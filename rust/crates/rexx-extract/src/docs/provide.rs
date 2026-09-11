@@ -11,11 +11,6 @@
 
 //! Table C's concept row set: one row per `<section id>` under `provide.xml`'s
 //! `provide` chapter, at every nesting level.
-//!
-//! The chapter is what supplies the concept floor, so the denominator is the
-//! chapter's sections and not a hand-made list of the ones anybody thought to
-//! name. `unkno` and `reqstr` are rows here for that reason: neither is a
-//! directive keyword, so table D cannot see either.
 
 use crate::docs::xml::{Section, blank_comments, sections};
 
@@ -31,10 +26,6 @@ pub struct ConceptSection {
 }
 
 /// Every section of the `provide` chapter, in document order.
-///
-/// Panics when a section has no `id` or no title of its own: either would
-/// produce a row that cannot be keyed or cannot be read, and absorbing one
-/// silently is how a denominator shrinks without anybody noticing.
 pub fn concept_sections(provide_xml: &str) -> Vec<ConceptSection> {
     let text = blank_comments(provide_xml);
     let chapter = chapter_span(&text, "provide");

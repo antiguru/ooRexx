@@ -10,47 +10,12 @@
 /*----------------------------------------------------------------------------*/
 
 //! A [`Body::Text`]'s bytes, held inline while they are few.
-//!
-//! The interpreter stores a string's bytes *in* the object: `RexxString` ends
-//! in `char stringData[4]`, a trailing flexible array, so a string is one
-//! allocation with its header and its bytes contiguous. A `Vec<u8>` beside the
-//! arena slot costs a second allocation for every string however short, plus
-//! the `free` that matches it and a dependent load to read a byte.
-//!
-//! [`Bytes`] is that answer in safe Rust: an inline array for the short case
-//! and a `Vec<u8>` for the rest. It derefs to `[u8]`, so every read is the
-//! slice operation it always was, and only construction goes through a method
-//! here.
-//!
-//! **A Rexx string is immutable**, which is what makes this shape simple: no
-//! value ever grows in place, so there is no spill path and no in-place edit
-//! to get wrong. A `Bytes` is decided once, at construction, from the length
-//! of what it is given.
-//!
-//! [`Body::Text`]: crate::Body
 
 use std::fmt;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 
 /// How many bytes fit without a heap allocation.
-///
-/// **This comes from the layout ceiling and from nothing else.** `Body`'s
-/// width is set by its widest variant, which is `Body::Stem`, and `Body::Text`
-/// has headroom against it. Measured with `size_of` over candidate capacities:
-/// `size_of::<Body>()` is 80 and `size_of::<Slot>()` is 96 for every capacity
-/// up to fifty-four, and fifty-five is the first that widens both by eight. So
-/// fifty-four is the largest capacity that costs the arena nothing, and one
-/// byte more costs every object in the heap, including the ones that hold no
-/// text at all.
-///
-/// **It is deliberately not chosen from any measured string population**, and
-/// the trap is worth naming because a benchmark sits right on it:
-/// `bench-programs/strings.rex` builds a 43-byte pangram and a 46-byte
-/// concatenation, so any capacity from 46 upwards inlines the whole of that
-/// axis. A capacity of 46 would measure the same as this one and would be the
-/// representation fitted to the benchmark. The three assertions -- here, on
-/// `Body` and on `Slot` -- are what hold the real bound.
 pub const INLINE_BYTES: usize = 54;
 
 /// **This is the payload width the capacity above is chosen against**, and it
@@ -58,44 +23,10 @@ pub const INLINE_BYTES: usize = 54;
 /// sentence has rotted in this repository before. `Body`'s and `Slot`'s own
 /// bounds are the two that matter to the arena; this one says which capacity
 /// produced them.
-///
-/// An upper bound rather than an equality, for the reason `Body`'s carries:
-/// the claim is that nothing widened, and shrinking needs no decision.
 const _: () = assert!(size_of::<Bytes>() <= 56);
 
 /// An immutable byte string, stored inline when it is at most
 /// [`INLINE_BYTES`] long.
-///
-/// # The invariant, and why this file is the whole of it
-///
-/// **`Inline`'s first `len` bytes are initialised and the rest are not, and
-/// nothing reads past `len`.**
-///
-/// Both halves are checkable by reading this file and nothing else.
-/// `Repr` is private and [`Bytes::from_slice`] is its only constructor, so
-/// `len` is only ever the length of a slice whose bytes were just written.
-/// [`Bytes::as_slice`] is the only reader of `buf`, and every other way out of
-/// this type -- [`Deref`], [`fmt::Debug`], and so every comparison, hash and
-/// pattern match a caller makes -- goes through it.
-///
-/// The tail is uninitialised on purpose: `[0u8; INLINE_BYTES]` followed by a
-/// copy writes the whole array and then writes the live prefix again, and that
-/// zeroing pass was **1.4% of `samples/rexxcps.rex`'s wall clock**
-/// (`_memset_avx2_unaligned_erms`, measured with samply). The safe
-/// alternatives were built and measured rather than argued about:
-/// `std::array::from_fn(|i| source.get(i).copied().unwrap_or(0))` replaces the
-/// vectorised memset with a bounds-checked scalar loop and costs
-/// `bench-programs/strings.rex` **+10.557%** retired instructions, `alloc4c`
-/// +8.310% and `rexxcps` +6.888%; keeping the zeroing is the 1.4%.
-///
-/// **Under `debug_assertions` the tail is filled with [`POISON`] instead of
-/// being left uninitialised**, so that a broken invariant is a *defined* wrong
-/// answer rather than undefined behaviour. Without it, the assertions that
-/// catch an over-read would themselves be reading uninitialised memory, and a
-/// green suite would be luck rather than evidence.
-/// `the_bytes_past_len_are_never_part_of_the_value` carries the three
-/// mutations this was checked against and says plainly that the poison adds no
-/// coverage the value assertions lack -- only soundness to their verdict.
 #[derive(Clone)]
 pub struct Bytes(Repr);
 
@@ -116,13 +47,6 @@ enum Repr {
 
 impl Bytes {
     /// A copy of `source`, inline when it fits.
-    ///
-    /// **The only place a `Repr::Inline` is built**, which is half of what
-    /// makes the type's invariant local: `len` below is the length of the
-    /// slice whose bytes the loop just wrote, so the first `len` bytes are
-    /// initialised by construction. No `unsafe` is needed to write them --
-    /// `MaybeUninit::write` is safe, and the loop lowers to the same copy the
-    /// `copy_from_slice` it replaces did.
     pub fn from_slice(source: &[u8]) -> Bytes {
         if source.len() <= INLINE_BYTES {
             let mut buf = [MaybeUninit::<u8>::uninit(); INLINE_BYTES];
@@ -144,16 +68,6 @@ impl Bytes {
     }
 
     /// [`from_slice`], for a caller that already owns the bytes.
-    ///
-    /// **A buffer longer than [`INLINE_BYTES`] is taken, never copied**, which
-    /// is the guarantee `rexx-exec`'s `Interp::text_owned` is built on: a
-    /// builtin sizing its result from user input reserves fallibly and then
-    /// hands the reservation over, and a copy would be a second allocation of
-    /// the same size that no `try_reserve` can catch. A buffer that fits
-    /// inline is copied and freed here, which is one allocation released
-    /// early rather than one added.
-    ///
-    /// [`from_slice`]: Bytes::from_slice
     pub fn from_vec(source: Vec<u8>) -> Bytes {
         if source.len() <= INLINE_BYTES {
             Bytes::from_slice(&source)
@@ -189,12 +103,6 @@ impl Bytes {
 
     /// Whether these bytes are held inline rather than in a separate
     /// allocation.
-    ///
-    /// The representation is not observable through any other method on
-    /// purpose -- two `Bytes` holding the same bytes on different arms are the
-    /// same value. This exists so a test can assert *which* arm a length
-    /// reaches, which is the whole content of the capacity claim and is
-    /// otherwise invisible.
     pub fn is_inline(&self) -> bool {
         matches!(self.0, Repr::Inline { .. })
     }
@@ -249,11 +157,6 @@ mod tests {
 
     /// The capacity claim itself: `INLINE_BYTES` is inline and one more is
     /// not, through both constructors.
-    ///
-    /// **Without this the whole change is invisible to the suite**: every
-    /// other assertion passes with the inline arm deleted, because a `Bytes`
-    /// that is always `Heap` answers every byte correctly and is exactly
-    /// today's `Vec<u8>`.
     #[test]
     fn the_capacity_is_where_the_constant_says_it_is() {
         let fits = vec![b'x'; INLINE_BYTES];
@@ -302,21 +205,6 @@ mod tests {
     /// `len + 1`, and `from_slice` writing one byte too few. Every one of them
     /// is caught by the value assertions that were already here, so this test
     /// finds nothing they do not.
-    ///
-    /// What it changes is whether their verdict *means* anything. Break the
-    /// invariant without a poisoned tail and the assertion that catches it is
-    /// reading uninitialised memory -- undefined behaviour, so a green run
-    /// would be luck rather than evidence. A debug build writes a byte no
-    /// caller supplied into the tail instead, which makes an over-read a
-    /// defined, recognisable answer and this file's verdict sound.
-    ///
-    /// Every inline length is checked, because an over-read of a *fixed* width
-    /// -- the shape a later "optimisation" would take -- shows only at the
-    /// lengths shorter than that width.
-    ///
-    /// `debug_assertions` only, and that is not a hole: a release build leaves
-    /// the tail uninitialised, so there is nothing there for a test to
-    /// recognise, and `rust/CLAUDE.md`'s gate is a debug run.
     #[cfg(debug_assertions)]
     #[test]
     fn the_bytes_past_len_are_never_part_of_the_value() {
@@ -339,10 +227,6 @@ mod tests {
 
     /// Two constructors reaching the inline arm answer the same value, and
     /// the tails they leave behind are not allowed to make them differ.
-    ///
-    /// `from_vec` copies out of a heap buffer and `from_slice` out of a stack
-    /// one, so anything comparing the whole array rather than `..len` would
-    /// see two different tails and could answer either way.
     #[test]
     fn the_two_constructors_agree_whatever_is_behind_the_live_bytes() {
         for len in 0..=INLINE_BYTES {

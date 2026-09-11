@@ -10,127 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! One Rexx clause: which line it is, and what has to happen when it ends.
-//!
-//! **A module of its own so that `run.rs` cannot reach the line field**, which
-//! is the whole point of the file (4b Task 7, fix round 3). A private field on
-//! a crate-root struct is still visible to `crate::run`, because a child
-//! module sees its ancestors' private items; a private field on a struct in
-//! *this* module is not visible to `crate::run` at all. That difference is
-//! what turns "remember to do both things" into "you cannot do one of them".
-//!
-//! # The defect this shape exists to end
-//!
-//! Four rounds of this task each fixed the sites they knew about and each
-//! asserted an exhaustiveness that was false a round later:
-//!
-//! * round 1 fixed `run_activation`'s `Flow` arms and said there was "no path
-//!   at all" left -- `run_bounded` was a path;
-//! * round 2 extracted one shared function and said it had "exactly two
-//!   callers", offering a grep -- `run_loop` was a third;
-//! * round 3 made the boundary a token obligation and said "every site that
-//!   runs a clause calls this" -- an `IF`'s condition, a `WHEN`'s condition
-//!   and a `SELECT CASE`'s expression were four more sites, all silent;
-//! * and each time the *same* omission produced two symptoms at once, because
-//!   a site that fails to say "a new clause is starting" also fails to run
-//!   what a clause boundary owes. `do while zn < sub()` reported `SIGL` from
-//!   a clause three lines away *and* delivered its `CALL ON` handler at the
-//!   wrong moment: one missing call, two wrong answers.
-//!
-//! # Where the set of sites comes from now, and it is not a list
-//!
-//! The oracle's own clause boundary is one place: `RexxActivation::run`'s
-//! instruction loop calls `processClauseBoundary()` after each
-//! `nextInst->execute()` returns (`RexxActivation.cpp:642-654`, read
-//! directly). So **a clause boundary sits after every instruction of the
-//! activation's own flat list**, and nothing else is one.
-//!
-//! This crate diverges from that in exactly one way, which is therefore the
-//! whole rule for where [`Interp::in_clause`] belongs: `IF`, `SELECT`,
-//! `DO`/`LOOP` and `INTERPRET` resolve *other* instructions inside their own
-//! `step` (`run_bounded`'s doc comment has why that is not optional), where
-//! the oracle's loop would have fetched each of them separately. Every such
-//! construct therefore has to end its own **header** clause before it runs
-//! anything else -- and `INTERPRET` is the one that must not, because there
-//! the oracle runs the fragment in an activation of its own whose condition
-//! queue is separate (`RexxActivation::interpret`, and measured: a condition
-//! queued by the `INTERPRET` clause's own expression is *not* delivered
-//! inside the fragment).
-//!
-//! **The fragment's separate queue is reconstructed at the delivery rather
-//! than by withholding boundaries**, and it has to be: the fragment's clauses
-//! do offer boundaries to a condition queued *inside* the fragment, and
-//! `PendingTrap::fragment_depth` is the key that tells the two apart. Its own
-//! doc comment carries the transcripts.
-//!
-//! `Interp::in_clause`'s own `debug_assert` is what makes a fifth such site
-//! announce itself rather than being found by a reviewer's probe: a clause
-//! that begins while an earlier clause of the same activation still owes a
-//! delivery is exactly the defect, and it now aborts the test suite naming
-//! itself.
-//!
-//! # What the shape guarantees, measured rather than asserted
-//!
-//! Overstating exactly this is the error the file is a response to, so what
-//! follows was established by writing each mutation, building it and reading
-//! the exit status -- see the report's fix-round-4 attack table.
-//!
-//! The clause's line and the clause's boundary are one operation with one
-//! implementation -- [`Interp::enter_clause`] and [`Interp::leave_clause`] --
-//! and two entry shapes into it.
-//!
-//! [`Interp::in_clause`] is the scoped shape, and its body is a closure. For
-//! everything that reaches the boundary that way, that closes the whole family
-//! of "the two halves came apart" mutations round 3's token left open, because
-//! there is no longer a value in scope to mishandle: `let _token`,
-//! `drop(token)`, `std::mem::forget(token)`, an early `return` between the two
-//! halves and a `?` between them are none of them expressible. An early
-//! `return` *inside* the closure returns from the closure, and the boundary
-//! still runs; an early `return` outside it is after the boundary already ran.
-//!
-//! The pair itself is the other shape, and it exists for a caller that has to
-//! run the clause's work in a loop of its own rather than in a callee --
-//! [`crate::ir`]'s driver, whose region ops the closure form puts behind a
-//! call. There the two halves are two statements and *can* come apart, so what
-//! narrows it is [`ClauseEntry`]: `leave_clause` takes one, nothing outside
-//! this module can build one, and it is `#[must_use]`. A leave with no enter in
-//! front of it does not compile; an enter whose token is dropped rather than
-//! spent warns. A token deliberately discarded with `let _ =` is reached by
-//! neither, and is named below with the rest of what this module's own
-//! `pub(crate)` surface admits.
-//!
-//! What remains expressible is named here rather than left for the next
-//! re-review to find:
-//!
-//! * **A site can decline to call `in_clause` at all.** Nothing in the type
-//!   system requires an instruction to be a clause. That is what the
-//!   `debug_assert` covers, and it covers it by behaviour rather than by
-//!   type: it fires only when such a site is actually reached with a
-//!   condition waiting.
-//! * **What this module has to expose to its own legitimate callers is also
-//!   what a caller could misuse, and that is not closed by a type the way
-//!   the "two halves came apart" family above is.** `self.clause_state =
-//!   ClauseState::new()` compiles, because `Interp::new` needs
-//!   `ClauseState::new` to be `pub(crate)` and Rust visibility cannot grant
-//!   that to `lib.rs` while withholding it from `lib.rs`'s other children --
-//!   that reset is loud in its own right (`SIGL` 0 is not a line).
-//!   `save_clause_state`/`restore_clause_state` are `pub(crate)` for the
-//!   same reason, so `Interp::invoke_call` can put a callee's caller state
-//!   back after the callee returns; nothing stops `run.rs` from restoring a
-//!   *stale* [`SavedClauseState`] at a moment other than the one it was
-//!   taken from, which sets a nonzero line with no boundary attached at
-//!   that moment -- measured: builds, passes clippy, and passes all 296 lib
-//!   tests, undetected. `deliver_pending_traps` is `pub(crate)` for the
-//!   mirror reason (a failed clause's own boundary runs from
-//!   `offer_to_trap`, not from `in_clause`), and nothing in the type system
-//!   stops it running a boundary paired with no line set at all. The
-//!   enter/leave pair is the same shape once more: `run.rs` builds the
-//!   stepped clause's own two halves out of it, so both are `pub(crate)`,
-//!   and a caller that holds a [`ClauseEntry`] can spend it at a moment
-//!   other than the one it was taken at. **This is what is reachable
-//!   through this module's own `pub(crate)` surface today, not a proof that
-//!   nothing else is** -- the property behind every one of them is that a
-//!   function this module must expose for one legitimate caller is a
-//!   function every other `pub(crate)` caller can also reach.
 
 use std::time::{Duration, Instant};
 
@@ -139,18 +18,10 @@ use crate::{Code, Ended, Failure, Interp, ObjRef};
 
 /// A wall-clock bound on a whole run, honoured at the clause boundary and
 /// unset by default.
-///
-/// It sees only runs that keep executing clauses, so a park, a spin inside one
-/// clause, and the parse are all outside it; `tests/watchdog/mod.rs` is the
-/// outer bound for those. The placement and its cost are measured in
-/// `docs/superpowers/records/2026-08-27-phase-5b/watchdog-report.md`.
 pub(crate) struct Deadline {
     /// When the run must stop.
     at: Instant,
     /// Whether the clock has already been found past [`Deadline::at`].
-    ///
-    /// Recorded rather than re-asked, because a path that discards a failure
-    /// would otherwise let an abandoned run report its main body's answer.
     expired: bool,
 }
 
@@ -161,9 +32,6 @@ impl Deadline {
 
     /// Clauses between two visits to [`Interp::countdown_reached`] for a run
     /// with no deadline, where the visit does nothing but reload this.
-    ///
-    /// The largest value the counter can hold, because the only thing it
-    /// buys is how rarely a run that will never be stopped pays for a call.
     pub(crate) const NO_DEADLINE_SPACING: u32 = u32::MAX;
 
     /// A bound `limit` from now.
@@ -177,10 +45,6 @@ impl Deadline {
 
 /// Proof that the clause about to be opened has had the deadline counted
 /// against it.
-///
-/// Both clause-entry sites take one and nothing outside this module can build
-/// one, so a site that opens a clause without counting it does not compile.
-/// It is zero-sized, so threading it costs nothing at run time.
 pub(crate) struct DeadlineCounted(());
 
 /// Every piece of state `step_in_temps_frame` sets fresh, unconditionally, on
@@ -189,48 +53,6 @@ pub(crate) struct DeadlineCounted(());
 /// callee runs and restore after it returns, because the callee's own
 /// `step_in_temps_frame` calls overwrite these exactly as the caller's own
 /// next clause would.
-///
-/// **The property that decides membership**, so the next field can be
-/// checked against it rather than added by analogy: set per clause by
-/// `step_in_temps_frame`, *and* read somewhere that can run after a nested
-/// activation has already run and returned within the same clause. `say
-/// f(1) + g(2)` is what makes the second half observable at all -- at most
-/// one activation could be entered per clause before Task 4 (`ExprKind::
-/// Call`), and the *next* clause's own `step_in_temps_frame` re-set these
-/// fields before anything read them, so a version missing the restore
-/// passed every test with no more than one call per clause in it.
-///
-/// A field failing either half does not belong here. `resolve_and_run_
-/// call`'s own five (`activation_indent`/`indent_offset`/
-/// `clause_line_override`/`call_context`, plus this whole struct) are not
-/// all one shape: those four are level state *for the callee*, each set
-/// once per call to a value the callee computes (`activation_indent` to
-/// the calling clause's indent plus two, `call_context` to that call's own
-/// name and arguments, ...), never refreshed per clause the way this
-/// struct's own fields are -- each already has its own reason, stated at
-/// that save/restore block rather than here.
-///
-/// **Bundled into one field, `Interp::clause_state`, rather than left as
-/// separate fields each needing its own save/restore line at a nested-
-/// activation boundary.** `current_value_indent` is Task 4's own C1;
-/// `current_clause_line` is Task 6's, and it shipped *without* the restore
-/// its own sibling field already carried -- the second time in a row the
-/// newer field of this exact shape went in without it, which is the same
-/// "a hand-maintained list eventually drops an entry" shape this project's
-/// own owner tables were already burned by three times. One struct and one
-/// [`Interp::save_clause_state`]/[`Interp::restore_clause_state`] pair at
-/// the save/restore site is what makes a third omission structurally
-/// impossible rather than merely against the rules: a field added *here* is
-/// restored by that existing pair with no second edit anywhere, where a
-/// field added directly to `Interp` needs someone to have read this comment
-/// first.
-///
-/// **Deliberately not `Copy` or `Clone`** (fix round 4). It was both, and
-/// that is what made `self.clause_state = <some other ClauseState>` -- a
-/// line set with no clause boundary attached -- expressible from `run.rs`
-/// despite the private field, which round 3's module doc denied. The one
-/// legitimate whole-struct write is the restore, and it now goes through a
-/// type that can only carry a value this module produced.
 pub(crate) struct ClauseState {
     /// The indent (Task 11's `static_indent` quantity, spaces already
     /// doubled) an intermediate value line traces at right now -- the one
@@ -241,55 +63,10 @@ pub(crate) struct ClauseState {
     /// through `evaluate`). Set once per traced clause, at whichever call
     /// site already computed that clause's own indent for the `*-*` echo
     /// or a `>K>` line -- `run.rs`'s own doc comments name each site.
-    ///
-    /// **Why a field and not an `eval` parameter.** Threading an indent
-    /// through `eval`/`eval_node`'s entire recursive call graph would touch
-    /// every arm in `eval.rs`, exactly the "eighteen arms" retrofit the
-    /// design's own withdrawn note wrongly predicted for the value events
-    /// themselves -- reading the oracle's own field-not-parameter design
-    /// avoids inventing that threading here instead.
-    ///
-    /// Public to the crate where its sibling is private, and that asymmetry
-    /// is the point: an indent that is momentarily wrong prints a wrong
-    /// number of spaces, where a line that is momentarily wrong means a
-    /// clause boundary did not happen.
     pub(crate) current_value_indent: usize,
     /// Whether the clause now running had instruction tracing in force **when
     /// it began**, which is the only thing an assignment's `>>>` echo is
     /// allowed to consult.
-    ///
-    /// **The oracle decides this once, before it evaluates.**
-    /// `RexxInstructionAssignment::execute` branches on
-    /// `context->tracingInstructions()` and takes a fast path that never calls
-    /// `traceResult` at all, so a `TRACE` reached *inside* the expression
-    /// cannot bring that line back. Measured: `zg = trace('i')` prints
-    /// `>F>   TRACE => "N"` and then `>=>   ZG <= "N"` with no `>>>` between
-    /// them, and `zg = trace('i') || 'q'` prints `>F>`, `>L>`, `>O>` and `>=>`
-    /// with none either -- while `say trace('i')`, whose instruction re-reads
-    /// the setting, does print one.
-    ///
-    /// **Only the assignment instruction has that shape**, which is why this
-    /// gates one call site rather than `Interp::trace_result` itself:
-    /// `tracingInstructions()` appears in exactly one file under
-    /// `interpreter/instructions/`.
-    ///
-    /// **What the field costs, since it is written per clause and read per
-    /// assignment**: `instructions:u` over `bench-programs/`, `varlookup.rex`
-    /// +0.379%, `emptyloop.rex` +0.362% -- 50,000,461 over 25,000,000 passes,
-    /// two an iteration, which is the load of the setting and the store beside
-    /// the indent. Carried rather than recomputed because the value wanted is
-    /// the one from *before* the expression ran, which nothing later can
-    /// recover.
-    ///
-    /// **Saved and restored by `Interp::save_clause_state`**, so a callee's
-    /// own clauses cannot leave this reading for the caller's: measured with
-    /// `trace i`, a routine whose body runs `trace o`, and the caller's clause
-    /// resuming afterwards -- dropping it from that copy changes those bytes.
-    ///
-    /// The other direction needs no field, because `traceResult` reads the
-    /// setting in force when it runs: `trace i` followed by `zg = trace('o')`
-    /// prints neither `>>>` nor `>=>`, and the ordinary `results` gate on both
-    /// lines is already what does that.
     pub(crate) instructions_traced_at_entry: bool,
     /// The line the clause currently being stepped starts at -- **`SIGL`'s**
     /// own value, one control transfer away from being read, and the exact
@@ -320,31 +97,11 @@ pub(crate) struct ClauseState {
     /// instruction's `clause_span` and nothing else records which
     /// instruction is running (`Activation::pc` stands on the enclosing
     /// construct, per [`crate::activation::ClauseSnapshot`]).
-    ///
-    /// **One `usize` and set under a guard**, unlike its two neighbours,
-    /// and both halves are a measurement. Writing the whole snapshot through
-    /// the running activation on every clause cost `instructions:u` +2.370%
-    /// on `bench-programs/emptyloop.rex` and +1.924% on `varlookup.rex`;
-    /// this shape, with the rest of the snapshot taken once per call in
-    /// `Interp::push_activation`, is what that became. The guard is
-    /// `clause_line_override`: an `INTERPRET` fragment's index belongs to
-    /// the fragment's body and not to this activation's, so a fragment
-    /// leaves the enclosing `INTERPRET` clause's index in force -- which is
-    /// the clause the oracle reports on that same frame.
-    ///
-    /// **`pub(crate)` where `current_clause_line` beside it is private**, the
-    /// same asymmetry `current_value_indent` carries and for its reason: an
-    /// index that is momentarily wrong renders a wrong `~traceLine`, where a
-    /// *line* that is momentarily wrong means a clause boundary did not
-    /// happen. Only the second needs the boundary dragged along with it.
     pub(crate) current_clause_index: usize,
 }
 
 impl ClauseState {
     /// The current clause's line -- `SIGL`'s own value.
-    ///
-    /// A getter because the field is private to this module: reading it is
-    /// harmless, and it is *setting* it that has to drag the boundary along.
     pub(crate) fn line(&self) -> usize {
         self.current_clause_line
     }
@@ -369,13 +126,6 @@ impl ClauseState {
 
 /// A `ClauseState` taken out of an `Interp` so it can be put back -- and
 /// nothing else.
-///
-/// The whole point is what it does *not* offer: no constructor, no field
-/// access to the line, and `ClauseState` itself is not `Copy`, so the only
-/// way `run.rs` can write the clause line as part of a whole-struct
-/// assignment is by restoring a value some [`Interp::in_clause`] set.
-/// `current_value_indent` is readable because `Interp::invoke_call` computes
-/// the callee's own base indent from it.
 pub(crate) struct SavedClauseState(ClauseState);
 
 impl SavedClauseState {
@@ -389,26 +139,6 @@ impl SavedClauseState {
 
 /// What a clause resolved to, for the one thing a boundary needs from it:
 /// a value that has to stay rooted while a `CALL ON` handler runs.
-///
-/// **No default implementation on purpose.** A type that reaches
-/// [`Interp::in_clause`] has to answer "does this carry an `ObjRef` whose
-/// only root was the clause's own temps frame?" explicitly, because the one
-/// type that answers *yes* is `Flow` and getting that wrong is a
-/// use-after-free rather than a wrong number. Round 3 expressed this as
-/// `ClauseEnd::Completed(Option<&Flow>)`, where a site holding a `Flow`
-/// could pass `None` and silently drop the rooting -- measured, that
-/// mutation panicked `a live value` under collect-on-every-allocation while
-/// clippy and all 970 tests stayed green. Here the value comes from the
-/// closure's own return type, which narrows the *shape* a site can hand
-/// back -- but does not decide the question by itself. A site can still
-/// compute the `Flow` inside the closure, write it to a captured
-/// `&mut Option<Flow>`, and return `Ok(())`, landing on `ClauseValue for
-/// ()` and dropping the rooting the same way `Completed(None)` did:
-/// measured, build 0, clippy 0, all 296 lib tests green, and it is
-/// `a_clause_value_survives_the_handler_its_boundary_runs`
-/// (`tests/collect_stress.rs`) that catches it, panicking `a live value`.
-/// The type narrows what a site can return; that test is what actually
-/// pins the rooting.
 pub(crate) trait ClauseValue {
     /// The value to root across a delivered handler, if any.
     fn rooted(&self) -> Option<ObjRef>;
@@ -449,22 +179,10 @@ impl ClauseValue for bool {
 
 /// A clause boundary that is open: [`Interp::enter_clause`] makes one and
 /// [`Interp::leave_clause`] spends it.
-///
-/// **Zero-sized, and carrying nothing is the point rather than an omission.**
-/// What the two halves have to hand each other is nothing at all -- the line
-/// goes on `Interp` where `SIGL` reads it, and the boundary reads the waiting
-/// condition off `Interp` too -- so this is the obligation itself. The private
-/// field is what makes it one: no other module can build one, so a leave with
-/// no enter in front of it does not compile.
 #[must_use]
 pub(crate) struct ClauseEntry(());
 
 /// How [`Interp::in_clause`] finished.
-///
-/// The outer `Result`'s `Err` is the *handler's* own failure, never the
-/// clause's: a clause that failed comes back as `Ran(Err(_))`, which is what
-/// lets `step_in_temps_frame` tell "my instruction raised" from "the `CALL
-/// ON` handler my boundary ran raised" and blame the right clause for each.
 pub(crate) enum ClauseOutcome<T> {
     /// The clause ran, successfully or not, and here is what it produced.
     Ran(Result<T, Failure>),
@@ -474,16 +192,6 @@ pub(crate) enum ClauseOutcome<T> {
 }
 
 /// A delivered `CALL ON` handler ended the program with `EXIT`.
-///
-/// **A type rather than an `Ended`** (fix round 4). `deliver_pending_traps`
-/// only ever reports `Ended::Exited`: a handler that *returns* resumes the
-/// interrupted clause and reports `Ok(None)` instead. Round 2 said so with
-/// an `unreachable!("clause_boundary reports only Ended::Exited")`; round 3
-/// replaced that with six copies of `Ok(Flow::Exit(ended.value()))`, and
-/// `Ended::value()` collapses `Returned` and `Exited`, so a future
-/// `deliver_pending_traps` that reported `Returned` would silently turn a
-/// `RETURN` into an `EXIT`. Now it cannot be built at all except from an
-/// `Ended::Exited`, at the single point that match already lives.
 pub(crate) struct HandlerExit(Option<ObjRef>);
 
 impl HandlerExit {
@@ -509,26 +217,6 @@ impl HandlerExit {
 impl Interp {
     /// Runs one Rexx clause: `line` is the clause's own line, `body` is the
     /// whole of the clause.
-    ///
-    /// Setting the line and running the boundary are one operation because
-    /// they are one fact -- see this module's doc comment for the three
-    /// rounds that established that the hard way, and for where the set of
-    /// call sites comes from.
-    ///
-    /// The boundary is where a `CALL ON` condition queued *during* this
-    /// clause gets its handler run: the wait is measured, `zres = one(1)`
-    /// with `one` raising a trapped condition and the handler assigning
-    /// `zres` prints the handler's value, so the assignment had already
-    /// completed. A clause that failed reached no boundary and delivers
-    /// nothing -- for a failure that is trapped *here* rather than unwinding
-    /// the activation, `offer_to_trap` is the one place that knows, and it
-    /// delivers there.
-    ///
-    /// **`inline(always)`, and it is a measurement rather than a habit.** This
-    /// is a layer generic over a closure, and left to the inliner's own
-    /// judgement such a layer is emitted as a function of its own that every
-    /// clause reaching it calls -- `Interp::in_stepped_clause`'s doc comment
-    /// carries the number, taken on that annotation and this one together.
     #[inline(always)]
     pub(crate) fn in_clause<T: ClauseValue>(
         &mut self,
@@ -544,15 +232,6 @@ impl Interp {
 
     /// Opens the clause at `line`: everything [`Interp::in_clause`] does before
     /// the clause's own work runs.
-    ///
-    /// Half of the clause unit rather than a function in its own right -- see
-    /// this module's doc comment for the two entry shapes and for what the
-    /// [`ClauseEntry`] does and does not close.
-    ///
-    /// [`DeadlineCounted`] is where the clause's own cost against the
-    /// deadline was taken -- [`Interp::count_clause_against_deadline`] --
-    /// which is one step earlier than this because that step can fail and
-    /// this one cannot.
     #[inline(always)]
     pub(crate) fn enter_clause(&mut self, line: usize, counted: DeadlineCounted) -> ClauseEntry {
         let DeadlineCounted(()) = counted;
@@ -572,39 +251,6 @@ impl Interp {
         // sites and three rounds' worth before them, always silently. The
         // handler will now report `SIGL` for the wrong clause, which is the
         // half of the defect that has recurred every round.
-        //
-        // **What the line comparison exempts, and why it is not a hedge.**
-        // Two clauses of this crate can carry one line legitimately, and in
-        // both the oracle has a single clause there:
-        //
-        // * A `DO`/`LOOP`'s control setup (the header evaluation) and its
-        //   first header test (`run_repeating`) are two clauses here and one
-        //   instruction -- `RexxInstructionControlledDo::execute` -- there.
-        //   `do i = 1 to sub()` queues in the first and delivers in the
-        //   second, both at the `DO` line, which is the line the oracle
-        //   reports.
-        // * Every clause of an `INTERPRET` fragment carries the enclosing
-        //   `INTERPRET` clause's line (`clause_line_override`), which is this
-        //   crate's stand-in for the oracle running fragment text in an
-        //   activation of its own. Measured: `interpret sub()`, where `sub`
-        //   raises a `CALL ON`-trapped condition, runs the fragment's own
-        //   `say` with the handler's variable still unset, on the oracle and
-        //   here -- the condition waits for the enclosing clause.
-        //
-        // **And what it exempts a third time, which is not a construct at
-        // all**: a trap queued by a *handler* this activation delivered at an
-        // earlier boundary. That boundary drains, but it drains only the
-        // entries that were queued when it began, so a handler's own requeue
-        // lands beyond the prefix that boundary owes and waits for the next
-        // one -- `Interp::pending_traps` carries the measurement behind that
-        // bound. The wait is therefore the design rather than a missing call,
-        // and the oracle waits too. Measured with no construct in the program
-        // at all, which is what says this is not the defect above wearing
-        // different clothes.
-        //
-        // So this catches the wrong-`SIGL` half and says so; a delivery that
-        // is late in *time* but lands on the same line is invisible to it,
-        // and to `SIGL`.
         debug_assert!(
             self.clause_state.current_clause_line == line
                 || !self.pending_traps.iter().any(|pending| {
@@ -622,9 +268,6 @@ impl Interp {
 
     /// Counts one clause against this run's deadline, and answers the proof
     /// [`Interp::enter_clause`] needs.
-    ///
-    /// The subtraction cannot underflow: every write to
-    /// [`Interp::clause_countdown`] leaves it at least 1.
     #[inline(always)]
     pub(crate) fn count_clause_against_deadline(&mut self) -> Result<DeadlineCounted, Failure> {
         self.clause_countdown -= 1;
@@ -635,10 +278,6 @@ impl Interp {
     }
 
     /// Reads the clock and either reloads the countdown or ends the run.
-    ///
-    /// Out of line and `#[cold]`, so that the caller's own body carries the
-    /// decrement and the branch and nothing else. A run with no deadline
-    /// reaches this too, and does nothing here but reload.
     #[cold]
     #[inline(never)]
     fn countdown_reached(&mut self) -> Result<(), Failure> {
@@ -659,9 +298,6 @@ impl Interp {
     }
 
     /// Whether this run was cut short by its deadline.
-    ///
-    /// False for a run with no deadline, and false for one that finished
-    /// inside its bound however narrowly -- see [`Deadline::expired`].
     pub(crate) fn deadline_expired(&self) -> bool {
         self.deadline
             .as_ref()
@@ -670,13 +306,6 @@ impl Interp {
 
     /// Closes the clause `entry` opened, around `ran` -- everything
     /// [`Interp::in_clause`] does once the clause's own work has run.
-    ///
-    /// **The clause's failure arrives as a value rather than as an `Err` of
-    /// this call**, which is what lets a caller whose work is a loop rather
-    /// than a closure reach this at all: there is no `?` to take the failure
-    /// past the boundary, because the boundary is what the failure is handed
-    /// to. The `Err` this function answers is the *handler's*, exactly as
-    /// [`ClauseOutcome`]'s own doc comment describes.
     #[inline(always)]
     pub(crate) fn leave_clause<T: ClauseValue>(
         &mut self,
@@ -703,35 +332,6 @@ impl Interp {
     }
 
     /// Closes the clause `entry` opened **without running its boundary**.
-    ///
-    /// For a construct this crate resolves entirely inside one step, where the
-    /// oracle has no clause at all. A `DO`/`LOOP` is the case: the oracle's
-    /// own `DO` instruction ends when its header does, and `END` is an
-    /// instruction of its own, so the boundaries the oracle offers a queued
-    /// condition are the header's and `END`'s. For a plain `DO`, which parses
-    /// as `LoopKind::Simple`, `run_loop_with_header`'s own arm opens each of
-    /// those as a clause in its own right. A repeating loop's clauses are
-    /// opened by `run_repeating` instead, and there `END` has no clause of
-    /// its own: the header re-test that follows the body carries `END`'s
-    /// line (`HeaderClause::End`), the re-test that ends the loop included.
-    /// The step that spans the whole construct is this crate's own
-    /// scaffolding, and a boundary here is a boundary the oracle does not
-    /// have: it delivers a condition that is owed to a later clause, at
-    /// whichever line the construct's last inner clause happened to leave
-    /// behind.
-    ///
-    /// Measured, `do until raiser1() > 0` with `nop` for a body and a handler
-    /// that requeues: the oracle runs the requeued handler at the clause
-    /// *after* the loop, reporting that clause's `SIGL`; with a boundary here
-    /// it ran at `END`'s line, ahead of the clause the oracle blames, on both
-    /// engines.
-    ///
-    /// The `entry` is still consumed, so a clause that takes this exit is a
-    /// clause that opened and closed -- the line and the tripwire in
-    /// [`Interp::enter_clause`] are unaffected. Taking `&self` and never
-    /// reading it is that same point and not a stub: spending the
-    /// [`ClauseEntry`] is the whole of the work here, and it leaves the
-    /// interpreter untouched by construction.
     #[inline(always)]
     pub(crate) fn leave_clause_without_boundary<T: ClauseValue>(
         &self,
@@ -745,20 +345,6 @@ impl Interp {
     /// Spends `entry` with **no boundary and no value at all**, for a clause
     /// that produced neither a `Flow` nor a failure at a moment when
     /// `pending_traps` is empty.
-    ///
-    /// That precondition is what makes this the same thing
-    /// [`Interp::leave_clause`] would do: its own first two exits both hand
-    /// `ran` straight back, and with nothing queued the second is the one
-    /// taken. It is also why the `DO`/`LOOP` exemption
-    /// [`Interp::leave_clause_without_boundary`] exists for does not need
-    /// repeating here -- an exemption from delivering has nothing to exempt
-    /// when there is nothing to deliver, so both halves of that decision
-    /// collapse into this one function.
-    ///
-    /// Taking `&self` and never reading it is the same point
-    /// `leave_clause_without_boundary` makes: spending the [`ClauseEntry`] is
-    /// the whole of the work, and it leaves the interpreter untouched by
-    /// construction.
     #[inline(always)]
     pub(crate) fn spend_clause_entry(&self, entry: ClauseEntry) {
         debug_assert!(
@@ -770,9 +356,6 @@ impl Interp {
 
     /// Takes a copy of the clause state for `Interp::invoke_call` to put
     /// back after the callee has run.
-    ///
-    /// Here rather than in `run.rs` because the fields are private to this
-    /// module, which is what stops the copy being modified in between.
     pub(crate) fn save_clause_state(&self) -> SavedClauseState {
         SavedClauseState(ClauseState {
             current_value_indent: self.clause_state.current_value_indent,

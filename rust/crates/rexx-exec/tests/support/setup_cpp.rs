@@ -12,19 +12,6 @@
 //! `Setup.cpp`, read for the native-or-Rexx column and the entry-point token
 //! that `collection_scopes.rs` and `introspection_scopes.rs` both join onto
 //! the oracle's own scope answer.
-//!
-//! Native-or-Rexx and the token are keyed by (scope, name): present in that
-//! scope's post-`InheritInstanceMethods` table means native, absent means
-//! Rexx. The Method object cannot answer it -- `~source~items` is 0 for
-//! `CircularQueue`'s Rexx `queue` and `Array`'s native `[]` alike, and
-//! `~package~name` is `REXX` for both.
-//!
-//! **The token is a citation, not a body identity.** Two tokens can name one
-//! C++ function -- `Set`'s `HasItem` is written `IdentityTable::hasIndexRexx`
-//! and `IdentityTableClass.hpp` declares no such member -- and one token can
-//! reach three behaviours chosen by the contents class the receiver
-//! allocated. Count tokens for an upper bound on bodies and never for a count
-//! of behaviours.
 
 #![allow(dead_code)]
 
@@ -37,10 +24,6 @@ pub type Native = (String, String);
 
 /// Every `StartClassDefinition` block's instance and class tables, with
 /// `InheritInstanceMethods` resolved.
-///
-/// `RemoveMethod` and `HideMethod` are deliberately not applied: a name they
-/// remove is not at that scope on the oracle either, so a (scope, name) key
-/// never reaches the copy they would have deleted. The module doc has why.
 pub fn setup_tables() -> (
     HashMap<String, HashMap<String, Native>>,
     HashMap<String, HashMap<String, Native>>,

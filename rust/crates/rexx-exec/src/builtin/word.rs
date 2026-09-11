@@ -11,29 +11,6 @@
 
 //! The word builtins: `DELWORD`, `SUBWORD`, `WORD`, `WORDINDEX`,
 //! `WORDLENGTH`, `WORDPOS` and `WORDS`.
-//!
-//! # A word is separated by two bytes and no others
-//!
-//! Blank (`0x20`) and horizontal tab (`0x09`), and nothing else. That is the
-//! whole rule, and it is narrower than either "whitespace" or `isspace`:
-//! `RexxString::WordIterator::skipBlanks` and `skipNonBlanks`
-//! (`classes/StringClass.hpp`) each test exactly `*scan != ' ' && *scan !=
-//! '\t'`, so a newline, a carriage return, a vertical tab, a form feed, a NUL
-//! and every byte at or above `0x80` are all *word content*.
-//!
-//! Measured across the whole byte range rather than at the bytes one might
-//! expect: `words('a' || d2c(i) || 'b')` is 2 for exactly `i = 9` and
-//! `i = 32`, and 1 for all 254 others. So `words('a'||'0a'x||'b')` is 1,
-//! `words('a'||'a0'x||'b')` is 1 and `words('a'||'00'x||'b')` is 1, while
-//! `words('a'||'09'x||'b')` is 2.
-//!
-//! [`Words`] is the single scanner the rule lives in, and
-//! `only_blank_and_tab_separate_words` asserts it over all 256 bytes.
-//!
-//! # Six of the seven turn on a position, and the boundaries are measured
-//!
-//! Against `'aa bb  cc'`, whose words start at bytes 1, 4 and 8:
-//!
 //! ```text
 //! word/wordindex/wordlength at 1     aa   1  2
 //! word/wordindex/wordlength at 3     cc   8  2
@@ -42,21 +19,6 @@
 //! word/wordindex/wordlength at 0                      93.924, rc 163
 //! word/wordindex/wordlength at -1                     93.924, rc 163
 //! ```
-//!
-//! A position past the end is an answer, not an error; a position of zero or
-//! below is an error, and it is [`super::position_of`]'s 93.924 rather than
-//! anything in the 40.x family. `WORDINDEX` and `WORDLENGTH` answer `0` there
-//! where `WORD` and `SUBWORD` answer the null string, which is the oracle's
-//! own split (`IntegerZero` against `GlobalNames::NULLSTRING`,
-//! `classes/support/StringUtil.cpp`).
-//!
-//! # Results are text, not numbers
-//!
-//! `WORDS`, `WORDINDEX`, `WORDLENGTH` and `WORDPOS` answer counts and
-//! offsets, and each is created as text for the reason `string.rs`'s own
-//! module doc gives. Measured with `DIGITS` changed between creation and
-//! rendering, which is the only way to see it:
-//!
 //! ```rexx
 //! numeric digits 12
 //! n = words('a b c d e f g h i j')   -- created here, renders as 10
@@ -75,13 +37,6 @@ use crate::error::Failure;
 
 /// The default word count `SUBWORD` and `DELWORD` use when their third
 /// argument is omitted.
-///
-/// `Numerics::MAX_WHOLENUMBER`, which is the oracle's own default for both
-/// (`StringUtil::subWord` and `RexxString::delWord` each pass it to
-/// `optionalLengthArgument`). It is also the largest value the argument
-/// precision admits, so an explicit count one digit longer never reaches
-/// here: measured, `subword('a b',1,999999999999999999)` is `a b` and
-/// `subword('a b',1,1000000000000000000)` is 40.12.
 const ALL_REMAINING_WORDS: usize = 999_999_999_999_999_999;
 
 /// Whether `byte` separates words: blank or horizontal tab, and no other
@@ -92,14 +47,6 @@ fn is_blank(byte: u8) -> bool {
 
 /// A scan over the words of a byte string, mirroring
 /// `RexxString::WordIterator` (`classes/StringClass.hpp`).
-///
-/// **The word most recently found survives a failed [`step`], and that is
-/// load-bearing rather than incidental.** `SUBWORD` reads the end of the last
-/// word *after* running out of words, which is how `subword('aa bb  ',1)`
-/// answers `aa bb` with the trailing blanks dropped; the C++ iterator carries
-/// the same note on `next()`.
-///
-/// [`step`]: Words::step
 struct Words<'a> {
     text: &'a [u8],
     /// Where the next scan starts. The C++ carries a pointer and a remaining
@@ -107,8 +54,6 @@ struct Words<'a> {
     /// always `text.len() - next`.
     next: usize,
     /// The word [`step`] last found, as a byte range of `text`.
-    ///
-    /// [`step`]: Words::step
     word: Range<usize>,
 }
 
@@ -122,13 +67,6 @@ impl<'a> Words<'a> {
     }
 
     /// Advances to the next word, answering whether there was one.
-    ///
-    /// A failure still consumes the trailing blanks, leaving [`next`] at the
-    /// end of the string -- which is what makes `DELWORD`'s remainder empty
-    /// when the deletion runs to the end, so `delword('aa bb   ',2)` is
-    /// `aa ` rather than `aa    `.
-    ///
-    /// [`next`]: Words::next
     fn step(&mut self) -> bool {
         self.skip_blanks();
         if self.next == self.text.len() {
@@ -143,10 +81,6 @@ impl<'a> Words<'a> {
     }
 
     /// Steps `count` times, answering whether every step found a word.
-    ///
-    /// `all` stops at the first failure, as `skipWords` does, so a `count` of
-    /// [`ALL_REMAINING_WORDS`] costs one step per word in the string and not
-    /// one per unit of the count.
     fn skip(&mut self, count: usize) -> bool {
         (0..count).all(|_| self.step())
     }
@@ -160,10 +94,6 @@ impl<'a> Words<'a> {
 }
 
 /// Every word of `text`, in order.
-///
-/// For a caller that wants the words themselves rather than a position in
-/// them. A caller needing only a count or an index scans [`Words`] directly
-/// and allocates nothing.
 pub(crate) fn word_slices(text: &[u8]) -> Vec<&[u8]> {
     let mut scan = Words::new(text);
     let mut found = Vec::new();
@@ -239,11 +169,6 @@ pub(crate) fn wordpos_bytes(phrase: &[u8], string: &[u8], start: usize) -> usize
 
 /// [`wordpos_bytes`] with ASCII case folded away,
 /// `StringUtil::caselessWordPos` (`classes/support/StringUtil.cpp:1651`).
-///
-/// The twin shares its scan: the C++'s two word searches are one function bar
-/// `WordIterator::compare` against `::caselessCompare`
-/// (`classes/StringClass.hpp:269`, `:289`), and both of those reject a length
-/// mismatch before comparing a byte.
 pub(crate) fn caseless_wordpos_bytes(phrase: &[u8], string: &[u8], start: usize) -> usize {
     wordpos_with(phrase, string, start, crate::builtin::string::caseless_eq)
 }
@@ -278,10 +203,6 @@ fn wordpos_with(
 }
 
 /// `WORDS(string)`: how many blank-delimited words the argument holds.
-///
-/// Measured: `words('')`, `words('   ')` and `words('09090909'x)` are all 0,
-/// and leading, trailing and repeated separators change nothing --
-/// `words('  a b  ')` and `words('a    b')` are both 2.
 pub(crate) fn words(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let count = word_count(&string);
@@ -290,12 +211,6 @@ pub(crate) fn words(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result
 
 /// The word-position argument at `position`, converted but **not yet
 /// range-checked**.
-///
-/// The two halves are separate because the layers they belong to are, and a
-/// builtin with a second numeric argument has to run the other argument's
-/// *conversion* in between: measured, `subword('a b',0,'q')` is 40.12 naming
-/// argument 3, not the 93.924 that argument 2's zero earns once every
-/// conversion is done.
 fn converted_position(
     interp: &mut Interp,
     name: &[u8],
@@ -325,10 +240,6 @@ pub(crate) fn word(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<O
 
 /// `WORDINDEX(string, n)`: the 1-based byte offset the `n`th word starts at,
 /// or 0.
-///
-/// The offset is into the argument as given, so leading separators count --
-/// measured, `wordindex('  aa'||'09'x||'bb  ',1)` is 3 and its second word is
-/// at 6.
 pub(crate) fn word_index(
     interp: &mut Interp,
     name: &[u8],
@@ -356,23 +267,6 @@ pub(crate) fn word_length(
 
 /// `SUBWORD(string, n [,length])`: `length` words from the `n`th, as a slice
 /// of the argument.
-///
-/// **The separators *between* the chosen words are the argument's own, not
-/// normalised**, while the separators outside them are dropped. Measured:
-/// `subword('aa bb  cc',2)` is `bb  cc` with its two blanks intact,
-/// `subword('aa'||'09'x||'09'x||'bb cc',1,2)` keeps both tabs, and
-/// `subword('  aa bb',1)` and `subword('aa bb  ',1)` are both `aa bb`.
-///
-/// **A `length` of zero is the one shape that cannot be left to the scan.**
-/// The oracle answers the null string for it before looking at the string at
-/// all, where skipping `length - 1` words would wrap to a very large count
-/// and run to the end: measured, `subword('aa bb  cc',2,0)` is the null
-/// string, not `bb  cc`.
-///
-/// **That shortcut is still behind the position check**, which is the pair
-/// only a call supplying both can separate: measured,
-/// `subword('SUBWORD','30'x,'30'x)` -- a zero position and a zero length
-/// together -- is 93.924 at rc 163, not the null string at rc 0.
 pub(crate) fn subword(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let n = converted_position(interp, name, args, 2)?;
@@ -386,19 +280,6 @@ pub(crate) fn subword(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
 
 /// `DELWORD(string, n [,length])`: the argument with `length` words from the
 /// `n`th removed.
-///
-/// **The blanks that followed the last deleted word go with it, and the
-/// blanks that preceded the first one stay.** Measured:
-/// `delword('aa bb  cc',2,1)` is `aa cc`, `delword('  aa bb',1,1)` is
-/// `  bb`, and a deletion that runs to the end takes the trailing separators
-/// too -- `delword('aa bb   ',2)` is `aa `.
-///
-/// A `length` of zero and a position past the last word are both the
-/// argument unchanged, measured at each: `delword('aa bb  cc',2,0)` and
-/// `delword('aa bb  cc',4)` are both `aa bb  cc`, where `delword('   ',1)`
-/// answers its three blanks back. The zero-length answer is still behind the
-/// position check, the same way `SUBWORD`'s is: measured,
-/// `delword('delWord','30'x,'30'x)` is 93.924 at rc 163.
 pub(crate) fn delword(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let mut string = required_string(interp, args, 1);
     let n = converted_position(interp, name, args, 2)?;
@@ -412,18 +293,6 @@ pub(crate) fn delword(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
 
 /// `WORDPOS(phrase, string [,start])`: which word of `string` begins a run
 /// matching `phrase`'s words, or 0.
-///
-/// **The phrase's own separators are not part of the match** -- both sides
-/// are compared word by word, so any run of blanks or tabs in either is the
-/// same as one. Measured against `'now is the time for all good men'`:
-/// `wordpos('the time',..)`, `wordpos('the   time',..)` and
-/// `wordpos('the'||'09'x||'time',..)` are all 3, as is `wordpos('  the  ',..)`.
-///
-/// The comparison is byte-for-byte and whole-word: `wordpos('The',..)` and
-/// `wordpos('th',..)` are both 0.
-///
-/// A phrase with no words never matches, which is *not* the same as matching
-/// everywhere: measured, `wordpos('',..)` and `wordpos('   ',..)` are both 0.
 pub(crate) fn word_pos(
     interp: &mut Interp,
     name: &[u8],
@@ -448,10 +317,6 @@ mod tests {
 
     /// Runs `name` over `arguments`, each `None` standing for an omitted
     /// interior position, and answers the result's own bytes.
-    ///
-    /// Goes through [`dispatch`] rather than calling the implementation
-    /// directly, so every case here also exercises the arity check and the
-    /// name lookup that a real call would.
     fn call(name: &[u8], arguments: &[Option<&[u8]>]) -> Result<Vec<u8>, Failure> {
         let mut interp = Interp::new();
         let args: Vec<_> = arguments
@@ -478,12 +343,6 @@ mod tests {
     }
 
     /// Blank and horizontal tab separate words; no other byte does.
-    ///
-    /// The sweep is the whole byte range rather than a handful of plausible
-    /// separators, because the shapes this rule could wrongly take -- "any
-    /// `isspace`", "every byte below `0x21`" -- each differ from it at bytes
-    /// nobody would think to write down. The oracle's own answer for
-    /// `words('a' || d2c(i) || 'b')` is 2 at exactly `i = 9` and `i = 32`.
     #[test]
     fn only_blank_and_tab_separate_words() {
         for byte in 0..=u8::MAX {
@@ -518,11 +377,6 @@ mod tests {
     /// The positional trio at every boundary a position can sit on: the
     /// first word, an interior one, the last, one past the last, and far
     /// past it.
-    ///
-    /// `'aa bb  cc'` has its words at bytes 1, 4 and 8, so a scan that
-    /// mishandled the repeated blank would answer 7 rather than 8 for the
-    /// third; a scan off by one at the start would answer 0 rather than 1
-    /// for the first.
     #[test]
     fn the_positional_builtins_answer_the_oracles_own_bytes() {
         assert_eq!(answer(b"WORD", &[b"aa bb  cc", b"1"]), b"aa");
@@ -685,10 +539,6 @@ mod tests {
 
     /// Bytes at or above `0x80`, control bytes and the null string, crossed
     /// with each position a word can be asked about.
-    ///
-    /// The subject is `'a<e9>' '<00>b' 'c<0a>d'` -- three words whose
-    /// content is exactly what an "ASCII space or whitespace" separator rule
-    /// would break apart, separated by one blank and one tab.
     #[test]
     fn a_byte_string_alphabet_crosses_every_position() {
         let subject: &[u8] = b"a\xe9 \x00b\tc\nd";
@@ -736,10 +586,6 @@ mod tests {
 
     /// A position of zero or below is 93.924, and it is the same answer for
     /// every builtin that takes one.
-    ///
-    /// The adjacent success is the point: position 1 on the same subject
-    /// works, so this pins the refusal to the zero rather than to the
-    /// string.
     #[test]
     fn a_non_positive_position_is_the_operation_layers_own_error() {
         for name in [
@@ -804,12 +650,6 @@ mod tests {
 
     /// An omitted count reaches every remaining word, however many there
     /// are.
-    ///
-    /// The subject is longer than any other here on purpose: the default is
-    /// a specific very large number rather than "the rest", and a default
-    /// that is merely *large enough for the tests* passes every short case.
-    /// A differential sweep found exactly that -- a default of 5 diverged on
-    /// this ten-word subject and on nothing shorter.
     #[test]
     fn an_omitted_count_reaches_every_remaining_word() {
         let ten: &[u8] = b"a b c d e f g h i j";
@@ -827,14 +667,6 @@ mod tests {
 
     /// The zero-count shortcut does not run before the position check, and
     /// the position's range check comes before the count's.
-    ///
-    /// A zero position with a zero count is the shape that separates them:
-    /// an implementation answering the null string as soon as the count is
-    /// zero returns successfully where the oracle raises. Measured, both are
-    /// 93.924 at rc 163 -- `subword('SUBWORD','30'x,'30'x)` and
-    /// `delword('delWord','30'x,'30'x)`, `'30'x` being the character `0`.
-    /// The negative-count pair pins the *order* of the two range checks: the
-    /// position's answer wins over a length that is also invalid.
     #[test]
     fn the_position_is_range_checked_before_the_count_is_honoured() {
         assert_eq!(
@@ -933,11 +765,6 @@ mod tests {
 
     /// A substitution carries the argument's own bytes, and the report
     /// applies the oracle's display rule to them.
-    ///
-    /// Measured on this family rather than assumed from `string.rs`'s: a
-    /// control byte reaches `found "..."` as `?` and a byte at or above
-    /// `0x80` reaches it raw -- `word('a b','01'x||'q')` names `"?q"` and
-    /// `word('a b','e9'x)` names the `0xe9` byte itself.
     #[test]
     fn a_substitution_carries_bytes_and_the_report_makes_them_displayable() {
         assert_eq!(
@@ -973,11 +800,6 @@ mod tests {
 
     /// The call layer runs before the operation layer here too, at the one
     /// shape in this family that can tell them apart.
-    ///
-    /// `SUBWORD` and `DELWORD` are the two with a second numeric argument, so
-    /// a zero position and a non-numeric count can be supplied together; the
-    /// adjacent success is the same call with the count made legal, which
-    /// then reaches the 93.924 the 40.12 was hiding.
     #[test]
     fn the_call_layer_is_checked_before_the_operation_layer() {
         assert_eq!(
@@ -1008,9 +830,6 @@ mod tests {
 
     /// The arity rows, at both ends and at the interior omission each one
     /// admits.
-    ///
-    /// `check_arity` owns all three, but the rows it reads are this task's,
-    /// so a wrong `(min, max)` shows up here rather than in a corpus run.
     #[test]
     fn the_arity_rows_are_the_oracles_own() {
         for (name, min, max) in [
@@ -1055,10 +874,6 @@ mod tests {
 
     /// A count or an offset is created as text, so `NUMERIC DIGITS` cannot
     /// reach it.
-    ///
-    /// The mutation this catches is building the result through
-    /// `Interp::number` under the settings in force, which would render `10`
-    /// as `1E+1` for a caller at `DIGITS 1`.
     #[test]
     fn a_counting_builtin_answers_text_that_no_digits_setting_reshapes() {
         assert_eq!(answer(b"WORDS", &[b"a b c d e f g h i j"]), b"10");

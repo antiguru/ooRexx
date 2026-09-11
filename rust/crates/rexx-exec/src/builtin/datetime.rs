@@ -15,119 +15,12 @@
 //! with the error inserts the oracle actually raises -- `DATE('C')` and
 //! `DATE('J')` exist in other Rexx dialects and are rejected with 40.904 on
 //! this build, measured.
-//!
-//! # Neither builtin may appear in a differential corpus program (D11)
-//!
-//! Both read the real wall clock for their no-argument forms, so nothing
-//! here can be pinned to a byte-exact value the way every other family in
-//! this phase is. What *is* deterministic, and what every test below pins,
-//! is the **conversion form** -- an explicit `indate`/`intime` argument
-//! converted between two named styles, which depends on nothing but its own
-//! bytes. `DATE`'s thirteen output letters (`BDEFILMNOSTUW`) and ten input
-//! letters (`BDEFINOSTU`) are each deterministic once an input is supplied,
-//! including `L`/`M`/`W` (month and weekday names). `M`/`W` read the
-//! oracle's own `monthNames`/`dayNames` tables (`RexxDateTime.cpp`)
-//! directly, hardcoded English text rather than a locale lookup. `L`'s own
-//! month name is a *different* mechanism -- `Interpreter::getMessageText
-//! (Message_Translations_January + month - 1)` (`BuiltinFunctions.cpp:1268`),
-//! a `rexxmsg.xml` catalogue entry -- and it agrees with `M`'s answer only
-//! because that catalogue entry is itself hardcoded to English on this
-//! build (`RexxErrorMessages.h:727`), not because `L` reads the same array.
-//! Either way, a fixed calendar date names its month and weekday exactly as
-//! pinned here regardless of when or where this runs. Only a
-//! **no-argument** call -- any of the thirteen letters, not a distinguished
-//! subset -- reads "today" and cannot be pinned.
-//!
-//! # The clock is cached once per clause, and `TIME('R')` is state that survives across clauses
-//!
-//! Measured against the oracle: two `TIME('L')` calls inside one clause
-//! answer identically across a real CPU burn placed *between* them, where
-//! the same burn placed between two separate clauses' calls changes the
-//! answer. `RexxActivation::getTime` (`execution/RexxActivation.cpp:3390`)
-//! is why: it caches a timestamp until `settings.timeStamp.valid` is
-//! cleared, and that happens exactly once per instruction, right after
-//! `nextInst->execute()` returns (`:647`). `Activation::cached_clock`
-//! reproduces this, invalidated from the identical one place every
-//! instruction passes through (`run.rs`'s `step_in_temps_frame`), on
-//! whichever activation is executing at the time -- which is also why it
-//! lives on the activation and not on the interpreter: a nested internal
-//! `CALL`'s own instructions invalidate only *its own* cache, never the
-//! caller's, matching the oracle's own per-activation `timeStamp` and
-//! measured directly against the shape above (`burn()` is a real internal
-//! routine, not scaffolding).
-//!
-//! `TIME('R')` resets an elapsed-time clock a later `TIME('E')`/`TIME('R')`
-//! measures from -- [`Interp::elapsed_anchor`]'s own doc has the reset
-//! semantics and the deliberate simplification this crate takes of the
-//! oracle's own lazily-applied reset. The transcript that pins it:
-//!
 //! ```text
 //! first time('R')            0
 //! time('E') after ~0.11s     0.109014
 //! time('R') after another    0.219483   = the sum of BOTH burns
 //! time('E') immediately      0.000023   so that R did reset
 //! ```
-//!
-//! # A few no-argument styles are also host-dependent absolute clocks
-//!
-//! Given a fixed input, `T`/`F` (a signed integer count of seconds or
-//! microseconds since a fixed epoch) are exactly as deterministic as every
-//! other letter -- `DATE.testGroup`'s own `date('T', date, format)`
-//! transcripts pin them. Only their *no-argument* reading is a raw clock
-//! sample, no more and no less host-dependent than a no-argument `B`/`D`
-//! reading "today"'s own basedate or day-of-year would be.
-//!
-//! **This crate reads that clock in the host's local zone, as the oracle
-//! does.** It did not until 2026-09-04: the offset was fixed at zero, which
-//! made every no-argument reading of either builtin a silent wrong answer
-//! anywhere but UTC, and `docs/superpowers/plans/phase-4-exclusions.txt`
-//! carried it as a `KNOWN GAP` with the transcripts. Both limbs the entry
-//! named are closed -- [`local_offset_micros`] for the clock, and the port of
-//! `setTimeZoneOffset` onto a parsed input value at both `indate`/`intime`
-//! sites. `tests/datetime_zone.rs` is the witness, and pins the zone rather
-//! than the clock because two interpreters launched seconds apart can never
-//! be compared on a reading of *now*.
-//!
-//! The offset comes from `chrono`, the only external crate `src/` depends on;
-//! `crates/rexx-exec/Cargo.toml` carries why. `std` exposes no local-zone API
-//! and the oracle's own `localtime` call is not reachable from safe Rust.
-//!
-//! # A defined answer where the oracle's own is undefined
-//!
-//! **`TIME`'s `H`/`S`/`M` input styles, crossed with a date-shaped output
-//! (`F`/`T`), diverge from the oracle -- `N`/`C`/`L` do not.** All six
-//! input styles start from `RexxDateTime::clear()`, which leaves
-//! `year`/`month`/`day` at `0`. `H`/`S`/`M` call `setHours`/`setSeconds`/
-//! `setMinutes`, none of which ever touch those three fields, so they stay
-//! at `0/0/0` on the oracle. `N`/`C`/`L` instead go through
-//! `parseDateTimeFormat`, whose own first three statements are
-//! unconditionally `day = 1; month = 1; year = 1;` -- run *before* the
-//! format string is even consulted, so a time-only format (`"HH:ii:ss"`,
-//! `"cc:iiCC"`, `"HH:ii:ss.uuuuuu"`) that never mentions those fields still
-//! leaves them at `1/1/1`, identically on both sides, because this crate's
-//! own [`Timestamp::parse`] ports that same unconditional reset. Measured
-//! directly against the oracle for all three: `time('F','12:34:56','N')`,
-//! `time('F','1:23pm','C')` and `time('F','01:02:03.456789','L')` give the
-//! identical answer on this crate and on the real interpreter.
-//!
-//! `H`/`S`/`M`'s own `0/0/0` then asks `getBaseDate()` for a *year* of `0`,
-//! which walks straight into the identical `monthStarts[-1]` read
-//! [`Timestamp::year_day`] documents for `DATE`'s day-of-year-`0` case --
-//! confirmed reproducible on this exact binary by working the oracle's own
-//! arithmetic through by hand and matching six real transcripts exactly
-//! (`time('F'/'T','5','H')`, `('30','S')`, `('90','M')`), not assumed
-//! stable across builds. This crate starts every cleared [`Timestamp`] at
-//! `1/1/1`, never `0/0/0`, so `H`/`S`/`M` land on a real (if very old)
-//! calendar date instead of reproducing that read -- a real, six-case
-//! divergence, pinned as such by
-//! [`time_h_s_m_diverge_from_the_oracle_for_a_date_shaped_output`] rather
-//! than left undocumented.
-//!
-//! `O` is not part of this family at all: its own input style copies
-//! `current` (`timestamp = current;`, `BUILTIN(TIME)`'s own `'O'` arm)
-//! before adjusting, so it starts from a real calendar date on both sides
-//! and never reaches `clear()`'s `0/0/0` in the first place. Its own former
-//! divergence was the UTC-only clock, closed above.
 
 use chrono::{Offset, TimeZone};
 
@@ -225,10 +118,6 @@ struct Timestamp {
     microseconds: i64,
     /// Microseconds this timestamp's own fields are offset from UTC,
     /// positive east of Greenwich -- `RexxDateTime::timeZoneOffset`.
-    ///
-    /// A clock reading carries the host's zone ([`now`]); a timestamp parsed
-    /// from an input value inherits the current reading's, which is what
-    /// `BuiltinFunctions.cpp` does immediately after its own `clear()`.
     time_zone_offset: i64,
 }
 
@@ -256,28 +145,6 @@ impl Timestamp {
 
     /// The day-of-year (`DATE('D')`), 1-based, leap day counted from March
     /// onward -- `RexxDateTime::getYearDay`.
-    ///
-    /// **`month == 0` is the consumer [`set_day`]'s own doc names**: this is
-    /// the site that would otherwise index `MONTH_STARTS` at `-1`, so the
-    /// lookup goes through `.get()` rather than direct indexing. Measured
-    /// on the oracle, `date('D','0','D')` (this crate's own `month == 0`)
-    /// returns `0` rather than crashing -- `monthStarts[-1]` happens to read
-    /// as `0` on this build. **That is a claim about what one out-of-bounds
-    /// C++ read happens to return, checked directly rather than assumed
-    /// stable**: cross-checked by hand against four *other* fields this
-    /// same input drives (`date('B','0','D')` = `739615`,
-    /// `date('W','0','D')` = `Wednesday`, `date('F','0','D')` = the matching
-    /// basetime, `date('T','0','D')` = the matching Unix time -- all four
-    /// arithmetic consequences of a year-day of exactly `0`), and the fifth
-    /// consumer, `date('M','0','D')`, **segfaults the real oracle** (its own
-    /// `monthNames[-1]` is not so lucky). So `0` is reproducible on this
-    /// exact binary, not "`0` by construction" -- a different build could
-    /// read anything at that offset, this crate is not attempting to track
-    /// that offset, and `unwrap_or(0)` is chosen because it is what this
-    /// build happens to do, pinned by the four transcripts above rather
-    /// than derived from anything about `MONTH_STARTS` itself.
-    ///
-    /// [`set_day`]: Timestamp::set_day
     fn year_day(&self) -> i64 {
         let mut yearday = MONTH_STARTS
             .get((self.month - 1) as usize)
@@ -316,9 +183,6 @@ impl Timestamp {
     /// [`base_time`] adjusted by this timestamp's own [`time_zone_offset`]
     /// -- `RexxDateTime::getUTCBaseTime`, and `TIME('E')`/`TIME('R')`'s own
     /// unit.
-    ///
-    /// [`base_time`]: Timestamp::base_time
-    /// [`time_zone_offset`]: Timestamp::time_zone_offset
     fn utc_base_time(&self) -> i64 {
         self.base_time() + self.time_zone_offset
     }
@@ -370,18 +234,6 @@ impl Timestamp {
     /// Sets month/day from a 1-based day-of-year, using this timestamp's own
     /// (already-set) year to choose the leap-aware month table --
     /// `RexxDateTime::setDay`.
-    ///
-    /// A day-of-year at or below `0` is the module doc's own defined-instead-
-    /// of-undefined case: set to month `0`, day `0` (clamped, never
-    /// negative). **This function's own lookup never indexes the month
-    /// table at `-1`** -- the `basedays < 1` arm below returns before
-    /// reaching it -- but `month == 0` still has to be read back out
-    /// somewhere, and every place that happens ([`year_day`], [`month_name`])
-    /// carries its own guard rather than assuming this function's early
-    /// return was the only place the hazard could show up.
-    ///
-    /// [`year_day`]: Timestamp::year_day
-    /// [`month_name`]: Timestamp::month_name
     fn set_day(&mut self, basedays: i64) {
         if basedays < 1 {
             self.month = 0;
@@ -501,20 +353,6 @@ impl Timestamp {
     /// `DATE('M')`'s own month name (and `'L'`'s, through [`Timestamp::
     /// format_language`]) -- `RexxDateTime::getMonthName`, `monthNames
     /// [month - 1]`.
-    ///
-    /// **`month == 0` is defined here, not reproduced from the oracle.**
-    /// [`Timestamp::year_day`]'s own doc has the sibling case
-    /// (`monthStarts[-1]`) and the four transcripts that cross-check it;
-    /// this one has no transcript to cross-check against, because the
-    /// identical input segfaults the real oracle instead of answering a
-    /// value -- measured, `date('M','0','D')` is rc 139 there, three runs
-    /// of three, `monthNames[-1]` reading a garbage pointer rather than
-    /// `monthStarts[-1]`'s own lucky `0`. This crate answers the empty
-    /// string rather than reproducing that crash, which is the only
-    /// defined choice available: there is no oracle byte to match.
-    ///
-    /// [`Timestamp::year_day`]: Timestamp::year_day
-    /// [`Timestamp::format_language`]: Timestamp::format_language
     fn month_name(&self) -> &'static [u8] {
         MONTH_NAMES
             .get((self.month - 1) as usize)
@@ -929,13 +767,6 @@ fn real_clock_base_time() -> i64 {
 /// activation* is stepping -- cached on that activation, and read fresh
 /// only once [`Activation::clock_stale`] says so. See its own doc for why
 /// the cache lives on the activation rather than on `Interp`.
-///
-/// **Also where a pending `TIME('R')` reset actually takes effect** --
-/// [`Interp::pending_elapsed_reset`]'s own doc has why that has to happen
-/// here, at the cache miss, rather than the instant `TIME('R')` runs: the
-/// still-stale [`Activation::cached_clock`] is read one last time, into
-/// [`Interp::elapsed_anchor`], before this function overwrites it with a
-/// fresh reading.
 fn now_base_time(interp: &mut Interp) -> i64 {
     if !interp.activation().clock_stale {
         return interp
@@ -958,15 +789,6 @@ fn now_base_time(interp: &mut Interp) -> i64 {
 
 /// Microseconds the host's local zone is ahead of UTC at `utc_micros`,
 /// which is [`UNIX_BASE_TIME`]-based like every other reading here.
-///
-/// `SystemInterpreter::getCurrentTime` (`platform/unix/TimeSupport.cpp:81`)
-/// computes the same quantity as `tv.tv_sec - mktime(gmtime(&tv.tv_sec))`,
-/// which is local-minus-UTC and so **positive east of Greenwich** -- for
-/// UTC+2 the oracle's own `TIME('O')` reads `7200000000`.
-///
-/// The offset is taken **at that instant** rather than sampled separately,
-/// so a reading that straddles a DST transition cannot pair one zone's
-/// calendar fields with the other's offset.
 fn local_offset_micros(utc_micros: i64) -> i64 {
     let unix_micros = utc_micros - UNIX_BASE_TIME;
     let secs = unix_micros.div_euclid(MICROSECONDS);
@@ -989,15 +811,6 @@ fn local_offset_micros(utc_micros: i64) -> i64 {
 }
 
 /// The clause's own clock reading, decomposed into calendar fields.
-///
-/// **The fields are the host's local time and [`Timestamp::time_zone_offset`]
-/// is the zone that produced them**, which is what `getCurrentTime` fills in:
-/// `localtime` for the calendar, the offset alongside it. A consequence worth
-/// naming because it looks like a defect: `DATE('T')`/`TIME('F')` are then
-/// local-shifted rather than true UTC epoch counts, since
-/// [`Timestamp::base_time`] reads the local fields -- measured, the oracle
-/// answers `1786117069` where the true epoch second is `1786109869`. Matching
-/// that is the point.
 fn now(interp: &mut Interp) -> Timestamp {
     let mut timestamp = Timestamp::clear();
     let utc = now_base_time(interp);
@@ -1086,7 +899,6 @@ const ALPHANUM: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01
 /// three call sites at once, all rc 216 and none of them what
 /// `set.contains(&0)` alone would answer since none of [`ALPHANUM`],
 /// `"EINOSU"` or `"BDFLMTW"` contains a literal zero:
-///
 /// ```text
 /// date('S','20070922','S','00'x)     40.43   (the alphanumeric-set osep check)
 /// date('00'x,,,'-')                  40.904  (the EINOSU osep-compatibility check;
@@ -1123,14 +935,6 @@ fn check_separator(name: &[u8], position: usize, sep: &[u8]) -> Result<(), Failu
 /// `DATE()` / `DATE(option, indate, option2, osep, isep)`: today's date, in
 /// one of thirteen output styles, optionally converted from an explicit
 /// `indate` given in one of ten input styles.
-///
-/// Argument order and every validation this reproduces follow `BUILTIN
-/// (DATE)` (`expression/BuiltinFunctions.cpp:1001`) line for line, because
-/// the ordering between checks is itself observable -- measured,
-/// `date(,'20070922','w',,'-')` raises 40.44 (the input separator is
-/// incompatible with style `W`) rather than 40.904 (`W` is not a valid
-/// input style at all), so the separator-compatibility check runs before
-/// the style-letter switch that would otherwise catch it first.
 pub(crate) fn date(
     interp: &mut Interp,
     name: &'static [u8],
@@ -1238,13 +1042,6 @@ pub(crate) fn date(
 /// one of eleven output styles, optionally converted from an explicit
 /// `intime` given in one of nine input styles; `E`/`R` are the elapsed-time
 /// pair the module doc's own transcript pins.
-///
-/// Ordering, as `BUILTIN(TIME)` (`expression/BuiltinFunctions.cpp:1313`)
-/// applies it: `option2`'s own presence-requires-`intime` check
-/// (measured, `time(,,'n')` is 40.5 naming argument 2) runs *before*
-/// `option2`'s own emptiness check, the reverse of the order `DATE`'s
-/// analogous pair runs in -- each is read directly from its own builtin
-/// rather than assumed to match the other's.
 pub(crate) fn time(
     interp: &mut Interp,
     name: &'static [u8],
@@ -1587,11 +1384,6 @@ mod tests {
     /// '1 Jan 0001')` (the zero basedate) and `date('B', '31 Dec 9999')`
     /// (the maximum) pin the two ends of the range [`Timestamp::
     /// set_base_date`] accepts, both measured against the oracle.
-    ///
-    /// **`D` is not here.** Its own conversion depends on "today"'s year
-    /// (`date('S','265','D')` would be `20260922` only in 2026, and wrong
-    /// on 2027-01-01), so it is pinned separately, year-independently, by
-    /// [`dates_day_of_year_style_round_trips_regardless_of_the_current_year`].
     #[test]
     fn date_every_input_letter_round_trips_to_standard() {
         for (probe, expected) in [
@@ -1671,17 +1463,6 @@ mod tests {
     /// `monthNames[-1]` unlike `monthStarts[-1]`), and this crate's own
     /// answer for it is the deliberate divergence [`month_name`]'s own doc
     /// names, not something to reproduce.
-    ///
-    /// Without [`Timestamp::year_day`]'s `.get(...).unwrap_or(0)` guard,
-    /// every one of `D`/`B`/`W`/`F`/`T` below panics the process (`index
-    /// out of bounds`, `MONTH_STARTS[(self.month - 1) as usize]` with
-    /// `self.month == 0`) rather than raising a Rexx condition -- a defect
-    /// no `SIGNAL ON SYNTAX` could ever catch, so this is the only
-    /// regression protection either that guard or `M`'s own separate one
-    /// in [`month_name`] has, since D11 keeps both builtins out of every
-    /// differential corpus program permanently.
-    ///
-    /// [`month_name`]: Timestamp::month_name
     #[test]
     fn date_day_of_year_zero_is_defined_across_five_output_styles() {
         assert_eq!(output(b"say date('D','0','D')\n"), "0\n");
@@ -1703,8 +1484,6 @@ mod tests {
     /// valid depends on the real calendar year this test happens to run
     /// in, which [`date_366_is_valid_only_in_a_leap_year`] checks
     /// separately and correctly instead of assuming one answer here.
-    ///
-    /// [`date_366_is_valid_only_in_a_leap_year`]: date_366_is_valid_only_in_a_leap_year
     #[test]
     fn date_conversion_errors_are_40_19() {
         for (source, expected_style) in [
@@ -1727,8 +1506,6 @@ mod tests {
     /// `365` is always a valid day-of-year, leap or not -- paired with
     /// [`date_366_is_valid_only_in_a_leap_year`], which is the one that
     /// actually depends on which year "today" is.
-    ///
-    /// [`date_366_is_valid_only_in_a_leap_year`]: date_366_is_valid_only_in_a_leap_year
     #[test]
     fn date_365_is_always_a_valid_day_of_year() {
         assert_eq!(output(b"say date('D','365','D')\n"), "365\n");
@@ -2177,16 +1954,6 @@ mod tests {
     /// A `DATE` result assigned to a variable survives every allocation a
     /// later clause makes, under `run_program_collect_every_alloc` (the
     /// gate's own collect-on-every-allocation mode, `lib.rs`).
-    ///
-    /// **Not evidence of a defect this task had to guard against.** Every
-    /// arm of [`date`] and [`time`] allocates its result exactly once, as
-    /// the very last thing it does before returning -- there is no second
-    /// allocation in the same call for an earlier one to be swept across,
-    /// unlike the compound-`VALUE` shape the shared brief's own rooting
-    /// warning names. This test is the general property (a variable's
-    /// value stays reachable across further allocations) run against this
-    /// module's own code, not a probe for a hazard this module's own shape
-    /// does not have.
     #[test]
     fn a_dates_result_survives_the_next_calls_allocations() {
         let outcome = crate::run_program_collect_every_alloc(

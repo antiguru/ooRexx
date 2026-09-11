@@ -13,7 +13,6 @@
 //! `REXX_BENCH_BINARY`. This is Task 0.7: it asserts nothing and gates
 //! nothing -- it only establishes the numbers that every later phase's
 //! performance gate (D9, Global Constraints) compares against.
-//!
 //! Run against the C++ oracle with:
 //! ```sh
 //! REXX_BENCH_BINARY=../build/bin/rexx cargo bench -p rexx-bench -- --save-baseline cpp-linux

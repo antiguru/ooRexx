@@ -10,21 +10,12 @@
 /*----------------------------------------------------------------------------*/
 
 //! The `**` operator.
-//!
-//! Ported from `NumberString::power` (`NumberStringMath2.cpp:811`).
 
 use crate::muldiv::{strip_leading, subtract_multiple};
 use crate::{ArithError, Digits, MAX_EXPONENT, Number};
 
 impl Number {
     /// The value one.
-    ///
-    /// Built directly rather than parsed. `Number::parse("1")` scans a string
-    /// and runs the whole numeric grammar for a value whose digit vector is
-    /// one byte; this is the same `Number` and is a `const fn`, so a caller
-    /// naming it in a `const` pays nothing at all. A controlled `DO` with no
-    /// `BY` asks for this on every loop entry, which for a nested loop is
-    /// once per iteration of the loop above it.
     pub const fn one() -> Number {
         Number {
             negative: false,
@@ -35,14 +26,6 @@ impl Number {
 
     /// Interprets this number as a whole number expressible within `digits`
     /// significant digits, which is what `**` requires of its exponent.
-    ///
-    /// The value is **rounded to `digits` first**, and only then required to
-    /// be whole. That is why `2 ** 2.5` is error 26 at DIGITS 9 but `8` at
-    /// DIGITS 1, where 2.5 rounds to 3.
-    ///
-    /// `2 ** 1e10` is error 26 at DIGITS 9 -- ten thousand million needs
-    /// eleven digits -- but succeeds at DIGITS 15, where it then fails with
-    /// error 42 because the *result* is out of range.
     fn as_whole(&self, digits: u64) -> Option<i64> {
         let rounded = self.round_to(digits);
         let self_ = &rounded;
@@ -183,12 +166,6 @@ impl Number {
 
 /// The reciprocal `1 / accum` for a negative power, ported from
 /// `NumberString::dividePower` (`NumberStringMath2.cpp:1059`).
-///
-/// The interpreter keeps this separate from its general division, and the
-/// differences are observable: it long-divides 1 by the accumulator to at
-/// most `digits + 1` quotient digits and stops there, with no rounding, no
-/// trailing-zero stripping and no range check of its own -- all of that is
-/// left to `pow`'s tail.
 fn divide_power(accum: &Number, digits: u64) -> Number {
     debug_assert!(!accum.is_zero(), "pow never inverts a zero accumulator");
     let divisor = &accum.digits;

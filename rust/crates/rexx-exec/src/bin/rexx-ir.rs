@@ -10,27 +10,11 @@
 /*----------------------------------------------------------------------------*/
 
 //! Prints the compiled op stream of a program: `rexx-ir FILE [TRACE-SETTING]`.
-//!
-//! **A view of the compiler, and nothing is run.** `rexx_exec::render_ir` owns
-//! what that means and what it cannot show; this file reads a path, hands the
-//! bytes over, and writes the answer.
-//!
-//! The optional second word is the `TRACE` setting the chunk is compiled
-//! under, spelled as a `TRACE` instruction spells it (`n`, `r`, `i`, `a`, ...).
-//! It is an input to compilation rather than a display option, which is why it
-//! is an argument here at all: under a setting that echoes, every promoted
-//! clause carries an `Op::TraceClause` that the same body compiled untraced
-//! does not have. It defaults to `n`, the setting a program runs under with no
-//! `TRACE` instruction in it.
 
 use std::io::Write;
 use std::process::ExitCode;
 
 /// The `TRACE` setting a chunk is compiled under when the caller names none.
-///
-/// `N`, because that is what an activation's setting is before any `TRACE`
-/// instruction runs, so this is the stream a program's first pass through each
-/// body actually uses.
 const DEFAULT_SETTING: &[u8] = b"n";
 
 fn main() -> ExitCode {

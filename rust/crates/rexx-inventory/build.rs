@@ -1,8 +1,4 @@
 //! Derives Rust tables from the C++ tree at build time.
-//!
-//! The C++ tree is the source of truth. Nothing here is hand-maintained, and
-//! nothing generated is written into `src/` -- it all goes to `OUT_DIR` and is
-//! `include!`d, so a stale copy cannot be committed by accident.
 
 use quick_xml::Reader;
 use quick_xml::events::Event;

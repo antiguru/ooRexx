@@ -11,28 +11,6 @@
 
 //! The driver: what runs a compiled [`Chunk`] for the activation on top of
 //! the stack.
-//!
-//! **The program counter is an op index.** That is the whole of what makes a
-//! promoted construct possible: an `IF` compiles to a run of ops sitting
-//! inside one instruction's position, and a counter that walks instructions
-//! cannot enter one. The instruction space has not gone away -- `Flow::Goto`
-//! and `Flow::Signal` both carry instruction indices, and `Chunk::op_of` is
-//! the one table where the two spaces meet.
-//!
-//! It sits beside `run_activation`'s own loop rather than replacing it --
-//! `Interp::engine` chooses between the two -- and it discharges exactly the
-//! same per-clause obligations, through the same functions, because those
-//! were extracted from that loop rather than copied out of it:
-//! `grant_procedure_permission`, the clause unit, `offer_to_trap`,
-//! `apply_flow` and `absorb`.
-//!
-//! **The clause unit is reached by its two halves here and by its closure form
-//! there, and they are two entry shapes into one implementation** --
-//! `Interp::enter_stepped_clause` and `Interp::leave_stepped_clause`, which
-//! `Interp::in_stepped_clause_with` is itself defined in terms of. That is what
-//! lets a promoted clause's ops run in this file's own loop, with no callee
-//! between the clause's two ends, without the driver owning a second copy of
-//! what a clause boundary owes.
 
 use rexx_core::{Decoded, FrameId, ObjRef};
 use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, ProgramSource, SymbolId};
@@ -48,31 +26,10 @@ use crate::run::{
 use crate::{Code, Failure, Interp, Loud};
 
 /// What a body that runs off its own end answers.
-///
-/// `Exited` and not `Returned`, for the reason `Ended::Exited`'s own doc
-/// gives and `run_activation`'s loop ends with: a callee that runs off the
-/// end of the file ends the *program*, and the caller's next clause never
-/// runs.
 const END_OF_BODY: Ended = Ended::Exited(None);
 
 /// One construct the driver has open: a `SELECT` branch that is running, and
 /// everything an escaping `Flow` needs in order to leave it.
-///
-/// **This is the tree-walker's own Rust call frame, flattened.** There, a
-/// matched `WHEN`'s branch is `run_bounded(code, when + 1, body_end, ...)?`
-/// followed by `leave_select`, and the call stack is what makes an escaping
-/// `Flow` meet that `leave_select` before it meets the enclosing range. A flat
-/// op stream has no call between the two, so the driver keeps the frames
-/// itself and an escaping `Flow` walks them.
-///
-/// **One stack on `Interp`, sliced per [`Interp::run_ops`] call.** Each entry
-/// records the length it found and treats everything below as another level's,
-/// so a `DO` body entering `run_ops` again through `run_bounded_from_chunk`
-/// still gets a region of its own: a `LEAVE` there meets the loop first and
-/// this frame afterwards, in that order, exactly as the nested calls give.
-/// [`Interp::unwind_frames`] is what a `Failure` costs -- it unwinds out of
-/// `run_ops` with frames still open, and the entry boundary truncates back to
-/// the length it recorded rather than each raise remembering to.
 pub(crate) struct SelectFrame {
     /// The `SELECT` instruction this branch belongs to, which is the position
     /// `pop_search_frame` resets a forwarded `LEAVE`'s indent to.
@@ -103,26 +60,9 @@ pub(crate) struct SelectFrame {
 
 /// **SPIKE.** One construct this level has open: a `SELECT`'s branch, or a
 /// flattened `DO`/`LOOP`.
-///
-/// **The two are one stack because a `Flow` leaving either is absorbed the
-/// same way** -- `settle` reads a range off whichever frame is innermost and
-/// asks `absorb`, and only what it does with an escape differs. A loop that
-/// held its state in a local of the driver instead would put that state in
-/// `run_ops`' own frame, which entry 66 measured at 66 instructions per pass
-/// before the flat path is ever taken.
-/// **The two fields the driver reads per op are in the frame itself rather
-/// than behind the kind**, so `pop_if`'s check and `settle`'s range stay the
-/// field loads they were before a second kind of frame existed. Measured: with
-/// them behind a `match`, a body clause costs 4 instructions more even when no
-/// loop is ever flattened, and a program has far more clauses than passes.
 pub(crate) struct Frame {
     /// One past this frame's last op, which reaching means the frame's own
     /// range ran out.
-    ///
-    /// **`u32::MAX` for a loop**, because a loop's body running out is an
-    /// arrival at [`super::Op::LoopNext`] rather than a position the driver
-    /// tests for: the op is at the `END`, so the driver decodes it on arrival
-    /// and this check must never fire for a loop.
     op_end: u32,
     /// The instruction range an escaping `Flow` is absorbed against.
     start: usize,
@@ -161,10 +101,6 @@ impl Frame {
 }
 
 /// Which of a `SELECT`'s two kinds of branch a [`SelectFrame`] is open over.
-///
-/// The two leave differently, and the difference is `run_otherwise`'s own
-/// split from `step`'s `Select` arm: `OTHERWISE`'s dispatch restores
-/// `Interp::indent_offset` once it is over, and a matched `WHEN`'s does not.
 enum Branch {
     /// A matched listed `WHEN`'s branch.
     When,
@@ -183,14 +119,6 @@ enum Settled {
 
 /// What a promoted clause's own ops answered: where they left the program
 /// counter, or the `Flow` a construct they resolved produced.
-///
-/// A type of its own so it can carry [`ClauseValue`]: `Interp::in_clause`
-/// chooses what to root across a delivered `CALL ON` handler from its work's
-/// return type. A counter position roots nothing, because a promoted clause's
-/// values live in the chunk's register region, which the clause's own temps
-/// frame is not the root for and does not unwind. A `Flow` does -- `Flow::Exit`
-/// carries a value whose only root can be that frame -- and it answers through
-/// `Flow`'s own implementation rather than a second copy of the rule.
 enum RegionEnd {
     /// Continue at this op.
     At(u32),
@@ -210,13 +138,6 @@ impl ClauseValue for RegionEnd {
 
 /// The name [`Loud::op_not_driven`] reports for an op the driver's own loop
 /// has no arm for.
-///
-/// **Out of line and `#[cold]`, so the loop's dispatch does not carry an arm
-/// per undriven op.** Every op that belongs to a clause region reaches the
-/// loop's wildcard, and naming it there would put a second table beside the
-/// one the driven ops use -- measured, and the arms are what it costs rather
-/// than the frame: dropping them took `emptyloop.rex` -2.105% and
-/// `varlookup.rex` -1.087% while the frame grew.
 #[cold]
 fn undriven_op_name(op: &Op) -> &'static str {
     match op {
@@ -291,10 +212,6 @@ impl Interp {
 
     /// One [`crate::ir::Op::TraceArgument`]'s `>A>` line, its gate already
     /// answered by the caller.
-    ///
-    /// The indent is the calling clause's own and is read fresh, for
-    /// `invoke_call`'s own measured reason: an earlier argument's callee can
-    /// have moved it.
     #[inline(never)]
     fn trace_call_arg(&mut self, registers: FrameId, src: u16) {
         let indent = self.clause_state.current_value_indent;
@@ -310,10 +227,6 @@ impl Interp {
 
     /// One [`crate::ir::Op::CallArgs`]: resolve the callee, then run it over
     /// the `argc` arguments its own ops left on the argument stack.
-    ///
-    /// **Deliberately not inlined into the driver.** See the op's arm for the
-    /// measurement; what it costs to inline is paid by every op in the stream
-    /// and not only by calls.
     #[inline(never)]
     #[allow(
         clippy::too_many_arguments,
@@ -336,17 +249,6 @@ impl Interp {
         // is what makes this op cheaper than `Op::CallExpr`: a resolved
         // builtin dispatches through the row the site holds, and that dispatch
         // does not read it.
-        //
-        // **It is read now, and this is a live defect.** `CallContext::name`
-        // takes whatever is passed here, and Phase 5i's `RexxContext~name` and
-        // `StackFrame~name` read that field -- so from the *second* execution
-        // of one call site onward, where the arm below is skipped, they answer
-        // the null string. The `CALL` form is unaffected and the tree-walker
-        // is correct throughout. Recorded as row 13 of the phase's
-        // `docs/superpowers/records/2026-09-07-phase-5i-introspection/found-not-fixed-register.md`,
-        // which owns the fix; this comment is corrected rather than the code,
-        // because the sentence that used to justify the empty spelling is no
-        // longer true.
         let mut spelling: &[u8] = b"";
         let resolved = match chunk.resolved_call(site) {
             Some(resolved) => {
@@ -377,10 +279,6 @@ impl Interp {
     /// One [`crate::ir::Op::CallNamed`]: resolve the callee off the site or
     /// the instruction's own name, then run it over the `argc` arguments its
     /// own ops left on the argument stack.
-    ///
-    /// **Deliberately not inlined into the driver**, for the reason
-    /// [`Interp::run_call_args`] gives: what it costs to inline is paid by
-    /// every op in the stream and not only by calls.
     #[inline(never)]
     fn run_call_named(
         &mut self,
@@ -419,17 +317,6 @@ impl Interp {
     }
 
     /// Closes the innermost `SELECT` branch if it runs out at `pc`.
-    ///
-    /// **The test [`super::Op::EndWhen`] exists to make, and the one the range
-    /// boundary makes for itself.** It used to run in front of every op, which
-    /// is where the answer was wanted for a branch that falls out of its own
-    /// end; the op sits at exactly that position instead, and a jump to the
-    /// instruction it belongs to lands on it because `Chunk::op_of` resolves
-    /// to a resume point in front of the ops emitted before that instruction.
-    ///
-    /// `Flow::Next` rather than a carried flow, because falling out of a
-    /// branch is what this closes; an escaping flow reaches `settle` instead
-    /// and unwinds the frames itself.
     #[expect(
         clippy::too_many_arguments,
         reason = "the range `settle` absorbs against, and every argument is one the driver \
@@ -466,13 +353,6 @@ impl Interp {
 
 impl Interp {
     /// Runs `chunk` for the activation on top of the stack.
-    ///
-    /// The register region is reserved once, here, from `chunk.registers`,
-    /// and truncated away on every path out. It sits on the temporaries
-    /// stack (`RootSet::reserve_temps`' own doc has why neither a slot frame
-    /// of its own nor the activation's own frame works), below every
-    /// watermark a clause takes, so a clause's own frame pops back to above
-    /// it rather than through it.
     pub(crate) fn run_chunk(
         &mut self,
         code: &Code<'_>,
@@ -494,15 +374,6 @@ impl Interp {
 
     /// The body of `run_chunk` past the register region, split out so the
     /// truncation above covers every way this returns.
-    ///
-    /// **Two levels rather than one flat loop, and the reason is the trap
-    /// offer.** [`Interp::run_ops`] runs ops until one escapes its range, and
-    /// is the same function `run_bounded`'s chunk arm enters for a construct's
-    /// body -- so it must not offer anything to a trap, exactly as
-    /// `run_bounded` does not. This level is the activation's own, which is
-    /// where the offer belongs: one per activation, made by the activation
-    /// that is unwinding. A nested `run_ops` (a `DO` body) shares this
-    /// activation's traps and must not get a second offer.
     fn run_chunk_clauses(
         &mut self,
         code: &Code<'_>,
@@ -515,15 +386,6 @@ impl Interp {
             // The activation's own `pc` is where a body is entered at -- `0`
             // for a program, a label's index for a `CALL`, a handler's for a
             // trap -- and `apply_flow` is what moves it afterwards.
-            //
-            // **The op counter below is a local, and what licenses that is a
-            // property of the `pc` rather than a claim about who reads it.**
-            // The tree-walker already leaves the `pc` sitting on an `IF` for
-            // the whole of that `IF`'s branch and on a `DO` for the whole of
-            // its loop, so a `pc` that does not name the clause currently
-            // running is the behaviour every reader of it already has to
-            // tolerate. This driver leaves it in exactly the same states: on
-            // whichever clause `apply_flow` last routed to.
             let entry = self.activation().pc;
             if entry >= len {
                 return Ok(END_OF_BODY);
@@ -560,15 +422,6 @@ impl Interp {
 
     /// `run_bounded`'s chunk arm: the instructions of `[start, end)`, run from
     /// `chunk`'s ops.
-    ///
-    /// The one mapping from the instruction space a range is expressed in
-    /// into the op space the loop walks, and the one guard on it. `compile`
-    /// writes one entry per instruction plus a final one, so the lookup is in
-    /// range for any index that indexes an instruction.
-    ///
-    /// `#[inline]` because this is entered once per pass of every promoted
-    /// `DO` body and does one map lookup before handing over, where the
-    /// tree-walker's own arm is inlined into its caller outright.
     #[inline]
     pub(crate) fn run_bounded_from_chunk(
         &mut self,
@@ -587,26 +440,6 @@ impl Interp {
 
     /// Runs `chunk`'s ops from op `at` until one of them produces a `Flow`
     /// that `[start, end]` does not absorb, and answers that `Flow`.
-    ///
-    /// `start` and `end` are **instruction** indices, because that is what a
-    /// `Flow::Goto` carries and what a construct computes its body's bounds
-    /// in; `at` and the counter are **op** indices. `Chunk::op_at` is where
-    /// the two spaces meet, and `absorb` -- shared with the tree-walker's own
-    /// bounded loop -- is where the rule that reads them lives.
-    ///
-    /// Reaching the op one past `end`'s own first op, whether by falling
-    /// through or by an absorbed `Goto`, is the only way this answers
-    /// `Flow::Next`; every other exit is the escaping `Flow` unchanged.
-    ///
-    /// `GRANTING` is whether this level is the activation's own, and so owes
-    /// each clause it opens the first-instruction permission. **The
-    /// tree-walker's own split, kept exactly**: `run_activation`'s loop calls
-    /// `grant_procedure_permission` and `run_bounded` does not, so a clause
-    /// inside a construct's body never spends the permission and a `PROCEDURE`
-    /// there is 17.1. Granting at every level instead would be a `mem::take`
-    /// per body clause that answers `false` every time. It is a `const`
-    /// parameter rather than a value because each caller knows its own answer
-    /// at the call site, which turns a per-clause branch into no code at all.
     #[expect(
         clippy::too_many_arguments,
         reason = "two callers, and every argument is a value each already holds"
@@ -741,44 +574,6 @@ impl Interp {
                     // **Whether the setting in force is still the one this
                     // chunk's trace ops were emitted for**, and the whole of
                     // what makes a compiled-in emission decision safe.
-                    //
-                    // The widened cache key answers this on the way in:
-                    // `chunk_for` is asked for the chunk of the setting in
-                    // force, so a body entered under a second setting gets a
-                    // second chunk rather than the first one. What the key
-                    // cannot answer is a `TRACE` run *while this chunk is
-                    // running*, which changes the setting with nothing
-                    // consulting the cache -- and the reply is not a
-                    // re-compile but a fall back to the run-time gate for the
-                    // clauses that follow, which is what the tree-walker does
-                    // for the same clause anyway.
-                    //
-                    // **Read here, per promoted clause, rather than kept in a
-                    // local the loop initialises -- and that is a measurement
-                    // rather than the obvious shape.** A local has to be
-                    // initialised, and `bench-programs/emptyloop.rex`, whose
-                    // body holds no promoted clause at all, enters `run_ops`
-                    // once per pass: it has nothing for the answer to decide
-                    // and would pay for it anyway. Measured with `perf stat -e
-                    // instructions:u` against 40.3009 billion user
-                    // instructions before this task:
-                    //
-                    //   * initialised at every `run_ops` entry -- 40.7259
-                    //     billion, 17 per pass;
-                    //   * read here -- 40.4009 billion, 4 per pass, and those
-                    //     four are the extra op variant in this match rather
-                    //     than the read, since this program reaches no
-                    //     `Clause` op at all.
-                    //
-                    // A clause that does have an echo to decide pays one
-                    // comparison, which is the one `in_stepped_clause` used to
-                    // make for it.
-                    //
-                    // It is also the shape with no premise about *who* can
-                    // change the setting mid-body. A local refreshed after the
-                    // ops that can run a `TRACE` needs that list to be right,
-                    // and the list is an internal enumeration; reading the
-                    // setting where the answer is used needs nothing.
                     let stale = chunk.trace().clause_echoes() != self.chunk_trace().clause_echoes();
                     // **`stale` moves the clause echo from the stream back to
                     // the run-time gate, in both directions at once.** The
@@ -802,13 +597,6 @@ impl Interp {
                     // `Interp::in_stepped_clause_with` is itself defined in
                     // terms of -- so a promoted clause and an unpromoted one
                     // discharge the same list from the same code.
-                    //
-                    // What the shape is worth is an IR-minus-tree-walker gap
-                    // per pass, and it moves with every promotion landed after
-                    // it, so it is recorded per commit in
-                    // `bench-baselines/phase-4e-arms.tsv` rather than restated
-                    // here -- a row keyed by a hash cannot go stale where a
-                    // number written into this line can.
                     let entry = self.enter_stepped_clause(
                         echo,
                         code,
@@ -821,51 +609,9 @@ impl Interp {
                     // Taken on entry exactly as `step` takes it, because a
                     // promoted clause is a clause and the permission is spent
                     // by whichever clause the activation granted it to.
-                    //
-                    // **Load-bearing, and so is the `grant_procedure_permission`
-                    // call in front of this region -- each with a witness of its
-                    // own.** Both were once unobservable, on the premise that an
-                    // op which grants follows every region and grants again
-                    // before any `PROCEDURE` is reached. Neither half of that
-                    // holds, and each fails for a different reason:
-                    //
-                    // * a construct whose body clauses are stepped by a nested,
-                    //   *non-granting* driver entry has no later grant at all,
-                    //   so without this take a `PROCEDURE` as a loop body's
-                    //   first instruction is permitted. Measured: dropping it
-                    //   makes `tests/ir_recorded_cases/loop-header-boundaries`'
-                    //   "procedure as a loop body's first instruction" row
-                    //   diverge between the engines, and nothing else in the
-                    //   workspace notices;
-                    // * a promoted clause that *is* the activation's first
-                    //   instruction has to consume `first_instruction_pending`
-                    //   itself, or the next clause's grant consumes it instead
-                    //   and a `PROCEDURE` behind a promoted clause is permitted.
-                    //   Measured: dropping the grant makes
-                    //   `tests/ir_recorded_cases/assignment-and-say`'s "procedure
-                    //   after an assignment in a called label" row diverge, and
-                    //   again nothing else notices.
                     self.region_procedure_permitted = std::mem::take(&mut self.procedure_permitted);
                     // The ops of this promoted clause, `[pc + 1, end)`, and
                     // where they leave the counter.
-                    //
-                    // **A labelled block rather than a callee**, and the
-                    // failure path is what makes that possible: the clause's
-                    // result reaches `leave_stepped_clause` as a value, so an
-                    // op that fails leaves the region carrying it rather than
-                    // taking a `?` past the boundary that owes it a site.
-                    //
-                    // Only the ops that are part of a clause's own work appear
-                    // here. An op that opens a clause of its own does not:
-                    // `compile` emits one region per instruction and never
-                    // nests one inside another, so the only `Op::Clause` in
-                    // `(here, end)` would be one this compiler does not emit.
-                    //
-                    // The register mark the plan's Decisions section describes
-                    // is a compile-time quantity -- the allocator releases to it
-                    // when this region's ops were emitted -- so there is nothing
-                    // to release here: the registers this region wrote are
-                    // simply not addressed again.
                     let ran: Result<RegionEnd, Failure> = 'cold: {
                         // **The region answers an op index and nothing else.**
                         // Where a clause leaves the counter is the whole of what
@@ -882,11 +628,6 @@ impl Interp {
                             // region's own ops because they are not `ObjRef`s and so
                             // have no register to live in: a bound is a `Number` and
                             // a budget is a count.
-                            //
-                            // **`None` until an op needs one**, so a region that is
-                            // not a loop header -- an `IF`'s, a `WHEN`'s, a
-                            // `SELECT`'s -- pays one discriminant store rather than
-                            // the struct's own initialisation.
                             let mut header: Option<LoopHeaderValues> = None;
                             let Some(ops) = chunk.ops_in(pc + 1, end) else {
                                 break 'cold Err(Loud::chunk_map_too_short().into());
@@ -928,12 +669,6 @@ impl Interp {
                                     // arms are the same functions `eval.rs` calls
                                     // on the same node; only the resolution comes
                                     // from the site instead of being made again.
-                                    //
-                                    // `enter_eval_node` is called because the
-                                    // *arguments* go back through `eval`, and a
-                                    // call that skipped it would start them one
-                                    // level shallower than the tree-walker does --
-                                    // see that function's own doc.
                                     Op::CallExpr {
                                         index,
                                         slot,
@@ -1259,12 +994,6 @@ impl Interp {
                                         // `z = 1` is unmoved at 367, which is the
                                         // control saying the change reached the read
                                         // and nothing else.
-                                        //
-                                        // The arm is `read_symbol`'s own
-                                        // `SymbolRead::Simple` arm, and the other
-                                        // kinds still go there: a stem allocates on a
-                                        // miss and a compound resolves a tail key,
-                                        // neither of which belongs in a driver.
                                         let value = match read {
                                             SymbolRead::Simple => {
                                                 let (value, novalue) =
@@ -1348,19 +1077,6 @@ impl Interp {
                                         // the evaluation of the operand after them,
                                         // and this op's operands were rooted before
                                         // it ran.
-                                        //
-                                        // **The hint decides only which path is
-                                        // tried first, and removes no check.** The
-                                        // small-integer path re-decodes both
-                                        // operands and re-checks them against
-                                        // `DIGITS` on every execution -- Rexx
-                                        // rounds the operands before it operates,
-                                        // so an operand too wide for the precision
-                                        // makes the exact answer the wrong one --
-                                        // and answers `None` for every case where
-                                        // the two paths could disagree. Both are
-                                        // therefore correct for every operand, and
-                                        // what the hint can change is speed alone.
                                         let mut quick = None;
                                         if chunk.tries_small_int(*hint) {
                                             quick = self.arith_small_int(*op, left, right);
@@ -1556,31 +1272,6 @@ impl Interp {
                                         // `result_text` and `trace_result` both
                                         // gate on `trace_mode().results` themselves,
                                         // so an untraced run renders nothing.
-                                        //
-                                        // The gate is `results` because it is the
-                                        // weaker of the two lines the long path
-                                        // emits: `>>>` is gated on `results` and
-                                        // `>=>` on `intermediates`, and `results`
-                                        // is true wherever `intermediates` is
-                                        // (`Interp::assign_evaluated` makes the
-                                        // same argument for the same reason), so a
-                                        // run that would print neither is exactly
-                                        // `!results`.
-                                        //
-                                        // No `push_temp` here, unlike the long
-                                        // path: the value is read out of a
-                                        // register and written into a slot, both
-                                        // of which are roots, and nothing between
-                                        // them allocates. `the_l0_subset_passes_
-                                        // again_under_collect_on_every_allocation`
-                                        // is what would find that wrong.
-                                        //
-                                        // Measured with the marginal method, a
-                                        // body run at N and 2N iterations and
-                                        // differenced: `z = 1` costs 368 user
-                                        // instructions per execution through
-                                        // `assign_evaluated` and 275 here, `z = a`
-                                        // 431 and 338.
                                         if let Some(slot) = at
                                             && matches!(target.kind, ExprKind::Variable(_))
                                             && !self.trace_mode().results
@@ -1706,16 +1397,6 @@ impl Interp {
                                     // and the choice between `Flow::Return` and
                                     // `Flow::Exit` are that function's rather than
                                     // a second copy.
-                                    //
-                                    // **The region ends here**, carrying the
-                                    // `Flow` out to `settle` exactly as
-                                    // `Op::Call`'s arm does with the `Flow` a call
-                                    // answers. The value leaves this clause inside
-                                    // that `Flow`, so what roots it across the
-                                    // boundary is `RegionEnd`'s own `ClauseValue`,
-                                    // which forwards to `ClauseValue for Flow` --
-                                    // the same rule `step`'s arm reaches through
-                                    // `in_clause`, rather than a second copy.
                                     Op::Return {
                                         index,
                                         src,
@@ -1948,14 +1629,6 @@ impl Interp {
                                     // own `step` enters -- so the kinds this op
                                     // covers are one implementation and not a
                                     // second copy beside it.
-                                    //
-                                    // **The permission is the region's own take**,
-                                    // not a fresh one: this clause already consumed
-                                    // it when it opened, and taking it again here
-                                    // would hand `Procedure` and `Use` a `false`
-                                    // the clause had earned. `Interp::
-                                    // region_procedure_permitted`'s own doc has why
-                                    // it is parked in a field.
                                     Op::Exec { index: at } => {
                                         debug_assert_names_the_clause(code, *at, clause, "Exec");
                                         match self.exec_instruction(
@@ -2052,39 +1725,6 @@ impl Interp {
                                         // `IF`/`WHEN` tests once, and its value is
                                         // already rooted in the register it came
                                         // from.
-                                        //
-                                        // Both forms a condition arrives in are
-                                        // taken: the small int this op writes back,
-                                        // and the inline `"1"`/`"0"` a comparison
-                                        // answers with (`eval.rs` builds those with
-                                        // `self.text`). Anything else -- a heap
-                                        // string, a number, a value that is not a
-                                        // logical at all -- falls through to the
-                                        // general path, which is also the only path
-                                        // that can raise, since nothing reaching
-                                        // the quick arms can fail its own test.
-                                        //
-                                        // Gated on `results` because that is what
-                                        // `condition_value` prints its `>>>` under.
-                                        //
-                                        // Measured with the marginal method, a body
-                                        // run at N and 2N iterations and
-                                        // differenced: `if a = b then nop` costs 756
-                                        // user instructions per execution through
-                                        // the general path and 707 here, `if 1 then
-                                        // nop` 682 and 634.
-                                        // **Two handles, because a logical reaches
-                                        // here two ways.** A comparison answers with
-                                        // the inline `"1"`/`"0"` `crate::eval::
-                                        // logical` builds, which is a constant and
-                                        // so compares as an integer; a source
-                                        // literal `1` is inlined as a tagged small
-                                        // int instead (`Interp::literal`), which the
-                                        // decode below is for. Measured, taking only
-                                        // the constants cost `if 1 then nop` 62 user
-                                        // instructions per execution -- literals
-                                        // fall through to the general path without
-                                        // the second arm.
                                         let quick = if value == crate::eval::LOGICAL_TRUE {
                                             Some(true)
                                         } else if value == crate::eval::LOGICAL_FALSE {
@@ -2451,15 +2091,6 @@ impl Interp {
 
     /// Drops every frame this level opened, and the loop state each open loop
     /// frame stands for.
-    ///
-    /// **The `Failure` path, and the reason the two stacks are unwound
-    /// together.** A `FrameKind::Loop` frame and an entry on
-    /// `Interp::flat_loops` are one construct held in two places -- the frame
-    /// carries what an escaping `Flow` is absorbed against, the entry carries
-    /// the header's own state -- so a raise that discards one without the
-    /// other leaves the next `Op::LoopNext` reading a loop that is not its own.
-    /// The boxes go back to `flat_spares`, which is where a loop that ended
-    /// normally puts them.
     #[cold]
     #[inline(never)]
     fn unwind_frames(&mut self, base: usize) {
@@ -2486,27 +2117,6 @@ impl Interp {
 
     /// Where `flow` leaves the counter, once every open frame and then the
     /// range itself have had their say.
-    ///
-    /// **The flattening of the tree-walker's own nesting.** There, a `Flow`
-    /// leaving a matched `WHEN`'s branch is absorbed against that branch's
-    /// range by `run_bounded`, then handed to `leave_select`,
-    /// and whatever comes back is absorbed against the enclosing range by
-    /// whichever loop called it -- one round per Rust call frame. Here the
-    /// rounds are a loop over the frame stack, in the same order and through
-    /// the same two functions.
-    ///
-    /// `next` is where an unabsorbed `Flow::Next` continues, which is the op
-    /// after whichever one produced it.
-    ///
-    /// **`inline(always)`, and it is a measurement rather than a habit.** This
-    /// is one call per clause of every promoted body, where the driver's loop
-    /// otherwise decides a `Flow` inline. Left to the inliner's judgement it is
-    /// emitted as a function, and `bench-programs/emptyloop.rex` -- a loop
-    /// whose body does nothing, so the measurement is the per-clause cost and
-    /// almost nothing else -- runs 3.38-3.40s on the compiled stream against
-    /// 2.84-2.87s without the frame stack at all. With the annotation it is
-    /// 2.85-2.87s, which is that same level. Interleaved between arms within
-    /// one sitting, three sittings.
     #[expect(
         clippy::too_many_arguments,
         reason = "two callers inside one loop, and every argument is a value that loop holds"
@@ -2592,20 +2202,6 @@ impl Interp {
     /// `select_escape` and `leave_select`, exactly what `step`'s own `Select`
     /// arm and `run_otherwise` do with the same `Flow`, and then the boundary
     /// the tree-walker's own wrapper around the whole arm runs.
-    ///
-    /// **`select_escape` decides one thing here that it also decides there,
-    /// and one thing it does not have to.** Where control goes is answered by
-    /// the op layout either way -- [`Op::EnterOtherwise`] sits at the
-    /// `OTHERWISE` marker's entry in `Chunk::op_of`, so every arrival there
-    /// opens the branch's frame, the scan running out of `WHEN`s and an
-    /// absorbed `WHEN CASE`'s escape alike. What the layout cannot answer is
-    /// whether the *construct* has finished: a redirect into `OTHERWISE` is
-    /// one `SELECT` still running, so it owes no end-of-branch boundary yet,
-    /// where the tree-walker gets that for free by not having returned from
-    /// its own `step` call. Answering it here is what keeps the two engines to
-    /// one boundary per construct.
-    ///
-    /// [`Op::EnterOtherwise`]: super::Op::EnterOtherwise
     fn leave_branch(
         &mut self,
         code: &Code<'_>,
@@ -2648,11 +2244,6 @@ impl Interp {
 
     /// The frame [`Op::EnterWhen`] opens: the matched branch of the listed
     /// `WHEN` at `when`, belonging to the `SELECT` at `select`.
-    ///
-    /// Every bound comes from the nodes themselves through the same
-    /// [`when_targets`] and [`select_parts`] the tree-walker reads, so the two
-    /// engines cannot come to disagree about where a branch ends or which
-    /// label leaves it.
     fn when_frame(
         &self,
         code: &Code<'_>,
@@ -2685,10 +2276,6 @@ impl Interp {
 
     /// The frame [`Op::EnterOtherwise`] opens: the `OTHERWISE` branch of the
     /// `SELECT` at `select`.
-    ///
-    /// The range **starts at the marker**, not past it, which is
-    /// `run_otherwise`'s own range: the marker is an ordinary clause, stepped
-    /// by the same unit as everything else in the branch.
     fn otherwise_frame(
         &self,
         code: &Code<'_>,
@@ -2719,14 +2306,6 @@ impl Interp {
     }
 
     /// Whether register `reg` holds the Rexx logical value `1`.
-    ///
-    /// The op that decided the branch has already written its answer here, as
-    /// the small integer of the `bool` it computed, so this is a readback
-    /// rather than a second check --
-    /// re-deriving the answer from the value's text would be a second
-    /// implementation of the rule that decides a branch. Anything else in the
-    /// register means the two ops came apart, which is loud rather than a
-    /// silently-taken branch.
     fn register_holds(&self, registers: FrameId, reg: u16) -> Result<bool, Failure> {
         let value = self.roots.temp_at(registers, reg as usize);
         // The two handles a logical arrives in, compared as integers: the
@@ -2748,15 +2327,6 @@ impl Interp {
 
 /// Asserts, in debug, that the op naming instruction `index` from inside a
 /// clause region names that region's own clause.
-///
-/// **What licenses [`Interp::run_ops`]' own `Op::Clause` arm reading the
-/// instruction off the region instead of looking each op's `index` up.** Every
-/// index-bearing op `compile` emits inside a region is emitted from the arm of
-/// the instruction whose region it is, so the two are the same instruction by
-/// construction -- `compile::assert_region_ops_name_their_clause` is that
-/// stated as a check on the emitted stream rather than as a sentence about the
-/// emitting code, and this is the run-time half for a stream that reached the
-/// driver some other way.
 fn debug_assert_names_the_clause(code: &Code<'_>, index: u32, clause: &Instruction, op: &str) {
     debug_assert_eq!(
         code.body
@@ -2770,10 +2340,6 @@ fn debug_assert_names_the_clause(code: &Code<'_>, index: u32, clause: &Instructi
 
 /// The op instruction `target` resumes at, or the loud failure a chunk whose
 /// map is shorter than its own body earns.
-///
-/// `compile` writes one entry per instruction plus a final one, so this is in
-/// range for every index a construct computes -- including one past the last
-/// instruction, which is what a branch's own `end` is.
 fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
     chunk
         .op_at(target)
@@ -2781,24 +2347,6 @@ fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
 }
 
 // Test-only instrumentation: how many chunks this thread has driven.
-//
-// The engine-selection tests need this to tell "the IR engine ran this body"
-// apart from "the run produced the answer the tree-walker also produces".
-// Both engines resolve every construct through the same functions, so they
-// agree on every program by construction and no observable output tells them
-// apart -- a selection test resting on output alone would pass with selection
-// deleted.
-//
-// **Per thread, not per process, and the difference is what keeps a delta
-// meaningful when the default engine is not the tree-walker.** A test reading
-// a process-wide count measures every program any concurrently running test
-// happens to drive, and no lock between the reading tests can exclude that,
-// because the contamination comes from tests that never take it. A thread's
-// own count is contaminated by nothing, since `libtest` gives each test a
-// thread and the interpreter runs on whichever thread entered it. That is
-// what obliges the tests to enter through `execute` rather than
-// `run_program`, which spawns a thread of its own: the counter would then be
-// incremented on a thread no test can read.
 #[cfg(test)]
 thread_local! {
     static RUN_CHUNK_ENTRIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -2818,18 +2366,6 @@ pub(crate) fn run_chunk_entries() -> usize {
 }
 
 // Whether the counters above and below are recording.
-//
-// **Off while the library bootstrap runs**, so that each of them answers a
-// question about the program rather than about the interpreter starting up.
-// `execute` now runs `CoreClasses.orx` and `StreamClasses.orx` before the
-// program's first clause; without this, "the IR engine drove 3 chunks"
-// becomes a fact about the interpreter's own library that moves whenever
-// that library does.
-//
-// **Suspending rather than zeroing at the boundary**, which is what keeps
-// every test in this file reading the delta it already reads: each takes its
-// own `before` outside `execute`, and a counter zeroed inside it would make
-// that subtraction meaningless.
 #[cfg(test)]
 thread_local! {
     static COUNTING: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
@@ -2856,19 +2392,6 @@ pub(crate) fn resume_counters() {
 
 // Test-only instrumentation: how many clauses this thread has stepped from a
 // compiled stream.
-//
-// `run_chunk_entries` counts *activations* driven, which cannot see the one
-// thing promoting a construct changes: whether a clause **inside** that
-// construct reaches the stream at all. An activation entered is one entry
-// however its body is compiled, so this is the observable that separates a
-// construct whose clauses reach the stream from one whose clauses do not.
-//
-// Counted where a clause *begins*, which is the one op that opens one,
-// `Op::Clause`. So a construct that changes the shape of its region does not
-// change the count, and a construct whose clauses stop reaching the stream
-// does.
-//
-// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
 #[cfg(test)]
 thread_local! {
     static CLAUSE_OP_ENTRIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -2889,22 +2412,6 @@ pub(crate) fn clause_op_entries() -> usize {
 
 // Test-only instrumentation: how many clause echoes this thread has emitted
 // from a chunk's own `Op::TraceClause`.
-//
-// **This is the only observable that says the compiled emission decision is
-// reached in production at all**, and without it the whole mechanism has no
-// witness. Two separate ways to make `Op::TraceClause` dead leave every
-// output-comparing test in the workspace green, because both are covered by
-// the run-time gate the driver falls back to and that gate prints the same
-// bytes: asking `chunk_for` for a chunk under a setting that is not the one in
-// force, and answering `stale` yes for every clause. Output cannot tell an
-// echo emitted by an op from the identical echo emitted by the clause unit;
-// this counts which one did it.
-//
-// Counted where the echo is *emitted*, not where the op is fetched, because
-// the second of those two mutations leaves the op in the stream and skips its
-// work -- a count of arrivals would stay green on it.
-//
-// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
 #[cfg(test)]
 thread_local! {
     static TRACE_OP_ECHOES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -2925,20 +2432,6 @@ pub(crate) fn trace_op_echoes() -> usize {
 
 // Test-only instrumentation: how many times this thread has skipped the
 // small-integer path because a site's hint said it had already fallen through.
-//
-// **The only observable that says the patch table is read in production at
-// all.** Both paths answer identically for every operand -- that is what makes
-// a hint safe -- so no program's output can tell which one ran, and a table
-// that was never consulted would leave every output-comparing test in the
-// workspace green. Deleting the table is not even a behaviour change: every
-// site then tries the small-integer path and falls through, which is what the
-// op does with no table at all.
-//
-// Counted at the skip rather than at the load, because that is the branch the
-// table exists to take: a count of loads would stay green on a table whose
-// state never changed.
-//
-// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
 #[cfg(test)]
 thread_local! {
     static ARITH_HINT_SKIPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -2959,17 +2452,6 @@ pub(crate) fn arith_hint_skips() -> usize {
 
 // Test-only instrumentation: how many times this thread has run a compiled call
 // from the resolution its site had already kept.
-//
-// **The only observable that says the resolution table is read in production at
-// all**, and it is `ARITH_HINT_SKIPS`' argument one op over: a kept resolution
-// and a fresh one are the same answer -- that is what makes keeping it safe --
-// so no program's output can tell which one ran, and a table nothing consulted
-// would leave every output-comparing test in the workspace green.
-//
-// Counted at the hit rather than at the store, because a count of stores would
-// stay green on a table that is written and never read.
-//
-// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
 #[cfg(test)]
 thread_local! {
     static CALL_SITE_HITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -2990,23 +2472,6 @@ pub(crate) fn call_site_hits() -> usize {
 
 // Test-only instrumentation: how many times an [`super::Op::Const`] on this
 // thread has had to build its value rather than read an interned one.
-//
-// **One counter per op rather than one for both**, because the two do not
-// occur independently in a program: a loop header's own bounds are constant
-// symbols, so a counted `Op::Const` test would be counting the header's
-// `Op::LoadConstant`s as well and its number would be about the header.
-//
-// **Output cannot see this and no other instrument in this crate can either.**
-// A constant built fresh on every execution and a constant built once produce
-// the same bytes, the same trace and the same exit status, by construction --
-// which is what makes the interning safe and also what leaves it unpinned. The
-// count is the only observable, and the property it states is the one worth
-// having: this is per *distinct* constant reached, not per execution.
-//
-// Counted where the value is built, so a cache that was written and never read
-// would show every execution here.
-//
-// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
 #[cfg(test)]
 thread_local! {
     static CONST_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -3047,21 +2512,6 @@ pub(crate) fn load_constant_builds() -> usize {
 
 // Test-only instrumentation: the deepest frame stack any [`Interp::run_ops`]
 // entry on this thread has found already open.
-//
-// **The observable a shared frame stack owes and a local `Vec` did not.** A
-// level that leaves frames behind cannot corrupt the level above it -- `base`
-// is what stops the walk, so the leftovers are inert -- and the interpreter
-// goes on printing the right bytes while the stack grows for as long as the
-// program runs. Output cannot see that, and neither can an exit code; what
-// sees it is the floor the next entry finds. Measured on a program that traps
-// out of two open loops 50,000 times: 46,108 kB of peak resident memory with
-// `unwind_frames` deleted against 4,792 kB with it.
-//
-// Recorded at entry rather than at exit because that is where a leftover
-// becomes another level's problem, and as a maximum because a leak shows up as
-// a floor that climbs rather than as one bad entry.
-//
-// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
 #[cfg(test)]
 thread_local! {
     static FRAME_FLOOR_HIGH_WATER: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };

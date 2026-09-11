@@ -8,88 +8,8 @@
 /* https://www.oorexx.org/license.html                                        */
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
-//!
 //! **D45, site two: `.local`/`.environment` lookup passes through exactly one
 //! chokepoint.**
-//!
-//! Site one is dispatch's, in `tests/dispatch_seam.rs`. This file is built to
-//! that file's standard, including its honesty about what a lexical scan can
-//! and cannot bound, and its needles are spelled differently on purpose so
-//! that neither file's counts move when the other's module changes.
-//!
-//! # The half the compiler enforces, which is more than site one's
-//!
-//! `environment::env_seam` holds two structs whose fields are private to it.
-//! `Directories` carries the two directory handles and `Admitted` is the
-//! clearance; `Admitted` is neither `Copy` nor `Clone` and has no constructor
-//! outside the module, and `env_seam::directory` -- the only expression that
-//! yields a directory handle -- takes one **by value**.
-//!
-//! So the reachability claim here is not "a lookup ought to pass the seam" but
-//! **"nothing outside the module can name a directory at all"**: reading
-//! `held.environment` anywhere else is `error[E0616]`, and calling `directory`
-//! without a clearance has nothing to pass. One trip through `admit` yields
-//! exactly one handle, because the token is moved.
-//!
-//! That is the whole of the compiler's contribution. It bounds *whether* the
-//! seam can be gone around, not *how many* producers of the token the module
-//! holds.
-//!
-//! # The half this test enforces, and what would pass it anyway
-//!
-//! Everything below is a lexical scan of `crates/rexx-exec/src`. **What it
-//! counts is two literal call spellings and the items inside one
-//! brace-matched region of one file** -- not calls, not producers, not paths.
-//! Concretely:
-//!
-//! * one call to `env_seam::admit(`, so there is one chokepoint and not two;
-//! * one call to `env_seam::directory(`, so a clearance is spent in one place;
-//! * the items inside `mod env_seam`, so a second producer of the token is a
-//!   second item and fails, whatever it is called -- which needle counting
-//!   alone would miss, since `fn admit_also(..) -> Admitted { let ok = ();
-//!   Admitted(ok) }` matches neither spelling.
-//!
-//! **What would pass every count here while a second lookup path exists**, and
-//! this list is the honest answer rather than an argument that there is none:
-//!
-//! * **An import alias.** `use env_seam::{admit as sneak_admit, directory as
-//!   sneak_directory};` at the top of `environment.rs`, plus a complete second
-//!   lookup path calling those names, compiles and leaves every count below
-//!   unmoved: neither call needle matches the aliased spelling, and no item
-//!   was added to the module, so the item bound does not move either. This is
-//!   the cheapest evasion there is -- it needs nothing already in hand -- and
-//!   it produces a second *chokepoint call*, not merely a second reader.
-//!   Nothing here defends against it.
-//! * **A reader that goes to the object rather than to the directory.** The
-//!   token guards the two *handles*; once a handle is in hand the entries are
-//!   read off `rexx_core::NativeObject`, whose accessors are public to the
-//!   whole workspace. A function that took `.environment`'s handle as a
-//!   parameter -- from `dot_variable`, say -- and read entries out of it would
-//!   be a second lookup path that spends no clearance of its own. Nothing here
-//!   sees that, and nothing structural prevents it; what bounds it today is
-//!   that the handle has exactly one source.
-//! * **An `admit` that hands out more than one clearance per call**, returning
-//!   a pair or a `Vec<Admitted>`. Every count below is satisfied while two
-//!   lookups are fed from one trip through the seam. This is site one's own
-//!   last can't-see item, unchanged: not being `Copy` does not stop the
-//!   producer building as many as it likes.
-//! * **A macro-produced item inside the module, or a second `mod env_seam`
-//!   elsewhere.** Neither exists; both would pass. The brace-matching read
-//!   below finds the first `mod env_seam {` in `environment.rs` and no other
-//!   file is read for it at all.
-//! * **A `.NAME` resolved somewhere other than `Interp::dot_variable`.** Both
-//!   callers -- `eval.rs`'s `ExprKind::DotVariable` arm and
-//!   `builtin::datatype::literal_value` -- go through that one function today,
-//!   and nothing here checks that a third one would. `Interp::dot_variable`
-//!   is `pub(crate)`, so a third caller inside this crate is legal; a fourth
-//!   outside it is not.
-//! * **A mention inside a comment or a string** counts toward the needle
-//!   tallies, so a stray one fails rather than passes -- the safe direction,
-//!   and the reason this file builds its needles with `format!` rather than
-//!   spelling them.
-//!
-//! The scan reads `src/` and never this file, so nothing here can satisfy its
-//! own assertion.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -163,11 +83,6 @@ fn directory_lookup_passes_through_exactly_one_chokepoint() {
 
 /// The negative control for the scan itself: a token this crate does not
 /// contain is found nowhere, and one it plainly does contain is found.
-///
-/// Without this, a `source_files` that silently read the wrong directory, or
-/// an `occurrences` that never matched anything, would make the assertions
-/// above pass by finding nothing at all -- and "exactly one" would then be the
-/// one thing it could not report.
 #[test]
 fn the_scan_can_tell_a_present_token_from_an_absent_one() {
     assert!(
@@ -182,10 +97,6 @@ fn the_scan_can_tell_a_present_token_from_an_absent_one() {
 }
 
 /// The seam module's own body, by brace matching from its `mod` line.
-///
-/// Read rather than counted from the outside, because the private fields put
-/// every possible producer of the token, and every possible reader of a
-/// directory handle, inside these lines and nowhere else.
 fn seam_module_body() -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/environment.rs");
     let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
@@ -215,20 +126,6 @@ fn seam_module_body() -> String {
 
 /// **The producer bound: the seam module holds exactly the structs and
 /// functions it is designed around, and no other item at all.**
-///
-/// The private fields mean every producer of the clearance and every reader of
-/// a directory handle must be written here, so counting the items here counts
-/// them -- where counting two token spellings does not, and the module doc has
-/// the evasion that motivates this.
-///
-/// Had a second producer been added -- `fn admit_also(..) -> Admitted { let ok
-/// = (); Admitted(ok) }`, the exact shape the needle tallies miss -- the `fn`
-/// count below is one higher and this fails.
-///
-/// **`which` is admitted and is not a producer**: it takes no clearance and
-/// hands back no handle, so it cannot be the route by which a caller obtains a
-/// directory it does not already hold. A reader checking this count has to
-/// read each `fn` to see that, which is exactly what the count is for.
 #[test]
 fn the_seam_module_holds_only_the_items_it_is_designed_around() {
     let body = seam_module_body();

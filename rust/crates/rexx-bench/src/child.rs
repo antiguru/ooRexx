@@ -11,17 +11,6 @@
 
 //! The two interpreters this repository compares, and the single capped,
 //! directory-pinned way of launching either of them.
-//!
-//! **One definition, every harness.** `src/bin/rexx-bench-suite.rs` produces
-//! the committed baseline and `src/bin/rexx-bench-band.rs` produces the
-//! between-run distribution the optimisation loop's accept rule is stated
-//! against. When those two launched their children differently the two sets of
-//! numbers were not interchangeable, and
-//! `docs/superpowers/plans/phase-4d-attribution.md` records the consequence:
-//! one document's base medians landed between 7.2% under and 0.2% over
-//! another's on a byte-identical binary, with part of the movement attributed
-//! to the harness difference rather than to the machine. A wrapper defined
-//! once cannot drift between callers.
 
 use std::path::{Path, PathBuf};
 
@@ -29,20 +18,6 @@ use crate::arms::Arm;
 use crate::timing::{Capture, Completed, time_once};
 
 /// Address-space ceiling applied to **both** sides on **every** axis, in KiB.
-///
-/// Not this project's usual 1 GiB. Measured 2026-08-08 on this tree: under
-/// `ulimit -v 1048576` this crate aborts (SIGABRT, "memory allocation of N
-/// bytes failed") on `varlookup`, `compound`, `strings`, `arith` and
-/// `samples/rexxcps.rex`, and completes only `startup`. Uncapped, the same
-/// four peak at 4.0 GB, 1.06 GB, 4.3 GB and 1.07 GB of resident memory
-/// against the oracle's 20 MB on all four. The cap therefore cannot stay at
-/// 1 GiB without the measurement covering one axis instead of five.
-///
-/// 8 GiB rather than no cap at all: the cap exists so a runaway interpreter
-/// cannot take the machine's memory with it, which has ended a session here
-/// before, and 8 GiB clears every axis on both sides with room to spare
-/// (verified before this constant was chosen). Both sides get the same
-/// number, so nothing about the comparison is asymmetric.
 pub const ADDRESS_SPACE_LIMIT_KIB: u64 = 8 * 1024 * 1024;
 
 /// Root of the built C++ oracle. Hardcoded for the reason
@@ -73,21 +48,6 @@ impl Side {
     }
 
     /// This crate's `rexx-run` at `binary`, on `arm`.
-    ///
-    /// **The arm is a parameter and there is no constructor without one**,
-    /// because the version that had none inherited it. This function used to
-    /// hand the child an empty environment, so `REXX_ENGINE` came from
-    /// whatever launched the harness and, unset, from `rexx-run`'s own
-    /// default -- which means the day that default moved, every binary built
-    /// on this constructor changed which engine it measured, with nothing in
-    /// its output saying so and a committed baseline to compare against that
-    /// had been taken on the other one.
-    ///
-    /// **The label carries the arm too**, so a row or a message that names
-    /// this side names the engine with it. A provenance block is something a
-    /// caller has to remember to print; the label is in every line either
-    /// way, and `rexx-bench-band`'s reducer branches on `oracle` rather than
-    /// on this string, so widening it costs nothing there.
     pub fn rust(binary: PathBuf, arm: Arm) -> Side {
         Side {
             label: match arm {
@@ -104,12 +64,6 @@ impl Side {
 }
 
 /// Which `perf stat` events wrap the child, if any.
-///
-/// **The variant names the events, and the same value both builds the `-e`
-/// argument and reads the reply** ([`Counted::events`]). Asking for one pair
-/// and parsing another is a reading attributed to the wrong instrument, which
-/// nothing downstream could notice: a user-mode cycle count and a total one
-/// differ by a few per cent on these axes, not by an order of magnitude.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Counted {
     /// No `perf stat` at all.
@@ -134,10 +88,6 @@ impl Counted {
 
 /// What sits between `/bin/sh` and the interpreter, beyond the address-space
 /// cap and the working directory that every run gets.
-///
-/// Both fields default to off, so the committed baseline's wrapper is the
-/// `Wrapper::default()` one and adding this type changed no number already on
-/// the record.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Wrapper {
     /// `taskset -c` CPU list. `Some("12,28")` confines the child to one
@@ -145,10 +95,6 @@ pub struct Wrapper {
     /// being part of the measurement.
     pub pin: Option<String>,
     /// Count retired cycles and instructions with `perf stat`.
-    ///
-    /// Cycles are the quantity frequency scaling does not touch, which
-    /// matters here because this machine exposes no `cpufreq` interface to
-    /// fix a governor with -- `/sys` carries no `devices/system/cpu` at all.
     pub counters: Counted,
 }
 
@@ -160,11 +106,6 @@ pub struct Counters {
 }
 
 /// One capped, directory-pinned invocation of one side.
-///
-/// The child's working directory is `workdir` and its address space is capped
-/// at [`ADDRESS_SPACE_LIMIT_KIB`]. Both are shell builtins because
-/// `std::process::Command` has no rlimit hook and this workspace forbids the
-/// `unsafe` `pre_exec` that would give it one.
 pub fn run(
     side: &Side,
     program: &Path,
@@ -177,9 +118,6 @@ pub fn run(
 }
 
 /// The argument vector [`run`] hands `/bin/sh`.
-///
-/// Separated from the spawn so the nesting can be asserted without a machine
-/// that has `perf` installed deciding whether the assertion runs.
 fn shell_args(binary: &Path, program: &Path, workdir: &Path, wrapper: &Wrapper) -> Vec<String> {
     // `cd` and `ulimit` are shell builtins and there is no rlimit hook on
     // `Command`; `"$@"` keeps the paths out of the shell string so nothing
@@ -214,26 +152,6 @@ fn shell_args(binary: &Path, program: &Path, workdir: &Path, wrapper: &Wrapper) 
 
 /// The counters `perf stat -x,` wrote to standard error, or `None` when the
 /// lines are absent or unreadable.
-///
-/// The format is one line per event, `value,unit,event,run-time,percent,,`,
-/// with `<not counted>` in the value field when the event was multiplexed out.
-/// A missing or unparsable value returns `None` for the whole reading rather
-/// than a zero: a zero cycle count would be a very fast run.
-///
-/// **`events` is the pair that was asked for, and the match is exact.** A
-/// caller that requested `cycles:u` and received `cycles` has been answered by
-/// a different instrument, and reporting that as the reading it asked for is
-/// the one error here that no downstream check could see. Callers get the
-/// array from [`Counted::events`] rather than writing the names again.
-///
-/// **A counter that was not enabled for the whole run is refused, and that is
-/// not defensiveness.** The fifth field is the percentage of the run the event
-/// was scheduled for, and when it is below 100 `perf` reports the count
-/// *scaled up* to what it would have been -- an estimate, printed in the same
-/// column and the same format as an exact count. On a quantity that is
-/// otherwise deterministic to eight significant figures, an estimate is
-/// indistinguishable from a real movement of a few per cent, which is larger
-/// than most of what this phase measures.
 pub fn parse_counters(stderr: &[u8], events: [&str; 2]) -> Option<Counters> {
     let text = String::from_utf8_lossy(stderr);
     let [wanted_cycles, wanted_instructions] = events;
@@ -282,12 +200,6 @@ mod tests {
     use super::*;
 
     /// The wrapper composes `taskset` outside `perf` outside the interpreter.
-    ///
-    /// Asserted on the argument vector rather than described, because the
-    /// order is the whole content of the claim: `perf` inside `taskset`
-    /// inherits the affinity mask and counts only the interpreter, while the
-    /// other order would count `taskset` as well and set the mask after the
-    /// counters were already attached.
     #[test]
     fn the_wrapper_nests_taskset_outside_perf_outside_the_interpreter() {
         let args = shell_args(
@@ -319,12 +231,6 @@ mod tests {
 
     /// The events named on the command line are the events [`Counted`] says
     /// it counts, for every variant that counts anything.
-    ///
-    /// Asserted rather than read off the two sites, because the whole value of
-    /// routing both through `Counted::events` is that they cannot drift; a
-    /// spelling changed in one place and not the other produces a run counted
-    /// on one instrument and parsed as another, and every number downstream
-    /// still looks like a number.
     #[test]
     fn the_perf_argument_names_the_events_the_reading_is_parsed_by() {
         for counted in [Counted::Total, Counted::User] {
@@ -348,10 +254,6 @@ mod tests {
 
     /// A reading is attributed to the instrument that produced it, so
     /// `perf stat -e cycles` cannot answer a request for `cycles:u`.
-    ///
-    /// The two differ by a few per cent on this crate's axes rather than by an
-    /// order of magnitude, so a silent substitution would read as a plausible
-    /// measurement rather than as a fault.
     #[test]
     fn a_total_counter_does_not_answer_for_a_user_one() {
         let total = b"200088,,cycles,471330,100.00,,\n143200,,instructions,471330,100.00,,\n";
@@ -402,19 +304,6 @@ mod tests {
     }
     /// A rust side sets **no** environment, and says which arm it is in its
     /// label.
-    ///
-    /// **This test used to assert the opposite half.** Each side carried
-    /// `REXX_ENGINE`, because an *inherited* one was a correct-looking run of
-    /// whichever engine `rexx-run` defaulted to -- and the day that default
-    /// moved, the suite and the band would have changed which arm they
-    /// measured against baselines taken on the other, with nothing in either
-    /// binary's output saying so.
-    ///
-    /// There is one engine now and `rexx-run` reads no such variable, so the
-    /// hazard is the mirror image: a harness still setting one would label a
-    /// row `rust-tw` for a run the compiled stream produced. The assertion is
-    /// on the environment rather than on the report for the same reason it
-    /// always was.
     #[test]
     fn a_rust_side_sets_no_engine_environment_and_names_its_arm() {
         for arm in Arm::BOTH {
@@ -473,13 +362,6 @@ mod tests {
     /// cycles, which reads as the fastest run in the set.
     /// A count `perf` scaled up because the event was not scheduled for the
     /// whole run is not a count.
-    ///
-    /// The failure this rules out is silent by construction: the scaled figure
-    /// is printed in the same column and the same format as an exact one, and
-    /// a few per cent of scaling on an instruction count reads exactly like a
-    /// change to the program. Observed here as one round in ten reading 2.85%
-    /// high on a body whose instruction count is otherwise stable to eight
-    /// significant figures.
     #[test]
     fn a_scaled_counter_is_not_a_count() {
         let user = Counted::User.events().unwrap();

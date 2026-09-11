@@ -11,51 +11,6 @@
 
 //! The interleaved two-interpreter benchmark suite: this crate against the
 //! built C++ oracle, one axis at a time, and the baseline report it emits.
-//!
-//! Report on standard output, progress on standard error. The report is
-//! markdown so it can go into `docs/superpowers/plans/perf-baseline.md`
-//! without being retyped; a number retyped is a number that can be retyped
-//! wrong, and this project has already put a figure into a gate document
-//! against the wrong commit that way.
-//!
-//! # Why the two sides alternate
-//!
-//! For each axis the suite runs the oracle, then this crate, then the oracle,
-//! then this crate, for [`PAIRS`] pairs. Not one side's whole set and then
-//! the other's. On this 32-core part the clock drifts across minutes by more
-//! than several of the effects being measured, and a block-per-side layout
-//! turns that drift into a bias on whichever side ran during the drift.
-//! Alternating makes it common-mode: both sides see the same drift, in the
-//! same order, and a ratio taken pairwise is insensitive to it.
-//!
-//! # What the numbers are
-//!
-//! Absolute throughput on both sides, not only their ratio. A ratio hides its
-//! denominator, and one open question this phase has to settle is whether the
-//! wide per-axis spread of ratios is a property of the oracle's variation or
-//! of this crate's -- which only the two sides' absolute spreads can answer.
-//! Iterations per second comes from each program's own `n = ...` loop bound,
-//! read out of the program text, so it is exact rather than an estimate of
-//! clauses per iteration.
-//!
-//! The fixed per-process offset gets its own line rather than being spread
-//! across every axis, measured with a program whose body is a single `say`.
-//! It is not symmetric between the two sides: this crate reserves 512 MiB of
-//! address space (`rexx_exec::INTERPRETER_STACK_BYTES`) before running
-//! anything and the oracle reserves nothing comparable.
-//!
-//! # Linux only
-//!
-//! The child wrapper is `/bin/sh` and the fingerprints come from `stat` and
-//! `sha256sum`. `std::process::Command` has no rlimit hook and the workspace
-//! forbids the `unsafe` `pre_exec` that would give it one, so the address-
-//! space cap has to be a shell builtin -- the same wrapper
-//! `rexx-exec/tests/support/oracle.rs` uses for the same reason.
-//!
-//! The wrapper itself lives in `rexx_bench::child`, shared with
-//! `rexx-bench-band`, so the two harnesses cannot launch their children
-//! differently. `--pin <cpulist>` confines every child to those CPUs; without
-//! it the wrapper is the one every committed figure was taken through.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -71,15 +26,6 @@ use rexx_bench::child::{
 use rexx_bench::timing::{MedianInterval, median_interval_indices};
 
 /// Paired measurements per axis.
-///
-/// Nine, and odd so the median is an element rather than a mean of two. Nine
-/// is the smallest odd count whose distribution-free 95% median interval is
-/// tighter than the whole sample: at nine the interval is the second to the
-/// eighth order statistic, at seven and below it is the whole range and would
-/// overlap anything. It is also what the suite can afford -- this crate takes
-/// about 28 s on the slowest axis, so nine pairs is minutes rather than
-/// tens of minutes, and a baseline nobody re-runs is a baseline that goes
-/// stale.
 const PAIRS: usize = 9;
 
 /// Pairs run and discarded before sampling starts, per axis. One is enough
@@ -97,31 +43,9 @@ const OFFSET_PAIRS: usize = 51;
 const OFFSET_WARMUP_PAIRS: usize = 5;
 
 /// The coverage every interval in this report targets.
-///
-/// The gate's definition of "slower" (the plan's Global Constraints,
-/// "Performance gate") is the point estimate falling outside the C++
-/// baseline's confidence interval on the slow side, so the report must carry
-/// an interval and not only a median. 95% because that is the level the
-/// existing criterion rows in `perf-baseline.md` are stated at, and a later
-/// measurement has to be comparable to this one.
 const TARGET_COVERAGE: f64 = 0.95;
 
 /// REXXCPS 2.2 with its loop counts fixed, in this repository.
-///
-/// **Not the copy in the read-only C++ tree**, which self-calibrates against
-/// the clock: it scales its own count until a trial takes about a second, so
-/// the two interpreters do different amounts of work and neither their wall
-/// times nor two reports taken on different days are comparable. Fixing the
-/// counts is what makes both comparable.
-///
-/// **And not a path into that tree**, which is machine state no file here
-/// records -- the oracle binary beside it was replaced wholesale on
-/// 2026-08-20, from a 5.0 interpreter to a 5.3 one, with nothing in the
-/// checkout noticing. A benchmark whose program lives outside the repository
-/// cannot be reproduced from the repository. `bench-rexxcps/README.md` has the
-/// provenance and what was changed.
-/// The path itself is [`rexx_bench::rexxcps_path`], resolved from this
-/// crate's manifest rather than the caller's cwd.
 fn rexxcps_program() -> std::path::PathBuf {
     rexx_bench::rexxcps_path()
 }
@@ -155,16 +79,6 @@ struct Axis {
 }
 
 /// Every program in `rust/bench-programs/`, in sorted order.
-///
-/// A literal here and asserted against the directory by
-/// [`verify_axis_list`], which runs before any measurement and again as a
-/// `#[test]`. Without the assertion an axis can be added to the directory and
-/// never measured, or removed from it and silently vanish from the report,
-/// and the report stays green over whatever is left -- the same defect
-/// `rexx-exec/tests/corpus.rs` guards its phase subset files against, twice
-/// having actually happened there.
-///
-/// Sorted, because the directory listing this is compared against is sorted.
 const AXES: &[Axis] = &[
     Axis {
         name: "alloc",
@@ -485,9 +399,6 @@ struct AxisRow {
 }
 
 /// Runs both sides alternately and returns their samples.
-///
-/// A non-zero exit or a signal on either side aborts the axis rather than
-/// contributing a sample: a failed run's wall time measures the failure.
 fn measure_interleaved(
     oracle: &Side,
     rust: &Side,
@@ -576,10 +487,6 @@ fn flag_value(arguments: &[String], name: &str) -> Option<String> {
 }
 
 /// The `.rex` stems present in `rust/bench-programs/`, sorted.
-///
-/// Read from the directory rather than listed a second time, so the
-/// assertion below cannot be satisfied by a copy of [`AXES`] edited in the
-/// same change.
 fn axis_names_on_disk() -> Vec<String> {
     let dir = rexx_bench::programs_dir();
     let entries =
@@ -607,10 +514,6 @@ fn verify_axis_list() {
 }
 
 /// The iteration count a benchmark program's own loop bound gives.
-///
-/// Read out of the program text rather than restated here, so the reported
-/// throughput cannot disagree with the work that was done. Every loop axis
-/// writes its bound as a single `n = <digits>` line.
 fn loop_count(program: &Path) -> Result<u64, String> {
     let text = fs::read_to_string(program).map_err(|error| format!("cannot read: {error}"))?;
     let mut found: Option<u64> = None;
@@ -662,10 +565,6 @@ impl Stats {
 
 /// The interval indices for a sample of this size, falling back to the whole
 /// range when the sample is too small for [`TARGET_COVERAGE`].
-///
-/// The fallback is reported through `coverage`, which then reads well below
-/// the target -- a self-check run at one pair has no interval, and saying so
-/// is different from quietly widening the target.
 fn interval_for(n: usize) -> MedianInterval {
     median_interval_indices(n, TARGET_COVERAGE).unwrap_or(MedianInterval {
         low: 0,
@@ -680,35 +579,17 @@ fn interval_for(n: usize) -> MedianInterval {
 
 /// The per-side coverage one axis's intervals carry, taken from its sample
 /// size rather than restated, so it cannot drift from [`PAIRS`].
-///
-/// Takes the row rather than the slice: a slice admits the empty case, and the
-/// caller has to have decided what an axis table with no axes says before it
-/// can ask this.
 fn interval_coverage(row: &AxisRow) -> f64 {
     interval_for(row.paired.oracle.len()).coverage
 }
 
 /// The Bonferroni lower bound on the ratio interval's coverage, from one
 /// side's coverage.
-///
-/// Each endpoint of the ratio can miss on either side, so the joint guarantee
-/// is one minus the two miss probabilities added. Clamped at zero because
-/// below 50% per side the raw arithmetic goes negative, and "at least -100%"
-/// is not a statement about anything -- `--self-check` takes one pair per axis
-/// and lands exactly there.
 fn joint_coverage_bound(per_side: f64) -> f64 {
     (1.0 - 2.0 * (1.0 - per_side)).max(0.0)
 }
 
 /// The paragraph that tells a reader what the ratio interval is worth.
-///
-/// Two sentences rather than one with a spliced fragment, because the two
-/// cases make different claims: one reports a bound, the other reports that
-/// there is no useful bound to report. The first is worded exactly as the
-/// committed baseline carries it -- see
-/// [`the_caveat_matches_the_committed_baseline`], which is what keeps that
-/// document's "this block is the program's output byte for byte" true without
-/// re-running a twelve-minute measurement to find out.
 fn ratio_interval_caveat(per_side: f64) -> String {
     let joint = joint_coverage_bound(per_side);
     if joint > 0.0 {
@@ -763,12 +644,6 @@ fn capture(program: &str, args: &[&str]) -> String {
 }
 
 /// Where `rexx-run` is built, release first.
-///
-/// `main` takes the release build and nothing else, because the profile is
-/// part of what is being measured. The role check in the tests takes whichever
-/// exists, because "does this program fail on this crate" does not depend on
-/// the optimisation level and a `cargo test --workspace` builds only the debug
-/// one.
 fn rust_binary_candidates() -> [PathBuf; 2] {
     let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
     [
@@ -778,11 +653,6 @@ fn rust_binary_candidates() -> [PathBuf; 2] {
 }
 
 /// The ooRexx shared objects `binary` actually loads, sorted.
-///
-/// Derived from `ldd` rather than listed, so the fingerprint set cannot fall
-/// behind the build. Anything outside [`ORACLE_ROOT`] is the system's, not
-/// the oracle's, and is left out: `libc` moving is not this baseline's
-/// subject.
 fn oracle_objects(binary: &Path) -> Vec<PathBuf> {
     let listing = capture("ldd", &[&binary.display().to_string()]);
     let mut objects: Vec<PathBuf> = listing
@@ -831,11 +701,6 @@ fn write_provenance(
     // objects it loads. A rebuild of a library alone leaves the launcher's
     // fingerprint unchanged, so fingerprinting only `bin/rexx` would not
     // detect the oracle moving under this baseline.
-    //
-    // Resolved from `ldd` rather than named here, so an object the oracle
-    // build gains later is fingerprinted without anyone remembering to add
-    // it. The two objects loaded today carry different dates, which is the
-    // observation that a hardcoded list is a list that can be short.
     for object in oracle_objects {
         let _ = writeln!(
             report,
@@ -942,11 +807,6 @@ fn counter_median(readings: &[Counters], pick: fn(&Counters) -> u64) -> f64 {
 }
 
 /// The hardware counters, per axis and per side.
-///
-/// **Wall time is what the gate is stated in; these are what explain it.** An
-/// axis can be slower on the clock while retiring fewer instructions, and
-/// which of those is true decides whether the work or the memory behaviour is
-/// the thing to change.
 fn write_counters(report: &mut String, rows: &[AxisRow]) {
     if rows.is_empty() {
         return;
@@ -1273,11 +1133,6 @@ fn write_rexxcps(report: &mut String, paired: &Paired) {
 
 /// Every `label= value` figure one side's sampled runs printed, keyed by
 /// label and in run order.
-///
-/// A run that printed a label the others did not is not dropped: a label whose
-/// sample count differs from the run count is reported with the count it has,
-/// so a program that stopped printing a figure shows a short row rather than
-/// a silently narrower median.
 fn self_timed_figures(runs: &[Vec<u8>]) -> BTreeMap<String, Vec<f64>> {
     let mut figures: BTreeMap<String, Vec<f64>> = BTreeMap::new();
     for run in runs {
@@ -1306,9 +1161,6 @@ fn median_of(samples: &[f64]) -> f64 {
 
 /// Reports a [`Role::SelfTimed`] axis from the figures the program printed on
 /// each side rather than from the wall time this harness took.
-///
-/// The run count is printed per row: a figure absent from some runs would
-/// otherwise be a median over fewer samples than the heading claims.
 fn write_self_timed(report: &mut String, name: &str, pairs: usize, paired: &Paired) {
     let oracle = self_timed_figures(&paired.oracle_stdout);
     let rust = self_timed_figures(&paired.rust_stdout);
@@ -1366,14 +1218,6 @@ fn parse_cps(stdout: &[u8]) -> Option<u64> {
 
 /// Runs the axes declared [`Role::Blocked`], reports what each produced, and
 /// names any that no longer deserve the role.
-///
-/// **The role is checked, not trusted.** [`verify_axis_list`] pins which
-/// programs exist; it says nothing about whether a program still fails. When
-/// Phase 5 lands message sends these three start exiting 0, and with the role
-/// unchecked they would keep appearing under this heading with status 0 and an
-/// empty message, timed by nothing -- three dimensions dropping out of the
-/// measurement while the run stayed green, which is the same defect the axis
-/// pin exists to prevent arriving through a different door.
 fn write_blocked(
     report: &mut String,
     rust: &Side,
@@ -1458,20 +1302,6 @@ mod tests {
 
     /// Every axis declared `Role::Blocked` really does fail on this crate, and
     /// every axis declared `Role::SelfTimed` really does run.
-    ///
-    /// The names pin is not enough on its own. It catches an axis leaving the
-    /// list; it cannot catch an axis staying in the list under a role that has
-    /// stopped being true -- an axis printed as unrunnable with status 0 and
-    /// an empty message while nothing timed it, the pin's own failure mode
-    /// reached by a different route. Red here forces the decision instead, and
-    /// it has fired once: `dispatch.rex` started running when `~new` landed
-    /// and this is what said so.
-    ///
-    /// **Both directions, because `Role::Blocked` may be empty.** A test that
-    /// only walked the blocked axes would assert nothing at all once the last
-    /// one starts running, which is the state this list is heading for; the
-    /// self-timed axes are what keep it saying something, and they are the
-    /// cheap ones to run.
     #[test]
     fn every_declared_runnability_still_holds() {
         let binary = rust_binary_candidates()
@@ -1568,15 +1398,6 @@ mod tests {
 
     /// The caveat this suite emits at [`PAIRS`] is the one the committed
     /// baseline carries.
-    ///
-    /// `perf-baseline.md` claims its whole block is this program's output byte
-    /// for byte, and 4d-2 diffs a fresh run against that block to find oracle
-    /// drift. Every other line of the block is a measured value that moves on
-    /// every run, so a diff there is self-explanatory; this paragraph is the
-    /// one piece of *prose* the harness emits, and prose that drifts would
-    /// show up in that diff looking exactly like a finding. Pinned here so it
-    /// cannot drift unnoticed, and so a wording change costs a re-paste rather
-    /// than a re-measurement nobody budgeted for.
     #[test]
     fn the_caveat_matches_the_committed_baseline() {
         let baseline = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1610,16 +1431,6 @@ mod tests {
 
     /// The two sides really do alternate, and every child really does run in
     /// the directory it was given.
-    ///
-    /// The whole methodological claim of this harness is the interleaving,
-    /// and nothing in the report it prints could distinguish an alternating
-    /// run from a side-at-a-time one -- the tables would look the same, and
-    /// the drift the alternation exists to cancel would be silently baked
-    /// into the ratios instead. So the order is observed rather than
-    /// asserted about: two `Side`s differing only in an environment variable
-    /// run a script that appends that variable to a file in the working
-    /// directory, and the file spells out the order the children ran in.
-    /// `ooooRRRR` is what a side-at-a-time implementation would leave here.
     #[test]
     fn the_two_sides_alternate_and_run_in_the_working_directory() {
         let dir = std::env::temp_dir().join(format!(

@@ -10,35 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! Phase 3 gate: every `rust/corpus/lang/` program tiles.
-//!
-//! Three properties, each with its own checker so the can-fail probes at the
-//! bottom can exercise them one at a time:
-//!
-//! 1. **Expressions nest**: every `Expr`'s span contains its children's spans.
-//!    This holds **by construction**: `Expr::new` widens the extent it is
-//!    given to cover each child before storing it, so no parseable input can
-//!    violate it. The check is kept as a pin against a future change to
-//!    `Expr::new`, not as evidence about the parser. See the gate assessment.
-//! 2. **Binary operands are tight and ordered**, which IS falsifiable: the
-//!    left operand ends at or before the right operand starts, and the bytes
-//!    between them are the operator (plus whitespace-class bytes) and nothing
-//!    else. A mis-nesting that attaches an operand to the wrong operator
-//!    keeps containment, because widening preserves it, and breaks this.
-//!    The AST does not retain the operator token's own position, so the check
-//!    is over the gap's byte class rather than an exact spelling: two
-//!    spellings can scan to one operator (`\` and the two not-sign bytes),
-//!    and either operand may sit in parentheses that belong to no node.
-//! 3. **Instructions are ordered**: consecutive `clause_span`s are in source
-//!    order, do not overlap, and the interstices between them hold only
-//!    whitespace-class bytes: blanks, line terminators, comments, and `,`/`-`
-//!    line continuations.
-//!
-//! A `;` is deliberately NOT whitespace-class here, although a null clause
-//! (`;;`, or `;` alone on a line) would put one into an interstice: the
-//! corpus has no null clause today, and permitting `;` would weaken the
-//! dropped-clause net this criterion exists for. If a corpus program ever
-//! gains one, or if this checker is ever extended to `samples/`, revisit that
-//! choice first; the failure message says the same thing.
 
 mod gate_walk;
 
@@ -48,13 +19,6 @@ use gate_walk::{body_of_directive, children_of, corpus_dir, each_expr, rex_files
 use rexx_parse::{DirectiveKind, Expr, ExprKind, Operator, Program, parse_program};
 
 /// The non-whitespace-class bytes of `text[range]`, each with its offset.
-///
-/// Whitespace-class means: blank, tab, CR, LF; a `--` comment to end of line;
-/// a `/* ... */` comment, which nests, exactly as the scanner's do; and a `,`
-/// or `-` whose rest-of-line is only blanks and comments, which is a line
-/// continuation. A continuation may equally sit inside a clause span, so
-/// permitting it here keeps the check independent of where the splitter put
-/// it. Everything else is returned for the caller to judge.
 fn non_whitespace_class(text: &[u8], range: Range<usize>) -> Vec<(usize, u8)> {
     let mut out = Vec::new();
     let mut i = range.start;
@@ -160,12 +124,6 @@ fn non_whitespace_class_line_tail(text: &[u8], range: Range<usize>) -> Option<us
 }
 
 /// Property 1: every node's span contains its children's spans.
-///
-/// The numbering here is this file's own and does not match
-/// `docs/superpowers/plans/phase-3-gate.md`, which numbers the exit criterion's
-/// two clauses so that its Property 2 is clause ordering, this file's Property
-/// 3. The gate doc's Property 2 and this file's Property 2 are different
-/// properties, so cite them by name rather than by number.
 fn containment_errors(e: &Expr, errors: &mut Vec<String>) {
     children_of(e, &mut |child| {
         if child.span.start < e.span.start || child.span.end > e.span.end {
@@ -189,11 +147,6 @@ fn is_operator_byte(b: u8) -> bool {
 
 /// Property 2: a binary node's operands are ordered and the gap between them
 /// holds the operator and nothing else.
-///
-/// The gap may also hold `(` and `)`, because parentheses belong to no node:
-/// `(a) + (b)` leaves `) + (` between the operand spans. For the two
-/// synthesised operators, abuttal and blank, the gap holds no operator byte
-/// at all; for every real operator it holds at least one.
 fn binary_tightness_errors(text: &[u8], e: &Expr, errors: &mut Vec<String>) {
     let ExprKind::Binary { op, left, right } = &e.kind else {
         return;
@@ -292,11 +245,6 @@ fn tiling_errors(text: &[u8], spans: &[Range<usize>], errors: &mut Vec<String>) 
 
 /// The program's clause spans in source order: the main body's instructions,
 /// then each directive's own clause followed by its body's instructions.
-///
-/// **A `::RESOURCE` owns lines rather than instructions**, and they are the
-/// one thing here that is not reachable through a `CodeBody`: `Resource`
-/// carries a range per body line, and its terminator line carries no range at
-/// all, so [`resource_span`] derives one from the marker the directive named.
 fn clause_spans(p: &Program, text: &[u8]) -> Vec<Range<usize>> {
     let mut spans: Vec<Range<usize>> = p
         .main
@@ -318,17 +266,6 @@ fn clause_spans(p: &Program, text: &[u8]) -> Vec<Range<usize>> {
 }
 
 /// The span of one `::RESOURCE`'s terminator line.
-///
-/// The parser keeps the marker's text and not its position, so it is found
-/// here: the first occurrence at or after the body, which is what ended the
-/// body in the first place.
-///
-/// **The marker may be empty**, which `::RESOURCE d END ''` writes and both
-/// interpreters accept at rc 0 -- measured, each prints the program's own
-/// output and exits 0. An empty marker matches nothing and is given an empty
-/// span, so the bytes after it are reported as belonging to no node rather
-/// than crashing the walk: `slice::windows(0)` panics, and this function is
-/// the one place that count is not known in advance.
 fn resource_span(text: &[u8], after: usize, resource: &rexx_parse::Resource) -> Range<usize> {
     let from = resource.lines.last().map_or(after, |line| line.end);
     let marker = &resource.end_marker;
@@ -343,13 +280,6 @@ fn resource_span(text: &[u8], after: usize, resource: &rexx_parse::Resource) -> 
 }
 
 /// [`resource_span`] is total over the marker shapes the parser produces.
-///
-/// **`::RESOURCE d END ''` is the shape that made it panic**, and it is not a
-/// program either interpreter refuses: measured 2026-09-08, both print the
-/// program's own output and exit 0. The parser records an empty `end_marker`
-/// and no body lines for it, so the length the search would use is zero and
-/// `slice::windows(0)` panics -- which is a crash in this walker over a
-/// program the corpus is allowed to gain.
 #[test]
 fn the_resource_span_is_total_over_the_markers_the_parser_produces() {
     for source in [
@@ -401,12 +331,6 @@ fn every_corpus_program_tiles() {
 }
 
 // ---- The checkers can fail. ----
-//
-// Property 1 cannot be violated by any input, because `Expr::new` widens a
-// node's span over its children, and properties 2 and 3 have no corpus
-// counterexample either. So each checker is demonstrated against hand-built
-// nodes, which the public field surface permits: these prove the CHECKERS
-// reject what they exist to reject, and say nothing about the parser.
 
 /// A literal leaf claiming `span`, for building violating trees by hand.
 fn leaf(span: Range<usize>) -> Expr {

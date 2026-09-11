@@ -40,12 +40,6 @@ fn nil_is_distinct_from_every_heap_slot_and_every_integer() {
 
 /// Every length the encoding admits, over bytes chosen to break a decoder
 /// that assumes text.
-///
-/// **`0x00` and `0xFF` are in the alphabet on purpose.** A Rexx string may
-/// contain a NUL -- `'00'x` is an ordinary one-byte value -- so an encoding
-/// that recovered the length from a terminator rather than from its own
-/// field would pass over ASCII and lose data here. That is why the length is
-/// stored, and this is what says so.
 #[test]
 fn a_short_string_round_trips_through_the_handle_at_every_length() {
     let alphabet: [u8; 6] = [0x00, 0x01, b'a', b'~', 0x7f, 0xff];
@@ -63,9 +57,6 @@ fn a_short_string_round_trips_through_the_handle_at_every_length() {
 }
 
 /// One byte more is refused rather than truncated.
-///
-/// The adjacent success is the length above it, so this pins a boundary and
-/// not merely "long strings are refused".
 #[test]
 fn a_string_one_byte_too_long_is_refused_rather_than_truncated() {
     let fits = vec![b'q'; INLINE_TEXT];
@@ -76,11 +67,6 @@ fn a_string_one_byte_too_long_is_refused_rather_than_truncated() {
 
 /// Distinct strings are distinct handles, including strings that differ only
 /// in length.
-///
-/// **`""`, `"\0"` and `"\0\0"` are the case that matters**: their byte
-/// payloads are all zero, so only the length field tells them apart, and an
-/// encoding that dropped it would collapse all three onto one handle -- and
-/// onto `NIL`, whose payload is also zero.
 #[test]
 fn strings_differing_only_in_length_are_different_handles() {
     let handles: Vec<ObjRef> = [&b""[..], &b"\0"[..], &b"\0\0"[..], &b"a"[..], &b"aa"[..]]
@@ -95,9 +81,6 @@ fn strings_differing_only_in_length_are_different_handles() {
 }
 
 /// The new tag does not collide with the three that were already there.
-///
-/// `NIL` is the one to watch: the null string's payload is entirely zero,
-/// and `NIL`'s is too, so only the tag separates them.
 #[test]
 fn an_inline_string_is_not_a_slot_an_integer_or_nil() {
     let empty = ObjRef::inline_text(b"").expect("fits");

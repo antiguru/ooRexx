@@ -13,123 +13,6 @@
 //! `extract_assertions` lifts out of `ootest/ooRexx/base/expressions/` (Task
 //! 15a) through `rexx_exec`'s public entry point and checks it the way the
 //! oracle's own test framework does.
-//!
-//! # Why two `SAY`s and not `==`
-//!
-//! For a row with no raise expectation (below): `OOREXXUNIT.CLS`'s
-//! `assertSame` is `if \ (expected == actual) then … fail`, and Rexx `==` is
-//! exact-string identity, no padding, no coercion. This harness reproduces
-//! that by turning each row into a two-line program -- `SAY <expr>` then
-//! `SAY <expected>` -- and comparing the two output lines **byte for byte**
-//! rather than asking `rexx_exec` to evaluate `==` itself.
-//! That is deliberate and not merely equivalent: criterion 2 is a byte-for-
-//! byte comparison to catch the created-digits/created-form rendering story
-//! (D15), and asking the executor's own `==` operator to be the judge would
-//! make the harness depend on the very code path it exists to check. Two
-//! independent `SAY`s and a `Vec<u8>` comparison in the test binary itself
-//! have no such circularity.
-//!
-//! # `NUMERIC DIGITS`/`FORM` per row, not once per file
-//!
-//! Every row carries the `DIGITS`/`FORM` in force at the point its assertion
-//! ran (Task 15a scanned each `.testGroup` file sequentially to compute
-//! this, from 1 to 100 and `SCIENTIFIC`/`ENGINEERING`). This harness emits
-//! both as the first two lines of that row's own program, never a shared
-//! default, and [`digits_and_form_are_carried_not_defaulted`] is a
-//! regression test for the failure mode named in Task 15's brief: a row
-//! evaluated at the wrong precision can render an answer that still happens
-//! to match and passes while testing the wrong thing.
-//!
-//! # `CONCATENATION`'s prelude
-//!
-//! `AssertionRow::prelude` (Task 15a) carries the method's `a`..`g`
-//! assignment lines verbatim; this harness's program builder ([`program_for`])
-//! writes them out before the two `SAY`s, so `expr`/`expected` see the same
-//! bindings the original method body would have given them. Nothing here
-//! substitutes a made-up prelude or leaves it out: a row whose prelude Task
-//! 15a could not represent is in `AssertionExtraction::blocked`, not among
-//! the rows this file runs.
-//!
-//! # Rows that expect a raise, not a value
-//!
-//! `AssertionRow::expect_raise` (`rexx-extract`) is `Some(major.sub)` for a
-//! row that follows a `self~expectSyntax` in its own method: the ooTest
-//! framework defers a raise-check to whatever runs next, so that row is not
-//! testing "expr equals expected" at all, it is testing "evaluating expr
-//! raises major.sub" -- and `expected` is never even reached under the
-//! oracle, since Rexx evaluates a message send's arguments left to right and
-//! the raise happens while evaluating the first one. [`program_for`] builds
-//! such a row's program with `expected` left out entirely, matching that
-//! evaluation order rather than printing a second line nothing would ever
-//! read; [`RowOutcome::RaiseMismatch`] is what a row like this produces
-//! instead of [`RowOutcome::Mismatch`], and [`the_raise_falsification_proof`]
-//! is the mismatch-shaped falsification proof for it, matching item 3's own
-//! concern (major and sub are checked, not major alone -- `26.11` and `26.2`
-//! must not be confused for each other).
-//!
-//! # Rows this harness cannot run yet
-//!
-//! A row is **runtime-blocked** if its program hits
-//! [`rexx_exec::NOT_IMPLEMENTED_EXIT`] -- some `ExprKind` the row's `expr` or
-//! `expected` text constructs is outside 4a's scope. Measured over the full
-//! 4,259-row set (see [`assertions_differential`]'s own report and
-//! `task-15b-report.md`): 35 rows, all in `Literals.testGroup`, none
-//! anywhere else -- `base/expressions` otherwise constructs only the
-//! arithmetic, comparison, concatenation and logical forms 4a already
-//! evaluates, plus plain literals and variables.
-//!
-//! **Attribution is "the sub-phase that actually unblocks this row", not
-//! "whichever construct its program happens to hit first today", and those
-//! two questions have different answers for 2 of the 35.** Both come from
-//! `Literals.testGroup`'s `test_string_range`, whose program's *first*
-//! `NOT_IMPLEMENTED_EXIT` is `a function call` (`xrange()`, in its own
-//! prelude) -- but the very next prelude line is `all~changeStr(.String~cr,
-//! "")`, a message send, so even a 4b that implements `Call` would only
-//! move this row's first blocker one line later, not make it pass. **All 35
-//! rows are unblocked only by Phase 5** (`Message`, per the design spec's
-//! own split table: "4a has no general message dispatch"). [`EXEMPT`] is
-//! where this fact is committed -- each entry's `unblocked_by` is `"Phase
-//! 5"`, including the two whose first-observed blocker is a 4b construct --
-//! and `RowOutcome::RuntimeBlocked`'s own `construct` field is kept
-//! alongside it, unrenamed, as the separate and genuinely first-hit fact it
-//! is: useful for a reader who wants to know what actually happened when
-//! this ran, not a stand-in for what would need to change to fix it.
-//!
-//! # The exempt set, and why STRICT can use it without becoming an escape hatch
-//!
-//! Criterion 2, taken literally within 4a alone, cannot pass STRICT: it
-//! contains rows only Phase 5 can ever satisfy, and 4a's own gate criteria
-//! never named Phase 5 as something 4a delivers. [`EXEMPT`] is a **committed,
-//! explicit list of the 35 rows** this is true for today (identified by
-//! `group`, `method`, source-order `occurrence` within that method --
-//! needed because two `test_string_range` rows share byte-identical
-//! `expr`/`expected` text -- and the `expr`/`expected` text itself, checked
-//! together so a corpus edit that changes a row's text without changing its
-//! position cannot silently keep matching the wrong entry). This is
-//! criterion 5's own device, reused: its owner arm requires the *set* of
-//! out-of-scope variants to be asserted, precisely so a variant that turns
-//! out hard cannot be quietly relabelled instead of getting a witness
-//! (`docs/superpowers/plans/phase-4-exclusions.txt`'s SET assertion is the
-//! same idea again, one level up).
-//! [`the_exempt_set_matches_the_current_blocked_rows`] asserts the set
-//! unconditionally, in every mode; STRICT
-//! (inside [`assertions_differential`]) additionally fails if a row **not**
-//! on the list is not passing, or if a row **on** the list *is* passing --
-//! the second case means the exemption is stale and the fix is to edit
-//! [`EXEMPT`], which shows up in a diff, not to let the harness quietly
-//! decide for itself that the row no longer needs forgiving.
-//!
-//! # REPORT vs STRICT, and why the report reaches the terminal
-//!
-//! Modelled directly on `tests/corpus.rs`, which solved both problems first:
-//! [`GATE_ENV`] switches between an always-green progress report and the
-//! phase gate, and [`emit_uncaptured`] pipes the report through a child
-//! process whose stderr is inherited, because a `println!`/`eprintln!`
-//! inside a `#[test]` writes to libtest's thread-local capture sink and
-//! never reaches the terminal under a plain `cargo test`. See
-//! `corpus.rs`'s own module doc for the fuller argument and the measurement
-//! that motivated it; nothing about the mechanism differs here, so it is
-//! not re-derived.
 
 mod watchdog;
 
@@ -166,38 +49,12 @@ fn gate_mode() -> bool {
 }
 
 /// `ootest/ooRexx/base/expressions/`, hardcoded relative to this crate.
-///
-/// Not an env var: there is exactly one checkout this can usefully point at,
-/// and a configurable path could only aim it at a different one with nothing
-/// to notice.
-///
-/// **`ootest/` is not checked-in test data**, and a doc comment here said it
-/// was until Task 11 corrected it. It is git-ignored (`.gitignore:6`), has
-/// zero tracked files, and exists only as an SVN working copy of
-/// `svn.code.sf.net/p/oorexx/code-0/test/trunk`; the C++ worktree next door
-/// has no `ootest` at all. So it *can* move under `svn up` with nothing in
-/// this repository changing, and a machine can indeed be missing it. The
-/// revision this file's own committed [`EXEMPT`] set was measured at is
-/// **r13178** -- read it back with `svn info ootest`, and check it first if
-/// the set ever goes red.
 fn suite_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../ootest/ooRexx/base/expressions")
 }
 
 /// Every `AssertionRow` and `BlockedMethod` in the suite, group by group in
 /// sorted file order (`find_test_groups` already sorts).
-///
-/// This does **not** re-pin the row/blocked counts against a hardcoded
-/// number, and does not independently recount `self~assertSame` occurrences
-/// either -- both pins already live on the extractor's own side
-/// (`rexx-extract/tests/extract_assertions.rs`'s
-/// `base_expressions_yields_the_measured_row_and_blocked_counts` and
-/// `every_assert_same_in_base_expressions_is_a_row_or_an_accounted_for_drop`),
-/// and duplicating either here would just be a second place that can drift
-/// out of sync with the first rather than a real cross-check. What this
-/// function's own caller checks is only that the count is nonzero, which is
-/// the narrower "not a silently empty extraction" property this crate can
-/// state without repeating the extractor's own arithmetic.
 fn collect_all() -> (Vec<AssertionRow>, Vec<BlockedMethod>) {
     let dir = suite_root();
     let mut groups = find_test_groups(&dir);
@@ -233,20 +90,6 @@ fn form_keyword(form: Form) -> &'static str {
 
 /// Turns one row into a standalone program: the `DIGITS`/`FORM` in force,
 /// the method's assignment prelude verbatim, then `expr`.
-///
-/// A value-comparison row (`expect_raise: None`) gets a second `SAY
-/// <expected>` after it, exactly as captured. A raise-expectation row
-/// (`expect_raise: Some(_)`) does not: `expected` is never evaluated under
-/// the oracle either, since Rexx evaluates a message send's arguments left
-/// to right and the raise happens while evaluating `expr`, the first one --
-/// printing a second line for it here would test something the row never
-/// actually claims.
-///
-/// `expected` is wrapped in nothing here -- when it is written at all, it
-/// is written out exactly as `rexx-extract` captured it, a bare `SAY
-/// <expected>`. [`the_falsification_proof`] is the one place a row's
-/// `expected` text is ever wrapped, and it wraps a *copy*, never this
-/// function's own row.
 fn program_for(row: &AssertionRow) -> Vec<u8> {
     let mut text = String::new();
     writeln!(text, "numeric digits {}", row.digits).unwrap();
@@ -339,15 +182,6 @@ struct ExemptRow {
 /// would actually unblock it. Generated once from a real run and hand
 /// -verified against the source (`Literals.testGroup`), not hand-guessed --
 /// see `task-15b-report.md` for the method.
-///
-/// Every row here is `"Phase 5"`. `test_hexadecimal`/`test_binary` both
-/// open with `tab = .String~tab`, which the library bootstrap installs, so
-/// the prelude line is not what blocks a row in either method; the rows
-/// still listed are the ones whose own `expr`/`expected` text carries a
-/// `self~` send of its own. `test_string_range` opens with `all = xrange()`
-/// (a function call, first-blocked as 4b's) but its very next prelude line
-/// is a message send, so implementing 4b's `Call` would not make either of
-/// its two rows pass either.
 const EXEMPT: &[ExemptRow] = &[
     ExemptRow {
         group: "Literals",
@@ -543,17 +377,6 @@ fn classify_value(outcome: Outcome) -> RowOutcome {
 
 /// The raise-expectation classification: `expr` alone must raise exactly
 /// `expect.major`.`expect.sub`.
-///
-/// `Raised` (the payload that would carry `major`/`sub` directly) is
-/// `pub(crate)` inside `rexx-exec` and this is an integration test outside
-/// the crate, so the two pieces come from the only channel a public caller
-/// has: `Outcome::exit_code` (`256 - major`, `error.rs`'s own rule) and the
-/// oracle-format report on `Outcome::stderr`, whose second line is always
-/// `Error <major>.<sub>:  <message>.` (`parse_condition_number`). Both are
-/// read and cross-checked against each other rather than trusting either
-/// alone -- see that function's own doc for why the *first* report line
-/// (`Error <major> running <path> line <n>:  ...`) never parses as a
-/// `major.sub` pair by accident even though it also starts with `Error `.
 fn classify_raise(expect: RaiseExpectation, outcome: Outcome) -> RowOutcome {
     if outcome.exit_code == NOT_IMPLEMENTED_EXIT {
         let construct =
@@ -598,19 +421,6 @@ fn classify_raise(expect: RaiseExpectation, outcome: Outcome) -> RowOutcome {
 
 /// Finds `major`/`sub` in the oracle-format report's second line, `Error
 /// <major>.<sub>:  <message>.`.
-///
-/// Scans every line for one starting `Error `, splits the rest at the first
-/// `:`, and tries to parse *that* as `<major>.<sub>` (both plain integers).
-/// The report's *first* line, `Error <major> running <path> line <n>:  ...`,
-/// also starts with `Error ` but never parses this way by construction: its
-/// segment before the first `:` is `<major> running <path> line <n>`, and
-/// `<path>` is `ROW_PATH`, which itself contains a `.` (`assertion-row.rex`)
-/// -- so `split_once('.')`'s first half there is non-numeric text, not a
-/// bare major, and the whole parse fails on that line and falls through to
-/// the second. Verified directly rather than assumed: every stderr this
-/// harness has produced so far has exactly this two-line shape, and the
-/// function returns the *first* line it can parse rather than picking one
-/// by position, so it does not depend on that continuing to hold.
 fn parse_condition_number(stderr: &[u8]) -> Option<(u32, u32)> {
     let text = String::from_utf8_lossy(stderr);
     for line in text.lines() {
@@ -707,11 +517,6 @@ fn describe(
 
 /// Builds the report text, in the same "always visible, caveated top and
 /// bottom in REPORT mode" shape as `corpus.rs::build_report`.
-///
-/// `gate_failures` is shown unconditionally, in REPORT mode too, not only
-/// when `gate` is set: each entry is precisely a reason STRICT would fail
-/// if it ran right now, and a reader in REPORT mode should not have to
-/// re-run with `{GATE_ENV}=1` just to find out whether any exist.
 fn build_report(
     total: usize,
     passed: usize,
@@ -840,13 +645,6 @@ fn emit_uncaptured(text: &str) {
 
 /// The runner. See the module doc for REPORT vs STRICT and "The exempt
 /// set", and `task-15b-report.md` for the measured counts.
-///
-/// STRICT fails on exactly two shapes, both against the committed
-/// [`EXEMPT`] list rather than anything recomputed here: a row **not** on
-/// the list that is not passing (an unattributed regression), or a row
-/// **on** the list that *is* passing (a stale exemption -- the fix is to
-/// remove that row from `EXEMPT`, not for the gate to quietly stop
-/// forgiving it on its own).
 #[test]
 fn assertions_differential() {
     let (rows, blocked) = collect_all();
@@ -917,27 +715,6 @@ fn assertions_differential() {
 /// is the *use* of the committed list (deciding what to forgive); this is
 /// the check that the list still describes reality, and it runs whether or
 /// not anyone ever sets `{GATE_ENV}`.
-///
-/// Verified to actually catch something rather than merely compile: with
-/// `program_for`'s prelude-writing loop commented out (so
-/// `test_hexadecimal`/`test_binary`'s `tab = .String~tab` line,
-/// `test_string_range`'s `all = xrange()` chain, and (load-bearing for a
-/// much larger set) `CONCATENATION`'s own `a`..`g` prelude all stop
-/// running), this test failed immediately with a length mismatch, `336`
-/// not-passing rows against `EXEMPT`'s `35`. Both directions this device
-/// exists to catch actually fired at once: 22 of the 35 committed rows --
-/// every one of `test_hexadecimal`/`test_binary`'s pure-literal
-/// comparisons with no `self~` in their own `expr`/`expected` text, e.g.
-/// `"AB"` vs `"41 42"x` -- started passing outright (a stale exemption, in
-/// `assertions_differential`'s own words for it: `"... now PASSES but is
-/// still listed in EXEMPT"`), and separately 323 previously-passing rows
-/// outside the committed list, almost all of them `CONCATENATION`'s
-/// (unset `a`..`g` rendering as their own names, exactly the silent/loud
-/// split Task 15's brief and `task-15a-report.md` already measured),
-/// started failing with no exemption to explain them. Reverted before
-/// committing; see `task-15b-report.md` for the full transcript and the
-/// exact counts, taken from `assertions_differential`'s own "EXEMPT-set
-/// violations" section while the mutation was live.
 #[test]
 fn the_exempt_set_matches_the_current_blocked_rows() {
     let (rows, _) = collect_all();
@@ -984,18 +761,6 @@ fn the_exempt_set_matches_the_current_blocked_rows() {
 /// The falsification proof Task 15's brief requires: perturbing one row's
 /// `expected` value must make exactly that row's comparison fail, and must
 /// not touch anything else.
-///
-/// Wraps the original `expected` text in parens before appending the
-/// concatenation, `({expected}) || 'ZZZ-FALSIFICATION-MARKER'`, rather than
-/// appending to the raw text directly: concatenation binds *tighter* than
-/// comparison in Rexx precedence, so appending straight onto text that
-/// happens to contain a top-level comparison (several `CONCATENATION` rows
-/// do) would silently regroup the expression instead of just perturbing its
-/// value. The parens are grouping only -- confirmed in `rexx-parse`
-/// (`expr.rs`'s `subterm`, `LeftParen` arm: "the parenthesised expression is
-/// returned unchanged, so there is no node for the parentheses") -- so this
-/// changes nothing about how the original text evaluates and only adds the
-/// marker on top.
 #[test]
 fn the_falsification_proof() {
     let (rows, _) = collect_all();
@@ -1044,14 +809,6 @@ fn the_falsification_proof() {
 /// Digits 5`, `self~assertSame(9999999999999 + 9999999999999, 20.000E+12)`
 /// -- `20.000E+12` is only the right answer in engineering notation at 5
 /// digits.
-///
-/// Proves the harness is actually *sensitive* to the row's own
-/// `digits`/`form` fields, not merely that Task 15a computed them
-/// correctly (its own tests already cover that): running this row's real
-/// `expr`/`expected` at the *default* settings (`DIGITS 9`, `FORM
-/// SCIENTIFIC`) must render a different pair of lines and must not pass,
-/// which is the direct, measured version of "silently tests the wrong
-/// precision and still passes" not holding here.
 #[test]
 fn digits_and_form_are_carried_not_defaulted() {
     let (rows, _) = collect_all();

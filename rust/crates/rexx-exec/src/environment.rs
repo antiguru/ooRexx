@@ -12,62 +12,6 @@
 //! `.environment`, `.local`, `.context` and `.methods` as objects, the order a
 //! `.NAME` resolves in, and the one chokepoint `.environment` and `.local`
 //! are read through.
-//!
-//! # The order, and why the obvious one is wrong
-//!
-//! `PackageClass::findClass` (`classes/PackageClass.cpp:1081`) is the whole
-//! rule, and it consults the **running package's own installed classes
-//! first**, ahead of `.local` and ahead of `.environment`. Measured, `::class
-//! array` in a user file makes `say .ARRAY` print `The ARRAY class` -- the
-//! package's own class, whose id an unquoted directive name upcases -- where a
-//! file without that directive prints `The Array class` from the environment.
-//! `CoreClasses.orx:47`-`:52` depends on this: it names classes its own file
-//! declares later with no `PUBLIC` keyword.
-//!
-//! The steps this module implements, in the C++'s order: the package's
-//! installed classes, the public classes its `::REQUIRES` directives
-//! imported, the `REXX` package's own public classes, the package's local
-//! environment directory, `.local`, `.environment`, then the interpreter's
-//! own reflection names (`RexxActivation::rexxVariable`,
-//! `execution/RexxActivation.cpp:2842`), then the name's own text with a
-//! period in front of it.
-//!
-//! **The `REXX` package's step is separate from `.environment` although the
-//! same two lines of `Setup.cpp` fill both**, and reading the directory
-//! instead was a silent wrong answer: measured, `.local~array = 'x'` makes
-//! `say .array` print `The Array class` on the oracle, because a system class
-//! is found four steps before `.local` is consulted.
-//!
-//! # `.NIL`, `.TRUE` and `.FALSE` never arrive here from an expression
-//!
-//! `LanguageParser`'s constructor builds a `SpecialDotVariable` retriever for
-//! each of them (`parser/LanguageParser.cpp:782`-`784`), so the
-//! expression form is a parse-time constant that resolves nothing. Measured,
-//! `::class True` in a file leaves `say .TRUE` printing `1` -- the package's
-//! own class does not shadow it -- while `say value('.TRUE')` in the same file
-//! prints `The TRUE class`, because `VALUE`'s one-argument form goes through
-//! `VariableDictionary::getVariableRetriever` and gets an ordinary dot
-//! variable. So `eval.rs` keeps its own arm for those names and only `VALUE`
-//! reaches the environment entries for them.
-//!
-//! # The names the oracle answers and this crate does not build
-//!
-//! The fallback -- a name nothing resolves renders as its own uppercased text
-//! with a period in front -- is right for a name the oracle does not resolve
-//! either, and a **silent wrong answer** for one it does. [`ORACLE_ENVIRONMENT`]
-//! and [`ORACLE_LOCAL`] are what `.environment` and `.local` hold, read off
-//! the oracle, and every name in them that this crate cannot answer fails
-//! loudly instead of falling back.
-//!
-//! # The object names that come from the prologue
-//!
-//! `.environment` renders as `The Environment Directory` and `.local` as `The
-//! Local Directory`, and neither name is `Setup.cpp`'s: `CoreClasses.orx:55`
-//! and `:990` assign them with `~objectName=`. They are built in here because
-//! the only oracle this crate can run is one that has already executed both
-//! assignments, so matching it byte for byte means carrying their result. The
-//! prologue assigning the same strings again when Phase 5a runs it changes
-//! nothing.
 
 use std::collections::{HashMap, HashSet};
 
@@ -77,11 +21,6 @@ use crate::plan::{ClassPackage, Package, ProgramId};
 use crate::{Failure, Interp, Loud};
 
 /// Which directory a lookup is reading.
-///
-/// The oracle asks its security manager separately for each --
-/// `checkLocalAccess` before `.local` and `checkEnvironmentAccess` before
-/// `.environment` (`PackageClass.cpp:1137` and `:1154`) -- so a manager
-/// installed in a later phase needs to know which, and the seam carries it.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum EnvScope {
     Local,
@@ -89,35 +28,19 @@ pub(crate) enum EnvScope {
 }
 
 /// The directory-lookup security seam.
-///
-/// Its own module so that the directory handles and the clearance token have
-/// their fields private to the smallest possible scope: nothing outside these
-/// lines can name a directory, and nothing outside them can build a
-/// clearance, whatever else this file grows.
 mod env_seam {
     use super::{EnvScope, Failure, Interp, ObjRef};
 
     /// `.environment` and `.local`, readable only with an [`Admitted`].
-    ///
-    /// The fields are private, so [`directory`] is the only expression that
-    /// yields either handle -- which is what makes the chokepoint below
-    /// unavoidable rather than merely conventional.
     pub(super) struct Directories {
         environment: ObjRef,
         local: ObjRef,
     }
 
     /// Evidence that a directory lookup passed the security seam.
-    ///
-    /// Zero-sized, with a private field, and neither `Copy` nor `Clone`.
-    /// [`admit`] is the only expression that can produce one and [`directory`]
-    /// consumes one, so one trip through the seam yields exactly one directory
-    /// handle.
     pub(super) struct Admitted(());
 
     /// Records the directory handles at bootstrap.
-    ///
-    /// Building the pair is not reading it, so this takes no clearance.
     pub(super) fn hold(environment: ObjRef, local: ObjRef) -> Directories {
         Directories { environment, local }
     }
@@ -125,11 +48,6 @@ mod env_seam {
     /// **The directory chokepoint (D45, site two).** Every read of `.local`
     /// and of `.environment` passes here, and a manager installed in a later
     /// phase gets its hook in this function's body.
-    ///
-    /// Each of the oracle's checks returns a *substitute* value when the
-    /// manager answers one, so what a later phase adds here is the manager
-    /// call and a way to say "answered instead", not a second seam. Nothing is refused in
-    /// this phase because there is no manager to refuse anything.
     pub(super) fn admit(
         interp: &mut Interp,
         scope: EnvScope,
@@ -140,11 +58,6 @@ mod env_seam {
     }
 
     /// Which of the two `handle` is, or `None` for any other object.
-    ///
-    /// **Takes no clearance and yields no handle**, which is why it may sit
-    /// beside [`directory`] without weakening it: a caller that already holds
-    /// an object can learn which directory it is and still has no way to
-    /// obtain one it does not hold.
     pub(super) fn which(held: &Directories, handle: ObjRef) -> Option<EnvScope> {
         if handle == held.environment {
             Some(EnvScope::Environment)
@@ -174,16 +87,6 @@ const ENVIRONMENT_ROOT: &str = ".environment";
 const LOCAL_ROOT: &str = ".local";
 
 /// `.environment`'s own contents, read off the oracle.
-///
-/// Measured by iterating `.environment~supplier` on
-/// `/home/moritz/dev/repos/ooRexx/build/bin/rexx` and sorting the indices. It
-/// is a running interpreter's answer, so it covers what `Setup.cpp` registers
-/// *and* what the shipped `.orx` files add on top -- which is why most of it is
-/// unreachable here and has to be loud rather than fall back.
-///
-/// A name in here that this crate does answer resolves normally; the rest
-/// becomes [`EnvironmentModel::unbuilt`] at bootstrap, derived rather than
-/// listed a second time.
 static ORACLE_ENVIRONMENT: &[&str] = &[
     "ALARM",
     "ALARMNOTIFICATION",
@@ -258,11 +161,6 @@ static ORACLE_ENVIRONMENT: &[&str] = &[
 
 /// `.local`'s own contents, read off the oracle the same way
 /// [`ORACLE_ENVIRONMENT`] was.
-///
-/// Every one of them is a standard stream, the external queue, or the command
-/// line the interpreter was started with, all built by the system interpreter's
-/// own startup -- so this crate builds none of them and each is loud, under a
-/// different owning phase from the environment's own.
 static ORACLE_LOCAL: &[&str] = &[
     "DEBUGINPUT",
     "ERROR",
@@ -305,18 +203,6 @@ struct Unbuilt {
 
 /// What one `::ANNOTATE` directive's pairs belong to, once the object that
 /// carries them exists.
-///
-/// **One key space rather than one table per kind**, because the readback is
-/// one pair of methods whatever the receiver: `memory/Setup.cpp` binds
-/// `Annotations`/`Annotation` at `Class` (`:498`), `Method` (`:1111`),
-/// `Routine` (`:1140`) and `Package` (`:1172`), and the C++ bodies behind
-/// those rows differ from one another only in which field they reach for.
-///
-/// The variants are what this crate can put a program's hands on. A member is
-/// keyed by its class, its dictionary side and its name rather than by the
-/// directive that declared it, because that is what
-/// `dispatch::native_method` holds when a program asks: `~method` takes a
-/// name and a class object and has no directive.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum Annotated {
     /// `::ANNOTATE PACKAGE`. The `REXX` package is a variant of [`Package`]
@@ -335,15 +221,6 @@ pub(crate) enum Annotated {
     /// A `::ROUTINE`, by the directive that declares it.
     Routine(ProgramId, usize),
     /// A method compiled from source text, by a count of its own.
-    ///
-    /// **No directive and no dictionary entry declares one**, which is what
-    /// separates this from [`Annotated::Member`]: the object exists before
-    /// any class has taken it, and one that a class never takes is still a
-    /// method whose `~annotations` answers. Counting is what keeps two of
-    /// them apart -- keying by the entry they are installed into would let a
-    /// `~define` over a name a `::ANNOTATE METHOD` already annotated answer
-    /// the old directive's pairs, where the oracle gives every compiled
-    /// method an empty table.
     Compiled(usize),
 }
 
@@ -365,28 +242,12 @@ pub(crate) enum PackageTable {
 }
 
 /// What one entry of a package table holds.
-///
-/// The value's own kind is fixed by which table it is in, and each is a value
-/// a program can reach: measured with one directive of each kind in a file,
-/// `.methods~z` and `.routines~r` render `a Method` and `a Routine`, and
-/// `.resources~x~class` is `The Array class`.
 enum TableValue {
     /// A `Method` or a `Routine`: the class it answers to, the annotations
     /// it carries, and -- for a `Method` -- which directive of this package
     /// is its body. Nothing here dispatches a `::METHOD` body through
     /// `.METHODS`, and a message neither the class's dictionary nor
     /// `NATIVE_METHODS` holds is 97.1 on either side.
-    ///
-    /// **`runnable` is for `Class~defineClassMethod`**, which is the one
-    /// caller that takes an object out of `.METHODS` and installs it where it
-    /// can be sent to: `CoreClasses.orx:73` hands
-    /// `.methods[("string_cls_" || name)~upper]` to `.String`. Nothing else
-    /// reads it.
-    ///
-    /// `declared` is the directive the object's own readers report on, which
-    /// every entry has and which a generated accessor has as much as a
-    /// written body does -- measured, oracle rc 0, `.K~method('ATT')` for
-    /// `::attribute ATT` answers `isAttribute` `1`.
     Instance {
         class: &'static str,
         site: Annotated,
@@ -405,10 +266,6 @@ enum TableValue {
 
 impl Interp {
     /// The directory model, built on first use.
-    ///
-    /// What is deferred is this model and not the class set it reads: the
-    /// classes are already built by the time any program clause runs, since
-    /// `Interp::bootstrap_library` builds them before the first one.
     fn environment_model(&mut self) -> &EnvironmentModel {
         if self.environment.is_none() {
             let model = self.build_environment();
@@ -474,17 +331,6 @@ impl Interp {
         // as `a RexxInfo` and answers `~class~id` `RexxInfo`. Measured
         // on the oracle at rc 0, `.RexxInfo~isA(.Class)` is `0` and
         // `.RexxInfo~class~superClass` is `The Object class`.
-        //
-        // **Allocated after every other allocation this function makes**, so
-        // that nothing between this line and the `set_entry` below can
-        // collect it: the environment is the only root it has, and
-        // `alloc_with` collects before it allocates.
-        //
-        // The other direction is safe for a reason of its own rather than by
-        // ordering: `true_value` and `false_value` are held in locals across
-        // this allocation, and `Interp::text` answers `ObjRef::inline_text`
-        // for a one-byte slice, so neither names an arena slot for a
-        // collection here to sweep.
         let rexx_info_class = self
             .classes()
             .system_lookup("RexxInfo")
@@ -560,11 +406,6 @@ impl Interp {
     /// `.NAME`'s value: `PackageClass::findClass`'s order, then
     /// `RexxActivation::rexxVariable`'s reflection names, then the name's own
     /// text.
-    ///
-    /// `dotted` is the whole symbol including its leading period, already
-    /// uppercased -- which both callers have in hand, `eval.rs` because the
-    /// scanner interned the symbol that way and `builtin::datatype::value`
-    /// because it upcased its argument to classify it.
     pub(crate) fn dot_variable(&mut self, dotted: &[u8]) -> Result<ObjRef, Failure> {
         let bare = dotted.strip_prefix(b".").unwrap_or(dotted);
 
@@ -609,44 +450,6 @@ impl Interp {
     /// do not declare it. A `ns:Name` target never comes here --
     /// `Interp::resolve_class_target` answers it from the namespace table
     /// instead, which is `ClassResolver::lookup`'s own split.
-    ///
-    /// `PackageClass::findClass`'s order (`classes/PackageClass.cpp:1081`),
-    /// **with the step this crate has nothing to consult named rather than
-    /// skipped silently**: installed classes, then the package's imported
-    /// public classes, then `TheRexxPackage`'s public classes, then the
-    /// package local, then the directories. **The package local is the step
-    /// left out**, and it is unobservable here rather than absent: a
-    /// directive installs before its package's first clause runs, and
-    /// `Package~local` is the only route into that directory, so nothing has
-    /// written to it by the time this is asked. `Interp::dot_variable` does
-    /// take the step, because a `.NAME` is evaluated after that point.
-    /// **`TheRexxPackage`'s
-    /// public classes are substituted for rather than skipped**:
-    /// `MemoryObject::completeSystemClass` (`memory/Setup.cpp:199`-`:206`)
-    /// puts every system class into `TheEnvironment` *and* into
-    /// `TheRexxPackage` in the same two lines, so the `.environment` step
-    /// answers what that one would. What is left is the installing package's
-    /// own classes, then its imported public ones, then `.environment`, then
-    /// the native name table.
-    ///
-    /// **The imported step is asked under `installing`**, the package whose
-    /// `::CLASS` this is, because a directive resolves before any activation
-    /// of that package exists and [`Interp::installed_class`] has none to ask.
-    /// Measured, oracle rc 0: `::requires 'dep.rex'` with a public
-    /// `::class Comparable` in the dependency and `::class K subclass
-    /// Comparable` in the requiring file resolves through the import.
-    ///
-    /// **`.environment` is the step the interpreter's own library needs and a
-    /// program rarely does.** `StreamClasses.orx:506` inherits `Comparable`,
-    /// which `CoreClasses.orx` declares and whose prologue puts in
-    /// `.environment`; the two are separate packages, so nothing but that
-    /// directory connects them. Before the bootstrap ran, every class in
-    /// `.environment` was one the native name table already answered, so this
-    /// step changed no answer a program could get.
-    ///
-    /// A directory entry that is not a class object is stepped over rather
-    /// than returned, so a `::CLASS K SUBCLASS ENDOFLINE` still gets its
-    /// 98.909 rather than a class-shaped failure further on.
     pub(crate) fn directive_class(
         &mut self,
         installing: ProgramId,
@@ -680,12 +483,6 @@ impl Interp {
 
     /// The first of `scopes` whose directory holds `bare`, or the refusal an
     /// unbuilt entry carries.
-    ///
-    /// **The one place either directory is read.** The loop is what keeps
-    /// the chokepoint singular while still asking once per directory, which
-    /// is what the oracle's own per-directory manager calls do, and
-    /// `tests/environment_seam.rs` asserts that `env_seam::admit` has this
-    /// one call site.
     fn directory_lookup(
         &mut self,
         scopes: &[EnvScope],
@@ -703,9 +500,6 @@ impl Interp {
     /// A class the running package's own directives installed, under its
     /// uppercased name -- `PackageClass::findInstalledClass`, the first step of
     /// the order.
-    ///
-    /// Keyed by program, not global: two packages may each declare a class of
-    /// the same name and each must see its own.
     fn installed_class(&self, upper: &[u8]) -> Option<ObjRef> {
         let program = self.running_program()?;
         self.package_classes.get(&program)?.get(upper).copied()
@@ -714,11 +508,6 @@ impl Interp {
     /// A public class the running package's own `::REQUIRES` directives
     /// imported -- `PackageClass::findPublicClass`, the step between the
     /// package's own installed classes and the directories.
-    ///
-    /// Measured, oracle rc 0: a required file's `::class Array public` makes
-    /// `say .Array` print `The ARRAY class`, so this step shadows
-    /// `.environment`, while the requiring file's own `::CLASS` of that name
-    /// shadows the import.
     fn imported_class(&self, upper: &[u8]) -> Option<ObjRef> {
         let program = self.running_program()?;
         self.merged_public_classes
@@ -731,14 +520,6 @@ impl Interp {
     /// -- `packageLocal->get(internalName)` in `PackageClass::findClass`
     /// (`classes/PackageClass.cpp:1122`), the step between the REXX package's
     /// public classes and `.local`.
-    ///
-    /// **Any entry, not a class-valued one**, which is what the C++ reads
-    /// there and what makes this step useful to a program at all: measured,
-    /// oracle rc 0, `.context~package~local~zork = 'from package local'`
-    /// makes `.zork` answer that string.
-    ///
-    /// Absent until something asks for the directory, so a program that never
-    /// sends `~local` pays one map lookup and no allocation.
     fn package_local_entry(&self, bare: &[u8]) -> Option<ObjRef> {
         let program = self.running_program()?;
         let directory = *self.package_locals.get(&Package::Program(program))?;
@@ -753,18 +534,6 @@ impl Interp {
     /// environment-symbol search order (`rexxpg` `classes.xml:838`) and the
     /// step `PackageClass::findClass` takes between a package's imports and
     /// its own local (`classes/PackageClass.cpp:1105`).
-    ///
-    /// **Its two sources are the two the oracle files there.**
-    /// `completeSystemClass` (`memory/Setup.cpp:199`-`:206`) puts every
-    /// `Setup.cpp` class in that package, which is
-    /// [`rexx_classes::ClassRegistry`] here, and the shipped `.orx` files'
-    /// own `::CLASS ... PUBLIC` directives install into it, which is
-    /// [`Interp::library_programs`]' public class tables.
-    ///
-    /// **Not `.environment`**, although the same two lines of `Setup.cpp` put
-    /// the system classes in both: a class a *program* writes into
-    /// `.environment` is not in the REXX package, and reading the directory
-    /// would promote it four steps.
     pub(crate) fn rexx_package_class(&mut self, upper: &[u8]) -> Option<ObjRef> {
         if let Some(&hit) = self.rexx_class_cache.get(upper) {
             debug_assert_eq!(
@@ -802,23 +571,12 @@ impl Interp {
     }
 
     /// Drops every cached `.NAME` answer.
-    ///
-    /// **Called by every write to a table [`Interp::rexx_package_class`]
-    /// reads**: `library_programs`, the packages' public class tables, and
-    /// `ClassRegistry`'s own name table -- the last of which the collector
-    /// also writes, since sweeping a class unlinks its row. The debug
-    /// assertion on the read path is what says the set is complete: it
-    /// recomputes the search on every hit and fires if any answer went stale.
     pub(crate) fn invalidate_rexx_class_cache(&mut self) {
         self.rexx_class_cache.clear();
     }
 
     /// `Package~local`: the package's own environment directory, allocated on
     /// the first ask.
-    ///
-    /// **Rooted globally**, because nothing else refers to it between two asks
-    /// -- a program may write an entry, drop every reference, and read it back
-    /// through `.NAME` many clauses later.
     pub(crate) fn package_local(&mut self, package: Package) -> ObjRef {
         if let Some(found) = self.package_locals.get(&package).copied() {
             return found;
@@ -855,11 +613,6 @@ impl Interp {
     /// `RexxActivation::rexxVariable` (`execution/RexxActivation.cpp:2842`):
     /// the names the interpreter answers out of the running activation rather
     /// than out of a directory.
-    ///
-    /// `.RS` is deliberately absent. The oracle answers it with the string
-    /// `.RS` unless a command has set the return status, and a command clause
-    /// is Phase 7's and fails loudly here, so falling through to that same
-    /// string is the whole of its behaviour in this phase.
     fn rexx_variable(&mut self, bare: &[u8]) -> Option<ObjRef> {
         match bare {
             b"METHODS" => {
@@ -888,31 +641,6 @@ impl Interp {
     /// `.METHODS`/`.ROUTINES`/`.RESOURCES`: a `StringTable` when the running
     /// package declares at least one directive of that kind, and nothing at
     /// all when it declares none.
-    ///
-    /// The absent case is not an empty table: `LanguageParser::
-    /// resolveDependencies` hands the package each of these tables only when
-    /// it is non-empty (`parser/LanguageParser.cpp:1893`-`1907`, one guarded
-    /// assignment per table), so the field stays null and the name falls
-    /// through to its own text. Measured, `say .ROUTINES`
-    /// prints `.ROUTINES` in a file with no `::ROUTINE` and `a StringTable` in
-    /// one with a `::ROUTINE`.
-    ///
-    /// **One object per package, not one per evaluation**, which the oracle's
-    /// own identity says: measured, `.methods~identityHash` answers the same
-    /// number twice in a row. `.CONTEXT` beside this is the other way round
-    /// and says why -- see [`Interp::context_object`].
-    ///
-    /// The entries are the directives themselves, keyed by their upcased
-    /// spelling: `unattachedMethods->setEntry`
-    /// (`parser/DirectiveParser.cpp:617`) upcases, and so do `.ROUTINES`'s
-    /// and `.RESOURCES`'s own keys. Measured, `::method "MiXeD"` puts `MIXED`
-    /// in `.METHODS` and `::routine "r"` puts `R` in `.ROUTINES`.
-    /// **`program` is a parameter rather than the running program**, because
-    /// `RexxContext~executable` reads a `::ROUTINE`'s object out of this same
-    /// table and the routine's declaring program is not always the running
-    /// one -- a `::REQUIRES`d routine is declared in another. The three
-    /// `.NAME` readers pass the running program, which is what they answer
-    /// for.
     pub(crate) fn package_string_table(
         &mut self,
         program: ProgramId,
@@ -924,11 +652,6 @@ impl Interp {
     /// [`Interp::package_string_table`] for a caller that is about to write an
     /// entry into it, which builds the table even when the program's own
     /// directives declare none of that kind.
-    ///
-    /// `Package~addRoutine` is what needs it: `addInstalledRoutine`
-    /// (`classes/PackageClass.cpp:1432`) creates the field when it is null,
-    /// so a package that declared no `::ROUTINE` has one afterwards and
-    /// `.ROUTINES` starts answering a table where it answered its own name.
     pub(crate) fn package_string_table_for_write(
         &mut self,
         program: ProgramId,
@@ -1007,17 +730,6 @@ impl Interp {
     }
 
     /// A fresh `StringTable` holding `entries`, sorted by name.
-    ///
-    /// **Fresh on every ask, which is what the `Package` table readers
-    /// answer**: each of them is a `->copy()` in the C++
-    /// (`classes/PackageClass.cpp:1542` onwards). Measured, oracle rc 0,
-    /// `(p~resources == p~resources)` is `0`, and a `~put` into one is
-    /// invisible to the next ask.
-    ///
-    /// The order the entries go in is observable -- `DO OVER` a `StringTable`
-    /// iterates its indexes -- so it is sorted rather than left to a hash
-    /// walk, which is also what keeps the allocation sequence the same from
-    /// run to run.
     pub(crate) fn string_table_of(&mut self, mut entries: Vec<(Box<[u8]>, ObjRef)>) -> ObjRef {
         entries.sort_by(|a, b| a.0.cmp(&b.0));
         let frame = self.roots.push_frame();
@@ -1052,12 +764,6 @@ impl Interp {
     }
 
     /// The one `Routine` object standing for `installed`.
-    ///
-    /// Built on the first ask, by materialising the declaring program's own
-    /// `.ROUTINES` table -- which is where a `::ROUTINE`'s object lives and
-    /// which fills [`Interp::routine_objects`] as it goes. `None` is a
-    /// routine whose declaring program this crate cannot reach, which no
-    /// program can produce.
     pub(crate) fn routine_object(&mut self, installed: crate::InstalledRoutine) -> Option<ObjRef> {
         if let Some(found) = self.routine_objects.get(&installed).copied() {
             return Some(found);
@@ -1067,9 +773,6 @@ impl Interp {
     }
 
     /// One `::RESOURCE`'s body as the `Array` of strings `.RESOURCES` holds.
-    ///
-    /// Each line is pushed as a temporary as it is built, because the next
-    /// line's own allocation may collect and nothing else holds it yet.
     fn line_array(&mut self, lines: &[Vec<u8>]) -> ObjRef {
         let mut slots = Vec::with_capacity(lines.len());
         for line in lines {
@@ -1084,21 +787,6 @@ impl Interp {
 
     /// `.CONTEXT`: `RexxActivation::getContextObject`, which builds the
     /// object on the first ask and keeps it in the activation's own field.
-    ///
-    /// **One object per activation, which is observable and is measured.**
-    /// Oracle rc 0: `c = .context` then
-    /// `(c~identityHash == .context~identityHash)` is `1`, and
-    /// `.context~objectName = "tagged"` then `say .context~objectName` prints
-    /// `tagged`. The same comparison against a context passed into a method
-    /// is `0`, so the object is the activation's and not the program's.
-    ///
-    /// [`Activation::context_object`] is where it lives and carries how it is
-    /// rooted in each of the two states an activation can be in.
-    ///
-    /// The `None` arm is a resolution with no activation running, which is how
-    /// a unit test against a bare `Interp` reaches this; nothing a program can
-    /// write does, since `.CONTEXT` is resolved from inside the activation
-    /// evaluating it.
     fn context_object(&mut self) -> ObjRef {
         self.context_object_at(0).unwrap_or_else(|| {
             let class = self.environment_model().context;
@@ -1113,11 +801,6 @@ impl Interp {
     /// oracle rc 0: every frame of a four-frame stack answers
     /// `~context~class~id` `RexxContext` in a program where only the
     /// innermost ever named `.context`.
-    ///
-    /// `None` has no activation at that depth, which is how a unit test
-    /// against a bare `Interp` reaches [`Interp::context_object`]; nothing a
-    /// program can write does, since `.CONTEXT` is resolved from inside the
-    /// activation evaluating it.
     pub(crate) fn context_object_at(&mut self, depth: usize) -> Option<ObjRef> {
         if let Some(found) = self.frame_at(depth)?.context_object {
             return Some(found);
@@ -1130,10 +813,6 @@ impl Interp {
 
     /// An instance of `class` with no entries, rendered the way
     /// `RexxObject::defaultName` renders one.
-    ///
-    /// Pushed onto the temporaries stack rather than left unrooted: the value
-    /// is returned into an expression that may allocate again before anything
-    /// stores it.
     pub(crate) fn native_instance(&mut self, class: ObjRef) -> ObjRef {
         let rendered = default_object_name(self.classes().id_string(class));
         let object = self.alloc_with(
@@ -1147,18 +826,6 @@ impl Interp {
     /// The entry `index` names on a `Directory` or a `StringTable`, or the
     /// refusal for an index whose entry the oracle has and this crate does
     /// not.
-    ///
-    /// **`.nil` is the answer for an absent entry and a wrong answer for an
-    /// unbuilt one**, which is the same split [`Interp::dot_variable`] makes
-    /// one step further down: measured, `.local['STDOUT']` is `STDOUT` on the
-    /// oracle and `.environment['STDOUT']` is `The NIL object`, so the refusal
-    /// has to be per directory rather than over the union of the two names.
-    /// [`Unbuilt::scope`] is what carries that.
-    ///
-    /// **Not through the seam.** `env_seam::admit` is what a `.NAME` lookup
-    /// passes to *find* a directory it was not handed; a send already holds the
-    /// receiver, and the oracle asks its manager per `getLocal`/`getEnvironment`
-    /// call (`PackageClass.cpp:1137`, `:1154`) and not per `~at`.
     pub(crate) fn hash_entry_read(
         &mut self,
         receiver: ObjRef,
@@ -1180,11 +847,6 @@ impl Interp {
     }
 
     /// Stores `item` under `index` on a `Directory` or a `StringTable`.
-    ///
-    /// The entry replaces whatever the bootstrap put there, which is what makes
-    /// a stored name answer where the unbuilt refusal above would otherwise
-    /// fire: `hash_entry_read` asks the map first, exactly as
-    /// [`Interp::dot_variable`] does.
     pub(crate) fn hash_entry_write(
         &mut self,
         receiver: ObjRef,
@@ -1204,14 +866,6 @@ impl Interp {
     /// Every key a string-keyed table holds, owned and in the table's own
     /// order -- `NativeObject`'s map for `.environment` and `.local`, and the
     /// hash store for a `Directory` or `StringTable` a program made.
-    ///
-    /// **Both, because a method table is written by Rexx and read by this
-    /// crate.** `Class~enhanced` and `~defineMethods` are handed a
-    /// `.StringTable~new` the program filled, which is a collection with a
-    /// store; the same functions are handed the bootstrap's own tables, which
-    /// are `Body::Native`. Measured when this read only the first:
-    /// `enhanced_scope.rex`, `enhanced_unset.rex` and `usesem.rex` all fell
-    /// through to a `SUPPLIER` send and refused.
     pub(crate) fn native_keys(&mut self, object: ObjRef) -> Vec<Box<[u8]>> {
         match self.heap.get(object).map(|held| &held.body) {
             Some(Body::Native(native)) => native.keys(),
@@ -1261,10 +915,6 @@ impl Interp {
 
     /// Stores one entry on a `Body::Native`, and does nothing for a receiver
     /// that is not one.
-    ///
-    /// The collector walks these, which is what makes the entry table the
-    /// right place for a value one of the interpreter's own objects has to
-    /// keep alive -- `dispatch`'s `MESSAGE_RESULT` is the caller.
     pub(crate) fn set_native_entry(&mut self, object: ObjRef, index: &[u8], value: ObjRef) {
         if let Some(held) = self.heap.get_mut(object)
             && let Body::Native(native) = &mut held.body
@@ -1275,11 +925,6 @@ impl Interp {
 
     /// Which of the two directories this model built `directory` is, or `None`
     /// for any other object.
-    ///
-    /// Reads the handles without a clearance, which is what
-    /// [`env_seam::Directories`]'s privacy allows and its doc intends: the
-    /// question is "is this handle one of those two", not "give me one of
-    /// those two", and answering it hands out neither.
     fn directory_scope(&mut self, directory: ObjRef) -> Option<EnvScope> {
         let model = self.environment_model();
         env_seam::which(&model.directories, directory)
@@ -1293,17 +938,6 @@ impl Interp {
 
     /// The phase owing the entries of `object` that this crate does not
     /// build, or `None` for a collection whose entries it fills.
-    ///
-    /// **The question [`Interp::hash_entry_read`] asks per name, asked about
-    /// the whole collection**, for a caller that walks the entries instead of
-    /// reading one. Walking a `Body::Native`'s own map answers what this
-    /// crate put there, which for `.local` is nothing at all: every entry it
-    /// has on the oracle is in the `unbuilt` table, so a walk sees an empty
-    /// collection and a caller that acts on what it sees does nothing at all
-    /// where the oracle acts.
-    ///
-    /// The owner is the smallest of the owners in that scope, so the refusal
-    /// names one phase rather than depending on a `HashMap`'s order.
     pub(crate) fn unbuilt_collection_owner(&mut self, object: ObjRef) -> Option<&'static str> {
         let scope = self.directory_scope(object)?;
         self.environment_model()
@@ -1316,30 +950,12 @@ impl Interp {
 
     /// The program whose directives and installed classes a `.NAME` resolves
     /// against -- the running activation's own.
-    ///
-    /// **A `::CONSTANT` expression is evaluated inside an activation too**
-    /// (`Interp::eval_constant_expression` pushes one carrying the installing
-    /// program's own id), so it reaches the same table -- but only the part of
-    /// it the directives ahead of that `::CONSTANT` have filled in, where the
-    /// oracle's class table is complete by the time any directive installs.
-    /// Nothing observes the difference in this phase: a `::CONSTANT`'s value is
-    /// recorded nowhere, so no send can read one back.
-    ///
-    /// `None` when no activation is running, which is how a unit test that
-    /// resolves a name against a bare `Interp` reaches this.
     pub(crate) fn running_program(&self) -> Option<ProgramId> {
         self.running_activation().map(|frame| frame.program_id)
     }
 
     /// Records a class a `::CLASS` directive installed, under the running
     /// package's own id.
-    ///
-    /// Separate from `ClassRegistry`'s flat name table, which models
-    /// `.environment`'s class entries and which the oracle never adds a
-    /// `::CLASS` to: `completeSystemClass` is an image-build path and
-    /// `PackageClass::install` files an installed class against the package
-    /// (`addInstalledClass`). Resolution reads this table and the environment
-    /// object; it never reads `ClassRegistry::lookup`.
     pub(crate) fn record_package_class(
         &mut self,
         program: ProgramId,
@@ -1372,12 +988,6 @@ impl Interp {
     /// Records a class `Class~subclass` or `Class~mixinClass` built, whose
     /// own `package` field the oracle leaves null
     /// (`classes/ClassClass.cpp:1546`, `:1496`, then `:1582`).
-    ///
-    /// Separate from [`Interp::record_package_class`] because the two write
-    /// different tables: a class built by message goes into no package's
-    /// class table at all. Measured, oracle rc 0:
-    /// `.context~package~classes~items` is `0` both before and after
-    /// `k = .object~subclass("k")`.
     pub(crate) fn record_packageless_class(&mut self, class: ObjRef) {
         self.class_packages.insert(class, ClassPackage::Null);
     }
@@ -1387,12 +997,6 @@ impl Interp {
     /// `PackageClass::addInstalledClass` (`classes/PackageClass.cpp:1401`),
     /// which both `addClassRexx` (`:1932`) and `addPublicClassRexx`
     /// (`:1950`) reach with the flag set differently.
-    ///
-    /// The name is stored upcased, because `setEntry` upcases its index
-    /// (`StringHashCollection::setEntry`, `classes/support/HashCollection.cpp:854`).
-    /// Measured on the oracle at rc 0: after `p~addClass("zz", .K)`,
-    /// `p~classes["ZZ"]` is `The K class` and `p~classes["zz"]` is `The NIL
-    /// object`.
     pub(crate) fn add_installed_class(
         &mut self,
         program: ProgramId,
@@ -1421,17 +1025,6 @@ impl Interp {
 
     /// The package object `class~package` answers, or `.nil` for a class that
     /// belongs to no package.
-    ///
-    /// A class this crate's own bootstrap registered belongs to the `REXX`
-    /// package; one a `::CLASS` installed belongs to its program's. Measured,
-    /// `(.K~package == .Array~package)` is `0` for a `::class K`.
-    ///
-    /// **`.nil` is the third answer and it is the oracle's**, for a class
-    /// `~subclass` or `~mixinClass` built: those forward `OREF_NULL` as the
-    /// package (`classes/ClassClass.cpp:1546`, `:1496`) and `getPackage`
-    /// answers `resultOrNil` of the field. Measured, oracle rc 159 with
-    /// stdout empty: `k = .object~subclass("k")` then `say k~package~name`
-    /// reports `Object "The NIL object" does not understand message "NAME".`
     pub(crate) fn package_object_for(&mut self, class: ObjRef) -> ObjRef {
         // A class this crate's own bootstrap registered is in no program's
         // table, and that absence is what `Package::Rexx` names -- the
@@ -1445,12 +1038,6 @@ impl Interp {
     }
 
     /// The one object standing for `package`, built on first use.
-    ///
-    /// Split out of [`Interp::package_object_for`] because
-    /// `RexxContext~package` names the running program's package with no
-    /// class to read it off, and the two must answer the same object:
-    /// measured, `.context~package == .K~package` is `1` for a `::class K`
-    /// in the running file.
     pub(crate) fn package_object(&mut self, package: Package) -> ObjRef {
         if let Some(found) = self.package_objects.get(&package).copied() {
             return found;
@@ -1482,46 +1069,6 @@ impl Interp {
 
     /// `Class~method`'s answer: the one `Method` object this class's instance
     /// dictionary entry named `name` has, built on first ask and kept.
-    ///
-    /// **One object per dictionary entry, because the oracle's identity is
-    /// observable.** `RexxClass::method` retrieves the method out of
-    /// `instanceMethodDictionary` and answers it
-    /// (`classes/ClassClass.cpp:984`, the retrieval at `:991`), so two sends
-    /// of `~method` for one name answer one object. Measured, oracle rc 0
-    /// and both engines identical:
-    /// `(.K~method("M")~identityHash == .K~method("M")~identityHash)` is `1`,
-    /// and `.K~method("M")~objectName = "x"` then `say .K~method("M")` prints
-    /// `x`. A fresh object per send answers `0` and `a Method`.
-    ///
-    /// The comparison is `==` and not `=`. The oracle's `identityHash` is an
-    /// address-derived integer of more than nine digits, and `=` compares two
-    /// of those at `NUMERIC DIGITS`, where they round to the same value, so
-    /// two genuinely different objects compare equal under it. Measured with
-    /// the two answers in variables, which is how they arrive from
-    /// `~identityHash`: `a = "-140404878001713"; b = "-140404878167489"` then
-    /// `say (a = b) (a == b)` prints `1 0`.
-    ///
-    /// **Written as variables because the literal form measures something
-    /// else.** Unary minus is arithmetic, so `say (-140404878001713 ==
-    /// -140404878167489)` evaluates each literal at `NUMERIC DIGITS` first
-    /// and compares two copies of `-1.40404878E+14`: it prints `1`, and it is
-    /// not this rule.
-    ///
-    /// Rooted as a global for the reason a package object is: it outlives
-    /// every send that reaches it and is reachable from no other object
-    /// between two of them.
-    ///
-    /// `scope` is the scope the dictionary entry was defined at, which is
-    /// what `Method~scope` answers -- see [`Interp::method_scope`]. The
-    /// caller supplies it rather than this function assuming `class`,
-    /// because `MethodDictionary::setMethodScope` rewrites a dictionary's
-    /// entries to another class's scope and `~inheritInstanceMethods` runs it
-    /// over the donor's own dictionary (`classes/ClassClass.cpp:560`-`:563`).
-    ///
-    /// `record` is what the object's own readers report on -- its seven
-    /// flags, its `~source`, its `~package` and the dictionary entry
-    /// `~setPrivate` acts on. The caller supplies it for `scope`'s reason: it
-    /// holds that entry, and this function has only a name.
     pub(crate) fn method_object(
         &mut self,
         class: ObjRef,
@@ -1551,12 +1098,6 @@ impl Interp {
 
     /// The one `Method` object for the method `name` defined at `scope` --
     /// what `RexxContext~executable` answers from a `::METHOD` context.
-    ///
-    /// **The same object `Class~method` hands out**, which is measured:
-    /// oracle rc 0, inside `::method m` of `::class kk`,
-    /// `.context~executable == .kk~method('M')` is `1`. Keyed on the
-    /// *defining* class rather than on the class the send arrived at, because
-    /// that is the dictionary the method really lives in.
     pub(crate) fn method_executable(
         &mut self,
         scope: ObjRef,
@@ -1608,19 +1149,6 @@ impl Interp {
     /// `MethodClass::newScope` (`classes/MethodClass.cpp:183`): the same
     /// method object with `scope` filled in when it had none, and a copy
     /// carrying `scope` when it already had one.
-    ///
-    /// This is what decides whether `~define` stores the very object it was
-    /// handed. Measured, oracle rc 0, with `::method z` above `::class K`
-    /// and `::class K2`: `m = .methods~z; .K2~define("Y", m)` then
-    /// `m == .K2~method("Y")` is `1`, and `.K2~define("X", .K~method("M"))`
-    /// then `.K~method("M") == .K2~method("X")` is `0` -- `.K`'s own method
-    /// already carries `.K` as its scope.
-    ///
-    /// The copy is shallow, which is `RexxObject::copy`: it shares the
-    /// annotation table rather than duplicating it, so the copy answers the
-    /// `::ANNOTATE` pairs the original was given. Measured at rc 0,
-    /// `.K2~method("X")~annotation("A")` answers what `::annotate method m A`
-    /// set.
     fn method_new_scope(&mut self, method: ObjRef, scope: ObjRef) -> Option<ObjRef> {
         let mut copy = match self.heap.get(method).map(|held| &held.body) {
             Some(Body::Native(native)) if native.scope().is_none() => {
@@ -1661,12 +1189,6 @@ impl Interp {
 
     /// `~define` with a method object: install it in `class`'s own instance
     /// dictionary under `name` and make [`Interp::method_object`] answer it.
-    ///
-    /// `RexxClass::defineMethod` (`classes/ClassClass.cpp:819`) puts the
-    /// object `newMethodObject` gave it straight into the dictionary
-    /// (`:864`), so `~method` afterwards answers that object and not a fresh
-    /// one -- which is the difference `~defineMethods` beside it does not
-    /// have.
     pub(crate) fn define_method_object(
         &mut self,
         class: ObjRef,
@@ -1684,19 +1206,6 @@ impl Interp {
     /// `defineClassMethod`: the same shape as [`Interp::define_method_object`]
     /// on the class side, plus the row that makes the installed method
     /// runnable.
-    ///
-    /// **The body row is the difference and it is load-bearing.** `~define`
-    /// mints an id and stores the object; a send to that id finds no body,
-    /// which is right there because the oracle's `~define` reaches an
-    /// instance side no class object answers from. `defineClassMethod`
-    /// installs where a send *does* land -- `.String~NL` after
-    /// `CoreClasses.orx:73` -- so the minted id has to name the directive the
-    /// object came from. `None` is a method object with no row in
-    /// [`Interp::table_method_bodies`]: one this crate did not build, or one
-    /// [`compile_method_source`] built from source text and kept no body for.
-    /// The caller refuses either.
-    ///
-    /// [`compile_method_source`]: crate::dispatch::compile_method_source
     pub(crate) fn define_class_method_object(
         &mut self,
         class: ObjRef,
@@ -1714,16 +1223,6 @@ impl Interp {
     }
 
     /// `~defineMethods`: one mutation for the whole table.
-    ///
-    /// Each entry goes through [`Interp::method_new_scope`] **twice**, which
-    /// is the oracle's own path and not a doubling:
-    /// `createMethodDictionary` calls `newMethodObject`
-    /// (`classes/ClassClass.cpp:1265`), and `replaceMethods` calls
-    /// `newScope` again on what that produced (`MethodDictionary.cpp:233`).
-    /// The second call always finds a scope set by the first, so the object
-    /// stored is always a copy -- measured, oracle rc 0:
-    /// `m = .methods~z; .K~defineMethods(.methods)` then
-    /// `m == .K~method("Z")` is `0` while `m == .methods~z` is `1`.
     pub(crate) fn define_method_table(
         &mut self,
         class: ObjRef,
@@ -1762,38 +1261,12 @@ impl Interp {
 
     /// Forget the `Method` object this dictionary entry answered, for a
     /// `~delete` or a `~define` that took the entry away.
-    ///
-    /// The identity `~method` hands out is per dictionary entry, so an entry
-    /// that stops existing must not leave its object behind to be answered by
-    /// whatever occupies the name next.
-    ///
-    /// **The map entry goes and the global root stays.** `RootSet` has no
-    /// counterpart to `add_global`, so the object [`Interp::hold_method_object`]
-    /// rooted stays reachable for the rest of the run. That costs one live
-    /// object per (class, name) pair a program ever installs and answers
-    /// nothing: `~method` reads this map, and it no longer has the entry. A
-    /// later `~define` under the same name replaces the root as well as the
-    /// entry, because `add_global` replaces by name.
     pub(crate) fn drop_method_object(&mut self, class: ObjRef, name: &[u8]) {
         self.method_objects.remove(&(class, name.into()));
     }
 
     /// The `StringTable` `~annotations` answers for `site`, built empty on
     /// first ask and kept.
-    ///
-    /// **Kept, because the oracle's is a live table and not a snapshot**:
-    /// `RexxClass::getAnnotations` and `BaseExecutable::getAnnotations` both
-    /// create the table on the first ask and store it in the object's own
-    /// field (`classes/ClassClass.cpp:325`, `execution/BaseExecutable.cpp:378`).
-    /// Measured, oracle rc 0 in each of three shapes: `.K~annotations~put('v',
-    /// 'N')` then `.K~annotation('N')` answers `v`, and so do the same pair
-    /// through `.K~method('M')` and through `.routines~r`, where a build
-    /// answering a fresh table each time answers `The NIL object`.
-    ///
-    /// **Rooted as a global**, the position `.environment` and a package
-    /// object are in: the table outlives every send that reaches it, and the
-    /// objects that carry a handle on it are rooted the same way, so nothing
-    /// on the temporaries stack keeps it alive between two sends.
     pub(crate) fn annotation_table(&mut self, site: Annotated) -> ObjRef {
         if let Some(found) = self.annotations.get(&site).copied() {
             return found;
@@ -1815,11 +1288,6 @@ impl Interp {
 
     /// Records what one `::ANNOTATE` directive named, under every key that
     /// reaches it.
-    ///
-    /// More than one key where a `::CONSTANT` is annotated: one directive
-    /// files a single method object in both of its class's dictionaries
-    /// (`instructions/ClassDirective.cpp:520`-`:524`), so both sides answer
-    /// the same table rather than two tables that could come to disagree.
     pub(crate) fn record_annotations(
         &mut self,
         sites: &[Annotated],
@@ -1850,12 +1318,6 @@ impl Interp {
 
     /// Gives `object` the annotation table `site` names, so that a send to it
     /// needs no way back to the directive that declared it.
-    ///
-    /// **A handle on the table [`Interp::annotation_table`] keeps, never a
-    /// copy of it.** More than one object can name one table -- a
-    /// `::CONSTANT`'s single method is filed on both sides of its class's
-    /// dictionary -- and a program adding to the table through any of them
-    /// must be answered through all of them.
     pub(crate) fn attach_annotations(&mut self, object: ObjRef, site: Annotated) {
         let table = self.annotation_table(site);
         let Some(held) = self.heap.get_mut(object) else {
@@ -1868,16 +1330,6 @@ impl Interp {
 
     /// The `StringTable` a receiver's `~annotations` answers, or the refusal
     /// for a receiver that carries none.
-    ///
-    /// A class object answers from [`Interp::annotations`] directly, because
-    /// a class handle is the key; every other carrier answers the handle it
-    /// was built with. The refusal is an internal inconsistency rather than a
-    /// program's doing -- `NATIVE_METHODS` binds `ANNOTATION` and
-    /// `ANNOTATIONS` at `Class`, `Method`, `Routine` and `Package` alone, and
-    /// a `Method`, a `Routine` and a `Package` object each get their table as
-    /// this crate builds them.
-    ///
-    /// [`Interp::annotations`]: Interp::annotations
     pub(crate) fn annotations_of(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {
         if self.is_class_object(receiver) {
             return Ok(self.annotation_table(Annotated::Class(receiver)));
@@ -1891,18 +1343,6 @@ impl Interp {
 
     /// `Method~scope`: the class the method object was defined at, and `.nil`
     /// for one that was defined at no class.
-    ///
-    /// `MethodClass::getScopeRexx` (`classes/MethodClass.cpp:361`) is
-    /// `resultOrNil(getScope())`, bound at `Method` by `memory/Setup.cpp:1113`,
-    /// so the absent scope is an answer and not a raise. Measured, oracle
-    /// rc 0: an unattached `::METHOD z` reached through `.methods~z~scope`
-    /// prints `The NIL object`, and the same object answers `K2` once
-    /// `.K2~define("Y", ...)` has taken it.
-    ///
-    /// The refusal is an internal inconsistency rather than a program's
-    /// doing: a receiver reaches here only by resolving `SCOPE` at `Method`,
-    /// and a method object is a `Body::Native`. Loud rather than `.nil`, so
-    /// a receiver that is neither cannot pass for one that carries no scope.
     pub(crate) fn method_scope(&self, receiver: ObjRef) -> Result<ObjRef, Failure> {
         match self.heap.get(receiver).map(|held| &held.body) {
             Some(Body::Native(native)) => Ok(native.scope().unwrap_or(ObjRef::NIL)),
@@ -1912,16 +1352,6 @@ impl Interp {
 
     /// `Package~name`'s answer for a package object this crate built, or
     /// `None` for a handle [`Interp::package_object_for`] did not produce.
-    ///
-    /// `REXX` for the primitive classes' package; for a program's own package
-    /// the path `PARSE SOURCE`'s third word carries, which is what the oracle
-    /// names -- measured, a `::CLASS` in a file answers that file's own
-    /// absolute path.
-    ///
-    /// The `None` is an internal inconsistency and not a program's doing:
-    /// `receiver_kind` admits a `Body::Native` as a package by its class, and
-    /// this crate builds one only above. Answered rather than panicked, so the
-    /// caller can refuse loudly.
     pub(crate) fn package_name(&self, package: ObjRef) -> Option<Vec<u8>> {
         Some(match self.which_package(package)? {
             Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
@@ -1929,21 +1359,6 @@ impl Interp {
             // loaded from -- measured, oracle rc 0: a required file's
             // `.context~package~name` is that file's own path where the
             // requiring program's is its own.
-            //
-            // **`PARSE SOURCE`'s third word and not the path**, which are the
-            // same string for a program loaded from a file and differ for one
-            // compiled from source text: measured, oracle rc 0,
-            // `.Routine~new('NEWR', 'return 42')~package~name` is `NEWR`, and
-            // so is `.context~package~name` read from inside a body
-            // `.K~define('MM', ...)` compiled.
-            //
-            // **The interpreter's own library is three more programs**, and
-            // each has a package object of its own that answers the running
-            // program's path here. None is reachable from a program: a
-            // program's `.context~package` is its own, and a class the
-            // library installed answers `Package::Rexx` because
-            // `Interp::record_package_class` leaves it out of
-            // `class_packages`.
             Package::Program(program) => self.program_display_name(program).to_vec(),
         })
     }
@@ -1952,14 +1367,6 @@ impl Interp {
     /// -- `completeSystemClass` (`memory/Setup.cpp:199`-`:206`) files every
     /// `Setup.cpp` class there -- plus what the shipped `.orx` files' own
     /// `::CLASS` directives installed.
-    ///
-    /// `public_only` selects `installedPublicClasses` over
-    /// `installedClasses`, which is the whole of the difference between
-    /// `~publicClasses` and `~classes` on that receiver. Every registry class
-    /// is public; the ones that are not are the library's own mixins.
-    /// Measured, oracle rc 0: `.Class~package~classes` has 67 entries and
-    /// `~publicClasses` 62, and the five that part are `BAGMIXIN`,
-    /// `LOCALSERVER`, `MANYITEMMIXIN`, `SETMIXIN` and `SUPPLIERMIXIN`.
     pub(crate) fn rexx_package_class_table(
         &mut self,
         public_only: bool,
@@ -1986,13 +1393,6 @@ impl Interp {
 
     /// `PackageClass::findClass` (`classes/PackageClass.cpp:1085`): the whole
     /// search order a package resolves a class name over, from `package`.
-    ///
-    /// `.nil` for a miss, which is `resultOrNil` at the `findClassRexx` stub.
-    /// `upper` is already uppercased, which is how every table here is keyed.
-    ///
-    /// **The security-manager steps are absent and cannot fire**: a manager
-    /// only reaches a package through `~setSecurityManager`, whose
-    /// argument-taking form this crate refuses.
     pub(crate) fn package_find_class(
         &mut self,
         package: Option<ProgramId>,
@@ -2079,10 +1479,6 @@ impl Interp {
     /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:897`):
     /// `findLocalRoutine` and then `findPublicRoutine`, as the `Routine`
     /// object or `.nil`.
-    ///
-    /// The REXX package declares no routine at all -- measured, oracle rc 0,
-    /// `.Class~package~routines` is empty -- so it answers `.nil` for every
-    /// name.
     pub(crate) fn package_find_routine(
         &mut self,
         package: Option<ProgramId>,
@@ -2112,10 +1508,6 @@ impl Interp {
     /// The file `name` resolves to from `package`'s own directory --
     /// `PackageClass::resolveProgramName`, which `~findProgram` and
     /// `~loadPackage` each reach with their own resolve type.
-    ///
-    /// `requires` selects `RESOLVE_REQUIRES`, whose one difference is the
-    /// `.cls` extension tried ahead of every other; `~findProgram` passes
-    /// `RESOLVE_DEFAULT` and so does not try it.
     pub(crate) fn resolve_program_name(
         &self,
         package: Option<ProgramId>,
@@ -2138,9 +1530,6 @@ impl Interp {
 
 /// The [`rexx_core::RootSet::add_global`] key one package object is held
 /// under.
-///
-/// Keyed by string, so each package needs a distinct one; the `REXX` package
-/// and each program's are different objects and must not displace each other.
 fn package_root_key(package: Package) -> String {
     match package {
         Package::Rexx => "the REXX package".to_string(),
@@ -2156,10 +1545,6 @@ fn program_routine_root_key(program: ProgramId) -> String {
 
 /// The [`rexx_core::RootSet::add_global`] key one annotation table is held
 /// under.
-///
-/// Spelled so that no two [`Annotated`] keys can collide: a class handle and
-/// a program id are numbers from different spaces, so each variant names
-/// itself as well as its parts.
 fn annotation_root_key(site: &Annotated) -> String {
     match site {
         Annotated::Package(package) => format!("annotations of {}", package_root_key(*package)),
@@ -2192,10 +1577,6 @@ fn package_local_root_key(package: Package) -> String {
 }
 
 /// The [`rexx_core::RootSet::add_global`] key one package table is held under.
-///
-/// A program's `.METHODS`, `.ROUTINES` and `.RESOURCES` are distinct objects
-/// and must not displace each other, so the kind is in the key alongside the
-/// program.
 fn package_table_root_key(ProgramId(program): ProgramId, kind: PackageTable) -> String {
     let which = match kind {
         PackageTable::UnattachedMethods => "methods",
@@ -2206,10 +1587,6 @@ fn package_table_root_key(ProgramId(program): ProgramId, kind: PackageTable) -> 
 }
 
 /// What `kind`'s table holds for `program`, keyed the way the oracle keys it.
-///
-/// Empty for a package that declares no directive of that kind, which is the
-/// state `.METHODS` renders as its own text in --
-/// [`Interp::package_string_table`] is where that distinction is read.
 fn package_table_entries(
     id: ProgramId,
     program: &rexx_parse::Program,
@@ -2346,11 +1723,6 @@ fn package_table_entries(
 /// `RexxObject::defaultName` (`classes/ObjectClass.cpp:1760`): the owning
 /// class's id with an article in front, `an` before a vowel and `a`
 /// otherwise.
-///
-/// The C++ has an arm ahead of the article for a behaviour marked *enhanced*,
-/// which renders `enhanced <id>` instead. No object this crate builds carries
-/// an enhanced behaviour, and `~enhanced` is not a message it answers, so
-/// there is nothing here for that arm to describe.
 pub(crate) fn default_object_name(id: &str) -> String {
     let vowel = id
         .as_bytes()
@@ -2377,10 +1749,6 @@ mod tests {
     /// Every name the oracle's `.environment` and `.local` hold either
     /// resolves here or fails loudly -- never the dotted-text fallback, which for one of these
     /// names would be a silent wrong answer at rc 0.
-    ///
-    /// **The fallback's own direction is asserted beside it**, because a build
-    /// that made every unresolved name loud would satisfy the first half and
-    /// break `VALUE`'s measured answer for an undefined name.
     #[test]
     fn every_name_the_oracle_answers_resolves_or_is_loud() {
         let mut interp = Interp::new();
@@ -2447,11 +1815,6 @@ mod tests {
     }
     /// **The premise [`Unbuilt`] rests on**: one entry per name is enough,
     /// because a name cannot be in both directories at once.
-    ///
-    /// A shared name would make the `scope` field pick a side, and the wrong
-    /// side turns a refusal into `.nil` for the directory the oracle answers
-    /// from. Asserted rather than written in prose because both lists are in
-    /// this file and either can gain a row.
     #[test]
     fn the_two_oracle_directories_share_no_name() {
         let environment: HashSet<&str> = ORACLE_ENVIRONMENT.iter().copied().collect();

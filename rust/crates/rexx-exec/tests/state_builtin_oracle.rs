@@ -12,45 +12,6 @@
 //! A differential sweep over `builtin/state.rs`'s eleven names: every case
 //! runs through both interpreters and all three descriptors must agree,
 //! except for the declared gaps in [`DECLARED_GAPS`].
-//!
-//! # Why this exists as a file rather than as a paragraph in a report
-//!
-//! 4c Task 10 ran a sweep of this shape by hand, reported "60 cases, 3
-//! differ", and shipped a wrong answer in three error messages that were
-//! inside the swept surface. The sweep was not wrong about the sixty
-//! programs it ran; it was **blind in one direction and its own published
-//! alphabet hid that**, which is the failure this file is built to make
-//! impossible to repeat. So it is committed, its alphabet is the table
-//! itself rather than a prose summary of it, and the set that differs is
-//! asserted in both directions.
-//!
-//! # The axis crossing, stated because it is what the hand sweep missed
-//!
-//! The alphabet a case list needs here is **two-dimensional**, and holding
-//! either axis at its safe value hides everything at the intersection:
-//!
-//! * *what an argument looks like* -- an integer literal, a value with an
-//!   exponent, one with surrounding blanks, one with a redundant sign, one
-//!   with a fractional part, a `NUMERIC`-produced value, a byte `>= 0x80`, a
-//!   control byte, the null string;
-//! * *what the interpreter's own settings are when it is read* -- the
-//!   default `NUMERIC DIGITS`, and one small enough that a value's captured
-//!   rendering (D15) stops being its digits.
-//!
-//! The hand sweep varied the first, held the second at its default, and
-//! published an alphabet naming `1.0`, `1.5` and `99.0` -- which reads as
-//! coverage of the numeric axis and is not, because none of those values
-//! reaches a message that substitutes anything. Every case below whose name
-//! ends `_crossed` is at the intersection, and each one was a live
-//! divergence when this file was written.
-//!
-//! # Both directions, and why the gap list is a set rather than a count
-//!
-//! A case that starts differing is red because it is not in
-//! [`DECLARED_GAPS`]. A declared gap that starts agreeing is red too,
-//! because the list is compared as a set: closing one is a change to what
-//! this crate claims, and it should show up in a diff rather than being
-//! absorbed. A count would let one open while another closed.
 
 mod support;
 
@@ -69,8 +30,6 @@ struct Case {
 
 /// The cases whose three descriptors must **not** agree, each because this
 /// crate refuses an answer it cannot build (`Loud::builtin_option_object`).
-///
-/// Named rather than counted: see the module doc.
 const DECLARED_GAPS: &[&str] = &["condition_additional", "condition_object"];
 
 const CASES: &[Case] = &[
@@ -558,12 +517,6 @@ fn every_state_builtin_case_matches_the_oracle_except_the_declared_gaps() {
 
 /// Every declared gap names a real case, and every gap is loud rather than
 /// merely different.
-///
-/// Without the first half a typo in [`DECLARED_GAPS`] would forgive nothing
-/// and be invisible, since the set test above would then report it as
-/// "closed" only if a case of that name existed. Without the second, a
-/// silent wrong answer could be parked in the list beside the two honest
-/// refusals.
 #[test]
 fn every_declared_gap_names_a_case_and_fails_loudly() {
     for name in DECLARED_GAPS {

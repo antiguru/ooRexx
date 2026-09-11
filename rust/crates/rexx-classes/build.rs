@@ -2,31 +2,6 @@
 //! table from `Setup.cpp` at build time -- the model is `rexx-inventory`'s
 //! `build.rs`: the C++ tree is the source of truth, nothing here is
 //! hand-maintained, and nothing generated is written into `src/`.
-//!
-//! Two tables come out of one file:
-//!
-//! * `SETUP_CLASSES` -- the checklist. Every `X::createInstance();` call in
-//!   `MemoryObject::createImage`, in file order -- a Rust line scan
-//!   (`parse_checklist`, below), not a shelled-out `grep`, but it matches
-//!   the same lines the brief's own specified command
-//!   (`/bin/grep -aE "createInstance\(\)"`) does. This is the C++ *type*
-//!   name (`RexxInteger`, `ArrayClass`, ...), not necessarily the
-//!   Rexx-visible id string.
-//! * `CLASS_DEFINITIONS` -- for every `StartClassDefinition(Name)` block up
-//!   to its matching `EndClassDefinition`/`EndSpecialClassDefinition(Name)`,
-//!   the ordered sequence of `AddMethod`/`AddClassMethod`/
-//!   `InheritInstanceMethods`/`RemoveMethod`/`HideMethod` operations it
-//!   contains, keyed by `Name` -- the macro-block name, which for four of
-//!   the thirty-one checklist entries differs from the C++ type name
-//!   (`RexxClass` -> `Class`, `RexxInteger` -> `Integer`, `RexxString` ->
-//!   `String`, `RexxObject` -> `Object`; every other entry's block name is
-//!   its C++ type name with a trailing `Class` stripped, or identical when
-//!   there is none). `rexx-classes/src/native_classes.rs` carries that
-//!   correspondence explicitly and asserts it against both derived lists.
-//!   Each block also carries which of the two closing macros ended it, as
-//!   `system_only`: `EndSpecialClassDefinition` registers the class with
-//!   `addToSystem` and `EndClassDefinition` with `completeSystemClass`,
-//!   which is whether `.environment` answers its name.
 
 use std::path::{Path, PathBuf};
 

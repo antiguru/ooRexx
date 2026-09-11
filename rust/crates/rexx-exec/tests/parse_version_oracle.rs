@@ -11,52 +11,6 @@
 
 //! `PARSE VERSION`'s string, checked against the running oracle rather than
 //! against a copy of itself.
-//!
-//! # Why this is a harness of its own and not a unit test
-//!
-//! `parse_template.rs`'s `VERSION` is the only value in this crate that is
-//! **the oracle's own build identity**: interpreter name and version, language
-//! level, and the interpreter's *build date*. Nothing in this crate can derive
-//! the third field, so the constant is a recorded measurement -- and a
-//! recorded measurement of a binary that gets rebuilt needs something that
-//! notices when the binary moves.
-//!
-//! An assertion inside the crate cannot notice. The only thing such an
-//! assertion can compare the constant against is a second copy of the same
-//! bytes, which goes red when someone edits one and forgets the other and
-//! stays green through every rebuild there has ever been -- the "test that
-//! cannot fail" shape `rust/CLAUDE.md`'s Method section records as having
-//! shipped repeatedly here, guarding a staleness that would in fact be
-//! guarded by nothing.
-//!
-//! The check below runs `parse version v ; say v` through **both**
-//! interpreters and compares all three channels, so it carries no copy of the
-//! string at all. `VERSION` is the one place in the tree the bytes appear.
-//!
-//! # Why a corpus program cannot do this instead
-//!
-//! `tests/corpus.rs` already runs programs through both interpreters and would
-//! be the natural home. It cannot be: the corpus's one standing rule
-//! (`corpus/README.md`, "The one rule: determinism") is that a program's
-//! output must be the same on every machine, and a build date is neither. So
-//! the differential lives here, where its one program is synthesised rather
-//! than committed.
-//!
-//! # The gate, and what it does and does not protect
-//!
-//! Gated on `REXX_CORPUS_GATE`, the same switch `tests/corpus.rs` uses, so an
-//! offline checkout is not asked to produce an oracle for it. **That
-//! protection is partial and saying otherwise here would be false**:
-//! `tests/builtin_status.rs` invokes the oracle unconditionally on a plain
-//! `cargo test`, with no gate at all -- `support::oracle::locate` asserts the
-//! binary exists rather than skipping -- so a machine without the oracle
-//! already cannot run this crate's default test suite. The gate is followed
-//! here because it
-//! is the convention for a check whose whole subject is the oracle, not
-//! because it restores a property the workspace has.
-//!
-//! Report mode prints what it skipped rather than passing silently, matching
-//! `corpus.rs`'s own REPORT/STRICT split.
 
 mod support;
 
@@ -94,17 +48,6 @@ fn fresh_run_dir() -> PathBuf {
 
 /// `PARSE VERSION` answers what the oracle answers, or this crate's recorded
 /// constant has gone stale against the built interpreter.
-///
-/// **This is the only guard on `VERSION`'s build date.** It goes red two ways
-/// and both matter: someone edits the constant, or the oracle is rebuilt and
-/// its build date moves. The second is the one no self-comparison can see, and
-/// the commit that introduced the constant (`f322477f`'s own standing
-/// consequence: "any recorded figure is a claim about the binary present when
-/// it was taken") is why it needs seeing.
-///
-/// The remedy when it fires is a re-measurement, not an edit to make it pass:
-/// read the oracle's answer out of the failure message and put *that* in
-/// `VERSION`.
 #[test]
 fn parse_version_still_answers_what_the_oracle_answers() {
     if !gate_mode() {

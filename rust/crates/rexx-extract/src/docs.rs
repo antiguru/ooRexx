@@ -11,15 +11,6 @@
 
 //! The `oodocs/` extractors, and the row sets they emit into
 //! `rust/corpus/docs/`.
-//!
-//! Each row set is the denominator of one half of a Phase 5 gate table, so a
-//! row that stops being derived matters exactly as much as one that appears.
-//! The files are committed beside these extractors and re-derived by
-//! `tests/extract_docs.rs`, which compares in **both** directions and asserts
-//! each file's revision stamp against the checkout it was derived from.
-//!
-//! Every extractor here is text-level; [`xml`]'s own doc gives the reason,
-//! which is a property of the books rather than a convenience.
 
 pub mod classes;
 pub mod directives;
@@ -39,10 +30,6 @@ pub const CLASS_BOOKS: &[&str] = &[
 ];
 
 /// A committed row set: the header comment its file carries, and its rows.
-///
-/// The header is part of the artifact rather than something the writer adds,
-/// because the both-directions check compares whole files: a header edited in
-/// the data file and not in the extractor is as red as a missing row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RowSet {
     pub header: Vec<String>,
@@ -51,11 +38,6 @@ pub struct RowSet {
 
 impl RowSet {
     /// The file's exact bytes: header lines, a blank line, then the rows.
-    ///
-    /// A header line is hard-wrapped, because a paragraph built by `format!`
-    /// otherwise lands as one very long line in a file whose whole point is
-    /// being read by a person. Lines indented in the source keep their
-    /// indentation and are not wrapped, so a derived list stays a list.
     pub fn render(&self) -> String {
         let mut out = String::new();
         for line in &self.header {
@@ -103,18 +85,11 @@ fn wrap(line: &str) -> Vec<String> {
 
 /// The stamp line every row set carries, naming the upstream revision the
 /// rows were derived at (D56).
-///
-/// Read back by `tests/extract_docs.rs` against `svn info`, which is the only
-/// thing that can say whether a committed row set is stale: `oodocs/` is
-/// git-ignored, so nothing in the checkout records what it held.
 pub fn stamp_line(revision: &str) -> String {
     format!("derived-at: oodocs/{REXXREF} {revision}")
 }
 
 /// The `Revision:` line of `svn info <path>`.
-///
-/// `oodocs/` itself is **not** a working copy -- `svn info` on it is
-/// `E155007` -- so this is asked of `oodocs/rexxref`, which is one.
 pub fn svn_revision(path: &std::path::Path) -> Result<String, String> {
     let out = std::process::Command::new("svn")
         .arg("info")
@@ -252,12 +227,6 @@ fn argutil_citation_line(provide_xml: &str) -> Result<usize, String> {
 
 /// The `*classmethods.xml` files the class tables include, and the ones in the
 /// same directory that nothing includes.
-///
-/// The second list is derived rather than remembered, so it is policed by the
-/// both-directions check: `objectclassmethods.xml` is included by nothing
-/// today, and if that changes the header moves and the check reddens. An
-/// extractor that globbed the directory instead of following the includes
-/// would credit `Object` with a method its own class table comments out.
 fn classmethod_files(
     book_dir: &std::path::Path,
     books: &[classes::Book],

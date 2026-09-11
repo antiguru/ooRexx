@@ -43,20 +43,9 @@ fn rebinding_a_global_replaces_it_rather_than_adding_a_second_root() {
 
 // ---------------------------------------------------------------------------
 // Where an IR chunk's register file can live.
-//
-// Three candidate homes were on the table. These decide between them by
-// running them rather than by arguing, because the argument for the losing
-// one was sound and the premise it was missing is only visible here.
-// ---------------------------------------------------------------------------
 
 /// The rejected design, and why: a register `SlotFrame` of its own makes
 /// every run-time variable introduction underneath it panic.
-///
-/// `grow_slots` asserts its target is the top frame, and its own doc says
-/// that assertion "is not a placeholder awaiting a later relaxation". A
-/// program reaches this on `INTERPRET` introducing a name, on `DROP (v)`,
-/// and on the first `CALL` in a program that never writes `RESULT` -- none
-/// of them exotic.
 #[test]
 #[should_panic(expected = "grow_slots on a frame that is not the top one")]
 fn a_register_slot_frame_makes_the_variable_frame_beneath_it_ungrowable() {
@@ -68,9 +57,6 @@ fn a_register_slot_frame_makes_the_variable_frame_beneath_it_ungrowable() {
 
 /// The chosen design: registers as an indexable temporaries region, which
 /// the variable frame beneath is free to grow through.
-///
-/// The neighbouring success to the refusal above, which is what pins the
-/// fix to the property it is supposed to have rather than to a coincidence.
 #[test]
 fn registers_in_the_temps_region_leave_the_variable_frame_growable() {
     let mut roots = RootSet::new();
@@ -104,10 +90,6 @@ fn registers_are_roots_until_their_region_is_truncated() {
 
 /// Register regions nest, which is what a fragment chunk compiled and run
 /// inside an already-running chunk needs.
-///
-/// `INTERPRET` pushes no frame of its own and runs inside the enclosing
-/// activation, so a fragment's registers cannot be a second frame and must
-/// not disturb the outer chunk's.
 #[test]
 fn a_nested_register_region_leaves_the_enclosing_one_intact() {
     let mut roots = RootSet::new();

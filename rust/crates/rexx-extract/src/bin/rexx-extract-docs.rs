@@ -12,15 +12,10 @@
 //! Derives the Phase 5 gate tables' row sets from `oodocs/` and from
 //! `interpreter/parser/DirectiveParser.cpp`, and writes them to
 //! `rust/corpus/docs/`.
-//!
 //! ```text
 //! cargo run -p rexx-extract --bin rexx-extract-docs -- \
 //!     --oodocs ../oodocs --interpreter ../interpreter --out corpus/docs
 //! ```
-//!
-//! `--check` derives and compares without writing, which is what
-//! `tests/extract_docs.rs` does in process; the flag is here so the same
-//! comparison can be run by hand.
 
 use rexx_extract::docs;
 use std::path::PathBuf;

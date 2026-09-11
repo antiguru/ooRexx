@@ -1,15 +1,5 @@
 //! Checks the generated message table against the oracle's own generated
 //! header, message for message.
-//!
-//! `interpreter/messages/RexxErrorMessages.h` is produced from the same
-//! `rexxmsg.xml` by `RexxErrorMessages.xsl`, so it is an independent rendering
-//! of exactly the text this crate must reproduce. Comparing against it
-//! validates every markup rule -- `<q>`, `<sq/>`, `<dq/>`, `<Sub>`, entity
-//! unescaping -- across all 704 messages at once, rather than the handful a
-//! hand-written test can assert.
-//!
-//! This is the test that would have caught treating `<q>` as documentation-only
-//! markup: 363 messages use it, and dropping its quotes fails 363 comparisons.
 
 use rexx_inventory::errors;
 use std::collections::HashMap;
@@ -17,10 +7,6 @@ use std::collections::HashMap;
 const HEADER: &str = "../../../interpreter/messages/RexxErrorMessages.h";
 
 /// Pulls `MESSAGE(Symbol, "text")` pairs out of the generated C header.
-///
-/// The only escape the header uses is `\"` (727 occurrences; verified by
-/// scanning the file), so the unescaper handles that and backslash itself and
-/// rejects anything else rather than silently mis-decoding it.
 fn oracle_messages() -> HashMap<String, String> {
     let src =
         std::fs::read_to_string(HEADER).unwrap_or_else(|e| panic!("cannot read {HEADER}: {e}"));

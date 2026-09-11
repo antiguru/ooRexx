@@ -16,87 +16,6 @@
 //! producing a plausible Rexx condition. "An implementation gap must never be
 //! able to produce a passing test" is the design spec's own statement of what
 //! this closes (`2026-07-30-phase-4a-executor-design.md`, "Failing loudly").
-//!
-//! # How this differs from `coverage.rs`
-//!
-//! `coverage.rs` (criterion 1) is parse-only: it proves the *subset*'s
-//! programs construct every in-scope variant, and records an owner string for
-//! everything else. This file *executes* one small program per out-of-scope
-//! variant through [`rexx_exec::run_program`] and checks the actual exit
-//! code. Nothing else in this gate runs a single out-of-scope construct
-//! through the executor at all -- `tests/corpus.rs`'s subset is defined to
-//! contain none of them, by its subset files' own headers -- so this is
-//! genuinely the wider surface the design spec calls out ("one criterion
-//! closes a surface larger than 4a's own").
-//!
-//! For the in-scope variants, this file does not re-run a program: `this
-//! crate executes it` is already established, more thoroughly, by `corpus.rs`'s
-//! byte-for-byte differential run against the oracle. Re-deriving that here
-//! with a one-line snippet would be strictly weaker evidence covering the
-//! same code path, not new evidence. What this file checks for the in-scope
-//! side is only that `owners.rs`'s two tables hold the in-scope totals
-//! [`in_scope_counts_match_the_audited_split`] asserts, so an in-scope
-//! variant cannot go unlisted by omission.
-//!
-//! # The owner table lives in `owners.rs`
-//!
-//! `Owner`, the seven `*_TAGS` tables and their tag functions all live in
-//! `owners.rs` now, `#[path]`-included below as `mod owners` -- `coverage.rs`
-//! includes the identical file the same way, so the two can no longer
-//! diverge by hand-editing only one (item I36; see `owners.rs`'s own module
-//! doc). See `coverage.rs`'s module doc for the full reasoning behind each
-//! owner string, in particular the five `ExprKind` assignments that are a
-//! Task 16 gate-time judgement call rather than a spec citation, recorded in
-//! `docs/superpowers/plans/phase-4-exclusions.txt`'s "EXPRKIND OWNERSHIP"
-//! section.
-//!
-//! # Arm-grained ownership, and why this file no longer reconciles anything
-//!
-//! Two `InstructionKind` variants hold forms that do not share an owner, and
-//! `owners.rs`'s `INSTRUCTION_TAGS` gives each form its own row through that
-//! file's `tags!` `split` sections.
-//!
-//! * `InstructionKind::Call` wraps an inner enum (`rexx_parse::Call`) whose
-//!   namespace-qualified arm, `CALL ns:name`, needs the object model and is
-//!   Phase 5's, mirroring `ExprKind::QualifiedCall`, while the other three
-//!   arms are this crate's. `owners::instruction_tag` answers
-//!   `"Call::Qualified"` rather than `"Call"` for the one that is still loud.
-//! * `InstructionKind::Address` names an environment, issues a command, or
-//!   both. Naming one is this crate's; issuing one, and the `WITH`
-//!   redirection that says where a command's streams go, are Phase 7's. So
-//!   `instruction_tag` answers `"Address::Command"` or
-//!   `"Address::Environment"` according to the instruction's own fields.
-//!
-//! **Everything below is keyed by exactly the tags that table produces.**
-//! There is no expansion step, no second grain and no owner string written
-//! down here: [`table_owner`] reads the owner out of `owners.rs`, and
-//! [`assert_witness_set_is_complete`] holds this file's witness tags equal
-//! to that table's phase-owned rows as literal sets. That is what lets
-//! [`every_out_of_scope_variant_fails_loudly`] compare `src/lib.rs`'s
-//! `instruction_owner`/`expr_owner` against `owners.rs` directly, rather
-//! than against a hand-maintained reconciliation of it -- which would only
-//! move the duplication into the reconciler.
-//!
-//! # Witness programs
-//!
-//! Each is the smallest program found that both (a) parses under
-//! `rexx-parse` into the exact target variant, checked here rather than
-//! assumed, and (b) reaches that instruction or expression through ordinary
-//! straight-line execution with no preceding label, call or condition to
-//! satisfy. Some instructions are conventionally written after a label
-//! reached by `CALL` -- nothing in the grammar requires that context, so each
-//! is written as a bare top-level clause instead, which also avoids depending
-//! on `CALL` (itself out of scope) ever succeeding.
-//!
-//! **`ExprKind::VariableReference` (`>x`/`<x`) has no row, and the reason is
-//! worth keeping because it was got wrong once:** `ast.rs`'s 20.930 is about
-//! which *token* may follow `>`/`<` (a variable or a stem, not a literal or a
-//! number, `expr.rs`'s own `parseVariableReferenceTerm` doc), **not** about
-//! which instruction context the whole reference may sit in -- so `say >x` is
-//! legal on its own and needs no `CALL` around it, and it prints the
-//! referenced variable's value, measured against the oracle. One position
-//! where `>` is *not* a reference, also measured: `say 'text' >x` is a
-//! comparison, because a `>` following a complete term is the operator.
 
 use std::path::Path;
 
@@ -111,9 +30,6 @@ use owners::{EXPR_TAGS, INSTRUCTION_TAGS, Owner, expr_tag, instruction_tag};
 /// tag it must construct, and the tag itself. Checked against the parsed AST
 /// before it is ever run, so a snippet that silently parses into the wrong
 /// shape cannot pass by accident.
-///
-/// **No owner field.** A witness names a tag and `owners.rs` says who owns
-/// it; see [`table_owner`].
 struct Witness {
     tag: &'static str,
     source: &'static str,
@@ -121,20 +37,6 @@ struct Witness {
 }
 
 /// The phase `owners.rs` records for `witness`'s own tag.
-///
-/// This is the only place an owner string enters this file, and that is the
-/// point rather than tidiness: the string it returns is what
-/// [`every_out_of_scope_variant_fails_loudly`] then requires `src/lib.rs` to
-/// have emitted, so the two tables are compared to each other rather than
-/// each to a copy kept here. A witness that named its own owner could agree
-/// with `lib.rs` while both disagreed with `owners.rs`, and nothing would
-/// say so.
-///
-/// Panics rather than returns an `Option` for a tag the table does not
-/// carry, or carries as in-scope: both mean this file and `owners.rs`
-/// disagree about what is loud, which is a harness defect and not a result.
-/// [`assert_witness_set_is_complete`] is what makes that unreachable in
-/// practice, by pinning the two tag sets equal.
 fn table_owner(witness: &Witness) -> &'static str {
     let table = match witness.category {
         Category::Instruction => INSTRUCTION_TAGS,
@@ -173,14 +75,6 @@ enum Category {
 }
 
 /// One witness per phase-owned row of `owners.rs`'s `INSTRUCTION_TAGS`.
-///
-/// **The count is not written here**, in either grain, because
-/// [`assert_witness_set_is_complete`] asserts this list's tag set equal to
-/// that table's phase-owned rows and a number beside it would be a second,
-/// unchecked statement of the same thing. It went stale three times as
-/// exactly that. The rule the assertion enforces in both directions: a
-/// variant that moves in scope must have its row *deleted* here, and a row
-/// here with no phase-owned tag fails just as loudly as a missing one.
 const INSTRUCTION_WITNESSES: &[Witness] = &[
     Witness {
         tag: "Command",
@@ -194,19 +88,6 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     // assertion below reads it: a variant this crate implements must not
     // carry one, because the row would assert a loud failure that does not
     // happen.
-    //
-    // **The command form, and the distinction is not cosmetic.** `address
-    // cmd` -- no quoted operand -- is the *constant environment* form: it
-    // sets the environment to `CMD` and issues nothing, measured on the
-    // oracle at rc 0 with no process started. This crate executes it, so a
-    // row naming it would assert a loud failure that no longer happens.
-    // `address cmd 'text'` is the command form, which is the half that is
-    // still Phase 7's.
-    //
-    // The command is the empty string on purpose: it is a `command` operand
-    // as far as every table here is concerned, and it is the one operand that
-    // could not do anything if a future change ever did dispatch it from a
-    // test run.
     Witness {
         tag: "Address::Command",
         source: "address cmd ''\n",
@@ -222,21 +103,11 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
 /// Every out-of-scope `ExprKind`, one witness each, every one wrapped in
 /// `SAY`, which is implemented, so the wrapper is never itself the gap -- see
 /// the module doc's note on `VariableReference`.
-///
-/// **Empty, and that is a state this table is allowed to be in.** Every
-/// `ExprKind` is in scope, so a row here would assert a loud failure that does
-/// not happen -- which is what `assert_witness_set_is_complete` reads
-/// `owners.rs` to check, in both directions.
 const EXPR_WITNESSES: &[Witness] = &[];
 
 /// Confirms `path`'s program actually constructs `witness.tag` in the
 /// category it claims, before running it. A snippet that parses into the
 /// wrong shape would otherwise let a passing exit-code check mean nothing.
-///
-/// `owners::instruction_tag` needs no help telling a `Call` arm or an
-/// `ADDRESS` form from its variant: that table is arm-grained where `lib.rs`
-/// is, so the tag it answers for a parsed node is already the tag a witness
-/// names.
 fn assert_constructs(witness: &Witness) {
     let program = parse_program(witness.source.as_bytes().to_vec())
         .unwrap_or_else(|e| panic!("witness for {} failed to parse: {e:?}", witness.tag));
@@ -428,30 +299,6 @@ fn every_out_of_scope_variant_fails_loudly() {
         // first on every run, per row, with no hand-maintained table
         // between them -- which is what makes `lib.rs`'s match a derived
         // fact rather than one more place to remember to edit.
-        //
-        // What it does **not** cover: the `None` arms. `Loud::instruction`
-        // is only reached for a variant the executor declines, so an owner
-        // wrongly written as `None` for something loud shows up here, while
-        // a phase wrongly written *onto* an implemented variant is data no
-        // path reads. **Nothing covers that, and this comment does not
-        // point anywhere claiming otherwise**, because a disclaimer naming
-        // a test that is not in fact watching is worse than none -- it
-        // stops the next reader looking. Measured: giving
-        // `InstructionKind::Say` an owner leaves the whole workspace suite
-        // green. The one exception is `Do`/`Loop`, which
-        // `run_loop_with_header` does reach here, and whose four `run.rs`
-        // tests on the exact unsuffixed message go red; `lib.rs`'s
-        // `instruction_owner` names them.
-        //
-        // **Pins the exact trailing shape, not merely the owner's presence
-        // (review finding I2).** An earlier version checked
-        // `stderr.contains(..)`, which a message reading `[4b] CALL:
-        // unimplemented` also satisfies -- `contains` cannot tell "names the
-        // owner in the documented shape" from "mentions the owner's bytes
-        // somewhere". `ends_with` on the exact suffix `owned_message`
-        // (`lib.rs`) produces is what actually pins the shape later tasks
-        // are told to rely on (`" is not implemented (OWNER)"`, `trim_end`
-        // first since every message ends in `\n`).
         let stderr = String::from_utf8_lossy(&outcome.stderr);
         let want_suffix = format!(" is not implemented ({owner})");
         if !stderr.trim_end().ends_with(&want_suffix) {

@@ -11,27 +11,11 @@
 
 //! The in-phase measurement front end: both engine arms of one build, both
 //! instruments, two problem sizes, one sitting.
-//!
-//! `rexx_bench::arms` is the measurement and the reductions; this file is the
-//! command line and the two output streams. What it adds is the **baseline
-//! file**: one machine-readable record per landed task, so the next task's
-//! brief cites a path rather than ratios retyped out of prose. A summary of a
-//! measurement is a new claim, and restating one is authorship rather than
-//! quotation -- a row appended here is the measurement itself.
-//!
 //! ```text
 //! rexx-arms --build base=/path/to/rexx-run --build head=target/release/rexx-run \
 //!           --axis varlookup --axis emptyloop --rounds 5 \
 //!           --task 7-M2 --commit ced6c209 --baseline bench-baselines/phase-4e-arms.tsv
 //! ```
-//!
-//! Rows go to standard output, progress to standard error, and the two are
-//! never interleaved into one stream: this repository has produced two false
-//! regressions from reading a program's descriptors together.
-//!
-//! An `--axis` entry holding a `/` is a path, which is how `bench-control/`
-//! and a scratch program reach this program; anything else names a file in
-//! `bench-programs/`.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -47,10 +31,6 @@ use rexx_bench::arms::{
 const FIELDS: usize = 12;
 
 /// Columns of the tab-separated stream, in order.
-///
-/// **Long rather than wide, one row per figure.** A wide row grows a column
-/// every time a reduction is added, and the header and the emitter then drift;
-/// here a new reduction is a new value of `scope` and no column moves.
 fn columns() -> [String; FIELDS] {
     let [median, min, max, rounds] = Figure::column_names("value");
     [
@@ -172,10 +152,6 @@ fn run(arguments: &[String]) -> Result<(), String> {
 }
 
 /// Every figure this sitting supports, as rows.
-///
-/// The per-pass and fixed-cost reductions appear only for a
-/// [`Measured::Scaled`] sitting, because they are methods on
-/// `ScaledSitting` and a fixed workload's sitting is not one.
 fn report(measured: &Measured, task: &str, commit: &str) -> Vec<String> {
     let sitting = measured.sitting();
     let mut lines = Vec::new();
@@ -270,10 +246,6 @@ fn report(measured: &Measured, task: &str, commit: &str) -> Vec<String> {
 }
 
 /// Every individual reading, one line per run, appended to `path`.
-///
-/// Not a reduction and not a claim: it is what the reductions were computed
-/// from, kept so that a round that looks wrong can be identified instead of
-/// reasoned about.
 fn write_raw(path: &Path, sitting: &Sitting, task: &str) -> Result<(), String> {
     let mut file = std::fs::OpenOptions::new()
         .create(true)

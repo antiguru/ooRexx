@@ -10,90 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! Gate table D: the directive and option surface.
-//!
-//! One row per line of `corpus/docs/directive-options.txt` -- the union of
-//! `dire.xml` and `interpreter/parser/DirectiveParser.cpp`, derived and
-//! committed with its extractor. One committed probe program per row under
-//! `corpus/gate-tables/directives/`. One verdict per row, and the verdict
-//! comes from **running** that program: this crate on both engines, in
-//! process, against the C++ oracle in a subprocess, compared on all three
-//! descriptors with `stderr` raw.
-//!
-//! # The table types no expected bytes
-//!
-//! There is no recorded oracle answer anywhere in this file or beside it. Each
-//! row's oracle column is produced by launching the oracle on the run that
-//! reports it, so a row cannot pass by agreeing with a recording of itself,
-//! and the table cannot go stale against a rebuilt interpreter the way a baked
-//! transcript can.
-//!
-//! # These probes are not corpus programs
-//!
-//! They live under `corpus/gate-tables/`, not in a phase subset file. Most of
-//! them diverge, and `corpus/phase-5a.txt` means "agrees with the oracle"; a
-//! probe moves there in the task that makes its row agree. The corpus
-//! differential is unaffected by this subtree existing: every copy of
-//! `phase_subset_files_on_disk` reads `corpus/` with a **non-recursive**
-//! `read_dir` filtered to `phase-*.txt`, either property alone being enough,
-//! and `corpus.rs`'s `the_differential_reads_every_phase_subset_file` is the
-//! standing assertion over that -- so this is checked by a test that already
-//! exists rather than by a sentence here.
-//!
-//! # A verdict says the two sides agree; it does not say either answered
-//!
-//! Every probe here prints one line, so before any row gets a verdict the
-//! oracle's `stdout` line count is checked against
-//! [`expected_oracle_lines`] -- one, or none for the rows [`ORACLE_REFUSES`]
-//! names. Two interpreters that fail identically agree on all three
-//! descriptors, so without this a row whose probe the oracle never reached
-//! reads `agree` and is counted as satisfied with nothing asked. A row that
-//! fails the check keeps its place and is reported as `unanswered`, never as
-//! `agree`.
-//!
-//! # What this table cannot see
-//!
-//! A keyword neither `dire.xml` nor `DirectiveParser.cpp` names is outside the
-//! denominator, because the row set is their union and nothing else.
-//!
-//! **For a row [`ORACLE_REFUSES`] names, what is checked is that the oracle
-//! refused, not what it refused.** The bound is on `stderr` because a report
-//! there is the answer **every** one of these rows gives, not because no
-//! other answer could exist for any of them. What was measured, on a
-//! construction built to look for one: each row's own directive preceded by a
-//! `::REQUIRES` of a helper program whose prologue prints, so that something
-//! runs at install time before the refusing directive is reached. The helper
-//! printed for the `::REQUIRES NAMESPACE` row, at rc 213; for the others --
-//! `::ATTRIBUTE EXTERNAL`, `::METHOD EXTERNAL`, `::ROUTINE EXTERNAL`,
-//! `::REQUIRES LIBRARY`, `::CLASS CLASS`, `::RESOURCE LIBRARY` -- `stdout`
-//! stayed empty, at rc 166, 166, 158, 158, 231, 231. **So "nothing can run
-//! before these" is false**: installing a `::REQUIRES` runs the required
-//! program, and install time is not before Rexx code runs, it is Rexx code
-//! running. Whether that makes a `stdout` bound available for the
-//! `::REQUIRES NAMESPACE` row on its own is a question for the task that
-//! gives this row set an expected-output column; it is not built here.
-//!
-//! A probe rewritten to fail for an unrelated reason still writes a report on
-//! `stderr` and is not caught; nothing derives these programs, so the
-//! instrument against that is the diff. The task that could close it is one
-//! that gives table D's row set a column saying what each row's probe is
-//! expected to produce -- the same standing gate table C's `entry` and
-//! `status` columns have, and the same "a plan task's committed output"
-//! ruling that put those there.
-//!
-//! And a row's verdict is about a directive **keyword**. A probe exercises the
-//! keyword at its position; what the directive then does with it is only
-//! visible here to the extent that the program's three descriptors show it. A
-//! keyword this crate accepts and ignores, where the oracle also produces no
-//! observable difference, reads `agree` -- the discriminator for that is a
-//! reflection query, which is table C's half.
-//!
-//! # The owning-phase column
-//!
-//! [`owning_phase`] is a committed assignment, one arm per directive keyword,
-//! and it is what decides whether a verdict mismatch is an exit status. It is
-//! read by a human out of a diff; nothing checks that a row is filed under the
-//! right phase, and a row filed under the wrong one escapes gating. Each arm
-//! names the authority it comes from.
 
 mod gate_tables;
 mod support;
@@ -137,12 +53,6 @@ struct Row {
 
 impl Row {
     /// The probe program this row runs, as a corpus-relative path.
-    ///
-    /// **Derived from the row, not looked up.** A table mapping rows to paths
-    /// would be a second place for a row's identity to live and a place for a
-    /// typo to hide; deriving it means a row and its probe cannot drift, and
-    /// the only way a row can lose its probe is for the file to be missing --
-    /// which is structural and named as such.
     fn probe_path(&self) -> String {
         let directive = self.directive.trim_start_matches(':').to_ascii_lowercase();
         let keyword = self.keyword.to_ascii_lowercase();
@@ -190,60 +100,6 @@ fn read_rows() -> Vec<Row> {
 }
 
 /// Which phase owes this row an `agree`.
-///
-/// Every arm's authority, in the order the arms appear:
-///
-/// * `docs/superpowers/plans/2026-08-17-phase-5a.md`'s handover section hands
-///   `::OPTIONS`, `::RESOURCE` and `::ROUTINE`'s option surface to **5c**.
-///   `::REQUIRES`'s two subkeywords were re-owned by D75:
-///   `LIBRARY` to **Phase 7**, beside `::ROUTINE EXTERNAL` above it, because it
-///   needs a native library loader; `NAMESPACE` to **5d**, which builds it.
-///   Every `::ANNOTATE` row is 5a's:
-///   what a row of this table measures is the install, and the readback of
-///   each of the six targets is 5a's too -- `.routines~r~annotation(...)` is
-///   the `ROUTINE` one and `corpus/lang/directive_annotate_targets.rex`
-///   carries it beside the other five.
-/// * The same plan puts `DELEGATE` in **5b**, because `dire.xml` defines it as
-///   `expose` plus `forward to()` and `FORWARD` is 5b's.
-/// * `::ROUTINE ... EXTERNAL` naming a real shared library is **Phase 7's** and
-///   its refusal is untouched by this phase, which the plan states in the same
-///   place it moves `::METHOD ... EXTERNAL 'LIBRARY REXX name'` into 5a.
-///
-///   **This one row spans a boundary, and the row cannot hold both sides of
-///   it.** A row's identity here is (directive, keyword, position), so
-///   `::ROUTINE r EXTERNAL 'LIBRARY <lib> <entry>'` and `::ROUTINE r EXTERNAL
-///   'LIBRARY REXX <entry>'` are one row, and its probe picks the first.
-///
-///   **The plan drew the boundary and left `::ROUTINE` whole**: it moved the
-///   `::METHOD ... EXTERNAL 'LIBRARY REXX name'` form into 5a and neither
-///   half of `::ROUTINE EXTERNAL`, so this row is still filed against the
-///   phase that owns every form of it. What that costs is a *reported*
-///   behaviour rather than a gated one: measured, oracle, `::routine r
-///   external 'LIBRARY REXX Filespec'` is rc 0 and the routine runs, and this
-///   crate refuses it at rc 120 -- a divergence no row of this table sees,
-///   because the probe names a shared library instead. Closing it needs the
-///   row set to distinguish those forms, which is
-///   `corpus/docs/directive-options.txt`'s shape and not this file's, and
-///   Phase 7 is where the behaviour it would gate lands.
-/// * `::ATTRIBUTE EXTERNAL` spans the same boundary the `::ROUTINE` row does
-///   and is filed the other way, because its probe picks the other side of
-///   it: `::attribute at external 'LIBRARY REXX zzz_no_entry'` names the
-///   library this crate binds, and measured, the oracle answers it with a
-///   Rexx condition rather than a library load -- rc 166, `90.998 Unable to
-///   find external method "GETzzz_no_entry"`. The spelling that loads a
-///   shared library shares the row and is Phase 7's, and what that costs is
-///   a reported behaviour rather than a gated one, exactly as above.
-/// * `::CLASS CLASS` and `::RESOURCE LIBRARY` are the row set's two
-///   `cross-reference` rows: the section documents the name and the
-///   directive's own parser has no arm for it, so both interpreters refuse
-///   them. Both refuse with the same error number and sub-number and differ
-///   only in how a syntax error is rendered, which
-///   `docs/superpowers/plans/phase-4-exclusions.txt`'s 2026-08-20 note records
-///   as a decided deferral that **nobody owns and that is not Phase 5 work**.
-///   They are filed under that deferral so they are reported and never gated.
-///
-/// `None` is a row this assignment has no arm for, which is structural: the
-/// row set gained a keyword and nobody decided who owes it.
 fn owning_phase(row: &Row) -> Option<&'static str> {
     let directive = row.directive.as_str();
     let keyword = row.keyword.as_str();
@@ -266,18 +122,6 @@ const PARSE_ERROR_RENDERING: &str = "deferred-parse-error-rendering";
 
 /// Every phase this table owns rows for whose corpus subset file exists is in
 /// [`gate_tables::CLOSED_PHASES`].
-///
-/// **`gate_table_c.rs` has the same assertion and it cannot reach this table.**
-/// Its enumeration is over the owners *table C's* rows carry, and a phase can
-/// own rows here and none there -- measured, `5d` is such a phase. Without this
-/// copy a `corpus/phase-<id>.txt` could be committed for it, which is the
-/// project's record that its programs agree with the oracle, while
-/// `CLOSED_PHASES` never named it and a verdict of its rows could move with
-/// every gate still exiting 0.
-///
-/// **One direction, and the other needs none**, for the reason table C's own
-/// copy gives: a phase named in `CLOSED_PHASES` before it closes gates rows
-/// that do not agree yet, which the next gate run reports as an exit status.
 #[test]
 fn every_closed_phase_this_table_owns_rows_for_is_gated() {
     let rows = read_rows();
@@ -308,41 +152,6 @@ fn every_closed_phase_this_table_owns_rows_for_is_gated() {
 }
 
 /// The rows whose probe the oracle refuses before it reaches its `say`.
-///
-/// **Why this table needs a list where gate table C derives one.** Every probe
-/// here prints one line, which is what `corpus/gate-tables/README.md` says
-/// they are for: "the oracle side shows the program ran rather than that it
-/// produced nothing". Without a check behind that sentence a row reads `agree`
-/// whenever the two interpreters fail *identically* -- same status, same
-/// `stderr`, both `stdout` empty -- and is counted as a satisfied row of its
-/// phase while neither side answered anything. Gate table C bounds each of its
-/// families from the probe's own derived text; these probes are hand-written
-/// and their row set carries no column that separates the ones the oracle
-/// refuses, so the separation is committed here, beside [`owning_phase`] and
-/// with the same standing: a human reads it out of a diff.
-///
-/// **Policed in both directions** by [`expected_oracle_lines`]'s caller: a row
-/// named here whose oracle *did* answer is as red as a row not named here
-/// whose oracle answered nothing. So the list cannot quietly grow to cover a
-/// probe that stopped working.
-///
-/// Each arm's reason, all of them the same shape -- the probe's own subject is
-/// what the oracle refuses:
-///
-/// * `::CLASS CLASS` and `::RESOURCE LIBRARY` are the row set's
-///   `cross-reference` rows: the section documents the name and the
-///   directive's own parser has no arm for it, so the directive is a syntax
-///   error and no clause of the program runs.
-/// * `::ROUTINE`'s `EXTERNAL` names a shared library, and `::REQUIRES`'s
-///   `LIBRARY` and `NAMESPACE` name a package; neither is present on this
-///   build, so the failure is at install time, before the program's own first
-///   clause.
-/// * `::ATTRIBUTE`'s and `::METHOD`'s `EXTERNAL` name `LIBRARY REXX`, which
-///   **is** present -- their probes refuse on the *entry point* instead, at
-///   the same install time. Measured, oracle: both are `90.998 Unable to find
-///   external method` at rc 166, the `::ATTRIBUTE` one naming
-///   `GETzzz_no_entry`, because that directive prefixes the procedure with
-///   `GET`.
 const ORACLE_REFUSES: &[(&str, &str)] = &[
     ("::ATTRIBUTE", "EXTERNAL"),
     ("::CLASS", "CLASS"),
@@ -367,34 +176,12 @@ fn expected_oracle_lines(row: &Row) -> usize {
 }
 
 /// Whether the oracle answered a refusing row's question.
-///
-/// **A bound of zero lines is satisfied by a program that produced nothing at
-/// all**, which is finding 1 through the other side of the same `if`: a
-/// refusing row's two sides both print nothing on `stdout`, so `compare_raw`
-/// agrees and the row reads `agree` with nothing asked.
-///
-/// What these rows do answer is the refusal itself, and the oracle writes it
-/// on `stderr`: measured, each of them writes a report there, the shortest
-/// 244 bytes, while a program reading `nop` writes none. That is the bound.
-/// [`check_refusing_probe_says`] is the other half of it -- these probes ask
-/// something before the directive refuses, so their empty `stdout` is a
-/// refusal rather than an empty program.
-///
-/// The module doc carries what was measured about a `stdout` bound for these
-/// rows, and why the answer is not the same for all of them.
 fn refusal_answered(oracle_stderr: &[u8]) -> bool {
     !oracle_stderr.is_empty()
 }
 
 /// Every row [`ORACLE_REFUSES`] names has a probe that asks something before
 /// its directive.
-///
-/// **What makes the empty `stdout` those rows produce evidence.** A program
-/// with no `SAY` before its first directive prints nothing whether or not
-/// anything refuses it, so the `stderr` bound would be resting on a `stdout`
-/// that carries no information. Asserted rather than written down, because
-/// the property is load-bearing for that bound and the probes are
-/// hand-written.
 fn check_refusing_probe_says(
     corpus: &Path,
     row: &Row,
@@ -424,16 +211,6 @@ fn check_refusing_probe_says(
 }
 
 /// The five cells partition the cube of three booleans.
-///
-/// The compiler already refuses a `verdict` that is non-exhaustive or has an
-/// unreachable arm, so this adds the half a `match` cannot state: that the
-/// five cells' preimages are pairwise disjoint and cover all eight points,
-/// checked from outside the function by walking the cube.
-///
-/// **What it would do if the claim were false.** Two cells sharing a point is
-/// unrepresentable -- `verdict` returns one value -- so the failure this can
-/// actually catch is a cell with an empty preimage, which is a cell that
-/// cannot fire and would be decoration. That is what the count below pins.
 #[test]
 fn the_verdict_function_partitions_the_descriptor_cube() {
     let mut seen: BTreeMap<Verdict, Vec<Descriptors>> = BTreeMap::new();
@@ -577,11 +354,6 @@ fn directive_option_gate_table() {
         // row fewer, no structural failure, exit 0, and the gated count one
         // lower than it was. A close criterion phrased over the gated count is
         // then satisfiable by removing evidence.
-        //
-        // **A probe whose bytes cannot be read is not this arm's case**, which
-        // is worth saying because it is the other thing "unreadable" suggests:
-        // measured, a `chmod 000` probe canonicalises fine and fails in
-        // `run_gate_probe`'s own read, naming the path.
         let abs = match fs::canonicalize(corpus.join(&probe)) {
             Ok(abs) => abs,
             Err(error) => {

@@ -1,11 +1,4 @@
 //! `Number::rendered_integer`, the shape predicate that replaces a render.
-//!
-//! The function's whole contract is that it agrees with the rendering it
-//! names, so the test is that equivalence over a generated population rather
-//! than a list of interesting values: every case here asserts the predicate
-//! against `format_form` + parse, which is the code it replaced, run as the
-//! oracle. Hand-picked cases would pin the values someone thought of; the
-//! cross product below pins the boundaries nobody did.
 
 use rexx_num::{Form, Number};
 

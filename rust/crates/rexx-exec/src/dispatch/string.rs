@@ -10,35 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! `String`'s primitive methods.
-//!
-//! A child of [`super`] rather than a sibling, for the reason its `mod native`
-//! comment gives: the rows point at `NativeMethod`s, whose parameter list
-//! names types only that module can.
-//!
-//! # A second table, chained rather than merged
-//!
-//! [`NATIVE_METHODS`] is registered beside [`super::NATIVE_METHODS`] in
-//! `ObjectModel::build`, which reads the two as one sequence. Chaining rather
-//! than merging is what keeps this file's rows and bodies together: a
-//! receiver whose methods are all one shape does not need its rows
-//! interleaved alphabetically with every other class's.
-//!
-//! **A row's method name is looked up in the class's own dictionary and the
-//! build panics if it is not there**, so a name that does not appear in
-//! `String`'s behaviour cannot be added here quietly.
-//!
-//! # The receiver's bytes, and what that rules out
-//!
-//! `Interp::to_text` is the whole of a `String` receiver's state, so a body
-//! here is that call, an argument layer, and a byte core. There is no
-//! `Body::Instance` to reach and nothing to keep between sends.
-//!
-//! **The argument layer is not the like-named builtin's.** The two agree on
-//! the answer and on nothing else -- measured on `left`, a missing argument
-//! is 93.903 at rc 163 through the method and 40.3 at rc 216 through the
-//! builtin, a non-numeric one is 93.923 against 40.12, and the argument
-//! numbering differs by one because the receiver is the builtin's first
-//! argument. Share the byte core; never the builtin's argument handling.
 
 use super::{
     Arity, Cleared, Failure, Interp, NativeMethod, ObjRef, abbrev_arguments, backward_search,
@@ -112,11 +83,6 @@ fn native_string_caselesscontains(
 }
 
 /// [`forward_search`] over the receiver's own text.
-///
-/// **The result buffer is taken before the bytes and not after**, because
-/// `Interp::to_text` borrows the interpreter mutably where the buffer's
-/// accessor does not; resolving the receiver into an owned `Vec` instead would
-/// put an allocation on every send.
 fn string_pos(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -213,9 +179,6 @@ fn native_string_caselesscountstr(
 }
 
 /// The non-overlapping count of `needle` in the receiver's own text.
-///
-/// The limit is unbounded: `countStrRexx` passes `Numerics::MAX_WHOLENUMBER`
-/// (`classes/StringClassMisc.cpp:423`), which no count over a string can reach.
 fn string_countstr(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -355,12 +318,6 @@ fn native_string_caselessendswith(
 }
 
 /// [`starts_with`] or [`ends_with`] over the receiver's own text.
-///
-/// **The argument is named, and a missing one is 88.901 at rc 168** rather
-/// than the 93.903 at rc 163 every other method in this file raises -- the
-/// C++ takes it through `stringArgument(other, "match")`, so the name reaches
-/// the message. Measured, oracle: `'abc'~startsWith` is
-/// `Missing argument; argument match is required.`
 fn string_at_an_end(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -398,10 +355,6 @@ fn native_string_caselessmatch(
 }
 
 /// [`match_region_over`] over the receiver's own text.
-///
-/// **A start past the end answers `0` before the second argument is read**,
-/// so a bad `other` there is not a refusal. Measured, oracle rc 0:
-/// `'abcabc'~match(99, .nil)` is `0`.
 fn string_match(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -443,9 +396,6 @@ fn native_string_caselessmatchchar(
 }
 
 /// Whether the byte at `position` is in the set, over the receiver's own text.
-///
-/// **A position past the end answers `0` before the set is read**, the same
-/// order [`string_match`] keeps.
 fn string_matchchar(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -539,10 +489,6 @@ fn native_string_subword(
 }
 
 /// `RexxString::subWords` (`classes/StringClassWord.cpp:200`).
-///
-/// **Answers an `Array`, not a string.** The C++ return type is `ArrayClass *`
-/// where `subWord`'s is `RexxString *`, so a witness that only renders the
-/// answer cannot tell one from the other.
 fn native_string_subwords(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -642,11 +588,6 @@ fn native_string_verify(
 }
 
 /// `RexxString::insert` (`classes/StringClassSub.cpp:170`).
-///
-/// **Answers a new string and leaves the receiver alone**, where the
-/// `MutableBuffer` row writes itself and answers the receiver. Measured,
-/// oracle: `'abcdef'~insert('XY', 2)` is `abXYcdef` with `'abcdef'` unchanged,
-/// and the same send to a buffer returns the buffer, now `abXYcdef`.
 fn native_string_insert(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -681,15 +622,6 @@ fn native_string_overlay(
 }
 
 /// `RexxString::replaceAt` (`classes/StringClassSub.cpp:376`).
-///
-/// **This is the one row of the shared set whose argument layer is not
-/// shared**, so it reads its own. `RexxString::replaceAt` opens
-/// `stringArgument(newStrObj, ARG_ONE)` (`:380`) where
-/// `MutableBuffer::replaceAt` opens `stringArgument(str, "new")`
-/// (`classes/MutableBufferClass.cpp:572`) and takes its position and pad by
-/// name too. Measured, oracle: a bare send is 93.903 here and 88.901 there, a
-/// zero position 93.924 against 88.912, a two-character pad 93.922 against
-/// 88.910. Only `.nil` in the first position agrees, at 88.909.
 fn native_string_replaceat(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -796,10 +728,6 @@ fn string_changestr(
 }
 
 /// `RexxString::translate` (`classes/StringClassMisc.cpp:681`).
-///
-/// **With no tables, pad or start it is an upper-case shift**, and the range
-/// arguments move to positions 3 and 4 -- measured, oracle rc 0:
-/// `'abcABCabc'~translate` is `ABCABCABC`.
 fn native_string_translate(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -877,13 +805,6 @@ fn native_string_space(
 /// than reading its argument as a string: concatenation *renders* what it is
 /// given, so `.nil` becomes `The NIL object` where a string argument would be
 /// refused at 88.909.
-///
-/// **It shares nothing with `MutableBuffer~append`**, which is
-/// `MutableBuffer::appendRexx` at `A_COUNT` (`memory/Setup.cpp:1422`): that one
-/// is variadic and writes the buffer. Measured, oracle:
-/// `.MutableBuffer~new('abc')~append('X', 'Y')` is `abcXY` where
-/// `'abc'~append('X', 'Y')` is 93.902, and `'abc'~append(.nil)` answers
-/// `abcThe NIL object` because concatenation renders its argument.
 fn native_string_append(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -902,13 +823,6 @@ fn native_string_append(
 
 /// Every binary operator `String` answers as a message, and the
 /// [`rexx_parse::Operator`] each one is.
-///
-/// **The name column is the operator's own spelling**, which
-/// `operator_spellings_match_the_parser` asserts against
-/// [`rexx_parse::Operator::spelling`] rather than restating here. The oracle
-/// registers all of them at one argument -- `AddMethod("+", RexxString::plus,
-/// 1)` and the rest of that block (`memory/Setup.cpp:649`-`:677`) -- and `\\`
-/// and `?` are the two that are not in it, at zero and two.
 #[cfg(test)]
 const BINARY_OPERATORS: &[(&str, Operator)] = &[
     ("+", Operator::Plus),
@@ -1255,13 +1169,6 @@ fn native_string_op_xor(
 }
 
 /// One arithmetic operator sent as a message.
-///
-/// **Arithmetic does not go through [`Interp::apply_binary`]**, whose own doc
-/// says so: `**`'s exponent is not converted the way its base is, so it does
-/// not share the operand handling the other families do. The expression form
-/// and `crate::ir::Op::Arith` both enter
-/// [`Interp::arith_small_int`] and [`Interp::arith_general`] in this order,
-/// and so does this, which is what keeps the three from disagreeing.
 fn string_arithmetic_operator(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1303,14 +1210,6 @@ fn string_arithmetic_operator(
 }
 
 /// One binary operator sent as a message.
-///
-/// **It routes to [`Interp::apply_binary`], the same dispatch the expression
-/// form enters**, so the two cannot come to disagree about what an operator
-/// answers. The send's own frame is already pushed by [`Interp::invoke`] --
-/// measured, the crate prints `Compiled method "SUBSTR" with scope
-/// "MutableBuffer".` for a raising native send byte-identically to the oracle
-/// -- so the traceback line an operator *message* carries and an operator
-/// *expression* does not comes from the send rather than from here.
 fn string_binary_operator(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1322,11 +1221,6 @@ fn string_binary_operator(
 }
 
 /// `String~"\\"`, the prefix `\` as a message.
-///
-/// **The one operator row that takes no argument** --
-/// `AddMethod("\\", RexxString::notOp, 0)` (`memory/Setup.cpp:674`) -- so it
-/// routes to [`Interp::apply_prefix`] rather than `apply_binary`. It is a text
-/// check and never a numeric one: measured, `say \'abc'` is 34.901, not 41.1.
 fn native_string_op_not(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1339,18 +1233,6 @@ fn native_string_op_not(
 }
 
 /// `String~"?"`, `RexxString::choiceRexx` (`classes/StringClass.cpp:2017`).
-///
-/// **The one row here whose name is not a [`rexx_parse::Operator`]** -- the
-/// oracle registers it beside the operators, `AddMethod("?",
-/// RexxString::choiceRexx, 2)` (`memory/Setup.cpp:678`), but the language has
-/// no `?` operator for an expression to spell, so this is the only dispatch
-/// there is and it has nothing to agree with.
-///
-/// The oracle's body is three lines and so is this, in that order: both
-/// arguments are required and named, and only then is the receiver read as a
-/// logical value. **The order is the whole of the behaviour** -- measured,
-/// `'abc'~"?"()` is 88.901 naming `true value`, not the 34.901 its receiver
-/// would otherwise earn.
 fn native_string_op_choice(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1374,9 +1256,6 @@ fn native_string_op_choice(
 
 /// `String~"CENTER"` and `String~"CENTRE"`, `RexxString::center`
 /// (`classes/StringClassSub.cpp:59`).
-///
-/// **The two names are one body**, registered twice
-/// (`memory/Setup.cpp:582`-`:583`), the way the oracle registers them.
 fn native_string_center(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1420,9 +1299,6 @@ fn native_string_right(
 }
 
 /// `String~"COPIES"`, `RexxString::copies` (`classes/StringClassMisc.cpp:288`).
-///
-/// Its count is not a length: 93.906 rather than the 93.923 the three above
-/// raise, which is why it does not share their argument layer.
 fn native_string_copies(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1452,10 +1328,6 @@ fn native_string_strip(
 
 /// `String~"ABBREV"`, `RexxString::abbrev`
 /// (`classes/StringClassMisc.cpp:75`).
-///
-/// Answers the *text* `1` or `0` rather than a boolean object, so the answer
-/// goes on to arithmetic -- measured, `'Print'~abbrev('Pri') + 1` is 2 and
-/// `datatype('Print'~abbrev('Pri'))` is `NUM`.
 fn native_string_abbrev(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1535,10 +1407,6 @@ fn native_string_x2c(
 }
 
 /// `String~"C2D"`, `RexxString::c2d`.
-///
-/// **The length is read before the receiver is looked at**, which is the
-/// ordering `x2d_c2d_over`'s own doc records: measured, `'ZZ'~x2d(-1)` is the
-/// length's 93.923 where `'ZZ'~x2d(4)` is the invalid-character 93.933.
 fn native_string_c2d(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1565,10 +1433,6 @@ fn native_string_x2d(
 }
 
 /// `String~"D2C"`, `RexxString::d2c`.
-///
-/// **The length is read from inside the core, through the closure**, because
-/// here the ordering is the other way round: the receiver's own check comes
-/// first, so `'abc'~d2c(-1)` is 93.929 and not the length's 93.923.
 fn native_string_d2c(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1635,11 +1499,6 @@ fn native_string_bitxor(
 }
 
 /// One bit operation sent as a message.
-///
-/// The receiver is the builtin's first string and the operand its second, so
-/// an omitted operand is the null string: every byte of the receiver reaches
-/// the pad path, and the pad's default is the operation's identity, which is
-/// why `'abc'~bitAnd` answers `abc`.
 fn string_bit_operation(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1685,11 +1544,6 @@ fn native_string_datatype(
 }
 
 /// The receiver of a numeric method, or 93.943 naming the method.
-///
-/// **It is read before any argument**, which is the ordering that separates
-/// these three from their builtins: measured, `'abc'~trunc('x')` and
-/// `'abc'~format(1,-1)` are the target's 93.943, where `trunc('abc','x')` is
-/// the argument's 40.12.
 fn numeric_receiver(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1800,15 +1654,6 @@ fn native_string_round(
 }
 
 /// `String~"MODULO"`, `RexxString::modulo`.
-///
-/// Three refusals in a fixed order, and the order is the whole of what makes
-/// this different from the rest of the family: the target must be a number,
-/// then a whole one, and only then is the divisor looked at. Measured,
-/// `'1.5'~modulo()` is 93.940 rather than the missing argument's 93.903.
-///
-/// The divisor's three ways of being wrong -- not numeric, not whole, not
-/// positive -- share one message, so `.nil`, `'1E9'` and `-3` all report
-/// 93.907.
 fn native_string_modulo(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1835,9 +1680,6 @@ fn native_string_modulo(
 }
 
 /// `String~"FORMAT"`, `RexxString::format`.
-///
-/// Four optional widths, all counts rather than lengths, and all read after
-/// the receiver.
 fn native_string_format(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1874,14 +1716,6 @@ fn native_string_min(
 }
 
 /// `MAX` and `MIN` as messages, which differ only in which end they want.
-///
-/// **`A_COUNT`, so the whole list reaches the body and nothing is refused
-/// ahead of it**; the omitted-argument check is the body's own, and it is the
-/// builtin's 40.5 at rc 216 rather than a 93.9xx. Measured, `'5'~max(,7)`
-/// reports `Missing argument in invocation of MAX; argument 1 is required.`
-///
-/// The receiver is read as a number first, so `'abc'~max(3)` is the target's
-/// 93.943 and not the argument's anything.
 fn string_max_min(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1985,11 +1819,6 @@ fn native_string_caseless_compare_to(
 }
 
 /// The two three-way comparisons, which differ only in case folding.
-///
-/// **The length's default needs both strings**, which is why
-/// `compare_to_arguments` leaves it `None`: it is
-/// `max(mine, theirs) - start + 1`, and the receiver is not one of the
-/// arguments.
 fn string_compare_to(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -2367,10 +2196,6 @@ mod tests {
     /// **The operator rows' names are the parser's own spellings**, so the
     /// table cannot name an operator the language does not have, and a
     /// spelling that changed would fail here rather than in a differential.
-    ///
-    /// It does not check that a row is wired to the *right* operator -- a `+`
-    /// bound to `Operator::Subtract` would pass this and fail
-    /// `corpus/lang/string_operators.rex` on its first line.
     #[test]
     fn operator_spellings_match_the_parser() {
         for (name, op) in BINARY_OPERATORS {

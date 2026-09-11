@@ -11,32 +11,6 @@
 
 //! `corpus/collection-arity.tsv` (Phase 5g Task 0b): what each documented
 //! collection method does when it is sent an argument list it could accept.
-//!
-//! The probe, the verdicts and the harness rule are `support::arity`; this
-//! file is the four files, the header and the refresh variable.
-//!
-//! # Why this exists at all
-//!
-//! `corpus/method-bodies.txt` classifies a row by sending its name with NO
-//! arguments, and its own header says what that costs: for a method that
-//! needs arguments the two sides agree about an *arity error*. Measured, that
-//! is most of these classes -- `Table~at` reads `answers` and
-//! `.Table~new; t['k'] = 'v'` refuses at rc 120; `.Bag~new~put('x')` reads
-//! `answers` and is rc 168 against the oracle's rc 0. **No task in this phase
-//! may cite that column as a reason a row needs no work.** This table is what
-//! it reads instead.
-//!
-//! This table carries no `arm` column and covers the instance arm only.
-//! Phase 5i's `corpus/introspection-arity.tsv` carries one; widening this
-//! file would move bytes no task asked to move, and its header's sentence
-//! about `method-bodies.txt` is scoped to these classes. Value comparison is
-//! off here for the same reason, so `agree` says the three descriptors
-//! matched and not that the two sides answered the same value; the property
-//! is `support::arity`'s.
-//!
-//! Refresh with
-//!   `REXX_COLLECTION_ARITY_REFRESH=1 cargo test --release -p rexx-exec \
-//!        --test collection_arity`
 
 mod support;
 
@@ -107,10 +81,6 @@ fn the_oracle_completes_every_send() {
 
 /// Every documented instance row has a list, and a native row whose upstream
 /// arity is not zero is sent something.
-///
-/// This is what defeats "fill in the two control rows and leave the rest
-/// empty": an empty list on a method that takes arguments is caught here
-/// rather than read as agreement.
 #[test]
 fn every_row_is_sent_something_its_arity_needs() {
     let wrong = arity::rows_missing_arguments(&layout());

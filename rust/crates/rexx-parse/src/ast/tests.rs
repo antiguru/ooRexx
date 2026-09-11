@@ -1,8 +1,4 @@
 //! The tree's own invariants, apart from any parse.
-//!
-//! The grammar's tests in `expr/tests.rs` check spans on real input. These
-//! check that the construction guarantees hold even for an extent a caller got
-//! wrong, which is what makes the containment property structural.
 
 use super::{CallTarget, Expr, ExprKind, PrefixOp, Tail, compound_parts};
 use crate::selector::SelectorTable;

@@ -10,33 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! Turning retained source into a token vector.
-//!
-//! Ported from `interpreter/parser/Scanner.cpp`: `locateToken`,
-//! `sourceNextToken`, `scanSymbol`, `scanLiteral`, `scanComment`,
-//! `nextSpecial`, `packHexLiteral` and `packBinaryLiteral`. The port is
-//! structural on purpose. The scanner's hard cases are not independent rules
-//! that can be reimplemented one at a time; they interact, and the
-//! interactions are where the behaviour lives. `nextSpecial` skipping blanks
-//! and comments is the clearest example: it makes `1 = = 1.0` a strict
-//! comparison, and so do `1 =/*c*/= 1.0` and a `=` continued onto the next
-//! line with `=-`. All three were measured, and all three fall out of the
-//! structure rather than being special-cased.
-//!
-//! Two departures from the C++ are deliberate and both follow from producing
-//! the whole vector up front rather than pulling one clause at a time.
-//!
-//! * A clause terminator is never emitted twice in a row and never for an
-//!   empty final clause, so a blank line or a stray `;;` produces no tokens.
-//!   This is the effect of `nextClause`'s null-clause skipping
-//!   (`LanguageParser.cpp:1009`) without reproducing the separate
-//!   `CLAUSEEND_EOL`/`CLAUSEEND_EOF` subclasses, which nothing in this phase
-//!   needs to tell apart.
-//! * The interpreter interleaves scanning with parsing, so a scan error later
-//!   in the file is never reached if an earlier clause fails to parse.
-//!   Measured: a file whose line 1 is `say )` and whose line 3 is
-//!   `x = 'unclosed` reports 37.2 on line 1, where an eager scan reports 6.2
-//!   on line 3. Both are errors and both are refusals; only the number
-//!   differs.
 
 use std::ops::Range;
 
@@ -55,20 +28,6 @@ pub(crate) const MAX_SYMBOL_LENGTH: usize = 250;
 const DEFAULT_RESOURCE_END: &[u8] = b"::END";
 
 /// One `::RESOURCE` body, copied verbatim rather than tokenised.
-///
-/// The body is not Rexx and must not be scanned as Rexx. Measured: a resource
-/// holding `this is 'unmatched and /* unclosed` gets rc 0 from `rexxc`, so a
-/// scanner that tokenised it would invent errors 6.2 and 6.1 that the
-/// interpreter does not raise.
-///
-/// The scanner establishes only the body's extent, which is all it has to do
-/// to avoid tokenising it. A directive parser still owes the rest of
-/// `resourceDirective` (`DirectiveParser.cpp:2266`): keying the package's
-/// resource table by the *upcased* name even though the end marker is not
-/// upcased when it comes from a literal, rejecting a duplicate name with
-/// `Error_Translation_duplicate_resource`, and rejecting a malformed
-/// directive, which is error 25.926 and is why a malformed one leaves no
-/// `ResourceBody` here at all.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ResourceBody {
     /// Index in `Scanned::tokens` of the `::` that opened the directive
@@ -80,20 +39,9 @@ pub struct ResourceBody {
 }
 
 /// Everything one pass of the scanner produced.
-///
-/// `scan` returns the tables because it owns interning; it cannot borrow one
-/// it is still filling.
 #[derive(Debug)]
 pub struct Scanned {
     /// Every token, in source order.
-    ///
-    /// Three invariants a clause splitter may rely on. No two clause
-    /// terminators are adjacent, and none is first, so every `Eoc` closes a
-    /// clause that holds at least one token. If there is any token at all the
-    /// last one is an `Eoc`, because end of file terminates the final clause.
-    /// A program with no clauses, whether empty, all blank lines, all
-    /// comments or only semicolons, produces no tokens at all rather than a
-    /// lone terminator.
     pub tokens: Vec<Token>,
     pub symbols: SymbolTable,
     pub keywords: Keywords,
@@ -103,13 +51,6 @@ pub struct Scanned {
 }
 
 /// Tokenises `source`.
-///
-/// A clause terminator is emitted for each `;`, each uncontinued line end and
-/// for end of file, with consecutive terminators collapsed.
-///
-/// Whether this is a program or `INTERPRET` text is `source.kind()`, decided
-/// when the source was built, so there is no way to construct one and scan it
-/// as the other.
 pub fn scan(source: &ProgramSource) -> Result<Scanned, ParseError> {
     let mut symbols = SymbolTable::default();
     let keywords = Keywords::new(&mut symbols);
@@ -125,13 +66,6 @@ pub fn scan(source: &ProgramSource) -> Result<Scanned, ParseError> {
 
 /// `LanguageParser::isSymbolCharacter` (`LanguageParser.hpp:415`): whether
 /// `byte` may appear in a symbol.
-///
-/// The C++ reads this out of `characterTable` (`Scanner.cpp:60`), whose
-/// non-zero entry for a byte is that byte *upcased*. Nothing here needs the
-/// upcased value, because `SymbolTable::intern` upcases what it is given and
-/// `to_ascii_uppercase` agrees with the table over every byte the table
-/// admits. The table is zero for every byte from 0x80 to 0xFF, which is why a
-/// symbol is always ASCII.
 pub(crate) fn is_symbol_char(byte: u8) -> bool {
     matches!(byte,
         b'!' | b'.' | b'?' | b'_' | b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z')
@@ -139,26 +73,6 @@ pub(crate) fn is_symbol_char(byte: u8) -> bool {
 
 /// The line scanning starts on: 2 when a program opens with a `#!` line,
 /// 1 otherwise.
-///
-/// `BufferProgramSource::buildDescriptors` (`ProgramSource.cpp:448`) sets
-/// `firstLine` and `LanguageParser::initializeForParsing` positions there
-/// (`LanguageParser.cpp:751`, at its `getFirstLine` call on `:764`). An earlier
-/// revision named `translate` for `:764`, which is a different function, at
-/// `:1093`. The line is skipped by the parser but kept by
-/// `SOURCELINE`, so this belongs to the scan and not to the line index. Found
-/// by differential testing: of the 790 files under `ootest/` and `samples/`,
-/// 492 open with a `#!` line and 446 of those use the `#!/usr/bin/env rexx`
-/// spelling exactly, the rest being `#!@OOREXX_SHEBANG_PROGRAM@` and
-/// `#!/usr/bin/rexx`. Without this, every one of them is error 13.1 on line 1
-/// here and rc 0 under `rexxc`. Re-measured 2026-07-30; an earlier revision
-/// said 494 with the exact spelling, which matches neither count.
-///
-/// An `INTERPRET` does not get the skip, and it is the only kind that does
-/// not. `ArrayProgramSource::setup` (`ProgramSource.cpp:594`) guards it with
-/// `interpretAdjust == 0`, so an array of lines that is not an `INTERPRET`
-/// skips one as a file does. Measured, `interpret "#! nothing here"` is error
-/// 13.1 on `#` ('23'X), while the identical text as line 1 of a file, and as
-/// the source a method is compiled from, are both accepted.
 fn first_line(source: &ProgramSource) -> usize {
     if source.kind() != SourceKind::Interpret
         && source.line(1).is_some_and(|line| line.starts_with(b"#!"))
@@ -307,11 +221,6 @@ impl<'a> Scanner<'a> {
     }
 
     /// The byte after the scan position, or `None` at the end of the line.
-    ///
-    /// The C++ `followingChar` reads one byte past the line's content when
-    /// the scan position is on the last character, so it sees the line
-    /// terminator. `None` stands in for that: the three call sites test for
-    /// `-`, `*` and symbol characters, and a terminator is none of those.
     fn following_char(&self) -> Option<u8> {
         self.line.get(self.line_offset + 1).copied()
     }
@@ -453,10 +362,6 @@ impl<'a> Scanner<'a> {
 
     /// `LanguageParser::scanComment`: step over a `/* */` comment, which
     /// nests and may span lines.
-    ///
-    /// The C++ also remembers the comment's opening line, solely for the
-    /// error 6.1 substitution `Unmatched comment delimiter ("/*") on line N`;
-    /// this phase does not produce substitutions.
     fn scan_comment(&mut self) -> Result<(), ParseError> {
         let mut level = 1;
         self.step_position();
@@ -486,11 +391,6 @@ impl<'a> Scanner<'a> {
 
     /// `LanguageParser::nextSpecial`: consume the next character if it is
     /// `target`, extending `end` to cover it.
-    ///
-    /// Blanks are not significant here and comments are stepped over, which
-    /// is why `1 = = 1.0`, `1 =/*c*/= 1.0` and a `=-` continuation all scan
-    /// as `==`. All three measured against `build/bin/rexx`, which prints 0
-    /// for each and 1 for `1 = 1.0`.
     fn next_special(&mut self, target: u8, end: &mut usize) -> Result<bool, ParseError> {
         match self.locate_token(false)? {
             Located::Normal(found) if found == target => {
@@ -709,12 +609,6 @@ impl<'a> Scanner<'a> {
     }
 
     /// `LanguageParser::scanSymbol`: consume a symbol and classify it.
-    ///
-    /// The state machine decides whether the symbol is a number, which also
-    /// decides whether an `E` may be followed by a sign that belongs to the
-    /// symbol. Measured: `say 1e+5` prints `1E+5`, while with `y = 5`,
-    /// `say 1e+y` fails with `Nonnumeric value ("1E") used in arithmetic
-    /// operation`, so the symbol there is `1E` and the `+` is an operator.
     fn scan_symbol(&mut self) -> Result<Token, ParseError> {
         let mut state = ExpState::Start;
         // Position of an exponent sign, kept so the scan can back up over it
@@ -884,9 +778,6 @@ impl<'a> Scanner<'a> {
 
     /// `LanguageParser::scanLiteral`: consume a quoted literal and decode its
     /// value.
-    ///
-    /// The value is not a slice of the source: doubled delimiters collapse to
-    /// one, and a `'…'x` or `'…'b` suffix packs the text down to bytes.
     fn scan_literal(&mut self) -> Result<Token, ParseError> {
         let span_start = self.absolute();
         let delimiter = self.get_char();
@@ -970,10 +861,6 @@ impl<'a> Scanner<'a> {
 
     /// If the clause that just closed is a well-formed `::RESOURCE`
     /// directive, copy its body verbatim up to the end marker.
-    ///
-    /// A malformed one, `::resource data junk`, is left alone: the C++
-    /// rejects it in the directive parser before it ever reads a line, so the
-    /// lines that follow are ordinary Rexx there too.
     fn scan_resource_if_directive(&mut self) -> Result<(), ParseError> {
         let eoc = self.tokens.len() - 1;
         // This runs for every clause in the program, so it tests the cheapest
@@ -1066,10 +953,6 @@ impl<'a> Scanner<'a> {
 
     /// `LanguageParser::checkMarker`: whether the current line *begins* with
     /// `marker`.
-    ///
-    /// A prefix match, not an equality test. Measured: with
-    /// `::resource d2 end 'STOP'`, a body line `STOPPING? no, prefix match`
-    /// ends the resource.
     fn check_marker(&self, marker: &[u8]) -> bool {
         marker.len() <= self.line.len() && &self.line[..marker.len()] == marker
     }
@@ -1077,10 +960,6 @@ impl<'a> Scanner<'a> {
 
 /// `LanguageParser::packHexLiteral`: validate a hex literal's grouping and
 /// pack it down to bytes.
-///
-/// Whitespace may separate groups but not sit at either end, and every group
-/// after the first must hold an even number of digits. The first group may be
-/// odd, which is what makes `'a'x` legal.
 fn pack_hex_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, ParseError> {
     if data.is_empty() {
         return Ok(Vec::new());
@@ -1138,9 +1017,6 @@ fn pack_hex_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, ParseEr
 
 /// `LanguageParser::packBinaryLiteral`: validate a binary literal's grouping
 /// and pack it down to bytes.
-///
-/// As for hex, but the groups are four bits wide and the first byte may hold
-/// fewer than eight.
 fn pack_binary_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, ParseError> {
     if data.is_empty() {
         return Ok(Vec::new());

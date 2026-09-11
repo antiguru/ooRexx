@@ -162,24 +162,6 @@ fn a_slot_frame_grows_for_a_name_the_plan_never_saw() {
 /// `grow_slots` must panic rather than silently grow a frame that is not on
 /// top, because a silent wrong answer here is a variable landing in another
 /// routine's pool.
-///
-/// **This is no longer a rule awaiting relaxation.** An earlier version of
-/// this comment predicted that 4b's `PROCEDURE EXPOSE` would need a callee
-/// to write into its caller's non-top frame, and that whoever implemented
-/// it would have to delete this panic. 4b's Task 5 implemented it and did
-/// not: an exposed name is bound by `alias_slot`, which allocates nothing
-/// in the caller, and the one case that can still need a fresh slot -- a
-/// computed `expose (v)` naming a symbol no instruction mentions -- is
-/// resolved before the callee's frame is pushed, while the caller's frame
-/// is still on top. `RootSet::grow_slots`'s own doc comment has both halves.
-///
-/// So the invariant is now permanent rather than provisional, and the
-/// `expected` string still pins the "4a invariant" wording because that is
-/// what names it: if the message stops saying it, this test should break
-/// and point back here.
-///
-/// (The same earlier comment also had the callee setting `zzz = 5` and the
-/// caller printing `9`, which no run produces; the measured value is `5`.)
 #[test]
 #[should_panic(expected = "4a invariant")]
 fn growing_a_frame_that_is_not_the_top_one_panics() {
@@ -208,20 +190,11 @@ fn popping_a_frame_that_is_not_the_top_one_panics() {
 /// A cleared slot reads as unset, and that is **distinguishable from a slot
 /// holding `.nil`** -- which is why `ObjRef::NIL` cannot encode "unset" and
 /// this operation has to exist at all.
-///
-/// Measured on `build/bin/rexx`, and the third line is the one that settles
-/// it:
-///
 /// ```text
 /// a = 5     ; drop a ; say a   ->  A                 (unset: the derived name)
 /// x = .nil            ; say x  ->  The NIL object    (`.nil` is a value)
 /// y = .nil  ; drop y  ; say y  ->  Y                 (unset again, not NIL)
 /// ```
-///
-/// A variable holding `.nil` and a dropped variable render differently, so a
-/// single `ObjRef` slot has no spare value to mean "no value". D16 rejected
-/// storing slots in `temps` for exactly this reason and the same argument
-/// reaches `set_frame_slot`.
 #[test]
 fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
     let mut heap = Heap::new();
@@ -259,14 +232,6 @@ fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
 
 /// Clearing a slot stops it being a root, so the value it held becomes
 /// collectable.
-///
-/// This is the half the operation exists for and the half a naive wrapper
-/// gets wrong. A `clear_frame_slot` that only changed what `frame_slot`
-/// returns, while `iter` went on yielding the old value, would keep the
-/// object alive with nothing pointing at it and nothing failing: the damage
-/// would surface as a
-/// heap that does not shrink, at whatever unrelated moment a collection
-/// finally lands.
 #[test]
 fn a_cleared_slot_stops_being_a_root() {
     let mut heap = Heap::new();
@@ -295,16 +260,6 @@ fn a_cleared_slot_stops_being_a_root() {
 
 /// Growth never hands out a cleared slot's index, and that is a requirement
 /// rather than an accident of `grow_slots` appending.
-///
-/// A cleared slot still *belongs to its name*: the plan maps an upcased name
-/// to an index once, and `DROP a` only empties `A`'s slot rather than
-/// retiring it, so `a = 1` afterwards must land back in the same place.
-/// Recycling that index for the next name growth allocates would alias two
-/// variables onto one slot, and the symptom would be one variable's
-/// assignment silently changing another's value.
-///
-/// `pop_slots` needs no equivalent: it truncates the whole frame, so a
-/// cleared slot leaves with its frame and cannot be observed afterwards.
 #[test]
 fn growth_does_not_recycle_a_cleared_slot() {
     let mut heap = Heap::new();

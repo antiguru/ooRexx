@@ -12,52 +12,6 @@
 //! The builtins that read interpreter state rather than transform a value:
 //! `ADDRESS`, `ARG`, `CONDITION`, `DIGITS`, `ERRORTEXT`, `FORM`, `FUZZ`,
 //! `GC`, `QUEUED`, `SOURCELINE` and `TRACE`.
-//!
-//! # They read the *running activation*, which is not the calling clause's
-//!
-//! Every reader below takes its answer from `Interp::activation()`, and a
-//! builtin adds no activation of its own (`builtin.rs`'s module doc has
-//! the three measured observables for that). So `DIGITS()` inside an
-//! internal routine reports the routine's own `NUMERIC DIGITS`, not the
-//! caller's, and `CONDITION('S')` reports the trap table of whichever frame
-//! asked.
-//!
-//! # A maximum of zero is not the same as ignoring an extra
-//!
-//! `ADDRESS`, `DIGITS`, `FORM`, `FUZZ` and `QUEUED` open with `check_args`
-//! and a maximum of 0 in `BuiltinFunctions.cpp`, so one argument is 40.4 --
-//! measured, `say address(1)` is `Too many arguments in invocation of
-//! ADDRESS; maximum expected is 0.` at rc 216. `builtin.rs`'s table is
-//! where each row's own `(min, max)` lives; nothing here restates it.
-//!
-//! # An option letter is one byte, upcased, and the null string is not one
-//!
-//! `ARG`'s second argument and `CONDITION`'s first are both read as
-//! `Utilities::toUpper(option->getChar(0))`, so only the first byte decides
-//! and case does not matter -- measured, `arg(1,'exists')` and `arg(1,'e')`
-//! are both `1`, and `condition('cond')` behaves as `condition('C')`. An
-//! empty option is rejected rather than treated as omitted: `condition('')`
-//! and `arg(1,'')` are both 40.904 with `found ""`.
-//!
-//! **The rejection belongs to the switch, not to reading the argument**, and
-//! `ARG` is where that shows: it has checks in front of the switch, and an
-//! empty option loses to both of them (`arg(,'')` is 40.5, `arg(0,'')` is
-//! 40.14). `arg`'s own doc has the four-row order.
-//!
-//! # What is not here, and why it is loud rather than approximated
-//!
-//! `CONDITION('A')` answers an `Array` and `CONDITION('O')` a `Directory`,
-//! neither of which this crate builds from a condition object, so each fails
-//! loudly at the call.
-//! Measured, inside a `SIGNAL ON SYNTAX` handler after `say substr('abc')`:
-//! `condition('A')~class` is `The Array class` and `condition('A')~items` is
-//! 2, and `condition('O')~items` is 14. The null string would be right for
-//! an empty `Array` and wrong for every other shape, which is exactly the
-//! silent-wrong-answer trade `Loud::builtin_option_object` exists to refuse.
-//!
-//! `CONDITION('D')` is answered from `Raised::description`, which carries a
-//! `RAISE ... DESCRIPTION` value and does not carry `NOVALUE`'s variable
-//! name -- that one pair is loud too, for the same reason and no other.
 
 use rexx_core::{BehaviourId, Body, ObjRef};
 
@@ -69,29 +23,6 @@ use crate::error::{Failure, Raised};
 
 /// The environment `ADDRESS()` names before any `ADDRESS` instruction has
 /// run, and after a bare `ADDRESS` swaps back to it.
-///
-/// **A compile-time platform constant, which is why it is spelled here at
-/// all.** Both platforms' `SystemInterpreter::getDefaultAddressName()` are
-/// the identical one line, `return GlobalNames::INITIALADDRESS;`, and
-/// `memory/GlobalNames.h:124` builds that name from `SYSINITIALADDRESS`.
-/// **The split is in `platform/<os>/PlatformDefinitions.h`**: `"sh"` at
-/// unix line 66, `"CMD"` at windows line 65, both read directly. (There is
-/// a second `#define SYSINITIALADDRESS "sh"` in
-/// `platform/unix/SystemCommands.cpp:68`; it is local to that translation
-/// unit and is **not** the one `GlobalNames.h` expands, so citing it -- as
-/// an earlier version of this comment did -- names a definition that could
-/// change without changing the answer.) The value is fixed when the
-/// interpreter is built, not read from the environment or the process, and
-/// measured on this host: `say address()` as a program's only clause prints
-/// `sh`.
-///
-/// So this is the same kind of value as `PARSE SOURCE`'s first two words --
-/// `LINUX COMMAND` here, also platform-fixed, also written into the corpus
-/// as a measured constant -- and not the kind `PARSE VERSION`'s build date
-/// is, which moves under a rebuild and is therefore pinned by a gated
-/// differential test instead of by a corpus program. Naming the default
-/// environment is not the same job as *issuing a command to* it, which is
-/// what D18 defers.
 #[cfg(unix)]
 const DEFAULT_ENVIRONMENT: &[u8] = b"sh";
 #[cfg(not(unix))]
@@ -99,11 +30,6 @@ const DEFAULT_ENVIRONMENT: &[u8] = b"CMD";
 
 /// The first byte of an option argument, upcased, or `None` when the
 /// argument was not supplied at all.
-///
-/// `Err` is the 40.904 the null string gets: an option that is present and
-/// empty is not an omitted option. Only for a builtin whose option is the
-/// *first* thing validated -- `ARG` has two checks in front of its switch
-/// and reads its own option inline for that reason.
 fn option_letter(
     interp: &mut Interp,
     name: &[u8],
@@ -121,14 +47,6 @@ fn option_letter(
 }
 
 /// `ADDRESS()`: the environment a command clause would be sent to.
-///
-/// `context->getAddress()` and nothing else. `None` on the activation is the
-/// platform default -- see [`DEFAULT_ENVIRONMENT`] for why that name is
-/// written down here rather than deferred with the rest of the command
-/// layer.
-///
-/// Measured, and the swap needs three toggles to be told from a pop:
-///
 /// ```text
 /// say address()   ->  sh
 /// address envA
@@ -168,10 +86,6 @@ pub(crate) fn fuzz(interp: &mut Interp, _name: &[u8], _args: Args<'_>) -> Result
 }
 
 /// `FORM()`: `SCIENTIFIC` or `ENGINEERING`, upper case.
-///
-/// The oracle returns one of two `GlobalNames` constants rather than
-/// formatting anything, so there is no third answer -- measured, `numeric
-/// form` with no expression resets to `SCIENTIFIC`.
 pub(crate) fn form(interp: &mut Interp, _name: &[u8], _args: Args<'_>) -> Result<ObjRef, Failure> {
     let text: &[u8] = match interp.activation().settings.form() {
         rexx_num::Form::Scientific => b"SCIENTIFIC",
@@ -181,12 +95,6 @@ pub(crate) fn form(interp: &mut Interp, _name: &[u8], _args: Args<'_>) -> Result
 }
 
 /// `QUEUED()`: how many lines the external data queue holds.
-///
-/// **Single-program only**, which is the `QUEUED` row of
-/// `phase-4-exclusions.txt` rather than a limitation of this function: the
-/// oracle's queue is served by a live `rxapi` and shared across processes,
-/// so a differential run that wrote in one process and counted in another
-/// could never agree. `queue.rs`'s module doc has the measurement.
 pub(crate) fn queued(
     interp: &mut Interp,
     _name: &[u8],
@@ -197,14 +105,6 @@ pub(crate) fn queued(
 }
 
 /// `GC()` / `GC('Force')`: whether a collection was run.
-///
-/// `0` with no argument and `1` with one, measured -- the oracle only
-/// collects unconditionally in a debug build, and this is a release one.
-/// The argument is not an option *letter*: `BUILTIN(GC)` tests
-/// `forceData[0] != 'f' && != 'F'` and rejects everything else, so
-/// `gc('fnord')` is `1` and `gc('x')` is 40.904 naming the four spellings
-/// **with their own quotes inside the message** -- `GC argument 1 must be
-/// one of "force", "Force", "f", "F"; found "x".`
 pub(crate) fn gc(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     const VALID: &str = "\"force\", \"Force\", \"f\", \"F\"";
     let Some(text) = optional_string(interp, args, 1) else {
@@ -219,17 +119,6 @@ pub(crate) fn gc(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Obj
     // (`Interp::alloc_with`) runs a collection immediately before every
     // allocation, so a caller's values are already rooted by the time any
     // builtin can be entered.
-    //
-    // **Through `Interp::collect_now` and not `Heap::collect` directly**,
-    // because the root set the collector is handed is not `Interp::roots`
-    // alone: an activation's context object is named by nothing in it and is
-    // swept in there. A build that reaches past it frees the running
-    // activation's own `.CONTEXT` -- measured against one, `say
-    // .context~objectName` either side of a forced collection answers
-    // `a RexxContext` twice at rc 0 on the oracle and refuses the second
-    // send at rc 120 here. Going through the same door every allocation goes
-    // through also keeps `collect_at` adjusted, which a bare `Heap::collect`
-    // leaves where it was.
     interp.collect_now();
     // `collectAndUninit` is collect *and* run, and `GC('force')` is the one
     // path that runs the finalizers inline rather than leaving them to a
@@ -245,13 +134,6 @@ pub(crate) fn gc(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Obj
 
 /// `ERRORTEXT(n)`: the major error message for `n`, or the null string when
 /// the catalogue has no entry.
-///
-/// Only the major message, which is why the range is `0..=99` and why no
-/// substitution ever happens: those live on the `n.m` sub-entries.
-/// Measured, rc 216 either side -- `errortext(-1)` and `errortext(100)` are
-/// both 40.903, `ERRORTEXT argument 1 must be in the range 0-99; found
-/// "..."` -- and inside the range a number with no catalogue entry is the
-/// null string rather than an error: `errortext(0)` prints nothing.
 pub(crate) fn errortext(
     interp: &mut Interp,
     name: &[u8],
@@ -270,16 +152,6 @@ pub(crate) fn errortext(
 }
 
 /// `SOURCELINE()`: the program's line count, or `SOURCELINE(n)`: line `n`.
-///
-/// The *program's*, never the fragment's: `getEffectivePackageObject` reads
-/// through an interpret context to its caller, and this crate's `INTERPRET`
-/// runs in the enclosing activation, so `activation().program` is already
-/// the right one.
-///
-/// Both failures are the BIF wrapper's 40.x at rc 216, measured against a
-/// one-line program: `sourceline(0)` is 40.14 `SOURCELINE argument 1 must be
-/// positive; found "0".`, and `sourceline(99)` is 40.34 naming both the
-/// request and the count.
 pub(crate) fn sourceline(
     interp: &mut Interp,
     name: &[u8],
@@ -309,31 +181,10 @@ pub(crate) fn sourceline(
 
 /// `TRACE()` / `TRACE(setting)`: the setting in force, and optionally a new
 /// one.
-///
-/// **The old setting is what comes back, not the new one** -- the oracle
-/// reads `traceSetting()` before calling `setTrace`, measured: `trace l`
-/// then `say trace('O')` prints `L` and leaves the setting at `O`.
-///
-/// The answer is one byte, `TraceSetting::toString`'s own rendering of the
-/// stored flags, and all nine letters are distinguishable --
-/// `TraceMode::letter` carries the measurements, including the initial `N`
-/// and the `?` prefix this crate does not reproduce.
-///
-/// A new setting goes through `parseTraceSetting`, so `trace('Z')` is 24.1
-/// at rc 232 rather than a 40.x. **A digit string is 24.1 here and 24.901
-/// from the instruction**, which is a real difference and not a slip:
-/// `RexxInstructionTrace::execute` tests for a whole number before parsing a
-/// setting, and `BUILTIN(TRACE)` goes straight to
-/// `RexxActivation::setTrace(RexxString *)`, which does not. Measured, rc
-/// 232 for both:
-///
 /// ```text
 /// trace value 5     24.901  Numeric TRACE requests are valid only from interactive debugging.
 /// say trace('5')    24.1    TRACE request letter must be one of "ACEFILNOR"; found "5".
 /// ```
-///
-/// The rejected byte is the first one, not the whole string: `trace('-3')`
-/// reports `found "-"`.
 pub(crate) fn trace(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let previous = interp.trace_mode().letter;
     if let Some(text) = optional_string(interp, args, 1) {
@@ -346,16 +197,6 @@ pub(crate) fn trace(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result
 
 /// `ARG()`, `ARG(n)` and `ARG(n, option)`: the current routine's own
 /// argument list.
-///
-/// **The list is the *call's*, not the activation's**, which is why this
-/// reads `Interp::call_context` -- at the top level that is the one
-/// command-line argument, and inside a routine it is that call's own
-/// positions with an interior omission left in place. Measured, both:
-/// a program run with one argument reports `arg()` as 1, and `call sub
-/// 'p1',,'p3'` reports 3 with position 2 omitted.
-///
-/// The four options, all measured against that call:
-///
 /// ```text
 /// arg(2)        ''      an omitted position reads as the null string
 /// arg(2,'E')    0       ... and 'E'xists says so
@@ -364,36 +205,17 @@ pub(crate) fn trace(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result
 /// arg(4,'O')    1       ... nor supplied
 /// arg(2,'N')    ''      'N'ormal is `arg(n)` again
 /// ```
-///
-/// **`'A'` answers the list from that position on, holes included.** The
-/// C++ copies `arglist`'s pointers straight into the array and an omitted
-/// position is `OREF_NULL` there, so the answer carries an empty slot rather
-/// than `.nil` or a shortened list. Measured against the same call, rc 0:
-///
 /// ```text
 /// arg(1,'A')    ~size 3, ~items 2, ~dimension 1, ~hasIndex(2) 0
 /// arg(2,'A')    ~size 2, ~items 1, ~dimension 1
 /// arg(4,'A')    ~size 0,           ~dimension 0
 /// ```
-///
-/// **Position 1 is tested before the past-the-end arm**, so a call with no
-/// arguments at all answers `~dimension` 1 there and 0 at any other
-/// position -- measured, rc 0, and it is the case `MapCollection~of` takes.
-///
-/// **The three checks run in the C++'s own order, and every pair of them
-/// can be told apart.** `optional_integer` first, then the no-position test,
-/// then `positive_integer`, and only then the option's own letter:
-///
 /// ```text
 /// arg('x','q')   40.12  argument 1 must be a whole number
 /// arg(,'')       40.5   argument 1 is required     (an empty option is still an option)
 /// arg(0,'')      40.14  argument 1 must be positive
 /// arg(1,'')      40.904 argument 2 must be one of AENO; found ""
 /// ```
-///
-/// All four measured, rc 216. The third and fourth are the pair that places
-/// the emptiness check: it belongs to the option *switch*, which a bad
-/// position never reaches.
 pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     const VALID: &str = "AENO";
     let position = whole_number(interp, name, args, 1)?;
@@ -460,15 +282,6 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
 
 /// `CONDITION()` and `CONDITION(option)`: what the handler now running was
 /// entered for.
-///
-/// **The bare form is `CONDITION('I')`, not `'C'`** -- `BUILTIN(CONDITION)`
-/// opens `int style = 'I'`, and measured, `say condition()` inside a `SIGNAL
-/// ON SYNTAX` handler prints `SIGNAL`.
-///
-/// The whole option table, measured from *inside* a live handler in each
-/// case, because outside one every answer is the null string or `.NIL` and a
-/// stub returning `''` is indistinguishable from a correct implementation:
-///
 /// ```text
 ///          SYNTAX (1/0)   NOVALUE      USER via SIGNAL   USER via CALL   no condition
 ///  bare    SIGNAL         SIGNAL       SIGNAL            CALL            ''
@@ -480,13 +293,6 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
 ///  O       <Directory 14> <Dir 9>      <Dir 10>          same            .NIL
 ///  S       OFF            OFF          OFF               DELAY           ''
 /// ```
-///
-/// **`I` and `S` are not one bit, and this is the case that shows it.** `I`
-/// is stored on the condition object when the trap fires; `S` is looked up
-/// *live* in the running activation's trap table
-/// (`RexxActivation::trapState`). Measured, inside a `SIGNAL ON SYNTAX`
-/// handler:
-///
 /// ```text
 /// before rearm  I SIGNAL  S OFF
 /// signal on syntax name sh1
@@ -494,14 +300,6 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
 /// signal off syntax
 /// after  off    I SIGNAL  S OFF
 /// ```
-///
-/// and the mirror inside a `CALL ON USER UC` handler, where `signal on user
-/// uc` leaves `I` at `CALL` while `S` becomes `ON`.
-///
-/// `R` clears the condition and answers the null string, and it clears
-/// **this activation's** copy only -- measured, a subroutine called from the
-/// handler that resets sees `''` afterwards while the handler itself still
-/// reports `SYNTAX` when it resumes.
 pub(crate) fn condition(
     interp: &mut Interp,
     name: &[u8],
@@ -570,11 +368,6 @@ pub(crate) fn condition(
 
 /// A converted argument as a 40.x range message spells it in `found "..."`:
 /// **the integer the conversion produced, never the value's own rendering.**
-///
-/// The two are the same for an integer literal and differ for everything
-/// else, which is why an alphabet of integer literals cannot see this.
-/// Measured on the oracle, rc 216 in every row:
-///
 /// ```text
 /// arg(0.0)                                found "0"          not "0.0"
 /// arg('+0')                               found "0"          not "+0"
@@ -583,28 +376,6 @@ pub(crate) fn condition(
 /// sourceline(1e1)                         ("10")             not ("1E1")
 /// numeric digits 3; errortext(999999+1)   found "1000000"    not "1.00E+6"
 /// ```
-///
-/// **The last row is the one that needs `NUMERIC DIGITS` crossed with a
-/// numeric-looking argument to see at all**, and it is a D15 interaction:
-/// the value's rendering is fixed at creation under `DIGITS 3`, while
-/// `required_integer` converts under `ARGUMENT_DIGITS` and the message
-/// carries what the conversion produced. Holding either axis at its safe
-/// value -- an integer literal, or the default `DIGITS` -- hides every row
-/// above.
-///
-/// **This is the opposite choice from [`Raised::argument_not_whole`], and
-/// the split is where the conversion succeeded.** 40.12 is raised *because*
-/// the conversion failed, so there is no integer and the rendered value is
-/// all there is -- measured, `numeric digits 3; z = 1/3; numeric digits 9;
-/// errortext(z)` reports `found "0.333"`, the rendering captured at
-/// creation, and `errortext(99999999999999999999)` reports all twenty
-/// digits. The range checks below it are raised *after* a successful
-/// conversion, and they report the result of it. `builtin.rs`'s
-/// `length_of`, `position_of` and `count_of` already had it right for the
-/// same reason: measured, `numeric digits 3; word('a b', -(999999+1))` is
-/// 93.924 `found "-1000000"`.
-///
-/// [`Raised::argument_not_whole`]: crate::error::Raised::argument_not_whole
 fn converted(value: i64) -> String {
     value.to_string()
 }
@@ -617,11 +388,6 @@ mod tests {
 
     /// Runs `source` as a whole program and hands back the stdout it
     /// produced, having first insisted the run ended cleanly.
-    ///
-    /// Through `run_program` and not a miniature of it, because every
-    /// property below is about state that only exists once activations are
-    /// being pushed and popped: which frame `DIGITS()` reads, what a handler
-    /// inherits, what dies with a callee.
     fn output(source: &[u8]) -> String {
         let outcome = run_program("/t.rex", source.to_vec(), Invocation::none());
         assert_eq!(
@@ -643,10 +409,6 @@ mod tests {
 
     /// Runs `source` expecting it to fail, and hands back the exit code and
     /// the whole of stderr.
-    ///
-    /// The two together rather than either alone: the code says which family
-    /// the error came from (216 for the 40.x wrapper, 163 for an operation's
-    /// 93.9xx, 120 for a declared gap) and the text says which member.
     fn failure(source: &[u8]) -> (i32, String) {
         let outcome = run_program("/t.rex", source.to_vec(), Invocation::none());
         (
@@ -896,11 +658,6 @@ mod tests {
     }
 
     /// The order of `ARG`'s three checks, one probe per adjacent pair.
-    ///
-    /// Every row is measured on the oracle and every one distinguishes two
-    /// orderings a natural implementation could pick. The empty option is
-    /// the case that pins the switch's own place in the sequence: it loses
-    /// to both checks in front of it and wins against nothing.
     #[test]
     fn args_three_checks_run_in_the_oracles_order() {
         // A bad *type* in position 1 beats everything after it.
@@ -946,10 +703,6 @@ mod tests {
     /// A range check reports the integer the conversion produced, and 40.12
     /// -- raised when that conversion fails -- reports the value's own
     /// rendering. [`converted`] has the oracle transcripts.
-    ///
-    /// Every argument below is a *text* whose rendering and conversion
-    /// differ. An alphabet of integer literals makes the two coincide and
-    /// cannot fail this test at all, which is how the wrong choice shipped.
     #[test]
     fn a_range_message_substitutes_the_converted_integer() {
         assert_eq!(
@@ -1012,16 +765,6 @@ mod tests {
 
     /// The D15 crossing: the `NUMERIC DIGITS` a value was *rendered* under
     /// against the integer its conversion produces.
-    ///
-    /// This is the axis pair the shared block asks for -- numeric-looking
-    /// argument crossed with a `DIGITS` setting -- and neither half sees
-    /// anything on its own. Under the default `DIGITS`, `999999+1` renders
-    /// as `1000000` and the two agree; with `DIGITS 3` and an integer
-    /// literal, no conversion is ever wrong.
-    ///
-    /// The second program of each pair moves `DIGITS` back *after* creating
-    /// the value, so a reading that used the current setting rather than the
-    /// captured one would also be wrong, and differently.
     #[test]
     fn a_range_message_ignores_the_digits_the_value_was_rendered_under() {
         for (source, expected) in [
@@ -1061,9 +804,6 @@ mod tests {
 
     /// `TRACE(setting)` and the `TRACE` instruction disagree about a digit
     /// string, and the disagreement is the oracle's own.
-    ///
-    /// The instruction tests for a whole number before parsing a setting and
-    /// the builtin does not, so the same text is two different errors.
     #[test]
     fn a_digit_string_is_a_bad_letter_to_the_builtin_and_a_skip_count_to_the_instruction() {
         let (code, stderr) = failure(b"say trace('5')\n");

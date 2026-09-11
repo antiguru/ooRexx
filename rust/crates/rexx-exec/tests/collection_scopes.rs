@@ -12,45 +12,6 @@
 //! `corpus/collection-scopes.tsv` (D89): which scope defines each documented
 //! collection method, whether that scope's body is C++ or Rexx, and for a C++
 //! body the `Setup.cpp` token and arity operand.
-//!
-//! # The scope comes from the oracle, and that is the whole point
-//!
-//! An earlier version of this join read the scope out of `Setup.cpp` and
-//! `CoreClasses.orx`. That recipe is defective three ways, each of which
-//! attributes a row to the wrong *body*:
-//!
-//! * `RemoveMethod` (`Setup.cpp:792-804`) strips nine documented rows from
-//!   `Queue` **after** `InheritInstanceMethods(Array)` copied them in;
-//! * `HideMethod` (`:1399-1404`) does the same on `Stem`;
-//! * the prolog's `.set~inheritInstanceMethods(.SetMixin)` and its four
-//!   neighbours (`CoreClasses.orx:80-87`) put `union` and its relatives on a
-//!   **mixin** body whose semantics differ from `Collection`'s.
-//!
-//! Asking the interpreter is immune to all three:
-//! `receiver~instanceMethod(NAME)~scope~id` resolves in the receiver's own
-//! behaviour, which is the behaviour after every copy, removal and hide.
-//!
-//! **The receiver must be an instance for the instance arm.** Sent to the
-//! class object, `instanceMethod` answers `.nil` for an inherited instance
-//! name -- a class object's behaviour holds class methods. That wrong
-//! negative is what sent the earlier version down the file-scanning path.
-//! `Class~method` is own-scope only and is not usable here at all.
-//!
-//! # What `Setup.cpp` is still read for
-//!
-//! Native-or-Rexx and the token, keyed by (scope, name). That join is
-//! `support::setup_cpp`, shared with `introspection_scopes.rs`, and its
-//! module doc carries why the Method object cannot answer it and why a token
-//! is a citation rather than a body identity.
-//!
-//! `InheritInstanceMethods` is still needed here (it is what puts `hasIndex`
-//! in `Table`'s own table), but `RemoveMethod` and `HideMethod` are not: a
-//! removed name is not at that scope on the oracle either, so the lookup
-//! never reaches the stale copy.
-//!
-//! Refresh with
-//!   `REXX_COLLECTION_SCOPES_REFRESH=1 cargo test --release -p rexx-exec \
-//!        --test collection_scopes`
 
 mod support;
 
@@ -65,13 +26,6 @@ const REFRESH_ENV: &str = "REXX_COLLECTION_SCOPES_REFRESH";
 const NO_EVIDENCE: &str = "--";
 
 /// The classes this table covers.
-///
-/// `RexxQueue` is excluded **by name** rather than by silence (spec D93): it
-/// is the external data queue, its methods are
-/// `EXTERNAL 'LIBRARY REXX rexx_*_queue'` bindings in `StreamClasses.orx`,
-/// and it has no native store and no entry point in common with these. Naming
-/// it here keeps "a scope that resolves nowhere is a failure" available as a
-/// signal for a class that is supposed to resolve.
 const SCOPE_CLASSES: &[&str] = &[
     "Array",
     "Bag",
@@ -172,11 +126,6 @@ fn documented(corpus: &Path) -> Vec<(String, String, String)> {
 // ---- the oracle's answer for the scope column ----
 
 /// One Rexx program that prints `class TAB method TAB arm TAB scope` per row.
-///
-/// The rows are emitted as literal `call` lines rather than driven from an
-/// `.Array` of names, because the collections are the subject: a probe that
-/// reads its own row list out of one of them would fail differently when that
-/// class does.
 fn scope_probe(rows: &[(String, String, String)], built: &HashMap<String, String>) -> String {
     let mut text = String::new();
     let mut classes: Vec<&String> = built.keys().collect();

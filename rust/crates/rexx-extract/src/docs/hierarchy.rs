@@ -12,18 +12,6 @@
 //! Table C's wiring edge set: the documented superclass-or-mixin edge each
 //! class carries, read off the indentation of `provide.xml`'s `chi`
 //! `<simplelist>`.
-//!
-//! The list gives **one** edge per class by construction -- its own prose says
-//! "Classes inheriting from multiple mixin classes are only listed below one
-//! of these mixin classes" -- so a derived edge is a claim that it is *present
-//! in* the child's `~superClasses`, never that it is the whole answer.
-//!
-//! Three rules, and they are not equally witnessed. Rules 2 and 3 are
-//! witnessed by running the whole set against the oracle, because their edges
-//! fail there when present: `.Object~superClasses~items` is `0` and
-//! `.RexxInfo~superClasses` raises `97.1`. **Rule 1 is not**, and
-//! [`edges_from_members`] carries its own assertion for that reason; see the
-//! assertion's own comment.
 
 use crate::docs::xml::{Member, members};
 
@@ -46,10 +34,6 @@ pub struct Edge {
 }
 
 /// The `<simplelist>` members of `provide.xml`'s `chi` section.
-///
-/// Takes the file text rather than a parsed tree so that the caller decides
-/// whether comments have been blanked -- which is what lets rule 1's assertion
-/// be seen firing instead of merely asserted to work.
 pub fn chi_members(provide_xml: &str) -> Vec<Member> {
     let section = provide_xml
         .find("<section id=\"chi\"")
@@ -84,20 +68,6 @@ fn section_end(text: &str, from: usize) -> usize {
 }
 
 /// The edge set, under the three rules.
-///
-/// `excluded` names are still read for the indentation they establish -- a
-/// child indented under one of them still gets the right parent -- but emit no
-/// edge of their own.
-///
-/// **The `ArgUtil` assertion.** Rule 1 -- strip comments before reading
-/// `<member>`s -- is the one rule the end-to-end oracle run cannot witness:
-/// `.ArgUtil~superClasses` is exactly `The Object class`, so an extractor that
-/// skips the stripping emits an extra edge the oracle confirms, and the run
-/// stays at zero failures over a wrong member set. The assertion is
-/// co-extensive with rule 1's whole observable effect here, because the block
-/// holds exactly one XML comment and it is the `ArgUtil` member; a comment
-/// added upstream later is caught by the both-directions check instead, since
-/// the derived set moves and the committed file does not.
 pub fn edges_from_members(members: &[Member], excluded: &[&str]) -> Vec<Edge> {
     let mut by_level: Vec<String> = Vec::new();
     let mut out: Vec<Edge> = Vec::new();

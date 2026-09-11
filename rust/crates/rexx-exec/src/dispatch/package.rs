@@ -11,36 +11,6 @@
 
 //! `Package`'s readers and its four writes -- `classes/PackageClass.cpp`,
 //! bound by `memory/Setup.cpp`'s `Package` block.
-//!
-//! A child of [`super`] rather than a sibling, for the reason its `mod native`
-//! comment gives: the rows point at `NativeMethod`s, whose parameter list
-//! names types only that module can.
-//!
-//! # Two receivers, and four readers tell them apart
-//!
-//! `Package::Rexx` is the interpreter's own package and `Package::Program` is
-//! a file's. Measured, oracle rc 0, the same send to each: `~trace` is the
-//! null string against `N`, `~prolog` is `The NIL object` against a `Routine`,
-//! `~source` is `Array(0)` against the program's lines, and `~options` ends
-//! `TRACE ?n/a?` against `TRACE NORMAL`. The four differ because
-//! `PackageSetting`'s default constructor leaves the trace flags zeroed and
-//! the REXX package's are never defaulted, while a parsed program's are.
-//!
-//! **Every write refuses on the REXX package**, which is `checkRexxPackage`
-//! (`classes/PackageClass.cpp:470`). Measured at rc 0 through a trap:
-//! `~addRoutine`, `~addPublicRoutine`, `~addPackage`, `~loadPackage`,
-//! `~loadLibrary` and `~setSecurityManager` all report 98.984 `User additions
-//! are not allowed to the REXX package.`
-//!
-//! # The table readers answer copies
-//!
-//! Each of `~classes`, `~publicClasses`, `~importedClasses`, `~routines`,
-//! `~publicRoutines`, `~importedRoutines`, `~definedMethods`, `~resources`
-//! and `~namespaces` is a `->copy()` of the package's own table, and
-//! `~importedPackages` is a copy of its array. Measured, oracle rc 0:
-//! `(p~resources == p~resources)` is `0`, and a `~put` into one is invisible
-//! to the next ask, where `.RESOURCES` answers the package's own table and
-//! `~addRoutine` is visible through it.
 
 use std::collections::HashMap;
 
@@ -56,9 +26,6 @@ use crate::{InstalledRoutine, ProgramId};
 
 /// `Package`'s instance methods. Chained into `ObjectModel::build` beside
 /// [`super::NATIVE_METHODS`].
-///
-/// The counts are `Setup.cpp`'s own, which
-/// `corpus/introspection-scopes.tsv` carries per row.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Package", "ADDPACKAGE", Arity::Fixed(2), add_package),
     (
@@ -153,10 +120,6 @@ pub(super) static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &
 
 /// Which package `receiver` stands for: `Some(program)` for a file's package,
 /// `None` for the interpreter's own.
-///
-/// The refusal is for a `Package`-classed object this crate did not build,
-/// which nothing a program can write produces -- every package object comes
-/// from `Interp::package_object`.
 fn package_of(interp: &Interp, receiver: ObjRef) -> Result<Option<ProgramId>, Failure> {
     match interp.which_package(receiver) {
         Some(Package::Program(program)) => Ok(Some(program)),
@@ -176,12 +139,6 @@ fn writable_package_of(interp: &Interp, receiver: ObjRef) -> Result<ProgramId, F
 
 /// The `::OPTIONS` settings a package carries, and the trace setting its
 /// `~trace` reports.
-///
-/// `None` for the REXX package, whose `PackageSetting` was never defaulted:
-/// measured, oracle rc 0, its `~trace` is the null string and its `~options`
-/// ends `TRACE ?n/a?` where a program package's are `N` and `TRACE NORMAL`.
-/// A program that declares no `::OPTIONS` still has defaulted settings, which
-/// is what the `unwrap_or_default` stands for.
 fn settings_of(interp: &Interp, program: Option<ProgramId>) -> (PackageOptions, Option<TraceMode>) {
     match program {
         None => (PackageOptions::default(), None),
@@ -252,23 +209,6 @@ fn trace(
 
 /// `PackageClass::options(optionName, newValue)`: the whole `::OPTIONS`
 /// string, or one option's value, or a write.
-///
-/// **The write is refused rather than performed.** A second argument moves
-/// the package's settings, and every activation of that package's code starts
-/// from them -- measured, oracle rc 0, `p~options('DIGITS', 5)` answers the
-/// previous `9` and leaves `p~digits` at `5`. Carrying the write into the
-/// bodies this crate has already planned is D12's and Phase 7's; answering
-/// the previous value without performing it would run on at rc 0 with the
-/// wrong settings in force.
-///
-/// **The refusals around the write are the oracle's, and there are four.**
-/// Measured at rc 163, one send each: a second argument to `I`, `R` or `X` is
-/// 93.902 `1 expected`, because those three are read-only; an empty second
-/// argument is 93.900 `argument 2 must not be empty.`; an unrecognised name
-/// with a second argument is 93.914 naming a **different** list from the one
-/// the no-value form names -- that one has `A[ll]` and no `X`, this one has
-/// `X` and no `A[ll]`; and a second argument with the first omitted is 93.903
-/// `argument 1 is required`.
 fn options(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -333,25 +273,6 @@ fn unknown_option(name: &[u8], setting: bool) -> Failure {
 
 /// `PackageClass::clzOptions`: the class-level override settings, which are
 /// what a package that names an option itself does *not* get.
-///
-/// **This reads a class-level static, not the receiver.** `defaultOptions` is
-/// `psOverridePackageSettings` and `overrideCount`
-/// (`classes/PackageClass.cpp:2655`), both of them `PackageClass`'s own
-/// fields. Measured, oracle rc 0: a program carrying `::options digits 13`
-/// reads `13` from `~options` and `DIGITS 9` from
-/// `.Package~defaultOptions('DIGITS')`.
-///
-/// **Only the first byte is read**, which is why `'DIGITS'` answers the
-/// override string at all: `D` is `DefineDefaultOptions` and `C` is
-/// `CountOverrides`. Measured at rc 163, `.Package~defaultOptions('FORM')`
-/// is 93.914 naming those two spellings.
-///
-/// **The answer is a constant here because the setter is refused.** The only
-/// thing that moves `psOverridePackageSettings` is `defaultOptions`'s own
-/// second argument, so with that refused the override settings are the
-/// language defaults for the whole of a run and `overrideCount` is zero. The
-/// string is built from `PackageOptions::default()` rather than written out,
-/// so it cannot drift from what `~options` renders.
 fn default_options(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -429,12 +350,6 @@ fn source(
 }
 
 /// `PackageClass::getSourceLineRexx`: one line, by position.
-///
-/// **Past the end is the null string and not a raise**, which is where this
-/// parts from the `SOURCELINE` builtin: measured, oracle rc 0,
-/// `p~sourceLine(99)` on a 24-line program answers the null string where
-/// `sourceline(99)` is 40.34 at rc 216. A position of zero or below is
-/// 93.924 -- `positionArgument`, measured at rc 168 for `0`, `-1` and `a`.
 fn source_line(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -449,10 +364,6 @@ fn source_line(
 }
 
 /// The lines `~source`, `~sourceLine` and `~sourceSize` read.
-///
-/// The REXX package holds none -- measured, oracle rc 0, `.Class~package`
-/// answers `sourceSize` `0` and an empty `Array` -- so it is the empty list
-/// rather than a refusal.
 fn source_lines(interp: &Interp, program: Option<ProgramId>) -> Vec<Vec<u8>> {
     let Some(program) = program.and_then(|program| interp.programs.get(program.0)) else {
         return Vec::new();
@@ -464,9 +375,6 @@ fn source_lines(interp: &Interp, program: Option<ProgramId>) -> Vec<Vec<u8>> {
 
 /// `PackageClass::getMainRexx`: the `Routine` a package's leading code
 /// section became, and `.nil` for a package that has none.
-///
-/// Measured, oracle rc 0: a program package answers a `Routine` and
-/// `.Class~package` answers `The NIL object`.
 fn prolog(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -480,20 +388,6 @@ fn prolog(
 }
 
 /// `PackageClass::setSecurityManagerRexx`.
-///
-/// **The no-argument form alone, and the answer is the oracle's own
-/// constant**: `setSecurityManagerRexx` ends `return TheTrueObject`
-/// (`classes/PackageClass.cpp:2049`) whatever it was given, so `1` here
-/// mirrors that literal rather than reading anything. Measured, oracle rc 0,
-/// `p~setSecurityManager` answers `1`.
-///
-/// **The argument-taking form is refused, and the refusal is the ruling
-/// Task 4's measurements settled.** The manager it installs is consulted at
-/// the next environment-symbol lookup -- measured, oracle rc 159 through a
-/// `Method` receiver: installing one then reading a `.NAME` is `97.1 ... does
-/// not understand message "LOCAL"`. Storing it and answering `1` would run on
-/// at rc 0 where the oracle raises, so the interception points D12 owns are
-/// named instead.
 fn set_security_manager(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -509,13 +403,6 @@ fn set_security_manager(
 
 /// `PackageClass::loadLibraryRexx`: `PackageManager::loadLibrary`, a
 /// `dlopen` of a native library.
-///
-/// **Refused rather than answered from a constant.** The answer is a property
-/// of this machine's shared libraries and not of the program: measured,
-/// oracle rc 0 in one run, `~loadLibrary('rxmath')` and
-/// `~loadLibrary('rexxutil')` answer `1` and `~loadLibrary('nosuchlib_zzz')`
-/// answers `0`. This crate loads no native library at all, so both answers
-/// would be invented.
 fn load_library(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -618,9 +505,6 @@ fn imported_routines(
 }
 
 /// The (name, `Routine` object) pairs one of the three routine tables holds.
-///
-/// The REXX package has none of the three -- measured, oracle rc 0, its
-/// `~routines`, `~publicRoutines` and `~importedRoutines` are all empty.
 fn routine_entries(
     interp: &mut Interp,
     program: Option<ProgramId>,
@@ -678,11 +562,6 @@ fn resources(
 }
 
 /// `PackageClass::getResourceRexx`: one `::RESOURCE`'s `Array`, or `.nil`.
-///
-/// **The lookup upcases**, because `StringTable::entry` does and
-/// `getResource` reaches the table through it. Measured, oracle rc 0,
-/// `p~resource('res2')` answers the same `Array` as `p~resource('RES2')`
-/// where `p~resources['res2']` is `The NIL object`.
 fn resource(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -705,9 +584,6 @@ fn resource(
 
 /// One of the package tables `.METHODS`/`.ROUTINES`/`.RESOURCES` also
 /// answers, as (name, value) pairs.
-///
-/// The REXX package has none of them -- measured, oracle rc 0, its
-/// `~definedMethods` and `~resources` are both empty.
 fn package_table_entries(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -785,13 +661,6 @@ fn imported_packages(
 
 /// `PackageClass::findClassRexx`: the whole environment-symbol search order,
 /// starting at this package.
-///
-/// **It reaches past the package's own tables**, which is what a body reading
-/// only `~classes` would get wrong: measured, oracle rc 0,
-/// `p~findClass('ARRAY')` answers `The Array class` from a program that
-/// declares no class of that name, and `p~findClass('ZZZ')` answers
-/// `The NIL object`. The lookup upcases -- `p~findClass('k')` answers the
-/// same class as `p~findClass('K')`.
 fn find_class(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -805,11 +674,6 @@ fn find_class(
 
 /// `PackageClass::findPublicClassRexx`: this package's own public classes,
 /// then its imports, then the REXX package's.
-///
-/// **The last step is why `'ARRAY'` answers here too** -- measured, oracle
-/// rc 0 -- while a class the package declares without `PUBLIC` does not:
-/// `p~findPublicClass('MPRIV')` is `The NIL object` where
-/// `p~findClass('MPRIV')` is the class.
 fn find_public_class(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -835,12 +699,6 @@ fn find_routine(
 }
 
 /// `PackageClass::findPublicRoutineRexx`.
-///
-/// **The same search as `~findRoutine` and not a narrower one**, which is the
-/// C++'s own shape: `findPublicRoutineRexx` calls `findRoutine`
-/// (`classes/PackageClass.cpp:2032`), not `findPublicRoutine`. Measured,
-/// oracle rc 0: `p~findPublicRoutine('RPRIV')` answers a `Routine` for a
-/// `::ROUTINE` declared without `PUBLIC`.
 fn find_public_routine(
     interp: &mut Interp,
     cleared: Cleared,
@@ -852,11 +710,6 @@ fn find_public_routine(
 
 /// `PackageClass::findNamespaceRexx`: one of this package's registered
 /// qualifiers, or the REXX package for the name `REXX`.
-///
-/// Measured, oracle rc 0: `p~findNamespace('NS')` answers the required
-/// package and `~name` on it is that file's path, `p~findNamespace('ns')`
-/// answers the same one, `p~findNamespace('REXX')` answers a `Package` from
-/// any receiver, and `p~findNamespace('X')` is `The NIL object`.
 fn find_namespace(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -880,14 +733,6 @@ fn find_namespace(
 
 /// `PackageClass::findProgramRexx`: the file `name` resolves to from this
 /// package's own directory, as a **String**, or `.nil`.
-///
-/// **A path and not a package object**, which is what a body answering
-/// `loadPackage`'s kind would get wrong: measured, oracle rc 0,
-/// `p~findProgram('lib.rex')` answers the resolved absolute path and
-/// `p~findProgram('zz.rex')` answers `The NIL object`.
-///
-/// `RESOLVE_DEFAULT` rather than `RESOLVE_REQUIRES`, so the `.cls` extension
-/// a `::REQUIRES` tries first is not tried here.
 fn find_program(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -945,16 +790,6 @@ fn add_public_routine(
 
 /// The body both `~addRoutine` rows share, since a second implementation is
 /// where the two could come to disagree.
-///
-/// The arguments are validated in the C++'s order: `stringArgument(name,
-/// "name")`, then `classArgument(routine, TheRoutineClass, "routine")`, then
-/// `checkRexxPackage`. Measured at rc 168, `~addRoutine('X')` is `Missing
-/// argument; argument routine is required.` and `~addRoutine('X', 5)` is
-/// 88.914 `Argument routine must be an instance of the Routine class.`
-///
-/// **The object added is the object the table answers**, measured: oracle
-/// rc 0, `(p~routines['NEWR'] == r)` and `(p~findRoutine('NEWR') == r)` are
-/// both `1`.
 fn install_routine(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1009,11 +844,6 @@ fn install_routine(
 
 /// `PackageClass::addPackageRexx`: imports another package into this one,
 /// optionally under a namespace qualifier.
-///
-/// **It answers the receiving package and not the package added**, measured
-/// at rc 0: `(p~addPackage(op) == p)` is `1`. The merge is
-/// `PackageClass::addPackage`'s and happens only when the package was not
-/// already imported.
 fn add_package(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1049,15 +879,6 @@ fn add_package(
 
 /// `PackageClass::loadPackageRexx`: loads a file the way a `::REQUIRES`
 /// would, imports it, and answers the loaded package.
-///
-/// **It answers the loaded package, where the three `add*` answer the
-/// receiver** -- measured at rc 0, `p~loadPackage('other.rex')~name` is that
-/// file's resolved path.
-///
-/// The source-array form is refused: `loadRequires(activity, name, source)`
-/// builds a package out of lines rather than a file, which is
-/// `.Package~new`'s two-argument form under another name and is not what the
-/// row measures.
 fn load_package(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1089,20 +910,6 @@ fn load_package(
 
 /// `PackageClass::newRexx`: a package built from a file, or from an `Array`
 /// of source lines.
-///
-/// **Both forms run the new package's prologue**, which is
-/// `InterpreterInstance::loadRequires`'s own `runProlog`. Measured, oracle
-/// rc 0: `.Package~new('inmem.rex', .array~of('say "prolog ran"', 'return 1'))`
-/// prints its line.
-///
-/// **The name is not resolved for the source form**: measured, that same send
-/// answers `~name` `inmem.rex` where the file form answers the resolved
-/// absolute path.
-///
-/// The third argument -- a parent context the new package resolves names
-/// against -- is refused rather than ignored, for
-/// [`super::native_new_file`]'s reason: accepting it without honouring it
-/// answers at rc 0 where the resolution differs.
 fn package_new(
     interp: &mut Interp,
     _cleared: Cleared,

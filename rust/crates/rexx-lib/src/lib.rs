@@ -12,19 +12,6 @@
 //! The Rexx-written part of the interpreter's own library: the `.orx` sources
 //! the C++ interpreter runs to finish building its image, embedded at build
 //! time from this repository's tracked copies.
-//!
-//! **Sources and their pins only.** Running them needs an `Interp`, which
-//! lives in `rexx-exec`, and `rexx-exec` reads this crate -- so a driver here
-//! would close a dependency cycle. The driver is `rexx_exec`'s
-//! `Interp::bootstrap_library`.
-//!
-//! `build.rs` records each file's sha256 and refuses to build if it moves, so
-//! an edit to a read-only upstream source is a build failure rather than a
-//! bootstrap that silently installs something else.
-//!
-//! **The `unix` platform file is the one embedded.** `build.rs`'s `Source`
-//! doc has the whole of that decision; the windows file is neither read nor
-//! embedded.
 
 /// One embedded program.
 pub struct Program {
@@ -48,13 +35,6 @@ pub const ENTRY: &str = "CoreClasses.orx";
 
 /// The embedded program a `CALL` target names, or `None` for a name that is
 /// not one of these.
-///
-/// Case-insensitive: a Rexx `CALL` target that came from a quoted string
-/// keeps its own case, and the C++ resolves a program name through the file
-/// system, which on the platforms this crate targets is not the same
-/// question. Matching case-insensitively here is the wider of the two and is
-/// what keeps `call 'streamclasses.orx'` inside the bootstrap from falling
-/// out to the external search.
 pub fn lookup(name: &str) -> Option<&'static Program> {
     PROGRAMS
         .iter()
@@ -89,18 +69,6 @@ mod tests {
     }
 
     /// Every quoted `CALL` target in `program`, in source order.
-    ///
-    /// **Case-insensitive and not anchored to the start of a line**, because
-    /// Rexx is case-insensitive and a `CALL` may be indented or follow a
-    /// `;`. Both halves matter: a scan matching `"call "` alone answers
-    /// nothing for `CALL 'CoreClasses.orx'`, and the windows
-    /// `PlatformObjects.orx` this crate declines to embed carries a real
-    /// `  call 'orexxole.cls'` at its line 2, which is why the guard below
-    /// has to hold at all.
-    ///
-    /// Over-matching is the safe direction here: a `call '...'` inside a
-    /// comment would be reported as a target, and the assertion it feeds
-    /// would then fail loudly rather than pass over a real one.
     fn quoted_call_targets(program: &Program) -> Vec<String> {
         let text = String::from_utf8(program.source.to_vec()).expect("the source is UTF-8");
         let lower = text.to_ascii_lowercase();
@@ -123,17 +91,6 @@ mod tests {
 
     /// `CoreClasses.orx`'s two `CALL`s name the other two rows, and neither
     /// of those two calls anything embedded.
-    ///
-    /// Derived from the embedded bytes rather than written down, so a file
-    /// whose `CALL` target changed upstream reddens here instead of leaving
-    /// the bootstrap to answer 43.1 at run time.
-    ///
-    /// **The second half is what makes the run-time recursion guard
-    /// unnecessary rather than forgotten**: `Interp::enter_library_program`
-    /// takes no activation-depth check, and this is what says the embedded
-    /// set has no cycle to need one. The check is the assertion below and
-    /// not a measurement of the files: `/bin/grep -in call` on
-    /// `StreamClasses.orx` answers 2, both inside comments.
     #[test]
     fn the_entry_program_calls_exactly_the_other_embedded_programs() {
         let entry = lookup(ENTRY).expect("the entry point is embedded");

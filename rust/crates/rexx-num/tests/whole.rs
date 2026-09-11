@@ -1,15 +1,4 @@
 //! `Number::whole_value`, the `requestNumber` conversion.
-//!
-//! Every case is a `build/bin/rexxc` measurement, reached through `TRACE` for the
-//! nine-digit precision and through `::OPTIONS DIGITS` and `::OPTIONS FUZZ` for
-//! the eighteen-digit one. Those are the two callers, and they are the only way
-//! to observe this conversion from a Rexx program, which is why the cases are
-//! recorded with the spelling that produced them.
-//!
-//! The twelve curated differential sets do not cover this function: they exercise
-//! the operators and the display conversions, not `requestNumber`. So the cases
-//! here are the whole of its differential evidence and are kept exhaustive at the
-//! boundaries rather than illustrative.
 
 use rexx_num::{ARGUMENT_DIGITS, Number};
 
@@ -79,38 +68,6 @@ fn the_conversion_rounds_to_the_precision_before_asking_if_it_is_whole() {
     assert_eq!(whole("1.0000000000000000001", ARGUMENT_DIGITS), Some(1));
     // THE CARRY RULE, IN WORDS, because the values alone do not state it and an
     // earlier version of this comment stated it wrongly.
-    //
-    // The digits have two separate jobs and it is easy to give them one. The
-    // FIRST DROPPED digit -- the tenth, under nine digits -- decides only whether
-    // there is a carry, and nothing else: `checkIntegerDigits` sets `carry` from
-    // `numberDigits[numDigits] >= 5`. The NINE KEPT digits then decide whether the
-    // value is a whole number, and what they must equal depends on that carry:
-    // every surviving decimal must be a `0` normally, but a `9` when the carry
-    // set, because only an all-nines tail can absorb the +1 and leave zeros.
-    //
-    // So the dropped digit never appears in the wholeness test, and the kept
-    // digits never decide whether there is a carry. The decisive pair is two
-    // inputs with IDENTICAL kept digits and different dropped ones, which come out
-    // opposite ways. Measured:
-    //
-    //   trace "0.9999999994"   24.1   dropped 4, no carry, so kept nines must be
-    //                                 zeros and are not
-    //   trace "0.99999999999"  rc 0   dropped 9, carry, so kept nines must be
-    //                                 nines and are
-    //
-    // and the other direction, a carry that cannot help because a kept digit is
-    // not a nine:
-    //
-    //   trace "0.99999999899"  24.1   dropped 9, carry, ninth kept digit is 8
-    //   trace "0.4999999999"   24.1   dropped 9, carry, FIRST kept digit is 4.
-    //                                 The carry does happen here. An earlier
-    //                                 comment said it did not, which was the
-    //                                 wrong rule attached to the right value.
-    //
-    // And the no-carry branch reaching a whole number at all, so the `compare == 0`
-    // arm is covered in both directions too:
-    //
-    //   trace "1.0000000004"   rc 0   dropped 0, no carry, kept decimals all zero
     assert_eq!(whole("0.99999999999", TRACE_DIGITS), Some(1));
     assert_eq!(whole("0.99999999989", TRACE_DIGITS), Some(1));
     assert_eq!(whole("0.9999999994", TRACE_DIGITS), None);
@@ -162,15 +119,6 @@ fn a_negative_whole_number_keeps_its_sign() {
 }
 
 /// The one path that does NOT apply the sign, reproduced from the C++ as written.
-///
-/// `numberValue` returns `carry ? 1 : 0` with no `* numberSign`, so a negative
-/// pure fraction that rounds up converts to +1. This is unobservable from a Rexx
-/// program rather than merely unmeasured: the only caller that reaches it is
-/// `TRACE`, and a numeric `TRACE` is rejected at RUN time with error 24.901,
-/// "Numeric TRACE requests are valid only from interactive debugging", whatever
-/// value the parse produced. Pinned so the asymmetry cannot be "tidied" by
-/// accident, and flagged as a suspected upstream defect rather than as intended
-/// behaviour.
 #[test]
 fn the_carry_only_path_drops_the_sign_as_the_cpp_does() {
     assert_eq!(whole("0.9999999999", TRACE_DIGITS), Some(1));
@@ -197,13 +145,6 @@ fn acceptance_and_conversion_are_separate_questions() {
 }
 
 /// `whole_i64` answers what building the `Number` and asking it answers.
-///
-/// **Equal on both outcomes, not only where the fast answer fires.** An
-/// `i64` has no fractional part, so the only question `whole_value` asks of
-/// it is width, and it applies the same ceiling in its rounding branch as in
-/// its direct one -- so a value too wide is `None` from both. The counts
-/// below refuse the two degenerate readings of that: a `whole_i64` answering
-/// `Some` for everything, and one answering `None` for everything.
 #[test]
 fn whole_i64_agrees_with_building_the_number() {
     let mut converted = 0usize;

@@ -10,34 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The collection classes' primitive methods.
-//!
-//! A child of [`super`] rather than a sibling, for the reason its `mod native`
-//! comment gives: the rows point at `NativeMethod`s, whose parameter list
-//! names types only that module can. [`NATIVE_METHODS`] is chained into
-//! `ObjectModel::build` beside [`super::NATIVE_METHODS`] rather than merged,
-//! so this file's rows and bodies stay together.
-//!
-//! **Empty on purpose at Phase 5g Task 0.** The registration path is landed
-//! before any body so that the first task to add one is debugging its own
-//! code and not the wiring; a chain that silently registers nothing looks
-//! exactly like a chain that works.
-//!
-//! # What a row here may not be read as
-//!
-//! **The name a row binds is a citation, not a body identity.** Upstream,
-//! `Setup.cpp` writes `Set`'s `HasItem` as `IdentityTable::hasIndexRexx` and
-//! `IdentityTableClass.hpp` declares no such member -- it is
-//! `HashCollection::hasIndexRexx` reached through C++ inheritance. So two
-//! tokens there can name one function, and separately one token can reach
-//! three behaviours, selected by the contents class the receiver allocated:
-//! `HashCollection::putRexx` passes `IndexOnlyHashCollection`'s validation on
-//! a `Set` or `Bag` and reaches `MultiValueContents::put` on a `Relation` or
-//! `Bag`. A Rust body shared between two rows here is a claim that the
-//! *behaviour* is shared, which the upstream token does not establish either
-//! way.
-//!
-//! `corpus/collection-scopes.tsv` is where that join is recorded, and its own
-//! test re-derives it.
 
 use super::{
     Arity, ArrayArgument, BehaviourId, Body, Cleared, Decoded, Failure, IndexUse, Interp, Loud,
@@ -48,11 +20,6 @@ use rexx_parse::Operator;
 
 /// The `Supplier` state's three names, bound in the receiver's own pool under
 /// the `Supplier` class as scope.
-///
-/// A pool rather than a new `Body` variant: `ScopePools` is already walked by
-/// the collector (`Body::trace`'s `Instance` arm), and a supplier holds two
-/// arrays, so a payload the collector could not see would be exactly the
-/// use-after-free spec D101 exists to prevent.
 const SUPPLIER_ITEMS: &[u8] = b"ITEMS";
 const SUPPLIER_INDEXES: &[u8] = b"INDEXES";
 const SUPPLIER_POSITION: &[u8] = b"POSITION";
@@ -83,9 +50,6 @@ fn position_in(
 /// The Array-shaped store's pool name, in the receiver's own pool under the
 /// `Array` class as scope -- `Supplier`'s arrangement and for the same
 /// reason: `ScopePools` is already walked by the collector.
-///
-/// **One scope for every holder**, so that `Queue`, `CircularQueue` and any
-/// user subclass of `Array` are all reached by the same [`store_of`].
 const QUEUE_ITEMS: &[u8] = b"ITEMS";
 
 /// The allocated extent a `Queue` was built with, which its index bound is
@@ -106,26 +70,6 @@ fn store_scope(interp: &mut Interp) -> ObjRef {
 // ---- the contents protocol ----
 
 /// The array that actually holds `receiver`'s slots.
-///
-/// **A `Queue` is not a `Body::Array` and cannot be one.** A `Body::Array`
-/// resolves to `Primitive::Array` wherever it is asked, so an object carrying
-/// one answers `.Array` for `~class` -- there is nowhere in that body to say
-/// which class it belongs to. Upstream has the opposite arrangement:
-/// `Setup.cpp`'s `InheritInstanceMethods(Array)` copies `Array`'s whole
-/// native behaviour into `Queue`, so one C++ body serves both receivers.
-///
-/// This function is what buys the same thing here. A `Queue` is an ordinary
-/// instance whose pool holds an `Array`, and every body written against
-/// `Array` reaches it by asking for the store rather than for the receiver.
-/// Measured before it existed: `.Queue~new~allItems` refused with
-/// `a message send to a value that is not an array` rather than with the
-/// unimplemented message, which is the shared registration already in place
-/// and only the store missing.
-///
-/// The alternative -- widening `Body::Array` with a class field -- costs
-/// every array in the heap eight bytes to serve two classes, against
-/// `body.rs`'s own size assertion. This costs a pool lookup on the collection
-/// methods of one class.
 fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
     if interp.array_slots(receiver).is_some() {
         return Ok(receiver);
@@ -141,9 +85,6 @@ fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
     // an exposed variable answers `items 1` after `queue('a')`, and the same
     // of a `CircularQueue` subclass -- both of which this crate refused with
     // `a value that is not an array` when the store was `INIT`'s to make.
-    //
-    // On demand rather than at `new` so that this stays the one function
-    // that knows the arrangement.
     if !holds_array_store(interp, receiver) {
         return Err(Loud::receiver_class("a value that is not an array").into());
     }
@@ -173,17 +114,6 @@ fn holds_array_store(interp: &mut Interp, receiver: ObjRef) -> bool {
 
 /// Every (index, item) pair an ordered receiver holds, in the store's own
 /// order, holes skipped.
-///
-/// **The index is an object and not a number**, because for a
-/// multi-dimensional array it is an `Array` of the coordinates: measured on
-/// the oracle, `.Array~new(2,3)` with `[1,1]` and `[2,3]` set answers
-/// `allIndexes` of two `Array`s reading `1,1` and `2,3`. Nothing about a
-/// one-dimensional array shows that, which is why the protocol carries an
-/// `ObjRef` here rather than a `usize`.
-///
-/// **An explicit `.nil` is an item and a hole is not.** Measured: an array
-/// with `[1]`, `[3]` and `[5] = .nil` answers `size 5`, `items 3`,
-/// `allIndexes 1,3,5`.
 fn ordered_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjRef)>, Failure> {
     let receiver = store_of(interp, receiver)?;
     let slots = array_slots_owned(interp, receiver)?;
@@ -204,16 +134,6 @@ fn ordered_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, O
         // reachable through the collection, and the very next thing a caller
         // does with these pairs is send `==` or `compare`, which runs Rexx
         // that may empty the collection.
-        //
-        // **This is held on evidence I did not reproduce.** The phase's
-        // review panicked at `not_in_arena`'s "a live value" on three such
-        // programs, driving `run_program_collect_every_alloc` from its own
-        // binary, with two controls that discriminated unrooting from
-        // allocation volume. `corpus/lang/collection_callback_mutates.rex`
-        // exercises the same shape and does **not** reproduce it: removing
-        // these two roots leaves `collect_stress` green. So the rooting is
-        // right and nothing in this tree witnesses it -- see the Task 9
-        // report.
         interp.roots.push_temp(item);
         pairs.push((index, item));
     }
@@ -222,12 +142,6 @@ fn ordered_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, O
 
 /// `ArrayClass`'s `lastItem`: the 1-based index of the outermost occupied
 /// slot, or 0 for a collection holding nothing.
-///
-/// **This is what `append` counts from, not the slot count.** Measured on the
-/// oracle: `.Array~new(5)~append('m')` answers `1` and leaves `size 5`, and
-/// an array whose last item has been removed appends back over the hole.
-/// `ArrayClass::empty` sets the field to 0 (`classes/ArrayClass.cpp:672`),
-/// which is why appending after `~empty` starts again at 1.
 fn last_item(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure> {
     Ok(occupied(interp, receiver)?
         .last()
@@ -237,9 +151,6 @@ fn last_item(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure> {
 /// The index object for the flat 0-based `offset` of an array shaped
 /// `dimensions`: the 1-based position for a single dimension, and an `Array`
 /// of coordinates for more than one.
-///
-/// Row-major, which is what the oracle's own layout is: measured, `[2,3]` of
-/// a `2x3` array is flat position 6.
 fn subscript_object(interp: &mut Interp, offset: usize, dimensions: Option<&[usize]>) -> ObjRef {
     let Some(shape) = dimensions.filter(|shape| shape.len() > 1) else {
         return interp.counted(offset + 1);
@@ -268,25 +179,6 @@ fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
 }
 
 /// Whether the collection holds `wanted`, comparing it against `element`.
-///
-/// **The SEARCHED-FOR value receives the `==`, not the element.**
-/// `ArrayClass::findSingleIndexItem` is `item->equalValue(test)` with `item`
-/// the argument and `test` the slot's contents
-/// (`classes/ArrayClass.cpp:2094`). Measured, and every line of it reverses
-/// if the operands are swapped: an array holding a plain string answers
-/// `hasItem(aK)` as `1` when `K` defines `::METHOD "==" return 1`, while an
-/// array holding that `K` answers `hasItem('plain')` as `0`.
-///
-/// **A send and not a comparison of handles.** `ArrayClass::hasItemRexx`
-/// reaches `equalValue`, which for anything but a primitive is the `==`
-/// message, and a user class may override it. Measured on the oracle: an
-/// array holding one `.K~new` answers `hasItem(.K~new)` as `1` when `K`
-/// defines `::METHOD "==" return 1`.
-///
-/// Measured for the primitives too, and none of the obvious readings is
-/// right: `'1'` matches `1`, `' 2'` does **not** match `2`, and `1` does not
-/// match `1.0` -- so it is neither byte equality of the source spelling nor
-/// numeric equality, but `==` on string values.
 pub(super) fn same_item(
     interp: &mut Interp,
     wanted: ObjRef,
@@ -299,13 +191,6 @@ pub(super) fn same_item(
 }
 
 /// The one item argument a collection method takes, which is required.
-///
-/// 93.903 and **not** 93.901: measured, `(1,2)~hasItem()`, `~index()` and
-/// `~removeItem()` all report `Missing argument in method; argument 1 is
-/// required.` while `~remove()`, `~hasIndex()` and `~at()` report `Not enough
-/// arguments for method; 1 expected.` The two families raise different errors
-/// and no zero-argument probe can tell them apart, because both are loud
-/// until the bodies exist.
 pub(super) fn item_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
     args.first()
         .copied()
@@ -347,12 +232,6 @@ fn native_array_all_indexes(
 
 /// `Array~makeArray`: `RexxObject::makeArrayRexx`, which is
 /// `return makeArray();` and therefore a **virtual**.
-///
-/// `ArrayClass::makeArray` answers `allItems()`. **This body is not shared
-/// with the mapped classes**, whose `HashCollection::makeArray` answers
-/// `allIndexes()` instead -- measured, a `Directory` holding `k1`/`k2`
-/// answers `makeArray` as `k1,k2` where an `Array` answers its items. One
-/// token upstream, one body per store here.
 fn native_array_make_array(
     interp: &mut Interp,
     cleared: Cleared,
@@ -363,9 +242,6 @@ fn native_array_make_array(
 }
 
 /// `Array~isEmpty`: whether the array holds no item -- `ArrayClass::isEmptyRexx`.
-///
-/// **Not `size == 0`.** Measured, `.Array~of('x','y')~empty` leaves `size 2`,
-/// `items 0` and `isEmpty 1`.
 fn native_array_is_empty(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -378,16 +254,6 @@ fn native_array_is_empty(
 
 /// `Array~empty`: drops every item and keeps the array's shape --
 /// `ArrayClass::empty`.
-///
-/// Measured: `size` and `dimensions` both survive, so this clears the slots
-/// rather than replacing the body.
-///
-/// **It answers the receiver**, which `ArrayClass::empty`'s own
-/// `return this;` (`classes/ArrayClass.cpp:676`) is. A body answering nothing
-/// passes any witness that calls `~empty` as a statement and reddens the
-/// moment one reads its value -- measured, `say a~empty` is a blank line at
-/// rc 0 on the oracle and `91.999 Message "EMPTY" did not return a result.`
-/// at rc 165 without this.
 fn native_array_empty(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -455,9 +321,6 @@ fn native_array_has_index(
 
 /// `Array~remove(index...)`: takes the item out of that slot and answers it,
 /// or `.nil` -- `ArrayClass::removeRexx`.
-///
-/// **The array does not shrink.** Measured, removing index 1 of a size-5
-/// array leaves `size 5` and `items` one lower.
 fn native_array_remove(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -595,16 +458,6 @@ fn supplier_state(
 
 /// How many pairs the supplier still has, measured from the current position
 /// against its ITEMS array.
-///
-/// **The INDEXES array bounds nothing.** `available`, `next`, `item` and
-/// `index` all test `position > items->size()` and none of them looks at the
-/// other array's length (`classes/SupplierClass.cpp:180`, `:217`, `:254`).
-/// Measured over items `('a','b')` and indexes `(1)`: after one `next` the
-/// supplier is still available and `item` is `b`, while `index` answers
-/// `.nil` -- [`supplier_half`]'s own missing-slot limb -- rather than
-/// raising. It is a SIZE and not an item count: a supplier over
-/// `.Array~new(2)` is available at both positions and answers `.nil` for the
-/// item at each.
 fn supplier_remaining(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure> {
     let (items, _, position) = supplier_state(interp, receiver)?;
     let items = array_slots(interp, items)?.len();
@@ -624,9 +477,6 @@ fn native_supplier_available(
 }
 
 /// `Supplier~item` and `Supplier~index`: the current pair's halves.
-///
-/// Past the end both raise **93.937**, and so does `~next`. Measured on the
-/// oracle at rc 163: `No more supplier items available.`
 fn supplier_half(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -677,9 +527,6 @@ fn native_supplier_next(
 }
 
 /// `Supplier~init(items, indexes)`: `SupplierClass::initRexx`.
-///
-/// **The items come first.** Measured, `.Supplier~new(.Array~of('i1'),
-/// .Array~of('x1'))` answers `~item` as `i1` and `~index` as `x1`.
 fn native_supplier_init(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -711,10 +558,6 @@ fn native_supplier_init(
 
 /// `ArrayClass::checkMultiDimensional` (`classes/ArrayClass.cpp:426`): the
 /// four methods that only work on a single-dimensional array.
-///
-/// Its callers upstream are `APPEND`, `INSERT`, `DELETE` and `SECTION`, and
-/// nothing else -- `fill`, `first`, `next` and the rest are happy with any
-/// shape. Measured at rc 163: `.Array~new(2,3)~delete(1)` reports 93.954.
 fn single_dimension_only(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -739,10 +582,6 @@ fn occupied(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<usize>, Failure
 
 /// `Array~first` and `Array~last`: the INDEX of the outermost occupied slot,
 /// or `.nil` -- `ArrayClass::firstRexx`, `ArrayClass::lastRexx`.
-///
-/// **Not the item.** `firstItem`/`lastItem` are those, and on a sparse array
-/// the two cannot coincide: measured, an array holding `[1]`, `[3]`, `[5]`
-/// answers `first 1 last 5` against `firstItem p lastItem t`.
 fn array_end(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -812,10 +651,6 @@ fn native_array_last_item(
 /// `Array~next(index...)` and `Array~previous(index...)`: the nearest occupied
 /// index on that side, or `.nil` -- `ArrayClass::nextRexx`,
 /// `ArrayClass::previousRexx`.
-///
-/// **The starting index need not hold anything.** Measured on an array
-/// holding `[1]`, `[3]`, `[5]`: `next(2)` is `3` and `previous(4)` is `3`.
-/// Past either end is `.nil` rather than an error.
 fn array_step(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -887,9 +722,6 @@ fn native_array_append(
 
 /// `append`'s body without the message send: writes `item` past the last
 /// item, growing to fit, and answers the 1-based index it landed on.
-///
-/// **Past the last ITEM, not past the last slot.** A trailing hole is written
-/// into rather than skipped -- see [`last_item`].
 fn append_slot(interp: &mut Interp, receiver: ObjRef, item: ObjRef) -> Result<usize, Failure> {
     let at = last_item(interp, receiver)?;
     let length = slots_of(interp, receiver)?.len();
@@ -901,12 +733,6 @@ fn append_slot(interp: &mut Interp, receiver: ObjRef, item: ObjRef) -> Result<us
 }
 
 /// A `Queue`'s two-tier index bound, which is two different errors.
-///
-/// `QueueClass::putRexx` (`classes/QueueClass.cpp:199`) validates the index
-/// first -- past the **allocated** extent that is `Error_Incorrect_method_index`,
-/// 93.918 -- and only then calls `checkInsertIndex`, which raises 93.966 for a
-/// position inside the extent but past the last item. Measured on a one-item
-/// queue: `~put('Y', 2)` is 93.966 and `~put('Y', 99)` is 93.918.
 fn queue_bound(interp: &mut Interp, receiver: ObjRef, position: usize) -> Result<(), Failure> {
     if !is_queue(interp, receiver) {
         return Ok(());
@@ -933,10 +759,6 @@ fn queue_bound(interp: &mut Interp, receiver: ObjRef, position: usize) -> Result
 }
 
 /// Whether `receiver` is a `Queue` or something deriving from one.
-///
-/// **A `Queue` and a subclass of `Array` are both instances carrying a store,
-/// so the store cannot tell them apart** -- the class has to. `Queue`
-/// range-checks an insertion index where `Array` extends to meet it.
 fn is_queue(interp: &mut Interp, receiver: ObjRef) -> bool {
     let Some(class) = interp.class_of_value(receiver) else {
         return false;
@@ -950,11 +772,6 @@ fn is_queue(interp: &mut Interp, receiver: ObjRef) -> bool {
 /// `Array~insert(item [, index])`: puts `item` **after** `index` and shifts
 /// the rest along, answering the index it landed on --
 /// `ArrayClass::insertRexx`.
-///
-/// Measured: `.Array~of('x','y','z')~insert('q', 1)` answers `2` and leaves
-/// `x,q,y,z`; with no index it appends and answers the new last index; index
-/// `0` is `93.907`, not the front; and an index past the end extends, so
-/// `insert('c', 9)` on a size-2 array answers `10` and leaves size 10.
 fn native_array_insert(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -992,11 +809,6 @@ fn native_array_insert(
 
 /// `Array~delete(index...)`: takes the slot out, closes the gap and answers
 /// the item -- `ArrayClass::deleteRexx`.
-///
-/// **Not `remove`.** Measured on `x,q,y,z,w`: `delete(2)` answers `q` and
-/// leaves `x,y,z,w` at size 4, while `remove(2)` answers the item and leaves
-/// a hole with the size unchanged. Same argument, same answer, different
-/// array.
 fn native_array_delete(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1044,10 +856,6 @@ fn native_array_fill(
 
 /// `Array~section(start [, count])`: a new array over that run --
 /// `ArrayClass::sectionRexx`.
-///
-/// Measured on `1,2,3,4,5`: `section(2,3)` is `2,3,4`; `section(4,10)` clamps
-/// to `4,5` rather than raising; `section(2,0)` is empty; and one argument
-/// runs to the end.
 fn native_array_section(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1075,10 +883,6 @@ fn native_array_section(
 
 /// `Array~dimensions`: an `Array` of the extents --
 /// `ArrayClass::getDimensionsRexx`.
-///
-/// **A single-dimensional array answers a one-element array holding its
-/// size**, which is why this is not `~dimension`'s plural spelling: measured,
-/// `.Array~of(1,2,3,4,5)~dimensions` prints `5` and `~dimension` prints `1`.
 fn native_array_dimensions(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1105,10 +909,6 @@ fn native_array_dimensions(
 // ---- the sort family ----
 
 /// Every item of a receiver the sort family will accept, in index order.
-///
-/// **A hole is a refusal and not a skip.** Measured at rc 158, an array
-/// holding `[1]`, `[3]`, `[5]` answers `~sort` with `98.975 Missing array
-/// element at position 2.`, where `allItems` happily skips the same holes.
 fn dense_items(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<ObjRef>, Failure> {
     let receiver = store_of(interp, receiver)?;
     let slots = array_slots(interp, receiver)?;
@@ -1125,11 +925,6 @@ fn dense_items(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<ObjRef>, Fai
 /// How the sort family orders two items.
 enum Order {
     /// The default: send `compareTo` to the first item.
-    ///
-    /// `ArrayClass::BaseSortComparator::compare` is `first->compareTo(second)`
-    /// (`classes/ArrayClass.cpp:2891`), a C++ virtual, which is why the
-    /// default order is **not** numeric: measured,
-    /// `.Array~of(10,9,2,100,1)~sort` answers `1,10,100,2,9`.
     CompareTo,
     /// `sortWith`: send `compare(first, second)` to the comparator
     /// (`:2897`).
@@ -1180,23 +975,6 @@ fn order_of(
 }
 
 /// Upstream's stable merge sort, comparison for comparison.
-///
-/// All four names reach it: `Setup.cpp` maps `Sort` and `StableSort` onto
-/// `ArrayClass::stableSortRexx` and both `With` spellings onto
-/// `stableSortWithRexx`, so **there is one algorithm here and not two**.
-///
-/// **The order of the comparisons is observable**, because every one of them
-/// runs Rexx -- a comparator that prints, counts or mutates sees the
-/// sequence, not just the result. Measured, `.Array~of(3,1,2)~sortWith`
-/// compares `1 3`, then `2 3`, then `2 1`, where a textbook top-down merge
-/// sort compares `1 2`, `3 1`, `3 2`. So this is `ArrayClass::mergeSort`
-/// (`classes/ArrayClass.cpp:2619`) written out rather than an algorithm that
-/// agrees with it on the answer: insertion sort at ten elements or fewer, and
-/// above that two halves merged by `merge` (`:2669`) using the exponential
-/// search of `find` (`:2773`).
-///
-/// The indices are one-based, as upstream's are, so the two can be read side
-/// by side; slot 0 of the vectors is a placeholder that is never compared.
 fn merge_sort(
     interp: &mut Interp,
     order: &Order,
@@ -1329,9 +1107,6 @@ fn merge(
 
 /// `ArrayClass::find` (`classes/ArrayClass.cpp:2773`): where `value` belongs
 /// in the sorted run `left..=right`, by exponential search then bisection.
-///
-/// `limit` is upstream's: `-1` puts `value` after its equals and `0` before
-/// them, which is what makes the merge stable.
 fn find(
     interp: &mut Interp,
     order: &Order,
@@ -1461,12 +1236,6 @@ fn array_splice(
 }
 
 /// A new array of the receiver's own class over `slots`.
-///
-/// `ArrayClass::sectionRexx` ends `allocateArrayOfClass`
-/// (`classes/ArrayClass.cpp:1524`), so a `Queue`'s section is a **Queue**.
-/// Measured: `q~section(1,1)~makeString` is 97.1 on the oracle, because a
-/// `Queue` does not answer `makeString` -- an `Array` result would have
-/// answered it, which is how this was found.
 fn same_class_array(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1489,13 +1258,6 @@ fn same_class_array(
 
 /// An instance of `class` whose store is `store`, for a `~new` on a subclass
 /// of `Array` and for a section of one.
-///
-/// **This is the whole of spec D90's mechanism.** The instance is an ordinary
-/// `Body::Instance`, so it has an object variable pool and the subclass's own
-/// `expose` works; the store is a pool entry, so the collection methods
-/// inherited from `Array` work through [`store_of`]. Both halves on one
-/// object, which is what `CircularQueue~init`'s `expose size` beside its
-/// `queue` needs.
 pub(super) fn instance_over_store(
     interp: &mut Interp,
     class: ObjRef,
@@ -1549,10 +1311,6 @@ fn write_slot(
 
 /// [`array_splice_slot`], except that a trailing empty slot absorbs the shift
 /// instead of the array growing.
-///
-/// Measured: `.Array~new(4)~insert('j')` answers `1` and leaves `size 4`,
-/// where a plain insert would leave 5. Upstream shifts within the slots it
-/// already has.
 fn splice_absorbing_slack(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1596,11 +1354,6 @@ fn array_grow(interp: &mut Interp, receiver: ObjRef, length: usize) -> Result<()
 
 /// `Queue~init([size])`: validates the optional capacity the way every
 /// collection's does, and gives the instance the array that holds its items.
-///
-/// Upstream a `Queue` *is* an array -- `QueueClass` derives from `ArrayClass`
-/// and `Setup.cpp` copies the whole behaviour across. Here the store is an
-/// `Array` object in the receiver's own pool, for the reason [`store_of`]
-/// gives.
 fn native_queue_init(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1640,9 +1393,6 @@ fn native_queue_queue(
 }
 
 /// `Queue~push(item)`: adds at the **front** -- `QueueClass::pushRexx`.
-///
-/// Measured: after `queue('a')`, `queue('b')`, `push('z')` the queue reads
-/// `z,a,b`, so the two are opposite ends and not spellings of one another.
 fn native_queue_push(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1689,10 +1439,6 @@ fn native_queue_pull(
 
 /// `Queue~delete(index)` and `Queue~remove(index)`, which are **one body**
 /// upstream (`QueueClass::deleteRexx`) where `Array` has two.
-///
-/// That is the difference worth stating: `Array~remove` leaves a hole and
-/// keeps the size, while `Queue~remove` closes the gap. Measured on a queue
-/// reading `a,b,c`, `remove(2)` answers `b` and leaves `a,c` at size 2.
 fn native_queue_delete(
     interp: &mut Interp,
     cleared: Cleared,
@@ -1740,11 +1486,6 @@ fn native_queue_put(
 
 /// `Queue~at(index)` and `Queue~[index]`: `ArrayClass::getRexx` over the
 /// store.
-///
-/// A row of its own rather than the shared registration, because the bodies
-/// `Setup.cpp` lets `Queue` inherit live in `dispatch.rs` and take the
-/// receiver's own slots. The ones in this file reach the store through
-/// [`store_of`] already; these four are the ones that do not.
 fn native_queue_at(
     interp: &mut Interp,
     cleared: Cleared,
@@ -1783,10 +1524,6 @@ fn native_queue_size(
 
 /// A `List` index argument, whose position in the error is **two** whatever
 /// its position in the argument list is.
-///
-/// `ListClass` passes `ARG_TWO` to `validateIndex`, `requiredIndex` and
-/// `validateInsertionIndex` alike, so `~at`, `~put` and `~insert` all report
-/// `argument 2 is required` for a missing index.
 fn list_index_argument(args: &[Option<ObjRef>], at: usize) -> Result<ObjRef, Failure> {
     args.get(at)
         .copied()
@@ -1851,20 +1588,6 @@ fn is_list(interp: &mut Interp, receiver: ObjRef) -> bool {
 
 /// Where in the list `handle` sits, or `None` for an index the list does not
 /// hold.
-///
-/// **A `List` index is a handle and not a position.** Measured: appending
-/// `a`, `b`, `c` answers `0 1 2`; inserting after the first answers a fresh
-/// `3` and leaves every old handle reaching the item it always did; removing
-/// the second leaves the first and third still valid.
-///
-/// **And it is converted, not compared.** `ListClass::validateIndex`
-/// (`classes/ListClass.cpp:195`) reads the argument with
-/// `unsignedNumberValue`, so `' 1'`, `'01'`, `1.0`, `'+1'`, `1e0` and `' 1 '`
-/// all name entry 1 -- measured, every one of them answers `b` of
-/// `.List~of('a','b','c')`. An argument that will not convert is 93.918 and
-/// not an answer, which is why this raises rather than reporting absence:
-/// measured, `at('abc')`, `at(-1)`, `hasIndex(1.5)`, `hasIndex('1e300')` and
-/// `hasIndex('')` all raise it, each naming the argument as it was written.
 fn list_position(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1895,11 +1618,6 @@ fn list_position(
 }
 
 /// The handle a new item takes: the last one removal freed, or a fresh one.
-///
-/// **Last freed first, measured.** Removing handles 1 and then 3 from a
-/// five-item list makes the next three appends answer `3`, `1` and a fresh
-/// `5` -- so the free list is a stack, not a queue, and not "the lowest free
-/// handle" either.
 fn list_next_handle(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
     let (_, handles, free) = list_state(interp, receiver)?;
     let stack = array_slots_owned(interp, free)?;
@@ -2095,14 +1813,6 @@ fn native_list_remove_item(
 
 /// The list's entries in chain order: every handle, each with the item it
 /// holds or `None` for an entry holding nothing.
-///
-/// **An entry that holds nothing is still an entry.** `l~put(, 1)` leaves one
-/// -- `putRexx` checks the index and not the value
-/// (`classes/ListClass.cpp:349`) -- and it still counts. Measured over
-/// `.List~of('a','b','c')` with entry 1 emptied: `items` stays `3`,
-/// `allIndexes` is `0,1,2`, `next(0)` is `1`, `previous(2)` is `1`,
-/// `firstItem` over an emptied first entry is `.nil`, and `section(0,3)`
-/// answers three entries where `section(0,2)` answers two.
 fn list_pairs(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -2174,13 +1884,6 @@ fn native_list_is_empty(
 
 /// `List~empty`: drops every entry, after which the handles start again from
 /// zero.
-///
-/// **Not the same as removing each entry in turn.** Removal frees its handle
-/// onto the stack `append` reuses, so emptying entry by entry would leave the
-/// next four appends answering `2 1 0 3`. `ListContents::empty` resets the
-/// free chains along with the entries
-/// (`classes/support/ListContents.cpp:706`), and the measured answer is
-/// `0 1 2 3`. The stack goes with them here for the same reason.
 fn native_list_empty(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -2415,17 +2118,6 @@ fn native_list_make_array(
 
 /// `Queue~of(item, ...)` and `List~of(item, ...)`: a new collection of the
 /// receiver's own class holding the arguments.
-///
-/// **An omitted argument is refused, and the position named is its own.**
-/// Measured at rc 163: `.List~of('a',,'c')` reports `Missing argument in
-/// method; argument 2 is required.`
-///
-/// **`INIT` is the only message it sends, and it sends it with no arguments.**
-/// Measured with a subclass of each of `Array`, `List` and `Queue` overriding
-/// `INIT`, `APPEND` and `PUT`: `.Watch~of('x','y')` prints the `INIT` line
-/// reporting `arg()` as `0` and nothing else. Filling through `APPEND`, which
-/// is what this did for the `List` and `Queue` rows, is observable through
-/// any subclass that overrides it.
 pub(super) fn native_collection_of(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -2457,14 +2149,6 @@ pub(super) fn native_collection_of(
 
 /// The collection classes' primitive methods, chained into
 /// `ObjectModel::build`.
-///
-/// Each row's method name is looked up in the class's own dictionary and the
-/// build panics if it is not there, so a name a class's behaviour does not
-/// answer cannot be added quietly.
-///
-/// **Arities come from `corpus/collection-scopes.tsv`**, which carries
-/// `Setup.cpp`'s own third operand: a literal is a maximum and `A_COUNT` is
-/// [`Arity::Counted`].
 pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("List", "INIT", Arity::Fixed(1), native_list_init),
     ("List", "APPEND", Arity::Fixed(1), native_list_append),

@@ -1,10 +1,4 @@
 //! `Number::floor`, `ceiling`, `round` and `is_integer`.
-//!
-//! Every case is a `build/bin/rexx` measurement of the corresponding String
-//! method -- `'1.5'~floor` and friends -- which is the only way a program can
-//! reach these. `is_integer` has no spelling of its own and is measured
-//! through `~modulo`, whose target it gates: an answer means true, 93.940
-//! means false.
 
 use rexx_num::{DEFAULT_DIGITS, Number};
 

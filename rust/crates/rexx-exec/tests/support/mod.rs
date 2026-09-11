@@ -15,81 +15,6 @@
 //! files that declare `mod support;`, compiling these helpers standalone
 //! for no reason. Renaming it to `support.rs` would add that extra binary
 //! back.
-//!
-//! DEVIATION 0 (`docs/superpowers/plans/phase-4-exclusions.txt`): the one
-//! normalisation the differential harnesses are allowed to apply to
-//! `stderr`, shared by `tests/corpus.rs` and `tests/trace_oracle.rs` rather
-//! than kept as two copies of the same function.
-//!
-//! **Why one copy, not two.** `rexx-exec/src/trace.rs`'s own module doc
-//! records what "one quantity, two formatters" cost this project already:
-//! `error.rs`'s `report` used to hold a second copy of `push_clause`'s four
-//! lines, and the two drifted until a clamp had to be added to both by
-//! hand. This function is compared against on two call sites and must give
-//! the identical answer on both, so it is written once here.
-//!
-//! **Scope, matching DEVIATION 0's own wording exactly.** Collapse the run
-//! of ASCII space bytes between a trace line's 3-byte prefix marker and its
-//! content down to one canonical space -- nothing else. A line only
-//! qualifies at all if its own bytes 7..10 (`PREFIX_OFFSET`/`PREFIX_LENGTH`,
-//! `rexx-exec/src/trace.rs`'s own constants, re-derived from
-//! `RexxActivation.cpp:3567`-`3611`) are one of the nineteen markers
-//! `trace_prefix_table` lists. That is deliberately generous -- the
-//! qualifying set is the oracle's whole table, **not** the subset this
-//! crate has an emitter for, so a later phase that adds an emitter gets the
-//! same normalisation from the day it lands, rather than silently comparing
-//! byte-exact (and looking "done" for the wrong reason) until someone
-//! remembers to extend this list. Whether a given marker is reachable from
-//! this crate today is deliberately not stated here: it moves every time a
-//! phase adds an emitter, and nothing in this file would go red when it
-//! did. Criterion 3 of `docs/superpowers/plans/phase-4b-gate.md` is where
-//! the witnessed-versus-owed split is measured and kept current, against
-//! `tests/trace_oracle.rs`'s `PREFIX_COVERAGE`.
-//!
-//! Everything else is untouched: the line-number field, the marker itself,
-//! the fixed `" => "`/`" <= "` tag markers, a quoted value's own bytes
-//! (including any embedded spaces), and -- because normalisation runs per
-//! line and never merges, drops or reorders one -- the presence, absence
-//! and order of every line in `stderr`. A line with no known marker at
-//! that offset (a `SAY`, or an `error.rs::report` banner line such as
-//! `Error 42 running ... line 8:  ...`) is returned exactly as given.
-//!
-//! **A traced value can itself contain a raw newline, and a naive
-//! per-line scan gets fooled by it.** `trace.rs`'s `push_quoted` wraps a
-//! value in `"..."` with no escaping at all, so if the *value itself*
-//! contains a `0x0A` byte, splitting `stderr` on `\n` cuts that one
-//! logical record into two physical lines -- and the second one starts
-//! wherever the value's own bytes happened to leave off, which can by
-//! coincidence look exactly like a fresh trace line. Measured, not
-//! inferred (found by review): `trace i` then
-//! `x = '0a'x || "       >>>   z"` makes the oracle emit, among others,
-//! the physical line `       >>>   z"` on its own -- not a `>>>` record,
-//! but the tail of the *previous* record's own quoted value, which
-//! happens to place `>>>` at [`PREFIX_OFFSET`] purely by chance. Treating
-//! that as a fresh trace line and collapsing its leading run would alter
-//! bytes that are `push_quoted`'s own literal, unescaped value content --
-//! precisely the "value lines' CONTENT... stay byte-exact" guarantee
-//! DEVIATION 0's SCOPE paragraph promises.
-//!
-//! The fix is one bit of state, carried across lines in
-//! [`normalize_stderr`]: a genuine (marker-recognised) trace line whose
-//! own byte count of `"` is odd has opened a quote its own physical line
-//! did not close, so every following physical line is a raw continuation
-//! -- returned untouched and never itself eligible to open or close
-//! anything -- until a continuation line's own `"` count is odd in turn,
-//! closing it. This is exactly `push_quoted`/`push_quoted_tag`'s own
-//! pairing rule (open, then close, always in twos), so it tracks the
-//! format precisely for the case that matters here: a value with an
-//! embedded newline and no embedded quote character. A value that embeds
-//! a literal `"` instead (without a newline) still parses as a complete
-//! single-physical-line record, but can leave this count looking odd for
-//! a reason other than "unterminated"; the only failure mode that causes
-//! is a following genuine trace line being conservatively left
-//! un-normalised (a stricter comparison, never a looser one) -- it cannot
-//! make two genuinely different transcripts compare equal, which is the
-//! one property this module exists to guarantee. The oracle's own trace
-//! format has this same embedded-quote ambiguity; nothing here resolves
-//! it, only refuses to let it hide a divergence.
 
 /// The arity probe both `collection_arity.rs` and `introspection_arity.rs`
 /// drive: one machine, two tables, parameterised by the four files each
@@ -158,10 +83,6 @@ const PREFIX_LENGTH: usize = 3;
 /// line. See the module doc for the full scope statement, including the
 /// "a traced value can itself contain a raw newline" paragraph this
 /// continuation tracking exists for.
-///
-/// Lines are split on `\n` and rejoined the same way, one at a time, so
-/// this can only reshape the inside of a line that already qualifies; it
-/// cannot merge two lines, drop one, or change their order.
 pub fn normalize_stderr(bytes: &[u8]) -> Vec<u8> {
     let had_trailing_newline = bytes.last() == Some(&b'\n');
     let mut lines: Vec<&[u8]> = bytes.split(|&b| b == b'\n').collect();
@@ -372,15 +293,6 @@ mod tests {
     /// records' quoted content across two physical lines each, and the
     /// tail of each -- `       >>>   z"` -- lines up with `PREFIX_OFFSET`
     /// exactly like a fresh `>>>` record purely by chance.
-    ///
-    /// `mutated` is `correct` with one space dropped from the *value's
-    /// own* continuation text after the `>O>` record specifically (`>>>
-    /// z"` instead of `>>>   z"`) -- the shape a real concatenation bug
-    /// would produce, entirely inside what `normalize_line` alone would
-    /// have mistaken for indentation on an unrelated fresh trace line.
-    /// Before the continuation-tracking fix, both collapsed that
-    /// coincidental run down to one space and compared equal; this must
-    /// keep failing.
     #[test]
     fn a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change()
     {

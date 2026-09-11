@@ -10,13 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The runner the L0 differential tests drive: `rexx-run FILE`.
-//!
-//! Deliberately thin. **The sized interpreter thread is not here**, it is in
-//! `rexx_exec::run_program`, because the L0 harness and the assertion-table
-//! harness both call that function in process rather than through this binary,
-//! and a `cargo test` thread's stack is far smaller than the one D19's depth
-//! limit is calibrated against. Everything this file does is read bytes, hand
-//! them over, and write back what came out.
 
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
@@ -36,20 +29,6 @@ fn main() -> ExitCode {
     // matches where the oracle does the same thing -- its own launcher
     // (`utilities/rexx/platform/unix/rexx.cpp`'s `main`) builds `arg_buffer`
     // from `argv` and the interpreter never sees the separate words.
-    //
-    // Bytes, not `String`: a command-line word is not required to be UTF-8 on
-    // this platform and a Rexx string is a byte string, so lossy conversion
-    // here would silently change the argument a program is given.
-    //
-    // No option parsing of any kind, which is the one place this binary is not
-    // a thin wrapper over that launcher. `rexx` accepts `-e`, `-o`/`-od` and
-    // `-v` before the program name; none of them is in Phase 4's scope, and
-    // treating a leading `-x` as an option here would mean silently dropping a
-    // word that would otherwise reach the program as part of its argument
-    // string. Every word after the path is an argument.
-    // This process's own standard input is what `.input` reads, and this is the
-    // only place in the tree that asks for it: `ProgramInput`'s own doc has why
-    // the in-process callers must not, and why the default is not this.
     let invocation = rexx_exec::join_command_line(args.map(|arg| arg.as_bytes().to_vec()))
         .with_input(rexx_exec::ProgramInput::Stdin);
 
@@ -68,11 +47,6 @@ fn main() -> ExitCode {
     // also resolves symlinks, which is one step further than the oracle has
     // been measured to go; nothing in the corpus runs through a symlink, so
     // that difference is unobserved rather than known to agree.
-    //
-    // A failure here falls back to the path as given rather than aborting: the
-    // file has already been read successfully by this point, so a canonicalise
-    // failure is a race or a permission quirk on the directory, and reporting
-    // the program under the name the caller used beats refusing to run it.
     let reported = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone().into());
     let outcome = rexx_exec::run_program(&reported.to_string_lossy(), text, invocation);
 
@@ -88,19 +62,5 @@ fn main() -> ExitCode {
     // `Raised::exit_code`'s `256 - major`, which `execute` applies, and now
     // `EXIT expr`'s own result, which `Interp::exit_code_for` (`lib.rs`)
     // converts into an `i32` that can be negative or wider than a byte.
-    //
-    // **A truncating cast, not `u8::try_from`, because the oracle wraps and
-    // the old conversion saturated.** Measured:
-    //
-    //     exit 256   ->  rc 0        exit 257  ->  rc 1
-    //     exit -1    ->  rc 255      exit 255  ->  rc 255
-    //
-    // so the oracle keeps only the low 8 bits of the value, which is exactly
-    // what `as u8` does on an `i32` (defined, not implementation-specific:
-    // Rust's numeric `as` narrows by truncating the two's-complement bit
-    // pattern) -- `-1i32 as u8` is 255, `256i32 as u8` is 0, `257i32 as u8` is
-    // 1, matching all four rows above. `u8::try_from(-1)` or `(256)` would
-    // instead fail and fall back to 255 for every one of them, indistinguishable
-    // from `exit -1` alone, which is the bug this replaces.
     ExitCode::from(outcome.exit_code as u8)
 }

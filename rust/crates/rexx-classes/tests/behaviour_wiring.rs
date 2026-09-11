@@ -4,15 +4,6 @@
 //! against `/home/moritz/dev/repos/ooRexx/build/bin/rexx`. Each test names
 //! its probe file (kept in the task report, not the tree) and states the
 //! exact recorded stdout it reproduces.
-//!
-//! One mechanism, `inheritInstanceMethods`, has no live probe: it is
-//! deleted from every saved image by `removeSetupMethods` before the
-//! oracle ships (D39), so no running script can ever send it -- measured,
-//! `Error 97.1: Object "The Target class" does not understand message
-//! "INHERITINSTANCEMETHODS"`. Its tests below are built from
-//! `RexxClass::inheritInstanceMethods` (`ClassClass.cpp:558-586`) read
-//! directly, cross-checked against its *effect* on the shipped `.Supplier`,
-//! `.Set` and `.Bag` classes, which a running script can and does measure.
 
 use rexx_classes::{ClassGraph, ClassKind, InheritRefusal, MethodId};
 use rexx_core::ObjRef;
@@ -408,19 +399,6 @@ fn inherit_instance_methods_donates_without_a_superclass_edge() {
 /// order, on both -- despite `.set~inheritInstanceMethods(.SetMixin)` and
 /// `.bag~inheritInstanceMethods(.BagMixin)` (`CoreClasses.orx:85,87`)
 /// donating different content.
-///
-/// `~superClasses` (`RexxClass::getSuperClasses`, `ClassClass.cpp:458-461`)
-/// answers a plain copy of the class's own `superClasses` field, not a
-/// flattened ancestor closure -- and reading `CoreClasses.orx:103-115`
-/// shows exactly how `.Set` ends up with three entries there: it is built
-/// in C++ with `superClasses = [Object]` alone, then
-/// `.set~inherit(.MapCollection)` (`:108`) and `.set~inherit(.SetCollection)`
-/// (`:114`) each append one more mixin, in that order, after the fact.
-/// This test reproduces that exact shape rather than a shallower one: two
-/// classes built the same way, ending up with the identical three-entry
-/// chain the oracle measures, each then receiving a **different**
-/// donation. A class-graph assertion (`ancestors`) cannot tell them apart;
-/// a method-SET assertion (`method_names_at`) can and must.
 #[test]
 fn two_classes_with_identical_ancestors_can_still_answer_to_different_method_sets() {
     let object = id(1);
@@ -584,19 +562,6 @@ fn inherit_refuses_a_cycle_through_a_mixins_own_mixinclass_target() {
 /// The `UNINIT` propagation flags **at this crate's own API**, through each
 /// constructor that builds an inheritance edge: `subclass`
 /// (`ClassClass.cpp:1634`), `mixinClass` (`:1525`) and `inherit` (`:1364`).
-///
-/// **This is not evidence about what a Rexx program gets.** It calls
-/// `define` before `define_class`, an order `rexx-exec`'s directive install
-/// never produces -- that installer builds a class, attaches its own
-/// methods, and only then builds the classes naming it, so the flags a
-/// *declarable* class ends up with also depend on `check_uninit` reading the
-/// flattened behaviour. `rexx-exec`'s own
-/// `the_uninit_flags_are_set_for_the_classes_a_file_declares` is the test
-/// for that half, and neither stands in for the other.
-///
-/// The negative rows are what stop a build that sets the flag on every class
-/// from passing: a class whose ancestry carries no `UNINIT` answers `false`
-/// through each of those constructors as well.
 #[test]
 fn uninit_propagates_through_all_three_constructors_at_the_graph_api() {
     let object = id(1);

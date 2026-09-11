@@ -12,56 +12,6 @@
 //! Reading the interpreter's own bootstrap Rexx -- `CoreClasses.orx` and
 //! `StreamClasses.orx` -- so a gate table can say which directive shapes the
 //! bootstrap actually depends on.
-//!
-//! **Derived, not asserted.** Every claim this module makes about those two
-//! files is the result of scanning them on the run that makes the claim.
-//! Nothing here holds a line number, a class name or a shape's location: a
-//! citation cannot be re-read by a test, and the whole reason the scan exists
-//! is that a citation inherited without re-reading is how a stale one
-//! survives.
-//!
-//! # What is scanned
-//!
-//! Directive clauses only. [`scan`] walks the file with a lexer that tracks
-//! Rexx's nesting `/* */` comments and its two string quotes, so a `::` inside
-//! a comment or a literal is not a directive and a `--` line comment does not
-//! swallow a token. What comes out is one [`DirectiveLine`] per directive
-//! clause, carrying the directive's own name, its operand tokens with each
-//! token's quoted-ness, the class the directive sits under, and whether the
-//! clause ended at a `;` with more of the program after it on the same
-//! physical line.
-//!
-//! # The keyword-usage column
-//!
-//! [`usage`] answers "does either file use this directive with this keyword".
-//! Its predicate is stated here rather than inferred from the code: for a
-//! `subkeyword` row, an **unquoted** token equal to the keyword at an *option
-//! position* of a clause of that directive; for a `value-of(X)` row, an
-//! unquoted token equal to the keyword immediately following an unquoted token
-//! equal to `X`.
-//!
-//! An option position is one that is neither the name the directive defines
-//! nor an operand consumed by a preceding keyword. The first is 1 for the
-//! directives whose first operand is a name (`::CLASS`, `::METHOD`,
-//! `::ATTRIBUTE`, `::ROUTINE`, `::CONSTANT`, `::REQUIRES`, `::RESOURCE`) and 0
-//! for the two whose first operand is already a keyword (`::OPTIONS`,
-//! `::ANNOTATE`); the second is [`operands_consumed`].
-//!
-//! **Skipping operands is not a refinement, it is what makes the column
-//! true.** Measured over both files with the operand rule off, exactly one hit
-//! was a class name standing where a keyword was being looked for:
-//! `::class "Singleton" mixinclass class public`, whose `class` is
-//! `MIXINCLASS`'s operand and not a `CLASS` subkeyword -- and it landed on the
-//! one row of the table whose own evidence says `::CLASS` has no `CLASS` arm
-//! at all, so the column would have reported a use that the parser cannot even
-//! accept.
-//!
-//! **What is left, and how a reader checks it.** [`operands_consumed`] is
-//! written from `DirectiveParser.cpp`'s per-directive functions and is not
-//! derived from them, so a change upstream to what a keyword consumes would
-//! move a hit without moving this. The report prints the file and line of
-//! every hit, which is what lets a reader check one against the file rather
-//! than take the count.
 
 use std::fs;
 use std::path::PathBuf;
@@ -71,10 +21,6 @@ pub const CORE_CLASSES: &str = "CoreClasses.orx";
 pub const STREAM_CLASSES: &str = "StreamClasses.orx";
 
 /// Where the interpreter keeps its bootstrap Rexx.
-///
-/// Hardcoded for the same reason the oracle binary's path is: this crate is
-/// checked against *that* C++ tree, and a variable pointing somewhere else
-/// would let a different checkout answer for it with nothing to notice.
 pub fn orx_root() -> PathBuf {
     PathBuf::from("/home/moritz/dev/repos/ooRexx/interpreter/RexxClasses")
 }
@@ -195,11 +141,6 @@ pub fn scan_text(file: &'static str, text: &str) -> Vec<DirectiveLine> {
 /// Replaces every comment region of one physical line with a space, carrying
 /// `depth` across lines so a `/* */` spanning several of them does not leave
 /// its body looking like code.
-///
-/// Both Rexx comment forms: the nesting `/* */`, and `--` to end of line. A
-/// quote opens a literal, inside which neither form starts a comment; a
-/// literal that is still open at the end of the line is not continued, which
-/// is what the language does too.
 fn strip_comments(line: &str, depth: &mut usize) -> String {
     let bytes: Vec<char> = line.chars().collect();
     let mut out = String::new();
@@ -261,11 +202,6 @@ fn split_directive_name(text: &str) -> (String, &str) {
 
 /// The operand tokens of a directive clause, and whether the program
 /// continues on the same physical line after the `;` that ended it.
-///
-/// A token is a quoted literal or a run of characters up to whitespace or the
-/// clause-ending `;`. Parentheses are not special: a `::CONSTANT`'s
-/// `(.File~getSeparator)` arrives as one token, which is what lets a shape
-/// look inside it without a Rexx expression parser.
 fn tokenize_clause(text: &str) -> (Vec<Token>, bool) {
     let chars: Vec<char> = text.chars().collect();
     let mut tokens = Vec::new();
@@ -320,15 +256,6 @@ fn first_option_index(directive: &str) -> usize {
 
 /// How many tokens a keyword takes with it, so the walk over a clause's option
 /// positions steps past an operand rather than reading it as another keyword.
-///
-/// Read out of `DirectiveParser.cpp`'s per-directive functions --
-/// `classDirective`, `methodDirective`, `attributeDirective`,
-/// `routineDirective`, `requiresDirective`, `resourceDirective`,
-/// `annotateDirective` and `optionsDirective`. `::CLASS`'s `INHERIT` is
-/// [`usize::MAX`] because that arm's own comment is "all tokens after the
-/// keyword will be consumed by the INHERIT keyword" and its loop runs to the
-/// end of the clause; every other operand-taking keyword here parses exactly
-/// one class reference, name or literal.
 pub fn operands_consumed(directive: &str, keyword: &str) -> usize {
     match (directive, keyword) {
         ("::CLASS", "INHERIT") => usize::MAX,
@@ -451,11 +378,6 @@ pub fn quoted_subclass_target(lines: &[DirectiveLine]) -> Vec<Hit> {
 
 /// A `::CONSTANT` whose value expression sends a message to its own class,
 /// naming a method that class declares `PRIVATE CLASS`.
-///
-/// Both halves are read out of the same file: the private class method's name
-/// comes from a `::METHOD` clause under the same `::CLASS`, and the send comes
-/// out of the `::CONSTANT`'s own parenthesised token. So the shape is found
-/// rather than looked up, and a rename on either side moves both.
 pub fn constant_sending_an_own_private_class_method(lines: &[DirectiveLine]) -> Vec<Hit> {
     let mut hits = Vec::new();
     for line in lines {

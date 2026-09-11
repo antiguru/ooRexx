@@ -13,14 +13,6 @@
 //! per error, before any of this was written. Twenty distinct errors are in
 //! scope and eighteen are reachable. The two that are not have their own test
 //! recording what the oracle answers instead.
-//!
-//! # Why so many sources carry blank lines
-//!
-//! A block error carries two positions: the line it is REPORTED on and the line
-//! it substitutes into the message. Adjacent clauses cannot tell them apart,
-//! because moving one moves the other. Every source that asserts a line
-//! therefore separates the two with a blank line, and the assertion is on the
-//! reported one, which is the only one this phase reproduces.
 
 use crate::ast::{DirectiveKind, EndStyle, InstructionKind};
 use crate::token::ParseError;
@@ -156,24 +148,6 @@ fn an_end_with_no_open_block_is_10_1() {
 #[test]
 fn an_end_closing_a_then_or_an_else_is_also_10_1() {
     // THE EVIDENCE FOR OMITTING TWO OF THE THIRTEEN.
-    //
-    // The C++ has `Error_Unexpected_end_then` (10.5) and
-    // `Error_Unexpected_end_else` (10.6) for exactly these shapes, and neither is
-    // reachable. The reason is structural: an END has `isControl() == false` and
-    // its type is not `KEYWORD_ELSE`, so `flushControl` always runs before the
-    // END arm of the switch, and `flushControl` cannot leave `ELSE`, `IFTHEN` or
-    // `WHENTHEN` on top -- it pops an ELSE outright and rewrites a THEN into a
-    // branch-end marker. So the type those two arms test for cannot be present
-    // when they are reached.
-    //
-    // 24 probes agree, six here and eighteen more covering nested IF/ELSE, a
-    // named `end a`, `if 1 = 1 then; end`, a WHEN-as-THEN followed by an END, an
-    // OTHERWISE holding a dangling THEN, and each shape inside a `::method`.
-    // Every one answers 10.1.
-    //
-    // What would overturn this: any source where `rexxc` prints 10.5 or 10.6. If
-    // one is found, the two arms belong in `match_end` beside the 10.1 default,
-    // and the assumption that broke is that `flushControl` always runs first.
     for source in [
         "nop\n\nif 1 = 1 then\n\nend\n",
         "nop\n\nif 1 = 1 then end\n",
@@ -197,8 +171,6 @@ fn a_mismatched_end_name_picks_its_number_from_what_it_failed_to_close() {
     // Four numbers from one condition, and the symbolic names do not say which
     // is which, so each was captured rather than derived. All reported against
     // the END, which is line 7 in each of these.
-    //
-    // A named block and a mismatching name.
     assert_eq!(err_at("nop\n\ndo label a\n\nnop\n\nend b\n"), (10, 2, 7));
     assert_eq!(err_at("nop\n\ndo i = 1 to 3\n\nnop\n\nend j\n"), (10, 2, 7));
     // An unnamed block and any name at all.
@@ -421,13 +393,6 @@ fn use_local_inverts_the_exposure_rule_and_seeds_five_names() {
 
 /// The compound cache, which is the one place a LATER guard is decided by an
 /// EARLIER instruction.
-///
-/// `addCompound` (`LanguageParser.cpp:2124`) returns the cached retriever before
-/// it reaches the `addStem` and `addSimpleVariable` calls that capture a guard
-/// variable, so a compound feeds a `GUARD ... WHEN` only the first time that
-/// exact spelling appears in the body. `addSimpleVariable` and `addStem` capture
-/// unconditionally and their comments say why, which is what makes this look like
-/// an upstream defect rather than a rule. Every row measured.
 #[test]
 fn a_compound_feeds_a_guard_only_on_its_first_reference_in_the_body() {
     // The pair that shows it, and the direction is the surprising one: inserting
@@ -476,12 +441,6 @@ fn a_compound_feeds_a_guard_only_on_its_first_reference_in_the_body() {
 }
 
 /// Which slots the cache is fed from, which is narrower than "every symbol".
-///
-/// A block name, a loop or `SELECT` label, a routine name, an `ADDRESS`
-/// environment and a condition trap's label all name something other than a
-/// variable, and none reaches `addVariable`. Both directions measured, and this
-/// is the distinction a scan of the clause's tokens could not make, because
-/// `end a.1` and `drop a.1` spell the symbol identically.
 #[test]
 fn only_a_variable_slot_feeds_the_compound_cache() {
     // Name slots: the guard stays legal.

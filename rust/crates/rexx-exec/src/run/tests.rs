@@ -16,17 +16,6 @@ use rexx_parse::{Program, parse_program};
 
 /// A controlled loop's `BY` is negative exactly when comparing it against
 /// zero says it is, at every `DIGITS` and `FUZZ`.
-///
-/// **The two agree by construction and this is what says so anyway.**
-/// `numeric_order` compares the operands' signs first and answers from them
-/// alone whenever they differ, so a zero on one side takes the answer out of
-/// the precision's hands -- and that is a claim about a function in another
-/// crate, which only running it can hold.
-///
-/// The grid deliberately spans values a small `DIGITS` would round hard
-/// (`0.0001` at `DIGITS 1`) and a `FUZZ` that eats the whole precision,
-/// because those are where a precision-sensitive route would part company
-/// with the sign.
 #[test]
 fn a_negative_by_is_what_comparing_it_against_zero_says() {
     let mut checked = 0usize;
@@ -104,17 +93,6 @@ fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
 
 /// Parses `source`, activates it, and runs its whole body -- through
 /// `Interp::run_activation` itself, not through a miniature of it.
-///
-/// `slots` is not an empty map here: `run_activation` builds its `Code`
-/// with `slots: &plan.by_symbol`, which `Plan::assign` populates, so
-/// every test in this module runs through the plan's fast path rather
-/// than around it.
-///
-/// That coverage is deliberate and is an improvement: these tests
-/// exercise what production runs. `eval.rs`, `stem.rs` and `plan.rs`
-/// still pass `&HashMap::new()` in their own helpers, so the by-name
-/// fallback keeps its expression-level coverage; what this file gains is
-/// whole-program coverage of the resolved path.
 fn run_source(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Failure> {
     let program = parse_program(source.to_vec()).expect("test program parses");
     let program = activate(interp, program);
@@ -122,10 +100,6 @@ fn run_source(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Fail
 }
 
 /// `run_source`, with the program's directives installed first.
-///
-/// **In `Interp::run`'s own order** -- install, then activate, then run --
-/// because a `::CLASS` must exist before the main body's first clause can
-/// send it a message, which is exactly what these programs do.
 fn run_source_with_directives(
     interp: &mut Interp,
     source: &[u8],
@@ -164,22 +138,6 @@ fn say_output_with_directives(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
 
 /// `run_source`'s second half, split out so `run_source_traced` can put a
 /// `TRACE` setting on the activation between the push and the run.
-///
-/// **`run_activation` itself, not a miniature of it.** A hand-rolled
-/// `run_bounded` loop here would reproduce `run_activation`'s own `Flow`
-/// dispatch arm by arm, and a second copy drifts: it needs teaching about
-/// every new `Flow` variant, and condition traps live in
-/// `run_activation`'s loop, one offer per activation, so a copy without
-/// them cannot trap at all -- eleven trap tests failed against exactly
-/// that harness while every one of the same programs matched the oracle
-/// byte for byte through `run_program`. A
-/// test harness that cannot reach the code under test is the sharpest
-/// version of a test that cannot fail.
-///
-/// `activate` above already pushes exactly the activation `Interp::run`
-/// pushes, so there is nothing for a copy to supply. The
-/// activation is deliberately **not** popped afterwards, matching what
-/// this helper did before: several tests read `interp` after the run.
 fn run_activated(interp: &mut Interp, _program: &Program) -> Result<Option<ObjRef>, Failure> {
     interp.run_activation().map(Ended::value)
 }
@@ -191,14 +149,6 @@ fn say_output(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
 
 /// `run_source`, with `TRACE R` already in force for the activation it
 /// pushes.
-///
-/// **A helper rather than an `interp.set_trace_mode(...)` line before the
-/// call, which is how every one of these tests used to read.** Task 3
-/// moved `trace_mode` from `Interp` onto `Activation`, so there is
-/// nothing to set it on until an activation exists, and the activation is
-/// what `run_source` pushes. `TRACE R` is baked in rather than passed
-/// because every caller wants exactly that; a second setting gets its own
-/// helper rather than a parameter nobody varies.
 fn run_source_traced(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Failure> {
     let program = parse_program(source.to_vec()).expect("test program parses");
     let program = activate(interp, program);
@@ -423,13 +373,6 @@ fn drop_of_the_indirect_form_validates_every_word() {
     // then fails the character-set check, and the reported name carries
     // the raw newline. Measured byte for byte against the oracle,
     // substitution included.
-    //
-    // This assertion is why `split_indirect_words` tests space and tab
-    // explicitly instead of calling `is_ascii_whitespace`. Without it a
-    // mutant that used `is_ascii_whitespace` passed all 79 tests, because
-    // no other case here carries a newline, and the distinction rested
-    // entirely on an end-to-end diff nobody re-runs. Carriage return,
-    // form feed and vertical tab behave as the newline does.
     let mut interp = Interp::new();
     let failure = run_source(&mut interp, b"v = 'a'||'0a'x||'b'\ndrop (v)").unwrap_err();
     let Failure::Raised(raised) = failure else {
@@ -1313,15 +1256,6 @@ fn a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause() {
 /// test harness `run_source` routes everything through its own top-level
 /// `run_bounded` with `source` supplied directly, so "never through
 /// `run_bounded` at all" is true of the production outer loop only.
-///
-/// This is round 1's own defect class -- an error escaping a nested
-/// `run_bounded` call misattributed to the enclosing construct -- and no
-/// existing test exercises the path that would regress if `source`
-/// stopped being threaded into `run_bounded`. Confirmed by mutation, not
-/// assumed: passing `None` in place of `source` at the two call sites,
-/// which are `If`'s and `Select`'s and not two of `Select`'s own, made
-/// this test and the `IF` one below fail while leaving all 102
-/// pre-existing tests green. Restored immediately after.
 #[test]
 fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
     let mut interp = Interp::new();
@@ -1758,18 +1692,6 @@ fn a_compound_control_variables_tail_re_resolves_every_pass() {
 /// derived-name text, so a broken write does not fail loudly here, it
 /// makes the read-back see `0` on every pass and the loop never reach
 /// its bound at all.
-///
-/// Reproduces `DO::test_DO_standardTest2P`'s own mechanism (`i`
-/// flip-flopping which tail of `a.` the control resolves to, so `c`
-/// counts passes while the bound is carried by the tail each `i` visits
-/// in turn) rather than a synthetic shape, because that is the `base/
-/// keyword` body a write-side-only regression hung on for real (fix
-/// round 1's own report has the transcript). `FOR 1000` is a safety
-/// cap, not a behavioural change: the oracle and this crate both end the
-/// loop via `TO 7` at pass 14, so the cap never fires on correct code,
-/// and it is what turns "hangs forever" into "counts 1000 instead of
-/// 14" if this ever regresses -- a `DO` loop in a permanent test must
-/// not be able to hang the suite that runs it.
 #[test]
 fn a_compound_controls_to_bound_survives_a_masking_stem_default() {
     let mut interp = Interp::new();
@@ -1787,21 +1709,6 @@ fn a_compound_controls_to_bound_survives_a_masking_stem_default() {
 /// assignment uses. Paired with the compound tests above because a
 /// stem's own spelling has no tail to resolve: it is the shape this fix
 /// must leave working, not the one it corrects.
-///
-/// **The second assertion is the one that can actually fail (review
-/// round 1, I1/I2).** `read_stem` returns whatever object sits in the
-/// slot with no check that it is a `Body::Stem`, so a flat scalar write
-/// there is invisible to a bare-stem *read* of the same name -- the
-/// first assertion's `say cv.` cannot tell a correct `stem_assign` write
-/// from the old flat write apart, and measured directly against the
-/// pre-fix tree (`git archive 1c2300d9`), it does not: the pre-fix build
-/// prints the identical `24`/`11`. A *tail* of the same stem, touched
-/// anywhere else in the body, goes through `stem_set`/`stem_get`
-/// instead, both of which `expect` a `Body::Stem` at that slot and
-/// panic otherwise -- measured on the pre-fix tree, `do cv. = 13\ncv.1 =
-/// 99\nleave\nend\nsay cv.1\nsay cv.` panics at `stem.rs:288:60: a live
-/// value`, rc 101, where the oracle and this crate's fixed build both
-/// answer `99`/`13`.
 #[test]
 fn a_stem_control_variable_binds_through_stem_assign() {
     let mut interp = Interp::new();
@@ -1825,34 +1732,6 @@ fn a_stem_control_variable_binds_through_stem_assign() {
 
 /// **A stem-controlled `DO` inside an `INTERPRET`, which is where the loop
 /// runs with no precomputed slot at all.**
-///
-/// The neighbour above is the same loop written in the compiled body,
-/// where the write and the re-test's read each take the stem's slot off
-/// `Code::compound`'s entry. A fragment carries no plan (`Code::plan`'s own
-/// doc says why), so both fall back to resolving the name -- the path this
-/// program is the witness for, and the one where a slot must **not** be
-/// carried across a body boundary.
-///
-/// Both halves are here because only the pair pins it. `ZQ.` is named by
-/// the enclosing body, so the plan holds it and the fragment's own writes
-/// land on the plan's slot; `ZT.` is named by no clause of the body at
-/// all, so nothing but the activation's run-time bindings can reach it.
-/// Measured on an interpreter instrumented to print which of `slot_of`'s
-/// three sources answered: `ZT.` grows into `extra` once, when the
-/// fragment's plan is built, and is found there afterwards, on both
-/// engines.
-///
-/// The oracle prints `4` for each of the three: a controlled `DO` writes
-/// the value that failed its `TO` test, and a bare stem write makes that
-/// value the stem's default, which is what an unwritten tail then answers.
-///
-/// **This passes unchanged before the slot was taken, and that is what it
-/// is for.** A fragment's `Code::plan` is `None` on both sides, so neither
-/// side has a slot to get wrong. It guards the design that was **not**
-/// shipped -- routing a fragment's own translated slot, which lives in the
-/// activation's `extra` rather than in any plan, into a stem write -- and
-/// under that design this program is the one the whole workspace suite
-/// otherwise had no case for.
 #[test]
 fn a_stem_control_inside_a_fragment_writes_the_enclosing_frames_slot() {
     let mut interp = Interp::new();
@@ -1934,17 +1813,6 @@ fn do_over_a_non_stem_target_iterates_once_yielding_itself() {
 /// `DO OVER ... FOR` on a non-stem target: `FOR 0` skips the one
 /// iteration entirely; any `FOR` at least `1` still runs it exactly
 /// once (there is only ever one item).
-///
-/// **The control variable is bound either way, and that half is what this
-/// test did not assert.** `RexxInstructionDoOverFor::iterate` is
-/// `doblock->checkOver(context, stack) && doblock->checkFor()`
-/// (`instructions/DoOverInstruction.cpp:279`), so the item is assigned before
-/// the budget is consulted and a `FOR 0` loop leaves the name holding it.
-/// Measured, three descriptors: `x = 'pre'` then `do x over 'hello' for 0` with
-/// a `SAY` in the body prints only `hello` from after the loop -- the body
-/// never runs and `x` is not `pre`. `corpus/lang/array_do_over.rex` carries
-/// that row against the oracle, and the third assertion below is its in-crate
-/// half.
 #[test]
 fn do_over_for_0_skips_the_single_non_stem_iteration() {
     let mut interp = Interp::new();
@@ -1978,9 +1846,6 @@ fn do_over_for_0_skips_the_single_non_stem_iteration() {
 /// `>K>   "FOR" => "1"` for the count, and
 /// `HeaderRole::OverFor::keyword()` is what decides whether this crate
 /// emits it.
-///
-/// **What this pins is that the bytes are the oracle's**, which is the
-/// whole of its job.
 #[test]
 fn a_do_over_for_echoes_the_for_keyword_the_oracle_prints() {
     let mut interp = Interp::new();
@@ -2590,17 +2455,6 @@ fn iterate_wrong_kind_through_a_transparent_unlabelled_block_reports_full_lexica
 /// entirely new shapes, `p1`/`p11` re-run to confirm the two that
 /// already matched still do). Every row was captured with `cat -A`
 /// against `build/bin/rexx`, byte for byte, not inferred.
-///
-/// **The rule the whole table obeys**: start at the `LEAVE`/`ITERATE`'s
-/// own full lexical depth; walk outward; every `SELECT` (always) or
-/// `DO`/`LOOP` (unless an unlabelled `Simple` block) that is examined
-/// and does *not* match resets the residual to *its own*
-/// `static_indent`; a match stops the walk without resetting anything
-/// itself; report whatever the residual is at that point. `p11`/`p1`
-/// are the two rows where the very first frame examined is the match,
-/// so nothing ever resets and the reported value is the origin's own
-/// unmodified full depth -- the case the original, wrong rule
-/// generalised from.
 #[test]
 fn the_corrected_28x_indent_rule_matches_all_fourteen_probed_shapes() {
     for (name, source, expect) in [
@@ -2703,14 +2557,6 @@ fn leave_and_iterate_survive_a_do_nested_in_an_ifs_then_iterating_repeatedly() {
 /// enclosing `DO` that would have consumed it does not, and it is the
 /// exhausted search instead. `run_fragment`'s own doc comment has the
 /// oracle transcripts these numbers come from.
-///
-/// **The bare rows are the ones that decide the design**, and until
-/// this was measured the code did the opposite: a bare `Flow::Leave`
-/// forwarded out of the fragment and the enclosing `DO` swallowed it,
-/// which is what "the fragment runs inside the enclosing activation"
-/// predicts and what the oracle does not do. Mutation-kill: restore
-/// `Ok(flow)` for the `None` arms in `run_fragment` and the two bare
-/// rows here run to completion with no error at all.
 #[test]
 fn a_fragments_leave_or_iterate_never_reaches_the_enclosing_loop() {
     for (source, number, sub, additional) in [
@@ -2751,17 +2597,6 @@ fn a_fragments_leave_or_iterate_never_reaches_the_enclosing_loop() {
 
 /// The name in 28.3/28.4 is resolved against the **fragment's** symbol
 /// table, which is the half of F-EX2 that survives the rule above.
-///
-/// `run_fragment` gives `"leave foo"` its own fresh `SymbolTable`, so
-/// `foo` interns at id 0 there regardless of what the enclosing
-/// program's own table looks like. This program's own table also has
-/// exactly one symbol -- `BAR`, also id 0, from the assignment on the
-/// first line -- chosen deliberately so the two tables collide on the
-/// same id with *different* names, which is what makes resolving
-/// against the wrong table give a wrong answer rather than a panic.
-/// Mutation-kill: resolve through the enclosing `code.symbols` instead
-/// and 28.3 names `"BAR"`, the enclosing program's own symbol 0, not the
-/// one `leave` actually named.
 #[test]
 fn a_fragments_named_leave_is_resolved_against_the_fragments_own_table() {
     let mut interp = Interp::new();
@@ -2776,9 +2611,6 @@ fn a_fragments_named_leave_is_resolved_against_the_fragments_own_table() {
 /// Review finding I1(a): `INTERPRET` traces `>>>` on the text it is about
 /// to run, like every other value-producing arm, and it shipped without
 /// doing so.
-///
-/// Oracle, verbatim, for the first program (rc 0, empty stdout):
-///
 /// ```text
 ///      1 *-* trace r
 ///      2 *-* zz = 'nop'
@@ -2787,29 +2619,6 @@ fn a_fragments_named_leave_is_resolved_against_the_fragments_own_table() {
 ///        >>>   "nop"
 ///      3 *-* nop
 /// ```
-///
-/// The whole transcript
-/// is compared byte for byte below, including that the fragment's clause
-/// echoes as line **3** -- the enclosing `INTERPRET`'s line, not the
-/// fragment's own line 1, which is what `Interp::clause_line_override`
-/// exists for and what a naive `Some(&fragment.source)` gets wrong.
-/// (`say_output` drives `trace_mode` directly instead of running a `trace
-/// r` clause, so the program below is the oracle's minus its first line
-/// and every line number is one lower.)
-///
-/// The second program pins the **indent**, which is the part a wrong fix
-/// would still get wrong: one `DO` deeper, the oracle's `>>>` picks up
-/// that construct's own two spaces, and it does so because the arm reads
-/// `current_value_indent` rather than recomputing anything. Mutation
-/// killed both ways: dropping the `trace_result` call empties the `>>>`
-/// lines, and moving it after `run_fragment` reports the *fragment's* last
-/// indent instead of this clause's.
-///
-/// It now pins the fragment echo's indent too, which is the **delta-0**
-/// measurement: the oracle prints `     3 *-*   nop` -- the enclosing
-/// clause's own two spaces and no more. An implementation that gave the
-/// fragment a level's worth of extra indent (the two spaces a *called
-/// routine* really does get, measured) prints four here and fails.
 #[test]
 fn interpret_traces_the_text_it_is_about_to_run() {
     let mut interp = Interp::new();
@@ -3045,33 +2854,6 @@ fn an_ifs_matched_then_or_else_branch_indents_four_and_an_else_if_chain_indents_
 /// only way anything before this task ever asked `static_indent` a
 /// question. `TRACE` echoes every stepped instruction, markers
 /// included, which is what finally asks.
-///
-/// Each expected number is the oracle's, read with `cat -A` against
-/// `build/bin/rexx` under `trace r` (the report has the full
-/// transcripts): a marker clause sits at exactly half the indent its
-/// own body gets, all the way down through nesting -- confirmed by
-/// `ThenInstruction.cpp`/`ElseInstruction.cpp`'s own `execute`
-/// (`indent(); trace; indent();`, so the marker traces after the first
-/// bump and the body after the second) and by `OtherwiseInstruction.cpp`
-/// (`trace; indent();`, one bump, so `OTHERWISE`'s own clause sits at
-/// the `SELECT`'s scan level, the same as a `WHEN`'s own condition).
-///
-/// This calls `static_indent` directly rather than through a raise,
-/// because a marker clause cannot raise -- there is no `FailureSite` to
-/// read one back from.
-/// `all_indents` fills what `static_indent` computes, for every position
-/// of every program in the corpus.
-///
-/// The two are separate traversals of the same rules -- `static_indent`
-/// walks the body once per position, `fill_indents` assigns every
-/// position in one walk -- so the transcription can be wrong where the
-/// original is right, and only running both over real programs shows it.
-/// The corpus is the source rather than examples written here for the
-/// usual reason: it grows when a construct lands, and a table of
-/// hand-picked shapes does not.
-///
-/// Programs that do not parse are skipped, since the corpus holds
-/// deliberate syntax errors and there is no instruction list to compare.
 #[test]
 fn all_indents_fills_what_static_indent_computes_for_every_corpus_program() {
     let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
@@ -3434,12 +3216,6 @@ fn a_callees_trace_setting_does_not_survive_its_return() {
 /// which is what makes this the instrument for the job -- the same
 /// argument `phase-4-exclusions.txt`'s DEVIATION 0 already makes for
 /// the pinned shallow-depth indent witnesses.
-///
-/// Every byte below is the oracle's, captured with `cat -A` from the
-/// two programs run verbatim. They carry their own `TRACE I`
-/// instruction rather than having a mode forced onto the activation, so
-/// that the first clause is untraced on both sides and the two
-/// transcripts are directly comparable.
 #[test]
 fn task_9s_two_new_indents_are_the_oracles_own_and_normalisation_cannot_see_them() {
     // A `Controlled` loop: the setup assignment prints at the `DO`
@@ -3574,20 +3350,6 @@ fn a_callees_clauses_echo_at_the_calling_clauses_indent_plus_two() {
 /// clauses, its `RETURN`'s own value trace, and the enclosing `say`
 /// clause's own final `>>>` -- is derived from `f`'s last clause instead
 /// of the caller's own.
-///
-/// Byte-exact against the oracle in a clean directory (source measured
-/// with a leading `trace r` clause enabling tracing, then every line
-/// number decremented by one to match `run_source_traced`'s own
-/// externally-set mode, which consumes no line of its own -- the same
-/// transformation this file's other `run_source_traced` expectations
-/// already rely on, checked here against `a_callees_clauses_echo_at_
-/// the_calling_clauses_indent_plus_two`'s own source with a real
-/// `trace r` prepended). This assertion compares raw `interp.trace`
-/// bytes and is **not** reachable by `corpus.rs`'s `normalize_stderr`
-/// (DEVIATION 0), which collapses exactly this class of indent
-/// difference -- see `phase-4b.txt`'s own entry for `lang/
-/// call_expression.rex` for why the corpus differential cannot be
-/// trusted to catch this at all.
 #[test]
 fn current_value_indent_is_restored_after_a_nested_expression_call() {
     let mut interp = Interp::new();
@@ -3619,14 +3381,6 @@ fn current_value_indent_is_restored_after_a_nested_expression_call() {
 /// once already without that restore -- the second field of this exact
 /// shape to do so, after `current_value_indent` itself went unrestored
 /// until the test just above this one caught it at Task 4.
-///
-/// The same shape catches it: two internal-function calls inside *one*
-/// clause. Without the restore, `g`'s own `SIGL` (`set_sigl`, reading
-/// `current_clause_line`) reads `f`'s own last line (`return 1`, line 5)
-/// instead of the calling clause's own (line 1) -- measured against the
-/// oracle in a clean directory, `rexx-run` on this exact source once
-/// read `sigl in g: 5` before this fix and `sigl in g: 1` after it, and
-/// the oracle has always answered `1`.
 #[test]
 fn current_clause_line_is_restored_after_a_nested_expression_call() {
     let mut interp = Interp::new();
@@ -3840,44 +3594,6 @@ fn a_dynamic_call_target_searches_labels_with_the_value_verbatim() {
 /// there is no search and no name to match -- every enclosing construct
 /// is abandoned unconditionally, so the loop's own later iterations
 /// never happen and neither does the clause right after `END`.
-///
-/// I1 (Task 6 fix round 1): a direct regression for `Flow::Signal`
-/// versus reusing `Flow::Goto`. Collapsing the two `Ok(Flow::Signal(
-/// target))` sites in the `Signal` step arm to `Ok(Flow::Goto(target))`
-/// left every test in this file, and the whole workspace, green --
-/// including every other `SIGNAL` test above and below this one, none
-/// of which happens to have a fragment whose own instruction count
-/// reaches the enclosing label's own index. This one does, on purpose:
-/// `here:` sits at enclosing body index 2 (`say 'A'` is 0, `interpret`
-/// is 1), and the fragment `"nop; signal here; say 'WRONG BRANCH RAN'"`
-/// has 3 instructions, so the escaping target (2) satisfies
-/// `run_bounded`'s own absorption guard (`target >= start(0) && target
-/// <= end(3)`) against the *fragment's* range. A `Goto`-collapsed build
-/// -- verified directly, reverted before committing -- absorbs the jump
-/// as its own, resumes stepping the fragment's own third instruction,
-/// and prints `WRONG BRANCH RAN` in the middle; the correct build
-/// escapes past the fragment entirely and never prints it.
-///
-/// **No second, self-referential ("g2") variant is added here.** The
-/// review that found this also found a shape where the escaping target
-/// lands on the fragment's *own* `SIGNAL` instruction (a label at
-/// enclosing index 0, a one-instruction fragment `"signal top"`) --
-/// under `Goto` reuse that does not print a wrong answer, it spins
-/// forever: `run_bounded`'s `while pc < end` loop has no iteration
-/// budget, and landing back on the same deterministic instruction
-/// reproduces the identical `Goto` every pass. That is true of *any*
-/// collision where the absorbed target is at or before the `SIGNAL`'s
-/// own position inside the fragment, not only the minimal one -- moving
-/// the target forward past the `SIGNAL` (this test's own shape) is what
-/// makes the wrong run terminate at all. There is no bounded encoding of
-/// the backward/self-referential shape as a live-executed test, only a
-/// choice between not testing it and risking a hang the moment this
-/// regression guard itself regresses; this crate's own precedent
-/// (`MAX_ACTIVATION_DEPTH`, D19/I6) is to convert an unbounded case into
-/// a bounded, reportable one rather than accept an unbounded test, and
-/// nothing here does that for a bare `while` loop's own iteration count.
-/// Documented instead of encoded: this doc comment and `Flow::Signal`'s
-/// own are where the fact lives.
 #[test]
 fn signal_out_of_a_fragment_does_not_collide_with_the_fragments_own_index_space() {
     let mut interp = Interp::new();
@@ -3943,9 +3659,6 @@ fn signal_out_of_a_select_unwinds_it_and_lands_on_its_label() {
 /// rather than `self.number`: measured, a `SIGL` value of `22` still
 /// renders `22` under `NUMERIC DIGITS 1`, where the identical magnitude
 /// as an arithmetic result would round to `2E+1`.
-///
-/// Five shapes, each measured against the oracle in a clean directory
-/// before being pinned here:
 #[test]
 fn sigl_is_set_at_every_control_transfer() {
     // Uninitialised until the first transfer, like any other variable;
@@ -4162,21 +3875,6 @@ fn a_quoted_signal_label_searches_case_sensitively_unlike_a_quoted_call() {
 
 /// The composition nobody had measured: `SIGNAL` from inside a called
 /// routine, targeting a label written back in the *caller's* own text.
-///
-/// **It reaches, and that is not `SIGNAL` crossing an activation
-/// boundary on its own.** At this phase every internal `CALL` target
-/// shares its caller's exact body and label table (`resolve_and_run_
-/// call`'s own D9r comment: no `::routine` directive gives a callee one
-/// of its own yet), so `resolve_signal_target`'s "search the running
-/// activation's own body" finds `caller_label:` from inside `sub` for
-/// the mundane reason that `sub`'s own body *is* the caller's. Measured
-/// against the oracle rather than assumed, per this phase's own method.
-///
-/// **And it never returns to the original `CALL`'s own next clause.**
-/// `SIGNAL`, unlike `RETURN`, never pops the activation it fires in --
-/// so once the label's own code runs out of further instructions, the
-/// *callee's* activation falls off the end, which ends the whole
-/// program (`Ended::Exited`'s own doc comment), not merely the call.
 #[test]
 fn signal_from_a_called_routine_reaches_a_label_in_the_shared_body_and_never_returns() {
     let mut interp = Interp::new();
@@ -4388,21 +4086,6 @@ fn the_body_selector_resolves_a_routine_directive_and_rejects_a_bad_index() {
 }
 
 // ---- PROCEDURE, PROCEDURE EXPOSE, USE and the variable reference ----
-//
-// Every program below runs its `PROCEDURE` through a real `CALL`, and
-// not because a `CALL` reads better: `run_source` drives the body
-// through `run_bounded`, and only `run_activation` grants the
-// first-instruction permission a `PROCEDURE` needs. A `PROCEDURE`
-// reached any other way is error 17.1 -- which is the oracle's own
-// answer too, measured, and what
-// `a_procedure_that_is_not_a_calls_first_instruction_raises_17_1`
-// asserts.
-//
-// **No value in these programs equals its own variable's derived name.**
-// An unexposed unset read yields the name, so a witness whose exposed
-// variable holds, say, `W` in `w` cannot tell exposure from
-// non-exposure. Every literal here is a hyphenated word no derived name
-// can collide with.
 
 #[test]
 fn procedure_isolates_and_expose_aliases_the_caller_entry() {
@@ -4421,9 +4104,6 @@ fn procedure_isolates_and_expose_aliases_the_caller_entry() {
 
 /// Exposure is transitive: `a` exposes `n` to `b`, `b` exposes the same
 /// `n` to `c`, and `c`'s write is visible in `a`.
-///
-/// Measured on the oracle. Binding `c`'s `n` to `b`'s frame instead of
-/// chasing `b`'s own alias passes at one level and gives `from-a` here.
 #[test]
 fn exposure_is_transitive_through_an_intermediate_procedure() {
     let mut interp = Interp::new();
@@ -4439,16 +4119,6 @@ fn exposure_is_transitive_through_an_intermediate_procedure() {
 }
 
 /// **The program that refuted "a bitset plus one target `SlotFrame`".**
-///
-/// One `PROCEDURE` exposes two names that live in two different frames:
-/// `n` chases through `bee`'s alias up to `a`, while `m` is `bee`'s own
-/// local and stops there. Measured on the oracle -- `bee` sees both of
-/// `cee`'s writes and `a` sees only `n`'s.
-///
-/// Any design carrying a single target frame per callee gets exactly one
-/// of the two names right, whichever frame it picked, so this is the
-/// test that cannot pass by accident. It is also why `RootSet`'s
-/// redirect is a per-slot `Vec<Option<usize>>`.
 #[test]
 fn one_procedure_can_expose_names_living_in_two_different_frames() {
     let mut interp = Interp::new();
@@ -4501,13 +4171,6 @@ fn the_indirect_expose_form_is_plural_and_exposes_its_own_selector() {
 }
 
 /// The five stem transcripts D9r records, all measured on the oracle.
-///
-/// Their common point is that `EXPOSE` aliases the caller's **variable
-/// entry**, not the stem *object*, which is what the `drop` pair pins:
-/// `drop a.` in the callee rebinds the caller's entry to a fresh stem,
-/// while a second variable holding the old object still sees the old
-/// tail. That is why `stem_drop`'s `replace_stem(name, None)` shape is
-/// correct under exposure and must not become a slot clear.
 #[test]
 fn an_exposed_stem_aliases_the_callers_entry_not_the_object() {
     for (source, expected, why) in [
@@ -4551,12 +4214,6 @@ fn an_exposed_stem_aliases_the_callers_entry_not_the_object() {
 
 /// A name the plan never saw, exposed through the indirect form, has to
 /// keep resolving to the same slot on both sides of the return.
-///
-/// `ZQXW` appears in no instruction of either routine -- only inside
-/// string literals -- so the plan has no slot for it and both sides
-/// reach it only through a run-time binding. Measured on the oracle.
-/// This is the case `exec_procedure`'s write-back of `extra` exists for,
-/// and the one that would otherwise need a non-top `grow_slots`.
 #[test]
 fn a_computed_expose_of_a_name_no_instruction_mentions_survives_the_return() {
     let mut interp = Interp::new();
@@ -4571,10 +4228,6 @@ fn a_computed_expose_of_a_name_no_instruction_mentions_survives_the_return() {
 }
 
 /// 17.1 at every shape but the legal one, and labels are transparent.
-///
-/// All five measured on the oracle. The `nop` case beside the two-label
-/// case is what shows the rule is "first instruction *executed*" with
-/// labels not counting, rather than "first instruction in the body".
 #[test]
 fn a_procedure_that_is_not_a_calls_first_instruction_raises_17_1() {
     for (source, why) in [
@@ -4619,18 +4272,6 @@ fn a_procedure_that_is_not_a_calls_first_instruction_raises_17_1() {
 
 /// A `::ROUTINE` is **not** an internal call, so a `PROCEDURE` first in
 /// one is 17.1 -- reached by `CALL` here, and as a function below.
-///
-/// **The exact stderr, because nothing else in the suite can see these
-/// bytes.** `support::normalize_stderr` (DEVIATION 0) collapses the
-/// space run between a trace line's marker and its content, so
-/// `tests/corpus.rs` compares this program's two echoed clauses equal to
-/// the same two echoed at any other indent. The ordering it does see:
-/// the failing clause first, at the routine's own indent 0, and the
-/// *calling* clause second.
-///
-/// The expectation is the oracle's own transcript for this program, `cat
-/// -A`'d in a clean directory, at rc 239 with an empty stdout -- the
-/// `say zz` after the `call` never runs on either side.
 #[test]
 fn a_procedure_first_in_a_called_routine_is_17_1_with_the_calling_clause_second() {
     const PATH: &str = "/tmp/proc-in-routine-call.rex";
@@ -4662,13 +4303,6 @@ fn a_procedure_first_in_a_called_routine_is_17_1_with_the_calling_clause_second(
 }
 
 /// The same routine reached as a **function** rather than by `CALL`.
-///
-/// A separate test rather than a row in the one above, because the two
-/// shapes corrupt the frame stack differently when the instruction is
-/// admitted: the `CALL` shape leaves the caller's next unbound name
-/// growing a frame that is no longer the top one, and this one fails on
-/// the way out instead, popping a frame that is not the top. A program
-/// containing both only ever reaches the first.
 #[test]
 fn a_procedure_first_in_a_routine_reached_as_a_function_is_17_1_too() {
     const PATH: &str = "/tmp/proc-in-routine-function.rex";
@@ -4701,10 +4335,6 @@ fn a_procedure_first_in_a_routine_reached_as_a_function_is_17_1_too() {
 /// A `PROCEDURE` first in an internal label reached as a **function** is
 /// legal, which is the neighbouring success the two refusals above are
 /// paired with.
-///
-/// Both routes into a label are separate admissions, and a rule keyed on
-/// "was this a `CALL` instruction" rather than on the entry kind refuses
-/// this one while leaving the `CALL` route working.
 #[test]
 fn a_procedure_first_in_a_label_reached_as_a_function_still_runs() {
     let mut interp = Interp::new();
@@ -4720,25 +4350,6 @@ fn a_procedure_first_in_a_label_reached_as_a_function_still_runs() {
 
 /// An isolated callee's frame is released on the way out, on the error
 /// path as well as the ordinary one.
-///
-/// Asserted against the root set's own slot count rather than through
-/// output, because a leak is invisible in a program's bytes: the run
-/// would still be correct and would simply hold one frame per call
-/// forever, which `do 100000; call sub; end` turns into 100,000 rooted
-/// frames. Both paths are checked here because they share the one
-/// `pop_slots` call whose position in `Interp::invoke_call` is the whole
-/// point -- outside the `Ok` arm, not inside it.
-///
-/// The property is that frames balance, so this counts **frames** and not
-/// slots. A slot count moves for reasons that are not leaks -- the first
-/// `CALL` in a program that never writes `RESULT` grows the top frame by
-/// one to hold it, measured while writing this test -- and it moves by a
-/// *different* amount on the error path, which never reaches that write.
-/// `RootSet::live_frames` has no such confounder.
-///
-/// `run_source` leaves the top-level frame standing (only `Interp::run`
-/// pops that one), so one frame is the correct answer for a balanced run
-/// and each unreleased callee would add one more.
 #[test]
 fn an_isolated_callees_frame_is_released_on_both_paths() {
     let mut interp = Interp::new();
@@ -4772,22 +4383,6 @@ fn an_isolated_callees_frame_is_released_on_both_paths() {
     // `owns_frame` test and is reached by neither block above: a callee
     // with no PROCEDURE pushes no frame of its own (D9r), so it must not
     // pop one either.
-    //
-    // **What this pins, corrected after review.** It used to claim that
-    // without it "an implementation that never pushed a callee frame
-    // would pass both assertions above" -- false, and shown false by
-    // building exactly that mutant, under which all three blocks pass,
-    // because all three compare against the same number. No frame count
-    // can catch a frame that is never pushed; the isolation tests are
-    // what catch it (`procedure_isolates_and_expose_aliases_the_caller_
-    // entry` and four others fail on it).
-    //
-    // What this block does catch, verified by mutation rather than
-    // asserted: popping unconditionally instead of only when
-    // `owns_frame`, which tears down the *caller's* still-live frame.
-    // That mutant fails here and passes
-    // `procedure_isolates_and_expose_aliases_the_caller_entry`, so this
-    // block is the one carrying it.
     let mut interp = Interp::new();
     say_output(
         &mut interp,
@@ -4828,12 +4423,6 @@ fn use_arg_binds_positionally_and_ignores_extra_arguments() {
 
 /// A target with no argument and no default is **dropped**, not left
 /// alone.
-///
-/// The callee has no `PROCEDURE` on purpose, so the caller's `PRESET` is
-/// the same variable and the drop is observable after the return.
-/// `preset-value` is deliberately not `PRESET`: a target whose prior
-/// value equalled its own derived name would render identically whether
-/// it was dropped or left, so such a probe could not fail.
 #[test]
 fn use_arg_drops_a_target_with_no_argument_and_no_default() {
     let mut interp = Interp::new();
@@ -4928,11 +4517,6 @@ fn use_strict_arg_checks_arity_at_both_ends() {
 /// `USE STRICT ARG`'s three refusals report the method catalogue rows inside a
 /// method and the call ones outside -- `UseInstruction.cpp`'s three
 /// `inMethod()` switches (`:103`, `:292`, `:305`).
-///
-/// The two halves of each pair are what make this discriminating: one error
-/// family for both contexts passes half the rows whichever family it picks,
-/// and the two rows that must not raise are what a check applied to `USE ARG`
-/// as well would redden.
 #[test]
 fn use_strict_arg_reports_method_errors_in_a_method_and_call_errors_outside() {
     for (source, status, catalogue) in [
@@ -5004,10 +4588,6 @@ fn use_strict_arg_reports_method_errors_in_a_method_and_call_errors_outside() {
 
 /// `USE ARG >name` aliases the caller's variable; the same call into a
 /// plain target copies its value instead.
-///
-/// The pair is what makes this test discriminating: an implementation
-/// that aliased unconditionally, or never, gets exactly one of the two
-/// right.
 #[test]
 fn use_arg_alias_binds_the_callers_variable_and_a_plain_target_does_not() {
     let mut interp = Interp::new();
@@ -5095,16 +4675,6 @@ fn use_arg_alias_refuses_a_plain_value_and_an_omitted_position() {
 
 /// `USE ARG >name` requires its target to be **currently unset**, and
 /// raises 98.995 otherwise.
-///
-/// **These three are a set and the middle one carries the weight.** The
-/// message says "it must be an uninitialized *local* variable", which
-/// invites writing the check as an exposure or locality test. The pair
-/// that rules that out is the second and third cases below: the same
-/// `procedure expose q`, raising when the exposed `q` holds a value and
-/// succeeding when it does not. Exposure is identical in both; only the
-/// value differs. The raising case alone does not pin which rule is being
-/// applied, and the succeeding case alone cannot fail against a wrong
-/// fix -- neither is worth much without the other.
 #[test]
 fn use_arg_alias_requires_an_uninitialised_target() {
     // Assigned, then aliased: refused, naming the target.
@@ -5180,22 +4750,9 @@ fn use_arg_alias_requires_an_uninitialised_target() {
 /// `USE ARG >name` requires the reference's **kind** to match the
 /// target's: a simple reference into a stem target is 88.929, and a stem
 /// reference into a simple target is 88.930.
-///
-/// **Each refusal is paired with its adjacent success, in this test
-/// rather than elsewhere, and the pairing is the point.** A test that
-/// only checks `>p` into `>q.` raises cannot distinguish "the kinds must
-/// match" from "a stem target is always refused"; the passing `>p.` into
-/// `>q.` case is what rules the second out. The same holds mirrored for
-/// 88.930. All four cells measured against the oracle.
 #[test]
 fn use_arg_alias_requires_the_reference_kind_to_match_the_target() {
     // Simple reference -> STEM target: refused.
-    //
-    // `p` holds `value-not-name` so that the substitution discriminates:
-    // 88.929 names the *caller's variable*, `P`, where 88.928 in the same
-    // position names the argument's *value*. A probe whose variable held
-    // its own name could not tell those apart -- the mistake this task
-    // already made once, on 88.928.
     let mut interp = Interp::new();
     let failure = run_source(
         &mut interp,
@@ -5293,12 +4850,6 @@ fn use_arg_alias_requires_the_reference_kind_to_match_the_target() {
 
 /// The kind check runs **before** the uninitialised check, so a target
 /// that fails both reports the kind error.
-///
-/// Measured both ways round. Ordering is not cosmetic here: each of the
-/// two errors is a different number and rc, so getting it backwards is a
-/// wrong answer rather than a differently-worded right one. A single
-/// test would not pin it -- both directions are needed, because a check
-/// that always reported the kind error would pass one of them alone.
 #[test]
 fn use_arg_alias_reports_the_kind_mismatch_before_the_uninitialised_target() {
     // Stem target, already assigned, given a simple reference: 88.929,
@@ -5333,13 +4884,6 @@ fn use_arg_alias_reports_the_kind_mismatch_before_the_uninitialised_target() {
 /// The stem half of the same rule, which is where this crate's own
 /// representation shows through and where the obvious one-line check gets
 /// it wrong.
-///
-/// `read_stem` vivifies a fresh empty `Body::Stem` into the slot on a bare
-/// stem read, and `stem_drop` leaves exactly the same thing, so a slot
-/// being `Some` is *not* the same question as the variable being
-/// initialised. All five measured against the oracle; the first three
-/// must succeed and would all raise under a plain `slot(..).is_some()`
-/// test.
 #[test]
 fn use_arg_alias_treats_an_empty_stem_as_uninitialised() {
     for (source, expected, why) in [
@@ -5446,10 +4990,6 @@ fn use_arg_alias_treats_an_empty_stem_as_uninitialised() {
 
 /// A variable reference renders as the referenced variable's value.
 /// Measured: `say >p` prints `p`'s value.
-///
-/// **The rendering, not the object.** `(>p)~class~id` is `VariableReference`
-/// on the oracle, and this pair is what separates the two: a term that
-/// answered the value would satisfy this test and fail the next.
 #[test]
 fn a_variable_reference_renders_as_the_referenced_value() {
     let mut interp = Interp::new();
@@ -5508,9 +5048,6 @@ fn two_references_to_one_variable_share_it() {
 /// A reference outlives the activation whose local it names -- measured,
 /// oracle rc 0: a `procedure` returning `>v` answers a reference whose
 /// `~value` reads `42` and whose `~value =` still writes after the return.
-///
-/// **The frame is gone by the time this reads**, so a reference holding a
-/// slot position would name whatever the next activation put there.
 #[test]
 fn a_variable_reference_outlives_its_frame() {
     let mut interp = Interp::new();
@@ -5553,13 +5090,6 @@ fn use_arg_alias_takes_any_variable_reference_value() {
 }
 
 /// The caller's own arguments survive a nested call.
-///
-/// **This is Task 4's Critical, in this task's own currency.** That
-/// finding was a piece of per-activation state a call failed to restore,
-/// invisible until two activations per clause were reachable.
-/// `Interp::call_context` is the fifth such piece; without the restore in
-/// `Interp::invoke_call`, the second `USE ARG` below reads the *inner*
-/// call's arguments and prints `inner-arg`.
 #[test]
 fn a_callers_arguments_survive_a_nested_call() {
     let mut interp = Interp::new();
@@ -5579,15 +5109,6 @@ fn a_callers_arguments_survive_a_nested_call() {
 /// shape that reaches `exec_use` at all, since `rexx-parse` rejects the
 /// rest at parse time. `exec_use`'s own doc comment lists the eight
 /// shapes that were tried and why the 99.910 arm carries no test.
-///
-/// **Driven through `run_program` rather than `run_source`**, and that is
-/// not incidental: this module's helper runs a body through
-/// `run_bounded`, which never grants the first-instruction permission,
-/// so a `run_source` version of this test would take the *other* arm and
-/// assert 99.910 -- passing against an implementation that had the two
-/// swapped. Only the real entry point puts the program in the state the
-/// oracle's own 98.993 describes. Verified against the oracle in a clean
-/// directory: rc 158 and these two lines.
 #[test]
 fn use_local_as_a_programs_first_instruction_raises_98_993() {
     let outcome = crate::run_program(
@@ -5607,12 +5128,6 @@ fn use_local_as_a_programs_first_instruction_raises_98_993() {
 
 /// `USE LOCAL` first in a `::ROUTINE` is 98.993 as well, and **not**
 /// 99.910.
-///
-/// The two numbers ask different questions, and a routine is the entry
-/// that separates them: it is entered by a call, and it is not a method
-/// invocation. Measured on the oracle in a clean directory, reached by
-/// `CALL` and as a function alike -- rc 158, and the same message the
-/// top-level shape gets.
 #[test]
 fn use_local_first_in_a_routine_raises_98_993_not_99_910() {
     for (source, why) in [
@@ -5644,11 +5159,6 @@ fn use_local_first_in_a_routine_raises_98_993_not_99_910() {
 
 /// `PROCEDURE EXPOSE` of a single compound tail fails loudly rather than
 /// approximating.
-///
-/// Measured on the oracle: exposing `a.1` shares that one tail and
-/// leaves `a.2` the callee's own, which is aliasing inside a stem object
-/// and not something a whole-slot alias can express. Exposing the stem
-/// instead would silently share `a.2` too.
 #[test]
 fn procedure_expose_of_a_single_compound_tail_fails_loudly() {
     let mut interp = Interp::new();
@@ -5668,27 +5178,9 @@ fn procedure_expose_of_a_single_compound_tail_fails_loudly() {
 }
 
 // ---- EXPOSE and the scope-keyed variable pool ----
-//
-// **No value below equals its own variable's derived name**, the same rule
-// the `PROCEDURE EXPOSE` block above states: an unbound exposed read yields
-// the upcased name, so a witness holding `V` in `v` cannot tell a pool that
-// works from one that does nothing.
-//
-// The programs that agree with the oracle byte for byte are in
-// `corpus/lang/expose_*.rex` and are run by the corpus differential on both
-// engines. What is here is what a corpus program cannot carry: a loud
-// refusal, and the pool's own keying, which a program cannot reach because
-// two scopes on one object need a superclass and `::CLASS ... SUBCLASS` is
-// still a `directive_gap`.
 
 /// `EXPOSE` of a single compound tail fails loudly, the same refusal
 /// `PROCEDURE EXPOSE` makes and for the same reason.
-///
-/// Measured on the oracle: with `expose a.1` in a class method that assigns
-/// both `a.1` and `a.2`, and `expose a.1` in a second one reading them back,
-/// the answer is `[tail-one][A.2]` -- tail 1 is the object's and tail 2 is
-/// the method's own local. That is aliasing inside a stem object, and a whole
-/// name is what this crate's pool holds.
 #[test]
 fn expose_of_a_single_compound_tail_fails_loudly() {
     let mut interp = Interp::new();
@@ -5726,18 +5218,6 @@ fn expose_of_a_whole_stem_binds_rather_than_refusing() {
 
 /// The pool is keyed on a scope, and a name bound in one scope is not in
 /// another's.
-///
-/// **What this can and cannot see.** It reads the pool a class method's own
-/// `EXPOSE` wrote and asks a *different* class identity for the same name: an
-/// implementation holding one flat table per object, or ignoring the scope
-/// altogether, answers the value for both and fails here. What it cannot see
-/// is the scope being confused with the *receiver*, because for a class
-/// method on `::class K` those are the same handle -- separating them needs a
-/// method inherited from a superclass, and `::CLASS ... SUBCLASS` does not
-/// install yet. `rexx-core`'s `scope_pools.rs` carries that half against the
-/// storage directly, with the transcript the oracle answers for the
-/// two-scope program (`S B`, against `B B` for a pool keyed on the object
-/// alone).
 #[test]
 fn a_pool_entry_belongs_to_one_scope_and_not_to_another() {
     let mut interp = Interp::new();
@@ -5784,20 +5264,8 @@ fn a_pool_entry_belongs_to_one_scope_and_not_to_another() {
 }
 
 // ---- condition traps, RAISE and NOVALUE ----
-//
-// Every trap test below asserts a value the *handler set*, never that
-// the program exited 0: a criterion of the second kind is satisfied by a
-// program that never raised at all. The values are chosen so that a
-// handler which did not run prints an unset variable's derived name --
-// `ZWITNESS`, not something that reads like data.
 
 /// The base case, and the one every other test here is a variation of.
-///
-/// `sigl` is asserted alongside the handler's own value because the two
-/// fail independently: a trap that fires with the wrong `SIGL` looks
-/// exactly like a correct one to any test that only checks the handler
-/// ran. Measured, `SIGL` is the **raising** clause's line (3), not the
-/// `SIGNAL ON` clause's (1) and not the handler's (5).
 #[test]
 fn a_signal_on_syntax_trap_runs_its_handler_and_sets_sigl_to_the_raising_clause() {
     let mut interp = Interp::new();
@@ -5862,16 +5330,6 @@ fn signal_off_removes_a_trap_that_signal_on_had_enabled() {
 
 /// The trap that fired is gone from the table by the time the handler
 /// runs.
-///
-/// **A direct assertion on the table rather than on behaviour, and the
-/// mutation record is why.** The behavioural pair below -- re-arm under
-/// a new label, and a second raise with no re-arm -- was written first,
-/// and deleting the removal left the first of the two *green*: its
-/// handler re-arms before raising again, and `insert` over a live entry
-/// looks exactly like `insert` over an absent one. The second test does
-/// go red, but by looping until the harness kills it, which is a poor
-/// signal to leave as the only one. This one fails in microseconds and
-/// names the property.
 #[test]
 fn the_trap_that_fired_is_removed_from_the_table() {
     let mut interp = Interp::new();
@@ -5898,11 +5356,6 @@ fn the_trap_that_fired_is_removed_from_the_table() {
 /// `SIGNAL ON` inside the handler re-arms the condition, under a new
 /// label: the first raise reaches `first` and the second reaches
 /// `second`.
-///
-/// This one is about the re-arm and **not** about the removal -- see
-/// `the_trap_that_fired_is_removed_from_the_table` above, which is the
-/// test that actually pins that, and the note there for how this one was
-/// measured not to.
 #[test]
 fn a_trap_can_be_re_armed_inside_its_own_handler() {
     let mut interp = Interp::new();
@@ -5918,12 +5371,6 @@ fn a_trap_can_be_re_armed_inside_its_own_handler() {
 /// Without the re-arm the second raise is fatal -- the adjacent case
 /// that pins the test above to "the trap was disabled" rather than to
 /// "the second raise happened to reach a different label".
-///
-/// Against an implementation that leaves the fired trap armed this
-/// program does not fail, it *loops*: the handler raises again, is
-/// trapped again, and prints `FIRST` forever.
-/// `the_trap_that_fired_is_removed_from_the_table` is the bounded
-/// version of the same property.
 #[test]
 fn a_second_raise_inside_a_handler_is_fatal_without_a_re_arm() {
     let mut interp = Interp::new();
@@ -6066,13 +5513,6 @@ fn a_callees_signal_off_leaves_the_callers_trap_enabled() {
 /// two(2)`: `one` raises, the inherited trap transfers to a handler that
 /// `RETURN`s, so `one(1)` yields the handler's value and evaluation
 /// resumes *inside the enclosing clause*, which then calls `two`.
-///
-/// `two` reports `SIGL`, which is the quantity Tasks 4 and 6 each shipped
-/// a defect on: it must be the enclosing clause's line (2), not `one`'s
-/// raise line (6), not the handler's (11). It is right because
-/// `clause_state` lives in `ClauseState` and `Interp::invoke_call`
-/// restores it whole -- the mechanism the brief asked this route to
-/// test, verified rather than assumed.
 #[test]
 fn a_trap_that_resumes_mid_clause_leaves_the_enclosing_clauses_state_intact() {
     let mut interp = Interp::new();
@@ -6090,11 +5530,6 @@ fn a_trap_that_resumes_mid_clause_leaves_the_enclosing_clauses_state_intact() {
 /// RETURN` value; the enclosing clause finishes -- `two(2)` and the
 /// assignment included -- and only then does the handler run and
 /// overwrite `zz`.
-///
-/// The `SIGL` in the handler's own output is what caught the first
-/// implementation, which delivered at the next clause boundary reached by
-/// *any* activation and so ran the handler inside `two`, reporting `two`'s
-/// label line instead of the enclosing clause's.
 #[test]
 fn a_call_trap_waits_for_the_raising_clause_to_finish() {
     let mut interp = Interp::new();
@@ -6230,11 +5665,6 @@ fn rc_is_set_from_the_condition_when_a_trap_fires() {
 /// four hundred must leave the same number of live temps, and a leak of
 /// even one root per cycle would make the second number two hundred
 /// larger.
-///
-/// The raise fires from inside a parenthesised expression on purpose --
-/// that is what puts `eval`'s own frame-opening sites on the path, which
-/// is what the chokepoint claim is about; a raise from a bare clause
-/// would exercise nothing.
 #[test]
 fn a_trap_that_resumes_does_not_accumulate_temps_frames() {
     fn live_temps_after(cycles: usize) -> usize {
@@ -6341,12 +5771,6 @@ fn a_call_trap_declines_a_condition_with_nowhere_to_resume_but_a_signal_trap_tak
 /// raises a trapped `USER` condition. The oracle runs the handler at that
 /// clause's own boundary -- so `SIGL` is line 7, `aa`'s `return bb()` --
 /// and then returns from `aa`.
-///
-/// Against the delivery check at the bottom of `run_activation`'s loop,
-/// past a `match` whose `Flow::Return` arm returns, the handler never ran
-/// at all and `ZMARK` kept its pre-set `NOMARK`. Chosen so that failure
-/// prints `NOMARK` rather than the derived name `ZMARK`: a flag that is
-/// merely unset reads as plausible data.
 #[test]
 fn a_pending_trap_is_delivered_when_the_trapping_clause_is_a_return() {
     let mut interp = Interp::new();
@@ -6364,16 +5788,6 @@ fn a_pending_trap_is_delivered_when_the_trapping_clause_is_a_return() {
 /// `return bb()` clause (`SIGL` 8 here), and printed `HANDLER-AT 11` --
 /// the `cc:` label's own line -- before the fix, because it ran inside
 /// `cc`.
-///
-/// **Which mechanism this actually pins, measured rather than assumed.**
-/// It dies when the delivery check is put back behind the `Return`/`Exit`
-/// arms, and *survives* when the activation identity is degraded to a
-/// stack depth -- because once the check runs at `aa`'s own `return
-/// bb()` boundary, the condition is gone before `cc` is ever called, and
-/// a depth is sufficient for that. So this test covers the placement, and
-/// `a_pending_trap_whose_activation_is_gone_is_never_delivered` is the
-/// one that covers the identity: the two mutations kill exactly one test
-/// each, which is what makes them two mechanisms rather than one.
 #[test]
 fn a_pending_trap_is_not_delivered_into_a_later_activation_at_the_same_depth() {
     let mut interp = Interp::new();
@@ -6391,20 +5805,6 @@ fn a_pending_trap_is_not_delivered_into_a_later_activation_at_the_same_depth() {
 /// by an error its *caller* traps, so it dies without ever finishing
 /// another clause; the caller then calls something else, which lands at
 /// the very depth the dead activation had.
-///
-/// Measured: the oracle drops the condition outright -- `after mark=
-/// NOMARK` -- and against a depth-keyed `PendingTrap` we printed
-/// `after mark= HANDLER-AT 13`, having run the handler inside `cc`. The
-/// identity check is what makes a dead activation's pending condition
-/// undeliverable rather than merely unlikely to be delivered.
-///
-/// **This is the test that pins the identity, and the only one.** It
-/// survives the mutation that reverts the delivery *placement* and dies
-/// under the one that degrades `ActivationId` to a stack depth; its
-/// sibling above does the reverse. The reason it can tell them apart is
-/// that here the activation never reaches another clause boundary at all
-/// -- the error unwinds it -- so no amount of moving the check helps, and
-/// only "that activation is gone" answers it.
 #[test]
 fn a_pending_trap_whose_activation_is_gone_is_never_delivered() {
     let mut interp = Interp::new();
@@ -6420,9 +5820,6 @@ fn a_pending_trap_whose_activation_is_gone_is_never_delivered() {
 /// **Fix round 1's finding 2.** Once a `CALL ON` handler has returned,
 /// its condition is no longer active, so a later `RAISE PROPAGATE` has
 /// nothing to re-raise and is `98.918`.
-///
-/// The report's Concern 1 called this unmeasured; one probe settled it.
-/// Against the unclearing version the program was silent at rc 0.
 #[test]
 fn a_returned_call_handler_leaves_no_active_condition_to_propagate() {
     let mut interp = Interp::new();
@@ -6463,15 +5860,6 @@ fn a_signal_handler_that_runs_on_can_still_propagate() {
 /// trap, which is removed and stays removed. `deliver_pending_traps`
 /// documented this and nothing tested it: deleting the release left the
 /// whole suite and the corpus gate green.
-///
-/// Two raises, and the second one's handler run is the assertion -- an
-/// implementation that never releases the trap prints `UH 2 / mid / end`
-/// and drops the second condition silently.
-///
-/// The release was a re-insertion until 4c Task 10 made it
-/// `trap.delayed = false`. Re-measured against the new spelling: with
-/// that line skipped this test fails exactly as before, and the corpus
-/// drops to 48 of 49 on `lang/call_on_trap_rearms.rex`.
 #[test]
 fn a_call_trap_is_put_back_after_its_handler_returns() {
     let mut interp = Interp::new();
@@ -6517,13 +5905,6 @@ fn raise_propagate_of_an_unreportable_condition_ends_the_program_silently() {
 /// **Fix round 1's finding 5.** `RAISE SYNTAX`'s argument is validated
 /// rather than used verbatim. Every row measured against the oracle; see
 /// `raise_syntax_condition` for the rule and the boundary probes.
-///
-/// Before this, rows 5 and 6 rendered a `<no message N.M in the
-/// catalogue>` placeholder to the user at rc 216, row 8 rendered an
-/// unrelated catalogue entry at rc 25, and rows 7, 9 and 10 answered
-/// `Error 0` at **rc 0** -- a report on stderr beside a successful exit
-/// status, which is the global constraint's worst case rather than a
-/// cosmetic one.
 #[test]
 fn raise_syntax_validates_its_argument() {
     for (argument, expected, substitution) in [
@@ -6600,11 +5981,6 @@ fn raise_syntax_validates_its_argument() {
 /// boundary, not the `END`'s. Both iterations must see the handler's
 /// value, and `SIGL` must be the `call sub` clause's line (4), not the
 /// `say`'s.
-///
-/// While the delivery check lived only in `run_activation`'s loop this
-/// printed `NOMARK` on both passes and `HANDLER-AT 5` once, after the
-/// loop -- wrong in timing and in `SIGL`. `run_bounded` is where a loop
-/// body's clauses are actually stepped.
 #[test]
 fn a_pending_trap_is_delivered_inside_a_do_body() {
     let mut interp = Interp::new();
@@ -6646,14 +6022,6 @@ fn a_pending_trap_is_delivered_inside_a_when_body_and_a_fragment() {
 /// `SIGNAL ON` handler is already running -- one clause can queue the
 /// first and raise the second -- and when it returns, the condition it
 /// interrupted must come back.
-///
-/// `zq = sub() + 1/0` does both: `sub` queues a trapped `USER`
-/// condition, then `1/0` raises a trapped `SYNTAX` one. The `SYNTAX`
-/// handler ends in `raise propagate`, which must re-raise **42.3**.
-/// Round 1 set `active_condition = None` when the call handler returned
-/// and got `98.918`; before round 1 nothing was cleared and it was
-/// silence at rc 0. Both interpreters agree on the delivery order (`UH`
-/// then `SH`), so the assertion isolates to the propagate.
 #[test]
 fn a_call_handler_restores_the_condition_it_interrupted() {
     let mut interp = Interp::new();
@@ -6680,15 +6048,6 @@ fn a_call_handler_restores_the_condition_it_interrupted() {
 /// expressions run in it, and its boundary is its own, not the whole
 /// loop's. `do i = 1 to sub()` must report `SIGL` 3 -- the `DO` clause --
 /// and deliver the handler before the body's first pass.
-///
-/// Before this the handler ran after the `END`, so this test pins the
-/// *boundary*. It does **not** pin the header's line: measured, a
-/// mutation that leaves `header_line` at whatever was already current
-/// keeps this test green, because the `DO` instruction's own
-/// `step_in_temps_frame` has already set line 3. The sibling below is
-/// what pins the line, since only a re-test can be on a different clause
-/// from the header. Two tests, two properties, stated because the
-/// mutation said so rather than assumed because they look related.
 #[test]
 fn a_loop_header_is_a_clause_with_its_own_boundary() {
     let mut interp = Interp::new();
@@ -6707,11 +6066,6 @@ fn a_loop_header_is_a_clause_with_its_own_boundary() {
 /// mechanism; this test carries the `DO`-then-`END` half, and
 /// `a_loop_retest_after_an_iterate_belongs_to_the_iterate_clause` carries
 /// the third member.
-///
-/// **Round 3's version of this comment said "the `DO` clause on the first
-/// pass, the `END` clause on every one after", which was false**: it
-/// fitted the two members probed and broke two previously-matching
-/// programs, because an `ITERATE` never reaches `END` at all.
 #[test]
 fn a_while_retest_belongs_to_the_do_clause_then_to_the_end_clause() {
     let mut interp = Interp::new();
@@ -6745,17 +6099,6 @@ fn a_while_retest_belongs_to_the_do_clause_then_to_the_end_clause() {
 /// `RexxActivation::iterate`, so `END` is never reached and never owns
 /// anything. Round 3 attributed it to `END` and turned two
 /// byte-for-byte-matching programs into divergences.
-///
-/// Three rows, no trap in the first two, so those are a plain `SIGL`
-/// question rather than a delivery one:
-///
-/// * the `ITERATE` row itself (oracle `2, 4, 4`; round 3 gave `2, 5, 5`);
-/// * **the adjacent success**, the same loop with the `ITERATE` removed,
-///   which must stay on `END` (oracle `2, 4, 4` with the `END` at 4) --
-///   that is what pins the rule to "who transferred control" rather than
-///   to "not `END`";
-/// * an `UNTIL` loop, where the two attributions alternate within one
-///   program (oracle `4, 6`), which no single-shape row can produce.
 #[test]
 fn a_loop_retest_after_an_iterate_belongs_to_the_iterate_clause() {
     let mut interp = Interp::new();
@@ -6798,12 +6141,6 @@ fn a_loop_retest_after_an_iterate_belongs_to_the_iterate_clause() {
 
 /// `END` is **not executed** when an `ITERATE` ends a pass, so it does not
 /// echo either -- the other half of NEW-1, found while measuring it.
-///
-/// The oracle's reason is the same one: `RexxInstructionEnd::execute` is
-/// what calls `reExecute` on a fall-through, and `RexxActivation::iterate`
-/// is what calls it for an `ITERATE`; `END` is jumped straight over. The
-/// adjacent success is the same loop with the `ITERATE` removed, which
-/// must still echo `end` once per pass.
 #[test]
 fn end_does_not_echo_for_a_pass_an_iterate_ended() {
     let mut interp = Interp::new();
@@ -6841,13 +6178,6 @@ fn end_does_not_echo_for_a_pass_an_iterate_ended() {
 /// right, so a `CALL ON` handler queued by one runs at *that* clause's
 /// boundary -- before the branch, before the next `WHEN`, before
 /// `OTHERWISE`.
-///
-/// Every row writes `then` on the line **after** the condition, which is
-/// what separates the right answer from the wrong one: with `then` on the
-/// same line, the clause that wrongly collected the boundary reports the
-/// same number, and five rounds of probes never told them apart. The
-/// one-line spellings are the adjacent successes in
-/// `a_single_line_then_reports_the_same_line_either_way`.
 #[test]
 fn a_construct_header_is_a_clause_with_its_own_boundary() {
     let trap = b"call on user foo name uh\nzmark = 'NOMARK'\n";
@@ -6895,16 +6225,6 @@ fn a_construct_header_is_a_clause_with_its_own_boundary() {
 /// The adjacent success for `a_construct_header_is_a_clause_with_its_own_
 /// boundary`: with `then` on the *same* line as the condition, the right
 /// answer and the wrong one coincide, and both must be the oracle's.
-///
-/// Kept as its own test rather than folded in, because it is the row that
-/// shows why the passing cases were never evidence: **its output is the
-/// same with and without the fix.** Measured -- with the per-`WHEN`
-/// clause removed, this test does fail, but on `in_clause`'s tripwire
-/// ("a clause at line 4 began while a condition queued by this
-/// activation's clause at line 3 was still waiting"), never on a wrong
-/// value. That is the tripwire earning its place: the coincidence that
-/// hid the defect for four rounds is exactly the case a value assertion
-/// cannot see.
 #[test]
 fn a_single_line_then_reports_the_same_line_either_way() {
     let trap = b"call on user foo name uh\nzmark = 'NOMARK'\n";
@@ -6943,12 +6263,6 @@ fn a_single_line_then_reports_the_same_line_either_way() {
 /// **An `INTERPRET` fragment is the one construct that must *not* end its
 /// header clause before running what it nests**, and this is the test
 /// that stops the NEW-2 fix being applied to it by analogy.
-///
-/// The oracle runs fragment text in an activation of its own
-/// (`RexxActivation::interpret`) whose condition queue is separate and is
-/// merged back only on the way out, so a condition queued by the
-/// `INTERPRET` clause's own expression waits for that clause's boundary --
-/// measured, the fragment's `say` reads the handler's variable **unset**.
 #[test]
 fn an_interpret_clause_does_not_deliver_before_its_fragment_runs() {
     let mut interp = Interp::new();
@@ -6964,10 +6278,6 @@ fn an_interpret_clause_does_not_deliver_before_its_fragment_runs() {
 /// **Fix round 3's NEW-B.** When the handler run at a clause's boundary
 /// itself fails, the clause the report blames is the one whose boundary
 /// ran it -- `call sub` -- not the enclosing `DO`.
-///
-/// The neighbouring case is what pins it to the boundary rather than to
-/// anything about `DO`: the same program with no trap at all, failing
-/// directly inside `sub`, already blamed `call sub` correctly.
 #[test]
 fn a_handler_that_fails_at_a_clause_boundary_blames_that_clause() {
     let mut interp = Interp::new();
@@ -6992,9 +6302,6 @@ fn a_handler_that_fails_at_a_clause_boundary_blames_that_clause() {
 
 /// A builtin reached through every call form the resolution serves, and
 /// the one form that must **not** reach it.
-///
-/// Every line is the oracle's, measured in a clean directory:
-///
 /// ```text
 /// say length('abc')      3            rc 0
 /// say Length('abcd')     4            rc 0     (a symbol target upcases)
@@ -7003,12 +6310,6 @@ fn a_handler_that_fails_at_a_clause_boundary_blames_that_clause() {
 /// call length 'abc'      RESULT 3     rc 0
 /// call "LENGTH" 'abc'    RESULT 3     rc 0
 /// ```
-///
-/// The lowercase literal is the neighbouring failure that pins the
-/// match to the bytes rather than to a case-insensitive compare, and it
-/// is the oracle's own 43.1 here: the `::ROUTINE` step behind the builtin
-/// table is what makes "matched no builtin" and "matched nothing at all"
-/// the same answer for a name no directive defines.
 #[test]
 fn length_dispatches_from_every_call_form_that_reaches_the_builtin_table() {
     let mut interp = Interp::new();
@@ -7065,18 +6366,6 @@ fn routine_program(source: &[u8]) -> crate::Outcome {
 /// line is for rather than the dispatch: every name below resolves to
 /// **something** on this crate, so a wrong order is a wrong answer and
 /// not a failure.
-///
-/// Measured on the oracle in a clean directory, rc 0, exactly these four
-/// lines. Each is a separate `::routine` that would win if the step in
-/// front of it were removed:
-///
-/// * `call max 1, 9` -> `9`: the builtin beats `::routine max`.
-/// * `call zorkolo` -> `LABEL`: the internal label beats
-///   `::routine zorkolo`.
-/// * `call 'ZORKOLO'` -> `ROUTINE`: a quoted target skips the label and
-///   reaches the routine anyway.
-/// * `call 'MAX' 1, 9` -> `9`: a quoted target does **not** skip the
-///   builtin.
 #[test]
 fn the_resolution_order_is_label_then_builtin_then_routine() {
     let outcome = routine_program(
@@ -7109,8 +6398,6 @@ fn the_resolution_order_is_label_then_builtin_then_routine() {
 /// of it is case-sensitive -- and the second half is what makes the first
 /// observable at all, since a `::routine 'max'` is only reachable because
 /// `call 'max'` misses the builtin table.
-///
-/// Measured on the oracle, rc 0, these three lines.
 #[test]
 fn a_routine_lookup_upcases_both_sides_where_the_builtin_lookup_does_not() {
     let outcome = routine_program(
@@ -7141,11 +6428,6 @@ fn a_routine_lookup_upcases_both_sides_where_the_builtin_lookup_does_not() {
 /// A `::ROUTINE` gets a pool of its own, and a `CALL`ed label does not --
 /// the pair, because the isolating half alone passes just as well against
 /// an implementation that isolates everything.
-///
-/// Measured on the oracle, rc 0: the routine reads the derived name `VV`
-/// for a variable the caller set, its own write does not survive the
-/// return, and the identical program with a label instead prints the
-/// caller's value and keeps the callee's write.
 #[test]
 fn a_routine_has_its_own_pool_and_a_called_label_shares_the_callers() {
     let outcome = routine_program(
@@ -7179,11 +6461,6 @@ fn a_routine_has_its_own_pool_and_a_called_label_shares_the_callers() {
 /// None of the five things [`Inherited`] carries crosses into a
 /// `::ROUTINE`, and the neighbouring `CALL`ed label shows each of them
 /// crossing -- so this pins the difference rather than the defaults.
-///
-/// Measured on the oracle, rc 0, exactly the eight lines below. The
-/// `NUMERIC` probe uses `FORM` as well as `DIGITS` because a caller
-/// setting `form engineering` and a routine reporting `SCIENTIFIC` is the
-/// only spelling of that field where inherited and defaulted differ.
 #[test]
 fn a_routine_inherits_none_of_the_five_a_called_label_inherits() {
     let outcome = routine_program(
@@ -7221,9 +6498,6 @@ fn a_routine_inherits_none_of_the_five_a_called_label_inherits() {
 /// probe separates "not inherited" from "the caller caught it after the
 /// routine unwound" -- which every two-level program answers the same way
 /// unless the routine has a label of the trap's own name.
-///
-/// Measured on the oracle, rc 0, `in routine` then `CALLER TRAP`: the
-/// routine's own `mytrap:` never runs.
 #[test]
 fn a_routine_does_not_inherit_the_callers_condition_traps() {
     let outcome = routine_program(
@@ -7252,11 +6526,6 @@ fn a_routine_does_not_inherit_the_callers_condition_traps() {
 }
 
 /// A `::ROUTINE` call sets no `SIGL` on either side.
-///
-/// Measured on the oracle, rc 0: the caller's own `SIGL` still reads the
-/// `SIGNAL`'s line after the call returns, and `sigl` inside the routine
-/// is the derived name. The `CALL`ed label beside it is the neighbouring
-/// success -- it *does* set one, in the pool the two share.
 #[test]
 fn a_routine_call_sets_no_sigl_where_a_called_label_does() {
     let outcome = routine_program(
@@ -7288,9 +6557,6 @@ fn a_routine_call_sets_no_sigl_where_a_called_label_does() {
 
 /// Two `::ROUTINE` directives of the same name refuse the program before
 /// its first clause, with the oracle's own translation error.
-///
-/// Measured, rc 157, stdout EMPTY -- the `say` never runs, which is the
-/// half a message-only assertion would miss.
 #[test]
 fn a_duplicate_routine_directive_is_99_903_before_the_first_clause() {
     let outcome = routine_program(
@@ -7312,18 +6578,6 @@ fn a_duplicate_routine_directive_is_99_903_before_the_first_clause() {
 
 /// Two `::RESOURCE` directives of the same name refuse the program before its
 /// first clause, and two of different names do not.
-///
-/// **This is the sole instrument for 99.942 and there can be no corpus row.**
-/// Measured by adding a `::RESOURCE` program to `corpus/lang/`:
-/// `rexx-parse`'s `every_corpus_program_tiles` fails it byte by byte -- "byte
-/// 'o' at offset 45 sits after the last clause span and belongs to no node"
-/// -- because a `::RESOURCE` body is source lines that no clause span covers.
-/// The same reason keeps `.RESOURCES` out of the corpus.
-///
-/// The key is the upcased name whatever the directive spelled, which the
-/// quoted lower-case first name is here to say. Measured against the oracle,
-/// rc 157 with stdout EMPTY and the second directive echoed; the distinct-name
-/// pair below it is rc 0 with `main ran` on stdout.
 #[test]
 fn a_duplicate_resource_name_is_refused_and_a_distinct_one_is_not() {
     let refused = routine_program(
@@ -7385,23 +6639,6 @@ fn an_uncalled_routine_directive_changes_nothing() {
 
 /// A value too large to copy twice runs to completion on every path
 /// whose second copy exists only to be traced.
-///
-/// **The unit this asserts is "does not abort", which is not a thing a
-/// test can assert from inside the process** -- an allocation failure
-/// aborts rather than unwinding, so the run below would take the whole
-/// test binary with it. What it asserts instead is the property the
-/// guard actually adds: that no rendering happens at all when nothing
-/// will print it. `Interp::intermediate_text` and `Interp::result_text`
-/// return `None` under `TRACE N`, and a version of either that rendered
-/// unconditionally and then threw the bytes away would satisfy every
-/// other test in this file.
-///
-/// The abort itself is measured out of process, in this task's own
-/// report and in `phase-4-exclusions.txt`'s memory row: `say
-/// length(copies('a',400000000))` at the project's `ulimit -v 1048576`
-/// was SIGABRT at rc 134 and is now `400000000` at rc 0, matching the
-/// oracle, and peak RSS for the 500 MB case went from 978,460 kB to
-/// 490,692 kB against the oracle's 496,364 kB.
 #[test]
 fn nothing_is_rendered_for_a_trace_line_that_will_not_print() {
     let mut interp = Interp::new();
@@ -7430,17 +6667,6 @@ fn nothing_is_rendered_for_a_trace_line_that_will_not_print() {
 
 /// `EXIT` inside a `::ROUTINE` ends the routine and settles `RESULT`,
 /// where `EXIT` inside a `CALL`ed label ends the program.
-///
-/// **Four routes, because the exit reaches the routine boundary four
-/// different ways** and only two of them travel on a `Flow`: a plain
-/// `EXIT` in the routine's own body, one reached from a label *inside*
-/// the routine, one reached through an expression call (which arrives as
-/// `Failure::Exited`, an `Err`), and one inside an `INTERPRET`. Measured
-/// on the oracle, rc 0 for all of them.
-///
-/// The last block is the neighbouring case that keeps this about routines
-/// rather than about `EXIT`: the same `exit 5` in a `CALL`ed label ends
-/// the program at rc 5.
 #[test]
 fn exit_inside_a_routine_ends_the_routine_where_a_labels_exit_ends_the_program() {
     let outcome = routine_program(
@@ -7497,20 +6723,6 @@ fn exit_inside_a_routine_ends_the_routine_where_a_labels_exit_ends_the_program()
 /// A `::ROUTINE`'s own clauses echo at indent **0**, however deeply the
 /// call site is nested -- the same fact as `TRACE` not crossing into a
 /// routine, seen from the other side.
-///
-/// **The exact stderr, because nothing else in the suite can see this
-/// one.** `support::normalize_stderr` (DEVIATION 0) collapses the space
-/// run between a trace line's marker and its content, so
-/// `tests/corpus.rs` and `tests/trace_oracle.rs` compare a clause echoed
-/// at indent 2 equal to one echoed at indent 0. Measured, and the
-/// mutation is the caller's own `value_indent() + 2` applied to the
-/// routine path as well: the whole workspace stays green with that
-/// change and only this assertion goes red.
-///
-/// The oracle's own transcript for this program, `cat -A`'d, is what the
-/// expectation below is: the routine is called from two nested `DO`
-/// blocks, so an internal label reached the same way would echo at
-/// indent 6.
 #[test]
 fn a_routines_own_clauses_echo_at_indent_zero_however_deep_the_call_site_is() {
     const PATH: &str = "/tmp/rtn-indent.rex";
@@ -7543,16 +6755,6 @@ fn a_routines_own_clauses_echo_at_indent_zero_however_deep_the_call_site_is() {
 /// `>I>`/`<I<` fire for exactly the four `TRACE` letters whose setting
 /// traces labels, and for no other, when the routine's own `TRACE` is its
 /// first instruction.
-///
-/// **All nine accepted letters, not the four that work.** Measured on the
-/// oracle by running the same routine under each: `a`, `i`, `l` and `r`
-/// announce both lines, and `n`, `c`, `e`, `f` and `o` produce zero
-/// stderr. A gate written as "any trace setting at all" passes a
-/// four-letter test and fails this one.
-///
-/// The bytes are asserted whole rather than by substring: seven leading
-/// blanks, the prefix, one blank, the message, the trailing period
-/// outside the closing quote, and no trailing whitespace.
 #[test]
 fn the_invocation_prefixes_fire_for_exactly_the_four_label_tracing_letters() {
     const PATH: &str = "/tmp/rtn-letters.rex";
@@ -7596,24 +6798,6 @@ fn the_invocation_prefixes_fire_for_exactly_the_four_label_tracing_letters() {
 /// A `TRACE` that is not a **top-level** clause of the routine announces
 /// nothing, however the construct around it nests -- and the two
 /// `INTERPRET` rows that break that rule in both directions.
-///
-/// **The axes this crosses, and why crossing them is the point.** The
-/// gate has a trace-letter axis and a where-does-the-TRACE-sit axis.
-/// `the_invocation_prefixes_are_gated_on_more_than_the_trace_letter`
-/// varies the second only with flat clauses in front, and
-/// `..._four_label_tracing_letters` varies the first with the `TRACE`
-/// always flat and first. Each holds the other axis on its safe value,
-/// and the defect lived exactly at the crossing: the decay was spent by
-/// `run_activation`'s top-level loop, so anything running through
-/// `run_bounded`/`run_fragment` reached the `TRACE` before it fired.
-/// Measured before the fix, `if 1=1 then trace l` as a routine's first
-/// clause: 0 bytes of stderr on the oracle, 318 bytes here, both rc 0.
-///
-/// Every row is the oracle's own stderr, captured with `cat -A` so
-/// trailing whitespace is visible. `n09` is here rather than only `n01`
-/// because it crosses the axes the other way: the `TRACE R` still takes
-/// effect for the clauses after it, so "announced nothing" has to be
-/// distinguished from "did nothing".
 #[test]
 fn the_invocation_prefixes_are_not_announced_from_inside_a_nested_construct() {
     const PATH: &str = "/tmp/rtn-nested.rex";
@@ -7681,11 +6865,6 @@ fn the_invocation_prefixes_are_not_announced_from_inside_a_nested_construct() {
 
 /// The five things other than the letter that decide whether the pair is
 /// announced, each with the neighbouring case that is announced.
-///
-/// Every source below was measured on the oracle, rc 0. They are one test
-/// because each is the *same* program differing in one clause, and
-/// splitting them would hide that: the announced case is what says the
-/// difference is the clause and not something else about the program.
 #[test]
 fn the_invocation_prefixes_are_gated_on_more_than_the_trace_letter() {
     const PATH: &str = "/tmp/rtn-gate.rex";
@@ -7764,12 +6943,6 @@ fn the_invocation_prefixes_are_gated_on_more_than_the_trace_letter() {
 /// Every directive form whose installation this crate **can** perform
 /// leaves the program running byte for byte as the oracle runs it, one
 /// program per form.
-///
-/// **This is the half that stops "any directive is a gap".** Each source
-/// below was measured on the oracle in a clean directory: rc 0, stdout
-/// `main ran`, stderr empty. A version of `directive_gap` that refused on
-/// presence passes every refusal test in this file and fails every one of
-/// these.
 #[test]
 fn every_directive_this_crate_can_install_leaves_the_program_alone() {
     let sources: &[(&str, &[u8])] = &[
@@ -7839,23 +7012,6 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 
 /// The refusals Task 21 leaves where the oracle answers, asserted here
 /// because nothing else can assert them.
-///
-/// **A refusal the oracle does not share is not expressible as a corpus
-/// row**, so the corpus gate cannot see one of these becoming an answer.
-/// That is the "an in-crate test only" case the global constraints name,
-/// and this is it: every source below is one the shipped oracle runs or
-/// raises a Rexx condition for, and that this crate refuses.
-///
-/// The measured oracle answer for each, rc 0 unless stated:
-///
-/// * `.K~defineMethods(.local)` is **rc 163**, `93.974`: the oracle reads
-///   `.local`'s entries and finds they are not methods, where this crate
-///   cannot read them at all.
-///
-/// **The exit code alone would not do it.** Each row asserts the message
-/// too, because `NOT_IMPLEMENTED_EXIT` is what a refusal from anywhere in
-/// the program produces, and a row checking only the code would pass on a
-/// refusal raised by some other construct on the same line.
 #[test]
 fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
     let cases: &[(&[u8], &str)] = &[
@@ -7885,35 +7041,6 @@ fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
 
 /// The source shapes a method compiled from source text refuses, each of
 /// which the shipped oracle takes.
-///
-/// **In-crate rather than a corpus row for the reason the refusals above
-/// are**: the oracle answers every one of these, so a differential program
-/// carrying one could never agree, and the exit code alone would not do it
-/// because `NOT_IMPLEMENTED_EXIT` is what a refusal from anywhere in the
-/// program produces.
-///
-/// The measured oracle answer for each:
-///
-/// * `.k~define("m", .environment)` is **rc 0**: `requestArray` on a
-///   directory answers its own index list, and every index is a string, so
-///   the directory compiles as a program. This crate holds a subset of
-///   `.environment`, so it would compile a different one.
-/// * `.k~define("bad", 'this is not rexx +++')` is **rc 221**, and the
-///   report names the method rather than the program:
-///   `Error 35 running bad line 1:` then
-///   `35.901 Prefix operator "+" is not followed by an expression term.`
-/// * `.k~define("m", 'say 1' || '0a'x || 'say 2')` is **rc 243**, `13.1`:
-///   a string source is one line, so a terminator inside it is a character
-///   in the program. This row is what says the refusal is the *report* and
-///   not the line model -- the number this crate reaches is 13.1 too.
-/// * A source whose second line is `::class zz` is **rc 0**, and `.zz` is
-///   97.1 in the caller afterwards: the directive installs into the
-///   method's own package and reaches nothing outside it.
-/// * `.methods~put('return 1', 'M')` then
-///   `.object~subclass("k", .Class, .methods)` is **rc 0**, and `k~m`
-///   answers. The source text is what is declined: putting the *method
-///   object* a `~define` produced into that same table agrees instead, and
-///   `corpus/lang/method_source_reported_name.rex` is that arm's witness.
 #[test]
 fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
     let cases: &[(&[u8], &str)] = &[
@@ -7959,18 +7086,6 @@ fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
 
 /// Every directive form whose installation this crate **cannot** perform
 /// refuses the program before its first clause, naming the owning phase.
-///
-/// Two things are asserted per form and both matter. The owner suffix is
-/// what `corpus.rs` and `keyword-exempt.txt` read to attribute a failure.
-/// The **empty stdout** is what says the refusal happened at install
-/// rather than at the call: every source below has `say 'main ran'` as
-/// its first clause, and the oracle prints nothing for the ones it also
-/// refuses.
-///
-/// **`::REQUIRES` has only its `LIBRARY` form here.** The plain form and the
-/// `NAMESPACE` form both open the file they name, so neither is a gap: a name
-/// nothing resolves is the oracle's own 43.901, asserted by the case below
-/// this one, and a namespace nothing registered is 98.987.
 #[test]
 fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
     let cases: &[(&[u8], &str)] = &[
@@ -8030,14 +7145,6 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
 /// **A gap the oracle diagnoses before it creates any class refuses before
 /// this crate creates one either**, so a `::CLASS` that cannot install does
 /// not answer in its place.
-///
-/// Every source below pairs one gap form with `::class a subclass
-/// zzznotaclass`, in each order. That `::CLASS` raises 98.909, and since
-/// `518cd6de7` this crate installs the file's classes ahead of the
-/// source-order pass that reads `directive_gap` -- so without `staged_gap`
-/// the class error is what a reader of these programs gets. The oracle's own
-/// answer, measured in a clean directory, is the same in either order:
-///
 /// ```text
 /// ::requires 'zzznosuchfile.rex'                        43.901 rc 213, the ::REQUIRES line
 /// ::routine zz external "LIBRARY nosuchlib nosuchfn"    98.903 rc 158, the ::ROUTINE line
@@ -8045,20 +7152,6 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
 /// ::attribute aa external "LIBRARY nosuchlib nosuchfn"  98.903 rc 158, the ::ATTRIBUTE line
 /// ::options digits 12                                   98.909 rc 158, the ::CLASS line
 /// ```
-///
-/// So every source but the `::OPTIONS` pair must refuse, and those must reach
-/// the class error -- which `::OPTIONS` does by installing rather than by
-/// having a stage, so its pair is what says the class pass still answers over
-/// a directive that succeeded. **The halves fail in opposite directions**:
-/// dropping `staged_gap` reddens the refusing rows, and a `::OPTIONS` whose
-/// install raised anything of its own reddens the last two.
-///
-/// **The `::REQUIRES` pair is the one that matches**, since this phase built
-/// the file search: it answers the oracle's own 43.901 at rc 213, echoing the
-/// `::REQUIRES` clause, in either order. The `EXTERNAL` rows still answer a
-/// refusal where the oracle answers 98.903 -- the honest half of the trade
-/// `staged_gap`'s doc states, which the corpus differential cannot see
-/// because a corpus program is one both implementations answer.
 #[test]
 fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() {
     let failing_class = "::class a subclass zzznotaclass\n";
@@ -8135,27 +7228,6 @@ fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() 
 
 /// **An unresolvable `::CLASS` keyword is diagnosed inside the class pass,
 /// and that is asserted here rather than left incidental.**
-///
-/// A namespace qualifier is the sharpest case: `Interp::resolve_class_target`
-/// answers it from the package's namespace table, so the refusal is raised
-/// while the classes are being created -- which is where the oracle
-/// diagnoses it too. Nothing asserted that until this test, so a change to
-/// `install_class_at` could have moved it with nothing going red.
-///
-/// Each form appears in two programs and they pin opposite sides:
-///
-/// * **above a `::CLASS` that cannot install**, the qualifier must win at
-///   98.987, because the class pass reaches its own directive first. Blaming
-///   the class error instead is a wrong answer, since the oracle blames the
-///   qualifier's line -- measured, on all four keywords.
-/// * **above a cyclic `::CLASS` pair**, the *cycle* must win at 98.911,
-///   because `class_install_order` runs before any class is created. Measured
-///   on the oracle, which agrees. This row is what would redden if one of
-///   these forms were ever hoisted into the first walk with `::ANNOTATE` and
-///   the `EXTERNAL` forms, where it does not belong.
-///
-/// Both exit 158, so the exit code alone separates neither from the other nor
-/// from the pre-namespace refusal; the sub-code and the blamed line do.
 #[test]
 fn a_class_keyword_gap_is_raised_inside_the_class_pass() {
     let failing_class = "::class a subclass zzznotaclass\n";
@@ -8202,38 +7274,12 @@ fn a_class_keyword_gap_is_raised_inside_the_class_pass() {
 /// **When one directive owes both a translation error and a gap, the
 /// translation error is the answer**, which is where the gap check sits
 /// relative to `Interp::install_directives`' first loop.
-///
-/// That loop walks the directives once and answers whichever of a duplicate
-/// `::ROUTINE` name, a class-less `::CONSTANT` expression, an `::ANNOTATE`
-/// target or an `EXTERNAL` library it reaches first -- the oracle's own order.
-/// A single `::ROUTINE` can owe two of those at once, and then the position of
-/// the gap check **inside** the loop body decides, which is a choice the
-/// source-order rule does not make for us.
-///
-/// Measured on the oracle, and this crate matches it byte for byte:
-///
 /// ```text
 /// say 'main ran'                                     rc 157
 /// ::routine dup                                        4 *-* ::routine dup external ...
 ///   return 1                                         Error 99.903: Duplicate ::ROUTINE
 /// ::routine dup external "LIBRARY nosuchlib ..."     directive instruction.
 /// ```
-///
-/// So the check runs **after** the loop's own arms. Putting it at the top of
-/// the body -- the obvious place, and the one this test exists to catch --
-/// refuses that program at [`NOT_IMPLEMENTED_EXIT`] instead, turning a match
-/// into an over-refusal that no other test and no gate would see: no corpus
-/// subset program pairs the two, and every standalone `EXTERNAL` witness
-/// refuses either way.
-///
-/// The second source is the control that keeps the first from passing for the
-/// wrong reason. Reverse the pair and the `EXTERNAL` directive is what the
-/// walk reaches first, so the refusal is right there and the oracle agrees
-/// about which directive is at fault -- 98.903 rc 158 echoing line 2. Without
-/// this row a build that never consulted `directive_gap` in the loop at all
-/// would still pass the first row.
-///
-/// [`NOT_IMPLEMENTED_EXIT`]: crate::NOT_IMPLEMENTED_EXIT
 #[test]
 fn a_directive_owing_both_a_translation_error_and_a_gap_answers_the_translation_error() {
     let outcome = routine_program(
@@ -8270,21 +7316,6 @@ fn a_directive_owing_both_a_translation_error_and_a_gap_answers_the_translation_
 
 /// A builtin's result is a value whose rendering `NUMERIC DIGITS` cannot
 /// reach, and D15 is still visible on it from the other side.
-///
-/// The whole program below is the oracle's, measured in a clean
-/// directory, rc 0, printing `16`, `2E+1`, `10`. Each line is doing
-/// separate work:
-///
-/// * `nn` is built under `DIGITS 3` and read back under `DIGITS 1`, which
-///   is the change D15 says a probe needs before it can see anything at
-///   all. It still prints `16`.
-/// * `nn + 0` under `DIGITS 1` prints `2E+1`, because the addition is a
-///   new operation creating a new number under the digits then in force.
-///   Without this line the first would also pass against a value that had
-///   simply captured `DIGITS 3`.
-/// * `length('abcdefghij')` under `DIGITS 1` prints `10` and not `1E+1`,
-///   which is what rules out creating the result through
-///   `Interp::number` with the current settings.
 #[test]
 fn a_builtins_result_renders_independently_of_the_digits_in_force() {
     let mut interp = Interp::new();
@@ -8299,19 +7330,11 @@ fn a_builtins_result_renders_independently_of_the_digits_in_force() {
 }
 
 /// `say length()` produces the oracle's own 40.3 report, byte for byte.
-///
-/// Measured in a clean directory, rc 216:
-///
 /// ```text
 ///      1 *-* say length()
 /// Error 40 running /.../p09.rex line 1:  Incorrect call to routine.
 /// Error 40.3:  Not enough arguments in invocation of LENGTH; minimum expected is 1.
 /// ```
-///
-/// **Driven through `run_program`**, because the bytes under test are the
-/// whole report -- the clause echo, the major line's path and line number,
-/// and the secondary line's two substitutions -- and only the real entry
-/// point assembles all three.
 #[test]
 fn a_builtin_called_with_too_few_arguments_reports_the_oracles_40_3() {
     let path = "/tmp/length-arity.rex";
@@ -8329,14 +7352,6 @@ fn a_builtin_called_with_too_few_arguments_reports_the_oracles_40_3() {
 }
 
 // ---- ADDRESS, the environment-naming forms ----
-//
-// Every assertion below reads the activation's own state rather than a
-// program's output. That was once forced -- the environment has exactly
-// two readers a Rexx program can use, `ADDRESS()` and issuing a command
-// -- and is now a division of labour: `corpus/lang/address_env.rex`
-// asserts the same properties through `ADDRESS()`, against the oracle,
-// and these read the pair directly so a wrong *alternate* is visible
-// without a toggle to expose it.
 
 /// The running activation's `(current, alternate)` pair as text, `None`
 /// staying `None` because it is not a name -- it is "the platform's
@@ -8374,18 +7389,6 @@ fn only_the_symbol_form_upcases_the_environment_name() {
 }
 
 /// Bare `ADDRESS` swaps the pair, forever.
-///
-/// **Four consecutive toggles, because one is not enough to tell a swap
-/// from a pop.** Measured on the oracle through `ADDRESS()`: `ENVB`,
-/// `ENVA`, `ENVB`, `ENVA`, `ENVB` for zero through four bare `ADDRESS`es
-/// after `envA` and `envB`. A pop-stack implementation agrees on the
-/// first toggle and then walks backwards out of the pair instead of
-/// returning into it -- measured by mutation, replacing the swap with
-/// `current = alternate.take()`: the alternate is already wrong after one
-/// toggle and the current after two.
-///
-/// Both halves are asserted rather than only the current one, and that is
-/// what makes the first row catch anything at all.
 #[test]
 fn bare_address_is_a_toggle_and_not_a_stack() {
     for (toggles, current, alternate) in [
@@ -8411,25 +7414,6 @@ fn bare_address_is_a_toggle_and_not_a_stack() {
 
 /// A bare `ADDRESS` before any other `ADDRESS` changes nothing, and the
 /// default is a name the pair can toggle back **to**.
-///
-/// Measured on the oracle, the one edge every earlier probe missed by
-/// setting an environment first: `say address()` reports `sh` before and
-/// after each of three bare `ADDRESS`es.
-///
-/// **The second half is what makes this discriminate anything.** The first
-/// assertion alone is satisfied by a `toggle` that does nothing at all,
-/// and only a change to how the default is represented could redden it.
-/// The second is the failure this edge actually invites: `None` is doing
-/// two jobs in an `Option`, "the platform default" and "absent", and an
-/// implementation that reads it as the second guards its toggle with `if
-/// let Some(previous) = self.alternate.take()` and then refuses to leave
-/// `ENVA`. Measured against the oracle, which does leave it: `address
-/// envA` then bare `ADDRESS` reports `sh`.
-/// One `Interp` per row, and a row's whole program in one string: each
-/// `run_source` pushes a **fresh** activation, so splitting a sequence
-/// across two calls would silently start the second half from the default
-/// again -- which is how an earlier version of this test appeared to pass
-/// its middle assertion for the wrong reason.
 #[test]
 fn a_bare_address_with_no_prior_environment_changes_nothing() {
     const LEAD: &str = "address\naddress\naddress\n";
@@ -8487,23 +7471,6 @@ fn setting_the_same_environment_twice_leaves_the_toggle_nothing_to_do() {
 
 /// The environment is **per activation**: a callee's own `ADDRESS` dies
 /// with it, and so does its own toggle.
-///
-/// Measured on the oracle: `address outer` in the caller, `address inner`
-/// in the callee, and the caller still reports `OUTER` after the `RETURN`,
-/// then `sh` after a bare `ADDRESS` -- so neither half of the pair came
-/// back. An implementation holding one pair on `Interp` instead of one per
-/// activation reads `INNER` here.
-///
-/// **The other direction cannot be asserted here, and is asserted in the
-/// corpus instead.** A callee does inherit the caller's pair, both
-/// halves, and `Activation::address`' own doc has the oracle transcript
-/// -- but a callee never writes anything back and `Interp::invoke_call`
-/// pops it unconditionally on both paths, so no in-crate test can read a
-/// callee's own state. `corpus/lang/address_env.rex`'s E block reads it
-/// from inside the callee with `ADDRESS()`, and uses two named
-/// environments rather than the default for both halves, because with an
-/// unset alternate "inherited the caller's pair" and "started from the
-/// default" print the same bytes.
 #[test]
 fn a_callees_own_environment_does_not_survive_the_return() {
     let mut interp = Interp::new();
@@ -8516,10 +7483,6 @@ fn a_callees_own_environment_does_not_survive_the_return() {
 }
 
 /// 250 bytes is accepted and 251 raises 29.1, on both setting forms.
-///
-/// Measured on the oracle, rc 227 for each of the two long spellings, and
-/// `ADDRESS()` reporting length 250 for the accepted one. The substitution
-/// carries the whole name back untruncated -- 251 bytes in, 251 quoted.
 #[test]
 fn an_environment_name_over_two_hundred_and_fifty_bytes_raises_29_1() {
     for length in [250usize, 251] {
@@ -8555,12 +7518,6 @@ fn an_environment_name_over_two_hundred_and_fifty_bytes_raises_29_1() {
 
 /// The command form and the `WITH` form both still fail loudly, and both
 /// name Phase 7.
-///
-/// `tests/loud.rs` carries one witness for the `Address::Command` tag and
-/// the tag covers two shapes, so the shape that witness does not spell is
-/// pinned here. The third row is the one that is easy to miss: a `WITH`
-/// with **no** command still configures a command's streams, so it is the
-/// same owner even though it only names an environment.
 #[test]
 fn the_command_and_with_forms_stay_loud_and_name_phase_7() {
     for source in [
@@ -8589,20 +7546,6 @@ fn the_command_and_with_forms_stay_loud_and_name_phase_7() {
 
 /// [`Interp::chunk_node_at`]'s steps land on the node the path names, and
 /// answer `None` for a step that has nowhere to go.
-///
-/// **The descent tested at its own steps rather than through a compiled
-/// op.** A path resolves the same whether or not anything emits one, so
-/// the arms below are reachable here without a program that compiles to a
-/// non-[`NodePath::ROOT`] address existing to reach them.
-///
-/// `zz = -za + zb * f(1)` is asymmetric at both levels on purpose. The
-/// **branch** is pinned by the two-step variables: `ZA` hangs off the
-/// prefix and `ZB` off the multiplication, so a step down the wrong child
-/// lands on the other name rather than on something that merely looks
-/// alike. The **order** is pinned by `ZB` alone, whose address is `[right,
-/// left]`: read innermost first that is `[left, right]`, the `right` step
-/// off a prefix, which has nowhere to go -- so a descent that walked the
-/// steps backwards finds nothing where this finds `ZB`.
 #[test]
 fn a_paths_steps_land_on_the_node_it_names() {
     let program = parse_program(b"zz = -za + zb * f(1)".to_vec()).expect("test program parses");
@@ -8658,16 +7601,6 @@ fn a_paths_steps_land_on_the_node_it_names() {
 /// DEVIATION 0's `normalize_stderr`, which collapses exactly the space run
 /// these two lines differ in. A unit test's own `assert_eq!` is outside
 /// either comparison function.
-///
-/// Every byte below is the oracle's, captured with `cat -A` from the two
-/// programs run verbatim.
-///
-/// * `>M>` sits at the **sending clause's** indent, like every other value
-///   line: two further in inside one `DO`.
-/// * a failing native method's `Compiled method ... with scope ...` traceback
-///   line carries **no** indent at all, even for a send two `DO` levels
-///   deep -- the catalogue entry supplies its own leading blanks and the
-///   send's nesting does not move it.
 #[test]
 fn a_message_sends_two_indents_are_the_oracles_own_and_normalisation_cannot_see_them() {
     let mut interp = Interp::new();
@@ -8725,12 +7658,6 @@ macro_rules! corpus_source {
 
 /// Runs `source` under both engines at `path` and asserts stderr is exactly
 /// `expected` on each.
-///
-/// Both arms rather than one, and it is not redundant with `tests/ir_recorded.rs`
-/// -- that harness compares the two engines against *each other*, and both
-/// format trace through one `crate::trace`, so an indent that is wrong is
-/// wrong identically on both and the comparison stays green. What this
-/// function adds is a third party: bytes the oracle produced.
 fn assert_stderr_on_both_engines(path: &str, source: &str, expected: &str) {
     let outcome = crate::run_program(path, source.as_bytes().to_vec(), crate::Invocation::none());
     assert_eq!(
@@ -8742,31 +7669,6 @@ fn assert_stderr_on_both_engines(path: &str, source: &str, expected: &str) {
 
 /// **A `::METHOD` activation's own trace indents, pinned here because
 /// nothing else in the tree can pin them.**
-///
-/// `tests/corpus.rs` does compare these two programs' stderr raw, which is
-/// what `RAW_STDERR_COMPARISON` was built for -- but that comparison needs
-/// the C++ oracle on the machine and the corpus gate switched on, and this
-/// one runs in every `cargo test`. `tests/trace_oracle.rs` cannot substitute
-/// for either: it compares through DEVIATION 0's `normalize_stderr`, which
-/// collapses exactly the space run these lines differ in.
-///
-/// Every byte below is the oracle's, captured with `cat -A` from the corpus
-/// program named beside it, run verbatim from a scratch directory. The **one**
-/// substitution is the package path, which is the file's own absolute
-/// location: the capture's scratch path is replaced by the path this test
-/// hands `run_program`, and nothing else is retyped.
-///
-/// What the shape says, and what a plausible wrong implementation gets wrong:
-///
-/// * the callee's clause echoes are at indent **0** while the sending clause
-///   sits at 2 -- a method activation inherits no indent, exactly as a
-///   `::ROUTINE` does not;
-/// * so are its own value lines: `>E>   .K` inside `OUTER` against
-///   `>E>     .K` in the caller;
-/// * `>I>` and `<I<` take no indent at all, at any depth;
-/// * `>M>` and the enclosing `>>>` are back at the **sending** clause's
-///   indent once the activation has ended, which is what shows the level
-///   state was restored rather than left at the callee's.
 #[test]
 fn a_method_activations_trace_indents_are_the_oracles_own_and_normalisation_cannot_see_them() {
     assert_stderr_on_both_engines(
@@ -8831,12 +7733,6 @@ fn a_method_activations_trace_indents_are_the_oracles_own_and_normalisation_cann
 
 /// **An untrapped condition inside a `::METHOD` body echoes two clauses,
 /// innermost first, and neither carries an indent from the other.**
-///
-/// The oracle's own bytes, captured from `corpus/lang/method_body_raises.rex`
-/// with the package path substituted as above. A method activation that
-/// failed to seal its level would print the send's clause only, and one that
-/// contributed a `Compiled method` traceback line -- which a *native* method
-/// does -- would print a third line the oracle does not.
 #[test]
 fn a_condition_inside_a_method_body_echoes_the_body_and_then_the_send() {
     assert_stderr_on_both_engines(
@@ -8854,19 +7750,6 @@ fn a_condition_inside_a_method_body_echoes_the_body_and_then_the_send() {
 
 /// **The receiver a callee's calling convention carries** (D24), for each
 /// route into a callee that this crate has.
-///
-/// The rows are the oracle's, measured with a `::method priv class private`
-/// and `self~priv` as the send -- [`entered_receiver`]'s own doc has each
-/// transcript. What this test holds is that the three routes do not collapse
-/// into each other: a build that gave a trap handler the same receiver as an
-/// internal `CALL` would let a private send through from a context the oracle
-/// refuses at 97.2, and a build that gave an internal `CALL` none would
-/// refuse one the oracle allows at rc 0.
-///
-/// **Latent, and that is why it is a unit test over the decision rather than
-/// a differential row.** No access scope is implemented here, so no program
-/// this crate can run tells the three apart; the differential cannot see this
-/// field at all, in either direction.
 #[test]
 fn a_trap_handler_and_an_internal_call_do_not_carry_the_same_receiver() {
     let caller = ObjRef::small_int(7).expect("7 fits the tag");
@@ -8907,28 +7790,6 @@ fn a_trap_handler_and_an_internal_call_do_not_carry_the_same_receiver() {
 
 /// **What a `REPLY` leaves on stderr, in every `cargo test` rather than only
 /// under the corpus gate.**
-///
-/// `tests/corpus.rs` compares the first two programs' stderr raw, and that is
-/// the stronger comparison -- but it needs the C++ oracle on the machine and
-/// `REXX_CORPUS_GATE` switched on. Measured with the raise deleted from
-/// `Interp::returned_value`: `corpus_differential` reddens, mismatching on
-/// `lang/method_reply.rex` and `lang/method_reply_exit_status.rex`, this test
-/// reddens beside it, and the *ungated* run reports the same two mismatches
-/// and still exits 0. So without this test the legality check has no
-/// instrument in gates 1 through 3.
-///
-/// **The shape is exit status 0 (or the main body's own) with a traceback**,
-/// which is what makes a status-only assertion useless here: with the raise
-/// gone, both programs keep their exit code and their whole stdout and lose
-/// only these bytes.
-///
-/// Every byte is the oracle's, captured from the corpus program named beside
-/// it and run from a scratch directory; the one substitution is the package
-/// path, which is the file's own absolute location.
-///
-/// The third program is the adjacent success: a `RETURN` with no value after a
-/// `REPLY` is legal, so an implementation that raised on the *reply* rather
-/// than on the value carried by the return would redden here.
 #[test]
 fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
     assert_stderr_on_both_engines(
@@ -8977,11 +7838,6 @@ fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
 /// **A second `REPLY` reports the oracle's own 98.935**, on the terms the test
 /// above states for 98.936: a `cargo test` instrument for a refusal whose
 /// whole difference is on stderr.
-///
-/// The reply that raises is the *second* one, and its own expression is
-/// evaluated before the check -- so an implementation that asked the
-/// one-per-invocation question before evaluating would still print this, and
-/// what separates the two is the clause the report names.
 #[test]
 fn a_second_reply_reports_the_oracles_own_98_935() {
     assert_stderr_on_both_engines(
@@ -8997,31 +7853,6 @@ fn a_second_reply_reports_the_oracles_own_98_935() {
 
 /// **What `GUARD` answers, and the Phase 6 refusals beside it, in every
 /// `cargo test`.**
-///
-/// **The rows are not all of one kind**, and which kind a row is decides what
-/// it can prove. The rows carrying an oracle answer are
-/// `corpus/lang/method_guard_instruction.rex`, whose stdout is the only thing
-/// a no-op can be read from, and the 99.911 and 34.902 raises; each was
-/// measured on `build/bin/rexx`. The gated corpus is the stronger comparison
-/// for those and needs the C++ oracle, where this runs without it.
-///
-/// The rows carrying a `NOT_IMPLEMENTED_EXIT` are **this crate's own
-/// refusals, which the oracle does not produce**, and they are here so that a
-/// refusal turning into a silent answer is visible. Each is also its
-/// refusal's sole instrument, which is why they share this table rather than
-/// having tests named for each:
-///
-/// * [`Loud::guard_when_false`] -- the oracle blocks for ever, so there is no
-///   transcript to compare and a no-op here would be a wrong answer nothing
-///   else could see. The program is `corpus/oracle-crashes.txt` entry 7 and
-///   must not be run.
-/// * [`Loud::reply_inside_construct`] -- the oracle *does* answer this, so the
-///   row pins a gap rather than an absence, and a corpus row would have to be
-///   a divergence. **This is the only place that refusal is checked**; a task
-///   splitting or renaming this test has to carry the row with it.
-///
-/// [`Loud::guard_when_false`]: crate::Loud
-/// [`Loud::reply_inside_construct`]: crate::Loud
 #[test]
 fn the_guard_instructions_answers_and_the_phase_6_refusals() {
     struct Row {
@@ -9094,11 +7925,6 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
 
 /// Runs `source` on both engines, insisting they agree with each other, and
 /// hands back `(exit code, stdout, stderr)`.
-///
-/// **Both, because `::ANNOTATE`'s install runs before either engine is
-/// chosen and its readback runs inside one.** The install half would pass
-/// with a single engine; the sends in the readback rows would not, and only
-/// running both says which.
 fn annotate_on_both_engines(source: &str) -> (i32, String, String) {
     let mut answer = None;
     let outcome = crate::run_program(
@@ -9120,23 +7946,6 @@ fn annotate_on_both_engines(source: &str) -> (i32, String, String) {
 
 /// Every `::ANNOTATE` target the accumulated package does not hold is the
 /// oracle's 99.945, naming the keyword and the upcased target.
-///
-/// **The corpus carries one of these and cannot carry the rest**: a program
-/// refuses once, so `class`, `routine`, `method`, `attribute` and `constant`
-/// would need a program each, and the kind filters below one each again. `directive_annotate_missing_target.rex` is
-/// the differential witness for the `class` row and this test is the only
-/// instrument for the others -- stated rather than implied, because a
-/// refusal this crate shares with the oracle is expressible as a corpus row
-/// and these are only left out for their cost.
-///
-/// The last two rows are the kind filters, and they are what says the
-/// resolution is more than a name lookup: `::ANNOTATE ATTRIBUTE` takes only
-/// an attribute method -- the getter each row names is found by
-/// `findInstanceMethod` and then discarded by `!getterMethod->isAttribute()`
-/// (`parser/DirectiveParser.cpp:2140`) -- and `::ANNOTATE CONSTANT` only a
-/// constant one (`isConstant()`, `:2081`), so a plain `::METHOD` of the right
-/// name is not a target. Each row is the
-/// oracle's answer, measured, three descriptors.
 #[test]
 fn an_annotate_target_the_package_does_not_hold_is_the_oracles_own_refusal() {
     let rows: &[(&str, &str)] = &[
@@ -9183,22 +7992,6 @@ fn an_annotate_target_the_package_does_not_hold_is_the_oracles_own_refusal() {
 
 /// What an `::ANNOTATE` resolves to, in the cases a single readback program
 /// cannot separate.
-///
-/// Each row's expected stdout is the oracle's, measured, three descriptors,
-/// and each is chosen so that a plausible wrong resolution answers a
-/// different line rather than failing:
-///
-/// * a second `::ANNOTATE` of one target **adds** to the first's pairs, and a
-///   repeated name inside one directive takes the later value -- both are
-///   `StringTable::put` into a table the target already owns;
-/// * `findMethod` reads the instance dictionary before the class one, so a
-///   class named on both sides annotates the instance method;
-/// * `::ANNOTATE ATTRIBUTE` annotates both halves of the accessor pair where
-///   `::ANNOTATE METHOD` naming the getter annotates the getter alone;
-/// * a class-side `::ATTRIBUTE` is reached only because the instance side
-///   holds neither half, which is `processAttributeAnnotations`' second
-///   lookup and the row that would go green by accident if the first lookup
-///   searched both sides at once.
 #[test]
 fn an_annotate_target_resolves_the_way_the_directive_walk_accumulates() {
     let rows: &[(&str, &str)] = &[
@@ -9244,21 +8037,6 @@ fn an_annotate_target_resolves_the_way_the_directive_walk_accumulates() {
 
 /// A `Method` object is one object per dictionary entry, which two of the
 /// oracle's own methods can see.
-///
-/// **This is the property a `~method` answering a fresh object each send
-/// would fail**, and what separates the two builds is the **second** `~method`
-/// send rather than either message on its own: a name stored and reread
-/// inside one clause would pass against a throwaway object.
-///
-/// `~identityHash` cannot be a corpus row at all -- `dispatch.rs`'s
-/// `native_identity_hash` answers the handle where the oracle derives its
-/// answer from an address, which is a licensed divergence and means no
-/// program may print one. The `~objectName=` half could be one, and is
-/// asserted here beside its sibling rather than as a program of its own.
-///
-/// Both rows are the oracle's answer, measured, three descriptors. The `P`
-/// row is the control: a second method of the same class is a different entry
-/// and must not answer the first one's name.
 #[test]
 fn a_class_answers_one_method_object_per_dictionary_entry() {
     let class = "::class K\n::method m\n  return 1\n::method p\n  return 2\n";
@@ -9277,23 +8055,6 @@ fn a_class_answers_one_method_object_per_dictionary_entry() {
 
 /// Two runs of one program in one process allocate the annotation tables in
 /// the same order.
-///
-/// **The property is determinism, and the instrument has to be two runs in
-/// one process rather than two processes.** `std`'s `RandomState` seeds each
-/// map from a thread-local counter, so a second `HashMap` built in this
-/// thread iterates differently from the first -- which is exactly the shape
-/// that made the release binary answer a different `~identityHash` per run
-/// while every in-process test stayed green. `AnnotatedSite`'s own doc
-/// carries the twelve-run measurement.
-///
-/// `~identityHash` is what exposes it: it answers the handle, so it reads
-/// the arena index an annotation table was allocated at.  That is also why
-/// this cannot be a corpus row -- the oracle derives its answer from an
-/// address -- so the assertion is against the program's own first run rather
-/// than against the oracle.
-///
-/// The program annotates a target of every shape a separate table is built
-/// for, so a walk that ordered only some of them still reddens here.
 #[test]
 fn two_runs_in_one_process_allocate_the_annotation_tables_alike() {
     let source = "say .K~annotations~identityHash\n\
@@ -9320,17 +8081,6 @@ fn two_runs_in_one_process_allocate_the_annotation_tables_alike() {
 }
 
 /// `Message~hasError` answering `1`, which no differential row can carry.
-///
-/// The oracle's own answer to a started method that raises is not
-/// reproducible: measured, the failure report interleaves with the starting
-/// program's and `~hasError` sampled before `~result` reads `0` as readily as
-/// `1`, which is what D68 puts out of reach of every check. So the arm is
-/// asserted against this crate alone.
-///
-/// **This crate reports the failure once, at `~result`**, where the oracle
-/// reports it twice -- once from the message's own activity, with no
-/// `running <file>` line, and once when `~result` re-raises it. Both sides
-/// end at rc 214.
 #[test]
 fn a_started_method_that_raises_has_an_error_and_reraises_at_result() {
     const PATH: &str = "/tmp/message-has-error.rex";

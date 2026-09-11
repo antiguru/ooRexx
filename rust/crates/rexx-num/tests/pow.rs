@@ -93,22 +93,6 @@ fn the_reciprocal_is_rounded_exactly_once() {
 /// exact `(major, sub)` pair `sub_code()` now exposes rather than only the
 /// major `pow()`'s own helper checks elsewhere in this file. Measured:
 /// `2**-1` -> `0.5`, `2**2.5` -> `Error 26.8`.
-///
-/// **The other four rows -- both non-numeric-operand cases, `2**'x'`,
-/// `'y'**2`, `'y'**'x'`, and the fact the base is checked before the
-/// exponent -- cannot be tested here, and that is a structural fact about
-/// this function's signature, not a gap in this crate's coverage.**
-/// `pow(&self, exponent: &Number, ...)` takes two already-parsed `Number`s;
-/// a non-numeric operand never becomes one, so there is no way to hand
-/// `pow` a string that failed to parse, and therefore no call this crate
-/// could make that exercises the routing between 26.8 and 41.1 for that
-/// case at all. That routing is necessarily decided one layer up, by
-/// whatever calls `Number::parse` on each operand *before* calling `pow`
-/// and picks which error to raise depending on which operand (if either)
-/// failed to convert -- `rexx-exec`'s job, not this crate's. A later
-/// simplification cannot "unify" that routing into `pow` without changing
-/// its signature to accept unparsed text, which would be a much larger
-/// change than a simplification.
 #[test]
 fn the_two_pow_asymmetry_rows_that_are_actually_this_crates_to_own() {
     assert_eq!(pow("2", "-1", 9).unwrap(), "0.5");

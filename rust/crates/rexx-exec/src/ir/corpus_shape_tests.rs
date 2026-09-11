@@ -11,76 +11,6 @@
 
 //! **The corpus-wide net over what `compile` emitted, as an invariant rather
 //! than a transcript.**
-//!
-//! `golden_tests.rs` pins the op stream of a handful of hand-written programs
-//! exactly; the corpus differential pins that every body *compiled*. Neither
-//! sees a promotion that stops firing for a construct in some shape the
-//! golden set does not spell out.
-//!
-//! **The reason it was written no longer exists, and the check it makes
-//! does.** It was built because the dual-engine comparison could not see a
-//! promotion stop firing: the instruction fell back to `Op::Generic`, which
-//! delegated to the tree-walker, and both arms then printed the same bytes.
-//! There is no fallback now. What remains true is that a promotion can stop
-//! firing without changing a program's output at all -- the clause still
-//! runs, through `Op::Exec` rather than through its own compiled ops -- and
-//! an output differential of any kind is blind to that. This harness reads
-//! the stream instead.
-//!
-//! So this module states the promotion set as a **derived expectation**: for
-//! every body of every corpus program, what construct each instruction is
-//! decides what its compiled clause must look like, and the compiled stream is
-//! checked against that. Nothing is committed, so nothing churns when an
-//! unrelated op is added.
-//!
-//! **What this cannot see, stated plainly.** It reads an op's *kind* and never
-//! its operands, so a register number, a jump target, a region end, a constant
-//! index or a `SymbolId` that is wrong is invisible here -- a transcript would
-//! catch those and this does not. It says nothing about the ops it does not
-//! name: a dropped `Op::TraceLiteral`, `Op::TraceRead`, `Op::TraceOperator`,
-//! `Op::EndBranch` or `Op::Jump` passes. And it is a claim about what
-//! compilation emitted, not about what running it does. The exact streams in
-//! `golden_tests.rs` cover contents over a few programs; this covers kind over
-//! every corpus program, and neither contains the other.
-//!
-//! **The expectations are computed here rather than asked of `compile`**, and
-//! that is the whole of why this can fail. [`root_of`] restates what
-//! `native_shape` and `push_native` decide, and [`promoted_as`] restates which
-//! instruction arms `compile` has; a version of either that called into
-//! `compile` would move with the code it is checking and could never redden.
-//! The price is that the two can drift, and the drift is loud in both
-//! directions: an operator dropped from the promoted set leaves an
-//! `Op::EvalExpr` where a computing op is expected, and one added leaves a
-//! computing op where an `Op::EvalExpr` is expected. Either reddens and names
-//! the program.
-//!
-//! **What this catches that the rest of the suite does not, measured rather
-//! than argued.** Each mutation below was applied to `compile` and the whole
-//! workspace run under it with `--no-fail-fast`.
-//!
-//! * Making `CALL name` fall through to a plain `Op::Exec` region -- a whole
-//!   promotion ceasing to fire -- reddens this, and reddens tests in
-//!   `golden_tests.rs`
-//!   and `drive/tests.rs` as well, and aborts `tests/spike.rs` on a stack
-//!   overflow. **For that mutation this file adds nothing**; it is a more
-//!   direct signal rather than a new one.
-//! * Bounding `native_shape` at depth 8 -- a promotion that keeps firing for a
-//!   shallow shape and stops firing for a deeper one -- reddens **this and
-//!   `golden_tests.rs`'s
-//!   `a_call_nested_past_the_paths_width_leaves_the_slot_general`, and nothing
-//!   else in the workspace**. That is the class this file exists for, and the
-//!   depth bound has two halves that those two witnesses split between them.
-//!   Measured 2026-08-12, on two mutations run over the whole workspace with
-//!   `--no-fail-fast`: refusing *every node* past depth 8 reddens both, while
-//!   refusing only an *address* past depth 8 reddens the golden test alone and
-//!   leaves this file green. `corpus/lang/deep_nested_expr.rex` is why -- a
-//!   single assignment whose header says it nests three thousand terms on
-//!   purpose and holds no call anywhere in them, so it reaches a bound on
-//!   nodes and cannot reach one on addresses. The golden test reaches both,
-//!   by generating a nesting and putting a call at the bottom of it.
-//!   `push_native` recurses once per operator, so such a bound is a change
-//!   Phase 4f might reasonably want, which is what makes the class live rather
-//!   than hypothetical.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -96,11 +26,6 @@ use crate::plan::{BodyKind, Plan};
 use crate::trace::{ChunkTrace, TraceMode};
 
 /// The op a promoted clause's value expression must end in.
-///
-/// One variant per arm of `push_native`, plus the fallback: `EvalExpr` is what
-/// an expression outside the native set compiles to, and naming it here is
-/// what makes the check bidirectional rather than a one-way "something
-/// promoted".
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Root {
     Const,
@@ -116,9 +41,6 @@ enum Root {
 impl Root {
     /// The `Root` an emitted op is, or `None` for an op that is not one an
     /// expression's own value can end in.
-    ///
-    /// Exhaustive with no catch-all, so an op variant added to [`Op`] has to
-    /// be classified here rather than silently counting as "not a root".
     fn of(op: &Op) -> Option<Root> {
         match op {
             Op::Const { .. } => Some(Root::Const),
@@ -169,17 +91,6 @@ impl Root {
 
 /// Which construct of the minimum promotion set an instruction is, or `None`
 /// for one outside it.
-///
-/// `listed` is the set of instruction indices some `SELECT` collected as its
-/// own `WHEN`s: an *absorbed* `WHEN` -- itself another `WHEN`'s consequence --
-/// is nobody's listed branch and compiles to a plain `Op::Exec` region with
-/// none of the scan-chain ops a listed one gets, so it is not in the set. Computed from the `SELECT` nodes rather than from `compile`'s own
-/// `when_info`, for the reason the module doc gives.
-///
-/// **The `None` arm carries no claim.** An instruction outside the set may
-/// compile to anything at all, so promoting a construct this does not name
-/// cannot redden the assertions below. What it may not do is stop firing for
-/// one that is named.
 fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option<&'static str> {
     match kind {
         InstructionKind::Do(_) => Some("DO"),
@@ -210,12 +121,6 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
 }
 
 /// The op the expression [`check_body`] hands this must end in.
-///
-/// A restatement of `native_shape` followed by `push_native`, over the parse
-/// tree alone. Every operator is spelled out below rather than asked of
-/// `eval::is_arithmetic` or `eval::is_native_binary`, which is what `compile`
-/// asks: an expectation computed by the code under test is an expectation that
-/// agrees with it whatever it does.
 fn root_of(expr: &Expr) -> Root {
     match &expr.kind {
         // A call at the root is the whole slot's expression, so the route down
@@ -248,31 +153,11 @@ fn root_of(expr: &Expr) -> Root {
 /// The deepest a call can sit below its slot's root and still be addressed by
 /// an op of its own: one step per bit a `u32` holds below the sentinel bit
 /// that marks where the route starts.
-///
-/// Written out here rather than read off `super::NodePath`, for the reason the
-/// module doc gives about the operator sets: a bound taken from the code under
-/// test moves with it and could never redden.
-///
-/// **Only a corpus program nesting a call deeper than this can falsify the
-/// number, and that is the price of the independence.** A `NodePath` whose
-/// width moved would redden
-/// `super::tests::a_node_path_carries_thirty_one_steps_and_refuses_the_thirty_second`
-/// and `golden_tests`'s
-/// `a_call_nested_past_the_paths_width_leaves_the_slot_general` while this
-/// number went on calling for `Root::EvalExpr` at the depths the wider address
-/// had just reached. Whoever widens one widens this, and this sentence is what
-/// says so.
 const DEEPEST_ADDRESSED_CALL: usize = 31;
 
 /// Whether every part of `expr` has a native op, which is what licenses the
 /// whole tree compiling without `eval.rs` being entered. `depth` is how many
 /// operators stand between `expr` and its slot's own root.
-///
-/// **Only a call reads `depth`.** A call's op carries the route down to the
-/// node, so a call standing deeper than a route reaches has no op and takes
-/// its whole slot general with it; every other shape here is computed into a
-/// register the operator above names, is addressed by nothing, and promotes
-/// however deep it stands.
 fn native(expr: &Expr, depth: usize) -> bool {
     match &expr.kind {
         ExprKind::Literal(_)
@@ -309,11 +194,6 @@ fn arithmetic(op: Operator) -> bool {
 /// The operators `Interp::apply_binary` computes -- concatenation, comparison
 /// and logical -- as this file's own statement of that set, spelled out for
 /// the reason [`arithmetic`] is.
-///
-/// The prefix `\` is deliberately in neither list: the parser builds an
-/// `ExprKind::Prefix` from it, so no expression this walks can hold one as a
-/// binary operator, and a row for it here would be an expectation about a tree
-/// shape the corpus cannot contain.
 fn other_family(op: Operator) -> bool {
     matches!(
         op,
@@ -392,10 +272,6 @@ struct Seen {
 
 /// Checks one body's compiled stream against what its instructions call for,
 /// and records what fired.
-///
-/// `where_` names the program and the body, and it is on every message: a
-/// failure that did not say which of the corpus programs produced it would
-/// leave the reader running the sweep by hand.
 fn check_body(
     body: &CodeBody,
     symbols: &rexx_parse::SymbolTable,
@@ -459,14 +335,6 @@ fn check_body(
         // what that slot's expression must end in: neither `Op::TraceKeyword`
         // nor `Op::LoopHeaderValue` is a `Root`, so the scan back inside a
         // group finds the expression's own op and nothing else.
-        //
-        // **`loop_header_slot` is asked which expression a slot holds, and that
-        // is a dependency this file otherwise avoids.** It is the resolution
-        // `compile` emits from, so a slot resolving to the wrong expression
-        // would agree with itself here; what stays independent is [`root_of`],
-        // which is the axis this file is about. A slot the header has no
-        // expression for is `Root::EvalExpr` for the reason `compile` leaves it
-        // one: it is a slot that stays general.
         if let InstructionKind::Do(loop_) | InstructionKind::Loop(loop_) = &instruction.kind {
             let mut slot = 0u32;
             let mut group = 0;
@@ -501,17 +369,6 @@ fn check_body(
         // CASE`'s values are compared inside `Op::WhenTest`. Neither is a slot
         // this file has anything to state about that the op's presence in the
         // stream has not already said.
-        //
-        // An `IF`'s condition ends in its expression's own root op, with
-        // `Op::Condition` and `Op::JumpUnless` behind it and neither of those
-        // a `Root`, so the same scan back finds it.
-        //
-        // A plain `WHEN`'s condition is the same expression offered the same
-        // way, and `None` is what it calls for when the offer is declined:
-        // its fallback is one `Op::WhenTest`, which is not a `Root` at all,
-        // where an `IF`'s is an `Op::EvalExpr`, which is. So the two
-        // constructs differ here in exactly one arm and the difference is the
-        // fallback op, not the promotion.
         let expected = match &instruction.kind {
             InstructionKind::Assignment { value, .. } => Some(root_of(value)),
             // A `SAY`, a `RETURN`, an `EXIT`, a `PUSH` and a `QUEUE` are one
@@ -545,9 +402,6 @@ fn check_body(
 }
 
 /// Every body of `program`: the main one and each directive's.
-///
-/// Exhaustive over `DirectiveKind` with no catch-all, so a directive form that
-/// gains a body has to be routed here rather than dropping out of the sweep.
 fn bodies(program: &rexx_parse::Program) -> Vec<(&CodeBody, String)> {
     let mut out = vec![(&program.main, "main".to_string())];
     for directive in &program.directives {
@@ -574,12 +428,6 @@ fn corpus_dir() -> PathBuf {
 }
 
 /// Every corpus program named by a phase subset file, each once, sorted.
-///
-/// The subset files are read from the directory rather than listed here.
-/// `ir_recorded.rs` keeps a literal pinned against the same listing, and a third
-/// copy of that literal is a third thing to keep in step; taking the listing
-/// directly is one fewer, and a phase subset file added later is swept without
-/// anyone remembering this file.
 fn corpus_programs() -> Vec<String> {
     let dir = corpus_dir();
     let entries =
@@ -616,17 +464,6 @@ fn corpus_programs() -> Vec<String> {
 /// **Every instruction of every corpus body that the minimum promotion set
 /// covers compiles to that construct's own ops**, and every promoted value
 /// expression ends in the op its shape calls for.
-///
-/// The net the phase-4e gate's criterion 6 asks for. It is what would go red
-/// if a promotion silently stopped firing for a construct in a shape
-/// `golden_tests.rs` does not spell out -- and an output differential would
-/// not, because an instruction that falls back to a plain `Op::Exec` region
-/// runs the same clause and prints the same bytes.
-///
-/// One test over the whole population rather than one per program: the
-/// population is read at run time from a directory, so there is no list to
-/// generate a test per entry from, and a failure names its program in the
-/// message.
 #[test]
 fn every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops() {
     // **On the stack the interpreter compiles bodies on, and that is not a
@@ -641,13 +478,6 @@ fn every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops() {
     // Measured 2026-08-12 with the sweep called inline instead: it aborts the
     // whole test binary at `RUST_MIN_STACK=2621440` and passes at `2883584`,
     // against a libtest thread's own 2 MiB.
-    //
-    // A stack overflow is not a test failure -- Rust's guard page aborts the
-    // process, taking every other test in the binary with it -- which is why
-    // this is a stack size rather than a depth the sweep watches.
-    //
-    // A panic is resumed on this thread rather than turned into a failure of
-    // its own, so an assertion below still reports its own message.
     let sweep = std::thread::Builder::new()
         .stack_size(crate::INTERPRETER_STACK_BYTES)
         .spawn(sweep_every_corpus_body)
@@ -702,9 +532,6 @@ fn sweep_every_corpus_body() {
     // by this population at least once -- so a row of `promoted_as` or of
     // `root_of` that nothing exercises is red here rather than a check that
     // happens to hold over an empty set.
-    //
-    // `DO` and `LOOP` are one row: they are the same construct under two
-    // spellings and a corpus that writes only one of them is not a gap.
     for construct in [
         "IF",
         "SELECT",

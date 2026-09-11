@@ -10,45 +10,14 @@
 /*----------------------------------------------------------------------------*/
 
 //! What the borrow-shape spike has to demonstrate, one test per claim.
-//!
-//! Every expected transcript here was captured from `build/bin/rexx` under
-//! `( ulimit -v 1048576; … )` before the test was written, and the program
-//! text is quoted verbatim beside it so the two can be re-run against each
-//! other. These are not L0 corpus programs: they go through the library entry
-//! point rather than through `rexx-run` and the diff harness, which is Task
-//! 14's.
-//!
-//! **The three fragment-lifetime tests moved to `src/lib.rs`'s own `#[cfg(test)]
-//! mod tests` at 4b's Task 1** (`a_fragment_shares_the_enclosing_frames_
-//! variable_pool`, `an_exit_inside_a_fragment_ends_the_program`, `the_stack_
-//! span_does_not_depend_on_what_else_the_program_evaluated`). They ran through
-//! `run_program_interpret_spike`, a `pub` entry point that existed only because
-//! an integration test could not otherwise reach a fragment; `INTERPRET` is
-//! implemented now, that entry point is deleted, and the tests kept their
-//! assertions unchanged. See the comment above them there for the trade being
-//! re-made.
 
 use rexx_exec::{NOT_IMPLEMENTED_EXIT, run_program};
 
 /// The path these tests report programs under.
-///
-/// They build programs from bytes rather than from files, so there is no real
-/// path here to canonicalise. It reaches output in exactly one place, the
-/// middle line of a raised condition's report, and
-/// `a_raised_condition_reports_the_failing_clause` asserts it there verbatim.
-///
-/// What a made-up path deliberately does **not** check is the canonicalisation
-/// itself: the oracle prints the absolute, dot-normalised path, and that
-/// conversion lives in `rexx-run`, on the far side of this entry point. It is
-/// covered by running real files through both interpreters, not from here, and
-/// a test that asserted canonical output against a value it invented would be
-/// checking its own arithmetic.
 const SPIKE_PATH: &str = "/nonexistent/spike-program.rex";
 
 /// The whole of Step 1: an interpreter small enough to prove the shape and
 /// nothing else.
-///
-/// Oracle, `say 'hello'`: stdout `hello\n`, rc 0.
 #[test]
 fn say_hello_prints_hello() {
     let outcome = run_program(
@@ -63,15 +32,10 @@ fn say_hello_prints_hello() {
 
 /// The variable pool, without a fragment anywhere near it: a value assigned to
 /// a slot, read back out of it, and concatenated.
-///
-/// Oracle:
-///
 /// ```text
 /// greeting = 'hello'
 /// say greeting || ', world'
 /// ```
-///
-/// gives `hello, world\n`, rc 0.
 #[test]
 fn a_variable_round_trips_through_its_slot() {
     let outcome = run_program(
@@ -84,8 +48,6 @@ fn a_variable_round_trips_through_its_slot() {
 }
 
 /// An uninitialised read yields the derived name, upcased (D16).
-///
-/// Oracle, `say nosuchvariable`: stdout `NOSUCHVARIABLE\n`, rc 0.
 #[test]
 fn an_unset_variable_reads_as_its_own_name() {
     let outcome = run_program(
@@ -99,28 +61,6 @@ fn an_unset_variable_reads_as_its_own_name() {
 
 /// The loud-failure code is outside the band a Rexx error can produce, so a
 /// differential run can never mistake an implementation gap for a condition.
-///
-/// **The probe construct changed under Task 11, and again under 4b's Task 1.**
-/// It began as `do i = 1 to 3 / end`, which stopped failing loudly the moment
-/// Task 11 implemented `DO`/`LOOP`: the test would have started asserting
-/// `0 == NOT_IMPLEMENTED_EXIT` and failed for a reason with nothing to do with
-/// what it checks. `call "sub"` replaced it, and would have gone the same way
-/// at 4b's Task 3, which implements `CALL`.
-///
-/// The **`OPTIONS` instruction** is the current witness, and it replaced a
-/// namespace-qualified class lookup, which replaced a parenthesised list,
-/// which replaced a message send, which replaced `call "sub"`, which replaced
-/// `do i = 1 to 3 / end`. **No construct is permanently unimplemented**, so
-/// the honest statement is the property rather than a prediction: this test
-/// needs *some* form the executor refuses, and whichever task implements the
-/// current one replaces the witness and the quoted message together.
-///
-/// **The witness had to leave `ExprKind` entirely this time**, which is a
-/// state rather than a preference: `owners.rs`'s `EXPR_TAGS` carries no
-/// `Owner::Phase` row at all now, and its own count assertion is what says so.
-///
-/// The expected stderr is quoted from a run rather than described:
-/// `rexx-exec: OPTIONS is not implemented (Phase 5)`.
 #[test]
 fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
     assert!(
@@ -141,63 +81,6 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 
 /// A loud failure names the **form** and never formats the node, so the
 /// message stays a constant size however big the expression behind it is.
-///
-/// This is a regression test for a real defect and not a tidiness rule. The
-/// first version of `Loud::expression` wrote `{kind:?}`, and `ExprKind`'s
-/// derived `Debug` walks the whole tree: one clause of
-/// `corpus/lang/deep_nested_expr.rex` produced **373,332 bytes** of stderr
-/// beginning `Binary { op: Plus, left: Expr { kind: Binary { op: Plus, left:
-/// ...`. Failing loudly is a gate criterion and every later task inherits this
-/// path, and criterion 1 compares stderr byte for byte, so an unbounded
-/// message is an unbounded diff.
-///
-/// The bound is deliberately loose. What must hold is that the message does
-/// not grow with the tree, which is why the same assertion runs against two
-/// expressions three orders of magnitude apart in size.
-///
-/// **What this test establishes on its own is narrower than the contract, and
-/// the rest is a compile-time property rather than a tested one.** Both
-/// programs here use `~`, so this pins the message for exactly one of the
-/// fifteen `ExprKind` forms, and the unit test named below pins two more. What
-/// extends it to the remaining twelve is `form_name`'s match: it is exhaustive
-/// with no `_` arm, and every arm returns a `&'static str` or one
-/// `Operator::spelling`, so a form whose message could grow with its input
-/// cannot be added without failing to compile. Auditing coverage from this
-/// test alone would over-read it.
-///
-/// The other loud path is `Loud::instruction`, which returns `keyword()`'s
-/// `&'static str` or one of four literals -- and it is the one this test now
-/// exercises, since no `ExprKind` is refused any more.
-///
-/// There used to be a third, `Loud::parse`, bounded because a `ParseError`
-/// deliberately carries no substitution values. 4b's Task 2 deleted it: a
-/// fragment that does not parse raises the oracle's own condition now rather
-/// than failing loudly, so it is no longer a loud path at all and no longer
-/// has a message whose size this contract governs.
-///
-/// **The `OPTIONS` instruction, and the choice of witness is the point.** This
-/// test needs a form the executor does not run, and it has been broken by its
-/// own witness being implemented underneath it every time: it began on `+`,
-/// moved to `=` when Task 7 landed arithmetic, went red again when Task 8
-/// landed comparison, moved to `~`, went red when Phase 5a's dispatch task
-/// landed `~`, moved to `ExprKind::List`, went red when the Array task landed
-/// that, moved to `ExprKind::ClassResolver`, and went red when Phase 5d's
-/// namespace task landed that. See
-/// [`the_loud_failure_code_cannot_be_confused_with_a_rexx_error`] for why no
-/// choice of witness is permanent and what a task landing this one owes.
-///
-/// **The witness is an instruction rather than an expression**, so the path
-/// under test is `Loud::instruction` rather than `Loud::expression`. What the
-/// test still asserts is the same property, and the tree it asserts it over is
-/// the same size: `OPTIONS` takes an expression, so the operand can be three
-/// thousand terms wide while the message stays the keyword.
-///
-/// The cost is that this test reaches neither of `form_name`'s two arms that
-/// call `format!`, which are the only two where its own size contract could
-/// break. That coverage lives in `lib.rs`'s
-/// `the_two_formatting_arms_do_not_grow_with_the_subtree`, which calls
-/// `form_name` directly on a 200-deep `Binary` and `Prefix` and so needs no
-/// unimplemented form at all.
 #[test]
 fn a_loud_failure_message_does_not_grow_with_the_expression() {
     const BOUND: usize = 300;
@@ -239,53 +122,6 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
 /// Step 3's numbers, and the reason this test exists rather than a note in the
 /// report: **Task 11 sets D19's evaluation-depth limit from what this prints**,
 /// so it has to be re-runnable rather than a figure someone recorded once.
-///
-/// The program is the concatenation analogue of D19's `1 + 1 + … + 1`: a
-/// left-deep chain of 100,000 terms, which is exactly the depth the oracle
-/// handles and exits 0 at. Measured on the oracle, `say 'a'` followed by
-/// 99,999 repetitions of `||''`: stdout `a\n`, rc 0.
-///
-/// Three recursions ride on the same stack here and the test covers all three
-/// at once, because it parses, plans, evaluates and then drops the tree:
-/// `Plan::note`, `eval`, and `Drop` for the `Box<Expr>` chain.
-///
-/// **Task 11 itself changed what this test can still measure, and this is
-/// the paragraph recording that rather than letting the test quietly stop
-/// witnessing what its own name claims.** `eval.rs`'s `MAX_EVAL_DEPTH` is
-/// now 100,000, enforced inside `eval` itself, so `run_program` -- the only
-/// way anything outside this crate reaches a sized stack at all -- refuses
-/// to recurse past it. This test's own chain is exactly 100,000 terms, at
-/// or below the limit, so it still runs for real and still measures a real
-/// `bytes_per_frame` at a real depth; nothing about *this* assertion became
-/// vacuous. What is gone is the ability to go past 100,000 *through this
-/// same public entry point* to independently re-confirm the `survivable`
-/// extrapolation below against an actual guard-page abort, the way the
-/// external `rexx-run` bisection this file's sibling doc comments describe
-/// once did (`lib.rs`'s own `INTERPRETER_STACK_BYTES` doc comment records
-/// the same consequence, and how to deliberately get past it again: raise
-/// `MAX_EVAL_DEPTH`, or call `eval` directly bypassing `run_program`, for
-/// the duration of a fresh bisection only, and put it back).
-///
-/// **The re-measured figure this test prints, recorded here too and not
-/// only in the report file**: at Task 11's own implementation, this test
-/// prints `per frame: 480.0 bytes` at the tree-walker's removal -- the figure
-/// was 1840.0 while the deep chain still reached `eval` through the
-/// tree-walker's own clause unit (up from the ~1600 `lib.rs`'s own doc
-/// comment on `INTERPRETER_STACK_BYTES` recorded after Task 7), giving
-/// `survivable ≈ 1,118,481` -- comfortably over the `> 100_000.0` the
-/// assertion below checks, by about 11x. `lib.rs`'s own doc comment
-/// on the constant carries the dated row; this comment exists so `grep`
-/// for the figure finds it beside the test that produces it too, not only
-/// in a report a later reader may never open.
-///
-/// **The chain carries one call, because the frame this costs is `eval`'s.**
-/// `compile` promotes a chain of native operators to ops that reach the
-/// operator with its operands already in registers, so a purely native chain
-/// does not enter `eval` at all and there is no frame to price -- measured, it
-/// reaches a peak depth of 5. One call anywhere makes `native_shape` decline
-/// the whole slot, so it compiles to a single `Op::EvalExpr` and `eval` walks
-/// every term. `eval::tests`' own `eval_walked_chain` (`src/eval.rs`) is the
-/// same shape and carries the measurement.
 #[test]
 fn records_the_stack_cost_of_one_eval_frame() {
     const TERMS: usize = 100_000;
@@ -332,18 +168,6 @@ fn records_the_stack_cost_of_one_eval_frame() {
     // size is a property of the compiler and the profile and will move. What
     // must not move is that the number is real: a zero would mean the probe
     // measured nothing.
-    //
-    // Raised from 1024 to 4096 after Task 7: `eval_node` grew from four
-    // match arms to fifteen (Stem, Compound, DotVariable, Prefix, seven
-    // arithmetic operators, Abuttal/Blank), and the measured cost moved from
-    // 784 to 1600 bytes even on this test's own unchanged `||`-only stress
-    // program -- see `INTERPRETER_STACK_BYTES`'s doc comment for the
-    // re-measurement and why 512 MiB stays as it is (still over three times
-    // D19's 100,000-level minimum at the new cost). The real safety check is
-    // the `survivable` assertion below, computed from whatever this run
-    // measured rather than a constant; this bound exists only to catch the
-    // probe measuring nothing, or a genuine blow-up, not to pin an exact
-    // figure that every later task's new `ExprKind` arms will keep moving.
     assert!(
         (16.0..=4096.0).contains(&bytes_per_frame),
         "measured {bytes_per_frame} bytes per eval frame, which is outside the range \
@@ -363,16 +187,6 @@ fn records_the_stack_cost_of_one_eval_frame() {
 
 /// The wiring between the instruction loop and `Raised::report`: which clause
 /// the echo names, which line it resolves to, and the `256 - major` exit code.
-///
-/// `error.rs`'s own tests pin the report's *format* against captured oracle
-/// bytes. None of them can pin the three things that only exist once a program
-/// actually runs, which is what this covers: that the clause echoed is the one
-/// that failed rather than the first or the last, that its line survives
-/// `run`'s teardown of the activation it came from, and that the exit code
-/// stops being `NOT_IMPLEMENTED_EXIT`.
-///
-/// Oracle, with the same three lines in a file at an absolute path (rc 222):
-///
 /// ```text
 /// a
 /// b
@@ -380,11 +194,6 @@ fn records_the_stack_cost_of_one_eval_frame() {
 /// Error 34 running /abs/pin.rex line 3:  Logical value not 0 or 1.
 /// Error 34.901:  Logical value must be exactly "0" or "1"; found "2".
 /// ```
-///
-/// `say 'a'` and `say 'b'` are there to make the line number wrong in a
-/// noticeable way if the site were taken from the first instruction or from
-/// the activation's `pc` after teardown, both of which would still produce a
-/// well-formed report.
 #[test]
 fn a_raised_condition_reports_the_failing_clause() {
     let outcome = run_program(
@@ -407,20 +216,6 @@ fn a_raised_condition_reports_the_failing_clause() {
 
 /// I6/D10: unbounded `CALL` recursion is a reportable 11.1 condition, not a
 /// native abort.
-///
-/// Oracle, `n = 0` / `call sub` / `exit` / `sub:` / `n = n + 1` / `call sub` /
-/// `return`: `Error 11.1`, `Insufficient control stack space`, rc 245, at its
-/// own depth of 27,314 (measured by trapping the condition and printing `n`).
-///
-/// **This test lives here rather than beside `CALL`'s own unit tests, and the
-/// reason is I34 rather than tidiness.** It was written there first and
-/// aborted the whole test binary: a `cargo test` thread's default 2 MiB
-/// survives fewer than 90 activations of this crate's own debug build
-/// (measured, 80 survives and 90 aborts), so the native overflow arrives
-/// two orders of magnitude before any counter. `run_program` is what spawns
-/// the 512 MiB thread `MAX_ACTIVATION_DEPTH` is sized against, and going
-/// through it is the whole point of the test rather than an incidental
-/// choice of entry point.
 #[test]
 fn unbounded_call_recursion_raises_11_1_rather_than_overflowing() {
     let outcome = run_program(

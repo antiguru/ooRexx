@@ -12,34 +12,6 @@
 //! `corpus/introspection-scopes.tsv` (Phase 5i Task 0): which scope defines
 //! each documented introspection method, whether that scope's body is C++ or
 //! Rexx, and for a C++ body the `Setup.cpp` token and arity operand.
-//!
-//! The column that cannot come from a file scan is `scope`, and the reasons
-//! are `collection_scopes.rs`'s: it is the oracle's own answer to
-//! `receiver~instanceMethod(NAME)~scope~id`, resolved in the receiver's
-//! behaviour after every `InheritInstanceMethods` copy, `RemoveMethod` and
-//! `HideMethod`. The `Setup.cpp` join is `support::setup_cpp`.
-//!
-//! # Two departures from `collection_scopes.rs`, both forced
-//!
-//! **The receivers come from `corpus/introspection-receivers.tsv`, not from
-//! `corpus/docs/class-set.txt`.** That file gives `StackFrame` no
-//! construction expression at all -- it is a `not-covered` row, because the
-//! reference says a `StackFrame` cannot be created by the user -- so the
-//! assertion `collection_scopes.rs` makes over `class-set.txt` cannot hold
-//! here.
-//!
-//! **One program per (class, arm), not one program for all of them.**
-//! `collection_scopes.rs` builds every receiver at the top of a single
-//! program; that is impossible here for two independent reasons, both
-//! measured on the oracle 2026-09-07. Receivers need `::class`, `::method`
-//! and `::routine` directives that differ per class and would collide in one
-//! file. And a `RexxContext` built inside a call is dead in the caller --
-//! `98.981 Target RexxContext is no longer active` -- so the receiver that
-//! needs a caller cannot be handed back to a common driver loop.
-//!
-//! Refresh with
-//!   `REXX_INTROSPECTION_SCOPES_REFRESH=1 cargo test --release -p rexx-exec \
-//!        --test introspection_scopes`
 
 mod support;
 
@@ -72,24 +44,9 @@ const SCOPE_CLASSES: &[&str] = &[
 
 /// The classes whose INSTANCE arm is excluded by name rather than by silence,
 /// the way `collection_scopes.rs` excludes `RexxQueue`.
-///
-/// `corpus/docs/class-set.txt` gives them no construction expression, because
-/// the reference says instances come only from native code
-/// (`utilityclasses.xml:429`, `:6910`), so no receiver exists to send to.
-/// Their **class** arm is measured: `.Pointer` needs no construction, and
-/// `new` is the row Phase 5i owns. Naming them keeps "a scope that resolves
-/// nowhere is a failure" available for every class that is supposed to
-/// resolve.
 const NO_INSTANCE_ARM: &[&str] = &["Buffer", "Pointer"];
 
 /// The documented rows whose name is a rendering rather than a message.
-///
-/// Measured on the oracle 2026-09-07: `o~'(abuttal)'('x')` raises `97.1`
-/// while `o~''('x')` and `o~' '('x')` both answer, so the book's displayed
-/// name reaches no method and `instanceMethod` on it is `.nil`. These are
-/// excluded by name so that `NOMETHOD` stays a failure for every other row.
-/// `corpus/method-bodies.txt` records both at rc 163 on both sides for the
-/// same reason.
 const DISPLAY_NAMES: &[(&str, &str)] = &[("Object", "(abuttal)"), ("Object", "(blank)")];
 
 /// A row of the derived table.
@@ -136,10 +93,6 @@ fn receivers() -> HashMap<(String, String), Receiver> {
 
 /// One Rexx program per (class, arm), printing
 /// `class TAB method TAB arm TAB scope` per row.
-///
-/// The rows are emitted as literal `call` lines rather than driven from an
-/// `.Array` of names, so that a collection this crate cannot build does not
-/// change what the probe measures.
 fn scope_probe(receiver: &Receiver, rows: &[(String, String, String)]) -> String {
     let mut body = String::new();
     for statement in receiver.setup.split('|') {
@@ -422,9 +375,6 @@ fn the_kind_column_agrees_with_the_two_it_governs() {
 }
 
 /// Every class in scope has a receiver for every arm its documented rows use.
-///
-/// A receiver file that quietly loses a row would otherwise make the class
-/// disappear from the table rather than fail.
 #[test]
 fn every_class_in_scope_has_a_receiver() {
     let receivers = receivers();

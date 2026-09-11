@@ -1,14 +1,5 @@
 //! The expression grammar, pinned against `build/bin/rexx` and
 //! `build/bin/rexxc`.
-//!
-//! Every precedence and associativity expectation below carries the probe that
-//! produced it, as a comment naming the program and the answer. Where the
-//! interpreter's *value* cannot tell two trees apart the comment says so
-//! rather than implying evidence that does not exist.
-//!
-//! In-crate rather than under `tests/`, because `ParseCtx`, `TokenCursor` and
-//! `parse_expr` are all `pub(crate)` and an integration test is a separate
-//! crate.
 
 use std::cell::RefCell;
 
@@ -36,11 +27,6 @@ pub(super) enum Entry {
 
 /// Parses `text` as one clause and returns the tree with the table its
 /// `SymbolId`s belong to.
-///
-/// `text` is the whole program, so a span in the result indexes `text`
-/// directly. That rules out an input whose first two tokens are a symbol and a
-/// colon, because `split_clauses` reads that as a label. Wrap such an
-/// expression in parentheses, which build no node.
 pub(super) fn parse(text: &str, entry: Entry) -> Result<(Expr, SymbolTable), ParseError> {
     let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
     let scanned = scan(&source).expect("the test input scans");
@@ -149,9 +135,6 @@ fn prefix_minus_binds_tighter_than_power() {
 fn prefix_not_binds_tighter_than_power() {
     // build/bin/rexx: `r = \0 ** 0` => 1, so this is (\0) ** 0 = 1 ** 0.
     // Parsing it as \(0 ** 0) would be \1 = 0.
-    //
-    // The exponent has to be 0 to discriminate: for any x in {0,1},
-    // (\x) ** 2 and \(x ** 2) are both \x, so `\0 ** 2` proves nothing.
     assert_eq!(shape("\\0 ** 0"), "(** (u\\ 0) 0)");
 }
 
@@ -398,12 +381,6 @@ fn a_colon_after_a_message_name_is_a_superclass_override() {
     // The gate is `isVariableOrDot` (`Token.hpp:576`), which is
     // `VARIABLE | STEM | COMPOUND | DOTSYMBOL`, and it is wider than a class
     // name has any use for. build/bin/rexxc translates all five of these:
-    //
-    //   r = a~b:.nil       rc=0
-    //   r = a~b:c          rc=0
-    //   r = a~b:c.         rc=0     (and then fails at run time, 88.914)
-    //   r = a~b:c.d        rc=0
-    //   r = a~b:c.d.e      rc=0
     assert_eq!(shape("a~b:.nil"), "(msg~ A \"B\" :env:.NIL)");
     assert_eq!(shape("a~b:c(1)"), "(msg~ A \"B\" :C 1)");
     assert_eq!(shape("a~b:c."), "(msg~ A \"B\" :stem:C.)");
@@ -414,10 +391,6 @@ fn a_colon_after_a_message_name_is_a_superclass_override() {
     );
 
     // And it must not be wider than those four classes. build/bin/rexxc:
-    //
-    //   r = a~b:1          Error 20.917
-    //   r = a~b:1e5        Error 20.917
-    //   r = a~b:.          Error 20.917    (a lone period is SYMBOL_DUMMY)
     assert_eq!(error("a~b:1"), (20, 917));
     assert_eq!(error("a~b:1e5"), (20, 917));
     assert_eq!(error("a~b:."), (20, 917));
@@ -675,11 +648,6 @@ fn an_empty_required_expression_raises_the_sub_number_the_caller_supplied() {
     // The grammar never invents a number here, because the interpreter's
     // depends on which instruction wanted the expression: measured, `r =` is
     // 35.918 and `interpret` alone is 35.912. So the caller passes it.
-    //
-    // No source text reaches this, which is the point: `scan` never produces
-    // an empty clause, so an empty expression only arises once an instruction
-    // parser has consumed the clause's keywords, as `say` alone does. The
-    // cursor is therefore built empty rather than derived from a clause.
     let source = ProgramSource::new(b"nop".to_vec(), SourceKind::Program);
     let scanned = scan(&source).expect("scans");
     let selectors = RefCell::new(SelectorTable::new());
@@ -748,13 +716,6 @@ fn a_call_span_reaches_its_closing_parenthesis() {
 fn every_node_in_a_dense_expression_contains_its_operands() {
     // `check_spans` runs on every `shape` call, so this adds the shapes that
     // no other test needs plus the cases that stress the widening.
-    //
-    // Containment cannot fail on parser output, and this test does not claim
-    // otherwise. `Expr::new` widens a node's span over its children before
-    // storing it, so the property holds by construction and no input can
-    // violate it. What this does buy is a guard on that invariant: if
-    // `Expr::new` ever stops widening, these shapes fail. `tests/tiling.rs`
-    // carries the falsifiable properties, on operand ordering and tightness.
     for text in [
         "a + b * c ** -d || e f g",
         ".array~of(1, 2)~~append(3)[1]",
@@ -887,14 +848,6 @@ fn program_selectors(text: &str) -> Vec<crate::Selector> {
 /// **The interning constraint, at the point the parse decides it** (D24):
 /// every site in one program that names a method holds the same selector,
 /// whichever spelling wrote it, and a different method is a different one.
-///
-/// `a~length` and `a~'length'` are the pair that makes it a parse-time
-/// property rather than a scanner one: the second name is a literal, which
-/// the scanner never saw as a symbol, and `parseMessage` upcases and interns
-/// both through one route (`parser/LanguageParser.cpp:3391`).
-///
-/// A parse that allocated per occurrence would leave every row of this test
-/// equal by value and none of them the same selector.
 #[test]
 fn one_method_name_is_one_selector_across_a_whole_program() {
     let selectors = program_selectors(

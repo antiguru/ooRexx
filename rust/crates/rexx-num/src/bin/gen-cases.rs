@@ -1,13 +1,4 @@
 //! Generates random `digits|a|op|b` arithmetic cases for differential testing.
-//!
-//! The curated value lists that drove Tasks 2.3 and 2.4 tested ~35,000 cases
-//! and still missed three defects, all of them at the exponent extremes --
-//! including one that panicked. Hand-picked inputs test what the author
-//! thought of; this tests what they did not.
-//!
-//! Output goes to stdout for the interpreter and the Rust harness to consume,
-//! so the oracle is invoked once per batch rather than once per case.
-//! Deterministic given a seed.
 
 use std::fmt::Write as _;
 

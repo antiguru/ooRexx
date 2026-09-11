@@ -10,12 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! `::OPTIONS`: what a file's directives leave on its own package.
-//!
-//! The oracle's `PackageSetting` (`execution/PackageSetting.hpp`), reached
-//! through `optionsDirective` (`parser/DirectiveParser.cpp:948`). Every
-//! activation of a body this package owns starts from these rather than from
-//! the language defaults, which is what makes `::OPTIONS DIGITS 12` reach a
-//! `::ROUTINE` and a `::METHOD` as well as the main body.
 
 use rexx_num::{Form, Settings, SettingsError};
 use rexx_parse::{ConditionOption, OptionsForm, PackageOption};
@@ -24,10 +18,6 @@ use crate::trace::{TraceMode, mode_from_setting};
 
 /// The six conditions `::OPTIONS` can turn from a condition into a SYNTAX
 /// error, in `subDirectives[]` order.
-///
-/// `ALL` is not one of them: it is a spelling that writes all six at once
-/// (`DirectiveParser.cpp:1258`-`:1290`), which [`PackageOptions::apply`]
-/// does.
 const ESCALATABLE: [&[u8]; 6] = [
     b"ERROR",
     b"FAILURE",
@@ -38,10 +28,6 @@ const ESCALATABLE: [&[u8]; 6] = [
 ];
 
 /// The settings one file's `::OPTIONS` directives accumulate.
-///
-/// Accumulated across every `::OPTIONS` in the file in source order, and the
-/// last write to a setting wins -- measured, `::options digits 12` followed
-/// by `::options digits 20 fuzz 4` leaves `digits()` 20 and `fuzz()` 4.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PackageOptions {
     /// `DIGITS`, `FUZZ` and `FORM`: the numeric settings every activation of
@@ -62,12 +48,6 @@ pub(crate) struct PackageOptions {
     /// `NOPROLOG`, stored negated so that a package naming no `::OPTIONS` has
     /// its prologue run -- `PackageClass::isPrologEnabled`, which
     /// `runProlog` reads (`classes/PackageClass.cpp:2131`).
-    ///
-    /// **It selects what a `::REQUIRES` of this file does, not what running
-    /// this file does.** Measured, oracle rc 0 both ways: `::options
-    /// noprolog` beside `say 'main'` still prints the line when the file is
-    /// the program, and suppresses it when another file requires this one --
-    /// the directives install either way.
     pub(crate) suppress_prolog: bool,
     /// Which options a `::OPTIONS` directive named, as opposed to which are
     /// in force -- `PackageClass::isExplicit*Option`, which
@@ -79,10 +59,6 @@ pub(crate) struct PackageOptions {
 /// The `::OPTIONS` subkeywords a package's directives actually named, in the
 /// order `PackageClass::optionsExplicitlySetToString`
 /// (`classes/PackageClass.cpp:2910`) writes them.
-///
-/// `PROLOG` and `NOPROLOG` are two flags there and two here: measured,
-/// oracle rc 0, `::options prolog numeric noinherit` renders
-/// `NUMERIC PROLOG` and `::options noprolog ...` renders `NOPROLOG`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 struct Explicit {
     named: [bool; EXPLICIT_WORDS.len()],
@@ -122,14 +98,6 @@ impl Explicit {
 
 /// Which conditions one activation raises as a SYNTAX error rather than as a
 /// condition.
-///
-/// **State of the activation and not of the package**, which is the oracle's
-/// own shape: `RexxActivation::trapOn` and `trapOff` turn the flag off for
-/// whatever condition a `SIGNAL ON`/`OFF` names, and an activation is where
-/// that write lands (`execution/RexxActivation.cpp:1547`, `:1598`). Measured:
-/// `::options novalue syntax` with `signal on novalue` then `signal off
-/// novalue` reads an unset variable as its own name, where the same file
-/// without those two clauses is 98.986.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub(crate) struct ConditionSyntax {
     escalated: [bool; 6],
@@ -150,10 +118,6 @@ impl ConditionSyntax {
     }
 
     /// Whether an untrapped `condition` is a SYNTAX error here.
-    ///
-    /// `false` for every name outside [`ESCALATABLE`], which is every
-    /// condition `::OPTIONS` has no spelling for -- `HALT`, `SYNTAX` and a
-    /// `USER` name among them.
     pub(crate) fn raises(self, condition: &[u8]) -> bool {
         ESCALATABLE
             .iter()
@@ -164,14 +128,6 @@ impl ConditionSyntax {
     /// `SIGNAL ON`/`OFF` and `CALL ON`/`OFF` of `condition`, each of which
     /// turns off the escalation the package asked for -- for the named
     /// condition, or for all six when the name is `ANY`.
-    ///
-    /// `signal` is false for the two `CALL` forms, which leave `NOVALUE`,
-    /// `LOSTDIGITS` and `NOSTRING` escalating: measured, `call on any` in a
-    /// file carrying `::options novalue syntax` still reports 98.986 for an
-    /// unset read, where `signal on any` reads the derived name. `NOVALUE`
-    /// additionally needs `novalue_trapped` false, which is `trapOff`'s own
-    /// extra guard -- a `NOVALUE` or `ANY` trap left in the table after the
-    /// removal keeps the flag where it was.
     pub(crate) fn disable_for(&mut self, condition: &[u8], signal: bool, novalue_trapped: bool) {
         let any = condition == b"ANY";
         let names = |name: &[u8]| any || condition == name;
@@ -198,11 +154,6 @@ impl ConditionSyntax {
 
 impl PackageOptions {
     /// Folds one `::OPTIONS` option into these settings.
-    ///
-    /// The `Err` is the DIGITS/FUZZ cross-check `optionsDirective` makes
-    /// against the package's accumulated pair rather than against a single
-    /// directive's: measured, `::options fuzz 5` and `::options digits 3` in
-    /// separate directives is the same 33.1 the two written together give.
     pub(crate) fn apply(&mut self, option: &PackageOption) -> Result<(), SettingsError> {
         let mut names = |word: &str| {
             let which = EXPLICIT_WORDS
@@ -268,12 +219,6 @@ impl PackageOptions {
     /// `PackageSetting::toString` (`execution/PackageSetting.hpp:122`): these
     /// settings written back as the `::OPTIONS` directive that would produce
     /// them, which `Package~options` answers when sent no option name.
-    ///
-    /// `trace` is the setting the package carries, and `None` renders
-    /// `?n/a?` -- the oracle's own last arm, reached by a `PackageSetting`
-    /// whose trace flags were never defaulted. Measured, oracle rc 0: the
-    /// REXX package's `~options` ends `TRACE ?n/a?` where a program
-    /// package's ends `TRACE NORMAL`.
     pub(crate) fn to_options_string(&self, trace: Option<TraceMode>) -> Vec<u8> {
         let condition = |which: &[u8]| {
             if self.syntax.raises(which) {
@@ -310,23 +255,6 @@ NOSTRING {} NOTREADY {} NOVALUE {} {} TRACE {}",
     }
 
     /// What `Package~options(name)` answers for one option name.
-    ///
-    /// The oracle switches on the first byte and, for `F` and the `NO`
-    /// spellings, on the second -- `PackageClass::options`
-    /// (`classes/PackageClass.cpp:2190`), whose own list of accepted names is
-    /// what [`OptionQuery::Unknown`] reports. Measured at rc 0 in one program
-    /// carrying `::options digits 13 novalue syntax`, one send per name:
-    /// `EXPLICITLYDEFINED` answers `CONDITION` because its `E` reaches the
-    /// ERROR arm first, `INITIALOPTIONS` and `RESETOPTIONS` both answer the
-    /// whole `::OPTIONS` string, and `SETOPTIONS` and `ALL` are argument
-    /// errors rather than answers because each needs the second argument.
-    ///
-    /// **`I` and `R` answer these settings and not the language defaults.**
-    /// `saveInitialPackageSettings` snapshots the package's own settings, and
-    /// nothing here can move them afterwards -- the setting form of
-    /// `~options` is refused -- so the snapshot and the current settings are
-    /// the same string. Measured: in the program above both answer
-    /// `DIGITS 13 ... NOVALUE SYNTAX`, not `DIGITS 9 ... NOVALUE CONDITION`.
     pub(crate) fn option_query(&self, name: &[u8], trace: Option<TraceMode>) -> OptionQuery {
         let upper: Vec<u8> = name.to_ascii_uppercase();
         let condition = |which: &[u8]| {
@@ -375,11 +303,6 @@ NOSTRING {} NOTREADY {} NOVALUE {} {} TRACE {}",
 }
 
 /// What one `Package~options(name)` send answers, or which refusal it earns.
-///
-/// The three refusing arms are separate because the oracle raises three
-/// different errors and the caller substitutes the name into one of them:
-/// measured at rc 0 for the answers and rc 163 for each refusal, `~options('S')`
-/// is 93.901, `~options('A')` is 93.903 and `~options('N')` is 93.914.
 pub(crate) enum OptionQuery {
     /// The option's current value.
     Value(Vec<u8>),
@@ -405,11 +328,6 @@ fn form_word(form: Form) -> &'static str {
 }
 
 /// The word `PackageSetting::toString` writes for one trace setting.
-///
-/// Keyed off [`TraceMode::letter`] rather than off the flags, because the C++
-/// tests the flags in a fixed order where the letters are already one per
-/// setting. Measured, oracle rc 0, one `::OPTIONS TRACE <letter>` per run:
-/// the nine letters answer these nine words.
 fn trace_word(mode: TraceMode) -> &'static str {
     match mode.letter {
         b'A' => "ALL",
@@ -493,10 +411,6 @@ mod tests {
     /// `SIGNAL ON <c>` turns off exactly `<c>`'s escalation and `SIGNAL ON
     /// ANY` turns off all six, while the `CALL` forms leave the three
     /// conditions no `CALL ON` can resume from.
-    ///
-    /// The `CALL` half is the measured one that a "clears everything"
-    /// implementation would get wrong: `call on any` in a file carrying
-    /// `::options novalue syntax` still reports 98.986.
     #[test]
     fn a_trap_clause_disables_the_escalation_its_own_condition_asked_for() {
         let uncallable = [b"LOSTDIGITS".as_slice(), b"NOSTRING", b"NOVALUE"];

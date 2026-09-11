@@ -10,20 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! Which code in this workspace is allowed to say `unsafe`, asserted.
-//!
-//! `[workspace.lints.rust] unsafe_code` is `deny` rather than `forbid`, which
-//! is what lets a module carry `#[allow(unsafe_code)]` at all -- the root
-//! `Cargo.toml` has why that choice was forced. What `forbid` used to give for
-//! free was that nothing could opt in without the manifest changing, and this
-//! file is what replaces it: the set of opt-ins is written down here, so a
-//! second one fails the suite instead of arriving with a commit that nobody
-//! reads the manifest of.
-//!
-//! **The two sets are separate on purpose.** An `#[allow]` is permission and an
-//! `unsafe` block is use, and either one appearing without the other is worth
-//! failing on: permission nothing uses should be taken back, and a use the
-//! compiler accepted somewhere unexpected means the permission is wider than
-//! this file thinks.
 
 use std::path::{Path, PathBuf};
 
@@ -36,11 +22,6 @@ fn workspace_root() -> PathBuf {
 }
 
 /// Every `.rs` file under `crates/`, workspace-relative and sorted.
-///
-/// Relative, because that is what the assertions below read as a list and
-/// because an absolute one would name this machine. Reading a file means
-/// joining the root back on -- a test's working directory is its own crate's,
-/// not the workspace's.
 fn rust_files() -> Vec<PathBuf> {
     let root = workspace_root();
     let mut found = Vec::new();

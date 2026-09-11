@@ -13,32 +13,6 @@
 //! receiver's behaviour -- `classes/ClassClass.cpp` and
 //! `classes/ObjectClass.cpp`, bound by `memory/Setup.cpp:462`-`:477` and
 //! `:538`-`:541`.
-//!
-//! A child of [`super`] for the reason [`super::rexx_info`] is one: the rows
-//! point at [`super::NativeMethod`]s, whose parameter list names types only
-//! that module can.
-//!
-//! # `~methods` and `~instanceMethods` are one C++ body
-//!
-//! Both are `behaviour->getMethods(class_object)` (`ClassClass.cpp:1027`,
-//! `ObjectClass.cpp:358`): an omitted argument answers the whole resolved
-//! set, a class answers that scope alone, and `.nil` answers the object's own
-//! level. They differ only in that `RexxClass::methods` maps `.nil` to the
-//! receiving class first (`ClassClass.cpp:1022`-`:1025`) -- measured, oracle
-//! rc 0, on a `::class KK` with two methods: `.KK~methods` is 34 entries,
-//! `.KK~methods(.KK)` and `.KK~methods(.nil)` are 2, `.KK~methods(.Object)`
-//! is 32, and `.KK~new~instanceMethods(.nil)` is 0.
-//!
-//! **Neither validates the argument.** Measured, oracle rc 0,
-//! `.Array~methods(1)` answers an empty `Supplier` rather than raising, so a
-//! scope that matches nothing is an empty answer and not an error.
-//!
-//! # The supplier's order is this crate's, not the oracle's
-//!
-//! [`rexx_classes::ClassRegistry::method_names_at`] answers a `BTreeSet`, so
-//! these suppliers are in name order where the oracle's are in hash order.
-//! Nothing makes two interpreters agree on the latter, so no witness may
-//! assert either -- see `corpus/lang/class_introspection.rex`.
 
 use super::{
     Arity, Behaviour, Cleared, Failure, Interp, NativeMethod, ObjRef, Raised, class_receiver,
@@ -109,11 +83,6 @@ fn query_mixin_class(
 /// `Class~subclasses`: `RexxClass::getSubClasses`
 /// (`classes/ClassClass.cpp:470`), the reverse edge `subclass` and `inherit`
 /// maintain.
-///
-/// **The oracle's list is weak** -- `subClasses->weakReferenceArray()` -- and
-/// this one is a plain `Vec<ObjRef>`. The difference is unobservable here
-/// because spec D59 does not collect classes, so an entry never becomes
-/// unreachable for the array to drop.
 fn subclasses(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -168,9 +137,6 @@ fn is_instance_of(
 
 /// `Object~instanceMethod(name)`: `RexxObject::instanceMethodRexx`
 /// (`classes/ObjectClass.cpp:370`).
-///
-/// **A name the receiver does not answer is `.nil`, not a raise** -- measured,
-/// oracle rc 0, `.Object~new~instanceMethod('ZZZ')` is `The NIL object`.
 fn instance_method(
     interp: &mut Interp,
     _cleared: Cleared,

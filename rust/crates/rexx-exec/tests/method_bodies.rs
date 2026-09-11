@@ -11,51 +11,6 @@
 
 //! The method-body table (D76): whether each documented method **works**,
 //! where gate table C only asks whether `hasMethod` answers for it.
-//!
-//! One row per (class, method, arm) of `corpus/docs/class-methods.txt`, each
-//! classified by sending the documented name with no arguments to a real
-//! receiver and comparing this crate against the oracle. The classification
-//! is a property of that one send, not of the method at every arity.
-//!
-//! # The gate, and it is red in every mode
-//!
-//! A row that was not diverging may not start, and a row that was answering
-//! may not stop -- [`regressed`] is the whole rule. A refusal that turns into
-//! a wrong answer is the failure this table exists to catch, and it is not a
-//! fact about any phase, so no gate mode relaxes it. A count of implemented
-//! bodies is not a criterion here and is not asserted on.
-//!
-//! # Two passes, and only the second needs the oracle
-//!
-//! The refusal precedes argument handling -- `Interp::invoke` asks
-//! `Interp::invocable` before the seam and before any arity check -- so a
-//! zero-argument send classifies [`Body::Loud`] exactly, with no signature
-//! source. Pass one is crate-only over every row; pass two runs the oracle
-//! only for the rows pass one did not classify.
-//!
-//! # No verdict is kept unless it turns on the two interpreters alone
-//!
-//! A comparison says nothing where the answer behind it moves on its own, so
-//! a second pass holds the crate's answer against the oracle under three
-//! environments and asks the oracle to repeat itself before any divergence
-//! is called. A row whose verdict turns on the clock, the zone, or the
-//! oracle's own irreproducibility is [`Body::Unstable`] -- derived from the
-//! runs, never from a list of names.
-//!
-//! # What [`Body::Answers`] is worth
-//!
-//! A method needing arguments is sent none, so both sides raise and agree on
-//! the raise: `answers` says the two interpreters agree on this send, which
-//! for such a row is agreement about an arity error rather than about a
-//! result. The gated rule does not rest on it.
-//!
-//! # Refreshing it
-//!
-//! `REXX_METHOD_BODIES_REFRESH=1 cargo test --release -p rexx-exec --test
-//! method_bodies` rewrites `corpus/method-bodies.txt` from the run -- and
-//! refuses to write a regression, so the baseline cannot be laundered by
-//! regenerating it. Any other difference between the committed file and the
-//! run, its header included, fails, so the table cannot go stale unnoticed.
 
 mod gate_tables;
 mod support;
@@ -101,14 +56,6 @@ const UNSTABLE_ORACLE: &str = "the oracle";
 
 /// Two zones twenty-six hours apart, so that no instant puts them on the same
 /// calendar date.
-///
-/// **That gap is what makes a row reading the wall clock score the same every
-/// hour of every day.** This crate's `.DateTime~today` answers the UTC date
-/// where the oracle answers the local one, so against this machine's zone
-/// alone the two agree for twenty-two hours a day and differ for two -- a
-/// verdict that turns on when the sweep ran. Against a pair that is never on
-/// one date, the row can never match all three, and `diverge` is what it
-/// reads at every hour.
 const SHIFTED_ZONES: (&str, &str) = ("Etc/GMT+12", "Etc/GMT-14");
 
 // ------------------------------------------------------------------ verdicts
@@ -135,17 +82,10 @@ enum Body {
     /// one `say` line does not run, both sides agree on the constructor's
     /// raise, and [`Body::Answers`] would be a claim about a method nobody
     /// asked.
-    ///
-    /// The evidence column names the constructor, not a status, because there
-    /// is no status of the method to report.
     Unanswered,
     /// **This crate answered and the oracle cannot be asked**, because the
     /// zero-argument send this table classifies by is a known oracle crash
     /// ([`ORACLE_CRASHING_SENDS`]). The evidence column names the crash.
-    ///
-    /// Not [`Body::Unanswered`], which means the send never reached the
-    /// method: here it reaches it and answers, and what is missing is the
-    /// other side.
     Uncomparable,
 }
 
@@ -184,11 +124,6 @@ impl Body {
 
 /// Whether a row moving from `was` to `now` is the regression this table
 /// gates.
-///
-/// One literal arm per ordered pair, so exhaustiveness and non-overlap are
-/// the compiler's rather than a claim in a comment. Two rules are in here: a
-/// row that was not diverging may not start, and a row that was answering may
-/// not stop -- including by losing its evidence.
 fn regressed(was: Body, now: Body) -> bool {
     match (was, now) {
         (Body::Loud, Body::Loud) => false,
@@ -372,11 +307,6 @@ fn read_committed(
 
 /// The two method names with no printable spelling, written in the row set as
 /// the placeholders the class tables use.
-///
-/// Measured: the names are the empty string and a single blank, and
-/// `.Object~method("")` and `.Object~method(" ")` both answer `The Method
-/// class`. A name this does not recognise is passed through, which is right
-/// for every other name in the row set.
 fn method_name_literal(name: &str) -> &str {
     match name {
         "(abuttal)" => "",
@@ -387,38 +317,10 @@ fn method_name_literal(name: &str) -> &str {
 
 /// A class whose `class-set.txt` construction expression cannot be this
 /// table's receiver, with the expression that replaces it.
-///
-/// `.DateTime~new` is the instant it is evaluated at, so a value-returning
-/// method of that instance answers differently on two runs and the row's
-/// verdict turns on the clock. Measured under the documented expression: this
-/// crate's own two engines disagree on the `DateTime` rows whose answer
-/// carries the time, and a row flips between two sweeps.
-///
-/// `.MutableBuffer~new` is empty, so a reader of its contents answers the
-/// same on an instance that keeps them and one that does not; the override
-/// gives the rows contents to read back.
-/// The `(class, method)` rows whose **zero-argument send crashes the oracle**,
-/// so this table cannot ask it and records [`Body::Uncomparable`] instead.
-///
-/// Every entry is one shape of `corpus/oracle-crashes.txt`'s strict-ordering
-/// comparison entry: `RexxString::primitiveStrictComp` dereferences a missing
-/// argument with no check (`classes/StringClassMisc.cpp:920`-`:923`), and the
-/// six operator methods that route to it are these. The other twelve
-/// comparison operators raise 93.903 and are not here.
-///
-/// **This names a property of the oracle, not of this tree**, so it does not
-/// go stale when a phase lands. It is checked the way
-/// [`RECEIVER_OVERRIDES`] is: every pair must be a row that exists.
 const ORACLE_CRASHING_SENDS: &[(&str, &str)] = &[
     // `Stem~hasItem` and `~index` with no argument, which
     // `corpus/oracle-crashes.txt` already carries: both dereference a missing
     // argument, and both are a SIGSEGV whenever the stem holds a tail.
-    //
-    // **They arrive here only with Phase 5h Task 6's receiver override.** The
-    // documented receiver is an empty stem, which is the one shape the oracle
-    // survives, so before the override these two rows were comparable and
-    // answered; a populated receiver makes them crash. That is the override
-    // working, not a new defect.
     ("Stem", "hasItem"),
     ("Stem", "index"),
     ("String", "<<"),
@@ -449,13 +351,6 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     // **Phase 5h Task 6's sweep**, the same step for the mapped classes: a
     // zero-argument probe against an empty map cannot tell a body that works
     // from one that refuses, and every class below can hold something now.
-    //
-    // `~~` rather than a helper, because a receiver override is one
-    // expression: it answers the receiver, so the puts chain. `Set` and `Bag`
-    // use `of`, which is native for those two alone -- the rest inherit
-    // `MapCollection~OF`, which spec D100 blocks. `Relation` gets two items
-    // under ONE index, which is the whole difference between it and a
-    // `Table`.
     ("Table", ".Table~new~~put('v1','k1')~~put('v2','k2')"),
     (
         "IdentityTable",
@@ -482,13 +377,6 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     // one -- so the fallback receiver is a bare `~new`, which the oracle and
     // this crate both refuse at `93.967`. That leaves all ten instance rows
     // `unanswered`: the method was never sent, on either side.
-    //
-    // **Binding `~new` is what makes this override necessary rather than
-    // sufficient.** With `new` bound and no override the rows move off `loud`
-    // and onto `unanswered`, which is honest but measures nothing; the
-    // interpreter's own route to a frame is what measures the ten methods.
-    // Unlike `Pointer` and `Buffer`, whose refusal is the whole of what either
-    // interpreter can reach, a `StackFrame` really works once you have one.
     ("StackFrame", ".context~stackFrames[1]"),
 ];
 
@@ -510,15 +398,6 @@ fn instance_receiver(class: &ClassRow) -> String {
 /// Whether this class's instance receiver is an expression this table
 /// **committed**, rather than the bare `~new` fallback -- which is the whole
 /// of what "the method was really sent" turns on below.
-///
-/// **An override counts, and until Phase 5i nothing said so**, because every
-/// override before `StackFrame` was on a class that also had a construction
-/// expression, so the two questions had the same answer and the difference
-/// could not show. `StackFrame` has no construction expression --
-/// `class-set.txt` marks it `not-covered`, the reference says the user cannot
-/// make one -- and reaches a real receiver only through the override. Reading
-/// `class.construction` alone recorded its ten rows `unanswered` with the
-/// override in force and the methods genuinely being sent.
 fn receiver_is_committed(class: &ClassRow) -> bool {
     class.construction.is_some()
         || RECEIVER_OVERRIDES
@@ -527,9 +406,6 @@ fn receiver_is_committed(class: &ClassRow) -> bool {
 }
 
 /// The text of one row's probe program.
-///
-/// This function is the definition of the program: nothing is committed for
-/// it to drift from, and the receiver and the name both come from the row.
 fn probe_text(class: &ClassRow, row: &MethodRow) -> String {
     let receiver = match row.arm.as_str() {
         "class" => format!(".{}", class.name),
@@ -561,16 +437,6 @@ struct CrateSide {
 }
 
 /// Runs one probe twice, bounded, and reports whether the two runs agreed.
-///
-/// **This used to run the probe on both engines and compare them**, re-running
-/// one engine on a disagreement to tell a program whose own answer moves from
-/// an engine defect. With one engine the second half is the whole test: two
-/// runs that disagree mean the program's answer is not reproducible, which is
-/// a row this table cannot classify, and `stable` is what carries that to the
-/// caller.
-///
-/// A refused body still panics. It is not a fact about the oracle and no mode
-/// relaxes it.
 fn run_probe_twice(abs: &Path, text: &[u8]) -> CrateSide {
     let path = abs
         .to_str()
@@ -598,17 +464,6 @@ fn same_outcome(left: &Outcome, right: &Outcome) -> bool {
 }
 
 /// This crate's answer to `abs` with `TZ` set, as a subprocess.
-///
-/// **Why a subprocess when every other crate-side run here is in process.**
-/// `TZ` is read per process, and the in-process executor shares this test
-/// binary's environment -- so the only way to ask what this crate answers
-/// under another zone is to run it as its own process. Setting the variable
-/// in this process instead would need `std::env::set_var`, which is `unsafe`
-/// in this edition and races every other test in the binary.
-///
-/// Only the three descriptors are filled: [`compare_raw`] reads no other
-/// field, and a subprocess cannot report a stack span or a collection count
-/// across the boundary anyway.
 fn run_crate_in_zone(abs: &Path, zone: &str) -> Outcome {
     let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
         .arg(abs)
@@ -648,14 +503,6 @@ struct Pending {
 
 /// The channels a `diverge` row moved on **in any of the three
 /// environments**, which is the comparison its verdict rests on.
-///
-/// **Against this machine's zone alone the answer turns on the hour.**
-/// `DateTime today` answers the UTC date here and the local one on the
-/// oracle, so the two agree in this zone for twenty-two hours a day: measured
-/// 2026-09-04, that row derives `agree` at 07:03 CEST and `diverge-stdout`
-/// around local midnight, while its verdict is `diverge` at every hour. A
-/// committed evidence value that moves by itself is a daily gate failure, so
-/// the union is what the table carries.
 fn channels_that_moved_anywhere(row: &Pending, shifted: &[(&str, CppOutcome)]) -> Descriptors {
     let mut moved = compare_raw(&row.crate_side, &row.oracle);
     for (_, out) in shifted {
@@ -687,11 +534,6 @@ struct Measured {
 
 /// Where the derived probes are written, one directory per row so that an
 /// oracle run's own working directory holds exactly the program it runs.
-///
-/// Under Cargo's per-target temporary directory and named with the pid and
-/// the clock, as `builtin_status.rs`'s `fresh_run_root` is and for its
-/// reason: a shared fixed path would let one run's probes appear in another
-/// run's external-routine search path.
 fn staging_root() -> PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -719,10 +561,6 @@ fn check_overrides(classes: &[ClassRow], structural: &mut Vec<Structural>) {
 
 /// Every `(class, method)` pair [`ORACLE_CRASHING_SENDS`] names is a row this
 /// table classifies.
-///
-/// An entry naming a row that does not exist would exempt nothing while
-/// reading as though it exempted something, which is the same failure
-/// [`check_overrides`] guards against one table over.
 fn check_crashing_sends(rows: &[MethodRow], structural: &mut Vec<Structural>) {
     let named: BTreeSet<(&str, &str)> = rows
         .iter()
@@ -742,10 +580,6 @@ fn check_crashing_sends(rows: &[MethodRow], structural: &mut Vec<Structural>) {
 
 /// Every instance receiver this table sends to is the one gate table C's
 /// committed probe constructs, or an override.
-///
-/// The two tables read the same `construction` column through two
-/// derivations, and a receiver that drifted apart would leave this table
-/// classifying a method on an object table C never asks about.
 fn check_receivers_match_table_c(
     corpus: &Path,
     classes: &[ClassRow],
@@ -1022,31 +856,6 @@ fn no_row_started_diverging_or_stopped_answering() {
 
     // **A second pass, which asks whether each row's verdict turns on
     // anything but the two interpreters.**
-    //
-    // A comparison is worth nothing where the answer behind it moves on its
-    // own, and two things move it here. The oracle's answer can be
-    // irreproducible -- `Object~identityHash` is derived from an address. And
-    // the comparison can turn on the clock and the zone, which is worse,
-    // because it makes a row's verdict a fact about when the sweep ran.
-    //
-    // So the crate's answer is held against the oracle under this machine's
-    // zone and under [`SHIFTED_ZONES`], and only agreement with all three is
-    // `answers`.
-    //
-    // **Both sides shift, and they did not always.** Until the zone-aware
-    // clock landed, only the oracle's side was shifted, because the crate
-    // runs in process and `TZ` is read per process -- so a body that
-    // correctly answered differently per zone would have matched at most one
-    // of the three and read `diverge`. That is no longer hypothetical:
-    // `DateTime`'s bodies do vary by zone now. Where the oracle's own three
-    // answers differ, this crate is therefore re-run per zone as a
-    // subprocess ([`run_crate_in_zone`]) and compared zone for zone.
-    //
-    // Where the oracle answers the same string in all three -- which is every
-    // row that has nothing to do with the clock -- the in-process answer is
-    // compared against it directly and no subprocess is spawned. That is not
-    // only an optimisation: it keeps the common path exactly as it was, so a
-    // row whose verdict moves is a row whose zone behaviour moved.
     for row in &pending {
         let shifted = [
             (
@@ -1095,9 +904,6 @@ fn no_row_started_diverging_or_stopped_answering() {
             // that as `answers` is what let `File`'s rows read as fifty
             // working methods while `.File~new('/tmp')` could not construct at
             // all, and a phase was scoped on them.
-            //
-            // The class arm is unaffected: its receiver is `.Name`, which
-            // constructs nothing.
             let asked = row.arm == "class" || row.constructs;
             measured.insert(
                 row.key.clone(),

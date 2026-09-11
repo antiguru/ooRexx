@@ -1,8 +1,5 @@
 //! `TokenCursor`, which no test outside this crate can reach: it is
 //! `pub(crate)`, so an integration test under `tests/` cannot name it.
-//!
-//! Three tests here exercised `TokenCursor::back` and went with the method:
-//! the grammar peeks rather than rewinding, so nothing called it.
 
 use super::{SymbolTable, Tag, Token, TokenCursor, TokenKind};
 
@@ -38,12 +35,6 @@ fn a_cursor_visits_only_its_own_range() {
 /// `SymbolId::index` promises a dense, zero-based index into the table that
 /// interned it, which is what lets a caller use a `Vec` instead of a
 /// `HashMap<SymbolId, _>` on the variable-lookup path.
-///
-/// The guarantee is a property of `intern` -- it assigns `SymbolId(names
-/// .len())` before pushing -- so it is pinned here rather than left implicit.
-/// A change that made ids sparse, or based them on anything but insertion
-/// order, would still satisfy every other test in this crate and would fail
-/// only inside a consumer's `Vec`, as either a panic or a silently wrong slot.
 #[test]
 fn symbol_ids_are_dense_and_zero_based() {
     let mut symbols = SymbolTable::default();

@@ -11,60 +11,6 @@
 
 //! The builtin functions: which names are builtins, how many arguments each
 //! takes, and the one dispatch every implementation hangs off.
-//!
-//! # The name set is read, never copied
-//!
-//! [`is_builtin`] answers from `rexx_inventory::builtins::in_scope()`, which
-//! is `NAMES` (generated from `BuiltinFunctions.cpp`) less the names
-//! `docs/superpowers/plans/phase-4-exclusions.txt` excludes **outright**.
-//! Three of that file's rows -- `VALUE`, `ADDRESS` and `QUEUED` -- are
-//! partial: excluded in one form and in scope in the other, so they are
-//! builtin names here. Subtracting `EXCLUDED` instead of `wholly_excluded()`
-//! gives a set three names short, and a name missing from this set is not a
-//! quiet gap: [`dispatch`] answers `None` for it, which is the answer that
-//! means "try a `::routine` next". Measured on the oracle, `::routine max`
-//! alongside `call max 1,2` still calls the builtin, so a name that dropped
-//! out of this set would silently run the wrong routine.
-//!
-//! # Arity and implementation are one row
-//!
-//! [`IMPLEMENTED`] carries the `(min, max)` pair beside the function pointer
-//! rather than in a table of its own. That is what makes the count check
-//! structural: [`dispatch`] runs [`check_arity`] from the same row it is
-//! about to call, so a new builtin cannot be added without an arity.
-//! `max` is `None` for a variadic builtin.
-//!
-//! **The guarantee is a count, not a shape, and the difference is real.**
-//! `(min, max)` can say how many arguments are acceptable; it cannot say
-//! *which positions* must be filled, because required-ness is conditional on
-//! what comes after. Measured: `date()` and `date('S')` both succeed, so
-//! `DATE`'s minimum is 0 -- yet `date('S',,'S')` is `40.5`, "argument 2 is
-//! required", because supplying position 3 makes position 2 mandatory.
-//! A model in which the required positions are a prefix of length `min`
-//! cannot express that, so an implementation *can* still be reached with an
-//! interior omission it would reject, and each one that cares must check its
-//! own positions.
-//!
-//! # What the builtin path does *not* do
-//!
-//! `resolve_and_run_call` (`run.rs`) evaluates the arguments and then comes
-//! here **without pushing an activation**, and that is measured rather than
-//! assumed. Each of the three is a thing the label path does:
-//!
-//! * **`SIGL` is not set.** Measured: with `say sigl` before and after,
-//!   `n = length('abc')` leaves `SIGL` at its uninitialised `SIGL`, where the
-//!   `call sub` two lines later sets it to that clause's own line number.
-//! * **`>A>` argument lines *do* fire**, exactly as they do for a label.
-//!   Measured under `trace i`, `n = length('abc')` traces
-//!   `>L>   "abc"` / `>A>   "abc"` / `>F>   LENGTH => "3"` / `>>>   "3"`,
-//!   which is the same argument shape `n = sub('abc')` traces.
-//! * **No activation level is added.** Two observables, both measured. Under
-//!   `trace i` the builtin's `>F>` and `>>>` sit at the *calling* clause's own
-//!   indent, where a label callee's clauses echo two columns further in. And
-//!   a condition raised by a builtin echoes one clause per enclosing
-//!   activation and none for the builtin: `say substr('abc')` at the top level
-//!   echoes one line, the same call inside `sub:` echoes two (the failing
-//!   clause, then `call sub`).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
@@ -102,11 +48,6 @@ pub(crate) mod word;
 
 /// What a builtin's code looks like: the interpreter, the row's own name and
 /// the already-evaluated arguments.
-///
-/// A named type rather than the signature spelled inline, because it is
-/// spelled in three places -- [`Builtin::run`], every implementation in
-/// `string.rs`, and the tests' own stand-in -- and those three cannot drift
-/// while they name this.
 type Run = fn(&mut Interp, &'static [u8], Args<'_>) -> Result<ObjRef, Failure>;
 
 /// One builtin this crate runs: its name, its arity, and the code.
@@ -122,33 +63,11 @@ struct Builtin {
     /// The most the oracle accepts, or `None` for a variadic builtin.
     max: Option<usize>,
     /// The code, taking this row's own [`name`] as its second argument.
-    ///
-    /// **The name is passed rather than written down again inside the
-    /// implementation**, and that is what lets `CENTER` and `CENTRE` be one
-    /// function: the oracle's two bodies are identical except for the name
-    /// they report, and measured, they really do report differently --
-    /// `centre('ab',6,'--')` is `CENTRE argument 3 must be a single
-    /// character` where `center('ab',6,'--')` is `CENTER argument 3`. An
-    /// implementation naming itself would be a second copy of the string in
-    /// this row, free to disagree with it.
-    ///
-    /// [`name`]: Builtin::name
     run: Run,
 }
 
 /// Every builtin this crate runs, with the arity `check_arity` enforces
 /// before the code is entered.
-///
-/// A name that is a builtin but has no row here fails loudly rather than
-/// being answered wrongly; `corpus/builtin-status.txt` is where the
-/// implemented/not-implemented boundary is recorded and policed, so this
-/// table does not describe it in prose.
-///
-/// Every `(min, max)` pair below is the oracle's own, taken from the
-/// `x_Min`/`x_Max` constants each `BUILTIN(x)` body opens with
-/// (`interpreter/expression/BuiltinFunctions.cpp`) and confirmed against the
-/// interpreter at both ends -- one argument short is 40.3 naming that
-/// minimum and one too many is 40.4 naming that maximum.
 const IMPLEMENTED: &[Builtin] = &[
     Builtin {
         name: b"ABBREV",
@@ -615,28 +534,12 @@ const IMPLEMENTED: &[Builtin] = &[
 ];
 
 /// The builtin names Phase 4 dispatches, as a set built once.
-///
-/// `in_scope()` allocates a fresh `Vec` per call and a call reaches it once
-/// per named call clause, so the set is built on first use and kept. It is
-/// still *derived*: the rows come from `rexx_inventory` on every process,
-/// never from a list written down here.
 fn in_scope() -> &'static HashSet<&'static str> {
     static NAMES: OnceLock<HashSet<&'static str>> = OnceLock::new();
     NAMES.get_or_init(|| rexx_inventory::builtins::in_scope().into_iter().collect())
 }
 
 /// Whether `name` is a builtin function name.
-///
-/// `name` arrives as the call site spells it: already upcased for a symbol
-/// target, verbatim for a quoted literal. Both are compared against the
-/// table's own upper-case spelling with no further folding, which is the
-/// oracle's own rule and is measured in both directions -- `say
-/// "LENGTH"('abc')` prints 3, and `say "length"('abc')` is Error 43.1
-/// ("Could not find routine") at rc 213.
-///
-/// A name that is not UTF-8 is not a builtin. `NAMES` is generated from C++
-/// identifiers, so every entry is ASCII; a `CallTarget::Literal` carrying
-/// arbitrary bytes simply matches none of them.
 pub(crate) fn is_builtin(name: &[u8]) -> bool {
     std::str::from_utf8(name).is_ok_and(|name| in_scope().contains(name))
 }
@@ -656,31 +559,12 @@ fn wholly_excluded() -> &'static HashSet<&'static str> {
 }
 
 /// Whether `name` is a builtin function name Phase 4 runs nothing for.
-///
-/// **Its own resolution step, in front of the `::ROUTINE` lookup and behind
-/// [`is_builtin`].** The oracle's builtin table is one table and a builtin
-/// always beats a `::ROUTINE` of the same name, so a name in it must never
-/// reach the routine step -- a `::routine charin` would otherwise run here
-/// where the oracle runs `CHARIN`. And it must never reach 43.1 either: the
-/// oracle answers this name, so a condition here would let a program
-/// *expecting* that condition pass against a gap, which is the whole reason
-/// an excluded construct fails loudly instead.
-///
-/// Case-sensitive on the same argument [`is_builtin`]'s doc makes: a quoted
-/// lower-case target reaches no builtin on the oracle either.
 pub(crate) fn is_excluded_builtin(name: &[u8]) -> bool {
     std::str::from_utf8(name).is_ok_and(|name| wholly_excluded().contains(name))
 }
 
 /// [`resolve`] composed with [`run`], for the unit tests in this module's
 /// children.
-///
-/// **Test-only, because resolution and dispatch are one step apart in
-/// production now.** `Interp::resolve_call` resolves the name and
-/// `Resolved::Builtin` carries the row to `run`, so nothing outside a test
-/// arrives here holding only a name. A test that wants to exercise a builtin
-/// by name is the one caller left, and `None` still means what it always did:
-/// the name is not a builtin.
 #[cfg(test)]
 pub(crate) fn dispatch(
     interp: &mut Interp,
@@ -693,32 +577,15 @@ pub(crate) fn dispatch(
 
 /// Which builtin a resolved name runs, decided once where the name is
 /// resolved rather than found again on every call.
-///
-/// **A row index, and not a copy of the row.** [`Resolved::Builtin`] used to
-/// carry nothing, and its doc gave the reason: the arity check and the code
-/// live on one row, so carrying "which builtin" beside the resolution would be
-/// a second copy free to drift from it. That argument is about the row's
-/// *contents*. An index names the one row and cannot disagree with it, and it
-/// is what lets a call site keep its answer.
-///
-/// [`Resolved::Builtin`]: crate::Resolved::Builtin
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum BuiltinTarget {
     /// The row of [`IMPLEMENTED`] that runs this name.
     Row(u16),
     /// A name this crate declares in scope and runs nothing for.
-    ///
-    /// **A resolution rather than a miss**, for exactly
-    /// [`is_excluded_builtin`]'s reason: the oracle answers this name, so it
-    /// must reach neither a `::ROUTINE` nor 43.1. It reaches the loud declared
-    /// gap instead, and [`run`] is where that happens.
     Gap,
 }
 
 /// Every implemented builtin's row, keyed by the bytes a call site spells.
-///
-/// Built once, from [`IMPLEMENTED`] itself, so it cannot name a row the table
-/// does not have or miss one it does.
 fn rows() -> &'static HashMap<&'static [u8], u16> {
     static ROWS: OnceLock<HashMap<&'static [u8], u16>> = OnceLock::new();
     ROWS.get_or_init(|| {
@@ -735,13 +602,6 @@ fn rows() -> &'static HashMap<&'static [u8], u16> {
 
 /// Resolves `name` to what will run it, or `None` when it is not a builtin at
 /// all and resolution should carry on to a `::ROUTINE`.
-///
-/// **This is the whole of the lookup, and it used to be two.** Resolution
-/// asked [`is_builtin`] -- one hash of the name -- and then [`dispatch`]
-/// hashed it a second time and walked [`IMPLEMENTED`] comparing byte slices
-/// until it matched. Entry 11 of the phase 4f record measured the pair at
-/// **17.4% of the `strings` axis**, 9.0% in the set lookup and 8.4% in the
-/// scan, and the scan is the half that grows with the table.
 pub(crate) fn resolve(name: &[u8]) -> Option<BuiltinTarget> {
     // **The row map is asked first, and that ordering is the second half of
     // the saving.** Every row's name is in scope -- asserted by
@@ -758,23 +618,6 @@ pub(crate) fn resolve(name: &[u8]) -> Option<BuiltinTarget> {
 }
 
 /// Runs the builtin `target` names over already-evaluated arguments.
-///
-/// `name` is the call site's own spelling and is used only to report the
-/// declared gap; the row's own [`Builtin::name`] is what a running builtin is
-/// handed, which is what keeps `CENTER` and `CENTRE` one function.
-///
-/// **Arguments arrive evaluated, and an omitted interior position arrives as
-/// `None`.** A trailing omission is not a position at all by the time it
-/// gets here: `rexx-parse` drops those (`ExprKind::List`'s own doc comment),
-/// matching the oracle, where `q(1,,2,,)` reports `arg()` as 3.
-///
-/// **There is no "not a builtin" answer here.** `Interp::resolve_call` decided
-/// that and handed over the row; this used to be reached through a `dispatch`
-/// that re-resolved the name and could report a miss the resolution had
-/// already ruled out.
-///
-/// See the module doc for what this path deliberately does *not* do that the
-/// label path does -- `SIGL`, and the activation level.
 pub(crate) fn run(
     interp: &mut Interp,
     name: &[u8],
@@ -819,41 +662,6 @@ pub(crate) fn run(
 
 /// The 1-based argument positions `name` fetches **raw**, which the
 /// required-string protocol must leave alone, or an empty slice.
-///
-/// `BuiltinFunctions.hpp` gives a `BUILTIN(x)` body a **converting** family of
-/// argument accessor, whose members reach `ExpressionStack`'s own converting
-/// fetches, and a **raw** family, whose members are `stack->peek` and convert
-/// nothing. A position reached only through the raw family is a position the
-/// oracle never converts, and converting it here is a silent wrong answer.
-///
-/// The converting family is not all one conversion: a string accessor reaches
-/// `requestString` and a numeric one reaches `requestNumber`/`numberValue`.
-/// The string protocol runs underneath either -- measured,
-/// `signal on nostring name h; say substr('abcdef', .array, 2)` traps NOSTRING
-/// on the oracle and on both engines at rc 0 -- so what this table is about is
-/// converting against raw, and not which conversion.
-///
-/// **Derived by enumerating every `BUILTIN(x)` block rather than by noticing
-/// one case**, and re-derived on every test run by
-/// `tests::the_raw_argument_table_re_derives_from_the_oracles_own_source`,
-/// which is where the derivation and its own blind spot are written down.
-/// **Of the positions a block's own `x_<name> = N` constant names, one in the
-/// whole set is reached only through the raw family**, and it is `VALUE`'s new
-/// value; the positions no constant names are that test's `EXTRA_ARGUMENT_BLOCKS`
-/// and were ruled by running. Measured, oracle rc 0:
-/// `r = value('a', .Array)` stores the class object, so `a~class` is
-/// `The Class class` and not `The String class`, and under `signal on any`
-/// with no `makeString` anywhere the same call raises nothing where a
-/// converted position would raise NOSTRING.
-///
-/// **The regression instruments are the corpus programs that carry a raw
-/// argument position under an armed latch**, of which
-/// `corpus/lang/required_string_builtin_raw_argument.rex` is the one that
-/// stores an object through `VALUE` directly. Removing the exemption reddens
-/// those and nothing else in the corpus, measured by removing it and reading
-/// the failures off a `--no-fail-fast` run: a program that arms the latch
-/// without reading a stored object back stays green, because the value only
-/// shows up when something reads it.
 pub(crate) fn raw_argument_positions(name: &'static [u8]) -> &'static [usize] {
     match RAW_ARGUMENT_POSITIONS.iter().find(|(row, _)| *row == name) {
         Some((_, positions)) => positions,
@@ -867,19 +675,6 @@ static RAW_ARGUMENT_POSITIONS: &[(&[u8], &[usize])] = &[(b"VALUE", &[2])];
 
 /// One builtin call's arguments, in each of the readings a builtin needs of
 /// them.
-///
-/// **The required-string protocol splits what a reader uses from what a
-/// message names.** `provide.xml` `reqstr` makes every builtin argument a
-/// conversion site, and the oracle's error path is handed the *object* the
-/// expression produced rather than the string it converted to -- measured, rc
-/// 216: `substr(.A, .B)` where `.B` has a class-side `makeString` answering
-/// `'x'` reports `SUBSTR argument 2 must be a whole number; found "The B
-/// class"`. A single slice cannot carry the two apart, and a builtin that
-/// reads the conversion while quoting the object needs each at once.
-///
-/// The two are the same slice whenever the protocol cannot change anything --
-/// `Interp::required_string_arguments` answers `None` for that -- so an
-/// ordinary call allocates nothing here.
 #[derive(Copy, Clone)]
 pub(crate) struct Args<'a> {
     /// Each supplied argument through the protocol, converted in position
@@ -911,27 +706,11 @@ impl<'a> Args<'a> {
 
 /// The 40.x incorrect-call checks every builtin shares, in the order the
 /// oracle applies them.
-///
-/// **The order is measured, not chosen.** `say substr(,2,3,'p','q')` has both
-/// too many arguments and a missing required first one, and the oracle
-/// answers 40.4 -- so the maximum is checked before anything about which
-/// positions were supplied. All three, rc 216 in every case:
-///
 /// ```text
 /// say substr('abc')             40.3  Not enough arguments in invocation of SUBSTR; minimum expected is 2.
 /// say length('abc','x')         40.4  Too many arguments in invocation of LENGTH; maximum expected is 1.
 /// say substr('abc',,2)          40.5  Missing argument in invocation of SUBSTR; argument 2 is required.
 /// ```
-///
-/// The routine name is **upcased in the message while the clause echo keeps
-/// the source spelling**, measured with a mixed-case call: `say
-/// SuBsTr('abc','x')` echoes `*-* say SuBsTr('abc','x')` above a secondary
-/// line naming `SUBSTR`. That falls out of `name` already being the table's
-/// own spelling and the echo being the clause's own bytes; nothing here
-/// upcases anything.
-///
-/// The name is interpolated rather than fixed: the same bad argument gives
-/// `COPIES argument 2 must be a whole number` for `say copies('abc','x')`.
 fn check_arity(builtin: &Builtin, args: &[Option<ObjRef>]) -> Result<(), Failure> {
     if let Some(max) = builtin.max
         && args.len() > max
@@ -948,30 +727,12 @@ fn check_arity(builtin: &Builtin, args: &[Option<ObjRef>]) -> Result<(), Failure
 }
 
 // ---- reading arguments ----
-//
-// The conversions every family of builtins shares, in the shape the oracle's
-// `required_*`/`optional_*` macros have: one per argument *kind* a builtin can
-// declare, each naming the routine and the call's own argument position in the
-// 40.x message it raises.
 
 /// The precision the oracle converts a builtin's numeric arguments under.
-///
-/// `Numerics::ARGUMENT_DIGITS` (`runtime/Numerics.hpp`), 18 on a 64-bit
-/// build and deliberately not the current `NUMERIC DIGITS` --
-/// `Raised::argument_not_whole` carries the pair of measurements that
-/// separates the two.
 const ARGUMENT_DIGITS: usize = 18;
 
 /// The argument at 1-based `position`, or `None` if the call did not supply
 /// one there.
-///
-/// The two ways a position can be absent are one answer here on purpose: a
-/// list shorter than `position` and an interior `None` mean the same thing to
-/// every builtin, since the oracle's `optional_*` macros test
-/// `argcount >= position` and then read a slot that may itself be null.
-/// [`check_arity`] guarantees positions `1..=min` are all `Some`, having
-/// turned any omission there into 40.5, so those are the positions the
-/// `expect`ing helpers below may be asked about -- and only those.
 fn arg(args: Args<'_>, position: usize) -> Option<ObjRef> {
     args.values.get(position - 1).copied().flatten()
 }
@@ -986,22 +747,6 @@ fn required_string(interp: &mut Interp, args: Args<'_>, position: usize) -> Vec<
 /// The argument at 1-based `position` prepared for a shared borrow, for a
 /// builtin that reads more than one string or reads one across a further call
 /// on the interpreter.
-///
-/// The counterpart to [`required_string`], and the reason to prefer it: that
-/// one copies the bytes out, and the copy is not what the caller wanted -- it
-/// is what the caller had to buy to release `to_text`'s `&mut`. Reading
-/// through [`Rendered::text`] instead costs nothing for a string argument,
-/// which is nearly all of them.
-///
-/// **Every `&mut` call the builtin makes has to happen before this one.**
-/// That is a real constraint on the call sites and it reorders them: the
-/// numeric and pad arguments are converted first, then the strings are read.
-/// The reordering changes no answer, because reading a string here cannot
-/// fail and cannot run Rexx code -- the required-string protocol has already
-/// converted every argument, in position order, before the body was entered
-/// (`Interp::required_string_arguments`), so what is left is
-/// [`Interp::to_text`], which is total, and the two lazy caches it fills are
-/// pure.
 fn required_render(interp: &mut Interp, args: Args<'_>, position: usize) -> Rendered {
     let value = arg(args, position).expect("check_arity admitted this required argument");
     interp.render(value)
@@ -1015,10 +760,6 @@ fn optional_string(interp: &mut Interp, args: Args<'_>, position: usize) -> Opti
 
 /// An argument the builtin declared as an integer, converted the way the
 /// oracle's `optional_integer`/`required_integer` macros do.
-///
-/// `Ok(None)` is "the call supplied nothing here"; the caller then applies
-/// that argument's own default, which differs per builtin and is never a
-/// single shared value.
 #[inline]
 fn whole_number(
     interp: &mut Interp,
@@ -1085,11 +826,6 @@ fn pad_byte(
 }
 
 // ---- range-checking converted arguments ----
-//
-// The operation layer's 93.9xx checks, which run after every conversion above
-// and name neither the routine nor the call position. `string.rs`'s own module
-// doc carries the three oracle transcripts that fix the order between the two
-// layers.
 
 /// A converted argument used as a length: zero or positive.
 #[inline]
@@ -1120,16 +856,6 @@ fn count_of(value: i64, method_position: usize) -> Result<usize, Failure> {
 
 /// A result buffer of exactly `len` bytes' capacity, or the condition the
 /// oracle raises when the allocator refuses.
-///
-/// See `Raised::system_resources` for why the refusal is asked of the
-/// allocator rather than of a size limit.
-/// A buffer that is not the lent one.
-///
-/// Two callers need this. `pack_hex` has no `Interp` to lend from, and
-/// `padding_width` uses the reservation *itself* as the resource check and then
-/// drops it -- a lent buffer that already had the capacity would make that
-/// check succeed without asking the allocator anything, which is the one place
-/// where reuse would be a defect rather than a saving.
 fn fresh_buffer(len: usize) -> Result<Vec<u8>, Failure> {
     let mut out = Vec::new();
     out.try_reserve_exact(len)
@@ -1146,11 +872,6 @@ fn fresh_buffer(len: usize) -> Result<Vec<u8>, Failure> {
 /// and that was the whole of what the program still allocated. Growing
 /// amortised lets the capacity settle at the longest result a program asks
 /// for and stay there.
-///
-/// The guarantee `fresh_buffer` beside this exists for is untouched: this
-/// still reserves fallibly, so a result sized from user input raises 5.1
-/// rather than aborting, and a request larger than the buffer's own capacity
-/// is still a single reservation of what was asked for.
 fn buffer(interp: &Interp, len: usize) -> Result<Vec<u8>, Failure> {
     let mut out = interp.take_result_buffer();
     out.try_reserve(len)
@@ -1164,12 +885,6 @@ mod tests {
 
     /// The three partial rows are builtin names, and the whole exclusions are
     /// not.
-    ///
-    /// This is the 63-against-66 trap in both directions. `EXCLUDED` has
-    /// eighteen rows and only fifteen of them are exclusions; taking the
-    /// whole list out would leave `VALUE`, `ADDRESS` and `QUEUED` answering
-    /// `None` from `dispatch`, which is the answer reserved for "this is not
-    /// a builtin, try a `::routine`".
     #[test]
     fn the_partial_exclusions_are_builtin_names_and_the_whole_ones_are_not() {
         for name in rexx_inventory::builtins::PARTIALLY_EXCLUDED {
@@ -1192,15 +907,6 @@ mod tests {
 
     /// [`resolve`] partitions the in-scope set exactly, and answers `None`
     /// for everything outside it.
-    ///
-    /// **The partition is what the reordering inside `resolve` depends on.**
-    /// That function asks the row map before the in-scope set and treats a hit
-    /// as conclusive, which is only sound if every row is in scope -- the test
-    /// below -- and only *complete* if every in-scope name without a row still
-    /// answers `Gap`, which is this one. Derived from the two collections
-    /// rather than from a list written here, so a name added to either is
-    /// covered without this test being edited -- which is how it came to
-    /// record that the gap set is currently empty.
     #[test]
     fn resolve_partitions_the_in_scope_set_into_rows_and_gaps() {
         let mut rows_seen = 0;
@@ -1228,15 +934,6 @@ mod tests {
         // is written down.** Phase 4's in-scope set and this crate's table are
         // currently the same 66 names, so no call can produce it -- found by
         // this test failing an earlier assertion that demanded a gap exist.
-        //
-        // The arm stays regardless, and the reason is that the two sets are
-        // not tied statically: `in_scope()` is derived per process from
-        // `rexx_inventory`, so widening it without adding a row makes `Gap`
-        // live again. Without the arm, such a name would fall past the builtin
-        // step to the `::ROUTINE` lookup and then to 43.1 -- exactly what
-        // `is_excluded_builtin`'s own doc gives the measurement against. This
-        // assertion is what turns that widening into a failure here rather
-        // than into a wrong answer at run time.
         assert_eq!(
             gaps_seen,
             0,
@@ -1255,10 +952,6 @@ mod tests {
     }
 
     /// Every implemented row names a real in-scope builtin.
-    ///
-    /// Without this a typo in [`IMPLEMENTED`] is invisible: `is_builtin`
-    /// would answer `false`, `dispatch` would answer `None`, and the row
-    /// would simply never run.
     #[test]
     fn every_implemented_row_names_an_in_scope_builtin() {
         for builtin in IMPLEMENTED {
@@ -1294,11 +987,6 @@ mod tests {
     /// only shape that can reach 40.5. `LENGTH` takes one argument and a lone
     /// omitted argument is a trailing omission that never arrives, so its own
     /// row cannot produce that sub-code.
-    ///
-    /// The arity is [`IMPLEMENTED`]'s own row rather than a copy of its
-    /// numbers, so this test cannot go on asserting a `(2, 4)` the table has
-    /// stopped saying; only `run` is replaced, since `check_arity` must never
-    /// reach it.
     fn substr_arity() -> Builtin {
         let row = IMPLEMENTED
             .iter()
@@ -1349,9 +1037,6 @@ mod tests {
 
     /// The maximum is checked before the required positions, which is the one
     /// ordering a program can tell apart.
-    ///
-    /// Measured: `say substr(,2,3,'p','q')` is 40.4, not 40.5, even though
-    /// argument 1 is both required and omitted.
     #[test]
     fn too_many_arguments_wins_over_a_missing_required_one() {
         let value = ObjRef::small_int(1).expect("1 is a small int");
@@ -1367,39 +1052,6 @@ mod tests {
     }
     /// The oracle's own source is what says which argument positions are
     /// fetched raw, and this re-derives [`RAW_ARGUMENT_POSITIONS`] from it.
-    ///
-    /// **Why a test and not a recorded answer in a comment.** The table is a
-    /// fact about `expression/BuiltinFunctions.cpp` held in this crate, and an
-    /// upstream change from a converting fetch to a raw one, or a builtin this
-    /// crate implements later that already has one, is a silent wrong answer
-    /// with nothing to notice it. Reading the C++ tree at test time is the
-    /// shape `tests/gate_tables/orx.rs`'s `orx_root` already has, for the
-    /// reason its own doc gives, and this panics rather than skipping when the
-    /// tree is absent for the same reason.
-    ///
-    /// **What the derivation covers, stated because it is narrower than
-    /// "every position".** It classifies the positions a block's own
-    /// `const size_t <NAME>_<arg> = N;` constant names. `MAX` and `MIN` hand
-    /// their trailing positions straight to `RexxString::Max`/`Min` as
-    /// `stack->arguments(argcount - 1)` and name no constant for them, so the
-    /// derivation cannot see those; `EXTRA_ARGUMENT_BLOCKS` is the set that
-    /// does that, asserted here so a new member reddens rather than passing
-    /// unseen. Those positions were ruled by running instead: `max('1', .K)`,
-    /// `max(1+0, .K)` and `min('9', .K)` with a saying `makeString` all print
-    /// `K asked` before the answer, and the oracle and both engines agree byte
-    /// for byte at rc 0, so they are converted and correctly absent from the
-    /// table.
-    ///
-    /// **The converting family is collapsed on purpose.** A numeric accessor
-    /// reaches `requestNumber`/`numberValue` rather than `requestString`, but
-    /// the string protocol runs underneath either way -- measured,
-    /// `signal on nostring name h; say substr('abcdef', .array, 2)` traps
-    /// NOSTRING on the oracle and on both engines at rc 0 -- so what matters
-    /// here is converting against raw and not which conversion.
-    ///
-    /// The derived set is restricted to the builtins this crate implements: a
-    /// raw position on a builtin with no `IMPLEMENTED` row cannot be reached
-    /// and would make this test red for a gap another task owns.
     #[test]
     fn the_raw_argument_table_re_derives_from_the_oracles_own_source() {
         /// The blocks that pass positions on without naming a constant for
@@ -1549,17 +1201,6 @@ mod tests {
     /// Every row of [`RAW_ARGUMENT_POSITIONS`] names a builtin this crate
     /// implements, at a position that builtin can be given, and the table is
     /// not empty.
-    ///
-    /// **What this adds over the corpus, which catches more than an earlier
-    /// version of this comment claimed.** A row orphaned to a name no
-    /// `IMPLEMENTED` row carries stops exempting anything, and
-    /// `corpus/lang/required_string_builtin_raw_argument.rex` does redden for
-    /// that -- measured, rc 1 against the oracle's rc 0 with the row renamed.
-    /// So this is not the only instrument for an orphaned row. What it adds is
-    /// that it runs without the oracle, names the offending row, and refuses
-    /// an **empty** table, which no other check here would: an empty table
-    /// makes every arm below vacuous, and vacuity is the shape a guard is
-    /// supposed to refuse rather than pass.
     #[test]
     fn every_raw_argument_row_names_a_builtin_and_a_position_it_can_take() {
         assert!(

@@ -10,41 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The expression tree and the instruction nodes.
-//!
-//! One variant per expression class under `interpreter/expression/`, and one
-//! `InstructionKind` variant per instruction keyword, with the collapses noted
-//! at each site.
-//!
-//! # Why a tree of owned children, where instructions are a flat chain
-//!
-//! D13 puts the AST in one arena per code body, and Task 3.1 Step 3b made that
-//! arena a `Vec<Instruction>` with nesting expressed as indices, because
-//! `SIGNAL`, `ITERATE`, `LEAVE` and `END` all jump *into* the instruction
-//! sequence and an index is what a jump target is.
-//!
-//! Expressions have no such jumps. Nothing branches into the middle of an
-//! expression, so an index would buy nothing an owned child does not already
-//! give, and it would cost a second arena plus an untyped index that no
-//! borrow check covers. So an `Expr` owns its children through `Box` and
-//! `Vec`, and an `Instruction` owns its `Expr`s inline. The whole body still
-//! lives in one arena object, which is what D13 asks for. Only the shape
-//! inside an instruction differs, and it differs because the reason for the
-//! chain does not apply here.
-//!
-//! # The span invariant
-//!
-//! Every node carries a byte range into the retained source, and a node's
-//! range contains every one of its children's ranges. That holds by
-//! construction rather than by discipline: `Expr::new` widens the extent it is
-//! given to cover each child before storing it, so a caller that computes an
-//! extent too narrowly gets a correct span anyway.
-//!
-//! Parentheses are the one thing that does not appear here. `parse_subterm`
-//! returns the parenthesised expression itself, exactly as the C++ does, so
-//! `(a)` and `a` give the same node and the node's span covers `a` alone. A
-//! node's span is the extent of the tokens that *built* that node, and a
-//! `Variable` node built from one symbol token must not claim a range holding
-//! anything else, or the source spelling recovered from it would be wrong.
 
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -65,14 +30,6 @@ pub struct Expr {
 }
 
 /// The prefix operators.
-///
-/// `+`, `-` and `\` are the only three (`LanguageParser.cpp:3644`). A prefix
-/// `>` or `<` is not an operator at all: it builds a `VariableReference`.
-///
-/// These have no entry in `RexxToken::precedence` (`Token.cpp:111`), and that
-/// absence is the whole reason `-2 ** 2` is 4 rather than -4: a prefix
-/// operator takes a whole message subterm as its operand before any dyadic
-/// operator is considered, so it can never lose a binding contest.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PrefixOp {
     Plus,
@@ -83,12 +40,6 @@ pub enum PrefixOp {
 impl PrefixOp {
     /// The canonical source spelling, which is what a `>P>` trace line carries
     /// as its tag.
-    ///
-    /// Canonical for [`Operator::spelling`]'s reason, in the case that has it:
-    /// `\`, `0xAA` and `0xAC` all scan to one `Operator::Backslash`
-    /// (`scanner.rs`'s own operator arm) and that token is what
-    /// `message_subterm`'s `Not` comes from, so this answers the ASCII
-    /// spelling rather than the source bytes.
     pub fn spelling(self) -> &'static str {
         match self {
             PrefixOp::Plus => "+",
@@ -99,13 +50,6 @@ impl PrefixOp {
 }
 
 /// What a function call names.
-///
-/// Kept apart rather than folded into one string because the two resolve
-/// differently, and observably so. Measured with `build/bin/rexx`:
-/// `'abs'(-3)` fails with `Error 43.1: Could not find routine "abs"` while
-/// `'ABS'(-3)` gives 3. So a literal call name is used exactly as written,
-/// case included, and never reaches the upcased builtin table, where a symbol
-/// name is upcased by the scanner before it gets here.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum CallTarget {
     /// `f(...)`. The id holds the upcased spelling, and this form can also
@@ -125,31 +69,14 @@ pub enum ExprKind {
     /// A symbol whose value is its own spelling, so never a variable:
     /// `SYMBOL_CONSTANT` and `SYMBOL_DUMMY`, which `addText` treats alike
     /// (`LanguageParser.cpp:2352`).
-    ///
-    /// The id holds the *upcased* spelling and that is the value, which is
-    /// observable: `say 1e5` prints `1E5`, not `100000` and not `1e5`.
     Constant(SymbolId),
     /// A simple variable, no periods.
     Variable(SymbolId),
     /// `stem.`, the id including the trailing period.
     Stem(SymbolId),
     /// `stem.i.j`, the id holding the whole dotted name.
-    ///
-    /// The tail decomposition is deliberately not stored. It is a pure
-    /// function of the spelling with no parse-time decision in it, see
-    /// `compound_parts`, and the pieces cannot be interned here because
-    /// `ParseCtx::symbols` is read-only during parsing and the pieces are not
-    /// tokens, so `scan` never saw them. Storing them un-interned would put
-    /// bare strings where every other variable reference carries a `SymbolId`.
     Compound(SymbolId),
     /// `.name`, an environment symbol.
-    ///
-    /// `ExpressionDotVariable` and `SpecialDotVariable` are collapsed into
-    /// this one variant. They are not two syntaxes: the C++ pre-loads
-    /// `.nil`, `.true` and `.false` into its `dotVariables` table as
-    /// `SpecialDotVariable` instances (`LanguageParser.cpp:782`-`784`) so
-    /// that those three resolve without a lookup, which is a retrieval
-    /// optimisation inside one syntactic form.
     DotVariable(SymbolId),
     /// A prefix operator applied to a message subterm.
     Prefix { op: PrefixOp, operand: Box<Expr> },
@@ -177,29 +104,12 @@ pub enum ExprKind {
     /// `ns:name` with no argument list, a namespace-qualified class lookup.
     ClassResolver { namespace: SymbolId, name: SymbolId },
     /// `target~name`, `target~~name`, and `target[...]`.
-    ///
-    /// `target[...]` is collapsed in here rather than given its own variant
-    /// because the interpreter does not distinguish them: `parseCollectionMessage`
-    /// builds a `RexxExpressionMessage` whose name is `[]`
-    /// (`LanguageParser.cpp:3317`). Measured, `"abc"[2]` and `"abc"~"[]"(2)`
-    /// both give `b`, so a user-defined `[]` method answers both spellings and
-    /// two variants would be a distinction the language does not make.
     Message {
         target: Box<Expr>,
         /// Upcased, for every spelling. Measured: `"abc"~'length'`,
         /// `"abc"~'LENGTH'` and `"abc"~"lEnGtH"` all give 3, because
         /// `parseMessage` upcases the name whether it came from a symbol or a
         /// literal. `[]` for the bracket form.
-        ///
-        /// A [`Selector`] rather than a `SymbolId`, because the tables answer
-        /// different questions: a `SymbolId` indexes the frame slot a
-        /// variable name resolves to, and a method name resolves against a
-        /// behaviour instead. A name from a literal has no `SymbolId` at all
-        /// -- `ParseCtx::symbols` is read-only once `scan` has run, and `scan`
-        /// never saw `LENGTH` as a symbol in `a~'length'` -- and
-        /// `ParseCtx::selectors` interns both spellings the same way, which
-        /// is what `commonString` does with them
-        /// (`parser/LanguageParser.cpp:3391`).
         name: Selector,
         /// `target~name:super(...)`, the superclass override.
         super_class: Option<Box<Expr>>,
@@ -208,41 +118,17 @@ pub enum ExprKind {
         cascade: bool,
     },
     /// A comma-separated list in parentheses, which builds an array.
-    ///
-    /// Unlike a call's argument list this keeps trailing omitted elements:
-    /// measured, `(1,)~size` is 2 and `(1,,)~size` is 3, where `f(1,)` passes
-    /// one argument. `parseFullSubExpression` returns `total` where
-    /// `parseArgList` returns `realcount` (`LanguageParser.cpp:3145`).
     List(Vec<Option<Expr>>),
     /// A comma-separated list in a conditional, which is a logical AND of its
     /// parts: `RexxExpressionLogical`, built by `parseLogical` for `IF`,
     /// `WHEN`, `GUARD`, `WHILE` and `UNTIL`. No element may be omitted.
     Logical(Vec<Expr>),
     /// A prefix `>` or `<` on a simple variable or a stem.
-    ///
-    /// One variant for both spellings because `parseMessageSubterm` maps
-    /// `OPERATOR_LESSTHAN` and `OPERATOR_GREATERTHAN` to the same
-    /// `parseVariableReferenceTerm` (`LanguageParser.cpp:3661`-`3666`), so the
-    /// two are interchangeable and nothing downstream can tell them apart.
-    /// The inner node is always a `Variable` or a `Stem`. Anything else is
-    /// error 20.930.
     VariableReference(Box<Expr>),
 }
 
 impl ExprKind {
     /// Calls `f` on each child expression, in source order.
-    ///
-    /// An omitted argument has no node and is skipped, so this yields fewer
-    /// items than an argument list has positions.
-    ///
-    /// The lifetime is named, rather than elided to a fresh one per call,
-    /// so that a caller building an explicit worklist (an iterative tree
-    /// walk, rather than one that recurses through this function) can stash
-    /// a yielded `&Expr` past the call that produced it -- `block.rs`'s
-    /// `visit_expr` does exactly that. A closure that only reads a child
-    /// inside its own body, the original use here, still satisfies this
-    /// signature; naming the lifetime only widens what is possible, it
-    /// narrows nothing already working.
     pub(crate) fn for_each_child<'a>(&'a self, f: &mut impl FnMut(&'a Expr)) {
         match self {
             ExprKind::Literal(_)
@@ -291,11 +177,6 @@ impl ExprKind {
     }
 
     /// The mutable twin of `for_each_child`, for `Expr`'s iterative `Drop`.
-    ///
-    /// Kept in exact lockstep with `for_each_child` -- same variants, same
-    /// order -- because a case added to one and not the other would silently
-    /// leave a child unvisited by whichever fell behind, and here that means
-    /// a child `Drop` skips, not merely a rendering gap.
     fn for_each_child_mut(&mut self, f: &mut impl FnMut(&mut Expr)) {
         match self {
             ExprKind::Literal(_)
@@ -347,12 +228,6 @@ impl ExprKind {
 impl Expr {
     /// Builds a node whose span is `extent` widened to contain every child's
     /// span.
-    ///
-    /// The widening is what makes the containment invariant structural. A
-    /// caller passes the extent of the tokens it consumed, which is already
-    /// right in every case here, and the widening means a caller that gets it
-    /// wrong produces a node with too wide a span rather than one that breaks
-    /// the invariant.
     pub fn new(kind: ExprKind, extent: Range<usize>) -> Self {
         let mut span = extent;
         kind.for_each_child(&mut |child| {
@@ -363,11 +238,6 @@ impl Expr {
     }
 
     /// A binary node spanning from its left operand to its right.
-    ///
-    /// The operator token itself needs no extent: it sits between the two
-    /// operands, so their union already covers it. That is also true of the
-    /// abuttal operator, whose token the parser synthesises with zero length
-    /// at the start of the right operand.
     pub fn binary(op: Operator, left: Expr, right: Expr) -> Self {
         let extent = left.span.start..right.span.end;
         Expr::new(
@@ -381,21 +251,6 @@ impl Expr {
     }
 
     /// A canonical rendering, for asserting tree shape in tests.
-    ///
-    /// Follows the D10 spike's `render`, so that the shapes recorded in
-    /// `d10-decision.md` still read the same way, with two departures. Both
-    /// exist because a rendering that maps two different trees onto one string
-    /// silently weakens every assertion made with it.
-    ///
-    /// An omitted argument renders `<omitted>` and not `_`, because `_` is a
-    /// legal symbol character, so `f(_,1)` and `f(,1)` rendered alike. Neither
-    /// `<` nor `>` can start a rendered leaf, so `<omitted>` cannot be
-    /// produced any other way.
-    ///
-    /// A message name and a literal render through `{:?}`, quoted and escaped,
-    /// because a name is arbitrary bytes: unquoted, `a~"b c"` and `a~b(c)`
-    /// rendered alike, and `'a''b'` decodes to `a'b`, which an unescaped
-    /// `'...'` cannot render unambiguously either.
     #[cfg(test)]
     pub(crate) fn shape(&self, symbols: &SymbolTable) -> String {
         match &self.kind {
@@ -491,22 +346,6 @@ impl Expr {
 
 /// Drops the whole subtree by iteration, not by the recursion a derived
 /// `Drop` would use.
-///
-/// `Expr` owns its children through `Box` and `Vec` (see this file's own
-/// header comment), so a compiler-generated destructor calls itself once per
-/// level of the tree. Measured (Task 3b): a flat `1 + 1 + ... + 1` chain
-/// parses and drops fine up to 2449 terms on a default 2 MiB thread stack
-/// and aborts from 2450 on, well inside what the oracle accepts. Every child
-/// is instead taken out of its `Box` or `Vec` slot in place with
-/// `mem::replace`, leaving a cheap childless leaf behind so that slot's own
-/// automatic drop glue is O(1), and the extracted child is pushed onto a
-/// worklist this loop drains. The whole subtree unwinds in one stack frame,
-/// however deep it is.
-///
-/// A child popped off the worklist still runs through this same `drop` a
-/// second time when it falls out of scope at the end of the loop body, but
-/// that second call finds a childless leaf (this call already hollowed it
-/// out) and returns immediately, so nothing recurses.
 impl Drop for Expr {
     fn drop(&mut self) {
         let mut worklist: Vec<Expr> = Vec::new();
@@ -563,18 +402,6 @@ pub enum Tail<'a> {
 }
 
 /// Splits a compound variable's name into its stem and its tail pieces.
-///
-/// `name` is the upcased spelling of a symbol the scanner classified
-/// `SymbolClass::Compound`, so it holds at least one period that is neither
-/// the only one nor at the end. The stem keeps its trailing period, matching
-/// `addCompound` (`LanguageParser.cpp:2153`), and a piece that is empty or
-/// starts with a digit is a constant rather than a variable
-/// (`LanguageParser.cpp:2184`). A trailing period therefore yields a final
-/// empty constant piece.
-///
-/// Measured with `build/bin/rexx`: with `b = 2` and `c = 1`, `say a.b.c`
-/// prints `A.2.1`, so `B` and `C` are looked up as variables while the stem
-/// contributes its own name.
 pub fn compound_parts(name: &str) -> (&str, Vec<Tail<'_>>) {
     let dot = name
         .find('.')
@@ -594,15 +421,6 @@ pub fn compound_parts(name: &str) -> (&str, Vec<Tail<'_>>) {
 }
 
 /// One code body: an instruction chain and the labels declared in it.
-///
-/// One of these per `translateBlock` call: the main program has one, and each
-/// `::METHOD`, `::ATTRIBUTE` and `::ROUTINE` that carries a body has its own.
-/// A label is local to the body that declares it, which is why the table lives
-/// here rather than once per program.
-///
-/// Every index stored anywhere inside -- a jump target, the block an `END`
-/// closes, a `labels` value -- indexes `instructions` of THIS body. An index
-/// from one body is meaningless in another.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct CodeBody {
     /// In source order, which is also the execution chain: control falls from
@@ -611,11 +429,6 @@ pub struct CodeBody {
     /// source ends -- `translate_block` stops there and leaves the cursor
     /// sitting on it for the caller, so an instruction after that point
     /// belongs to the next code body, never this one.
-    ///
-    /// There is no `next` field because there is nothing for one to say. Every
-    /// instruction enters the chain through the port of `addClause`
-    /// (`LanguageParser.cpp:2544`), which only ever appends, so index order is
-    /// the chain exactly.
     pub instructions: Vec<Instruction>,
     /// Keyed by the label token's VALUE, not by `SymbolId`: upcased for a
     /// symbol label, verbatim for a literal one. `Box<[u8]>` rather than
@@ -633,11 +446,6 @@ pub struct CodeBody {
 /// Which closure action an `END` performs: `EndBlockType`
 /// (`RexxInstruction.hpp:107`), as `getEndStyle` and
 /// `RexxInstructionSelect::matchEnd` set it.
-///
-/// The C++ enum also holds `LABELED_SELECT_BLOCK`, which nothing sets: a
-/// `SELECT`'s own `getEndStyle` (`SelectInstruction.hpp:76`) returns
-/// `SELECT_BLOCK` whether it is labelled or not, and `matchEnd` overrides only
-/// the two `OTHERWISE` cases. There is no variant for it here.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum EndStyle {
     /// A `DO` with no control expression and no `LABEL`.
@@ -658,9 +466,6 @@ pub enum EndStyle {
 }
 
 /// What an `END` turned out to close, and how.
-///
-/// The two travel together because neither is decided until the `END` is
-/// matched, and neither is meaningful without the other.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct EndTarget {
     /// The block instruction this `END` closes: a `Do`, a `Loop` or a
@@ -672,79 +477,32 @@ pub struct EndTarget {
 }
 
 /// One instruction, and the clause `TRACE` prints for it.
-///
-/// # Why there is no `next`
-///
-/// Task 3.1 Step 3b settled a flat chain in one arena per code body, with
-/// nesting held as indices rather than as child nodes. In a `Vec` the chain
-/// itself is index order, so a `next` field would restate it. The jump targets
-/// -- where an `IF` goes when its condition is false, which block an `END`
-/// closes -- are not computable from one clause: they need the control stack
-/// that walks the whole body, and they live on the kinds that jump.
-///
-/// # Why there is no node for the synthetic end of a branch
-///
-/// The C++ chain holds `RexxInstructionEndIf` markers that `endIfNew` builds
-/// out of nothing, one at the end of every `THEN` and `ELSE` branch. They are
-/// not reproduced. Measured with `trace r`, `if 1 = 1 then say "y"` followed by
-/// `say "after"` traces exactly three `*-*` lines for the `IF` clause and then
-/// the next line's, so no marker is ever echoed and nothing observable is lost.
-/// Reproducing them would put an `Instruction` with no source clause into
-/// `instructions`, which two gate criteria are stated over: source-ordered
-/// non-overlapping `clause_span`s, and one `*-*` line per clause. A jump index
-/// on the instruction that jumps carries the same information with neither
-/// exception.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Instruction {
     pub kind: InstructionKind,
     /// Byte range in the retained source: the clause this instruction was
     /// built from, which is what `TRACE` echoes on its `*-*` line.
-    ///
-    /// Not the extent of the node's own tokens. A `THEN` covers just the
-    /// `then` keyword (`ThenInstruction.cpp:76`), and an `IF` stops at the
-    /// START of whatever token ended its condition, so the bytes between two
-    /// instructions' spans can belong to neither. See `ClauseCursor::split_before`.
     pub clause_span: Range<usize>,
 }
 
 /// One instruction form: the 35 keyword instructions, plus the four clause
 /// shapes that no keyword introduces.
-///
-/// Two keywords that share a C++ implementation class still get a variant
-/// each, because they are distinct `InstructionKeyword` values there and the
-/// spelling is observable: `LEAVE`/`ITERATE` share `RexxInstructionLeave`,
-/// `PUSH`/`QUEUE` share `RexxInstructionQueue`, `PARSE`/`ARG`/`PULL` share
-/// `RexxInstructionParse`, and `DO`/`LOOP` share every loop class.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum InstructionKind {
     // ---- the four clause shapes with no keyword ----
     /// `name = expr`, and also `name (op)= expr`, whose right-hand side is
     /// already the expanded `name op expr` tree (`assignmentOpNew`).
-    ///
-    /// `target` is what `addVariable` builds, so its kind is always
-    /// `Variable`, `Stem` or `Compound`: `needVariable` rejects every other
-    /// class before this node exists. It is an `Expr` rather than a bare
-    /// `SymbolId` so that the class is carried the way every other variable
-    /// reference in this tree carries it, and so that the target keeps its own
-    /// span.
     Assignment {
         target: Expr,
         value: Expr,
     },
     /// `name:`, and also `"name":`. Task 3.4 already ended the clause at the
     /// colon.
-    ///
-    /// Bytes rather than a `SymbolId` because a literal label was never seen
-    /// as a symbol, so it is not in the read-only symbol table, and both
-    /// spellings reach `addLabel` through the same `token->value()`.
     Label {
         name: Box<[u8]>,
     },
     /// A standalone message send, `q~append(1)`, and the message-assignment
     /// forms `q[1] = 2` and `q[1] += 2`.
-    ///
-    /// `term` is always an `ExprKind::Message`, whose `cascade` flag carries
-    /// the `~~` distinction that the C++ spells as a second instruction type.
     Message {
         term: Expr,
         /// The right-hand side when this is an assignment form. For the
@@ -765,25 +523,12 @@ pub enum InstructionKind {
         /// Where control goes when `condition` is false: the `ELSE` when there
         /// is one, otherwise the instruction after the `THEN` branch. `None` is
         /// the end of this body.
-        ///
-        /// `RexxInstructionIf::else_location->nextInstruction`
-        /// (`IfInstruction.cpp:147`). The C++ target is the synthetic marker
-        /// that closes the `THEN` branch, and control resumes at the
-        /// instruction after it, so this is that instruction directly.
         false_target: Option<usize>,
     },
     Then,
     Else {
         /// Where control goes when the `THEN` branch finished, which is the
         /// instruction after the `ELSE` branch. `None` is the end of this body.
-        ///
-        /// Stored on the `ELSE` because there is nothing to skip without one:
-        /// a `THEN` branch with no `ELSE` falls straight through, which is the
-        /// C++'s null `else_end` (`EndIf.cpp:154`). `RexxInstructionElse` does
-        /// not read it either -- executing an `ELSE` only traces
-        /// (`ElseInstruction.cpp:113`) -- it forwards the target to the marker
-        /// that closes the `THEN` branch (`:145`), and this field is where that
-        /// forwarding lands.
         then_exit: Option<usize>,
     },
     Select {
@@ -791,19 +536,9 @@ pub enum InstructionKind {
         /// `SELECT CASE expr`, a different instruction class in the C++.
         case: Option<Expr>,
         /// The `WHEN` instructions this `SELECT` collected, in source order.
-        ///
-        /// `RexxInstructionSelect::whenList`, filled by `addWhen`. Only a
-        /// `WHEN` whose immediate enclosing block is this `SELECT` is here, and
-        /// that is narrower than "every `WHEN` between here and the `END`":
-        /// measured rc 0, `select` / `when 1 = 1 then` / `when 2 = 2 then nop` /
-        /// `end` is accepted and the second `WHEN` is the first one's `THEN`
-        /// instruction, so it is never added (`LanguageParser.cpp:1319`).
         whens: Vec<usize>,
         otherwise: Option<usize>,
         /// The `END` that closes this `SELECT`.
-        ///
-        /// `None` only while the body is still being assembled: an unclosed
-        /// `SELECT` is error 14.2, so a body that parsed has this set.
         end: Option<usize>,
     },
     When {
@@ -814,21 +549,10 @@ pub enum InstructionKind {
         /// Where control goes when this `WHEN`'s branch finished, which is the
         /// instruction after the enclosing `SELECT`'s `END`, because one true
         /// `WHEN` ends the whole `SELECT`. `None` is the end of this body.
-        ///
-        /// `fixWhen` (`SelectInstruction.cpp:222`) sets it, so it is the same
-        /// value for every `WHEN` of one `SELECT`, and `None` for a `WHEN` that
-        /// `whens` never collected.
         exit: Option<usize>,
     },
     /// A `WHEN` inside `SELECT CASE`: `RexxInstructionCaseWhen`, a different
     /// class from `RexxInstructionIf` because the clause means something else.
-    ///
-    /// `parseCaseWhenList` (`LanguageParser.cpp:3168`) builds a LIST of values
-    /// to compare against the `SELECT`'s own expression where `parseLogical`
-    /// builds an AND of conditions. Measured at run time, which is the only
-    /// place the two differ for a single-element list: `select case 2` /
-    /// `when 1, 2 then say "hit"` prints `hit`, while plain `select` /
-    /// `when 1, 2` is error 34.6 `found "2"` because 2 is not a logical value.
     WhenCase {
         /// At least one, and none may be omitted: an empty element is 35.934.
         values: Vec<Expr>,
@@ -845,9 +569,6 @@ pub enum InstructionKind {
     End {
         name: Option<SymbolId>,
         /// What this `END` closes, and how.
-        ///
-        /// `None` only while the body is still being assembled: an `END` with
-        /// no open block is error 10.1, so a body that parsed has this set.
         closes: Option<EndTarget>,
     },
 
@@ -912,9 +633,6 @@ pub enum InstructionKind {
 impl InstructionKind {
     /// The instruction keyword that introduced this node, or `None` for the
     /// four clause shapes that no keyword introduces.
-    ///
-    /// The spelling is the one in `keywordInstructions[]`, so this is what a
-    /// test asserts a keyword reached its node by.
     pub fn keyword(&self) -> Option<&'static str> {
         Some(match self {
             InstructionKind::Assignment { .. }
@@ -965,9 +683,6 @@ impl InstructionKind {
 }
 
 /// One name in a `DROP`, `EXPOSE`, `PROCEDURE EXPOSE` or `USE LOCAL` list.
-///
-/// `processVariableList` (`InstructionParser.cpp:4469`) admits both spellings
-/// and wraps the second in a `RexxVariableReference`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum VariableRef {
     /// A name written out: a simple variable, a stem, or a compound. Which
@@ -978,12 +693,6 @@ pub enum VariableRef {
 }
 
 /// A `DO` or `LOOP` header.
-///
-/// One struct for both keywords and for all 23 of the C++'s loop instruction
-/// classes, because those classes differ only in which of these fields are
-/// present: `createLoop` fills the same `ControlledLoop`, `OverLoop`,
-/// `WithLoop`, `ForLoop` and `WhileUntilLoop` structs and then picks a class
-/// from which ones came back non-null.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Loop {
     /// `DO LABEL name`. For a controlled or `OVER` loop with no `LABEL`, the
@@ -997,9 +706,6 @@ pub struct Loop {
     /// requires the end of the clause after the one it parsed.
     pub conditional: Option<LoopConditional>,
     /// The `END` that closes this block.
-    ///
-    /// `None` only while the body is still being assembled: an unclosed block
-    /// is error 14.1 or 14.5, so a body that parsed has this set.
     pub end: Option<usize>,
 }
 
@@ -1326,33 +1032,15 @@ pub enum Trace {
 }
 
 /// One `::` directive, and the clause it was built from.
-///
-/// Shaped like `Instruction` on purpose, because both are one clause in and one
-/// node out. A directive is not part of any instruction chain: `translate`
-/// drains the instructions first and then loops over directives
-/// (`LanguageParser.cpp:735`), so a directive has no index into the chain and
-/// nothing jumps to one.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Directive {
     pub kind: DirectiveKind,
     /// Byte range in the retained source: the directive clause.
-    ///
-    /// A directive is never traced, so unlike `Instruction::clause_span` nothing
-    /// echoes these bytes. They are kept because `ClassDirective`,
-    /// `RequiresDirective` and `ConstantDirective` all retain their clause for
-    /// the location an install-time error is reported against.
     pub clause_span: Range<usize>,
 }
 
 /// One directive form, one variant per row of `RexxToken::directives[]`
 /// (`KeywordConstants.cpp:52`-`63`).
-///
-/// There are nine rows and nine variants. `DIRECTIVE_LIBRARY` is a
-/// `DirectiveKeyword` enum member with no row in that table and so no variant
-/// here: a library is `::REQUIRES name LIBRARY`, which `requiresDirective`
-/// turns into a `LibraryDirective` at the end
-/// (`DirectiveParser.cpp:2857`-`2860`), and it is never a directive keyword of
-/// its own.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum DirectiveKind {
     Annotate(Box<Annotate>),
@@ -1373,9 +1061,6 @@ pub enum DirectiveKind {
 
 impl DirectiveKind {
     /// The directive keyword that introduced this node.
-    ///
-    /// The spelling is the one in `directives[]`, so this is what a test
-    /// asserts a keyword reached its node by.
     pub fn keyword(&self) -> &'static str {
         match self {
             DirectiveKind::Annotate(_) => "ANNOTATE",
@@ -1392,14 +1077,6 @@ impl DirectiveKind {
 }
 
 /// A method's or routine's access scope.
-///
-/// `Default` is a value and not the absence of one: the C++ keeps
-/// `DEFAULT_ACCESS_SCOPE` distinct from `PUBLIC_SCOPE` precisely so that a
-/// SECOND access keyword is an error, which is why `::METHOD m PUBLIC PUBLIC`
-/// and `::METHOD m PUBLIC PRIVATE` are both 25.902.
-///
-/// `::CLASS` and `::ROUTINE` admit only `Public` and `Private`. `Package` is
-/// reachable on `::METHOD` and `::ATTRIBUTE` alone.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub enum Access {
     #[default]
@@ -1428,16 +1105,6 @@ pub enum GuardOption {
 }
 
 /// A decoded `EXTERNAL` specification.
-///
-/// `decodeExternalMethod` (`DirectiveParser.cpp:1403`) and the routine form
-/// (`DirectiveParser.cpp:2649`-`2749`) split the string into blank-delimited
-/// words and upcase the first, then require two or three words whose first is
-/// `LIBRARY`. A routine also accepts `REGISTERED`. Anything else is 99.917,
-/// which is a parse error, so the decode happens here and not at install time.
-///
-/// Resolving the library is NOT done here and cannot be: measured,
-/// `::METHOD m EXTERNAL "LIBRARY nosuch"` is `Error 98.903 Unable to load
-/// library "nosuch"` at rc 158, a run-time failure of a program that parsed.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ExternalSpec {
     /// True for the `REGISTERED` spelling, which only `::ROUTINE` accepts and
@@ -1447,30 +1114,6 @@ pub struct ExternalSpec {
     /// The library name, as written after the first word.
     pub library: Box<[u8]>,
     /// The entry point, when the specification named a third word.
-    ///
-    /// `None` is the absence of a third word and NOT a default, because the
-    /// default is three different names depending on what asked for it, and only
-    /// the asker knows which:
-    ///
-    /// * A `::ROUTINE` uses the routine's own name AS WRITTEN, case included
-    ///   (`DirectiveParser.cpp:2664`).
-    /// * A `::METHOD` uses the method's UPCASED lookup name
-    ///   (`DirectiveParser.cpp:1406`).
-    /// * A `::METHOD ATTRIBUTE` or `::ATTRIBUTE` resolves an entry point per
-    ///   accessor, and a `GET` or a `SET` is **prefixed** to the procedure to
-    ///   name it (`DirectiveParser.cpp:867`-`868`, `:1678`-`1679`). The prefix
-    ///   goes in front because `concatToCstring` appends the receiver to its
-    ///   argument (`StringClass.cpp:1405`-`:1416`), and what it is prefixed
-    ///   to is the *procedure*, so the upcased method name is what gets
-    ///   prefixed where there was no third word. Measured, oracle:
-    ///   `::attribute a external "LIBRARY REXX file_separator"` is
-    ///   `90.998 Unable to find external method "GETfile_separator"`.
-    ///   Whether a `::ATTRIBUTE`'s `GET` or `SET` style prefixes at all
-    ///   depends on the procedure that was decoded (`:1737`, `:1802`), which
-    ///   is one more reason resolving one is not this node's.
-    ///
-    /// Resolving those is the caller's, along with loading the library, so
-    /// filling one in here would be picking one of the three arbitrarily.
     pub entry: Option<Box<[u8]>>,
 }
 
@@ -1498,8 +1141,6 @@ pub struct ClassDirective {
 
 /// A class reference on a `::CLASS` directive: the argument of `SUBCLASS`,
 /// `MIXINCLASS`, `METACLASS`, or one entry of `INHERIT`.
-///
-/// `parseClassReference` (`DirectiveParser.cpp:287`).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ClassRef {
     /// `ns:name`, restricted to the symbol spelling. A literal cannot carry a
@@ -1531,16 +1172,6 @@ pub struct MethodDirective {
     /// A symbol only: measured, `::METHOD m DELEGATE "p"` is 20.926.
     pub delegate: Option<SymbolId>,
     /// This method's code body: the clauses after this directive, assembled.
-    ///
-    /// `None` for every option that generates the method itself, and then a
-    /// following non-directive clause is an error with its own number: 99.946
-    /// for `DELEGATE`, 99.934 for `ATTRIBUTE`, 99.933 for `ABSTRACT` and
-    /// 99.936 for `EXTERNAL`. Those are raised while parsing this directive,
-    /// so a `None` here has already been checked against what follows.
-    ///
-    /// The directive parser decides only whether a body belongs here and leaves
-    /// an empty `CodeBody`, which is also the right answer for a body with no
-    /// clauses in it. The block assembler fills it.
     pub body: Option<CodeBody>,
 }
 
@@ -1560,12 +1191,6 @@ pub struct AttributeDirective {
     pub delegate: Option<SymbolId>,
     /// This attribute method's code body: the clauses after this directive,
     /// assembled.
-    ///
-    /// Only `GET` or `SET` with no generating option can have one, and there
-    /// the C++ asks `hasBody()` (`DirectiveParser.cpp:1773`) rather than
-    /// deciding from the options: with a body the method is written in Rexx,
-    /// without one it is generated. So whether this is `Some` is the one place
-    /// a directive parse depends on the clause that FOLLOWS it.
     pub body: Option<CodeBody>,
 }
 
@@ -1611,10 +1236,6 @@ pub struct Annotate {
 }
 
 /// What a `::ANNOTATE` directive annotates.
-///
-/// Every name is upcased, because `annotateDirective` looks each one up with
-/// `commonString(token->upperValue())`. Each target must already exist, which
-/// needs the accumulated package and is not checked here.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum AnnotationTarget {
     Package,
@@ -1663,10 +1284,6 @@ pub enum PackageOption {
 }
 
 /// `::OPTIONS FORM`'s two settings.
-///
-/// Kept apart from `NumericSetting` because that enum's `FormValue` and
-/// `FormDefault` have no `::OPTIONS` spelling: measured,
-/// `::OPTIONS FORM VALUE` is 25.11.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum OptionsForm {
     Scientific,
@@ -1674,9 +1291,6 @@ pub enum OptionsForm {
 }
 
 /// Which condition a `::OPTIONS` condition option selects.
-///
-/// `All` is a spelling and not a set, because it is a row of
-/// `subDirectives[]` in its own right and it sets the other six at once.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ConditionOption {
     All,
@@ -1716,9 +1330,6 @@ pub struct Resource {
     pub end_marker: Box<[u8]>,
     /// Byte range of each body line in the retained source, line terminators
     /// and the marker line excluded.
-    ///
-    /// Ranges rather than text, because the body is a slice of the retained
-    /// source and copying it would duplicate the whole of a large resource.
     pub lines: Vec<Range<usize>>,
 }
 

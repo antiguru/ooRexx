@@ -1,12 +1,4 @@
 //! D1 measurement: allocation throughput and full-GC pause.
-//!
-//! The graph shape mirrors `rust/bench-programs/heapshape.rex` so the pause
-//! figure is comparable with the C++ one: 1,000 arrays of 1,000 distinct
-//! strings, 10% cross-linked so the graph is not a pure tree, all reachable
-//! from one root, plus 1,000 more distinct strings and a container mirroring
-//! the Rexx side's `root` directory (see `build_graph`, which is the one
-//! place that still cannot match exactly: this crate has no `Directory`
-//! body variant).
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use rexx_core::{Body, Bytes, Heap, ObjRef, RootSet};

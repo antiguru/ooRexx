@@ -10,106 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! Gate table C: the concept and class surface.
-//!
-//! Four row classes over the row sets `corpus/docs/` carries, sharing gate
-//! table D's harness (`tests/gate_tables/mod.rs`) for the verdict function,
-//! the two-engine crate run, the structural channel and the report:
-//!
-//! * **concept rows**, one per `<section id>` under `provide.xml`'s `provide`
-//!   chapter (`provide-sections.txt`), each naming the probe program that
-//!   exercises the section's mechanism and the negative control that would
-//!   redden it;
-//! * **wiring rows**, one per class in `class-set.txt` -- asked what the
-//!   `.environment` entry renders as and what its class is, questions any
-//!   entry answers, and then `~id`, `~class`, `~superClass`, `~superClasses`,
-//!   `~metaClass` and `~isA(.Class)`, which only a class object answers --
-//!   and one per documented edge in `hierarchy-edges.txt`;
-//! * **the `ArgUtil` assertion**, which is a wiring row with **no verdict
-//!   channel** for the reason [`argutil_assertion`] gives in full;
-//! * **method rows**, one per (class, method, arm) in `class-methods.txt`,
-//!   owned by the row's own class through `class-set.txt`'s `method-owner`
-//!   column, except where [`method_row_owner`] derives [`NEVER_AGREES`].
-//!
-//! # The table types no expected bytes, and one expected count
-//!
-//! As in table D, no oracle *answer* is recorded anywhere in this file or
-//! beside it. Every row's oracle column is produced by launching the oracle
-//! on the run that reports it, so a row cannot pass by agreeing with a
-//! recording of itself.
-//!
-//! The one exception is [`Concept::oracle_lines`], a line count per concept
-//! row. It is a shape and not an answer -- it holds no byte the oracle
-//! produced, and it can only make a row **fail** -- and the concept family is
-//! the one whose probes nothing derives, so it is where the bound has to come
-//! from somewhere. Its own doc carries the rest.
-//!
-//! # A non-`agree` row is not a failing test
-//!
-//! A verdict failure is an exit status only under [`gate_tables::CORPUS_GATE_ENV`]
-//! and only for a row whose owning phase is closing
-//! ([`gate_tables::PHASE_GATE_ENV`]) or already closed
-//! ([`gate_tables::CLOSED_PHASES`]). Outside that, this table is a progress
-//! report: a row that does not `agree` is a row waiting on the task that owns
-//! it, and the number of non-`agree` rows per phase is what each task reports
-//! against its predecessor's. A **structural** failure is red in every mode
-//! and is never one of those.
-//!
-//! # A verdict says the two sides agree; it does not say either answered
-//!
-//! Before any row gets a verdict, the oracle's `stdout` is checked against
-//! the shape the row's probe could produce while asking its question --
-//! [`OracleShape`], bounded by the derived probe text for the families whose
-//! text is derived and by a committed count for the concept family, whose
-//! probes are hand-written. For a class row that bound is read through the
-//! `entry` column, and it is paired with [`check_entry_present`], because a
-//! count alone cannot tell an entry from a name nothing defines: an
-//! unresolved environment symbol answers the opening questions as a string.
-//! Two interpreters that fail identically at a
-//! probe's first instruction agree on all three descriptors, so without this
-//! a row over a class neither of them has reads `agree` and is counted as a
-//! satisfied row of its phase. A row that fails the check keeps its place in
-//! the table and is reported as `unanswered`, never as `agree`: dropping it
-//! would lower the gated count, which is a close criterion satisfiable by
-//! removing evidence.
-//!
-//! # The probe corpus is derived from the row set, and checked in both
-//! directions
-//!
-//! Table D derives each row's probe **path** from the row. The class, edge and
-//! method families here go further and derive the probe's **text**:
-//! `class_probe_text`, `edge_probe_text` and `method_probe_text` are the sole
-//! definition of what those programs contain, and every run compares the
-//! committed file against the re-derivation. A path-only check cannot see a
-//! probe that asks about the wrong class -- `classes/string.rex` asking
-//! `.Array~id` would agree with the oracle for the wrong reason, and nothing
-//! about the row would notice. The concept probes are hand-written, because
-//! nothing derives a program that exercises a documented mechanism, and they
-//! keep table D's path-only property.
-//!
-//! # Method rows share a program, and their stdout channel is one line of it
-//!
-//! One oracle launch per (class, arm) rather than per row, for the reason the
-//! spec gives: every row costs a process launch. A row's `status` and
-//! `stderr` channels are therefore the whole program's, which is correct --
-//! a program that died did not answer any of its rows -- and its `stdout`
-//! channel is its own line of the program's output. [`method_row_stdout`]
-//! carries the exact rule, including why a line-count mismatch reddens every
-//! row rather than only the rows past the mismatch.
-//!
-//! # What this table cannot see
-//!
-//! * **The operator-frame traceback line.** The spec records it as a
-//!   mechanism with no documented section, and this table's concept rows are
-//!   one per `provide.xml` section id, so it has no row here. Its instrument
-//!   is the corpus programs.
-//! * **A section's mechanism beyond what its one probe reaches.** A concept
-//!   row is one program; a claim of the section that program does not
-//!   exercise is outside the row. Each concept arm's `control` field names
-//!   the mutation that would redden the row, which is the honest statement of
-//!   what the row does reach.
-//! * **A row filed under the wrong phase.** As in table D, the owning phase
-//!   is a committed assignment read by a human out of a diff, and a row filed
-//!   under the wrong one escapes gating.
 
 mod gate_tables;
 mod support;
@@ -137,13 +37,6 @@ const EDGE_SUBDIR: &str = "gate-tables/hierarchy";
 const METHOD_SUBDIR: &str = "gate-tables/methods";
 
 /// Reads one committed row file as tab-separated fields.
-///
-/// Comment and blank lines are dropped, the same way every other reader of a
-/// corpus list drops them, and a row with the wrong number of fields is a
-/// panic rather than a silently short row: these files are derived and
-/// re-derived in both directions by `rexx-extract/tests/extract_docs.rs`, so
-/// a malformed line here means the file this table's denominator comes from
-/// is not the file that check polices.
 fn read_table(name: &str, fields: usize) -> Vec<Vec<String>> {
     let path = corpus_dir().join("docs").join(name);
     let text =
@@ -193,12 +86,6 @@ fn read_sections() -> Vec<Section> {
 }
 
 /// What a method probe's instance arm binds `o` to.
-///
-/// **This is where `covered` stops being a string.** The variant is parsed
-/// from the row's `status` and `construction` together, the two disagreeing
-/// is a panic, and [`method_probe_text`] can only emit a construction
-/// program out of [`Construction::Constructs`] -- so a class cannot be
-/// flipped to `covered` and left on a bare `~new` that raises.
 #[derive(Clone, PartialEq, Eq, Debug)]
 enum Construction {
     /// The class is `covered`, and this is the committed expression the
@@ -242,11 +129,6 @@ fn read_classes() -> Vec<ClassRow> {
 }
 
 /// The fields `covered` is spread across, read back as one value.
-///
-/// A panic rather than a structural row: a `covered` class with no program
-/// would leave every instance-arm probe below it derived from a status that
-/// claims a route the row set does not carry, and there is nothing to compare
-/// once that is true.
 fn construction_of(name: &str, status: &str, program: &str, directive: &str) -> Construction {
     let directive = match directive {
         NO_PROGRAM => None,
@@ -318,13 +200,6 @@ fn read_method_rows() -> Vec<MethodRow> {
 
 /// One concept row's committed assignment: which phase owes it an `agree`,
 /// and the negative control that would redden it.
-///
-/// **The control is a sentence, not a mechanism, and that is deliberate.** A
-/// mutation control demonstrates a row going from green to red, and a row
-/// that is already red demonstrates nothing -- measured on the commit that
-/// creates this table, every row here but the ones listed as agreeing is
-/// already red. So each control names the change that would falsify the row.
-/// Two of them are D50's required controls.
 struct Concept {
     /// The `provide.xml` section id, which is also the probe's file stem.
     id: &'static str,
@@ -335,38 +210,10 @@ struct Concept {
     /// The change that would redden the row.
     control: &'static str,
     /// How many lines of `stdout` this section's probe prints on the oracle.
-    ///
-    /// **The only committed expectation in this table, and it is a shape
-    /// rather than an answer.** The other families derive their bound from
-    /// the probe text, because that text is derived too; a concept probe is
-    /// hand-written against a page of prose and nothing derives it, so
-    /// without a number here a concept row that stopped reaching its
-    /// mechanism entirely would read `agree` the moment both interpreters
-    /// fell over alike. It can only make a row **fail** -- no line count can
-    /// turn a divergence into agreement -- and it holds no byte the oracle
-    /// answered.
-    ///
-    /// It also makes editing a concept probe a visible act: changing what the
-    /// program prints means changing this, in the same diff, which is the
-    /// nearest thing this family has to the derivation the others get.
     oracle_lines: usize,
 }
 
 /// One arm per `provide.xml` section id.
-///
-/// The assignment is checked against `provide-sections.txt` in both
-/// directions by [`concept_rows`]: a section this table has no arm for is
-/// structural, and so is an arm naming a section the row set does not carry.
-///
-/// The authorities are `docs/superpowers/specs/2026-08-17-phase-5-object-model.md`'s
-/// mechanism enumeration, which files most of these sections by id, and
-/// `docs/superpowers/plans/2026-08-17-phase-5a.md`'s handover, which is what
-/// decides a section the enumeration has no row for. **The sections in that
-/// second class** -- `xcremet`, `usingcl`, `methna`, `classmeth`, `chi` and
-/// `methodsbyclass` -- are the concept-row denominator doing the job the spec
-/// says it is there for: the enumeration is a hand-made list with no
-/// denominator of its own, and a mechanism it missed surfaces here because
-/// the section set is derived.
 const CONCEPTS: &[Concept] = &[
     Concept {
         id: "typcla",
@@ -582,10 +429,6 @@ const CONCEPTS: &[Concept] = &[
 ];
 
 /// The phase that owes every wiring row an `agree`.
-///
-/// One value rather than a per-row assignment: the spec's class-set criterion
-/// replaces the roadmap's "32 classes exist and respond" with exactly this
-/// half. There is no class in `class-set.txt` the plan files anywhere else.
 const WIRING_PHASE: &str = "5a";
 
 /// The owner of a method row that is never expected to agree, deliberately not
@@ -602,13 +445,6 @@ const INSTANCE_ARM: &str = "instance";
 
 /// The phase that owes one method row an `agree`: its class's `method-owner`
 /// column, except for a row that can never agree.
-///
-/// **The exception is per (class, arm), not per class.** An `unreachable`
-/// class's instance arm raises at construction before any documented name is
-/// asked; its class arm asks `hasMethod` of the class object, which answers
-/// whether or not an instance can exist -- measured, `Buffer~new` and
-/// `Pointer~new` agree today. Keyed on the class alone this would file those
-/// two as impossible.
 fn method_row_owner<'a>(class: &'a ClassRow, arm: &str, status: &str) -> &'a str {
     if status == UNREACHABLE_STATUS && arm == INSTANCE_ARM {
         NEVER_AGREES
@@ -642,17 +478,10 @@ fn method_probe(class: &str, arm: &str) -> String {
 }
 
 /// The marker a class probe prints the `.environment` entry itself under.
-///
-/// [`check_entry_present`] reads the oracle's answer back by it, so it is
-/// spelled once and both sides of that pair are in this file.
 const ENTRY_MARKER: &str = "entry ";
 
 /// The questions a class wiring row asks that **any** `.environment` entry
 /// answers, whether it is a class object or an instance.
-///
-/// Split out from the rest because the split is the row's bound: an `entry`
-/// column reading `class` says every question below answers, and one reading
-/// `instance` says only these do. See [`class_probe_shape`].
 fn class_probe_entry_questions(name: &str) -> Vec<String> {
     vec![
         format!("say '{}' .{name}\n", ENTRY_MARKER.trim_end()),
@@ -673,14 +502,6 @@ fn class_probe_class_questions(name: &str) -> Vec<String> {
 }
 
 /// The text of a class wiring row's probe.
-///
-/// **This function is the definition of the program**, not a copy of it: the
-/// committed file is compared against this on every run, in both directions,
-/// so a probe cannot ask about a class other than its row's.
-///
-/// One text for every row, whatever its `entry` column says; what the column
-/// decides is how many of these lines the entry can answer, which is
-/// [`class_probe_shape`]'s job.
 fn class_probe_text(name: &str) -> String {
     let mut text = format!(
         "/* Table C wiring row: the .{name} environment entry, asked what it\n\
@@ -701,14 +522,6 @@ fn class_probe_text(name: &str) -> String {
 }
 
 /// How many lines a class wiring row's probe prints on the oracle.
-///
-/// **This is the arm the `entry` column decides, and it must not be zero.**
-/// A bound of zero is satisfied by a program that produced nothing at all, so
-/// a row filed as an instance entry over a name the build does not have would
-/// read `agree` on the two interpreters raising alike -- the same defect the
-/// class arm's bound exists to catch, reintroduced through the other side of
-/// the same `if`. The instance shape therefore opens with questions any entry
-/// answers, and its bound is how many of those there are.
 fn class_probe_shape(name: &str, entry: &str) -> OracleShape {
     let entry_questions = class_probe_entry_questions(name).len();
     match entry {
@@ -719,22 +532,10 @@ fn class_probe_shape(name: &str, entry: &str) -> OracleShape {
 
 /// The `entry` values [`class_probe_shape`] and [`check_edge_endpoints`] know
 /// how to read.
-///
-/// **Read at two decision sites and validated nowhere is how a typo exempts a
-/// row instead of reddening it**: an unrecognised value falls to the
-/// instance arm's bound and drops out of the edge families' referential
-/// check, both silently. Recognised here, so a fourth kind is a structural
-/// failure that names the row.
 const ENTRY_KINDS: &[&str] = &["class", "instance"];
 
 /// Every concept row's committed line count is one a probe can be evidence
 /// for.
-///
-/// **Zero is not.** A bound of zero lines is satisfied by a program that
-/// produced nothing at all, so a concept row committed at zero would read
-/// `agree` the moment both interpreters fell over alike -- the same defect
-/// the bound exists to catch, through the one arm of it that a committed
-/// number rather than a derivation decides.
 fn check_concept_line_counts(
     concepts: &[(&Section, &'static Concept)],
     structural: &mut Vec<Structural>,
@@ -774,15 +575,6 @@ fn check_entry_kinds(classes: &[ClassRow], structural: &mut Vec<Structural>) {
 
 /// Records a structural failure when the oracle does not resolve the row's
 /// name to an `.environment` entry at all.
-///
-/// **What separates a real entry from a name nothing defines**, and why a
-/// line count cannot do it alone: an unresolved environment symbol evaluates
-/// to its own name as a string, so `.Zork` renders as `.ZORK` and answers
-/// `~class~id` with `String` -- one line either way, and both interpreters
-/// agree on it. Measured, `.Array` renders as `The Array class` and
-/// `.RexxInfo` as `a RexxInfo`. So the discriminator is the rendering, and it
-/// is checked here rather than in the probe because the probe cannot fail;
-/// it is the row's own claim that this name is an entry.
 fn check_entry_present(
     probe: &str,
     name: &str,
@@ -814,33 +606,6 @@ fn check_entry_present(
 }
 
 /// The text of a hierarchy edge row's probe.
-///
-/// The documented claim is that the parent is **present in** the child's
-/// `~superClasses`, never that it is the whole answer: the hierarchy list
-/// gives one edge per class by construction and says so in its own prose. So
-/// the probe walks that list, prints whether the parent is on it, prints the
-/// whole list beside that for the report, and no line of it asserts the
-/// list's length.
-///
-/// **The walk compares `~id`, not the objects themselves, and that is the
-/// fidelity the rest of the row already has.** `~superClasses~makeString`
-/// renders each member as its `~id` inside `The ... class`, and the class
-/// wiring row for either endpoint asks `~id` directly, so nothing in this
-/// family distinguishes two class objects that answer the same `~id`.
-/// Asking membership by identity instead would put a **different**
-/// mechanism inside a wiring row: whether two class objects are one object,
-/// which is `==` sent to a class object. Measured, this crate refuses that
-/// one loudly, at rc 120 naming the operator and the operand's shape, and
-/// `crates/rexx-exec/src/eval.rs`'s
-/// `an_operator_sent_to_an_object_is_loud` is what pins the refusal. A
-/// wiring row phrased over it could not be answered until that mechanism
-/// lands, which would make this phase's class-set criterion wait on a later
-/// phase.
-///
-/// What the walk therefore cannot see: a `~superClasses` holding some other
-/// object whose `~id` is the documented parent's. The `superclasses` line is
-/// what stands behind it, the whole list rendered and compared byte for byte
-/// against the oracle's.
 fn edge_probe_text(child: &str, parent: &str) -> String {
     let mut text = format!(
         "/* Table C wiring row: provide.xml's class hierarchy list indents\n\
@@ -873,12 +638,6 @@ fn edge_probe_text(child: &str, parent: &str) -> String {
 
 /// The two method names that have no printable spelling, written in the row
 /// set as the placeholders the class tables use.
-///
-/// Measured: the names are the empty string and a single blank, and
-/// `.Object~method("")` and `.Object~method(" ")` both answer
-/// `The Method class`. A name this function does not recognise is passed
-/// through, which is right for every other name in the row set -- they are
-/// literal.
 fn method_name_literal(name: &str) -> &str {
     match name {
         "(abuttal)" => "",
@@ -888,19 +647,6 @@ fn method_name_literal(name: &str) -> &str {
 }
 
 /// The text of a (class, arm) method probe.
-///
-/// **Which shape this takes comes from the committed row set, which is a fact
-/// about the row set rather than a claim about the oracle.** The class arm
-/// asks `.X~hasMethod`, which needs no instance. The instance arm needs one,
-/// and [`Construction`] says whether the row set offers a route to it:
-/// `covered` carries the expression this opens with, and `not-covered` says
-/// only that none is committed -- its own header adds, in capitals, that it
-/// CARRIES NO CLAIM ABOUT THE ORACLE.
-///
-/// A `covered` group's oracle shape is [`OracleShape::Exactly`], not
-/// `AllOrNothing`: the claim is that the expression answers an instance, so a
-/// group whose oracle construction raised is a structural failure rather than
-/// a set of rows agreeing over a question neither side was asked.
 fn method_probe_text(
     class: &str,
     arm: &str,
@@ -980,22 +726,6 @@ fn method_probe_text(
 
 /// What the oracle's `stdout` must look like for a row's probe to have asked
 /// the question the row is about.
-///
-/// **The check every family here needs, and the reason it is not optional.**
-/// A verdict is a comparison of two sides; it says nothing about whether
-/// either side answered. Two interpreters that fail identically at a probe's
-/// first instruction agree on all three descriptors, so the row reads
-/// `agree` and is counted as satisfied while nothing was asked -- measured, a
-/// row naming a class neither interpreter has produces byte-identical `97.1`
-/// on both sides, empty `stdout`, identical exit status. `class-set.txt`'s
-/// header records `RegularExpression` being removed from the row set by hand
-/// for exactly that reason, so the case is not hypothetical: had it stayed,
-/// its wiring row would read `agree` today over a class this build does not
-/// ship, satisfying a "Done when" no interpreter can meet.
-///
-/// The bound comes from the probe's own text, never from a recording of what
-/// the oracle said. It can only make a row **fail**; nothing here can turn a
-/// divergence into agreement.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum OracleShape {
     /// Exactly this many lines, because every `say` the program holds is
@@ -1026,19 +756,12 @@ impl OracleShape {
 }
 
 /// How many lines a derived probe prints when every `say` in it is reached.
-///
-/// Read off the derived text rather than counted by the caller, so the bound
-/// and the program cannot drift: they are the same string.
 fn derived_say_lines(text: &str) -> usize {
     text.lines().filter(|line| line.starts_with("say ")).count()
 }
 
 /// Records a structural failure when the oracle's output is not a shape the
 /// probe could have produced while asking its row's question.
-///
-/// Returns whether the shape held, so a caller with a second check over the
-/// same output can skip it rather than report twice about a program that
-/// plainly did not run.
 fn check_oracle_shape(
     probe: &str,
     subject: &str,
@@ -1064,19 +787,6 @@ fn check_oracle_shape(
 }
 
 /// Whether one method row's own `stdout` channel differs.
-///
-/// The program's `stdout` is shared by every row of its group, so a row's
-/// share of it is its own line. Two rules, both of which exist to stop a row
-/// reading `agree` off a program that did not answer it:
-///
-/// * if the two sides' whole `stdout` agrees, no row's line can differ, and
-///   that is answered directly rather than by indexing;
-/// * otherwise a row agrees only if the two sides produced the **same number
-///   of lines** and this row's line matches. Without the count, a crate that
-///   printed more lines than the oracle would let the rows before the extra
-///   line read `agree` while the program's output as a whole is wrong, and a
-///   crate that printed fewer would let the rows past the end compare
-///   nothing against nothing.
 fn method_row_stdout(oracle: &[Vec<u8>], crate_side: &[Vec<u8>], index: usize) -> bool {
     if oracle.len() != crate_side.len() {
         return true;
@@ -1097,18 +807,6 @@ const DOCUMENTED_EDGE_MARKER: &str = "documented-edge ";
 
 /// Records a structural failure when the oracle does not confirm the edge the
 /// row claims.
-///
-/// **The row's own claim, asked of the oracle.** A hierarchy row says the
-/// documented parent is present in the child's `~superClasses`; if it is not,
-/// every instrument in this table still works and the row still reads `agree`
-/// whenever the two interpreters answer `0` alike -- a row that has become a
-/// statement about neither the book nor the build. What it is here to catch
-/// is a row whose claim the shipped interpreter contradicts, which is a
-/// finding for a maintainer rather than a verdict for a phase, so it is
-/// structural.
-///
-/// The marker is the one [`edge_probe_text`] writes, in the same file, so the
-/// two cannot drift.
 fn check_documented_edge(
     probe: &str,
     subject: &str,
@@ -1176,14 +874,6 @@ struct Ran {
 
 /// Runs one probe on both crate engines and on the oracle, or records why it
 /// could not be run.
-///
-/// `on_disk` is the probe subdirectory's own listing, and the guard on it is
-/// table D's: a row whose probe was simply deleted has already been reported
-/// by the set comparison, and reporting it again here -- with a message
-/// stating that the name **is** in the listing -- would be a second, false
-/// report of the same fact. What this arm is for is the probe that is listed
-/// and still cannot be resolved, a dangling symlink being the case that
-/// produces it.
 fn run_probe(
     oracle: &support::oracle::Oracle,
     corpus: &Path,
@@ -1239,10 +929,6 @@ fn run_probe(
 
 /// Compares a probe family's derived path set against the directory's own
 /// listing, in both directions, and returns the listing.
-///
-/// A row with no probe is structural, and so is a probe no row names: an
-/// orphan program is one nothing ever runs, which is the shape a deleted row
-/// leaves behind.
 fn probe_set(
     corpus: &Path,
     subdir: &str,
@@ -1312,10 +998,6 @@ fn check_probe_text(
             // program still exists, still runs, and still produces a verdict
             // -- so a silent return turns off the only thing standing between
             // a row's verdict and a program about a different subject.
-            //
-            // Guarded on the directory listing for the reason `run_gate_probe`'s
-            // own arm is: a genuinely missing file is the set check's case and
-            // has already been reported once there.
             if on_disk.contains(probe) {
                 structural.push(Structural {
                     subject: probe.to_string(),
@@ -1356,14 +1038,6 @@ fn check_probe_text(
 /// The one-based number of the first line at which two texts differ, and that
 /// line from each side, **terminator included**. A line present on one side
 /// only is reported as the empty string on the other.
-///
-/// `split_inclusive`, not `lines`. `lines` strips the terminator and a
-/// trailing `\r` with it, and cannot see a missing final newline at all, so a
-/// file differing from its derivation *only* in line endings is a difference
-/// this function has to be able to point at. This repository carries no
-/// `.gitattributes`, so a CRLF checkout puts every derived probe through this
-/// path at once. The caller escapes both sides, so a `\r` and a missing `\n`
-/// are visible in the message.
 fn first_difference(left: &str, right: &str) -> (usize, String, String) {
     let mut lefts = left.split_inclusive('\n');
     let mut rights = right.split_inclusive('\n');
@@ -1419,19 +1093,6 @@ fn concept_rows<'a>(
 
 /// The row-set text a derived probe copies into a Rexx block comment, checked
 /// for the sequences that would end the comment early or split the line.
-///
-/// `class-set.txt`'s `reason` is free text and [`method_probe_text`] writes it
-/// between `/*` and `*/`. A reason containing `*/` closes the comment where it
-/// stands and leaves the rest of the header being parsed as Rexx -- and
-/// **nothing else here would notice**: the derivation is the definition, so
-/// the committed file matches it, and an instance group whose program now
-/// fails to parse answers no lines, which [`OracleShape::AllOrNothing`]
-/// admits. The fix belongs in the row file, so this names the row rather than
-/// escaping the text and carrying on.
-///
-/// `construction` is written into the header the same way **and** into the
-/// probe's own `o = ` line, so a newline in it would put the tail of the
-/// expression on a line of its own.
 fn check_interpolated_text(classes: &[ClassRow], structural: &mut Vec<Structural>) {
     for row in classes {
         if row.reason.contains("*/") {
@@ -1468,14 +1129,6 @@ fn check_interpolated_text(classes: &[ClassRow], structural: &mut Vec<Structural
 
 /// Every hierarchy edge names, at both ends, a class the class row set carries
 /// as a class object.
-///
-/// **This is what makes the class wiring row the existence check for the other
-/// families.** A class row asks whether `.X` answers at all; an edge row and a
-/// method group both name a class, and neither asks that question of its own
-/// accord. Tying both back to `class-set.txt` means a name this build does not
-/// have is caught once, at its class row, rather than once per family or not
-/// at all. The method families are tied by the membership check the grouping
-/// does; this is the edge families' half.
 fn check_edge_endpoints(classes: &[ClassRow], edges: &[Edge], structural: &mut Vec<Structural>) {
     let class_objects: BTreeSet<&str> = classes
         .iter()
@@ -1500,17 +1153,6 @@ fn check_edge_endpoints(classes: &[ClassRow], edges: &[Edge], structural: &mut V
 }
 
 /// The `ArgUtil` assertion, carried here as a wiring row.
-///
-/// **It is the one row here with no verdict channel, and the reason is that a
-/// verdict could not see it.** `provide.xml` comments `ArgUtil`'s member out
-/// of the class hierarchy list, so an extractor that read the `<member>`s
-/// without stripping XML comments first emits an `ArgUtil Object` edge -- and
-/// that edge is **true**: `.ArgUtil~superClasses` does hold `The Object
-/// class`, measured. So an edge row for it would read `agree`, the end-to-end
-/// oracle run would stay at zero failures, and the wrong member set would be
-/// invisible to every instrument in this table. What can see it is an
-/// assertion over the committed files themselves, which is what this is, and
-/// it is structural because there is nothing for a gate mode to relax.
 fn argutil_assertion(
     classes: &[ClassRow],
     edges: &[Edge],
@@ -1558,11 +1200,6 @@ fn argutil_assertion(
 }
 
 /// Every owner the method rows carry.
-///
-/// **Enumerated by running [`method_row_owner`] over the committed row set,
-/// never by listing the values.** The method family's owner is a column rather
-/// than a constant this file can read off, so a listing here would let the
-/// check below go blind to every method row and still pass.
 fn method_row_owners() -> BTreeSet<String> {
     let classes = read_classes();
     let by_name: BTreeMap<&str, &ClassRow> =
@@ -1576,18 +1213,6 @@ fn method_row_owners() -> BTreeSet<String> {
 
 /// Every phase this table owns rows for whose corpus subset file exists is in
 /// [`CLOSED_PHASES`].
-///
-/// `CLOSED_PHASES` is what turns a red row of a closed phase into an exit
-/// status. Its other readers are `verdict_is_gated` and `Report::new`, so a
-/// phase dropped from it simply stops being gated: the only trace is the
-/// report's own `verdicts gated for ...` line and its `N not yet agree`
-/// tally, and nothing asserts on either. A `corpus/phase-<id>.txt` is the
-/// project's own record that the phase's programs agree with the oracle, so a
-/// phase that has one and owns rows here owes those rows an exit status.
-///
-/// **One direction, and the other needs none.** A phase added here before it
-/// closes gates rows that do not agree yet, which the next gate run reports as
-/// an exit status of its own.
 #[test]
 fn every_closed_phase_this_table_owns_rows_for_is_gated() {
     let corpus = corpus_dir();
@@ -1905,10 +1530,6 @@ fn concept_and_class_gate_table() {
         // string edit can move. An instance arm without one asks a bare
         // `~new` the row set says nothing about, and no count between all and
         // none is reachable.
-        //
-        // What stays uncovered is a `not-covered` group whose two sides raise
-        // alike: every row of it can read `agree` over a question neither
-        // side was asked, and the report counts those on every run.
         let shape = match (arm.as_str(), &group.construction) {
             ("class", _) | (_, Construction::Constructs { .. }) => OracleShape::Exactly(rows.len()),
             (_, Construction::Raises) => OracleShape::AllOrNothing(rows.len()),
@@ -1930,9 +1551,6 @@ fn concept_and_class_gate_table() {
             // row. The group's own report line still carries the two sides'
             // exit statuses and `stderr`, which is where the constructor's
             // divergence is visible.
-            //
-            // One side answering and the other not is a real divergence and
-            // keeps its verdict.
             let asked = oracle_lines.get(at).is_some() || crate_lines.get(at).is_some();
             // Kept, not dropped, when the shape check failed: a group that
             // vanished would take its rows out of every count, including the
@@ -2135,12 +1753,6 @@ fn concept_and_class_gate_table() {
     // raised before reaching them, so they are `unanswered` above rather than
     // `agree`, and no run of this table can move them until an instance
     // exists.
-    //
-    // Counted from the verdicts themselves rather than from the oracle's own
-    // output, because the sentence and the column have to agree: a group
-    // whose oracle raised while this crate answered has rows that **were**
-    // asked on one side, and an oracle-only predicate would put them in this
-    // line while the table reported them as divergences.
     let unasked = method_measured
         .iter()
         .filter(|(_, verdict, _, _, _)| verdict.is_none())

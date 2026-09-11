@@ -1,38 +1,6 @@
 //! The four pins Task 11 requires on the `base/keyword` extractor:
 //! conservation, absolute committed literals, a real floor, and the ooTest
 //! revision the literals were measured at.
-//!
-//! # Why conservation alone would be a tautology, and what makes it one here
-//!
-//! `rows + dropped == calls` holds trivially at `0 + 0 == 0` (nothing
-//! scanned) and at `0 + N == N` (everything dropped). What makes it
-//! non-vacuous is that `calls` is counted **independently of the extractor**,
-//! by [`rexx_extract::keyword::count_assert_same`], which does not parse Rexx
-//! and only counts a substring -- so a scanner that silently sees nothing
-//! cannot satisfy it, and neither can one that drops everything, because
-//! [`the_row_floor`] below states a real lower bound on the rows side.
-//! Those two plus [`base_keyword_yields_the_measured_counts`]'s absolute
-//! literals are the four-part requirement.
-//!
-//! # The denominator is the *exact* `assertSame` spelling
-//!
-//! `base/keyword` contains 4,567 `self~assert*` occurrences of all
-//! spellings. **2,561 match the prefix `self~assertSame`, but only 2,441 are
-//! the method `assertSame`** -- the other 120 are `assertSameList`, a
-//! different method that compares two lists and which a prefix test
-//! swallows. This extractor's denominator is the **2,441**, and
-//! `count_assert_same` implements exactly that rule.
-//!
-//! Taking the prefix instead would inflate the denominator to 2,561 and
-//! silently classify 120 `assertSameList` calls as dropped `assertSame`
-//! calls -- reporting a shortfall against a population that never existed.
-//! The cost of the narrower choice is that those 120 are not counted at all,
-//! anywhere, which is correct: they are a different assertion.
-//!
-//! **2,126 of the group's 4,567 assertions (46.6%) are deliberately outside
-//! this population** -- every spelling other than `assertSame`, the largest
-//! being `assertTrue` (797), `assertSyntaxError` (400) and `assertEquals`
-//! (361). Nothing here claims anything about them.
 
 use rexx_extract::find_test_groups;
 use rexx_extract::keyword::{DropReason, count_assert_same, extract_keyword};
@@ -41,11 +9,6 @@ use std::path::{Path, PathBuf};
 /// The ooTest revision every absolute literal below was measured at. Named
 /// in each failure message so a red count is diagnosable as `svn up` rather
 /// than as a regression in this repository.
-///
-/// `ootest/` is **not** checked-in test data: it is git-ignored
-/// (`.gitignore:6`), has zero tracked files, and exists only as an SVN
-/// working copy of `svn.code.sf.net/p/oorexx/code-0/test/trunk`. Read it
-/// back with `svn info ootest`.
 const OOTEST_REVISION: &str = "r13178";
 
 /// What a red absolute-literal test most likely means, appended to every
@@ -103,11 +66,6 @@ fn measure() -> Vec<(String, usize, usize, usize)> {
 
 /// The absolute committed literals: per-group row counts, and the four
 /// totals. Measured at [`OOTEST_REVISION`].
-///
-/// Each row is `(group, assertSame calls, rows)`. `dropped` is not repeated
-/// per group -- conservation makes it `calls - rows` exactly, and a second
-/// column that is arithmetically forced by the other two would pin nothing
-/// the first two do not already pin.
 const PER_GROUP: &[(&str, usize, usize)] = &[
     ("ADDRESS", 222, 11),
     ("ASSIGNMENT", 265, 265),
@@ -230,20 +188,6 @@ fn every_assert_same_is_a_row_or_an_accounted_for_drop() {
 }
 
 /// **Criterion 3, the floor.** A real number, not `> 0`.
-///
-/// `> 0` would call a 54-row extraction a pass, and 54 is exactly what the
-/// `base/expressions` extractor already yields on this group -- so a floor
-/// that low would certify the very result this task exists to replace.
-///
-/// **Derived from what is actually achieved, and set just under it.** The
-/// extractor carries [`TOTAL_ROWS`] = 1,773 of 2,441 calls (72.6%); the
-/// floor is 1,750, about 1.3% below. It is deliberately *not* `TOTAL_ROWS`
-/// itself, which would be that literal a second time and would move
-/// whenever it moved -- the point of a separate floor is that it survives a
-/// deliberate re-measurement of the exact counts while still failing on any
-/// real collapse. A gap this narrow means the two tests fail together for a
-/// large regression and the absolute one fails alone for a small
-/// deliberate change, which is the intended division of labour.
 #[test]
 fn the_row_floor() {
     /// Below this, the body-shaped extractor has failed rather than drifted.
@@ -260,25 +204,6 @@ fn the_row_floor() {
 }
 
 /// **The 668 calls outside the population, accounted for by reason.**
-///
-/// `calls - rows` as a single number says only that something was lost.
-/// This pins what kind and how much of each, so a category that starts
-/// growing is visible on its own rather than absorbed into a total that was
-/// always going to be large. Every variant is listed, including the ones at
-/// zero: a category pinned at zero fails the first time the corpus grows
-/// one.
-///
-/// Two rows here are load-bearing beyond bookkeeping.
-///
-/// `OtherAssertion` (169) is exactly the price of this extractor's
-/// population choice -- the calls a wider rule would admit by rewriting
-/// other `self~assert*` spellings to `NOP`, which would report those bodies
-/// as passing after deleting the checks they were written to make. Having
-/// it as a committed number rather than a claim is the point.
-///
-/// `AssertSameList` reads zero, and **not** because no body mixes the two
-/// spellings -- five do. See [`DropReason::AssertSameList`]'s own doc for
-/// which, and why `MessageSend` claims them first.
 #[test]
 fn the_drop_reasons_account_for_every_call_outside_the_population() {
     /// `(reason, methods, calls)`, measured at [`OOTEST_REVISION`].
@@ -390,12 +315,6 @@ fn an_assertion_after_a_semicolon_is_found_not_only_a_line_starting_one() {
 }
 
 /// The other half of that blindness: an assertion as a `THEN` target.
-///
-/// The replacement must be **one instruction**, and specifically not an
-/// `IF` -- an `IF` here would capture a following `ELSE` that belongs to the
-/// outer one, silently changing which branch the program takes. Asserting
-/// the shape of the emitted text is what pins that choice; a test that only
-/// counted rows would pass just as well with the broken rewrite.
 #[test]
 fn a_then_target_assertion_becomes_a_single_say_not_a_nested_if() {
     let out = one_body("::method test_1\n   If a=1 Then self~assertSame(1, b)\n   Else c=2\n");
@@ -413,10 +332,6 @@ fn a_then_target_assertion_becomes_a_single_say_not_a_nested_if() {
 /// prefix and is a different method. It must not be counted as an
 /// `assertSame`, and it must not be rewritten as one -- it leaves its `~`
 /// behind, which blocks its body like any other message send.
-///
-/// `base/expressions` contains zero of these, which is the only reason the
-/// row-shaped extractor's prefix test has never mattered; `base/keyword`
-/// contains 120.
 #[test]
 fn assert_same_list_is_neither_counted_nor_rewritten() {
     let source = "::method test_1\n   self~assertSameList(a, b)\n";
@@ -501,15 +416,6 @@ fn an_assertion_inside_a_comment_is_accounted_as_a_drop_not_rewritten() {
 
 /// The measurement behind keeping comments rather than stripping them, as a
 /// test rather than only as prose in [`rexx_extract::keyword`]'s own doc.
-///
-/// `ITERATE.testGroup`'s `test_11` and `LEAVE.testGroup`'s `test_10` both
-/// write an expected value as `(11/**/ 1/**irrelevant**/05  10/*...*/)`,
-/// relying on the comment to end a token *without* contributing a blank.
-/// Measured on the oracle: `say '['1/**/05']'` prints `[105]` and
-/// `say '['1 /**/ 05']'` prints `[1 05]`. So the two rewrites below must
-/// differ, and the first must keep the operand's bytes exactly as written --
-/// an earlier draft replaced each comment with a space, and both of those
-/// two bodies then disagreed with the oracle.
 #[test]
 fn a_comment_inside_an_operand_is_kept_verbatim_not_turned_into_a_blank() {
     let abutted = one_body("::method test_1\n   self~assertSame(x, (1/**/05))\n");
@@ -630,20 +536,6 @@ fn an_assertion_used_as_an_operand_blocks_rather_than_producing_invalid_rexx() {
 }
 
 /// Conservation has exactly one hole, and this pins that it is **loud**.
-///
-/// `count_assert_same` counts a substring and does not know what a string
-/// literal is; `rewrite_line` tracks string state and skips one. No
-/// [`DropReason`] covers the difference, so such an occurrence makes
-/// `rows + dropped` come out short. That is a red conservation test naming
-/// the group, not a wrong number reported quietly -- which is the behaviour
-/// to want from a hole -- but it is a hole, and
-/// `count_assert_same`'s own doc now says so rather than claiming the
-/// accounting is total.
-///
-/// No such literal exists in `base/keyword` at r13178, which is why
-/// `every_assert_same_is_a_row_or_an_accounted_for_drop` passes over the
-/// real corpus. This constructs one so the property is checked rather than
-/// merely believed.
 #[test]
 fn a_call_inside_a_string_literal_breaks_conservation_loudly() {
     let source = "::method test_1\n   s = 'self~assertSame(1, 2)'\n   self~assertSame(1, 1)\n";
@@ -675,11 +567,6 @@ fn a_call_inside_a_string_literal_breaks_conservation_loudly() {
 /// [`DropReason::UnparsedCallShape`] is pinned at zero against the corpus,
 /// and a category pinned at zero proves nothing unless it can fire. Three
 /// shapes reach it.
-///
-/// This is the same requirement `assert_same_list_is_neither_counted_nor_
-/// rewritten` meets for the other zero-valued category. `NotAClause` has
-/// its own witness in
-/// `an_assertion_used_as_an_operand_blocks_rather_than_producing_invalid_rexx`.
 #[test]
 fn the_unparsed_call_shape_category_is_reachable() {
     for source in [
@@ -708,20 +595,6 @@ fn the_unparsed_call_shape_category_is_reachable() {
 
 /// The population choice's price, re-derived by a **different rule** and
 /// checked against the committed [`DropReason::OtherAssertion`] column.
-///
-/// The extractor decides that column with a per-body cascade over blanked
-/// lines (`classify_sends`). This re-derives the same quantity the way the
-/// pre-implementation estimate did: split methods with `extract`, strip
-/// comments with a local stripper, and ask whether deleting every
-/// `self~assert*`/`self~expect*` token leaves a `~` behind. Two independent
-/// routes to one number is what makes it a cross-check rather than the same
-/// rule reported twice -- which is precisely the objection this answers.
-///
-/// The wider population is the set of bodies whose only sends are ooTest
-/// assertions of any spelling; the narrower one, which this extractor takes,
-/// requires the only send to be `assertSame` exactly. The difference is what
-/// admitting the wider rule would buy, and it must equal the committed
-/// column.
 #[test]
 fn the_population_choices_price_is_reproduced_by_an_independent_rule() {
     fn strip(body: &str) -> String {

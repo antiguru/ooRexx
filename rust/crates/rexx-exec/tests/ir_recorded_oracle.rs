@@ -11,54 +11,9 @@
 
 //! `ir_recorded_cases`' recorded expectations, checked against the running oracle
 //! rather than against this crate.
-//!
-//! # The gap this closes
-//!
-//! Every stanza under `tests/ir_recorded_cases` carries a block of bytes its own
-//! header calls oracle-measured, and `ir_recorded.rs` compares **this crate**
-//! against that block. Nothing compared the block against an oracle again
-//! after the day it was written, so a recording and the interpreter could
-//! drift apart and no test in the workspace could see it: this crate agreeing
-//! with a stale recording is exactly what `ir_recorded.rs` reports as success.
-//!
-//! That is not hypothetical. When the oracle binary was replaced with a 5.3
-//! build on 2026-08-20, a sweep of every stanza found six recordings the
-//! interpreter no longer produced, **and this crate agreed with all six**.
-//! Five were corrected from the oracle's own bytes and one is a live
-//! divergence carried below. The sweep was a throwaway script; this file is
-//! that script with the workspace's own harness under it.
-//!
-//! `tests/corpus.rs` runs the oracle on every program it owns each time it
-//! runs, which is why no equivalent gap exists there. These cases never did.
-//!
-//! # Why the expectations are not simply regenerated
-//!
-//! `ir_recorded.rs` refuses `REWRITE` for the reason that applies twice over here:
-//! `datadriven`'s idiom is to regenerate an expectation from the
-//! implementation, and an expectation regenerated from this crate would agree
-//! with whatever this crate does. This file's whole content is that the bytes
-//! come from somewhere else. It refuses `REWRITE` too.
-//!
-//! # Stanzas whose bytes are deliberately not the oracle's
-//!
-//! A stanza may record something the oracle does *not* produce -- a construct
-//! this crate refuses on purpose, or a divergence that is known, recorded and
-//! not yet fixed. Those carry `not-oracle-bytes` on the directive line, naming
-//! the mechanism rather than the symptom:
-//!
 //! ```text
 //! program not-oracle-bytes=do-with-refused
 //! ```
-//!
-//! The value is one word because `datadriven` parses directive arguments as
-//! words; the sentence that explains it belongs in the comment above the
-//! stanza, where a reader is already looking.
-//!
-//! **The marker is policed in both directions.** A marked stanza whose oracle
-//! answer has come to *agree* with its recording fails here, because the
-//! marker is then a false statement about the tree and the next reader would
-//! take a live divergence for a deliberate one. Removing the marker is the
-//! remedy, not silencing the test.
 
 mod support;
 
@@ -111,9 +66,6 @@ fn fresh_run_dir() -> PathBuf {
 }
 
 /// One case's program, rendered in the tagged form the case files record.
-///
-/// The tags are what let an expected block hold a program's own blank line: a
-/// blank line ends such a block, so no line inside one may be empty.
 fn tagged(exit_code: i32, stdout: &[u8], stderr: &[u8]) -> String {
     let mut out = format!("rc> {exit_code}\n");
     for line in String::from_utf8_lossy(stdout).lines() {
@@ -127,10 +79,6 @@ fn tagged(exit_code: i32, stdout: &[u8], stderr: &[u8]) -> String {
 
 /// The oracle's answer for one program, with the path it ran from rewritten to
 /// [`INLINE_PATH`] so a traceback's middle line is comparable.
-///
-/// `label` identifies the stanza for the [`did_not_finish`] check below --
-/// `expect_exit_code`'s own panic has no such label in it, and this function
-/// is called once per stanza across every file `datadriven::walk` reads.
 fn render_oracle(oracle: &Oracle, run_dir: &Path, label: &str, program: &str) -> String {
     let path = run_dir.join("case.rex");
     fs::write(&path, program.as_bytes())
@@ -171,12 +119,6 @@ fn render_crate(program: &str) -> String {
 
 /// Every recorded expectation is still what the oracle produces, or is marked
 /// as deliberately something else.
-///
-/// The remedy when this fires is a re-measurement rather than an edit that
-/// makes it pass: read the oracle's bytes out of the failure and decide
-/// whether this crate should now produce them. Regenerating the block from
-/// this crate is the one thing that cannot be right, because it is what the
-/// other test already checks.
 #[test]
 fn every_recorded_expectation_is_still_what_the_oracle_produces() {
     if !gate_mode() {

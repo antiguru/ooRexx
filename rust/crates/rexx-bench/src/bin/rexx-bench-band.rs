@@ -11,58 +11,6 @@
 
 //! Repeated independent invocations of one cheap oracle comparison, and the
 //! distribution of the ratio across them.
-//!
-//! # What this is for
-//!
-//! `phase-4d-gate.md`'s escalation rule: measure cheaply, and spend more
-//! measurement only on an axis whose ratio lands near 1.0. This program is the
-//! cheap measurement and, run repeatedly, the escalation. It answers "how far
-//! apart do independent invocations land", which is the question an axis near
-//! 1.0 has to answer before its verdict means anything.
-//!
-//! **It is not the gate's verdict and it does not establish a global band.**
-//! That band was withdrawn -- see `phase-4d-gate.md`'s second amendment -- and
-//! nothing here should be quoted as one. An axis far from 1.0 is decided
-//! without this program.
-//!
-//! **It is not the optimisation loop's accept rule either.** That rule is a
-//! paired comparison against this crate's own previous binary on one machine
-//! state, and the oracle does not enter it.
-//!
-//! # Why this is not the suite with more pairs
-//!
-//! `rexx-bench-suite` reports a sign-test interval over the pairs inside one
-//! invocation. That interval says how far the median would move if that exact
-//! run were repeated, and `docs/superpowers/plans/perf-baseline.md` records it
-//! being wrong about reality: `compound` produced **disjoint** intervals across
-//! two quiet runs of a byte-identical binary. So adding pairs inside one
-//! invocation tightens an interval around a quantity that is already known to
-//! understate the movement, which is worse than not tightening it.
-//!
-//! One invocation of this program is therefore **one pass**: one independent
-//! observation, emitted as rows. A driver loop invokes it many times, so the
-//! process boundary between passes is real rather than a loop iteration, and
-//! `--summarise` reads the accumulated rows back and reduces them.
-//!
-//! # The two modes
-//!
-//! * **collect** (default) -- run one pass and write tab-separated rows to
-//!   standard output, one row per sampled run, progress on standard error.
-//! * **`--summarise FILE...`** -- read rows back and print the per-axis
-//!   between-pass distribution, plus the within-pass spread beside it so the
-//!   two are never confused for each other.
-//!
-//! Reduction lives here rather than in a throwaway script because a figure
-//! that decides an axis near 1.0 has to be recheckable, and a derivation in an
-//! uncommitted script is not.
-//!
-//! # The control pair
-//!
-//! An `--axes` entry holding a `/` is a path rather than a name in
-//! `bench-programs/`, which is how `bench-control/` reaches this program. The
-//! escalation rule requires a pair differing by a known small amount to run
-//! alongside an axis claiming parity, so that a tight interval is shown to be
-//! sensitivity rather than blindness.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -286,12 +234,6 @@ fn collect(arguments: &[String]) -> ExitCode {
 }
 
 /// The label and the program file one `--axes` entry names.
-///
-/// A bare stem is a program in `bench-programs/`; anything holding a `/` is a
-/// path taken as given, labelled by its file stem. The second form exists for
-/// the negative control the band needs: a program that differs from an axis by
-/// a known amount does not belong in `bench-programs/`, where the suite's own
-/// axis list would then have to declare it a dimension of the baseline.
 fn resolve(entry: &str) -> (String, PathBuf) {
     if entry.contains('/') {
         let path = PathBuf::from(entry);
@@ -314,12 +256,6 @@ fn printable(stdout: &[u8]) -> String {
 }
 
 /// How one pass's samples become one ratio, and what quantity they are.
-///
-/// These choices are free: they re-reduce rows already collected, so each can
-/// be compared against the others on the same machine state rather than on a
-/// fresh run of its own. That matters, because a between-run comparison of two
-/// reductions taken from two different runs would carry the very variance the
-/// reductions are being judged on.
 struct Reduction {
     /// `wall` or `cycles`.
     metric: String,
@@ -485,11 +421,6 @@ fn summarise(files: &[PathBuf], reduction: &Reduction) -> ExitCode {
 }
 
 /// One pass's ratio of this crate to the oracle.
-///
-/// `paired` divides inside each pair before reducing, which cancels a drift
-/// both sides saw; `pooled` reduces each side first, which is what the suite's
-/// ratio column does. `oracle` and `rust` are in pair order, so index `i` on
-/// one is the partner of index `i` on the other.
 fn pass_ratio(oracle: &[f64], rust: &[f64], paired: bool, use_min: bool) -> f64 {
     if !paired {
         let mut oracle = oracle.to_vec();
@@ -526,16 +457,6 @@ fn spread(values: &[f64]) -> f64 {
 }
 
 /// Half-width of the central 95% of `ratios`, relative to `centre`.
-///
-/// Reported beside the envelope rather than instead of it, because the two
-/// answer different questions and both are quoted. The envelope is an extreme:
-/// it can only widen as passes are added, so comparing an envelope over 30
-/// passes with one over 3 is not like for like. This figure is a pair of
-/// interpolated quantiles and does not systematically widen with the sample,
-/// which is what makes a before-and-after comparison at different pass counts
-/// honest.
-///
-/// `ratios` is assumed sorted, which [`median`] leaves it.
 fn central_band(ratios: &[f64], centre: f64) -> f64 {
     let low = quantile(ratios, 0.025);
     let high = quantile(ratios, 0.975);
@@ -544,11 +465,6 @@ fn central_band(ratios: &[f64], centre: f64) -> f64 {
 
 /// The `p` quantile of a sorted sample, linearly interpolated between order
 /// statistics.
-///
-/// Interpolated rather than "drop the outermost k": at thirty passes an
-/// integer count of dropped samples rounds to zero, so a nominal 95% figure
-/// would silently equal the envelope and a reader comparing the two columns
-/// would see agreement that means nothing.
 fn quantile(sorted: &[f64], p: f64) -> f64 {
     let n = sorted.len();
     if n == 1 {
@@ -561,11 +477,6 @@ fn quantile(sorted: &[f64], p: f64) -> f64 {
 }
 
 /// Standard deviation of `ratios` as a fraction of their mean.
-///
-/// Quoted so a reader can derive a bound at a coverage this program does not
-/// print. It is not the band: run times are bounded below by the work and have
-/// a long right tail, so a normal-theory interval would describe a
-/// distribution these samples do not have.
 fn relative_sd(ratios: &[f64]) -> f64 {
     let n = ratios.len();
     if n < 2 {
@@ -701,11 +612,6 @@ mod tests {
 
     /// A row splits into exactly the fields the header names, and the two
     /// columns the reduction reads by position are where it reads them.
-    ///
-    /// The header and the emission site are separate expressions and a reader
-    /// of a collected file has nothing else to align them by. The array length
-    /// is what keeps them the same width; these assertions are what keep
-    /// `wall_s` and `cycles` at the offsets `summarise` indexes.
     #[test]
     fn a_row_splits_into_the_columns_the_header_names() {
         let emitted = row(std::array::from_fn(|index| COLUMNS[index].to_string()));

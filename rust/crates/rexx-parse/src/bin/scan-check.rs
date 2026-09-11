@@ -1,11 +1,5 @@
 //! Differential harness for the scanner: scans each file named on the command
 //! line and prints one line per file, for diffing against `build/bin/rexxc`.
-//!
-//! `ok` corresponds to `rexxc` exiting 0 as far as scanning is concerned, and
-//! `E<code>.<sub> line <n>` to the `Error <code>.<sub>` and reported line it
-//! writes to stderr. `rexxc` also rejects programs this scanner accepts,
-//! because it goes on to parse them; a difference is only a scanner difference
-//! when the error number is one the scanner raises at all.
 use rexx_parse::{ProgramSource, SourceKind, TokenKind, scan};
 
 fn main() {

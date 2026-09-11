@@ -11,59 +11,6 @@
 
 //! Comparing the two engine arms of one build, on both instruments, at two
 //! problem sizes, inside one sitting.
-//!
-//! # Why this is a tool and not a paragraph
-//!
-//! Every rule below was already written down in this phase's plan when a task
-//! broke it. A rule stated in prose is re-derived by each task that reads it;
-//! a rule stated in a type is not available to be broken. The four defects
-//! this module exists to make unexpressible, each of which has shipped or
-//! nearly shipped here:
-//!
-//! * **A claim on one instrument.** [`Reading`] carries `instructions:u` and
-//!   `cycles:u` together and has no constructor that takes one of them. The
-//!   `perf stat` reply is refused whole when either event is missing, and the
-//!   events asked for are the events parsed (`child::Counted::events`).
-//! * **A comparison assembled from two sittings.** [`measure`] takes the
-//!   builds and the workload and runs every cell itself. There is no entry
-//!   point that takes two result sets, and [`Sitting`] cannot be built from
-//!   outside this module.
-//! * **A cross-binary arm comparison.** [`Sitting::arm_ratio`] takes one
-//!   build's index and reads that build's own two arms. A ratio between two
-//!   binaries is [`Sitting::across_builds`], which is a different method with
-//!   a different name, because Task 4c built the same source twice differing
-//!   by one comment and read 7.8% between them on a `.text` with the same
-//!   sha256.
-//! * **A bare number.** [`Figure`]'s fields are private and its only
-//!   renderings -- [`Figure::fmt`] and [`Figure::columns`] -- carry the
-//!   spread and the round count beside the median.
-//!
-//! # What two sizes buy, and the one workload that has none
-//!
-//! Running the same body at two lengths separates the per-pass cost from the
-//! fixed cost exactly, because the fixed part cancels in the difference. That
-//! is the question every promotion task in this phase asks, and it is what
-//! settled "per promoted clause, zero per body entry".
-//!
-//! The two lengths are the program's own committed bound and **half** of it,
-//! not the bound and twice it -- see [`Workload::rendered`] for the axis that
-//! is killed by the address-space cap when it is doubled, and for why the
-//! committed bound has to be one of the two.
-//!
-//! A program's size is **derived from the program**, not declared beside it:
-//! [`Workload::classify`] reads the single `n = <integer>` line the benchmark
-//! programs carry. A program with no such line has no size to vary, and gets
-//! [`Workload::Fixed`] -- a variant with no per-pass reduction on it at all,
-//! so a fixed workload cannot produce a per-pass figure rather than producing
-//! a misleading one. A program with more than one such line is refused,
-//! because which one is the loop bound is then a guess.
-//!
-//! # Scope
-//!
-//! In-phase, arm against arm. Phase 4f compares this binary against the C++
-//! oracle on wall clock, which is a different comparison against a different
-//! reference; `child::Side` already carries the oracle and this module
-//! deliberately does not reach for it.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -71,18 +18,6 @@ use std::path::{Path, PathBuf};
 use crate::child::{Counted, Side, Wrapper, parse_counters, run};
 
 /// Which engine arm of a build a run used.
-///
-/// **Both arms come from one binary**, selected through `REXX_ENGINE`, which
-/// is why this is a value the harness sets per run rather than a second
-/// binary it launches.
-/// **One arm, because there is one engine.**
-///
-/// This was a pair -- the tree-walker and the compiled stream -- selected per
-/// child through `REXX_ENGINE`. The tree-walker is gone and `rexx-run` reads
-/// no such variable, so a two-armed harness would have set it, had it
-/// ignored, and labelled the resulting row `rust-tw`: a benchmark reporting
-/// an arm it did not run. The type stays so that the rows, labels and
-/// baseline files keep naming what they measured.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Arm {
     Ir,
@@ -118,10 +53,6 @@ impl Instrument {
 }
 
 /// What one run of one cell cost, on both instruments.
-///
-/// There is no constructor taking a single count. The only way to make one is
-/// from a `perf stat` reply that carried both events, which is what makes
-/// "reported on instructions alone" a thing this harness cannot do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Reading {
     instructions: u64,
@@ -161,11 +92,6 @@ impl Size {
 }
 
 /// One build under test: a binary, and the label its rows carry.
-///
-/// **Both arms of a comparison come from one of these.** Several builds may
-/// be measured in one sitting -- that is how a base and a head are compared
-/// without assembling the comparison from two runs -- and the rotation covers
-/// them, so a build never keeps a slot either.
 #[derive(Clone, Debug)]
 pub struct Build {
     pub label: String,
@@ -193,11 +119,6 @@ impl Build {
 }
 
 /// A benchmark program, classified from its own text.
-///
-/// The classification is derived rather than declared, in both directions:
-/// `the_benchmark_programs_all_classify` runs it over every program in
-/// `bench-programs/`, so a program whose shape this cannot read is a red test
-/// rather than a silently mis-sized measurement.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Workload {
     /// A program with exactly one `n = <integer>` line, which is its loop
@@ -208,16 +129,6 @@ pub enum Workload {
         bound: u64,
     },
     /// A program with no `n = <integer>` line, so there is no size to vary.
-    ///
-    /// **This is the one exception to "two sizes or it refuses", and it is
-    /// narrow by construction rather than by intent.** The rule exists so a
-    /// whole-program figure is never quoted as a per-pass one; a `Fixed`
-    /// workload produces no per-pass figure at all, because
-    /// [`Sitting::per_pass`] lives on [`Scaled`] and this variant does not
-    /// reach it. `bench-programs/startup.rex` is a program of this shape:
-    /// `say 1`, whose whole content is the fixed cost the other axes cancel.
-    ///
-    /// [`Scaled`]: Measured::Scaled
     Fixed { name: String, text: String },
 }
 
@@ -272,23 +183,6 @@ impl Workload {
     }
 
     /// The program text to run at `size`, and the number of passes it makes.
-    ///
-    /// **The large length is the program's own committed bound and the small
-    /// one is half of it**, rather than the bound and twice it. Two reasons,
-    /// and the first is a measurement this harness failed before it was
-    /// written this way:
-    ///
-    /// * A doubled `bench-programs/strings.rex` asks for 6.4 GB and is killed
-    ///   by `ADDRESS_SPACE_LIMIT_KIB`. Doubling changes the axis's *memory*
-    ///   behaviour as well as its pass count, which is a different program on
-    ///   the allocation-shaped axes rather than a longer one.
-    /// * The committed bound is the length every published figure in this
-    ///   phase was taken at, so keeping it as one of the two lengths makes the
-    ///   whole-program ratio directly comparable with the record instead of
-    ///   comparable with a doubled program nobody else ran.
-    ///
-    /// The difference is `bound - bound / 2` passes either way, so the
-    /// per-pass reduction is unaffected.
     fn rendered(&self, size: Size) -> (String, u64) {
         match self {
             Workload::Fixed { text, .. } => (text.clone(), 0),
@@ -327,12 +221,6 @@ impl Workload {
 }
 
 /// A measured quantity together with the spread of the rounds behind it.
-///
-/// **Private fields and no median accessor.** The two renderings this type
-/// has both carry the spread, so a figure cannot be quoted into a brief or a
-/// report stripped of the noise it was measured against -- which is how a
-/// ratio taken once has twice been carried forward here as though it were
-/// exact.
 #[derive(Clone, Copy, Debug)]
 pub struct Figure {
     median: f64,
@@ -414,10 +302,6 @@ struct Sample {
 }
 
 /// Every reading of one sitting over one workload.
-///
-/// **Only [`measure`] can build one**, which is what makes "assembled from
-/// two runs" unexpressible: there is no `Sitting::from_rows`, and the rotation
-/// is applied inside `measure` rather than by whoever calls it.
 pub struct Sitting {
     builds: Vec<Build>,
     axis: String,
@@ -426,11 +310,6 @@ pub struct Sitting {
 }
 
 /// The order of the cells in round `round`, as indices into `cells`.
-///
-/// A left rotation by the round number. Over `k` rounds with `c` cells and
-/// `k <= c` every cell occupies `k` distinct slots, so no cell keeps the slot
-/// that carries whatever the previous run left in the caches --
-/// `no_cell_keeps_a_slot` asserts exactly that rather than describing it.
 fn rotation(cells: usize, round: usize) -> Vec<usize> {
     (0..cells).map(|slot| (slot + round) % cells).collect()
 }
@@ -452,13 +331,6 @@ impl Sitting {
     }
 
     /// The same arm of two builds, as a ratio.
-    ///
-    /// **Named apart from [`Sitting::arm_ratio`] on purpose.** This is a
-    /// comparison between two binaries, which Task 4c measured at 7.8% between
-    /// two builds of the same source, and nothing here makes it more reliable
-    /// than that -- interleaving removes the machine's drift from it, not the
-    /// code placement's. A caller that wants the phase's headline ratio wants
-    /// the other method.
     pub fn across_builds(
         &self,
         from: usize,
@@ -489,12 +361,6 @@ impl Sitting {
     }
 
     /// Every individual reading, in the order it was taken.
-    ///
-    /// **Emitted so that an excursion can be looked at rather than inferred
-    /// from a median's max.** One round of one cell here read 2.85% high on an
-    /// instruction count that is otherwise stable to eight significant
-    /// figures; the median absorbed it, which is the reduction working, and
-    /// nothing in the reduced output said which run it was.
     pub fn runs(&self) -> impl Iterator<Item = (usize, &str, Arm, Size, Reading)> {
         self.samples.iter().map(|sample| {
             (
@@ -518,19 +384,11 @@ impl Sitting {
 }
 
 /// A sitting over a workload whose size can be varied.
-///
-/// The wrapper exists so that [`ScaledSitting::per_pass`] is reachable only
-/// for a workload that has two sizes. A fixed workload's sitting is a plain
-/// [`Sitting`] and there is no per-pass method on it to call.
 pub struct ScaledSitting(pub Sitting);
 
 impl ScaledSitting {
     /// One arm's cost per loop pass: the difference between the two lengths,
     /// divided by the difference in passes, per round, reduced.
-    ///
-    /// The fixed cost -- process start, source load, everything before the
-    /// loop -- is identical in the two lengths and cancels exactly. This is
-    /// the quantity a per-clause claim is made of.
     pub fn per_pass(&self, build: usize, arm: Arm, instrument: Instrument) -> Option<Figure> {
         let mut per_round = Vec::new();
         for round in 0..self.0.rounds {
@@ -583,21 +441,9 @@ impl Measured {
 }
 
 /// How many rounds a figure needs before it is one.
-///
-/// Three is the smallest sample with a median that is not also an endpoint, so
-/// a spread computed from fewer is the sample itself rather than a spread.
 pub const MINIMUM_ROUNDS: usize = 3;
 
 /// Runs every cell of one sitting and answers the readings.
-///
-/// **This function owns the rotation, the interleaving and the warm-up**, and
-/// that is the whole reason it takes the builds and the workload rather than
-/// taking results. A caller cannot run the arms in two passes, cannot run the
-/// builds on two occasions, and cannot choose an order that leaves one arm
-/// always first.
-///
-/// One untimed pass over every cell precedes the rounds, so the file cache and
-/// the branch predictors are not part of whichever cell happens to be first.
 pub fn measure(
     builds: &[Build],
     workload: &Workload,
@@ -731,13 +577,6 @@ mod tests {
 
     /// Every program in `bench-programs/` classifies, and a scaled one really
     /// does differ from its own source in nothing but the bound.
-    ///
-    /// Both halves are asserted because either can fail silently. A program
-    /// this cannot classify would be refused at run time with nothing on the
-    /// record saying the harness had stopped covering it, and a rewrite that
-    /// touched a second line would be measuring a different program at the
-    /// large size than at the small one -- which reads exactly like a
-    /// per-pass cost.
     #[test]
     fn the_benchmark_programs_all_classify() {
         let dir = crate::programs_dir();
@@ -805,10 +644,6 @@ mod tests {
     }
 
     /// A fixed workload runs at one size, a scaled one at two.
-    ///
-    /// This is the only place the harness runs a single size, and the type
-    /// that permits it is the one with no per-pass reduction on it -- which is
-    /// what stops the exception from being a way back to a single-size claim.
     #[test]
     fn only_a_fixed_workload_runs_at_one_size() {
         let fixed = Workload::classify("fixed".into(), "say 1\n".into()).unwrap();
@@ -817,12 +652,6 @@ mod tests {
         assert_eq!(scaled.sizes(), &[Size::Small, Size::Large]);
     }
     /// No cell keeps its slot across the rounds.
-    ///
-    /// Asserted on the permutation rather than trusted to the expression: an
-    /// implementation that returned `0..cells` unchanged would still be "a
-    /// rotation" by the loosest reading, and would put the same arm first in
-    /// every round -- which is the ordering artifact the rule exists to
-    /// remove.
     #[test]
     fn no_cell_keeps_a_slot() {
         for cells in 2..=12usize {
@@ -864,10 +693,6 @@ mod tests {
 
     /// A figure prints its spread and its round count, never the median
     /// alone.
-    ///
-    /// The degenerate implementation this rules out is a `Display` that
-    /// forwards to the median's own: it would satisfy "a figure can be
-    /// printed" and would put a bare number into every table.
     #[test]
     fn a_figure_carries_its_own_noise() {
         let figure = Figure::of(&mut [1.0, 1.5, 1.2]).expect("three samples");

@@ -12,86 +12,6 @@
 //! The recorded-output harness: this crate's curated programs, each run once
 //! and required to answer the bytes committed for it, plus a sweep that runs
 //! every population to completion with no body refused.
-//!
-//! # What this was, and what it kept
-//!
-//! **This file used to run every program twice -- once on the tree-walker,
-//! once on the compiled stream -- and require the two to be byte-identical.**
-//! There is one engine now, so that comparison is gone. What it could never
-//! see was work the two engines shared, which was most of it: a promotion
-//! that delegates its tail to the same `Interp` function cannot diverge from
-//! itself. What it did see was anything a compiled op does that the shared
-//! path does not, and that half survives -- because the curated cases carry
-//! the bytes, not just the agreement.
-//!
-//! The bytes are the **oracle's**, recorded per case, which is why they
-//! outlive the engine that used to be checked against them. `ir_recorded_cases`'
-//! own header says so and this harness refuses `REWRITE=1` so that an
-//! expectation cannot be regenerated from the implementation.
-//!
-//! **That the coverage survived is measured, not assumed.** Making
-//! `crate::ir::Op::TraceLiteral`'s emission a no-op -- the `>L>` line a
-//! literal owes, which `Op::Const` produces without entering `eval.rs` and so
-//! must re-emit itself -- reddens [`every_case_file_answers_as_recorded`],
-//! [`every_loop_shape_answers_as_recorded`] and
-//! [`every_branch_shape_answers_as_recorded`]. Three catchers, where the
-//! dual comparison was one. The same shape held for `Op::TraceRead`'s `>V>`
-//! line when the engines were still both here.
-//!
-//! **The oracle differential still cannot see those lines**, because
-//! `tests/support/mod.rs` normalises the region they sit in. That is the
-//! whole reason this file records raw stderr per case: it is the only place
-//! in the tree where a `>L>` or `>V>` line going missing is a failure.
-//!
-//! What is genuinely lost is the *breadth*. The corpus and `ootest`
-//! populations carry no recorded bytes -- they existed to be diffed between
-//! arms -- so for them this file now asserts only that every program runs to
-//! completion and that no body is refused. Their output is compared against
-//! the oracle instead, by the harnesses `REXX_CORPUS_GATE` runs, which is a
-//! stronger comparison the fast suite does not wait for.
-//!
-//! **A refusal is a failure here, and that is new.** A body the compiler
-//! refuses used to run on the tree-walker, so both arms agreed and the
-//! population passed while the engine under test never ran. There is nowhere
-//! to fall back to now, and `chunks_refused` is asserted zero at every level
-//! of this file.
-//!
-//! Which *engine* ran is no longer a question, and how much of a program the
-//! driver drove is still not observable from that program's output. That is
-//! answered where it can be answered honestly, by counting what the driver
-//! did: `src/ir/drive/tests.rs`.
-//!
-//! # There is no REPORT mode here
-//!
-//! `corpus.rs`, `assertions.rs`, `bif_assertions.rs` and
-//! `keyword_assertions.rs` each default to an always-green progress report
-//! and gate only under their own environment variable
-//! (`REXX_CORPUS_GATE`, `REXX_ASSERTIONS_GATE`, `REXX_BIF_GATE`,
-//! `REXX_KEYWORD_GATE`). That is right for them: each measures how far this
-//! crate has got against an external expectation, and how far that is
-//! changes with every task.
-//!
-//! It would be wrong here. A program that stopped printing what it is
-//! recorded as printing is a defect at any point in the phase, with nothing
-//! to forgive and no denominator to report -- so **this file asserts
-//! unconditionally and reads no environment variable at all.** Setting the
-//! four gate variables changes nothing about what it checks, which is
-//! strictly stronger than honouring them: there is no mode in which it exits
-//! 0 having found a difference.
-//!
-//! # The populations, and why one cannot silently vanish
-//!
-//! [`populations`] builds every case once. What is asserted is that the list
-//! is complete, and every such assertion compares against something outside
-//! this file: [`the_harness_reads_every_phase_subset_file`] pins the corpus
-//! half against the corpus directory itself (the shape `corpus.rs`'s own
-//! `the_differential_reads_every_phase_subset_file` uses),
-//! [`the_sweep_runs_every_ootest_suite_a_sibling_harness_runs`] pins the
-//! other half against the suite roots the sibling harnesses in `tests/` name,
-//! and [`every_population_the_tree_calls_for_is_present_and_non_empty`]
-//! requires each to have found programs. A population that silently
-//! extracted nothing, or was deleted along with the line declaring it, would
-//! otherwise pass with a shrunken denominator and no output saying so.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -105,14 +25,6 @@ use rexx_extract::keyword::extract_keyword;
 use rexx_extract::{AssertionRow, Form, extract_assertions, find_test_groups};
 
 /// The brief's own first test: a two-clause program, byte for byte.
-///
-/// Kept beside the population sweep rather than folded into it because it is
-/// the one case a reader can check by eye, and because it is the smallest
-/// program that fails if the driver's outer loop is broken outright.
-///
-/// **It used to run on both engines and compare them.** The bytes below were
-/// the tree-walker's, and the compiled stream had to match them; now they are
-/// simply the answer, and nothing else computes it.
 #[test]
 fn the_smallest_program_answers() {
     let outcome = run(b"n1 = 2\nsay n1 + 3\n".to_vec());
@@ -126,14 +38,6 @@ fn run(text: Vec<u8>) -> Outcome {
 }
 
 /// One inline program with the answer recorded for it.
-///
-/// **These bytes used to be checked twice and now are checked once.** A case
-/// carried the expected output *and* a tree-walker-against-IR comparison,
-/// because neither half alone was enough: the comparison said the engines
-/// agreed and nothing about what either did, and the bytes said what the
-/// program did but would have stayed green with the compiled stream never
-/// selected. Only the first half can survive one engine, and it is the half
-/// that says what the program is supposed to print.
 struct InlineCase {
     name: &'static str,
     program: &'static str,
@@ -143,10 +47,6 @@ struct InlineCase {
     /// is where a re-implementation diverges first, because a `DO`/`END` pair
     /// re-echoes per pass and an `IF`'s `THEN`/`ELSE` markers echo at lines
     /// and indents no `SAY` can observe.
-    ///
-    /// `<PATH>` stands for [`INLINE_PATH`], which a raised condition's middle
-    /// line prints and which no `&'static str` can spell without repeating
-    /// the constant; [`compare_inline_cases`] substitutes it.
     stderr: &'static str,
     /// The exit status, so a case whose whole point is a raised condition
     /// pins the status as well as the message.
@@ -156,12 +56,6 @@ struct InlineCase {
 /// The shapes the loop promotion has to keep: one per `LoopKind` this crate
 /// runs, both `LoopConditional` spellings, both `LEAVE` and `ITERATE`, and two
 /// traced loops.
-///
-/// **Every one of these was written before the compiler emitted anything for
-/// the construct it covers**, when both engines still delegated the clause to
-/// the tree-walker and the case therefore had to pass. That is what makes
-/// them worth keeping: a case written after a promotion cannot say whether it
-/// ever would have failed.
 const LOOP_CASES: &[InlineCase] = &[
     InlineCase {
         name: "controlled",
@@ -296,46 +190,6 @@ const LOOP_CASES: &[InlineCase] = &[
 ];
 
 /// What a branch promotion has to keep, in two kinds.
-///
-/// **Shapes**, which ask what a branch does: an `IF` with an `ELSE` on both
-/// paths and one without on both paths, a nested `IF`, a null `THEN`
-/// consequence, a `SELECT` that matches and two that do not (**7.3**, not the
-/// 93.4 an earlier draft of the plan named -- measured against the oracle,
-/// which reports "All WHEN expressions of SELECT are false; OTHERWISE
-/// expected" at rc 249 for both `SELECT` and `SELECT CASE`), a condition that
-/// is not a logical value, a condition that raises into a `SIGNAL ON` trap, a
-/// branch inside a loop body that leaves it, a `DO` block as a whole true
-/// branch, and a branch in a `CALL`ed label.
-///
-/// **Boundaries**, which ask whether the clause unit is discharged exactly
-/// once where a promoted clause opens one: a `PROCEDURE` reached through a
-/// true branch, which is 17.1 because a branch does not inherit the
-/// first-instruction permission, and two `CALL ON` handlers that fail at an
-/// `IF`'s own clause boundary.
-///
-/// **The second kind is the one a table of shapes does not reach**, and it is
-/// here because a first version of this table had only the first kind and a
-/// promoted `IF` shipped without recording its boundary's failure site: every
-/// shape agreed on both engines and the divergence was in a clause obligation
-/// no shape asks about. A table extended for the next promotion should grow
-/// boundaries, not more shapes.
-///
-/// **`SELECT` opens a clause per listed `WHEN` as well as for its own header**,
-/// so it has more of those boundaries than `IF` does. Its own boundary cases
-/// are: a `CALL ON` handler queued by the `SELECT CASE` expression, which the
-/// header's boundary must deliver before the first `WHEN` is tested; a handler
-/// failing at a listed `WHEN`'s own clause boundary; a handler failing at a
-/// matched `WHEN` body clause's boundary; and a `PROCEDURE` inside a matched
-/// `WHEN` body, which is 17.1 for the same reason a branch's is.
-///
-/// **Every one of these was written before the compiler emitted anything for
-/// the construct it covers**, when both engines still delegated the clause to
-/// the tree-walker and the case therefore had to pass. That is what makes
-/// them worth keeping: a case written after a promotion cannot say whether it
-/// ever would have failed.
-///
-/// Every expected byte below was measured against the oracle before it was
-/// written down, and the two agree on all of them.
 const BRANCH_CASES: &[InlineCase] = &[
     InlineCase {
         name: "if with an else, true path",
@@ -624,12 +478,6 @@ const BRANCH_CASES: &[InlineCase] = &[
         // is not one it owes. So the last member clause's boundary is not the
         // last boundary with work, which is the assumption a flattened
         // construct's single boundary rests on.
-        //
-        // `h` runs at the body clause's boundary and its own `RAISE ... RETURN`
-        // queues `zy`; the boundary that delivers `g` is the one the oracle
-        // runs at the branch's synthetic end. Measured: `G ran 4` then
-        // `after`. Without it `g` ran after `say 'after'` at the wrong `SIGL`,
-        // and in debug the run tripped `clause.rs`'s own assertion.
         name: "a handler that queues again at a matched when's own branch end",
         program: "call on user zx name h\ncall on user zy name g\nselect\n\
                   when 1 = 1 then zq = raiser()\nend\nsay 'after'\nexit\nraiser:\n\
@@ -854,25 +702,6 @@ const CASE_DIR: &str = "tests/ir_recorded_cases";
 /// as a `const` table in this file (the plan's Tech Stack section: a data file
 /// from Task 6 onward, and the three existing tables not retrofitted because
 /// they hold witnesses nothing else catches).
-///
-/// Each stanza is one program, run once, with its answer rendered into the
-/// stanza's own expected block -- so a change shows as a diff rather than as
-/// an assertion message. **Each used to be run twice and the engines compared
-/// inside the callback**; that half went with the second engine, and the
-/// block it renders into did not move.
-///
-/// **The expected bytes are the oracle's, so `REWRITE=1` must not reach
-/// them.** That is `datadriven`'s whole idiom -- regenerate the expectation
-/// from the implementation -- and it is exactly wrong here: it would turn an
-/// oracle-measured expectation into a self-consistent one, in a diff that
-/// looks like any other expectation update. The refusal below is the tripwire,
-/// and the file's own header says how to regenerate a row instead.
-///
-/// A file whose subject is a deliberate deviation from the oracle says so in its
-/// own header and names what its bytes are instead -- `loop-refusals`, whose
-/// three forms the oracle implements and this crate declines. The refusal above
-/// applies to it for the same reason: a regenerated expectation would agree with
-/// whatever the code did.
 #[test]
 fn every_case_file_answers_as_recorded() {
     assert!(
@@ -904,12 +733,6 @@ fn every_case_file_answers_as_recorded() {
 
 /// Runs one case's program and renders its answer in the tagged form the case
 /// files record.
-///
-/// **Every line is tagged, so no line of an expected block can be empty.** A
-/// blank line is what ends such a block, and a program's own output may
-/// contain one; the tag also keeps a trailing blank -- which an `IF` header's
-/// `*-*` echo ends in, and which is compared -- away from the end of a line
-/// that would otherwise look empty.
 fn render_engine(program: &str) -> String {
     let outcome = run(program.as_bytes().to_vec());
     assert_eq!(outcome.chunks_refused, 0, "the compiler refused this body");
@@ -925,11 +748,6 @@ fn render_engine(program: &str) -> String {
 }
 
 /// Runs each case and asserts its recorded bytes.
-///
-/// The `chunks_refused` assertion is not decoration: a body the compiler
-/// refuses used to run on the tree-walker, so a refusal was a silent
-/// downgrade rather than a failure. There is nowhere to downgrade to now, and
-/// this is one of the places that says so.
 fn compare_inline_cases(cases: &[InlineCase]) {
     assert!(!cases.is_empty(), "an empty case table asserts nothing");
     for case in cases {
@@ -967,10 +785,6 @@ fn compare_inline_cases(cases: &[InlineCase]) {
 // tree-walker settles them by removing the side that was wrong, and there is
 // no divergence left to record. The programs themselves are not lost: the
 // oracle harnesses run that shape.
-//
-// `INLINE_PATH` keeps its `ir-dual-case` spelling deliberately: it is
-// substituted into every recorded stderr block that names a source path, so
-// renaming it would rewrite recordings to no purpose.
 const INLINE_PATH: &str = "/nonexistent/ir-dual-case.rex";
 
 /// One program, run once per engine.
@@ -991,30 +805,12 @@ struct Population {
 }
 
 /// The `ootest/ooRexx/base` suites this sweep draws programs from, sorted.
-///
-/// A literal, checked against the tree by
-/// [`the_sweep_runs_every_ootest_suite_a_sibling_harness_runs`]: the sibling
-/// harnesses in `tests/` name the suites they run, on disk, outside this
-/// file, so a suite dropped from here is red rather than a quietly smaller
-/// sweep. That is [`SUBSET_FILES`]'s arrangement exactly, one literal against
-/// one external enumeration, and it is the arrangement a second in-repo list
-/// does not have -- deleting a population and its name from a list beside it
-/// is one edit, not two.
 const OOTEST_SUITES: &[&str] = &["bif", "expressions", "keyword"];
 
 /// The name of the population that is not an `ootest` suite.
 const CORPUS_POPULATION: &str = "corpus";
 
 /// The subset files the corpus population reads, in union order.
-///
-/// The same list `corpus.rs` keeps, for the same reason and pinned the same
-/// way -- see [`the_dual_harness_reads_every_phase_subset_file`]. Duplicated
-/// rather than shared because these are separate integration-test binaries
-/// and neither can `mod` the other.
-///
-/// A literal here and a directory listing on the other side of the
-/// assertion, never two literals: that asymmetry is the whole of what the pin
-/// is worth.
 const SUBSET_FILES: &[&str] = &[
     "phase-4a.txt",
     "phase-4b.txt",
@@ -1037,10 +833,6 @@ fn ootest_dir(suite: &str) -> PathBuf {
 }
 
 /// The phase subset files that exist in the corpus directory, sorted.
-///
-/// Read from the directory rather than listed a second time, so the
-/// assertion cannot be satisfied by a copy of [`SUBSET_FILES`] edited in the
-/// same change.
 fn phase_subset_files_on_disk() -> Vec<String> {
     let dir = corpus_dir();
     let entries =
@@ -1097,11 +889,6 @@ fn form_keyword(form: Form) -> &'static str {
 }
 
 /// A program that establishes one row's state and then `SAY`s each clause.
-///
-/// The same shape `assertions.rs` and `bif_assertions.rs` build, and for the
-/// same reason: `NUMERIC DIGITS`/`FORM` first, always, because a row
-/// evaluated at the wrong precision exercises different code in both arms
-/// rather than the code the row is about.
 fn row_program(digits: u32, form: Form, prelude: &[String], clauses: &[&str]) -> Vec<u8> {
     let mut text = String::new();
     text.push_str(&format!("numeric digits {digits}\n"));
@@ -1162,11 +949,6 @@ fn case_of(row: &AssertionRow, index: usize) -> Case {
 
 /// Every case, one population per entry of [`OOTEST_SUITES`] plus the
 /// corpus.
-///
-/// The `match` has no catch-all: a suite named in that list with no arm here
-/// cannot be turned into programs, and saying so loudly is the only honest
-/// answer -- silently running three populations where four were declared is
-/// the shrunken denominator this file exists to prevent.
 fn populations() -> Vec<Population> {
     let mut out = vec![Population {
         name: CORPUS_POPULATION,
@@ -1231,11 +1013,6 @@ fn keyword_cases(suite: &str) -> Vec<Case> {
 }
 
 /// Runs one case and describes what went wrong with it, if anything.
-///
-/// One `Case` and two runs, so the two arms cannot be given different
-/// programs. Stdout, stderr and exit status are compared **unnormalised**:
-/// there is no oracle here, so `corpus.rs`'s DEVIATION 0 does not apply and
-/// a trace line's own indentation is required to match exactly.
 fn compare(case: &Case) -> Option<String> {
     let outcome = watchdog::run_bounded(&case.path, case.text.clone(), Invocation::none());
     if watchdog::did_not_finish(&outcome) {
@@ -1260,11 +1037,6 @@ fn compare(case: &Case) -> Option<String> {
 }
 
 /// This harness reads **every** phase subset file the corpus has.
-///
-/// `corpus.rs`'s own `the_differential_reads_every_phase_subset_file` has the
-/// argument: a file missing from the list is a phase whose programs are never
-/// run, the sweep stays green over whatever is left, and nothing else here
-/// can see it happen.
 #[test]
 fn the_harness_reads_every_phase_subset_file() {
     assert_eq!(
@@ -1277,13 +1049,6 @@ fn the_harness_reads_every_phase_subset_file() {
 
 /// Every `ootest` suite a sibling harness in `tests/` runs programs from,
 /// read out of those files rather than listed here a second time.
-///
-/// The marker is the path the harnesses build their suite root from, which is
-/// a literal in each of them. `ir_recorded.rs` itself joins the suite name on
-/// separately and so contributes nothing to this set, which is what stops the
-/// answer being a copy of the question -- but the file is skipped by name as
-/// well, so a later edit that spelled the path out here could not quietly
-/// satisfy the pin either.
 fn ootest_suites_sibling_harnesses_read() -> Vec<String> {
     const MARKER: &str = "ootest/ooRexx/base/";
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
@@ -1313,13 +1078,6 @@ fn ootest_suites_sibling_harnesses_read() -> Vec<String> {
 }
 
 /// The sweep runs every `ootest` suite some other harness in this crate runs.
-///
-/// **What this rules out is a two-sided deletion**, which is the one that
-/// happens: a population removed from [`populations`] *and* from the list
-/// beside it leaves every other test in this file green over a sweep missing
-/// thousands of programs. Pinning the list against a second list in the same
-/// file does not rule that out, because both are one edit away. The sibling
-/// harness sources are not.
 #[test]
 fn the_sweep_runs_every_ootest_suite_a_sibling_harness_runs() {
     let on_disk = ootest_suites_sibling_harnesses_read();
@@ -1338,16 +1096,6 @@ fn the_sweep_runs_every_ootest_suite_a_sibling_harness_runs() {
 
 /// Every population the tree calls for is built, and every one of them found
 /// programs.
-///
-/// The expectation is derived, not restated: the corpus population is
-/// required because `rust/corpus/` has phase subset files in it, and each
-/// suite population because a sibling harness runs that suite. So deleting
-/// either kind from [`populations`] is red without a second edit anywhere
-/// being able to hide it.
-///
-/// Non-emptiness is separate from presence and catches the other shape: an
-/// extractor pointed at the wrong directory, or a subset file naming nothing,
-/// builds a population that exists and runs no programs.
 #[test]
 fn every_population_the_tree_calls_for_is_present_and_non_empty() {
     let mut required = vec![CORPUS_POPULATION.to_string()];
@@ -1378,14 +1126,6 @@ fn every_population_the_tree_calls_for_is_present_and_non_empty() {
 
 /// The sweep: every case of every population, run once, to completion, with
 /// no body refused.
-///
-/// **This used to compare two engines byte for byte, and that is what it
-/// lost.** What it keeps is worth keeping on its own: the populations are the
-/// widest set of programs in the tree, and running them says a promotion did
-/// not make one hang, panic, or exceed the stream's index widths. The byte
-/// comparison it can no longer do is done against the oracle instead, by the
-/// harnesses `REXX_CORPUS_GATE` runs over these same programs -- a stronger
-/// comparison that the fast suite does not wait for.
 #[test]
 fn every_population_runs_without_a_refusal() {
     let populations = populations();

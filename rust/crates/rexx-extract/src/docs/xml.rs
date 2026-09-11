@@ -10,28 +10,8 @@
 /*----------------------------------------------------------------------------*/
 
 //! Text-level DocBook scanning, shared by every `oodocs/` extractor.
-//!
-//! **Text-level rather than parsed, and the choice is forced.** `provide.xml`
-//! uses `apos`, `mdash`, `nbsp` and `quot`, none of which `rexxref.ent`
-//! defines; they come only from the external DocBook DTD the DOCTYPE names by
-//! `http` URL, and `oodocs/` is a read-only checkout with neither the DTD nor
-//! a catalog. A local-entity-only parse dies at `&mdash;` on `provide.xml:59`,
-//! long before the first `&nbsp;` at `:849`. So an entity reference reaching
-//! these extractors as literal source text is the contract, not an accident:
-//! [`split_revision_marker`] strips the four revision entities off a title and
-//! `hierarchy`'s indentation rule counts literal `&nbsp;`.
-//!
-//! **Comments are blanked, not deleted.** Every citation these extractors emit
-//! is a `file:line`, so a transform that removed bytes would renumber the
-//! document it is citing. [`blank_comments`] overwrites a comment's bytes with
-//! spaces and leaves its newlines, so offsets and line numbers are unchanged
-//! and a scan of the result cannot see inside a comment.
 
 /// Every byte of every `<!-- ... -->` replaced by a space, newlines kept.
-///
-/// A comment with no closing marker blanks the rest of the file; that is a
-/// malformed document rather than a case to absorb, and it shows up as a
-/// collapsed row set rather than as a silently wrong one.
 pub fn blank_comments(src: &str) -> String {
     let bytes = src.as_bytes();
     let mut out = String::with_capacity(src.len());
@@ -91,10 +71,6 @@ pub struct Section {
 impl Section {
     /// The part of this section that precedes its first nested `<section`, or
     /// the whole body when it nests none.
-    ///
-    /// This is a class section's own prose and its generated class table --
-    /// the span the method-row extractor keys a class's methods by, and the
-    /// span the reading ledger's four-books row was read to.
     pub fn head<'a>(&self, text: &'a str) -> &'a str {
         let body = &text[self.body_start..self.body_end];
         match body.find("<section") {
@@ -105,12 +81,6 @@ impl Section {
 }
 
 /// Every `<section>` in `text`, in document order.
-///
-/// `text` must already have been through [`blank_comments`]: a commented-out
-/// `<section` would otherwise open a span that never closes.
-///
-/// Panics on an unbalanced `</section>`, because a scan that absorbed one
-/// would report a plausible tree for a document it had misread.
 pub fn sections(text: &str) -> Vec<Section> {
     let mut open: Vec<usize> = Vec::new();
     let mut out: Vec<Section> = Vec::new();
@@ -294,10 +264,6 @@ pub fn xincludes(text: &str) -> Vec<(String, usize)> {
 
 /// The four revision-marker entities `rexxref.ent` defines as the empty
 /// string, split off the front of a title.
-///
-/// A text-level extractor sees them verbatim, glued to the name with no
-/// space -- `&added50;size`, `&changed50;send`. Deriving `&ADDED50;SIZE` gives
-/// a name the oracle has on neither arm.
 pub fn split_revision_marker(title: &str) -> (Option<&str>, &str) {
     const MARKERS: &[&str] = &["&added50;", "&added51;", "&added52;", "&changed50;"];
     for marker in MARKERS {

@@ -14,13 +14,6 @@
 //! as its own test binary in addition to being pulled in as a module by
 //! `tiling.rs` and `variants.rs`, compiling this walk standalone for no
 //! reason. Renaming it to `gate_walk.rs` would add that extra binary back.
-//!
-//! The AST walk shared by the Phase 3 gate tests (`tiling.rs`, `variants.rs`).
-//!
-//! Every `match` in this module is exhaustive on purpose: a new `ExprKind`,
-//! `InstructionKind` or `DirectiveKind` variant makes this module fail to
-//! compile, which is what forces the gate tests to learn about it rather than
-//! silently skipping it.
 
 // Each test binary compiles its own copy of this module, and neither binary
 // uses every item: `tiling.rs` never lists the samples, `variants.rs` never
@@ -39,10 +32,6 @@ use rexx_parse::{
 };
 
 /// Calls `f` on each direct child expression of `expr`, in source order.
-///
-/// Reimplements the crate-private `ExprKind::for_each_child` from the public
-/// field surface, because an integration test cannot reach the private one.
-/// An omitted argument has no node and is skipped.
 pub fn children_of<'a>(expr: &'a Expr, f: &mut impl FnMut(&'a Expr)) {
     match &expr.kind {
         ExprKind::Literal(_)
@@ -91,10 +80,6 @@ pub fn children_of<'a>(expr: &'a Expr, f: &mut impl FnMut(&'a Expr)) {
 }
 
 /// Calls `f` on each top-level expression an instruction holds.
-///
-/// Top-level means the expressions the instruction owns directly; recursing
-/// into their children is `children_of`'s job. The match is exhaustive so a
-/// new instruction variant cannot be skipped silently.
 pub fn exprs_of_instruction<'a>(kind: &'a InstructionKind, f: &mut impl FnMut(&'a Expr)) {
     let opt = |e: &'a Option<Expr>, f: &mut dyn FnMut(&'a Expr)| {
         if let Some(e) = e {

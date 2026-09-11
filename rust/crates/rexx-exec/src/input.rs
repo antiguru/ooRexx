@@ -10,70 +10,12 @@
 /*----------------------------------------------------------------------------*/
 
 //! `.input`: one line position, shared by every construct that reads a line.
-//!
-//! # The model is one position, not one read per instruction
-//!
-//! `PULL`, `PARSE PULL` and `PARSE LINEIN` do not each open the console;
-//! they each advance the same `.input` position. Measured, with an empty
-//! queue and four lines on stdin, running `parse pull` / `parse linein` /
-//! `parse pull` / `parse linein` in that order:
-//!
 //! ```text
 //! 1=<line-A> 2=<line-B> 3=<line-C> 4=<line-D>
 //! ```
-//!
-//! The interleaving is the whole point: two different constructs consumed
-//! four consecutive lines, so neither has a position of its own.
-//!
-//! The suite asserts this in exactly one place, and it is not in any `PARSE`
-//! or `PULL` group -- `runtime.objects/environmentEntries.testGroup` sets
-//! `.input~destination(.ArrayStream~of("a", "b", "c", "d", "e"))` and then
-//! runs `pull`, `parse pull`, `parse linein`, `linein()` and
-//! `.input~lineIn` against it, expecting `"A b c d e"`. Five constructs, one
-//! position, and only the first uppercasing. Three of the five are
-//! implemented here; `LINEIN()` is an excluded builtin and `.input~lineIn` is
-//! a message send, so that assertion as written is not a target this crate
-//! can pass. It is the reason the position lives in one place regardless.
-//!
-//! # `PARSE LINEIN` never consults the queue
-//!
-//! This is the finding that makes "each instruction reads the console" wrong
-//! rather than merely imprecise. Measured, the same four clauses with two
-//! entries pushed onto the queue first and the same four-line stdin:
-//!
 //! ```text
 //! 1=<qentry-one> 2=<line-A> 3=<qentry-two> 4=<line-B>
 //! ```
-//!
-//! Adjacent `PARSE PULL` and `PARSE LINEIN` clauses returned values from
-//! different places, and the two `PARSE PULL`s did not advance the `.input`
-//! position at all while the queue still had entries. So `PULL`'s queue is a
-//! store consulted *before* this position, not a buffer in front of it.
-//!
-//! # End of input, and an unreadable input, are the null string
-//!
-//! Measured, empty queue and stdin at `/dev/null`: all four clauses answer
-//! the null string, rc 0, no condition raised, no hang, and repeatably. Past
-//! the last line of a non-empty stdin, the same. There is no reachable state
-//! in which a line read fails.
-//!
-//! **An unreadable descriptor is also the null string, and that was measured
-//! rather than assumed.** With stdin closed (`exec 0<&-`) and with stdin
-//! bound to a *directory* -- so the read itself fails with `EISDIR` rather
-//! than reporting end of file -- the oracle answers the null string, rc 0,
-//! empty stderr, in both cases. So [`Input::read_line`] reporting `None` for
-//! an I/O error is not this crate deciding to swallow one; it is the answer
-//! the oracle gives.
-//!
-//! # The line rule, byte for byte
-//!
-//! A line is the bytes up to and including the next newline, with the
-//! newline removed, and with **one** carriage return removed if it was
-//! immediately before that newline. The oracle does the `\r\n` collapse in
-//! `SysFile::gets` (`common/platform/unix/SysFile.cpp`), which rewrites a
-//! `\r` into a `\n` when the next byte is a `\n` and otherwise leaves the
-//! `\r` as data. Measured, `length` and `c2x` of each line read:
-//!
 //! ```text
 //! " pad \n"          ->  " pad "   (5)   leading and trailing blanks kept
 //! "\n"               ->  ""        (0)
@@ -84,11 +26,6 @@
 //! "y\r"              ->  "y\r"     (2)   at end of file, no pair to collapse
 //! "a\x00b\n"         ->  "a\x00b"  (3)   NUL is data
 //! ```
-//!
-//! The last three rows are what separate this rule from the three plausible
-//! near-misses: stripping every trailing `\r`, stripping a trailing `\r`
-//! whether or not a newline followed, and treating the input as text rather
-//! than bytes.
 
 use std::io::{BufRead, Cursor};
 
@@ -96,12 +33,6 @@ use crate::Interp;
 use crate::invocation::ProgramInput;
 
 /// `.input`'s position: the one line cursor every input construct advances.
-///
-/// Not a `Vec<u8>` with an index, because [`ProgramInput::Stdin`] must be read
-/// incrementally: the oracle reads the console a line at a time, so a program
-/// that reads one line and exits must not have required the whole descriptor
-/// to reach end of file first. `BufRead::read_until` is that read for all
-/// three arms.
 pub(crate) struct Input {
     source: Source,
 }
@@ -130,11 +61,6 @@ impl Input {
     }
 
     /// The next line, or `None` once there is nothing left to read.
-    ///
-    /// `None` covers both end of input and a failed read, which the module
-    /// doc's own measurement is what justifies: the oracle answers the null
-    /// string for a closed descriptor and for one that cannot be read at all,
-    /// exactly as it does past the last line.
     fn read_line(&mut self) -> Option<Vec<u8>> {
         let mut line = Vec::new();
         let read = match &mut self.source {
@@ -165,17 +91,6 @@ impl Input {
 impl Interp {
     /// One line for `PULL` and `PARSE PULL`: the queue's head if the queue has
     /// one, and otherwise the next line of `.input`.
-    ///
-    /// The queue is consulted first and consumed from the **front**, which is
-    /// what makes `PUSH`'s head insertion the LIFO order and `QUEUE`'s tail
-    /// append the FIFO one relative to it -- `queue.rs`'s own module doc
-    /// carries the measured order and named this as the premise its own tests
-    /// could not check.
-    ///
-    /// Reaching `.input` only when the queue is empty is not a fallback bolted
-    /// on: measured, a `PARSE PULL` served from the queue leaves the `.input`
-    /// position untouched, so an adjacent `PARSE LINEIN` still gets the first
-    /// line of stdin (this module's doc has the transcript).
     pub(crate) fn pull_line(&mut self) -> Vec<u8> {
         match self.queue.pop() {
             Some(line) => line,
@@ -203,10 +118,6 @@ mod tests {
     }
 
     /// The module doc's own measured byte table, row for row.
-    ///
-    /// Each case is one buffer and the full list of lines read out of it, so a
-    /// reader that dropped or duplicated a line fails here as well as one that
-    /// mishandled a terminator.
     #[test]
     fn a_line_is_the_bytes_before_the_terminator() {
         let cases: &[(&[u8], &[&[u8]])] = &[
@@ -234,10 +145,6 @@ mod tests {
 
     /// Nothing to read answers nothing, on the first read and on every read
     /// after it.
-    ///
-    /// Repeated rather than asked once, because "the null string, repeatably"
-    /// is the measured property and a reader that answered a line once and
-    /// then something else would satisfy a single call.
     #[test]
     fn an_empty_input_is_exhausted_from_the_start() {
         for input in [ProgramInput::Nothing, ProgramInput::Bytes(Vec::new())] {

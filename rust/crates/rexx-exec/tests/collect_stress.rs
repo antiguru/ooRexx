@@ -13,74 +13,6 @@
 //! `rust/corpus/phase-*.txt` file, which is what [`read_subset`]'s caller
 //! reads -- passes again under collect-on-every-allocation, and the mode is
 //! proved to do something before its pass is believed.
-//!
-//! # The mode did not exist before this task
-//!
-//! `Heap::alloc_with` (as it was named before this task) never collected,
-//! and `Heap::collect` had no caller outside `rexx-core`'s own tests --
-//! this criterion was written as though the mode already existed, but it
-//! had never once run against `rexx-exec`. Task 16 built it:
-//! `rexx-core::Heap::alloc_with_uncollected` is the renamed, never-collects
-//! primitive (renamed so a *new* allocation site written the natural way
-//! announces at the call site that it bypasses the stress hook, rather
-//! than silently doing so); `rexx_exec::Interp::alloc_with` (`lib.rs`) is
-//! the one production entry point every value/stem constructor now calls,
-//! and it collects when [`run_program_collect_every_alloc`] enabled it and
-//! does nothing extra otherwise. **This means criterion 4's pass here is
-//! the first time this mode has ever run against this crate's rooting
-//! discipline, not a re-confirmation of something exercised throughout the
-//! phase.** See the gate document for why that matters and what it does
-//! and does not prove.
-//!
-//! # Collect BEFORE the allocation, not after -- and this was not the first
-//! design tried
-//!
-//! `Interp::alloc_with`'s own doc comment has the full account: an earlier
-//! version collected immediately *after* allocating, which cannot work --
-//! the caller has not had a chance to root the value the allocation is
-//! about to return, so every single allocation swept its own result,
-//! unconditionally, on every program including ones with no rooting
-//! question at stake. Measured at the time: 29 of 29 subset programs
-//! panicked, even `say 1`. Collecting *before* the allocation asks the
-//! right question instead -- is everything already rooted by an *earlier*
-//! call's `push_temp` still reachable now that a *new* allocation is about
-//! to happen -- and that is what this file actually exercises.
-//!
-//! # The negative control
-//!
-//! **Verified by hand, not by an assertion in this file**, because it
-//! means deleting a line of production code, which nothing here should do
-//! on every run. With `eval.rs`'s `eval_arithmetic`'s
-//! `self.roots.push_temp(left_value);` removed (the call that roots the
-//! left operand while the right operand's own evaluation runs and can
-//! allocate arbitrarily), **7 of the 29 subset programs panic** under
-//! [`run_program_collect_every_alloc`] with `to_text`'s "a live value"
-//! (`arith_digits.rex`, `trace_output.rex`, `notation_thresholds.rex`,
-//! `number_identity.rex`, `deep_nested_expr.rex`, `trace_results.rex`,
-//! `mutation_digits_at_render.rex`) -- rebuilt and re-run against a clean
-//! tree afterward, all 29 pass again. A different site, the analogous
-//! `push_temp(right_value)` two lines below, turned out **not** to be a
-//! useful control at this particular call shape: `right_value` is read
-//! exactly once, immediately, by `arith_operand`, with no allocation
-//! between its creation and that read, so nothing here ever asks whether
-//! it survived -- deleting its root is inert for this reason alone, not
-//! because rooting does not matter for it in general. That is why
-//! `left_value`'s is the site named as this criterion's control, not
-//! `right_value`'s: the criterion asks for a site whose deletion a subset
-//! program actually catches, and this is the one that does.
-//!
-//! # Why comparison is against `run_program`, not the oracle, directly
-//!
-//! `tests/corpus.rs` (criterion 1) already establishes, byte for byte,
-//! that `run_program`'s output matches the oracle for every program named
-//! in `phase-4a.txt`. So `stress_output == plain_output` combined with
-//! that already-established fact gives `stress_output == oracle_output`
-//! transitively, without this file needing its own oracle invocation (and
-//! its own `ulimit` wrapper, `LD_LIBRARY_PATH`, missing-binary handling --
-//! all of which `corpus.rs` already owns). It is also the more direct
-//! question this criterion is actually asking: does turning the mode on
-//! change what the interpreter produces, not does the interpreter still
-//! agree with a second program.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -96,14 +28,6 @@ fn corpus_dir() -> PathBuf {
 /// same corpus program. Duplicated from `corpus.rs`/`coverage.rs` rather
 /// than shared: see either file's own module doc for why an integration
 /// test cannot `mod` another test binary.
-///
-/// Takes a slice rather than a single path so that a later phase's own subset
-/// file runs *alongside* the earlier ones rather than replacing them -- see
-/// `coverage.rs`'s own copy of this function for the fuller argument. The
-/// caller below reads every phase subset file the corpus has, which is what
-/// puts a phase's own constructs under the collector at all: a program calling
-/// a builtin lives only in `phase-4c.txt`, and until it was read here every
-/// allocation a builtin makes was outside this harness's reach.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();
@@ -123,17 +47,6 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
 }
 
 /// The subset files this harness reads, in union order.
-///
-/// A named constant rather than a literal at the call site so that
-/// [`the_stress_subset_reads_every_phase_subset_file`] can assert it against
-/// the corpus directory itself. Which files a harness reads is not something
-/// any other check here can see: `coverage.rs`'s
-/// `phase_*_subset_matches_the_committed_list` tests pin each file's
-/// **contents**, and every assertion in
-/// [`the_l0_subset_passes_again_under_collect_on_every_allocation`] holds just
-/// as well over a smaller union. Measured by deleting the subject: with
-/// `phase-4c.txt` removed from this list, the whole workspace stays green and
-/// byte-identical, and the builtins leave the collector's reach silently.
 const SUBSET_FILES: &[&str] = &[
     "phase-4a.txt",
     "phase-4b.txt",
@@ -152,21 +65,6 @@ const SUBSET_FILES: &[&str] = &[
 /// reading them rather than assumed from the names. The direction is the
 /// reassuring one: a program *joining* this set would have had an allocation
 /// silently removed.
-///
-/// The subset programs that allocate nothing, so collect-on-every-allocation
-/// has nothing to fire on.
-///
-/// **Two inline representations put programs here, not one.**
-/// `Interp::literal` inlines a literal spelling a canonical small integer,
-/// and `Interp::text_bytes` inlines any byte string short enough to travel
-/// in the handle. `deep_nested_expr.rex` is the clearest case of the first:
-/// three thousand terms, all of them the literal `1`, and not one allocation
-/// between them. The second is why the list is long -- short strings are
-/// most strings, so a program has to produce a wide one, a stem, or a
-/// non-integral number before the heap hears about it at all.
-///
-/// A program belongs here because of what it contains, not because it was
-/// inconvenient -- see the both-directions assertion at the use site.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "gate-tables/directives/attribute__external__subkeyword.rex",
     "gate-tables/directives/method__external__subkeyword.rex",
@@ -238,11 +136,6 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
-///
-/// Read from the directory rather than listed a second time, so the assertion
-/// below cannot be satisfied by a copy of [`SUBSET_FILES`] that was edited in
-/// the same change -- and so a subset file added later and forgotten here is
-/// red rather than silently unread.
 fn phase_subset_files_on_disk() -> Vec<String> {
     let dir = corpus_dir();
     let entries =
@@ -257,14 +150,6 @@ fn phase_subset_files_on_disk() -> Vec<String> {
 }
 
 /// The stress run reads **every** phase subset file the corpus has.
-///
-/// This is the pin on *which files* the harness reads, which is a different
-/// question from what any of them contains. Without it the third entry of
-/// [`SUBSET_FILES`] can be dropped -- by an edit, or by a merge -- and nothing
-/// in the workspace moves: the run still passes, still reports a non-zero
-/// collection count for every program it did read, and still exercises no
-/// builtin at all, because no program in `phase-4a.txt` or `phase-4b.txt`
-/// calls one.
 #[test]
 fn the_stress_subset_reads_every_phase_subset_file() {
     assert_eq!(
@@ -338,18 +223,6 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
     // exactly the defect this criterion was rewritten to close. Checked
     // per program, not only in aggregate, so one silent program cannot
     // hide behind the rest of the subset's counts.
-    //
-    // The set is committed data rather than an emptiness check, because a
-    // program that allocates nothing is a legitimate state: a program whose
-    // only values are literals spelling canonical small integers allocates
-    // nothing at all, since `Interp::literal` inlines those into the handle
-    // instead of the heap.
-    //
-    // **Both directions.** A program joining this set has had an allocation
-    // silently removed; a program leaving it has gained one. Either is a
-    // change a human should look at, which a one-directional exemption
-    // would not force -- and an exemption nobody can fail is how a
-    // shrinking subset goes unnoticed.
     let mut observed: Vec<&str> = zero_collection_programs
         .iter()
         .map(String::as_str)
@@ -376,23 +249,6 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
 /// that rooting goes: the corpus subset above does not contain the shape,
 /// which is why deleting the `push_temp` left 970 tests and this whole file
 /// green while panicking on `a live value` under a hand-run program.
-///
-/// The shape is a clause whose value is created *and consumed* across an
-/// activation boundary: `return bb() || 'TAIL'`, where `bb` queues the
-/// condition. By the time the boundary runs, the concatenation's own
-/// one-clause temps frame is already popped, and the handler is a nested
-/// activation that allocates -- so the only thing keeping the returned
-/// `ObjRef` alive is the boundary's own `push_temp`.
-///
-/// Three rows because the crate has two `Flow` variants that carry a value
-/// and both must be rooted: a `RETURN` at top level, the same inside a `DO`
-/// body (a different `run_bounded` drives it), and an `EXIT`.
-///
-/// **Checked by deleting its subject**, which is the only thing that makes
-/// this a test rather than a re-run of the plain interpreter: with
-/// `ClauseValue for Flow` returning `None`, all three rows panic on
-/// `a live value` at `value.rs`, and the plain (non-stress) run of the same
-/// three programs still passes, so nothing but the collector sees it.
 #[test]
 fn a_clause_value_survives_the_handler_its_boundary_runs() {
     let rows: [(&str, &str, &str); 3] = [
@@ -439,21 +295,6 @@ fn a_clause_value_survives_the_handler_its_boundary_runs() {
 
 /// The command line's argument string survives every allocation the program
 /// makes.
-///
-/// It is an `ObjRef` created before the first clause runs and read by a clause
-/// that may be the program's last, and `Interp::call_context` is **not** walked
-/// by the collector -- so the only thing keeping it reachable is the
-/// `push_temp` `execute` takes before `Interp::run`. Nothing else in the tree
-/// can see that: the plain interpreter never collects, and every differential
-/// harness runs a program short enough that a swept value would still be
-/// sitting in freed-but-untouched memory.
-///
-/// **Checked by deleting its subject.** With `execute`'s `push_temp(value)`
-/// removed, this test panics at `value.rs`'s `a live value` while
-/// `tests/input_oracle.rs` and the whole plain suite stay green.
-///
-/// The program allocates repeatedly before reading the argument, and reads it
-/// last, so a collect between the two has somewhere to happen.
 #[test]
 fn a_command_line_argument_survives_collect_on_every_allocation() {
     let text = "do i = 1 to 20\n  zj = 'filler' i\nend\nparse arg zp\nsay '['zp']'\n";
@@ -476,23 +317,6 @@ fn a_command_line_argument_survives_collect_on_every_allocation() {
 
 /// `VALUE`'s compound-write path (`builtin/datatype.rs`) holds the *old*
 /// value across the allocation its own write performs.
-///
-/// `Interp::stem_get`'s "no object at all" branch (`stem.rs`) derives a
-/// fresh, slot-less `Body::Text` for the read-before-write answer when the
-/// stem has never been touched, and `Interp::stem_set` then allocates that
-/// stem's *first* object on the identical branch -- so without rooting the
-/// old value first, that second allocation's own pre-sweep can collect the
-/// first with nothing left pointing at it.
-///
-/// **Checked by deleting its subject**, the `push_temp` `value`'s
-/// `SymbolKind::CompoundName` arm now takes: with it removed, the fourth
-/// row panics at `value.rs`'s `a live value`, and the plain (non-stress)
-/// run of the same program still passes, so nothing but the collector
-/// sees it. The first three rows are the adjacent successes that pin the
-/// defect to *this* write path rather than to compounds, `VALUE`, or
-/// reads in general -- a direct compound assignment, a stem already
-/// carrying a default, and `VALUE`'s own read-only form all stay green
-/// under the mutant.
 #[test]
 fn values_compound_write_roots_the_old_value_before_the_stems_first_allocation() {
     let rows: [(&str, &str, &str); 4] = [
@@ -545,34 +369,6 @@ fn values_compound_write_roots_the_old_value_before_the_stems_first_allocation()
 }
 
 /// A loop's own per-pass roots survive the pass they belong to.
-///
-/// `Interp::loop_advance`'s `Controlled` arm opens a temps frame of its own
-/// and pops it once `bind_control` has written the new control value into the
-/// variable's storage. Both halves are load-bearing and the frame's boundary
-/// is not obvious from the site: the value is created by `Interp::number`,
-/// then *rendered* for a trace line and then written through a path that can
-/// resolve a compound tail -- both of which allocate, and either of which can
-/// collect.
-///
-/// **The rows that catch it are the ones where the loop's own values are heap
-/// objects.** A counted loop over small integers puts a tagged immediate in
-/// the control variable and allocates nothing per pass, so it is green under
-/// any placement of the frame; a `BY 0.5` control is a `Number` on the arena
-/// and a `cv.j` control resolves a tail key on every write. Rows 1 to 3 are
-/// the adjacent successes that pin the failure to the second shape rather
-/// than to loops in general.
-///
-/// **Checked by deleting its subject, twice, and by the harder check
-/// beside it.** Moving the `pop_frame` to before `bind_control`, and
-/// separately removing the `push_temp` of the bound value, each panic row 5
-/// on `a live value`; the plain run of the same programs stays green under
-/// both, so nothing but the collector sees it. And the whole workspace suite
-/// **without this test** stays green under both mutations as well -- the
-/// 10,461-case dual-engine sweep included, run with the stress mode on for
-/// every case -- so these rows add coverage rather than merely being able to
-/// fail.
-///
-/// Every expected string is the oracle's own, measured on `build/bin/rexx`.
 #[test]
 fn a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop() {
     /// The fourth column is whether the row allocates at all. A counted loop
@@ -651,26 +447,6 @@ fn a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop() {
 
 /// A method body a `REPLY` left owed still reads its own variables when it
 /// resumes, with a collection at every allocation in between.
-///
-/// **The window this is about exists nowhere else.** Every other activation's
-/// variables are in an open slot frame for the whole of its life, and
-/// `RootSet::iter` walks that frame. A parked one has no frame: its values are
-/// copied out and handed to `RootSet::park`, its arguments and receiver with
-/// them, and the sender then runs on and allocates. So a value the park
-/// forgot is swept between the two halves rather than merely retained.
-///
-/// The program is built so that every value the resumed half prints is wide
-/// enough to need a heap slot -- a short one rides in the handle and would
-/// survive a missing root by not being an object -- and so that the sender
-/// allocates after the reply, which is what makes the collection happen inside
-/// the window rather than before it.
-///
-/// **Checked by taking its subject away**, one mutation at a time: removing
-/// `RootSet::iter`'s `self.parked` chain, and removing `park_reply`'s
-/// `context.object_roots(&mut anchor)`. Each panics here on `a live value` on
-/// both engines, and under each the plain (non-stress) run of this same
-/// program still prints all five lines correctly on both engines -- so nothing
-/// but the collector sees either one.
 #[test]
 fn a_parked_reply_keeps_its_variables_across_a_collection() {
     let program = concat!(
@@ -714,23 +490,6 @@ fn a_parked_reply_keeps_its_variables_across_a_collection() {
 
 /// A running activation's `RexxContext` survives a collection, with one at
 /// every allocation between the two sends that reach it.
-///
-/// **Nothing but `Activation::context_object` holds it here.** `.context`
-/// stores the object on the activation and hands back the stored one on every
-/// later ask, so the first send's expression temp is gone long before the
-/// second send resolves the same handle -- which makes this the one shape
-/// where `Interp::object_roots` is the only root the object has.
-///
-/// **Checked by taking its subject away**: with `object_roots`' `out.extend`
-/// over the running and suspended activations removed, this fails on both
-/// engines, while the plain run of the same program still prints all three
-/// lines.
-///
-/// **It is not the only witness**, and does not claim to be: the same
-/// mutation reddens [`the_l0_subset_passes_again_under_collect_on_every_allocation`]
-/// on `lang/rexx_context.rex`, `lang/rexx_context_arity.rex`,
-/// `lang/rexx_context_edges.rex` and `lang/package_namespace.rex`. What this
-/// adds is a five-line program that names the root it is about.
 #[test]
 fn a_running_activation_keeps_its_context_object_across_a_collection() {
     let program = concat!(
@@ -765,30 +524,6 @@ fn a_running_activation_keeps_its_context_object_across_a_collection() {
 
 /// A method body that assigns over `SELF` still reads its exposed variables
 /// back, with a collection at every allocation in between.
-///
-/// **An instance keeps its variable pools in its own body**, so a collection
-/// reaches an exposed value only by tracing the instance, and `SELF` is an
-/// ordinary variable a body may assign to. The clobber happens twice: once
-/// inside `INIT`, while `~new` is still building the object and only
-/// `native_new`'s own temporary holds it, and once in an ordinary send.
-///
-/// The exposed value is wider than a handle can carry, because a short one
-/// rides in the handle and would survive a missing root by not being a heap
-/// object -- measured, with a five-byte value this row stays green under the
-/// first mutation below.
-///
-/// **Checked by taking its subject away**, one mutation at a time: with
-/// `Body::trace`'s `Instance` arm no longer tracing the pools, and with
-/// `native_new`'s `push_temp` removed, this row fails on both engines, the
-/// first on `a live value` and the second on `an exposed variable's owner is
-/// a rooted Body::Instance`. Under the second the plain (non-stress) run of
-/// the same program still agrees with the oracle on all three descriptors, so
-/// nothing but the collector sees it.
-///
-/// **What it adds over the subset run above, measured:** nothing for this
-/// program, which `corpus/phase-5b.txt` also names, so the subset row reddens
-/// under the same mutations. What it adds is the pinned stdout and the
-/// non-zero collection count for this shape on their own.
 #[test]
 fn a_method_that_assigns_over_self_keeps_its_exposed_variables() {
     let program = concat!(
@@ -832,16 +567,6 @@ fn a_method_that_assigns_over_self_keeps_its_exposed_variables() {
 
 /// A weak reference does not keep its referent alive, and keeps answering one
 /// that something else does.
-///
-/// This is the only place either half is observable: the collector is what
-/// clears a reference, and no differential harness collects. **The dropped and
-/// the held reference are read in the same program after the same
-/// collections**, so an implementation that ignored weakness entirely fails
-/// the first line and one that cleared unconditionally fails the second.
-///
-/// Measured against the tree before `WeakReference~value` existed: the program
-/// stops at the first `~value` with `rexx-exec: method "VALUE" of class
-/// "WeakReference" is not implemented (Phase 5)` at exit 120.
 #[test]
 fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
     let program = concat!(

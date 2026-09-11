@@ -10,47 +10,16 @@
 /*----------------------------------------------------------------------------*/
 
 //! Message selectors, interned while a source is parsed.
-//!
-//! `LanguageParser::parseMessage` interns the upcased message name into the
-//! parse's own string pool -- `messagename = commonString(messagename->
-//! upper())` (`parser/LanguageParser.cpp:3391`) -- and `commonString` hands
-//! back the pool's copy when the spelling is already there
-//! (`parser/LanguageParser.cpp:2269`-`2280`). The pool is a field of the
-//! parser (`parser/LanguageParser.hpp:481`), so its scope is one parse, which
-//! is [`SelectorTable`]'s scope here.
 
 use std::collections::HashSet;
 use std::sync::Arc;
 
 /// One message name, as the parse that read it holds it.
-///
-/// **Identity, not just equality.** Two occurrences of the same spelling in
-/// one parse are one `Selector` sharing one allocation, so
-/// [`Selector::same`] answers the question the oracle answers by comparing
-/// two `RexxString *`. Two spellings that differ are never the same
-/// allocation.
-///
-/// `Arc` rather than `Rc`, and the requirement is the tree's and not this
-/// type's: `crates/rexx-parse/tests/deep.rs` parses on a thread of its own
-/// for the stack, which needs `Program` to be `Send`.
-///
-/// Derefs to the bytes, so a reader that wants the name reads it here rather
-/// than through a table: the name is already upcased and already carries the
-/// bracket spelling `[]` for the collection form.
-///
-/// **Comparable across parses by value and not by identity.** A `Selector`
-/// from one [`SelectorTable`] and one from another can hold equal bytes at
-/// different allocations, so `==` answers for both and [`Selector::same`]
-/// answers only within the parse that interned them.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Selector(Arc<[u8]>);
 
 impl Selector {
     /// The name's bytes.
-    ///
-    /// Spelled as a method as well as through [`Deref`](std::ops::Deref) so
-    /// that a struct field or a call argument of type `&[u8]` can be written
-    /// without relying on a coercion site.
     pub fn bytes(&self) -> &[u8] {
         &self.0
     }
@@ -71,11 +40,6 @@ impl std::ops::Deref for Selector {
 }
 
 /// One parse's pool of message names.
-///
-/// A set rather than a name-to-index map: the [`Selector`] a caller gets back
-/// carries the bytes, so nothing has to index back into the pool, and the
-/// pool's only job is to keep the one allocation per spelling alive and
-/// findable while the parse runs.
 #[derive(Default)]
 pub(crate) struct SelectorTable(HashSet<Arc<[u8]>>);
 
@@ -86,11 +50,6 @@ impl SelectorTable {
 
     /// The pool's selector for `name`, adding it if the pool has no such
     /// spelling.
-    ///
-    /// The parser hands in an already-upcased name, which is where the
-    /// oracle upcases it too (`parser/LanguageParser.cpp:3391`): interning
-    /// the raw spelling would put `length` and `LENGTH` in the pool as two
-    /// entries for one method.
     pub(crate) fn intern(&mut self, name: &[u8]) -> Selector {
         if let Some(found) = self.0.get(name) {
             return Selector(Arc::clone(found));
@@ -108,9 +67,6 @@ mod tests {
     /// **The interning constraint's own test** (D24): one spelling is one
     /// allocation within a parse, so a resolution keyed on a selector's
     /// identity answers the same for every site that names the method.
-    ///
-    /// A pool that returned a fresh allocation per call would satisfy `==`
-    /// on both rows and fail the first.
     #[test]
     fn one_spelling_interns_to_one_allocation_and_two_spellings_do_not() {
         let mut pool = SelectorTable::new();

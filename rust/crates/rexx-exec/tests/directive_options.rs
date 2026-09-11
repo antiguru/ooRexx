@@ -10,22 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! `corpus/lang/directive_options*.rex` against the oracle, on both engines.
-//!
-//! **Kept beside `corpus/phase-5c.txt`, which names the same programs.** What
-//! this binary has that the differential does not: `stderr` compared **raw**
-//! rather than through DEVIATION 0's normalisation, both engines rather than
-//! the default one, [`CONCURRENTLY_TRACED`]'s scope guard, and the LOSTDIGITS
-//! table below, which drives programs of its own.
-//!
-//! Three descriptors compared separately and raw, `directive_options_trace`
-//! included: its `>I>`/`<I<` lines name the program's own path, which is the
-//! same absolute path on both sides.
-//!
-//! **One program's stderr is compared as a multiset of lines rather than as a
-//! sequence**, per Deviation 7 in `docs/superpowers/plans/phase-4-exclusions.txt`:
-//! `REPLY` under a package trace setting has two threads writing trace lines and
-//! their interleaving is not a specified observable. [`CONCURRENTLY_TRACED`] is
-//! the scope, and it is the only relaxation applied anywhere in this file.
 
 mod support;
 
@@ -40,12 +24,6 @@ const PREFIX: &str = "directive_options";
 
 /// The programs whose stderr is compared as a multiset of lines rather than as
 /// a sequence, and the only ones -- Deviation 7's scope.
-///
-/// Measured 2026-09-03: thirty oracle runs of this program answered two
-/// distinct stderr orderings from one path and five from another, all of them
-/// the same multiset of lines, while both crate engines answered one ordering
-/// thirty times out of thirty. `REPLY` runs the rest of the method on another
-/// thread and its trace lines interleave with the main thread's.
 const CONCURRENTLY_TRACED: &[&str] = &["directive_options_trace_reply.rex"];
 
 /// The word whose presence in a program's source is what
@@ -64,11 +42,6 @@ fn corpus_dir() -> PathBuf {
 
 /// Every program this binary runs, read from the directory rather than
 /// listed here.
-///
-/// **Derived so a program added later cannot be silently unrun**, which is
-/// the same reason `corpus.rs`'s `phase_subset_files_on_disk` reads its
-/// directory: a committed list edited in the same change as the file it
-/// forgets would satisfy an assertion against itself.
 fn programs() -> Vec<PathBuf> {
     let dir = corpus_dir().join(SUBDIR);
     let entries =
@@ -114,11 +87,6 @@ fn run_crate(path: &Path) -> Outcome {
 
 /// Every `::OPTIONS` program answers the oracle byte for byte on stdout,
 /// stderr and exit status, on both engines.
-///
-/// **Unconditional, not gated.** A `::OPTIONS` this crate parsed and then
-/// ignored would leave `digits()` at 9 and an unset read answering its own
-/// name -- rc 0 with empty stderr on both counts, so nothing else here would
-/// go red for it.
 #[test]
 fn every_directive_options_program_answers_the_oracle() {
     let oracle = locate();
@@ -167,15 +135,6 @@ fn every_directive_options_program_answers_the_oracle() {
 
 /// The multiset comparison discards the ordering of stderr lines and nothing
 /// else.
-///
-/// **Every row is a mutation of one transcript**, so each says which single
-/// property survives sorting: a reordering is accepted, and a changed,
-/// missing, added or duplicated line, or a lost final newline, is still
-/// caught. Without the last of those the split would be `str::lines` and a
-/// truncated stderr would pass.
-///
-/// The unlicensed half of each row is what stops the relaxation from leaking:
-/// the same reordering is a difference when the flag is off.
 #[test]
 fn the_multiset_comparison_discards_ordering_and_nothing_else() {
     let base = b"     4 *-* say 1\n       >>>   \"1\"\n     5 *-* say 2\n       >>>   \"2\"\n";
@@ -223,15 +182,6 @@ fn the_multiset_comparison_discards_ordering_and_nothing_else() {
 
 /// [`CONCURRENTLY_TRACED`] names exactly the programs whose source mentions
 /// [`SECOND_THREAD`], in both directions.
-///
-/// A program that gains a `REPLY` later would flake under the sequence
-/// comparison at whatever rate the machine's scheduling gives it; this makes
-/// that a red test and a deliberate decision instead. The other direction
-/// catches a name that has been renamed or deleted out from under the list,
-/// which would leave the licence claiming a scope it no longer has.
-///
-/// The tail assertion is the one that keeps the licence narrow: at least one
-/// program is compared as a sequence, so the strict path is still exercised.
 #[test]
 fn the_licensed_list_names_exactly_the_programs_that_can_trace_from_two_threads() {
     let found = programs();
@@ -276,16 +226,6 @@ fn the_licensed_list_names_exactly_the_programs_that_can_trace_from_two_threads(
 
 /// `::OPTIONS LOSTDIGITS SYNTAX` raises 98.972 on an operand carrying more
 /// digits than the precision in force, matching the oracle byte for byte.
-///
-/// The rows that must **not** raise are the point of the table rather than
-/// padding: a gate firing on the directive alone rather than on a real digit
-/// loss would raise on `1 + 1`, which the oracle answers cleanly. Each
-/// `Raises` row also asserts the oracle still carries 98.972, so a row cannot
-/// agree over a program that stopped losing digits.
-///
-/// The two `Diverges` rows are the LOSTDIGITS **condition**, which is a
-/// separate gap: `SIGNAL ON LOSTDIGITS` arms nothing here, and a bare `DO n`
-/// answers 26.2 where the oracle's escalation preempts its own.
 #[test]
 fn lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else() {
     #[derive(PartialEq, Debug)]
@@ -424,11 +364,6 @@ fn lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else() {
         ),
         // The two this task did not close, each loud on both sides or silent
         // on both -- named so a change to either is visible here.
-        //
-        // `signal-on-trap`: the trap disables the escalation, so the check
-        // declines and this crate answers the rounded number where the oracle
-        // runs the handler. That is the LOSTDIGITS **condition** gap, which
-        // predates `::OPTIONS` and is reachable with no directive at all.
         (
             "signal-on-trap",
             "numeric digits 3\nsignal on lostdigits\nsay 1.23456789 + 0\nexit\nlostdigits:\nsay 'trapped'\n",

@@ -1,12 +1,4 @@
 //! Clause splitting, pinned against `build/bin/rexx` with `trace r`.
-//!
-//! `trace r` prints one `*-*` line per clause holding exactly the clause's
-//! span, so every span expectation here was read off the interpreter rather
-//! than reasoned about. A loop re-traces its body per iteration, so the number
-//! of `*-*` lines is not the number of clauses and no test here counts them.
-//!
-//! In-crate rather than under `tests/`, because `Clause` and `split_clauses`
-//! are `pub(crate)` and an integration test is a separate crate.
 
 use crate::token::TokenKind;
 use crate::{ProgramSource, SourceKind, Tag, Token, scan};

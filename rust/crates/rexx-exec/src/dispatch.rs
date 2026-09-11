@@ -11,86 +11,6 @@
 
 //! Message dispatch: the object model this crate resolves against, the
 //! `resolve`/`invoke` pair, and the one chokepoint every invocation passes.
-//!
-//! **`resolve` and `invoke` are two steps, not one fused send** (D24). They
-//! are separate functions with separate signatures for the same reason
-//! `Interp::resolve_call` and `Interp::invoke_call` are: the resolution's
-//! inputs and the invocation's are different, and a construct that has one
-//! already in hand must be able to enter the other on its own.
-//! [`Interp::send_message`] is their composition and not a third step --
-//! `exec_call`'s relation to the call pair exactly. What it adds around them
-//! is the search order's tail: a name `resolve` does not find reaches
-//! [`Interp::unknown_or_nomethod`], which forwards to the receiver's own
-//! `UNKNOWN` or raises the condition beneath it.
-//!
-//! **Resolution is dynamic and nothing caches it** (D28). Every send resolves
-//! against the receiver's *current* behaviour; `crate::ir::CallSite` is a
-//! classic-call cache and no send goes near it. `ClassGraph` carries a
-//! per-behaviour monotonic version for a future cache to guard on, and this
-//! module reads it nowhere.
-//!
-//! # The security seam (D45, site one of two)
-//!
-//! The oracle sends a protected method through
-//! `RexxObject::processProtectedMethod` (`ObjectClass.cpp:976`), which asks
-//! `getEffectiveSecurityManager()->checkProtectedMethod` before running
-//! anything. There is no manager object in this phase and nothing installs
-//! one; what this module owes is the **place** one would hook, and the
-//! guarantee that there is exactly one of them.
-//!
-//! `PROTECTED` is what routes through it. [`seam::clear`] asks
-//! [`Interp::method_is_protected`] and, for a method that is, puts the
-//! manager's question at [`Interp::check_protected_method`] -- so the seam is
-//! where the one access scope the oracle asks a manager about is decided,
-//! rather than a place nothing reaches. With no manager the answer is
-//! permission, so no program can tell the branch from its absence:
-//! `tests/dispatch_seam.rs` pins the placement lexically and says so.
-//!
-//! # The access scopes
-//!
-//! `PRIVATE` and `PACKAGE` are decided in [`Interp::resolve`] and not at the
-//! seam, because the oracle refuses the **lookup** rather than the
-//! invocation: `messageSend` drops the method it found and enters
-//! `processUnknown` with the refusal's own error code
-//! (`ObjectClass.cpp:876`-`:889`, `:904`), so a refused private send reaches
-//! the receiver's own `UNKNOWN` if it has one. Measured, oracle rc 0: a class
-//! whose `m` is `PRIVATE` and which also answers `UNKNOWN` prints
-//! `unknown saw M` for `.K~m` from outside. [`Miss`] is that error code and
-//! [`Interp::check_private`] and [`Interp::check_package`] are the two
-//! checks.
-//!
-//! **What the type system carries**: [`seam::Cleared`] has a private field
-//! and is neither `Copy` nor `Clone`, and every function that runs a resolved
-//! method takes one by value, so none of them runs without a value produced
-//! inside [`mod seam`](seam). The compiler refuses the token's tuple-struct
-//! constructor written anywhere else, `error[E0423]`.
-//!
-//! **What it does not carry** is how many producers that module holds: a
-//! second `fn` inside it is as legal as the first. `tests/dispatch_seam.rs`
-//! is what bounds that, by reading the module's items rather than by
-//! counting two token spellings, and its own module doc states what the
-//! reading still cannot see.
-//!
-//! # The native method table
-//!
-//! [`NATIVE_METHODS`] names the primitive methods this phase implements. A
-//! name in a class's dictionary with no row here **resolves** and then fails
-//! loudly on invocation, naming the owning phase -- D37's rule for a native
-//! entry point, applied to a native method: the oracle's own answer is a
-//! working method, so a Rexx condition here would let a program expecting one
-//! pass against a gap.
-//!
-//! # The invocable kinds, and the one clearance
-//!
-//! [`Invocable`] is what a resolved [`rexx_classes::MethodId`] names, one
-//! variant per table [`Interp::invocable`] reads, and its own doc says what
-//! separates them. [`Interp::invoke`] picks between them **after** the seam
-//! has been passed: a kind with a body of its own takes the [`Cleared`] token
-//! by value, and a kind `invoke` answers inline is answered by a function
-//! that already holds one. [`Interp::enter_method_body`] is written here
-//! rather than beside the other activation machinery in `run.rs` for exactly
-//! that reason: `Cleared` is private to this module, so a function that takes
-//! one has to live here.
 
 use std::rc::Rc;
 
@@ -110,38 +30,16 @@ use crate::run::MAX_ACTIVATION_DEPTH;
 use crate::{Failure, Interp, Loud};
 
 /// The dispatch security seam.
-///
-/// Its own module so that [`Cleared`]'s field is private to the smallest
-/// possible scope: nothing outside these few lines can build one, whatever
-/// else `dispatch.rs` grows.
 mod seam {
     use super::{Failure, Interp, MethodId, ObjRef};
 
     /// Evidence that a message send passed the dispatch security seam.
-    ///
-    /// Zero-sized, with a private field. [`clear`] is the only expression
-    /// that can produce a value of this type, and every function that runs a
-    /// resolved method takes one, so nothing runs without the seam having
-    /// been passed first.
     pub(super) struct Cleared(());
 
     /// **The dispatch chokepoint (D45, site one).** Every method invocation
     /// passes here, whatever kind [`super::Invocable`] finds it to be, and a
     /// manager installed in a later phase gets its hook in this function's
     /// body.
-    ///
-    /// The oracle asks its manager only for a *protected* method:
-    /// `RexxObject::messageSend` routes one through
-    /// `processProtectedMethod` (`classes/ObjectClass.cpp:886`-`:889`), and
-    /// every other method reaches `method->run` with nothing asked
-    /// (`:896`-`:899`). So the question is asked here, which is the one place
-    /// every invocation passes, and [`Interp::check_protected_method`] is the
-    /// manager's own half of it.
-    ///
-    /// `PRIVATE` and `PACKAGE` are **not** asked here, and that is measured
-    /// rather than chosen: they refuse the *lookup* and fall through to the
-    /// receiver's own `UNKNOWN`, so [`Interp::resolve`] is where they belong.
-    /// [`super::Miss`] carries the reading behind that.
     pub(super) fn clear(
         interp: &mut Interp,
         receiver: ObjRef,
@@ -189,27 +87,10 @@ mod context;
 mod package;
 
 /// One primitive method's implementation.
-///
-/// The [`Cleared`] parameter is the seam's own enforcement and is never read
-/// by an implementation -- see this module's doc comment.
-///
-/// **`None` is a method that produced no value**, which is `OREF_NULL` off a
-/// C++ method body: measured, `.environment~put('v','q')` is rc 0 as a whole
-/// clause and 91.999 at rc 165 under `say`, exactly as a `::METHOD` body
-/// ending in a bare `return` is.
 type NativeMethod =
     fn(&mut Interp, Cleared, ObjRef, &[Option<ObjRef>]) -> Result<Option<ObjRef>, Failure>;
 
 /// What a resolved [`MethodId`] runs.
-///
-/// The kinds are not interchangeable and are kept apart rather than
-/// hidden behind one closure. What separates them is what [`Interp::invoke`]
-/// has to do around the code: a declared argument count for the send to
-/// check, a `Compiled method` traceback line to contribute, an activation to
-/// push. `Native` and the implemented half of `External` are the kinds that
-/// run compiled code: both take a count check and both contribute the
-/// traceback line, and they differ in which error the count check raises,
-/// which is measured on [`Raised::too_many_external_arguments`].
 enum Invocable {
     Native(NativeEntry),
     Rexx(crate::InstalledMethodBody),
@@ -239,13 +120,6 @@ struct NativeEntry {
 }
 
 /// How many arguments an entry admits.
-///
-/// **Where the count comes from differs by entry kind.**
-/// For a [`NativeEntry`] it is the second half of that method's `AddMethod`
-/// row in `memory/Setup.cpp`; for a `native::NativeExternal` it is the `N` of
-/// the `RexxMethod<N>` that defines the entry point, and the refusal is
-/// 88.922 from inside `NativeActivation` rather than the 93.902 named below.
-/// [`Raised::too_many_external_arguments`] carries that pair measured.
 #[derive(Copy, Clone)]
 enum Arity {
     /// A numeric count. For a primitive method `CPPCode::run` refuses more
@@ -265,16 +139,6 @@ enum Arity {
 
 /// The primitive methods every run of this crate implements, as (class id,
 /// method name, declared parameter count, implementation).
-///
-/// [`SETUP_METHODS`] is the other table and is registered only while the
-/// interpreter's own library is being run.
-///
-/// The class id is the `~id` string `rexx_classes::native_classes` registers,
-/// and the method name is looked up in that class's **own** dictionary, so a
-/// row here fixes the method's scope: `HASMETHOD` at `Object` is the one
-/// entry a `String` receiver reaches too, because the flattened cascade
-/// copies `Object`'s entry (its `MethodId` included) into `String`'s
-/// behaviour.
 static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `ArrayClass::getRexx` under both of its names, `memory/Setup.cpp:713`
     // and `:715`, at `A_COUNT` in each row -- the same both-names-one-function
@@ -973,12 +837,6 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 
 /// The primitive methods bound to a class's **class** dictionary rather than
 /// its instance one -- `memory/Setup.cpp`'s `AddClassMethod` rows.
-///
-/// A separate table because the two dictionaries are separate: a name in one
-/// is not the name in the other, and [`ObjectModel::build`] resolves a row
-/// here through `lookup_class_method`. `Setup.cpp`'s `AddMethod` on `.Class`
-/// stays in [`NATIVE_METHODS`], because a class object's messages resolve
-/// against `.Class`'s *instance* behaviour by way of the metaclass merge.
 static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `AddClassMethod("New", RexxObject::newRexx, A_COUNT)`,
     // `memory/Setup.cpp:514`, reached by every class whose own class
@@ -1107,19 +965,6 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 
 /// The two methods `Setup.cpp` puts on `.Class` for the image build and
 /// `removeSetupMethods` deletes before the image is saved (D39).
-///
-/// **Registered only when the model is built for the library bootstrap**
-/// ([`ObjectModel::bootstrap_for_library`]), because the class dictionary
-/// only holds their names then: `rexx_classes::native_classes` leaves them
-/// out and `native_classes_for_bootstrap` puts them in, and a row here
-/// naming a method the registry does not answer is a panic at model-build
-/// time.
-///
-/// **Neither has an oracle transcript** and neither can get one: they do not
-/// exist in any shipped interpreter, so every refusal below is this crate's
-/// own judgement rather than a measurement. Each is [`Loud`] for that
-/// reason -- a plausible Rexx condition here would be a wrong answer nobody
-/// could check.
 static SETUP_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
         "Class",
@@ -1137,22 +982,9 @@ static SETUP_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 
 /// `~defaultName` for an array -- `RexxObject::defaultName`'s article rule
 /// (`classes/ObjectClass.cpp:1760`) applied to `.Array`'s id.
-///
-/// This is what `stringValue()` answers for an array: `RexxObject::stringValue`
-/// sends `OBJECTNAME` (`classes/ObjectClass.cpp:1157`), which falls through to
-/// `defaultName()` for an object nothing has named. Measured, `a =
-/// .Array~superClasses`: `a~objectName` and `a~defaultName` are both `an
-/// Array`.
-///
-/// A constant rather than a lookup because every array this crate builds is an
-/// instance of `.Array` itself: `native_superclasses` is the one constructor.
 pub(crate) const ARRAY_DEFAULT_NAME: &[u8] = b"an Array";
 
 /// The message the search order's last step sends -- `GlobalNames::UNKNOWN`.
-///
-/// Upper case because every name a dictionary is keyed by is: the parser
-/// upcases the name in a send, and `::METHOD unknown` is installed upcased,
-/// so a lookup spelled any other way finds nothing.
 const UNKNOWN: &[u8] = b"UNKNOWN";
 
 /// The message name a `~run` body is entered under --
@@ -1162,10 +994,6 @@ const UNKNOWN: &[u8] = b"UNKNOWN";
 const UNNAMED_METHOD: &[u8] = b"*UNNAMED*";
 
 /// The entry a `Message` object keeps the value its send answered under.
-///
-/// On the object rather than beside it in [`Interp::message_outcomes`]
-/// because the collector walks a `Body::Native`'s entries and does not walk
-/// that table.
 const MESSAGE_RESULT: &[u8] = b"RESULT";
 
 /// The message a class construction sends the class it just built --
@@ -1192,20 +1020,9 @@ pub(crate) const ACTIVATE: &[u8] = b"ACTIVATE";
 
 /// The class model this crate dispatches against, and the implementations
 /// its `MethodId`s name.
-///
-/// One struct rather than separate `Interp` fields because the table is
-/// derived from the registry: the `MethodId`s in `natives` are minted by
-/// `classes`, so a registry built without the matching table would resolve
-/// every name and implement none.
 pub(crate) struct ObjectModel {
     classes: ClassRegistry,
     /// Indexed by [`MethodId`]'s own number rather than keyed by it.
-    ///
-    /// **The ids are dense**: `ClassRegistry` mints them from a counter, and
-    /// this table is built once at bootstrap from the static `NATIVE_METHODS`
-    /// tables, so the vector is as long as the highest id a native method
-    /// reaches and `None` at every id belonging to something else. A hash of
-    /// any kind is wasted work on a key that is already an index.
     natives: Vec<Option<NativeEntry>>,
     /// The classes a value this crate builds answers to, and `.Class`,
     /// resolved once at bootstrap. These are handles into `classes` and not a
@@ -1247,28 +1064,12 @@ pub(crate) struct ObjectModel {
 impl ObjectModel {
     /// The hash-collection class a `DO OVER` target may be, for a caller
     /// asking whether an object is one.
-    ///
-    /// **`StringTable` and not `Directory`**, which is a narrowing rather
-    /// than an omission and is measured. A `StringTable` this crate hands out
-    /// -- `.methods`, `.routines`, `.resources`, a package's
-    /// `~publicClasses` -- holds exactly what the running program's own
-    /// directives and sends put in it, so its membership is the oracle's:
-    /// measured, a file with three unattached `::METHOD`s answers `3` for
-    /// both. `.environment` and `.local` are `Directory`s this crate models
-    /// as a subset of the oracle's, so iterating one would differ in
-    /// *membership* and not only in order: measured, `.local` iterates ten
-    /// entries on the oracle and none here.
     pub(crate) fn iterable_collection_class(&self) -> ObjRef {
         self.string_table
     }
 
     /// `Setup.cpp`'s native class set, plus the lookup from each implemented
     /// method's minted identity to its code.
-    ///
-    /// **Built on first use and not in `Interp::new`**, through
-    /// `Interp::object_model`'s `get_or_insert_with`, which is its only
-    /// caller. `Interp::bootstrap_library` assigns the model itself, so what
-    /// this builds is the model of an `Interp` that never ran the bootstrap.
     fn bootstrap(mint: &mut dyn FnMut() -> ObjRef) -> ObjectModel {
         ObjectModel::build(rexx_classes::native_classes(mint), &[])
     }
@@ -1440,25 +1241,6 @@ enum Primitive {
     String,
     /// A receiver whose whole value is in the handle's integer tag
     /// ([`Decoded::SmallInt`]) -- **D24's `SmallInt` behaviour arm**.
-    ///
-    /// **It changes nothing today, and it is not a cheaper route either.**
-    /// The arm that answers [`Primitive::String`] for the handle's inline
-    /// text decides from the tag too, so the split buys no arena read and no
-    /// class-range test that was being paid before it; and every consumer
-    /// folds this variant straight back into `String`'s answer
-    /// ([`Interp::receiver_behaviour`], [`native_class`]). Measured against
-    /// the oracle, a small integer and the same digits as a string are
-    /// indistinguishable: `12345~class~id` is `String` for both
-    /// (`CLASS_CREATE_SPECIAL(Integer, "String", RexxIntegerClass)`,
-    /// `classes/IntegerClass.cpp:2066`), and so are `~length`, `~isA`,
-    /// `~hasMethod` and `~reverse`.
-    ///
-    /// **What it is, then, is the named place** D24 asks for: a phase that
-    /// gives a tagged integer behaviour of its own changes this arm's mapping
-    /// and touches neither the inline-text receiver nor the arena's.
-    /// `a_small_integer_receiver_takes_the_small_int_arm` is what keeps the
-    /// two halves from collapsing back together -- a distinct kind, one
-    /// shared behaviour.
     SmallInt,
     /// `.nil`, measured: `.nil~class~id` is `Object`.
     Object,
@@ -1473,39 +1255,14 @@ enum Primitive {
     Method,
     /// A `Body::Native` whose class is `.Routine` -- what a `.ROUTINES` entry
     /// holds. Measured, `.routines~r~class` is `The Routine class`.
-    ///
-    /// **Kept apart from [`Primitive::Method`] beside it** for
-    /// [`Primitive::StringTable`]'s reason: the two classes hold different
-    /// names and the traceback says which was the receiver's -- measured,
-    /// `.routines~r~annotation()` reports `Compiled method "ANNOTATION" with
-    /// scope "Routine".` where `.K~method("M")~annotation()` reports
-    /// `"Method"`.
     Routine,
     /// A `Body::Native` whose class is `.Directory` -- `.environment` and
     /// `.local`. Measured, `.environment~class~id` is `Directory`.
-    ///
-    /// **Identity and not descent, unlike [`Primitive::StringTable`] beside
-    /// it**: [`native_directory_new`] gives a subclass an instance body
-    /// rather than a native one.
     Directory,
     /// A `Body::Native` whose class is `.StringTable` or a subclass of it --
     /// `.methods`, `.routines` and `.resources`, and `.TraceObject~new`.
     /// Measured, `.methods~class` is `The StringTable class` and
     /// `.TraceObject~new~class~id` is `TraceObject`.
-    ///
-    /// **Carries the object's own class**, because a subclass answers its own
-    /// method set: measured, oracle rc 0,
-    /// `.TraceObject~new~hasMethod("makeString")` is `1` where
-    /// `.StringTable~new~hasMethod("makeString")` is `0`.
-    ///
-    /// **Separate from [`Primitive::Directory`] even though every method
-    /// either answers is the same C++ function**, because `Directory` and
-    /// `StringTable` are separate behaviours: the traceback names the
-    /// receiver's own class, measured -- `.methods~at()` reports `Compiled
-    /// method "AT" with scope "StringTable".` where `.environment~at()`
-    /// reports `"Directory"`.
-    ///
-    /// **`.context` is not this**; it is [`Primitive::Context`] below.
     StringTable(ObjRef),
     /// A `Body::Native` whose class is `.RexxContext` -- what `.context`
     /// answers. Measured, `.context~class` is `The RexxContext class`.
@@ -1518,45 +1275,17 @@ enum Primitive {
     /// pre-built instance `.RexxInfo` answers (`Setup.cpp:1735`-`:1737`).
     /// Measured, `.RexxInfo~class~id` is `RexxInfo` and
     /// `.RexxInfo~isA(.Class)` is `0`.
-    ///
-    /// **The class object itself takes [`Primitive::Class`] and not this
-    /// arm**, whatever route puts it in a program's hands:
-    /// [`Interp::receiver_kind`] asks `ObjRef::class_id` before it reaches
-    /// the arena at all, so a class handle never gets as far as the
-    /// `Body::Native` guards below.
-    ///
-    /// `RexxInfo`'s instance behaviour here is `Setup.cpp`'s whole set, the
-    /// position `.Package` above is in: a name it does not hold is a name
-    /// the running oracle does not hold either, so 97.1 is the answer and
-    /// not a guess -- measured, `.RexxInfo~id` is
-    /// `97.1 Object "a RexxInfo" does not understand message "ID"`. A name
-    /// it *does* hold with no [`NativeMethod`] behind it is this crate's own
-    /// gap and refuses loudly, because the oracle answers those: measured,
-    /// `.RexxInfo~digits` is `9` and `.RexxInfo~languageLevel` is `6.06`.
     RexxInfo,
     /// A `Body::Native` whose class is `.Message` -- what `~start` and
     /// `~startWith` answer. Measured, oracle rc 0: `o~start('M', 5)~class~id`
     /// is `Message` and `~string` is `a Message`.
-    ///
-    /// `Message`'s instance behaviour here is `Setup.cpp`'s whole set, the
-    /// position `.Package` above is in, so a name it does not hold is 97.1
-    /// and a name it holds with no [`NativeMethod`] behind it is this crate's
-    /// own gap.
     Message,
     /// A `Body::VarRef` -- the object a `>name` term answers. Measured,
     /// `vr = 5; o = >vr; say o~class~id` is `VariableReference`.
-    ///
-    /// **Its behaviour hides `=`, `==`, `\\=`, `\\==`, `<>` and `><`**
-    /// (`memory/Setup.cpp:1307`-`:1312`), so those names miss and reach
-    /// `UNKNOWN`, which forwards them to the referenced value.
     VariableReference,
     /// A `Body::Stem` -- what a bare stem read answers and what `.Stem~new`
     /// builds. Measured, oracle rc 0: `s. = 'd'; o = s.; say o~class~id` is
     /// `Stem`.
-    ///
-    /// **Its string value is the stem's default, not `a Stem`**, which is
-    /// `classify_string_conversion`'s `Body::Stem` arms rather than this one;
-    /// `~objectName` and `~defaultName` are `a Stem` all the same, measured.
     Stem,
     /// The receiver **is** a class object, so its messages resolve against
     /// that class's own class behaviour rather than against any class's
@@ -1568,12 +1297,6 @@ enum Primitive {
     /// and the behaviour it was given at construction (D58). Measured,
     /// `::class K` and `o = .K~new`: `o~class~id` is `K` and `o~string` is
     /// `a K`.
-    ///
-    /// **The two are separate answers**, which is what the pair is for:
-    /// `class` is what `~class` and the default rendering read, and
-    /// `behaviour` is what every message resolves against. `~define` on `K`
-    /// after this object exists moves the class's own behaviour and leaves
-    /// this one where it was.
     Instance {
         class: ObjRef,
         behaviour: BehaviourHandle,
@@ -1581,16 +1304,6 @@ enum Primitive {
 }
 
 /// The behaviour a receiver's messages resolve against.
-///
-/// An enum rather than a bare `ObjRef`, because a class object's messages
-/// are answered by its **class** behaviour while every other receiver's are
-/// answered by its class's **instance** behaviour, and those dictionaries
-/// hold different names for the same class.
-///
-/// The instance arm names the dictionary itself rather than the class, so
-/// that every reader of it -- the lookup, `~hasMethod`, the scope-override
-/// check, `SUPER`, the `UNINIT` question -- answers from the behaviour the
-/// receiver actually holds and none of them has to restate D58 for itself.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Behaviour {
     Instance {
@@ -1603,11 +1316,6 @@ enum Behaviour {
 }
 
 /// One message term's own parts, as the two call sites already hold them.
-///
-/// A struct rather than a positional parameter list: `super_class` and
-/// `assigned` are both `Option<&Expr>` and `cascade` is a bare `bool`, so a
-/// positional signature invites exactly the transposition that would show up
-/// as wrong output rather than as a compile error.
 #[derive(Copy, Clone)]
 pub(crate) struct MessageTerm<'a> {
     pub(crate) target: &'a Expr,
@@ -1627,50 +1335,12 @@ pub(crate) struct MessageTerm<'a> {
 }
 
 /// The sending side of a send, which the receiver does not carry (D53).
-///
-/// **One input per access scope that reads one.** `PRIVATE` compares
-/// the *caller's own receiver* against the receiver of the send --
-/// `RexxObject::checkPrivate` reads `activation->getReceiver()`
-/// (`classes/ObjectClass.cpp:616`), allows the send outright when the two are
-/// the same object (`:617`-`:620`), and refuses when the caller has no
-/// receiver at all (`:622`-`:626`). `PACKAGE` compares the method's package
-/// against the *caller's* -- `RexxObject::checkPackage` reads
-/// `activation->getPackage()` (`classes/ObjectClass.cpp:671`) and refuses
-/// when there is no calling activation (`:665`-`:669`).
-///
-/// **A parameter of [`Interp::resolve`] rather than something read off
-/// `Interp` inside it.** The oracle takes both off `getTopStackFrame()`, so
-/// both are properties of the activation the send is written in, and a
-/// resolution asked for outside a send -- by [`Interp::send_message`]'s own
-/// callers, or by a test -- has to be able to say which caller it is asking
-/// as, and a caller with neither half is a state both of the oracle's checks
-/// refuse rather than a state they cannot be asked about.
-///
-/// The C++'s spelling of `PRIVATE`'s input is the caller's **receiver**, not
-/// the caller's method scope: `:628` reads the scope off the *method* being
-/// resolved, which [`Resolution`] already carries.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct Caller {
     /// The receiver of the call in progress, from the calling convention.
-    ///
-    /// `None` where the code the send is written in was not itself entered
-    /// by a message send, which is `RexxActivation::getReceiver`'s
-    /// `OREF_NULL` (`execution/RexxActivation.cpp:2342`-`:2349`). An
-    /// `INTERPRET` fragment answers its enclosing activation's receiver there
-    /// (`:2344`-`:2347`) and answers it here for the same reason: a fragment
-    /// runs in the activation that interpreted it, so the calling convention
-    /// it reads is that activation's.
     receiver: Option<ObjRef>,
     /// The package the sending code was translated in, which is the running
     /// activation's program.
-    ///
-    /// **A variant for "no activation" rather than an absent package**, which
-    /// is the state `checkPackage` refuses before it reads anything
-    /// (`classes/ObjectClass.cpp:665`-`:669`). [`crate::plan::Package`] has
-    /// the other side of the same rule: an absent [`crate::plan::ProgramId`]
-    /// there would mean the interpreter's own package, so the two absences
-    /// would be one type with opposite meanings and a `PACKAGE` check
-    /// comparing them directly would call `.Array`'s package "no package".
     package: CallerPackage,
 }
 
@@ -1688,9 +1358,6 @@ pub(crate) enum CallerPackage {
 
 impl Caller {
     /// The receiver of the call the send is written in.
-    ///
-    /// Read by [`Interp::check_private`], which compares it against the
-    /// receiver of the send.
     pub(crate) fn receiver(self) -> Option<ObjRef> {
         self.receiver
     }
@@ -1704,14 +1371,6 @@ impl Caller {
 
 /// One method's access scope and protection, as `MethodClass`'s own flags
 /// carry them (`classes/MethodClass.hpp:115`-`:118`).
-///
-/// **Only a method the oracle calls *special* has one of these.**
-/// `messageSend` reads the flags at all only inside
-/// `if (method_save->isSpecial())` (`classes/ObjectClass.cpp:876`), which is
-/// `protected || private || package`, so a method with neither an access
-/// keyword nor `PROTECTED` is dispatched without any of this being consulted.
-/// `Interp::special_methods` holds a row for exactly the special ones and
-/// [`Interp::access_scope_of`] answers `None` for every other method.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct AccessScope {
     /// `PRIVATE` or `PACKAGE`. `Access::Default` or `Access::Public` for a
@@ -1721,27 +1380,10 @@ pub(crate) struct AccessScope {
     /// asks about.
     pub(crate) protected: bool,
     /// The package the method's own directive was translated in.
-    ///
-    /// `PACKAGE`'s other input: `MethodClass::isSamePackage` asks the
-    /// method's code object, not its scope class
-    /// (`classes/MethodClass.hpp:147`), so it is the package of the file the
-    /// `::METHOD` was written in.
     pub(crate) package: Package,
 }
 
 /// Why a send's own lookup produced no method to run.
-///
-/// The oracle's `error` local in both `messageSend` overloads
-/// (`classes/ObjectClass.cpp:872`, `:930`). An access check that refuses does
-/// not raise: it replaces the found method with nothing and sets this, and
-/// `processUnknown` carries it to `reportNomethod` only for a receiver whose
-/// behaviour answers no `UNKNOWN` (`:904`, `:1009`).
-///
-/// **So a refusal here is not a failure the caller reports**, and the
-/// difference is observable. Measured, oracle rc 0: `.K~m` where `m` is
-/// `::METHOD m CLASS PRIVATE` and the class also declares
-/// `::METHOD unknown CLASS` prints `unknown saw M with 0`, and the same
-/// program with the `UNKNOWN` removed is the 97.2 report at rc 159.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum Miss {
     /// The receiver's behaviour answers no method of that name -- 97.1.
@@ -1755,11 +1397,6 @@ pub(crate) enum Miss {
 
 /// What a resolved message send names: the method, and the class its
 /// definition came from.
-///
-/// The scope is not bookkeeping. It is the class whose `~id` the oracle
-/// prints in a native method's traceback line (`Compiled method "LENGTH"
-/// with scope "String".`), and it is where a further scope-override send
-/// from inside that method would start.
 #[derive(Copy, Clone)]
 pub(crate) struct Resolution {
     pub(crate) scope: ObjRef,
@@ -1768,18 +1405,6 @@ pub(crate) struct Resolution {
 
 impl Interp {
     /// The [`Caller`] a send written in the running activation resolves as.
-    ///
-    /// **The receiver is read out of the calling convention**
-    /// ([`crate::CallContext`]) rather than out of the running activation,
-    /// and that is where the oracle reads it too: `checkPrivate` asks
-    /// `getTopStackFrame()->getReceiver()` (`classes/ObjectClass.cpp:612`,
-    /// `:616`), which is the frame's own receiver and is `OREF_NULL` for a
-    /// routine or program frame. The convention is saved and restored around
-    /// every call, so a send inside a method reads that method's receiver and
-    /// a send after it returns reads the caller's again.
-    ///
-    /// The package is the running activation's program, which is the package
-    /// the sending clause was translated in.
     pub(crate) fn caller(&self) -> Caller {
         Caller {
             receiver: self.call_context.receiver,
@@ -1803,11 +1428,6 @@ impl Interp {
 
     /// Stores a freshly built object model and files the access scopes of
     /// the natives `Setup.cpp` declares private.
-    ///
-    /// **The natives are recorded here rather than at their `NATIVE_METHODS`
-    /// row** because the identity a row is filed under is the registry's
-    /// mint, and only the registry that minted it knows which rows came from
-    /// an `AddPrivateMethod`.
     pub(crate) fn install_object_model(&mut self, model: ObjectModel) {
         debug_assert!(
             self.special_methods.is_empty(),
@@ -1832,27 +1452,6 @@ impl Interp {
     }
 
     /// The rendering of a handle the arena does not hold.
-    ///
-    /// **A class identity is what reaches this today**, because
-    /// `rexx_core::CLASS_SLOT_BASE` puts it past every slot the arena can
-    /// allocate, so `Heap::resolve` answers `None` for it
-    /// (`rexx-core/src/heap.rs:292`-`299`) with no test of its own. Anything
-    /// else arriving here is a handle whose object is gone, which is the
-    /// `a live value` tripwire the callers used to carry alone -- so a later
-    /// phase adding another handle kind outside the arena has to widen the
-    /// assertion below rather than inherit it.
-    ///
-    /// **`Interp::to_text` and `Interp::try_text` reach this through the
-    /// `None` their existing `Heap::get` already produces**, which is what
-    /// keeps a class object off their hot path. A guard testing every heap
-    /// operand instead measured 73 instructions per pass of the `strings`
-    /// benchmark axis, on a program that names no class at all.
-    ///
-    /// **`~objectName` and not `~defaultName`**, which is what
-    /// `RexxObject::stringValue` sends (`classes/ObjectClass.cpp:1157`): a
-    /// class object something has renamed renders under the new name.
-    /// Measured, oracle rc 0: after `.K~objectName = "renamed"`, `say .K`
-    /// prints `renamed`.
     pub(crate) fn not_in_arena(&self, value: ObjRef) -> &[u8] {
         assert!(self.heap.is_class(value), "a live value");
         self.class_object_name(value)
@@ -1871,10 +1470,6 @@ impl Interp {
 
     /// `~defaultName` for a class object -- `The <id> class` -- borrowed out
     /// of the registry that minted the identity.
-    ///
-    /// **`&self`, which is why the string is stored rather than built.**
-    /// `Interp::try_text` hands back a borrow of the value's own bytes and has
-    /// nowhere to put a freshly formatted one.
     pub(crate) fn class_default_name(&self, class: ObjRef) -> &[u8] {
         self.object_model
             .as_ref()
@@ -1886,15 +1481,6 @@ impl Interp {
 
     /// `behaviour->getOwningClass()->getId()` for any receiver: the id of the
     /// class whose behaviour answers this object's messages.
-    ///
-    /// `None` where this phase builds no behaviour for the receiver, which is
-    /// [`Interp::receiver_kind`]'s own refusal.
-    /// `RexxInternalObject::isBaseClass` (`classes/ObjectClass.hpp`): whether
-    /// the value's class is the interpreter's own class of that name rather
-    /// than a user subclass wearing it.
-    ///
-    /// It is what `requestArray` and the hash protocols branch on, so it lives
-    /// here rather than in either caller.
     pub(crate) fn is_base_class(&mut self, value: ObjRef) -> bool {
         let Some(class) = self.class_of_value(value) else {
             return true;
@@ -1917,10 +1503,6 @@ impl Interp {
 
     /// `~id` for a class object -- the name it was declared with, case
     /// unmodified.
-    ///
-    /// `&self`, for the reason [`Interp::class_default_name`] is: the caller
-    /// is a `&self` reader that has a class handle and no way to reach the
-    /// registry through [`Interp::classes`].
     pub(crate) fn class_id_text(&self, class: ObjRef) -> &str {
         self.object_model
             .as_ref()
@@ -1965,25 +1547,6 @@ impl Interp {
 
     /// Which native class a value answers to, or the value's own shape when
     /// this phase builds no class for it.
-    ///
-    /// Every heap shape that has no class here gets a refusal naming itself
-    /// rather than a shared one, so whichever task makes one reachable as a
-    /// receiver gets a message that says which.
-    ///
-    /// A **class object** is the one heap-tagged handle that answers, and it
-    /// answers as itself rather than as an instance of anything: its
-    /// behaviour is that class's class behaviour, which is where `::METHOD
-    /// ... CLASS` installs.
-    ///
-    /// An **array** answers, because `~superClasses` puts one in a program's
-    /// hands. A name `.Array`'s behaviour here does not hold is the oracle's
-    /// 97.1. `CoreClasses.orx:93` and `:97`
-    /// are the same `~inherit` and both run: measured, `.String~superClasses`
-    /// names `Comparable` and `.Array~superClasses` names
-    /// `OrderedCollection` on this crate and on the oracle alike. What is
-    /// missing is the mixin's own methods and not the edge -- measured,
-    /// `'abc'~compareTo('abd')` is `-1` on the oracle and a Phase 5 refusal
-    /// here.
     fn receiver_kind(&self, receiver: ObjRef) -> Result<Primitive, &'static str> {
         match receiver.decode() {
             Decoded::Nil => Ok(Primitive::Object),
@@ -2022,13 +1585,6 @@ impl Interp {
                     // name it does not hold is a name the running oracle does
                     // not hold either, and 97.1 is the right answer rather than
                     // a guess.
-                    //
-                    // The prologue leaves `.Package` alone, and the claim is as
-                    // wide as the pattern behind it: case-insensitive
-                    // `\.package\b` over `interpreter/RexxClasses/`'s
-                    // `CoreClasses.orx` and `StreamClasses.orx` matches nothing
-                    // in either file, where the same pattern for `.array`
-                    // matches in both.
                     Body::Native(native)
                         if self.object_model.as_ref().map(|model| model.package)
                             == Some(native.class()) =>
@@ -2121,13 +1677,6 @@ impl Interp {
 
     /// The behaviour a value's messages resolve against, or the value's own
     /// shape when this phase builds no class for it.
-    ///
-    /// **Only [`Primitive::Instance`] carries a stored handle**; every other
-    /// receiver's is read off its class here, and the two answer alike for
-    /// them because the `REXX_DEFINED` lock refuses every mutator a program
-    /// could send to a class this crate builds. Measured, oracle rc 158:
-    /// `.String~define('ZORK', .methods~z)` is 98.985, "User additions are
-    /// not allowed to the REXX language classes".
     fn receiver_behaviour(&mut self, receiver: ObjRef) -> Result<Behaviour, &'static str> {
         let kind = self.receiver_kind(receiver)?;
         let model = self.object_model();
@@ -2169,20 +1718,6 @@ impl Interp {
 
     /// **Step one of a send** (D24): which method a name reaches on this
     /// receiver and from which scope, or why the send has none to run.
-    ///
-    /// This is the whole of what `RexxObject::messageSend` does before
-    /// `method->run`: [`Interp::lookup`], then the access check its
-    /// `isSpecial()` branch performs (`classes/ObjectClass.cpp:874`-`:894`).
-    /// A method the check refuses is not an error raised here -- see
-    /// [`Miss`], which is the oracle's own `error` local.
-    ///
-    /// `caller` is the sending side, which the access scopes read and the
-    /// receiver does not carry -- [`Caller`] has each one's C++ site.
-    ///
-    /// Nothing here is cached, per D28. The answer depends on the receiver's
-    /// behaviour as it stands at this instant, and a `~define` between two
-    /// sends of the same name at the same call site must change the second
-    /// one's answer.
     pub(crate) fn resolve(
         &mut self,
         receiver: ObjRef,
@@ -2213,13 +1748,6 @@ impl Interp {
     /// `RexxBehaviour::methodLookup`, or `RexxObject::superMethod(msgname,
     /// startscope)` for a `target~name:scope` override, which searches only
     /// the starting scope itself and the scopes folded in ahead of it.
-    ///
-    /// **The lookup with no access check on it**, which is the shape
-    /// `processUnknown` uses for its own `UNKNOWN` lookup
-    /// (`classes/ObjectClass.cpp:1004`). Measured, oracle rc 0: a class whose
-    /// only method is `::METHOD unknown CLASS PRIVATE` answers `.K~zork` from
-    /// outside the class, where the same directive under any other name is
-    /// refused.
     pub(crate) fn lookup(
         &mut self,
         receiver: ObjRef,
@@ -2267,10 +1795,6 @@ impl Interp {
     /// What `receiver`'s own dictionary answers for `name`: `None` when it
     /// holds no entry under it, `Some(None)` for a name it hides, and
     /// `Some(Some(method))` for one it defines.
-    ///
-    /// **Gated on [`Interp::object_methods`]**, so a program that never
-    /// sends `SETMETHOD` pays one load and one branch per send --
-    /// [`Interp::special_methods`]'s shape, taken for its reason.
     pub(crate) fn own_method_entry(
         &self,
         receiver: ObjRef,
@@ -2288,11 +1812,6 @@ impl Interp {
     /// Installs one entry in `receiver`'s own dictionary, or takes one away
     /// -- `RexxObject::defineInstanceMethod` (`classes/ObjectClass.cpp:2297`)
     /// and `deleteInstanceMethod` (`:2328`).
-    ///
-    /// A receiver with no dictionary of its own to hold one is loud rather
-    /// than silent, for [`native_object_name_set`]'s reason: the oracle
-    /// copies the behaviour of whatever it is given, and forgetting the
-    /// definition would be a wrong answer where the oracle keeps it.
     fn write_object_method(
         &mut self,
         receiver: ObjRef,
@@ -2335,15 +1854,6 @@ impl Interp {
     /// `RexxObject::checkUninit` (`classes/ObjectClass.cpp:2604`), which both
     /// mutators run: an object that answers `UNINIT` after the change is
     /// registered for finalization and one that does not is taken back out.
-    ///
-    /// Both directions are measured, oracle rc 0:
-    /// `self~setMethod('UNINIT', 'say "one-off uninit"')` prints from the
-    /// termination sweep and from a forced collection alike, and
-    /// `self~setMethod('UNINIT')` on a class that declares one prints
-    /// nothing.
-    ///
-    /// Asked only for the one name, which is what makes it free for every
-    /// other definition.
     fn check_uninit(&mut self, receiver: ObjRef, name: &[u8]) {
         if !name.eq_ignore_ascii_case(UNINIT) {
             return;
@@ -2358,27 +1868,6 @@ impl Interp {
     /// `RexxObject::validateScopeOverride` (`classes/ObjectClass.cpp:1950`):
     /// whether `scope` was folded into the behaviour this receiver resolves
     /// against, which is `behaviour->hasScope(scope)`.
-    ///
-    /// **The behaviour is the receiver's own, so a class object asks its
-    /// class side.** `.k~tag:.Array` and `'abc'~length:.Array` are both
-    /// 93.957 and reach that answer through different dictionaries.
-    ///
-    /// A receiver whose class this phase does not build answers `false`, so
-    /// the send is refused with the oracle's own 93.957 rather than
-    /// resolving from a scope nothing here can search. Every receiver
-    /// [`Interp::receiver_kind`] rejects is already refused by
-    /// [`Interp::send_message`] before the message name is looked up.
-    /// `RexxObject::validateScopeOverride` as the send itself runs it.
-    ///
-    /// The oracle asks it inside `RexxObject::messageSend`'s scope-override
-    /// overload (`classes/ObjectClass.cpp:921`), whose comment says FORWARD
-    /// relies on that placement, so every site here that hands
-    /// [`Interp::send_message`] a start scope asks it first.
-    ///
-    /// `target` is the object the send is made to, which for a `FORWARD` is
-    /// the `TO` value rather than `SELF` -- measured, `forward to (t) class
-    /// (.Other)` reports `Target object "a TGT"`. `Ok(())` for a send that
-    /// names no scope.
     pub(crate) fn validate_scope_override(
         &mut self,
         target: ObjRef,
@@ -2409,10 +1898,6 @@ impl Interp {
 
     /// The scope a name would resolve to on this receiver, for a caller that
     /// reports what a send it is not making would have failed with.
-    ///
-    /// `None` is 97.1's case -- the behaviour does not answer the name --
-    /// and `Some(id)` names the class the entry came from, which is what
-    /// [`Loud::native_method`]'s message carries.
     fn lookup_for_refusal(&mut self, receiver: ObjRef, name: &[u8]) -> Option<String> {
         let resolution = self.lookup(receiver, name, None)?;
         Some(self.classes().id_string(resolution.scope).to_string())
@@ -2420,16 +1905,6 @@ impl Interp {
 
     /// The access scope and protection of a resolved method, for the methods
     /// that have one.
-    ///
-    /// **The emptiness test is what keeps an ordinary send off the search.**
-    /// The oracle reads `isSpecial()` off a flag word on the method object,
-    /// and this crate has no method object to hang one on, so the question
-    /// costs a lookup wherever it is asked at all. A program that declares no
-    /// `PRIVATE`, `PACKAGE` or `PROTECTED` method has no row and pays one
-    /// load and one branch per send instead.
-    ///
-    /// [`Interp::special_methods`] carries why the rows are searched rather
-    /// than hashed, with the measurement.
     fn access_scope_of(&self, method: MethodId) -> Option<AccessScope> {
         // One bounds check and one load. The table is indexed by the id, so
         // there is no order to get wrong and no search to check against a
@@ -2450,22 +1925,6 @@ impl Interp {
 
     /// The security manager's `checkProtectedMethod`, asked for a method the
     /// send has found to be `PROTECTED`.
-    ///
-    /// **Nothing installs a manager in this phase and the answer is
-    /// permission.** `SecurityManager::checkProtectedMethod` returns `false`
-    /// -- "not handled, run the method" -- from its first statement when
-    /// there is no manager object (`execution/SecurityManager.cpp:175`), and
-    /// `processProtectedMethod` then runs the method
-    /// (`classes/ObjectClass.cpp:989`). Measured, both engines and the
-    /// oracle: `::METHOD m CLASS PROTECTED` sent from outside its class is
-    /// rc 0 with identical stdout.
-    ///
-    /// So this cannot refuse, and no program can distinguish it from its own
-    /// absence. What it is for is the *place*: a manager arrives by
-    /// `~setSecurityManager` on a Package, Method or Routine object, every
-    /// route to one of which is a loud refusal in this phase, and the task
-    /// that lands the first route has one function to fill in rather than a
-    /// dispatch path to find.
     fn check_protected_method(
         &mut self,
         receiver: ObjRef,
@@ -2477,21 +1936,6 @@ impl Interp {
     }
 
     /// `RexxObject::checkPrivate` (`classes/ObjectClass.cpp:608`-`:646`).
-    ///
-    /// **The input is the caller's own receiver, not the caller's scope.**
-    /// The C++ reads `activation->getReceiver()` (`:616`) and compares it
-    /// against the receiving object, which is why `self~m` is allowed from
-    /// inside the defining class *and* from a subclass's own method: both
-    /// send to the same object the caller was entered on. Measured, oracle
-    /// rc 0 `inner` for each, where a rule written over the defining scope
-    /// alone would refuse the subclass.
-    ///
-    /// **Every measurement behind this is on a class method**, because
-    /// reaching an instance method needs `~new`. The `isInstanceOf` limb
-    /// below therefore has no differential witness in this phase: a class
-    /// object's own class is the metaclass, never a user class, so the limb
-    /// that answers for a second instance of the defining class is written
-    /// from the C++ and covered by an in-crate test alone.
     fn check_private(
         &mut self,
         resolution: Resolution,
@@ -2526,20 +1970,6 @@ impl Interp {
     }
 
     /// `RexxObject::checkPackage` (`classes/ObjectClass.cpp:658`-`:685`).
-    ///
-    /// `method_package` is the package the `::METHOD` directive was
-    /// translated in, which is what `MethodClass::isSamePackage` compares
-    /// against the caller's.
-    ///
-    /// **The cross-package refusal is not reachable in this phase**, and a
-    /// second package existing does not change that: only `Access::Package`
-    /// reaches this check, so a `::METHOD ... PACKAGE` has to have declared
-    /// the method, and no embedded library file declares one -- measured,
-    /// `/bin/grep -acinE "^\s*::method[^;]*\bpackage\b"` answers 0 for each
-    /// of the three. A program's own `::METHOD ... PACKAGE` is in the
-    /// caller's package by construction. The same-package arm is what a
-    /// program can run, and an in-crate test is the whole instrument for the
-    /// other.
     fn check_package(method_package: Package, caller: Caller) -> Result<(), Miss> {
         match caller.package() {
             // No calling activation at all (`:665`-`:669`).
@@ -2551,12 +1981,6 @@ impl Interp {
 
     /// `RexxObject::classObject()`, the class an arbitrary value is an
     /// instance of, or `None` for a value this phase builds no class for.
-    ///
-    /// A **class object** answers its own class rather than itself:
-    /// `receiver_behaviour` reports the class-side behaviour for one, and the
-    /// class of a class object is what `~class` answers, which is the
-    /// metaclass. `RexxInternalObject::isInstanceOf` is unconditionally false
-    /// (`classes/ObjectClass.cpp:258`-`:261`), which is the `None` arm.
     fn class_of_value(&mut self, value: ObjRef) -> Option<ObjRef> {
         match self.receiver_behaviour(value).ok()? {
             Behaviour::Instance { owner, .. } => Some(owner),
@@ -2565,10 +1989,6 @@ impl Interp {
     }
 
     /// `isOfClassType(Class, value)`: whether the value is a class object.
-    ///
-    /// Asked through `receiver_kind` rather than off the handle's own tag,
-    /// because a heap-tagged handle with a class id is the one shape that
-    /// names no arena slot and that distinction is that function's.
     pub(crate) fn is_class_object(&self, value: ObjRef) -> bool {
         matches!(self.receiver_kind(value), Ok(Primitive::Class(_)))
     }
@@ -2591,9 +2011,6 @@ impl Interp {
 
     /// What a resolved [`MethodId`] runs, or the refusal for one no table
     /// below names.
-    ///
-    /// Asked **before** the seam rather than after, so the seam stays a
-    /// single call site with every invocable kind behind it.
     fn invocable(&mut self, resolution: Resolution, name: &[u8]) -> Result<Invocable, Failure> {
         if let Some(entry) = self
             .object_model()
@@ -2629,20 +2046,6 @@ impl Interp {
     }
 
     /// **Step two of a send** (D24): run what [`Interp::resolve`] found.
-    ///
-    /// The seam is passed first and the argument count is checked after,
-    /// which is the oracle's order: `messageSend` asks the security manager
-    /// before `method->run`, and the count check is part of the method's own
-    /// entry (`NativeActivation::run`), not of the send.
-    ///
-    /// **`None` is a send that produced no value**, and it is not one
-    /// [`Invocable`] kind's property. Measured, `::method m class` ending in a
-    /// bare `return`: as a whole clause it drops `RESULT` at rc 0, and in an
-    /// expression it is 91.999 at rc 165. `.environment~put('v','q')` answers
-    /// the identical pair from a [`NativeMethod`], and so does a generated
-    /// setter -- `.k~a = 5` on `::attribute a class` is rc 0 as a whole clause
-    /// and `say .k~'A='(5)` is `91.999 Message "A=" did not return a result.`
-    /// at rc 165, oracle and both engines.
     pub(crate) fn invoke(
         &mut self,
         resolution: Resolution,
@@ -2733,24 +2136,6 @@ impl Interp {
     /// declaring scope's pool on the receiver, or -- for a variable nothing
     /// has assigned -- the derived name, which is that variable's own
     /// spelling.
-    ///
-    /// **No activation and no frame**, which is what the oracle's own shape
-    /// makes it: `AttributeGetterCode::run` reads the pool and returns
-    /// (`execution/CPPCode.cpp:280`-`:302`). A traced send therefore shows
-    /// the ordinary `>M>` result line and nothing from inside the accessor --
-    /// measured, `trace i` with `say .K~a` on a stored `5` echoes
-    /// `>M>   "A" => "5"` and no `>I>`/`<I<` pair.
-    ///
-    /// **`GUARDED` has no reachable effect here.** The C++ splits on
-    /// `method->isGuarded()` only to reserve the variable dictionary against
-    /// other activities before reading it, and this crate runs one activity,
-    /// so the two arms of that `if` are the same read. `::ATTRIBUTE`'s
-    /// `GUARDED` and `UNGUARDED` are separate table D rows and both reach
-    /// this function, which is why neither can be read as evidence about the
-    /// keyword.
-    ///
-    /// The argument bound is the C++'s own and is checked before the pool is
-    /// touched: measured, `.K~a(1)` is `93.902` naming `0 expected`.
     fn read_attribute(
         &mut self,
         _cleared: Cleared,
@@ -2775,16 +2160,6 @@ impl Interp {
 
     /// A generated setter: assigns the attribute's variable in the declaring
     /// scope's pool on the receiver, and answers nothing.
-    ///
-    /// **Answering nothing is observable**, and it is the same absence a
-    /// `::METHOD` body ending in a bare `return` produces: measured,
-    /// `r = .K~'A='(9)` is `91.999` at rc 165, `Message "A=" did not return
-    /// a result.`
-    ///
-    /// Both argument bounds are the C++'s own and both are checked before the
-    /// pool is touched (`execution/CPPCode.cpp:330`-`:342`). Measured:
-    /// `.K~'A='(1,2)` is `93.902` naming `1 expected`, and `.K~'A='()` is
-    /// `93.903` naming `argument 1`.
     fn write_attribute(
         &mut self,
         _cleared: Cleared,
@@ -2808,25 +2183,6 @@ impl Interp {
     /// A `::CONSTANT` accessor: the value the resolve-constants pass recorded
     /// for the directive, on whichever dictionary side the send resolved
     /// through.
-    ///
-    /// **No activation and no frame**, for the reason [`Interp::read_attribute`]
-    /// has none: `ConstantGetterCode::run` checks the argument count and
-    /// returns the stored value (`execution/CPPCode.cpp:438`-`:454`).
-    ///
-    /// The argument bound is that function's own and is checked before the
-    /// value is looked at: measured, `.A~c(1)` on `::constant c 5` is 93.902
-    /// naming `0 expected`.
-    ///
-    /// **A constant with no value yet is 97.4 and not 97.1**, and the
-    /// distinction is the oracle's: `reportNomethod` is reached with
-    /// `Error_No_method_constant` rather than through a dictionary miss, so
-    /// the name resolves and the *value* is what is missing. See
-    /// [`Raised::constant_not_initialized`] for when that is reachable. The
-    /// `NOMETHOD` condition it offers carries the **constant's** name as its
-    /// description, which is the `message` argument `reportNomethod` takes
-    /// (`execution/CPPCode.cpp:450`), and not the name the send spelled.
-    ///
-    /// [`Raised::constant_not_initialized`]: crate::Raised::constant_not_initialized
     fn read_constant(
         &mut self,
         _cleared: Cleared,
@@ -2856,32 +2212,6 @@ impl Interp {
     /// under and with the arguments it arrived with, to the value of the
     /// delegate variable in the declaring scope's pool on the receiver
     /// (`DelegateCode::run`, `execution/CPPCode.cpp:605`-`:628`).
-    ///
-    /// **No activation and no frame**, which [`Interp::read_attribute`] has
-    /// for the same reason and which is measured here from the other side: a
-    /// `1/0` inside the delegated-to method reports its own clause and then
-    /// the *sending* clause, with nothing between them.
-    ///
-    /// **The variable is read exactly as a generated getter reads one**,
-    /// uninitialised value included -- measured, `::method m delegate d` with
-    /// nothing assigned to `d` is `97.1 Object "D" does not understand
-    /// message "M".` at rc 159, the delegate variable rendering as its own
-    /// derived name and the message name being the one the send used.
-    ///
-    /// **The caller of the re-sent message is this send's own caller**, not
-    /// the delegate method: `DelegateCode::run` pushes no activation, so
-    /// `getTopStackFrame()` inside it is still the sending code's.
-    /// [`Interp::caller`] answers the same here, because this arm runs before
-    /// any activation is pushed.
-    ///
-    /// **`GUARDED` has no reachable effect**, for the reason
-    /// [`Interp::read_attribute`]'s own doc gives: the C++ splits on
-    /// `method->isGuarded()` only to reserve the variable dictionary against
-    /// other activities while it reads the target, and this crate runs one
-    /// activity.
-    ///
-    /// There is no argument bound: the delegated message takes whatever the
-    /// original send carried, and the method it reaches applies its own.
     fn send_to_delegate(
         &mut self,
         _cleared: Cleared,
@@ -2908,8 +2238,6 @@ impl Interp {
     /// The variable a `DELEGATE` method addresses, refusing the name shapes
     /// whose storage this crate has no representation for -- see
     /// [`Loud::delegate_variable`].
-    ///
-    /// [`Loud::delegate_variable`]: crate::Loud::delegate_variable
     fn delegate_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
         let program = &self.programs[generated.program.0];
         let Some(directive) = program.directives.get(generated.directive) else {
@@ -2928,8 +2256,6 @@ impl Interp {
     /// The variable a generated accessor addresses, refusing the name shapes
     /// whose storage this crate has no representation for -- see
     /// [`Loud::accessor_variable`].
-    ///
-    /// [`Loud::accessor_variable`]: crate::Loud::accessor_variable
     fn accessor_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
         let program = &self.programs[generated.program.0];
         // `get` rather than an index, and `None` rather than a panic, for the
@@ -2948,23 +2274,6 @@ impl Interp {
 
     /// Runs one `::METHOD` body in an activation of its own, and answers what
     /// it returned.
-    ///
-    /// **Written here rather than beside [`Interp::invoke_call`] because of
-    /// the `cleared` parameter**: [`Cleared`]'s constructor is private to
-    /// [`mod seam`](seam), so the only functions that can take one by value
-    /// are in this module, and taking one by value is what makes a Rexx body
-    /// as unreachable-without-the-seam as a [`NativeMethod`] is.
-    ///
-    /// **The activation is a `::ROUTINE`'s in every respect the caller can
-    /// see**, and each of those is measured on the oracle rather than carried
-    /// over by analogy -- [`Activation::method`] lists them. The two pieces
-    /// that are this function's own are the `SELF`/`SUPER` bindings and the
-    /// gap check below.
-    ///
-    /// **Every ending is a value the caller gets, including `EXIT`.**
-    /// Measured, `::method m class` whose body is `exit 5`: the sending
-    /// clause receives `5` and the program runs on, exactly as a `::ROUTINE`
-    /// does.
     fn enter_method_body(
         &mut self,
         _cleared: Cleared,
@@ -3013,10 +2322,6 @@ impl Interp {
         // the activation carries, the `SELF` the body reads and the caller a
         // send inside the body resolves as all name one field rather than
         // each taking its own copy of this function's argument.
-        //
-        // Saved and restored with the level state further down -- which is
-        // where `Interp::invoke_call` does all of it -- and replaced ahead of
-        // that group because the bindings below read out of it.
         let arguments = self.shared_arguments(args);
         let saved_context = std::mem::replace(
             &mut self.call_context,
@@ -3063,20 +2368,6 @@ impl Interp {
         // (`RexxActivation.cpp:535`-`536`). Measured in a class method of
         // `::class K`: `say self` is `The K class` and `say super` is
         // `The Class class`.
-        //
-        // **Through `Interp::slot_of` rather than through the plan alone**,
-        // so that a body which never mentions either name still binds them:
-        // an `INTERPRET` inside such a body resolves `self` through the same
-        // function and would otherwise read an unset variable and answer
-        // `SELF`. `slot_of` grows the frame only when the plan has no slot,
-        // so a body that does mention them pays nothing.
-        //
-        // **`SELF` is the receiver of the send and not the scope the method
-        // was found at**, and the two part wherever a method is inherited:
-        // measured on `::class K` with a class method `m` and `::class J
-        // subclass K`, `.J~m` returning `self` answers `The J class` where
-        // the resolution's scope is `K`. Reading it out of the calling
-        // convention is what makes that the receiver by construction.
         let self_slot = self.slot_of(b"SELF");
         self.set_variable(frame, self_slot, receiver);
         let super_slot = self.slot_of(b"SUPER");
@@ -3148,17 +2439,6 @@ impl Interp {
 
     /// Takes a method activation whose `REPLY` has just handed a value out,
     /// releases its frame, and queues the rest of its body.
-    ///
-    /// **SCHEDULING.** The oracle continues the body on another activity from
-    /// here; `Interp::run_deferred_replies` continues it after the main
-    /// program has finished. `Interp::deferred`'s own doc has the measured
-    /// interleaving that separates the two.
-    ///
-    /// The order below is the whole of the rooting: the values come out of the
-    /// frame, everything they and the convention name goes to
-    /// `RootSet::park`, and only then is the frame released. Nothing between
-    /// the read and the park can allocate, so there is no window in which a
-    /// value is named by neither.
     fn park_reply(&mut self, mut activation: Box<Activation>, context: crate::CallContext) {
         let frame = activation.frame;
         let len = self.roots.frame_len(frame);
@@ -3200,33 +2480,6 @@ impl Interp {
 
     /// Runs every method body a `REPLY` has left owed, oldest first, and
     /// answers what each of them raised.
-    ///
-    /// **SCHEDULING, and Phase 6 owns the whole function.** There is nothing
-    /// of the language in it: draining a queue after the main program has
-    /// finished is this interpreter's stand-in for the activity the oracle
-    /// spawns, and `Interp::deferred`'s own doc has what that does and does
-    /// not reproduce.
-    ///
-    /// **A body queued by a body already in this loop is run too**, which is
-    /// what the queue is drained rather than iterated for: a resumed
-    /// remainder can send a message whose method replies in its turn.
-    ///
-    /// The failures come back rather than being reported here, because what a
-    /// report needs -- the program's path -- belongs to `execute` and so does
-    /// the decision about the exit status. Measured, oracle rc **7**: a
-    /// program ending `exit 7` whose replied method then raises 98.936 prints
-    /// the traceback and exits 7, so a raise here settles nothing.
-    ///
-    /// Each failure carries its **own** echo stack, drained at the resume that
-    /// produced it: the sites accumulate on `self` and a second resumed body
-    /// would otherwise report the first one's clauses under its own error.
-    ///
-    /// **A deadline stops the drain**, and it is the one failure that does.
-    /// This loop is where the self-forward's non-termination lives -- each
-    /// drained body queues its own successor, so a deadline that only
-    /// reddened one entry would leave the loop running for ever collecting
-    /// failures. See [`Failure::Deadline`] and
-    /// [`Deadline`](crate::clause::Deadline).
     pub(crate) fn run_deferred_replies(&mut self) -> Vec<(Failure, Vec<FailureSite>)> {
         let mut failures = Vec::new();
         let mut abandoned = false;
@@ -3246,9 +2499,6 @@ impl Interp {
         // still rooting anything is a set of values kept alive for the rest of
         // the process. Cheap and once per run, unlike `RootSet::live_frames`'
         // own callers.
-        //
-        // Not asked of a drain the deadline cut short: the queue is not empty
-        // there, so the entries still in it are parked and owed.
         debug_assert!(
             abandoned || self.roots.live_parked() == 0,
             "a replied method body's values are still parked with nothing owing them"
@@ -3257,28 +2507,6 @@ impl Interp {
     }
 
     /// Sends `UNINIT` to `object` and answers a loud refusal if one escaped.
-    ///
-    /// **A raised condition and an `EXIT` are both discarded**, which is what
-    /// `UninitDispatcher` under `activity->run` does
-    /// (`memory/RexxMemory.cpp:373`, and the dispatcher's two `handleError`
-    /// overrides at `memory/UninitDispatcher.cpp:64` and `:77`). Measured,
-    /// oracle rc 0 with empty stderr: `y = 1/0`, `raise syntax 40.900` and
-    /// `exit 5` inside an `UNINIT` each print the finalizer's own output and
-    /// nothing else, and the rest of the program runs on. A loud refusal is
-    /// not discarded -- that is this crate saying it cannot run the
-    /// construct, and the loud rule is what keeps it from becoming a silent
-    /// wrong answer.
-    ///
-    /// **An object that no longer answers `UNINIT` is reached and runs
-    /// nothing**, which is `RexxObject::uninit`'s own `hasMethod` test
-    /// (`classes/ObjectClass.cpp:2581`). A class's registration is never
-    /// undone -- `RexxClass::checkUninit` only sets
-    /// (`classes/ClassClass.cpp:1211`) -- so for an instance of a class
-    /// whose ancestry gained and lost a finalizer this test is the only
-    /// thing that cancels one. Measured,
-    /// oracle rc 0 with empty stderr: `.QQ~inherit(.MX)` then
-    /// `.QQ~uninherit(.MX)` runs `MX`'s finalizer and not `QQ`'s, and an
-    /// instance built between an `~inherit` and its `~uninherit` runs none.
     fn run_one_uninit(&mut self, object: ObjRef) -> Option<Loud> {
         if !self.answers_uninit(object) {
             return None;
@@ -3334,12 +2562,6 @@ impl Interp {
 
     /// Runs `UNINIT` on each of `batch`, oldest first, with the whole batch
     /// rooted for the length of the run.
-    ///
-    /// **The flags are cleared before this is called**, which is `runUninits`
-    /// removing the table entry (`memory/RexxMemory.cpp:362`) before running
-    /// the method (`:373`). The flag was the batch's only root, so the park
-    /// is this loop's `ProtectedObject`: without it a collection inside one
-    /// finalizer sweeps the members that have not run.
     fn run_uninit_batch(&mut self, batch: Vec<ObjRef>, loud: &mut Vec<Loud>) {
         let parked = self.roots.park(batch.clone());
         for object in batch {
@@ -3352,28 +2574,6 @@ impl Interp {
     /// first -- oracle's `MemoryObject::runUninits`
     /// (`memory/RexxMemory.cpp:337`), reached from `collectAndUninit` and so
     /// from `GC('force')` (`expression/BuiltinFunctions.cpp:3033`).
-    ///
-    /// **One pass, not a fixed point.** `runUninits` walks the table once,
-    /// so an object readied *during* the walk is reached only if its bucket
-    /// is still ahead of the iterator -- and an instance's bucket is its
-    /// address, so which side it falls on is not reproducible. This crate
-    /// takes the deterministic side and leaves it for the next sweep.
-    ///
-    /// **Re-entering it runs nothing**, which is the interlock `runUninits`
-    /// opens with (`memory/RexxMemory.cpp:341`-`:347`, cleared at `:383`).
-    /// A `GC('force')` inside a finalizer therefore collects and marks and
-    /// runs no method.
-    ///
-    /// **Only the interlock has a reproducible witness.** Measured on a
-    /// finalizer that builds an instance of another `UNINIT` class, drops it
-    /// and calls `GC('force')`: the oracle never runs the inner finalizer
-    /// inline, twelve runs of twelve, rc 0 with empty stderr -- but *when* it
-    /// does run is bimodal, before the program's next clause in 3 of 13 runs
-    /// and at termination in the other 10, which is the iterator's cursor
-    /// against an address-derived bucket. `corpus/lang/uninit_nested_collection.rex`
-    /// prints the first and deliberately not the second. The single pass is
-    /// chosen on the C++ rather than on that split, and it lands on the
-    /// majority side.
     pub(crate) fn run_ready_uninits(&mut self) -> Vec<Loud> {
         if self.processing_uninits {
             return Vec::new();
@@ -3391,34 +2591,6 @@ impl Interp {
     /// (D69), then every class object with a class-side `UNINIT` (D60) in the
     /// order [`ClassRegistry::take_uninit_classes_in_sweep_order`] gives,
     /// and then the same again once.
-    ///
-    /// **Not the same as [`Interp::run_ready_uninits`] and not buildable out
-    /// of it.** Under D59 a class-scope `EXPOSE` roots an instance for ever,
-    /// so it never becomes unreachable and a collection never readies it;
-    /// the oracle fires those at termination anyway, measured. A class object
-    /// is never in the arena at all.
-    ///
-    /// **[`SWEEPS`] passes, and then whatever is still flagged is
-    /// discarded.** The oracle's shutdown reaches the sweep exactly twice --
-    /// `collectAndUninit` at `runtime/InterpreterInstance.cpp:581` and
-    /// `lastChanceUninit` at `runtime/Interpreter.cpp:279`, which ends
-    /// `uninitTable->empty()` (`memory/RexxMemory.cpp:330`) -- and each pass
-    /// runs only what its own `collect` readied (`:274`). Measured, oracle
-    /// rc 0 with empty stderr: a finalizer that allocates one further
-    /// instance of its own class per call prints `u 1` / `u 2` and stops,
-    /// at a self-imposed limit of 4 and of 8 alike. Running to a fixed point
-    /// instead does not terminate on a finalizer that always allocates,
-    /// where the oracle exits rc 0.
-    ///
-    /// **The instance group runs before the class group, and no check may
-    /// depend on that** (D61). The oracle's sweep is one table holding both,
-    /// and an instance's position in it comes from its address: measured,
-    /// twenty runs of one class-side `UNINIT` on `::CLASS C` beside one live
-    /// instance answered `instance` before `C` nineteen times and after it
-    /// once.
-    ///
-    /// [`ClassRegistry::take_uninit_classes_in_sweep_order`]:
-    ///     rexx_classes::ClassRegistry::take_uninit_classes_in_sweep_order
     pub(crate) fn run_termination_uninits(&mut self) -> Vec<Loud> {
         if self.processing_uninits {
             return Vec::new();
@@ -3439,36 +2611,6 @@ impl Interp {
     }
 
     /// Puts one parked method body back and runs the rest of it.
-    ///
-    /// **SCHEDULING, and Phase 6 owns the whole function**, for
-    /// [`Interp::run_deferred_replies`]'s reason. Only the `>I>`/`<I<`
-    /// handling below is measured against the C++, and the C++ line it
-    /// follows is itself on the reply-resume path, so it moves with whatever
-    /// replaces this.
-    ///
-    /// **The level state is entered at nothing rather than restored**, and
-    /// that is the resumed body's own shape rather than an omission: it has no
-    /// sending clause left to be indented under, so the clause echoes start at
-    /// indent 0 exactly as they do on the first half
-    /// ([`Interp::enter_method_body`]'s own comment carries that
-    /// measurement).
-    ///
-    /// **The resumed body announces a second `>I>` exactly when the first
-    /// half announced one**, which is `RexxActivation::run`'s own reply arm:
-    /// `traceEntryAllowed = traceEntryDone; traceEntryDone = false`
-    /// (`execution/RexxActivation.cpp:562`-`:563`), and then the unconditional
-    /// `traceEntry()` at `:600`. So [`TraceEntry::Done`] becomes
-    /// [`TraceEntry::Allowed`] and anything else becomes
-    /// [`TraceEntry::Spent`], and the announcement is asked for here rather
-    /// than waiting for a `TRACE` instruction the remainder need not contain.
-    /// Measured under `trace r`: a class method whose body is `trace r` /
-    /// `guard on` / `reply "v"` / `say "tail"` / `return` produces `>I>`, the
-    /// clauses, `<I<`, then `>I>` again before `say "tail"` and a final
-    /// `<I<`.
-    ///
-    /// **`first_instruction_pending` does not go back with it.** A resumed
-    /// clause is not the first instruction executed, so a `PROCEDURE` or a
-    /// `USE LOCAL` there is the ordinary refusal.
     fn resume_reply(&mut self, deferred: DeferredReply) -> Result<(), Failure> {
         let DeferredReply {
             mut activation,
@@ -3487,14 +2629,6 @@ impl Interp {
             }
         }
         // Released only once the arena holds the values again.
-        //
-        // **The context object is rooted by neither mechanism between here
-        // and the `push_activation` below.** The park named it while the
-        // activation was off the stack; `Interp::collect_now`'s sweep names
-        // it once it is back on. Nothing between the two lines allocates a
-        // Rexx object, so no collection can happen in that window today --
-        // which makes this latent rather than live, and makes an allocation
-        // added here the thing that would turn it live.
         self.roots.release(parked);
         activation.frame = frame;
         activation.trace_entry = if activation.trace_entry == TraceEntry::Done {
@@ -3551,18 +2685,6 @@ impl Interp {
     /// [`Interp::resolve`] then [`Interp::invoke`], with
     /// [`Interp::unknown_or_nomethod`] behind them for a name the receiver's
     /// behaviour does not answer.
-    ///
-    /// Not a third step and not a fusion of the two: it is the composition
-    /// every caller wants, in the shape `Interp::exec_call` already gives the
-    /// classic-call pair.
-    ///
-    /// **"This phase builds no class for that receiver" and "that class does
-    /// not answer this name" are two different answers, and only the second
-    /// is 97.1.** A stem is the reachable case of the first: the oracle
-    /// answers `a. = 'dflt'; say a.~length` with `4`, forwarding through
-    /// `StemClass`'s own `UNKNOWN`, so raising a condition here would let a
-    /// program *expecting* 97.1 pass against a gap -- the same argument
-    /// [`Loud::unresolved_call`] makes for an excluded builtin.
     pub(crate) fn send_message(
         &mut self,
         receiver: ObjRef,
@@ -3585,30 +2707,6 @@ impl Interp {
     /// condition beneath it when the behaviour answers no `UNKNOWN` either --
     /// `RexxObject::processUnknown` (`classes/ObjectClass.cpp:1002`), reached
     /// from `messageSend` at `:904`.
-    ///
-    /// **The forward's arguments are the missed message name and then an
-    /// `Array` of the send's own arguments**, in that order (`:1013`, then
-    /// `:1018`-`:1019`).
-    /// The array is the argument list as the send holds it, omissions
-    /// included: measured, `.k~zork(1,,3)` reaches an `UNKNOWN` whose
-    /// `arguments~items` is `2` and whose `~size` is `3`, while `.k~zork()`
-    /// answers `0` for each.
-    ///
-    /// **The `UNKNOWN` lookup is the ordinary one, carries no start scope and
-    /// is not access-checked**, whatever the missed send's own scope override
-    /// or access refusal was: `processUnknown` asks
-    /// `behaviour->methodLookup(GlobalNames::UNKNOWN)` directly wherever
-    /// `messageSend` reaches it, so [`Interp::lookup`] is the call and not
-    /// [`Interp::resolve`]. Measured, oracle rc 0: a class whose only method
-    /// is `::METHOD unknown CLASS PRIVATE` answers `.K~zork` sent from
-    /// outside the class.
-    ///
-    /// `miss` is why the send had no method, which decides the report the
-    /// receiver with no `UNKNOWN` gets.
-    ///
-    /// Off every hot path by construction -- a send that resolves never
-    /// arrives here -- so the body is out of line rather than folded into
-    /// [`Interp::send_message`]'s `match`.
     #[cold]
     #[inline(never)]
     fn unknown_or_nomethod(
@@ -3634,18 +2732,6 @@ impl Interp {
         // where the plain run prints the row. A message name of seven bytes
         // or fewer leaves the subset green, because `Interp::text` inlines it
         // and nothing allocates between the array and the send.
-        //
-        // `missed`'s root has no such witness and stays because it is the
-        // only root the value has: the slice handed to `invoke` is not one,
-        // nothing else holds the name, and `invoke` runs a whole method body.
-        // Measured, its removal reddens nothing today, which says `invoke`
-        // reaches its argument binding without allocating and not that the
-        // value is safe unrooted.
-        //
-        // `args` themselves need nothing here: the send site evaluated them
-        // and rooted each one as it went (`Interp::eval_traced_argument`),
-        // which is the same rooting every other allocation reached from a
-        // send already relies on.
         let frame = self.roots.push_frame();
         let arguments = self.alloc_with(BehaviourId::ARRAY, Body::array(args.to_vec()));
         self.roots.push_temp(arguments);
@@ -3664,53 +2750,6 @@ impl Interp {
     /// The condition a send raises when the receiver's behaviour answers
     /// neither the message nor `UNKNOWN`, and **which condition that is
     /// depends on what is armed**.
-    ///
-    /// **`miss` decides the syntax error and not the condition.**
-    /// `reportNomethod` takes the error code `messageSend` set and offers the
-    /// same `NOMETHOD` condition whichever it is (`:904`, `:1009`), so an
-    /// access refusal that nothing traps is 97.2 or 97.3 in place of 97.1
-    /// while a trapping handler reads the identical items. Measured, oracle
-    /// rc 0 on a `PRIVATE` class method sent from the program body under
-    /// `signal on nomethod`: `CONDITION('C')` `NOMETHOD`, `CONDITION('D')`
-    /// `M`, `CONDITION('E')` the null string and `RC` untouched, which is
-    /// 97.1's own row.
-    ///
-    /// `reportNomethod` (`concurrency/ActivityManager.hpp:509`) offers a
-    /// `NOMETHOD` condition first and raises the 97.1 syntax error only when
-    /// nothing took it, so they are separate answers a program can tell
-    /// apart. Measured, `say 'abc'~nosuchmsg`: under `signal on nomethod` it
-    /// traps with `CONDITION('C')` `NOMETHOD`, `CONDITION('D')` `NOSUCHMSG`,
-    /// `CONDITION('E')` the null string and `RC` untouched; under `signal on
-    /// syntax` alone it traps with `C` `SYNTAX`, `D` the null string, `E` `1`
-    /// and `RC` `97`.
-    ///
-    /// **The offer is to the running activation's own table and goes no
-    /// further** -- [`Interp::trap_for`]'s question, not a walk of the
-    /// activation stack. An internal `CALL` inherits its caller's traps by
-    /// copy ([`Activation::traps`]), so a caller's `SIGNAL ON NOMETHOD` does
-    /// take a miss raised inside such a callee, and beats a `SIGNAL ON
-    /// SYNTAX` that callee armed for itself. A `::METHOD` activation inherits
-    /// none, and that is where the readings part: measured, with `signal on
-    /// nomethod` and `signal on syntax` both armed in the main body and the
-    /// miss inside a `::METHOD` body, the oracle runs the **`SYNTAX`**
-    /// handler, where a version asking the whole stack runs the `NOMETHOD`
-    /// one.
-    ///
-    /// **The choice belongs here and not in [`Interp::offer_to_trap`]**: that
-    /// function sees each activation in turn as the failure unwinds, and a
-    /// `NOMETHOD` condition declined by the activation that raised it must
-    /// become the 97.1 *there*, in time for that same activation's `SYNTAX`
-    /// trap to take it -- measured, a routine whose own `SIGNAL ON SYNTAX` is
-    /// the only trap armed anywhere does take its own missed send.
-    ///
-    /// A `CALL ON` trap does not count. There is nothing to resume into once
-    /// a clause has failed, and `TrapHandler::canHandle`
-    /// (`execution/TrapHandler.cpp:118`) refuses this whole family to a `CALL
-    /// ON ANY`: measured, `call on any name h` over `say 'abc'~nosuchmsg` is
-    /// the untrapped 97.1 at rc 159 where `signal on any` traps it as
-    /// `NOMETHOD`. Excluding it here is what makes the gate the same test
-    /// `offer_to_trap` applies a moment later, which is the shape
-    /// [`Interp::novalue_raised`] describes for its own condition.
     fn nomethod(&mut self, receiver: ObjRef, name: &[u8], miss: Miss) -> Failure {
         let target = self.message_target_text(receiver);
         let report = match miss {
@@ -3727,16 +2766,6 @@ impl Interp {
 
     /// The receiver as 97.1 names it: `stringValue()`, which is **not** the
     /// string value [`Interp::to_text`] answers for every receiver.
-    ///
-    /// An array is where the two part. `RexxObject::stringValue` for an array
-    /// is [`ARRAY_DEFAULT_NAME`], while a string context reaches
-    /// `ArrayClass::makeString` and gets the items joined
-    /// (`classes/ArrayClass.cpp:1841`). Measured, `a = .Array~superClasses`:
-    /// `say a + 1` reports `Object "an Array" does not understand message
-    /// "+".` where `say 'x'a` prints the two class names on two lines.
-    ///
-    /// [`Interp::string_value_text`] is the whole of it, and this name is what
-    /// says which question the 97.1 site is asking.
     fn message_target_text(&mut self, receiver: ObjRef) -> Vec<u8> {
         self.string_value_text(receiver)
     }
@@ -3744,14 +2773,6 @@ impl Interp {
     /// One whole `target~name(...)` term: the receiver, the scope override,
     /// the arguments, the send, and `~~`'s replacement of the result by the
     /// target.
-    ///
-    /// **The evaluation order is the oracle's and is observable under
-    /// `TRACE I`**: receiver, then the scope override, then the arguments
-    /// left to right, each tracing its own `>A>` line -- omitted positions
-    /// included, measured, `'abc'~nosuch(,1)` traces `>A>   ""` then
-    /// `>A>   "1"`. The scope override is validated **before** the arguments
-    /// are evaluated, so a bad scope refuses without them
-    /// (`RexxExpressionMessage::evaluate`, `ExpressionMessage.cpp:158-181`).
     pub(crate) fn message_term(
         &mut self,
         code: &crate::Code<'_>,
@@ -3810,10 +2831,6 @@ impl Interp {
         // both forms do pass through is what keeps them from disagreeing.
         // The position is the same either way: this is the last thing the
         // term does before returning its value.
-        //
-        // **A send that produced no value traces no line at all**, measured
-        // under `trace i`: a whole-clause `.K~m` on a method ending in a bare
-        // `return` emits the clause echo and its `>E>` and nothing else.
         if let Some(value) = value
             && let Some(rendered) = self.intermediate_text(value)
         {
@@ -3850,33 +2867,6 @@ impl Interp {
 
     /// Records the traceback line a failing native method contributes, and
     /// closes the level so the sending clause records its own.
-    ///
-    /// The oracle's catalogue entry
-    /// (`Message_Translations_compiled_method_invocation`) is a whole line
-    /// including its own `*-*` marker and the blank line-number field in
-    /// front of it, so the bytes are rendered here rather than assembled by
-    /// `trace::push_clause`. Measured, the line carries no indent even for a
-    /// send two `DO` levels deep.
-    ///
-    /// `pub(crate)` rather than private to this module, because the rule for
-    /// who calls this is not "who wrote a send term": **the line is owed
-    /// wherever the oracle reached the failing native method's body by a
-    /// message send**, whatever put that send there. A `~` in the source is
-    /// the obvious route and not the only one -- a stem forwarding an
-    /// operator to its default value reaches the method through
-    /// `value->messageSend` with no send term anywhere in sight
-    /// (`classes/StemClass.cpp:280`).
-    ///
-    /// **Being inside a native method's body is not the condition; having
-    /// been sent to is**, and `ClassDirective::install` is the discriminating
-    /// pair by itself. It reaches `INHERIT` by `classObject->sendMessage`
-    /// (`instructions/ClassDirective.cpp:230`) and that send's refusals carry
-    /// this line; it *calls* `subclass()` and `mixinClass()` (`:205`, `:200`)
-    /// and the 99.927 those raise carries none -- both measured, on one
-    /// directive, and `RexxClass::subclass` is the very body a `~subclass`
-    /// send would have entered. So a caller reaching a native method by a
-    /// direct call owes nothing here, and reading the condition as "raises
-    /// from inside a native method" over-predicts exactly there.
     pub(crate) fn blame_native_method(&mut self, name: &[u8], scope: &str) {
         if self.failure_site.is_some() {
             return;
@@ -3888,9 +2878,6 @@ impl Interp {
 }
 
 /// What the protocol's conversion limbs answered, before anything is built.
-///
-/// The [`StringConversion::Bytes`] split, one layer up: the caller that only
-/// reads the bytes must not allocate an object to read them out of.
 enum RequiredString {
     Object(ObjRef),
     Bytes(Vec<u8>),
@@ -3914,22 +2901,11 @@ pub(crate) const STRING: &[u8] = b"STRING";
 /// What a value's own string value is, before the protocol's fallbacks: the
 /// value itself, the object a `makeString` answered, bytes no object holds, or
 /// nothing.
-///
-/// The `Array` arm is why this is a value rather than a `bool`: an array's
-/// string value is its items joined, which no object holds, so a caller that
-/// wants one has to build it.
 enum StringConversion {
     /// The object that *is* the string value: the value itself, or a stem's
     /// own default value, or what a `makeString` answered.
     Object(ObjRef),
     /// The string value as bytes no object holds -- an array's items joined.
-    ///
-    /// **Separate from the arm above rather than built into a string here**,
-    /// so that a caller which only wants to read the bytes does not allocate
-    /// an object to read them out of again. `Interp::required_string_value`'s
-    /// own debug check is that caller, and a heap allocation there would
-    /// change what `tests/collect_stress.rs` observes between a debug build
-    /// and a release one.
     Bytes(Vec<u8>),
     /// The receiver's behaviour has a `makeString` to send.
     MakeString,
@@ -3943,21 +2919,6 @@ impl Interp {
     /// `defaultName`. **This is the value every context `provide.xml`
     /// `reqstr` lists renders, and rendering it without coming through here
     /// is the silent wrong answer the protocol exists to prevent.**
-    ///
-    /// `RexxInternalObject::requestString` (`classes/ObjectClass.cpp:1235`).
-    /// The answer is a *value*, not bytes, so the caller renders it with the
-    /// same [`Interp::to_text`] it always did and nothing on the rendering
-    /// path becomes fallible.
-    ///
-    /// **The latch is what keeps this off the hot path.** With no
-    /// `makeString` installed anywhere and no NOSTRING trap ever armed, the
-    /// protocol's first limb cannot answer differently from the value itself
-    /// and its third cannot fire, so the value stands and the whole of the
-    /// walk below is skipped. A debug build runs the walk anyway and insists
-    /// it agrees, which is the check that would catch a latch that misses an
-    /// arming route -- see [`Interp::reqstr_armed`].
-    ///
-    /// [`Interp::reqstr_armed`]: crate::Interp::reqstr_armed
     #[inline]
     pub(crate) fn required_string_value(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
         // **A string and a small integer are their own string value**, and
@@ -3968,13 +2929,6 @@ impl Interp {
         // three calls deeper is what keeps an armed interpreter from paying
         // `required_string_dispatch` + `required_string_answer` +
         // `classify_string_conversion` for every operand of every comparison.
-        //
-        // **The armed path also pushes its answer as a GC temp, and this does
-        // not.** Neither decoding this arm covers lives in the arena -- a
-        // small integer is tagged and short text is inline in the handle --
-        // so there is nothing for a root to protect. A heap string is
-        // deliberately not here: it would need that `push_temp`, and it needs
-        // the heap lookup the arm below is already making.
         if matches!(value.decode(), Decoded::SmallInt(_) | Decoded::Text(_)) {
             return Ok(value);
         }
@@ -3986,10 +2940,6 @@ impl Interp {
             // `push_temp`, because unlike the two decodings above this value
             // does live in the arena and the caller's rooting of it is not
             // this function's to assume.
-            //
-            // Inside the armed branch rather than beside the fast path above,
-            // so that a clear latch still answers `Ok(value)` with no root
-            // pushed and no lookup made, exactly as it did before.
             if matches!(
                 self.heap.get(value).map(|object| &object.body),
                 Some(Body::Text { .. } | Body::Num { .. })
@@ -4009,31 +2959,6 @@ impl Interp {
 
     /// Whether the fast path is the right answer for `value` with the latch
     /// clear -- one test per limb the latch claims cannot fire.
-    ///
-    /// **A wrongly clear latch is a wrong answer, not a slow one**, and it is
-    /// wrong independently at limb 1 and at limb 3, so this asks about each.
-    /// Limb 1 can answer a different string than the value renders as, and
-    /// limb 3 can raise where the fast path renders. A check covering only the
-    /// first is silent for a route that arms a trap, which is exactly what the
-    /// limb-3 test below is for.
-    ///
-    /// **This detects; it does not protect.** It runs under `debug_assert`, so
-    /// a release build has nothing here: release correctness rests entirely on
-    /// [`Interp::reqstr_armed`]'s arming sites being complete, and this is the
-    /// instrument that says whether they are when a debug build runs the same
-    /// program.
-    ///
-    /// **The bytes and not the identity**, for limb 1. The protocol's last
-    /// limb builds a fresh string out of `stringValue()`, so an object never
-    /// comes back as itself even when nothing has changed; what the latch
-    /// claims is that rendering the value the caller already holds gives the
-    /// same answer, and that is what this compares.
-    ///
-    /// **Not `#[cfg(debug_assertions)]`**: `debug_assert!` type-checks its
-    /// expression in every profile, so the function has to exist in a release
-    /// build even though nothing there calls it.
-    ///
-    /// [`Interp::reqstr_armed`]: crate::Interp::reqstr_armed
     fn required_string_latch_holds(&mut self, value: ObjRef) -> bool {
         // Limb 3's route, and it is not about `value` at all: a trap that
         // could take NOSTRING while the latch is clear is wrong for every
@@ -4093,11 +3018,6 @@ impl Interp {
         // wherever `STRING` resolves to `native_string`. Measured, oracle
         // rc 0: with `::METHOD string` returning `from-string`, `say o`,
         // `'x' o` and `length(o)` all follow it.
-        //
-        // **No `REQUEST` frame when the send raises**, unlike the conversion
-        // limbs above: measured, oracle rc 214, `::METHOD string` ending in
-        // `1/0` reports the method's own clause and then the sending clause,
-        // and nothing between them.
         let readable = if matches!(self.receiver_kind(value), Ok(Primitive::Instance { .. })) {
             let caller = self.caller();
             match self.send_message(value, STRING, None, &[], caller)? {
@@ -4133,38 +3053,6 @@ impl Interp {
     /// position order, through the required-string protocol -- `None` when the
     /// protocol cannot change any of them, so the caller passes its own list
     /// on.
-    ///
-    /// **`provide.xml` `reqstr` names "arguments to built-in functions"
-    /// wholesale, and the oracle converts a position when the builtin fetches
-    /// it through a converting accessor** -- `ExpressionStack::requiredStringArg`
-    /// (`expression/ExpressionStack.cpp:142`) and
-    /// `ExpressionStack::optionalStringArg` (`:167`), each of which calls
-    /// `argument->requestString()`. A position it fetches with `stack->peek`
-    /// instead is never converted, and
-    /// `crate::builtin::raw_argument_positions` is the enumeration of those.
-    ///
-    /// Converting the rest up front reproduces the order every fetch that
-    /// follows position order sees, and it reaches an argument the builtin
-    /// does not go on to use -- measured on `SUBSTR`'s pad, which the oracle
-    /// fetches through `optional_pad` whether or not the length reaches past
-    /// the subject: `substr('abc', 1, 2, .P)` with a class-side `makeString`
-    /// on `.P` prints `pad asked` at rc 0.
-    ///
-    /// **Converting a position at most once is the oracle's own property, not
-    /// an economy here**: both of those write the converted string back with
-    /// `replace(position, newStr)` (`:154`, `:186`), so a builtin that fetches
-    /// one position twice converts it once. Measured on
-    /// `XRANGE`, whose loop passes over its arguments twice:
-    /// `xrange('a', .K, 'x', 'z')` prints `K asked` exactly once on both
-    /// sides at rc 0.
-    ///
-    /// **After the 40.x count checks and before the builtin's own argument
-    /// validation**, measured on both sides of that line: `date('S', , .Z)`
-    /// prints `Z asked` and *then* raises 40.5, while
-    /// `substr(.A, .B)` with `.B` answering `'x'` converts both and then
-    /// raises 40.12 naming `The B class` -- an argument's own error names the
-    /// object, because the oracle's error path has the object in hand and not
-    /// the conversion.
     pub(crate) fn required_string_arguments(
         &mut self,
         name: &'static [u8],
@@ -4207,14 +3095,6 @@ impl Interp {
     /// The protocol's conversion limbs, answered without building anything --
     /// [`Interp::string_conversion`]'s own body with the materialisation left
     /// to the caller.
-    ///
-    /// **Its callers want different things from it.**
-    /// [`Interp::required_string_dispatch`] wants an object, because its own
-    /// caller renders one; the debug check behind
-    /// [`Interp::required_string_value`]'s latch wants only the bytes, and
-    /// allocating an object there would make a debug build collect where a
-    /// release build does not -- which `tests/collect_stress.rs` compares
-    /// against a committed list.
     fn required_string_answer(&mut self, value: ObjRef) -> Result<Option<RequiredString>, Failure> {
         Ok(match self.classify_string_conversion(value) {
             StringConversion::Object(text) => Some(RequiredString::Object(text)),
@@ -4244,10 +3124,6 @@ impl Interp {
     /// `RexxInternalObject::requiredString()` (`classes/ObjectClass.cpp:1341`):
     /// the protocol's conversion limbs alone, with **no** `~string` fallback
     /// and **no** NOSTRING condition. `None` is the oracle's `.nil`.
-    ///
-    /// This is what a method argument that must be text gets
-    /// ([`required_string_argument`]) and what `Object~request("STRING")`
-    /// answers.
     pub(crate) fn string_conversion(&mut self, value: ObjRef) -> Result<Option<ObjRef>, Failure> {
         Ok(match self.required_string_answer(value)? {
             Some(RequiredString::Object(text)) => Some(text),
@@ -4268,16 +3144,6 @@ impl Interp {
     }
 
     /// Which limb of the protocol answers for `value`.
-    ///
-    /// **`primitiveMakeString` is asked first, where the oracle asks
-    /// `isBaseClass()` first**, and the two split the same set for every value
-    /// this phase builds: a receiver whose `MAKESTRING` is a
-    /// [`NativeMethod`] is one of the primitives the arms below answer for,
-    /// and its `primitiveMakeString` answers the same bytes that method would,
-    /// so taking the primitive answer is the oracle's own shortcut and reaches
-    /// the same string without a send. The only `MAKESTRING` a program can
-    /// install is a Rexx one, and it can only be installed on a receiver no
-    /// arm below answers for.
     fn classify_string_conversion(&mut self, value: ObjRef) -> StringConversion {
         let redirect = match value.decode() {
             Decoded::Nil => return self.make_string_or_none(value),
@@ -4345,13 +3211,6 @@ impl Interp {
     }
 
     /// Whether the receiver's own behaviour answers `MAKESTRING`.
-    ///
-    /// `RexxObject::requestRexx` (`classes/ObjectClass.cpp:1912`) forms
-    /// `MAKE` + the class name and asks `behaviour->methodLookup` for it --
-    /// the unchecked lookup, so a `PRIVATE makeString` is found here and
-    /// refused by the send, which is that function's own order. A receiver
-    /// this phase builds no behaviour for has none to ask and answers
-    /// nothing.
     fn make_string_or_none(&mut self, value: ObjRef) -> StringConversion {
         match self.lookup(value, MAKESTRING, None) {
             Some(_) => StringConversion::MakeString,
@@ -4360,13 +3219,6 @@ impl Interp {
     }
 
     /// Sends `makeString` on the receiver's behalf.
-    ///
-    /// **No traceback frame of its own**, because the frame belongs to the
-    /// `REQUEST` activation the oracle runs *around* this send and not to the
-    /// send: a caller that is itself `Object~request` already gets that line
-    /// from `Interp::invoke`, and one that reaches the protocol from a
-    /// language context has no native activation and owes it --
-    /// [`Interp::blame_request`] is that caller's own call.
     fn send_make_string(&mut self, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
         // The sending side is the frame the conversion happens in, not the
         // conversion itself: `checkPrivate` asks
@@ -4378,21 +3230,6 @@ impl Interp {
 
     /// The traceback line the oracle's own `REQUEST` activation contributes
     /// when a `makeString` reached through the protocol fails.
-    ///
-    /// **The frame is `REQUEST`'s and not `MAKESTRING`'s**, measured: with a
-    /// class-side `makeString` whose body is `return 1/0`, `say .K~makeString`
-    /// reports the failing clause and then the sending clause, while
-    /// `say .K` and `say length(.K)` put
-    /// `*-* Compiled method "REQUEST" with scope "Object".` between them.
-    /// `requestString` reaches `makeString` through
-    /// `sendMessage(GlobalNames::REQUEST, GlobalNames::STRING)`
-    /// (`classes/ObjectClass.cpp:1256`), and that native activation is what
-    /// owns the line.
-    ///
-    /// A method argument's conversion gets this line **and** the method's own
-    /// on top of it, measured: `'abc'~hasMethod(.K)` reports the failing
-    /// clause, then `REQUEST` with scope `Object`, then `HASMETHOD` with
-    /// scope `Object`, then the sending clause.
     fn blame_request(&mut self) {
         self.blame_native_method(b"REQUEST", "Object");
     }
@@ -4402,16 +3239,6 @@ impl Interp {
 /// (`classes/ObjectClass.cpp:1373`): a method argument the method needs as
 /// text, converted through the required-string protocol, or 88.909 for a
 /// value that has no string value at all.
-///
-/// This is `stringArgument` (`runtime/MethodArguments.hpp:136`), which is
-/// `provide.xml` `reqstr`'s "for all other methods" rule: `request("STRING")`
-/// and an error when it answers `.nil`. **`~string` and the NOSTRING
-/// condition are `requestString`'s limbs and not this one's** --
-/// `requiredString` stops where the conversion fails, which is why an object
-/// with no string value is an error here and a readable rendering in a `SAY`.
-///
-/// Measured, three descriptors against the oracle:
-///
 /// ```text
 /// 'abc'~hasMethod(5)                oracle `0` rc 0    a number has one
 /// 'abc'~hasMethod(a.)               oracle `0` rc 0    an unset stem is its own name
@@ -4421,18 +3248,6 @@ impl Interp {
 /// a. = .array; 'abc'~hasMethod(a.)  oracle 88.909 rc 168
 /// a. = .nil;   'abc'~hasMethod(a.)  oracle 88.909 rc 168
 /// ```
-///
-/// and the row a `makeString` puts on the other side of that line: with
-/// `::CLASS K` plus `::METHOD makeString CLASS` returning `'LENGTH'`,
-/// `'abc'~hasMethod(.K)` is `1` at rc 0.
-///
-/// **Not [`Interp::operator_operand_gap`], and the difference is `.nil`.**
-/// That predicate passes `.nil` through as text on purpose, because an
-/// operator there compares its rendering; `requiredString` refuses it.
-///
-/// **Scoped to this argument rather than to native arguments in general**:
-/// the surface where each native checks its own is owned by the phase named
-/// against the argument row in `docs/superpowers/plans/phase-4-exclusions.txt`.
 fn required_string_argument(
     interp: &mut Interp,
     value: ObjRef,
@@ -4459,10 +3274,6 @@ fn required_string_named_argument(
 
 /// `RexxObject::initRexx` (`classes/ObjectClass.cpp:2546`-`:2549`): it takes
 /// no arguments, does nothing, and answers `OREF_NULL`.
-///
-/// **Answering nothing is observable and is what the oracle answers**:
-/// measured, `say .K~init` under a lone `::CLASS K` is rc 165, `No result
-/// object.` and `Message "INIT" did not return a result.`
 fn native_no_op(
     _interp: &mut Interp,
     _cleared: Cleared,
@@ -4473,11 +3284,6 @@ fn native_no_op(
 }
 
 /// `Object~hasMethod(name)`: whether the receiver's behaviour answers `name`.
-///
-/// The argument is upcased before the lookup, measured:
-/// `'abc'~hasMethod('length')` is `1`. An argument with no string value is
-/// 88.909 rather than an answer of `0`, measured -- see
-/// [`required_string_argument`] for which shapes those are.
 fn native_has_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4519,14 +3325,6 @@ fn native_has_method(
 
 /// `Class~baseClass`: `RexxClass::getBaseClass`, bound as a method of
 /// `.Class` by `Setup.cpp:455`.
-///
-/// A class declared `MIXINCLASS` answers its target's own base class and
-/// every other class answers itself, which is the one thing about a class
-/// that says whether it is a mixin -- measured, `::CLASS M MIXINCLASS
-/// Object` and `::CLASS P` answer `The Object class` and `The P class`.
-///
-/// The non-class-object arm is unreachable, for the reason
-/// [`class_receiver`] gives.
 fn native_base_class(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4539,12 +3337,6 @@ fn native_base_class(
 
 /// The class object a receiver whose messages resolve against a class's
 /// **class** behaviour is, or the refusal for one that is not a class object.
-///
-/// Every method in `.Class`'s own instance dictionary is in this position:
-/// the only receiver whose behaviour that dictionary reaches is a class
-/// object, and nothing this crate can build is an *instance* of `.Class`
-/// without being one. Answering from the instance arm would mean picking a
-/// class, so it refuses instead.
 fn class_receiver(interp: &Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
     match interp.receiver_kind(receiver) {
         Ok(Primitive::Class(class)) => Ok(class),
@@ -4557,10 +3349,6 @@ fn class_receiver(interp: &Interp, receiver: ObjRef) -> Result<ObjRef, Failure> 
 /// `classArgument(other, TheClassClass, "class")`
 /// (`runtime/MethodArguments.hpp:727`), which refuses an omitted argument
 /// with 88.901 and a value that is not a class object with 88.914.
-///
-/// Measured at rc 168: `.Array~isSubclassOf()` reports `Missing argument;
-/// argument class is required.` and `.Array~isA('abc')` reports `Argument
-/// class must be an instance of the Class class.`
 fn class_argument(interp: &Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("class").into());
@@ -4573,12 +3361,6 @@ fn class_argument(interp: &Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Fa
 
 /// `Class~id`: the name the class was declared with, case unmodified --
 /// `RexxClass::getId` (`classes/ClassClass.cpp:385`).
-///
-/// Measured, `.array~id` is `Array`, `::class "Foo"` makes `.Foo~id` `Foo`
-/// and `::class Foo` makes it `FOO` -- an unquoted directive name is upcased
-/// with every other symbol before the id is taken, and a quoted one is not.
-/// `.object~subclass("Foo")~id` is `Foo`, because that id is a string
-/// argument and no tokenizer sees it.
 fn native_id(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4592,11 +3374,6 @@ fn native_id(
 
 /// `Class~defaultName`: `The <id> class` -- `RexxClass::defaultNameRexx`
 /// (`classes/ClassClass.cpp:614`).
-///
-/// **`~objectName=` does not move it**, which is what separates it from
-/// [`native_object_name`]: measured, oracle rc 0, after `.K~objectName = 'zed'`
-/// the class answers `zed` for `~objectName` and `~string` and `The K class`
-/// for this.
 fn native_class_default_name(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4611,13 +3388,6 @@ fn native_class_default_name(
 /// `Object~defaultName`: the receiver's class id with an article in front --
 /// `RexxObject::defaultNameRexx` (`classes/ObjectClass.cpp:2868`) over
 /// `RexxObject::defaultName` (`:1760`).
-///
-/// The receiver's own class and not the scope the method resolved at, so it
-/// follows a subclass. Measured, oracle rc 0: `'abc'`, a small integer and
-/// `1.5` all answer `a String`; `.nil` answers `an Object`; `.environment`
-/// answers `a Directory`; and `.local~defaultName` is `a Directory` where its
-/// `~objectName` is `The Local Directory`, so a stored name does not reach
-/// this.
 fn native_default_name(
     interp: &mut Interp,
     cleared: Cleared,
@@ -4642,10 +3412,6 @@ fn native_default_name(
 }
 
 /// `Class~metaClass`: `RexxClass::getMetaClass` (`classes/ClassClass.cpp:419`).
-///
-/// **Not `~class`**, and the pair parts iff the superclass is a metaclass and
-/// is not the named-or-inherited metaclass -- `ClassRegistry::class_of` carries
-/// the measured rows and the rule.
 fn native_metaclass(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4660,11 +3426,6 @@ fn native_metaclass(
 /// `.Object` -- `RexxClass::getSuperClass` (`classes/ClassClass.cpp:441`),
 /// whose body is `superClasses->getFirstItem()`, so it reads the **first** entry
 /// of the superclass list and not its last.
-///
-/// Measured, `.Array~superClass` is `The Object class` while
-/// `.Array~superClasses` holds `The Object class` and `The OrderedCollection
-/// class`, so the first entry and the whole list are different answers;
-/// `.Object~superClass` is `The NIL object`.
 fn native_superclass(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4681,9 +3442,6 @@ fn native_superclass(
 /// superclasses -- `RexxClass::getSuperClasses`
 /// (`classes/ClassClass.cpp:458`), whose body is `superClasses->copy()`, so it
 /// hands out a copy rather than the class's own list.
-///
-/// Measured, `(.Array~superClasses == .Array~superClasses)` is `0`: two sends
-/// answer two objects.
 fn native_superclasses(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4708,14 +3466,6 @@ fn native_superclasses(
 /// `Object~class`: the class whose behaviour answers this receiver's
 /// messages -- `RexxObject::classObject` (`classes/ObjectClass.cpp:1814`),
 /// whose whole body is `behaviour->getOwningClass()`.
-///
-/// For a class object this is [`ClassRegistry::class_of`], the class the class
-/// object's own behaviour belongs to, and **not** its metaclass; that
-/// function's doc carries the measured rows where the two part. The C++ body
-/// is what says which: the owning class is a field of the behaviour, and the
-/// metaclass is a field of the class.
-///
-/// [`ClassRegistry::class_of`]: rexx_classes::ClassRegistry::class_of
 fn native_class(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4751,11 +3501,6 @@ fn native_class(
 /// subclass of it -- `RexxObject::isInstanceOfRexx`
 /// (`classes/ObjectClass.cpp:286`), which asks `classObject()` and not the
 /// receiver.
-///
-/// The indirection through `~class` is the whole difference from
-/// [`native_is_subclass_of`], and it is measurable on a class object as
-/// receiver: `.Array~isA(.Class)` is `1` because `.Array~class` is `.Class`,
-/// and `.Array~isA(.Array)` is `0` where `.Array~isSubclassOf(.Array)` is `1`.
 fn native_is_a(
     interp: &mut Interp,
     cleared: Cleared,
@@ -4790,21 +3535,6 @@ fn native_is_subclass_of(
 }
 
 /// `Object~identityHash`.
-///
-/// **Answers the handle**, which is deviation 4's licence read at this
-/// message: identity in this crate is handle equality. The oracle's own
-/// answer is derived from the object's address, so no differential row can
-/// compare the two -- the corpus cannot witness this method and
-/// `dispatch.rs`'s own tests are the instrument.
-///
-/// **The divergence is licensed rather than closed, and the oracle is why.**
-/// `RexxObject::identityHash` is `((uintptr_t)this) ^ UINTPTR_MAX`
-/// (`classes/ObjectClass.hpp:340`), rendered as a signed decimal. Measured
-/// 2026-09-03, `say .Object~new~identityHash` over 10 runs answered 10
-/// different values between `-139691328307761` and `-140519509881393`, so the
-/// oracle does not reproduce its own answer across runs and there is nothing
-/// to match; matching the width instead -- 16 characters in 20 of 20 runs --
-/// would pin this machine's mmap address range into this crate.
 fn native_identity_hash(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4821,12 +3551,6 @@ const NIL_HASH: u64 = 0xdead_beef;
 
 /// The string hash `RexxString::getStringHash` computes
 /// (`classes/StringClass.hpp:328`), over the bytes rather than the text.
-///
-/// The accumulator is 64-bit and wraps, and **the byte is signed** -- `char`
-/// on this platform -- which is the half a reimplementation gets wrong,
-/// because it only shows above 0x7f. Measured: `'ff'x~hashCode` is eight `FF`
-/// bytes, so the single byte contributed -1 rather than 255, and
-/// `'80'x~hashCode` is `80FFFFFFFFFFFFFF`.
 fn string_hash(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0;
     for byte in bytes {
@@ -4839,25 +3563,6 @@ fn string_hash(bytes: &[u8]) -> u64 {
 
 /// `Object~hashCode`, `RexxObject::hashCode` (`classes/ObjectClass.cpp:398`):
 /// `getHashValue()` rendered as its own eight bytes, little-endian.
-///
-/// `getHashValue` is virtual and overridden by `NilObject`, `String`,
-/// `Pointer`, `Integer`, `NumberString` and `Class`; every other receiver
-/// takes `identityHash()`. **The rule is the receiver's kind, not whether it
-/// renders as text**: measured, two `.MutableBuffer~new('abc')` hash
-/// differently from each other and from `'abc'`, and both move between the
-/// oracle's own runs.
-///
-/// `Integer` and `NumberString` delegate to their string value's hash
-/// (`IntegerClass.cpp:83`, `NumberStringClass.cpp:129`) and answer `String`
-/// for their class, so [`Primitive::String`] covers all three: measured,
-/// `5~hashCode` and `'5'~hashCode` are both `3500000000000000`, and
-/// `(2**40)~hashCode` equals `'1.09951163E+12'~hashCode` -- the hash is of
-/// the number as it renders, not of its digits.
-///
-/// The identity arm answers the handle, which is deviation 4's licence read
-/// exactly as [`native_identity_hash`] reads it: the oracle's own value is
-/// the complement of an address and does not reproduce across its own runs,
-/// so no differential row can compare the two.
 fn native_hash_code(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4884,20 +3589,6 @@ pub(super) fn hash_value(interp: &mut Interp, receiver: ObjRef) -> u64 {
 
 /// `Class~annotation(name)`, and the same method at `Method`, `Routine` and
 /// `Package`: the annotation `name` holds, or `.nil`.
-///
-/// `RexxClass::getAnnotationRexx` (`classes/ClassClass.cpp:374`) and its two
-/// siblings are each `resultOrNil(getAnnotation(stringArgument(name,
-/// "name")))`, and every `getAnnotation` reads
-/// `annotations->entry(name)`, which **upcases the index it is given**
-/// (`StringHashCollection::entry`, `classes/support/HashCollection.cpp:824`).
-/// Measured, oracle rc 0 under `::ANNOTATE CLASS K author 'moritz'`:
-/// `.K~annotation("AUTHOR")` and `.K~annotation("author")` both answer
-/// `moritz`, and `.K~annotation("ZZ")` answers `The NIL object`.
-///
-/// The argument is a required string named `name` in the message the oracle
-/// reports: measured, `.K~annotation()` is 88.901 `Missing argument;
-/// argument name is required.` and `.K~annotation(.array)` is 88.909
-/// `Argument name must have a string value.`
 fn native_annotation(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4917,11 +3608,6 @@ fn native_annotation(
 
 /// `Class~annotations`, and the same method at `Method`, `Routine` and
 /// `Package`: the receiver's own annotation table.
-///
-/// `RexxClass::getAnnotations` (`classes/ClassClass.cpp:325`) creates an
-/// empty `StringTable` on the first ask and stores it, so a target no
-/// `::ANNOTATE` named still answers a table and a program can add to it --
-/// [`Interp::annotation_table`] carries the measurement.
 fn native_annotations(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4934,15 +3620,6 @@ fn native_annotations(
 /// `String~sign`: `RexxString::sign`, which is
 /// `ArithmeticMethod(Sign(), "SIGN")` (`classes/StringClass.cpp:1084`) and so
 /// is the `SIGN` builtin's own computation on the receiver.
-///
-/// **Landed here because `DateTime~compareTo` reaches it**:
-/// `(utcTimeStamp - othertime)~sign` (`CoreClasses.orx:2517`) is the last step
-/// of every ordering comparison on a `DateTime`, so that class's documented
-/// comparison operators all refused on this one name.
-///
-/// Measured, oracle: `(-12)~sign` is `-1`, `'-0.0'~sign` is `0`, and
-/// `'abc'~sign` is `93.943 SIGN method target must be a number; found "abc".`
-/// at rc 163 under a `Compiled method "SIGN" with scope "String".` line.
 fn native_string_sign(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -4957,13 +3634,6 @@ fn native_string_sign(
 }
 
 /// The one operand every `Object` operator method requires, or 93.903.
-///
-/// `requiredArgument(other, ARG_ONE)` opens each of them
-/// (`classes/ObjectClass.cpp:452`), and the count in `Setup.cpp:521`-`:530`
-/// is 1 -- so a shorter list is padded and refused here rather than by
-/// [`Interp::invoke`]. Measured, oracle rc 163: `o~'='()` is `93.903 Missing
-/// argument in method; argument 1 is required.` under a `Compiled method "="
-/// with scope "Object".` line.
 fn operator_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
     match args.first().copied() {
         Some(Some(argument)) => Ok(argument),
@@ -4974,12 +3644,6 @@ fn operator_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
 /// `Object~"="` and `Object~"=="`: `RexxObject::equal` and
 /// `RexxObject::strictEqual` (`classes/ObjectClass.cpp:464`, `:448`), each a
 /// direct identity test rather than a comparison of renderings.
-///
-/// Measured, oracle rc 0 on `::CLASS K`: `.K~new = .K~new` is `0`, `o = o` is
-/// `1`, and `o = 'a K'` is `0` against the very text the instance renders as.
-///
-/// Identity here is handle equality, which is deviation 4's licence read the
-/// same way [`native_identity_hash`] reads it.
 fn native_object_identical(
     _interp: &mut Interp,
     _cleared: Cleared,
@@ -5006,11 +3670,6 @@ fn native_object_different(
 /// `Object~"||"` and `Object~""`: `RexxObject::concatRexx`
 /// (`classes/ObjectClass.cpp:2807`), which is `requestString()` on the
 /// receiver and then that string's own concatenation.
-///
-/// Measured, oracle rc 0: an instance whose class defines `::METHOD string`
-/// returning `'STR'` gives `STRx` for `o || 'x'`, and one that defines
-/// `makeString` gives `MKSx`, where a class defining neither gives its
-/// default name.
 fn native_object_concat(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5035,9 +3694,6 @@ fn native_object_concat_blank(
 /// [`Interp::apply_binary`] on it, which is the C++'s
 /// `alias->concatRexx(otherObj)` and converts the other operand exactly as
 /// every other concatenation does.
-///
-/// The alias is rooted because the join allocates and the receiver's own
-/// `STRING` method may have built it.
 fn concat_through_string_value(
     interp: &mut Interp,
     op: Operator,
@@ -5059,21 +3715,6 @@ fn concat_through_string_value(
 
 /// `Class~method(name)`: the method object `name` names **in this class's own
 /// instance dictionary**, and 97.1 for anything else.
-///
-/// `RexxClass::method` (`classes/ClassClass.cpp:984`) retrieves from
-/// `instanceMethodDictionary` directly, so an inherited name, a donated name
-/// and a class-side name all raise. Measured, three descriptors:
-/// `.Array~method("APPEND")` answers `a Method`; `.Array~method("STRING")`,
-/// whose name `.Object` defines and `.Array`'s flattened behaviour holds, is
-/// 97.1 at rc 159; and `.K~method("M")` for `::method m class` is 97.1 too,
-/// while the same directive without `CLASS` answers.
-///
-/// **A hidden name answers `.nil` rather than raising**, which is the one
-/// reader that tells hiding and removal apart -- the C++ says so in its own
-/// comment at the raise (`:992`-`:993`: "Note that is could be there, but as
-/// .nil.  We will return that value"). Measured at rc 0,
-/// `.Stem~method("==")` and `.VariableReference~method("==")` both print
-/// `The NIL object` where `.Queue~method("SORT")` raises 97.1.
 fn native_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5109,13 +3750,6 @@ fn native_method(
 /// `Method~scope`: the class the method object was defined at, `.nil` for a
 /// method object no class has taken -- [`Interp::method_scope`] carries the
 /// C++ and the measurements.
-///
-/// **The scope is not the class the send went to**, which is the whole point
-/// of the answer: measured, oracle rc 0, with `::method m` under a
-/// `::class base` and an overriding `::method m` under `::class sub subclass
-/// base`, `.base~method("M")~scope~id` is `BASE` and `.sub~method("M")~scope~id`
-/// is `SUB`, so a reader that walked to the ancestor defining the name would
-/// answer `BASE` twice. `corpus/gate-tables/concepts/xscope.rex` is that pair.
 fn native_scope(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5129,24 +3763,6 @@ fn native_scope(
 /// `isRexxDefined()` and its `reportException(Error_Execution_rexx_defined_class)`
 /// (`classes/ClassClass.cpp:823`, `:522`, `:955`, `:1290`, `:1382`, one per
 /// mutator).
-///
-/// **Checked before the arguments are**, which the five methods all do and
-/// which is measured: `.Array~inherit()` reports 98.985 where the same send
-/// to a class a `::CLASS` declared reports 88.901.
-///
-/// **The corpus is what catches a regression in this check**, and its rows
-/// have to name a class from each half of what carries the flag: the classes
-/// `Setup.cpp` builds and the classes the interpreter's own Rexx-written
-/// library declares. A build that dropped the check would let
-/// `.Array~define(...)` succeed at rc 0 where the oracle raises -- a
-/// divergence a differential row sees, unlike a refusal the oracle does not
-/// share.
-///
-/// Whether the flag is *set* on the library's half is a different question,
-/// and a corpus row can only ask it of a class a program can name.
-/// `every_class_the_library_declares_carries_the_rexx_defined_flag` asks it
-/// over the whole table the bootstrap leaves behind, which is where the
-/// classes declared without `PUBLIC` are.
 fn rexx_defined_lock(interp: &mut Interp, class: ObjRef) -> Result<(), Failure> {
     // **Open while the interpreter's own library runs**, which is the state
     // `Setup.cpp` builds the image in: `CoreClasses.orx:93` onwards is a run
@@ -5167,21 +3783,6 @@ fn rexx_defined_lock(interp: &mut Interp, class: ObjRef) -> Result<(), Failure> 
 /// The physical lines a method source is compiled from, or the refusal for
 /// a value this crate cannot read as one -- `processExecutableSource`
 /// (`execution/BaseExecutable.cpp:169`).
-///
-/// **A string is one line and not a text to split.** The C++ wraps it in a
-/// one-element array (`:174`-`:177`) and `ArrayProgramSource` gives one line
-/// per element, so a terminator byte inside it is a character in the program:
-/// measured, oracle rc 243, `.k~define("m", 'say 1' || '0a'x || 'say 2')` is
-/// `Error 13.1: Incorrect character in program "\n" ('0A'X).` Joining the
-/// lines and letting the scanner find the boundaries would compile that at
-/// rc 0, which is why [`rexx_parse::parse_lines`] takes the elements rather
-/// than a buffer.
-///
-/// **The walk ends at the last item**, which is `stringArrayArgument`'s own
-/// `1..=lastIndex()` -- see [`Raised::method_source_not_all_strings`] for the
-/// pair of measurements that separates a hole from a longer array.
-///
-/// [`Raised::method_source_not_all_strings`]: crate::Raised::method_source_not_all_strings
 fn method_source_lines(
     interp: &mut Interp,
     source: ObjRef,
@@ -5212,10 +3813,6 @@ fn method_source_lines(
 /// Whether one value is a source line -- the C++'s `isString(source)` for
 /// the whole source and its `makeString()` for an array's items
 /// (`execution/BaseExecutable.cpp:174`, `classes/StringClassUtil.cpp:428`).
-///
-/// [`Primitive::SmallInt`] answers with [`Primitive::String`] because the
-/// oracle makes no distinction to answer differently: measured,
-/// `12345~class~id` is `String`, and `.k~define("m", 5)` is rc 0.
 fn is_source_line(interp: &Interp, value: ObjRef) -> bool {
     matches!(
         interp.receiver_kind(value),
@@ -5226,21 +3823,6 @@ fn is_source_line(interp: &Interp, value: ObjRef) -> bool {
 /// `MethodClass::newMethodObject`'s compiling arm
 /// (`classes/MethodClass.cpp:462`-`:485`): the `Method` object a source text
 /// becomes, carrying no scope, for a caller that is about to install it.
-///
-/// **The body is filed under the object rather than under a dictionary
-/// key**, which is [`Interp::record_compiled_body`]'s job: `~define` and
-/// `~defineMethods` mint their own identity for what they install, and
-/// `SETMETHOD` is what installs where a send can reach the body this crate
-/// holds.
-///
-/// The parse also buys the oracle's **timing**: a source that does not parse
-/// fails at `~define` time and not at send time, measured at rc 221 for a
-/// body no send ever reaches.
-///
-/// `name` is the method's own name as the caller wrote it, which the oracle
-/// keeps unchanged where the dictionary key is upcased
-/// (`classes/ClassClass.cpp:830`-`:832`): it is the name a parse failure
-/// reports the source under.
 fn compile_method_source(
     interp: &mut Interp,
     name: &[u8],
@@ -5275,11 +3857,6 @@ fn compile_method_source(
 
 /// `RoutineClass::newRexx`'s compiling arm (`classes/RoutineClass.cpp:379`):
 /// [`compile_method_source`] answering a `Routine` instead.
-///
-/// The two share their argument checking, their parse and their annotation
-/// table, and differ in the class of the object and in the directive kind the
-/// body is filed under -- [`Interp::record_compiled_routine`] carries the
-/// measurement that makes the second observable.
 fn compile_routine_source(
     interp: &mut Interp,
     name: &[u8],
@@ -5321,17 +3898,6 @@ fn method_name_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<
 
 /// [`method_name_argument`] with the spelling the caller wrote kept beside
 /// the dictionary key.
-///
-/// `~define` needs both at once: the key is `method_name->upper()` and the
-/// method object is built under `method_name` itself
-/// (`classes/ClassClass.cpp:830`-`:832`, `:849`). What the oracle does with
-/// the second is report a parse failure under it -- measured, rc 221,
-/// `.k~define("bad", 'this is not rexx +++')` reports `Error 35 running bad
-/// line 1:`, the name as written -- and that report is
-/// [`compile_method_source`]'s refusal here, which names the method the same
-/// way. Nothing else in this crate can see the difference: a dictionary key
-/// is upcased again by `MethodDict` on insert and on lookup, so the two
-/// spellings reach the same entry.
 fn method_name_pair(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -5347,32 +3913,6 @@ fn method_name_pair(
 
 /// `Class~define(name, method)`: install one instance method on the receiver
 /// -- `RexxClass::defineMethod` (`classes/ClassClass.cpp:819`).
-///
-/// **The second argument has three shapes and they are three answers**,
-/// measured on the oracle for a `::class K` and read back through `~method`:
-///
-/// * a `Method` object -- installed, and `~method` answers **that** object;
-/// * omitted -- a `.nil` tombstone, and `~method` answers `The NIL object`.
-///   `.K~define("STRING")` does this for a name `.Object` supplies, so the
-///   entry is created rather than overwritten;
-/// * `.nil` -- the entry goes away, and `~method` raises 97.1. This is not
-///   the tombstone: measured, `.K~define("Z", .methods~z)` followed by
-///   `.K~define("Z", .nil)` leaves `.K~method("Z")` raising where the
-///   omitted form leaves it answering `The NIL object`. The C++ leaves
-///   `methodObject` at `OREF_NULL` for this arm alone (`:840`-`:849`, whose
-///   two tests are `OREF_NULL == methodSource` and
-///   `TheNilObject != methodSource`) and hands that to `replaceMethod`.
-///   Modelled as the removal it reads as; the flattened behaviour is where a
-///   stored null and an absent entry could still part, and no send this
-///   phase can make reaches one, since `~new` is not built.
-///
-/// Anything else is source text for `newMethodObject` to compile, which is
-/// [`compile_method_source`]. The compiled object carries no scope, so the
-/// `newScope` inside [`Interp::define_method_object`] fills in this class and
-/// keeps the object rather than copying it: measured, oracle rc 0,
-/// `.cost~define("upper", 'return "U"')` then `.cost~method("UPPER")~scope~id`
-/// is `COST`, while an unattached `::METHOD` reached through `.methods~z`
-/// answers `The NIL object` until a class takes it.
 fn native_define(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5416,23 +3956,6 @@ fn native_define(
 /// `Class~defineMethods(methods)`: install a whole table of instance methods
 /// in one mutation -- `RexxClass::defineMethodsRexx`
 /// (`classes/ClassClass.cpp:518`).
-///
-/// **The object stored is never the one the table held**, unlike `~define`
-/// beside it -- see [`Interp::define_method_table`] for the two `newScope`
-/// calls that make it so and the measurement.
-///
-/// The oracle reads the argument by sending it `SUPPLIER`
-/// (`classes/ClassClass.cpp:1250`), so what a value that has no such method
-/// gets is 97.1 naming that message, and this raises the same: measured,
-/// `.K~defineMethods("abc")` is rc 159, `Object "abc" does not understand
-/// message "SUPPLIER".` under the `DEFINEMETHODS` frame. A value whose
-/// behaviour *does* answer `SUPPLIER` and which this phase cannot walk is
-/// the refusal that send would have produced instead.
-///
-/// The two hash collections are read from their own entries rather than
-/// through a supplier object, which this phase does not build. They are
-/// walked in sorted name order: the order is not observable, and a stable
-/// one is what keeps the run-to-run allocation sequence fixed.
 fn native_define_methods(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5486,11 +4009,6 @@ fn native_define_methods(
 /// can walk: one of this crate's own `Body::Native` directories, or a
 /// `Directory` or `StringTable` a program made, which since Phase 5h Task 4
 /// is a collection with a hash store.
-///
-/// **Both, and the second is the one that was missed.** Measured when this
-/// asked only `receiver_kind`: `enhanced_scope.rex`, `enhanced_unset.rex` and
-/// `usesem.rex` -- all three of which hand `Class~enhanced` a
-/// `.StringTable~new` they filled -- fell through to the `SUPPLIER` refusal.
 fn string_keyed_table(interp: &mut Interp, value: ObjRef) -> bool {
     if matches!(
         interp.receiver_kind(value),
@@ -5503,12 +4021,6 @@ fn string_keyed_table(interp: &mut Interp, value: ObjRef) -> bool {
 
 /// What a `SUPPLIER` send to `table` would have answered, as the failure
 /// `~defineMethods` reports for a value it cannot walk.
-///
-/// Asking the same lookup a send asks, rather than deciding from the value's
-/// kind: a receiver whose behaviour has no `SUPPLIER` entry is the oracle's
-/// own 97.1, and one that has an entry this crate implements no code for is
-/// this crate's gap. Nothing is run either way -- no value this phase builds
-/// answers `SUPPLIER` with a supplier object.
 fn supplier_refusal(interp: &mut Interp, table: ObjRef) -> Failure {
     match interp.lookup_for_refusal(table, b"SUPPLIER") {
         Some(scope) => Loud::native_method(b"SUPPLIER", &scope).into(),
@@ -5536,14 +4048,6 @@ fn native_subclass(
 /// `Class~mixinClass(id, metaclass, classMethods)`: the same factory, marking
 /// what it builds a mixin -- `RexxClass::mixinClassRexx`
 /// (`classes/ClassClass.cpp:1493`).
-///
-/// **`RexxClass::mixinClass` is `subclass` under the mixin flag** (`:1519`)
-/// **and the base class taken from the receiver's own** (`:1522`) rather than
-/// from the class being built. [`rexx_classes::ClassGraph::define_class`]
-/// makes both from [`ClassKind::Mixin`], which is why one factory serves both
-/// messages. Measured, oracle rc 0: `.array~mixinclass("mx")~baseClass`
-/// is `The Array class` where `.array~subclass("s")~baseClass` is `The s
-/// class`.
 fn native_mixin_class_factory(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5554,21 +4058,6 @@ fn native_mixin_class_factory(
 }
 
 /// `Object~new`: what every class that declares no `NEW` of its own answers.
-///
-/// `RexxObject::newRexx` (`classes/ObjectClass.cpp:2630`) allocates a plain
-/// object and hands it to `RexxClass::completeNewObject`
-/// (`classes/ClassClass.cpp:1882`), whose steps run in a fixed order:
-/// `checkAbstract`, the behaviour, the `UNINIT` registration, the `INIT` send.
-///
-/// **The order is observable.** The abstract check precedes `INIT`, so an
-/// abstract class whose `INIT` prints never prints; and `~new`'s frame is
-/// still on the traceback while `INIT` runs -- measured, oracle rc 163,
-/// `.Object~new(1)` reports `Compiled method "INIT" with scope "Object".`
-/// above `Compiled method "NEW" with scope "Object".`
-///
-/// **`~new`'s arguments are `INIT`'s, and nothing chains them.** Measured,
-/// oracle rc 0: a subclass whose `INIT` omits `self~init:super` leaves the
-/// superclass's `INIT` unrun and its exposed variable reading its own name.
 fn native_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5585,10 +4074,6 @@ fn native_new(
 /// `RexxClass::completeNewObject` (`classes/ClassClass.cpp:1882`) up to but
 /// not including the `INIT` send: the abstract check, the behaviour, the
 /// rooting and the `UNINIT` registration, in that order.
-///
-/// Split from [`native_new`] because [`native_enhanced`] takes the same
-/// steps and then puts the enhancing methods in before `INIT` runs, which is
-/// what makes an enhancing `INIT` the one that runs.
 fn new_instance(interp: &mut Interp, class: ObjRef) -> Result<ObjRef, Failure> {
     if interp.classes().is_abstract(class) {
         let id = interp.classes().id_string(class).as_bytes().to_vec();
@@ -5622,25 +4107,6 @@ fn new_instance(interp: &mut Interp, class: ObjRef) -> Result<ObjRef, Failure> {
 }
 
 /// `RexxClass::subclass` (`classes/ClassClass.cpp:1562`), in its own order.
-///
-/// **The order is observable and each boundary is measured**, oracle, stdout
-/// empty: the metaclass is resolved and tested first, so
-/// `.object~subclass(, .Object)` is 99.927 and not the 88.901 its omitted id
-/// would earn, while `.object~subclass(, .Class)` is that 88.901. The
-/// enhancing methods are merged before the `INIT` send, so an enhancing
-/// `INIT` is the one that runs -- measured, `::METHOD init` in `.methods`
-/// prints from inside `.object~subclass("k", .Class, .methods)`.
-///
-/// **Nothing here consults `REXX_DEFINED` and nothing sets it.** The C++ is
-/// the reason on both halves: no mutator [`rexx_defined_lock`] guards has its
-/// `isRexxDefined()` test inside this function, and the flag is written by
-/// `RexxClass::liveGeneral` at image-save time (`:136`-`:142`) rather than by
-/// any constructor. Measured, oracle rc 0: `k = .object~subclass("k")` then
-/// `k~inherit(.object~mixinclass("mx"))` answers `The Object class The mx
-/// class`, where `.array~inherit(.object)` is 98.985.
-///
-/// The id string is `String::from_utf8_lossy`'d for the reason
-/// [`Interp::install_class`] gives about a `::CLASS` name that is not UTF-8.
 fn class_factory(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -5675,16 +4141,6 @@ fn class_factory(
 /// The metaclass a class factory builds from: the second argument, or the
 /// receiver's own where the send omits it (`classes/ClassClass.cpp:1566`-
 /// `:1569`).
-///
-/// **`.nil` is not an omission**, measured: `.object~subclass("k", .nil)` is
-/// 99.927 naming `The NIL object`, where `.object~subclass("k")` builds. The
-/// C++ tests `meta_class == OREF_NULL`, which an omitted argument is and a
-/// supplied `.nil` is not.
-///
-/// **The test is `!isInstanceOf(TheClassClass) || !isMetaClass()`** (`:1572`),
-/// so a value that is not a class object gets the same 99.927 with its own
-/// rendering: measured, `.object~subclass("k", "abc")` reports `"abc" is not
-/// a valid metaclass.`
 fn factory_metaclass(
     interp: &mut Interp,
     class: ObjRef,
@@ -5722,19 +4178,6 @@ fn factory_metaclass(
 
 /// The `class id` argument, and the traceback frame the oracle's own `NEW`
 /// activation contributes when it refuses.
-///
-/// `RexxClass::newRexx` is where the checks live
-/// (`classes/ClassClass.cpp:1786`, `stringArgument(class_id, "class id")`),
-/// because `subclass` reaches it by
-/// `meta_class->sendMessage(GlobalNames::NEW, class_id, p)` (`:1579`) -- so
-/// the frame is
-/// owed for the same reason [`Interp::blame_request`]'s is, and the method's
-/// own frame goes above it from [`Interp::invoke`]. Measured, oracle rc 168:
-/// `.object~subclass()` reports `Compiled method "NEW" with scope "Class".`
-/// then `Compiled method "SUBCLASS" with scope "Class".` then the sending
-/// clause, and `88.901 Missing argument; argument class id is required.`;
-/// `.object~subclass(.environment)` is `88.909 Argument class id must have a
-/// string value.` under the same pair.
 fn class_id_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
     let outcome = required_class_id(interp, args);
     if outcome.is_err() {
@@ -5745,10 +4188,6 @@ fn class_id_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec
 
 /// [`class_id_argument`] without the frame, so that every way of failing
 /// takes it.
-///
-/// **The id keeps the spelling it was given**, unlike a method name, which
-/// [`method_name_argument`] upcases: measured, `.object~subclass("k")~id` is
-/// `k` and `~string` is `The k class`.
 fn required_class_id(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("class id").into());
@@ -5760,15 +4199,6 @@ fn required_class_id(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec
 /// The third argument: class-side methods the new class is built with --
 /// `createMethodDictionary(enhancing_methods, new_class)` merged into
 /// `classMethodDictionary` (`classes/ClassClass.cpp:1602`-`:1608`).
-///
-/// **The class side and not the instance side**, measured, oracle rc 0: with
-/// `::METHOD z` unattached, `k = .object~subclass("k", .Class, .methods)`
-/// answers `k~z` and `k~hasMethod('Z')` is `1`, while `k~method('Z')` raises
-/// 97.1 -- `~method` reads the instance dictionary and nothing was put there.
-///
-/// The argument is read the way [`native_define_methods`] reads its own, for
-/// the reason that function gives: the oracle walks it by sending `SUPPLIER`,
-/// so what a value with no such method gets is 97.1 naming that message.
 fn enhance_class_methods(
     interp: &mut Interp,
     class: ObjRef,
@@ -5825,9 +4255,6 @@ fn install_enhancing_class_methods(
 
 /// `Class~delete(name)`: take one instance method back off the receiver --
 /// `RexxClass::deleteMethod` (`classes/ClassClass.cpp:952`).
-///
-/// A name the class does not define is not an error: measured, oracle rc 0
-/// with nothing on either descriptor.
 fn native_delete(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5848,10 +4275,6 @@ fn native_delete(
 /// superclass list -- `RexxClass::inherit` (`classes/ClassClass.cpp:1287`),
 /// the same function the `INHERIT` keyword of a `::CLASS` directive reaches
 /// by sending this message ([`Interp::inherit_mixin`]).
-///
-/// `position` is optional and says where in the list the mixin lands --
-/// [`rexx_classes::ClassGraph::inherit_at`] carries what "after" means
-/// there.
 fn native_class_inherit(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5880,15 +4303,6 @@ fn native_class_inherit(
 /// method of the receiver -- `RexxClass::defineClassMethod`
 /// (`classes/ClassClass.cpp:883`), which writes the class behaviour and
 /// `classMethodDictionary` from one `newScope` copy.
-///
-/// **No `REXX_DEFINED` lock**, and that is the C++: every mutator
-/// [`rexx_defined_lock`] guards opens with `isRexxDefined()` and this one
-/// does not, which is what lets `CoreClasses.orx:73` put its string
-/// constants on `.String`.
-///
-/// **Deleted from every shipped image**, so nothing here can be measured
-/// against the oracle: `removeSetupMethods` strips it (D39). The refusals
-/// are loud for that reason -- see [`SETUP_METHODS`].
 fn native_define_class_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5920,9 +4334,6 @@ fn native_define_class_method(
 /// superclass edge added -- `RexxClass::inheritInstanceMethods`
 /// (`classes/ClassClass.cpp:558`), the "phony inherit" `CoreClasses.orx:77`
 /// names in its own comment.
-///
-/// **No `REXX_DEFINED` lock**, for the reason
-/// [`native_define_class_method`] gives, and no oracle transcript either.
 fn native_inherit_instance_methods(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -5965,12 +4376,6 @@ fn native_uninherit(
 /// The `mixin class` argument `~inherit` and `~uninherit` share: required,
 /// and a `MIXINCLASS` class object or 98.942 naming the value
 /// (`classes/ClassClass.cpp:1298`-`:1301`, `:1391`-`:1394`).
-///
-/// **The mixin test is the graph's and the class-object test is here**,
-/// because the two report the same error and only one of them has a class to
-/// ask about. Measured at rc 158: `.K~uninherit('abc')` reports `Class "abc"
-/// must be a MIXINCLASS for INHERIT.` and `.K~uninherit(.Object)` reports the
-/// same sentence with `The Object class` in it.
 fn mixin_class_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
     let Some(Some(argument)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("mixin class").into());
@@ -6010,9 +4415,6 @@ fn inherit_refusal(
 /// -- `PackageClass::addClassRexx` (`classes/PackageClass.cpp:1926`) and
 /// `addPublicClassRexx` (`:1944`), which differ only in the flag they hand
 /// `addInstalledClass`.
-///
-/// Both answer the package object itself (`return this`, `:1933`), which is
-/// measured: `p~addClass("zz", .K) == p` is `1`.
 fn native_package_add_class(
     interp: &mut Interp,
     cleared: Cleared,
@@ -6034,13 +4436,6 @@ fn native_package_add_public_class(
 
 /// The body both `~addClass` rows share, since a second implementation is
 /// where the two could come to disagree.
-///
-/// The arguments are validated in the C++'s order: `stringArgument(name,
-/// "name")`, then `classArgument(clazz, TheClassClass, "class")`, then
-/// `checkRexxPackage`. Measured at rc 168, `~addClass()` is `Missing
-/// argument; argument name is required.`, `~addClass("a")` is the same
-/// sentence for `class`, and `~addClass("a", "b")` is 88.914 `Argument class
-/// must be an instance of the Class class.`
 fn add_installed_class(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6071,11 +4466,6 @@ fn add_installed_class(
 
 /// An array receiver's own slots, borrowed, or the refusal for a receiver that
 /// is not one.
-///
-/// The refusal is unreachable -- every row that reaches one of these callers
-/// is in `.Array`'s own dictionary, and the only receiver whose behaviour that
-/// dictionary reaches is a `Body::Array`. Loud rather than a panic, this
-/// crate's rule for an internal inconsistency.
 fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<&[Option<ObjRef>], Failure> {
     let receiver = collection_store(interp, receiver);
     interp
@@ -6085,15 +4475,6 @@ fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<&[Option<ObjRef>], F
 
 /// The array that actually holds `receiver`'s slots: the receiver itself when
 /// it carries a `Body::Array`, and otherwise the store its own pool holds.
-///
-/// **One resolution point for every Array-shaped receiver**, which is what
-/// lets one body serve `.Array`, a `Queue`, a `CircularQueue` and a user
-/// subclass of any of them. A `Body::Array` resolves to `Primitive::Array`
-/// wherever it is asked and so cannot answer a subclass's `~class`; spec D90
-/// and `collection::store_of` carry the whole argument.
-///
-/// Answers the receiver unchanged when there is no store, so the refusal a
-/// caller already raises stays the one it raises.
 fn collection_store(interp: &Interp, receiver: ObjRef) -> ObjRef {
     if interp.array_slots(receiver).is_some() {
         return receiver;
@@ -6116,9 +4497,6 @@ fn array_slots_owned(interp: &Interp, receiver: ObjRef) -> Result<Vec<Option<Obj
 
 /// An array receiver's dimensions array as an owned copy, or the refusal
 /// [`array_slots`] gives for a receiver that is not an array.
-///
-/// `None` is an array no dimension list was fixed for, which is not the same
-/// as a one-element list -- see [`rexx_core::Body::Array`].
 fn array_dimensions(interp: &Interp, receiver: ObjRef) -> Result<Option<Vec<usize>>, Failure> {
     let receiver = collection_store(interp, receiver);
     match interp.array_body(receiver) {
@@ -6143,10 +4521,6 @@ const MAX_FIXED_ARRAY_SIZE: usize = 100_000_000_000_000_000;
 /// `size` empty slots, or the 5.0 the oracle raises when the allocator refuses
 /// -- [`Raised::system_resources`] carries why that refusal is asked of the
 /// allocator rather than of a size limit.
-///
-/// [`MAX_FIXED_ARRAY_SIZE`] is a different check and runs first: a size above
-/// it is 93.959, and a size below it the allocator cannot satisfy is this.
-/// `corpus/lang/array_allocation_refused.rex` holds both against the oracle.
 fn empty_slots(size: usize) -> Result<Vec<Option<ObjRef>>, Failure> {
     let mut slots = Vec::new();
     slots
@@ -6181,14 +4555,6 @@ impl IndexUse {
 /// `ArrayClass::validateIndex` (`classes/ArrayClass.cpp:1211`): the flattened
 /// 1-based slot `args` names in `receiver`, or `None` for a subscript out of
 /// bounds under [`IndexUse::Get`].
-///
-/// Under [`IndexUse::Put`] the receiver grows to hold the position, so the
-/// answer is always `Some`.
-///
-/// **A lone array argument is the subscript list**, spread by taking its item
-/// count alongside its slot array (`:1219`-`:1226`). Measured, that is item
-/// count and not size: `(1,2)~at((1,))` answers `1` where `(1,2)~at((1,2))` is
-/// 93.926 and `(1,2)~at((,))` is 93.901.
 fn array_position(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -6216,11 +4582,6 @@ fn array_position(
 }
 
 /// `ArrayClass::validateSingleDimensionIndex` (`classes/ArrayClass.cpp:1258`).
-///
-/// A subscript past the end of the array is **not** an error under
-/// [`IndexUse::Get`] -- measured, `(1,2)~at(100000000000000001)` answers
-/// `The NIL object` even though that is past `MaxFixedArraySize` -- and only
-/// the count and the conversion raise.
 fn single_dimension_position(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -6267,9 +4628,6 @@ fn single_dimension_position(
 /// `ArrayClass::validateMultiDimensionIndex` (`classes/ArrayClass.cpp:1361`),
 /// whose offset takes the **first** subscript as the fastest-moving one
 /// (`:1408`-`:1410`).
-///
-/// Measured, oracle rc 0: a 2 by 3 array with `m[i, j]` set to `i || j` at
-/// every cell renders `11 21 12 22 13 23` through `~toString('l', ' ')`.
 fn multi_dimension_position(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -6315,10 +4673,6 @@ fn is_whole_method_argument(interp: &mut Interp, value: ObjRef) -> bool {
 /// A subscript converted under `Numerics::ARGUMENT_DIGITS` rather than under
 /// the activation's own `NUMERIC DIGITS`, or `None` for one that is not a
 /// whole number of at least 1.
-///
-/// The fixed precision is measured rather than read off the default argument:
-/// `numeric digits 3; say (1,2)~at(1000000)` answers `The NIL object` where a
-/// conversion at 3 digits would have rounded the subscript.
 fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
     // A tagged integer already is the answer when it is narrow enough that
     // the rounding rule would change nothing, the same shortcut
@@ -6340,11 +4694,6 @@ fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
 /// (`classes/ListClass.cpp:195`) reads a list handle with
 /// `unsignedNumberValue` under the same `Numerics::ARGUMENT_DIGITS`, and a
 /// list's first handle is `0`.
-///
-/// Measured on `.List~of('a','b','c')`, whose handles are `0`, `1` and `2`:
-/// `hasIndex('-0')` is `1`, `hasIndex('1e1')` is `0` -- it converts to ten,
-/// which the list does not hold -- and `hasIndex('1e300')` raises, because no
-/// `size_t` holds it.
 fn unsigned_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
     if let Decoded::SmallInt(small) = value.decode()
         && let Some(whole) = rexx_num::whole_i64(small, rexx_num::ARGUMENT_DIGITS)
@@ -6359,10 +4708,6 @@ fn unsigned_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
 /// comparators make on what the Rexx method answered
 /// (`classes/ArrayClass.cpp:2907`, `classes/ObjectClass.cpp:243`), at
 /// `Numerics::DEFAULT_DIGITS` rather than at the subscript precision.
-///
-/// `None` is the 26.902/26.903 limb. Measured: `'1.0'`, `'-1.0'` and `'0.0'`
-/// all convert and sort, where reading the answer's text for a sign left the
-/// array in its original order.
 fn whole_comparison(interp: &mut Interp, value: ObjRef) -> Option<i64> {
     let digits = rexx_num::DEFAULT_DIGITS as usize;
     if let Decoded::SmallInt(small) = value.decode() {
@@ -6374,10 +4719,6 @@ fn whole_comparison(interp: &mut Interp, value: ObjRef) -> Option<i64> {
 /// One subscript as `RexxInternalObject::requiredPositive`
 /// (`classes/ObjectClass.cpp:1564`) reads it, `position` naming its place in
 /// the method's own argument list.
-///
-/// Measured at rc 163: `(1,2)~at(0)` reports `Method argument 1 must be a
-/// positive whole number; found "0".` and `(1,2)~put('v',0)` reports the same
-/// for argument 2.
 fn positive_index(interp: &mut Interp, value: ObjRef, position: usize) -> Result<usize, Failure> {
     match whole_index(interp, value) {
         Some(index) => Ok(index),
@@ -6391,12 +4732,6 @@ fn positive_index(interp: &mut Interp, value: ObjRef, position: usize) -> Result
 /// One subscript of a multidimensional index as `positionArgument`
 /// (`classes/StringClassUtil.cpp:209`) reads it -- the same conversion
 /// [`positive_index`] makes, under a different pair of errors.
-///
-/// Measured at rc 163, `m = .array~new(2,3)`: `m[,2]` reports `Missing
-/// argument in method; argument 2 is required.`, `m[1.5,1]` reports `Invalid
-/// position argument specified; found "1.5".` and `m[.array,1]` reports the
-/// same with `found "The Array class"`. **The second names no position and
-/// renders the argument rather than its converted value.**
 fn position_index(
     interp: &mut Interp,
     subscript: Option<ObjRef>,
@@ -6435,16 +4770,6 @@ fn array_resize(interp: &mut Interp, receiver: ObjRef, size: usize) -> Result<()
 /// `ArrayClass::extendMulti` (`classes/ArrayClass.cpp:2434`): grow the
 /// receiver so that every subscript is within bounds, answering the shape it
 /// now has.
-///
-/// Each dimension becomes the larger of the subscript and the extent it had;
-/// an array with no dimensions array takes the subscripts as its shape, and
-/// the C++ reaches that only at size zero. **The subscripts are validated
-/// against `i + 1` here** rather than against the position the caller counts
-/// from (`:2457`, `:2515`), which is visible only in a `93.903`.
-///
-/// **The C++ bounds the product in `createMultidimensional` (`:217`-`:220`)
-/// and not here**; this raises the same 93.959 in both places rather than
-/// wrapping.
 fn array_extend_multi(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -6472,10 +4797,6 @@ fn array_extend_multi(
 
 /// The element move `ArrayClass::extendMulti` performs: each filled slot goes
 /// to the offset its multidimensional index has under `dimensions`.
-///
-/// `old` is the shape the slots are laid out under, and is `None` for a
-/// receiver that had no compatible shape -- which the C++ reaches only at
-/// size zero, so nothing moves.
 fn array_reshape(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -6522,9 +4843,6 @@ fn array_reshape(
 /// an empty slot and for a subscript past the end -- `ArrayClass::getRexx`
 /// (`classes/ArrayClass.cpp:979`), whose out-of-bounds answer is
 /// `TheNilObject` and whose in-bounds answer is `resultOrNil(get(position))`.
-///
-/// Measured, `a = (1,,3)`: `a[1]` is `1`, `a[2]` is `The NIL object`, `a[3]` is
-/// `3` and `a[4]` is `The NIL object`.
 fn native_array_at(
     interp: &mut Interp,
     cleared: Cleared,
@@ -6559,11 +4877,6 @@ fn native_array_at_for(
 /// `ArrayClass::putRexx` (`classes/ArrayClass.cpp:590`), which requires the
 /// value, validates the rest as the subscript list under `IndexUpdate` and
 /// answers nothing.
-///
-/// Measured at rc 163: `(1,2)~put('v')` reports `Not enough arguments for
-/// method; 2 expected.` and `(1,2)~put(,1)` reports `Missing argument in
-/// method; argument 1 is required.` Measured at rc 0: `a = (1,2)` then
-/// `a~put('v',5)` leaves `a~size` `5` and `a~items` `3`.
 fn native_array_put(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6592,12 +4905,6 @@ fn native_array_put(
 /// of dimension `n` -- `ArrayClass::dimensionRexx`
 /// (`classes/ArrayClass.cpp:1103`), which answers `0` for a dimension the
 /// array does not have.
-///
-/// Measured, oracle rc 0: `.array~new()~dimension` is `0` and its
-/// `~dimension(1)` is `0`; `.array~new(0)~dimension` is `1`;
-/// `.array~new(5)~dimension(1)` is `5` and its `~dimension(2)` is `0`;
-/// `(1,2)~dimension` is `1`; and `.array~new(2,3)` answers `2`, `2`, `3` and
-/// then `0` for `~dimension(3)`.
 fn native_array_dimension(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6628,17 +4935,6 @@ fn native_array_dimension(
 
 /// `.Array~new([size])` and `.Array~new(dimension...)`:
 /// `ArrayClass::newRexx` (`classes/ArrayClass.cpp:89`).
-///
-/// One argument that is not an array is the slot count; a lone array
-/// argument, or more than one argument, is the dimension list
-/// (`createMultidimensional`, `:199`), spread the way a subscript list is;
-/// and no argument at all is an empty array whose shape is not yet fixed.
-/// `INIT` is sent with no arguments, because `completeNewObject(temp)`
-/// (`classes/ClassClass.cpp:1882`) takes the default empty list.
-///
-/// Measured, oracle rc 0: `.array~new((2,3))~size` is `6`, and
-/// `.array~new(0)~dimension` is `1` where `.array~new()~dimension` is `0` --
-/// an explicit zero size fixes the shape where an omitted one does not.
 fn native_array_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6676,10 +4972,6 @@ fn native_array_new(
 
 /// `body` as an object of `class`: a bare `Body::Array` for `.Array` itself,
 /// and an instance carrying it as a store for any subclass.
-///
-/// A `Body::Array` resolves to `Primitive::Array` wherever it is asked, so it
-/// cannot answer a subclass's `~class` -- spec D90 and
-/// `dispatch::collection::store_of` carry the whole of that argument.
 fn array_of_class(interp: &mut Interp, class: ObjRef, body: Body) -> Result<ObjRef, Failure> {
     let store = interp.alloc_with(BehaviourId::ARRAY, body);
     if class == interp.object_model().array {
@@ -6692,12 +4984,6 @@ fn array_of_class(interp: &mut Interp, class: ObjRef, body: Body) -> Result<ObjR
 /// `.Array~of(item, ...)`: the arguments as an array's slots, in order --
 /// `ArrayClass::ofRexx` (`classes/ArrayClass.cpp:150`), whose `INIT` send
 /// carries no arguments.
-///
-/// An omitted argument is an empty slot, and an empty argument list fixes the
-/// shape the way an explicit zero size does. Measured, oracle rc 0:
-/// `.array~of(1,,3)` is `~size` `3` and `~items` `2`, and `.array~of()` is
-/// `~dimension` `1` where `.array~new()` is `0`
-/// (`ArrayClass::ArrayClass(objs, count)`, `:314`).
 fn native_array_of(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6717,10 +5003,6 @@ fn native_array_of(
 
 /// `ArrayClass::createMultidimensional` (`classes/ArrayClass.cpp:199`): a
 /// body whose shape is `dimensions` and whose slots are all empty.
-///
-/// A one-element dimension list is a single-dimensional array that still
-/// carries a dimensions array, which is [`rexx_core::Body::Array`]'s own
-/// distinction.
 fn multidimensional_body(
     interp: &mut Interp,
     dimensions: &[Option<ObjRef>],
@@ -6744,13 +5026,6 @@ fn multidimensional_body(
 /// `ArrayClass::validateSize` (`classes/ArrayClass.cpp:178`) over
 /// `nonNegativeArgument` (`classes/StringClassUtil.cpp:167`): a whole number
 /// of at least zero, `MaxFixedArraySize` its upper bound.
-///
-/// Measured at rc 163: `.array~new(-1)` reports `Method argument 1 must be
-/// zero or a positive whole number; found "-1".`, `.array~new(2,'-1.0')`
-/// reports the same for argument 2 and renders the argument rather than its
-/// converted value, `.array~new((,3))` reports `Missing argument in method;
-/// argument 1 is required.` and `.array~new(100000000000000001)` reports `An
-/// array cannot contain more than 100000000000000000 elements.`
 fn array_size_argument(
     interp: &mut Interp,
     argument: Option<ObjRef>,
@@ -6776,10 +5051,6 @@ fn array_size_argument(
 
 /// `Array~size`: how many slots the array has, empty ones included --
 /// `ArrayClass::sizeRexx`.
-///
-/// Measured, `(1,)~size` is `2`, `(,)~size` is `2` and `(1,,3)~size` is `3`:
-/// the list expression's own array is `new_array(expressionCount)`
-/// (`expression/ExpressionList.cpp:93`), so a trailing omission is a slot.
 fn native_array_size(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6791,10 +5062,6 @@ fn native_array_size(
 }
 
 /// `Array~items`: how many slots hold an object -- `ArrayClass::itemsRexx`.
-///
-/// **Not `~size`, and an explicit `.nil` is an item.** Measured,
-/// `(1,,3)~items` is `2` while `(1,.nil,3)~items` is `3`, and both are
-/// `~size` `3`.
 fn native_array_items(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6807,21 +5074,6 @@ fn native_array_items(
 
 /// The index argument a hash-collection method was given, as the bytes it is
 /// stored and looked up under.
-///
-/// `stringArgument(index, "index")` (`runtime/MethodArguments.hpp:161`), which
-/// raises 88.901 for an omitted argument and 88.909 for a value with no string
-/// value. Measured at rc 168: `.environment~at()` reports `Missing argument;
-/// argument index is required.` and `.environment~at(.nil)` reports `Argument
-/// index must have a string value.`
-///
-/// **The bytes are not upcased.** An index is stored and matched verbatim --
-/// measured, `d~put('v','kk')` leaves `d['kk']` `v` and `d['KK']`
-/// `The NIL object`, and `.environment['array']` is `The NIL object` where
-/// `.environment['ARRAY']` is `The Array class`. The entries `Setup.cpp`
-/// registers are uppercase because `completeSystemClass` upcases the *name it
-/// registers*, not because a lookup folds case. [`native_hash_unknown`] is
-/// where the fold does happen, because `entry` and `setEntry` are the
-/// upcasing pair and `get`/`put` are not.
 fn hash_index(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -6837,10 +5089,6 @@ fn hash_index(
 /// `~at(index)` and `~[index]` on a `Directory` or a `StringTable`: the entry
 /// stored under `index`, or `.nil` -- `HashCollection::getRexx`, donated to
 /// each of them by an `InheritInstanceMethods`.
-///
-/// Measured, `.environment['ARRAY']` is `The Array class`,
-/// `.environment['x']` is `The NIL object`, and `.methods['Z']` is `a Method`
-/// in a file whose only directive is `::method z`.
 fn native_hash_at(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6867,15 +5115,6 @@ fn native_hash_at(
 
 /// `~put(item, index)` on a `Directory` or a `StringTable`: stores `item`
 /// under `index`, replacing whatever was there -- `HashCollection::putRexx`.
-///
-/// **The item is argument one and the index argument two**, which is the order
-/// `CoreClasses.orx:65` writes (`.environment~put(class, name)`). Measured at
-/// rc 168, the two refusals in the order the C++ checks them:
-/// `.environment~put()` reports `Missing argument; argument item is required.`
-/// and `.environment~put('a')` reports `... argument index is required.`
-///
-/// **Answers no value**, measured: `.environment~put('v','q')` is rc 0 as a
-/// whole clause and 91.999 at rc 165 under `say`.
 fn native_hash_put(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6901,32 +5140,6 @@ fn native_hash_put(
 /// `~unknown(message, arguments)` on a `Directory` or a `StringTable`: **the
 /// entry-method mechanism**, `StringHashCollection::unknown`
 /// (`classes/support/HashCollection.cpp:1015`).
-///
-/// A name ending in `=` stores the send's own first argument under the name
-/// without it (`:1020` is the test); every other name reads the entry. So an entry
-/// answers a message of its own name without being in the behaviour at all --
-/// measured, `.environment~local~class` is `The Directory class` while
-/// `.environment~hasMethod("LOCAL")` is `0`.
-///
-/// **Both directions fold the name to upper case**, which `~at` and `~put` do
-/// not: `entry` and `setEntry` are `get` and `put` with `index->upper()`
-/// (`:824`, `:854`). Measured, `.local~"mything="('v')` then `.local["MYTHING"]`
-/// is `v` and `.local["mything"]` is `The NIL object`.
-///
-/// **The set form with no value argument is refused, and there is no oracle
-/// behaviour to match.** `unknown` reads `arguments[0]` whatever the argument
-/// count is, so a send that supplies none reads uninitialised memory:
-/// measured, `d~mything = 'v'` then `say 'a' d["MYTHING"]` then
-/// `d~"MYTHING="()` leaves `d["MYTHING"]` holding `a v` -- the string the
-/// intervening `SAY` had just built. `d~"MYTHING="(,)` and `(,,)` do the same.
-/// The message-assignment form always supplies a value, so nothing that
-/// reaches this from `receiver~NAME = expr` takes the refusal.
-///
-/// `arguments` is an `Array` on every send the interpreter itself forwards
-/// ([`Interp::unknown_or_nomethod`] builds one). A program sending `~UNKNOWN`
-/// by hand may pass anything, and the oracle converts it with `requestArray`;
-/// this crate has no `MAKEARRAY` for any receiver, so a value that is not
-/// already an array is the same refusal `~request('ARRAY')` gives.
 fn native_hash_unknown(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6974,9 +5187,6 @@ fn native_hash_unknown(
 
 /// `VariableReference~name`: the referenced variable's own spelling --
 /// `VariableReference::getName` (`classes/VariableReference.cpp:150`).
-///
-/// Measured, oracle rc 0: `vr = 5; say (>vr)~name` is `VR`, upper case
-/// whatever the source spelled, and `s. = 0; say (>s.)~name` is `S.`.
 fn native_reference_name(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -6994,10 +5204,6 @@ fn native_reference_name(
 /// `VariableReference::getValue` (`classes/VariableReference.cpp:161`), whose
 /// `getResolvedValue` answers the variable's derived name when it holds
 /// nothing.
-///
-/// Measured, oracle rc 0: with `vr` unassigned, `(>vr)~value` is `VR`; and
-/// after `vr = 5`, `o = >vr`, `vr = 'changed'`, `o~value` is `changed` --
-/// the read is at the ask and not at the reference.
 fn native_reference_value(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7019,12 +5225,6 @@ fn native_reference_value(
 /// `VariableReference~value=`: writes the referenced variable --
 /// `VariableReference::setValueRexx` (`classes/VariableReference.cpp:190`),
 /// whose `requiredArgument` is the 93.903 an omitted value raises.
-///
-/// Measured, oracle rc 0: `vr = 5; o = >vr; o~value = 7; say vr` is `7`, and
-/// the same through a reference returned by a `procedure` after its frame is
-/// gone. Its `requiredArgument(v, "VALUE")` names the argument rather than
-/// numbering it: measured, oracle rc 168, `o~"VALUE="()` reports
-/// `88.901 Missing argument; argument VALUE is required.`
 fn native_reference_value_set(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7062,10 +5262,6 @@ fn native_reference_value_set(
 /// value -- `VariableReference::unknownRexx`
 /// (`classes/VariableReference.cpp:205`), which is what makes every message
 /// the class does not define read as one to the variable's value.
-///
-/// The hidden comparison operators reach this too
-/// (`memory/Setup.cpp:1307`-`:1312`). Measured, oracle rc 0: `vr = 5;
-/// o = >vr; say o~length` is `1` and `say o == 5` is `1`.
 fn native_reference_unknown(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7091,9 +5287,6 @@ fn native_reference_unknown(
 /// `VariableReference~request(class)`: forwards to the referenced value --
 /// `VariableReference::request` (`classes/VariableReference.cpp:359`), which
 /// handles none of them itself.
-///
-/// Measured, oracle rc 0: `vr = 5; say (>vr)~request('STRING')~class~id` is
-/// `String`.
 fn native_reference_request(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7107,9 +5300,6 @@ fn native_reference_request(
 
 /// The value a reference receiver names, materialised as an object so that a
 /// message can be sent to it.
-///
-/// `getResolvedValue`'s own answer for an unset variable is its derived name,
-/// which for a simple or stem symbol is the reference's own spelling.
 fn referenced_receiver(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
     interp
         .referenced_object(receiver)
@@ -7118,17 +5308,6 @@ fn referenced_receiver(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, 
 
 /// `RexxObject::requestArray` (`runtime/MethodArguments.hpp:683`): the value
 /// itself when it already is an array, and its `MAKEARRAY` otherwise.
-///
-/// Upstream this is a `REQUEST` send, which answers `.nil` for a receiver
-/// whose behaviour has no `MAKEARRAY` and lets one that does raise through.
-/// The `.nil` limb keeps [`unconverted_array_argument`]'s loud refusal here
-/// rather than becoming upstream's `Error_Execution_noarray`: that gap is
-/// unchanged by this function and is not what it is for.
-///
-/// It exists because the collection classes now answer `MAKEARRAY`, and the
-/// refusal was written when no receiver did. Measured, oracle and crate
-/// agreeing: `.Supplier~new(.List~of('a'), .List~of('h'))` answers
-/// `1 a h`, where the direct slot read refused it.
 fn request_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef, Failure> {
     if interp.array_slots_of(value).is_some() {
         return Ok(value);
@@ -7142,12 +5321,6 @@ fn request_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef, Failure> 
 }
 
 /// The refusal for an `~UNKNOWN` argument list that is not already an `Array`.
-///
-/// `arrayArgument` converts with `requestArray`, which is a `MAKEARRAY` send,
-/// so both arms name a step of that send: the method for a value whose class
-/// this crate has, and the send itself for a value it does not build a class
-/// for at all. Either way the message reads like the one `~request('ARRAY')`
-/// produces for the same value.
 fn unconverted_array_argument(interp: &mut Interp, value: ObjRef) -> Failure {
     match interp.receiver_class_id(value) {
         Some(id) => Loud::native_method(b"MAKEARRAY", &id).into(),
@@ -7160,14 +5333,6 @@ fn unconverted_array_argument(interp: &mut Interp, value: ObjRef) -> Failure {
 /// (`classes/ArrayClass.cpp:1856`), which `MakeString` and `ToString` both
 /// name at the same arity (`memory/Setup.cpp:733`-`:734`), which is why one
 /// function answers both rows.
-///
-/// `L` joins the items with `separator`, defaulting to the line ending; `C`
-/// concatenates them and **refuses a separator**, which is where the method's
-/// own declared arity of 2 and the 93.902 it raises for its own second
-/// argument come apart. Measured at rc 163:
-/// `.Array~superClasses~makeString('C', '-')` reports `1 expected` where
-/// `.Array~superClasses~makeString('L', ' ', 'z')` reports `2 expected`, and
-/// `makeString('X')` is 93.915 naming `"CL"`.
 fn native_array_make_string(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7210,12 +5375,6 @@ fn native_array_make_string(
 
 /// `Class~package`: the package the class was defined in --
 /// `RexxClass::getPackage` (`classes/ClassClass.cpp:1732`).
-///
-/// Measured, three descriptors: `.Array~package` renders `The REXX Package`
-/// and `.Array~package~name` is `REXX`, while a `::CLASS` in a user file
-/// answers `a Package` whose `~name` is that file's own path. Measured too,
-/// `(.Array~package == .String~package)` is `1` and
-/// `(.K~package == .Array~package)` is `0`.
 fn native_package(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7229,12 +5388,6 @@ fn native_package(
 /// `Package~local`: the package's own environment directory, which is
 /// `rexxpg`'s step 5 of the environment-symbol search order and the one route
 /// a program has to it.
-///
-/// Measured, oracle rc 0: empty on the first ask, the same object on every
-/// ask, and an entry written into it answers a `.NAME` ahead of `.local` --
-/// `PackageClass::findClass` reads `packageLocal` between the REXX package's
-/// public classes and `ActivityManager::getLocalEnvironment`
-/// (`classes/PackageClass.cpp:1122`).
 fn native_package_local(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7249,9 +5402,6 @@ fn native_package_local(
 
 /// `Package~name`: the package's own name -- `PackageClass::getProgramName`
 /// (`classes/PackageClass.hpp:147`), bound as `Name` by `memory/Setup.cpp:1189`.
-///
-/// `REXX` for the package the primitive classes belong to, and the program's
-/// own path for a package a `::CLASS` installed into.
 fn native_package_name(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7270,13 +5420,6 @@ fn native_package_name(
 /// `RexxObject::stringValue` (`classes/ObjectClass.cpp:1157`), which is an
 /// `OBJECTNAME` send, except for a `String`, whose own override answers
 /// itself.
-///
-/// **Not the required-string protocol's answer, and that is what this method
-/// is for.** Measured, oracle rc 0, with a class-side `makeString` returning
-/// `'K says hello'`: `say .K` prints `K says hello` where `say .K~string`
-/// prints `The K class`. The documented example in `provide.xml` `reqstr` is
-/// exactly that gap -- `substr(d~string,3,6)` reads the readable form where
-/// `substr(d,5,7)` reads the converted one.
 fn native_string(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7304,16 +5447,6 @@ fn native_string(
 /// `Object~objectName`: the name something gave this object, or
 /// `RexxObject::defaultName` for one nothing has named
 /// (`classes/ObjectClass.cpp:1696`, `:1760`).
-///
-/// **`~string` and this part on a string**, which is the whole reason this is
-/// not [`native_string`]: `RexxString::stringValue` answers the string itself
-/// where its `defaultName` is the article rule applied to `String`. Measured,
-/// oracle rc 0: `'abc'~string` is `abc` and `'abc'~objectName` is `a String`.
-/// The receivers whose name is not derived carry it -- measured,
-/// `.local~objectName` is `The Local Directory` and `.Array~package
-/// ~objectName` is `The REXX Package`, both of which `CoreClasses.orx`
-/// assigns -- and for every one of those `stringValue()` is already the
-/// answer.
 fn native_object_name(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7391,17 +5524,6 @@ fn native_object_name(
 /// `Object~objectName=`: replaces what `~objectName` answers, and with it
 /// every rendering of the object -- `RexxObject::objectNameEquals`
 /// (`classes/ObjectClass.cpp:1733`), whose own return is `OREF_NULL`.
-///
-/// Measured, oracle rc 0: after `.K~objectName = "renamed"`, `say .K`,
-/// `say .K~objectName` and `say .K~string` all print `renamed`, while
-/// `.K~request("STRING")` still answers `The NIL object` -- the rename moves
-/// `stringValue()` and not the conversion.
-///
-/// **A receiver with nowhere to keep a name is loud rather than silent.** The
-/// oracle stores this in the object's own variable pool at `Object` scope, and
-/// a string, a number and a stem have no pool in this crate; answering rc 0
-/// and forgetting the name would be a wrong answer where the oracle
-/// remembers it.
 fn native_object_name_set(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7463,21 +5585,6 @@ fn native_object_name_set(
 
 /// `Object~setMethod(name, method, scope)`: attach one method to this object
 /// alone -- `RexxObject::setMethod` (`classes/ObjectClass.cpp:1829`).
-///
-/// **The order of the steps is observable**, and it is the C++'s: the name,
-/// then the method object, then the scope option, then the restricted check,
-/// then the definition. Measured, oracle rc 168 from a class method of an
-/// unrelated class: `self~setMethod('MM', 'return 1', 'BOGUS')` reports the
-/// option's 88.916 and not the restricted check's 98.991, so the option is
-/// read first.
-///
-/// **A second argument that is omitted hides the name**, storing the
-/// oracle's `.nil` rather than removing anything: measured, oracle rc 159,
-/// after `self~setMethod('MM')` on a class that defines `MM`,
-/// `hasMethod('MM')` is `0` and the send is 97.1.
-///
-/// The third argument is D67 and [`rexx_core::ObjectMethod`] carries which
-/// pool each of its values selects.
 fn native_set_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7512,12 +5619,6 @@ fn native_set_method(
 
 /// `Object~unsetMethod(name)`: take back a `setMethod` definition --
 /// `RexxObject::unsetMethod` (`classes/ObjectClass.cpp:1891`).
-///
-/// **A name this object never set is untouched**, and that is the whole
-/// difference from `Class~delete`: measured, oracle rc 0,
-/// `self~unsetMethod('MM')` for a class-defined `MM` leaves `o~mm` answering
-/// the class's, and `self~unsetMethod('ZZZ')` for a name nothing defines is
-/// not an error either.
 fn native_unset_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7532,17 +5633,6 @@ fn native_unset_method(
 
 /// `setMethod`'s third argument: which variable pool the new method's
 /// `EXPOSE` reaches (D67).
-///
-/// `FLOAT`, the default, is `TheNilObject` -- one pool per object, shared by
-/// all of that object's `FLOAT` methods and separate from the class's.
-/// `OBJECT` is `classObject()`, the object's own class, so the pool is the
-/// one the class's own methods use. Measured, oracle rc 0: two `FLOAT`
-/// methods on one object read each other's writes while a second instance of
-/// the same class sees the name uninitialised, and an `OBJECT` method's write
-/// is what a `::METHOD` of the class reads back.
-///
-/// Anything else is 88.916 -- measured, oracle rc 168, `Argument 3 must be
-/// one of "FLOAT" or "OBJECT"; found "BOGUS".`
 fn set_method_scope(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -7568,18 +5658,6 @@ fn set_method_scope(
 /// fourth access check (D66): `run`, `setMethod` and `unsetMethod` may be
 /// sent only from a method of the receiving object itself or from a class
 /// method of a class it is an instance of.
-///
-/// **It is not the private check and it has its own error.** The private
-/// check runs first, at dispatch, and refuses a program context with `97.2
-/// ... cannot accept private message` at rc 159 and no method frame; this
-/// one refuses with `98.991 ... may only be invoked from a method of the
-/// same object or one of its classes.` at rc 158, under a `Compiled method
-/// "SETMETHOD" with scope "Object".` frame. Both measured, and the frame is
-/// what tells them apart. The allowing arm is measured too: a class method
-/// of the object's own class may send it, oracle rc 0.
-///
-/// The caller's *receiver* is the input, which is what makes this a check no
-/// value of [`Access`] can express.
 fn check_restricted_method(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -7612,22 +5690,6 @@ fn check_restricted_method(
 /// `Object~copy`: a new object with the receiver's methods and an equivalent
 /// set of object variables holding the same values -- `RexxObject::copyRexx`
 /// (`classes/ObjectClass.cpp:2879`).
-///
-/// **Shallow, and the write-through is what makes that observable.**
-/// Measured, oracle rc 0: `(o~identityHash == c~identityHash)` is `0`, the
-/// copy reads the receiver's values back, and after `c~set('changed')` the
-/// receiver's `~get` still answers `orig` where the copy's answers `changed`.
-/// The objects the pools hold are shared and not copied.
-///
-/// The object's own `setMethod` and `Class~enhanced` dictionary travels with
-/// it -- measured, oracle rc 0, a one-off set on the receiver answers on the
-/// copy -- and so does the receiver's `UNINIT` registration: measured, one
-/// instance with a finalizer, copied once and both dropped, prints
-/// `uninit ran` twice.
-///
-/// A receiver with no scope of its own is loud rather than answered. A class
-/// object never reaches here -- `memory/Setup.cpp:483` overrides this row and
-/// [`native_class_copy`] is the refusal it installs.
 fn native_copy(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7666,20 +5728,6 @@ fn native_copy(
 }
 
 /// The pool entries a collection's CONTENTS live in, as (scope class, name).
-///
-/// A `Body::Instance` clone copies the pool map, so the copy's entries name
-/// the same `Array` objects the receiver's do -- which is right for an
-/// ordinary instance variable and wrong for a collection's contents.
-/// Upstream draws the same line by overriding the virtual `copy()`:
-/// `HashCollection::copy` copies the base object and then its contents
-/// (`classes/support/HashCollection.cpp:237`), and `ArrayClass` and
-/// `ListClass` do the same for theirs.
-///
-/// Measured before this existed: `q = .Queue~of('a','b')`, `c = q~copy`,
-/// `c~queue('z')` left **both** at 3 items where the oracle answers 2 and 3,
-/// and the same for `List`. It is why `Set~union` -- which is `self~copy` and
-/// then a loop of `put` (`RexxClasses/CoreClasses.orx:480`) -- was mutating
-/// its receiver, which is how this was found.
 const COLLECTION_STORES: &[(&str, &[u8])] = &[
     ("Array", b"ITEMS"),
     ("List", b"ITEMS"),
@@ -7699,10 +5747,6 @@ const COLLECTION_STORES: &[(&str, &[u8])] = &[
 ];
 
 /// Replaces each of [`COLLECTION_STORES`] on `copy` with an array of its own.
-///
-/// The slots are copied across as they stand: the ITEMS are shared with the
-/// receiver's, which is what upstream's shallow element copy does, and only
-/// the array holding them is new.
 fn duplicate_collection_stores(interp: &mut Interp, copy: ObjRef) {
     for (scope_name, entry) in COLLECTION_STORES {
         let Some(scope) = interp.classes().lookup(scope_name) else {
@@ -7725,10 +5769,6 @@ fn duplicate_collection_stores(interp: &mut Interp, copy: ObjRef) {
 /// `Class~copy`: the refusal `memory/Setup.cpp:483` puts over [`native_copy`]
 /// -- `RexxClass::copyRexx` (`classes/ClassClass.cpp:166`), whose whole body
 /// is the raise.
-///
-/// Measured, oracle rc 163: `.K~copy` is `93.970 COPY method is not supported
-/// for object The K class.` under a `Compiled method "COPY" with scope
-/// "Class".` frame.
 fn native_class_copy(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7742,23 +5782,6 @@ fn native_class_copy(
 /// `Object~run(method [, option [, argument ...]])`: run a method on this
 /// object as if the object had defined it -- `RexxObject::run`
 /// (`classes/ObjectClass.cpp:2185`).
-///
-/// **The body's `EXPOSE` reaches the object's `FLOAT` pool** (D67), because
-/// the method is built with `TheNilObject` for its scope (`:2201`). Measured,
-/// oracle: `self~run('expose v; return v*10')` is `41.1` at rc 215 where the
-/// class's own `v` is 7; a `FLOAT` one-off's write is what a run body reads
-/// back; and two run bodies on one object read each other's writes.
-///
-/// **The steps are in the C++'s order and the order is observable**: the
-/// method, then the option, then the restricted check. Measured, oracle rc
-/// 163 from a class method of an unrelated class,
-/// `o~run('return 1', 'BOGUS')` reports the option's 93.915 and not the
-/// restricted check's 98.991.
-///
-/// **The body is named `RUN` and not for the file.** Measured, oracle rc 0,
-/// `parse source` inside one answers `LINUX METHOD RUN`; and rc 214, a
-/// failure inside one reports `Error 42 running RUN line 1` with no
-/// `Compiled method` line of its own above the native `RUN` frame.
 fn native_run(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7783,18 +5806,6 @@ fn native_run(
 /// `~run`'s first argument as a body this crate can enter --
 /// `MethodClass::newMethodObject(GlobalNames::RUN, methobj, TheNilObject,
 /// "method")` (`classes/ObjectClass.cpp:2201`).
-///
-/// A source string and an `Array` of source strings are
-/// [`compile_method_source`]'s two shapes and are compiled here. A `Method`
-/// object is taken when this crate holds its body, which is every object
-/// `compile_method_source` built; one that came from `Class~method` names a
-/// dictionary entry and carries no body a send could enter, so it is loud
-/// rather than run under the wrong one.
-///
-/// The scope every arm runs at is `ObjRef::NIL`, which a `Method` object does
-/// not override: measured, oracle rc 0, `self~run(.K~method('PROBE'))` on a
-/// `PROBE` that exposes `v` answers the derived name `V` where the class's
-/// own pool holds `class-pool`.
 fn run_method_body(
     interp: &mut Interp,
     source: ObjRef,
@@ -7815,15 +5826,6 @@ fn run_method_body(
 
 /// `~run`'s `Individual`/`Array` option and the arguments behind it
 /// (`classes/ObjectClass.cpp:2207`-`:2235`).
-///
-/// A send with no second argument passes none, which is the option being
-/// absent rather than empty: measured, oracle rc 0, `self~run('return
-/// "no-opt"')` answers, while `self~run('...', , 5)` is `88.901 Missing
-/// argument; argument argument style is required.` at rc 168 and
-/// `self~run('...', '', 5)` is `93.915 ... found "".` at rc 163.
-///
-/// Only the first letter is read and the rest ignored -- measured, oracle rc
-/// 0, `'ignored-after-first'` passes its arguments individually.
 fn run_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -7858,12 +5860,6 @@ fn run_arguments(
 /// `Object~send(messagename [, argument ...])`: invoke a method on this
 /// object under a name built at run time -- `RexxObject::send`
 /// (`classes/ObjectClass.cpp:2008`).
-///
-/// The name may be an array whose first item is the message and whose second
-/// is the class to start the method search from, which is the dynamic form of
-/// `receiver~name:scope`. Measured, oracle rc 0: with `::class Sub subclass
-/// Base` both defining `M`, `o~send('M')` answers the subclass's and
-/// `o~send(('M', .Base))` the base's.
 fn native_send(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7877,11 +5873,6 @@ fn native_send(
 /// `Object~sendWith(messagename, arguments)`: [`native_send`] with the
 /// arguments in an array -- `RexxObject::sendWith`
 /// (`classes/ObjectClass.cpp:1972`).
-///
-/// **The name is decoded before the array is read**, which is the C++'s order
-/// and is observable: measured, oracle rc 163, `o~sendWith(.nil)` is the
-/// name's own 93.972 where the same call to `~startWith` reports the missing
-/// second argument instead.
 fn native_send_with(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7896,25 +5887,6 @@ fn native_send_with(
 /// `Object~start(messagename [, argument ...])`: a `Message` object whose
 /// send has been made -- `RexxObject::start`
 /// (`classes/ObjectClass.cpp:2067`) through `startCommon` (`:2094`).
-///
-/// **The send runs before this answers**, where the oracle runs it on an
-/// activity of its own, and nothing a check may assert separates the two
-/// (D68): `~start`'s interleaving with the program that started it is not
-/// reproducible on the oracle, and `~completed` sampled *before* `~result` is
-/// part of that interleaving. What is reproducible, and what the corpus
-/// asserts, is `~result`'s value and `~completed` after it -- measured,
-/// oracle rc 0, `result ran 5` / `completed 1` / `haserror 0`.
-///
-/// **Phase 6 owes the scheduling.** Two consequences of running the send
-/// here, both measured against the oracle and neither reachable by a check
-/// this phase may write: a started method's own output lands before the
-/// starting program's next clause rather than interleaved with it, and a
-/// started method that raises reports its failure once, at `~result`, where
-/// the oracle writes the same report twice in a transcript that does not
-/// reproduce -- four runs of one program, two orderings.
-///
-/// A `Message` row with no [`NativeMethod`] behind it refuses loudly, so a
-/// message this crate cannot drive never answers as though it could.
 fn native_start(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7930,13 +5902,6 @@ fn native_start(
 /// `Object~startWith(messagename, arguments)`: [`native_start`] with the
 /// arguments in an array -- `RexxObject::startWith`
 /// (`classes/ObjectClass.cpp:2046`).
-///
-/// **The array is read before the name is decoded**, the opposite of
-/// [`native_send_with`], because `startWith` checks the message is merely
-/// present and leaves the decoding to `startCommon` (`:2049`-`:2053`).
-/// Measured, oracle rc 163, one call shape and two catalogue rows:
-/// `o~startWith(.nil)` is `93.903 Missing argument in method; argument 2 is
-/// required.` where `o~sendWith(.nil)` is the name's own 93.972.
 fn native_start_with(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -7954,12 +5919,6 @@ fn native_start_with(
 }
 
 /// The send `~send` and `~sendWith` make, once the name has been decoded.
-///
-/// The scope override is validated before the send, which is where
-/// `RexxObject::sendWith` puts it (`:1989`) and what makes an unrelated class
-/// 93.957 rather than 97.1: measured, oracle rc 163, `o~send(('M', .Array))`
-/// is `Target object "a K" is not a subclass of the message override scope
-/// (The Array class).`
 fn dynamic_send(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -7975,12 +5934,6 @@ fn dynamic_send(
 /// The `Message` object `~start` and `~startWith` answer, with its send
 /// already made -- `RexxObject::startCommon` (`classes/ObjectClass.cpp:2094`)
 /// and `MessageClass::dispatch` (`classes/MessageClass.cpp:421`).
-///
-/// **Only a raised condition is caught.** `MessageClass::error` is handed a
-/// condition object by the activation notifying it, so what a message records
-/// is a Rexx condition and nothing else: a [`Loud`] is this crate saying it
-/// cannot run something and has to reach the program rather than become a
-/// message's `~hasError`, and `Failure::Exited` is not a failure at all.
 fn started_message(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -8008,10 +5961,6 @@ fn started_message(
 /// `Message~result`: the value the send answered, `.nil` for one that
 /// answered none, and the send's own condition raised again where it failed
 /// -- `MessageClass::result` (`classes/MessageClass.cpp:279`).
-///
-/// Measured, oracle rc 0: `m~result` after `o~start('M', 5)` is the method's
-/// value, and after a method ending in a bare `return` it is
-/// `The NIL object`.
 fn native_message_result(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -8032,11 +5981,6 @@ fn native_message_result(
 /// `Message~completed`: whether the send has ended, with a result or with an
 /// error -- `MessageClass::completed` (`classes/MessageClass.cpp:722`), which
 /// is `resultReturned() || raiseError()`.
-///
-/// `setResultReturned()` runs after the send whether or not it produced a
-/// value (`:446`), so a method ending in a bare `return` completes like any
-/// other. **Sampling this before `~result` is racy on the oracle**, which is
-/// what D68 puts out of reach of every check.
 fn native_message_completed(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -8062,11 +6006,6 @@ fn native_message_has_error(
 /// `RexxObject::decodeMessageName` (`classes/ObjectClass.cpp:2125`): a
 /// message name, or a two-item array of a name and the class to start the
 /// method search from.
-///
-/// The name is upcased, so `o~send('m')` reaches `::method M` -- measured,
-/// oracle rc 0. Each refusal below differs from its neighbours in exit status
-/// or catalogue row, and `corpus/lang/object_send_refusals.rex` is where they
-/// are asserted rather than listed.
 fn decode_message_name(
     interp: &mut Interp,
     message: Option<ObjRef>,
@@ -8114,10 +6053,6 @@ fn decode_message_name(
 /// `ArrayClass::messageArgCount` (`classes/ArrayClass.hpp:305`), which is the
 /// array's `lastItem`: the position of the last filled slot, so a trailing
 /// empty slot is not an argument and an interior one is an omitted argument.
-///
-/// Measured, oracle rc 0, over `~sendWith` into a method reporting `arg()`:
-/// `(5,)` passes `1`, `(5, , 7)` passes `3` with the second omitted, and
-/// `(, 6)` passes `2` with the first omitted.
 fn message_argument_count(slots: &[Option<ObjRef>]) -> usize {
     slots
         .iter()
@@ -8158,18 +6093,6 @@ enum ArrayArgument {
 }
 
 /// `arrayArgument`: an argument's message-argument slots.
-///
-/// A value that is not already an `Array` takes
-/// [`unconverted_array_argument`]'s refusal, for the reason `~UNKNOWN`'s own
-/// argument list takes it: the C++ converts with `requestArray`, which is a
-/// `MAKEARRAY` send this crate answers for no receiver.
-///
-/// Both overloads then test that answer for `isMultiDimensional`, and they
-/// differ in the raise that carries. Measured, oracle:
-/// `o~sendWith('M', .array~new(2,2))` is `88.913 Argument message arguments
-/// must be a single-dimensional array.` at rc 168, and
-/// `o~startWith('M', .array~new(2,2))` is `98.913 Unable to convert object
-/// "an Array" to a single-dimensional array value.` at rc 158.
 fn array_argument(
     interp: &mut Interp,
     value: ObjRef,
@@ -8196,25 +6119,6 @@ fn array_argument(
 /// `Class~enhanced(methods, ...)`: an instance of the receiver carrying
 /// methods of its own -- `RexxClass::enhanced`
 /// (`classes/ClassClass.cpp:1440`).
-///
-/// **The enhancing methods are in place before `INIT` runs**, which is
-/// observable and is why this builds the object rather than sending `~new`:
-/// the C++ puts them in a dummy subclass's behaviour and then sends `NEW` to
-/// that subclass (`:1454`-`:1470`). Measured, oracle rc 0: with `INIT` in the
-/// table, the enhancing `INIT` runs and the class's own does not, and the
-/// arguments after the table are its arguments.
-///
-/// **The dummy subclass is invisible.** `setOwningClass(this)` (`:1474`)
-/// puts the object's class back to the receiver, so `~class~id` and `~isA`
-/// answer for the receiver -- measured, `K` and `1`.
-///
-/// **The methods are a level of their own, not `setMethod`'s.** They are
-/// added with `.nil` scope, "so that these additional methods will look like
-/// they were added with setMethod" (`:1454`-`:1455`), which is D67's pool selection
-/// and is measured: an enhancing method and a `FLOAT` one-off on the same
-/// object read each other's `EXPOSE`d names, oracle rc 0. The oracle keeps
-/// them in the dummy subclass's behaviour, where `unsetMethod` cannot reach
-/// them, and [`ObjectMethods`] is where that level lives here.
 fn native_enhanced(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -8324,12 +6228,6 @@ fn install_enhancing_object_methods(
 /// `StringTable::newRexx` and `DirectoryClass::newRexx`
 /// (`memory/Setup.cpp:875`, `:928`), each of which allocates and then sends
 /// `INIT` with the whole argument list.
-///
-/// The `INIT` send is what validates the initial-size argument, and it is a
-/// send rather than a check here so the traceback carries both frames --
-/// measured, oracle rc 163 for `.stringtable~new('abc')`: `Compiled method
-/// "INIT" with scope "StringTable".` above `Compiled method "NEW" with scope
-/// "StringTable".`
 fn native_hash_collection_new(
     interp: &mut Interp,
     cleared: Cleared,
@@ -8348,11 +6246,6 @@ fn native_hash_collection_new(
 
 /// `Directory~new`: the hash body above for `.Directory` itself, and
 /// [`native_new`]'s plain instance for a subclass.
-///
-/// **The split is what a `Body::Native` has not got**: a variable pool and an
-/// `UNINIT` registration, each of which a `Directory` subclass can reach and
-/// the oracle answers. What the split costs is the subclass's entry writes,
-/// which refuse. `a_directory_subclass_keeps_the_instance` is the pair.
 fn native_directory_new(
     interp: &mut Interp,
     cleared: Cleared,
@@ -8372,11 +6265,6 @@ fn native_directory_new(
 /// (`classes/support/HashCollection.cpp:63`), and the `QueueClass::initRexx`
 /// and `ListClass::initRexx` beside it (`classes/QueueClass.cpp:261`,
 /// `classes/ListClass.cpp:102`), which differ only in the default capacity.
-///
-/// The size is a capacity hint and nothing observable depends on it, so it
-/// is checked and not kept. Measured, oracle rc 163:
-/// `.stringtable~new('abc')` is `93.923 Invalid length argument specified;
-/// found "abc".`
 fn native_capacity_init(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -8667,10 +6555,6 @@ fn named_pad_argument(
 
 /// The refusal a constructor that has checked its arguments and cannot build
 /// the primitive body answers.
-///
-/// [`Loud::native_method`] with the receiving class's own `~id`, so the
-/// message names the class the send went to rather than the one the row is
-/// filed under.
 fn unbuilt_new(interp: &mut Interp, class: ObjRef) -> Failure {
     unbuilt_class_method(interp, class, b"NEW")
 }
@@ -8686,11 +6570,6 @@ fn unbuilt_class_method(interp: &mut Interp, class: ObjRef, name: &[u8]) -> Fail
 /// (`classes/MutableBufferClass.cpp:90`): `default_size` is the second
 /// argument or `DEFAULT_BUFFER_LENGTH`, and the capacity is that or the
 /// string's length, whichever is larger.
-///
-/// **The `INIT` send takes the arguments from the front with the last two
-/// dropped from the count**, `completeNewObject(newBuffer, args, argc > 2 ?
-/// argc - 2 : 0)` (`:134`), which is not the same list as "the arguments past
-/// the second".
 fn native_mutable_buffer_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -8799,12 +6678,6 @@ fn native_mutable_buffer_string(
 /// (`classes/MutableBufferClass.cpp:717`): a fresh string of the contents.
 /// `Setup.cpp:1446` and `:1473` bind that one C++ entry under both `String`
 /// and `makeString`.
-///
-/// This is what the required-string protocol reaches, so it is what `say buf`
-/// and `length(buf)` answer from. The receiver-side comparison does not come
-/// here at all -- `buf == 'abc'` sends `==` to the buffer and
-/// [`native_object_identical`] answers it, which is the oracle's `0` against
-/// `'abc' == buf`'s `1`.
 fn native_mutable_buffer_makestring(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -8818,9 +6691,6 @@ fn native_mutable_buffer_makestring(
 }
 
 /// `MutableBuffer::endsWithRexx` (`classes/MutableBufferClass.cpp:1569`).
-///
-/// An empty `match` is `0`, `primitiveMatch`'s `len == 0` arm (`:1615`) --
-/// measured, oracle rc 0: `.MutableBuffer~new('abc')~endsWith('')` is `0`.
 fn native_mutable_buffer_endswith(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -8880,9 +6750,6 @@ fn native_mutable_buffer_append(
 /// `MutableBuffer::mydelete` (`classes/MutableBufferClass.cpp:647`): the
 /// position defaults to 1 and the length to the rest of the contents, and a
 /// position past them deletes nothing; answers the receiver.
-///
-/// `Setup.cpp:1427` and `:1428` bind this one C++ method under both `Delete`
-/// and `DelStr`, and `name` is what the two rows differ in.
 fn buffer_delete(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -8934,12 +6801,6 @@ fn native_mutable_buffer_setbuffersize(
 /// `MutableBuffer::setTextRexx` (`classes/MutableBufferClass.cpp:355`)
 /// reaching `setText` (`:369`): the contents become the argument's; answers
 /// the receiver.
-///
-/// **The length is zeroed before the capacity is raised**, which is what
-/// `setText` does before it appends, so the size `ensureCapacity` needs is
-/// the argument's own length and not the sum -- measured, oracle rc 0:
-/// `.MutableBuffer~new('abc', 10)~setText(copies('y',40))` reads
-/// `getBufferSize` `40` where raising for the sum would read `43`.
 fn native_mutable_buffer_settext(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -8957,14 +6818,6 @@ fn native_mutable_buffer_settext(
 
 /// `substr`'s arguments: a 0-based start, an optional length, and a pad
 /// defaulting to a blank.
-///
-/// **Shared by both receivers**, and the C++ says so at the site:
-/// `RexxString::substr` (`classes/StringClassSub.cpp:598`) is one line under
-/// the comment *"use the common code shared with MutableBuffer"*, and that
-/// common code is `StringUtil::substr`'s padding overload
-/// (`classes/support/StringUtil.cpp:66`), which `MutableBuffer::substr`
-/// (`classes/MutableBufferClass.cpp:770`) calls too. A pad wider than one character is 93.922, which is this layer's and
-/// not the core's.
 pub(super) fn substr_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -8976,12 +6829,6 @@ pub(super) fn substr_arguments(
 }
 
 /// The optional length `C2D`, `D2C`, `D2X` and `X2D` take, as methods.
-///
-/// An ordinary `optionalLengthArgument`: `None` for omitted, 93.923 for
-/// anything that is not a non-negative whole number in range. **The builtin
-/// forms do not share it** -- there the same mistake is 40.x, so the two
-/// conversions' cores read their length through the caller rather than
-/// reading it themselves.
 pub(super) fn conversion_length_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -8991,14 +6838,6 @@ pub(super) fn conversion_length_argument(
 
 /// A count argument that is zero or a positive whole number, answered as the
 /// `i64` the numeric cores take.
-///
-/// [`optional_non_negative_argument`] beside it narrows to `usize`, which is
-/// right for an index into bytes and wrong for a width: `padding_width` reads
-/// an `i64` and decides for itself which widths are absurd, and narrowing
-/// first would move that decision.
-///
-/// 93.906 for a negative or non-whole value, the same sub-code `COPIES` uses
-/// and not the 93.923 the pad family raises.
 pub(super) fn count_method_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9013,12 +6852,6 @@ pub(super) fn count_method_argument(
 }
 
 /// `BITAND`/`BITOR`/`BITXOR`'s optional operand and optional pad.
-///
-/// Neither is required and the operand has no length rule, so the pad is the
-/// only thing here that can be wrong: 93.922 for anything but exactly one
-/// byte, 88.909 for a value with no string value. **The pad is answered
-/// undefaulted**, because each operation's default is its own identity byte
-/// and only the caller knows which operation it is.
 pub(super) fn bit_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9029,12 +6862,6 @@ pub(super) fn bit_arguments(
 }
 
 /// `DATATYPE`'s option letter, or `None` when it is omitted.
-///
-/// **Not [`option_method_argument`]**, which substitutes the whole option
-/// string into its 93.915. `DATATYPE` substitutes the LETTER: measured,
-/// `'5'~dataType('Zonk')` reports `found "Z"` where `'  ab  '~strip('Zonk')`
-/// reports `found "Zonk"`. An empty option has no first letter and reports
-/// the NUL byte, which the report renders `?`.
 pub(super) fn datatype_option_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9053,18 +6880,6 @@ pub(super) fn datatype_option_argument(
 }
 
 /// `STRIP`'s option and character set.
-///
-/// The option is `"BLT"`, defaulting to `B`, and an unrecognised letter is
-/// 93.915 naming the accepted set -- measured, `'x'~strip('Z')` reports
-/// `Method option must be one of "BLT"; found "Z".` An empty option string is
-/// as wrong as a wrong letter.
-///
-/// **The set is answered as `Option`, because omitted and null are different
-/// arguments.** Omitted takes the whitespace default; a null string is an
-/// empty set that strips nothing. Documented, in rexxref's own words: "If
-/// chars is a null string, then no characters are removed." There is no
-/// length check on it at all -- `STRIP("12.0000", "T", '.0')` is the
-/// documentation's own two-character example.
 pub(super) fn strip_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9075,11 +6890,6 @@ pub(super) fn strip_arguments(
 }
 
 /// `EQUALS`'s and `CASELESSEQUALS`'s one operand, as its **string value**.
-///
-/// **Not [`string_method_argument`]**, which is 88.909 for a value with no
-/// string value. `equals` has no such refusal -- measured, `'abc'~equals(.nil)`
-/// and `'abc'~equals(.array)` are both `0`, because every object renders and
-/// the rendering simply is not `abc`. An omitted operand is still 93.903.
 pub(super) fn equals_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9091,12 +6901,6 @@ pub(super) fn equals_argument(
 }
 
 /// `COMPARETO`'s and `CASELESSCOMPARETO`'s three arguments.
-///
-/// The other string is required and strict -- 88.909, unlike `equals` above --
-/// the start is a `positionArgument` defaulting to 1 (93.924) and the length is
-/// an `optionalLengthArgument` (93.923) whose default is
-/// `max(len, other) - start + 1` and so is left to the caller, which is the one
-/// piece of it that needs both strings.
 pub(super) fn compare_to_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9108,9 +6912,6 @@ pub(super) fn compare_to_arguments(
 }
 
 /// `ABBREV`'s candidate and its minimum length.
-///
-/// The candidate is required (93.903 omitted, 88.909 without a string value)
-/// and the length is `optionalLengthArgument`, 93.923.
 pub(super) fn abbrev_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9121,10 +6922,6 @@ pub(super) fn abbrev_arguments(
 }
 
 /// `COMPARE`'s other string and its pad.
-///
-/// The same first argument as [`abbrev_arguments`] over a second that is a pad
-/// rather than a length, so the two differ only in which sub-code the second
-/// argument raises: 93.922 here against 93.923 there.
 pub(super) fn compare_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9136,13 +6933,6 @@ pub(super) fn compare_arguments(
 
 /// A width and a pad: `CENTER`/`CENTRE`/`LEFT`/`RIGHT`'s two arguments as
 /// methods.
-///
-/// The width is `lengthArgument` and required, so an omitted one is 93.903 and
-/// anything that is not a non-negative whole number in range is 93.923; the pad
-/// is `optionalPadArgument`, 93.922 for anything but exactly one byte and
-/// 88.909 -- an 88, not a 93 -- for a value with no string value at all. That
-/// is the pair `RexxString::center` opens with
-/// (`classes/StringClassSub.cpp:59`) and `left` and `right` repeat.
 pub(super) fn pad_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9154,11 +6944,6 @@ pub(super) fn pad_arguments(
 
 /// `COPIES`'s count: `nonNegativeArgument` (`classes/StringClassMisc.cpp:288`),
 /// required.
-///
-/// **A different sub-code from the width above for the same shape of
-/// mistake.** Measured, oracle: `'abc'~center(-1)` is 93.923 `Invalid length
-/// argument specified` and `'abc'~copies(-1)` is 93.906 `Method argument 1
-/// must be zero or a positive whole number`.
 pub(super) fn copies_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9171,12 +6956,6 @@ pub(super) fn copies_argument(
 
 /// `verify`'s arguments: the reference set, the `M`/`N` option defaulting to
 /// `N`, a 0-based start, and an optional range.
-///
-/// **The option is the one argument here with an error of its own** -- an
-/// unrecognised letter is 93.915, which names the accepted set, and it is
-/// raised before the start is looked at. Measured, oracle:
-/// `'abcabc'~verify('ab', 'Z')` is 93.915 and so is the same send to a
-/// `MutableBuffer`.
 pub(super) fn verify_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9224,14 +7003,6 @@ fn native_mutable_buffer_brackets(
 
 /// `StringUtil::posRexx`'s argument handling: the needle, a 1-based start
 /// defaulting to the first byte, and an optional range.
-///
-/// **Shared by both receivers, which is what the C++ does too.**
-/// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`) and
-/// `MutableBuffer::posRexx` (`classes/MutableBufferClass.cpp:803`) each
-/// forward to `StringUtil::posRexx(getStringData(), getLength(), ...)`
-/// (`classes/support/StringUtil.cpp:184`), so the two differ in where the
-/// bytes come from and in nothing else. Every error a bad argument raises is
-/// raised here, once.
 pub(super) fn forward_search_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9244,11 +7015,6 @@ pub(super) fn forward_search_arguments(
 
 /// [`forward_search_arguments`]' search: the 1-based position of `needle`, or
 /// 0, with an omitted range reaching the end of `haystack`.
-///
-/// `scan` is [`crate::builtin::string::find_forward`] or its caseless twin.
-/// **The caseless one is not the plain scan with a folded compare** -- the two
-/// oracle scans answer differently for the same arguments, measured at
-/// `caseless_find_forward`'s own doc.
 pub(super) fn forward_search(
     haystack: &[u8],
     needle: &[u8],
@@ -9483,14 +7249,6 @@ fn native_mutable_buffer_subword(
 }
 
 /// A fresh `Array` holding one string per element of `pieces`.
-///
-/// An empty result carries no dimensions, which is `~dimension` `0` --
-/// measured, oracle rc 0: `.MutableBuffer~new('')~makeArray~dimension` is `0`
-/// where a one-line buffer's is `1`.
-///
-/// Each string is rooted as it is built, because [`Interp::alloc_with`]
-/// collects before it allocates and a string already made is reachable from
-/// nothing until the array carries it.
 fn array_of_texts(interp: &mut Interp, pieces: Vec<Vec<u8>>) -> Result<ObjRef, Failure> {
     let frame = interp.roots.push_frame();
     let mut slots = Vec::with_capacity(pieces.len());
@@ -9516,10 +7274,6 @@ fn array_of_texts(interp: &mut Interp, pieces: Vec<Vec<u8>>) -> Result<ObjRef, F
 /// `MutableBuffer::subWords` (`classes/MutableBufferClass.cpp:1778`) over
 /// `StringUtil::subWords` (`classes/support/StringUtil.cpp:1405`): an
 /// **`Array`** of the words from `position`, at most `count` of them.
-///
-/// Both arguments are converted before the contents are looked at, so
-/// `subWords(9, .nil)` is 93.923 rather than the empty array a start past the
-/// last word answers -- measured, oracle rc 163.
 fn native_mutable_buffer_subwords(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -9614,12 +7368,6 @@ fn native_mutable_buffer_words(
 
 /// `StringUtil::wordPos`'s argument handling: the phrase, and a 1-based start
 /// defaulting to the first word.
-///
-/// **Shared by both receivers**, as `StringUtil::wordPos`
-/// (`classes/support/StringUtil.cpp:1565`) is: `RexxString::wordPos`
-/// (`classes/StringClassWord.cpp:256`) and `MutableBuffer::wordPos`
-/// (`classes/MutableBufferClass.cpp:1845`) pass it their own bytes and nothing
-/// else.
 pub(super) fn wordpos_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9716,9 +7464,6 @@ fn native_mutable_buffer_caselesscontainsword(
 
 /// `STARTSWITH` and its caseless twin over any bytes: an empty `match`
 /// answers `0` on both, which is why this is not `slice::starts_with`.
-///
-/// `matches` is `<[u8]>::eq` or [`crate::builtin::string::caseless_eq`], the
-/// only difference between the two spellings.
 pub(super) fn starts_with(
     haystack: &[u8],
     needle: &[u8],
@@ -9825,10 +7570,6 @@ fn native_mutable_buffer_caselessmatch(
 /// length past `other` is `0` -- measured, oracle rc 0: `~match(1, 'abc', 4,
 /// -1)` is `0`. `None` is those two answers; `Some` is the region of `other`
 /// to compare.
-///
-/// **Shared by both receivers, and reading these arguments is all it does** --
-/// the receiver is not touched here, which is what lets a `String` and a
-/// `MutableBuffer` reach the same code with the borrow each of them needs.
 pub(super) fn match_region_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -9954,9 +7695,6 @@ fn native_mutable_buffer_subchar(
 
 /// A mutator's rebuilt contents written back over the receiver's own, the
 /// capacity already raised for them.
-///
-/// `BufferState::ensure_capacity` has reserved at least `built.len()`, so the
-/// copy cannot be what grows the allocation.
 fn replace_buffer_contents(state: &mut BufferState, built: &[u8]) {
     state.bytes.clear();
     state.bytes.extend_from_slice(built);
@@ -9992,9 +7730,6 @@ pub(super) fn space_arguments(
 }
 
 /// The `(start, range)` a case shift takes, from `first` onwards.
-///
-/// `first` is 0 for `upper` and `lower` and 3 for `translate`'s no-table form,
-/// which is a case shift wearing `translate`'s argument positions.
 pub(super) fn case_shift_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -10030,10 +7765,6 @@ pub(super) fn translate_in_table(in_table: &[u8]) -> Option<&[u8]> {
 
 /// `insert`'s arguments: the string, a 0-based begin defaulting to the front,
 /// an optional length and a pad.
-///
-/// **Shared by both receivers.** Measured, oracle: a non-whole second argument
-/// is 93.906 at a `String` and at a `MutableBuffer` alike, so unlike
-/// [`replace_at_plan`]'s callers these two agree on every refusal.
 pub(super) fn insert_arguments(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -10082,9 +7813,6 @@ pub(super) fn delword_arguments(
 
 /// How much of the receiver `replaceAt` overwrites, and how long the answer
 /// is: `(replaced, final_length)`.
-///
-/// A begin past the contents replaces nothing and pads out to it; a length
-/// running past the end is trimmed to what is there.
 pub(super) fn replace_at_plan(
     contents: usize,
     begin: usize,
@@ -10142,10 +7870,6 @@ fn native_mutable_buffer_insert(
 /// position is 1-based and defaults to 1, and the capacity is raised for the
 /// position plus the overlay length rather than for the result; answers the
 /// receiver.
-///
-/// Measured, oracle rc 0: `.MutableBuffer~new('abc', 10)~overlay('Z', 60)`
-/// reads `60 63`, so the capacity outruns the contents by the original
-/// length.
 fn native_mutable_buffer_overlay(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10167,10 +7891,6 @@ fn native_mutable_buffer_overlay(
 /// range from the 1-based position is excised and the replacement spliced in
 /// whole, so the contents shift where the two lengths differ; answers the
 /// receiver.
-///
-/// `Setup.cpp:1425` and `:1426` bind this and `bracketsEqual`
-/// (`MutableBufferClass.cpp:545`), which is this with the pad left to its
-/// default, and `name` is what the two rows differ in.
 fn buffer_replace_at(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -10216,11 +7936,6 @@ fn native_mutable_buffer_bracketsequal(
 /// `MutableBuffer::changeStr` (`classes/MutableBufferClass.cpp:971`): answers
 /// the receiver, and raises the capacity only on the branch where the
 /// replacement is longer than the needle (`:1081`).
-///
-/// Measured, oracle rc 0:
-/// `.MutableBuffer~new('abc', 10)~changeStr('b', copies('q', 50))` reads
-/// `52 55`, where the equal-length and shorter branches leave the capacity
-/// where it was.
 fn native_mutable_buffer_changestr(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10322,11 +8037,6 @@ fn native_mutable_buffer_lower(
 /// byte within the range that the input table holds -- or every byte, read as
 /// its own index, where that table is the null string -- becomes the output
 /// table's byte at that index, or the pad past its end; answers the receiver.
-///
-/// **With all three table arguments omitted this is `upper`**, taking its
-/// position and length from arguments four and five (`:1385`-`:1388`) --
-/// measured, oracle rc 0:
-/// `.MutableBuffer~new('abcdef')~translate(, , , 2, 3)` is `aBCDef`.
 fn native_mutable_buffer_translate(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10396,12 +8106,6 @@ fn native_mutable_buffer_delword(
 
 /// `Class~new(id, ...)`: the class id is required and this crate builds no
 /// class from it -- `RexxClass::newRexx` (`classes/ClassClass.cpp:1776`).
-///
-/// The refusal past the checks is the clone at `:1789`, which makes the
-/// receiver the new class's metaclass; `~subclass` is the factory this crate
-/// does build. Measured, oracle: `.Class~new` is `93.901 Not enough arguments
-/// for method; 1 expected.` at rc 163 and `.Class~new(.nil)` is `88.909
-/// Argument class id must have a string value.` at rc 168.
 fn native_class_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10421,15 +8125,6 @@ fn native_class_new(
 
 /// `Message~new(target, message, ...)`: a message object whose send has not
 /// been made -- `MessageClass::newRexx` (`classes/MessageClass.cpp:828`).
-///
-/// The target, the name and the arguments are not kept, and a third argument
-/// -- the `"AI"` argument-style option (`:861`) -- is refused rather than
-/// checked. What the object does carry is the **absence** of an entry in
-/// [`Interp::message_outcomes`], which is what tells an unsent message from a
-/// completed one; [`Loud::unsent_message_result`] reads it.
-///
-/// Measured, oracle rc 163: `.Message~new` is `93.901 Not enough arguments
-/// for method; 2 expected.`
 fn native_message_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10457,23 +8152,6 @@ fn native_message_new(
 /// arguments are required -- `BaseExecutable::processNewExecutableArgs`
 /// (`execution/BaseExecutable.cpp:225`), which `MethodClass::newRexx` and
 /// `RoutineClass::newRexx` share.
-///
-/// Measured, oracle rc 168: `.Method~new` is `88.901 Missing argument;
-/// argument name is required.` and `.Method~new('m')` is `88.901 Missing
-/// argument; argument source is required.`
-///
-/// The two-argument `Method` form is built here, through the same
-/// [`compile_method_source`] that `Object~setMethod` compiles a source string
-/// with. Measured, oracle rc 0: `.Method~new('MM', 'return 7')` answers a
-/// `Method` whose `~scope` is `.nil` and whose `~annotations` is an empty
-/// `StringTable`, and setting it into a directory answers 7.
-///
-/// The `Routine` form is built here too, through [`compile_routine_source`].
-/// Measured, oracle rc 0: `.Routine~new('NEWR', 'return 42')~call` answers
-/// `42` and answers it again on a second send.
-///
-/// A `~new` carrying the optional third argument -- a package, measured rc 0,
-/// where anything else is rc 40 -- still compiles nothing.
 fn native_executable_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10502,18 +8180,6 @@ fn native_executable_new(
 /// the executable a file's own text becomes -- `MethodClass::newFileRexx`
 /// (`classes/MethodClass.cpp:521`) and `RoutineClass::newFileRexx`
 /// (`classes/RoutineClass.cpp:341`).
-///
-/// [`Interp::new_file_executable`] carries what the load does and the three
-/// measurements that pin it.
-///
-/// **The second argument is refused rather than ignored.** It is the package
-/// context the loaded file resolves names against, and accepting it without
-/// honouring it would answer at rc 0 where the resolution differs. Measured,
-/// oracle rc 0: `.Method~newFile('body.rex', .context~package)` answers a
-/// `Method`; and rc 216, a second argument that is none of `"PROGRAMSCOPE"`,
-/// a `Method`, a `Routine` or a `Package` is `40.904`.
-///
-/// [`Interp::new_file_executable`]: crate::Interp
 fn native_new_file(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10535,29 +8201,6 @@ fn native_new_file(
 
 /// `MethodClass::loadExternalMethod(name, descriptor)` and
 /// `RoutineClass::loadExternalRoutine` (`memory/Setup.cpp:1091`, `:1130`).
-///
-/// **`loadExternalMethod`'s `LIBRARY REXX` arm is the one this phase answers**,
-/// and the boundary is `crate::directive_gap`'s, drawn in the same two places
-/// -- see [`Loud::external_entry_point`] for both halves. Measured, oracle rc
-/// 0, and it is why the refused arm cannot be answered from a constant either:
-/// on this machine `LIBRARY rxmath RxCalcPi` answers a `Routine` and
-/// `LIBRARY rexxutil SysCurPos` answers `.nil`, because `build/lib` holds one
-/// library and not the other; and `loadExternalRoutine('Filespec', 'LIBRARY
-/// REXX')` answers a `Routine` where the same entry point is absent from the
-/// method registry this crate keeps.
-///
-/// [`Loud::external_entry_point`]: crate::Loud
-///
-/// **A descriptor that is not `LIBRARY <name> [<entry>]` is 99.917, before
-/// any library is looked for.** Measured, oracle rc 157 for `garbage`, for
-/// `LIBRARY` alone, for the empty string, and -- unlike a `::ROUTINE
-/// EXTERNAL` -- for `REGISTERED junk`, which `loadExternalRoutine` does not
-/// accept.
-///
-/// **The entry point defaults to the name as written**, case included:
-/// measured, oracle rc 0, `loadExternalMethod('file_separator', 'LIBRARY
-/// REXX')` answers a `Method` where the same call under the name `M9` answers
-/// `.nil`.
 fn native_load_external(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10603,9 +8246,6 @@ fn native_load_external(
 
 /// A `loadExternal*` descriptor split into its library and its entry point,
 /// or `None` for one that is not an external name specification.
-///
-/// `LIBRARY` and two or three words is the whole of what either row accepts;
-/// the entry point falls back to the executable's own name as written.
 fn external_specification(descriptor: &[u8], name: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
     let mut words = descriptor
         .split(|byte| byte.is_ascii_whitespace())
@@ -10624,11 +8264,6 @@ fn external_specification(descriptor: &[u8], name: &[u8]) -> Option<(Vec<u8>, Ve
 /// `Package~new(name, source, ...)`: the name is required, the source is not,
 /// and this crate loads no package either way -- `PackageClass::newRexx`
 /// (`classes/PackageClass.cpp:158`).
-///
-/// A constructor of its own rather than [`native_executable_new`]'s, because
-/// an omitted source is a file to resolve and load here rather than the
-/// 88.901 the other two raise -- measured, oracle rc 0, `.Package~new('p')`
-/// answers `a Package`.
 fn native_package_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10654,16 +8289,6 @@ fn executable_name_argument(
 
 /// `String~new(value, ...)`: a string carrying `value`'s own bytes --
 /// `RexxString::newRexx` (`classes/StringClass.cpp:2352`).
-///
-/// **A fresh string and not the argument**, which the C++ says is so that the
-/// class can be adjusted (`:2365`-`:2368`). The `INIT` send takes the
-/// arguments past the first, so `.String~new('abc', 'x')` reaches
-/// `Object~init` with one argument -- measured, oracle rc 163, `93.902 Too
-/// many arguments in invocation of method; 0 expected.`
-///
-/// A subclass of `String` refuses: `completeNewObject` would give the string
-/// that subclass's behaviour, and a string this crate builds carries no class
-/// of its own.
 fn native_string_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10688,15 +8313,6 @@ fn native_string_new(
 
 /// `Stem~new(name, ...)`: a stem object whose name is the optional argument
 /// -- `StemClass::newRexx` (`classes/StemClass.cpp:92`).
-///
-/// The constructor sets both `stemName` and `value` from that argument and
-/// leaves the stem dropped (`:118`-`:128`), which is what `default: None`
-/// means here: an unset stem renders as its own name. Measured, oracle rc 0:
-/// `say '[' || .Stem~new || ']'` is `[]` and the same with `('FOO.')` is
-/// `[FOO.]`.
-///
-/// A subclass of `Stem` refuses, for [`native_string_new`]'s reason: the body
-/// this builds carries no class of its own.
 fn native_stem_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10732,11 +8348,6 @@ fn native_stem_new(
 /// `Pointer~new` and `Buffer~new`: the raise that is the whole body of
 /// `PointerClass::newRexx` (`classes/PointerClass.cpp:139`-`:143`) and
 /// `BufferClass::newRexx` (`classes/BufferClass.cpp:86`-`:90`).
-///
-/// No argument is read, and the substitution is the receiver class's own
-/// `getId()` rather than the scope the method is compiled in. Measured, oracle
-/// rc 163: with `::class P subclass Pointer`, `.P~new` reports `NEW method is
-/// not supported for the P class.` under a trace line naming scope `Pointer`.
 fn native_unsupported_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10753,12 +8364,6 @@ fn native_unsupported_new(
 const WEAK_REFERENT: &[u8] = b"REFERENT";
 
 /// The cell `WEAK_REFERENT` holds: a `Body::WeakRef` allocated for `referent`.
-///
-/// The reference object keeps this cell strongly and the cell keeps nothing,
-/// so `Heap::collect`'s weak pass rewrites it to `Body::WeakRef(ObjRef::NIL)`
-/// as soon as the referent is unreachable -- `WeakReference::referentObject`
-/// with `memoryObject.addWeakReference` around it
-/// (`classes/WeakReferenceClass.cpp:82`-`:88`).
 fn weak_referent_cell(interp: &mut Interp, referent: ObjRef) -> ObjRef {
     let cell = interp.alloc_with(rexx_core::BehaviourId::OBJECT, Body::WeakRef(referent));
     interp.roots.push_temp(cell);
@@ -10767,13 +8372,6 @@ fn weak_referent_cell(interp: &mut Interp, referent: ObjRef) -> ObjRef {
 
 /// `WeakReference~new(value, ...)`: a reference that does not keep `value`
 /// alive -- `WeakReference::newRexx` (`classes/WeakReferenceClass.cpp:231`).
-///
-/// The instance is an ordinary one, so a subclass keeps its own class, its own
-/// rendering and its own instance variables; the referent lives beside them in
-/// [`WEAK_REFERENT`]. The arguments past the first go to `INIT`.
-///
-/// Measured, oracle rc 163: `.WeakReference~new` is `93.903 Missing argument in
-/// method; argument 1 is required.`
 fn native_weak_reference_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10797,10 +8395,6 @@ fn native_weak_reference_new(
 /// `WeakReference~value`: the referent, or `.nil` once the collector has
 /// cleared it -- `WeakReference::value` (`classes/WeakReferenceClass.cpp:217`),
 /// whose whole body is `resultOrNil(referentObject)`.
-///
-/// A cleared cell holds `ObjRef::NIL`, so a cleared reference and a live one
-/// are the same read; a receiver carrying no cell answers `.nil` for the
-/// reason an unset `referentObject` does.
 fn native_weak_reference_value(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10820,29 +8414,6 @@ fn native_weak_reference_value(
 
 /// `Object~request(class)`: the receiver converted to `class`, or `.nil` --
 /// `RexxObject::requestRexx` (`classes/ObjectClass.cpp:1912`).
-///
-/// The rule is `MAKE` + the upcased class name looked up in the receiver's own
-/// behaviour and sent if it is there; failing that, the receiver itself when
-/// the name matches its own class's id; failing that, `.nil`. Bug #1904's own
-/// comment fixes that order -- the `MAKE` method comes first because it can do
-/// more than hand back the same object.
-///
-/// Measured, oracle rc 0: `.K~request("STRING")` is `The NIL object` without a
-/// `makeString` and `K says hello` with one; `'abc'~request("STRING")` is
-/// `abc`; `5~request("STRING")` is `5`; `.environment~request("STRING")` is
-/// `The NIL object`; `.Array~request("CLASS")` is `The Array class`, which is
-/// the id-match limb; `.K~request("K")` and `.K~request(5)` are both
-/// `The NIL object`; and the argument is case-insensitive, so
-/// `.K~request("string")` answers what `.K~request("STRING")` does.
-///
-/// **A `MAKE` method the class dictionaries declare and this crate has no code
-/// for is a loud refusal rather than `.nil`**, which is what keeps the
-/// unimplemented conversions from becoming wrong answers: `.environment
-/// ~request("ARRAY")` is an array on the oracle, and `Directory`'s behaviour
-/// really does answer `MAKEARRAY` -- measured,
-/// `.environment~hasMethod("MAKEARRAY")` is `1` where `.K~hasMethod
-/// ("MAKEARRAY")` is `0`, so the lookup below tells the two apart and only the
-/// second reaches the `.nil`.
 fn native_request(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10875,10 +8446,6 @@ fn native_request(
 /// `String~makeString`: a string is its own string value --
 /// `RexxString::makeString` (`classes/StringClass.hpp`), which
 /// `Object~request("STRING")` is what finds.
-///
-/// Measured, oracle rc 0: `'abc'~makeString` is `abc` and
-/// `'abc'~hasMethod("MAKESTRING")` is `1`, where
-/// `.environment~hasMethod("MAKESTRING")` is `0`.
 fn native_string_make_string(
     _interp: &mut Interp,
     _cleared: Cleared,
@@ -10891,21 +8458,6 @@ fn native_string_make_string(
 /// `String~upper([n [, length]])`: the receiver with a range of it
 /// uppercased -- `RexxString::upperRexx` (`classes/StringClass.cpp:1765`),
 /// bound at `memory/Setup.cpp:681` with a declared count of 2.
-///
-/// The body is `upperRexx`'s, and the no-op cases are its own: a start past
-/// the end of the string, a zero-length range, and a range capped at what is
-/// left. Measured, oracle rc 0: `'abcdef'~upper` is `ABCDEF`,
-/// `'abcdef'~upper(3)` is `abCDEF`, `'abcdef'~upper(3,2)` is `abCDef`,
-/// `'abcdef'~upper(9)` and `'abcdef'~upper(3,0)` are both `abcdef` unchanged,
-/// and `'abcdef'~upper(,2)` is `ABcdef` -- an omitted first argument takes the
-/// default rather than shifting the second.
-///
-/// **`to_ascii_uppercase` and not a locale fold**, which is `Utilities::
-/// toUpper`: measured, `'e9'x~upper` answers its own byte back.
-///
-/// The receiver is a string by dispatch -- this row is in `String`'s own
-/// dictionary -- so `to_text` is its value and no required-string protocol
-/// runs. Measured, `1234~upper` is `1234`.
 fn native_string_upper(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -10958,15 +8510,6 @@ fn native_string_upper(
 /// One `optionalPositionArgument`/`optionalLengthArgument` conversion: the
 /// argument at `index` as a whole number, `None` for an omitted or absent
 /// position, and `raise`'s own condition for anything that is not one.
-///
-/// **The 93.9xx families a *method* raises name the object's own
-/// `stringValue()`, never the converted value**, which is where they part
-/// from the identically-numbered conditions the builtin layer raises.
-/// Measured on the oracle, three descriptors: `'abcdef'~upper('0.0')` reports
-/// `found "0.0"` and `'abcdef'~upper(' -1 ')` reports `found " -1 "`, where
-/// `substr('abc','0.0')` reports the converted `found "0"`. A non-string
-/// object is rendered the same way -- `'abcdef'~upper(.array)` reports
-/// `found "The Array class"`.
 fn whole_method_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
@@ -11043,13 +8586,6 @@ fn native_length(
 }
 
 /// `file_separator`: the file system's name separator.
-///
-/// **The unix answer, which is the platform this crate is checked against.**
-/// `SysFileSystem::getSeparator` returns `"/"`
-/// (`platform/unix/SysFileSystem.cpp:1358`-`:1361`) and the windows half of
-/// the platform layer is Phase 7's, unread and unbuilt here, exactly as Task
-/// 23 embeds `platform/unix/PlatformObjects.orx` and no other. Measured,
-/// oracle: a class method bound to this entry answers `/`.
 fn native_file_separator(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -11060,11 +8596,6 @@ fn native_file_separator(
 }
 
 /// `file_path_separator`: the separator between the entries of a search path.
-///
-/// `SysFileSystem::getPathSeparator` returns `":"`
-/// (`platform/unix/SysFileSystem.cpp:1369`-`:1372`); see
-/// [`native_file_separator`] for the platform note. Measured, oracle: a class
-/// method bound to this entry answers `:`.
 fn native_file_path_separator(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -11075,12 +8606,6 @@ fn native_file_path_separator(
 }
 
 /// `String~makeArray`: the receiver's lines, one array element each.
-///
-/// Measured on the oracle: `LF` separates and a trailing one terminates
-/// rather than separating, so `'a' || LF` is one element and
-/// `LF` alone is one empty element; a `CR` immediately before an `LF` is
-/// dropped with it, while a lone `CR` is ordinary data; and the empty string
-/// has no lines at all, answering an array of zero items.
 fn native_string_makearray(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -11144,12 +8669,6 @@ mod tests {
     }
 
     /// The object model is built on first use and not in `Interp::new`.
-    ///
-    /// **This is the shape of the 5.5 ms measurement, asserted rather than
-    /// left to a comment.** Had `Interp::new` built it, every program in the
-    /// benchmark set would pay for a class registry it never reads; had the
-    /// accessor not built it, `classes` would have nothing to look a class up
-    /// in.
     #[test]
     fn the_object_model_is_built_on_first_use() {
         let mut interp = Interp::new();
@@ -11198,24 +8717,6 @@ mod tests {
 
     /// **The start-scope argument, at the seam rather than through a
     /// program.**
-    ///
-    /// `Interp::message_term` is what a `target~name:scope` send goes
-    /// through, and it validates the scope against the receiver's own
-    /// behaviour first, so a program cannot ask `resolve` about a start
-    /// scope the receiver does not hold. This test calls `resolve`
-    /// directly and can.
-    ///
-    /// The pair is what makes it mean something. `findSuperMethod` searches
-    /// the starting scope itself plus the scopes folded in **ahead of** it,
-    /// so on a `String` receiver:
-    ///
-    /// * starting at `Object`, `ISNIL` (defined there) is found and `LENGTH`
-    ///   (defined at `String`, folded in after `Object`) is not;
-    /// * starting at `String`, both are found.
-    ///
-    /// A `resolve` that ignored its start scope would answer `Some` for all
-    /// four, and one that always answered `None` for a start scope would
-    /// answer `None` for all four.
     #[test]
     fn a_start_scope_hides_a_method_defined_after_it_and_not_one_defined_before() {
         let mut interp = Interp::new();
@@ -11250,12 +8751,6 @@ mod tests {
     /// different answers and the pair is what keeps them apart: a build that
     /// raised for both would let a program expecting a working `String`
     /// method pass against a gap.
-    ///
-    /// **The loud name is chosen from the registry rather than written
-    /// down**, so that implementing any one `String` method does not retire
-    /// this test by making its example answer. The assertion that one was
-    /// found is what stops it going vacuous the day the last row lands: it
-    /// fails then, which is when it wants rewriting.
     #[test]
     fn an_unimplemented_method_is_loud_where_an_unknown_one_is_a_condition() {
         let mut interp = Interp::new();
@@ -11301,32 +8796,6 @@ mod tests {
 
     /// **A class identity used as a receiver resolves against that class's
     /// own class behaviour, never through the arena.**
-    ///
-    /// Before class identities moved to `rexx_core::CLASS_SLOT_BASE`'s
-    /// reserved range, a class handle decoded as an ordinary heap handle,
-    /// `heap.get` answered whatever object held that slot, and the send
-    /// resolved against **that value's** class and answered from it: a silent
-    /// wrong answer. `LENGTH` is `String`'s *instance* method and no class
-    /// answers it on the class side, so the correct answer is 97.1 -- and
-    /// under the collision the answer is `17`, measured: the length of a
-    /// string the program never named.
-    ///
-    /// **The arrangement below is what makes the send the catcher**, and
-    /// getting it wrong is what a first version of this test did. `.String`
-    /// is the third identity the registry mints, so under the old minting its
-    /// handle is the arena's **slot 2** -- filling slot 0 alone leaves slot 2
-    /// empty, `heap.get` answers `None`, and the send fails for the wrong
-    /// reason. With the arena filled up to and including that slot, the two
-    /// mintings give visibly different answers. There is deliberately no
-    /// `class_id()` precondition here, so that reverting the minting fails
-    /// this test at the send rather than ahead of it.
-    ///
-    /// **The pair is what pins it to the class side rather than to "a class
-    /// object answers nothing".** `HASMETHOD` is `Object`'s instance method
-    /// and reaches the class object through the metaclass merge, so it
-    /// answers -- and it answers about the *class* behaviour, measured on the
-    /// oracle: `::class K` plus `::method m class` gives
-    /// `.K~hasMethod('M')` = `1` and `.K~hasMethod('LENGTH')` = `0`.
     #[test]
     fn a_class_identity_used_as_a_receiver_answers_from_the_class_side() {
         let mut interp = Interp::new();
@@ -11370,12 +8839,6 @@ mod tests {
 
     /// Runs `source` on both engines and hands back `(exit code, stdout,
     /// stderr)`, having first insisted the two engines agree with each other.
-    ///
-    /// Both arms, because a method body is entered from
-    /// `Interp::message_term`, which the compiled instruction op
-    /// (`crate::ir::Op::Message`) and the tree-walker's own
-    /// `ExprKind::Message` arm both reach, and because the body's own clauses
-    /// are then driven by whichever engine is running.
     fn both_engines(source: &str) -> (i32, String, String) {
         let mut answer = None;
         let outcome = crate::run_program(
@@ -11398,18 +8861,6 @@ mod tests {
     /// **D24's `SmallInt` behaviour arm is taken for a small integer
     /// receiver**, where the general path is what a receiver whose bytes are
     /// in the arena takes.
-    ///
-    /// The pair is what makes it mean something, and each half fails on its
-    /// own kind of mistake:
-    ///
-    /// * the two receivers answer **different** kinds, so folding the tag
-    ///   into `Primitive::String` reddens the first assertion;
-    /// * they answer the **same** behaviour, so an arm that pointed the tag
-    ///   at another class reddens the second -- and that half is why no
-    ///   differential row moves and why the split is structural rather than
-    ///   an optimisation: `RexxInteger`'s own id is `String`
-    ///   (`classes/IntegerClass.cpp:2066`), and measured, `12345~class~id` is
-    ///   `String` and `12345~length` is 5 on the oracle.
     #[test]
     fn a_small_integer_receiver_takes_the_small_int_arm() {
         let mut interp = Interp::new();
@@ -11464,18 +8915,6 @@ mod tests {
     /// **D24's receiver in the calling convention**: `SELF` is the object the
     /// send was addressed to, taken from `crate::CallContext`, and not the
     /// scope the resolution found the method at.
-    ///
-    /// The two part exactly where a method is inherited, which is what this
-    /// program is for: `m` is defined at `K`, the send is to `J`, and the
-    /// oracle answers `The J class` -- measured, rc 0, empty stderr. A
-    /// `SELF` re-derived from the resolution would answer `The K class`, and
-    /// a program whose receiver and scope are the same class cannot tell the
-    /// two apart.
-    ///
-    /// The second row is the convention's other state: a frame that is not a
-    /// method's carries no receiver, which is
-    /// `RexxActivation::getReceiver`'s `OREF_NULL`
-    /// (`execution/RexxActivation.cpp:2348`).
     #[test]
     fn a_method_send_binds_self_from_the_receiver_in_the_calling_convention() {
         assert_eq!(
@@ -11498,17 +8937,6 @@ mod tests {
 
     /// **`SELF` and `SUPER` are bound before the body's first instruction**,
     /// to the receiver and to the scope after the method's own.
-    ///
-    /// Measured on the oracle, one class method of `::class K`: `say self`
-    /// is `The K class` and `say super` is `The Class class` -- the class
-    /// behaviour folds `Object`, then `Class`, then `K`, so the scope after
-    /// `K` is `Class`. A build that bound neither would print the two
-    /// variables' own derived names, `SELF` and `SUPER`.
-    ///
-    /// The second program is the reason the binding goes through
-    /// `Interp::slot_of` rather than through the plan alone: the outer body
-    /// mentions neither name, so the plan carries no slot for either, and an
-    /// `INTERPRET` that reads one has to find it anyway.
     #[test]
     fn self_and_super_are_bound_before_the_bodys_first_instruction() {
         assert_eq!(
@@ -11539,16 +8967,6 @@ mod tests {
 
     /// A native method's argument that has no string value raises 88.909,
     /// and the neighbouring arguments that have one still answer.
-    ///
-    /// **Ungated, where the corpus witness is not.**
-    /// `corpus/lang/message_send_argument_object_not_a_string.rex` runs these
-    /// same shapes against the live oracle, and it only fails a run under
-    /// `REXX_CORPUS_GATE`; an argument answered instead of raised passes every
-    /// other gate command without this case.
-    ///
-    /// The pair is what pins the rule to "has a string value" rather than to
-    /// "is not a heap object": a stem answers *as* its default, so the same
-    /// handle shape is on both sides of the line depending on what it holds.
     #[test]
     fn an_argument_with_no_string_value_raises_where_one_with_a_string_value_answers() {
         for source in [
@@ -11587,22 +9005,6 @@ mod tests {
 
     /// The `::METHOD` and `::ATTRIBUTE` shapes whose body this crate cannot
     /// run are **loud**, and the neighbouring shapes that it can run are not.
-    ///
-    /// The refusals cannot be corpus programs, which have to match the
-    /// oracle; each row's comment carries what the oracle answers instead.
-    /// The successes below them are what stops "refuse every directive
-    /// option" from passing: `PROTECTED`, `PACKAGE` and `UNGUARDED` run on the
-    /// oracle and must run here, and a `::ATTRIBUTE GET` with a body of its
-    /// own is the one attribute form that is a written method rather than a
-    /// generated accessor.
-    ///
-    /// `PRIVATE` is not a row in either list, because it is neither: the
-    /// oracle answers it or refuses it depending on who is sending, and
-    /// [`Interp::private_sends_are_refused_by_who_is_sending`] is the test
-    /// that separates the two.
-    ///
-    /// [`Interp::private_sends_are_refused_by_who_is_sending`]:
-    ///     private_sends_are_refused_by_who_is_sending
     #[test]
     fn a_method_body_this_crate_cannot_run_is_loud_and_its_neighbours_still_run() {
         // (source, the refusal's own text after `rexx-exec: `). The tail
@@ -11670,21 +9072,6 @@ mod tests {
     /// **A `DELEGATE` directive installs a forwarding method under every key
     /// it claims**, including the setter half of the pair a `ATTRIBUTE`
     /// modifier adds, and every row's bytes are the oracle's own.
-    ///
-    /// **These rows were the refusal list's above until `DELEGATE` was
-    /// built**, and they are here rather than in the corpus because the
-    /// receiver is a class object whose delegate property is never assigned:
-    /// the answer is a refusal from the *delegate*, which is what says the
-    /// message reached it. The message name each row reports is the one the
-    /// send used, so the setter row is the only instrument anywhere for the
-    /// `A=` key -- a build that installed the getter alone would make
-    /// `.K~a = 5` a name miss on the class and report `Object "The K class"`
-    /// instead, the oracle's status and catalogue row over a receiver the
-    /// oracle does not name.
-    ///
-    /// Table D's two rows send through an *instance* and answer rather than
-    /// refuse, so they cover the arm this one cannot and the two are not
-    /// substitutes.
     #[test]
     fn a_delegate_directive_forwards_under_every_key_it_claims() {
         for (source, message) in [
@@ -11718,20 +9105,6 @@ mod tests {
     /// **A generated accessor pair reads and writes one variable in the
     /// declaring scope's pool on the receiver**, and every row is measured on
     /// the oracle.
-    ///
-    /// **What catches a regression here**, stated because this replaces a
-    /// loud refusal and the corpus gate cannot see a refusal becoming a wrong
-    /// answer: this test,
-    /// `corpus/lang/method_attribute_generated.rex` and the
-    /// `method_attribute_generated_*` programs beside it, and the table D rows
-    /// `corpus/gate-tables/directives/attribute__class__subkeyword.rex` and
-    /// `method__attribute__subkeyword.rex`. The instance reading of every row
-    /// below is out of reach until something builds instances, so a wrong
-    /// answer to a send whose receiver is not a class object is caught by
-    /// nothing here.
-    ///
-    /// Both directives generate the pair, which is why the first group has a
-    /// `::ATTRIBUTE` row and a `::METHOD ... ATTRIBUTE` row.
     #[test]
     fn a_generated_accessor_pair_reads_and_writes_the_declaring_scopes_pool() {
         for (source, expected) in [
@@ -11872,19 +9245,6 @@ mod tests {
 
     /// **An `ABSTRACT` method installs and is refused when it is sent**,
     /// naming the message rather than the directive.
-    ///
-    /// The instrument, stated because this replaces a loud refusal: **this
-    /// test and the table D rows** `method__abstract__subkeyword.rex`
-    /// and `attribute__abstract__subkeyword.rex`, plus
-    /// `corpus/lang/method_abstract_send.rex`. Gate table C cannot see it --
-    /// its `abscla` row records that the abstract-*method* half has no arm of
-    /// that section's probe -- so nothing derived covers this.
-    ///
-    /// Every row is measured on the oracle at rc 163. Between them they
-    /// cover each directive that can install an `ABSTRACT` method, the
-    /// as-written and upcased spellings of a name, and both halves of an
-    /// abstract accessor pair -- the setter's message carrying the appended
-    /// `=` is what shows the pair is installed rather than a single name.
     #[test]
     fn an_abstract_send_is_refused_at_the_send_naming_the_message() {
         for (source, named) in [
@@ -11925,29 +9285,6 @@ mod tests {
 
     /// **A private send is refused by who is sending, and the refusal names
     /// the scope that refused it.**
-    ///
-    /// This is the instrument the corpus gate cannot be, and the reason is
-    /// the shape of the gate rather than a gap in the programs: a refusal
-    /// this crate shares with the oracle is a corpus row, but the failure
-    /// this task risks is a refusal quietly becoming an *answer*, and the
-    /// moment that happens the row's exit status stops being a refusal's at
-    /// all. So the refusals are asserted here by their catalogue coordinates,
-    /// against the sends that must keep answering.
-    ///
-    /// Each refusing row is a distinct limb of `checkPrivate`: a program
-    /// frame carries no receiver, a routine frame carries none either, and a
-    /// sibling class is a class object whose hierarchy does not contain the
-    /// declaring scope. Each answering row is a distinct allowing limb.
-    ///
-    /// `97.2` rather than `97.1` is what separates a real access check from a
-    /// build that dropped the method and let the name-miss report stand:
-    /// measured on the oracle, `CONDITION('E')` under a `SIGNAL ON SYNTAX` is
-    /// `2` for a refused private send and `1` for a name the behaviour does
-    /// not answer.
-    ///
-    /// **Every row is a class method**, because reaching an instance method
-    /// needs `~new`. The instance reading of each is untested rather than
-    /// confirmed.
     #[test]
     fn private_sends_are_refused_by_who_is_sending() {
         let class = "\n::CLASS K\n::METHOD m CLASS PRIVATE\n  return 'inner'\n";
@@ -11994,10 +9331,6 @@ mod tests {
     /// **The refusal is not raised at the send**: it drops the method and
     /// enters the receiver's own `UNKNOWN`, and the `UNKNOWN` lookup is not
     /// itself access-checked.
-    ///
-    /// The pair is what makes each half mean something. A build that raised
-    /// at the send answers neither row; a build that checked the `UNKNOWN`
-    /// lookup too answers the first and refuses the second.
     #[test]
     fn a_refused_send_reaches_unknown_and_the_unknown_lookup_is_not_checked() {
         assert_eq!(
@@ -12070,17 +9403,6 @@ mod tests {
 
     /// **`checkPrivate`'s `isInstanceOf` limb, which no program in this phase
     /// can reach either.**
-    ///
-    /// The limb allows a send from another *instance* of the class that
-    /// declared the method, and an instance needs `~new`. A class object
-    /// cannot stand in for one: its own class is the metaclass, never the
-    /// user class a `::METHOD ... PRIVATE` is declared in. So the check is
-    /// called directly, with a string as the sender and `.String` as the
-    /// declaring scope -- the one value kind this phase has whose class is a
-    /// class the registry holds.
-    ///
-    /// The second half is the refusal that makes the first mean something:
-    /// the same sender against a scope its class is not compatible with.
     #[test]
     fn a_private_send_from_another_instance_of_the_declaring_class_is_allowed() {
         let mut interp = Interp::new();
@@ -12129,17 +9451,6 @@ mod tests {
     /// object the receiver's behaviour holds**, is 88.914 when the scope is
     /// not a class object at all, and is 93.957 when it is a class the
     /// receiver's behaviour was never given.
-    ///
-    /// The three together are what keep each refusal from swallowing the
-    /// next: 88.914 is `RexxExpressionMessage::evaluate`'s own
-    /// `isInstanceOf(TheClassClass)` test (`ExpressionMessage.cpp:166`) and
-    /// 93.957 is `validateScopeOverride`'s, and a version raising either for
-    /// both cases passes half of this.
-    ///
-    /// Oracle-measured, all three: `'abc'~length:.String` is `3` at rc 0,
-    /// `'abc'~length:super` outside a method is 88.914 at rc 168 because
-    /// `SUPER` is then an ordinary uninitialised variable, and
-    /// `'abc'~length:.Array` is 93.957 at rc 163.
     #[test]
     fn a_scope_override_answers_and_has_one_refusal_for_each_bad_scope() {
         assert_eq!(
@@ -12165,12 +9476,6 @@ mod tests {
 
     /// A `Stem` answers a message it has no method for by forwarding it to its
     /// VALUE -- `StemClass::unknownRexx`.
-    ///
-    /// This was a refusal until `Stem~UNKNOWN` was built, and what replaced it
-    /// is the oracle's own answer rather than a choice: a stem named `A.` with
-    /// nothing assigned to it has the value `A.`, so `LENGTH` is 2. Measured,
-    /// oracle rc 0, with both engines agreeing: `a.b = 1` then `a.~length` is
-    /// `2`, `a.~string` is `A.` and `a.~upper` is `A.`.
     #[test]
     fn a_stem_forwards_a_message_it_has_no_method_for_to_its_value() {
         let mut interp = Interp::new();
@@ -12192,20 +9497,6 @@ mod tests {
     /// `~identityHash` answers, and **the corpus cannot witness it**: the
     /// oracle's answer is derived from the object's address, so no differential
     /// row can compare the two and this test is the whole instrument.
-    ///
-    /// What it pins is the half deviation 4 does not license away. The method
-    /// answers rather than refusing; it answers something a Rexx program can
-    /// use as a whole number; and equal handles answer equally while different
-    /// handles do not, which is the identity model that deviation names -- so
-    /// a build answering a constant answers and is usable, and still fails the
-    /// row that asks two different handles.
-    ///
-    /// [`string_hash`] against the oracle's own answers, byte for byte.
-    ///
-    /// The signed-byte rows are the ones that matter: an unsigned
-    /// accumulator is right for every ASCII string and wrong above `0x7f`,
-    /// so a witness of letters alone cannot see it. `c2x` of the method's
-    /// answer is this value little-endian.
     #[test]
     fn the_string_hash_matches_the_oracle_including_above_7f() {
         // Measured with `c2x(<x>~hashCode)`, read back as little-endian.
@@ -12244,11 +9535,6 @@ mod tests {
 
     /// Every receiver kind answers `~identityHash`, and each line is the
     /// oracle's own answer, measured 2026-09-03 on three descriptors.
-    ///
-    /// **The rows below are the whole of what the licence leaves standing.**
-    /// The *value* diverges and cannot be closed -- see
-    /// [`native_identity_hash`] -- so a build answering a per-receiver
-    /// constant would satisfy the rendering and still fail the last two rows.
     #[test]
     fn identity_hash_answers_every_receiver_kind_as_the_oracle_does() {
         assert_eq!(
@@ -12271,13 +9557,6 @@ mod tests {
 
     /// Two equal short strings are **one** object here and two on the oracle,
     /// which is deviation 4's identity half rather than its rendering half.
-    ///
-    /// A string of up to [`rexx_core::INLINE_TEXT`] bytes lives in the handle
-    /// and allocates nothing, so two separate concatenations of equal value
-    /// are the same handle. Measured 2026-09-03, oracle rc 0: both rows below
-    /// are `0` there. The second is the boundary control -- one byte past the
-    /// inline capacity and the two sides agree -- so the divergence is pinned
-    /// to the inline case rather than to `~identityHash` at large.
     #[test]
     fn two_equal_inline_strings_share_one_handle() {
         assert_eq!(
@@ -12293,11 +9572,6 @@ mod tests {
     /// The reflection protocol answers on both engines for a receiver that is
     /// not a class object, which is where `~class` and `~isA` differ from the
     /// `.Class`-scope methods beside them.
-    ///
-    /// `corpus/lang/class_reflection.rex` runs these same shapes against the
-    /// live oracle. Here to keep the split loud without `REXX_CORPUS_GATE`: a
-    /// build that answered `~class` from `receiver_kind`'s class arm alone
-    /// would refuse every row below, and nothing outside the gate would say so.
     #[test]
     fn the_object_protocol_answers_a_receiver_that_is_not_a_class_object() {
         assert_eq!(
@@ -12319,17 +9593,6 @@ mod tests {
 
     /// A name in `.Class`'s own dictionary does not reach a receiver that is
     /// not a class object.
-    ///
-    /// This is what makes [`class_receiver`]'s non-class arm unreachable, and
-    /// asserting it here rather than asserting the arm is deliberate: reaching
-    /// the arm needs a [`Cleared`] token, and building one outside
-    /// [`Interp::invoke`] would add a second call to the dispatch seam, which
-    /// `tests/dispatch_seam.rs` bounds at one.
-    ///
-    /// One row per receiver kind `Interp::receiver_kind` admits that is not a
-    /// class object; that function is where membership is decided. `~id` is
-    /// the name that would answer if the class-side and instance-side
-    /// dictionaries were one.
     #[test]
     fn a_class_scope_name_does_not_reach_a_receiver_that_is_not_a_class_object() {
         for source in [
@@ -12349,10 +9612,6 @@ mod tests {
     }
     /// Every class with a `NEW` row of its own answers an instance of the
     /// class the send was addressed to, or the oracle's own refusal.
-    ///
-    /// The refusing rows are what stop the pair from collapsing: a constructor
-    /// that skipped its argument checks would answer an instance for all of
-    /// them, and one that refused everything would answer none.
     #[test]
     fn a_primitive_constructor_answers_an_instance_or_the_oracle_s_own_refusal() {
         for class in [
@@ -12396,12 +9655,6 @@ mod tests {
     /// The constructors whose argument list carries the instance's whole state
     /// answer one, and the state is either kept and read back or refused,
     /// never answered from nothing.
-    ///
-    /// The refusal row is what stops this from passing over a constructor that
-    /// fabricated a body: it names a method that would read what the arguments
-    /// carried, and the crate holds none of it. `MutableBuffer`, `Supplier` and
-    /// `WeakReference` keep what they are given, so their rows read the state
-    /// back instead.
     #[test]
     fn a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state() {
         let message = ".Message~new(.Object~new, 'STRING')";
@@ -12476,14 +9729,6 @@ mod tests {
 
     /// A `.Directory~new` reads `.nil` for every index until something puts
     /// an entry there, and then reads it back through all three spellings.
-    ///
-    /// Every line is the oracle's, measured 2026-09-03 on three descriptors.
-    /// Reading `.nil` is its answer for an empty directory and a wrong answer
-    /// for any other, so the first line is only correct while the writes
-    /// beside it land -- and the last is the control: a second directory does
-    /// not see the first one's entries. `~zork` reads and writes under the
-    /// upper-cased name where `~at` and `~put` do not, which is why `d~zork`
-    /// stays `.nil` across the two rows that store `X` and `Y`.
     #[test]
     fn a_new_directory_reads_nil_until_an_entry_is_put_there() {
         assert_eq!(
@@ -12514,15 +9759,6 @@ mod tests {
 
     /// A `Directory` subclass has a variable pool AND a store, so its
     /// `EXPOSE` answers and so do its entry writes.
-    ///
-    /// **The split this test recorded is closed.** It used to assert the
-    /// second half REFUSING, and said so: "what the split costs and the
-    /// oracle answers `1` for". `native_directory_new` gave `.Directory`
-    /// itself a `Body::Native` -- which has no variable pool -- and a
-    /// subclass a plain instance, so exactly one of the two rows could be
-    /// green at a time. Phase 5h Task 4 gave every `Directory` a program
-    /// makes the hash store, which lives in the pool, so the two are no
-    /// longer exclusive. Both values below are the oracle's.
     #[test]
     fn a_directory_subclass_keeps_the_instance() {
         assert_eq!(
@@ -12550,13 +9786,6 @@ mod tests {
 
     /// A stem receiver answers `Stem` and renders as its own value, and a
     /// `Stem` method with no body refuses loudly rather than answering.
-    ///
-    /// **The halves fail on opposite mistakes.** A stem built as a plain
-    /// instance renders `a Stem` where the oracle renders the default, at
-    /// rc 0 on both sides; a `~objectName` taken from the string value
-    /// answers `dflt` where the oracle answers `a Stem`; and without the
-    /// refusals a `Stem` method with no body would answer from nothing. Every
-    /// value below is the oracle's, measured.
     #[test]
     fn a_stem_receiver_answers_stem_and_renders_its_own_value() {
         assert_eq!(
@@ -12604,13 +9833,6 @@ mod tests {
     /// A `StringTable` subclass answers its own class and its own method set,
     /// and stores what its constructor puts in it -- `.TraceObject~new` is the
     /// one the image ships.
-    ///
-    /// **The pair is what makes each half mean something.** `makeString` is a
-    /// name `TraceObject` declares and `StringTable` does not, so a build that
-    /// read the behaviour off `.StringTable` answers `StringTable 0` for the
-    /// first line; and the entries are what separate a genuine collection from
-    /// an object that merely answers the right names. Every value below is the
-    /// oracle's, measured.
     #[test]
     fn a_string_table_subclass_answers_its_own_class_methods_and_entries() {
         assert_eq!(
@@ -12636,9 +9858,6 @@ mod tests {
     /// A semaphore's `UNINIT` runs at collection rather than at a send, so a
     /// class that declares one needs a row even where the finalizer does
     /// nothing.
-    ///
-    /// A refusal escaping the sweep reaches the program, so the instance
-    /// merely going out of scope is what this asks about.
     #[test]
     fn a_semaphore_instance_runs_its_finalizer_without_refusing() {
         for class in ["EventSemaphore", "MutexSemaphore"] {
@@ -12653,15 +9872,6 @@ mod tests {
 
     /// **The one shape of `~at` that has no oracle behaviour to match**, and
     /// the instrument [`Loud::array_index_hole`]'s own doc names.
-    ///
-    /// `.Array~of` fills the slots from its arguments, and every line is the
-    /// oracle's, measured 2026-09-03 on three descriptors.
-    ///
-    /// **The omission rows are what separate a real `~of` from a `~new` that
-    /// took the argument count.** An interior omission is a slot with no item
-    /// (`~size` 3, `~items` 2) and a trailing one is not an argument at all
-    /// (`~size` 2), and an empty list fixes the shape where `.array~new()`
-    /// leaves it open.
     #[test]
     fn array_of_fills_its_slots_from_its_arguments() {
         assert_eq!(
@@ -12686,9 +9896,6 @@ mod tests {
     /// `~of` sent to a subclass of `Array` answers an instance of that
     /// subclass -- Phase 5g Task 6, where this test used to assert the
     /// refusal.
-    ///
-    /// Measured, oracle rc 0: `.array~subclass('K')~of(1,2)~size` is `2` and
-    /// its `~class~id` is `K`.
     #[test]
     fn array_of_on_a_subclass_answers_an_instance_of_it() {
         assert_eq!(
@@ -12703,11 +9910,6 @@ mod tests {
     /// in `corpus/oracle-crashes.txt` and must never be run against the
     /// oracle, so a differential row cannot cover this and this test is the
     /// whole of it.
-    ///
-    /// **The adjacent answers are the point.** Each row beside the refusal is
-    /// a shape the spread does answer, and a build that refused the whole
-    /// spread -- or that read the item count as the size -- reddens one of
-    /// them rather than passing.
     #[test]
     fn an_expanded_index_of_one_empty_slot_is_loud() {
         for source in [
@@ -12745,11 +9947,6 @@ mod tests {
     /// by one -- and which index kind the subscript belongs to decides the
     /// error as well as the number, because `positionArgument` names no
     /// position at all where `requiredPositive` does.
-    ///
-    /// The corpus differential compares the numbers these raise; this is what
-    /// compares their substitutions.
-    ///
-    /// Measured, oracle rc 163, `m = .array~new(2,3)`.
     #[test]
     fn a_subscript_refusal_names_the_position_its_own_method_counts_from() {
         for (source, message) in [
@@ -12786,9 +9983,6 @@ mod tests {
     }
     /// A subclass of `Array` constructs, keeps its class, and carries both a
     /// store and an object variable pool -- Phase 5g Task 6.
-    ///
-    /// This test used to assert the refusal that stood here. Measured on the
-    /// oracle: `.array~subclass('K')~new(2,3)~size` is `6` at rc 0.
     #[test]
     fn new_on_a_subclass_of_array_answers_an_instance_of_it() {
         assert_eq!(
@@ -12803,11 +9997,6 @@ mod tests {
     /// the forward reaches the receiver's own `UNKNOWN`, whose body reads the
     /// name as an entry -- so a missing name is `.nil` and a present one is
     /// the entry.
-    ///
-    /// **The `String` row is the pair that makes this a rule about `UNKNOWN`
-    /// rather than about missing names.** That receiver's behaviour answers no
-    /// `UNKNOWN`, so the same shape really is the condition there, and a build
-    /// answering `.nil` for every miss fails it.
     #[test]
     fn a_hash_collection_forwards_a_missing_name_to_its_own_unknown() {
         assert_eq!(
@@ -12831,14 +10020,6 @@ mod tests {
     /// **The entry-method assignment with no value to store**, which the
     /// oracle answers by reading uninitialised memory -- see
     /// [`Loud::entry_method_without_a_value`] for the measurement.
-    ///
-    /// The only instrument, for the reason that constructor's doc gives: there
-    /// is no oracle behaviour to agree with, so no corpus row can carry it.
-    ///
-    /// **The answering rows beside it are the point.** The same message name
-    /// with a value stores it, and the ordinary message-assignment form
-    /// reaches the same code with a value always present -- so a build that
-    /// refused the whole set form fails them rather than passing.
     #[test]
     fn an_entry_method_send_with_no_value_is_loud() {
         for source in [
@@ -12868,22 +10049,6 @@ mod tests {
     /// **A metaclass carrying its own `NEW` decides what `~subclass` builds**,
     /// and this crate has no `NEW` to run -- see [`factory_metaclass`] for why
     /// that is a loud refusal rather than a class built from `.Class`'s path.
-    ///
-    /// The only instrument. The oracle answers this shape at rc 0, so no
-    /// corpus row can carry a refusal for it; and a build that dropped the
-    /// check would answer at rc 0 as well, with a class the metaclass's own
-    /// `NEW` never saw. That is a silent wrong answer, which is the outcome
-    /// nothing else here catches.
-    ///
-    /// **The answering row beside it is the point.** The same metaclass with
-    /// no `NEW` of its own builds and answers `id k`, matching the oracle, so
-    /// a build that refused every named metaclass fails that row rather than
-    /// passing this one.
-    ///
-    /// The `FORWARD` body is deliberate and is not reached: a `::METHOD new
-    /// CLASS` that returns anything which is not a class object crashes the
-    /// oracle, `corpus/oracle-crashes.txt` entry 8, and a program in this
-    /// file is a program someone will eventually run against it.
     #[test]
     fn a_metaclass_with_its_own_new_is_loud() {
         let (code, stdout, stderr) = both_engines(
@@ -12908,16 +10073,6 @@ mod tests {
 
     /// **`.RESOURCES` holds each `::RESOURCE` body as an `Array` of its own
     /// lines**, and this is the whole instrument for it.
-    ///
-    /// No corpus program can carry it: a `::RESOURCE` body is source lines
-    /// that no clause span covers, and `rexx-parse`'s
-    /// `every_corpus_program_tiles` requires every byte of a corpus program to
-    /// be tiled by a clause node. `corpus/phase-5a.txt` says so at the Task 17
-    /// block. Every row below was measured on the oracle at rc 0.
-    ///
-    /// The empty body is the neighbour that stops a build answering the whole
-    /// file, and the lower-case index is the one that stops a build keying by
-    /// the spelling the directive quoted.
     #[test]
     fn the_package_tables_hold_what_their_directives_declare() {
         assert_eq!(
@@ -12956,13 +10111,6 @@ mod tests {
     /// An `~UNKNOWN` sent by hand rather than forwarded: its argument list is
     /// an `Array` on every forward and anything at all here, and the oracle
     /// converts what it is given with `requestArray`.
-    ///
-    /// In-crate only, because the refusal is this crate's: no `MAKEARRAY` is
-    /// implemented for any receiver, so the conversion the oracle performs is
-    /// the same gap `~request('ARRAY')` already reports. The answering row
-    /// beside it is measured on the oracle -- `.environment~unknown('ARRAY',
-    /// .Array~superClasses)` is `The Array class` at rc 0 -- and is what stops
-    /// a build refusing every by-hand send from passing.
     #[test]
     fn an_unknown_sent_by_hand_needs_an_array_this_crate_does_not_convert() {
         assert_eq!(
@@ -12984,19 +10132,6 @@ mod tests {
     /// An entry the oracle's own directory holds and this crate does not build
     /// is a refusal, not `.nil` -- and the refusal is per directory, because
     /// the oracle answers `.nil` for a `.local` name asked of `.environment`.
-    ///
-    /// The three answering rows are what stops a build that refuses every miss
-    /// from passing, and the `~put` row is what stops one that refuses by name
-    /// alone: an entry a program stored answers even under a name the unbuilt
-    /// table holds.
-    ///
-    /// `ENDOFLINE` rather than a class name: the library bootstrap fills
-    /// `.environment` with the classes `CoreClasses.orx` and
-    /// `StreamClasses.orx` declare, so almost every entry in the unbuilt
-    /// table now answers. What is left is `Setup.cpp`'s own non-class
-    /// additions, of which this is one -- the line terminator read off the
-    /// `RexxInfo` instance (`Setup.cpp:1741`), measured a bare newline on
-    /// the oracle.
     #[test]
     fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
         for (source, owner) in [
@@ -13034,13 +10169,6 @@ mod tests {
     }
     /// **The required-string protocol answers where it can and refuses where
     /// it cannot, and the refusals are only visible here.**
-    ///
-    /// The corpus gate cannot see a clean refusal becoming a wrong answer: a
-    /// refusal this crate does not share with the oracle is not expressible as
-    /// a differential row at all. So the shapes of `~request` and
-    /// `~objectName=` this task deliberately left loud are asserted by their
-    /// message here, and the neighbouring answering shapes sit beside them --
-    /// which is what stops "refuse every argument" passing.
     #[test]
     fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer() {
         for (source, message) in [
@@ -13101,9 +10229,6 @@ mod tests {
     /// refused**, which is the honest reading of the section's own list: it
     /// bounds the row set, and a row whose instruction is another phase's is
     /// outside it.
-    ///
-    /// A refusal cannot be a corpus row, so this is the only instrument. Each
-    /// message names the owning phase the section's own context is waiting on.
     #[test]
     fn a_reqstr_context_whose_instruction_is_another_phases_is_still_loud() {
         for (source, message) in [
@@ -13149,19 +10274,6 @@ mod tests {
 
     /// [`Interp::run_termination_uninits`] refuses to re-enter itself, and
     /// refusing leaves its work pending rather than consuming it.
-    ///
-    /// **The only instrument for the termination sweep's copy of the
-    /// interlock.** Its other copy, in [`Interp::run_ready_uninits`], is
-    /// witnessed differentially by
-    /// `corpus/lang/uninit_nested_collection_at_exit.rex`, which reaches it
-    /// from inside a termination finalizer; the check-and-set below is
-    /// reached only by a second entry into the termination sweep, which no
-    /// program has been found to produce.
-    ///
-    /// **The empty answer is not the assertion**, because an empty `Vec<Loud>`
-    /// is also what a sweep that ran everything successfully answers. What
-    /// separates them is whether the registry still holds the class, so the
-    /// un-interlocked arm below is what gives the interlocked one its meaning.
     #[test]
     fn an_interlocked_termination_sweep_runs_nothing_and_consumes_nothing() {
         let mut fresh = interp_awaiting_a_class_uninit();

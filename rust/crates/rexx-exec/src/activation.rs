@@ -10,25 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! One activation: everything about the frame currently executing (D16).
-//!
-//! Moved here from Task 3's spike, which built this shape; `plan.rs` moved
-//! alongside it, since the two are the halves of one design. `blocks:
-//! Vec<Block>` is deliberately **not** here, and the reason is that nothing
-//! reads it yet, not that its shape is unknown: the design doc's DO/LOOP
-//! passage already gives one, naming the control variable's slot,
-//! `to`/`by`/`for`, the iteration counter, the block's label and its `end`
-//! index. Task 11 is the first code that will actually walk a block, so it
-//! should pick the representation against a real reader rather than inherit
-//! a guess made here. An earlier version of this comment claimed no
-//! definition existed while listing it in the same sentence.
-//!
-//! **4b's Task 3 is the first task for which more than one of these exists
-//! at a time**, and three fields carry the consequences: `body` (which code
-//! body this frame runs, no longer assumed to be `main`), `trace_mode`
-//! (moved off `Interp`, because a callee's `TRACE` must die with it) and
-//! `settings` (which finally has a caller to inherit from). Their doc
-//! comments carry the measurements; `Activation::nested` is where all three
-//! are set for a callee.
 
 use crate::Interp;
 use crate::options::ConditionSyntax;
@@ -42,28 +23,10 @@ use std::rc::Rc;
 
 /// How many ended activation boxes [`Interp::recycle_activation`] parks for
 /// reuse.
-///
-/// Small on purpose: what the pool serves is a call and its return, which
-/// needs one box back for the next call, and every extra entry is a frame's
-/// worth of memory held for a depth the program has already left.
 const SPARE_ACTIVATIONS: usize = 4;
 
 /// One enabled condition trap: `SIGNAL ON cond NAME label` or `CALL ON cond
 /// NAME label`.
-///
-/// The two differ only in this `bool`, and the difference is entirely in
-/// *when* and *how* the handler runs -- measured, and the two answers are
-/// not variations of one another:
-///
-/// * `SIGNAL ON` transfers control the instant the condition is raised. The
-///   rest of the clause never runs: `signal on novalue` with `say zunset`
-///   prints nothing before the handler.
-/// * `CALL ON` runs the handler as an ordinary internal call at the **next
-///   clause boundary**, and the clause that raised completes first. Measured
-///   with `zres = one(1)` where `one` raises a trapped `USER` condition and
-///   the handler assigns `zres` itself: the program prints the *handler's*
-///   value, so the assignment had already stored the routine's before the
-///   handler ran.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Trap {
     /// `CALL ON` rather than `SIGNAL ON`.
@@ -82,65 +45,18 @@ pub(crate) struct Trap {
     pub(crate) label: std::rc::Rc<[u8]>,
     /// The trap is armed but held while its own `CALL ON` handler runs
     /// (`TrapHandler::disable`/`enable`, `execution/TrapHandler.cpp`).
-    ///
-    /// **A state and not a removal, and `CONDITION('S')` is the whole of
-    /// what a program can see of the difference.** It reports `DELAY`
-    /// inside the handler and `OFF` for a trap that is not there at all,
-    /// measured in one program -- `call on user uc` with the handler
-    /// printing `condition('S')` gives `DELAY`, and the same handler after
-    /// `call off user uc` gives `OFF`. Removing and re-inserting reports
-    /// `OFF` for the first.
-    ///
-    /// **That is the only difference, and the wider claim this comment used
-    /// to make is false.** It said a removal "resurrects a trap the handler
-    /// turned off". It does not: the handler runs as a nested activation
-    /// with its own copy of the trap table, so its `CALL OFF` never reaches
-    /// the caller's table and there is nothing to resurrect. Measured two
-    /// ways -- on the oracle, a handler whose first act is `call off user
-    /// uc` is entered again on a second raise; and with the removal restored
-    /// here, the same program prints identically except that
-    /// `CONDITION('S')` reads `OFF` where it should read `DELAY`.
-    /// Commit `f03d69f1`'s message carries the superseded claim and cannot
-    /// be edited.
-    ///
-    /// A delayed trap does not fire, and `Interp::trap_for` is what
-    /// enforces that. **`Interp::caller_trap_for` deliberately does not**,
-    /// which is the C++'s own line rather than an omission: `raiseCondition`
-    /// matches a handler and queues it without asking whether it is delayed,
-    /// and `processTraps` is what skips a delayed one. So a condition raised
-    /// inside a handler by a routine the handler called is *matched*, then
-    /// dropped at the clause boundary when `deliver_pending_traps`'s own
-    /// `trap_for` declines it. Measured, and both interpreters agree: a
-    /// handler whose first run calls a routine raising the same condition
-    /// runs **once**, and the program carries on. An earlier version of this
-    /// comment said every such lookup filters, which is one lookup too many.
     pub(crate) delayed: bool,
 }
 
 /// The condition a handler running in this activation was entered for: as
 /// much of the oracle's condition Directory as `CONDITION()` can be answered
 /// from here.
-///
-/// **Per activation, and that is measured rather than convenient.** The C++
-/// keeps it in `settings.conditionObj`, which an internal call copies along
-/// with the rest of the settings block and never writes back, so the three
-/// observables are:
-///
 /// ```text
 /// handler          condition('C')  ->  SYNTAX
 ///  call clearer    condition('C')  ->  SYNTAX      inherited
 ///  call clearer    condition('R')              then condition('C')  ->  ''
 /// handler          condition('C')  ->  SYNTAX      the callee's reset died with it
 /// ```
-///
-/// The same copy rule is why a handler's condition does not outlive its own
-/// activation: a `SIGNAL ON` handler in a callee leaves the caller reporting
-/// nothing once it returns.
-///
-/// **What is deliberately not here.** `CONDITION('A')` and `CONDITION('O')`
-/// answer an `Array` and a `Directory`, neither of which this crate's value
-/// model has; `builtin::state`'s `CONDITION` refuses those two options
-/// loudly rather than storing something that could only be rendered wrongly.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TrappedCondition {
     /// `CONDITION('C')`: the condition's own name, the same bytes
@@ -148,71 +64,23 @@ pub(crate) struct TrappedCondition {
     pub(crate) name: Box<[u8]>,
     /// `CONDITION('E')`: the part of the condition object's `CODE` item
     /// after the dot, which only a `SYNTAX` condition has one of.
-    ///
-    /// Measured: `say 1/0` trapped gives `3` (the sub of 42.3), `raise
-    /// syntax 40.4` gives `4`, `raise syntax 40` gives `0` -- so a missing
-    /// sub is a real zero rather than an absence -- and `NOVALUE`, `USER`,
-    /// `ERROR` and `FAILURE` all give the null string.
     pub(crate) code_sub: Option<u16>,
     /// `CONDITION('I')`: the trap that fired was `CALL ON` rather than
     /// `SIGNAL ON`.
-    ///
-    /// **This is the one thing `CONDITION()` needs that nothing else records.**
-    /// `Trap::call` says how a trap *would* fire; this says how the
-    /// condition being reported *did*. The two come apart the moment the
-    /// handler re-arms its own trap the other way round -- measured, inside
-    /// a `CALL ON USER UC` handler, `signal on user uc` leaves
-    /// `CONDITION('I')` at `CALL` while `CONDITION('S')` becomes `ON`.
     pub(crate) call: bool,
     /// `CONDITION('D')`: the `RAISE ... DESCRIPTION` value, or `None` when
     /// the raise carried none. See [`Raised::description`] for the one
     /// condition whose description this cannot supply.
-    ///
-    /// [`Raised::description`]: crate::error::Raised::description
     pub(crate) description: Option<Vec<u8>>,
 }
 
 /// A unique identity for one activation, minted when it is pushed and never
 /// reused for the life of an `Interp`.
-///
-/// **Added by fix round 1, because a depth does not identify an activation.**
-/// `PendingTrap` first named its target activation by the activation stack's
-/// own depth, which is right while that activation is on the stack and wrong
-/// the moment it leaves: a later, unrelated call re-enters the same depth and
-/// picks up a
-/// condition that was never its. Measured both ways -- `call aa` then `call
-/// cc`, with `aa` raising a trapped `USER` condition, ran the handler inside
-/// `cc`; and a pending condition whose activation is unwound by an error the
-/// *caller* traps is dropped by the oracle and was delivered into the next
-/// routine by us.
-///
-/// A counter rather than a pointer or an index for the obvious reason: it
-/// stays unique across a pop, which is exactly the case both defects had in
-/// common.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct ActivationId(pub(crate) u64);
 
 /// The `ADDRESS` environment pair an activation carries: the target a command
 /// clause would be sent to, and the one a bare `ADDRESS` swaps back to.
-///
-/// **A pair and not a stack**, which is the whole of the bare form's
-/// behaviour. Measured on the oracle with `envA`, `envB` and then four
-/// consecutive bare `ADDRESS`es: `ENVA`, `ENVB`, `ENVA`, `ENVB`. A stack walks
-/// backwards out of the pair instead of returning into it, and it parts
-/// company almost immediately -- measured by mutation, replacing the swap with
-/// `current = alternate.take()`: the alternate is wrong after **one** toggle
-/// and the current after **two**. The C++ is the same two words swapping,
-/// `RexxActivation::toggleAddress`.
-///
-/// `None` is the interpreter's default environment, which is **platform
-/// supplied** (`Activity::getInstance()->getDefaultEnvironment()`, and `sh`
-/// measured on this host) rather than a name this crate chooses. Both fields
-/// start `None` because the oracle starts both at that same default:
-/// `RexxActivation`'s own constructors set `currentAddress` and then
-/// `alternateAddress = currentAddress`. Measured consequence, and the one edge
-/// a survey built from working examples misses -- a bare `ADDRESS` before any
-/// other `ADDRESS` swaps two equal values and so changes nothing:
-///
 /// ```text
 /// say address()  ->  sh
 /// address        ->  (no change)
@@ -221,14 +89,6 @@ pub(crate) struct ActivationId(pub(crate) u64);
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct AddressState {
     /// The environment in force. `None` is the platform default.
-    ///
-    /// **This is what `ADDRESS()` answers**: `BuiltinFunctions.cpp`'s
-    /// `ADDRESS` is `context->getAddress()` and nothing else. It is one of
-    /// five readers of `settings.currentAddress` in the C++ and the only one
-    /// a Rexx program can use without issuing a command --
-    /// `corpus/lang/address_env.rex`'s own header has the enumeration.
-    /// Rendering `None` means naming the platform default, which
-    /// `builtin::state`'s `DEFAULT_ENVIRONMENT` spells and says why.
     pub(crate) current: Option<Rc<[u8]>>,
     /// What a bare `ADDRESS` swaps `current` with.
     pub(crate) alternate: Option<Rc<[u8]>>,
@@ -237,11 +97,6 @@ pub(crate) struct AddressState {
 impl AddressState {
     /// `ADDRESS env` / `ADDRESS VALUE expr`: the new target becomes current and
     /// the old current becomes the alternate.
-    ///
-    /// The old *alternate* is discarded, so setting the same name twice leaves
-    /// both halves equal and a following bare `ADDRESS` does nothing --
-    /// measured, `address envA; address envA` then three bare `ADDRESS`es all
-    /// report `ENVA`.
     pub(crate) fn set(&mut self, name: Rc<[u8]>) {
         self.alternate = self.current.take();
         self.current = Some(name);
@@ -249,18 +104,6 @@ impl AddressState {
 
     /// [`AddressState::set`] from bytes, reusing an `Rc` that already holds
     /// them.
-    ///
-    /// **The name a `SELECT`-free `ADDRESS env` names is a constant of the
-    /// parse tree, and the one `ADDRESS VALUE address()` computes is the name
-    /// already in force**, so allocating for either is an allocation whose
-    /// result is a copy of something this state is holding. Measured against
-    /// the tree as committed, `instructions:u` per `address SH`: 353 before
-    /// and 232 after, where a bare `ADDRESS` -- the same bookkeeping with no
-    /// name to hand over -- is 230.
-    ///
-    /// Both arms are what [`AddressState::set`] would leave behind, and
-    /// `set_bytes_agrees_with_set` says so by running the two against each
-    /// other over every ordering of a small set of names.
     pub(crate) fn set_bytes(&mut self, name: &[u8]) {
         // Setting the name already in force: `set` would leave both halves
         // holding it, and the second one can be the first's own `Rc`.
@@ -285,29 +128,6 @@ impl AddressState {
 
 /// How far a routine activation is past the point where it could still
 /// announce its own `>I>`, and whether it has.
-///
-/// **One value where the C++ has two bools**, `traceEntryAllowed` and
-/// `traceEntryDone` (`RexxActivation.hpp:634`-`635`). They are read together
-/// at every site, only three of their four combinations are reachable, and
-/// the one this crate got wrong was reachable only because the pair let the
-/// "allowed" half be spent from a place the "done" half could not see.
-///
-/// **The transitions are a decay driven by clauses stepped, not by
-/// instructions in a list, and that difference is the whole defect this
-/// models.** The C++ clears `traceEntryAllowed` at the bottom of its own
-/// instruction loop (`RexxActivation.cpp:657`-`659`), and an `IF`'s
-/// then-clause, a `DO` body's clause and an `INTERPRET`'s clauses are each a
-/// separate instruction in that same loop. Here they are nested *inside*
-/// their enclosing clause's own step, so a clear driven by the top-level loop
-/// never fires before them. Measured -- `call rtn` / `::routine rtn` /
-/// `if 1=1 then trace l` / `return`: the oracle writes zero bytes to stderr
-/// and this crate wrote the whole `>I>`/`<I<` pair, both at rc 0, until the
-/// decay moved to [`Interp::step_in_temps_frame`], which is the one place a
-/// clause is stepped at any nesting depth.
-///
-/// The measured table, one row per shape, `>I>` announced only where marked.
-/// Every routine body below ends `return`; the caller is `call rtn`:
-///
 /// ```text
 /// trace l                                        announced
 /// /* comment */ then trace l                     announced   (not an instruction)
@@ -324,16 +144,6 @@ impl AddressState {
 /// if 1=1 then interpret "trace l"                -
 /// interpret "interpret 'trace l'"                -
 /// ```
-///
-/// **`INTERPRET` is the one construct that does not simply decay**, and the
-/// last four rows are why. The C++ gives an interpret activation its own
-/// `traceEntryAllowed` and gates on `tracingLabels() &&
-/// parent->isMethodOrRoutine() && parent->traceEntryAllowed &&
-/// !parent->traceEntryDone` (`:3644`-`:3652`). So a fragment starts its own
-/// count, but only when the `INTERPRET` was the routine's own first clause,
-/// and never when the parent is *another fragment* -- an interpret activation
-/// is not a method or routine, which is exactly what the last row measures.
-/// `Interp::enter_fragment` and `Interp::leave_fragment` are that rule.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum TraceEntry {
     /// No clause of this activation has been stepped yet.
@@ -346,20 +156,11 @@ pub(crate) enum TraceEntry {
     /// owed.
     Spent,
     /// `>I>` has been announced, which is also the precondition for `<I<`.
-    ///
-    /// The exit half needs this **and** `tracingLabels()` still being in
-    /// force at the end: measured, a routine whose body is `trace l` then
-    /// `trace off` announces `>I>` and no `<I<` at all.
     Done,
 }
 
 impl TraceEntry {
     /// The state one more stepped clause leaves this in.
-    ///
-    /// `Pending` is spent by the first clause *beginning*, not by its
-    /// finishing, which is what makes `Allowed` the state a `TRACE` in that
-    /// clause sees. `Done` absorbs, so a routine that announced and then runs
-    /// on still owes its `<I<`.
     pub(crate) fn stepped(self) -> TraceEntry {
         match self {
             TraceEntry::Pending => TraceEntry::Allowed,
@@ -375,10 +176,6 @@ impl TraceEntry {
 }
 
 /// How far one activation is through a `REPLY` ([`Activation::reply`]).
-///
-/// **Three states rather than two flags**, because `Owed` implies
-/// `Issued` and a pair admits a state that means nothing: a body cannot be
-/// waiting to continue past a `REPLY` that never ran.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum ReplyState {
     /// No `REPLY` has run here. The ordinary state of every activation.
@@ -390,34 +187,11 @@ pub(crate) enum ReplyState {
     /// A `REPLY` has just handed its value out and the rest of the body is
     /// owed. `Interp::enter_method_body` reads this to park the activation
     /// instead of releasing it, and moves it to `Issued` as it does.
-    ///
-    /// Named for the debt rather than for the activation's position, because
-    /// `Interp::suspended` is the activation stack below the running one and
-    /// this is not that.
-    ///
-    /// **SCHEDULING.** The states beside it are what the oracle's own
-    /// numbered checks read; this one exists only because the body has to be
-    /// put down and picked up again.
     Owed,
 }
 
 /// The clause an activation is executing, as `StackFrame~line`,
 /// `~traceLine` and `RexxContext~line` report it.
-///
-/// **Written once per *call*, by `Interp::push_activation`, from the clause
-/// state in force as the activation is suspended** -- not once per clause.
-/// The running activation has no need of it: `Interp::clause_state` already
-/// carries that clause's line, indent and index, and reading it there is
-/// what keeps this off the clause loop. `ClauseState::current_clause_index`
-/// carries the measurement that settled the shape and the
-/// `clause_line_override` guard that goes with it.
-///
-/// **The line is carried rather than derived from `Activation::pc`**, which
-/// cannot answer it: `run_bounded_instructions` steps a nested construct's
-/// clauses on a **local** program counter, so a call made from inside a `DO`
-/// leaves `pc` on the `DO`.
-///
-/// `index` names an instruction of the body [`Activation::body`] selects.
 #[derive(Copy, Clone)]
 pub(crate) struct ClauseSnapshot {
     /// `RexxActivation::getContextLineNumber`
@@ -448,288 +222,69 @@ pub(crate) struct Activation {
     /// insufficient.
     pub(crate) id: ActivationId,
     /// The program this frame is running.
-    ///
-    /// **A liveness anchor, and never borrowed through.** Nothing takes
-    /// `&self.activation().program.…` and then calls a `&mut self`
-    /// method: that is the `E0502` written out in `run_activation`. This field
-    /// exists so that the `Rc` the instruction loop clones into its local has
-    /// something to be cloned from, and so that a frame keeps its program
-    /// alive independently of `Interp::programs`.
-    ///
-    /// **It records the program and not the body**, which is why [`body`]
-    /// sits beside it: through 4a `run_activation` hardcoded `&program.main`,
-    /// true for every activation 4a could build and false the moment an
-    /// activation runs anything else. Task 3 replaced the hardcoding with a
-    /// read of that field.
-    ///
-    /// [`body`]: Activation::body
     pub(crate) program: Rc<Program>,
     /// `program`'s own id, the durable identity `Interp::programs` hands out.
-    ///
-    /// The `Rc` above is a liveness anchor and cannot answer this: two
-    /// activations holding the same `Rc` share an id, but an `Rc` is not a
-    /// key, and recovering the index by scanning `Interp::programs` is a
-    /// reverse lookup that can fail. Carried so that [`Activation::body_key`]
-    /// is a field read: it is the other half of the plan and chunk caches'
-    /// key, whose first half is [`body`] just below.
-    ///
-    /// [`body`]: Activation::body
     pub(crate) program_id: ProgramId,
     /// Which of `program`'s code bodies this activation is running: `None` is
     /// `program.main`, `Some(i)` is `program.directives[i]`'s own body.
-    ///
-    /// **The same shape `BodyKey::directive` carries** (`plan.rs`), decided
-    /// together with it on purpose -- a selector here that denoted something
-    /// other than the plan cache's key would cache one body's plan under
-    /// another body's name, which is a wrong answer rather than a miss.
-    /// [`body_of`] is the one function that turns the pair into a
-    /// `&CodeBody`, so the two spellings cannot come apart.
-    ///
-    /// `Some(i)` is a `::ROUTINE` activation built by [`Activation::routine`]
-    /// from `Interp::resolve_call`'s third resolution step, or a
-    /// `::METHOD`/`::ATTRIBUTE` activation built by [`Activation::method`]
-    /// from a resolved message send. [`Entry`] is what tells the two apart
-    /// where it matters. The resolution order in
-    /// front of the routine step is load-bearing rather than
-    /// tidy -- internal label, then builtin, then `::ROUTINE` -- because a
-    /// routine name that **collides** with a builtin must go to the builtin.
-    /// Measured: `::routine max` alongside `call max 1, 9` still calls the
-    /// builtin and reports 9, so a `::routine` search placed in front would
-    /// silently run the wrong routine rather than fail.
-    ///
-    /// A quoted target is a second order and not the same one: measured,
-    /// `call 'ZORKOLO'` skips the internal `zorkolo:` label and reaches the
-    /// `::routine`, while `call 'MAX' 1, 9` still reaches the builtin.
-    ///
-    /// The lookup **upcases both sides**, unlike [`CodeBody::labels`].
-    /// Measured: `::routine 'zork'` is found by `call zork`, `call 'zork'`
-    /// and `call 'ZORK'` alike, and `::routine MiXeD` by `call 'mixed'`.
-    /// The builtin step in front of it is the opposite, matched
-    /// case-sensitively: `call 'max' 1, 9` is 43.1 where `call 'MAX' 1, 9`
-    /// answers 9, which is what lets a `::routine 'max'` be reachable at all.
-    ///
-    /// [`CodeBody::labels`]: rexx_parse::CodeBody::labels
     pub(crate) body: Option<usize>,
     pub(crate) plan: Rc<Plan>,
     /// Names bound after `plan` was built, and the reason this field exists is
     /// the whole answer to "does a fragment's plan work against the enclosing
     /// plan's name map".
-    ///
-    /// It does for reads, and it cannot for writes. A fragment that introduces
-    /// a name the enclosing body never mentions has to bind that name to a
-    /// slot, and the binding has to outlive the fragment. Measured on the
-    /// oracle:
-    ///
     /// ```text
     /// interpret "zork = 42"      /* ZORK is in no instruction of this body */
     /// interpret "say zork"       /* prints 42 */
     /// ```
-    ///
-    /// The enclosing `plan` is an `Rc` the activation holds a clone of, so it
-    /// is not uniquely owned and cannot be extended; `RootSet::grow_slots`
-    /// hands out the *slot* but records no *name* for it. This map is where
-    /// the name goes. `DROP (v)` has the identical hole, so this is not a
-    /// fragment-only mechanism.
-    /// **`NameMap`'s hasher, not `RandomState`.** Measured on
-    /// `bench-programs/dispatch.rex`, whose every send binds one: the insert
-    /// alone was 5.06% of retired instructions with the default hasher, and
-    /// the key is a name out of the program text, which is what `NameMap` is
-    /// for.
     pub(crate) extra: NameMap<Box<[u8]>, usize>,
     pub(crate) frame: SlotFrame,
     /// Whether this activation is the one that must `pop_slots` [`frame`],
     /// and equivalently whether the pool in it is its own.
-    ///
-    /// **The whole of D9r's shared-pool default lives in this one bool.** A
-    /// callee with no `PROCEDURE` reuses the caller's frame, so it is `false`
-    /// and the frame outlives the return; a `PROCEDURE` callee pushes a frame
-    /// of its own and sets it `true`. The top-level activation owns its frame
-    /// too -- `Interp::run` is what pops that one.
-    ///
-    /// It also decides a second thing, and getting only the first right is a
-    /// silent bug: `Interp::invoke_call` moves the callee's `extra` back into
-    /// the caller on return, which is correct exactly when the two shared a
-    /// pool. For a `PROCEDURE` callee it would overwrite the caller's own
-    /// run-time name bindings with the callee's isolated ones.
-    ///
-    /// [`frame`]: Activation::frame
     pub(crate) owns_frame: bool,
     /// How this activation was entered -- what an instruction whose legality
     /// depends on the entry reads. [`Entry`] carries the oracle's own table.
     pub(crate) entry: Entry,
     /// What `PARSE SOURCE`'s second word answers while this activation runs.
-    ///
-    /// A field rather than a function of [`entry`], because [`Entry::Routine`]
-    /// is one kind for a `::ROUTINE` reached by `CALL` and for the same body
-    /// reached as a function, which answer differently: [`CallType`]'s own
-    /// doc has the measured table and the program for each row.
-    ///
-    /// [`entry`]: Activation::entry
     pub(crate) call_type: CallType,
     /// `Some` exactly for an [`Entry::Method`] activation: what its
     /// `>I>`/`<I<` lines name.
-    ///
-    /// Carried on the activation rather than recovered from
-    /// [`Activation::body`], because neither substitution is in the directive:
-    /// [`MethodIdentity`]'s own doc has the measurements.
     pub(crate) method_identity: Option<MethodIdentity>,
     /// Every name an `EXPOSE` in this activation bound to a scope pool on the
     /// receiving object, by the slot index that name resolves to here.
-    ///
-    /// **Empty for all but a method activation that ran an `EXPOSE`**, and the
-    /// emptiness is the fast path: `Interp::variable` and its two siblings ask
-    /// this first and fall straight through to the frame when there is nothing
-    /// in it.
-    ///
-    /// **Keyed on the slot index rather than on the name** so that every route
-    /// to the variable agrees without re-deriving anything. A plan-resolved
-    /// read, an `INTERPRET` fragment's read and a `VALUE('V')` call all reach
-    /// `Interp::slot_of` (or the plan's own map, which is the same answer), so
-    /// keying on what they all produce is what makes the exposure invisible to
-    /// them.
-    ///
-    /// **Inherited by an internal `CALL` that shares this pool**, measured: a
-    /// class method exposing `v`, calling an internal label with no
-    /// `PROCEDURE`, and the label assigning `v`, leaves the object variable
-    /// changed. A `PROCEDURE` callee starts from an empty list and
-    /// `exec_procedure` puts back only what its own `EXPOSE` list names.
     pub(crate) exposed: Vec<(usize, InstanceVar)>,
     /// How far this activation is through a `REPLY`, which is
     /// `ActivationSettings::isReplyIssued` plus the `REPLIED` execution state
     /// as one value.
-    ///
-    /// [`ReplyState`] has the transitions. The readers are
-    /// `Interp::exec_reply`, for the one-per-invocation rule;
-    /// `Interp::returned_value`, where a `RETURN`/`EXIT` carrying a value has
-    /// nowhere to send it once a reply has been handed over;
-    /// `Interp::enter_method_body`, which parks this activation rather than
-    /// releasing it when the body is to continue; and
-    /// `Interp::resume_reply`'s assertion that a resumed body did not ask to
-    /// be parked a second time.
-    ///
-    /// **Named rather than counted.** The readers are a set the tree can
-    /// enumerate, so a number here is a fact that goes stale with nothing to
-    /// notice.
-    ///
-    /// **LEGALITY where `exec_reply` and `returned_value` read it,
-    /// SCHEDULING where `enter_method_body` and `resume_reply` do.** 98.935
-    /// and 98.936/98.937 are the oracle's own numbers and Phase 6 keeps them,
-    /// so the `None`/`Issued` distinction survives whatever replaces the
-    /// scheduling; [`ReplyState::Owed`] and its readers do not.
     pub(crate) reply: ReplyState,
     /// Whether the `REPLY` that ran here carried a value.
-    ///
-    /// **`RexxActivation::result` read as a bool.** The oracle's own field
-    /// holds the replied object (`execution/RexxActivation.cpp:1061`) and the
-    /// only check that reads it asks whether it is null, which is
-    /// `Interp::forward_after_reply`'s 98.937. Keeping the object here would
-    /// root a value the sender already holds.
-    ///
-    /// Separate from [`reply`] rather than a payload on it, because the two
-    /// answer different questions and only one of them moves: the state goes
-    /// `None` to `Owed` to `Issued` as the body is put down and picked up,
-    /// and this is fixed at the `REPLY` itself.
-    ///
-    /// [`reply`]: Activation::reply
     pub(crate) replied_a_value: bool,
     /// Whether this activation is performing the send of a `FORWARD` that
     /// does not `CONTINUE`, which makes it a phantom for condition delivery.
-    ///
-    /// `RexxActivation::forward` sets `settings.setForwarded(true)` before
-    /// the send (`execution/RexxActivation.cpp:1372`), and both
-    /// `RexxActivation::trap` (`:2450`) and `RexxActivation::willTrap`
-    /// (`:2582`) open by reading it and drilling to the previous
-    /// non-forwarded frame. So a trap armed here does not see a condition
-    /// the send raises, and the caller's does. Measured, oracle: a
-    /// `signal on syntax` in the forwarding method over a `1/0` in the
-    /// forwarded-to method is rc 214 with the report on stderr, and the same
-    /// program with `CONTINUE` on the `FORWARD` traps.
-    ///
-    /// Never cleared: the C++ does not clear it either, and the activation
-    /// ends with the send.
     pub(crate) forwarded: bool,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
-    ///
-    /// `PROCEDURE` and `USE LOCAL` both ask "is this the *first* instruction
-    /// executed", and the answer is a run-time property, not a static one.
-    /// Measured on the oracle, all four shapes:
-    ///
     /// ```text
     /// call sub / sub: procedure                 -> runs
     /// call sub / sub: / lbl2: / procedure       -> runs      (labels do not count)
     /// call sub / sub: nop / procedure           -> 17.1      (a NOP does)
     /// say 'main' / sub: / procedure             -> 17.1      (fell through, no call)
     /// ```
-    ///
-    /// The second and third together are why this is cleared per instruction
-    /// *kind* rather than at the label the call jumped to, and the fourth is
-    /// why [`entry`] is a separate field: a body's text cannot say
-    /// whether its `PROCEDURE` is reachable, because the same instruction is
-    /// legal when called and not when fallen into.
-    ///
-    /// `run_activation` is the only writer, and it clears this **before**
-    /// stepping rather than after -- measured, `sub: interpret "procedure"`
-    /// is 17.1, so a fragment does not inherit its host clause's permission.
-    /// `Interp::procedure_permitted` carries the value across the one step
-    /// that is allowed to use it.
-    ///
-    /// [`entry`]: Activation::entry
     pub(crate) first_instruction_pending: bool,
     /// How far this activation is past the point where a `>I>` could still be
     /// announced -- `RexxActivation::traceEntryAllowed` and `traceEntryDone`
     /// as one value, because the two are read together everywhere and a
     /// separate pair admits states the C++ never reaches.
-    ///
-    /// [`TraceEntry`] has the transitions and the measurements behind them.
     pub(crate) trace_entry: TraceEntry,
     pub(crate) pc: usize,
     /// This activation's own `NUMERIC DIGITS`/`FUZZ`/`FORM`.
-    ///
-    /// Per activation and not one field on `Interp` (measured, in the
-    /// design's "The borrow shape"): a callee's own `NUMERIC` setting must
-    /// not leak back into its caller once it returns, so each activation
-    /// needs its own copy rather than sharing one. Task 6 adds the field,
-    /// default-initialised, since 4a's one activation never has a caller to
-    /// inherit from. Task 7's arithmetic is its first reader (`eval.rs`'s
-    /// `digits()`/`form()` calls, feeding the DIGITS/FORM pair a value is
-    /// rendered under at creation); Task 9's `NUMERIC` instruction is what
-    /// will first mutate it, and 4b's `CALL` is what will initialise a
-    /// callee's from the caller's current value instead of the default.
-    /// [`Activation::nested`] is that initialisation.
     pub(crate) settings: Settings,
     /// Which conditions this activation raises as SYNTAX errors --
     /// `::OPTIONS <condition> SYNTAX` on its own package, minus whatever a
     /// `SIGNAL ON`/`OFF` here has turned off since.
-    ///
-    /// **Per activation and mutable, following [`settings`] rather than
-    /// living on the package**, because `RexxActivation::trapOn` writes it:
-    /// `signal on novalue` turns the escalation off so the trap can take the
-    /// condition instead, and it stays off for the rest of that activation.
-    /// Inherited by an internal call like [`settings`], and started afresh
-    /// from the package by a `::ROUTINE` or `::METHOD` like it too.
-    ///
-    /// [`settings`]: Activation::settings
     pub(crate) condition_syntax: ConditionSyntax,
     /// This activation's own `TRACE` setting (D17).
-    ///
-    /// **Per activation since Task 3, and one field on `Interp` before
-    /// that.** The `Interp` field was a deliberate 4a-only simplification and
-    /// said so: 4a has exactly one frame, so there was no `return` for a
-    /// callee's `TRACE OFF` to fail to survive. Measured on the oracle, `trace
-    /// r` in a caller and `trace off` as the callee's first clause -- the
-    /// caller's own next clause is echoed again after the `return`, so the
-    /// callee's setting dies with the callee. [`Activation::nested`] inherits
-    /// the caller's value at call time; nothing writes back on the way out,
-    /// which is the whole of that behaviour.
     pub(crate) trace_mode: TraceMode,
     /// This activation's own `ADDRESS` environment pair.
-    ///
-    /// **Per activation, inherited by copy at call time, never written back**,
-    /// the same one-way rule [`trace_mode`], [`settings`] and [`traps`] follow,
-    /// and measured the same way. `address outer` in the main body, then a
-    /// called internal routine:
-    ///
     /// ```text
     /// main   address()  ->  OUTER
     ///  sub   address()  ->  OUTER      inherited
@@ -738,58 +293,15 @@ pub(crate) struct Activation {
     /// main   address()  ->  OUTER      unchanged by the callee
     /// main   address              ->   sh      the caller's own alternate
     /// ```
-    ///
-    /// So both halves of the pair cross into the callee, not just the current
-    /// one -- the C++ copies the whole settings block
-    /// (`_parent->putSettings(settings)` in the internal-call constructor).
-    ///
-    /// A `::routine` does **not** inherit it: its constructor sets
-    /// `currentAddress` from the instance default and `alternateAddress` from
-    /// that, exactly as a top-level activation does. Nothing in this crate
-    /// enters a `::routine` body yet, so no code path here depends on that
-    /// difference, but it is the same non-inheritance `DIGITS`/`FORM`/`FUZZ`
-    /// and `TRACE` show.
-    ///
-    /// [`trace_mode`]: Activation::trace_mode
-    /// [`settings`]: Activation::settings
-    /// [`traps`]: Activation::traps
     pub(crate) address: AddressState,
     /// The condition traps enabled in this activation, keyed by the exact
     /// condition name a raise carries (`Raised::condition`) -- `SYNTAX`,
     /// `NOVALUE`, `USER FOO`, ...
-    ///
-    /// **Per activation, inherited by copy at call time, and never written
-    /// back** -- all three measured, and each one separately:
-    ///
-    /// * *Inherited.* `signal on syntax` in the main body with `say 1/0`
-    ///   inside a `PROCEDURE`d routine traps, and the handler reads the
-    ///   *routine's* isolated variable pool, so the trap fired in the callee
-    ///   rather than after unwinding to the caller. `SIGL` is the callee's
-    ///   own raising line there (9 in that probe), not the caller's `call`
-    ///   clause.
-    /// * *By copy.* The same program with `signal off syntax` as the callee's
-    ///   first clause still traps -- in the *caller*, with `SIGL` set to the
-    ///   caller's `call` clause -- so turning a trap off in a callee leaves
-    ///   the caller's own enabled.
-    /// * *Never written back.* Symmetric with [`trace_mode`] and [`settings`]
-    ///   just above, and for the same reason: the callee's map dies with its
-    ///   frame.
-    ///
-    /// A trap is **removed when it fires** (measured: a `SIGNAL ON SYNTAX`
-    /// handler whose own clause divides by zero gets the ordinary fatal
-    /// report, not a second trap; and a `NOVALUE` handler reading a second
-    /// unset variable gets that variable's derived name). `SIGNAL ON` inside
-    /// the handler re-arms it, also measured.
-    ///
-    /// [`trace_mode`]: Activation::trace_mode
-    /// [`settings`]: Activation::settings
     pub(crate) traps: TrapMap,
     /// The condition `CONDITION()` reports in this activation, or `None`
     /// when no handler has been entered here. [`TrappedCondition`] carries
     /// the measurements for the copy-on-call, never-write-back rule it
     /// follows along with [`traps`].
-    ///
-    /// [`traps`]: Activation::traps
     pub(crate) condition: Option<TrappedCondition>,
     /// `DATE`/`TIME`'s clock reading, in `builtin::datetime`'s own
     /// microseconds-since-0001-01-01 unit -- the last value this activation
@@ -801,26 +313,6 @@ pub(crate) struct Activation {
     /// being current, to anchor the reset to. Overwriting this straight to
     /// `None` on invalidation, an earlier version of this field's own
     /// shape, made that value unrecoverable by the time a reset needed it.
-    ///
-    /// **Per activation, matching `ActivationSettings::timeStamp` exactly**,
-    /// and not one field on `Interp` the way [`Interp::elapsed_anchor`]'s
-    /// own divergence is: a nested `CALL`'s own instructions must not
-    /// disturb the *caller's* cached reading, and a single `Interp`-wide
-    /// field could not tell the two apart. Measured, the shape the shared
-    /// brief's own probe is built from: `say time("L") burn() time("L")`,
-    /// where `burn` is an internal routine that runs a real CPU burn before
-    /// returning. `burn`'s own body steps its own instructions -- a `DO`
-    /// clause and a `RETURN` clause, at least two calls into
-    /// `step_in_temps_frame` -- through *its own* `Activation`, invalidating
-    /// only `clock_stale` on the callee's frame; the caller's is a
-    /// different field on a different frame and survives the call
-    /// untouched, so the second `time("L")` after `burn()` returns still
-    /// reads *this* clause's own cached value. A version of this field
-    /// tried first on `Interp` reproduced the oracle's cache in every case
-    /// except this one nested-call shape -- and this is that shape.
-    ///
-    /// [`clock_stale`]: Activation::clock_stale
-    /// [`Interp::elapsed_anchor`]: crate::Interp::elapsed_anchor
     pub(crate) cached_clock: Option<i64>,
     /// Whether [`cached_clock`] needs a fresh read before this activation's
     /// clause may trust it -- the per-clause half [`cached_clock`]'s own
@@ -828,92 +320,27 @@ pub(crate) struct Activation {
     /// on whichever activation is executing at the time, mirroring
     /// `RexxActivation::run`'s own `settings.timeStamp.valid = false` set
     /// right after `nextInst->execute()` returns (`RexxActivation.cpp:647`).
-    ///
-    /// [`cached_clock`]: Activation::cached_clock
     pub(crate) clock_stale: bool,
     /// The `RexxContext` this activation's `.CONTEXT` answers, built on the
     /// first ask and kept for the rest of the activation --
     /// `RexxActivation::getContextObject`, which fills its own field the
     /// same way.
-    ///
-    /// **One per activation and not one per evaluation**, which the oracle's
-    /// identity says out loud. Measured, oracle rc 0: `c = .context` then
-    /// `c~identityHash == .context~identityHash` is `1`, and the same
-    /// comparison against the outer context passed into a method is `0`. A
-    /// program-wide object would answer `1` to both and a fresh one `0` to
-    /// both.
-    ///
-    /// **Rooted by [`Interp::collect_now`]'s sweep over the activation stack
-    /// while this activation is running or suspended, and by
-    /// [`Activation::object_roots`] while it is parked.**
-    ///
-    /// **The rooting hangs off the collection site, not off the state**, and
-    /// that distinction is load-bearing rather than pedantic: an activation
-    /// really is only ever running, suspended or parked, but a collection
-    /// reached by some other door sees neither mechanism. A door that calls
-    /// `Heap::collect` directly frees the running activation's own context
-    /// object -- measured against such a build, `say .context~objectName`
-    /// either side of `gc('force')` answers `a RexxContext` twice at rc 0 on
-    /// the oracle and refuses the second send at rc 120 here. So every
-    /// collection goes through [`Interp::collect_now`], which
-    /// `dispatch_seam.rs`'s `heap_collect_is_called_from_collect_now_alone`
-    /// asserts rather than leaving to this paragraph.
     pub(crate) context_object: Option<ObjRef>,
     /// The clause this activation is executing. [`ClauseSnapshot`] carries
     /// where it is written and why it is carried rather than derived.
     pub(crate) clause: ClauseSnapshot,
     /// This activation's `~invocation` id, minted on the first ask.
-    ///
-    /// **`RexxActivation::getIdntfr` (`execution/RexxActivation.cpp:94`) is
-    /// `if (idntfr == 0) idntfr = ++counter;` off a process-global atomic,
-    /// so the numbers follow the order they were first *asked* for and not
-    /// the depth.** Measured, oracle rc 0: a program reading
-    /// `.context~invocation` at the top level before calling gets `1`, and
-    /// its own `PROGRAM` frame then reads `1` while the `ROUTINE` and
-    /// `INTERNALCALL` frames above it read `2` and `3`. Minting eagerly
-    /// would answer `3` there.
     pub(crate) invocation: Option<u32>,
     /// The name this activation was invoked under -- `settings.messageName`,
     /// which `StackFrame~name` and `RexxContext~name` both answer.
-    ///
-    /// **`None` for a `Entry::Method` activation**, whose message name is
-    /// already on [`Activation::method_identity`]: [`Activation::invoked_as`]
-    /// reads it from there, and `Interp::run_activation` carries why the two
-    /// sources are not merged.
-    ///
-    /// **The name as the caller wrote it, not the declared spelling.**
-    /// Measured, oracle rc 0: `::routine MiXeD` reached by `call MiXeD`
-    /// answers `MIXED` (the parser upcased the symbol) and `::routine
-    /// 'lower'` reached by `call 'lower'` answers `lower`.
-    ///
-    /// A refcount clone of [`crate::CallContext::name`], taken where that
-    /// convention is established, because the convention itself is one
-    /// `Interp` field saved and restored in a Rust local and so cannot be
-    /// read for any activation but the running one.
-    /// **`None` rather than an empty slice**, and that is a measurement:
-    /// `Rc<[T]>::from(&[])` allocates a header even for a zero-length slice,
-    /// so a plain `Rc` field would have put two `malloc`/`free` pairs on
-    /// every activation this crate builds. Measured with them,
-    /// `instructions:u` on `bench-programs/dispatch.rex` -- one message send
-    /// per iteration -- was +6.579% against BASE; the same build with these
-    /// two fields optional reads +0.093%.
     pub(crate) call_name: Option<Rc<[u8]>>,
     /// The arguments this activation was entered with, the other half of
     /// [`call_name`]'s snapshot -- `StackFrame~arguments` and
     /// `RexxContext~args`.
-    ///
-    /// [`call_name`]: Activation::call_name
     pub(crate) call_arguments: Option<Rc<[Option<ObjRef>]>>,
 }
 
 /// How control arrived at an activation.
-///
-/// **The kinds are kept apart rather than reduced to "was it called"**,
-/// because the instructions that ask disagree about which entries they want
-/// and neither wants the split that question draws. Measured on the oracle,
-/// one program per cell in a clean directory, with the instruction as the
-/// entered body's first executed one:
-///
 /// ```text
 /// entered by                       PROCEDURE first   USE LOCAL first
 /// the program itself               17.1, rc 239      98.993, rc 158
@@ -923,27 +350,9 @@ pub(crate) struct Activation {
 /// a ::ROUTINE, as a function       17.1, rc 239      98.993, rc 158
 /// a ::METHOD                       17.1, rc 239      runs, rc 0
 /// ```
-///
-/// **A `::ROUTINE` is not an internal call**, which is what the `PROCEDURE`
-/// column turns on. 17.1's own sentence is "the first instruction executed
-/// after an internal CALL or function invocation"; a `::ROUTINE` body is
-/// neither, however it was reached, and neither is a `::METHOD`. Admitting
-/// a `PROCEDURE` there pushes a second frame onto an activation that
-/// already owns one, which is a corrupted frame stack rather than a wrong
-/// answer.
-///
-/// The `USE LOCAL` column is a different question -- "is this a method
-/// invocation" -- and the rows where it says 99.910 never reach the executor
-/// at all, since `rexx-parse` refuses a `USE LOCAL` that is not its body's
-/// first instruction (`exec_use`'s own doc has the shapes that were tried).
-///
-/// Every reader matches on this exhaustively and without a wildcard, so an
-/// entry kind added here cannot be left unanswered at any of them.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Entry {
     /// The program's own activation, which [`Interp::run`] starts.
-    ///
-    /// [`Interp::run`]: crate::Interp::run
     TopLevel,
     /// A label in the running program's own source, reached by `CALL` or by
     /// a function invocation -- the one entry a `PROCEDURE` is legal in.
@@ -958,12 +367,6 @@ pub(crate) enum Entry {
 /// was entered under, which the oracle keeps as `settings.calltype`
 /// (`execution/ActivationSettings.hpp:179`) and renders straight into the
 /// source string (`RexxActivation.cpp:4601`).
-///
-/// **This is not [`Entry`] under another name**, and reducing it to one would
-/// reintroduce the defect it was written for. Measured on the oracle, one
-/// program per row in a clean directory, each printing the second word from
-/// the body named:
-///
 /// ```text
 /// the program itself                          COMMAND
 /// an internal label, by CALL                  the enclosing activation's
@@ -973,20 +376,6 @@ pub(crate) enum Entry {
 /// a ::METHOD, by a message send               METHOD
 /// a ::ATTRIBUTE GET or SET, by a message send METHOD
 /// ```
-///
-/// `Entry::Routine` is one kind for every `::ROUTINE` row above and cannot
-/// tell them apart, which is why this is carried beside it rather than
-/// derived from it: measured, one `::routine` body reached each way in a
-/// single program
-/// answers `SUBROUTINE` from the `CALL` and `FUNCTION` from the function
-/// invocation. And the label rows inherit rather than answering a value of
-/// their own -- measured, a `::routine` invoked as a function whose body then
-/// `CALL`s an internal label reads `FUNCTION` inside that label -- which is
-/// [`Inherited`]'s job and why this field is one of its members.
-///
-/// An `INTERPRET` fragment has no row because it pushes no activation, so it
-/// reads whatever its enclosing one answers; measured all the same, a
-/// fragment inside a `::METHOD` body reads `METHOD`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum CallType {
     /// A program run as a command, which is how the `rexx` front end starts
@@ -1019,16 +408,6 @@ impl CallType {
 }
 
 /// What a `::METHOD` activation knows about the send that entered it.
-///
-/// **Two of the three are what `>I>`/`<I<` name**: the substitutions message
-/// 101018's method form takes (`rexxmsg.xml:6480`, `Method <q>&1</q> with
-/// scope <q>&2</q> in package <q>&3</q>.`), and neither is recoverable from
-/// the directive alone -- the oracle's first substitution is
-/// `getMessageName()`, the name the *send* used, which is the dictionary key
-/// and so differs from the directive's own spelling for an `::ATTRIBUTE`
-/// setter; the second is the scope the resolution came from. The third,
-/// `receiver`, is what `EXPOSE` binds against, and the scope is read twice
-/// over because it decides that as well.
 pub(crate) struct MethodIdentity {
     /// The message name, already upcased by the parser -- measured,
     /// `::method MiXeD` announces `"MIXED"` and `::method "quoted"`
@@ -1036,33 +415,12 @@ pub(crate) struct MethodIdentity {
     pub(crate) name: Box<[u8]>,
     /// The defining class, whose `~id` is printed unmodified -- measured,
     /// `::class 'k'` announces `with scope "k"`.
-    ///
-    /// **Also the pool `EXPOSE` binds into**, which is what makes one object
-    /// hold one name at two values at once: the scope is where the method was
-    /// declared, not where the send arrived, so a method inherited from a
-    /// superclass reaches that superclass's pool on the same receiver.
     pub(crate) scope: ObjRef,
     /// The object the send was addressed to -- `SELF`.
-    ///
-    /// Here rather than read back out of the `SELF` slot when `EXPOSE` wants
-    /// it. The slot is an ordinary variable a body may assign to, so reading
-    /// it would make the pool `EXPOSE` binds depend on what the body has done
-    /// to a name, and the pool is a property of the send.
     pub(crate) receiver: ObjRef,
 }
 
 /// One method body a `REPLY` left owed, off every stack until it is resumed.
-///
-/// **The slots are copied out rather than left where they were.** A
-/// `SlotFrame` nests -- `RootSet::pop_slots` asserts that the frame it closes
-/// is the top one -- so an activation cannot keep its frame open while the
-/// activations above it close. `slots` is that frame's contents in frame
-/// order, and `Interp::resume_reply` pushes a frame of the same length and
-/// writes them back.
-///
-/// `parked` is what keeps every `ObjRef` in all three of the other fields
-/// reachable while this sits in the queue; [`Activation::object_roots`] has
-/// what goes into it and what it cannot see.
 pub(crate) struct DeferredReply {
     pub(crate) activation: Box<Activation>,
     /// The calling convention the method was entered under: what `ARG()`,
@@ -1079,21 +437,9 @@ pub(crate) struct DeferredReply {
 
 /// One variable an `EXPOSE` bound: which object's pools hold it, which of that
 /// object's pools, and under what name.
-///
-/// **All three travel together and none of them is derivable at the point of
-/// use.** The owner is not `SELF` (a body may reassign that name), the scope
-/// is the method's declaring class rather than the receiver's own, and the
-/// name is the spelling the pool is keyed on rather than the slot index the
-/// activation reached it by.
 #[derive(Clone, Debug)]
 pub(crate) struct InstanceVar {
     /// The object whose [`rexx_core::ScopePools`] hold this variable.
-    ///
-    /// **Not the receiver.** A class object is not an arena object, so it has
-    /// no `Body::Instance` of its own to hold pools; `Interp` gives it one and
-    /// this names that object. A class object is the only receiver an `EXPOSE`
-    /// accepts here -- `Loud::expose_receiver` refuses the rest -- so this is
-    /// always such an object, and always one `Interp::class_variables` roots.
     pub(crate) owner: ObjRef,
     /// Which of the owner's pools -- the running method's declaring class.
     pub(crate) scope: ObjRef,
@@ -1105,12 +451,6 @@ impl Activation {
     /// A fresh top-level activation: no run-time bindings yet, default
     /// `NUMERIC` settings, `TRACE` off. What `Interp::run` starts every
     /// program with.
-    ///
-    /// [`Activation::nested`] is the sibling a `CALL` uses, and the two are
-    /// deliberately not one function with a flag: a fresh top-level run and a
-    /// nested call begin from genuinely different starting settings, and
-    /// folding them together would need parameters that are meaningless on
-    /// one of the two paths.
     pub(crate) fn new(
         id: ActivationId,
         program: Rc<Program>,
@@ -1162,43 +502,6 @@ impl Activation {
     /// The activation a `CALL` pushes: it starts at `pc`, and it **inherits
     /// every field [`Inherited`] carries** from the caller rather than
     /// defaulting them.
-    ///
-    /// The struct is the enumeration, so this doc names no list of its own:
-    /// a field added there is inherited here by construction, and a contract
-    /// repeating the list would say what it carried when it was written.
-    /// [`Inherited`]'s own doc states what qualifies a field for it.
-    ///
-    /// `traps` is the one worth pointing at from here -- see
-    /// [`Activation::traps`] for the three probes that pin it, including the
-    /// one that separates "inherited" from "checked in the caller after
-    /// unwinding", which every two-level program answers the same way and
-    /// only a `PROCEDURE`d callee tells apart.
-    ///
-    /// Every inheritance is measured, and all are one-way -- the callee
-    /// starts from the caller's value and never writes back. `numeric digits
-    /// 7` in a caller, `numeric digits 3` in the callee: the callee sees 7 on
-    /// entry, reports 3 after its own instruction, and the caller still
-    /// reports 7 after the `return`. `trace r` in a caller and `trace off` in
-    /// the callee: the callee's clauses stop echoing and the caller's resume.
-    /// Copying the values in here is what makes both true, since the callee's
-    /// own fields are then simply dropped with its frame.
-    ///
-    /// `frame` is the caller's own `SlotFrame` for a callee with no
-    /// `PROCEDURE` (D9r's shared pool, the default Task 3 implemented), so
-    /// this constructor does not decide the pool -- and, since Task 5, it
-    /// never does: the callee is always born sharing, and its `PROCEDURE`
-    /// arm is what swaps in a frame of its own if it has one. Nothing here
-    /// inspects the callee's first instruction, because whether that
-    /// instruction is a legal `PROCEDURE` is not knowable from the body's
-    /// text (`first_instruction_pending`'s own doc has the four measured
-    /// shapes).
-    ///
-    /// **A `::ROUTINE` is not this constructor's shape and takes no
-    /// [`Inherited`] at all** -- [`Activation::routine`] is its own, and the
-    /// reason it is separate is that a routine inherits **none** of the
-    /// fields this one copies. Measured, one probe per field, each with a
-    /// caller that set the value and a routine that reads it back:
-    ///
     /// ```text
     /// numeric digits 7 / fuzz 2 / form engineering    routine: 9 0 SCIENTIFIC
     /// address system                                  routine: address() = sh
@@ -1208,22 +511,6 @@ impl Activation {
     /// trace r in the caller                           routine: trace() = N,
     ///                                                 none of its clauses echoed
     /// ```
-    ///
-    /// The pool is a further difference and is not a field of either
-    /// constructor: a routine's `frame` is one this crate pushed for it and
-    /// `owns_frame` is true, where a `CALL`ed label shares its caller's.
-    /// Measured: a caller holding `vv = 'CALLER'` calling a routine that says
-    /// `vv` prints the derived name `VV`, the routine's own write to `vv` is
-    /// not visible after the return, and `RESULT` and `SIGL` read inside the
-    /// routine are their own uninitialised names rather than the caller's
-    /// values.
-    ///
-    /// The parameter list is over clippy's threshold and stays that way: the
-    /// three fields that could be bundled are `program`, `program_id` and
-    /// `body`, and bundling them would put a type between every reader and
-    /// `Activation::program`, which is the field the instruction loop clones
-    /// its `Rc` from. [`Inherited`] is the bundle that pays for itself,
-    /// because the fields in it share a property rather than a caller.
     #[allow(
         clippy::too_many_arguments,
         reason = "the alternative bundle would wrap the field every instruction loop reads"
@@ -1281,25 +568,6 @@ impl Activation {
     /// The activation a call into a `::ROUTINE` directive pushes: it starts
     /// at instruction 0 of `directives[body]`'s own body, in a pool of its
     /// own, and it inherits **nothing**.
-    ///
-    /// **The absence of an [`Inherited`] parameter is the contract**, not a
-    /// convenience. [`Activation::nested`]'s own doc carries the six probes
-    /// that measure it, one per field it would otherwise have copied, and
-    /// there is no arm here that could accidentally start copying one.
-    ///
-    /// `owns_frame` is true, so `Interp::invoke_call` pops the frame on the
-    /// way out and does **not** move `extra` back into the caller. That is
-    /// the same pair `PROCEDURE` already sets, and it is right here for a
-    /// stronger reason than there: a routine has a different `CodeBody` and
-    /// therefore a different [`Plan`], so a name means a different slot index
-    /// on each side and a binding carried across would land on an unrelated
-    /// variable.
-    ///
-    /// `call_type` is the one thing the *invocation form* decides rather than
-    /// the directive: [`CallType::Subroutine`] for `CALL name` and
-    /// [`CallType::Function`] for `name(...)`, which is why it is a parameter
-    /// where every other field here is fixed. [`CallType`]'s own doc has the
-    /// measurement.
     pub(crate) fn routine(
         id: ActivationId,
         program: Rc<Program>,
@@ -1345,24 +613,6 @@ impl Activation {
     }
 
     /// The activation a message send into a `::METHOD` body pushes.
-    ///
-    /// **Everything [`Activation::routine`] settles, settled the same way**,
-    /// and each half is measured rather than carried over by analogy:
-    ///
-    /// * it inherits nothing -- `trace i` in the caller does not echo the
-    ///   method's own clauses, and the method's clauses echo at indent 0 even
-    ///   when the sending clause sits two `DO` levels deep;
-    /// * it owns its frame, because the body is a different [`CodeBody`] with
-    ///   a plan of its own;
-    /// * `PROCEDURE` as its first instruction is 17.1, the same answer a
-    ///   `::ROUTINE` gets ([`Entry`]'s own table has the row).
-    ///
-    /// What differs is [`Entry::Method`], which `USE LOCAL` reads,
-    /// `method_identity`, which the `>I>`/`<I<` pair reads, and
-    /// [`CallType::Method`], which `PARSE SOURCE`'s second word reads -- and
-    /// that last one is fixed here where [`Activation::routine`] takes it as
-    /// a parameter, because a message send is a single form while a routine
-    /// call's own form -- `CALL name` against `name(...)` -- decides it.
     pub(crate) fn method(
         id: ActivationId,
         program: Rc<Program>,
@@ -1409,14 +659,6 @@ impl Activation {
 
     /// The key this activation's body is cached under, in both the plan
     /// cache and the chunk cache.
-    ///
-    /// The two halves are [`Activation::program_id`] and
-    /// [`Activation::body`], and neither is derived here: `body` is already
-    /// the same selector `BodyKey::directive` carries (that field's own doc
-    /// says why the two spellings cannot come apart), and `program_id` is the
-    /// id the loader issued for `program`. So this is a field read, and a
-    /// body entered through any path is looked up under the key its plan was
-    /// built under.
     pub(crate) fn body_key(&self) -> BodyKey {
         BodyKey {
             program: self.program_id,
@@ -1440,25 +682,6 @@ impl Activation {
     }
 
     /// Appends every `ObjRef` this activation holds to `out`.
-    ///
-    /// **For an activation that is off every stack**, which is what a `REPLY`
-    /// leaves behind: while it is on the stack, `SELF` in its own frame and
-    /// `Interp::class_variables` root the same objects, and this type is not
-    /// walked by the collector at all. Parked, neither holds, so the values
-    /// have to be handed to `RootSet::park`.
-    ///
-    /// **SCHEDULING**, with `Interp::park_reply` and the rest of the parked
-    /// group (`rexx_core::RootSet::park` names it): a running activation's
-    /// objects are rooted by its frame and by `Interp::class_variables`, and
-    /// only a parked one needs them handed over.
-    ///
-    /// **The destructuring is exhaustive and has no `..`**, so a field added
-    /// to any of the three types below is a compile error here rather than a
-    /// value that silently stops being rooted. It cannot see an `ObjRef`
-    /// appearing inside `Settings`, `TrapMap`, `AddressState` or
-    /// `TrappedCondition`, none of which holds one; the instrument for that is
-    /// `run_program_collect_every_alloc`, which collects at every allocation
-    /// and so reaches a missed root as a wrong answer rather than as luck.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
         let Activation {
             id: _,
@@ -1531,18 +754,6 @@ impl Activation {
 
 /// Everything a callee starts from its caller's copy of, gathered so
 /// [`Activation::nested`] takes one argument for the lot.
-///
-/// **The grouping is the concept and not a parameter-count workaround.**
-/// Each field here is measured to be inherited at call time and measured
-/// *not* to be written back on return -- the callee's copy simply dies with
-/// its frame -- and each field's own doc comment on `Activation` carries the
-/// transcript. They travel as one argument because that pair of properties
-/// is what they have in common, which a run of separate parameters between
-/// `pc` and the end of the signature would not say.
-///
-/// A field belongs here when both halves hold. `extra` deliberately does not:
-/// it is moved back into the caller on return for a shared-pool callee
-/// (`owns_frame`'s own doc comment), which is the opposite of one-way.
 pub(crate) struct Inherited {
     pub(crate) call_type: CallType,
     pub(crate) settings: Settings,
@@ -1555,24 +766,6 @@ pub(crate) struct Inherited {
 
 /// The code body a `(program, selector)` pair denotes: `None` is
 /// `program.main`, `Some(i)` is `program.directives[i]`'s own body.
-///
-/// A free function rather than a method on `Activation`, because the borrow
-/// it returns has to outlive every `&mut self` call in `run_activation` --
-/// the discipline that function's own doc comment writes out at length. Its
-/// caller holds an `Rc<Program>` in a local and passes `&local`, so the
-/// `&CodeBody` is rooted in the local and not in `self`.
-///
-/// `None` on a selector that names a directive with no body of its own,
-/// rather than a panic: `Some(i)` can only be built from a resolution
-/// step that already looked at `directives[i]`, so a mismatch is an internal
-/// inconsistency, and this crate's rule for those is to fail loudly at the
-/// caller rather than abort the process here.
-///
-/// A `::METHOD`'s and a `::ATTRIBUTE`'s bodies are here beside `::ROUTINE`'s
-/// because a method activation runs one: `::ROUTINE`, `::METHOD` and
-/// `::ATTRIBUTE` are the directive kinds that own a [`CodeBody`], and each
-/// field's own doc says when it is `None` (a generating option, for both
-/// method forms).
 pub(crate) fn body_of(program: &Program, selector: Option<usize>) -> Option<&CodeBody> {
     match selector {
         None => Some(&program.main),
@@ -1599,11 +792,6 @@ impl Interp {
     /// The activation stack innermost first -- the order
     /// `Activity::generateStackFrames` (`concurrency/Activity.cpp:1141`)
     /// walks it and the order `RexxContext~stackFrames` answers in.
-    ///
-    /// [`Interp::suspended`] is oldest first, so the running activation is
-    /// followed by that vector reversed.
-    ///
-    /// [`Interp::suspended`]: crate::Interp::suspended
     pub(crate) fn frames(&self) -> impl DoubleEndedIterator<Item = &Activation> {
         self.running
             .iter()
@@ -1618,14 +806,6 @@ impl Interp {
     }
 
     /// The clause the activation at `depth` is stopped on.
-    ///
-    /// **Depth `0` is answered from [`Interp::clause_state`] and not from the
-    /// activation**, because the running activation's own snapshot is only
-    /// written as it is suspended: keeping it fresh per clause is the cost
-    /// [`ClauseSnapshot`] declines, and the clause state already carries the
-    /// same three values for whichever activation is running.
-    ///
-    /// [`Interp::clause_state`]: crate::Interp::clause_state
     pub(crate) fn clause_of(&self, depth: usize) -> ClauseSnapshot {
         if depth == 0 && self.running.is_some() {
             return ClauseSnapshot {
@@ -1640,9 +820,6 @@ impl Interp {
     }
 
     /// [`Interp::frame_at`] for a caller that has to write.
-    ///
-    /// Indexed rather than iterated, because a `DoubleEndedIterator` over
-    /// `&mut` through two fields is not what `frames` is.
     pub(crate) fn frame_at_mut(&mut self, depth: usize) -> Option<&mut Activation> {
         // **The two indexings are separate code and this is what holds them
         // equal.** `frames` counts forwards from the running activation and
@@ -1650,12 +827,6 @@ impl Interp {
         // off-by-one here would write one activation's `~invocation` id onto
         // its caller -- a wrong answer with nothing to notice it, since both
         // are plausible numbers.
-        //
-        // **Taken from what this function is about to return**, and not from
-        // the same arithmetic written twice: a first version recomputed the
-        // backward index inside the assertion, which made it compare `frames`
-        // against a formula rather than against the answer, and an off-by-one
-        // mutation of the line below left it green.
         let expected = self.frame_at(depth).map(|activation| activation.id);
         let found = match depth.checked_sub(usize::from(self.running.is_some())) {
             None => self.running.as_deref_mut(),
@@ -1681,10 +852,6 @@ impl Interp {
     }
 
     /// The running activation, or `None` where nothing is running.
-    ///
-    /// For the caller that asks *whether* one is running rather than
-    /// assuming it: everything else wants [`Interp::activation`] and its
-    /// `expect`.
     pub(crate) fn running_activation(&self) -> Option<&Activation> {
         self.running.as_deref()
     }
@@ -1704,12 +871,6 @@ impl Interp {
     /// now: the running one, or, while that one is a phantom performing a
     /// non-continuing `FORWARD`'s send, the innermost frame beneath it that
     /// is not.
-    ///
-    /// `RexxActivation::willTrap` and `RexxActivation::trap`
-    /// (`execution/RexxActivation.cpp:2582` and `:2450`) both open with this
-    /// drill, and both keep drilling because several forwards can be in
-    /// progress at once. `None` where nothing is running, and where every
-    /// live frame is a phantom.
     pub(crate) fn trap_frame(&self) -> Option<&Activation> {
         let running = self.running_activation()?;
         if !running.forwarded {
@@ -1723,24 +884,11 @@ impl Interp {
     }
 
     /// How many activations are live, the running one included.
-    ///
-    /// This is what `Vec::len` answered while the running activation sat at
-    /// the top of the same vector, and every caller reading a *depth* --
-    /// `MAX_ACTIVATION_DEPTH`, an `INTERPRET` fragment's queue, the driver's
-    /// own entry depth -- means this number and not the suspended count.
     pub(crate) fn activation_depth(&self) -> usize {
         self.suspended.len() + usize::from(self.running.is_some())
     }
 
     /// Makes `activation` the running one and suspends whatever was.
-    ///
-    /// **The box comes from [`Interp::recycle_activation`]'s pool when one is
-    /// waiting**, so a program whose loop calls a routine allocates the frame
-    /// once instead of once per call. Overwriting the spare drops whatever the
-    /// last activation left in it, which is the same drop the `Box` would have
-    /// run when it was freed -- what is saved is the allocator round trip, and
-    /// on a probe whose loop is one `CALL` into a label that returns at once,
-    /// `malloc` and `free` were 6.5% of the program between them.
     pub(crate) fn push_activation(&mut self, activation: Activation) {
         let boxed = match self.spare_activations.pop() {
             Some(mut spare) => {
@@ -1771,17 +919,6 @@ impl Interp {
 
     /// Keeps an ended activation's box for the next [`Interp::
     /// push_activation`], instead of returning it to the allocator.
-    ///
-    /// **The contents are left in it and dropped at reuse.** They are the
-    /// activation that just ended, so nothing reads them; clearing them here
-    /// would be the same drop moved earlier and a write of the whole struct
-    /// besides. What they keep alive is one program's `Rc` and one plan's,
-    /// both of which `Interp::programs` holds anyway.
-    ///
-    /// **Capped, because the pool is fed by returns and drained by calls, so a
-    /// recursion that unwinds a thousand levels would otherwise leave a
-    /// thousand frames parked.** Past the cap the box is simply dropped; the
-    /// depth that pays for the pool is the shallow, repeated one.
     pub(crate) fn recycle_activation(&mut self, ended: Box<Activation>) {
         if self.spare_activations.len() < SPARE_ACTIVATIONS {
             self.spare_activations.push(ended);
@@ -1790,10 +927,6 @@ impl Interp {
 
     /// Ends the running activation and resumes its caller, answering the
     /// activation that ended.
-    ///
-    /// Answers the box rather than its contents, so that ending an
-    /// activation moves a pointer where returning it by value would copy the
-    /// whole of it back out.
     pub(crate) fn pop_activation(&mut self) -> Option<Box<Activation>> {
         let ended = self.running.take()?;
         self.running = self.suspended.pop();
@@ -1807,13 +940,6 @@ impl Interp {
     }
 
     /// The `TRACE` setting in force right now: the *running* activation's.
-    ///
-    /// Returns a copy rather than a borrow, and `TraceMode` is `Copy` for
-    /// exactly this reason. Every reader is inside a condition that also
-    /// calls a `&mut self` method in the same expression -- `if
-    /// self.trace_mode().all && let Some(..) = self.clause_site(..)` is the
-    /// shape, sixteen times over -- and a borrow of `self` held across those
-    /// would be the same `E0502` `run_activation`'s doc comment writes out.
     pub(crate) fn trace_mode(&self) -> TraceMode {
         // **The cache is checked here rather than trusted**, which is what
         // closes the set of places that maintain it: any path that changes
@@ -1840,9 +966,6 @@ impl Interp {
 
 /// One of the condition names the language fixes, used as an index into a
 /// [`BuiltinTraps`] slot.
-///
-/// `USER <name>` is not here: its spelling is half program text, so it lives
-/// in [`TrapMap`]'s map along with everything else this does not recognise.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Builtin {
     Any,
@@ -1861,14 +984,6 @@ impl Builtin {
     const COUNT: usize = 10;
 
     /// The slot `name` names, or `None` for a name that gets a map entry.
-    ///
-    /// **Correctness does not rest on this list being complete.** A spelling
-    /// it does not answer for goes to `TrapMap`'s map, which is where every
-    /// name went before there were slots at all, so a name missing from here
-    /// is slower and not wrong. The list is `CONDITIONS` in `rexx-parse`'s
-    /// own token table without the two entries that are not trap keys:
-    /// `USER`, which only ever reaches a table as the `USER <name>` form, and
-    /// `PROPAGATE`, which is `RAISE`'s.
     fn of(name: &[u8]) -> Option<Builtin> {
         Some(match name {
             b"ANY" => Builtin::Any,
@@ -1891,20 +1006,6 @@ impl Builtin {
 pub(crate) struct BuiltinTraps([Option<Trap>; Builtin::COUNT]);
 
 /// The condition traps armed in one activation.
-///
-/// **Two stores, because the keys come from two places.** Every name the
-/// language fixes gets a slot; `USER <name>` and anything [`Builtin::of`]
-/// does not recognise gets a map entry. An activation that arms nothing --
-/// the overwhelming majority -- holds a null pointer and an empty map, and a
-/// callee inheriting its caller's table copies both without allocating.
-///
-/// **`Rc` rather than inline slots, and a pointer rather than nothing, are
-/// two separate measurements.** Inline slots would put a `Trap`-sized cell
-/// per condition into `Activation`, whose layout is on the variable-read
-/// path: putting the whole table behind an `Rc` once *shrank* `Activation`
-/// and cost 0.26% to 1.66% on every benchmark axis, two of which make no
-/// calls at all. `Rc` rather than `Box` is what makes the per-call copy free
-/// rather than one allocation, since a callee that arms nothing never writes.
 #[derive(Clone, Default)]
 pub(crate) struct TrapMap {
     builtin: Option<Rc<BuiltinTraps>>,
@@ -1914,20 +1015,6 @@ pub(crate) struct TrapMap {
     /// `HashMap` is 48 of `TrapMap`'s 56 bytes, and `Interp::push_activation`
     /// copies the whole `Activation` on every call. `TrapMap` is 16 bytes now
     /// and `Activation` 416 rather than 456.
-    ///
-    /// **The same change to `Activation::extra` was measured and rejected**:
-    /// boxing that map alone cost `dispatch` +1.95% and `dispatchclass`
-    /// +2.01% in retired instructions, where this one pays. A smaller struct
-    /// is not automatically a faster one, and the two fields differ in how
-    /// often they are populated.
-    ///
-    /// **`clippy::box_collection` is allowed here on a measurement.** The lint
-    /// is right in general -- a `HashMap` already keeps its table on the heap,
-    /// so boxing one buys an extra indirection -- but what it models is the
-    /// cost of reaching the table, and what matters here is the 48 bytes the
-    /// `HashMap` header occupies *inline in this struct*, which every
-    /// `Activation` copies whether or not a trap was ever set. Eight bytes
-    /// instead, and the indirection is paid only by a body that sets one.
     #[allow(clippy::box_collection)]
     user: Option<Box<HashMap<Box<[u8]>, Trap>>>,
 }
@@ -1995,12 +1082,6 @@ mod address_tests {
     /// **[`AddressState::set_bytes`] leaves what [`AddressState::set`] would**,
     /// which is the whole of its licence to skip the allocation: it is an
     /// optimisation of `set`, not a second rule about what `ADDRESS` does.
-    ///
-    /// Driven over every sequence of names drawn from a set small enough that
-    /// repeats, alternations and fresh names all occur -- which is what
-    /// reaches both of its arms and the fall-through. A `bare` step is a plain
-    /// `ADDRESS`, so the toggling that decides which half holds what is in the
-    /// sequences too.
     #[test]
     fn set_bytes_agrees_with_set() {
         const NAMES: [&[u8]; 3] = [b"AAA", b"BB", b"C"];

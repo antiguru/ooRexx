@@ -10,31 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The executor.
-//!
-//! This crate is a spike, and the thing it exists to prove is one sentence
-//! from the design's "The borrow shape": **the instruction loop clones the
-//! `Rc` into a local on entry, and every `&CodeBody` and `&Expr` derives from
-//! that local.** `Interp` owns the heap, the root set, the activation stack,
-//! the plan cache and the two sinks, and does not own the AST. `run_activation`
-//! (`run.rs`) is where that discipline is written down, together with the
-//! version of it that does not compile.
-//!
-//! **What it executes grows task by task, and this doc deliberately does not
-//! list it.** The enumeration that stood here was true of Task 3's spike and
-//! false by Task 7, and the two `Loud` messages carried the same list and went
-//! stale the same way; `Loud::expression`'s doc records why the cure is
-//! deleting the list rather than correcting it. What holds instead: any
-//! construct not yet implemented fails loudly with `NOT_IMPLEMENTED_EXIT`
-//! rather than silently, which is a gate criterion.
-//!
-//! The per-concept modules the design's crate layout names have landed beside
-//! this file (`value.rs`, `stem.rs`, `plan.rs`, `activation.rs`, `error.rs`,
-//! `eval.rs`, `run.rs`). What stays here is the interpreter itself, the
-//! loud-failure path, and the entry point and thread setup that exercise the
-//! borrow discipline `run.rs` writes down -- `Code<'a>`, the type that
-//! discipline is expressed through, stays here too, because every module that
-//! evaluates or steps through one needs it equally and none of them is a
-//! better owner than the crate root.
 
 use rexx_classes::{ClassKind, InheritRefusal, MethodId};
 use rexx_core::{Body, Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};
@@ -148,245 +123,30 @@ use options::PackageOptions;
 mod require;
 
 /// The exit code for a construct this crate does not implement.
-///
-/// It has to sit outside 157..=253, where a Rexx error's `256 - major` lives,
-/// or a not-implemented failure is indistinguishable from error 11 and a
-/// program *expecting* error 11 would pass. 120 also sits below 126, so it
-/// cannot be read as a shell's `128 + signal` encoding either, and it is not
-/// 0, 1, 2, 126 or 127.
-///
-/// **No value in 0..=255 is collision-free, and pretending otherwise is the
-/// mistake to avoid here.** A program can name its own exit code, and once
-/// Task 9 implements `EXIT` with a result it can name this one: measured,
-/// `exit 120` gives rc 120 under the oracle, so a corpus program could produce
-/// this code legitimately. What makes the choice safe is not the number, it is
-/// **the harness treating this code as a hard failure whatever the oracle
-/// did** (criterion 5), rather than comparing it against an expectation. The
-/// 157..=253 exclusion is still worth having, because a code inside that band
-/// would be wrong in a second and worse way: it would look like a *condition*
-/// the interpreter raised, and a program expecting that condition would pass.
-///
-/// **Task 12 settled this at 120 by leaving it alone**, having built the
-/// `256 - major` band it has to avoid, so the spike's choice is now the final
-/// one. This constant remains the single place to change it.
 pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 
 /// The status a run abandoned at its own deadline exits with
 /// ([`Invocation::with_deadline`]).
-///
-/// Every constraint [`NOT_IMPLEMENTED_EXIT`] states applies here for the same
-/// reasons, and it is a different number from that one because a harness must
-/// not count a hang as a construct awaiting implementation.
 pub const DEADLINE_EXIT: i32 = 121;
 
 /// The stderr line a run abandoned at its deadline leaves behind.
-///
-/// It shares the `rexx-exec: ` prefix with a loud refusal because both are
-/// this interpreter speaking rather than the language, and names no duration
-/// because the caller that set the bound is the one that knows it.
 pub const DEADLINE_REPORT: &[u8] = b"rexx-exec: the run exceeded its deadline\n";
 
 /// The name the interpreter's own package answers to -- `PackageClass::
 /// getProgramName`'s answer for internal code (`classes/PackageClass.hpp:147`).
-///
-/// Read as a package's `~name`, and as the name a traceback frame inside one
-/// reports where a program reports its path.
 pub(crate) const LIBRARY_PACKAGE_NAME: &[u8] = b"REXX";
 
 /// The interpreter thread's stack, in bytes.
-///
-/// Chosen from a measurement rather than from taste, and the measurement is in
-/// `tests/spike.rs::records_the_stack_cost_of_one_eval_frame`, which is the
-/// test Task 11 re-runs when it sets the evaluation-depth limit. D19 requires
-/// the limit to be **at least 100,000** (the oracle evaluates a 100,000-term
-/// expression and exits 0) and **below what this stack survives**, so this
-/// number and the per-frame cost together bracket it from both sides.
-///
-/// Measured on a 100,000-term left-deep expression, `x86_64-unknown-linux-gnu`,
-/// rustc 1.96.1: **784 bytes per `eval` level in a debug build, 192 in
-/// release**. Debug is the number that matters, because that is what `cargo
-/// test` runs and what the in-process harnesses will therefore sit on. The
-/// whole pipeline survives to roughly 685,000 levels here, against a limit
-/// that has to be at least 100,000, so there is about six and a half times the
-/// headroom a limit at the oracle's own maximum needs.
-///
-/// The budget this covers is larger than `eval` alone, and all four of its
-/// users run on this same thread because the entry point owns everything from
-/// `parse_program` onward:
-///
-/// * `eval` recursing once per term of a left-deep expression,
-/// * `Plan::note` recursing over the same expression to assign its slots,
-///   which is this crate's own and is the shallowest-per-level of the three
-///   at about 160 bytes, but is still a recursion and could be given the same
-///   explicit-worklist treatment `rexx-parse`'s walks got,
-/// * dropping the AST, which `rexx-parse` now does iteratively. It used to
-///   recurse once per `Box<Expr>` level, and was the thing that bound this
-///   budget until it was fixed,
-/// * and, since Task 10, `step` recursing through `run_bounded` once per
-///   source *nesting* level of `IF` or `SELECT` (`run.rs`'s own module doc
-///   comment and `run_bounded`'s doc comment have the full argument: a
-///   nested `IF`/`SELECT` resolves itself inside its enclosing one's own
-///   `step` call, through `step_in_temps_frame`, rather than returning to
-///   this thread's outer loop first). Task 11 added `DO`/`LOOP` to this
-///   same recursion (`run_loop`/`run_repeating` each drive their own
-///   `run_bounded` calls one level deeper, per lexical nesting level, the
-///   identical shape `IF`/`SELECT` already had): a nested `DO`, `LOOP` or
-///   `SELECT WHEN`/`WHEN CASE` costs a level here exactly like a nested
-///   `IF` does. **Unmeasured** -- unlike the other three, nothing
-///   generates a program with thousands of *lexically* nested `IF`/
-///   `SELECT`/`DO`/`LOOP` clauses the way a left-deep expression generates
-///   deep `eval` recursion from one term count, so there is no natural knob
-///   to bisect against, and no corpus or real program comes remotely close
-///   to needing one: a 2,000-level synthetic nested-`IF` chain ran clean in
-///   about 70ms as a sanity check, nothing more precise. Bounded by program
-///   *text* rather than by data, so it is not the unbounded case D19's
-///   limit exists for and needs no counter of its own -- but the next
-///   person to move this figure should know it is a fourth consumer, not
-///   only the three above, and that "unmeasured" is the honest state of it
-///   rather than a number this comment is confident in.
-///
-/// **`eval` is the recursion that binds, and the figure to size against is its
-/// own 784.** Measured by bisecting `rexx-run` on this stack, debug, to within
-/// 2,000 levels, with the phases separated by choosing programs that reach
-/// different ones (`exit` first, so the deep expression is parsed and dropped
-/// but never evaluated; a bare command clause, which `Plan::build` skips too):
-///
-/// | what runs | deepest surviving | implied bytes per level |
-/// |---|---|---|
-/// | parse and drop only | over 4,000,000, no cliff found | under 134 |
-/// | parse, plan and drop | 3,354,442, fails at 3,356,347 | about 160 |
-/// | all four, including `eval` | 684,618, fails at 686,523 | about 783 |
-///
-/// The last row is an independent check on the probe inside `eval`, arrived at
-/// by a different method entirely, and the two agree to within 0.2 per cent:
-/// 783 bisected against 784.0 probed. So **roughly 685,000 levels**, and a
-/// limit at the oracle's own maximum of 100,000 has about six and a half times
-/// the headroom.
-///
-/// **This table replaced an earlier one that said the opposite, and the reason
-/// is worth keeping.** Before `rexx-parse` made `Expr`'s `Drop`, `block.rs`'s
-/// `visit_expr` and the gate walk iterative, the parse-and-drop shape cliffed
-/// near 630,000 and `eval` did not move the cliff at all, so the binding
-/// recursion was in `rexx-parse` and not here. That measurement was correct
-/// when taken and describes a tree that no longer exists. Anyone re-deriving
-/// these numbers should re-run the bisection rather than trust the table,
-/// including this one.
-///
-/// The other lesson from that round: quote the bisected cliff, not a per-level
-/// number divided out of a coarse bracket. A 100,000-wide bracket produced an
-/// apparent 820-versus-860 split that had parse-and-drop costing *less* per
-/// level than parse-plan-and-drop, which no model of sequential phases
-/// produces, and the incoherence was the tell.
-///
-/// One consequence that survives the correction: a depth limit on `eval` still
-/// **does not close the abort path in general**, because parsing, planning and
-/// dropping happen outside any counter this crate owns. It is no longer
-/// reachable in practice at these depths, since those phases now cost 160
-/// bytes a level and under, but nothing enforces that.
-///
-/// **Re-measured after Task 7, and it moved: 1600 bytes per `eval` level in
-/// debug, roughly double the 784 above.** `eval_node` grew from four match
-/// arms to fifteen (`Stem`, `Compound`, `DotVariable`, `Prefix`, the seven
-/// arithmetic operators, `Abuttal`/`Blank` beside `||`), and in an
-/// unoptimised debug build the compiler does not appear to reuse stack slots
-/// across mutually exclusive match arms as aggressively as it does in
-/// release, so a dispatch function's own frame grows with how many forms it
-/// names, not only with what the one taken arm does -- confirmed by
-/// re-running `records_the_stack_cost_of_one_eval_frame` on the unchanged
-/// `||`-only stress program, whose own logic did not change. This is
-/// `bytes_per_frame`'s probe reading, **not a re-bisection**: the earlier
-/// table's own two rows for `eval` (783 bisected, 784.0 probed) agreed to
-/// within 0.2%, so the probe is a reasonable stand-in, but confirming that
-/// still holds at this size is Task 11's to do when it sets the real depth
-/// limit, not assumed here. Survivable depth at the new cost is
-/// `512 MiB / 1600 ≈ 335,000` levels, still more than three times D19's
-/// 100,000 minimum, so `INTERPRETER_STACK_BYTES` stays unchanged rather than
-/// growing to chase a number every later task's new `ExprKind` arms will
-/// keep moving. Expect this figure to keep drifting downward as Task 8
-/// (comparison, logical) and later tasks add more forms, and re-measure
-/// rather than trust it, the same instruction the row above already gives.
-///
-/// 512 MiB is reserved address space, not resident memory. Linux commits stack
-/// pages on first touch, so a program that never recurses pays for the pages it
-/// actually uses and not for this number.
-///
-/// **Re-measured again at Task 11: 1840 bytes per `eval` level in debug, up
-/// from the 1600 above.** `eval`'s own D19 depth counter (`MAX_EVAL_DEPTH`,
-/// `eval.rs`) adds a handful of bookkeeping bytes to every level, exactly the
-/// mechanism the 784-to-1600 move already described -- a dispatch function's
-/// frame grows with what it does on every call, not only on the arm actually
-/// taken. Method: `cargo test -p rexx-exec --test spike
-/// records_the_stack_cost_of_one_eval_frame -- --nocapture`, unchanged from
-/// the row above, printing (byte for byte, this run):
-///
 /// ```text
 /// interpreter stack: 536870912 bytes, eval depth reached: 100000, span: 183998160 bytes, per frame: 1840.0 bytes
 /// ```
-///
-/// Survivable depth at this cost: `536,870,912 / 1840 ≈ 291,777` levels,
-/// still comfortably over D19's 100,000 floor (about 2.9x headroom, down
-/// from Task 7's ~3.35x at 335,000).
-///
-/// **Re-measured at the tree-walker's removal: 480 bytes per `eval` level,
-/// and the trend reversed.** The deep chain now reaches `eval` through a
-/// single `crate::ir::Op::EvalExpr` instead of through the tree-walker's own
-/// clause unit and `eval_node` chain, so a level is the recursion alone and
-/// not the frames that stood above it. The same command prints (byte for
-/// byte, this run):
-///
 /// ```text
 /// interpreter stack: 536870912 bytes, eval depth reached: 100000, span: 47999520 bytes, per frame: 480.0 bytes
 /// ```
-///
-/// Survivable depth at this cost: `536,870,912 / 480 ≈ 1,118,481` levels,
-/// about 11x D19's floor. `INTERPRETER_STACK_BYTES` stays at 512 MiB; this
-/// is the sixth value this figure has taken across the phase (820, 850,
-/// 783/784, 1600, 1840, now 480), and the point of keeping every row rather
-/// than overwriting the last one is that each was correct for the code it
-/// measured -- re-measure again rather than trust this one either, the same
-/// instruction every prior row already gives.
-///
-/// **Task 11 set `eval.rs`'s `MAX_EVAL_DEPTH` to 100,000, and that closes off
-/// the way every figure on this page was re-derived.** Everything above was
-/// measured by letting `eval` recurse far past 100,000 -- the external
-/// `rexx-run` bisection to a guard-page abort (684,618 survives, 700,000
-/// aborts, rc 134) and this crate's own `records_the_stack_cost_of_one_eval_frame`
-/// (`tests/spike.rs`) both depend on that being possible. `run_program` is
-/// now the only public entry point that reaches `eval` on a sized stack at
-/// all, and `eval` itself refuses anything past `MAX_EVAL_DEPTH`, so neither
-/// method can be re-run through it any more: a program built to recurse
-/// 700,000 levels now raises 11.1 at 100,001 and never reaches the guard
-/// page, and `records_the_stack_cost_of_one_eval_frame`'s own 100,000-term
-/// chain is the deepest such a program can now legally go.
-///
-/// That measurement, at exactly 100,000, is still real and still runs on
-/// every `cargo test` -- it is what the two-sided bound above is checked
-/// against, and it needed no external bisection to begin with, only a
-/// division. What is gone is the ability to go *past* 100,000 through the
-/// public API to independently confirm the extrapolation still holds at
-/// higher depths, the way the external bisection to ~685,000 once did.
-/// **Whoever next revisits this figure and wants that confirmation has to
-/// raise `MAX_EVAL_DEPTH` (or call `eval` directly, bypassing `run_program`,
-/// from code temporarily built for the purpose) before bisecting again, and
-/// must remember to put it back.** Recorded here rather than only in
-/// `eval.rs`, because this constant's own two-sided justification is the
-/// thing the change affects, not the counter itself.
 pub const INTERPRETER_STACK_BYTES: usize = 512 * 1024 * 1024;
 
 /// The arena size below which no ordinary run ever collects, and the floor
 /// every later growth allowance is raised to (see `Interp::collect_at`).
-///
-/// An arena of this many slots costs about 6 MB, at the 96 bytes per `Slot`
-/// `phase-4d-retention.md` measured, plus each object's own payload. Below it
-/// there is nothing worth reclaiming and a collection is pure cost: a program
-/// that allocates a few hundred values -- which is most of the corpus --
-/// never collects at all, and pays one branch per allocation for the
-/// trigger's existence.
-///
-/// The number is a round power of two rather than a tuned one. It is the
-/// floor `phase-4d-retention.md`'s prototype used, kept so that this crate's
-/// measured landing can be read against that document's prediction rather
-/// than against a threshold chosen after seeing the result.
 const COLLECT_FLOOR: usize = 65_536;
 
 /// The globals entry [`Interp::root_exit_value`] writes. A name rather than an
@@ -395,19 +155,6 @@ const COLLECT_FLOOR: usize = 65_536;
 const EXIT_VALUE_ROOT: &str = "the program's exit value";
 
 /// What one interpreter run produced.
-///
-/// `stdout` and `stderr` are the sinks themselves rather than a handle to
-/// them, for two reasons that happen to agree. The design wants a test to
-/// capture output without a subprocess, and this value is what crosses the
-/// `join()` back from the interpreter thread, so it has to be `Send` -- which
-/// `Vec<u8>` is and an `Rc`-flavoured sink would not be. D17's "because they
-/// are separate descriptors their relative interleaving is not observable" is
-/// what makes two independently buffered sinks safe rather than a shortcut.
-///
-/// The cost, recorded here rather than discovered by Task 14: a program that
-/// prints and then runs for a long time buffers all of it instead of
-/// streaming. Nothing in the corpus does that, and a streaming model would
-/// replace this whole shape.
 #[derive(Debug)]
 pub struct Outcome {
     pub exit_code: i32,
@@ -417,81 +164,14 @@ pub struct Outcome {
     /// evaluation-depth limit; see `StackSpan`.
     pub stack: StackSpan,
     /// How many times `Heap::collect` ran during this program.
-    ///
-    /// **Can be non-zero under an ordinary `run_program`**, because the
-    /// watermark policy collects on its own: `collect_policy.rs`'s churn
-    /// program reads 6 there, and `GC('Force')` reaches a collection from any
-    /// program that calls it. Most programs never reach the watermark and do
-    /// read `0`. What `run_program_collect_every_alloc` changes is the
-    /// *trigger*, not whether the counter can move -- under it every
-    /// allocation collects.
-    ///
-    /// Criterion 4's gate asserts this is non-zero under the stress mode
-    /// specifically so a mode that silently collected nothing cannot pass by
-    /// being indistinguishable from one that collected correctly, and
-    /// `collect_policy.rs` asserts a **bound** on it under the ordinary
-    /// policy, in both directions, for the same reason.
     pub collections: u64,
     /// How many times the run declined to compile a body because it does not
     /// fit the compiled stream's index widths, and ran it on the tree-walker
     /// instead.
-    ///
-    /// **Refusals, not bodies.** A refused body is not remembered -- there is
-    /// no negative cache -- so one entered a thousand times is compiled,
-    /// refused and counted a thousand times.
-    ///
-    /// Always `0` under [`Engine::TreeWalker`](crate::Engine::TreeWalker),
-    /// which compiles nothing. Under [`Engine::Ir`](crate::Engine::Ir) it is
-    /// what stops the fallback being silent: the dual-engine harness asserts
-    /// it is zero across the whole population, so a compiler that starts
-    /// refusing ordinary bodies goes red rather than quietly running
-    /// everything on the tree-walker and passing.
     pub chunks_refused: usize,
 }
 
 /// How deep evaluation went and how much stack it took to get there.
-///
-/// Measured from inside `eval` itself rather than from a replica of it, by
-/// taking the address of a local at the first level and at the deepest one.
-/// Both ends are inside the same function, so the fixed cost of the frames
-/// *above* `eval` cancels and what is left is the per-level cost.
-///
-/// **Both ends come from the same call chain, and that is load-bearing rather
-/// than incidental.** A program evaluates many separate expressions, each its
-/// own chain from depth 1, and the frames above `eval` are not the same height
-/// for all of them: a fragment's `eval` runs under `run_fragment` under `step`
-/// under the enclosing `eval`, thousands of bytes deeper than a top-level one.
-/// An earlier version rewrote the depth-1 address on every depth-1 entry while
-/// recording the deepest only on a new maximum, so the two ends could come
-/// from different chains and the "frames above cancel" argument silently
-/// stopped holding. Measured: a 1000-term expression followed by `interpret
-/// "say 'b'"` reported **782.16** bytes per level against the true 784.0,
-/// because the fragment's shallow evaluation sits deeper and shortened the
-/// span. The error ran in the **unsafe** direction, since a smaller
-/// bytes-per-level implies more survivable levels than there are, and this
-/// value is public and its doc tells Task 11 to size a limit from it. So the
-/// depth-1 address is now held aside and copied in at the moment the maximum
-/// is beaten, which pins both ends to one chain by construction.
-///
-/// The probe itself perturbs the frame it measures, by the width of the local
-/// whose address it takes. That biases the answer upward by a few bytes per
-/// level, which is the safe direction for sizing a stack.
-///
-/// **This is the one thing in `Outcome` the two engines can disagree about, and
-/// the disagreement is the definition working rather than a defect.** It counts
-/// `eval` recursion, and the compiled stream produces some values without
-/// recursing at all: `crate::ir::Op::Const` builds a literal's value from the
-/// chunk's own constant table and `crate::ir::Op::Load` reads a bare symbol's
-/// out of a frame slot, neither of them entering `eval`. So `say 'x'` reports
-/// `max_depth` 1 on the tree-walker and 0 on the compiled stream -- one level of
-/// `eval` against none -- and 0 is the honest answer for a run that recursed
-/// nowhere. **Nothing asserts it either way**: `tests/ir_recorded.rs` compares
-/// stdout, stderr and exit status, and this field reaches no oracle comparison
-/// at all (`tests/support/oracle.rs`'s own doc says the oracle process never
-/// measures it). An operator chain, which is what anything sizing a stack from
-/// this measures, recurses identically on both engines, because an operator is
-/// evaluated by `eval` whichever engine reached it. **A caller must not read
-/// `max_depth` as a count of expressions evaluated.**
 #[derive(Copy, Clone, Debug, Default)]
 pub struct StackSpan {
     /// The deepest `eval` recursion the run reached. Zero if it never
@@ -508,10 +188,6 @@ pub struct StackSpan {
 impl StackSpan {
     /// Stack bytes one further level of `eval` costs, or `None` when the run
     /// never recursed and there is nothing to divide by.
-    ///
-    /// The divisor is `max_depth - 1` and not `max_depth`: `bytes` spans the
-    /// gap *between* level 1 and the deepest level, so it counts one fewer
-    /// step than there are levels.
     pub fn bytes_per_frame(self) -> Option<f64> {
         (self.max_depth > 1).then(|| self.bytes as f64 / (self.max_depth - 1) as f64)
     }
@@ -519,11 +195,6 @@ impl StackSpan {
 
 /// A construct this crate does not implement, on its way to becoming an exit
 /// code and a line on stderr.
-///
-/// Not a Rexx condition and never convertible into one: the whole point of
-/// `NOT_IMPLEMENTED_EXIT` is that an implementation gap cannot produce a
-/// passing differential test. Real errors have their own type, `Raised`, which
-/// is a different thing entirely.
 #[derive(Debug)]
 struct Loud {
     message: String,
@@ -533,22 +204,6 @@ impl Loud {
     /// An instruction this crate does not execute. `keyword()` is `None` for the four
     /// clause shapes no keyword introduces, and their names come from the
     /// shape rather than from a keyword table.
-    ///
-    /// Two properties of the match below, both deliberate and both easy to
-    /// undo by accident.
-    ///
-    /// It is **exhaustive with no `_` arm**, so adding an `InstructionKind`
-    /// variant is a compile error here rather than a silent fallthrough. That
-    /// is the same rule `form_name` follows, and it is why 36 variants are
-    /// listed by name to reach one shared expression.
-    ///
-    /// It **cannot panic**. An earlier version ended `_ => unreachable!(…)`,
-    /// which was true of the tree as it stood and broke the failing-loudly
-    /// rule anyway: a new keywordless variant would have aborted the process
-    /// instead of producing `NOT_IMPLEMENTED_EXIT` and a message naming the
-    /// construct, and an abort is precisely the outcome that rule exists to
-    /// exclude. The fallback is a string, not a panic, and the exhaustive
-    /// match is what stops it ever being reached.
     fn instruction(kind: &InstructionKind) -> Loud {
         let name = match kind {
             // The four clause shapes no keyword introduces.
@@ -600,23 +255,6 @@ impl Loud {
     }
 
     /// An expression form this crate does not evaluate.
-    ///
-    /// Names the **form** and never formats the node. An earlier version wrote
-    /// `{kind:?}` and produced 364 KB of stderr for one clause of
-    /// `corpus/lang/deep_nested_expr.rex`, because `ExprKind`'s derived `Debug`
-    /// walks the whole tree and a tree is unbounded. Failing loudly is a gate
-    /// criterion and every later task inherits this path, so the size of the
-    /// message is part of the contract: the variant name is what a reader
-    /// needs, and the differential harness has to compare whatever is emitted
-    /// byte for byte.
-    ///
-    /// **Neither message lists what *is* implemented**, and both used to. The
-    /// list was true of Task 3's spike and false by Task 7, which is the whole
-    /// argument: every task that implements a form has to remember to edit a
-    /// string in a file it is not otherwise touching, and none of the three
-    /// that shipped between did. A message that can only go stale by being
-    /// wrong about its own subject cannot rot this way, so the enumeration is
-    /// gone rather than corrected.
     fn expression(kind: &ExprKind) -> Loud {
         Loud {
             message: owned_message(&form_name(kind), expr_owner(kind)),
@@ -625,24 +263,6 @@ impl Loud {
 
     /// A binary operator that no family of `Interp::apply_binary` claims -- an
     /// internal inconsistency, never a program error.
-    ///
-    /// `Operator::Backslash` is the operator this is about: it is the prefix
-    /// `\` token, and the parser builds an `ExprKind::Prefix` from it rather
-    /// than an `ExprKind::Binary`, so no program reaches this by writing one.
-    /// An operator added to `rexx_parse::Operator` and left out of
-    /// `eval::is_native_binary` would reach it too.
-    ///
-    /// Loud rather than an `unreachable!` for the reason [`Loud::instruction`]'s
-    /// own doc gives: a guarantee the parser makes is not one the type system
-    /// enforces, and an abort is precisely the outcome the failing-loudly rule
-    /// exists to exclude.
-    ///
-    /// The variant's own name rather than its spelling, because
-    /// `Operator::Abuttal`'s spelling is the empty string and a message naming
-    /// it would name nothing. `Operator`'s derived `Debug` is one word with no
-    /// tree behind it, unlike [`Loud::expression`]'s subject.
-    ///
-    /// [`Loud::instruction`]: Loud::instruction
     fn binary_operator(op: Operator) -> Loud {
         Loud {
             message: format!("binary operator {op:?} has no implementation"),
@@ -650,38 +270,6 @@ impl Loud {
     }
 
     /// A call that resolved to a **builtin this crate runs nothing for**.
-    ///
-    /// **Not "a name that resolved to nothing"**, which is what this used to
-    /// answer and no longer does. A named call resolves in four steps --
-    /// internal label, builtin, `::ROUTINE`, then an external Rexx file --
-    /// and a name matching none of them is the oracle's own Error 43.1
-    /// (`Raised::routine_not_found`), because the only step this crate skips
-    /// is the file search and that answers nothing for a program with no such
-    /// file beside it. External routine resolution is **Phase 7's**, with
-    /// both transcripts in `phase-4-exclusions.txt`.
-    ///
-    /// What is left for this constructor is the second step's own gap: the
-    /// fifteen builtins Phase 4 excludes outright (`builtin::
-    /// is_excluded_builtin`), where the oracle answers normally and this
-    /// crate has no code. A condition would be the wrong answer there --
-    /// a program *expecting* 43.1 would pass against a gap -- which is why
-    /// the excluded-builtin step sits in front of the `::ROUTINE` lookup
-    /// rather than falling through it. `builtin::dispatch`'s own
-    /// belt-and-braces arm is the other caller.
-    ///
-    /// The message keeps `owned_message`'s exact shape, `"routine \"NAME\"
-    /// is not implemented (4c)"`, because that trailing shape is a contract
-    /// `loud.rs` pins with an `ends_with`, not a formatting preference -- a
-    /// second spelling here would be a second thing to keep in sync for
-    /// nothing. The owner is `4c` for every name that reaches here, whichever
-    /// phase actually owns the builtin; `corpus/keyword-exempt.txt`'s own
-    /// header records that imprecision and which rows it affects.
-    ///
-    /// **Truncated**, which now costs nothing: every name reaching here is a
-    /// builtin's, so it is short by construction. The truncation is kept
-    /// because it is free and because nothing in the type stops a future
-    /// caller handing over a `Call::Dynamic` target, which is an arbitrary
-    /// run-time value.
     fn unresolved_call(name: &[u8]) -> Loud {
         const LIMIT: usize = 128;
         let shown = if name.len() > LIMIT {
@@ -696,16 +284,6 @@ impl Loud {
 
     /// A message sent to a value whose class this phase does not build, so
     /// there is no behaviour to resolve the name against at all.
-    ///
-    /// The reachable case is a stem: `Interp::receiver_kind` has no arm that
-    /// maps a `Body::Stem` onto `.Stem`, so a send to one finds no behaviour
-    /// to search. The oracle answers such a send -- `a. = 'dflt'; say
-    /// a.~length` is `4`, forwarded through `StemClass`'s own `UNKNOWN` --
-    /// so 97.1 would be a wrong answer that a program could trap, which is
-    /// why this is loud instead.
-    ///
-    /// `kind` names the value's shape rather than a class, because the whole
-    /// point is that no class object was found for it.
     fn receiver_class(kind: &str) -> Loud {
         Loud {
             message: owned_message(&format!("a message send to {kind}"), Some("Phase 5")),
@@ -715,29 +293,6 @@ impl Loud {
     /// An operator whose **left** operand is an object this phase can build
     /// but send no message to: a class object, or one of the interpreter's
     /// own (`.environment`, `.local`, `.methods`, `.context`).
-    ///
-    /// **The oracle sends the operator to the left operand as a message**, so
-    /// what it answers is that object's own method and not a comparison of
-    /// renderings. Measured: `.array + 1` and `.array > .array` are 97.1;
-    /// `.methods == .routines` is `0` where both render `a StringTable`;
-    /// `.array == "The Array class"` is `0` against the very text the object
-    /// renders as. Handing those operands to the string and numeric operators
-    /// answers `1`, `1` and `1` -- three wrong answers at rc 0, where this
-    /// crate refused the whole program before `.NAME` resolved at all.
-    ///
-    /// **An operator's right operand is not this**, measured the same way:
-    /// `1 + .array` is 41.1 quoting `"The Array class"` and
-    /// `"a StringTable" == .methods` is `1`, both of which this crate already
-    /// answers identically, because the oracle sends the operator to the
-    /// *left* operand and that operand converts the right one through
-    /// `stringValue()` exactly as this crate does. **That is a fact about
-    /// operators and not a rule about right-hand operands**: a controlled `DO`
-    /// header rounds every position through a unary operator of its own, so
-    /// [`Loud::object_position`] refuses `do i = 1 to .array` too.
-    ///
-    /// `op` is spelled by the caller rather than taken as an `Operator`,
-    /// because a prefix operator and a binary one are different types with
-    /// the same need.
     fn operator_operand(op: &str, kind: &str) -> Loud {
         Loud {
             message: owned_message(
@@ -751,30 +306,6 @@ impl Loud {
     /// that is not an operator's operand: a `DO` header's value, `DO OVER`'s
     /// target, a controlled loop's own control variable at the increment, or
     /// a `RAISE SYNTAX` clause's `ADDITIONAL` value.
-    ///
-    /// **A separate constructor because the program contains no operator to
-    /// name**, and naming one would send a reader looking for something that
-    /// is not there. `position` is the whole phrase rather than a keyword, so
-    /// each site says where it is in its own words.
-    ///
-    /// What the oracle does at each, measured:
-    ///
-    /// * a controlled header's `initial`/`TO`/`BY`, and the control variable
-    ///   the increment adds to, are rounded through what is a real unary `+`,
-    ///   so each answers 97.1;
-    /// * `DO OVER`'s target is handed to `requestArray`, which is 98.913 for a
-    ///   class and an iteration of the entries for a directory or a string
-    ///   table -- neither of which this crate can produce;
-    /// * a `RAISE` clause's `ADDITIONAL` value reaches `requestArray` only
-    ///   under a `SYNTAX` condition (`RaiseInstruction.cpp:280-286`). Under
-    ///   any other condition, and for the `ARRAY (...)` form whose value is
-    ///   already an array, the elements are rendered by `stringValue()` and
-    ///   this crate matches -- which is why the refusal carries that guard.
-    ///
-    /// **`do i = 1 to .array` is why "the right operand always agrees" is not
-    /// a rule.** It held for the binary operators, where the operand the
-    /// operator was sent to converts the other through `stringValue()`; it
-    /// does not hold here, where every position converts on its own.
     fn object_position(position: &str, kind: &str) -> Loud {
         Loud {
             message: owned_message(&format!("{kind} as {position}"), Some("Phase 5")),
@@ -783,15 +314,6 @@ impl Loud {
 
     /// A `.NAME` the oracle's `.environment` or `.local` answers and this
     /// crate builds nothing for.
-    ///
-    /// Loud rather than the dotted-text fallback, which is what an
-    /// **unresolved** name renders as on both sides: taking the fallback for a
-    /// name the oracle resolves is a silent wrong answer at rc 0, and it is
-    /// the shape `phase-4-exclusions.txt` recorded against `VALUE`'s
-    /// one-argument form before this phase closed it.
-    ///
-    /// `owner` differs by which directory holds the name --
-    /// `environment.rs`'s own bootstrap has the split and its reason.
     fn environment_symbol(name: &[u8], owner: &'static str) -> Loud {
         let shown = String::from_utf8_lossy(name);
         Loud {
@@ -801,12 +323,6 @@ impl Loud {
 
     /// A directory index the oracle's own `.environment` or `.local` has an
     /// entry for and this crate builds nothing for.
-    ///
-    /// [`Loud::environment_symbol`]'s counterpart for the message-send route.
-    /// The two are separate constructors because the name they quote is
-    /// spelled differently -- a `.NAME` carries its leading period and an
-    /// index does not -- and so a reader tracing one refusal is pointed at the
-    /// route it came through.
     fn environment_entry(index: &[u8], owner: &'static str) -> Loud {
         let shown = String::from_utf8_lossy(index);
         Loud {
@@ -816,19 +332,6 @@ impl Loud {
 
     /// A message that **resolved** to a primitive method this crate has no
     /// code for.
-    ///
-    /// Loud rather than a condition, for the reason [`Loud::unresolved_call`]
-    /// gives about excluded builtins: the oracle answers normally here, so a
-    /// 97.1 would let a program expecting the oracle's answer pass against a
-    /// gap. 97.1 is reserved for a name the receiver's behaviour genuinely
-    /// does not answer, which is a different question and is decided before
-    /// this constructor can be reached.
-    ///
-    /// `scope` is the class the definition came from, which is what makes the
-    /// message actionable: the same name can be a different method on a
-    /// different class.
-    ///
-    /// [`Loud::unresolved_call`]: Loud::unresolved_call
     fn native_method(name: &[u8], scope: &str) -> Loud {
         let shown = String::from_utf8_lossy(name);
         Loud {
@@ -841,26 +344,6 @@ impl Loud {
 
     /// An array subscript list whose only element is an empty slot, which the
     /// oracle answers by dying.
-    ///
-    /// `ArrayClass::validateIndex` expands a lone array argument into the
-    /// subscript list by taking its **item count** with its **slot array**
-    /// (`classes/ArrayClass.cpp:1219`-`:1226`), so an array whose leading slot
-    /// is empty and whose item count is one hands
-    /// `validateSingleDimensionIndex` a null `index[0]` and it dereferences
-    /// it (`:1264`). Measured, 3 runs of 3: `(1,2)~at((,2))` and
-    /// `(1,2)~at((,,3))` are SIGSEGV at rc 139, where `(1,2)~at((1,))` answers
-    /// `1` and `(1,2)~at((1,,3))` is a clean 93.926 -- the two subscripts are
-    /// counted before either is read.
-    ///
-    /// **There is no oracle behaviour to match here**, so this is a refusal
-    /// rather than an answer, and no differential row can cover it: the
-    /// program is in `corpus/oracle-crashes.txt` and must not be run.
-    /// `dispatch.rs`'s `an_expanded_index_of_one_empty_slot_is_loud` is the
-    /// instrument.
-    ///
-    /// No owner: the construct is implemented and the refusal is not a gap,
-    /// which is the same reason `Loud::instruction`'s `Do`/`Loop` carve-outs
-    /// print no suffix -- `owned_message`'s own doc names them.
     fn array_index_hole() -> Loud {
         Loud {
             message: owned_message("an array subscript that is an empty slot", None),
@@ -868,22 +351,6 @@ impl Loud {
     }
 
     /// A `receiver~NAME=` entry-method send that carried no value argument.
-    ///
-    /// **There is no oracle behaviour to match**, so this is a refusal rather
-    /// than an answer, the position [`Loud::array_index_hole`] is in.
-    /// `StringHashCollection::unknown` reads `arguments[0]` without consulting
-    /// the argument count (`classes/support/HashCollection.cpp:1026`), so a
-    /// send supplying none reads uninitialised memory: measured,
-    /// `d~mything = 'v'` then `say 'a' d["MYTHING"]` then `d~"MYTHING="()`
-    /// leaves the entry holding `a v`, the string the `SAY` had just built,
-    /// and the hole spellings `(,)` and `(,,)` answer the same.
-    ///
-    /// No differential row can cover it and the corpus gate cannot see it;
-    /// `dispatch.rs`'s `an_entry_method_send_with_no_value_is_loud` is the
-    /// whole instrument.
-    ///
-    /// No owner, because the construct is implemented and the refusal is not
-    /// a gap -- [`Loud::array_index_hole`]'s own position.
     fn entry_method_without_a_value(index: &[u8]) -> Loud {
         let shown = String::from_utf8_lossy(index);
         Loud {
@@ -897,12 +364,6 @@ impl Loud {
     /// A collection this crate can name but cannot read: one whose entries
     /// the oracle has and this crate answers per name through
     /// [`Loud::environment_entry`] instead of building.
-    ///
-    /// `~defineMethods` is the caller. Walking such a collection's own map
-    /// finds what this crate put there, which for `.local` is nothing, so a
-    /// mutation driven by the walk would silently do nothing where the oracle
-    /// raises -- measured, `.K~defineMethods(.local)` is oracle rc 163,
-    /// `93.974`.
     fn unreadable_collection(owner: &'static str) -> Loud {
         Loud {
             message: owned_message(
@@ -914,62 +375,6 @@ impl Loud {
 
     /// A method compiled from source text, in one of the shapes or places
     /// [`compile_method_source`] does not take.
-    ///
-    /// `MethodClass::newMethodObject` answers an existing method object
-    /// unchanged and otherwise runs the source through
-    /// `LanguageParser::createMethod` (`classes/MethodClass.cpp:457`-`:486`),
-    /// which builds a method whose package context is the running one. The
-    /// cases refused here, each measured on the oracle:
-    ///
-    /// * **A source that is neither a string nor an array.** The C++ asks the
-    ///   value for an array and then for a string
-    ///   (`execution/BaseExecutable.cpp:181`-`:194`), so a value that
-    ///   converts to either is a source: measured, oracle rc 0,
-    ///   `.k~define("m", .environment)` compiles the directory's own index
-    ///   list. This crate models `.environment`'s membership as a subset, so
-    ///   answering from what it holds would compile a different program;
-    ///   93.974, which the oracle raises for a value that converts to
-    ///   neither, would be a wrong answer for the same reason.
-    /// * **A source that does not parse.** The oracle reports it against the
-    ///   method rather than the program -- measured, rc 221,
-    ///   `.k~define("bad", 'this is not rexx +++')` echoes the body's own
-    ///   clause and then `Error 35 running bad line 1:` with `35.901
-    ///   Prefix operator "+" is not followed by an expression term.`
-    ///   `ParseError` carries no substitution values, so the second line
-    ///   would read `Prefix operator "&1"`, which is the same gap
-    ///   `Interp::run_fragment` records for `INTERPRET`.
-    /// * **A source carrying a directive.** `generateMethod` installs the
-    ///   package the source declares (`parser/LanguageParser.cpp:590`-`:608`)
-    ///   and the main section becomes the method: measured, oracle rc 0, a
-    ///   two-line array source whose second line is `::class zz` compiles,
-    ///   and `.zz` is 97.1 in the caller afterwards.
-    /// * **A class-side install.** Nothing files a class-side body here, so
-    ///   the source is refused rather than compiled -- measured, oracle rc
-    ///   214, `.methods~put('return 1/0', 'M')` then
-    ///   `.object~subclass("k", .Class, .methods)` then `k~m` gives
-    ///   `Error 42 running M line 1:`.
-    ///
-    /// [`compile_method_source`]: crate::dispatch::compile_method_source
-    /// `Method~setSecurityManager` and the two rows beside it, given a
-    /// manager to install.
-    ///
-    /// **The state is kept nowhere because keeping it would be the wrong
-    /// answer.** An installed manager is consulted at the next
-    /// environment-symbol lookup, which is D12's interception points and
-    /// Phase 7's: measured, oracle rc 159,
-    /// `.K~method('MM')~setSecurityManager(.Object~new)` then
-    /// `.routines~rr~class~id` is
-    /// `97.1 Object "an Object" does not understand message "LOCAL".`, where
-    /// the same program without that line is rc 0. The no-argument form
-    /// installs nothing -- measured, `.routines~rr` still answers -- and is
-    /// the form this phase answers.
-    /// `Method~newFile` and `Routine~newFile` given the package context their
-    /// second argument is.
-    ///
-    /// **Refused rather than ignored.** It is what the loaded file resolves
-    /// names against, so accepting it and loading without it would answer at
-    /// rc 0 where the resolution differs. Measured, oracle rc 0:
-    /// `.Method~newFile('body.rex', .context~package)` answers a `Method`.
     fn executable_context() -> Loud {
         Loud {
             message: owned_message("a newFile package context", Some("Phase 7")),
@@ -978,16 +383,6 @@ impl Loud {
 
     /// `loadExternalMethod` and `loadExternalRoutine` for an entry point this
     /// phase cannot resolve.
-    ///
-    /// **The boundary is `directive_gap`'s, drawn in the same two places.**
-    /// A library other than `REXX` is a `dlopen`, whose answer is a property
-    /// of the machine's shared libraries rather than of the program --
-    /// measured, oracle rc 0 on this machine, `LIBRARY rxmath RxCalcPi`
-    /// answers a `Routine` and `LIBRARY rexxutil SysCurPos` answers `.nil`.
-    /// And a **routine** entry point resolves against `rexx_routines[]`,
-    /// which `dispatch::native`'s registry is not -- the reason
-    /// `::ROUTINE EXTERNAL` keeps every one of its forms, the `LIBRARY REXX`
-    /// spelling included, on that same list.
     fn external_entry_point(what: &'static str) -> Loud {
         Loud {
             message: owned_message(what, Some("Phase 7")),
@@ -1003,12 +398,6 @@ impl Loud {
     /// `Package~options(name, value)` and `Package~defaultOptions(name,
     /// value)`, each of which writes a package setting rather than reading
     /// one.
-    ///
-    /// Measured, oracle rc 0: `p~options('DIGITS', 5)` answers the previous
-    /// `9` and leaves `p~digits` at `5`, so the write is observable through
-    /// every later read of that package's settings. Answering the previous
-    /// value without performing it would run on at rc 0 with the wrong
-    /// settings in force.
     fn package_option_write() -> Loud {
         Loud {
             message: owned_message("a package settings write", Some("D12, Phase 7")),
@@ -1031,13 +420,6 @@ impl Loud {
 
     /// A `SETMETHOD` or `UNSETMETHOD` whose receiver has no dictionary of
     /// its own here.
-    ///
-    /// The oracle copies the behaviour of whatever it is given, so every
-    /// receiver can carry one; this crate keeps the dictionary in
-    /// `Body::Instance` and has nowhere to put one on a string, an array or
-    /// a class object. Loud rather than silent for
-    /// `native_object_name_set`'s reason -- forgetting the definition would
-    /// be a wrong answer where the oracle keeps it.
     fn object_method(what: &str) -> Loud {
         Loud {
             message: owned_message(what, Some("Phase 5")),
@@ -1054,10 +436,6 @@ impl Loud {
     }
 
     /// One of the interpreter's own embedded `.orx` sources will not parse.
-    ///
-    /// `rexx-lib` pins each file's sha256, so the bytes are the tracked
-    /// ones; this is a construct in them this crate's parser does not yet
-    /// take, and it stops the interpreter rather than a program.
     fn library_source(name: &str, error: &str) -> Loud {
         Loud {
             message: owned_message(
@@ -1068,12 +446,6 @@ impl Loud {
     }
 
     /// A file a `::REQUIRES` found will not parse.
-    ///
-    /// **Loud rather than the oracle's own report**, on the same footing as a
-    /// top-level parse failure: `execute`'s own arm says why a `ParseError`
-    /// cannot be reported byte for byte, and the required file is no
-    /// different. Measured, the oracle answers the syntax error itself, under
-    /// the requiring `::REQUIRES` clause and naming the required file.
     fn required_source(path: &str, error: &str) -> Loud {
         Loud {
             message: owned_message(
@@ -1086,13 +458,6 @@ impl Loud {
     /// One of the two methods `Setup.cpp` puts on `.Class` for the image
     /// build and `removeSetupMethods` deletes, given something it cannot
     /// use.
-    ///
-    /// **Loud rather than a Rexx condition, and there is no third option.**
-    /// Neither method exists in any shipped interpreter, so no oracle run
-    /// can say what either does with a bad argument -- a plausible
-    /// condition here would be a wrong answer nobody could check. Only the
-    /// interpreter's own library can reach either, so a refusal ends the
-    /// bootstrap rather than a program.
     fn setup_method(what: &str) -> Loud {
         Loud {
             message: owned_message(what, Some("Phase 5")),
@@ -1101,9 +466,6 @@ impl Loud {
 
     /// `EXPOSE` in a method whose receiver is neither a class object nor an
     /// instance.
-    ///
-    /// A string, a number, an array and a stem have nowhere to keep a variable
-    /// pool, so a method reaching one refuses rather than losing the write.
     fn expose_receiver() -> Loud {
         Loud {
             message: owned_message("EXPOSE on an object with no variable pool", Some("Phase 5")),
@@ -1112,12 +474,6 @@ impl Loud {
 
     /// `USE LOCAL` as a `::METHOD`'s first instruction, which is the one
     /// placement the oracle runs (measured, rc 0).
-    ///
-    /// What it does there is invert `EXPOSE`: with a `USE LOCAL` present every
-    /// name the body mentions is bound to the method's scope pool *except*
-    /// the ones it lists (`autoExpose`, `LanguageParser.cpp:2232`). The pool
-    /// exists here and the inversion does not, so this is loud rather than the
-    /// 99.910 the other placements get.
     fn use_local_in_a_method() -> Loud {
         Loud {
             message: owned_message("USE LOCAL in a ::METHOD body", Some("Phase 5")),
@@ -1125,39 +481,6 @@ impl Loud {
     }
 
     /// `EXPOSE` or `PROCEDURE EXPOSE` naming a single compound tail.
-    ///
-    /// **Both instructions reach here and `keyword` is which**, because the
-    /// gap is the same one and the measurement is the same on both sides:
-    /// with `expose a.1` in one class method assigning `a.1` and `a.2`, and
-    /// `expose a.1` in another reading them back, the oracle prints
-    /// `[tail-one][A.2]` -- tail 1 is the object's and tail 2 is the method's
-    /// own local.
-    ///
-    /// **Both spellings reach here, and the second is easy to miss.** The
-    /// direct one is `procedure expose a.1`; the indirect one is `v = 'A.1'`
-    /// with `procedure expose (v)`, because `expose_names` expands the
-    /// selector's value into ordinary names and a compound-shaped word among
-    /// them arrives at the same check. Measured, the indirect form: oracle rc
-    /// 0 printing `changed other`, this crate rc 120 with the message below.
-    /// The gap is exactly as wide as the direct spelling suggests, not
-    /// narrower.
-    ///
-    /// **A disclosed gap inside an otherwise implemented instruction, and
-    /// loud rather than approximated because the near-miss is a silent wrong
-    /// answer.** Measured: with the caller holding `a.1 = 'kept'` and `a.2 =
-    /// 'other'`, `sub: procedure expose a.1` writing both tails leaves the
-    /// caller printing `changed other` -- tail 1 is shared and tail 2 is the
-    /// callee's own. So this is aliasing *inside* a stem object, at one tail,
-    /// and this crate's exposure mechanism aliases whole slots: the stem lives in a
-    /// slot and its tails do not. Exposing the whole stem instead would make
-    /// `a.2` shared as well, which is a wrong answer found by chasing a wrong
-    /// value rather than a message that says why.
-    ///
-    /// No owner string: unlike `unresolved_call`'s `4c`, the steps behind
-    /// this are not another phase's to build -- nothing has been scheduled to
-    /// build them. `owned_message` is deliberately not used, since its shape
-    /// belongs to the variant-keyed owner tables (`instruction_owner`) and
-    /// this is a sub-case within a variant those tables call implemented.
     fn compound_expose(keyword: &str, name: &[u8]) -> Loud {
         Loud {
             message: format!(
@@ -1169,23 +492,6 @@ impl Loud {
 
     /// A generated `::METHOD ATTRIBUTE`/`::ATTRIBUTE` accessor whose
     /// variable is a stem or a single compound tail.
-    ///
-    /// **A disclosed gap inside an otherwise delivered accessor pair**, the
-    /// shape [`Loud::compound_expose`] established, and loud for the same
-    /// reason. Measured on the oracle, both rc 0: `::attribute "a." class`
-    /// with `.K~'A.' = 5` then `say .K~'A.'` answers `5`, and
-    /// `::attribute "a.b" class` answers `a.b` for an uninitialised read. So
-    /// the first needs a stem object in the scope pool with a default this
-    /// crate never assigns there, and the second needs aliasing at one tail
-    /// inside such an object -- the same thing `Loud::compound_expose`
-    /// refuses, reached from the other direction.
-    ///
-    /// A simple name is the whole of what a generated accessor here answers,
-    /// and that is not the same restriction the *directive* has: both
-    /// spellings above install and both are 99.925 only for a name that is no
-    /// variable name at all.
-    ///
-    /// No owner string, for the reason [`Loud::compound_expose`] gives.
     fn accessor_variable(name: &[u8]) -> Loud {
         Loud {
             message: format!(
@@ -1198,12 +504,6 @@ impl Loud {
     /// A `DELEGATE` whose variable is a stem or a single compound tail, the
     /// same storage gap [`Loud::accessor_variable`] refuses reached from a
     /// different directive.
-    ///
-    /// Measured on the oracle, `::method m delegate a.b` with nothing
-    /// assigned: rc 159, `Object "A.B" does not understand message "M".`, so
-    /// the variable resolves to its derived name and the send goes to that.
-    ///
-    /// No owner string, for the reason [`Loud::compound_expose`] gives.
     fn delegate_variable(name: &[u8]) -> Loud {
         Loud {
             message: format!(
@@ -1214,31 +514,6 @@ impl Loud {
     }
 
     /// A builtin's option letter whose answer this crate cannot produce.
-    ///
-    /// **A disclosed gap inside an otherwise delivered builtin**, the shape
-    /// [`Loud::compound_expose`] established, and loud for the same reason:
-    /// the near miss is a silent wrong answer.
-    ///
-    /// **Two different reasons reach it, and the name says "object" for
-    /// only one of them.** `ARG(n,'A')` and `CONDITION('A')`/`CONDITION('O')`
-    /// answer an `Array` or a `Directory` -- measured, `condition('A')~class`
-    /// inside a `SIGNAL ON SYNTAX` handler is `The Array class` and
-    /// `condition('O')~class` is a `Directory` with 14 items -- and this
-    /// crate's value model has neither. `CONDITION('D')` for a `NOVALUE`
-    /// condition answers an ordinary *string*, the variable's derived name,
-    /// which this crate simply does not carry as far as the handler
-    /// (`Raised::description`). Both are "the oracle has an answer here and
-    /// we cannot build it", which is what this constructor is for; only the
-    /// first is about an object.
-    ///
-    /// `why` names what is missing, so the message says that rather than
-    /// only that something is.
-    ///
-    /// No owner string: like `compound_expose`, this is a sub-case within a
-    /// builtin the status table calls implemented, and `owned_message`'s
-    /// shape belongs to the variant-keyed owner tables.
-    ///
-    /// [`Loud::compound_expose`]: Loud::compound_expose
     fn builtin_option_object(routine: &str, option: u8, why: &str) -> Loud {
         Loud {
             message: format!(
@@ -1251,33 +526,6 @@ impl Loud {
     /// `VALUE`'s three-argument form: a *present* third argument selects an
     /// external pool rather than this crate's own local variables
     /// (`expression/BuiltinFunctions.cpp:1848`-`1913`).
-    ///
-    /// **Presence decides, not the selector's value.** Measured 2026-08-07:
-    /// `value('myvar',,'')` still reaches this path, because an *empty*
-    /// third argument is a present one and the oracle answers a lookup in
-    /// `.environment`; only an *omitted* third argument stays on 4c's own
-    /// local-pool read/write. A crate that ignores the third argument
-    /// answers the local pool's value instead -- a wrong answer, not a loud
-    /// one -- which is worse than the gap this declares.
-    ///
-    /// **One argument, three destinations, and this constructor declares
-    /// all three unimplemented without claiming which one a given call
-    /// would have reached.** The oracle's own dispatch on the selector's
-    /// value (`BUILTIN(VALUE)`, cited above) is an empty selector reading
-    /// or writing `.environment`; the literal `'ENVIRONMENT'` reading or
-    /// writing the OS environment; and anything else trying a
-    /// platform-defined selector and then the registered value exit. Only
-    /// the third of these is Phase 7's; the first is Phase 5's, the same
-    /// environment/`.local` subsystem a `docs/superpowers/plans/
-    /// phase-4-exclusions.txt` KNOWN GAP row already names, and the second
-    /// is neither. That row carries the per-path attribution; this
-    /// constructor does not repeat it.
-    ///
-    /// No owner string: like [`Loud::builtin_option_object`], this is a
-    /// sub-case within a builtin the status table calls implemented, and
-    /// `owned_message`'s shape belongs to the variant-keyed owner tables.
-    ///
-    /// [`Loud::builtin_option_object`]: Loud::builtin_option_object
     fn value_selector() -> Loud {
         Loud {
             message: "VALUE's external-selector form is not implemented".to_string(),
@@ -1285,17 +533,6 @@ impl Loud {
     }
 
     /// A `PARSE` template trigger that needs an operand and has none.
-    ///
-    /// Not reachable from a program that parsed: `parse_template`
-    /// (`rexx-parse`'s own `instruction.rs`) fills `value` for every kind but
-    /// `End`, and refuses a trigger with nothing after it at parse time
-    /// (38.901, measured). Kept as a `Loud` rather than a defaulted position
-    /// or an `unreachable!` for the reason [`Loud::instruction`]'s own doc
-    /// gives: a guarantee the grammar makes is not one the type system
-    /// enforces, and an abort is the outcome the failing-loudly rule exists to
-    /// exclude.
-    ///
-    /// [`Loud::instruction`]: Loud::instruction
     fn parse_trigger_operand() -> Loud {
         Loud {
             message: "a PARSE template trigger carries no position operand".to_string(),
@@ -1304,15 +541,6 @@ impl Loud {
 
     /// An activation's body selector named something that is not a routine
     /// body -- an internal inconsistency, never a program error.
-    ///
-    /// Unreachable through any program, since nothing constructs a
-    /// `Some(index)` selector at all (`Activation::body`'s own doc has the
-    /// measured reason). Kept, and kept as a `Loud` rather than an
-    /// `unreachable!`, for the same reason `Loud::instruction`'s own doc
-    /// gives for not ending its match in a panic: a guarantee the resolution
-    /// order makes is not one the type system enforces, and an abort is
-    /// precisely the outcome the failing-loudly rule exists to exclude.
-    /// Whoever first sets `Some(index)` is who makes this reachable.
     fn missing_body() -> Loud {
         Loud {
             message: "an activation's body selector names no routine body".to_string(),
@@ -1321,15 +549,6 @@ impl Loud {
 
     /// A chunk's instruction map is shorter than the body it was compiled
     /// from -- an internal inconsistency, never a program error.
-    ///
-    /// `compile` writes one entry per instruction plus a final one, so the
-    /// driver's lookup is in range for every instruction index the body has.
-    /// Loud rather than an indexing panic for the reason [`Loud::instruction`]
-    /// gives: an abort is precisely the outcome the failing-loudly rule
-    /// exists to exclude, and a guarantee one function makes is not one the
-    /// type system enforces at the other.
-    ///
-    /// [`Loud::instruction`]: Loud::instruction
     fn chunk_map_too_short() -> Loud {
         Loud {
             message: "a compiled chunk has no op for an instruction of its own body".to_string(),
@@ -1337,18 +556,6 @@ impl Loud {
     }
 
     /// A body the compiler refused, which used to run on the tree-walker.
-    ///
-    /// **The refusal has one cause and it is a machine width** (`ir::compile`'s
-    /// own doc): op indices are `u32` and register indices `u16`, so a body
-    /// whose stream or register file would exceed either cannot be compiled.
-    /// While a second engine existed this was a silent downgrade counted by
-    /// `Outcome::chunks_refused`; there is nowhere to downgrade to now, so it
-    /// raises.
-    ///
-    /// Nothing in the corpus, the samples or the benchmark set is within
-    /// orders of magnitude of either width, and `chunks_refused` is asserted
-    /// zero across `tests/ir_recorded.rs`' populations -- which is the widest
-    /// evidence in the tree that this is unreachable rather than merely rare.
     fn chunk_refused() -> Loud {
         Loud {
             message: "a body does not fit the compiled stream's index widths, and there is no \
@@ -1358,9 +565,6 @@ impl Loud {
     }
 
     /// The driver reached an op it has no arm for.
-    ///
-    /// `what` names the op, so the message says which one rather than only
-    /// that one was reached.
     fn op_not_driven(what: &'static str) -> Loud {
         Loud {
             message: format!("a compiled {what} op has no driver arm"),
@@ -1369,12 +573,6 @@ impl Loud {
 
     /// A compiled jump names an op past the end of the range it is running in
     /// -- an internal inconsistency, never a program error.
-    ///
-    /// A construct's own jumps stay inside (or exactly at the boundary of) the
-    /// range that encloses it, because `block.rs` closes an inner branch's
-    /// targets before the outer one's. Loud rather than left to the loop's own
-    /// bound, which would read the escape as the range having completed
-    /// normally and answer `Flow::Next` for a construct that never finished.
     fn jump_out_of_range() -> Loud {
         Loud {
             message: "a compiled jump leaves the range it is running in".to_string(),
@@ -1383,11 +581,6 @@ impl Loud {
 
     /// A register a branch op reads holds something that is not a Rexx
     /// logical value -- an internal inconsistency, never a program error.
-    ///
-    /// A register a branch op reads is written by the op that decided the
-    /// branch, always as the small integer of the `bool` that op answered, so
-    /// anything else in it says the two came apart. Loud rather than a
-    /// defaulted answer, which would take a branch on a value nothing chose.
     fn register_not_logical() -> Loud {
         Loud {
             message: "a compiled branch read a register holding no logical value".to_string(),
@@ -1396,13 +589,6 @@ impl Loud {
 
     /// A compiled `SELECT` op does not describe the `SELECT` it was emitted
     /// for -- an internal inconsistency, never a program error.
-    ///
-    /// `ir::compile` emits these ops only while compiling a `Select` node and
-    /// fills their instruction indices from that node, so reaching this means
-    /// an op and the body it indexes came apart. Loud rather than a panic, for
-    /// the reason [`Loud::instruction`] gives.
-    ///
-    /// [`Loud::instruction`]: Loud::instruction
     fn select_op_off_its_node() -> Loud {
         Loud {
             message: "a compiled SELECT op does not name a SELECT of its own body".to_string(),
@@ -1411,10 +597,6 @@ impl Loud {
 
     /// A compiled `DO`/`LOOP` op does not describe the loop it was emitted for
     /// -- an internal inconsistency, never a program error.
-    ///
-    /// [`Loud::select_op_off_its_node`]'s reasoning exactly, one construct over.
-    ///
-    /// [`Loud::select_op_off_its_node`]: Loud::select_op_off_its_node
     fn loop_op_off_its_node() -> Loud {
         Loud {
             message: "a compiled DO/LOOP op does not name a DO/LOOP of its own body".to_string(),
@@ -1433,11 +615,6 @@ impl Loud {
 
     /// A compiled `Store` op does not describe the assignment it was emitted
     /// for -- an internal inconsistency, never a program error.
-    ///
-    /// [`Loud::select_op_off_its_node`]'s reasoning exactly, one instruction
-    /// over.
-    ///
-    /// [`Loud::select_op_off_its_node`]: Loud::select_op_off_its_node
     fn store_op_off_its_node() -> Loud {
         Loud {
             message: "a compiled Store op does not name an assignment of its own body".to_string(),
@@ -1446,20 +623,6 @@ impl Loud {
 
     /// A compiled op that runs or traces a call does not describe the call it
     /// was emitted for -- an internal inconsistency, never a program error.
-    ///
-    /// [`Loud::select_op_off_its_node`]'s reasoning exactly, shared by the ops
-    /// that reach a call:
-    ///
-    /// * `Op::Call`, which `ir::compile` emits only for a `CALL` instruction's
-    ///   `Named` form, so reaching it there means the op names an instruction
-    ///   that is not a `CALL` at all, or one whose `CALL` is a form that
-    ///   compiles to a plain `Op::Exec` region instead;
-    /// * `Op::CallExpr`, whose `slot` and `path` reach no node of the clause,
-    ///   or reach one that is not a call;
-    /// * `Op::TraceFunction`, whose echo walks that same address to the node
-    ///   it describes and finds nothing at the end of it.
-    ///
-    /// [`Loud::select_op_off_its_node`]: Loud::select_op_off_its_node
     fn call_op_off_its_node() -> Loud {
         Loud {
             message: "a compiled call op does not name a call of its own body".to_string(),
@@ -1468,13 +631,6 @@ impl Loud {
 
     /// A compiled `Const` op names a constant its own chunk does not carry --
     /// an internal inconsistency, never a program error.
-    ///
-    /// `ir::compile` interns every constant it emits an op for into the same
-    /// chunk, so reaching this means the op and the table came apart. Loud
-    /// rather than an indexing panic, for the reason [`Loud::instruction`]
-    /// gives.
-    ///
-    /// [`Loud::instruction`]: Loud::instruction
     fn constant_out_of_range() -> Loud {
         Loud {
             message: "a compiled Const op names no constant of its own chunk".to_string(),
@@ -1482,26 +638,6 @@ impl Loud {
     }
 
     /// A `GUARD ... WHEN` whose expression is false.
-    ///
-    /// `RexxInstructionGuard::execute` loops on `context->guardWait()` while
-    /// the expression is false (`instructions/GuardInstruction.cpp:167`-
-    /// `:185`), waiting to be woken by another activity changing one of the
-    /// exposed variables it names. One activity has nothing that can wake it.
-    /// Measured twice under a 10-second kill: rc 137, no bytes on any
-    /// descriptor, and 0.00 s of CPU over 5.00 s elapsed -- a block, not a
-    /// spin.
-    ///
-    /// **There is no oracle behaviour to match here**, so this is a refusal
-    /// rather than an answer, and no differential row can cover it: the
-    /// program is in `corpus/oracle-crashes.txt` as entry 7 and must not be
-    /// run. `run/tests.rs`'s
-    /// `the_guard_instructions_answers_and_the_phase_6_refusals` is the
-    /// instrument, whose refusal rows are this one and
-    /// [`Loud::reply_inside_construct`]'s.
-    ///
-    /// **SCHEDULING.** Phase 6 may delete this outright: an interpreter with
-    /// a second activity has an answer to give here and does not need a
-    /// refusal.
     fn guard_when_false() -> Loud {
         Loud {
             message: "a GUARD that has to wait for another activity to make its WHEN \
@@ -1511,17 +647,6 @@ impl Loud {
     }
 
     /// `Message~result` on a message whose send has not been made.
-    ///
-    /// `MessageClass::result` waits for the message to complete
-    /// (`classes/MessageClass.cpp:279`), and a message nothing has sent never
-    /// does. Measured off `/proc/<pid>/stat` with the binary launched direct:
-    /// state `S` and 0 utime and stime ticks at 7 s, where a spinning program
-    /// sampled the same way reads `R` and 700. The same object's `~completed`
-    /// and `~hasError` both answer `0` at rc 0.
-    ///
-    /// **There is no oracle behaviour to match here**, so this is a refusal
-    /// rather than an answer: the program is in `corpus/oracle-crashes.txt`
-    /// and must not be run.
     fn unsent_message_result() -> Loud {
         Loud {
             message: "`Message~result` on a message whose send has not been made is not \
@@ -1531,22 +656,6 @@ impl Loud {
     }
 
     /// A `REPLY` that is not a clause of its method body's own top level.
-    ///
-    /// Continuing the body needs the enclosing `DO`/`SELECT`/`IF` state that
-    /// an instruction index cannot carry -- that state is a Rust local of
-    /// `run_bounded` and of the driver's own frame stack, and unwinding to
-    /// hand the sender its value destroys it. `Interp::exec_reply`'s own doc
-    /// has the argument.
-    ///
-    /// Unlike [`Loud::guard_when_false`] the oracle **does** answer this
-    /// shape, so the refusal is a gap rather than an absence of behaviour to
-    /// match, and a differential row would have to be a divergence.
-    /// `run/tests.rs`'s `the_guard_instructions_answers_and_the_phase_6_refusals`
-    /// is the sole instrument, and it is filed there rather than in a test of
-    /// its own because the Phase 6 refusals share one table.
-    ///
-    /// **SCHEDULING.** Phase 6 may delete this outright, for
-    /// [`Loud::guard_when_false`]'s reason.
     fn reply_inside_construct() -> Loud {
         Loud {
             message: "a REPLY inside a DO, SELECT or IF is not implemented (Phase 6)".to_string(),
@@ -1561,15 +670,6 @@ impl Loud {
 }
 
 /// Names an expression form in **bounded** text, for a loud failure to quote.
-///
-/// The bound is the whole point and it is a contract, not a preference: this is
-/// called on nodes this crate cannot evaluate, and those nodes carry arbitrarily large
-/// subtrees. Everything returned here is either a `&'static str` or one
-/// `Operator::spelling`, which is also `&'static`, so no input can make the
-/// answer long. **Never format a node into a message.**
-///
-/// The match is exhaustive with no `_` arm on purpose, so a new `ExprKind`
-/// variant is a compile error here rather than a silent "unknown".
 fn form_name(kind: &ExprKind) -> String {
     let name = match kind {
         ExprKind::Literal(_) => "a literal",
@@ -1604,33 +704,6 @@ fn form_name(kind: &ExprKind) -> String {
 /// ({owner})"`, or leaves it unsuffixed (`"{name} is not implemented"`) when
 /// [`instruction_owner`]/[`expr_owner`] answer `None` -- meaning "this crate
 /// implements that variant", not "the owner is some particular phase".
-///
-/// **Review finding I6.** An earlier version keyed this on the literal
-/// `"4a"`, which doubles a phase *name* as a sentinel for a different
-/// property ("implemented here"), and that conflation is a forward trap:
-/// the moment Task 3 implements `InstructionKind::Call`, the owner table
-/// would have to either mislabel it `"4a"` (false -- 4b implemented it) or
-/// leave it `"4b"` and let some other, still-unimplemented 4b-local site
-/// print `rexx-exec: CALL is not implemented (4b)` for a *different*
-/// reason -- the exact self-contradiction this carve-out exists to
-/// prevent, with no carve-out left to catch it. `Option<&'static str>`
-/// says what is actually meant and needs no phase name to mean it, so it
-/// survives every later phase unchanged.
-///
-/// `None` is reachable here only through two documented edge cases in
-/// `run.rs` (`run_loop_with_header`'s `DO`/`LOOP` COUNTER/`DO WITH` check,
-/// and its stem-target `DO OVER` deviation) where the outer `InstructionKind`/
-/// `ExprKind` is implemented but the specific reason that call happened is
-/// not. Printing an owner there would read as self-contradictory -- the
-/// construct plainly *is* implemented -- so this leaves the message
-/// without a suffix on that path, and is the only
-/// reason this function exists rather than a bare `format!` at each of the
-/// two call sites. `run/tests.rs`'s `do_with_takes_the_loud_path`,
-/// `do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on`,
-/// `do_over_a_stem_target_takes_the_loud_path` and
-/// `do_over_a_parenthesised_stem_target_is_also_caught` each assert the
-/// exact unsuffixed message (I1) -- before those assertions existed,
-/// deleting this carve-out left the whole suite green.
 fn owned_message(name: &str, owner: Option<&'static str>) -> String {
     match owner {
         None => format!("{name} is not implemented"),
@@ -1641,10 +714,6 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// Every class this `::CLASS` names: its `SUBCLASS`/`MIXINCLASS` target (one
 /// slot, `mixin` telling the two apart), its `METACLASS`, and each entry of
 /// its `INHERIT` list.
-///
-/// The set is the oracle's own: `ClassDirective::addDependencies`
-/// (`interpreter/instructions/ClassDirective.cpp:327`-`:344`) asks
-/// `checkDependency` about the same references and no others.
 fn class_references(class: &ClassDirective) -> impl Iterator<Item = &ClassRef> {
     class
         .subclass
@@ -1655,20 +724,6 @@ fn class_references(class: &ClassDirective) -> impl Iterator<Item = &ClassRef> {
 
 /// The gap a `::` directive declares at install time, or `None` for one this
 /// crate can install.
-///
-/// **The predicate is what installing the directive *does*, and it has three
-/// clauses**: a directive is a gap here when installing it runs code, changes
-/// a package setting a Phase 4 construct can read, or resolves a name against
-/// a table this crate does not have. `Interp::install_directives`' own doc
-/// carries the measured transcript for every form on both sides of the line,
-/// and `phase-4-exclusions.txt`'s directive section carries the two arms that
-/// deliberately over-refuse and why.
-///
-/// A directive that installs cleanly is not thereby a no-op: a `::CLASS`
-/// creates a class object a `.NAME` can resolve and a `::METHOD` records a
-/// body a send can enter. What makes a form a gap here is that installing it
-/// is something this crate cannot do at all, not that nothing reads it
-/// afterwards.
 fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
     let gap = |name: &str, owner: &'static str| {
         Some(Loud {
@@ -1743,9 +798,6 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// `REXX` package does not export -- the one the oracle reports 90.998 for --
 /// or `None` for a directive whose `EXTERNAL` resolves and for one carrying
 /// none.
-///
-/// Both directives that can carry a binding `EXTERNAL` are asked here, so
-/// [`Interp::install_directives`]' walk puts one question to each.
 fn unresolved_external(kind: &DirectiveKind) -> Option<Vec<u8>> {
     let external = match kind {
         DirectiveKind::Method(method) => dispatch::native::method_external(method),
@@ -1757,18 +809,6 @@ fn unresolved_external(kind: &DirectiveKind) -> Option<Vec<u8>> {
 
 /// The refusal a directive stage owes, or `None` when every directive the
 /// stage selects installs.
-///
-/// **[`Interp::install_directives`] consults [`directive_gap`] in stages,
-/// because the oracle does not diagnose every gap form at the same point.**
-/// A refusal owed at an earlier stage has to be raised before this crate
-/// installs anything: leave it to the source-order pass and a class error
-/// preempts the diagnosis the oracle issues first, which turns a loud refusal
-/// into a wrong answer. That is the trade `518cd6de7` made by accident.
-///
-/// **The oracle's stages, as measured** -- each row a program pairing the
-/// named form with the named other directive, run both ways round, and the
-/// answer is the same in both orders unless the row says otherwise:
-///
 /// ```text
 /// ::routine/::method/::attribute EXTERNAL  vs a failing ::CLASS  98.903 rc 158, the EXTERNAL line
 /// ::routine/::method/::attribute EXTERNAL  vs a ::CLASS cycle    98.903 rc 158, the EXTERNAL line
@@ -1781,76 +821,10 @@ fn unresolved_external(kind: &DirectiveKind) -> Option<Vec<u8>> {
 /// ::options digits 12                      vs a failing ::CLASS  98.909 rc 158, the ::CLASS line
 /// ::class q metaclass zzz                  vs a failing ::CLASS  98.908 or 98.909, whichever is first
 /// ```
-///
-/// **Every `EXTERNAL` row above names a shared library.** `LIBRARY REXX` is
-/// not one, and the `::METHOD` and `::ATTRIBUTE` forms of it are not gaps at
-/// all: `dispatch::native` binds them and [`Interp::install_directives`]
-/// resolves them in the same first walk, so neither reaches a stage.
-/// Measured, oracle: `::method m external "LIBRARY REXX nosuch"` is 90.998
-/// rc 166, which is a differential row rather than a refusal, and it still
-/// wins over a duplicate `::ROUTINE` pair standing later in the file; and
-/// `::attribute at external 'LIBRARY REXX zzz_no_entry'` is the same 90.998
-/// rc 166 whichever side of `::class a subclass zzznotaclass` it stands on.
-///
-/// So the oracle walks the directive list once, in source order, resolving
-/// `::ANNOTATE` targets, `LIBRARY REXX` entry points and the libraries the
-/// other `EXTERNAL` forms name as it reaches them;
-/// then looks for a cycle; then opens `::REQUIRES` files; then creates the
-/// classes, resolving `SUBCLASS` and `METACLASS` in that pass; and evaluates
-/// `::CONSTANT` expressions last. `::OPTIONS` is applied in the first walk and
-/// has no diagnosis of its own, which is why its refusal can stay late.
-///
-/// **That first walk is [`Interp::install_directives`]' own first loop, and
-/// this function is not what runs it** -- the gap check for the forms it
-/// carries is inline there, beside the duplicate-`::ROUTINE` and class-less-
-/// `::CONSTANT` refusals it shares the walk with, so first in source order
-/// wins across all of them (R33). What is left for this function is
-/// `::REQUIRES`, whose stage is its own.
-///
-/// **What is measured and what is not.** Every row above is a probe, both
-/// engines, three descriptors. The placement of `::CLASS MIXINCLASS`,
-/// `::CLASS INHERIT` and `::CLASS SUBCLASS ns:` is *not* probed against a
-/// cycle here; they need no stage of their own because
-/// `Interp::install_class_at` consults [`directive_gap`] itself, so their
-/// refusal is raised inside the class pass wherever the oracle would have
-/// diagnosed them. A form added to [`directive_gap`] later does **not**
-/// inherit a stage: place it by probing it against a failing `::CLASS` and
-/// against a cycle, both orders, and add a row here.
-///
-/// **The first walk is shared with the translation-time errors this crate
-/// finds in the same loop, and one directive can owe both.** When it does the
-/// oracle answers the translation error: measured, `::routine dup` followed
-/// by `::routine dup external "LIBRARY nosuchlib nosuchfn"` is 99.903 rc 157
-/// echoing the second directive, not 98.903. The loop's own comment says
-/// where that puts the gap check relative to its arms.
-///
-/// **The cost is a refusal wherever the oracle would have carried on**, and
-/// it is not confined to the class error. With the `EXTERNAL` library
-/// loadable, the oracle installs the directive and goes on to whatever the
-/// file fails at next, where this crate refuses:
-///
 /// ```text
 /// ::class a / ::constant kk (1/0) / ::routine r external
 ///                              'LIBRARY REXX Filespec'                 42.3 rc 214
 /// ```
-///
-/// A probe, both engines, three descriptors: the oracle installs the directive
-/// and reaches the `::CONSTANT`'s own divide, and this crate answers rc 120
-/// instead. `::ROUTINE` is what keeps it a loss -- [`directive_gap`] refuses
-/// that directive whatever library it names -- where
-/// `corpus/lang/directive_method_external_not_a_staged_gap.rex`, the same file
-/// with a `::METHOD` in that position, is answered here. **The same shape with
-/// a present `::REQUIRES` in that position was the other row and is a loss no
-/// longer**: measured, the same three descriptors, both sides reach the divide
-/// at 42.3 rc 214.
-///
-/// The row puts the gap **after** the failing directive, which is what makes
-/// it a loss: with the gap first this crate refuses whatever the staging.
-///
-/// **A resolvable `::ANNOTATE` target is not one of them**, because this
-/// crate resolves one against the accumulated package. Measured, each
-/// matching the oracle byte for byte on both engines:
-///
 /// ```text
 /// ::routine r / ::annotate routine r / ::class a subclass zzznotaclass  98.909 rc 158
 /// ::class a / ::constant kk (1/0) / ::routine r / ::annotate routine r  42.3 rc 214
@@ -1868,10 +842,6 @@ fn staged_gap(program: &Program, stage: fn(&DirectiveKind) -> bool) -> Option<Lo
 /// The classes of the file being installed that a `::CLASS`'s own reference
 /// can resolve against: the index of every `::CLASS` the file declares, and
 /// the object each of the ones installed so far became.
-///
-/// One value rather than two parameters, so that a resolution's inputs travel
-/// together and `Interp::resolve_class_target` stays inside clippy's argument
-/// bound.
 struct FileClasses<'a> {
     declared: &'a HashMap<Box<[u8]>, usize>,
     installed: &'a HashMap<usize, ObjRef>,
@@ -1892,11 +862,6 @@ fn directive_clause(program: &Rc<Program>, directive: &Directive) -> (usize, Vec
 
 /// The directives this one must be installed after: every class it names
 /// that this file also declares, unqualified.
-///
-/// `ClassDirective::checkDependency`
-/// (`interpreter/instructions/ClassDirective.cpp:294`-`:310`) skips a
-/// qualified reference, because a `ns:name` target comes out of a package
-/// the sort has no say over; [`class_references`] is what it is asked about.
 fn class_dependencies<'a>(
     class: &'a ClassDirective,
     declared: &'a HashMap<Box<[u8]>, usize>,
@@ -1908,40 +873,12 @@ fn class_dependencies<'a>(
 
 /// The order a file's `::CLASS` directives install in: each class after every
 /// class it names, when that target is declared in the same file.
-///
-/// **Not source order, and the oracle's is not either.** Measured, rc 0:
-/// `::class c subclass b` / `::class b subclass a` / `::class a` runs a class
-/// method declared on `a` through `.c`, so a target declared later in the file
-/// resolves. The order is also observable when nothing fails to resolve: a
-/// `::CONSTANT` whose expression raises blames the class installed **last**,
-/// and `::class b subclass a` / `::constant c (1/0)` / `::class a` blames `b`,
-/// which source order reaches first.
-///
-/// **The corpus programs named below pin that blame rule together; none of
-/// them does alone.** Each is also produced by reading source order in one
-/// direction or the other, which is what an earlier version of this comment
-/// got wrong when it claimed one of them was produced by neither. Measured,
-/// by putting a single positional rule where `order.last()` is read below and
-/// running the corpus differential:
-///
 /// ```text
 /// blame the LAST ::CLASS directive in the file:
 ///     directive_constant_blames_the_last_installed_class.rex differs, 105 of 106
 /// blame the FIRST ::CLASS directive in the file:
 ///     directive_constant_expression_blames_the_last_class.rex differs, 105 of 106
 /// ```
-///
-/// So each direction of source order is excluded by one witness, and the
-/// dependency order this function computes is what answers every one of them.
-///
-/// **`Err` is a cycle**, carrying the directive to blame: the root of the walk
-/// that closed the loop, which is what the oracle echoes. Measured, rc 158
-/// with stdout empty and the **first** of the directives echoed, on `::class a
-/// subclass b` with `::class b subclass a`, on `::class a subclass a`
-/// alone, and on `::CLASS K INHERIT K`.
-///
-/// Depth-first over source order rather than repeated sweeps, so that the
-/// walk that finds a cycle still holds the root that started it.
 fn class_install_order(
     program: &Program,
     declared: &HashMap<Box<[u8]>, usize>,
@@ -2002,31 +939,6 @@ fn class_install_order(
 
 /// The dictionary keys a `::METHOD` directive claims, each with what a send
 /// reaching it runs.
-///
-/// **Shared with the duplicate check in `Interp::install_directives`' first
-/// walk, so that the keys a directive is refused for and the keys it installs
-/// are one enumeration.** The oracle shares them the same way:
-/// `methodDirective` calls `checkDuplicateMethod` once per name it is about
-/// to add (`parser/DirectiveParser.cpp:822`, `:841`, `:855`).
-///
-/// `methodDirective`'s own order of precedence over the generating options
-/// (`parser/DirectiveParser.cpp:826`-`:915`): `DELEGATE` first, then
-/// `ATTRIBUTE`, then `ABSTRACT`.
-///
-/// **`DELEGATE` under `ATTRIBUTE` installs the pair**, which is what the C++
-/// does: `methodDirective`'s comment there is "A delegate method can also be
-/// an attribute, which really just means we produce two delegate methods",
-/// and it calls `createDelegateMethod` for the setter name as well as the
-/// plain one. Both keys are [`GeneratedKind::Delegate`], which is what
-/// `createDelegateMethod` builds for each: one `DelegateCode` per name, over
-/// the one retriever the directive's `DELEGATE` symbol resolved to
-/// (`parser/DirectiveParser.cpp:831`, `:843`, `:846`).
-///
-/// **The setter's key is here and not under `ATTRIBUTE`'s arm below**: a key
-/// the dictionary does not hold makes `.K~a = 5` a name miss on the class,
-/// reporting the oracle's own status and the oracle's own catalogue row over
-/// a receiver the oracle does not name -- a difference no comparison of exit
-/// status or error number can see.
 fn method_dictionary_keys(method: &MethodDirective) -> Vec<(Vec<u8>, Option<GeneratedKind>)> {
     let upper = method.name.to_ascii_uppercase();
     if method.delegate.is_some() {
@@ -2056,22 +968,6 @@ fn method_dictionary_keys(method: &MethodDirective) -> Vec<(Vec<u8>, Option<Gene
 /// The dictionary keys an `::ATTRIBUTE` directive claims -- the plain name
 /// for a getter, the name with `=` appended for a setter, both for the
 /// default (neither `GET` nor `SET`) style.
-///
-/// Shared with the duplicate check for [`method_dictionary_keys`]' reason,
-/// and the oracle shares them the same way (`attributeDirective`'s
-/// `checkDuplicateMethod` calls at `parser/DirectiveParser.cpp:1664`,
-/// `:1667`, `:1725` and `:1790`, one per name it is about to add).
-///
-/// `attributeDirective` asks the same questions in the same order for each
-/// style (`parser/DirectiveParser.cpp:1671`-`:1855`) -- external, then
-/// abstract, then delegate -- and where none of them answers, the `GET` and
-/// `SET` styles let the presence of a body decide: `hasBody()` there
-/// (`:1773`, `:1836`), `attribute.body` here. The `BOTH` style admits no body
-/// at all, `checkDirective` refusing one at `:1670`: measured,
-/// `::attribute a class` with a following clause is `Error 99.937: Attribute
-/// methods without a SET or GET designation cannot have a method body.` So
-/// `attribute.body` is `None` on every directive that reaches this arm
-/// through that style.
 fn attribute_dictionary_keys(
     attribute: &AttributeDirective,
 ) -> Vec<(Vec<u8>, Option<GeneratedKind>)> {
@@ -2102,14 +998,6 @@ fn attribute_dictionary_keys(
 
 /// The dictionary keys one member directive claims, each with the side it
 /// claims them on -- `true` for the class dictionary.
-///
-/// **A `::CONSTANT` claims its name on both sides from one directive**, which
-/// is `ClassDirective::addConstantMethod` adding the single method object it
-/// built to `classMethods` and to `instanceMethods`
-/// (`instructions/ClassDirective.cpp:520`-`:524`). Every other member
-/// directive claims its keys on the side its `CLASS` keyword names.
-///
-/// Empty for a directive that is not a member.
 fn member_dictionary_keys(kind: &DirectiveKind) -> Vec<(Vec<u8>, bool)> {
     match kind {
         DirectiveKind::Method(method) => method_dictionary_keys(method)
@@ -2130,22 +1018,6 @@ fn member_dictionary_keys(kind: &DirectiveKind) -> Vec<(Vec<u8>, bool)> {
 
 /// Which directives each `::CLASS` in `program` owns, keyed by that
 /// `::CLASS`'s own index and in source order within a class.
-///
-/// R9's positional attachment: a `::METHOD`, `::ATTRIBUTE` or `::CONSTANT`
-/// belongs to the most recently declared `::CLASS` above it, which is
-/// `LanguageParser::addMethod` filing against `activeClass`
-/// (`parser/DirectiveParser.cpp:610`-`:623`). **No other directive resets
-/// that field** -- `parser/LanguageParser.cpp:1112` clears it before the
-/// directive walk starts and `parser/DirectiveParser.cpp:355` is the only
-/// assignment after that -- so a `::ROUTINE` standing between a `::CLASS`
-/// and a `::METHOD` does not detach the method. Measured, oracle rc 0:
-/// `::class a` / `::routine r` / `::method m class` answers `.a~m` with the
-/// method's own result.
-///
-/// A member above every `::CLASS` belongs to no class and appears in no
-/// entry. It installs on the oracle -- measured, a lone `::METHOD` under
-/// `say 'main ran'` is rc 0 printing that line -- and has nothing here to
-/// attach to, which is the R9 boundary rather than a gap.
 fn class_members(program: &Program) -> HashMap<usize, Vec<usize>> {
     let mut members: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut current: Option<usize> = None;
@@ -2172,39 +1044,11 @@ fn class_members(program: &Program) -> HashMap<usize, Vec<usize>> {
 
 /// The [`rexx_core::RootSet::add_global`] key one `::CONSTANT`'s value is
 /// held under.
-///
-/// Keyed by the directive for the reason [`Interp::constant_values`] is, and
-/// spelled so that two programs' directives at the same index cannot collide.
 fn constant_root_key(ProgramId(program): ProgramId, directive: usize) -> String {
     format!("constant:{program}:{directive}")
 }
 
 /// What an `::ANNOTATE` names, as the first install walk can express it.
-///
-/// **Keyed by the directive and not by the object the target becomes**,
-/// because that walk runs before any of those objects exists: a `::CLASS`
-/// has no class object until the install pass creates one, and a method
-/// dictionary entry has no [`rexx_classes::MethodId`] until the same pass
-/// mints it. [`Interp::install_directives`] converts every one of these into
-/// an [`Annotated`] key as soon as the object is there, which is the split
-/// the oracle has too -- `ClassDirective` carries a class's annotations
-/// through translation and `install` hands them to the class object it just
-/// built (`instructions/ClassDirective.cpp:243`).
-/// **Ordered, and that is a correctness requirement rather than tidiness.**
-/// [`Interp::install_directives`] walks the staging map to allocate one
-/// annotation table per target, and an object's handle is what
-/// `Object~identityHash` answers, so an unordered walk makes that answer
-/// depend on a hash seed. Measured before the map was ordered: one program
-/// printing four annotation tables' `~identityHash`, twelve runs of the
-/// release binary, ten distinct outputs -- where the same program with the
-/// `::ANNOTATE` directives removed was identical on all twelve.
-/// `run/tests.rs`'s
-/// `two_runs_in_one_process_allocate_the_annotation_tables_alike` is what
-/// holds it, and it fails against a `HashMap` here because a second map in
-/// one thread is seeded differently from the first.
-///
-/// The order the derive gives is the walk's own: the package, then the
-/// directives by index, then the member entries by directive and name.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 enum AnnotatedSite {
     /// `::ANNOTATE PACKAGE`, which names the running package and no
@@ -2214,12 +1058,6 @@ enum AnnotatedSite {
     Directive(usize),
     /// One dictionary entry of a method-shaped directive: the directive that
     /// declares it and the name it is filed under.
-    ///
-    /// The name is what tells the two halves of an accessor pair apart, and
-    /// they do part: measured, oracle rc 0, `::ATTRIBUTE a` under
-    /// `::ANNOTATE METHOD A` leaves `~method("A")~annotation("X")` the
-    /// annotation's value and `~method("A=")~annotation("X")` `The NIL
-    /// object`, where `::ANNOTATE ATTRIBUTE a` answers it on both.
     Member(usize, Box<[u8]>),
 }
 
@@ -2233,13 +1071,6 @@ struct MissingTarget<'a> {
 
 /// Whether a member directive's methods are the *attribute* methods
 /// `::ANNOTATE ATTRIBUTE` will accept -- `MethodClass::isAttribute()`.
-///
-/// `::ATTRIBUTE` sets it on every method it creates, and `::METHOD name
-/// ATTRIBUTE` reaches the same two constructors
-/// (`parser/DirectiveParser.cpp:895`, `:896`), so the two spellings are one
-/// test. A `GET` or `SET` half written as Rexx keeps it: `createMethod`'s
-/// last argument is the flag and `attributeDirective` passes `true`
-/// (`:1775`, and `_method->setAttribute(isAttribute)` at `:2388`).
 fn is_attribute_method(kind: &DirectiveKind) -> bool {
     match kind {
         DirectiveKind::Attribute(_) => true,
@@ -2251,27 +1082,6 @@ fn is_attribute_method(kind: &DirectiveKind) -> bool {
 /// `annotateDirective`'s target resolution (`parser/DirectiveParser.cpp:1940`):
 /// which directives an `::ANNOTATE` annotates, or the target it could not
 /// find.
-///
-/// **Against the accumulated package, which is the state this walk has
-/// reached and not the whole file.** Measured, oracle rc 157 with 99.945:
-/// `::ANNOTATE CLASS K` above `::CLASS K`, and `::ANNOTATE METHOD m` under
-/// `::CLASS B` when `m` was declared under `::CLASS A`.
-///
-/// **A member is looked up in the active class's own two dictionaries,
-/// instance side first** -- `ClassDirective::findMethod`
-/// (`instructions/ClassDirective.cpp:455`), reached through
-/// `LanguageParser::findMethod` (`parser/DirectiveParser.cpp:540`), which
-/// reads the file's unattached table instead while no `::CLASS` has been
-/// seen. Measured, oracle rc 0: `::METHOD m CLASS` and `::METHOD m` in one
-/// class with `::ANNOTATE METHOD m` under them annotates the instance one,
-/// and a lone `::METHOD m` with no `::CLASS` at all is annotated and read
-/// back through `.methods~m`.
-///
-/// `ATTRIBUTE` is the one target that can name two: `processAttributeAnnotations`
-/// (`:2131`) takes the getter and the setter together, refuses a name that is
-/// neither's, and looks at the class side only when the instance side holds
-/// neither. `CONSTANT` is the one target that tests the claimant's kind
-/// without pairing anything (`:2081`, `isConstant()`).
 fn annotation_target<'a>(
     program: &Program,
     target: &'a AnnotationTarget,
@@ -2350,38 +1160,6 @@ fn annotation_target<'a>(
 /// Why a resolved method's directive cannot be entered, or `None` when it
 /// can -- the gate `Interp::enter_method_body` (`dispatch.rs`) takes before
 /// it pushes anything.
-///
-/// **Only a directive whose method is a body reaches here**, so the question
-/// is narrower than "which directive forms run": `Interp::invocable` answers
-/// with [`InstalledMethodBody`] only where [`Interp::generated_methods`] has
-/// no row for the resolved id, so a generated accessor and an `ABSTRACT`
-/// declaration never arrive.
-///
-/// **Exhaustive over the directive kinds that can arrive**, which are the
-/// ones `Interp::install_method` and `Interp::install_attribute` mint body
-/// ids for. `Interp::install_constant` mints ids too and none of them reaches
-/// here, because it mints only generated ones. Anything else arriving here is
-/// an internal inconsistency and gets a refusal of its own rather than a
-/// panic, on the reasoning [`Loud::instruction`]'s doc gives.
-///
-/// **`DELEGATE` never reaches this function**: it is a
-/// [`GeneratedKind::Delegate`] and so is answered out of
-/// [`Interp::generated_methods`], like every other method a directive
-/// implements itself. **`EXTERNAL` never reaches it either.** A form bound to a
-/// `LIBRARY REXX` entry point does reach a send, and `Interp::invocable`
-/// answers it out of [`Interp::native_externals`] before it looks in
-/// [`Interp::method_bodies`], so no `InstalledMethodBody` is ever minted for
-/// it. The forms naming another library stop at [`directive_gap`] while the
-/// package is installing. Either way the third arm below covers them rather
-/// than an arm of its own.
-///
-/// **An access scope is not a reason to refuse a body**, and that is the one
-/// row this table lost. `PRIVATE` is decided at the send, by
-/// `Interp::check_private`, which reads the caller's own receiver: it refuses
-/// the outside caller the oracle refuses and answers the `self~m` the oracle
-/// answers. A gap here could only do the first.
-///
-/// [`Loud::instruction`]: Loud::instruction
 fn method_body_gap(kind: &DirectiveKind) -> Option<Loud> {
     match kind {
         DirectiveKind::Method(method) => {
@@ -2407,11 +1185,6 @@ fn method_body_gap(kind: &DirectiveKind) -> Option<Loud> {
 
 /// The dictionary key of a generated setter: the getter's key with `=`
 /// appended.
-///
-/// `attributeDirective` and `methodDirective` both build it as
-/// `internalname->concatWithCstring("=")` over the already-upcased name
-/// (`parser/DirectiveParser.cpp:853`, `:1665`), so the argument is the
-/// upcased spelling and not the directive's own.
 pub(crate) fn accessor_setter_name(upper: &[u8]) -> Vec<u8> {
     let mut setter = upper.to_vec();
     setter.push(b'=');
@@ -2420,20 +1193,6 @@ pub(crate) fn accessor_setter_name(upper: &[u8]) -> Vec<u8> {
 
 /// The variable a generated accessor reads and writes: the directive's name
 /// **as written**, which is not the accessor's own dictionary key.
-///
-/// The two differ, and the difference is observable on both spellings.
-/// `getRetriever(name)` is handed the as-written `name` where `addMethod`
-/// receives the upcased `internalname`
-/// (`parser/DirectiveParser.cpp:1656`, `:1716`). Measured, oracle rc 0:
-/// `::attribute "aB" class` with `.K~aB = 5` leaves a class method's
-/// `expose ab` reading the derived name `AB`, so the pool entry is not
-/// keyed on `AB`; and `::attribute "a." class` answers `a.` for an
-/// uninitialised read, which is the as-written spelling of the variable
-/// rather than a stem name any scanner produced.
-///
-/// `None` for a directive kind that generates no accessor, which is an
-/// internal inconsistency where a [`GeneratedKind::Getter`] or
-/// [`GeneratedKind::Setter`] reached it.
 fn accessor_variable(kind: &DirectiveKind) -> Option<&[u8]> {
     match kind {
         DirectiveKind::Attribute(attribute) => Some(&attribute.name),
@@ -2444,15 +1203,6 @@ fn accessor_variable(kind: &DirectiveKind) -> Option<&[u8]> {
 
 /// The variable a `DELEGATE` method reads to find its target: the directive's
 /// `DELEGATE` symbol, **not** the directive's own name.
-///
-/// A symbol rather than a byte slice because that is what the parser kept,
-/// and the spelling behind it is already upcased -- which is the oracle's too,
-/// measured: `::method length delegate Dd` over an `init` exposing `dD`
-/// answers `6` for a six-byte string, so the two spellings name one variable.
-/// Contrast [`accessor_variable`], whose name is the as-written one.
-///
-/// `None` for a directive kind that declares no delegate, which is an
-/// internal inconsistency where a [`GeneratedKind::Delegate`] reached it.
 fn delegate_variable(kind: &DirectiveKind) -> Option<SymbolId> {
     match kind {
         DirectiveKind::Attribute(attribute) => attribute.delegate,
@@ -2466,47 +1216,6 @@ fn delegate_variable(kind: &DirectiveKind) -> Option<SymbolId> {
 /// (`docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
 /// split") -- `None` for a variant this crate implements (see
 /// [`owned_message`]'s doc for why that is `None` and not a `"4a"` string).
-///
-/// **A third copy of `tests/owners.rs`'s `INSTRUCTION_TAGS`, separate by
-/// construction**: production code cannot depend on anything under
-/// `tests/`, so the two cannot be merged the way `coverage.rs` and
-/// `loud.rs` were. Separate, but not unchecked, and the difference is worth
-/// stating because it decides how much care an edit here needs: a variant
-/// that moves in scope or changes owner must be edited in both places, and
-/// `loud.rs`'s `every_out_of_scope_variant_fails_loudly` fails if it is
-/// not. That test requires each witness's emitted message to end with the
-/// owner `owners.rs` records for that witness's tag, read out of the table
-/// rather than restated in `loud.rs`, so this match is compared against
-/// `owners.rs` itself. `owners.rs`'s own module doc names this function as
-/// the fifth of its five pinned items.
-///
-/// **The comparison reaches the `Some` arms only, and almost nothing covers
-/// the rest.** `Loud::instruction` is not called for a variant this crate
-/// executes, so a phase written onto one is data no path reads: measured,
-/// giving `InstructionKind::Say` an owner leaves the whole workspace suite
-/// green. Nothing catches that and nothing needs to, the value being
-/// unreachable -- but the reason is unreachability, not some other test
-/// standing guard, and an edit here should not expect one to.
-///
-/// The exception is `Do`/`Loop`, because `run_loop_with_header` reaches this
-/// function for them through the two edge cases described below, where the
-/// instruction is implemented and only the specific reason is not. Measured:
-/// giving that arm an owner turns `run/tests.rs`'s `do_with_takes_the_loud_path`,
-/// `do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on`,
-/// `do_over_a_stem_target_takes_the_loud_path` and
-/// `do_over_a_parenthesised_stem_target_is_also_caught` red, all four
-/// asserting the exact unsuffixed message.
-///
-/// **Arm-grained for `InstructionKind::Address`, matching `owners.rs`'s own
-/// `split` section row for row.** It splits on whether the instruction
-/// carries a command or a `WITH` redirection, which its own arm below writes
-/// out. `owners.rs` still splits `InstructionKind::Call` four ways and this
-/// function no longer needs to, because every arm answers `None`; that table
-/// keeps the grain to say which resolution rule each arm was checked under.
-///
-/// Exhaustive with no `_` arm, matching `Loud::instruction`'s own match: a
-/// new `InstructionKind` variant is a compile error here, not a silent
-/// omission from the loud message's owner.
 fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
     match kind {
         InstructionKind::Assignment { .. }
@@ -2581,11 +1290,6 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // configures where a command's streams go; both need the command
         // dispatch `InstructionKind::Command` needs, so they carry that same
         // owner rather than one of their own (D18).
-        //
-        // The condition is a `bool` and not a pattern because these are struct
-        // fields rather than enum arms; `owners.rs`'s `split` section for
-        // `Address` matches on the identical expression, which is what keeps
-        // the two tables comparable row for row.
         InstructionKind::Address(address) => {
             if address.command.is_some() || address.io.is_some() {
                 Some("Phase 7")
@@ -2651,20 +1355,6 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         // `>name`/`<name` answers a `VariableReference`, which `eval.rs`'s
         // own arm builds and `run.rs`'s `Interp::variable_reference` binds to
         // the variable.
-        //
-        // **`ExprKind::Message` is `None` too**, for the reason its
-        // `InstructionKind` twin above is: `dispatch.rs` resolves and invokes
-        // the send, and what it has no code for is loud.
-        //
-        // **`ExprKind::List` is `None` too**: `eval.rs`'s `eval_list` builds
-        // the array every position of the list is a slot of, and every
-        // position is an ordinary expression with nothing later-phase hiding
-        // inside it.
-        //
-        // **The two namespace forms are `None` too.** `ns:name(...)` resolves
-        // against the namespace package's public routines and `ns:Name`
-        // against its public classes, and a miss on either is the oracle's own
-        // 43.902/98.988 rather than a refusal.
         ExprKind::Call { .. }
         | ExprKind::VariableReference(_)
         | ExprKind::Message { .. }
@@ -2676,14 +1366,6 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
 
 /// The code a step is executing, all of it borrowed from the caller's local
 /// `Rc` and none of it from `self`.
-///
-/// This is the design's `fn eval(&mut self, body: &CodeBody, expr: &Expr)`
-/// with the two things a body needs beyond its instructions folded in: the
-/// symbol table a `SymbolId` is meaningless without, and the slot each symbol
-/// resolved to. Bundling them keeps the lifetime argument in one place --
-/// every field of a `Code<'a>` outlives `&mut self` because `'a` is a local's,
-/// so a `&[u8]` name pulled out of `symbols` survives a `&mut self` call that
-/// a `&self.…` name would not.
 struct Code<'a> {
     body: &'a CodeBody,
     symbols: &'a SymbolTable,
@@ -2696,57 +1378,12 @@ struct Code<'a> {
     /// (`Plan::indents`), the line each of its clauses sits on
     /// (`Plan::lines`), and how each of its compound names splits
     /// (`Plan::compounds`).
-    ///
-    /// A field here for the same reason `slots` is one: an `INTERPRET`
-    /// fragment runs its own instruction list while the activation's plan
-    /// still describes the enclosing body, so neither table can be read back
-    /// off the activation without being the wrong body's.
-    ///
-    /// **`None` means there is no upfront pass to consult**, and each reader
-    /// falls back to computing its own answer -- what `printed_indent`,
-    /// `Interp::clause_line_at` and `Code::compound` each did before their
-    /// own table existed. An `INTERPRET`
-    /// fragment is that case, and it is `None` rather than the fragment's own
-    /// local plan on purpose: `Interp::fragment_plan` does build one, but its
-    /// slot numbers are local to the fragment and only its returned
-    /// translation means anything in the enclosing frame, so handing the local
-    /// plan over here would put a table whose slots are local beside a `slots`
-    /// map whose slots are not.
-    ///
-    /// **`symbols` and this field come from the same body**, which is what
-    /// makes indexing `Plan::compounds` by an id out of `symbols` mean
-    /// anything at all -- `SymbolId::index`'s own doc comment has what
-    /// happens when an id and a table are mismatched, and the quiet case is
-    /// the one to design against.
     plan: Option<&'a Plan>,
 }
 
 impl<'a> Code<'a> {
     /// The slot this body's upfront pass bound `id` to, or `None` when it
     /// bound it none.
-    ///
-    /// **An indexed load where this was a `HashMap` lookup.** `SymbolId` is a
-    /// dense, table-local, zero-based index (`SymbolId::index()`), and
-    /// `Plan::by_symbol` is sized by the table it belongs to, so the id the
-    /// AST already carries addresses the answer directly. What that removes is
-    /// not the resolution -- the plan did that once, upfront -- but the
-    /// `SipHash` of a `u32` that reading the answer used to cost, on a path
-    /// every compiled read and write goes through.
-    ///
-    /// **`None` is safe and a wrong `Some` is not**, which is what the
-    /// tripwire below checks and why it checks in one direction only. A `None`
-    /// falls through to `Interp::slot_of`, which resolves the name and answers
-    /// the same number. A `Some` is used as-is: were it another symbol's slot,
-    /// every read and write of this name would silently address another
-    /// variable, and no program that does not already know the answer could
-    /// notice. `Plan::bind` fills this table and `Plan::names` from one
-    /// `slot_for` call, so the name map is an independent recomputation of the
-    /// same fact rather than a second copy of this one.
-    ///
-    /// The check is one-directional because the reverse does not hold and its
-    /// failing is not a defect: `Plan::note_compound_name` puts a stem and its
-    /// variable tail pieces in `names` without binding their ids here, so a
-    /// name can carry a slot that no symbol's entry does.
     pub(crate) fn slot_for(&self, id: SymbolId) -> Option<usize> {
         let at = self.slots.get(id.index()).copied().flatten();
         debug_assert!(
@@ -2762,10 +1399,6 @@ impl<'a> Code<'a> {
 
     /// How the compound `id` names splits, from the upfront pass when this
     /// body had one, and by splitting the interned spelling when it did not.
-    ///
-    /// The returned borrow is `'a` and not the borrow of `self`, so a caller
-    /// can hold the pieces across the `&mut Interp` calls that read a
-    /// variable piece's value.
     fn compound(&self, id: SymbolId) -> Option<&'a CompoundName> {
         self.plan?.compound(id)
     }
@@ -2774,16 +1407,6 @@ impl<'a> Code<'a> {
     /// included -- the name whose slot holds the stem object a tail is read
     /// out of or written into -- **and that slot, when the entry carries
     /// one**.
-    ///
-    /// The name and the slot come back together rather than from separate
-    /// methods, so that a caller reaching for the name has to say what it
-    /// does about the slot.
-    /// `None` is the answer for a body with no plan, and for the entry
-    /// `Plan::bind` records for a **compound**-shaped name, whose stem half is
-    /// a name of its own that the plan never bound; it means "resolve it the
-    /// ordinary way", which is what every stem accessor did before the slot
-    /// was kept. A stem-shaped name has no stem half distinct from itself, so
-    /// `bind` does record that one.
     fn stem(&self, id: SymbolId) -> (&'a [u8], Option<usize>) {
         match self.compound(id) {
             Some(entry) => (&entry.stem, entry.stem_at),
@@ -2794,12 +1417,6 @@ impl<'a> Code<'a> {
 
 /// A program's main body as a `Code`, carrying the plan the upfront pass
 /// builds for it -- which is what `run.rs` hands every step.
-///
-/// Here rather than in each test module because a hand-written `Code` with
-/// `plan: None` takes `Code::compound`'s and `printed_indent`'s fallbacks
-/// instead of the tables, and so exercises the path only an `INTERPRET`
-/// fragment reaches. A test about what a compound resolves to wants the
-/// production path unless it says otherwise.
 #[cfg(test)]
 fn planned_code<'a>(program: &'a Program, plan: &'a Plan) -> Code<'a> {
     Code {
@@ -2811,19 +1428,6 @@ fn planned_code<'a>(program: &'a Program, plan: &'a Plan) -> Code<'a> {
 }
 
 /// Whether a variable read found a value or derived one from the name.
-///
-/// D16 requires the read path to answer this from the start rather than gain
-/// it later: `SIGNAL ON NOVALUE` changes what an uninitialised read
-/// does, and retrofitting a raise into the hottest path is what naming it here
-/// prevents. `Interp::novalue_check`
-/// (`run.rs`) is the reader D16 was holding it for,
-/// and the retrofit that would otherwise have been needed never happened.
-///
-/// **Both producers matter and they are not the same code.** `Interp::read`
-/// answers it for a simple variable and `Interp::stem_get` for a compound;
-/// `Interp::read_stem`, the bare-stem read, deliberately answers nothing at
-/// all, because measured, `say zstem.` under `SIGNAL ON NOVALUE` does not
-/// trap where `say zstem.1` does.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Novalue {
     Set,
@@ -2832,24 +1436,11 @@ enum Novalue {
 
 /// The condition a running handler was entered for, kept so `RAISE
 /// PROPAGATE` can re-raise it.
-///
-/// **The echo stack travels with it**, which is the part that is measured
-/// rather than obvious. A trapped condition clears `failure_site` and
-/// `failure_sites` (inherited item I11), so by the time a handler runs there
-/// is nothing left to echo -- yet the oracle's report for a `RAISE
-/// PROPAGATE` from inside that handler names the *original* raising clause,
-/// not the `raise propagate` clause:
-///
 /// ```text
 ///      8 *-*   say 1/0          <- line 8 raised; line 12 propagated
 ///      3 *-* call fun
 /// Error 42:  Arithmetic overflow/underflow.
 /// ```
-///
-/// So the two fields are saved here at the moment they are cleared and put
-/// back if `PROPAGATE` ever asks. Putting `site` back full is also what
-/// keeps the `raise propagate` clause itself out of the report, since
-/// `record_failure_at` is first-wins.
 struct ActiveCondition {
     raised: Raised,
     site: Option<FailureSite>,
@@ -2858,13 +1449,6 @@ struct ActiveCondition {
 
 /// A condition waiting for the current clause to finish before its `CALL ON`
 /// handler runs.
-///
-/// Carries only what the handler needs that cannot be looked up again at
-/// delivery time: the condition's name is the trap-table key, and `rc` is the
-/// `RAISE ERROR n`/`RAISE FAILURE n` argument, held as its rendered text
-/// rather than as an `ObjRef` because the raising clause's temps frame is
-/// popped long before the handler runs and a handle into it would be
-/// unrooted. `set_sigl` already takes the same approach for the same reason.
 struct PendingTrap {
     condition: Box<[u8]>,
     rc: Option<Vec<u8>>,
@@ -2874,63 +1458,12 @@ struct PendingTrap {
     description: Option<Vec<u8>>,
     /// The activation this may be delivered to: the raising activation's
     /// **caller**, which is the one whose trap table matched.
-    ///
-    /// **A depth first, then an identity, and both changes came from
-    /// measurement.** The original had no such field at all and delivered at
-    /// the next clause boundary reached by *any* activation, which is a
-    /// different thing the moment the raising clause goes on to call
-    /// something else: `say 'a' one(1) two(2)`, with `one` raising, ran the
-    /// handler inside `two` -- `SIGL` 8, the `two:` label's own line, against
-    /// the oracle's 3 -- and printed it before the `SAY` rather than after.
-    /// A depth closed that and left a second hole, because a depth is only
-    /// unique while its activation is live: `call aa` then `call cc`, with
-    /// `aa` raising, ran the handler inside `cc`, and a pending condition
-    /// whose activation is unwound by an error the caller traps was delivered
-    /// into the next routine where the oracle drops it. [`ActivationId`] is
-    /// unique across a pop, which is what both holes needed.
-    ///
-    /// Pinned by `a_call_trap_waits_for_the_raising_clause_to_finish`,
-    /// `a_pending_trap_is_delivered_when_the_trapping_clause_is_a_return` and
-    /// `a_pending_trap_whose_activation_is_gone_is_never_delivered`.
     activation: ActivationId,
     /// Whether this was queued by a **handler** running at a clause boundary
     /// rather than by that clause's own work.
-    ///
-    /// **It exempts exactly one thing: `Interp::in_clause`'s own tripwire.**
-    /// That assertion reads a condition still waiting when a later clause
-    /// begins as a construct having run an instruction without ending its
-    /// header clause first, and for a trap the clause itself queued that is
-    /// what it means. A trap queued *during* a delivery is not: the boundary
-    /// running that delivery drains only the entries that were queued when it
-    /// began, so this trap lands beyond the prefix that boundary owes, and the
-    /// oracle defers it to the next boundary too. Measured with no construct
-    /// anywhere in the program --
-    /// `zq = raiser()` on line 3 whose handler itself raises a second trapped
-    /// condition -- the oracle prints `after` and then the second handler's
-    /// `SIGL` 4, and this crate agrees; the assertion fired on it regardless.
-    ///
-    /// Nothing else reads it. Delivery order, the identity check and `SIGL`
-    /// are all unchanged by it.
     queued_during_delivery: bool,
     /// [`Interp::fragment_depth`] as it stood when this was queued: which
     /// `INTERPRET` fragment, if any, was running.
-    ///
-    /// **A condition is delivered only at a boundary reached at the same
-    /// depth**, which is this crate's stand-in for the oracle running a
-    /// fragment in an activation whose condition queue is its own. Both
-    /// directions are measured, on a `CALL ON USER` handler that requeues a
-    /// second trapped condition:
-    ///
-    /// * queued *before* the fragment, `interpret 'do; say ''body''; end'`:
-    ///   the oracle prints `body` and then the second handler, so the
-    ///   fragment's own clauses offer that condition no boundary and the
-    ///   enclosing `INTERPRET` clause's boundary is where it lands;
-    /// * queued *inside* the fragment, `interpret 'zq = raiser(); do; say
-    ///   ''body''; end'`: the oracle prints the second handler and *then*
-    ///   `body`, so a fragment clause's boundary does take it.
-    ///
-    /// One field answers both, where suppressing the boundary itself answers
-    /// only the first and moves the second handler after `body`.
     fragment_depth: usize,
 }
 
@@ -2940,183 +1473,25 @@ struct Interp {
     heap: Heap,
     roots: RootSet,
     /// A buffer lent out for building a compound's tail key, and handed back.
-    ///
-    /// **A tail key is built, read once, and dropped**, once per compound
-    /// reference. Measured with `heaptrack` on `samples/rexxcps.rex`, whose
-    /// inner loop references `acompound.key1.loop`, lending this buffer
-    /// removed 1,939,997 allocations of 8 bytes and 1,119,998 of 16 -- a key
-    /// built by pushing into an empty `Vec` takes both, growing through the
-    /// first capacity into the second.
-    ///
-    /// **Lent and returned rather than borrowed in place**, because every
-    /// caller uses the key while calling back into `&mut self` -- to read a
-    /// stem, to set one -- which a live borrow of a field would forbid.
-    /// [`Interp::take_key_buffer`] moves it out and
-    /// [`Interp::give_key_buffer`] moves it back.
-    ///
-    /// **Losing it is safe and costs only the reuse.** A caller that returns
-    /// early between the two leaves this empty, and the next taker allocates a
-    /// fresh one; nothing observes the difference. That property is what makes
-    /// this sound under nesting too, which is why no reentrancy guard is
-    /// needed: an inner build gets its own buffer rather than corrupting an
-    /// outer one.
     key_buffer: Vec<u8>,
     /// A buffer lent out for a builtin call's evaluated argument values.
-    ///
-    /// **Every builtin call allocated one of these and freed it on the way
-    /// out.** Measured with `heaptrack` on `bench-programs/strings.rex`, whose
-    /// loop makes four builtin calls, that was eight of the ten allocations
-    /// the program made per iteration -- this buffer and a second one, since
-    /// the arguments were built as `Argument`s first and copied into values to
-    /// hand over. The builtin path builds the values directly now, so this is
-    /// the only one left.
-    ///
-    /// **A stack, and the only one**: every call's arguments, innermost run on
-    /// top, whether the call was compiled to `Op::PushArg` or evaluates its
-    /// arguments through `invoke_builtin_call`'s own loop.
-    ///
-    /// **One field and not two for the nesting above, and not because a
-    /// second one would cost anything.** Measured against the tree as
-    /// committed: a second `Vec<Option<ObjRef>>` declared here and never read
-    /// moves no program in `bench-programs/` by more than 0.004% of retired
-    /// instructions, and neither does 1536 bytes of unread padding, which
-    /// carries this struct's hottest fields -- `running`, `clause_state`,
-    /// `text_scratch`, `trace_cache` -- that far along. `Interp`'s width is
-    /// not a lever. The 5.97% that `varlookup` retires when the compiled
-    /// call path is written out is the driver's arm bodies, and `ir::drive`
-    /// records it at the arms it belongs to.
-    ///
-    /// **Lent and returned rather than borrowed in place**, for
-    /// [`Interp::key_buffer`]'s reason: a call needs `&mut self` and its own
-    /// arguments at once, which a live borrow of a field would forbid. What
-    /// is lent is the whole stack and what comes back has the caller's own
-    /// run removed, so a callee that pushes runs of its own starts from an
-    /// empty one.
     value_buffer: Vec<Option<ObjRef>>,
     /// Buffers lent out for a `PARSE` instruction's source strings, and
     /// handed back when the template walk is done with them.
-    ///
-    /// **A pool rather than one slot, because more than one is live at a
-    /// time**: the comma fence builds the next template's string before it
-    /// gives the finished cursor's back, and a trigger operand that calls a
-    /// routine can reach a `PARSE` of its own while this one's string is
-    /// still being walked. A single lent slot would be empty for the inner
-    /// one, which is safe but allocates. Every buffer is copied out of a
-    /// value, walked, and dropped, which is [`Interp::key_buffer`]'s waste in
-    /// a place that repeats it per clause.
-    ///
-    /// Losing one is safe and costs only the reuse, the same as the single
-    /// slots above: a template that leaves through `?` drops its buffers and
-    /// the next `PARSE` allocates.
-    ///
-    /// **Both bounds below exist so that the pool cannot become the program's
-    /// footprint.** A buffer wider than the byte bound is dropped rather than
-    /// parked, so parsing one enormous string does not leave that much memory
-    /// held for the rest of the run, and the count bounds how many are kept
-    /// at all.
     parse_buffers: Vec<Vec<u8>>,
     /// Where an inline string's bytes, or a tagged integer's rendering, are
     /// put so that [`Interp::to_text`] can hand back a borrow of them.
-    ///
-    /// **A `Cow::Owned` here would undo the encoding it serves.** An inline
-    /// string is the commonest value there is, and `to_text` is how most of
-    /// them are read; allocating a `Vec` per read would give back everything
-    /// carrying the bytes in the handle saves.
-    ///
-    /// **One slot is enough because `to_text` takes `&mut self`.** The borrow
-    /// it returns holds the interpreter exclusively, so no second call can
-    /// run to overwrite this while the first result is live -- the compiler
-    /// enforces the invariant rather than a convention doing it. A reader
-    /// that wants two values' bytes at once goes through `render`, which
-    /// copies into its own `Rendered` and never touches this.
     text_scratch: [u8; crate::value::TEXT_SCRATCH],
     /// The parse cache a handle-inline string has nowhere to keep. See
     /// `value::TextNumbers`, which owns the rule and the measurement.
     text_numbers: crate::value::TextNumbers,
     /// A buffer lent out for building a builtin's result, and handed back.
-    ///
-    /// **The same lending as [`Interp::key_buffer`], for a waste of the same
-    /// shape.** A builtin builds its answer into an owned `Vec` and hands it
-    /// to `text_owned`, and `Bytes::from_vec` copies anything of
-    /// `INLINE_BYTES` or less into the object's own inline buffer and drops
-    /// the `Vec`. So every short result allocated, filled, copied, and freed.
-    /// Measured with `heaptrack` on `samples/rexxcps.rex`, whose inner loop
-    /// asks for `substr` and `word`: the 1, 2, 3 and 7-byte widths together
-    /// were about a quarter of every allocation the interpreter made.
-    ///
-    /// Losing it is safe and costs only the reuse, exactly as for the key
-    /// buffer: a builtin that returns early through `?` between the take and
-    /// the give leaves this empty and the next taker allocates.
-    ///
-    /// **A `Cell` where the key buffer is a plain field**, and that is not a
-    /// style choice. A builtin reads its argument's bytes out of the heap
-    /// first, which borrows the `Interp`, and then wants the buffer -- so a
-    /// take that needed `&mut self` would be refused while that borrow is
-    /// live. `Cell::take` needs only `&self` and leaves the default behind,
-    /// which is exactly the lending this wants.
     result_buffer: std::cell::Cell<Vec<u8>>,
     /// The activation running right now, held in a field of its own rather
     /// than at the top of [`Interp::suspended`].
-    ///
-    /// **The split is a measurement.** Every hot read of the running
-    /// activation -- `activation().frame` for a variable, `activation()
-    /// .settings` for an arithmetic operator, `trace_mode()` for a gate --
-    /// went through `Vec::last`, which is a load of the pointer, a load of
-    /// the length, a multiply by `size_of::<Activation>()`, an add and an
-    /// empty check. None of that can be hoisted out of a dispatch loop,
-    /// because every op between two reads takes `&mut self`; so the IR
-    /// driver re-derived the same address once per op. A field is an offset
-    /// from the interpreter, and the same read is one load.
-    ///
-    /// Measured on `perf stat -e instructions:u` against `bench-programs/`,
-    /// which is deterministic there to the digit, with the stdout, stderr
-    /// and exit status of every program identical either way: `varlookup.rex`
-    /// -6.085%, `compound.rex` -4.604%, `emptyloop.rex` -3.525%,
-    /// `alloc4c.rex` -3.437%, a fixed-work `rexxcps` -2.772%,
-    /// `strings.rex` -2.289%, `arith.rex` -1.593%. It is not confined to the
-    /// IR driver, and that is why it reaches a program with no promoted
-    /// clause in it: `read_at`, `loop_advance` and `bind_control` each read
-    /// the running activation too.
-    ///
-    /// `None` is an interpreter with nothing running, which is what
-    /// [`Interp::new`] answers and what a body that has returned leaves
-    /// behind.
-    ///
-    /// **Boxed rather than held inline, and that is a measurement of its
-    /// own.** Tried inline: the instruction saving above collapsed to -1.45%
-    /// on `compound.rex` and -1.07% on `strings.rex`. The pointer also makes
-    /// suspending an activation a pointer move rather than a copy of the
-    /// whole of it.
-    ///
-    /// **Not for the width.** Displacing this struct's fields costs nothing,
-    /// and [`Interp::value_buffer`] carries that measurement; a `cycles:u`
-    /// comparison between two builds cannot settle a layout question here at
-    /// all, because an inert field that no program reads moves
-    /// `bench-programs/` by -4.71% to +5.55% on that counter -- a wider
-    /// spread than any layout change measured against it.
     running: Option<Box<Activation>>,
     /// The `TRACE` setting of whatever [`Interp::running`] holds, kept beside
     /// it rather than read through it.
-    ///
-    /// **The same move the field above is, for the value that field is asked
-    /// for most.** `Interp::trace_mode` is on the path of every clause and of
-    /// every expression node that can echo, and reaching the setting through
-    /// the box above costs an `Option` test and a pointer chase per call.
-    /// Measured against the tree as committed, `instructions:u`, stdout,
-    /// stderr and exit status identical either way: `varlookup.rex` -2.722%,
-    /// `emptyloop.rex` -2.555%, `compound.rex` -2.122%, `alloc4c.rex`
-    /// -1.589%, a fixed-work `rexxcps` -1.432%, `strings.rex` -1.410%,
-    /// `arith.rex` -0.422%.
-    ///
-    /// **The invariant is that this equals the running activation's own
-    /// `trace_mode`**, and it is maintained by [`Interp::push_activation`],
-    /// [`Interp::pop_activation`] and [`Interp::set_trace_mode`] -- the only
-    /// code that can change either side of it. `Interp::trace_mode` asserts
-    /// the equality in debug rather than trusting it, because a missed sync
-    /// point is a wrong `TRACE` setting, which every program that does not
-    /// trace runs past in silence.
-    ///
-    /// [`TraceMode::OFF`] with nothing running, matching the `None` above.
     trace_cache: crate::trace::TraceMode,
     /// The activations that entered before [`Interp::running`], oldest
     /// first, so `suspended.last()` is the running activation's own caller.
@@ -3142,29 +1517,12 @@ struct Interp {
     next_activation_id: u64,
     /// The counter `RexxContext~invocation` mints from --
     /// `RexxActivation.cpp:94`'s file-scope `counter`.
-    ///
-    /// **Separate from [`Interp::next_activation_id`] and not derivable from
-    /// it**, because the two are minted at different moments: an
-    /// `ActivationId` is assigned when the activation is built and this is
-    /// assigned when something first *asks*, which is what makes the
-    /// numbers follow the ask order. [`crate::activation::Activation::
-    /// invocation`] has the measurement that tells the two apart.
     next_invocation: u32,
     /// Every program the loader has issued an id for, indexed by that id.
-    ///
-    /// This is what makes a `ProgramId` a durable identity rather than a
-    /// number that outlives its program: a plan cached under
-    /// `BodyKey { program: ProgramId(0), .. }` stays correct because
-    /// `ProgramId(0)`'s program is still here.
     programs: Vec<Rc<Program>>,
     /// What each program's `::OPTIONS` directives left on its package,
     /// entered by `Interp::install_directives` and read by every activation
     /// of that program's code.
-    ///
-    /// **A program with no `::OPTIONS` has no entry**, so the settings a
-    /// program starts from are the language defaults without a lookup
-    /// answering that -- [`Interp::options_of`] is the one reader and its
-    /// `None` is that case.
     package_options: HashMap<ProgramId, PackageOptions>,
     /// **`NameHasher` and not `RandomState`**, for the reason that alias's own
     /// doc gives and with the same shape of key behind it: a `BodyKey` is a
@@ -3177,160 +1535,47 @@ struct Interp {
     plans: NameMap<BodyKey, Rc<Plan>>,
     /// The wall-clock bound `Interp::count_clause_against_deadline` honours,
     /// or `None` for the unbounded run every shipped caller asks for.
-    ///
-    /// On the interpreter rather than threaded through every call, because it
-    /// is a property of the whole run; armed in `execute`
-    /// rather than here: the countdown starts when the program does, not when
-    /// the interpreter is built.
     deadline: Option<crate::clause::Deadline>,
     /// Clauses left before `Interp::countdown_reached` runs.
-    ///
-    /// Clauses left before `Interp::countdown_reached` runs.
-    ///
-    /// Separate from `deadline` and never `None`, so the default path pays one
-    /// decrement and one branch with the question of whether there is a
-    /// deadline at all behind them. Every write leaves it at least 1, which is
-    /// what makes the decrement unable to underflow.
     clause_countdown: u32,
     /// The chunk cache (Phase 4e): D16's discipline applied to a second cache
     /// rather than invented afresh for it, under `plans`' own `BodyKey`
     /// **paired with the trace setting the chunk was compiled under**.
-    ///
-    /// The pair rather than the `BodyKey` alone because the setting is an
-    /// input to compilation (D23), so one body has one plan and can have more
-    /// than one chunk. See `Interp::chunk_for`, in `plan.rs`, for why a
-    /// narrower key is a wrong-output defect.
-    ///
-    /// `NameMap`'s hasher, for the reason `plans` states.
     chunks: NameMap<(BodyKey, ChunkTrace), Rc<crate::ir::Chunk>>,
     /// How many times `chunk_for` has refused a body because it does not fit
     /// the index widths the compiled stream commits to (`ChunkTooLarge`) --
     /// never because a body contains a construct the compiler does not
     /// know, which does not exist (D21: every instruction compiles).
-    ///
-    /// One per refusal rather than one per body, because `chunks` holds only
-    /// successes: a refused body is recompiled and refused again on every
-    /// entry. `Interp::chunk_for`'s own doc says what stops this being a
-    /// silent fallback to the tree-walker.
     chunks_refused: usize,
     /// Method bodies a `REPLY` has left owed, oldest first.
-    ///
-    /// **SCHEDULING, and Phase 6 owns the whole of it.** The oracle continues
-    /// such a body on another activity, concurrently with the sender; here it
-    /// is run after the main program has finished, in the order the replies
-    /// were issued. That reproduces the oracle wherever the oracle is
-    /// deterministic and is a different interleaving wherever it is not.
-    ///
-    /// **What is measured is that the oracle has no single answer, not any
-    /// particular distribution.** A two-object shape gave five distinct
-    /// stdout orders over 30 runs, reproduced at five across two
-    /// independent sittings, three of the same rows -- which alone
-    /// establishes that such a program cannot be a differential row and
-    /// that no figure here is *the* distribution, which is all the
-    /// exclusion resting on this needs. A separate sitting, of a two class
-    /// methods each replying shape, gave two distinct orders, 18 and 12,
-    /// over its own 30 runs; that program was never preserved, so nothing
-    /// here says why the two readings differ.
-    ///
-    /// **The claim stops there deliberately.** A scheduler that yielded at the
-    /// `REPLY` and returned to the sender would produce some of those orders,
-    /// so "an order no sequential schedule produces" is false of any single
-    /// one of them; what no single schedule produces is all of them.
-    /// See [`Interp::run_deferred_replies`].
-    ///
-    /// **`execute` is the only thing that drains it.** A caller that drives
-    /// `Interp::run` directly -- which is most of this crate's unit tests --
-    /// leaves whatever a `REPLY` queued unrun, so a test about an owed body
-    /// has to go through `run_program`.
     deferred: std::collections::VecDeque<crate::activation::DeferredReply>,
     /// Every `::ROUTINE` a program installs, keyed by the program and then by
     /// the routine's **upcased** name, holding its index in
     /// `Program::directives`.
-    ///
-    /// Upcased on both sides, which is the lookup rule and not a convenience:
-    /// measured, `::routine 'zork'` is reached by `call zork`, `call 'zork'`
-    /// and `call 'ZORK'` alike, and `::routine MiXeD` by `call 'mixed'`.
-    /// `CodeBody::labels` is the opposite -- a quoted target never searches it
-    /// at all -- so the two tables cannot share a key rule.
-    ///
-    /// **Per program, which is what keeps a required file's own routines out
-    /// of the requiring program's reach.** `PackageClass::findRoutine`
-    /// (`classes/PackageClass.cpp:898`) asks `findLocalRoutine` and then
-    /// `findPublicRoutine`; measured, a non-`PUBLIC` `::ROUTINE` in a required
-    /// file is `Could not find routine "PRIVR".` in the requiring one.
-    ///
-    /// Filled by [`Interp::install_directives`] before the main body's first
-    /// clause, matching the oracle, which resolves every directive at
-    /// translation or install time: measured, a `::ROUTINE` naming a library
-    /// it cannot load reports 98.903 with **empty stdout** whether or not the
-    /// program ever calls it.
     routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
     /// The subset of [`routines`] a `::ROUTINE ... PUBLIC` filed -- the
     /// oracle's `publicRoutines`, a second table beside `routines` exactly as
     /// [`package_public_classes`] is beside [`package_classes`].
-    ///
-    /// [`routines`]: Interp::routines
-    /// [`package_classes`]: Interp::package_classes
-    /// [`package_public_classes`]: Interp::package_public_classes
     package_public_routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
     /// The public routines a program's `::REQUIRES` directives imported --
     /// `mergedPublicRoutines`, filled by `PackageClass::mergeRequired`
     /// (`classes/PackageClass.cpp:693`).
-    ///
-    /// **First write wins, and the merge is transitive.** `HashContents::merge`
-    /// leaves an existing entry alone, and a required file's own imports are
-    /// merged in after its own publics -- measured, two required files each
-    /// declaring `::routine which public` answer the first one's, and a
-    /// routine two `::REQUIRES` deep is reachable.
     merged_public_routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
     /// The public classes a program's `::REQUIRES` directives imported --
     /// `mergedPublicClasses`, merged alongside the routines above and read by
     /// `PackageClass::findClass` between the package's own installed classes
     /// and `.local`.
-    ///
-    /// Measured, oracle rc 0: a required file's `::class Array public` makes
-    /// `say .Array` print `The ARRAY class`, so an import shadows
-    /// `.environment`.
     merged_public_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
     /// `.NAME` answers [`Interp::rexx_package_class`] has already found,
     /// keyed by the bare uppercased name.
-    ///
-    /// **Keyed by the name alone, which is only sound for this step.** The two
-    /// steps in front of it in `dot_variable` read the *running* package's
-    /// tables, so their answers depend on who is asking; this one reads
-    /// `library_programs` and the registry, which are the same whoever asks.
-    /// Caching at the top of `dot_variable` instead would answer a routine in
-    /// one package with another package's class.
-    ///
-    /// Measured before it existed: `dot_variable` was 24.6% of `alloc.rex`,
-    /// and 87.7% of that was this step -- a loop over `library_programs`
-    /// hashing each, then a registry lookup, run afresh for a `.array` whose
-    /// answer never changes.
     rexx_class_cache: NameMap<Box<[u8]>, ObjRef>,
     /// The packages a program's `::REQUIRES ... NAMESPACE` directives
     /// registered, under the upcased qualifier -- `PackageClass::addNamespace`
     /// (`classes/PackageClass.cpp:2152`), whose key is `name->upper()`.
-    ///
-    /// **A namespace registration does not replace the ordinary merge**:
-    /// measured, oracle rc 0, `::requires 'lib.cls' namespace w` still makes
-    /// the required file's public class answer `.Widget` and its public
-    /// routine answer a bare call. One file may be registered under several
-    /// qualifiers.
     package_namespaces: HashMap<ProgramId, HashMap<Box<[u8]>, Package>>,
     /// The `Directory` `Package~local` answers, per package, built on first
     /// ask -- `PackageClass::getPackageLocal` (`classes/PackageClass.cpp:2131`
     /// region), which creates it lazily too.
-    ///
-    /// Read by [`Interp::dot_variable`] between the imported public classes
-    /// and `.local`, which is where `PackageClass::findClass`
-    /// (`classes/PackageClass.cpp:1122`) reads `packageLocal`. Measured,
-    /// oracle rc 0: `.context~package~local~zork = 'x'` makes `.zork` answer
-    /// `x` where `.local~zork` alone loses to it.
-    ///
-    /// Keyed by [`crate::plan::Package`] rather than by program, because the
-    /// interpreter's own package has one too and it is the same object on
-    /// every ask -- measured, oracle rc 0, `.Array~package~local` is an empty
-    /// `Directory` and `p~local == p~local` is `1`.
     package_locals: HashMap<Package, ObjRef>,
     /// The object model message dispatch resolves against: `Setup.cpp`'s
     /// native classes, whatever `::CLASS`/`::METHOD`/`::ATTRIBUTE` have
@@ -3338,12 +1583,6 @@ struct Interp {
     /// implements. `rexx-classes`' own
     /// [`rexx_classes::ClassRegistry`] is the one class model here (R9), not
     /// one of two.
-    ///
-    /// **`None` until something needs it**, because building the native set
-    /// is measured at 5.5 ms and a program that neither declares a class nor
-    /// sends a message must not pay it. [`Interp::classes`] and
-    /// [`Interp::object_model`] (`dispatch.rs`) are the accessors that force
-    /// it.
     object_model: Option<dispatch::ObjectModel>,
     /// `.environment`, `.local` and what `.context`/`.methods` are built from
     /// (D33). `None` until a `.NAME` is resolved, for the reason
@@ -3351,160 +1590,46 @@ struct Interp {
     environment: Option<environment::EnvironmentModel>,
     /// The arena object holding each class object's own variable pools, by
     /// class identity.
-    ///
-    /// **A class object needs somewhere to keep object variables and has no
-    /// `Body` of its own.** `RexxClass` is an ordinary object in the C++ and
-    /// carries `objectVariables` like any other, which is why `::method m
-    /// class` can `EXPOSE`; here a class identity comes out of
-    /// [`rexx_core::CLASS_SLOT_BASE`] and names no arena slot, so the pools go
-    /// in an arena object created on first use and reached through this map.
-    /// Everything downstream then sees one shape -- a
-    /// [`rexx_core::Body::Instance`] -- whichever kind of receiver a method
-    /// was sent to.
-    ///
-    /// **Rooted through [`rexx_core::RootSet::add_global`]**, because a class
-    /// is never collected in this phase and neither, therefore, is what it
-    /// holds. An instance's pools need no such root: they are in the
-    /// instance's own body and the collector reaches them by tracing it.
     class_variables: HashMap<ObjRef, ObjRef>,
     /// The classes each program's own `::CLASS` directives installed, keyed by
     /// the uppercased name -- `PackageClass`'s installed-class table, which
     /// `.NAME` resolution consults ahead of `.local` and `.environment`.
-    ///
-    /// Per program rather than global, because that is what makes the first
-    /// step of the order mean anything: two packages may each declare a class
-    /// of one name.
     package_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
     /// The subset of [`package_classes`] a `::CLASS ... PUBLIC` directive or
     /// `~addPublicClass` filed -- the oracle's `installedPublicClasses`,
     /// which is a second table beside `installedClasses` and not a flag on
     /// the entries of one (`classes/PackageClass.cpp:1406`-`:1419`).
     /// `~publicClasses` is what reads it.
-    ///
-    /// [`package_classes`]: Interp::package_classes
     package_public_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
     /// Which program's `::CLASS` directive created a class -- the other
     /// direction of [`package_classes`], which `~package` reads.
-    ///
-    /// A class absent here came from `rexx_classes::native_classes` and
-    /// belongs to the `REXX` package; `Interp::record_package_class` fills both
-    /// tables, so a class a directive installed cannot be in one and not the
-    /// other. A class built by `~subclass` or `~mixinClass` is in this table
-    /// alone, under [`crate::plan::ClassPackage::Null`], because no directive
-    /// installed it into any package.
-    ///
-    /// [`package_classes`]: Interp::package_classes
     class_packages: HashMap<ObjRef, ClassPackage>,
     /// The one empty argument list every call that has none shares.
-    ///
-    /// **`Rc<[T]>::from(&[])` allocates a header even for a zero-length
-    /// slice**, so building one per call would put a `malloc`/`free` pair on
-    /// every argument-less send. Measured, `instructions:u` on
-    /// `bench-programs/dispatch.rex` -- one no-argument message send per
-    /// iteration -- +3.481% against BASE with the allocation and +0.093%
-    /// with this.
     empty_arguments: Rc<[Option<ObjRef>]>,
     /// The package objects `~package` answers, keyed by the package itself
     /// -- see [`crate::plan::Package`] for why the interpreter's own is a
     /// variant rather than an absent program id.
-    ///
-    /// Cached rather than built per send, because the oracle answers one
-    /// object: measured, `(.Array~package == .String~package)` is `1`.
     package_objects: HashMap<Package, ObjRef>,
     /// The one `Routine` object standing for a program's own main section --
     /// what `RexxContext~executable` answers from a `PROGRAM` or
     /// `INTERNALCALL` context.
-    ///
-    /// **Cached because the identity is observable**: measured, oracle rc 0,
-    /// `(.context~executable == .context~executable)` is `1`. A `::ROUTINE`
-    /// or a `::METHOD` context has a cache of its own already -- the
-    /// `.ROUTINES` table and `Interp::method_objects` -- and answers out of
-    /// it, which is what makes `.context~executable == .routines['R']`
-    /// answer `1` here as it does on the oracle.
-    ///
-    /// Globally rooted, the position [`Interp::package_objects`]'s entries
-    /// are in: the object outlives every send that can reach it and nothing
-    /// else refers to it.
-    ///
-    /// [`Interp::package_objects`]: Interp::package_objects
     program_routine_objects: HashMap<ProgramId, ObjRef>,
     /// The `.METHODS`/`.ROUTINES`/`.RESOURCES` tables, keyed by the program
     /// whose directives fill them and by which of those names it answers.
-    ///
-    /// Cached rather than built per evaluation, because the oracle answers one
-    /// object: measured, `.methods~identityHash` is the same number twice.
-    /// Each is rooted through [`rexx_core::RootSet::add_global`], the position
-    /// [`Interp::package_objects`]'s entries are in.
-    ///
-    /// [`Interp::package_objects`]: Interp::package_objects
     package_tables: HashMap<(ProgramId, environment::PackageTable), ObjRef>,
     /// The one `Routine` object standing for each installed routine.
-    ///
-    /// **The identity is observable and is the reason this exists.**
-    /// Measured, oracle rc 0: `p~addRoutine('NEWR', r)` then
-    /// `(p~routines['NEWR'] == r)` is `1`, and so is
-    /// `(p~findRoutine('NEWR') == r)`. `Package~routines`,
-    /// `~publicRoutines`, `~importedRoutines` and the two `find*Routine`
-    /// readers all answer out of here, so an object reached through a
-    /// package's own table and one reached through an import are the same
-    /// object.
-    ///
-    /// Keyed by the routine rather than by a package and a name, because an
-    /// imported name and the name it was declared under need not be the same
-    /// -- `~addPublicRoutine` files a `Routine` under any name the caller
-    /// gives, and `mergeRequired` carries that name into the importing
-    /// package.
-    ///
-    /// Rooted by the `.ROUTINES` table each entry is also in, which is a
-    /// [`rexx_core::RootSet::add_global`]; nothing here roots on its own.
     routine_objects: HashMap<InstalledRoutine, ObjRef>,
     /// The packages each program has imported, in the order they were added
     /// -- `PackageClass`'s `loadedPackages`, which `~importedPackages`
     /// answers a copy of.
-    ///
-    /// **Appended by a `::REQUIRES` as well as by `~addPackage`**, because
-    /// `PackageClass::loadRequires` ends with `addPackage(packageInstance)`
-    /// (`classes/PackageClass.cpp:1331`). Measured, oracle rc 0: a file
-    /// carrying one `::requires 'lib.rex'` answers `~importedPackages~items`
-    /// `1`.
-    ///
-    /// **A package is added once**: `addPackage` returns early when the list
-    /// already holds it (`classes/PackageClass.cpp:1377`). Measured, oracle
-    /// rc 0, `p~addPackage` of two separate `.Package~new('other.rex')`
-    /// answers leaves the count at `1`, because both name one loaded package.
     package_imports: HashMap<ProgramId, Vec<Package>>,
     /// The value each `::CONSTANT` accessor answers, keyed by the directive
     /// that declared it.
-    ///
-    /// **Keyed by the directive and not by the method identity**, because one
-    /// directive installs the same value under a separate identity per
-    /// dictionary side -- `ClassDirective::addConstantMethod` adds the single
-    /// method object it built to both `classMethods` and `instanceMethods`
-    /// (`instructions/ClassDirective.cpp:520`-`:524`), so the sides cannot
-    /// disagree there and do not disagree here.
-    ///
-    /// **An absent entry is a constant whose expression has not run yet**,
-    /// which the oracle reports as 97.4 rather than as a name miss; see
-    /// [`Raised::constant_not_initialized`]. A literal `::CONSTANT` is
-    /// recorded while its class is being installed, so only the expression
-    /// form is ever absent.
-    ///
-    /// **Rooted through [`rexx_core::RootSet::add_global`]**, the position
-    /// [`Interp::package_objects`]'s entries are in: an expression's value is
-    /// an ordinary heap object that nothing else names once the evaluating
-    /// activation is gone.
-    ///
-    /// [`Interp::package_objects`]: Interp::package_objects
     constant_values: HashMap<(ProgramId, usize), ObjRef>,
     /// The `StringTable` each annotated thing's `~annotations` answers, keyed
     /// by the thing -- see [`environment::Annotated`] for the key space and
     /// [`Interp::annotation_table`] for why the table is kept rather than
     /// rebuilt.
-    ///
-    /// **Rooted through [`rexx_core::RootSet::add_global`]**, the position
-    /// [`Interp::package_objects`]'s entries are in.
-    ///
-    /// [`Interp::package_objects`]: Interp::package_objects
     annotations: HashMap<environment::Annotated, ObjRef>,
     /// How many methods have been compiled from source text, which is what
     /// [`environment::Annotated::Compiled`] counts -- see that variant for
@@ -3514,44 +1639,13 @@ struct Interp {
     /// The `Method` object `Class~method` answers, keyed by the class and the
     /// instance dictionary name -- see [`Interp::method_object`] for the two
     /// oracle answers that make one object per entry observable.
-    ///
-    /// **Rooted through [`rexx_core::RootSet::add_global`]**, the position
-    /// [`Interp::package_objects`]'s entries are in.
-    ///
-    /// [`Interp::package_objects`]: Interp::package_objects
     method_objects: HashMap<(ObjRef, Box<[u8]>), ObjRef>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
     /// already returns.
-    ///
-    /// Keyed rather than positional: the registry mints an id for every
-    /// native method before a directive can install one, so a
-    /// [`rexx_classes::MethodId`]'s own `u32` is not an index into the
-    /// directives this program declared. [`Interp::record_method_body`] runs
-    /// immediately after each mint a directive makes, and asserts the key is
-    /// fresh.
     method_bodies: NameMap<MethodId, InstalledMethodBody>,
     /// Whether the interpreter's own Rexx-written library is running.
-    ///
-    /// **What it opens, and each is closed again the moment the prologue
-    /// reaches its `exit`.** `Setup.cpp` builds the image in a state no
-    /// shipped interpreter is ever in: `.Class` carries the two setup
-    /// methods `removeSetupMethods` later strips, and the `REXX_DEFINED`
-    /// lock every class in the image carries does not refuse the mutators,
-    /// because the library's own prologue is what does the mutating --
-    /// `.string~inherit(.Comparable)` and the `~inherit` clauses after it are
-    /// `98.985 User additions are not allowed to the REXX language classes`
-    /// for a program and are the whole point of `CoreClasses.orx:93` onwards.
-    ///
-    /// **The library's own `::CLASS` directives are in that image too**, and
-    /// `Interp::install_class` flags each as it creates it, so the prologue
-    /// mutates classes that already carry the lock and a program that names
-    /// one of them meets the same 98.985 it meets on `.Array`.
-    ///
-    /// **No user program can see either.** The bootstrap runs to completion
-    /// before the program's first clause, so this is false for every clause
-    /// a program executes and for every directive it installs.
     library_bootstrap: bool,
     /// How many collections the heap had performed when the library
     /// bootstrap finished, which is what `Outcome::collections` is counted
@@ -3559,146 +1653,44 @@ struct Interp {
     /// there and not at process start.
     collections_before_program: u64,
     /// The programs the library bootstrap loaded, in load order.
-    ///
-    /// Read twice: by `Interp::record_package_class`, so a class the library
-    /// installed answers `REXX` for its package rather than the running
-    /// program's path, and by `Interp::sourceless_site`, so a traceback
-    /// frame inside one renders the way a frame in an image-saved package
-    /// does.
-    ///
     library_programs: Vec<ProgramId>,
     /// The name a program compiled from method source text reports under.
-    ///
-    /// `MethodClass::newMethodObject` builds an executable of its own, named
-    /// for the method rather than for the file that supplied the string, and
-    /// a traceback's `running <name>` span and `parse source`'s third word
-    /// each see the difference. Measured, oracle: a one-off whose body is
-    /// `return 1/0` reports `Error 42 running MM line 1:` at rc 214, and
-    /// `parse source` inside one answers `LINUX METHOD MM`.
-    ///
-    /// The name is the one the caller wrote, not the dictionary key --
-    /// measured, oracle rc 221: `.k~define("bad", 'this is not rexx +++')`
-    /// reports `Error 35 running bad line 1:`.
     compiled_method_names: HashMap<ProgramId, Box<[u8]>>,
     /// Whether any object has been given a method of its own, which is what
     /// keeps the per-object dictionary off a send's path in a program that
     /// never sends `SETMETHOD` -- see `Interp::own_method_entry`.
-    ///
-    /// Monotone: it is set when a definition is stored and never cleared, so
-    /// a dead object cannot make it answer wrongly. The cost of leaving it
-    /// set is one arena read per send to an instance.
     object_methods: bool,
     /// Which directive is the body of a `Method` object this crate handed
     /// out through `.METHODS` or compiled from source text.
-    ///
-    /// `Class~defineClassMethod` and `Object~setMethod` are what install
-    /// such an object where it can be sent to.
-    ///
-    /// Keyed by the object rather than by a [`MethodId`], because a
-    /// `.METHODS` entry has no dictionary entry and so no id: it is a
-    /// directive the package filed under a name and nothing more. Written
-    /// only for a written `::METHOD`; `environment.rs`'s `written_method`
-    /// carries why an `::ATTRIBUTE` or `::CONSTANT` accessor is absent.
     table_method_bodies: NameMap<ObjRef, InstalledMethodBody>,
     /// What each `Method` and `Routine` object this crate has handed out
     /// reports on -- see [`ExecutableSource`], which carries why this is not
     /// [`Interp::table_method_bodies`] with more rows in it.
-    ///
-    /// A row holds no [`ObjRef`], so an object that dies takes nothing with
-    /// it but this row -- the position [`Interp::method_objects`] is in.
     executable_sources: HashMap<ObjRef, ExecutableRecord>,
     /// What `Method`'s four setters have written on each object they have
     /// been sent to, over what its directive declared -- see
     /// [`dispatch::executable::MethodFlagWrites`].
-    ///
-    /// Empty until a program sends one, which is what keeps the readers off a
-    /// hash lookup in the ordinary case, and it holds no [`ObjRef`].
     method_flag_writes: HashMap<ObjRef, dispatch::executable::MethodFlagWrites>,
     /// What the send behind each `Message` object this crate has built ended
     /// with -- `MessageClass`'s `flagResultReturned` and `flagRaiseError`
     /// (`classes/MessageClass.hpp:61`-`:62`) and its `condition` field (`:135`).
-    ///
-    /// A row is added when the send returns, so `Message~completed` is a
-    /// lookup here and not a constant: a `Message` this table does not name
-    /// has not completed.
-    ///
-    /// The result is **not** here: it is an entry on the `Message` object's
-    /// own [`rexx_core::NativeObject`], which the collector walks. A row here
-    /// holds no [`ObjRef`], so a message that dies takes nothing with it but
-    /// this row, which stays -- the position [`Interp::method_objects`] is
-    /// in.
     message_outcomes: HashMap<ObjRef, Option<Box<Raised>>>,
     /// The methods a directive implements itself -- see [`GeneratedMethod`]
     /// for why these are not rows of [`method_bodies`], which is a
     /// measurement rather than a taxonomy.
-    ///
-    /// Consulted only where `method_bodies` misses, so a send to a written
-    /// body reads one table exactly as it did before this table existed.
-    ///
-    /// [`method_bodies`]: Interp::method_bodies
     generated_methods: HashMap<MethodId, GeneratedMethod>,
     /// Which `LIBRARY REXX` entry point each `::METHOD ... EXTERNAL` bound
     /// to, keyed by the identity [`Interp::install_one_method`] minted for
     /// its dictionary key.
-    ///
-    /// A table of its own for [`generated_methods`]' reason, and the last
-    /// table `dispatch::Interp::invocable` reads, so a send to a written body
-    /// or a primitive reaches the table it always reached and never this one.
-    ///
-    /// **A row here is a bind, not an implementation.** A row whose registry
-    /// entry is `dispatch::native::ExternalBody::Deferred` still binds and
-    /// its send is loud; the row exists because the *file* installs either
-    /// way, which is what `CoreClasses.orx` and `StreamClasses.orx` need.
-    ///
-    /// [`generated_methods`]: Interp::generated_methods
     native_externals: HashMap<MethodId, &'static dispatch::native::NativeExternal>,
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
-    ///
-    /// **Indexed by [`MethodId`]'s own number**, `None` at every method with
-    /// no access scope of its own. The id is a mint counter from
-    /// `ClassRegistry::add_instance_method` and its class-side twin, so it is
-    /// already an index and needs neither a hash nor an order.
-    ///
-    /// **This table has now been all three shapes, each measured.** Hashed on
-    /// `MethodId` with the default hasher, a program whose loop is `.K~outer`
-    /// over a body doing `self~m` cost 580 `instructions:u` more as soon as
-    /// any method in the file was special -- the whole of it the hasher
-    /// rather than the check it guarded. Sorted and binary-searched, the same
-    /// pair of programs was 23 apart, which is why it was sorted for a while.
-    /// Indexed, the search disappears: it had grown to **15.2% of
-    /// `alloc.rex`** -- 4.3% in `binary_search_by` and the rest in the
-    /// `select_unpredictable` and `get_unchecked` it inlines, a branch the
-    /// predictor cannot learn -- and removing it took that program's retired
-    /// instructions down 8.4%.
-    ///
-    /// **The emptiness test the sorted shape carried was measuring the wrong
-    /// program.** It let "an ordinary send skip the search" for a program
-    /// declaring no `PRIVATE`, `PACKAGE` or `PROTECTED` method, and no such
-    /// program exists in practice: the shipped `.orx` library declares them,
-    /// so every program carries rows and every send paid the search. The
-    /// indexed shape needs no guard -- a bounds check and a load answer
-    /// whether there is a row at all.
-    ///
-    /// Nothing here checks its own answer against a scan any more, and that
-    /// is not an omission: the assertion that used to stand here guarded a
-    /// broken sort order, and this shape has no order to break.
     special_methods: Vec<Option<dispatch::AccessScope>>,
     /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
     /// becomes.
     out: Vec<u8>,
     /// The trace sink, which becomes `Outcome::stderr`.
-    ///
-    /// It exists because the design puts both sinks on `Interp` and D17 makes
-    /// them separate for a measured reason: with `trace r` the `*-*` and `>>>`
-    /// lines are on stderr while `SAY` is on stdout, and being separate
-    /// descriptors is what makes their relative interleaving unobservable and
-    /// two independently buffered sinks safe. Task 13 was the first to write
-    /// to it (`trace.rs` and a dozen call sites in `run.rs` now do); keeping
-    /// the field from the start meant the loud-failure path already appended
-    /// to the right buffer rather than being rerouted later, which is when a
-    /// stray ordering difference would have appeared.
     trace: Vec<u8>,
     /// `current_value_indent` and `current_clause_line`, bundled -- see
     /// `ClauseState`'s own doc comment for what the two share, the property
@@ -3707,15 +1699,6 @@ struct Interp {
     clause_state: ClauseState,
     /// **SPIKE.** The flattened `DO`/`LOOP`s the op driver has open, innermost
     /// last.
-    ///
-    /// **Here rather than in a local of `Interp::run_ops`**, and that is a
-    /// measurement: a loop's state holds `Number`s, so a stack of it has a
-    /// destructor, and a destructor anywhere the driver's per-clause path
-    /// unwinds through costs 14 instructions per body clause. The driver's own
-    /// frame stack stays plain data and this holds what has to be dropped.
-    ///
-    /// Boxed so that a pass boundary, which has to take the top out to hand it
-    /// a `&mut Interp` beside it, moves a pointer rather than the state.
     #[expect(
         clippy::vec_box,
         reason = "the box is the point: a pass boundary takes the top out to hand it a &mut Interp beside it, and moves a pointer rather than the header's Numbers"
@@ -3723,36 +1706,9 @@ struct Interp {
     flat_loops: Vec<Box<crate::run::FlatLoop>>,
     /// **SPIKE.** The innermost open flat loop, held apart from the stack of
     /// the ones enclosing it.
-    ///
-    /// A pass boundary has to take this state out of the interpreter to hand
-    /// it a `&mut Interp` beside it, and puts it straight back. Off the top of
-    /// `flat_loops` that was a `Vec` pop and a `Vec` push -- a length load, an
-    /// emptiness test, a length store, an element load, then a length load, a
-    /// capacity compare, an element store and a length store. Here it is a
-    /// pointer load, a null store and a pointer store. `flat_loops` is
-    /// unchanged for the whole of a pass, so nothing below the innermost loop
-    /// is touched on the path every pass of every loop takes.
-    ///
-    /// The invariant, which [`Interp::unwind_frames`] is the one place that
-    /// has to restore rather than maintain: this is `Some` exactly when a
-    /// flat loop is open, and `flat_loops` then holds the ones enclosing it,
-    /// innermost last.
     flat_top: Option<Box<crate::run::FlatLoop>>,
     /// **SPIKE.** The constructs the op driver has open, innermost last, across
     /// every level of it at once.
-    ///
-    /// **Here rather than in a local of `Interp::run_ops`** so that entering a
-    /// body is not a fresh `Vec`: a level records the length it finds and
-    /// treats what is below as another level's, which is the same slicing
-    /// `flat_loops` already gets from being here. A body that opens a
-    /// construct then writes into an allocation this interpreter already owns,
-    /// where a local paid a `malloc`/`free` pair for every entry that pushed
-    /// once -- `samples/rexxcps.rex` enters `run_ops` for a called routine
-    /// 280,000 times and opens a loop frame in each.
-    ///
-    /// [`crate::ir::drive::Frame`] carries the argument for why the two kinds
-    /// of frame are one stack, and `Interp::unwind_frames` the one for why a
-    /// raise unwinds this and `flat_loops` together.
     frames: Vec<crate::ir::drive::Frame>,
     /// **SPIKE.** Boxes a finished loop handed back, so that entering a loop
     /// is a write into an allocation this interpreter already owns. A loop
@@ -3765,67 +1721,9 @@ struct Interp {
     )]
     flat_spares: Vec<Box<crate::run::FlatLoop>>,
     /// A condition raised by `RAISE` whose `CALL ON` handler has not run yet.
-    ///
-    /// **Deliberately not part of `ClauseState`**, checked against that
-    /// struct's own membership rule rather than placed by analogy: this is
-    /// not set per clause by `step_in_temps_frame`, it is set once by a
-    /// `RAISE` and *consumed* at the next clause boundary, so a nested
-    /// activation overwriting it is not the hazard `ClauseState` exists to
-    /// close.
-    ///
-    /// **The real hazard is delivery into the wrong activation, and it took
-    /// two goes to close** (fix round 1's finding 7 corrects the sentence
-    /// that used to assert it was already closed). Delivery happens at a
-    /// clause boundary, on every path out of a clause -- a `RETURN` or an
-    /// `EXIT` cannot skip it, because `Flow::Return` means the clause *was* a
-    /// `RETURN`, not that it did not happen -- and it delivers only to the
-    /// activation named by [`PendingTrap::activation`], an identity rather
-    /// than a stack depth. The first property makes the condition reach its
-    /// activation; the second stops it reaching anyone else's.
-    ///
-    /// **"Every clause" means every clause, and four rounds each named a set
-    /// of sites that was short by one.** The lists are gone: the boundary is
-    /// now inseparable from the clause's own line, in `clause.rs`'s
-    /// [`Interp::in_clause`], whose closure body *is* the clause. Where the
-    /// call sites are is a derived question rather than an enumerated one --
-    /// the oracle's boundary sits after every instruction of the
-    /// activation's flat list, and this crate diverges only where `IF`,
-    /// `SELECT`, `DO`/`LOOP` and `INTERPRET` resolve other instructions
-    /// inside their own `step`. `in_clause`'s own `debug_assert` is what
-    /// makes a fifth such construct announce itself; `clause.rs`'s module doc
-    /// has the rule, what the shape does and does not guarantee, and the
-    /// residual.
-    ///
-    /// **A queue, drained at a boundary in the order the conditions were
-    /// queued.** The oracle takes everything a clause left pending, not one:
-    /// measured, `zr = ra() + rb()` with both trapped runs `ra`'s handler and
-    /// then `rb`'s, both reporting the raising clause's own line, and the
-    /// three-condition version runs all three in that same order. A single
-    /// slot answered the last one only and lost the rest outright.
-    ///
-    /// **What a handler queues while it runs is owed to the next boundary,
-    /// not this one.** Measured over a two-pass loop whose body requeues: the
-    /// oracle defers the requeue past the boundary that delivered it and takes
-    /// it at the following clause -- which is what [`PendingTrap::
-    /// queued_during_delivery`] records, and why the drain is bounded to the
-    /// entries present when the boundary began.
-    ///
-    /// **Entries for another activation are stepped over, not blocking.**
-    /// Each activation owns its own queue in the oracle; here they share one
-    /// and [`PendingTrap::activation`] is what separates them.
-    ///
-    /// **One shape in this family has no oracle answer:** a clause queuing the
-    /// same condition name twice segfaults the oracle once the drain reaches
-    /// the second copy. `corpus/oracle-crashes.txt` carries the program and
-    /// the warning; nothing here may be described as agreeing with the oracle
-    /// on it.
     pending_traps: VecDeque<PendingTrap>,
     /// The condition whose handler is running, for `RAISE PROPAGATE` to
     /// re-raise.
-    ///
-    /// Set when a trap fires and never cleared -- `run.rs`'s own
-    /// `exec_raise_propagate` states what that costs and what is measured
-    /// either side of it.
     active_condition: Option<ActiveCondition>,
     /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
     /// `case` text, or `None` inside a plain `SELECT` (or before any
@@ -3839,18 +1737,6 @@ struct Interp {
     /// `whens`) has no such hand-off -- it is stepped like any other
     /// instruction, with nothing carrying its enclosing `SELECT CASE`'s
     /// own comparison value along.
-    ///
-    /// Set by `Select`'s own arm, unconditionally, every time (mirroring
-    /// `current_value_indent`'s own field-not-parameter shape) -- **not
-    /// saved and restored across a nested `SELECT`/`SELECT CASE`**, which
-    /// is a real, narrow, disclosed limitation: an absorbed `WhenCase`
-    /// belonging to an *outer* `SELECT CASE`, reached only *after* a
-    /// *nested* `SELECT CASE` inside the same outer body has already run
-    /// and overwritten this field, would read the nested one's `case`
-    /// text instead of its own. No corpus or spec example nests `SELECT
-    /// CASE` around an absorbed `WHEN CASE` this way; `run.rs`'s own
-    /// `WhenCase` arm names the same limitation again at its own read
-    /// site.
     current_case_text: Option<Vec<u8>>,
     /// **F3's own perimeter, found by review -- and corrected twice more,
     /// each correction found by re-verifying the previous one rather than
@@ -3861,220 +1747,24 @@ struct Interp {
     /// otherwise` -- reports every indent it computes **`self` spaces
     /// higher** than its own ordinary `static_indent` would give, for as
     /// long as this stays non-zero.
-    ///
-    /// **The value is the constant `4`, always -- not a function of the
-    /// absorbed condition's own depth, which the field's second version
-    /// wrongly used.** That second version (`current_value_indent - 2`,
-    /// an *additive* offset rather than the first version's absolute
-    /// replacement) was right at the top level (`6 - 2 = 4`) and wrong one
-    /// `DO` deeper (`8 - 2 = 6`, where the oracle still wants `4`) --
-    /// caught only because F-EX1's own fix was re-verified at a second
-    /// nesting depth rather than trusted from the first. The real
-    /// invariant: the absorbed condition always sits exactly two
-    /// `indent()` bumps past an *ordinary* `SELECT`-level construct's own
-    /// position -- the enclosing, listed `WHEN`/`WHEN CASE`'s own marker,
-    /// then its own body entry -- and that gap (`4` spaces) does not grow
-    /// with how many other constructs enclose the whole `SELECT`, because
-    /// both the absorbed condition's own depth *and* `END`'s/`OTHERWISE`'s
-    /// own ordinary depth grow by the identical amount together. Measured
-    /// at two nesting depths for all three landing shapes before trusting
-    /// it a second time (this task's report has the full transcripts):
-    ///
-    /// | landing shape | top-level ordinary / actual | one `DO` deeper |
-    /// |---|---|---|
-    /// | `END`'s own 7.3 | `0` / `4` | `2` / `6` |
-    /// | `OTHERWISE`'s own marker | `2` / `6` | `4` / `8` |
-    /// | `OTHERWISE`'s own body | `4` / `8` | `6` / `10` |
-    ///
-    /// every row's own `actual - ordinary` is `4`. `4` is the identical
-    /// "marker is half its body" arithmetic `static_indent`'s own doc
-    /// comment already states for `THEN`/`ELSE`/`OTHERWISE`, so the
-    /// *number* is still the one rule this task keeps reusing; it is
-    /// simply a fixed constant here, not `current_value_indent`-derived.
-    ///
-    /// **Why a field, not `Flow::Goto` growing a payload.** `Flow::Goto`
-    /// is the ordinary resume mechanism *every* `If`/`Select`/`Do` match
-    /// uses (`Ok(Flow::Goto(resume))`, dozens of sites), none of which has
-    /// any residual indent to carry -- only this one escape does. Giving
-    /// every one of those sites an indent to thread, to serve the single
-    /// site that needs one, is the restructuring the coordinator asked to
-    /// be told about rather than done; this field is the same shape
-    /// `current_value_indent`/`current_case_text` already are, applied to
-    /// a third, narrower quantity, not a new idiom.
-    ///
-    /// **Why persistent rather than consumed after one step, unlike the
-    /// field's own first version.** `OTHERWISE`'s own body can be more
-    /// than one clause (`say 'O'` *and* `leave s`, in the measured case,
-    /// both needing the offset), so a `.take()` at the top of the very
-    /// next `step_in_temps_frame` call -- right for `END`'s own one-clause
-    /// landing -- would have zeroed it before the second body clause ever
-    /// read it. `0` in the overwhelmingly common case (nothing escaping
-    /// right now); set by the absorbed `WhenCase`'s own false branch,
-    /// added (never replacing) inside `Interp::printed_indent` on every step
-    /// while non-zero, and explicitly restored to `0` by `run_otherwise`
-    /// once its own `run_bounded` call returns -- the one place that knows
-    /// the elevated dispatch is now over. The `END`-only landing needs no
-    /// explicit restore: 7.3 is fatal, so nothing runs afterward to see a
-    /// stale value (`execute`, `lib.rs`, gives every run a fresh `Interp`).
-    ///
-    /// **This field means exactly one thing, and the mistake it invites is
-    /// carrying an `INTERPRET` fragment's activation base here as well**, on
-    /// the reasoning that both are "an indent added on
-    /// top of `static_indent`". They are not the same quantity and the
-    /// difference is lifetime: this one is transient and its two producers
-    /// write it **absolutely** (`= 4` at the absorbed escape, `= 0` at
-    /// `run_otherwise`), while an activation base lives for the whole life
-    /// of the fragment. Measured, with no `CALL` anywhere -- `do z = 1 to 1`
-    /// around `interpret "select; when 1 = 0 then nop; otherwise nop; end;
-    /// say 1/0"` printed `say 1/0` at 0 where the oracle prints 2, because
-    /// `run_otherwise`'s reset destroyed the base. The base now lives in
-    /// [`Interp::activation_indent`], the two are added together, and each
-    /// producer writes only its own.
-    ///
-    /// **The "narrower than the general case" disclosure this doc used to
-    /// carry is gone because the narrowness is.** It said only
-    /// `step_in_temps_frame` and `run_otherwise` added this offset, that the
-    /// `WHEN` scan and the `WHILE`/`UNTIL` overrides did not, and bounded the
-    /// consequence with "no corpus or spec example nests this deeply". The
-    /// bound was false **before any fragment base existed**: a nested
-    /// `SELECT` inside an escaped `OTHERWISE`, with no `INTERPRET` in the
-    /// program, printed its inner `WHEN` at 6 where the oracle prints 10.
-    /// A fragment base widened the reach -- a plain `SELECT` inside an
-    /// `INTERPRET` inside one `DO` printed 2 against the oracle's 4 -- but it
-    /// did not create the defect, and saying it did would be the same false
-    /// bound one notch narrower. Every site that
-    /// applies either offset now goes through `Interp::printed_indent`, the
-    /// `WHEN` scan included, so there is no per-site list left to go stale.
-    /// The `WHILE`/`UNTIL` sites were never really exceptions -- they read
-    /// `current_value_indent`, which is a `printed_indent` result already.
-    /// `pop_search_frame` is the one deliberate exclusion and says so at its
-    /// own definition.
     indent_offset: usize,
     /// The absolute printed indent every clause of the **current activation
     /// level** starts from -- `0` for a program's own body, and an
     /// `INTERPRET` fragment's enclosing clause's own printed indent for the
     /// life of that fragment.
-    ///
-    /// Added to `static_indent` alongside [`Interp::indent_offset`] by
-    /// `Interp::printed_indent`, which is the one place either is applied.
-    /// **`0` for every program with no fragment and no call**, which is what
-    /// makes adding it at a site incapable of moving such a program's
-    /// expectation: nothing but a fragment or a `CALL` ever sets it.
-    ///
-    /// **Measured delta 0 for a fragment, +2 for a called routine**, and
-    /// that is why this is the activation's base rather than "one more
-    /// level of nesting". `interpret "do jj = 1 to 1; say 2 & 1; end"` at
-    /// top level echoes the inner clause at 2 and the `INTERPRET` at 0, and
-    /// the identical fragment two `DO`s deep echoes them at 6 and 4 -- the
-    /// fragment adds nothing of its own. A `CALL` at printed indent 4 into a
-    /// flat routine echoes the callee's clause at 6, so Task 3 sets this to
-    /// the calling clause's printed indent **plus two**.
-    ///
-    /// **Set, not added, and `indent_offset` is zeroed with it.** The
-    /// `Interpret` arm saves both fields, sets this to the enclosing
-    /// clause's `current_value_indent` and `indent_offset` to `0`, and
-    /// restores both afterwards. The enclosing clause's own printed indent
-    /// already contains whatever escape elevation was in force, so leaving
-    /// `indent_offset` alone would count it twice -- measured on an
-    /// `INTERPRET` inside an escaped `OTHERWISE`'s own body one `DO` deep,
-    /// where the oracle prints the fragment's clause at 12 and the
-    /// double-counting version prints 16. A fragment is a fresh level, so it
-    /// starts with a fresh (zero) escape elevation; saving and restoring
-    /// rather than clearing is what lets a fragment nest inside a fragment.
     activation_indent: usize,
     /// The clause a `Raised` condition escaped from, as the 1-based line and
     /// the bytes `TRACE` would echo, or `None` if nothing raised.
-    ///
-    /// Resolved here rather than carried on `Raised`, and the reason is that
-    /// only an instruction loop knows **which source** an
-    /// `Instruction::clause_span` indexes into: the main loop's spans are the
-    /// program's, a fragment's are its own. Storing a bare span would leave
-    /// `execute` guessing between them.
-    ///
-    /// Written once, by the first loop to see the failure escape, and read by
-    /// `execute` after `run` has already popped the activation the site came
-    /// from. That teardown is why the site cannot simply be reconstructed at
-    /// the top: by then the frame is gone.
-    ///
-    /// **First-wins *within one level* (inherited item I11).** The
-    /// early-return guard at the top of `record_failure_at` means the most
-    /// specific clause at this level wins.
-    ///
-    /// **A trap is what clears it**, and it empties
-    /// [`Interp::failure_sites`] alongside it: a trapped condition prints no
-    /// report, so the sites it accumulated must not be printed against a
-    /// later, untrapped one. `run.rs`'s `offer_to_trap` is the one place that
-    /// clears either, and `a_second_raise_after_a_trapped_one_reports_its_
-    /// own_site` is the transcript.
     failure_site: Option<FailureSite>,
     /// The levels that have already finished failing, innermost first --
     /// `Raised::report`'s echo stack minus its last entry.
-    ///
-    /// **Why two fields and not one `Vec`.** `failure_site` is the level
-    /// currently unwinding and is first-wins; this is the record of levels
-    /// already sealed. `run.rs`'s `seal_site_level` moves one into the other
-    /// and is called by exactly the constructs that open a level --
-    /// `run_fragment` and `Interp::invoke_call`. Keeping the two apart is
-    /// what lets the guard stay a plain `is_none()` rather than a "did
-    /// anything get recorded since the current level opened" watermark, and
-    /// it is why the single-site behaviour falls out unchanged
-    /// when nothing ever seals: this stays empty and `execute` builds a
-    /// one-entry stack.
-    ///
-    /// Never resolved by walking the activation stack instead: `run` pops
-    /// the activation before `execute` sees the error, which is the whole
-    /// reason `failure_site` exists rather than being reconstructed at the
-    /// top.
     failure_sites: Vec<FailureSite>,
     /// The line number every clause echo prints while an `INTERPRET`
     /// fragment is running, overriding the clause's own line in its own
     /// source.
-    ///
-    /// A fragment's spans index the fragment's text, which is line 1 of a
-    /// source of its own, and the oracle prints the **enclosing `INTERPRET`
-    /// clause's** line for every clause inside it -- measured, `interpret
-    /// "say 2 & 1"` on line 2 echoes both the fragment's clause and the
-    /// `INTERPRET` as line 2, and a fragment inside a fragment (`interpret
-    /// 'interpret "say 2 & 1"'` on line 3, inside two `DO`s) echoes all
-    /// three at line 3. So the override is set once by the outermost
-    /// `INTERPRET` and inherited unchanged inward, which falls out of setting
-    /// it from the resolved line of the `INTERPRET` clause itself: by then
-    /// that line has already been through any override in force.
-    ///
-    /// A field rather than a parameter for the same reason
-    /// `current_value_indent` is one: `clause_site` is reached from four
-    /// call sites across `step_in_temps_frame`, `record_failure_at`,
-    /// `leave_origin` and `run_otherwise`, none of which otherwise has any
-    /// business knowing a fragment is running. Saved and restored around
-    /// `run_fragment` by the `Interpret` arm, not cleared afterwards, so a
-    /// nested fragment cannot strand the outer one's value.
     clause_line_override: Option<usize>,
     /// How many `INTERPRET` fragments are running, counted from zero outside
     /// any of them.
-    ///
-    /// **The key a clause boundary matches a queued condition against**
-    /// ([`PendingTrap::fragment_depth`], which has the transcripts): the
-    /// oracle runs a fragment in an activation whose condition queue is its
-    /// own, so a condition queued outside the fragment gets no boundary
-    /// inside it and one queued inside gets no boundary outside.
-    ///
-    /// A depth rather than a "some fragment is running" flag, because a
-    /// fragment inside a fragment is a third queue again. Measured against a
-    /// built flag design, with a condition queued in the **outer** fragment and
-    /// an inner fragment running while it waits: `interpret 'zq = raiser();
-    /// interpret "say 1; say 2"; say 3'` prints `1`, `2`, the second handler,
-    /// then `3` on the oracle and here, where the flag delivers after `1`.
-    /// `ir_recorded_cases/interpret-condition-queue` holds that program, and beside
-    /// it the neighbouring shape that does **not** separate the two designs.
-    ///
-    /// Separate from `clause_line_override`, which the `Interpret` arm sets
-    /// beside it: that one is *inherited* by a nested fragment (the oracle
-    /// prints the outermost `INTERPRET`'s line for every clause inside), where
-    /// this one has to distinguish the nesting levels it deliberately
-    /// flattens. Not saved across a call either, where `clause_line_override`
-    /// is cleared: a callee's clauses run in the fragment that called them,
-    /// and a condition the callee raises is owed to the caller's own next
-    /// boundary, which is inside that fragment.
     fragment_depth: usize,
     /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
     /// criterion 4): when true, [`Interp::alloc_with`] calls `Heap::collect`
@@ -4089,148 +1779,31 @@ struct Interp {
     /// The objects a collection found unreachable and flagged for `UNINIT`,
     /// oldest first, awaiting [`Interp::run_ready_uninits`] -- oracle's
     /// `setReadyForUninit` list (`memory/RexxMemory.cpp:274`).
-    ///
-    /// **Needs no root of its own.** `Heap::collect` resurrects a flagged
-    /// object and keeps its registry entry, so the flag holds the object
-    /// alive until the finalizer clears it.
     uninit_ready: Vec<ObjRef>,
     /// Whether a `UNINIT` sweep is running -- oracle's `processingUninits`
     /// (`memory/RexxMemory.cpp:341`-`:347`, cleared at `:383`).
-    ///
-    /// A finalizer that drives a collection must not run the finalizers that
-    /// collection readies; they wait for the sweep already in progress.
     processing_uninits: bool,
     /// The arena size at which [`Interp::alloc_with`] collects, and half of
     /// this crate's trigger policy. The other half is `Heap::will_grow`.
-    ///
-    /// **Collect when the arena is about to grow AND it has reached this
-    /// many slots; afterwards set it to twice what survived, floored at
-    /// [`COLLECT_FLOOR`].** The two halves answer different questions and
-    /// both are needed:
-    ///
-    /// * **`will_grow` is the pressure event.** It is the moment the process
-    ///   would ask for more memory, which is what the oracle triggers on --
-    ///   see that method's own doc for why its allocation-failure signal does
-    ///   not port and this branch is the analogue that does. While swept
-    ///   slots remain there is nothing to gain by collecting again, and this
-    ///   is what stops it happening.
-    /// * **This watermark is the growth allowance.** A fresh heap has no free
-    ///   list, so `will_grow` alone would collect on every allocation
-    ///   forever, finding nothing. Doubling it from the survivors is the
-    ///   oracle's `adjustMemorySize` step: the collection's own result sets
-    ///   the next threshold rather than a constant somebody picked.
-    ///
-    /// Three properties come out of the pair, and nothing else was asked of
-    /// it:
-    ///
-    /// * **The peak is bounded by the live set rather than by the program's
-    ///   total allocation.** Before this existed nothing collected at all, so
-    ///   a loop's peak resident set was everything it had ever allocated --
-    ///   `strings.rex` reached 2.5 GB with a live set of a few values.
-    /// * **The collector's total work is bounded by a constant times the
-    ///   program's total allocation.** Between two collections the program
-    ///   must allocate at least as many objects as the first one left alive,
-    ///   so a marking pass over `n` survivors is paid for by `n` allocations,
-    ///   whatever `n` is. That is what keeps a program with a genuinely large
-    ///   live set -- `alloc4c.rex`'s growing compound table -- from
-    ///   re-marking it on a schedule the live set itself sets.
-    /// * **A transient does not go on being paid for.** Measured, a program
-    ///   building 200,000 live tails, dropping them, then making 2,000,000
-    ///   short-lived values: 11 collections against the 35 a watermark on the
-    ///   *live count* alone performs, for the same peak resident set and the
-    ///   same output. The count-based form collects while thousands of swept
-    ///   slots sit unused, because live has fallen back to the floor.
-    ///
-    /// **The blind spot, named rather than left to be discovered: this counts
-    /// slots, not bytes.** A slot is 96 bytes of arena; the object's payload
-    /// -- a string's bytes, a `Number`'s digit vector, a stem's map -- is a
-    /// separate `malloc` the heap does not size. So a few very large strings
-    /// are few slots and a great deal of memory, and neither half of this
-    /// policy reacts to them. Byte accounting would need payload sizes
-    /// `Body` does not carry today.
-    ///
-    /// It is a **policy** and policies invite tuning, so the numbers in it
-    /// are fixed and stated rather than searched: a threshold adjusted until
-    /// a benchmark number looked right would not survive a different
-    /// workload.
     collect_at: usize,
     /// Current `eval` recursion depth, and the deepest it has reached.
-    ///
-    /// Task 11 turns `depth` into D19's guard by comparing it against a limit
-    /// and raising 11.1. Here it only feeds the measurement, because the limit
-    /// is set from numbers this spike is what produces.
     depth: usize,
     max_depth: usize,
     /// The depth-1 address of the chain currently being evaluated, kept aside
     /// until that chain turns out to be the deepest one.
-    ///
-    /// Scratch, not a result. It is overwritten by every new top-level
-    /// evaluation, which is exactly why it is not `stack_first`: see
-    /// `StackSpan` for the measurement that showed what happens when the two
-    /// ends of the span come from different chains.
     stack_entry: usize,
     /// The two ends of the span, both from the chain that reached
     /// `max_depth`, written together so they can never disagree.
-    ///
-    /// Zero before anything is measured. `stack_span` subtracts one from the
-    /// other saturatingly, so the unmeasured state answers zero rather than
-    /// needing a sentinel to test for.
     stack_first: usize,
     stack_deepest: usize,
     /// Whether the instruction about to be stepped is allowed to be a
     /// `PROCEDURE` -- and, read the other way, whether it is the first
     /// instruction executed in its activation.
-    ///
-    /// **Set only by `run_activation`, and taken when a
-    /// [`crate::ir::Op::Clause`] region opens.** That pairing is the whole
-    /// mechanism, and it is what makes the permission stop at exactly one
-    /// instruction: any nested driving -- an `INTERPRET` fragment, an
-    /// `IF`/`SELECT` branch through `run_bounded` -- opens its own regions
-    /// after the outer one has already taken the flag, so it sees `false`
-    /// without any of those paths having to know this field exists.
-    /// Measured, and the reason it is taken on the way in rather than
-    /// cleared on the way out: `sub: interpret "procedure"` is error 17.1,
-    /// so a fragment must not inherit its host clause's permission.
     procedure_permitted: bool,
     /// What [`Interp::procedure_permitted`] held when the running
     /// [`crate::ir::Op::Clause`] region opened, for the one op that needs it.
-    ///
-    /// **A field rather than a value the driver keeps live across the region
-    /// loop, and that is a measurement.** Held as a local it costs
-    /// `bench-programs/varlookup.rex` 4.0 retired instructions per iteration
-    /// and `emptyloop` 1.0: the bool spans the whole loop, so it takes a
-    /// stack slot and pushes `self` out of its register into reloads. Held
-    /// here it costs one store per region and no liveness at all, which is
-    /// `varlookup` -2.0 per iteration, `rexxcps` -0.07% and no axis worse.
-    ///
-    /// **Nothing can overwrite it between the write and the read**, which
-    /// `compile::assert_exec_regions_hold_nothing_else` checks rather than
-    /// assumes: the only reader is [`crate::ir::Op::Exec`], and its region
-    /// holds nothing but the `Clause` that wrote this and an optional
-    /// `Op::TraceClause`, neither of which drives a clause of its own.
     region_procedure_permitted: bool,
     /// The call that entered the running activation: what `USE ARG` reads.
-    ///
-    /// **Saved and restored around every call, alongside the four pieces of
-    /// level state `Interp::invoke_call` already saves.** That is the same
-    /// discipline Task 4's own review finding was about -- a fifth piece of
-    /// per-activation state added without a restore is invisible until two
-    /// activations per clause are reachable, and then wrong. Everything a
-    /// call sets here is set in one place and put back in one place.
-    ///
-    /// On `Interp` and not on `Activation` because it is filled *before* the
-    /// callee's activation exists: the arguments are evaluated in the caller,
-    /// which is where the argument expressions' own variables live.
-    ///
-    /// **The top-level program is a call too, and its caller is the command
-    /// line.** `execute` fills this from the [`Invocation`] before running the
-    /// main body, with the program's own path as the name and the command
-    /// line's one argument string -- or nothing at all, when there was no
-    /// argument. Measured, `use arg p` as a program's own first clause: with
-    /// no argument `p` reads as `P`, with `rexx p.rex hello` it reads as
-    /// `hello`, and with `rexx p.rex ""` it reads as the null string. So an
-    /// empty context here is the right answer for one specific invocation and
-    /// the wrong answer for the other two.
     call_context: CallContext,
     /// The in-process external data queue (I15): every line
     /// `PUSH`/`QUEUE` has written and `PULL`/`PARSE PULL` have not yet
@@ -4245,87 +1818,15 @@ struct Interp {
     input: Input,
     /// `RANDOM`'s generator state: the seed the next call will scramble, or
     /// `None` before any call has drawn one.
-    ///
-    /// **One field for the whole interpreter, where the oracle keeps it per
-    /// activation and forwards.** `RexxActivation::getRandomSeed`
-    /// (`execution/RexxActivation.cpp:3453`) opens with `if
-    /// (isInternalLevelCall()) return parent->getRandomSeed(seed)`, so an
-    /// internal routine and an `INTERPRET` share their caller's stream rather
-    /// than starting one of their own -- which is what
-    /// `bif/RANDOM.testGroup`'s stream test needs, since it seeds once and
-    /// then makes 99 further unseeded calls and requires the whole run to
-    /// repeat. Holding it here reproduces that sharing directly.
-    ///
-    /// `None` rather than a fixed starting value, because the oracle's first
-    /// unseeded number is genuinely process-random: measured, the same
-    /// program's first `random()` was 894, 152 and 414 on three consecutive
-    /// runs, while every number *after* a seeded call repeated exactly. So
-    /// this is drawn once, from the clock and the process id, and never from
-    /// a constant that would make an unseeded program reproducible where the
-    /// oracle's is not.
     random_seed: Option<u64>,
     /// `TIME('E')`/`TIME('R')`'s anchor: the clock reading (`builtin::
     /// datetime`'s microseconds-since-0001-01-01 unit) elapsed time is
     /// measured from, or `None` before any `E`/`R` call has run.
-    ///
-    /// **Lazily initialised to the first call's own reading, not to zero.**
-    /// `RexxActivation::getElapsed` does the same lazy fill
-    /// (`execution/RexxActivation.cpp:3424`), which is what makes a
-    /// program's *first* `TIME('E')` or `TIME('R')` read exactly `0` rather
-    /// than elapsed-since-process-start.
-    ///
-    /// **The reset itself is applied lazily, not immediately, matching the
-    /// oracle rather than simplifying it.** `TIME('R')` does not overwrite
-    /// this field the instant it runs; it sets [`pending_elapsed_reset`]
-    /// instead, and `builtin::datetime::now_base_time`'s own cache-miss
-    /// path is what actually moves this anchor, to the *stale* value still
-    /// sitting in [`Activation::cached_clock`] from the clause the reset
-    /// ran in -- exactly `RexxActivation::getTime`'s own order
-    /// (`execution/RexxActivation.cpp:3400`-`3406`): capture the timestamp
-    /// before overwriting it, then refresh. An earlier version of this
-    /// applied the reset immediately and got exactly one measured case
-    /// wrong: two `TIME('R')` calls inside **one** clause read the same
-    /// value on the oracle (the reset has not taken effect yet when the
-    /// second call reads the still-cached timestamp), where the immediate
-    /// version read `0` for the second -- `builtin::datetime`'s own
-    /// `time_r_resets_relative_to_the_last_reset_not_program_start` pins
-    /// the corrected behaviour with a real burn rather than a fabricated
-    /// clock.
-    ///
-    /// **One field for the whole interpreter, where the oracle keeps it per
-    /// activation** (`ActivationSettings::elapsedTime`) -- the same
-    /// divergence [`random_seed`]'s own doc takes, but **not** for the
-    /// reason an earlier revision of this comment gave. The oracle does
-    /// not reset this to zero on every `CALL`: `putSettings` copies the
-    /// *whole* settings block into a callee by value
-    /// (`execution/RexxActivation.cpp:225`, the same inheritance
-    /// [`trace_mode`]/[`traps`] already document), so a callee's own
-    /// `TIME('E')` reads the caller's own elapsed time correctly inherited
-    /// -- and this one field reproduces exactly that, measured directly.
-    /// The real, opposite divergence is the *write-back*: the oracle's own
-    /// copy-in is guarded to never copy back out except for an `INTERPRET`
-    /// fragment (`isInterpret()`, `:686`), so a callee's own reset dies
-    /// with its frame there and leaks into the caller here, because both
-    /// read and write the identical field. Measured:
-    ///
     /// ```text
     /// zz=time('E'); call burn; call sub; say 'after' time('E')   [sub does n2 = time('R')]
     ///   oracle:  inside 0.725271  inside-after-R 0.000004  after 0.725387
     ///   crate:   inside 33.889432 inside-after-R 0.000005  after 0.000013
     /// ```
-    ///
-    /// `inside` (the callee's own inherited reading) matches; `after` (the
-    /// caller's reading once the callee has returned) does not, because
-    /// the callee's own `R` reset this field out from under the caller.
-    /// `builtin::datetime`'s own
-    /// `a_callees_own_time_r_leaks_into_the_caller_after_it_returns` pins
-    /// this as a declared divergence rather than a silent one.
-    ///
-    /// [`random_seed`]: Interp::random_seed
-    /// [`pending_elapsed_reset`]: Interp::pending_elapsed_reset
-    /// [`Activation::cached_clock`]: crate::activation::Activation::cached_clock
-    /// [`trace_mode`]: crate::activation::Activation::trace_mode
-    /// [`traps`]: crate::activation::Activation::traps
     elapsed_anchor: Option<i64>,
     /// Whether a `TIME('R')` (or a clock read going backward) is waiting
     /// to move [`elapsed_anchor`] the next time the clock cache next
@@ -4333,102 +1834,29 @@ struct Interp {
     /// (`execution/ActivationSettings.hpp:121`), consumed by
     /// `builtin::datetime::now_base_time`'s cache-miss path. See
     /// [`elapsed_anchor`]'s own doc for why the reset is lazy at all.
-    ///
-    /// [`elapsed_anchor`]: Interp::elapsed_anchor
     pending_elapsed_reset: bool,
     /// Whether the required-string protocol can answer anything other than
     /// the value it was handed -- `Interp::required_string_value`'s gate.
-    ///
-    /// **This latches on every route that can make the protocol answer or
-    /// refuse.** A `makeString` installed by a directive is what lets limb 1
-    /// answer a different string; a NOSTRING trap is what lets limb 3 refuse;
-    /// an instance is a receiver whose own `STRING` the last limb sends.
-    /// With neither, every context `provide.xml` `reqstr` lists renders
-    /// exactly what it rendered before the protocol existed, and the gate is
-    /// one load and a branch where the walk is a decode and a heap lookup.
-    ///
-    /// **Monotonic, and that is the point rather than an economy.** `SIGNAL
-    /// OFF NOSTRING` and a class whose `makeString` is never sent both leave
-    /// it set, which costs the walk and cannot change an answer -- where
-    /// clearing it would have to be right at every unwind, and a missed
-    /// clear would be a wrong answer instead of a slow one.
-    ///
-    /// **A missed arming is a wrong answer, so what protects a release build
-    /// is the arming sites and not a check.** The writes are
-    /// `Interp::arm_reqstr_for`, called from every directive install that adds
-    /// a name to a class's dictionary, `Interp::exec_condition_trap`'s
-    /// `NOSTRING`/`ANY` arm, `Interp::install_directives`' `::OPTIONS NOSTRING
-    /// SYNTAX` arm, and `dispatch.rs`'s `native_new`; the initialiser is
-    /// `false` and nothing clears it. `dispatch.rs`'s
-    /// `Interp::required_string_latch_holds` runs under `debug_assert` and
-    /// tests both limbs' routes, so an arming route added without setting
-    /// this reddens the **debug** gate -- both halves proved live by
-    /// inverting each write in turn, which the task report records.
-    ///
-    /// **An instance arms it outright rather than by any
-    /// name**: the protocol's own fallback sends `STRING` to an instance and
-    /// `Object~objectName` sends `DEFAULTNAME`, so every route by which the
-    /// instance's class could come to answer either differently -- a
-    /// directive, `~define`, `~defineMethods`, an inherited mixin -- would
-    /// otherwise need its own arming site. Arming at construction costs the
-    /// walk to a program that builds an instance and cannot answer wrongly.
     reqstr_armed: bool,
     /// Whether any program in this run installed `::OPTIONS ... LOSTDIGITS
     /// SYNTAX`, which is the gate on [`Interp::lostdigits_check`].
-    ///
-    /// **Monotonic and process-wide, the shape [`Interp::reqstr_armed`]
-    /// carries and for its reason**: this is the *fast reject* and not the
-    /// answer. Every arithmetic operand asks it, so it has to be one already
-    /// hot bool rather than a walk to the running activation's own
-    /// `condition_syntax`; the precise, per-activation question is asked only
-    /// once this is set, and a `SIGNAL ON LOSTDIGITS` that turns the
-    /// escalation off leaves this true and costs the walk.
     lostdigits_armed: bool,
     /// The running program's own location, as `PARSE SOURCE`'s third word.
-    ///
-    /// The same string `run_program` was handed and `Raised::report`'s
-    /// position line prints -- absolute and dot-normalised, which is how the
-    /// oracle spells it (`run_program`'s own doc has the measurement). Held
-    /// here rather than derived from `programs` because a program's bytes
-    /// cannot know where they came from, and filled by `execute`; every other
-    /// construction path leaves it empty, so a unit test that wants a path
-    /// sets one.
     program_path: String,
     /// The resolved location of each program a `::REQUIRES` loaded, which is
     /// what that program's own `PARSE SOURCE`, `~package~name` and traceback
     /// report in place of [`Interp::program_path`].
-    ///
-    /// Measured, oracle rc 0: a required file's prologue reports `LINUX
-    /// REQUIRES <its own path>` where the requiring program reports `LINUX
-    /// COMMAND <its own>`, and a failure inside that prologue reports
-    /// `Error 42 running <the required file> line 1`.
     required_paths: HashMap<ProgramId, Box<str>>,
     /// The package each `::REQUIRES` name has already loaded, keyed both by
     /// the name as written and by the file it resolved to.
-    ///
-    /// **Both keys, because the oracle caches under both and asks the written
-    /// one first** (`InterpreterInstance::addRequiresFile`,
-    /// `runtime/InterpreterInstance.cpp:1000`). Measured, oracle rc 0: two
-    /// files in different directories each `::requires 'lib.rex'` with a
-    /// `lib.rex` of its own beside it, and the second gets the *first* file's
-    /// package.
     required_packages: HashMap<Box<[u8]>, ProgramId>,
     /// The resolved paths whose `::REQUIRES` directives are still installing
     /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
-    ///
-    /// A required name that resolves to one of these is 98.952 rather than a
-    /// second load.
     requires_installing: Vec<Box<str>>,
 }
 
 /// Where one installed `::ROUTINE` lives: which loaded program, and which of
 /// its directives.
-///
-/// The program is carried rather than assumed to be the running one, because
-/// the two spellings the resolution needs -- the `BodyKey` a plan is cached
-/// under and the `Rc<Program>` the activation holds -- must name the same
-/// program or a routine would run under another program's plan. Both come
-/// from this one field, so they cannot come apart.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 struct InstalledRoutine {
     program: ProgramId,
@@ -4437,11 +1865,6 @@ struct InstalledRoutine {
 
 /// One `Method` or `Routine` object this crate has handed out, as its own
 /// readers see it.
-///
-/// Separate from [`Interp::table_method_bodies`], which names only the bodies
-/// `Class~defineClassMethod` and `Object~setMethod` may install: a
-/// `::CONSTANT` getter and a `::ROUTINE` are rows here and must not be rows
-/// there.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct ExecutableRecord {
     /// What the seven flags, `~source` and `~package` report on.
@@ -4455,9 +1878,6 @@ pub(crate) struct ExecutableRecord {
     /// the directive [`ExecutableRecord::source`] names: a `Routine`
     /// compiled from source text reports the whole of its own program as its
     /// source and runs the sole directive that program carries.
-    ///
-    /// `None` for a `Method`, whose body a send reaches through
-    /// [`Interp::method_bodies`] instead.
     pub(crate) routine: Option<(ProgramId, usize)>,
 }
 
@@ -4484,11 +1904,6 @@ pub(crate) enum ExecutableSource {
 }
 
 /// What a namespace qualifier resolved to.
-///
-/// The `REXX` variant is a package this crate has no [`ProgramId`] for -- the
-/// interpreter's own, whose public classes are `.environment`'s class-valued
-/// entries and whose public routines are empty -- exactly as
-/// [`crate::plan::Package`] is a variant rather than an absent id.
 #[derive(Copy, Clone)]
 enum Namespace {
     Rexx,
@@ -4501,11 +1916,6 @@ enum Namespace {
 /// directive, and both are needed to find the [`rexx_parse::CodeBody`]
 /// (or its absence, for a generated accessor or an `ABSTRACT`/`DELEGATE`
 /// method) later.
-///
-/// `Interp::enter_method_body` (`dispatch.rs`) is the reader: it turns the
-/// pair into the `Rc<Program>` an activation holds and the `BodyKey` its plan
-/// is cached under, which is why both halves are needed and why they travel
-/// together.
 #[derive(Copy, Clone)]
 struct InstalledMethodBody {
     program: ProgramId,
@@ -4518,45 +1928,10 @@ struct InstalledMethodBody {
 /// path -- measured, `bench-programs/dispatchclass.rex` at +1.88% and 121
 /// `instructions:u` per send when a [`GeneratedKind`] discriminant sat
 /// beside `program` and `directive` (see [`GeneratedMethod`]).
-///
-/// **This catches the change and does not guard the mechanism**, which is
-/// worth saying beside it rather than letting the assertion read as a proof.
-/// The same measurement narrowed the widened struct to 16 bytes by making
-/// `directive` a `u32` and the axis got *worse* (26,243,886,462 against
-/// 26,207,891,553), so the width is not what the send path was paying for.
-/// What this fails on is precisely the edit the measurement was taken
-/// against.
 const _: () = assert!(size_of::<InstalledMethodBody>() == 16);
 
 /// One installed method that the *directive* implements rather than a body:
 /// a generated accessor, or an `ABSTRACT` declaration.
-///
-/// **A table of its own rather than a discriminant on
-/// [`InstalledMethodBody`], and that is measured.** Every send to a
-/// `::METHOD` body copies an `InstalledMethodBody` out of
-/// [`Interp::method_bodies`] and enters it; putting a kind beside `program`
-/// and `directive` there costs `bench-programs/dispatchclass.rex` --
-/// 4,000,000 sends to a body, none of them to a generated method -- **121 more
-/// `instructions:u` per send**, 25,723,898,929 against 26,207,891,553 for
-/// the whole run. Narrower shapes were measured and none recovered it:
-/// making `directive` a `u32` so the widened struct was 16 bytes again was
-/// worse (26,243,886,462), an out-of-line arm behind one comparison left
-/// 26,191,934,770, and forcing the accessors out of line while pulling
-/// `Activation::method` and `Interp::super_scope_for` back in recovered a
-/// fraction. Separating them recovers all of it, because a body send reads the
-/// table it always read and never reaches this one. The totals above come from
-/// `perf stat -e instructions:u` run directly on the axis while the shapes
-/// were being chosen; `bench-baselines/phase-5a-arms.tsv`, `task=15-breach`,
-/// is the committed re-measurement of the same comparison, and it reproduces
-/// the 121 per send and the ordering rather than these totals.
-///
-/// **Recorded rather than derived, because one directive mints an id per key
-/// and only the installer knows which is which.** A `::ATTRIBUTE a` with
-/// neither `GET` nor `SET`, and a `::METHOD a ATTRIBUTE`, each add a getter's
-/// key and a setter's key to one dictionary from a single directive; the directive says an accessor pair
-/// was generated and the dictionary key says which half, but reading the key
-/// back means deciding a getter from a setter by a trailing `=` on a name
-/// that a `::METHOD "a="` could also carry.
 #[derive(Copy, Clone)]
 struct GeneratedMethod {
     program: ProgramId,
@@ -4565,14 +1940,6 @@ struct GeneratedMethod {
 }
 
 /// Which method a directive generated.
-///
-/// **`EXTERNAL` is not here.** An `EXTERNAL` this phase binds has a body that
-/// is neither a directive's nor a dictionary key's: it is a row of
-/// `dispatch::native`'s registry, reached through
-/// [`Interp::native_externals`], and the `EXTERNAL` forms this phase does not
-/// bind are refused before any id is minted for them. So this enum covers
-/// what a send runs *out of a directive*, which is what an installer can
-/// decide from the directive alone.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum GeneratedKind {
     /// A generated getter: it answers the attribute's variable in the
@@ -4588,34 +1955,14 @@ enum GeneratedKind {
     /// re-sent, under the name it arrived under and with the arguments it
     /// arrived with, to the value of the delegate variable in the declaring
     /// scope's pool on the receiver.
-    ///
-    /// **Here rather than on the body path, and that is measured rather than
-    /// a matter of shape.** The C++ builds a `DelegateCode`
-    /// (`parser/DirectiveParser.cpp:2442`), a primitive that pushes no Rexx
-    /// activation, so a failure inside the delegated-to method leaves **no**
-    /// frame of its own on the traceback. `dire.xml`'s stated equivalence --
-    /// `expose delegateName` plus `forward to (delegateName)` -- does leave
-    /// one: measured over the same failing inner method, `::method m delegate
-    /// d` reports the inner clause then the sending clause, and the
-    /// written-out body reports the inner clause, its own `forward to (d)`
-    /// clause, and then the sending clause. Both rc 214, `Error 42.3`.
     Delegate,
     /// A `::CONSTANT` accessor: it answers the value
     /// [`Interp::constant_values`] holds for the directive.
-    ///
-    /// One directive mints one of these per dictionary side, which is what
-    /// `ClassDirective::addConstantMethod` does with the single method object
-    /// it builds (`instructions/ClassDirective.cpp:520`-`:524`).
     Constant,
 }
 
 /// What one just-installed dictionary key resolves to, handed to
 /// [`Interp::install_one_method`] by whichever installer minted it.
-///
-/// One arm per table a resolved [`MethodId`] can be found in, and the
-/// installer is the only place that knows which: reading it back off the
-/// directive would mean deciding a generated accessor from a written body
-/// from a bound entry point by re-running every rule that produced the key.
 #[derive(Copy, Clone)]
 enum InstallBody {
     /// The directive's own Rexx body: a row of [`Interp::method_bodies`].
@@ -4628,47 +1975,19 @@ enum InstallBody {
 }
 
 /// The name, arguments and receiver of one call in progress.
-///
-/// One struct rather than separate `Interp` fields so that the
-/// save-and-restore in `Interp::invoke_call` is a single `mem::replace`:
-/// separate fields would be separate places to forget, which is precisely the
-/// defect shape this is modelled to avoid.
 #[derive(Default)]
 struct CallContext {
     /// The resolved routine name, as errors 40.3 and 40.4 spell it --
     /// measured, `Not enough arguments in invocation of SUB2`, the label's
     /// own upcased spelling.
-    ///
-    /// At the top level it is the **program's own path**, not a label: with no
-    /// argument supplied, `use strict arg p` as a program's first clause is
-    /// measured as `Error 40.3: Not enough arguments in invocation of
-    /// /abs/path/p.rex; minimum expected is 1.`, and `use strict arg` with an
-    /// argument supplied is the matching 40.4 naming the same path.
     name: Vec<u8>,
     /// The arguments in source order, an omitted position (`call sub 1,,3`)
     /// left as `None` rather than closed up. Measured: that call into `use
     /// arg p, q, r` gives `[1] [Q] [3]`, so an omission holds its place.
-    ///
-    /// **Shared with the activation this convention entered**
-    /// ([`crate::activation::Activation::call_arguments`]), which is what
-    /// lets an outer frame answer `StackFrame~arguments`: this field is one
-    /// `Interp` slot saved and restored in a Rust local, so nothing but the
-    /// running activation could otherwise read it. A refcount clone rather
-    /// than a copy, so the sharing costs no allocation --
-    /// [`Interp::shared_arguments`] keeps the empty case free too.
     arguments: Rc<[Option<ObjRef>]>,
     /// **The receiver, which is part of the calling convention** (D24): the
     /// object a message send was addressed to, and `None` for a call that has
     /// none.
-    ///
-    /// `RexxActivation::getReceiver` is the oracle's reader
-    /// (`execution/RexxActivation.cpp:2342`-`:2349`), and its `OREF_NULL` is
-    /// the same absence: code that a message send did not enter has no
-    /// receiver.
-    ///
-    /// **A callee's own `SELF` and the caller a send inside it resolves as
-    /// both come from here**, which is what the oracle's single
-    /// `getReceiver` makes them.
     receiver: Option<ObjRef>,
 }
 
@@ -4685,19 +2004,6 @@ impl Interp {
 
 /// Where a variable lives: a frame slot, or a name in a scope pool on some
 /// object.
-///
-/// **What `PROCEDURE EXPOSE` has to carry**, and one of the two arms is not
-/// derivable from the other. A `SlotRef` addresses `RootSet` storage, and an
-/// `EXPOSE`d name has none -- its value is in the receiving object's pool, so
-/// a name resolved as a slot would bind the callee to an empty slot the
-/// caller never reads. Measured: a class method exposing `v` and calling
-/// `inner: procedure expose v`, which assigns `v` -- the object variable is
-/// what changes.
-///
-/// The same two homes reach a `>name` reference through
-/// [`rexx_core::VarRefHome`], which the object carries instead: a reference is
-/// an ordinary value and may outlive the frame, so its slot arm names a cell
-/// rather than a frame position.
 #[derive(Clone, Debug)]
 enum VarHome {
     Slot(SlotRef),
@@ -4706,15 +2012,6 @@ enum VarHome {
 
 impl CallContext {
     /// Appends every `ObjRef` this convention holds to `out`.
-    ///
-    /// What `Interp::park_reply` hands to `RootSet::park` alongside the
-    /// activation's own: a parked method still owns its arguments and its
-    /// receiver, and nothing else roots them once its frame is released.
-    ///
-    /// **SCHEDULING**, and Phase 6 may delete it. Nothing but a parked
-    /// activation needs this: a running one's arguments are rooted by the
-    /// temps its caller pushed, and a design that keeps the frame open while
-    /// the body continues has no parked activations at all.
     fn object_roots(&self, out: &mut Vec<ObjRef>) {
         let CallContext {
             name: _,
@@ -4733,13 +2030,6 @@ impl Interp {
     /// that shape: `execute` sets each from what it was handed, and every
     /// other caller -- the unit tests throughout this crate, which is nearly
     /// all of them -- gets the value below.
-    ///
-    /// **`engine` starting at `TreeWalker` is therefore not the default
-    /// engine**, which is [`Engine::DEFAULT`] and reaches an `Interp` through
-    /// `execute`. What this value decides is the arm those unit tests run on,
-    /// and it is the tree-walker: measured, by setting it to `Engine::Ir` and
-    /// counting what the driver did -- 1 chunk driven and 2 clauses stepped
-    /// from it against 0 and 0 -- with the whole suite green either way.
     fn new() -> Interp {
         Interp {
             heap: Heap::new(),
@@ -4850,11 +2140,6 @@ impl Interp {
 
     /// Loads `program`, runs its main body in a fresh activation, and tears
     /// the activation down again.
-    ///
-    /// This is the *outermost* activation only. A `CALL` pushes and pops its
-    /// own (`run.rs`'s `exec_call`), so the pop below is still matched with
-    /// the push above it by the time control gets here -- `run_activation`'s
-    /// own loop asserts exactly that after every step.
     fn run(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
         let program = Rc::new(program);
         let program_id = ProgramId(self.programs.len());
@@ -4865,28 +2150,6 @@ impl Interp {
     /// Runs the interpreter's own Rexx-written library -- `Setup.cpp:1786`'s
     /// `resolveProgramName(BASEIMAGELOAD)` and the `runProgram` at `:1795`,
     /// which hands the entry program `TheRexxPackage` as its one argument.
-    ///
-    /// **At interpreter start, before the program's first clause and before
-    /// its directives install.** D26 builds no image, so this is what a
-    /// saved image would
-    /// otherwise have been: the classes `CoreClasses.orx` and
-    /// `StreamClasses.orx` declare are most of the documented class set, and
-    /// a program that never asked for them still has to find `.Alarm` in
-    /// `.environment`.
-    ///
-    /// **The argument is the entry program's own package object**, where the
-    /// C++ hands a distinct `TheRexxPackage`. The two answer the same
-    /// questions here: the prologue reads `~publicClasses` off `.context
-    /// ~package` and writes through `~addClass`/`~addPublicClass` and
-    /// `~objectname=`, and `Interp::record_package_class` is what makes a
-    /// class the library installed answer `REXX` for `~package` rather than
-    /// this object. Cost if that is wrong: a program that could reach this
-    /// object would see a `~name` of the running program's path. Nothing
-    /// hands it out -- a program's own `.context~package` is its own.
-    ///
-    /// The state this opens is closed here rather than by the prologue:
-    /// [`Interp::library_bootstrap`] carries what it opens, and
-    /// `rexx_classes::remove_setup_methods` is `Setup.cpp:1809`.
     pub(crate) fn bootstrap_library(&mut self) -> Result<(), Failure> {
         debug_assert!(
             self.object_model.is_none(),
@@ -4920,10 +2183,6 @@ impl Interp {
 
     /// Parses one embedded library program, registers it, and runs its body
     /// with `arguments` as its calling convention.
-    ///
-    /// `None` is the entry point, whose one argument this builds: it is the
-    /// package object of the program itself, which cannot exist before the
-    /// program has an id.
     fn enter_library_program(
         &mut self,
         program: &'static rexx_lib::Program,
@@ -4981,13 +2240,6 @@ impl Interp {
     }
 
     /// Starts a freshly built activation from its own package's `::OPTIONS`.
-    ///
-    /// `caller` is the numeric settings in force where the call was made,
-    /// which `::OPTIONS NUMERIC INHERIT` selects in place of the package's
-    /// own; `None` is the top-level activation, which has no call site.
-    /// Measured, `::options digits 12 numeric inherit` with `numeric digits
-    /// 20` in the main body: a `::ROUTINE` it calls reports 20, and the main
-    /// body itself reports 12.
     fn start_from_package(&self, activation: &mut Activation, caller: Option<&Settings>) {
         let Some(options) = self.options_of(activation.program_id) else {
             return;
@@ -5005,12 +2257,6 @@ impl Interp {
     /// Whether the running activation turns an untrapped raise of `condition`
     /// into a SYNTAX error -- `::OPTIONS <condition> SYNTAX`, and `ALL` for
     /// all six at once.
-    ///
-    /// **Asked only where nothing would trap the condition**, which is the
-    /// measured order: `::options novalue syntax` under `signal on novalue`
-    /// traps `NOVALUE`, and under `signal on any` traps `NOVALUE` too, so the
-    /// escalation is what an untrapped raise becomes rather than something
-    /// that preempts a trap.
     pub(crate) fn condition_raises_syntax(&self, condition: &[u8]) -> bool {
         self.running_activation()
             .is_some_and(|activation| activation.condition_syntax.raises(condition))
@@ -5018,11 +2264,6 @@ impl Interp {
 
     /// Installs `program`'s directives and runs its main body, for a program
     /// already registered under `program_id`.
-    ///
-    /// `call_type` is what `PARSE SOURCE`'s second word answers for that body
-    /// and what selects whether `::OPTIONS NOPROLOG` suppresses it:
-    /// [`CallType::Requires`] for a package a `::REQUIRES` loaded,
-    /// [`CallType::Command`] for a program.
     fn run_loaded(
         &mut self,
         program: Rc<Program>,
@@ -5095,13 +2336,6 @@ impl Interp {
 
     /// Resolves every `::` directive of `program`, filling [`Interp::routines`]
     /// and refusing the ones this crate cannot resolve.
-    ///
-    /// **A directive that fails to resolve refuses the program; a directive
-    /// that merely *exists* does not.** Both halves are measured, and they
-    /// fail in opposite directions, which is why the rule is stated rather
-    /// than approximated by "any directive is a gap". Programs the oracle
-    /// runs, all rc 0 printing `main ran`:
-    ///
     /// ```text
     /// ::class foo
     /// ::class foo + ::method bar
@@ -5112,9 +2346,6 @@ impl Interp {
     /// ::annotate <target> <name>, with the target declared above it
     /// a loose ::method with no ::class
     /// ```
-    ///
-    /// Programs the oracle refuses before `main`, stdout EMPTY in every case:
-    ///
     /// ```text
     /// ::class foo subclass zzznotaclass     98.909 rc 158
     /// ::class foo metaclass zzznotaclass    98.908 rc 158
@@ -5126,26 +2357,6 @@ impl Interp {
     /// ::annotate routine nosuchrtn          99.945 rc 157
     /// duplicate ::routine of the same name  99.903 rc 157
     /// ```
-    ///
-    /// So the predicate below is: **a directive installs here when installing
-    /// it neither runs code, changes a setting a Phase 4 construct can read,
-    /// nor resolves a name against a table this crate does not have.**
-    /// [`directive_gap`]'s arms each say which of the three they trip. An
-    /// `::ANNOTATE` naming a target resolves it against the accumulated
-    /// package, which the walk below carries, so it trips none of them and
-    /// answers the oracle's own 99.945 where the name is not there --
-    /// [`annotation_target`] is the resolution and [`AnnotatedSite`] is what
-    /// it produces.
-    ///
-    /// **`::CONSTANT`'s parenthesised expression form is the one exception to
-    /// "installing does not run code".** The oracle evaluates it right here,
-    /// before `program.main`'s first clause, so a failing expression refuses
-    /// the program exactly the way the other install-time gaps above do --
-    /// measured, `::class K` then `::constant c (1/0)` is rc 214 with stdout
-    /// EMPTY, both engines, while the same directive with `(2+3)` is rc 0 with
-    /// `program.main`'s own output intact. A well-formed expression's value is
-    /// what the directive's accessor then answers -- see
-    /// [`Interp::constant_values`].
     fn install_directives(&mut self, id: ProgramId, program: &Rc<Program>) -> Result<(), Failure> {
         // **The oracle's first walk, and everything it can answer is answered
         // here in source order** -- the duplicate names (`::CLASS`,
@@ -5157,16 +2368,6 @@ impl Interp {
         // under a preceding `::CLASS` reaches the install-time evaluation
         // below instead; and see `staged_gap` for the stage order this walk is
         // the first of, and for every probe placing a form in it.
-        //
-        // **One walk rather than a walk and then a gap pass, because the
-        // oracle takes whichever it reaches first.** Measured, `::annotate
-        // routine nosuchrtn` above a duplicate `::routine` pair is the
-        // oracle's 99.945 and `::routine zz external` in the same position is
-        // its 98.903, where a separate later pass answers the duplicate's
-        // 99.903 instead -- which is a wrong answer where this is a refusal
-        // (R33). The same source order decides between the duplicate checks:
-        // measured, a duplicate `::ROUTINE` pair above a duplicate `::CLASS`
-        // pair is 99.903 and the two blocks swapped is 99.901.
         let mut saw_class = false;
         // The class a member directive's keys are claimed against, and the
         // keys claimed so far. `None` is `LanguageParser`'s `unattachedMethods`
@@ -5356,12 +2557,6 @@ impl Interp {
             // nosuchfn"` is 99.903 rc 157 echoing the second directive, not
             // 98.903. Reverse that pair and the `EXTERNAL` comes first in the
             // file and wins, which the walk gives.
-            //
-            // The kinds are named rather than their EXTERNAL-ness, so the
-            // discrimination stays in `directive_gap` alone: it answers
-            // `None` for a `::ROUTINE`, `::METHOD` or `::ATTRIBUTE` with no
-            // `EXTERNAL` and for `::ANNOTATE PACKAGE`, and those fall
-            // through here.
             if matches!(
                 directive.kind,
                 DirectiveKind::Annotate(_)
@@ -5382,13 +2577,6 @@ impl Interp {
             // EXTERNAL` on a missing entry point is rc 166 with stdout empty,
             // and the same file naming `file_separator` is rc 0 printing the
             // prologue.
-            //
-            // **After the arms above for their reason and not by accident.**
-            // Measured, oracle: a `::CLASS` carrying `::method m` and then
-            // `::method m external "LIBRARY REXX nosuch"` is the duplicate's
-            // 99.902 at rc 157, which `check_member_keys` answers at the top
-            // of this loop; and a file whose `::METHOD EXTERNAL` precedes a
-            // duplicate `::ROUTINE` pair is 90.998, which source order gives.
             if let Some(missing) = unresolved_external(&directive.kind) {
                 self.blame_directive(program, directive);
                 return Err(Raised::external_method_not_found(&missing).into());
@@ -5400,12 +2588,6 @@ impl Interp {
         // (98.9xx/43.901/the `::CONSTANT` expression evaluation), so a
         // program with both gets the translation error -- which is what
         // running the whole first pass before any of this reproduces.
-        //
-        // Every `::CLASS` name this file declares, upcased, so that a
-        // `SUBCLASS` target can be told from a name the registry answers.
-        // One entry per name by construction: the walk above refuses a second
-        // `::CLASS` of one name with 99.901, so `or_insert` below can only
-        // ever insert.
         let mut declared: HashMap<Box<[u8]>, usize> = HashMap::new();
         for (index, directive) in program.directives.iter().enumerate() {
             if let DirectiveKind::Class(class) = &directive.kind {
@@ -5464,21 +2646,6 @@ impl Interp {
         // every `::CONSTANT` expression (`:1290`), then send `ACTIVATE` to
         // every class (`:1299`). Each pass walks `order` rather than the
         // file, because `processInstall`'s own list is the class list.
-        //
-        // **The second pass is what lets a constant expression name a class
-        // declared later.** Measured, oracle rc 0 printing `from B`:
-        // `::class A` / `::constant c (.B~m)` / `::class B` / `::method m
-        // class`. Evaluating that expression while `A` installs answers 97.1
-        // instead, because `B`'s own methods are not in yet.
-        //
-        // **A class's members are attached inside its own install, not in a
-        // pass of their own**, which is what makes the `INIT`/`ACTIVATE`
-        // split observable. Measured, oracle rc 0 on `::CLASS M MIXINCLASS
-        // Object` carrying `::METHOD mm CLASS`, with `::CLASS K INHERIT M`
-        // carrying class-side `init` and `activate`: `K init, hasMethod MM =
-        // 0` then `K activate, hasMethod MM = 1`. A pass that attached every
-        // file's methods after every file's classes would leave `M`'s own
-        // method out of `K`'s `INHERIT` merge and answer `0` twice.
         let mut classes: HashMap<usize, ObjRef> = HashMap::new();
         for index in &order {
             let attached = members.get(index).map_or(&[][..], Vec::as_slice);
@@ -5547,15 +2714,6 @@ impl Interp {
 
     /// Loads every package this program's `::REQUIRES` directives name, in
     /// source order, and merges each one's public routines and classes in.
-    ///
-    /// **The package is marked as installing for the whole walk**, which is
-    /// `PackageClass::processInstall`'s own `InstallingPackage`
-    /// (`classes/PackageClass.cpp:1254`): a name resolving back to a package
-    /// on that list is 98.952 rather than a second load.
-    ///
-    /// A failure carries one clause echo per level of the chain, which is
-    /// what `seal_site_level` below the load builds -- the same mechanism a
-    /// failing `::CONSTANT` expression uses for its two.
     fn load_required_packages(
         &mut self,
         id: ProgramId,
@@ -5605,13 +2763,6 @@ impl Interp {
 
     /// The package `name` names, loaded and its prologue run if this is the
     /// first `::REQUIRES` to reach it.
-    ///
-    /// `InterpreterInstance::loadRequires`
-    /// (`runtime/InterpreterInstance.cpp:1021`): the written name is looked
-    /// up in the cache first, then the resolved one, and only a miss on both
-    /// opens a file. **The circularity check is on a cache hit alone**, which
-    /// is why a file requiring itself loads a second copy before it is
-    /// refused -- measured, the oracle echoes that `::REQUIRES` clause twice.
     fn load_requires(&mut self, id: ProgramId, name: &[u8]) -> Result<ProgramId, Failure> {
         if let Some(&loaded) = self.required_packages.get(name) {
             self.check_not_installing(loaded)?;
@@ -5670,16 +2821,6 @@ impl Interp {
 
     /// `PackageClass::addPackage` (`classes/PackageClass.cpp:1367`): records
     /// `from` as one of `into`'s imports, once.
-    ///
-    /// Answers whether the list grew, which is what `~addPackage` needs to
-    /// know before it merges -- the C++ returns from `addPackage` without
-    /// merging when the package is already there.
-    ///
-    /// **The interpreter's own package can be imported**, which is why this
-    /// takes a [`Package`] rather than a program: measured, oracle rc 0,
-    /// `.context~package~addPackage(.Class~package)` answers a `Package`,
-    /// leaves `~importedPackages` at one entry whose `~name` is `REXX`, and
-    /// fills `~importedClasses` with 62 entries.
     fn add_imported_package(&mut self, into: ProgramId, from: Package) -> bool {
         let held = self.package_imports.entry(into).or_default();
         if held.contains(&from) {
@@ -5690,11 +2831,6 @@ impl Interp {
     }
 
     /// [`Interp::merge_required`] for either kind of package.
-    ///
-    /// The interpreter's own contributes its public classes and no routines
-    /// -- measured, oracle rc 0, importing it leaves `~importedRoutines`
-    /// empty and `~importedClasses` at the 62 names `~publicClasses` answers
-    /// for it.
     fn merge_package(&mut self, into: ProgramId, from: Package) {
         let from = match from {
             Package::Program(program) => return self.merge_required(into, program),
@@ -5709,14 +2845,6 @@ impl Interp {
 
     /// The public routines and classes `from` contributes to `into`: its own
     /// first, then the ones it imported.
-    ///
-    /// **First write wins**, so the earliest `::REQUIRES` in source order owns
-    /// a name two required files both export -- `HashContents::mergeItem`
-    /// leaves an existing entry alone, and `PackageClass::mergeRequired`
-    /// (`classes/PackageClass.cpp:693`) merges the direct publics ahead of the
-    /// transitive ones for the same reason. Measured, oracle rc 0: two files
-    /// each declaring `::routine which public` and `::class Coll public`, and
-    /// the first `::REQUIRES` answers both.
     fn merge_required(&mut self, into: ProgramId, from: ProgramId) {
         let routines: Vec<(Box<[u8]>, InstalledRoutine)> = self
             .package_public_routines
@@ -5747,11 +2875,6 @@ impl Interp {
 
     /// The package a namespace qualifier written in `package` names, or `None`
     /// when nothing registered it.
-    ///
-    /// `PackageClass::findNamespace` (`classes/PackageClass.cpp:784`), whose
-    /// first check is the reserved `REXX` name and whose second is the
-    /// package's own table. `::REQUIRES ... NAMESPACE REXX` cannot reach the
-    /// table -- it is 99.944 at parse time -- so the two cannot collide.
     fn find_namespace(&self, package: ProgramId, upper: &[u8]) -> Option<Namespace> {
         if upper == LIBRARY_PACKAGE_NAME {
             return Some(Namespace::Rexx);
@@ -5768,18 +2891,6 @@ impl Interp {
 
     /// The class `namespace:name` names from `package`, or the oracle's own
     /// refusal for either half missing.
-    ///
-    /// `ClassResolver::lookup`'s qualified branch
-    /// (`expression/ExpressionClassResolver.cpp:170`): the namespace first,
-    /// 98.987 when it is absent, then `findPublicClass` in that package alone,
-    /// 98.988 when that answers nothing. **The unqualified search order is not
-    /// consulted at either step**, so a class the requiring file declares
-    /// itself is not reachable through a qualifier.
-    ///
-    /// The `REXX` namespace reaches [`Interp::rexx_package_class`], the same
-    /// table `.NAME`'s own step 4 reads. Measured, `rexx:RexxInfo` is 98.988
-    /// on the oracle because that name is an instance rather than a class,
-    /// and `.RexxInfo` is not in either of that table's two sources here.
     fn namespace_class(
         &mut self,
         package: ProgramId,
@@ -5817,16 +2928,6 @@ impl Interp {
 
     /// The routine `namespace:name` names from `package`, or the oracle's own
     /// refusal for either half missing.
-    ///
-    /// `RexxInstructionQualifiedCall::resolve`
-    /// (`instructions/CallInstruction.cpp:443`-`:456`): 98.987 for the
-    /// namespace and 43.902 for the routine, and **`findPublicRoutine` alone**
-    /// -- a non-`PUBLIC` `::ROUTINE` of the namespace package is not
-    /// reachable. Measured, `w:privr()` is 43.902 naming `"PRIVR"` and `"W"`.
-    ///
-    /// **The `REXX` namespace exports no routine**, so every name reaches
-    /// 43.902 there rather than a builtin: measured, `rexx:length('abc')` is
-    /// `Routine "LENGTH" not found in namespace "REXX".`
     fn namespace_routine(
         &self,
         package: ProgramId,
@@ -5855,22 +2956,12 @@ impl Interp {
 
     /// The file a `::REQUIRES` of `name` in package `id` resolves to, or
     /// `None` when no route holds one.
-    ///
-    /// [`require::candidates`] owns the order and is asserted on its own; what
-    /// is here is the environment the search runs in and the test each
-    /// candidate is put to -- `stat` plus `S_ISREG`, which is
-    /// `SysFileSystem::checkCurrentFile` (`platform/unix/SysFileSystem.cpp:435`).
     fn resolve_requires(&self, id: ProgramId, name: &[u8]) -> Option<String> {
         self.resolve_search(Some(self.package_path(id)), name, true)
     }
 
     /// [`Interp::resolve_requires`] for a caller that names the searching
     /// package's path itself and chooses the resolve type.
-    ///
-    /// `program` is `None` for a search with no package directory to start
-    /// from, which is what the REXX package's own `~findProgram` is;
-    /// `requires` is `RESOLVE_REQUIRES`, whose one difference is the `.cls`
-    /// extension tried ahead of every other.
     pub(crate) fn resolve_search(
         &self,
         program: Option<&str>,
@@ -5908,11 +2999,6 @@ impl Interp {
 
     /// `PackageClass::newRexx`'s in-memory form: a package compiled from
     /// source lines, its directives installed and its prologue run.
-    ///
-    /// **The name is kept as written and not resolved**, which is what
-    /// `~name` then answers -- measured, oracle rc 0,
-    /// `.Package~new('inmem.rex', <lines>)~name` is `inmem.rex` where the
-    /// file form answers the resolved absolute path.
     pub(crate) fn package_from_source(
         &mut self,
         name: &[u8],
@@ -5935,14 +3021,6 @@ impl Interp {
 
     /// Moves what the first walk recorded for one `::CLASS` and for the
     /// members attached to it onto the class object that has just been built.
-    ///
-    /// **The two stages the oracle has**, and the reason for them here is the
-    /// same: a `ClassDirective` accumulates annotations while the file is
-    /// read and hands them to a class object that does not exist until
-    /// `install` runs (`instructions/ClassDirective.cpp:243`). A member's are
-    /// keyed by the class and the dictionary name rather than by the
-    /// directive, because `~method` is what a program reads them through and
-    /// it holds a class object and a name.
     fn attach_directive_annotations(
         &mut self,
         program: &Rc<Program>,
@@ -5985,47 +3063,6 @@ impl Interp {
     /// (`parser/DirectiveParser.cpp:507`-`:530`): every dictionary key a
     /// member directive is about to claim, refused if the class it attaches
     /// to has already been given that key on that side.
-    ///
-    /// **A translation error on the oracle, not an install one**, so it is
-    /// raised in the walk that answers the rest of them and before this crate
-    /// installs anything: measured, `::method m` twice under a `::CLASS`,
-    /// followed by `::class B subclass zzznotaclass`, is 99.902 at rc 157 and
-    /// not the class error. `rexx-parse` does not detect it, so it is
-    /// detected here, where the accumulated set is what answers -- the same
-    /// place and the same reason as the duplicate `::ROUTINE` beside it.
-    ///
-    /// **It runs before [`directive_gap`] in the walk**, because a directive
-    /// that is both a duplicate and an `EXTERNAL` gets the duplicate:
-    /// measured, `::method m` followed by
-    /// `::method m external "LIBRARY nosuchlib nosuchfn"` is 99.902 at rc 157,
-    /// byte for byte on both engines.
-    ///
-    /// **The reverse order is evidence for that placement too, on the
-    /// `LIBRARY REXX` form.** Measured, `::method m external "LIBRARY REXX
-    /// no_such_entry_point_xyz"` above a plain `::method m`: 90.998 at rc 166
-    /// echoing the `EXTERNAL` directive, oracle and both engines, so source
-    /// order decides and this check does not run ahead of it.
-    /// `corpus/lang/directive_method_external_before_duplicate.rex` is that
-    /// program.
-    ///
-    /// **The same pair with a library nothing can load is not evidence and is
-    /// not offered as any**, because this crate never answers it the way the
-    /// oracle does: measured, `::method m external "LIBRARY nosuchlib
-    /// nosuchfn"` first is the oracle's own 98.903 at rc 158 and a refusal
-    /// here at rc 120, on both engines, because [`directive_gap`] refuses
-    /// that form whichever check the walk reached first.
-    ///
-    /// **Per side, so a class method and an instance method may share a
-    /// name**: measured, oracle rc 0 on `::CLASS A` carrying `::METHOD m` and
-    /// `::METHOD m CLASS`. `ClassDirective::checkDuplicateMethod` asks one
-    /// dictionary or the other (`instructions/ClassDirective.cpp:434`-`:444`).
-    ///
-    /// **The `CLASS` keyword with no `::CLASS` above it is this function's
-    /// own refusal and not a duplicate at all** (`:512`-`:515`), which is why
-    /// it is here: measured, `::METHOD m CLASS` alone in a file and
-    /// `::ATTRIBUTE p CLASS` alone in a file are each 99.905 at rc 157. A
-    /// `::CONSTANT` never reaches it, because `constantDirective` guards its
-    /// class-side call with `activeClass != OREF_NULL` (`:1929`).
     fn check_member_keys(
         &mut self,
         program: &Rc<Program>,
@@ -6057,21 +3094,6 @@ impl Interp {
     }
 
     /// Records the value of every literal `::CONSTANT` among `attached`.
-    ///
-    /// **Before the class's own members are installed, because a class-side
-    /// `INIT` can read one.** A literal constant's value is fixed when the
-    /// directive is parsed -- `ConstantGetterCode(name, value)`
-    /// (`parser/DirectiveParser.cpp:2520`), reached with `value` already set
-    /// from the value token (`:1911`) -- where the expression form's value
-    /// arrives in the second install pass. Measured, oracle rc 0: an `init`
-    /// class method saying `self~c` prints `5` under `::constant c 5` and is
-    /// 97.4 under `::constant c (2+3)`.
-    ///
-    /// A `::CONSTANT` with no value at all takes its own name instead
-    /// (`:1875`, the arm the end-of-clause test at `:1873` selects), and the
-    /// name is the token's value, which the tokenizer has already upcased for
-    /// a symbol and left alone for a literal. Measured, oracle rc 0: `.A~c3`
-    /// is `C3` under `::constant c3` and `c4` under `::constant "c4"`.
     fn record_literal_constants(
         &mut self,
         id: ProgramId,
@@ -6093,22 +3115,6 @@ impl Interp {
 
     /// Evaluates the `::CONSTANT` expressions among `attached`, in source
     /// order, and records what each answered.
-    ///
-    /// **The blame on failure is the class installed LAST and not the class
-    /// this constant belongs to**, which is the same target the oracle's own
-    /// `activation->setCurrent` leaves behind: `ClassDirective::install` sets
-    /// it per class (`instructions/ClassDirective.cpp:171`) and nothing in
-    /// the constants pass sets it again, so the enclosing echo is whichever
-    /// class the install pass reached last. `class_install_order`'s own doc
-    /// has the corpus witnesses that exclude each direction of source order.
-    ///
-    /// **`class` is the class each expression runs against and is the class
-    /// the constant attaches to**, not the blame target beside it: the two
-    /// are separate parameters because they name different classes whenever
-    /// a file declares more than one. Measured, oracle rc 0 on `::CLASS K` /
-    /// `::CONSTANT c (self~id)` / `::CLASS J SUBCLASS K` /
-    /// `::CONSTANT c (self~id "and" super~id)`: `.J~c` is `J and K` and
-    /// `.K~c` is `K`, where the blame target for either is `J`.
     fn resolve_constants(
         &mut self,
         id: ProgramId,
@@ -6131,24 +3137,10 @@ impl Interp {
                     // Two clause echoes, innermost first, matching the
                     // oracle's own report exactly (measured, `::class K` /
                     // `::constant c (1/0)`):
-                    //
                     // ```text
                     //      4 *-* ::constant c (1/0)
                     //      3 *-* ::class K
                     // ```
-                    //
-                    // `blame_directive` sets `self.failure_site`;
-                    // `seal_site_level` is the same mechanism
-                    // `invoke_call`/`run_fragment` use to move a level's site
-                    // into `self.failure_sites` before the next, enclosing
-                    // level sets its own. **The two directive clauses stand in
-                    // for activation nesting between themselves**, and only
-                    // between themselves: a method the expression calls is a
-                    // real activation and has already sealed its own site
-                    // below these two. Measured, the probe above with the
-                    // divide moved into a class method that
-                    // `::constant c (self~m)` calls:
-                    //
                     // ```text
                     //      5 *-* return 1/0
                     //      6 *-* ::constant c (self~m)
@@ -6171,10 +3163,6 @@ impl Interp {
     }
 
     /// Records what a `::CONSTANT` accessor answers, and roots it.
-    ///
-    /// [`rexx_core::RootSet::add_global`] keyed by the directive, so that a
-    /// value the evaluating activation was the only other holder of survives
-    /// the collector for the rest of the run.
     fn record_constant_value(&mut self, program: ProgramId, directive: usize, value: ObjRef) {
         self.constant_values.insert((program, directive), value);
         self.roots
@@ -6192,11 +3180,6 @@ impl Interp {
 
     /// The constant's name as its accessor was installed under, which is what
     /// a 97.4 report names.
-    ///
-    /// `internalname = commonString(name->upper())` is what
-    /// `constantDirective` hands `createConstantGetterMethod`
-    /// (`parser/DirectiveParser.cpp:1865`, `:1933`), so the upcased spelling
-    /// is the one the message carries whatever the send spelled.
     pub(crate) fn constant_name(&self, generated: GeneratedMethod) -> Result<Vec<u8>, Failure> {
         let program = &self.programs[generated.program.0];
         // `get` rather than an index, and a refusal rather than a panic, for
@@ -6212,26 +3195,6 @@ impl Interp {
 
     /// One message the install machinery sends a class object, run in a
     /// throwaway activation carrying the installing program.
-    ///
-    /// **The activation is what makes the send's own package the installing
-    /// package**, which the oracle's is: `processInstall` runs inside an
-    /// activation of the package being installed, so a `PACKAGE`-scoped
-    /// method is callable from it. Measured, oracle rc 0: `::METHOD init
-    /// CLASS PACKAGE` and `::METHOD activate CLASS PACKAGE` both run.
-    ///
-    /// **The send carries no receiver**, and that is observable rather than
-    /// incidental: `checkPrivate` reads the sending frame's own receiver, and
-    /// an install frame has none, so a `PRIVATE` class-side `INIT` refuses
-    /// the install. Measured, oracle rc 159 on `::METHOD init CLASS PRIVATE`:
-    /// `Object "The A class" cannot accept private message "INIT" from this
-    /// context.` echoing the `::CLASS` clause alone.
-    ///
-    /// `blame` is the directive whose clause is echoed beneath the failure,
-    /// and it is not the same directive for the two senders: an `INIT` blames
-    /// the class being constructed and an `ACTIVATE` blames the class
-    /// installed last. Measured, oracle rc 214 with `x = 1/0` in a class-side
-    /// `activate` on `::CLASS A` followed by `::CLASS ZZ`: the second echo is
-    /// `::CLASS ZZ`.
     fn send_directive_message(
         &mut self,
         id: ProgramId,
@@ -6254,14 +3217,6 @@ impl Interp {
 
     /// Pushes the activation an install-time evaluation or send runs in, and
     /// answers the frame [`Interp::pop_directive_activation`] takes back.
-    ///
-    /// **The `Plan::default()` handed to `Activation::new` is a placeholder,
-    /// not a plan.** `Activation::new`'s signature requires an `Rc<Plan>`
-    /// field to exist. [`Interp::slot_of`] does read it, but every read goes
-    /// through `Plan::slot_of`, which answers `None` for a name it does not
-    /// carry, so an empty plan sends each name down the unresolved path.
-    /// Building one would compute nothing either caller could reach: neither
-    /// has a body to walk, so the map comes out empty either way.
     fn push_directive_activation(&mut self, id: ProgramId, program: &Rc<Program>) -> SlotFrame {
         let frame = self.roots.push_slots(0);
         let activation_id = self.next_activation_id();
@@ -6284,32 +3239,6 @@ impl Interp {
     /// `::CLASS`'s own R9 install: a class object in [`Interp::classes`],
     /// carrying the name as written, and an entry in the running package's own
     /// class table under the uppercased one.
-    ///
-    /// **Both `superclass` and `metaclass` are the caller's**, resolved by
-    /// [`Interp::install_class_at`] against the file's own `::CLASS` names and
-    /// then the registry. The superclass is `.Object` for the bare form and
-    /// whatever `SUBCLASS` or `MIXINCLASS` named otherwise -- the two keywords
-    /// fill one slot, exactly as `RexxClass::mixinClass` builds its result by
-    /// calling `subclass` on the same target (`ClassClass.cpp:1514`-`:1519`).
-    /// The metaclass is what `METACLASS` named, or the superclass's own where
-    /// the directive names none, which is `RexxClass::subclass`'s default
-    /// (`ClassClass.cpp:1566`-`:1569`).
-    ///
-    /// **`mixin` and not the slot's presence is what makes a class a
-    /// `Mixin`**, which is the whole reason `ClassDirective` carries the flag
-    /// beside the shared slot. The difference is observable: a `Mixin`'s
-    /// `~baseClass` is its target's, so `::CLASS M MIXINCLASS Object` answers
-    /// `The Object class` where a `Regular` class answers itself.
-    ///
-    /// `String::from_utf8_lossy` rather than a hard requirement: a class
-    /// name is close to always ASCII in practice and `ClassRegistry`'s API
-    /// takes `&str`, so a non-UTF-8 literal name (legal Rexx, rare in
-    /// practice) has its id recorded lossily rather than being rejected -- a
-    /// known, narrow limitation. The id is observable now that `say .Foo`
-    /// renders `The Foo class` through it, so a class whose declared name is
-    /// not UTF-8 renders replacement characters where the oracle renders the
-    /// bytes. The package table's key below is taken from the directive's own
-    /// bytes and is not lossy.
     fn install_class(
         &mut self,
         program: ProgramId,
@@ -6335,14 +3264,6 @@ impl Interp {
         // class in the image under `PREPARINGIMAGE` (`ClassClass.cpp:136`-
         // `:142`). Measured: the oracle refuses `.Alarm~inherit(.Comparable)`
         // with 98.985, the same refusal it gives `.Array~inherit()`.
-        //
-        // Set as each class is created rather than by a sweep once the
-        // bootstrap closes, for the reason `native_classes::build` gives for
-        // setting it beside each `define_class`: a sweep's only source of
-        // classes is a `HashMap`, and `Interp::package_classes` is one too.
-        // `Interp::library_bootstrap` is still true here and
-        // `dispatch::rexx_defined_lock` is open while it is, so the prologue's
-        // own `~inherit` clauses still run against a class that carries it.
         if self.library_bootstrap {
             self.classes().set_rexx_defined(id);
         }
@@ -6361,33 +3282,6 @@ impl Interp {
 
     /// Installs the `::CLASS` at `index`, whose declared targets
     /// [`class_install_order`] has already put before it.
-    ///
-    /// **The order inside the directive is the oracle's**
-    /// (`ClassDirective::install`,
-    /// `interpreter/instructions/ClassDirective.cpp:165`-`:249`): resolve the
-    /// `METACLASS` target, then the `SUBCLASS`/`MIXINCLASS` one, create the
-    /// class from the pair with its class-side members already in it, then
-    /// walk the `INHERIT` list left to right sending `INHERIT` to the new
-    /// class for each entry, then add the instance-side members
-    /// (`classObject->defineMethods(instanceMethods)`, `:237`), and finally
-    /// apply `ABSTRACT`. Each `INHERIT` send appends to the end of the superclass
-    /// list (`superClasses->addLast`), and the cascade walks that list in
-    /// reverse, so the leftmost `INHERIT` is folded in last among the mixins
-    /// and wins a name conflict between them -- while the `SUBCLASS` target,
-    /// first in the list, is folded in last of all and outranks every mixin.
-    ///
-    /// **That order is what decides which refusal a directive owing more
-    /// than one gets**, and each boundary is measured on the oracle: `::class k
-    /// metaclass zzznometa subclass zzznosub` is 98.908 and not 98.909, and
-    /// `::CLASS S MIXINCLASS Class ABSTRACT INHERIT zzznotaclass` is 98.909
-    /// and not 98.990.
-    ///
-    /// **The directive's own gap is checked here** rather than left to the
-    /// pass that walks source order, which runs after every class is
-    /// installed.
-    ///
-    /// `attached` is the directives this `::CLASS` owns, from
-    /// [`class_members`].
     fn install_class_at(
         &mut self,
         program_id: ProgramId,
@@ -6490,24 +3384,6 @@ impl Interp {
     /// One side of a class's own members: the `::METHOD` and `::ATTRIBUTE`
     /// directives whose `CLASS` keyword matches `class_side`, and every
     /// `::CONSTANT`, which installs on both.
-    ///
-    /// **The two sides go in at different moments and that is the oracle's
-    /// shape, not a convenience.** `ClassDirective` keeps `classMethods` and
-    /// `instanceMethods` apart (`ClassDirective::addMethod`,
-    /// `instructions/ClassDirective.cpp:501`-`:511`); the class side is
-    /// handed to the constructor and the instance side is added after the
-    /// `INHERIT` sends. A `::CONSTANT` is in both lists, because
-    /// `addConstantMethod` calls `addMethod` once for each (`:520`-`:524`).
-    ///
-    /// Source order within a side, and the last write to a dictionary key
-    /// wins. **That is observable only where the oracle refuses the file**:
-    /// measured, `::CLASS A` carrying `::METHOD m CLASS` twice is rc 157,
-    /// `Error 99.902: Duplicate ::METHOD directive instruction.`, echoing the
-    /// second directive, and so is the same class carrying `::CONSTANT c`
-    /// beside `::METHOD c CLASS` -- a `::CONSTANT` occupies both dictionaries,
-    /// so it collides with either kind. Nothing in this crate detects that
-    /// duplication, so both programs run here and answer the last member
-    /// installed.
     fn install_class_members(
         &mut self,
         program_id: ProgramId,
@@ -6534,18 +3410,6 @@ impl Interp {
 
     /// `::CONSTANT`'s own R9 install: the upcased name lands in one of
     /// `class`'s dictionaries as a [`GeneratedKind::Constant`] accessor.
-    ///
-    /// The key is upcased for the reason [`Interp::install_method`]'s is:
-    /// `constantDirective` builds `internalname = commonString(name->upper())`
-    /// and every install of the directive goes through it
-    /// (`parser/DirectiveParser.cpp:1865`).
-    ///
-    /// **No access scope and no protection.** `createConstantGetterMethod`
-    /// sets neither: what it does set is `setUnguarded`
-    /// (`parser/DirectiveParser.cpp:2523`) and `setConstant` (`:2525`), and
-    /// `MethodClass::isSpecial()` reads none of those, so the method is not
-    /// one the oracle calls *special* and [`Interp::record_access_scope`]
-    /// files no row for it.
     fn install_constant(
         &mut self,
         program: ProgramId,
@@ -6569,25 +3433,6 @@ impl Interp {
 
     /// One class reference on a `::CLASS`, resolved against the file's own
     /// `::CLASS` names and then the registry.
-    ///
-    /// **A target the file does not declare is the registry's**, and one the
-    /// registry does not hold raises `not_found` naming it -- measured, rc 158
-    /// with stdout empty. A target the file *does* declare wins over a
-    /// registry entry of the same name, measured: `::class array` carrying a
-    /// class method, with `::class k2 subclass array` under it, answers that
-    /// method through `.k2`.
-    ///
-    /// **`not_found` is the caller's because the oracle's is**: each keyword's
-    /// resolution has its own `reportException` in `ClassDirective::install`,
-    /// and `METACLASS`'s is 98.908 where the others are 98.909
-    /// (`ClassDirective.cpp:180` against `:191` and `:225`). Nothing about
-    /// the lookup itself differs, which is why they share this function.
-    ///
-    /// **A `ns:Name` target takes neither route and reports neither error.**
-    /// `ClassResolver::lookup`'s qualified branch raises 98.987/98.988 itself
-    /// and never reaches `findInstalledClass`, so a qualifier also hides the
-    /// file's own `::CLASS` of that name -- measured on the oracle for
-    /// `SUBCLASS`, `MIXINCLASS`, `METACLASS` and `INHERIT` alike.
     fn resolve_class_target(
         &mut self,
         installing: ProgramId,
@@ -6625,18 +3470,6 @@ impl Interp {
     }
 
     /// One `INHERIT` entry, as the send the oracle makes for it.
-    ///
-    /// **The refusal carries a native method's own traceback frame**, because
-    /// the oracle reaches `RexxClass::inherit` by
-    /// `classObject->sendMessage(GlobalNames::INHERIT, mixin, result)`
-    /// (`ClassDirective.cpp:230`) rather than by calling it. Measured, the
-    /// report opens `       *-* Compiled method "INHERIT" with scope
-    /// "Class".` above the directive's own echo -- the frame every failing
-    /// native method contributes, from a send the install machinery makes.
-    ///
-    /// The scope is read from the registry rather than written down: it is
-    /// the id of the class whose instance dictionary holds `INHERIT`, which
-    /// is the metaclass every `::CLASS` is an instance of.
     fn inherit_mixin(
         &mut self,
         program: &Rc<Program>,
@@ -6683,24 +3516,6 @@ impl Interp {
     /// dictionary, or its class dictionary for `::METHOD ... CLASS`, and
     /// [`Interp::record_method_body`] records which directive to read its
     /// body from later (Task 7's, not entered here).
-    ///
-    /// **The dictionary key is the upcased name**, which is what the oracle
-    /// installs under: `LanguageParser::methodDirective` builds
-    /// `internalname = commonString(name->upper())` and hands *that* to
-    /// `addMethod`, exactly as `attributeDirective` does for the accessors
-    /// [`Interp::install_attribute`] generates. `MethodDirective::name` keeps
-    /// the as-written spelling, which is the method object's own name and a
-    /// different thing from its lookup key.
-    ///
-    /// **Nothing observes the difference**, and no test pins it:
-    /// `MethodDict::add_method` upcases its own key, so `::method "abc"`
-    /// answers `~abc` either way and the stored key is the same string either
-    /// way. Entering the body did not change that -- the `>I>`/`<I<` pair
-    /// names the **message**, measured on the oracle, so `::method MiXeD` and
-    /// `::method "quoted"` announce `"MIXED"` and `"QUOTED"`. What would tell
-    /// the two spellings apart is a method object with a readable name, which
-    /// nothing here builds. The upcasing is alignment with the oracle's own
-    /// parser.
     fn install_method(
         &mut self,
         program: ProgramId,
@@ -6746,18 +3561,6 @@ impl Interp {
     /// appended for a setter, both for the default (neither `GET` nor `SET`)
     /// style -- landing in `class`'s instance or class dictionary the same
     /// way [`Interp::install_method`] does.
-    ///
-    /// **A generated accessor is a [`GeneratedMethod`] and not a row of
-    /// [`Interp::method_bodies`]**, and each half carries its own
-    /// [`GeneratedKind`]: the `Both` style's keys come from a single directive
-    /// and are a getter and a setter, which the directive alone does not
-    /// say. A `GET` or `SET` that carries a body of its own is a
-    /// written method and goes on the body path with every other one.
-    ///
-    /// The names are upcased for the same reason
-    /// [`Interp::install_method`]'s is: `attributeDirective` derives both
-    /// accessors from `internalname = commonString(name->upper())`, the
-    /// setter as that name with `=` concatenated.
     fn install_attribute(
         &mut self,
         program: ProgramId,
@@ -6826,9 +3629,6 @@ impl Interp {
     /// Arms `Interp::reqstr_armed` for a method name the required-string
     /// protocol would send, called from every directive install that adds a
     /// name to a class's dictionary.
-    ///
-    /// The name is the dictionary key, which is already upcased -- every
-    /// installer derives it the way `LanguageParser::methodDirective` does.
     fn arm_reqstr_for(&mut self, installed: &[u8]) {
         if installed == dispatch::MAKESTRING {
             self.reqstr_armed = true;
@@ -6872,25 +3672,6 @@ impl Interp {
 
     /// Files a body compiled from method source text as a program of its own
     /// and hangs it on the `Method` object, so a send can enter it.
-    ///
-    /// `MethodClass::newMethodObject` runs the same `compileSource` a file
-    /// does and takes the main section as the executable
-    /// (`parser/LanguageParser.cpp:590`-`:608`). The main section is what
-    /// [`rexx_parse::parse_lines`] returns as `main`, and it is moved into a
-    /// `::METHOD` directive here because an [`InstalledMethodBody`] names a
-    /// directive.
-    ///
-    /// `name` is the method's name as the caller wrote it, which is what the
-    /// program reports under -- see [`Interp::compiled_method_names`].
-    ///
-    /// **The program is never reclaimed**, so a run that compiles method
-    /// sources in a loop grows without bound where the oracle is flat.
-    /// Measured, `maxrss` under `REXX_ENGINE=ir`: 20,000 `setMethod` calls
-    /// under one name, each replacing the last, reach 382,788 KB against the
-    /// oracle's 20,636, while 20,000 of `setMethod`'s no-method form under
-    /// one name reach 17,192 KB against an empty program's 16,556 -- so the
-    /// cost is this program and not the object's dictionary, and a forced
-    /// collection every thousandth iteration leaves it at 377,044 KB.
     fn record_compiled_body(&mut self, object: ObjRef, name: &[u8], parsed: Program) {
         let Program {
             source,
@@ -6942,16 +3723,6 @@ impl Interp {
 
     /// [`Interp::record_compiled_body`] for a `Routine`: the same program of
     /// its own, carrying a `::ROUTINE` rather than a `::METHOD`.
-    ///
-    /// **The directive kind is what the callee's calling convention reads**,
-    /// and it is observable: measured, oracle rc 0, `parse source` inside
-    /// `.Routine~new('NEWR', ...)~call` answers `LINUX SUBROUTINE NEWR`,
-    /// where the same text through `.Method~new` and `Object~run` answers
-    /// `LINUX METHOD`.
-    ///
-    /// No `table_method_bodies` row, which is the other half of the same
-    /// distinction: a `Routine` is not a body `Object~setMethod` or
-    /// `Class~defineClassMethod` may install.
     fn record_compiled_routine(&mut self, object: ObjRef, name: &[u8], parsed: Program) {
         let Program {
             source,
@@ -6991,23 +3762,6 @@ impl Interp {
     /// `MethodClass::newFileRexx` and `RoutineClass::newFileRexx`
     /// (`classes/MethodClass.cpp:521`, `classes/RoutineClass.cpp:341`): the
     /// executable a file's own text becomes.
-    ///
-    /// **The file is resolved against the current directory and not against
-    /// the running program**, which is measured and is the opposite of what
-    /// `::REQUIRES` does: the same `newFile('body2.rex')` raises 3.1 from one
-    /// working directory and answers from another with the program unmoved.
-    /// The name is answered back unchanged, so `~package~name` is what the
-    /// caller wrote -- measured, `newFile('nf/body.rex')~package~name` is
-    /// `nf/body.rex`.
-    ///
-    /// **The directives install and the main section does not run**, which is
-    /// the difference from a `::REQUIRES` load: measured, oracle rc 0, a file
-    /// whose text is `return helper(3)` above a `::routine helper` answers
-    /// `33` from `~call` and prints nothing when `newFile` builds it.
-    ///
-    /// The main section is filed as a directive appended after the file's
-    /// own, carrying an empty clause span so that the three directive walks
-    /// leave it alone -- [`Interp::install_directives`] has the rule.
     pub(crate) fn new_file_executable(
         &mut self,
         name: &[u8],
@@ -7131,23 +3885,6 @@ impl Interp {
 
     /// `Method~setPrivate`'s half that a send can see: the dictionary entry
     /// this object *is* stops answering a sender outside its scope.
-    ///
-    /// The oracle needs no such step, because the object `Class~method`
-    /// answers is the very method the dictionary holds and `isSpecial()`
-    /// reads the flag word off it. Here the dictionary holds a
-    /// [`MethodId`] and the access scopes are a table beside it, so the
-    /// write has to reach that table. Measured, oracle: `o~mm` answers `1`,
-    /// then `.K~method('MM')~setPrivate`, then the same `o~mm` is 97 at rc
-    /// 159.
-    ///
-    /// **`PRIVATE` and `PACKAGE` are one field here and two flags in the
-    /// C++**, so a `PACKAGE` method this makes private keeps answering `1`
-    /// to `isPackage` while resolving as private -- which is the C++'s own
-    /// order, since `isPrivate()` is the first arm of the `else if`
-    /// (`classes/ObjectClass.cpp:874`-`:894`).
-    ///
-    /// Nothing happens for an object no class has taken, which is right:
-    /// its flag has no dictionary entry to act on.
     pub(crate) fn make_method_private(&mut self, object: ObjRef) {
         let Some(method) = self
             .executable_sources
@@ -7197,20 +3934,6 @@ impl Interp {
 
     /// One `::ROUTINE` run over the arguments given, for `Routine~call` and
     /// the two rows beside it.
-    ///
-    /// **A `SUBROUTINE` call**, which `parse source` inside the routine
-    /// reports -- measured, oracle rc 0, `LINUX SUBROUTINE <the declaring
-    /// file>` -- and a written one, which is
-    /// [`run::CallEntry::Written`]'s receiver.
-    ///
-    /// **A routine that returns nothing answers nothing**, and the 91.999
-    /// that follows is the sending message's own: measured, oracle rc 165,
-    /// `say .routines~noret~call` on a bare `return` is
-    /// `Message "CALL" did not return a result.` and the same send spelled
-    /// `~'[]'()` names `[]`, so the name in the message is the row's and not
-    /// the routine's.
-    ///
-    /// [`run::CallEntry::Written`]: run::CallEntry
     pub(crate) fn enter_installed_routine(
         &mut self,
         program: ProgramId,
@@ -7232,19 +3955,6 @@ impl Interp {
 
     /// Records a just-minted method's access scope and protection, for the
     /// methods the oracle calls *special*.
-    ///
-    /// `MethodClass::isSpecial()` is `protected || private || package`
-    /// (`classes/MethodClass.hpp:118`), and the membership rule here is that
-    /// disjunction: a method with neither an access keyword nor `PROTECTED`
-    /// gets no row, which is what [`Interp::special_methods`] rests on.
-    ///
-    /// `UNPROTECTED` is `Protection::Unprotected` and is not a row either.
-    /// The oracle's flag word has one `PROTECTED_FLAG` and no unprotected
-    /// bit, so the keyword's whole effect is to make a second protection
-    /// keyword 25.902, which `rexx-parse` already owns.
-    ///
-    /// `program` is the package the directive was translated in, which is the
-    /// method's own package for `PACKAGE`'s comparison.
     fn record_access_scope(
         &mut self,
         method: MethodId,
@@ -7266,46 +3976,6 @@ impl Interp {
 
     /// Evaluates a `::CONSTANT` directive's parenthesised expression in the
     /// second install pass, and answers what it produced.
-    ///
-    /// **It runs as a method against the class object**, which is what
-    /// `ClassDirective::resolveConstants` builds it as: a `MethodClass` over
-    /// the class's accumulated expressions (`ClassDirective.cpp:271`),
-    /// `setScope(classObject)` (`:273`), then `run` with `classObject` as the
-    /// receiver (`:276`). What that buys, each measured against the oracle at
-    /// rc 0:
-    ///
-    /// * `SELF` is the class object. `::CLASS K` / `::CONSTANT c (self~id)`
-    ///   answers `K`.
-    /// * `SUPER` is what a class method of the same class reads, which is
-    ///   what `setScope` is there for. `::CLASS J SUBCLASS K` with
-    ///   `::CONSTANT c (super~id)` answers `K`, and `K`'s own answers
-    ///   `Class`.
-    /// * The receiver in the calling convention is the class object, so
-    ///   `checkPrivate` takes the arm that allows a sender which *is* the
-    ///   receiving object (`classes/ObjectClass.cpp:617`-`:620`) rather than
-    ///   the refusal a caller with no receiver takes (`:622`-`:626`).
-    ///   `::CONSTANT c (self~p)` answers for `::METHOD p CLASS PRIVATE`.
-    /// * The arguments are the method's own, which are none, and not the
-    ///   running program's. A program invoked with one argument reads `arg()`
-    ///   as `0` and `arg(1)` as the empty string inside the expression.
-    ///
-    /// [`Interp::push_directive_activation`] is the frame it runs in: default
-    /// `NUMERIC` settings, `TRACE` off, and `SELF`/`SUPER` bound the way
-    /// [`Interp::enter_method_body`] binds them, through [`Interp::slot_of`]
-    /// so that a frame carrying no plan still grows a slot for each.
-    ///
-    /// **The expression's own operators are engine-agnostic**: the walk below
-    /// reaches the shared [`Interp::eval`] that both engines' instruction
-    /// loops call, so an expression that only computes enters neither loop.
-    /// **A method or a `::ROUTINE` the expression calls does enter one**,
-    /// under whichever engine is selected, so this function is not the reason
-    /// such a body answers alike on both.
-    ///
-    /// `slots: &[]` and `plan: None` on the [`Code`] below are correct rather
-    /// than merely convenient: the expression is evaluated with no enclosing
-    /// frame at all, so every name in it falls through [`Code::slot_for`] to
-    /// [`Interp::slot_of`]'s ordinary resolution exactly as an `INTERPRET`
-    /// fragment's untranslated names do (`run_fragment`, `run.rs`).
     fn eval_constant_expression(
         &mut self,
         id: ProgramId,
@@ -7351,10 +4021,6 @@ impl Interp {
     /// Records `directive`'s own clause as the site a directive-time
     /// condition is reported against, so its report carries the same echo
     /// line the oracle prints above the two `Error` lines.
-    ///
-    /// Indent 0 unconditionally: a directive is never nested inside anything,
-    /// and the oracle's own echo for one is flush left (measured, `     2 *-*
-    /// ::class foo subclass zzznotaclass`).
     fn blame_directive(&mut self, program: &Rc<Program>, directive: &Directive) {
         let (line, text) = directive_clause(program, directive);
         self.failure_site = Some(FailureSite::Clause {
@@ -7366,10 +4032,6 @@ impl Interp {
 
     /// [`Interp::blame_directive`] for a directive in the package `id`, whose
     /// report names that package's own file when a `::REQUIRES` loaded it.
-    ///
-    /// Measured, oracle rc 158 on a pair of mutually requiring files: the
-    /// report's `running <name> line <n>` span names the **inner** file, not
-    /// the program the command line started.
     fn blame_directive_in(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
         let (line, text) = directive_clause(program, directive);
         self.failure_site = Some(match self.required_paths.get(&id) {
@@ -7396,24 +4058,6 @@ impl Interp {
     /// The variable slot `slot` of `frame` names: the frame's own storage,
     /// unless an `EXPOSE` in this activation bound that slot to a pool on the
     /// receiving object.
-    ///
-    /// **The three functions here are the only route to a Rexx variable**, and
-    /// `RootSet`'s own `frame_slot`/`set_frame_slot`/`clear_frame_slot` are
-    /// the frame half of the decision rather than a shortcut to it. Reading
-    /// the frame directly for an exposed name answers `None` for ever, which
-    /// is an uninitialised variable -- a silent wrong answer, and the reason
-    /// the `RootSet` names say `frame`.
-    ///
-    /// **Split in two, and the split is a measurement rather than a
-    /// preference.** Every read and write of every variable comes through
-    /// here, and folding the pool lookup into the same function put its heap
-    /// access on that path: at the shape below's predecessor the six-axis
-    /// `rexx-arms` sitting read +5.0% to +8.6% `instructions:u` on five of six
-    /// axes, `varlookup` at 2752.000 per pass against 2947.000, on programs
-    /// that declare no class and run no method. What is left inline is the
-    /// question "does this activation expose anything at all", which is one
-    /// load and one branch; the pool itself is [`Interp::exposed_variable`]
-    /// and its two siblings, out of line.
     #[inline(always)]
     fn variable(&self, frame: SlotFrame, slot: usize) -> Option<ObjRef> {
         if self.activation_exposes(frame) {
@@ -7448,19 +4092,6 @@ impl Interp {
     /// Whether the running activation has bound any name at all to a scope
     /// pool over `frame` -- the whole of what the three accessors above test
     /// before taking the frame, and the reason each of them is two functions.
-    ///
-    /// **A cheaper first test was measured and bought nothing.** An
-    /// interpreter-wide "has anything ever been exposed" flag, checked ahead
-    /// of the activation so that a program declaring no class never reaches
-    /// it, produced ratios equal to these to six decimal places on both axes
-    /// and both arms, so the state it would have to be kept in step with is
-    /// not paid for by anything.
-    ///
-    /// **The frame is compared, not assumed.** A `PROCEDURE` callee has an
-    /// exposure list of its own over a frame of its own, and `exec_procedure`
-    /// resolves names against the *caller's* frame before swapping; a list
-    /// consulted for the wrong frame would redirect a name that is a plain
-    /// local there.
     #[inline(always)]
     fn activation_exposes(&self, frame: SlotFrame) -> bool {
         let activation = self.activation();
@@ -7470,12 +4101,6 @@ impl Interp {
     /// [`Interp::variable`] for a **named** activation rather than the running
     /// one -- what `RexxContext~variables` reads a suspended context's pool
     /// through.
-    ///
-    /// [`Interp::variable`] cannot answer it: its exposure test compares the
-    /// frame against the *running* activation's, so a suspended activation
-    /// that exposed a name would read the empty frame slot the exposure left
-    /// behind. This asks the activation it was handed, which is the same
-    /// question `Interp::exposure_in` already takes an activation for.
     pub(crate) fn variable_in(&self, activation: &Activation, slot: usize) -> Option<ObjRef> {
         let frame = activation.frame;
         match Interp::exposure_in(activation, frame, slot) {
@@ -7549,14 +4174,6 @@ impl Interp {
     /// Assigns one name in one scope's pool on `owner`, outside any
     /// activation's exposure list -- what a generated `::ATTRIBUTE` setter
     /// writes through.
-    ///
-    /// **Not [`Interp::set_exposed_variable`]**, and the difference is the
-    /// frame rather than the storage: that function reaches a pool by way of
-    /// an `EXPOSE` that bound a running activation's slot to it, and a
-    /// generated accessor has no activation and no slot. The pool entry the
-    /// two reach is the same one -- measured, oracle rc 0: a class method
-    /// exposing `a` and assigning it leaves `say .K~a` reading what it
-    /// assigned.
     fn set_pool_variable(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8], value: ObjRef) {
         let pools = self
             .heap
@@ -7603,16 +4220,6 @@ impl Interp {
 
     /// Reads a variable, by the slot the plan already resolved its id to, or
     /// by `at` when a compiler resolved the same thing earlier.
-    ///
-    /// Falls back to `slot_of` when the plan never saw the id, which a
-    /// non-exhaustive `Plan::build` can produce and which the exhaustive pass
-    /// should not. The fallback is not dead weight even then: it is the same
-    /// path a name bound at run time takes.
-    ///
-    /// **`at` is that same resolution made at compile time**, from the `Plan`
-    /// whose `by_symbol` map `Code::slots` is a view of, so the two cannot be
-    /// different slots for one activation -- `Interp::run_ops` asserts that in
-    /// debug at the op that carries one.
     pub(crate) fn read_at(
         &mut self,
         code: &Code<'_>,
@@ -7635,19 +4242,6 @@ impl Interp {
 
     /// What an uninitialised read yields: the derived name, which for a
     /// simple variable is its own upcased spelling.
-    ///
-    /// **Its own `#[cold]` function rather than an arm of [`Interp::read_at`],
-    /// and what decides that is the prologue rather than this code.**
-    /// `Interp::text` is `#[inline]`, so an arm here drags a `Bytes` inline
-    /// buffer with its `memset` and `memcpy` calls, a `malloc` and a
-    /// `Heap::collect` into the caller -- which then sizes a stack frame and
-    /// saves the callee-saved registers all of that needs, on every read,
-    /// including the reads that answer a value and never come here.
-    /// Measured, the same code written as that arm instead: exactly 9 more
-    /// `instructions:u` per `read_at` call -- a stack-frame allocation,
-    /// further callee-saved pushes, and their pops -- which is +1.988% on
-    /// `bench-programs/varlookup.rex` and +1.081% on `strings.rex`, neither of
-    /// which reads an uninitialised variable in its loop.
     #[cold]
     #[inline(never)]
     fn derived_name(&mut self, code: &Code<'_>, id: SymbolId) -> ObjRef {
@@ -7658,45 +4252,6 @@ impl Interp {
     /// Converts `EXIT`'s result into the raw exit code, before `rexx-run`'s
     /// own 8-bit truncation (`bin/rexx-run.rs`) narrows it to a process exit
     /// status.
-    ///
-    /// `None` -- a bare `EXIT`, or falling off the end of the body -- is 0,
-    /// matching the oracle. `Some(value)` needs `value` to be a whole number
-    /// that fits a signed 32-bit integer (`Numerics::objectToSignedInteger`'s
-    /// own bound, `INT32_MIN..=INT32_MAX`, both inclusive); anything else --
-    /// fractional, non-numeric, or simply too wide -- leaves the exit code at
-    /// 0, which is where it already sits on every path here. Measured:
-    /// `exit 5.9` and `exit 'abc'` and `exit 2147483648` (one past
-    /// `INT32_MAX`) all give rc 0.
-    ///
-    /// **Not a fixed-width check on its own -- it inherits one for free from
-    /// D15's own rule that a number's precision is fixed at creation.** A
-    /// bare literal like `exit 2147483647` never passes through arithmetic, so
-    /// `to_number` hands back the exact value with nothing rounded, and the
-    /// only bound left is the `i32` one. A value built by arithmetic -- even
-    /// `EXIT`'s own unary minus, `-2147483647` -- was already rounded to the
-    /// *active* `NUMERIC DIGITS` (9 by default) the moment it was created
-    /// (`eval_prefix`, `eval.rs`), and this function never re-rounds it. That
-    /// is the entire explanation for an asymmetry that looks, at first, like
-    /// a sign bug: measured, `exit 2147483647` gives rc 255 while `exit
-    /// -2147483647` gives rc 0, because the second is `0 - 2147483647`
-    /// rounded to 9 digits at creation (`2147483650`, one past `INT32_MAX`),
-    /// not because negative values are bounded differently. Raising the
-    /// active DIGITS before the subtraction removes the rounding and the
-    /// asymmetry with it: measured, `numeric digits 20; exit -2147483647`
-    /// gives rc 1, `-2147483647 mod 256`.
-    ///
-    /// `rexx_num::ARGUMENT_DIGITS` (18) is `whole_value`'s own precision
-    /// argument here, deliberately not the activation's current `NUMERIC
-    /// DIGITS`: the oracle's own conversion (`NumberString::int64Value`) uses
-    /// a fixed width of its own, independent of the setting in force --
-    /// measured, `numeric digits 3; exit 2147483647` still gives rc 255. Any
-    /// width at least the ten digits `INT32_MAX` needs gives the identical
-    /// answer here, since a value wide enough to need rounding at 18 digits is
-    /// already wide enough to fail the `i32` bound regardless of how it was
-    /// rounded; 18 is used rather than invented because it is already
-    /// `rexx-num`'s own public constant for exactly this kind of
-    /// current-DIGITS-independent conversion (`::OPTIONS DIGITS`'s own reason
-    /// for reaching for it).
     fn exit_code_for(&mut self, value: Option<ObjRef>) -> i32 {
         let Some(value) = value else { return 0 };
         let Ok(number) = self.to_number(value) else {
@@ -7710,28 +4265,6 @@ impl Interp {
 
     /// Roots a value that has to outlive the clause that produced it, all the
     /// way to [`Interp::exit_code_for`].
-    ///
-    /// **The one value in this crate whose lifetime the temps stack cannot
-    /// express.** `EXIT`'s result is pushed as an ordinary one-clause temp,
-    /// and `leave_stepped_clause` pops that frame before `Flow::Exit` has even
-    /// reached `run_activation` -- so from there through the activation
-    /// teardown and into `execute`'s conversion, nothing on the temps stack
-    /// names it. `add_global` is the root that survives, because nothing
-    /// truncates the globals list.
-    ///
-    /// **Measured, which is why this exists rather than a comment arguing the
-    /// window is benign.** A `Heap::collect` placed immediately before
-    /// `exit_code_for` swept the value and panicked on `a live value` in four
-    /// harnesses; with this root taken, the same probe leaves the whole
-    /// workspace green. The trigger itself never fires inside the window --
-    /// the workspace is also green with collect-on-every-allocation forced on
-    /// for every run -- but that says only that nothing on today's path
-    /// allocates, which is a property of the code rather than an invariant of
-    /// the design.
-    ///
-    /// One name, replaced rather than accumulated, so a routine whose own
-    /// `EXIT` becomes a `RETURN` to its caller (`run.rs`'s `Entered::Routine`
-    /// arm) can run any number of times and hold one value at a time.
     fn root_exit_value(&mut self, value: ObjRef) {
         self.roots.add_global(EXIT_VALUE_ROOT, value);
     }
@@ -7747,54 +4280,6 @@ impl Interp {
     /// The one allocation entry point every value/stem constructor in this
     /// crate goes through, so that Task 16's stress mode has exactly one
     /// place to hook rather than one per call site.
-    ///
-    /// **Two things can make it collect first, and they are different
-    /// questions.** `stress_collect` collects on *every* allocation and is a
-    /// test instrument (`run_program_collect_every_alloc`). The other is the
-    /// production trigger, and it is two tests: the arena is about to grow,
-    /// and it has reached `collect_at` slots. `collect_at`'s own doc comment
-    /// defines the policy; the cost when it does not fire is an `Option`
-    /// discriminant test and a `usize` comparison, both against state the
-    /// heap already maintains.
-    ///
-    /// **Every allocation is a collection point, and that is what makes the
-    /// rooting discipline load-bearing rather than advisory.** Before this
-    /// trigger existed, a value held only in a Rust local across another
-    /// allocation was inert -- nothing swept, so nothing noticed. Now it is a
-    /// use-after-free that shows up as a wrong answer. `push_temp` the value
-    /// before anything else can allocate; the instrument that finds the ones
-    /// that were missed is `run_program_collect_every_alloc`, which collects
-    /// strictly more often than any watermark can.
-    ///
-    /// `self.heap` and `self.roots` are sibling fields, so this borrows each
-    /// independently and needs no interior mutability or unsafe cell to call
-    /// one method with a borrow of the other in scope.
-    ///
-    /// **Collecting BEFORE the allocation, not after, and this was not the
-    /// first thing tried.** An earlier version of this method collected
-    /// *after* allocating, on the reasoning that a fresh object is the one
-    /// thing this mode should be checking. That reasoning is backwards: the
-    /// caller has not had a chance to root the value this call is about to
-    /// return -- `self.text(bytes)` cannot call `push_temp` on its own
-    /// result before handing it back -- so a collect fused into the
-    /// allocation that produced it can only ever find it unreached and
-    /// sweep it, on every single allocation, unconditionally. Measured: with
-    /// that order, `run_program_collect_every_alloc("say 1")` panicked
-    /// (`value.rs`'s `to_text`, "a live value") and so did all 29 of
-    /// `phase-4a.txt`'s programs, including the ones with no rooting
-    /// question at stake at all -- a mode that fails everything tests
-    /// nothing, the same shape `/bin/true` failed criterion 6 for. Collecting
-    /// *before* asks the right question instead: is everything the caller
-    /// already holds -- rooted by an *earlier* call's `push_temp`, which by
-    /// now has had every chance to run -- still reachable at the moment a
-    /// *new* allocation is requested. `eval_arithmetic`'s own shape
-    /// (`eval.rs`) is what makes this the faithful test: `push_temp
-    /// (left_value)` runs immediately after `left_value` is produced and
-    /// strictly before `right_value`'s own evaluation can allocate anything,
-    /// so by the time this method's pre-allocation collect runs for
-    /// `right_value`'s own allocation, `left_value` has already had its
-    /// chance to be rooted -- and the negative control below is what
-    /// confirms the mode actually notices when that chance was skipped.
     pub(crate) fn alloc_with(
         &mut self,
         behaviour: rexx_core::BehaviourId,
@@ -7806,9 +4291,6 @@ impl Interp {
 
     /// The collection decision every allocation site makes, without the
     /// allocation.
-    ///
-    /// Shared by [`Interp::alloc_with`] and [`Interp::alloc_immortal_with`],
-    /// which differ in what they allocate and not in when they collect.
     fn collect_if_due(&mut self) {
         if self.stress_collect
             || (self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
@@ -7819,27 +4301,6 @@ impl Interp {
 
     /// Appends every `ObjRef` the interpreter must hand the collector to
     /// `out`, and names every field that does not need to be handed over.
-    ///
-    /// **The destructuring is exhaustive and has no `..`**, the form
-    /// [`crate::activation::Activation::object_roots`] uses and for its
-    /// reason: a field added to `Interp` is a compile error here until
-    /// someone decides whether it is a root, rather than a value that
-    /// silently stops being one. `Interp::flat_top` and `Interp::flat_loops`
-    /// were added holding a `Vec<ObjRef>` that no root named, with nothing
-    /// asking whether they should be rooted; this asks. It does not answer:
-    /// see the limit below.
-    ///
-    /// **Almost every field binds `_`, and that is the ruling rather than a
-    /// shortcut.** A field binds `_` when it holds no arena object, or when
-    /// `RootSet` already reaches its objects as a global, a temp or a park;
-    /// the comments below name which, wherever the type does not say it.
-    /// Handing such a field over again would cost a walk per collection and
-    /// would hide a missing root instead of finding one.
-    ///
-    /// **It cannot see an `ObjRef` inside a type bound `_`**, which is how
-    /// `run::LoopState` sat inside `run::FlatLoop`. This forces the decision;
-    /// it does not prove reachability. The instrument for that remains
-    /// `run_program_collect_every_alloc`.
     fn object_roots(&self, out: &mut Vec<ObjRef>) {
         let Interp {
             heap: _,
@@ -7996,12 +4457,6 @@ impl Interp {
         // survives a forced collection there, because nothing can drop the
         // binding. Since Phase 5j a class is an ordinary object, so these
         // tables hold arena handles and an unrooted one would dangle.
-        //
-        // The keys of `class_variables`, `method_objects`, `annotations` and
-        // `class_packages` are deliberately not here: a key is a class, and
-        // rooting one would pin every class that ever existed. A row whose
-        // class has been collected is stale, and the collection is what
-        // removes it.
         for table in [
             merged_public_classes,
             package_classes,
@@ -8020,23 +4475,6 @@ impl Interp {
 
     /// The collection itself, kept out of [`Interp::collect_if_due`]'s body so
     /// that what an allocation pays when nothing is due is the test alone.
-    ///
-    /// **`inline(never)` is measured and not a precaution.** Folding this body
-    /// back into the caller costs the axes that allocate and nothing else.
-    /// `instructions:u` against the phase's pin, five rounds interleaved,
-    /// out-of-line against inlined, ir arm, small size: `alloc4c` 1.004808
-    /// against 1.010281, `arith` 0.989743 against 0.994651, `strings`
-    /// 1.013408 against 1.020129, `rexxcps` 1.020337 against 1.026160. The
-    /// axes whose loops allocate nothing -- `compound`, `emptyloop`,
-    /// `varlookup` -- read the same to six decimal places either way. That
-    /// partition is what says the cost is on the allocation path and not in
-    /// the collection.
-    ///
-    /// `dispatchclass` is deliberately not in that list: its ir/small cell is
-    /// bimodal, and both clusters appear inside a single sitting's rounds --
-    /// `[1.017560..1.019626]` out of line and `[1.017565..1.019938]` inlined,
-    /// medians landing in different clusters from overlapping spreads. Its
-    /// other three cells read the same on both builds.
     #[inline(never)]
     fn collect_now(&mut self) {
         // Everything the interpreter holds outside `RootSet`, handed to the
@@ -8083,12 +4521,6 @@ impl Interp {
     /// Flags a class carrying a class-side `UNINIT` so the collector
     /// resurrects it rather than freeing it, exactly as it does for an
     /// instance.
-    ///
-    /// **Without this a collectable class loses its finalizer silently**: the
-    /// pending list `rexx-classes` keeps would hold a handle to a freed slot,
-    /// and the termination sweep would send to nothing. Measured before it
-    /// existed --- `class-uninit-at-driven-collection` stopped printing its
-    /// finalizer at all.
     pub(crate) fn flag_class_uninit(&mut self, class: ObjRef) {
         if self.classes().has_pending_class_uninit(class) {
             self.heap.set_uninit(class);
@@ -8096,14 +4528,6 @@ impl Interp {
     }
 
     /// Records that `class` keeps `object` alive.
-    ///
-    /// **The alternative was a global root keyed by the class, and it cannot
-    /// be undone**: `RootSet` has only `add_global`, so such a root outlives
-    /// the class and the object with it. Holding the handle in the class's own
-    /// body means the object is reachable exactly as long as the class is.
-    ///
-    /// Panics if `class` is not a class object, because the caller's object
-    /// would otherwise be left with no root at all.
     fn class_owns(&mut self, class: ObjRef, object: ObjRef) {
         match self.heap.get_mut(class).map(|held| &mut held.body) {
             Some(rexx_core::Body::Class { owned }) => owned.push(object),
@@ -8112,11 +4536,6 @@ impl Interp {
     }
 
     /// A class object a program made, which the collector may take.
-    ///
-    /// **Rooted before it is returned**, for the reason `.environment` and
-    /// `.local` are: the caller registers it in tables the collector does not
-    /// walk, and everything between here and there can allocate. The temp is
-    /// released with the clause's frame.
     fn mint_class(&mut self) -> ObjRef {
         let class = self.alloc_with(
             rexx_core::BehaviourId::OBJECT,
@@ -8127,17 +4546,6 @@ impl Interp {
     }
 
     /// [`alloc_with`], for an object the collector must never take.
-    ///
-    /// **The collection point is kept and only the object's fate changes.** An
-    /// immortal object needs no root, so going straight to
-    /// `Heap::alloc_immortal` would be correct -- but it would also remove an
-    /// allocation site from the stress mode, whose whole job is to collect at
-    /// every one of them and so find a root some *other* value is missing.
-    /// Measured: with this bypassing the decision, eight corpus programs
-    /// dropped to zero collections under that mode, which
-    /// `collect_stress.rs`'s committed list caught.
-    ///
-    /// [`alloc_with`]: Interp::alloc_with
     fn alloc_immortal_with(
         &mut self,
         behaviour: rexx_core::BehaviourId,
@@ -8148,15 +4556,6 @@ impl Interp {
     }
 
     // ---- values ----
-    //
-    // `text`, `number`, `to_text` and `to_number` live in `value.rs` (Task 4),
-    // as `impl Interp` methods in a sibling module rather than here: `Interp`
-    // and its fields are defined in this module (the crate root), and a
-    // private item is visible to its defining module's descendants, so
-    // `value.rs` reaches `self.heap` directly with no `pub(crate)` needed on
-    // the fields themselves. The methods are marked `pub(crate)` there
-    // because visibility does not run the other way -- this module could not
-    // otherwise call them.
 
     // `eval`/`eval_node`/`stack_span` live in `eval.rs` (Task 7), beside the
     // operators they evaluate. `depth`/`max_depth`/`stack_entry`/
@@ -8168,41 +4567,6 @@ impl Interp {
 // ---- the public entry point ----
 
 /// Runs a Rexx program and returns what it produced.
-///
-/// **This entry point owns everything from `parse_program` onward** and does
-/// it on a thread with an explicitly sized stack (D19). Not the `rexx-run`
-/// binary: the L0 harness and the assertion-table harness both run in process,
-/// and a `cargo test` thread's default stack is far smaller than the one the
-/// depth limit is calibrated against, so putting the thread in the binary
-/// alone would leave every in-process caller on exactly the cliff the depth
-/// policy exists to keep them off.
-///
-/// The parse is inside the thread and not outside it because `Rc<Program>` is
-/// `!Send`: a program parsed on the caller's thread cannot be handed across.
-/// That is a compile error on day one rather than a subtle bug, and it is why
-/// `text` crosses as `Vec<u8>` and an `Outcome` comes back.
-///
-/// `path` is the program's location **as the oracle prints it**, which is the
-/// absolute, dot-normalised form: measured, running `./sub/../sub/rel.rex` and
-/// `rel.rex` from two different working directories both report the same
-/// canonical path. It is a parameter rather than something derived from `text`
-/// because a program's own bytes cannot know where they came from, and it is
-/// separate from `ProgramSource` because the parser has no use for it. The
-/// caller that read the file is the one that knows; `rexx-run` canonicalises
-/// before calling.
-///
-/// `invocation` is what the command line supplied -- see [`Invocation`], whose
-/// own doc carries the measured argument model. A caller with nothing to
-/// supply passes [`Invocation::none`], which is what a program run as
-/// `rexx p.rex` gets and is not the same as one run as `rexx p.rex ""`.
-///
-/// **A third parameter rather than a sibling entry point.** The alternative
-/// considered was leaving this signature alone and adding
-/// `run_program_with_arguments` beside it, which is cheaper to land and wrong
-/// for the reason `run_program_collect_every_alloc`'s own doc states about
-/// itself: this crate has one front door, and a second one is a second thing
-/// for every future caller to choose between. Widening the parameter list once
-/// costs a mechanical edit at every existing call site and nothing afterward.
 pub fn run_program(path: &str, text: Vec<u8>, invocation: Invocation) -> Outcome {
     let path = path.to_string();
     on_interpreter_thread(move || execute(&path, text, false, invocation))
@@ -8213,28 +4577,6 @@ pub fn run_program(path: &str, text: Vec<u8>, invocation: Invocation) -> Outcome
 /// has to pass again under this mode, with the mode proved to have actually
 /// collected (`Outcome::collections` non-zero) rather than merely having
 /// been requested.
-///
-/// `#[doc(hidden)]` because it is `pub` only so `tests/` can reach it, not a
-/// second front-door choice beside `run_program`. It is the crate's only
-/// hidden entry point.
-///
-/// **This mode was built at Task 16 gate time, not during the phase, and
-/// this is the first time anything has run the L0 subset under it.** The
-/// design spec's criterion 4 asked to run the subset under collect-on-every-
-/// allocation as though the mode already existed; it did not -- `alloc_with`
-/// never collected and `Heap::collect` had no caller outside `rexx-core`'s
-/// own tests. So a pass here is real evidence about this run, gathered for
-/// the first time on the day it was gathered, not a re-confirmation of
-/// something exercised throughout the phase. Say that plainly wherever this
-/// criterion's result is reported, rather than letting a passing gate imply
-/// otherwise.
-///
-/// It takes an [`Invocation`] for the same reason it takes a `path` and a
-/// `text`: it is a mode of `execute`, not a narrower entry point, and a mode
-/// that could not run a program the ordinary front door can run would be
-/// unable to stress exactly the programs whose rooting is least obvious --
-/// the argument string is an `ObjRef` this crate has to keep reachable for the
-/// whole run, which is the kind of thing this mode exists to check.
 #[doc(hidden)]
 pub fn run_program_collect_every_alloc(
     path: &str,
@@ -8247,27 +4589,6 @@ pub fn run_program_collect_every_alloc(
 
 /// Every body of `text`, compiled to a chunk and rendered as text: what the
 /// `rexx-ir` binary prints.
-///
-/// **This is a view of the compiler, not of a run.** It reaches `ir::compile`
-/// through the same `Plan::build` an activation does, so the stream it renders
-/// is the stream that body would run -- but nothing is executed, no activation
-/// exists, and a construct whose shape depends on run-time state is not
-/// resolved here. `setting` is the `TRACE` word the chunk is compiled under,
-/// which is an input to compilation rather than a display option (D23): under a
-/// setting that echoes, each promoted clause carries an `Op::TraceClause` that
-/// the same body compiled untraced does not have.
-///
-/// **A body that `compile` refuses is reported rather than skipped**, because
-/// a refusal is exactly what a reader printing the IR wants to see: that body
-/// runs on the tree-walker.
-///
-/// `Err` is a parse failure, rendered the way `execute` would report it.
-///
-/// **On the caller's thread.** `compile`'s expression walk takes a frame per
-/// operator, so a deeply nested expression can outrun an ordinary stack --
-/// `corpus_shape_tests`' own sweep measured the boundary and asks for
-/// [`INTERPRETER_STACK_BYTES`]. The binary spawns such a thread; this function
-/// does not, so that a caller already on one does not stack a second.
 pub fn render_ir(text: Vec<u8>, setting: &[u8]) -> Result<String, String> {
     let mode = trace::mode_from_setting(setting).map_err(|byte| {
         format!(
@@ -8295,12 +4616,6 @@ pub fn render_ir(text: Vec<u8>, setting: &[u8]) -> Result<String, String> {
 
 /// One row of the `LIBRARY REXX` entry-point registry (D37), for a caller
 /// that walks it.
-///
-/// **A flattened copy rather than the registry's own row.** A row's body is a
-/// function taking `dispatch`'s security-seam token, which nothing outside
-/// that module can name, so handing out the row itself would mean widening
-/// the seam. `render_ir` and [`run_program_collect_every_alloc`] are the same
-/// shape of surface: a projection this crate computes for a test to read.
 pub struct NativeEntryPoint {
     /// The name the `REXX` package exports the entry point under, spelled as
     /// `interpreter/runtime/NativeMethods.h` spells it. The lookup that
@@ -8326,11 +4641,6 @@ pub fn native_entry_points() -> Vec<NativeEntryPoint> {
 
 /// Every body [`render_ir`] compiles, in source order, each with the name it is
 /// printed under.
-///
-/// The main body always, and one per directive that carries code. A directive
-/// with no body of its own -- a `::CLASS`, a `::REQUIRES` -- contributes
-/// nothing, which is why the arms are spelled out rather than reached through a
-/// catch-all: a directive kind that gains a body should have to be named here.
 fn ir_bodies(program: &rexx_parse::Program) -> Vec<(&rexx_parse::CodeBody, String, BodyKind)> {
     use rexx_parse::DirectiveKind;
 
@@ -8359,16 +4669,6 @@ fn ir_bodies(program: &rexx_parse::Program) -> Vec<(&rexx_parse::CodeBody, Strin
 }
 
 /// Runs `body` on a thread with `INTERPRETER_STACK_BYTES` of stack.
-///
-/// A panic on that thread is resumed on the caller's rather than converted
-/// into an `Outcome`: a panic is a bug in this crate, not a Rexx condition,
-/// and swallowing it into an exit code would make it indistinguishable from a
-/// construct that failed loudly on purpose.
-///
-/// A *stack overflow* is the one failure this cannot report. Rust's guard page
-/// prints "has overflowed its stack" and aborts the process, which is exactly
-/// the silent death D19's depth limit exists to prevent, and the reason the
-/// limit has to be below what this stack survives rather than merely large.
 fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Outcome {
     let interpreter = std::thread::Builder::new()
         .name("rexx-interp".to_string())
@@ -8413,11 +4713,6 @@ fn execute(
         // clause echo: the failing clause never became an `Instruction`, and
         // `ParseError` carries the clause's *start* byte with no end, so
         // there is no span to echo at either level.
-        //
-        // Parse errors remain deliberately not reproduced byte for byte (the
-        // number and sub match on a plausible line; message text and
-        // substitutions are not gated), so this arm is wrong in the details
-        // on purpose and right in never being mistaken for success.
         Err(error) => {
             return Outcome {
                 exit_code: NOT_IMPLEMENTED_EXIT,
@@ -8460,10 +4755,6 @@ fn execute(
     // `Interp::bootstrap_library` carries why that is at start rather than on
     // demand -- and running it first leaves nothing of this program's to keep
     // reachable across the allocation it does.
-    //
-    // A bootstrap failure takes the same reporting path a program's own does,
-    // which is what `and_then` buys: it is a `Failure` like any other and the
-    // only thing this crate can do with it is say so.
     let result = interp.bootstrap_library().and_then(|()| {
         if let Some(argument) = argument {
             let value = interp.text(&argument);
@@ -8540,11 +4831,6 @@ fn execute(
     // afterwards. Measured, oracle rc 7 on a program ending `exit 7` whose
     // replied method then raises 98.936 -- the traceback is on stderr and the
     // status is the main body's, so a raise here only writes.
-    //
-    // A **loud** refusal is the exception and does move the status. It says
-    // this interpreter does not know the answer, and a message with an
-    // unchanged exit code is exactly the silent gap the loud rule exists to
-    // exclude.
     for (failure, mut sites) in interp.run_deferred_replies() {
         match failure {
             // `Interp::resume_reply` answers `Ok` for this variant, exactly as
@@ -8631,12 +4917,6 @@ mod tests {
     /// from one a program wrote, and three walks skip on it --
     /// [`Interp::install_directives`], `class_members` and
     /// `environment.rs`'s `package_table_entries`.
-    ///
-    /// **Asserted rather than relied on.** If a written directive could ever
-    /// carry an empty span, those three would silently stop installing it and
-    /// nothing would point at the cause; this is what makes the rule narrow
-    /// instead of a trap. Every `.rex` file under `corpus/` is the population,
-    /// which is every directive form this crate parses.
     #[test]
     fn no_written_directive_has_an_empty_clause_span() {
         let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
@@ -8675,20 +4955,10 @@ mod tests {
     }
 
     /// The path these tests report programs under.
-    ///
-    /// They build programs from bytes rather than from files, so there is no
-    /// real path here to canonicalise, and nothing below reads it back: it
-    /// reaches output only through a raised condition's middle line, which
-    /// none of these programs produces. `tests/spike.rs`'s own copy of this
-    /// constant carries the fuller note, beside the test that does assert it.
     const TEST_PATH: &str = "/nonexistent/lib-test-program.rex";
 
     /// A program with a body per directive kind that carries one, which is what
     /// [`super::render_ir`] walks.
-    ///
-    /// The `::ATTRIBUTE` is written `GET` with instructions under it: a bare
-    /// `::attribute a` declares accessors and has no body of its own, so it
-    /// would exercise the walk's `None` arm rather than its `Some` one.
     const EVERY_BODY: &[u8] = b"\
 say 1
 ::class k
@@ -8702,9 +4972,6 @@ say 1
 
     /// [`super::render_ir`] renders every body a program has, each under its
     /// own heading -- not the main body alone.
-    ///
-    /// The `::CLASS` contributes none and is here for that: a walk that pushed
-    /// a heading per directive rather than per body would show one for it.
     #[test]
     fn the_ir_render_covers_every_body_and_only_the_ones_that_exist() {
         let rendered = super::render_ir(EVERY_BODY.to_vec(), b"n").expect("the program parses");
@@ -8731,10 +4998,6 @@ say 1
 
     /// **The `TRACE` setting is an input to compilation, not a display
     /// option** (D23), and the render shows the difference.
-    ///
-    /// Under a setting that echoes, each promoted clause carries an
-    /// `Op::TraceClause`; under `N` the stream holds none at all. A `render_ir`
-    /// that ignored its `setting` argument would answer the same text twice.
     #[test]
     fn the_ir_render_compiles_under_the_setting_it_is_given() {
         let untraced = super::render_ir(EVERY_BODY.to_vec(), b"n").expect("the program parses");
@@ -8751,17 +5014,6 @@ say 1
 
     /// **A clause-opening op carries the source clause it stands for, and an
     /// op inside a region does not.**
-    ///
-    /// That split is the whole of what the annotation decides -- one line of
-    /// source per clause, rather than the same clause repeated on every op of
-    /// its region -- and both halves are asserted, because a renderer that
-    /// annotated everything satisfies the first alone.
-    ///
-    /// **`Op::Exec` is what makes the second half worth asserting.** It
-    /// carries an instruction index of its own, so a renderer that annotated
-    /// every op holding an index would annotate it; the ops this test used to
-    /// check the second half against carried no index at all and could not
-    /// tell the two rules apart.
     #[test]
     fn the_ir_render_names_the_clause_a_region_opens_and_not_its_inner_ops() {
         // `DROP` delegates and `SAY` has compiled operands, so this program
@@ -8828,22 +5080,6 @@ say 1
 
     /// `Loud::expression`'s size contract, tested on the two arms that can
     /// break it.
-    ///
-    /// Thirteen of `form_name`'s fifteen arms return a `&'static str` and
-    /// cannot grow with anything. `Prefix` and `Binary` are the two that call
-    /// `format!`, so they are the two where a regression to `{kind:?}` -- the
-    /// 364 KB stderr the doc on `Loud::expression` records -- could actually
-    /// land. Both are checked here against a subtree two hundred levels deep,
-    /// which is the direct form of the property: the message is a function of
-    /// the operator alone, and the children are not read.
-    ///
-    /// **This lives here rather than in `tests/spike.rs` because the runtime
-    /// test cannot reach these two arms for long.** A test that observes a
-    /// loud failure needs a form the executor does not evaluate, and every
-    /// operator, prefix and dyadic, is implemented here -- a witness picked
-    /// from the operators has to move each time one lands. Calling
-    /// `form_name` directly needs no unimplemented form at all, so nothing a
-    /// later task does can take this coverage away.
     #[test]
     fn the_two_formatting_arms_do_not_grow_with_the_subtree() {
         let deep = nest(200);
@@ -8870,19 +5106,10 @@ say 1
     }
 
     // ---- the fragment's lifetime (I7) ----
-    //
-    // Here rather than in `tests/spike.rs`, and the usual argument against a
-    // unit test does not apply: "a unit test with privileged access to
-    // private internals proves less about the shape callers actually get".
-    // These need no privileged access. They call `run_program`, the same
-    // public entry point on the same sized thread an integration test would
-    // use, because a fragment is reachable through the front door.
 
     /// Step 4's test, and the one property `INTERPRET` has that no other
     /// instruction does: a name bound inside fragment text outlives the
     /// fragment, so a *later, separate* fragment reads it back.
-    ///
-    /// Measured on the oracle: the binding outlives the fragment.
     #[test]
     fn interpret_binds_a_name_the_enclosing_body_never_mentions() {
         let outcome = run_program(
@@ -8895,22 +5122,6 @@ say 1
     }
 
     /// Step 2, and the reason the spike exists in the shape it does.
-    ///
-    /// Three separate things are being asserted by one transcript, and they are
-    /// listed here because a single `assert_eq!` hides which one broke:
-    ///
-    /// 1. A fragment created mid-instruction **reads** a name the enclosing body
-    ///    bound (`zzz`).
-    /// 2. A fragment **introduces** a name that appears in no instruction of the
-    ///    enclosing body (`zork`), and a *later, separate* fragment reads it back.
-    ///    This is the case that forces the enclosing activation to own a mutable
-    ///    name-to-slot map, because the enclosing plan is an `Rc` and cannot be
-    ///    extended.
-    /// 3. The enclosing body carries on afterwards with its own slots intact, and
-    ///    a third fragment sees the updated value.
-    ///
-    /// Oracle, verbatim:
-    ///
     /// ```text
     /// zzz = 'from the enclosing frame'
     /// interpret "say zzz"
@@ -8919,14 +5130,11 @@ say 1
     /// zzz = zzz || '!'
     /// interpret "say zzz"
     /// ```
-    ///
     /// ```text
     /// from the enclosing frame
     /// 42
     /// from the enclosing frame!
     /// ```
-    ///
-    /// rc 0.
     #[test]
     fn a_fragment_shares_the_enclosing_frames_variable_pool() {
         let program = b"zzz = 'from the enclosing frame'\n\
@@ -8946,17 +5154,12 @@ say 1
     /// `EXIT` inside a fragment ends the *program*, not the fragment, so control
     /// leaves the nested loop and the enclosing one together and both `Rc` locals
     /// drop in order.
-    ///
-    /// Oracle, verbatim:
-    ///
     /// ```text
     /// say 'before'
     /// interpret "say 'inside'"
     /// interpret "exit"
     /// say 'after'
     /// ```
-    ///
-    /// gives `before\ninside\n`, rc 0. `after` is not printed.
     #[test]
     fn an_exit_inside_a_fragment_ends_the_program() {
         let program = b"say 'before'\n\
@@ -8971,46 +5174,12 @@ say 1
     /// A condition raised inside an `INTERPRET` fragment reports
     /// **both** clauses, and this is the whole report, byte for byte, at the
     /// one level `run_program` can see it.
-    ///
-    /// Oracle, verbatim, for a program whose two `DO`s put the `INTERPRET` at
-    /// printed indent 4 and whose fragment nests its failing clause one
-    /// deeper (rc 222, empty stdout):
-    ///
     /// ```text
     ///      3 *-*       say 2 & 1;
     ///      3 *-*     interpret "do jj = 1 to 1; say 2 & 1; end"
     /// Error 34 running <path> line 3:  Logical value not 0 or 1.
     /// Error 34.901:  Logical value must be exactly "0" or "1"; found "2".
     /// ```
-    ///
-    /// **Every field here discriminates a different wrong implementation.**
-    /// Four mutations, each built and run rather than argued about:
-    ///
-    /// | mutation | this shape prints | `interpret ...` alone on line 1 |
-    /// |---|---|---|
-    /// | the level is never sealed | one echo, not two | one echo, not two |
-    /// | no line override | inner echo at line **1** | **identical** |
-    /// | a called routine's `+ 2` base | inner echo at **8** | inner at 4 |
-    /// | no base at all | inner echo at **2** | **identical** |
-    ///
-    /// **That right-hand column is why the program is two `DO`s deep with the
-    /// `INTERPRET` on line 3 and not one line at top level**, and the
-    /// measurement corrected a claim written here first and checked
-    /// afterwards. Two of the four survive the simplest shape, and for two
-    /// unrelated reasons that both look like "it worked": at indent 0 the
-    /// base is 0, so omitting it changes nothing, and with the `INTERPRET` on
-    /// line 1 the enclosing line and the fragment's own line are both 1, so
-    /// overriding it changes nothing either. Varying only the depth would
-    /// have caught the first and not the second.
-    ///
-    /// `say 2 & 1;` keeps its semicolon because that is where the fragment's
-    /// own clause span ends; trimming it diverges.
-    ///
-    /// `rust/corpus/lang/interpret_error_echo.rex` is the same shape as a
-    /// live differential, and all four mutations above were confirmed against
-    /// it as well. This test exists beside it because the corpus gate needs a
-    /// built oracle and is skipped without one, and the property is too
-    /// central to have no assertion on a machine that lacks it.
     #[test]
     fn a_raise_inside_a_fragment_reports_both_clauses() {
         let program = b"do kk = 1 to 1\n\
@@ -9037,30 +5206,6 @@ say 1
 
     /// Review round 1, F1 and its neighbours: the activation base survives
     /// every construct inside the fragment that writes an indent of its own.
-    ///
-    /// **F1 was a live divergence and this is the shape that found it.**
-    /// `Interp::indent_offset` had two absolute writers (`= 4` at the
-    /// absorbed `WhenCase` escape, `= 0` at the end of `run_otherwise`),
-    /// which were correct while it carried only a transient escape
-    /// elevation and destroyed the fragment base once it carried that too.
-    /// Every row below was captured from the oracle before the fix and every
-    /// one of the first three failed against it:
-    ///
-    /// | row | what writes an indent inside the fragment | was |
-    /// |---|---|---|
-    /// | `OTHERWISE` | `run_otherwise`'s `indent_offset = 0` | echo at 0, oracle 2 |
-    /// | `LEAVE` out of a `DO` | `pop_search_frame`'s reset | echo at 0, oracle 2 |
-    /// | escaped `OTHERWISE` around the `INTERPRET` | the `= 4` write | already right, and the row that keeps it right |
-    ///
-    /// The third row is the **regression guard on the fix itself**, not a
-    /// third bug: the enclosing clause's own printed indent already contains
-    /// the escape elevation, so a fix that set `activation_indent` without
-    /// zeroing `indent_offset` counts the 4 twice and prints 16 where the
-    /// oracle prints 12. It passed before this fix and it has to keep
-    /// passing, which is the only reason it is here.
-    ///
-    /// Each row asserts the whole stderr, so a wrong indent on *either* echo
-    /// fails rather than only the one being probed.
     #[test]
     fn a_fragments_activation_base_survives_every_indent_writer_inside_it() {
         // (program, expected stderr with `{path}` for the program's path)
@@ -9120,26 +5265,6 @@ say 1
     }
 
     /// Review round 1, F2: the `WHEN` scan's own echo carries the offsets too.
-    ///
-    /// `Select`'s arm computed `when_indent` from `static_indent` alone --
-    /// the one clause-echo indent in `run.rs` that added neither offset.
-    /// **The divergence does not need a fragment base**: a
-    /// nested `SELECT` inside an escaped `OTHERWISE` reaches it with no
-    /// `INTERPRET` in the program at all, printing the inner `WHEN` at 6
-    /// where the oracle prints 10. The fragment base only made it easy to
-    /// hit -- a plain `SELECT` inside an `INTERPRET` inside one `DO` is not
-    /// deep nesting either. The old doc bounded this with "no corpus or spec
-    /// example nests this deeply", and that false bound is why nobody looked;
-    /// "it only became live with a fragment base" would be the same trap one
-    /// notch narrower.
-    ///
-    /// Oracle, verbatim and byte-identical below (rc 0, empty stdout). The
-    /// `WHEN` line is the one that was wrong, at 2 instead of 4; the whole
-    /// transcript is asserted so that fixing it by moving the error elsewhere
-    /// fails too. A plain `do` block rather than `do z = 1 to 1` on purpose:
-    /// a `Controlled` loop's re-tested pass traces its own control-variable
-    /// value lines, which this test is not the place to encode: this test is
-    /// about a fragment's own indent.
     #[test]
     fn a_when_scan_inside_a_fragment_echoes_at_the_fragments_own_indent() {
         let program = "trace r\n\
@@ -9172,21 +5297,6 @@ say 1
 
     /// A fragment that does not parse raises the oracle's own condition
     /// instead of failing loudly.
-    ///
-    /// Measured: `interpret "do forever then"` is **27.901 at rc 229** on the
-    /// oracle, and `interpret "if"` is 35.929 at rc 221.
-    ///
-    /// **What is asserted and what is deliberately not.** The exit code and
-    /// the enclosing clause echo are the oracle's exactly, so this fails for
-    /// anything that kept `NOT_IMPLEMENTED_EXIT` or that dropped the echo.
-    /// Two things still diverge and are asserted as they *are* rather than as
-    /// the oracle has them, so the divergence cannot shrink unnoticed: the
-    /// oracle prints a further echo of the failing fragment clause above this
-    /// one (`     2 *-* do forever then`), which needs a clause span
-    /// `ParseError` does not carry, and its sub-message reads `found "THEN"`
-    /// where ours leaves the catalogue's `&1` unfilled, because `ParseError`
-    /// carries no substitution values. `phase-4-exclusions.txt`'s amended
-    /// KNOWN GAP row records both with their measurements.
     #[test]
     fn a_fragment_that_does_not_parse_raises_the_oracles_condition() {
         let outcome = run_program(
@@ -9219,28 +5329,6 @@ say 1
 
     /// The reported span comes from one call chain, so what else the program
     /// evaluated cannot change it.
-    ///
-    /// A regression test for a defect the review found by measuring rather than by
-    /// reading. `eval` records a depth-1 address and a deepest address; if the
-    /// first is rewritten by *every* top-level evaluation while the second moves
-    /// only on a new maximum, the two can end up describing different chains, and
-    /// the frames above `eval` then no longer cancel. A fragment's evaluation runs
-    /// under `run_fragment` under `step` under the enclosing `eval`, about 2 KB
-    /// deeper than a top-level one, so appending one `INTERPRET` to a program was
-    /// enough: measured before the fix, this pair reported **784.0** and
-    /// **782.158**, and the second is the dangerous direction, since a smaller
-    /// per-level cost implies more survivable levels than there are.
-    ///
-    /// The assertion is equality of the two spans rather than a bound on either,
-    /// because the property is "the span does not depend on what else ran" and a
-    /// bound would pass for both the fixed and the broken version.
-    ///
-    /// **On the tree-walker, because the recursion this measures is `eval`'s.**
-    /// `ir::compile` promotes a chain of native operators to ops that reach the
-    /// operator with its operands in registers, so on the compiled engine this
-    /// chain does not enter `eval` at all and both spans would be the depth of
-    /// nothing -- equal, and equal for the wrong reason. `eval::tests`'
-    /// `depth_limited` carries the measurement behind that.
     #[test]
     fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
         let mut alone = b"say 'a'".to_vec();
@@ -9293,11 +5381,6 @@ say 1
 
     /// The class `::CLASS name` installed, read out of the package's own
     /// table.
-    ///
-    /// Not `ClassRegistry::lookup`: that table is `.environment`'s class
-    /// entries and an installed class is deliberately absent from it, so a
-    /// lookup there would answer the environment's class of the same name or
-    /// nothing at all.
     fn installed_class(interp: &Interp, name: &str) -> rexx_core::ObjRef {
         interp.package_classes[&ProgramId(0)][name.as_bytes()]
     }
@@ -9313,12 +5396,6 @@ say 1
 
     /// **An installed class is not an environment entry**, which is the whole
     /// of why `install_class` does not register the name.
-    ///
-    /// `::class array` declares a class whose id is `ARRAY`, and
-    /// `.environment` must still answer the native `Array` for that name --
-    /// the package's own table is what shadows it, and only for this package.
-    /// Had the directive registered the name, the environment's snapshot
-    /// would be built from a table the directive had already overwritten.
     #[test]
     fn an_installed_class_does_not_displace_the_environments_own_entry() {
         let (mut interp, _program) = installed(b"say 'main ran'\n::class array\n");
@@ -9350,18 +5427,6 @@ say 1
     /// **`~metaClass` and `~class` are two different fields of a class
     /// object, and they part iff the superclass is a metaclass and is not the
     /// named-or-inherited metaclass.**
-    ///
-    /// `RexxClass::subclass` writes the `metaClass` field to the superclass at
-    /// `ClassClass.cpp:1590`, when that superclass is itself a metaclass, and
-    /// *then* at `:1615` hands `setOwningClass` the local `meta_class` it was
-    /// given -- a different location, which the write at `:1590` never
-    /// touched. So where the two differ, the field answers the superclass and
-    /// the behaviour goes on belonging to the named-or-inherited metaclass.
-    ///
-    /// Measured on the oracle, for the very program below -- `S` and `M1` are
-    /// both metaclasses, and the right-hand column says which rows this test
-    /// asserts:
-    ///
     /// ```text
     /// ::class S  MIXINCLASS Class         ~metaClass Class  ~class Class   same   stated, cannot fail
     /// ::class M1 MIXINCLASS Class         ~metaClass Class  ~class Class   same
@@ -9370,30 +5435,6 @@ say 1
     /// ::class K  METACLASS M1             ~metaClass M1     ~class M1      same   asserted
     /// ::class P                           ~metaClass Class  ~class Class   same   asserted
     /// ```
-    ///
-    /// **Deriving from a metaclass is necessary and not sufficient**, and the
-    /// counterexample is the first row: `S` derives from `.Class`, a
-    /// metaclass, and still answers `Class` to both, because there the
-    /// superclass *is* the metaclass in play. A rule stated as "derived from a
-    /// metaclass" alone would predict a divergence there and be wrong.
-    /// Measured on the oracle, `::CLASS M3 SUBCLASS S METACLASS S` answers `S`
-    /// to both for the same reason.
-    ///
-    /// **Nothing differential can witness this, which is why the check is
-    /// in-crate.** Every program that could observe the split has to send
-    /// `~class` or `~request` -- `RexxObject::requestRexx` reads the same
-    /// `behaviour->getOwningClass()` to build its `MAKExxxx` name
-    /// (`ObjectClass.cpp:1916`) -- and both sends are refused here, so the
-    /// split is not expressible as a corpus row at all. What the test asserts is what the
-    /// *directive path* produced -- `installed` runs `install_directives`,
-    /// not a hand-built graph -- so it cannot pass over a layer a real
-    /// program does not reach.
-    ///
-    /// **Collapsing the fields back into one fails it whichever field is made
-    /// to stand in for the other, and at a different assertion each time**,
-    /// measured: reading `owning_class` off the `metaclass` field fails the
-    /// `T~class` row, and dropping the override so both hold what the caller
-    /// passed fails the `T~metaClass` row.
     #[test]
     fn a_class_objects_metaclass_and_its_class_are_separate_fields() {
         let (mut interp, _program) = installed(
@@ -9424,17 +5465,6 @@ say 1
         // Derived from a metaclass and yet the two agree, which is the row
         // that refutes "the fields part wherever a class derives from a
         // metaclass": deriving from one is necessary and is not sufficient.
-        //
-        // **This pair cannot fail, and that is a property of the row rather
-        // than an oversight.** `Class` is both this row's superclass and the
-        // metaclass a bare declaration inherits, so both fields take their
-        // value from the same object and no rule written over those two
-        // inputs can separate them. It is here because the code is where the
-        // boundary of the rule gets read, and a reader who reaches for the
-        // stronger sentence needs the counterexample in front of them --
-        // not because it guards anything. What guards the split is the `T`
-        // and `T2` pair above, measured: collapsing `class_of` onto the
-        // `metaclass` field stops at `T~class` and never reaches here.
         assert_eq!(interp.classes().metaclass(s), class, "S~metaClass");
         assert_eq!(interp.classes().class_of(s), class, "S~class");
         // Naming one under a superclass that is not a metaclass, and naming
@@ -9463,11 +5493,6 @@ say 1
 
     /// Had `::METHOD` landed in the class dictionary instead of the instance
     /// one (or nowhere), one side of this pair would be wrong.
-    ///
-    /// `own_*_method_names` rather than the flattened sets the previous test
-    /// reads: `.Object`'s and `.Class`'s own methods are in both flattened
-    /// sets now, and a name absent from one of them is only evidence if the
-    /// set is this class's own.
     #[test]
     fn a_method_directive_lands_in_the_classs_instance_dictionary() {
         let (mut interp, _program) =
@@ -9499,31 +5524,6 @@ say 1
 
     /// The `UNINIT` flags, **through the directive path** -- which is the
     /// half `rexx-classes`' own graph-API test cannot reach.
-    ///
-    /// `Interp::install_class_at` runs `check_uninit` and then
-    /// `refresh_parent_has_uninit` on each class it builds, at the points
-    /// `RexxClass::subclass` does (`ClassClass.cpp:1628`, `:1634`-`:1637`).
-    ///
-    /// **Only `check_uninit` is witnessed here, measured by deleting each on
-    /// its own.** Dropping `check_uninit` reddens the
-    /// `has_uninit(kid)` row -- that flag comes from the *flattened* instance
-    /// behaviour, which no constructor computes. Dropping
-    /// `refresh_parent_has_uninit` reddens nothing: a class is built after
-    /// every class it names, so [`ClassGraph::define_class`] already asks
-    /// `uninit_reaches` of the same finished parent, and the call is a second
-    /// computation of the answer it got.
-    ///
-    /// `has_uninit(base)` survives both, because [`ClassGraph::define`] sets
-    /// it when the `::METHOD uninit` is attached -- so the declaring class is
-    /// not what either call is for, and an assertion on it alone would not
-    /// have caught them going missing.
-    ///
-    /// The oracle's own answer for this hierarchy is measured, and it is what
-    /// makes `has_uninit` on `KID` and `GRANDKID` right rather than merely
-    /// consistent: `::CLASS P` with an instance `::METHOD uninit`,
-    /// `::CLASS K SUBCLASS P`, and `o = .K~new` runs P's `uninit` for that
-    /// instance at rc 0 -- so the *subclass* is what registered it, which is
-    /// `HAS_UNINIT` being set on the subclass from its flattened behaviour.
     #[test]
     fn the_uninit_flags_are_set_for_the_classes_a_file_declares() {
         let (mut interp, _program) = installed(
@@ -9566,12 +5566,6 @@ say 1
 
     /// A class-side `::METHOD uninit CLASS` sets neither flag, and that is
     /// the oracle's answer rather than a gap.
-    ///
-    /// Measured: a program making two `.K~new` instances under a class-side
-    /// `uninit` prints `uninit on K` **once**. The spelling registers the
-    /// class *object* through `hasUninitMethod` (`ClassClass.cpp:1222`), not
-    /// its instances through `HAS_UNINIT`, so a build that set `has_uninit`
-    /// here would over-register every instance the class ever makes.
     #[test]
     fn a_class_side_uninit_sets_neither_flag() {
         let (mut interp, _program) = installed(
@@ -9620,11 +5614,6 @@ say 1
 
     /// `::METHOD ... ATTRIBUTE` generates the same pair `::ATTRIBUTE` does,
     /// and each half is recorded as the half it is.
-    ///
-    /// **What a send reads is the kind**, so asserting the names alone would
-    /// leave a pair recorded as a getter twice looking correct here: the
-    /// setter's message would then read the variable and answer it instead of
-    /// assigning, which is a value where the oracle has no result.
     #[test]
     fn a_method_attribute_installs_a_getter_and_a_setter() {
         let (mut interp, _program) =
@@ -9660,11 +5649,6 @@ say 1
 
     /// A `DELEGATE` method is a row of the generated table and not of the
     /// body one, and under `ATTRIBUTE` it is two rows rather than one.
-    ///
-    /// **The pair's arm is what the name assertion alone would miss**: a
-    /// build installing the getter's key only leaves `.K~a = 5` a name miss
-    /// on the class, which reports the oracle's own status and catalogue row
-    /// over a receiver the oracle does not name.
     #[test]
     fn a_delegate_method_is_a_generated_method() {
         let (interp, _program) =
@@ -9758,14 +5742,6 @@ say 1
     /// **Every class the interpreter's own library declares carries
     /// `REXX_DEFINED`** -- asserted over the set the bootstrap leaves behind
     /// rather than on the classes a corpus row happens to name.
-    ///
-    /// A corpus row can only reach a public one. The routes to a class a
-    /// `::CLASS` without `PUBLIC` declares are `~package~classes` and
-    /// `~package~findClass`, both refused here, so `SetMixin` and its
-    /// neighbours have no differential witness in this phase and this is the
-    /// only instrument that sees them.
-    /// The names below are read out of the table rather than listed, so a
-    /// `::CLASS` added upstream is covered without an edit here.
     #[test]
     fn every_class_the_library_declares_carries_the_rexx_defined_flag() {
         let mut interp = Interp::new();

@@ -10,27 +10,12 @@
 /*----------------------------------------------------------------------------*/
 
 //! Phase 3 gate: every `.rex` file under `samples/` parses to an AST.
-//!
-//! The oracle side is already settled: every one of these files passes
-//! `build/bin/rexxc` (syntax check only, no execution), measured for the gate
-//! assessment in `docs/superpowers/plans/phase-3-gate.md`. So the expected
-//! answer for every file is "parses", there is no per-file expectation to
-//! curate, and any `Err` here is a real divergence from the oracle.
-//!
-//! Files are read as bytes, never as strings, because two samples are not
-//! valid UTF-8 (`samples/windows/rexutils/drives.rex` and oodialog's
-//! `comboBoxToolTip.rex` are ISO-8859, measured with `file` and confirmed
-//! with `iconv`), and a Rexx literal may hold any byte at all.
 
 use std::path::{Path, PathBuf};
 
 use rexx_parse::parse_program;
 
 /// Collects every `*.rex` file under `dir`, recursively, in a stable order.
-///
-/// Recursion is the point: `samples/*.rex` matches only the 36 top-level
-/// files, and the other files live under `samples/api/`, `samples/windows/`
-/// and deeper. Sorted so a failure list reads the same way every run.
 fn rex_files_under(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let mut stack = vec![dir.to_path_buf()];

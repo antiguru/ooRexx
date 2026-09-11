@@ -11,20 +11,6 @@
 
 //! Lifts individual test methods out of ooTest `.testGroup` files so they can
 //! run as standalone programs long before the ooTest framework itself works.
-//!
-//! This is a heuristic, and deliberately conservative: a method that touches
-//! fixture state set up by `setUp` cannot stand alone, so it is flagged and
-//! skipped rather than mis-extracted into a silently-passing test.
-//!
-//! [`extract_assertions`] is a second, unrelated extraction mode for
-//! `base/expressions`: wrapping a whole method as `::routine main public`
-//! produces a program whose prolog is empty (nothing precedes the directive,
-//! so nothing calls it), which runs and asserts nothing at all. That mode
-//! emits one *row* per `self~assertSame` call instead -- the two expressions
-//! it compares, verbatim and unparsed, plus the `NUMERIC DIGITS`/`FORM`
-//! settings in force when it runs and any assignment prelude the same method
-//! established first -- so a later harness with a real evaluator can check
-//! each one directly, without ever running the extracted text as a program.
 
 //! [`keyword`] is a third mode again, for `base/keyword`. Neither of the two
 //! above transfers to it: that group tests *statements*, so its assertions
@@ -157,39 +143,11 @@ pub enum Form {
 
 /// A condition an assertion's expression is expected to **raise**, in place
 /// of a value it is expected to equal.
-///
-/// `self~expectSyntax(major.sub)` does not check anything itself -- it sets
-/// a flag (`OOREXXUNIT.CLS`: `self~conditionExpected = .true; self~
-/// conditionName = "SYNTAX"; self~conditionCode = major.sub`) that the
-/// framework's own per-method condition trap consults *later*, whenever
-/// something in the rest of that method actually raises. So a
-/// `self~assertSame` seen after one is not testing "expr equals expected"
-/// at all: it is testing "evaluating expr raises major.sub", and `expected`
-/// (its second argument) is never even reached under the oracle, because
-/// Rexx evaluates a message send's arguments left to right and the raise
-/// happens while evaluating the first one.
-///
-/// Measured, `DIVISION.testGroup`'s `test_262`:
-///
 /// ```text
 /// self~expectSyntax(26.11)
 /// Numeric Digits 5
 /// self~assertSame("-5678932" % "-37", 1)
 /// ```
-///
-/// running `"-5678932" % "-37"` under `DIGITS 5` raises the oracle's own
-/// Error 26.11 ("Result of % operation did not result in a whole number"),
-/// which is what this row is actually checking -- not that the quotient
-/// equals `1`. Note `expectSyntax` is not even the *immediately* preceding
-/// line here; `NUMERIC DIGITS` sits between it and the assertion, which is
-/// why this is carried as state (below) rather than checked one line back.
-///
-/// **Carried sequentially, exactly like `digits`/`form`**, and for the same
-/// reason: a second `self~expectSyntax` in the same method (none occur in
-/// `base/expressions` today -- checked -- but nothing about the mechanism
-/// is specific to there being only one) would set a new expectation for
-/// whatever follows it, the same way a second `NUMERIC DIGITS` would. This
-/// struct is `Copy` so carrying it costs nothing extra in the scan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RaiseExpectation {
     pub major: u32,
@@ -201,16 +159,6 @@ pub struct RaiseExpectation {
 /// force, any assignment lines earlier in the same method, and whether a
 /// `self~expectSyntax` earlier in the method turns this row into a
 /// raise-expectation rather than a value comparison.
-///
-/// `expr` and `expected` are `assertSame`'s two positional arguments,
-/// verbatim source text, unparsed. Both are ordinary Rexx expressions --
-/// method-call arguments always are, so a quoted literal and a bare signed
-/// number are both just expressions that happen to be constant -- and
-/// deciding what either one evaluates to needs a real evaluator, which is a
-/// later harness's job, not this extractor's. When `expect_raise` is
-/// `Some`, `expected` is still the raw text `assertSame` was called with,
-/// kept for provenance, but it is not meaningful to compare against: see
-/// `RaiseExpectation`'s own doc for why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssertionRow {
     pub group: String,
@@ -230,10 +178,6 @@ pub struct AssertionRow {
 
 /// One method whose remaining `assertSame` calls could not become rows, and
 /// why, and how many were dropped.
-///
-/// Assertions from *before* the blocking statement in the same method still
-/// become rows: nothing about them was actually invalidated, only the
-/// state after that point stopped being trustworthy.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockedMethod {
     pub group: String,
@@ -252,10 +196,6 @@ pub struct AssertionExtraction {
 /// calls and turns each into an [`AssertionRow`], carrying `NUMERIC`
 /// settings and any assignment prelude sequentially through the method
 /// exactly as the interpreter would.
-///
-/// `group` is a caller-supplied label (typically the `.testGroup` file's
-/// stem, e.g. `"PRECEDENCE"`) copied verbatim into every row and blocked
-/// entry; this function has no notion of files.
 pub fn extract_assertions(group: &str, source: &str) -> AssertionExtraction {
     let mut out = AssertionExtraction::default();
     for method in extract(source) {
@@ -430,13 +370,6 @@ fn scan_method_for_assertions(
 /// Splits a `self~assertSame(...)` clause into its two positional arguments,
 /// verbatim apart from surrounding whitespace. `line` must already be known
 /// (case-insensitively) to start with `self~assertSame`.
-///
-/// `None` means the shape this scanner requires does not hold: no opening
-/// paren immediately after the message name, unbalanced parens, a comma
-/// count at the call's own nesting depth other than exactly one, or text
-/// trailing after the closing paren. None of the corpus's 4,269 calls hit
-/// this (checked before writing this scanner), so `None` here means a
-/// method this scanner has never seen the shape of, not an expected case.
 fn parse_assert_same(line: &str) -> Option<(String, String)> {
     let prefix_len = "self~assertsame".len();
     let rest = line.get(prefix_len..)?.trim_start();
@@ -499,14 +432,6 @@ fn parse_assert_same(line: &str) -> Option<(String, String)> {
 /// trimmed -- expected to be exactly `(major.sub)` with nothing else, which
 /// is the shape every one of the 184 `self~assertSame` calls this scanner
 /// converts to a raise expectation follows.
-///
-/// `None` for anything else, including `expectSyntax`'s own array form
-/// (`(major.sub, message inserts...)`, which the method also accepts but
-/// none of these 184 rows' own markers use) or a trailing `msg` argument.
-/// Rather than guess which comma-separated item is the code, or discard the
-/// inserts, this blocks the method -- the same conservative choice
-/// `parse_assert_same` makes for an `assertSame` shape it has not seen
-/// either.
 fn parse_raise_expectation(rest: &str) -> Option<RaiseExpectation> {
     let inner = rest.strip_prefix('(')?.strip_suffix(')')?.trim();
     if inner.contains(',') {

@@ -13,69 +13,6 @@
 //! the oracle: each row's program run through the C++ interpreter and through
 //! both of this crate's engines, with all three descriptors asserted on every
 //! side.
-//!
-//! # The property, and why a fix must delete a row rather than update it
-//!
-//! A row is red if **either** side's answer moves, in either direction. That
-//! includes the crate starting to agree with the oracle: a licence that
-//! quietly stopped being needed is a decision to revisit, so the row is
-//! deleted with the licence rather than edited to match. `ir_recorded.rs`'s
-//! `KNOWN_DIVERGENCES` states the same property for its own rows and is the
-//! shape this file is built from.
-//!
-//! # How to read a red row, because the licence is wider than this test
-//!
-//! The DEVIATION rows license **ordering**: a finalizer may run at any point
-//! after its object is unreachable and no later than termination, which the
-//! documentation quoted in each row makes a free choice. This test pins the
-//! exact bytes anyway, so that nothing moves quietly. Both are wanted, and the
-//! two answers a red row can carry are not the same finding.
-//!
-//! A change on **this crate's** side, inside the boundary each row's SCOPE
-//! states, is a deliberate edit to that row by whoever re-timed the finalizer
-//! -- not a defect this test caught. A change on the **oracle's** side, or any
-//! exit-status or stderr change on either side, is a real finding.
-//!
-//! # What is different from that table, and it is the whole design
-//!
-//! `KNOWN_DIVERGENCES` compares **tree-walker against ir**, both in process.
-//! These rows compare **the crate against the oracle**, which needs
-//! `support::oracle` and a subprocess, and each row runs **both** crate
-//! engines: it asserts that they agree with each other while both differ from
-//! the oracle in exactly the recorded way. A row that checked one engine
-//! would stay green on a build where the two engines had drifted apart, which
-//! is a defect no licence covers.
-//!
-//! # All three descriptors, on both sides
-//!
-//! A row records one exit status and one stderr for *both* sides, because a
-//! divergence licensed here is a silent one: the two interpreters agree on
-//! those and their stdout differs only in where a line sits. Both agreements
-//! are asserted rather than assumed, so a row cannot stay green through the
-//! crate starting to raise. stderr is compared raw, not through DEVIATION 0's
-//! normalisation, which is the stricter claim and available because these
-//! programs write none.
-//!
-//! # A `const` table rather than a `datadriven` case file
-//!
-//! The standing rule for inline-case tables in this tree is a data file
-//! (`docs/superpowers/plans/2026-08-09-phase-4e-ir.md`'s dependency
-//! exception). It does not fit here, and the reason is mechanical rather than
-//! stylistic: `datadriven::TestFile::run` branches on `env::var("REWRITE")`
-//! and rewrites each file's expected block in place
-//! (`datadriven-0.9.0/src/lib.rs:501`). A table whose whole claim is "this
-//! must not be updated in place" cannot live in a medium with a supported
-//! command for updating it in place.
-//!
-//! # Not gated on `REXX_CORPUS_GATE`
-//!
-//! Most oracle harnesses here gate on it so an offline checkout is not asked
-//! to produce an interpreter. `parse_version_oracle.rs`'s own module doc
-//! records that the protection is already unavailable in this crate --
-//! `tests/builtin_status.rs` invokes the oracle on a plain `cargo test` with
-//! no gate -- so gating buys nothing back. These rows are the only instrument
-//! standing between a licensed divergence changing shape and nobody noticing,
-//! and each costs one subprocess, so they run in every mode.
 
 mod support;
 
@@ -226,10 +163,6 @@ fn assert_oracle_side(case: &LicensedDivergence, cpp: &CppOutcome) {
 /// Every [`LICENSED_DIVERGENCES`] row still says exactly what it claims: the
 /// two crate engines agree with each other, and both differ from the oracle
 /// in the recorded way and in no other.
-///
-/// Red if either side's answer moves, in either direction -- including the
-/// crate starting to agree, which is what should delete the row and its
-/// DEVIATION together rather than update them.
 #[test]
 fn the_licensed_divergences_still_diverge_exactly_as_recorded() {
     assert!(
@@ -273,15 +206,6 @@ fn names_the_exclusions_file_claims(exclusions: &str) -> BTreeSet<&str> {
 }
 
 /// The prose rows and the executable table name exactly the same divergences.
-///
-/// A **set equality**, in both directions, because the two failures it has to
-/// catch are not symmetrical in the obvious way. Deleting a DEVIATION row
-/// takes its marker with it, which a one-directional check would see. Deleting
-/// a row from [`LICENSED_DIVERGENCES`] leaves the prose claiming a witness
-/// that no longer runs -- the state `phase-4-exclusions.txt` was in before
-/// this file existed, and the one its DEVIATION 4 transcripts are still in --
-/// and only the other direction sees that. A typo in either copy of a name
-/// fails both directions at once.
 #[test]
 fn the_prose_rows_and_this_table_name_the_same_divergences() {
     let exclusions = fs::read_to_string(exclusions_path())

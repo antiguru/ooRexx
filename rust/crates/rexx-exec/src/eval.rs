@@ -11,65 +11,6 @@
 
 //! Expression evaluation, parts one and two: terms, arithmetic,
 //! concatenation, comparison and logic.
-//!
-//! `eval`/`eval_node`/`stack_span` moved here from Task 3's spike, extended
-//! (Task 7) with `Stem`, `Compound`, `DotVariable`'s parse-time names,
-//! `Prefix`, the arithmetic operators and the concatenation forms
-//! `||` did not already cover, and (Task 8) with the comparison operators
-//! (through `rexx-num`'s own comparison entry points, never a hand-written
-//! string comparison), the binary logical operators `&`/`|`/`&&`, and
-//! `ExprKind::Logical` (the comma-separated conditional list `IF a, b THEN`
-//! desugars to), and (Task 4, 4b) `ExprKind::Call`, the internal-function
-//! form (`f(...)`/`"f"(...)`) -- see `eval_call`'s own doc for the
-//! resolution order and what still falls through to the loud `4c` fallback,
-//! and (Task 5, 4b) `ExprKind::VariableReference`, the `>x`/`<x` form, which
-//! evaluates to the referenced variable's own value -- the arm's own comment
-//! has the measurement, and why `USE ARG >name` does not come through here.
-//! `QualifiedCall` and `ClassResolver` are `eval_cold`'s own arms, resolved
-//! against the running package's namespace table. `DotVariable` resolves
-//! through `environment.rs` (Phase 5a, D33), whose own doc has the order and
-//! the names it refuses rather than answers.
-//!
-//! **A function here that opens a temps frame and then evaluates through `?`
-//! leaves its own `pop_frame` unreached when that evaluation raises. That is
-//! deliberate, and Tasks 10 and 11 should copy it rather than repair it.**
-//! `step_in_temps_frame` pops unconditionally with an outer watermark, and
-//! `pop_frame` truncates rather than popping one frame, so the skipped inner
-//! frames are discarded when the failing instruction returns. Nothing
-//! accumulates: an instruction is the granularity at which the temps stack is
-//! guaranteed balanced, not an expression.
-//!
-//! **The other side of that is a frame popped on the failure path, and it is
-//! equally safe.** `eval_node`'s binary arm and `eval_prefix` bind their
-//! operator's result and pop before returning it, so an *operator's* own raise
-//! discards everything the site rooted, where the `?` on an *operand's*
-//! evaluation skips past. Both are correct for the same reason -- `pop_frame`
-//! truncates to a watermark the site took itself, so it can only discard what
-//! that site rooted -- plus one thing the failure path needs on its own:
-//! nothing the failure carries away is a root. `Failure::Exited` is the
-//! variant that carries an `ObjRef`, and neither the functions `apply_binary`
-//! dispatches to nor `apply_prefix`'s own arms build anything but `Raised` and
-//! `Loud`.
-//!
-//! The alternative was measured and rejected rather than left untried. A
-//! `Drop` guard cannot be written here at all, because it would have to hold
-//! `&mut RootSet` across `self.eval(&mut self)` and that is two live `&mut`
-//! borrows; the only escapes are a raw pointer, which is `unsafe` for no
-//! strict need, and putting the `RootSet` behind a `RefCell`, which relaxes
-//! this crate's borrow discipline to fix something that is not a defect.
-//!
-//! What this does depend on is every instruction loop routing through
-//! `step_in_temps_frame`. A future caller that evaluates in a loop *outside*
-//! instruction context and carries on past an `Err` would accumulate for
-//! real, and would do it silently, since nothing asserts temps balance. Only
-//! test helpers do that today.
-//!
-//! **Arithmetic, comparison and logic can all fail two different ways, and
-//! this module is where that split first matters.** An unimplemented form
-//! is `Loud`, unchanged. A real Rexx condition -- `1/0`, `'abc' + 1`, `2 **
-//! 'x'`, `\'abc'`, `if 1, 'x' then` -- is `Raised` (`error.rs`), and both
-//! convert into the one type `step` and everything above it propagate,
-//! `Failure`.
 
 use crate::activation::CallType;
 use crate::error::Raised;
@@ -85,59 +26,10 @@ use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, SymbolId};
 /// left-deep term, refuses anything past this depth with 11.1 ("Insufficient
 /// control stack space") rather than letting the interpreter thread's guard
 /// page abort the process silently.
-///
-/// **Exactly 100,000, the largest depth the oracle is measured to survive**
-/// (`phase-4-exclusions.txt`'s Deviation 2: it prints an answer for a
-/// 100,000-term expression and SIGSEGVs, no condition, between 100,000 and
-/// 150,000). Bounded on both sides, per D19: at least 100,000 is the floor a
-/// lower limit would fail (it would refuse programs the oracle accepts), and
-/// `INTERPRETER_STACK_BYTES` (512 MiB) divided by this crate's own measured
-/// per-level cost (`lib.rs`'s own doc comment on `INTERPRETER_STACK_BYTES` --
-/// **480** bytes/level in debug, re-measured at the tree-walker's removal
-/// (1840 while a deep chain still reached `eval` through it), at that task's own
-/// implementation time and recorded there with the task it belongs to, the
-/// method and the survivable-depth arithmetic, in the same task-anchored
-/// form as every other row in that lineage rather than under a calendar
-/// date; ~1600 was the figure current before this
-/// task's own depth counter added its own few bytes per level) is the
-/// ceiling a higher one would fail. A
-/// limit *above* the oracle's own cliff would be worse than one below it: it
-/// would widen the window where this crate succeeds and the oracle segfaults,
-/// which is the opposite of what a differential harness wants.
-///
-/// `eval` checks `self.depth > MAX_EVAL_DEPTH`, never `>=`: a 100,000-term
-/// expression's deepest `eval` call is depth 100,000 exactly, and that is the
-/// one depth the oracle is known to handle, so the check has to fire one
-/// level past it or the corpus's own passing case would be refused.
-///
-/// **What this does not do, and must not be documented as doing**: a program
-/// can reach a deep tree without ever evaluating it (`exit` before a
-/// 700,000-term expression aborts inside `Drop`, with no `eval` call and
-/// this counter never in a position to see it) -- that path is closed by
-/// `rexx-parse`'s iterative `Drop`, not by this counter.
 const MAX_EVAL_DEPTH: usize = 100_000;
 
 /// Which of the three bare-symbol reads an expression is, carried where the
 /// `ExprKind` itself is not.
-///
-/// [`Interp::read_symbol`] and [`Interp::echo_symbol_read`] both dispatch on
-/// this, and `crate::ir::Op::Load` carries one because a compiled op holds no
-/// borrow of the node it was emitted for -- the same reason
-/// `crate::ir::Op::LoopHeaderValue` carries a `HeaderRole` rather than the
-/// keyword's own node.
-///
-/// **The three kinds it does not have are the three that are not a variable
-/// read.** `ExprKind::Constant`'s value is its own upcased spelling rather
-/// than anything stored, `ExprKind::DotVariable` traces `>E>` and
-/// `ExprKind::VariableReference` traces `>O>`; none reaches either function.
-/// The handle a Rexx logical value is, as a constant.
-///
-/// **A comparison's value is the one-byte string `"1"` or `"0"`, and that
-/// string inlines into the handle itself** -- so the two handles are fixed bit
-/// patterns and `logical` is a `const fn` rather than a call into
-/// `Interp::text`, which would run `inline_text`'s loop to rediscover them.
-/// Every consumer that only wants the bit can then compare two integers
-/// instead of decoding a handle and matching its bytes.
 pub(crate) const LOGICAL_TRUE: ObjRef = ObjRef::inline_byte(b'1');
 /// See [`LOGICAL_TRUE`].
 pub(crate) const LOGICAL_FALSE: ObjRef = ObjRef::inline_byte(b'0');
@@ -148,14 +40,6 @@ pub(crate) const fn logical(holds: bool) -> ObjRef {
 }
 
 /// What an arithmetic operator's left operand turned out to be.
-///
-/// **`Send` rides [`Interp::to_number`]'s refusal rather than being asked
-/// first**, so the general arithmetic path pays no heap lookup for a shape a
-/// `Body::Num` can never have. The premise is that every value
-/// [`Interp::operator_message_receiver`] names is one that refuses, which is
-/// what `a_value_the_operator_gap_names_parses_as_no_number` holds -- the
-/// same premise [`Interp::compare_values`] already skips its own gap check
-/// on.
 enum ArithOperand {
     Number(Number),
     Send(ObjRef),
@@ -177,42 +61,6 @@ pub(crate) enum SymbolRead {
 impl Interp {
     /// Evaluates one expression node, and keeps the depth bookkeeping D19
     /// needs.
-    ///
-    /// Split from `eval_node` so that the depth is decremented on every exit
-    /// path including the `?` ones, without a guard type that would need to
-    /// hold a borrow of `self` across the recursive call. Task 11 adds the
-    /// limit check to this function, which is why it is the one that owns the
-    /// counter.
-    ///
-    /// The stack probe: the address of a local here, recorded at the first
-    /// level and at the deepest. Taking a raw pointer and casting it to
-    /// `usize` is safe code, so this needs no `unsafe`, and measuring the real
-    /// function rather than a replica of it is the whole reason to do it here.
-    /// The two ends are written **together**, when the maximum is beaten, so
-    /// they always describe one call chain; `StackSpan`'s doc has the
-    /// measurement that made that necessary.
-    /// [`Interp::eval`]'s own per-node entry: the stack-span bookkeeping and
-    /// D19's evaluation-depth limit, in one place because there is now more
-    /// than one caller.
-    ///
-    /// **The second caller is the compiled stream.** A native op evaluates a
-    /// node without entering `eval` at all, and for most of them that is
-    /// invisible -- an `Op::Const` has no operands to recurse into, so the
-    /// depth it would have counted bounds nothing. A call is different: its
-    /// *arguments* go back through `eval`, so a call op that skipped this
-    /// would start them one level shallower than the tree-walker does and move
-    /// the depth at which a deeply nested argument raises 5.3. Calling this is
-    /// what keeps the two engines' answer to that identical rather than nearly
-    /// so.
-    ///
-    /// `anchor` is any address inside the caller's own frame; its value is
-    /// never read, only its position, which is what makes the span a
-    /// measurement of the real stack rather than of the recursion count.
-    ///
-    /// **The caller owes the matching `self.depth -= 1`** on every exit path,
-    /// the raising ones included, exactly as `eval` does below. Not a guard
-    /// type, because the trace hook on the way out needs the value in hand, so
-    /// both halves would have to be threaded through one anyway.
     pub(crate) fn enter_eval_node<T>(&mut self, anchor: *const T) -> Result<(), Failure> {
         let here = anchor as usize;
 
@@ -271,16 +119,6 @@ impl Interp {
     /// computed. A no-op immediately when `!self.tracing_intermediates()`
     /// (`TRACE I` only; `TRACE R` never reaches any of these, measured),
     /// so the match below only ever runs its own `to_text` cost under `I`.
-    ///
-    /// **Every arm here is additive tracing, never a second evaluation.**
-    /// `expr.kind`'s own already-computed pieces (a `SymbolId`'s name, an
-    /// operator's spelling) are read directly; nothing re-derives a value
-    /// `eval_node` already produced.
-    ///
-    /// **Split so the untraced path is a predicate and not a call.** The
-    /// guard is a cached field read, but the body is a wide match over
-    /// `expr.kind`, so one function meant every evaluated node paid a call to
-    /// reach a `return`. Measured at 1.8% of `alloc.rex` before the split.
     #[inline]
     pub(crate) fn trace_intermediate(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
         if !self.tracing_intermediates() {
@@ -355,11 +193,6 @@ impl Interp {
             // `>O>   ">" => "PQ"`, the `<` form included -- the oracle's own
             // call passes the literal `">"` regardless of which byte was
             // written.
-            //
-            // Reached because a reference argument is evaluated through
-            // `eval` on the *whole* reference node rather than on its inner
-            // variable: doing the latter traced `>V>   PQ => "val"` here
-            // instead, which is this arm's own adjacent measured failure.
             ExprKind::VariableReference(inner) => {
                 let (ExprKind::Variable(id) | ExprKind::Stem(id)) = &inner.kind else {
                     // `rexx-parse` admits nothing else inside a reference
@@ -424,35 +257,6 @@ impl Interp {
     /// One bare symbol's read: the whole of what `eval_node`'s own
     /// `Variable`/`Stem`/`Compound` arms do, entered from there and from
     /// `crate::ir::Op::Load`.
-    ///
-    /// **The three kinds are three different operations, which is why this
-    /// dispatches rather than resolving a slot once and reading it.**
-    ///
-    /// * A simple variable's miss derives its own upcased spelling and nothing
-    ///   more can ever observe the difference, so a `Body::Text` is the whole
-    ///   answer.
-    /// * A bare stem's miss must come back as a real, shared `Body::Stem`
-    ///   (`Interp::read_stem`), because the oracle's `createStemVariable` fires
-    ///   on any miss, reads included, and a read's result can be aliased (`b. =
-    ///   a.` with `a.` never touched, then `a.1 = 5`, then `say b.1` -> `5`).
-    ///   Rendering an unset stem alone cannot tell the two models apart -- both
-    ///   give the derived name -- which is exactly how this was missed the first
-    ///   time (branch review F4); aliasing is where the object's identity
-    ///   becomes observable.
-    /// * A compound raises `NOVALUE` on a miss exactly as a simple variable
-    ///   does, measured: `signal on novalue` with `say zunset.1` traps, with
-    ///   `SIGL` set to the reading clause. A **bare stem** does not -- `say
-    ///   zunsetstem.` under the same trap prints the derived name and carries
-    ///   on, rc unchanged -- which is why the arm below it has no
-    ///   `novalue_check` and the other two do.
-    ///
-    /// **`at` is the slot a compiler already resolved, and `None` is the
-    /// resolution every caller made before there was one.** `crate::ir::compile`
-    /// reads it out of the same `Plan` this activation runs with -- the map
-    /// `Code::slots` is a view of -- so the two are one answer resolved at two
-    /// times rather than two answers. A compound never carries one: its read
-    /// goes through the *stem's* slot and a tail key resolved at the read site,
-    /// neither of which is this symbol's own slot.
     pub(crate) fn read_symbol(
         &mut self,
         code: &Code<'_>,
@@ -505,41 +309,6 @@ impl Interp {
     }
 
     /// The `>V>` line one bare-symbol read owes.
-    ///
-    /// **The `>C>` a compound owes in front of it is not here**, and that is
-    /// not tidying: a substituted tail is a required-string context, so
-    /// building the resolved name a second time would send a second
-    /// `makeString` for one reference. [`Interp::read_symbol`]'s `Compound`
-    /// arm emits it, where the key the lookup used is still in hand, and it
-    /// runs before this line on either engine -- the compiled stream loads
-    /// through the same `read_symbol` and only then reaches
-    /// `crate::ir::Op::TraceRead`.
-    ///
-    /// **The one implementation both engines enter**, for the reason
-    /// [`Interp::echo_literal`] is one: `eval.rs` emits these as a side effect
-    /// of evaluating the expression, and `crate::ir::Op::Load` evaluates
-    /// nothing -- so `crate::ir::Op::TraceRead` emits them from a register
-    /// instead, and the two must not be able to disagree about what they say.
-    ///
-    /// `>V>` is tagged with the symbol's own name and shows the value's text.
-    /// Measured for a simple variable; a bare stem's own `>V>` is reasoned from
-    /// that rather than separately probed, since both produce a tag and an
-    /// already-computed value and the line shows the same two things regardless
-    /// of which read produced it.
-    ///
-    /// `>C>` then `>V>` -- measured (`RexxActivation.cpp:4791`-`4802` read
-    /// directly): a compound read always announces the fully-resolved name it
-    /// used before showing what is stored there, whether or not the tail
-    /// actually resolves. The tag is the compound's own *unresolved* source
-    /// spelling (e.g. `A.I`); the resolved name is `Code::stem_name`'s answer
-    /// -- the read site's own -- concatenated with `tail_key`'s output, which
-    /// matches `stem_get`'s own answer exactly when the read site and the stem
-    /// object's own name agree, and diverges from it only through aliasing: a
-    /// known, narrow gap, not silently assumed correct.
-    ///
-    /// The gate is asked before anything is rendered, for the reason
-    /// `Interp::echo_literal` asks it there: rendering allocates a copy of a
-    /// value of any size, and an untraced run must not pay for it.
     #[inline(always)]
     pub(crate) fn echo_symbol_read(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
         if !self.tracing_intermediates() {
@@ -582,12 +351,6 @@ impl Interp {
             // True` in the file, `say .TRUE` still prints `1` where `say
             // value('.TRUE')` prints `The TRUE class`, because only the
             // second goes through `getVariableRetriever`.
-            //
-            // The interned spelling keeps its leading period and is upcased
-            // (`scanner.rs`'s symbol capture includes the whole `.NAME` span
-            // before interning), so the match is against
-            // `.NIL`/`.TRUE`/`.FALSE`, not `NIL`/etc, and `dot_variable`
-            // takes the same dotted, upcased spelling.
             ExprKind::DotVariable(id) => match code.symbols.name(*id) {
                 ".NIL" => Ok(ObjRef::NIL),
                 // `.true`/`.false` need no representation of their own
@@ -637,10 +400,6 @@ impl Interp {
                 // discards its operands here, where the `?` on an operand's
                 // evaluation above leaves them for `step_in_temps_frame` to
                 // truncate. The module doc has why both are safe.
-                //
-                // The result is unrooted from `apply_binary`'s return to
-                // whatever the caller of this does with it, and nothing
-                // between the two allocates.
                 let result = self.apply_binary(*op, left_value, right_value);
                 self.roots.pop_frame(frame);
                 result
@@ -656,12 +415,6 @@ impl Interp {
             // itself rather than its value -- measured, oracle rc 0:
             // `vr = 5; o = >vr; say o~class~id` is `VariableReference`, and
             // `o~value = 7` writes `vr`.
-            //
-            // **`say >p` still prints `p`'s value**, and that is the
-            // object's doing rather than this arm's: every rendering and
-            // every conversion of a reference answers *as* the variable it
-            // names ([`Interp::redirect_of`]), and every message the class
-            // does not define is forwarded to that value by `UNKNOWN`.
             ExprKind::VariableReference(inner) => self.variable_reference(code, inner),
 
             // `f(...)`/`"f"(...)` (Task 4, 4b) -- see `eval_call`'s own doc.
@@ -673,12 +426,6 @@ impl Interp {
             // for the send itself. The **expression** form only: the
             // message-assignment form is an instruction and never an
             // expression, so `assigned` is `None` here.
-            //
-            // **91.999 is the expression position's own error and not the
-            // send's**, which is why it is raised here rather than inside
-            // `message_term`: measured, `::method m class` ending in a bare
-            // `return` is rc 0 as a whole clause and 91.999 at rc 165 under
-            // `say`.
             ExprKind::Message {
                 target,
                 name,
@@ -705,26 +452,6 @@ impl Interp {
 
     /// Every expression form the match above does not name: `(a, b, ...)`, and
     /// the ones that fail loudly.
-    ///
-    /// **A parenthesised list is answered here rather than given an arm of its
-    /// own above, and that is a measurement.** The match above is the
-    /// tree-walker's whole expression dispatch, so every node evaluated pays
-    /// for its shape: giving `ExprKind::List` an arm there costs the `strings`
-    /// axis 39 instructions per pass on the tree-walker arm and the
-    /// `varlookup` axis 4, on programs with no list in them.
-    ///
-    /// **Both are marginal readings and the two causes are not additive.**
-    /// Each is `b-committed-f4b21eadb` minus `c-no-list-arm` in
-    /// `bench-baselines/phase-5a-arms.tsv`'s `11-bisection` rows, where every
-    /// build is named for the single change it carries, so a reader subtracts
-    /// them rather than trusting this sentence. Added to
-    /// [`Interp::string_value_text`]'s own figure they come to less than the
-    /// whole movement those same rows measure.
-    ///
-    /// **This shape is not free either**, and asserting it were would be
-    /// asserting a zero the same rows read as nonzero:
-    /// `e-outlined-6f3434e88` still sits 33 and 12 instructions per pass above
-    /// `a-base-21cde29af` on those two axes, and nothing here places that.
     #[inline(never)]
     fn eval_cold(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
         match &expr.kind {
@@ -766,26 +493,6 @@ impl Interp {
 
     /// `ExprKind::List`: a fresh `.Array` whose slots are the list's
     /// positions.
-    ///
-    /// **A slot per written position, omitted ones included** --
-    /// `new_array(expressionCount)` (`expression/ExpressionList.cpp:93`), and
-    /// `parseFullSubExpression` counts `total` where `parseArgList` counts
-    /// `realcount` (`parser/LanguageParser.cpp:3145`), so a trailing omission
-    /// is a slot where a call's own trailing omission is nothing. Measured,
-    /// `(1,)~size` is `2` and `(1,)~items` is `1`.
-    ///
-    /// **Each written position traces `>A>`, an omitted one traces nothing,
-    /// and the list itself traces `>>>`** -- the `traceArgument` inside the
-    /// loop and the `traceResult` after it (`:105`, `:118`). Measured under
-    /// `trace i`, `a = (1,,3)` prints `>L> "1"`, `>A> "1"`, `>L> "3"`,
-    /// `>A> "3"`, then `>>> "an Array"` for the list and a second one for the
-    /// assignment. The `>A>` line is emitted here rather than through `eval`'s
-    /// own `trace_intermediate` hook for the reason a call's arguments are:
-    /// the line belongs to the site that evaluated the element, not to the
-    /// element's own node.
-    ///
-    /// Every element is rooted while the later ones are evaluated, and they
-    /// are still rooted when the array is allocated -- which can collect.
     #[inline(never)]
     fn eval_list(&mut self, code: &Code<'_>, items: &[Option<Expr>]) -> Result<ObjRef, Failure> {
         let frame = self.roots.push_frame();
@@ -813,47 +520,6 @@ impl Interp {
 
     /// `ExprKind::Call`: the internal-function form, evaluated for its
     /// value rather than run as a clause of its own.
-    ///
-    /// **Resolution is four steps -- internal label, builtin, `::ROUTINE`,
-    /// then an external Rexx file -- and none of them is in this function.**
-    /// `eval_call` only decides the two inputs a `CallTarget` reduces to
-    /// (`name`, `search_labels`) below and hands them to `Interp::resolve_call`
-    /// (`run.rs`), which both this function and `exec_call` (`CALL`) share, and
-    /// which owns all four steps: the label search
-    /// (`activation_body.labels.get(name)`), the builtin table, the
-    /// `::ROUTINE` lookup, and the 43.1 that stands in for the file search
-    /// this crate does not do. Only the fourth is deferred, to **Phase 7**.
-    /// Keeping them there rather than here is what stops `CALL length 'abc'`
-    /// and `say length('abc')` answering differently. `eval_call` itself owns
-    /// no expression-only resolution step; the only thing specific to this
-    /// call form is what happens *after* `Interp::invoke_call` returns
-    /// (`Ended`'s three cases, below), which `CALL` does not need because it
-    /// never produces a value for an enclosing expression to use.
-    ///
-    /// **The two halves are entered here rather than through their
-    /// composition, and uncached**: an expression call has no name of its own
-    /// to remember an answer under, where a compiled `CALL` site has its op
-    /// position (`crate::ir::Op::Call`).
-    ///
-    /// **`CallTarget::Literal` never searches the label table, symmetric
-    /// with `CALL "SUB"` (Task 3).** Its own doc in `rexx-parse` already
-    /// says so; confirmed here, on the oracle, in a clean directory (the
-    /// scratchpad root is on the external-routine search path and a stale
-    /// `f.rex` there gives a different, wrong answer): with an internal
-    /// `f:` label present, `say f(1)` runs it, while `say "f"(1)` is Error
-    /// 43.1 rc 213, "Routine not found". **That is this crate's answer too**
-    /// (`search_labels = false` below): with the builtin and `::ROUTINE`
-    /// steps behind the label search built, "not a label" and "not anything"
-    /// are separable, so the condition is the oracle's own rather than a
-    /// fabricated one. `a_literal_call_target_never_reaches_the_label_table`
-    /// asserts exactly that, five lines of test below this paragraph.
-    ///
-    /// **`RESULT` is never touched here**, unlike `CALL`: measured, a
-    /// caller's `RESULT` is unaffected by `f(1)` appearing in an
-    /// expression. Nor does this emit `TRACE I`'s own `>F>`/`>A>` lines --
-    /// `eval`'s own `trace_intermediate` hook has no arm for `ExprKind::
-    /// Call` yet, and Task 9 is who adds one; this function must not
-    /// anticipate it.
     fn eval_call(
         &mut self,
         code: &Code<'_>,
@@ -869,14 +535,6 @@ impl Interp {
     }
 
     /// [`eval_call`]'s second half: everything after the resolution.
-    ///
-    /// **Split so the compiled stream can supply a resolution it kept rather
-    /// than making a fresh one**, and split rather than copied because the
-    /// three `Ended` arms below are measured behaviour -- 44.1 in particular
-    /// is the expression form's own answer and `CALL` has no equivalent -- and
-    /// a second copy of them is one free to stop agreeing.
-    ///
-    /// [`eval_call`]: Interp::eval_call
     pub(crate) fn eval_call_resolved(
         &mut self,
         code: &Code<'_>,
@@ -928,10 +586,6 @@ impl Interp {
 
     /// `+`/`-`/`\` (D15's "Expression evaluation"), over an operand this
     /// evaluates out of the tree.
-    ///
-    /// The operand prologue alone: what the operator then does with one value
-    /// is [`Interp::apply_prefix`], entered from here and from
-    /// `crate::ir::Op::Prefix`.
     fn eval_prefix(
         &mut self,
         code: &Code<'_>,
@@ -944,32 +598,12 @@ impl Interp {
         // Bound rather than propagated with `?`, so the frame is popped on the
         // failure path too -- the shape `eval_node`'s own binary arm has, and
         // the module doc has why both it and the `?` above are safe.
-        //
-        // The result is unrooted from `apply_prefix`'s return to whatever the
-        // caller of this does with it, and nothing between the two allocates.
         let result = self.apply_prefix(op, value);
         self.roots.pop_frame(frame);
         result
     }
 
     /// `op value` for the prefix operators `+`, `-` and `\`.
-    ///
-    /// **The one dispatch both engines enter**: `eval_prefix` above evaluates
-    /// the operand out of the tree and `crate::ir::Op::Prefix` reads it out of
-    /// a register, and everything past that point is this function, so the two
-    /// cannot come to disagree about what a prefix operator answers.
-    /// [`Interp::apply_binary`]'s arrangement, with one operand.
-    ///
-    /// `+`/`-` are arithmetic -- measured, `numeric digits 1
-    /// ; say -12345` gives `-1E+4`, the same rounding `0 - 12345` gives, so
-    /// they are implemented as exactly that rather than a sign flip on the
-    /// operand's own digits. `\` is a **text** check, never a numeric one:
-    /// measured, `say \'abc'` is 34.901, not 41.1, so a non-numeric operand
-    /// is not converted first and does not fail as "nonnumeric".
-    ///
-    /// **The operand must already be rooted by the caller**, for the reason
-    /// [`Interp::concat_values`] states: both arms below allocate the value
-    /// they answer with.
     pub(crate) fn apply_prefix(&mut self, op: PrefixOp, value: ObjRef) -> Result<ObjRef, Failure> {
         let result = self.apply_prefix_body(op, value);
         // Blamed on any failure, the same reason `Interp::arith_general`
@@ -1009,11 +643,6 @@ impl Interp {
                 // `\.array` is 97.1 on the oracle, the same message send the
                 // dyadic operators make, and it is asked ahead of the truth
                 // test for the reason [`Interp::logical_values_body`] states.
-                //
-                // **Asked outright here, unlike the two arms above.** `\`
-                // converts through `to_text`, which answers an instance's own
-                // name rather than refusing, so there is no failing
-                // conversion for the send to ride.
                 if let Some(target) = self.operator_message_receiver(value) {
                     return self.send_operator(op.spelling(), target, &[]);
                 }
@@ -1034,19 +663,6 @@ impl Interp {
 
     /// The seven arithmetic operators, sharing one operand-evaluation and
     /// error-conversion path.
-    ///
-    /// **`**`'s exponent is not evaluated the same way its base is, and
-    /// that asymmetry is the fact being reproduced, not a shortcut**
-    /// (measured: `2 ** 'x'` and `2 ** 2.5` both give 26.8, `'y' ** 2` and
-    /// `'y' ** 'x'` both give 41.1 -- the base's failure always wins, and
-    /// checked first). The base goes through `arith_operand`, exactly like
-    /// every other operator's operands, and a conversion failure is 41.1.
-    /// The exponent goes through `to_number` directly: on `NotNumeric` it
-    /// is 26.8 with the exponent's own text as the substitution (there is
-    /// no `Number` for `rexx-num`'s own `ArithError::PowerExponentNotWhole`
-    /// to carry in that case); on a `Number` that parses but is not whole,
-    /// `Number::pow` raises `PowerExponentNotWhole` itself and `Raised`'s
-    /// `From<ArithError>` carries it through unchanged.
     fn eval_arithmetic(
         &mut self,
         code: &Code<'_>,
@@ -1077,24 +693,6 @@ impl Interp {
 
     /// `left op right` on the small-integer path, or `None` when the general
     /// path must run instead.
-    ///
-    /// Both operands already integers small enough to tag, and an operator
-    /// whose exact result is an integer too: [`Interp::arith_general`] is a
-    /// detour through a representation neither operand is in and the result
-    /// does not need. It is a detour that allocates -- `to_number` renders a
-    /// `SmallInt` to a `String` and reparses it, `add` builds a digit `Vec`,
-    /// and `number` renders that back to a `String` to decide the result is a
-    /// small integer after all -- so what this skips is five allocations, not
-    /// five instructions.
-    ///
-    /// [`small_int_arith`] answers `None` for every case where the two paths
-    /// could disagree, and `exact_small_int`'s own doc comment has why the
-    /// remaining ones cannot.
-    ///
-    /// **This is the whole of what `crate::ir::Op::Arith`'s quickened arm
-    /// runs, entered from there and from `eval_arithmetic` above**, so the
-    /// hint that arm reads decides only whether this is *tried*, never what it
-    /// answers.
     pub(crate) fn arith_small_int(
         &self,
         op: Operator,
@@ -1116,15 +714,6 @@ impl Interp {
 
     /// `left op right` through `rexx-num`, the path every operand shape
     /// reaches and the one [`Interp::arith_small_int`] falls through to.
-    ///
-    /// **Both operands must already be rooted by the caller**, because
-    /// everything below allocates: `eval_arithmetic` pushes them as temps of
-    /// the frame it opened, and `crate::ir::Op::Arith` has them in registers,
-    /// which are roots of the region `Interp::run_chunk` reserved.
-    ///
-    /// The settings are read here rather than passed in, so that an operation
-    /// computes under the ones in force at the moment it runs -- D15's rule,
-    /// and the reason a caller holding a `digits` from before cannot supply it.
     pub(crate) fn arith_general(
         &mut self,
         op: Operator,
@@ -1223,12 +812,6 @@ impl Interp {
     /// operand's own rendered text as the substitution -- measured, `say
     /// 'abc' + 1` reports `Nonnumeric value ("abc")`, the operand as it
     /// renders, not upcased or otherwise transformed.
-    ///
-    /// `pub(crate)` since Task 11: a controlled `DO`/`LOOP`'s own
-    /// `initial`/`TO`/`BY` need exactly this conversion (measured, `do i =
-    /// 'a' to 3` is the identical 41.1 an arithmetic operand's own failure
-    /// is) and `run.rs` is where that header is evaluated, not here --
-    /// reused rather than a second copy of the same three lines.
     pub(crate) fn arith_operand(&mut self, value: ObjRef) -> Result<Number, Failure> {
         match self.to_number(value) {
             Ok(number) => Ok(number),
@@ -1240,45 +823,6 @@ impl Interp {
     }
 
     /// [`Interp::arith_operand`] for the operand the operator is *sent to*.
-    ///
-    /// **The asymmetry is the oracle's and is measured**: `.array + 1` is 97.1
-    /// where `1 + .array` is 41.1 quoting `"The Array class"`, which this
-    /// crate already answers identically. So only the left operand -- and a
-    /// prefix operator's only one -- can carry this gap *for an operator*, and
-    /// the right one keeps the ordinary 41.1. A controlled `DO` header is not
-    /// an operator and does not follow that rule: `Interp::header_number`
-    /// checks every position, because each is rounded through a unary
-    /// operator of its own -- and each is a receiver of that unary operator
-    /// exactly as this function's own operand is, which is why
-    /// `Interp::header_number` calls [`Interp::blame_stem_forwarded_operator`]
-    /// the same way [`Interp::arith_general`] does, not this function.
-    ///
-    /// Entirely on the failing path: an object of either shape is
-    /// [`NotNumeric`] whatever this decides, so a program doing arithmetic on
-    /// numbers never reaches the test.
-    ///
-    /// **This function's own failure carries no frame by itself.** The frame
-    /// belongs to the *receiver* of a forwarded operator, whatever step of
-    /// evaluating that operator raises -- this function's own conversion,
-    /// the other operand's, or the arithmetic past both -- so
-    /// [`Interp::arith_general`] and [`Interp::apply_prefix`] blame once,
-    /// wrapping their whole computation, rather than this function blaming
-    /// its own narrower failure. Measured: a plain string receiver, `say
-    /// 'abc'` `+ 1`, is 41.1 with no `Compiled method` line; a stem
-    /// receiver, `say b.` `+ 1`, is the same 41.1 *with* one reading `scope
-    /// "String"`, even though `b.~class` is `The Stem class` -- because a
-    /// stem answers no operator itself and forwards the message to its
-    /// default value (`StemClass`'s own `UNKNOWN`, the same forward `a. =
-    /// 'dflt'; say a.~length` already reaches), and that forward is a real
-    /// message dispatch landing on the default's own native method, where a
-    /// plain `String`'s or `NumberString`'s operator is this crate's own
-    /// direct arithmetic and never dispatches at all. And measured, past
-    /// this function's own return: a stem receiver whose *right* operand
-    /// fails instead, `say s.` `+ .array` (`s.` a valid number), still
-    /// carries the frame -- the forwarded method's own argument failing is
-    /// still that method failing -- where `say 2` `+ b.` (the receiver `2`,
-    /// not a stem) carries none regardless of which operand fails, because
-    /// no forwarding happens there at all.
     fn arith_left_operand(&mut self, op: &str, value: ObjRef) -> Result<ArithOperand, Failure> {
         match self.to_number(value) {
             Ok(number) => Ok(ArithOperand::Number(number)),
@@ -1298,22 +842,6 @@ impl Interp {
     /// Renders the operator-forwarded native-method frame for `op` when
     /// `value` is a stem whose forward reaches a method that actually runs
     /// -- a no-op otherwise.
-    ///
-    /// **Called once per operator, wrapping the whole computation over
-    /// `value` rather than any one step of it.** A caller is an adapter
-    /// that evaluates one operator whose receiver is `value`, and it calls
-    /// this on any failure of its own -- `Interp::header_number` (`run.rs`)
-    /// among them, where a controlled `DO` header position is not written
-    /// as an operator but is rounded through a real unary `+` whose
-    /// receiver it is. The frame belongs to the receiver, not to which
-    /// step of evaluating its operator raised: measured, `s. = 1; say s. /
-    /// 0` (an arithmetic overflow past a valid conversion), `say s. **
-    /// 999999999999` (the exponent's own range check), `s. = 'abc'; say s.
-    /// & 1` and `say \s.` (a non-logical operand on `&` and on prefix `\`),
-    /// and `numeric digits 1; s. = '9.9E999999999'; do i = s. to 5` (a DO
-    /// header's own range check past a valid conversion) all carry the
-    /// frame, scope `"String"`, none of them a conversion failure of
-    /// `value` itself.
     pub(crate) fn blame_stem_forwarded_operator(&mut self, op: &[u8], value: ObjRef) {
         if !self.is_stem_receiver(value) {
             return;
@@ -1328,23 +856,6 @@ impl Interp {
     /// is a `String`) and for one whose default is itself `String`/
     /// `Number`-valued; false for `.nil` and for anything
     /// [`Interp::operator_operand_gap`] already named.
-    ///
-    /// **The oracle's frame requires the forwarded method to have actually
-    /// run and raised, and `.nil` answers no operator at all.** Measured:
-    /// `s. = .nil` then `say s. + 1` is 97.1 on the oracle, "does not
-    /// understand message +", with no `Compiled method` line, because the
-    /// forward never reaches a method to raise from -- where `b.` (no
-    /// default) and `s. = "abc"` (a `String` default) both carry the frame,
-    /// scope `"String"`.
-    ///
-    /// **Safe to call whether or not [`Interp::operator_operand_gap`] has
-    /// already answered `value`.** A class object or one of this crate's
-    /// own native objects answers `false` here on its own account --
-    /// `heap.get` answers `None` for a class handle (see
-    /// [`Interp::not_in_arena`]) and neither shape is a `Stem` -- so a
-    /// caller that blames on any failure after already trying the gap check
-    /// (as [`Interp::arith_general`] and [`Interp::header_number`] do) gets
-    /// the same answer this function would give if the gap had never run.
     fn is_stem_receiver(&self, value: ObjRef) -> bool {
         let Decoded::Heap { .. } = value.decode() else {
             return false;
@@ -1364,14 +875,6 @@ impl Interp {
     /// [`Interp::operator_operand_gap`] both do. `.nil` and a class object
     /// answer no arithmetic operator on the oracle, so a forward landing on
     /// either never reaches a method to raise from.
-    ///
-    /// One of this crate's own native objects answers `false` here too, but
-    /// for a narrower reason: this crate registers no operator method for
-    /// one, whatever the oracle itself does for a particular one of them.
-    /// Measured, `.environment + 1` is rc 0 on the oracle, `Directory`
-    /// forwarding through its own `UNKNOWN` -- which this phase implements
-    /// nothing of, so the gap is this crate's registry, not a property every
-    /// native object shares on the oracle.
     fn stem_default_is_string_or_number(&self, value: ObjRef) -> bool {
         match value.decode() {
             Decoded::Nil => false,
@@ -1391,26 +894,6 @@ impl Interp {
 
     /// The shared body of `||`/`Abuttal` (no separator) and `Blank` (one
     /// space).
-    ///
-    /// `Blank` inserts exactly one space, regardless of how much whitespace
-    /// separated the terms in source -- measured, `'a'  'b'` is `a b` whether
-    /// one space or several sit between them in the original text, because the
-    /// scanner has already collapsed that distinction into "this is a Blank
-    /// operator" before the parser ever sees it. That is why the separator is a
-    /// caller's argument and not read off the source span.
-    ///
-    /// **One byte or none, rather than a slice**, and the width is the reason:
-    /// a slice of run-time length is joined by a call into `memcpy`, and the
-    /// separator this function is handed most often is the empty one, which
-    /// pays that call to copy nothing. `Blank`'s single space is the widest
-    /// there is for the type to have to hold.
-    ///
-    /// **Both operands must already be rooted by the caller**, because the join
-    /// below allocates and a value held only in a Rust local across an
-    /// allocation is invisible to the collector. [`Interp::arith_general`]'s
-    /// contract, for the same reason: `eval_node` pushes them as temps of the
-    /// frame it opened, and `crate::ir::Op::Binary` has them in registers,
-    /// which are roots of the region `Interp::run_chunk` reserved.
     fn concat_values(
         &mut self,
         left_value: ObjRef,
@@ -1452,7 +935,6 @@ impl Interp {
             rest[..right_bytes.len()].copy_from_slice(right_bytes);
             return Ok(self.text(&buffer[..total]));
         }
-        //
         // **Built in the lent buffer and finished with `text_built`**, which
         // is what makes the one remaining allocation conditional rather than
         // certain. Only a result too long to live inline reaches here, and it
@@ -1484,20 +966,6 @@ impl Interp {
     /// because this function has already decided which arm applies: each
     /// arm's own doc comment says so, and says what a caller buys by
     /// choosing.
-    ///
-    /// **Both operands must already be rooted by the caller**, for the reason
-    /// [`Interp::concat_values`] states: the result value below allocates.
-    ///
-    /// Calls `to_number` for the non-strict family only, and never for
-    /// strict operators, which never inspect a `Number` at all
-    /// (`CompareOp::is_strict`'s short-circuit, `compare.rs`) -- asking for
-    /// one anyway would force a needless parse of an operand
-    /// `==`/`>>`/... never numerically compares. When `to_number` is
-    /// called, it already routes through `Body::Text`'s tri-state `num`
-    /// cache (`value.rs`), so an operand already asked about is not
-    /// reparsed -- keeping the parse on this side of the call is what the
-    /// plan's "do not quietly defeat the cache by using the `&str` entry
-    /// point" is about, not a prohibition on calling `to_number` at all.
     fn compare_values(
         &mut self,
         op: Operator,
@@ -1567,19 +1035,6 @@ impl Interp {
         // never fails and so offers nothing to ride.** Measured, comparing an
         // object against the very text it renders as answers `0` on the
         // oracle and `1` here; see `Loud::operator_operand`.
-        //
-        // **Behind the left operand's own parse as well, and the premise is
-        // that a shape this gap names is one `Interp::to_number` answers
-        // `NotNumeric` for** -- so a left operand that produced a `Number`
-        // has no gap to report and the lookup this costs is a heap fetch on a
-        // value already known to be a number. That premise is held by
-        // `a_value_the_operator_gap_names_parses_as_no_number` rather than by
-        // this paragraph; the assertion below is its tripwire on every
-        // comparison the debug gate runs. The ordering the skip must not
-        // disturb is the *error's*, and it is undisturbed: nothing between
-        // here and the original position can fail, and the arm that could --
-        // `compare_numbers` -- is reached only when both operands parsed,
-        // which is exactly when there is no gap.
         debug_assert!(
             left_number.is_err() || self.operator_operand_gap(left_value).is_none(),
             "a left operand that parsed as a number reported an operator gap"
@@ -1602,10 +1057,6 @@ impl Interp {
         // happens rather than what the comparison answers. What it skips is
         // `render` plus `text` on both sides, whose result reaches only the
         // string fallback below.
-        //
-        // Measured on `samples/rexxcps.rex`: 2,520,002 comparisons reach this
-        // point and 1,680,001 of them take this arm, which is 3,360,002
-        // renderings not performed.
         if let (Ok(left), Ok(right)) = (&left_number, &right_number) {
             // The **numeric** arm only: measured, `1.23456789 = 'abc'` at
             // DIGITS 3 is rc 0 on the oracle, because a comparison that falls
@@ -1619,15 +1070,6 @@ impl Interp {
         // Either operand failed to parse, or the operator is strict and neither
         // was parsed at all. Both routes compare the operands' own text, which
         // is what these two renderings are for.
-        //
-        // **`compare_strings` rather than `compare_decoded`, because a `None`
-        // here is an answer and not a question.** `compare_decoded` reads a
-        // `None` as "parse this one from the bytes", which is right for a
-        // caller that has not tried -- and this one has: an operand is `None`
-        // exactly when [`Interp::to_number`] already refused it, or when the
-        // operator is strict and no `Number` is ever consulted. Handing that
-        // `None` on buys the refused parse a second time, over the same
-        // bytes, to reach the same string fallback.
         let left_rendered = self.render(left_value);
         let right_rendered = self.render(right_value);
         let left_bytes = left_rendered.text(self);
@@ -1663,9 +1105,6 @@ impl Interp {
     /// belongs to whoever calls this: the check half is here, and it checks
     /// the operand it was handed second even when the first already decided
     /// the answer.
-    ///
-    /// **Both operands must already be rooted by the caller**, for the reason
-    /// [`Interp::concat_values`] states: the result value below allocates.
     fn logical_values(
         &mut self,
         op: Operator,
@@ -1720,26 +1159,6 @@ impl Interp {
 
     /// The object an operator is **sent to as a message**, or `None` for an
     /// operand the operator converts itself.
-    ///
-    /// `RexxObject`'s own operator methods are each a `messageSend` of the
-    /// operator's spelling (`classes/ObjectClass.cpp:2738`-`:2795`), so an
-    /// instance answers whatever its class defines: measured, a `::METHOD
-    /// "+"` answers `.K~new + 1` where a class without one is 97.1, and
-    /// `.DateTime~new + .TimeSpan~fromSeconds(5)` is a `DateTime`.
-    ///
-    /// Redirects through a stem's default and a variable reference's value
-    /// exactly as [`Interp::operator_operand_gap`] does, and the target is
-    /// the redirected object rather than the stem or the reference --
-    /// measured, `s. = .K~new; say s. + 1` and `zz = .K~new; say (>zz) + 1`
-    /// both reach the instance's own `+`.
-    ///
-    /// **Asked ahead of every other operand test**, because the oracle
-    /// decides on the left operand's class before it touches the right one:
-    /// the argument the method receives is the right operand as it stands,
-    /// not its string value.
-    ///
-    /// Takes one operand and allocates nothing, so it carries no rooting
-    /// precondition of its own.
     pub(crate) fn operator_message_receiver(&self, value: ObjRef) -> Option<ObjRef> {
         // **`.nil` is an operator receiver.** It answers `==`, `\\==`, `=`,
         // `<>` and `><` by identity and understands no other operator, so an
@@ -1781,19 +1200,6 @@ impl Interp {
 
     /// Sends an operator to its left operand as a message, for a receiver
     /// [`Interp::operator_message_receiver`] named.
-    ///
-    /// A prefix operator passes **no** argument at all, which is
-    /// `prefixOperatorMethod`'s own `operand == OREF_NULL ? 0 : 1`
-    /// (`classes/ObjectClass.cpp:2752`) -- measured, `-o` reaches a
-    /// `::METHOD "-"` whose `arg()` is `0` where `o - 1` reaches the same
-    /// method with `1`.
-    ///
-    /// A method that returns nothing is 91.999 here and not `.nil`, which is
-    /// the `result.isNull()` arm of that same macro -- measured, rc 165,
-    /// `Message "+" did not return a result.`
-    ///
-    /// **The receiver and every argument must already be rooted by the
-    /// caller**, for the reason [`Interp::concat_values`] states.
     fn send_operator(
         &mut self,
         spelling: &str,
@@ -1810,20 +1216,6 @@ impl Interp {
 
     /// The noun for an operand no operator here can take, or `None` for one
     /// every operator can.
-    ///
-    /// The arms below are the shapes, and none of them is a value the oracle
-    /// treats as text when an operator meets it. [`Loud::operator_operand`]
-    /// carries the measurements and [`Loud::object_position`] the surfaces
-    /// that are not operators.
-    ///
-    /// **[`Interp::compare_values`] and `Interp::header_number` ask on a path
-    /// that has not already failed**: a comparison of renderings always
-    /// succeeds, so the first sits behind the two-small-integer fast path
-    /// where a loop bound never pays for it, and the second runs once per
-    /// loop entry rather than once per iteration.
-    ///
-    /// Takes one operand and allocates nothing, so it carries no rooting
-    /// precondition of its own.
     pub(crate) fn operator_operand_gap(&self, value: ObjRef) -> Option<&'static str> {
         // A small integer, an inline string and `.nil` all leave on this
         // line: only a heap-tagged handle can be either shape.
@@ -1879,19 +1271,6 @@ impl Interp {
 
     /// `left op right` for every binary operator whose two operands are just
     /// values by the time it runs -- concatenation, comparison and logical.
-    ///
-    /// **The one dispatch both engines enter**: `eval_node`'s own binary arm
-    /// evaluates the operands out of the tree and `crate::ir::Op::Binary` reads
-    /// them out of registers, and everything past that point is this function,
-    /// so the two cannot come to disagree about what an operator answers.
-    ///
-    /// Arithmetic is **not** here and keeps [`Interp::eval_arithmetic`]:
-    /// `**`'s exponent is not converted the way its base is, so it does not
-    /// share the operand handling the families below do, and its
-    /// compiled site carries a quickening hint no other operator has.
-    ///
-    /// **Both operands must already be rooted by the caller**, for the reason
-    /// [`Interp::concat_values`] states.
     pub(crate) fn apply_binary(
         &mut self,
         op: Operator,
@@ -1907,10 +1286,6 @@ impl Interp {
         // `:774`, `:925`). The left operand is the receiver and is not
         // converted at all: measured, `.array + 1` is 97.1 where `1 + .array`
         // is 41.1, and `eval.rs`'s `object_operand_tests` is that half.
-        //
-        // **The send is asked first**, so the argument a receiver's own
-        // operator method gets is the right operand as it stands rather than
-        // the string value the line below would make of it.
         if let Some(target) = self.operator_message_receiver(left) {
             return self.send_operator(op.spelling(), target, &[Some(right)]);
         }
@@ -1938,67 +1313,6 @@ impl Interp {
     /// c THEN` (and `WHEN`/`GUARD`/`WHILE`/`UNTIL`'s own versions)
     /// desugars to, "a logical AND of its parts" (`ast.rs`'s own doc
     /// comment).
-    ///
-    /// **Short-circuits on the first element that checks out false**,
-    /// unlike `&` (`logical_values`' own doc comment). Measured with `if 0,
-    /// (1/0) then nop` followed by `say 'reached'`, which prints `reached`
-    /// and exits 0, and `if 1, 0, (1/0) then nop`, which does the same with
-    /// three elements. Every element up to and including the first false one
-    /// is evaluated left to right and checked to be exactly `0`/`1`; nothing
-    /// after it is touched.
-    ///
-    /// The probe is `(1/0)` rather than the `'x'` an earlier version of this
-    /// comment cited, because `'x'` cannot tell the two candidate rules
-    /// apart: a literal evaluates harmlessly, so skipping only the *check*
-    /// would produce the same clean run. `(1/0)` raises 42.3 the moment it is
-    /// evaluated, and `if 1, (1/0)` does exactly that (rc 214), so what is
-    /// skipped is the evaluation.
-    ///
-    /// **Always 34.6, the per-element message, never 34.1/34.2/34.3/34.4**
-    /// -- measured, `if 1, 'x' then` and `if 'x', 1 then` both give 34.6,
-    /// "Value of logical list expression element must be exactly...",
-    /// regardless of position, while a *single*, non-list condition
-    /// (`if 'x' then`, no comma) gives 34.1 instead. The four
-    /// keyword-specific numbers belong to `IF`/`WHEN`/`WHILE`/`UNTIL`
-    /// themselves (Tasks 9-11), evaluating a bare condition `Expr`
-    /// directly and checking its own result rather than going through this
-    /// arm at all -- this function has no instruction context to prefer
-    /// one of those numbers over 34.6, and the oracle's own rule does not
-    /// ask it to: 34.6 is what a list element gets independent of which of
-    /// the five keywords built the list.
-    ///
-    /// **F4, found by review: every element traces its own `>>>`, under
-    /// `TRACE R` alone, not only `TRACE I`.** Measured: `trace r` /
-    /// `if 1, 1 then say 'x'` gives *three* `>>>` lines --  one per
-    /// element (`"1"`, `"1"`) and one more for the list's own overall
-    /// result (`"1"`), the third of which was already covered (`eval_
-    /// condition`'s own `ConditionTrace::Result`/`Keyword` fires on
-    /// whatever this function returns, list or not). The two missing
-    /// lines are `trace_result`, **not** an intermediate: comma-list
-    /// elements trace through the same `results`-gated path a traced
-    /// instruction's own top-level value does (matching `test_case_when`'s
-    /// own per-value `>>>` pair, `SELECT CASE`'s comma list, the other
-    /// place this crate already has this exact shape), not through
-    /// `eval`'s `intermediates`-gated hook -- which is *why* `TRACE R`
-    /// alone already shows it on the oracle, and confirms this is not a
-    /// second, competing computation of anything `eval`'s own hook
-    /// already produces: an element already gets its own `>L>`/`>V>`/
-    /// `>O>` etc. under `TRACE I` from that hook (unaffected, still
-    /// correct), and *additionally* gets this `results`-gated line,
-    /// exactly as `IF`'s own condition gets both an intermediate trace
-    /// for its sub-expressions and its own separate `>>>`.
-    ///
-    /// Fixes `IF`/`WHEN`/`WHILE`/`UNTIL` **all four** in this one place,
-    /// since every one of them reaches a comma-list condition only
-    /// through this shared function (`eval_node`'s `ExprKind::Logical`
-    /// arm, the desugaring point) -- confirmed, not assumed: re-ran the
-    /// oracle differential for `IF` with this exact fix in place, byte
-    /// for byte (this task's report has the transcript).
-    ///
-    /// **The failing element still traces before it raises**: measured,
-    /// `if 1, 'x' then nop` shows `>>>   "1"` then `>>>   "x"` and only
-    /// then 34.6 -- the trace call sits ahead of the `logical_value`
-    /// check below, matching that order exactly.
     fn eval_logical_list(&mut self, code: &Code<'_>, items: &[Expr]) -> Result<ObjRef, Failure> {
         let frame = self.roots.push_frame();
         let indent = self.clause_state.current_value_indent;
@@ -2031,71 +1345,6 @@ impl Interp {
 
 /// Narrows `Settings::digits()` (`u64`) to `Body::Num`'s `created_digits`
 /// (`u32`) by saturating rather than rejecting or panicking.
-///
-/// Unreachable in practice, which is the reason saturation is the right
-/// choice rather than a guess dressed up as one: `u32::MAX` is about four
-/// billion significant figures, and a program that set `NUMERIC DIGITS`
-/// anywhere near that would exhaust memory building a single `Number`
-/// (`rexx-num` reserves working storage proportional to `DIGITS`) long
-/// before precision ever mattered. No corpus program, and no realistic
-/// one, can reach the clamp.
-///
-/// `pub(crate)` since Task 11: a controlled `DO`/`LOOP`'s own control
-/// variable is created through `Interp::number` exactly like any other
-/// arithmetic result (`run.rs`'s `loop_advance`), and needs the identical
-/// narrowing -- reused from here rather than copied.
-/// `left op right` as a tagged small integer, or `None` when the general
-/// arithmetic path must run instead.
-///
-/// All seven arithmetic operators are here, each admitted only where its
-/// exact `i64` answer is the answer the interpreter gives:
-///
-/// * `+`, `-` and `*` take two integers to an integer outright.
-/// * `%` truncates toward zero and `//` takes the dividend's sign, which is
-///   what `i64`'s own `/` and `%` do -- measured, `-7 % 3` is `-2`, `-7 // 3`
-///   is `-1` and `7 // -3` is `1`. Neither can need more room than the
-///   operand guard below has already allowed: `|left % right|` is at most
-///   `|left|` and `|left // right|` is below `|right|`, both of which that
-///   guard accepted.
-/// * `/` is the one of the seven whose exact result need not be an integer,
-///   so it is admitted only when the division leaves no remainder -- `6 / 2`
-///   is, `1 / 3` is not.
-/// * `**` is admitted for a non-negative exponent whose exact power fits both
-///   the tag and `digits`. `NumberString::power` reduces the exponent
-///   bitwise, so every intermediate is `base` raised to a prefix of that
-///   exponent and therefore no wider than the result itself; it also works at
-///   `digits` plus the exponent's own digit count plus one. So a result that
-///   needs no rounding is reached without any, and the exact answer is the
-///   interpreter's answer.
-///
-/// **Every case this declines is answered by the general path, so a decline
-/// costs speed and never an answer** -- which is why the guards below are
-/// free to be stricter than the interpreter wherever stating the exact
-/// condition would be harder than the fast path is worth.
-///
-/// The `checked_*` forms carry two different jobs. On `*` and `**` they are
-/// the overflow test, and it is reachable. On `/`, `%` and `//` they are how
-/// a **zero divisor** declines, so the 42.3 the general path raises is still
-/// what a program sees. On `+` and `-` they are neither: two operands inside
-/// the tag cannot overflow `i64`, and the checked form is there only so the
-/// arms read alike.
-///
-/// **Both operands are checked against `digits` before the operation, not
-/// just the result afterwards.** Rexx rounds the operands too, so an operand
-/// too wide for the precision makes the exact `i64` answer the wrong one --
-/// see [`exact_small_int`]'s own doc comment for the measured pair. `**` does
-/// *not* round its base (`prepareOperatorNumber` is called there with
-/// `NOROUND`), so for that operator the shared guard is stricter than the
-/// interpreter rather than matching it.
-/// [`Interp::arith_small_int`] for a pair that is not two tagged integers,
-/// where at least one operand has to be read out of its bytes.
-///
-/// **Outlined, and the `match` above never falls into it by accident.** Two
-/// tagged operands are the common pair and answer without touching this;
-/// everything else arrives here, most of it to be declined. Keeping the
-/// scan out of the caller is what stops a clause that cannot use it from
-/// paying for it -- measured, folding this into the caller cost between 0.3%
-/// and 2.2% more instructions on the four fixed-work benchmark axes.
 #[inline(never)]
 fn spelled_int_arith(
     op: Operator,
@@ -2110,16 +1359,6 @@ fn spelled_int_arith(
 
 /// The integer an operand already is, whether it carries the tag or spells
 /// one.
-///
-/// **A string that spells an integer canonically is that integer**, and
-/// [`Interp::literal`] says so already: a source literal whose bytes are
-/// exactly some integer's own rendering starts life tagged. A value reaching
-/// arithmetic as [`Decoded::Text`] instead has usually come back from a
-/// builtin, which does not apply that test -- `substr` answers a string --
-/// and it is the same value either way. [`canonical_small_int`] is the same
-/// test, so what it admits parses to exactly what `Number::from_i64` would
-/// build from the tag; anything it refuses, `05` and `+5` and ` 5 ` among
-/// them, falls to the general path where the bytes decide.
 fn small_int_operand(value: ObjRef) -> Option<i64> {
     match value.decode() {
         Decoded::SmallInt(int) => Some(int),
@@ -2147,12 +1386,6 @@ fn small_int_arith(op: Operator, left: i64, right: i64, digits: u64) -> Option<O
 
 /// `base ** exponent` in `i64`, or `None` when [`small_int_arith`] must
 /// decline.
-///
-/// A negative exponent leaves the integers -- `2 ** -1` is `0.5` -- and is
-/// declined by the conversion rather than by a test of its own. So is an
-/// exponent past [`u32`], which no base but `0`, `1` and `-1` could survive
-/// anyway; those three would be exact, and they go to the general path with
-/// everything else rather than earning an arm of their own.
 fn small_int_power(base: i64, exponent: i64) -> Option<i64> {
     base.checked_pow(u32::try_from(exponent).ok()?)
 }
@@ -2216,12 +1449,6 @@ fn compare_op(op: Operator) -> CompareOp {
 
 /// Whether `op` is one of the operators [`Interp::eval_arithmetic`]
 /// computes.
-///
-/// **The guard on `eval_node`'s own arithmetic arm, and so the one enumeration
-/// of the set** -- `crate::ir::compile` decides whether an expression compiles
-/// to `crate::ir::Op::Arith` by asking this, rather than by repeating the list
-/// where nothing would notice the two drifting apart. A compiler that promoted
-/// one operator more than this would run arithmetic on a concatenation.
 pub(crate) fn is_arithmetic(op: Operator) -> bool {
     use Operator::*;
     matches!(
@@ -2240,11 +1467,6 @@ fn is_concatenation(op: Operator) -> bool {
 
 /// Whether `op` is one of the operators [`Interp::compare_values`] compares
 /// under, the numeric-or-string family and the strict one.
-///
-/// **The guard on `Interp::apply_binary`'s own comparison arm, and so the one
-/// enumeration of the set** -- `compare_op` translates each of these to a
-/// `rexx-num` `CompareOp`, and an operator in one list and not the other is a
-/// comparison that reaches the translation with nothing to translate to.
 fn is_comparison(op: Operator) -> bool {
     use Operator::*;
     matches!(
@@ -2272,9 +1494,6 @@ fn is_comparison(op: Operator) -> bool {
 
 /// Whether `op` asks whether two values are the same, as against how they
 /// order.
-///
-/// The distinction is `.nil`'s: `RexxString::primitiveIsEqual` refuses it
-/// before comparing bytes, where `comp` converts it like anything else.
 fn is_equality(op: Operator) -> bool {
     use Operator::*;
     matches!(
@@ -2306,22 +1525,11 @@ fn is_logical(op: Operator) -> bool {
 /// Whether `op` has a native op of its own, which is what licenses
 /// `crate::ir::compile` compiling it to registers rather than leaving its
 /// whole expression to `crate::ir::Op::EvalExpr`.
-///
-/// **A positive enumeration of the families rather than "everything but the
-/// prefix `\`"**, so that an operator added to `rexx_parse::Operator` is
-/// not promotable until somebody says it is: the compiler would otherwise emit
-/// an op for it, and the driver would reach `Interp::apply_binary` with no arm
-/// to answer from.
 pub(crate) fn is_native_binary(op: Operator) -> bool {
     is_arithmetic(op) || is_concatenation(op) || is_comparison(op) || is_logical(op)
 }
 
 /// The bytes a call target names, and whether an internal label may answer it.
-///
-/// One place rather than two, because the pair is what decides which routine
-/// runs: `CALL 'MAX'` skipping the internal `max:` label is measured
-/// behaviour, and the compiled stream has to reach the same answer as
-/// `eval.rs` from the same node.
 pub(crate) fn call_target_name<'a>(code: &Code<'a>, target: &'a CallTarget) -> (&'a [u8], bool) {
     match target {
         CallTarget::Symbol(id) => (code.symbols.name(*id).as_bytes(), true),
@@ -2337,32 +1545,6 @@ pub(crate) fn call_target_name<'a>(code: &Code<'a>, target: &'a CallTarget) -> (
 /// `compare_decoded` is reached (a strict comparison never looks at a
 /// `Number`, so parsing one first would be pure waste).
 /// Whether two tagged small integers settle `op` between them, and how.
-///
-/// `None` means they do not and the general path must run.
-///
-/// **This is `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp`) and
-/// not an optimisation of the path below it.** Two integers that both fit
-/// `NUMERIC DIGITS` are subtracted directly there -- but only while
-/// `number_fuzz()` is zero, which the caller tests before reaching this, since
-/// a fuzzed comparison belongs to `NumberString::comp`. Measured at `DIGITS 9
-/// FUZZ 8`, both `100000000 = 100000001` and the same pair spelled
-/// `100000000.0 = 100000001` answer `1`; at `FUZZ 0` both answer `0`, and only
-/// there does the spelling stop mattering.
-///
-/// The guards are each a case where comparing the integers would give a
-/// different answer from what the interpreter does, so none of them is
-/// defensive.
-///
-/// * **Both magnitudes must sit inside `NUMERIC DIGITS`**, which is
-///   `Numerics::isValid`'s test on either side of that `&&`. Outside it the
-///   interpreter falls to `NumberString::comp` and the operands are rounded to
-///   that many significant digits first, so at `DIGITS 9` two distinct
-///   ten-digit integers compare equal.
-/// * **The strict *ordering* operators are excluded**, because they compare
-///   strings and not numbers: `9 >> 10` is true where `9 > 10` is false.
-///   Strict *equality* is included, because a small integer renders
-///   canonically -- no sign on zero, no leading zeros, no exponent -- so two
-///   equal renderings mean equal values and the converse holds too.
 fn small_int_compare(op: Operator, left: ObjRef, right: ObjRef, digits: u64) -> Option<bool> {
     let (Decoded::SmallInt(left), Decoded::SmallInt(right)) = (left.decode(), right.decode())
     else {
@@ -2408,11 +1590,6 @@ mod tests {
 
     /// An operand that spells an integer reads as the same integer the tag
     /// carries, and one that spells it any other way does not.
-    ///
-    /// The refusals are the load-bearing half. A Rexx value's identity is its
-    /// bytes, and `05`, `+5` and `5.0` are numerically five but render as
-    /// themselves -- so they must reach the general path, where the bytes
-    /// decide, rather than being folded into a tag that would render `5`.
     #[test]
     fn an_operand_that_spells_an_integer_reads_as_that_integer() {
         for value in [0i64, 1, -1, 9, -9, 10, -10, 1234, -1234, 999_999] {
@@ -2496,16 +1673,6 @@ mod tests {
 
     /// `eval_source`, against the activation already on top of the stack
     /// rather than pushing a fresh one.
-    ///
-    /// For a test that has already bound state into a frame -- via
-    /// `stem_assign`/`stem_set`, or `activation_mut().settings` -- and
-    /// wants to evaluate against it. Calling `activate` (hence
-    /// `eval_source`) a *second* time here would push a second, empty
-    /// frame that shadows the one already set up, exactly the trap
-    /// `stem.rs`'s own multi-clause test found
-    /// (`a_multi_level_tail_joins_its_pieces_with_a_period`): the parsed
-    /// `Program` does not need to be remembered by `Interp` at all for a
-    /// one-off eval, so it is a plain local here, never an `Rc`.
     fn eval_in_place(interp: &mut Interp, source: &[u8]) -> Result<ObjRef, Failure> {
         let program = parse_program(source.to_vec()).expect("test program parses");
         let expr = match &program.main.instructions[0].kind {
@@ -2533,21 +1700,6 @@ mod tests {
 
     /// Every answer the fast path gives is the answer the general path
     /// gives, over a grid of operands, precisions and both `FORM`s.
-    ///
-    /// Compared against the general path's own output rather than against a
-    /// table of expected strings written here. A table would pin the fast
-    /// path to my reading of Rexx's rounding rule, and that reading is
-    /// exactly what was wrong: a first version of `small_int_arith` checked
-    /// only the result against `DIGITS` and answered `975` for `1000 - 25`
-    /// at `DIGITS 3`, where the interpreter answers `980`. The general path
-    /// is `rexx-num`, which is differentially validated against the oracle;
-    /// agreeing with it is the property worth asserting.
-    ///
-    /// **The `expect` on the general path's own result is an assertion, not
-    /// a convenience.** A fast path that accepted an operation the general
-    /// path raises on -- a zero divisor, an exponent that overflows -- would
-    /// answer where the interpreter reports 42.3 or 26, and that is the shape
-    /// this line fails on.
     #[test]
     fn the_small_int_fast_path_answers_what_the_general_path_answers() {
         use rexx_num::Form;
@@ -2699,10 +1851,6 @@ mod tests {
     /// The sign rule for `%` and `//` with a negative operand, which is the
     /// half of this candidate a wrong `i64` intuition would get wrong
     /// silently.
-    ///
-    /// Measured on the interpreter: `-7 % 3` is `-2` (truncated toward zero,
-    /// not floored to `-3`), `-7 // 3` is `-1` and `7 // -3` is `1` -- the
-    /// remainder takes the *dividend's* sign, not the divisor's.
     #[test]
     fn integer_division_truncates_toward_zero_and_the_remainder_follows_the_dividend() {
         let mut interp = Interp::new();
@@ -2750,13 +1898,6 @@ mod tests {
 
     /// The measured pair the guard exists for, and its neighbour that must
     /// still go fast.
-    ///
-    /// `1000 - 25` at `DIGITS 3` is `980` on the interpreter, not `975`:
-    /// `1000` needs four significant digits, so it is rounded before the
-    /// subtraction and the `5` falls off the end (`ootest`'s
-    /// `SUBTRACTION::test_147`). The fast path must decline it. `100 - 25`
-    /// differs only in the operand's width and must not be declined --
-    /// without this half, a guard that refused every subtraction would pass.
     #[test]
     fn an_operand_too_wide_for_the_precision_leaves_the_fast_path() {
         assert!(small_int_arith(Operator::Subtract, 1000, 25, 3).is_none());
@@ -2845,10 +1986,6 @@ mod tests {
     /// Every other name goes through the resolution order, and each of its
     /// outcomes is reachable from an expression: an environment entry, a name
     /// nothing here answers that the oracle does, and a name neither answers.
-    ///
-    /// Asserting them together is what makes each mean something. A build that
-    /// always fell back would answer `.ARRAY` with its own text; one that was
-    /// always loud would refuse `.FOO`, which the oracle answers at rc 0.
     #[test]
     fn a_dot_variable_beyond_the_three_resolves_falls_back_or_is_loud() {
         let mut interp = Interp::new();
@@ -3075,19 +2212,6 @@ mod tests {
         // `LessEqual` from `Less`, so unequal operands cannot tell those pairs
         // apart however many of them a test lists, and non-strict `>=`/`<=`
         // appeared in no test at all.
-        //
-        // **This was a transcription loss, not a measurement gap, and an
-        // earlier version of this comment blamed the wrong step.** Task 8's
-        // report does carry equal-operand rows: `'9' <<= '9'` is there and
-        // would have exposed the `<<=` mutation, and `'9' \== '9'` is an
-        // equal-operand negated form. Both were measured and neither reached
-        // a test. So the oracle work was sound and the loss happened between
-        // the report and the assertions, which is the more likely failure of
-        // the two and the one worth guarding: check a report's own table
-        // against the test that claims to encode it.
-        //
-        // Each value below was re-measured against `build/bin/rexx` before
-        // being written here rather than derived from the mapping it checks.
         assert_eq!(eval_text(&mut interp, b"say ('9' \\> '9')"), b"1");
         assert_eq!(eval_text(&mut interp, b"say ('9' \\< '9')"), b"1");
         assert_eq!(eval_text(&mut interp, b"say ('9' \\>> '9')"), b"1");
@@ -3127,17 +2251,6 @@ mod tests {
         // The contrast is the test: the same two operands answer 0 under `==`
         // and 1 under `=`, so this pins that `==` reaches `CompareOp`'s strict
         // row rather than the ordinary one.
-        //
-        // **It is deliberately not named for skipping `to_number`, which was
-        // this test's previous name and claim.** That claim is unobservable
-        // from any result, and its stated failure story ("would compare 1 == 1
-        // and answer 1") is wrong: `compare_decoded` returns on
-        // `op.is_strict()` before reading either `Number`, so routing a strict
-        // operator through `to_number` changes nothing a program can see.
-        // Proved by mutation, not by reading -- hardwiring `is_strict_compare`
-        // to `false` left the whole suite green. `is_strict_compare` gating
-        // the parse is a real saving and its own doc comment gives that
-        // honest, performance rationale; no behavioural test can guard it.
         let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say ('01' == '1')"), b"0");
         assert_eq!(eval_text(&mut interp, b"say ('01' = '1')"), b"1");
@@ -3275,16 +2388,6 @@ mod tests {
     fn a_comma_list_short_circuits_on_the_first_false_element() {
         // The opposite of `&`'s own rule
         // (logical_operators_do_not_short_circuit, above).
-        //
-        // **`(1/0)` and not `'x'`, and the difference is the whole strength of
-        // this test.** A skipped `'x'` only shows the *check* was skipped: a
-        // literal evaluates harmlessly, so `if 0, 'x'` passes just as well
-        // against an implementation that evaluates every element and then
-        // stops checking. `(1/0)` cannot be evaluated without raising 42.3, so
-        // it separates the two. Measured on the oracle: `if 0, (1/0) then nop`
-        // and `if 1, 0, (1/0) then nop` both exit 0, while `if 1, (1/0)` exits
-        // 214 with Error 42.3 -- that last one is the control, and without it
-        // this test would pass against an evaluator that raised nothing ever.
         let mut interp = Interp::new();
         // An activation, which the `'x'` version of this test did not need:
         // division reads the frame's own `NUMERIC DIGITS`, so the control case
@@ -3319,16 +2422,6 @@ mod tests {
     /// here rather than a fresh arithmetic chain invented for this test:
     /// one already-measured relationship between term count and `eval`
     /// depth is worth more than two unrelated ones.
-    ///
-    /// **Not nested parentheses.** `rexx-parse`'s own `MAX_EXPR_DEPTH` is
-    /// 50,000 and raises the identical 11.1 from the *parser*, before
-    /// `eval` ever runs -- a depth test built that way would go green
-    /// without this counter firing at all, which is exactly the trap this
-    /// task's own brief warns about. A flat chain of same-precedence binary
-    /// operators does not increase parser recursion the way a nested
-    /// construct does (the precedence-climbing loop that assembles it does
-    /// not recurse per term), so 100,000 (and 100,001) terms here never
-    /// come near that other limit.
     fn chain(terms: usize) -> Vec<u8> {
         let mut program = b"say 'a'".to_vec();
         for _ in 1..terms {
@@ -3340,20 +2433,6 @@ mod tests {
 
     /// The same chain with one **call** in it, which is what makes the whole
     /// expression reach `eval` at all.
-    ///
-    /// `MAX_EVAL_DEPTH` is `eval`'s own recursion counter, and its purpose is
-    /// to refuse a depth that would otherwise walk off the interpreter
-    /// thread's guard page. `crate::ir::compile` promotes a chain of native
-    /// operators to ops that reach the operator with its operands already in
-    /// registers, so such a chain never recurses and there is no stack to
-    /// exhaust -- measured, a `MAX_EVAL_DEPTH + 1` term native chain answers
-    /// `a` with a peak `eval` depth of **5**.
-    ///
-    /// One call anywhere in the chain makes `native_shape` decline the whole
-    /// slot, so it compiles to a single `crate::ir::Op::EvalExpr` and `eval`
-    /// walks every term: measured, the same chain then reports a peak depth
-    /// equal to its own term count. That is the shape the limit is *for*, and
-    /// it is the shape the two boundary tests below use.
     fn eval_walked_chain(terms: usize) -> Vec<u8> {
         let mut program = b"say 'a'".to_vec();
         for term in 1..terms {
@@ -3371,15 +2450,6 @@ mod tests {
 
     /// **A native chain past the limit runs, and that is the point of the
     /// limit rather than a hole in it.**
-    ///
-    /// `MAX_EVAL_DEPTH` guards `eval`'s recursion against the guard page. A
-    /// compiled native chain does not recurse, so nothing is at risk and
-    /// refusing it would be failing where there is no danger. Measured here:
-    /// `MAX_EVAL_DEPTH + 1` terms, exit 0, and a peak `eval` depth far below
-    /// the limit.
-    ///
-    /// The tree-walker did raise 11.1 for this program. That is the one
-    /// behaviour its removal deliberately changes.
     #[test]
     fn a_native_chain_past_the_eval_limit_runs() {
         let outcome = crate::run_program(
@@ -3418,19 +2488,6 @@ mod tests {
     /// here) -- it simply lives beside the counter it defends rather than
     /// in a separate file, since nothing about reaching `run_program`
     /// requires a different module.
-    ///
-    /// **Confirming this reaches `MAX_EVAL_DEPTH` and neither of the two
-    /// other limits nearby.** Not the parser's own 50,000 (`chain`'s own
-    /// doc comment: no nested construct, so no parser recursion to hit).
-    /// Not the native guard page either: printed and checked directly, both
-    /// halves of this pair report `outcome.stack.max_depth` (via a `dbg!`
-    /// run by hand while writing this test, since the assertion below only
-    /// needs the boundary case to hold) equal to `MAX_EVAL_DEPTH` and
-    /// `MAX_EVAL_DEPTH + 1` respectively -- exactly one term more between
-    /// the two, and both values sit at roughly 1600 bytes/level *
-    /// 100,000 ~= 160 MB into the 512 MiB stack, nowhere near its own
-    /// cliff (`INTERPRETER_STACK_BYTES`'s own doc comment: ~335,000
-    /// survivable levels at that per-level cost).
     #[test]
     fn eval_survives_exactly_max_eval_depth_terms_and_prints_the_oracles_own_answer() {
         let outcome = crate::run_program(
@@ -3501,16 +2558,6 @@ mod tests {
     /// A name that resolves to nothing -- not a label of the calling body,
     /// not a builtin and not a `::ROUTINE` -- raises the oracle's own 43.1
     /// rather than succeeding, crashing, or reporting a gap.
-    ///
-    /// The witness is a name no table can ever hold, not a builtin waiting
-    /// its turn: the builtin step reads `rexx_inventory`'s own name set, so
-    /// any real builtin here would assert where the implemented boundary sits
-    /// and go red the day that name landed. Where the boundary sits is
-    /// `corpus/builtin-status.txt`'s to record, over every builtin at once.
-    ///
-    /// Measured on the oracle in a clean directory, which is the only place
-    /// this answer is stable: `call zorkolo` reports 43.1 rc 213 there and
-    /// runs a stale `zorkolo.rex` at rc 0 in a directory that has one.
     #[test]
     fn an_unresolvable_name_raises_43_1() {
         let outcome = crate::run_program(
@@ -3675,50 +2722,12 @@ mod tests {
 
 /// **R12: an operator whose left operand is an object this phase can build
 /// and send no message to.**
-///
-/// A separate module because every case here runs a whole program through
-/// both engines rather than driving `eval` against a hand-built activation,
-/// which is what the module above is for.
-///
-/// # Why the left operand and not the right
-///
-/// These cases were first derived from a coercion audit -- which value
-/// *shapes* this crate renders where the oracle does something else -- and
-/// they are re-derived here from `provide.xml` `reqstr`, which is the
-/// section that owns the question. The section's dyadic-operator context is
-/// "Rexx dyadic operators when the receiving object (the object to the left
-/// of the operator) is a string", so the operand it converts is the one on
-/// the **right**: the receiver's own method is what asks its argument for a
-/// string value. Every case in this module is the *other* operand, and the
-/// section names it nowhere -- because an object on the left is not converted
-/// at all, it is sent a message.
-///
-/// **So none of these is a `reqstr` row, and every one of them stays.**
-/// Measured, and the asymmetry is what says so: `.array + 1` is 97.1 where
-/// `1 + .array` is 41.1, and `say (.array == 'The Array class')` is `0` --
-/// `Object`'s own identity comparison -- where `say ('x' == .array)` compares
-/// `x` against the array's items joined. The right operand's own rows are
-/// `corpus/lang/required_string_operator_argument.rex`, which can be corpus
-/// programs because both implementations answer them; these cannot, because
-/// this crate refuses them.
-///
-/// The audit's non-operator cases are unaffected for the same reason. A `DO`
-/// header's `initial`/`TO`/`BY` reach `callOperatorMethod(OPERATOR_PLUS)` and
-/// are receivers of that unary operator, while `exprr` and `exprf` reach
-/// `requestString` and are `reqstr` rows -- `Interp::accept_header_value`
-/// carries that split at the code.
 #[cfg(test)]
 mod object_operand_tests {
     use crate::{Invocation, run_program};
 
     /// Runs `source` on both engines and hands back `(exit code, stdout,
     /// stderr)`, having first insisted the two engines agree with each other.
-    ///
-    /// **Both engines, because the check lives in `apply_binary`,
-    /// `apply_prefix`, `arith_general` and `compare_values`, all four of
-    /// which `crate::ir::Op::Binary`/`Op::Arith`/`Op::Prefix` enter as well.**
-    /// A check placed in `eval_node` instead would leave the compiled arm
-    /// answering, and only running both arms can tell.
     fn both_engines(source: &[u8]) -> (i32, String, String) {
         let mut answer = None;
         let outcome = run_program("/t.rex", source.to_vec(), Invocation::none());
@@ -3741,12 +2750,6 @@ mod object_operand_tests {
 
     /// Every operator the oracle sends to its left operand as a message
     /// refuses loudly, naming the operator and the operand's shape.
-    ///
-    /// **Each of these answered at rc 0 or raised the wrong condition before
-    /// this test existed**, and the pre-Phase-5 build refused the whole
-    /// program at rc 120 because `.array` did not resolve at all -- so
-    /// resolving the name without this check turned a loud gap into a wrong
-    /// answer. The oracle's own answer is in each row's comment.
     #[test]
     fn an_operator_sent_to_an_object_is_loud() {
         // (source, the operator the message must name, the shape it must name)
@@ -3758,9 +2761,6 @@ mod object_operand_tests {
             // `a_class_objects_operators_are_sent_as_messages` is where they
             // are asserted, and the rows below are the control -- a change
             // that widened past class handles would move one of them.
-            //
-            // oracle 0, "The NIL object" -- Directory answers `+` through its
-            // own UNKNOWN, which this crate models nothing of
             (
                 b"say (.environment + 1)\n",
                 "+",
@@ -3830,17 +2830,6 @@ mod object_operand_tests {
 
     /// A class object answers the comparison operators by **identity** and
     /// refuses every other one the way the oracle does, at both spellings.
-    ///
-    /// `memory/Setup.cpp`'s `Class` block declares `=`, `==`, `\\=`, `\\==`,
-    /// `<>` and `><` (`:485`-`:490`) and no other operator, so an arithmetic
-    /// or ordering operator is a name the behaviour does not hold and the
-    /// send reports 97.1 -- the oracle's own answer, not a gap of this
-    /// crate's.
-    ///
-    /// **Both spellings, because they are two code paths that must agree.**
-    /// `(.Array = .Array)` is an expression and reaches
-    /// `Interp::operator_message_receiver`; `.Array~'='(.Array)` is a message
-    /// and reaches `Interp::invocable`. A fix at one leaves the other loud.
     #[test]
     fn a_class_objects_operators_are_sent_as_messages() {
         // Identity and not a comparison of renderings, which is what the
@@ -3908,15 +2897,6 @@ mod object_operand_tests {
 
     /// **R12 at the one numeric surface that is not an operator**: a
     /// controlled `DO` header's `initial`, `TO` and `BY` values.
-    ///
-    /// `Interp::header_number` rounds each through what is a real unary `+` on
-    /// the oracle, so all three answer 97.1 -- and `do i = 1 to .array` is why
-    /// "the operand on the right always agrees" is a fact about the binary
-    /// operators and not a rule: here every position converts through an
-    /// operator of its own.
-    ///
-    /// Before this, each answered 41.1 at rc 215 quoting the object's
-    /// rendering, where the pre-Phase-5 build refused the whole program.
     #[test]
     fn an_object_in_a_do_headers_numeric_position_is_loud() {
         let cases: &[(&[u8], &str, &str)] = &[
@@ -3950,15 +2930,6 @@ mod object_operand_tests {
 
     /// The header positions that read the value's **text** rather than
     /// converting it, which both implementations answer alike.
-    ///
-    /// The control for the test above, in the shape the concatenation family
-    /// is the control for the operator one. `FOR` and a bare `DO`'s repeat
-    /// count go through `whole_nonneg`, which never asks for a number, and
-    /// `NUMERIC DIGITS` renders the value with `to_text` and parses the bytes
-    /// in `set_digits_str` -- so all three answer 26.3, 26.2 and 26.5 from the
-    /// object's rendering on both sides.
-    /// `corpus/lang/environment_object_in_a_loop_header.rex` is the same
-    /// property against the live oracle.
     #[test]
     fn a_header_position_that_reads_text_keeps_the_oracles_own_diagnostic() {
         for (source, major) in [
@@ -3979,20 +2950,6 @@ mod object_operand_tests {
     /// **`DO OVER` hands its target to `requestArray`**, which is neither
     /// `stringValue()` nor an operator, so it falls outside every boundary the
     /// two tests above draw.
-    ///
-    /// Measured: `do e over .array` is 98.913 at rc 158, and a directory
-    /// iterates its own entries -- `do e over .environment` prints
-    /// `INPUTOUTPUTSTREAM` first. Binding the target once and yielding the
-    /// object's rendering would be a single wrong line at rc 0 for each,
-    /// which is why the refusal is here and not in `Interp::over_snapshot`.
-    ///
-    /// **A `Directory` and not a `StringTable`**, which is the split
-    /// `ObjectModel::iterable_collection_class` carries: a `StringTable`
-    /// iterates here, and `corpus/lang/do_over_string_table.rex` is that
-    /// half. `.environment` and `.local` keep the refusal because this
-    /// crate models them as a subset of the oracle's, so iterating one
-    /// would differ in *membership* and not only in order -- measured,
-    /// `.local` iterates ten entries on the oracle and none here.
     #[test]
     fn an_object_as_a_do_over_target_is_loud() {
         let cases: &[(&[u8], &str)] = &[
@@ -4053,18 +3010,6 @@ mod object_operand_tests {
     }
 
     /// **A stem redirects to its default, and every check has to follow.**
-    ///
-    /// `to_text` and `to_number` chase a `Body::Stem`'s default, so a check
-    /// that stopped at the stem handle let the review's original Critical back
-    /// in through one assignment: measured, `a. = .array; say (a. == 'The
-    /// Array class')` answered `1` where the oracle answers `0`.
-    ///
-    /// The redirect now reaches `Interp::operator_message_receiver` rather
-    /// than only the gap, so the operator rows answer the oracle's own
-    /// answers instead of refusing. The `DO` header row is the one that still
-    /// refuses, and it is the control: `Interp::header_number` asks the gap
-    /// and never the send, so a class reached through a stem is loud there
-    /// where the oracle is 97.1.
     #[test]
     fn an_object_reached_through_a_stem_default_answers_as_the_object() {
         // Measured, oracle rc 0 and rc 159: the redirect reaches the class
@@ -4112,11 +3057,6 @@ mod object_operand_tests {
 
     /// A controlled loop's own increment adds to the control variable, and
     /// that variable is the oracle's **left** operand of the implicit `+`.
-    ///
-    /// Measured, `do i = 1 to 3; say 'iter' i; i = .array; end` prints one
-    /// iteration and then raises 97.1; this crate printed the same iteration
-    /// and then raised 41.1. The stdout assertion is what pins that the
-    /// refusal happens at the increment and not before the body runs.
     #[test]
     fn an_object_assigned_to_a_control_variable_is_loud_at_the_increment() {
         let (code, stdout, stderr) =
@@ -4134,22 +3074,6 @@ mod object_operand_tests {
 
     /// `RAISE ... ADDITIONAL` hands its value to `requestArray` -- **under a
     /// `SYNTAX` condition and nowhere else**.
-    ///
-    /// `RaiseInstruction::execute` (`instructions/RaiseInstruction.cpp:270`
-    /// -`290`) makes that call once, inside
-    /// `if (errorCode->strCompare(SYNTAX))`. Measured: `additional (.array)`
-    /// is a 98 execution error at rc 158, and `additional (.environment)`
-    /// substitutes `INPUTOUTPUTSTREAM` -- the first entry of the array the
-    /// directory converts to -- where rendering the object substituted its own
-    /// name into an otherwise correct 40.1.
-    ///
-    /// **The `ARRAY (...)` form is not this and is deliberately absent.** The
-    /// oracle builds a real `ArrayClass` from those elements first
-    /// (`:217`-`:239`), so the `requestArray` below gets an array and returns
-    /// it unchanged; the elements are rendered, never converted. A check on
-    /// that arm refused three programs this crate already matched, which is
-    /// what [`a_raise_the_oracle_does_not_array_convert_still_answers`] now
-    /// holds it to.
     #[test]
     fn an_object_as_a_raise_syntax_substitution_is_loud() {
         for source in [
@@ -4173,15 +3097,6 @@ mod object_operand_tests {
 
     /// **The `RAISE` over-refusal control, and the reason it is its own
     /// test.**
-    ///
-    /// Every expected string below is the oracle's own output for that
-    /// program, and the `ARRAY` and `USER` ones were **rc 120 for a while**:
-    /// the first version of the `RAISE` fix checked the `ARRAY` elements and
-    /// checked `ADDITIONAL` under every condition, which refused four
-    /// programs this crate had been matching byte for byte. `DESCRIPTION` was
-    /// never refused and is here because the arm sits beside the two that
-    /// were. It all shipped with the whole suite green, because the control
-    /// standing in for it was a counted loop with no `RAISE` in it.
     #[test]
     fn a_raise_the_oracle_does_not_array_convert_still_answers() {
         let cases: &[(&[u8], i32, &str)] = &[
@@ -4235,13 +3150,6 @@ mod object_operand_tests {
     /// *every* operator loud would satisfy the test above and refuse a pile
     /// of programs the oracle runs at rc 0 with bytes this crate already
     /// matches.
-    ///
-    /// The boundary is the oracle's own and is measured, not reasoned: the
-    /// operator is sent to the **left** operand, so an object on the right
-    /// is converted through `stringValue()` exactly as this crate converts
-    /// it; and the concatenation family calls `stringValue()` on both sides
-    /// whichever operand is an object. Every expected string below is the
-    /// oracle's own stdout for that program.
     #[test]
     fn an_object_the_operator_is_not_sent_to_still_answers() {
         let cases: &[(&[u8], &str)] = &[
@@ -4283,12 +3191,6 @@ mod object_operand_tests {
 
     /// A condition is not an operator, and the oracle's answer for one is
     /// this crate's already.
-    ///
-    /// `IF`/`WHEN`/`WHILE` and the comma list check their value's *text* on
-    /// both sides -- measured, `if .array then` is 34.1 and `if .array, 1
-    /// then` is 34.6 on the oracle, both quoting the object's own rendering.
-    /// Extending R12's refusal to them would be an over-refusal of a
-    /// diagnostic the two implementations already agree on byte for byte.
     #[test]
     fn a_condition_on_an_object_keeps_the_oracles_own_diagnostic() {
         for (source, major) in [
@@ -4310,14 +3212,6 @@ mod object_operand_tests {
     /// never reaches a method to run, so its own forwarded failure carries
     /// no traceback frame, unlike `b.` (no default) and a `String`-defaulted
     /// stem, both of which do.
-    ///
-    /// The gap this test used to document is closed. It recorded that this
-    /// crate answered `41.1` here against the oracle's `97.1`, and left the
-    /// fix to "whichever task owns 97.1's forwarding rule"; that rule is
-    /// `operator_message_receiver` admitting `.nil` as an operator receiver,
-    /// so an operator it does not understand raises the message send's own
-    /// 97.1 instead of converting its string value. stderr is now
-    /// byte-identical to the oracle's on this program.
     #[test]
     fn a_nil_defaulted_stem_carries_no_operator_frame() {
         let (code, stdout, stderr) = both_engines(b"s. = .nil\nsay s. + 1\n");
@@ -4339,18 +3233,6 @@ mod object_operand_tests {
 
     /// An operator on an instance is the message send the oracle makes, and
     /// a name that spells a number never converts the receiver.
-    ///
-    /// The receiver here is named `'1'` on purpose: every row below would
-    /// answer something different if the operator read that rendering as
-    /// text. Measured, oracle rc 159 for the operators `Object` defines no
-    /// method for -- `97.1 Object "1" does not understand message "+".` --
-    /// and rc 0 for the six comparisons it does, each of them **identity**:
-    /// `o = 1` is `0` where a converted receiver would give `1`.
-    ///
-    /// **The three adjacent successes are the load-bearing half**, because
-    /// sending every operator would satisfy the rows above and break the
-    /// positions the oracle converts in: to the right of a string's own
-    /// operator, in the concatenation family, and in a truth test.
     #[test]
     fn an_operator_on_an_instance_is_the_send_the_oracle_makes() {
         let prologue = "o = .K~new\no~objectName = '1'\n";
@@ -4419,17 +3301,6 @@ mod object_operand_tests {
     /// [`Interp::arith_left_operand`] asks only where [`Interp::to_number`]
     /// has already refused. An operand that produced a `Number` and was also
     /// a send target would have its operator applied to the wrong side.
-    ///
-    /// The skip reads the gap only when the left operand failed to parse, so
-    /// a value that is both a number and a gap is compared where the oracle
-    /// refuses -- measured, `a = (1,); say (a = 1)` answered `1` against the
-    /// oracle's `0`, at rc 0 on both sides. The `debug_assert` beside the
-    /// skip states the premise; this is what holds them against each other,
-    /// on the value kinds whose rendering can be a number.
-    ///
-    /// **Every value here renders as a number**, which is the point: a body
-    /// whose rendering could never parse would satisfy this whatever the two
-    /// functions did.
     #[test]
     fn a_value_the_operator_gap_names_parses_as_no_number() {
         let mut interp = crate::Interp::new();

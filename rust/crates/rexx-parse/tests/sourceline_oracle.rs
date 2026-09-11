@@ -13,55 +13,6 @@
 //! every `rust/corpus/lang/` program, including the last line of a file
 //! without a trailing newline (`no_trailing_newline.rex`, which the oracle
 //! counts as a full line).
-//!
-//! The oracle's answers live in `tests/sourceline_oracle/<name>.txt`: line
-//! one is `count N`, then the N source lines exactly as
-//! `.Package~new(file)~source` returns them, terminators excluded. They were
-//! captured by a driver rather than by editing the files under test, because
-//! constructing the package runs the file's prolog and its output interleaves
-//! with the driver's; the driver prefixes its own lines and the capture keeps
-//! only those.
-//!
-//! **Constructing the package runs the file's prolog** -- this is also the
-//! project's standing "never instantiate `.Package~new` on a repository
-//! file" rule, and this driver is the one place that already breaks it. It
-//! has been safe only because every corpus prolog used to be trivial: `SAY`
-//! and assignment, nothing that raises. `trace_numeric_request.rex` is the
-//! first one where that stopped being true (its whole point is a prolog
-//! that raises `Error 24.901`), and it will not be the last, since this
-//! phase now writes witness programs whose entire purpose is a specific
-//! failure. A driver that only works on programs that succeed is not a
-//! driver for a corpus that deliberately contains failures -- so the driver
-//! below traps the construction failing and falls back to reading the file
-//! as plain text instead, rather than assuming every prolog behaves.
-//!
-//! The fallback is `LINEIN()` in a loop, not another call into `.Package`,
-//! specifically so a crashing prolog cannot run a second time. It is a
-//! faithful substitute for `~source` only for a file carrying none of the
-//! shapes a naive line reader and `~source` read differently: a CRLF
-//! terminator, an embedded `CTRL-Z`, or a missing final newline
-//! (`no_trailing_newline.rex`'s entire reason to exist).
-//!
-//! **Which programs take the fallback is not written down here, because it is
-//! not a fact about this module.** A file takes it when constructing its
-//! package raises, and constructing a package runs the file's prolog and
-//! installs its directives, so every witness program whose whole purpose is a
-//! failure takes it -- measured with a copy of this driver instrumented to
-//! report the path it took, a large fraction of `corpus/lang` does,
-//! `trace_numeric_request.rex` among them. What has to
-//! hold instead is the condition above, and the test below asserts it over
-//! every corpus program: no CR byte, no `CTRL-Z`, and a final terminator on
-//! every file except the one whose name says it has none. A future witness
-//! program that broke any of those would redden that assertion rather than
-//! quietly gain an expectation this driver captured wrongly.
-//!
-//! `no_trailing_newline.rex` is therefore the file that must never be the one
-//! whose prolog is made to crash: measured, it takes the primary path and is
-//! 7 lines under `~source`, not 6, and the `SIGNAL ON SYNTAX` wrapper does not
-//! change what any non-crashing file's expectation looks like.
-//!
-//! To regenerate, put this driver in a scratch directory as `srclines.rex`:
-//!
 //! ```rexx
 //! parse arg f
 //! signal on syntax name fallback
@@ -86,13 +37,6 @@
 //!   end
 //!   return
 //! ```
-//!
-//! and run, from the repository root (the `ulimit` guards against the
-//! interpreter requesting unbounded memory, and the `</dev/null` against the
-//! prolog reading the console -- `pull_queue.rex`'s prolog does, and without
-//! that redirect this driver blocks forever waiting for a line that a
-//! terminal will never send):
-//!
 //! ```bash
 //! for f in rust/corpus/lang/*.rex; do
 //!   name=$(basename "$f" .rex)

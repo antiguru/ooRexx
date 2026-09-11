@@ -11,37 +11,6 @@
 
 //! `RexxInfo`'s readers -- `classes/RexxInfoClass.cpp`, bound by
 //! `memory/Setup.cpp:1252`-`:1279`.
-//!
-//! A child of [`super`] rather than a sibling, for the reason its `mod native`
-//! comment gives: the rows point at `NativeMethod`s, whose parameter list
-//! names types only that module can.
-//!
-//! # The receiver carries none of this
-//!
-//! `RexxInfo::initialize` fills every field of the C++ instance from a
-//! compile-time constant or a platform call, at image-build time; nothing a
-//! program does moves any of them, and there is one instance. So a body here
-//! reads a constant of this crate's own, and the constraint that matters is
-//! **which** constant: the answer must be the same fact the interpreter
-//! enforces elsewhere, not a value copied out of a differential.
-//!
-//! # `digits`, `form` and `fuzz` are the defaults and not the settings in force
-//!
-//! `RexxInfo::getDigits` reads `Numerics::DEFAULT_DIGITS` and
-//! `RexxInfo::getFuzz` reads `Numerics::DEFAULT_FUZZ`; neither looks at the
-//! running activation. Measured, oracle rc 0: after `numeric digits 5;
-//! numeric form engineering; numeric fuzz 2`, `.RexxInfo~digits
-//! .RexxInfo~form .RexxInfo~fuzz` is `9 SCIENTIFIC 0` where `digits() form()
-//! fuzz()` is `5 ENGINEERING 2`. `RexxContext`'s same-named methods are the
-//! live ones.
-//!
-//! # The version fields have one source
-//!
-//! [`crate::parse_template::VERSION`] is `PARSE VERSION`'s string and is also
-//! `RexxInfo~name` -- `RexxInfo::initialize` assigns
-//! `Interpreter::getVersionString()`. `version`, `majorVersion`, `release`,
-//! `modification`, `languageLevel` and `date` are cut out of it there.
-//! `revision` is not: it is `ORX_BLD` and appears nowhere in the string.
 
 use super::{Arity, Cleared, Failure, Interp, NativeMethod, ObjRef};
 use crate::parse_template;
@@ -49,10 +18,6 @@ use crate::plan::Package;
 
 /// `RexxInfo`'s instance methods. Chained into `ObjectModel::build` beside
 /// [`super::NATIVE_METHODS`].
-///
-/// `Setup.cpp:1252`-`:1279` declares each of these with a parameter count of
-/// zero, so the send refuses an argument before a body runs -- measured,
-/// `.RexxInfo~digits(1)` is 93 on the oracle and here.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("RexxInfo", "ARCHITECTURE", Arity::Fixed(0), architecture),
     (
@@ -114,29 +79,13 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 
 /// `linux/limits.h`'s `PATH_MAX`, which `platform/unix/SysFileSystem.hpp:65`
 /// takes `MAXIMUM_PATH_LENGTH` from.
-///
-/// Rust's standard library exposes no such limit and this workspace has no
-/// `libc` dependency, so the header's value is mirrored here.
 const PATH_MAX: usize = 4096;
 
 /// `ORX_BLD`: the source-control revision the interpreter was configured at.
-///
-/// `CMakeLists.txt:87` sets it to `0` and `:143` overrides it with the
-/// working copy's last-changed revision when the source is an SVN checkout.
-/// Nothing behind this crate is one, so the configured default is the answer
-/// -- and it is separate from `modification`, which is `ORX_MOD` and moves
-/// with the version string.
 const BUILD_LEVEL: i64 = 0;
 
 /// `Numerics::MAX_WHOLENUMBER`: the largest value a whole-number conversion
 /// can produce, and the ceiling on `NUMERIC DIGITS` itself.
-///
-/// **Derived from [`rexx_num::ARGUMENT_DIGITS`] rather than written out.**
-/// `runtime/Numerics.hpp:85`-`:98` sets the two together per pointer width and
-/// its own comment says `ARGUMENT_DIGITS` is the digits setting chosen "to
-/// allow for the full range": eighteen digits beside eighteen nines on a
-/// 64-bit build, nine beside nine on a 32-bit one. Derived, this answers the
-/// right one on either.
 const MAX_WHOLENUMBER: i64 = 10i64.pow(rexx_num::ARGUMENT_DIGITS as u32) - 1;
 
 /// A whole number as the object a `new_integer` answers, falling back to the
@@ -156,15 +105,6 @@ fn architecture(
 }
 
 /// `RexxInfo::getCaseSensitiveFiles`: `SysFileSystem::isCaseSensitive("/")`.
-///
-/// **This mirrors that function's fallback rather than its probe.** On Linux
-/// the probe is `ioctl(FS_IOC_GETFLAGS)` looking for `FS_CASEFOLD_FL`
-/// (`platform/unix/SysFileSystem.cpp:1321`-`:1335`), and where it is
-/// unavailable the C++ takes its own documented "non-determined, just return
-/// true" path at `:1335`. This workspace has no `libc` dependency and denies
-/// `unsafe`, so the ioctl is not reachable and the fallback is what is left.
-/// A casefolded ext4 directory would make the oracle answer `0` where this
-/// answers `1`.
 fn case_sensitive_files(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -186,12 +126,6 @@ fn date(
 }
 
 /// `RexxInfo::getDebug`: `#ifdef _DEBUG`.
-///
-/// **A constant, and not this build's own `debug_assertions`.** `_DEBUG` is
-/// an MSVC construct: no `-D_DEBUG` appears in ooRexx's `CMakeLists.txt`, and
-/// the oracle's `CMakeCache.txt` has `CMAKE_CXX_FLAGS_DEBUG:STRING=-g` with
-/// nothing defining it, so `getDebug` answers `.false` for every Linux build
-/// of the interpreter including a Debug one.
 fn debug(
     interp: &mut Interp,
     _cleared: Cleared,

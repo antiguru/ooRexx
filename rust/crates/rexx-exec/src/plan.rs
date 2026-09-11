@@ -14,18 +14,6 @@
 //! `Interp` rather than on the body itself (an `Rc<Program>` gives shared
 //! immutable access, so nothing could be written into a `CodeBody` reached
 //! through one).
-//!
-//! `Plan`, `BodyKey` and `ProgramId` here, and the cache lookup
-//! (`Interp::plan_for`), a fragment's own resolution
-//! (`Interp::fragment_plan`) and the full name resolution order
-//! (`Interp::slot_of`) all moved here from Task 3's spike, which built this
-//! shape and proved why `extra` (on `Activation`, `activation.rs`) is not
-//! optional: the plan is an `Rc`, shared and immutable, built by a pass
-//! that never saw a name introduced at run time -- and such names exist in
-//! 4a. `DROP (v)` names its target at run time, and an interpreted
-//! fragment's bindings are visible to the enclosing body's own later
-//! clauses (measured: `interpret "newvar = 7"` then `say newvar + 1`
-//! prints 8).
 
 use crate::Interp;
 use crate::run::{NameShape, shape_of};
@@ -38,33 +26,10 @@ use rexx_parse::{
 use std::rc::Rc;
 
 /// A loaded program's identity.
-///
-/// A small integer the loader hands out, never a pointer: D16 requires that
-/// the plan cache's key cannot be reused by a different program, and an
-/// address can be, once an `Rc` drops and the allocator reuses the block.
-/// `Interp::programs` holds an `Rc` for every id it has issued, so an id
-/// outlives every plan keyed against it by construction.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct ProgramId(pub(crate) usize);
 
 /// Which package something belongs to.
-///
-/// **A variant for the interpreter's own package rather than an absent
-/// [`ProgramId`].** `Interp::package_objects` keys on this, and the class a
-/// program installed and the class the crate's own bootstrap registered are
-/// different packages with different `~name` answers -- measured,
-/// `.Array~package~name` is `REXX` and a `::CLASS`'s is the program's own
-/// path. Spelling the first as an absence puts it in the same type as "there
-/// is no package at all", which is a different state that `Caller::package`
-/// (`dispatch.rs`) carries and that the oracle's `checkPackage` refuses
-/// (`classes/ObjectClass.cpp:665`-`:669`).
-///
-/// **`Interp::class_packages` does not key on this and wants no variant.** It
-/// maps a class handle to a [`ClassPackage`], so a class the bootstrap
-/// registered is simply absent from it, and `Interp::package_object_for` is
-/// the one reader that turns the absence into `Package::Rexx`. Putting a
-/// `Package` in there would give one state two spellings -- absent, and
-/// present as `Rexx` -- which is the shape this enum exists to remove.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum Package {
     /// The package the interpreter's own classes belong to. `PackageClass::
@@ -77,14 +42,6 @@ pub(crate) enum Package {
 /// What a class object's own `package` field holds -- `RexxClass::setPackage`,
 /// the write `RexxClass::subclass` makes before it builds anything
 /// (`classes/ClassClass.cpp:1582`).
-///
-/// **Three states, one spelling each**, and the third is why this type is not
-/// [`ProgramId`]. Absent from `Interp::class_packages` is a class the
-/// bootstrap registered, whose `~package` is the `REXX` one; `Program` is a
-/// class a `::CLASS` directive installed, whose `~package` is that program's;
-/// `Null` is a class built by message, whose `~package` is `.nil`. Measured,
-/// oracle rc 159: `k = .object~subclass("k")` then `say k~package~name`
-/// reports `Object "The NIL object" does not understand message "NAME".`
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum ClassPackage {
     /// `ClassDirective::install` passes the installing package
@@ -96,55 +53,16 @@ pub(crate) enum ClassPackage {
 }
 
 /// Which code body of which loaded program a cached plan belongs to (D16).
-///
-/// There is deliberately **no fragment arm**, and that is a finding rather
-/// than an omission. D16 says a fragment's plan is keyed by `(enclosing body,
-/// fragment id)`, but a fragment is re-parsed on every execution of its
-/// `INTERPRET` and its text can differ per iteration, so a "fragment id" can
-/// only be a counter handed out per parse. Every lookup against such a key
-/// misses and every insert stays forever, so `do 1000000; interpret s; end`
-/// would accumulate a million plans that are each read zero times. The
-/// durable part of a fragment's resolution is not its plan but the
-/// name-to-slot bindings it adds to the enclosing activation, and those live
-/// on `Activation::extra`. So a fragment plan is built, used, and dropped with
-/// the fragment. See `Interp::fragment_plan`.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct BodyKey {
     pub(crate) program: ProgramId,
     /// `None` is the program's main body, `Some(index)` is
     /// `directives[index]`'s.
-    ///
-    /// **The same selector `Activation::body` carries**, decided with it by
-    /// Task 3 rather than separately: a plan is cached under this key and
-    /// looked up again by whatever runs that body, so if the two spellings
-    /// denoted different things a body would run under another body's plan.
-    /// `activation.rs`'s own `body_of` is the single place either is turned
-    /// into a `&CodeBody`.
-    ///
-    /// `Interp::run` builds the main body's plan under `None`;
-    /// `Interp::invoke_call`'s `::ROUTINE` step and
-    /// `Interp::enter_method_body`'s `::METHOD`/`::ATTRIBUTE` step build
-    /// theirs under `Some(index)`. Each gets a plan of its own rather than sharing
-    /// the caller's, and that is what makes its pool safe to isolate: a
-    /// different `CodeBody` means a different name-to-slot map, so the
-    /// slot-index identity `PROCEDURE EXPOSE`'s alias bitset rests on does
-    /// not hold across the two.
     pub(crate) directive: Option<usize>,
 }
 
 /// Whether a body is entered as a method, which is the one thing
 /// [`Plan::build`] needs to know about its caller.
-///
-/// `Interp::enter_method_body` binds `SELF` and `SUPER` before a method body's
-/// first instruction, so this is the predicate "does entering this body bind
-/// those two names" -- spelled as the two kinds of body rather than as a bare
-/// `bool`, because a `true` at a call site would say nothing about which side
-/// it is.
-///
-/// The one other place that binds the two names is
-/// `Interp::eval_constant_expression`, and it is not a case this enum has to
-/// cover: a `::CONSTANT`'s activation carries `Plan::default()` rather than a
-/// built plan, so there is nothing for `build` to have registered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BodyKind {
     /// A program's main body or a `::ROUTINE`: entering it binds neither name.
@@ -154,43 +72,16 @@ pub(crate) enum BodyKind {
 }
 
 /// One tail piece of a compound's name, owned.
-///
-/// `rexx_parse::Tail` is the same two cases borrowed from the interned
-/// spelling, and it is what `CompoundName::split` classifies with. An owned
-/// copy is what a `Plan` can hold: the plan outlives no borrow of the
-/// `SymbolTable` -- it is an `Rc` cached on `Interp` while the table lives
-/// behind an `Rc<Program>` -- and owning the bytes is also what lets
-/// `Interp::tail_key` join a key without touching the symbol table at all.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum TailPiece {
     /// A piece that is empty or starts with a digit, so it can never be a
     /// variable name and stands for itself.
     Constant(Box<[u8]>),
     /// A simple variable whose value supplies this piece.
-    ///
-    /// `at` is the slot the plan holding this entry bound `name` to, so that
-    /// reading the piece costs an index rather than a hash of its bytes.
-    /// **`None` is a piece the plan assigned no slot**, and it is an ordinary
-    /// outcome rather than a gap: `Plan::bind` records a split and assigns
-    /// nothing, for the reason its own doc comment gives, so an entry existing
-    /// does not mean its pieces carry slots. `Interp::read_by_name_at`
-    /// resolves the name the ordinary way when there is none, exactly as every
-    /// piece did before this field existed.
-    ///
-    /// A `Some` slot is never a *different* answer from resolving the name.
-    /// `Interp::slot_of` reads the plan's own name map first and the
-    /// activation's `extra` only after it misses, and a slot lands here only
-    /// because `slot_for` put `name` in that same map -- so for a piece that
-    /// carries one, `extra` was already unreachable. `Interp::join_tails`
-    /// carries the debug tripwire for the premise that can break, which is the
-    /// entry belonging to some plan other than the running activation's.
     Variable { name: Box<[u8]>, at: Option<usize> },
 }
 
 /// A compound's name, split into the pieces `Interp::tail_key` joins.
-///
-/// One of these per compound-shaped symbol in a body, keyed by that symbol's
-/// own id on `Plan::compounds`.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct CompoundName {
     /// The stem half, its trailing period included (`compound_parts`' own
@@ -199,30 +90,6 @@ pub(crate) struct CompoundName {
     /// The slot the plan holding this entry bound `stem` to, so that finding
     /// the stem object at a reference costs an index rather than a hash of the
     /// stem's bytes.
-    ///
-    /// **`None` is a stem the plan assigned no slot**, and it is an ordinary
-    /// outcome rather than a gap, the same one `TailPiece::Variable`'s own
-    /// `at` records: `Plan::bind` binds a *compound*-shaped name whole and
-    /// gives its stem half nothing, and `CompoundName::split` is entered by an
-    /// `INTERPRET` fragment with no plan at all. `Interp::stem_slot` resolves
-    /// the name the ordinary way when there is none, exactly as every stem
-    /// accessor did before this field existed.
-    ///
-    /// **A stem-shaped name is its own stem half, and `Plan::bind` fills this
-    /// in for one.** `zs. = 'one'` and `do zs. = 1 to 3` bind `ZS.` whole, so
-    /// the slot bound to the symbol *is* the stem's slot and there is no
-    /// second name to assign. That is what lets `Interp::stem_assign_at` reach
-    /// a bare stem's slot on both engines, where a compiled `Op::Store` would
-    /// reach it on only one.
-    ///
-    /// A `Some` slot is never a *different* answer from resolving the name.
-    /// `Interp::slot_of` reads the plan's own name map first and the
-    /// activation's `extra` only after it misses, and a slot lands here only
-    /// because `slot_for` put `stem` in that same map -- so for a stem that
-    /// carries one, `extra` was already unreachable. A stem that carries
-    /// **none** does reach `extra`, measured: `do za.zi = 1 to 3` binds the
-    /// whole `ZA.ZI` and nothing named `ZA.`, so the loop's own read grows
-    /// `ZA.` into `extra` and hits it on every pass.
     pub(crate) stem_at: Option<usize>,
     /// The tail pieces in source order.
     pub(crate) tails: Box<[TailPiece]>,
@@ -230,22 +97,6 @@ pub(crate) struct CompoundName {
 
 impl CompoundName {
     /// Splits one compound-shaped interned spelling.
-    ///
-    /// **The single definition of the split**, entered both by the upfront
-    /// pass that fills `Plan::compounds` and by `Interp::tail_key`'s fallback
-    /// for a body with no plan entry, so the two cannot come to disagree
-    /// about how a name decomposes.
-    ///
-    /// `name` must hold a period: `compound_parts` panics without one. Every
-    /// caller already guarantees it -- a `Compound` expression's own spelling
-    /// always has one (`ast.rs`), and `Plan::note_variable_ref` checks before
-    /// it calls.
-    ///
-    /// **The stem and every variable piece come back with no slot**, because
-    /// how a name splits is a property of the text alone while a slot is a
-    /// property of the plan the entry is going into, and this function is
-    /// entered by a fragment that has no plan at all. `note_compound_name`
-    /// fills the slots in afterwards, for the entries that get any.
     pub(crate) fn split(name: &str) -> CompoundName {
         let (stem, tails) = compound_parts(name);
         CompoundName {
@@ -267,27 +118,6 @@ impl CompoundName {
 
 /// One body's variable-resolution plan, built by one upfront pass at first
 /// execution (D16).
-///
-/// Two views of the same assignment. `names` is the map D16 specifies, keyed
-/// by upcased name, and it is what a name resolved at *run time* goes through:
-/// `DROP (v)`, and a fragment's names. `by_symbol` is what evaluation goes
-/// through, so the hot path is a lookup by the id the AST already carries
-/// rather than a byte-string hash.
-///
-/// `by_symbol` is a `HashMap` where D16's shape wants an array index.
-/// `SymbolId` is a newtype over a private `u32` with no accessor, so nothing
-/// outside `rexx-parse` can turn one into a `Vec` index directly -- though
-/// `SymbolTable::intern`/`name` (`token.rs`) already use that same `u32` as a
-/// dense, table-local, zero-based index internally
-/// (`SymbolId(u32::try_from(self.names.len())...)`, `self.names[id.0 as
-/// usize]`), so exposing it as `SymbolId::index()` would cost nothing new.
-/// **That accessor has since landed** (`SymbolId::index()`, `180875a9`), so
-/// switching `by_symbol` to a `Vec` indexed by it is now a decision this
-/// crate could make, not one blocked on `rexx-parse`. Not made in this fix
-/// round, which is scoped to making `note`/`build` exhaustive rather than
-/// to the representation: variable lookup is 8.1%/32.2% of runtime (the
-/// realistic and stem-heavy benchmarks), so trading a `HashMap` for a `Vec`
-/// is worth its own measurement, not a side effect of an unrelated change.
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
     pub(crate) names: rexx_core::NameMap<Box<[u8]>, usize>,
@@ -296,133 +126,26 @@ pub(crate) struct Plan {
     /// transfer. Cached because the alternative is `Interp::slot_of`, which
     /// hashes the name; measured, setting `RESULT` cost 236 user
     /// instructions per call against the oracle's 18.
-    ///
-    /// `None` on a `Plan::default()`, which `Interp` hands to an activation
-    /// that has no body of its own (`lib.rs`) and whose name map is empty --
-    /// there is no slot to name, so those callers keep the lookup.
     pub(crate) result_slot: Option<usize>,
     pub(crate) sigl_slot: Option<usize>,
     pub(crate) by_symbol: Vec<Option<usize>>,
     /// Whether nothing this body runs can change the `TRACE` setting in force
     /// while it runs, so that a compiled stream may decide at compile time
     /// which value echoes it carries rather than gating each one.
-    ///
-    /// **`false` is the safe answer and the default one**, which is what a
-    /// [`Plan::default()`] gives a body-less activation and a fragment: it
-    /// means "may retrace", so every echo is emitted and gated at run time
-    /// exactly as it always was. [`Plan::build`] starts this `true` and lets
-    /// the walk below falsify it.
-    ///
-    /// **What falsifies it** is a `TRACE` instruction, an `INTERPRET` or
-    /// `OPTIONS` whose text is not known here, a call this body makes to
-    /// `TRACE()` -- the builtin sets the running activation's own setting
-    /// (`builtin::state::trace`) -- and a `CALL (expr)` whose target is not
-    /// known until it runs. A call to anything else cannot reach it: a routine
-    /// or method runs in an activation of its own, and `push_activation` and
-    /// `pop_activation` restore this one's setting around it.
     never_retraces: bool,
     /// The static clause indent of every instruction in this body, by index.
-    ///
-    /// `static_indent` walks the flat instruction list from position zero to
-    /// answer for one index, and `step_in_temps_frame` asks for the answer on
-    /// every clause it steps -- so the cost of computing it on demand is the
-    /// length of the body, per clause. Measured on `samples/rexxcps.rex`,
-    /// where the body is long enough for that to show: `indent_in_range` was
-    /// the single largest self-time function in the profile at 8.0%.
-    ///
-    /// The answer depends on the instruction list alone (`static_indent`'s
-    /// own doc comment: never on which iteration is running), so it belongs
-    /// here, with the rest of what one upfront pass over the body knows.
-    ///
-    /// Filled by `all_indents`, which walks the body **once** for every
-    /// position rather than once per position -- that distinction is what
-    /// makes filling upfront affordable. Asking `static_indent` for each
-    /// index instead costs the body's length per index, and made a
-    /// 20,000-clause body placed after an `EXIT` go from 22 ms to 211 ms.
     pub(crate) indents: Box<[usize]>,
     /// The 1-based source line every instruction in this body sits on, by
     /// index -- empty for a body built without a source, which is the
     /// fragment case `build`'s own parameter documents.
-    ///
-    /// `indents` above, for the other constant of the source text the same
-    /// upfront pass can know. `ProgramSource::line_of` is a `partition_point`
-    /// over the line starts and `enter_stepped_clause` asks for the answer on
-    /// **every** stepped clause, unconditionally, because `SIGL` has to stay
-    /// correct whether or not `TRACE` is on -- so the search ran once per
-    /// executed clause on both engines. Counted on this crate's own axes at
-    /// `9b2d416d3`, identically under `REXX_ENGINE=ir` and under the
-    /// tree-walker: 50,000,005 searches on `bench-programs/emptyloop.rex`,
-    /// 57,000,006 on `varlookup.rex`, and 10,161,437 on
-    /// `samples/rexxcps.rex`.
-    ///
-    /// **What the search cost tracks the body's line count**, measured on the
-    /// same axes by dividing each axis's instruction saving by its own count
-    /// above: 40.0 instructions per removed search on a 7-line program, 42.0
-    /// on an 8-line one, about 53 on each of the 12-to-14-line ones, 75.3 on
-    /// a 51-line one and 94.7 on `rexxcps`' 198 lines. The planning spike
-    /// concluded the opposite from probe arms that returned deliberately
-    /// wrong line numbers, whose long-program arm the plan itself disowns as
-    /// contaminated; the depth is real and it is most of the spread.
-    ///
-    /// It changes nothing about the fix. A table is not chosen over a faster
-    /// search because the search is shallow -- it is chosen because a search
-    /// that is not made costs neither its call nor its depth, which is the
-    /// upper bound any faster search would be measured against.
-    ///
-    /// **Valid only for the source it was built from**, which is what the
-    /// `debug_assert_eq!` in [`Plan::line_at`] exists to hold: a plan is
-    /// cached by `BodyKey`, and a table of line numbers reached with another
-    /// program's source does not miss, it answers wrongly and silently --
-    /// `SIGL`, every condition's reported line and every `*-*` trace line at
-    /// once, in programs that raise nothing and trace nothing.
     pub(crate) lines: Box<[usize]>,
     /// How a compound-shaped symbol this body names splits, by
     /// `SymbolId::index`, `None` where this pass recorded nothing for it.
-    ///
-    /// The same move `indents` above is, for a different constant of the
-    /// source text. `Interp::tail_key` used to call `compound_parts` on the
-    /// interned name on **every** reference, re-splitting a string that
-    /// cannot change: measured by `perf record` over `samples/rexxcps.rex`
-    /// (`REXX_ENGINE=ir`, `count=100`/`averaging=100`, 999 Hz), that split
-    /// was 3.38% of self time with the `CharSearcher` its `split('.')`
-    /// drives at a further 3.80%, on a program whose innermost loop
-    /// references `acompound.key1.loop`.
-    ///
-    /// The upfront pass already had the answer and discarded it:
-    /// `note_compound_name` splits every compound name to assign its stem
-    /// and its variable pieces slots. It now keeps the split.
-    ///
-    /// **An entry is an optimisation and never a requirement**, which is what
-    /// makes filling this safe to reason about one call site at a time: a
-    /// symbol with no entry splits its own spelling at the reference, exactly
-    /// as every reference did before this field existed. `Code::compound` is
-    /// where the two meet.
-    ///
-    /// **A `Vec` indexed by id rather than a `HashMap` keyed by one**, which
-    /// is correct because `SymbolId::index` is dense and zero-based within
-    /// the table that interned it, and affordable because the id space is one
-    /// program's distinct symbols. Measured over the corpus, this crate's
-    /// bench programs and the oracle's `samples/` tree -- 381 programs that
-    /// parse -- the largest program-wide total of `symbols.len()` summed over
-    /// a program's code bodies is 2,244 entries, and the sum over all 381 is
-    /// 85,428.
-    ///
-    /// **Sized by the whole symbol table and not by the compounds in this
-    /// body**, so a body that names few compounds still carries an entry per
-    /// symbol. That is what buys the indexing: an id is only an index into
-    /// the table that interned it, and any denser addressing would need a
-    /// second map from id to position, which is the hash this replaces.
     pub(crate) compounds: Box<[Option<CompoundName>]>,
 }
 
 impl Plan {
     /// The static clause indent of `target`.
-    ///
-    /// `instructions` is a parameter rather than a field because a `Plan` is
-    /// cached by `BodyKey`, and the body it describes is reached through the
-    /// `Rc<Program>` every caller already holds. It is only consulted for a
-    /// position this plan has no entry for, which a body of the length the
-    /// table was built from cannot produce.
     pub(crate) fn indent_of(&self, instructions: &[Instruction], target: usize) -> usize {
         match self.indents.get(target) {
             Some(indent) => *indent,
@@ -431,20 +154,6 @@ impl Plan {
     }
 
     /// The 1-based source line `target`'s own clause starts on.
-    ///
-    /// `instruction` is `target`'s own instruction, which every caller
-    /// already holds; it supplies the fallback's span for a position this
-    /// plan has no entry for -- a body of the length the table was built from
-    /// cannot produce one, and a plan built with no source has no entries at
-    /// all.
-    ///
-    /// **The `debug_assert_eq!` is the whole safety argument for this field**
-    /// and is not decoration. A cached line that is merely absent falls back
-    /// and is right; a cached line that is *wrong* misreports `SIGL`, every
-    /// condition's line and every `*-*` trace line, in programs that observe
-    /// none of the three and so cannot fail a differential. Asserting the
-    /// cache against a recomputation at the accessor is what turns that into
-    /// a debug-build failure at the first clause.
     pub(crate) fn line_at(
         &self,
         instruction: &Instruction,
@@ -467,15 +176,6 @@ impl Plan {
     }
 
     /// How the compound `id` names splits, if this plan's pass saw it.
-    ///
-    /// **`id` must belong to the `SymbolTable` this plan was built against**,
-    /// and nothing here can check that: an id from another table is either out
-    /// of range, which answers `None`, or in range, which answers another
-    /// symbol's entry with no complaint (`SymbolId::index`'s own doc comment
-    /// on the two ways that goes wrong). `Code` is what pairs a plan with the
-    /// table whose ids index it, and `Code::compound` is the only caller.
-    /// Whether nothing this body runs can change the `TRACE` setting while it
-    /// runs. See the field for what falsifies it and why `false` is safe.
     pub(crate) fn never_retraces(&self) -> bool {
         self.never_retraces
     }
@@ -486,32 +186,6 @@ impl Plan {
 
     /// Walks `body` once and returns a finished table (D16: "built by one
     /// upfront pass", not populated lazily one name at a time).
-    ///
-    /// **Exhaustive over `InstructionKind`, with no catch-all arm.** The
-    /// original `_ => {}` here (and `note`'s own, below) was the actual
-    /// defect this fix closes, not a placeholder: a body containing a
-    /// `Stem` or `Compound` produced an *empty* plan, so every one of its
-    /// names went through `grow_slots` one at a time on first touch --
-    /// precisely the lazy algorithm D16 exists to replace, and worst on the
-    /// stem-heavy code D16's own 32.2% figure measures. Matching every
-    /// variant explicitly, even the ones that contribute nothing, is what
-    /// makes a future omission a compile error instead of a silent one.
-    ///
-    /// Registers every name an instruction's fields *could* name, not only
-    /// the ones this phase's `eval`/`run` already executes: most kinds
-    /// below still fail loudly today and gain real behaviour only in later
-    /// tasks, but pre-registering a name costs nothing when it is never
-    /// read (an unread slot is simply unread), and it means neither this
-    /// function nor a later task has to remember to revisit `plan.rs` the
-    /// day one of them stops failing loudly.
-    ///
-    /// **`source` is `None` for a body with no source of its own to index**,
-    /// and the only such caller is `fragment_plan`: an `INTERPRET` fragment's
-    /// clauses all report the enclosing `INTERPRET` clause's line through
-    /// `Interp::clause_line_override`, `Code::plan` is `None` for a fragment
-    /// so nothing would read the table, and a fragment's plan is discarded
-    /// with the fragment. Filling it there would be a table built once per
-    /// execution of the `INTERPRET` and read never.
     pub(crate) fn build(
         body: &CodeBody,
         symbols: &SymbolTable,
@@ -546,17 +220,6 @@ impl Plan {
         // the body's own names rather than before them, because only being
         // *in* the plan matters here and taking the low indices would
         // renumber every slot this crate's tests pin.
-        //
-        // The interpreter assigns all three itself, so leaving them out of the
-        // plan does not mean they never get a slot -- it means they get one
-        // from `Interp::slot_of`'s third source, which grows the frame and
-        // records the name in `Activation::extra`. That map is cloned into
-        // every callee, so a single `CALL` whose routine returns a value made
-        // every later call allocate a map and copy a key, for a name the
-        // program never wrote. Measured with the marginal method: `call sub`
-        // against a routine ending `return 1` cost 4420.7 user instructions
-        // per call with `RESULT` reaching `extra`, and 4053.0 with the body
-        // mentioning `RESULT` so the plan held it already.
         plan.result_slot = Some(plan.slot_for(b"RESULT"));
         plan.slot_for(b"RC");
         plan.sigl_slot = Some(plan.slot_for(b"SIGL"));
@@ -568,11 +231,6 @@ impl Plan {
         // send, which is exactly the cost the paragraph above describes for
         // `RESULT`. Measured on `bench-programs/dispatch.rex`, `slot_of`
         // reached from that binding was the largest single caller of `extra`.
-        //
-        // Conditional where the three above are unconditional, because the
-        // three above are names the language binds in *every* body and these
-        // two are not: a `::ROUTINE` or a main body never has either bound, so
-        // a slot for them there would be frame width no send ever writes.
         if kind == BodyKind::Method {
             plan.slot_for(b"SELF");
             plan.slot_for(b"SUPER");
@@ -724,10 +382,6 @@ impl Plan {
     /// since each is one complete, interned symbol with its own id, the
     /// same treatment `note` gives a bare `Variable`) and every expression
     /// its kind and its trailing `WHILE`/`UNTIL` carry.
-    ///
-    /// `label` is deliberately not bound: a loop label names the block for
-    /// `LEAVE`/`ITERATE`/`END`, not a data variable, exactly like `Select`'s
-    /// own `label` in `note_instruction`.
     fn note_loop(&mut self, loop_: &Loop, symbols: &SymbolTable) {
         if let Some(counter) = loop_.counter {
             self.bind(counter, symbols.name(counter));
@@ -823,17 +477,6 @@ impl Plan {
     }
 
     /// One `Drop`/`Expose`/`Procedure`/`Use Local` target.
-    ///
-    /// `Indirect(id)`'s `id` is the *wrapper* variable read at run time to
-    /// learn the real target's name (`DROP (v)` reads `v` itself, the same
-    /// as any ordinary read) -- the target `v` names is not knowable until
-    /// then, so nothing more can be pre-registered for it, and this file's
-    /// own `a_runtime_name_grows_the_frame` test is exactly this case,
-    /// expected to keep falling through to `extra`/`grow_slots`.
-    /// `Direct(id)`'s spelling can be a simple variable, a stem or a
-    /// compound with no tag saying which (`VariableRef`'s own doc comment)
-    /// -- dispatched here on whether it contains a `.` at all, the same
-    /// condition `compound_parts` itself requires before it can be called.
     fn note_variable_ref(&mut self, var_ref: &VariableRef, symbols: &SymbolTable) {
         let (VariableRef::Direct(id) | VariableRef::Indirect(id)) = *var_ref;
         let name = symbols.name(id);
@@ -851,25 +494,6 @@ impl Plan {
     /// expression's own interned spelling, or a `Drop`/`Expose`/
     /// `Procedure`/`Use Local` target's, once `note_variable_ref` has
     /// already established it is compound- or stem-shaped.
-    ///
-    /// Registers by name alone, with no slot bound to `id`: neither the stem
-    /// prefix nor a tail piece has a `SymbolId` of its own --
-    /// `compound_parts` only ever hands back a borrowed slice of the one
-    /// interned spelling a `Compound` id carries, and a piece was never a
-    /// token the scanner saw (`ast.rs`'s own `Compound` doc comment says so).
-    /// That is what makes `names`, not `by_symbol`, the correct table for
-    /// them to land on -- and the slot each one lands on is kept on the entry
-    /// rather than dropped, so that a reference indexes the frame instead of
-    /// hashing the name again.
-    ///
-    /// `id` is the whole compound's own id, and it addresses `compounds`
-    /// rather than being bound to a slot. Every caller has one: `note`'s
-    /// `ExprKind::Compound` arm, and `note_variable_ref` for either shape of
-    /// `VariableRef`. In the `Indirect` case that id names the wrapper
-    /// variable, which reaches here only when the wrapper is *itself*
-    /// compound-shaped (`DROP (a.b)`) -- and then `run.rs`'s own
-    /// `drop_variable` reads it through `tail_key` under this same id, so
-    /// the entry is addressed by the id the reader will present.
     fn note_compound_name(&mut self, id: SymbolId, name: &str) {
         let mut entry = CompoundName::split(name);
         // The stem's slot, kept for the same reason each piece's is: a
@@ -897,21 +521,6 @@ impl Plan {
     }
 
     /// Assigns slots to every variable `expr` names, in source order.
-    ///
-    /// Recursive, and that recursion is on the interpreter thread's stack
-    /// budget alongside `eval`'s: a left-deep 100,000-term expression is
-    /// walked here as deeply as it is later evaluated.
-    ///
-    /// **Exhaustive over `ExprKind`, with no catch-all arm** -- see
-    /// `build`'s doc comment for why: the original `_ => {}` here was the
-    /// actual defect, not a placeholder, and matching every variant
-    /// explicitly is what turns a future omission into a compile error.
-    /// Reimplements the same shape `ExprKind::for_each_child`
-    /// (`rexx-parse`'s `ast.rs`) already walks, rather than calling it:
-    /// that method is `pub(crate)` to `rexx-parse`, so nothing outside that
-    /// crate can reach it -- `rexx-parse/tests/gate_walk/mod.rs`'s
-    /// `children_of` reimplements the identical shape for the identical
-    /// reason, one crate over.
     fn note(&mut self, expr: &Expr, symbols: &SymbolTable) {
         match &expr.kind {
             ExprKind::Variable(id) | ExprKind::Stem(id) => {
@@ -989,42 +598,6 @@ impl Plan {
     }
 
     /// Binds `name` to a slot, and `id` to the same one.
-    ///
-    /// Both views are updated together because they are one assignment seen
-    /// two ways: a second symbol spelling the same name must land on the slot
-    /// the first one got, which is why the slot number comes from `names` and
-    /// never from `by_symbol`'s length.
-    ///
-    /// **A compound-shaped spelling also gets its split recorded**, and here
-    /// rather than at the call sites that can produce one, so that recording
-    /// it is a property of binding a name at all. A `DO` control variable is
-    /// the shape that makes this worth doing: `do a.i = 1 to 5` binds one
-    /// whole dotted symbol, and `run.rs`'s controlled-loop step then resolves
-    /// its tail through `tail_key` on **every pass**, which is exactly the
-    /// per-reference split `compounds` exists to remove.
-    ///
-    /// **No new name is assigned a slot here, which is what separates this
-    /// from `note_compound_name`**: `name` is bound whole above, and adding
-    /// slots for its parts would move every later slot number in the body -- a
-    /// change to frame layout, not to how a name splits. So the entry this
-    /// writes has `at: None` on every variable piece, and `Interp::join_tails`
-    /// resolves those by name.
-    ///
-    /// **`stem_at` is the exception, and it assigns nothing new.** A
-    /// stem-shaped `name` has no part that is not itself: its stem half is the
-    /// whole spelling, so the slot already bound to `id` above is the stem's
-    /// slot and recording it costs no name and moves no layout. A
-    /// compound-shaped `name` does have parts, so its stem stays `None` and
-    /// `Interp::stem_slot` resolves it -- `do a.i = 1 to 5` binds `A.I` and
-    /// nothing called `A.`.
-    ///
-    /// **An entry already recorded is left alone**, which matters when one id
-    /// reaches `note_compound_name` as well -- `say v.i` and then `do v.i = 1
-    /// to 2` name one symbol. Either entry holds the identical split, since
-    /// they split the identical spelling, and they differ only in whether the
-    /// pieces carry slots; overwriting would therefore change no answer and
-    /// would throw away `note_compound_name`'s slots for every reference in
-    /// the body, in whichever order the pass happened to reach them.
     fn bind(&mut self, id: SymbolId, name: &str) {
         let slot = self.slot_for(name.as_bytes());
         self.by_symbol[id.index()] = Some(slot);
@@ -1045,11 +618,6 @@ impl Plan {
     /// to bind alongside them (`note_compound_name`'s own doc comment says
     /// why) and so go through this directly.
     /// The slot this pass bound `id` to, or `None` when it bound it none.
-    ///
-    /// The compile-time half of `Code::slot_for`, which carries the tripwire:
-    /// this side holds no symbol table, so it has no name to check the answer
-    /// against. Both read the one table, so the compiled answer and the
-    /// run-time one stay one resolution made at two times.
     pub(crate) fn slot_for_symbol(&self, id: SymbolId) -> Option<usize> {
         self.by_symbol.get(id.index()).copied().flatten()
     }
@@ -1077,16 +645,6 @@ impl Interp {
     /// "cached on `Interp`, not on the body", because an `Rc<Program>` gives
     /// shared immutable access and nothing can be written into a `CodeBody`
     /// reached through one).
-    ///
-    /// **`source` must be the source of the program `key` names**, and
-    /// nothing here can check it -- the plan is cached under `key` and handed
-    /// back to whatever asks for that key next, so a table of line numbers
-    /// built from another program's text would be answered with no complaint.
-    /// The two production callers both take the body, the symbols and the
-    /// source out of one `Rc<Program>` reached through the same id `key`
-    /// carries (`InstalledRoutine`'s own doc comment has that argument for
-    /// the routine caller), and `Plan::line_at`'s `debug_assert_eq!` is what
-    /// holds it at the read rather than at the build.
     pub(crate) fn plan_for(
         &mut self,
         key: BodyKey,
@@ -1108,18 +666,6 @@ impl Interp {
     }
 
     /// Whether the body `key` names is entered as a method.
-    ///
-    /// Read off the key rather than passed in beside it, because the two would
-    /// then be two spellings of one fact and a caller could disagree with the
-    /// cache: a plan is stored under `key` and handed to whatever asks for
-    /// that key next, so a wrong kind at one call site would be answered to
-    /// every other. A directive index selects one directive, and a directive
-    /// is a `::METHOD`, an `::ATTRIBUTE` or something else -- there is nothing
-    /// for the caller to add.
-    ///
-    /// `Plain` for a key naming no directive of this program, which
-    /// `Interp::plan_for`'s own doc rules out by construction; a plan built
-    /// for a body that does not exist has no slots to be wrong about.
     fn body_kind(&self, key: BodyKey) -> BodyKind {
         let Some(index) = key.directive else {
             return BodyKind::Plain;
@@ -1137,28 +683,6 @@ impl Interp {
 
     /// The chunk for one body **under one trace setting**, from the cache or
     /// compiled and cached (D16's discipline, with the key D23 widens it by).
-    ///
-    /// **`BodyKey` alone does not identify a chunk and keying on it alone is a
-    /// wrong-output defect, not a slow one.** The trace setting is an input to
-    /// compilation (D23): it decides which clause echoes are emitted as ops,
-    /// so one body compiles to two different streams under two settings, and a
-    /// lookup that ignored the setting would hand back whichever was compiled
-    /// first -- a body entered untraced and then under `trace i` would run the
-    /// untraced stream the second time. `ChunkTrace` is exactly what
-    /// `crate::ir::compile` reads, and `compile` takes nothing else, so the
-    /// key cannot come to be narrower than the thing it names.
-    ///
-    /// Widened rather than evicted, because eviction throws away the chunk a
-    /// program that toggles `TRACE` is about to want again: two settings mean
-    /// two entries here and two compiles for the whole run, where eviction
-    /// means one compile per change.
-    ///
-    /// `None` means the body does not fit the index widths and this
-    /// activation runs on the tree-walker. `chunks_refused` counts that, once
-    /// per refusal: only a compiled chunk is cached, so a refused body comes
-    /// back here and is refused again the next time it is entered. That
-    /// counter is what stops the fallback being silent -- the dual-engine
-    /// harness asserts it is zero across the corpus.
     pub(crate) fn chunk_for(
         &mut self,
         key: BodyKey,
@@ -1184,28 +708,6 @@ impl Interp {
 
     /// The slot `name` resolves to in the current frame, allocating one if it
     /// resolves to none.
-    ///
-    /// Three sources in order, and the third is the one D16 leaves out. The
-    /// plan's name map is the upfront pass's answer. `extra` is every binding
-    /// made since, which is where a fragment's new names and `DROP (v)`'s
-    /// run-time target land. Growth is what happens when neither has it:
-    /// `RootSet::grow_slots` extends the frame, and the name is recorded
-    /// **here**, because the plan is an `Rc` and cannot be extended.
-    /// The slot `name` is already bound to in this activation, without
-    /// binding one for it.
-    ///
-    /// **[`Interp::slot_of`]'s own first two steps, and the invariant a
-    /// carried slot is checked against.** A slot travels on a `CompoundName`
-    /// or in a compiled op because `slot_of` answered it, and that answer is
-    /// the plan's name map *or* the activation's `extra` -- not the map
-    /// alone. An `INTERPRET` fragment is what makes the difference
-    /// observable: its plan resolves every name through `slot_of` against the
-    /// **enclosing** activation, so a name the enclosing body never wrote
-    /// grows into `extra` and the slot a fragment carries for it is one the
-    /// enclosing plan has no entry for.
-    ///
-    /// Growth is what this leaves out, deliberately: a check that bound a
-    /// slot would answer `Some` for every name it was asked about.
     pub(crate) fn bound_slot_of(&self, name: &[u8]) -> Option<usize> {
         let activation = self.activation();
         activation
@@ -1230,18 +732,6 @@ impl Interp {
 
     /// Resolves a fragment's own `SymbolId`s to slots in the **enclosing**
     /// frame.
-    ///
-    /// This is D16's "its plan is built against the enclosing plan's name map"
-    /// and it goes through `slot_of`, which is that name map plus the two
-    /// things D16 does not mention: the activation's `extra` bindings, and
-    /// growth for a name nobody has bound yet. A fragment's ids are its own,
-    /// and `parse_interpret` builds a fresh `SymbolTable` every call, so id 7
-    /// in the fragment and id 7 in the program name unrelated symbols -- the
-    /// join has to be through the text, `fragment.symbols.name(id)`, and this
-    /// is the only place that matters.
-    ///
-    /// The result is returned rather than cached, for the reason `BodyKey`
-    /// gives.
     pub(crate) fn fragment_plan(&mut self, fragment: &Fragment) -> (Vec<Option<usize>>, Plan) {
         // The same upfront pass, run against the fragment's own body, which
         // numbers its names 0..n in walk order. Those numbers are local to the
@@ -1277,26 +767,6 @@ impl Interp {
         // frame**, which is what lets a fragment compile at all: a chunk's
         // `Op::Load` and `Op::Store` carry plan slots, and a fragment's own
         // numbering means nothing in the frame those ops write.
-        //
-        // Every field that holds a slot is translated and nothing else moves.
-        // `names` and `by_symbol` are the two maps `Code::slot_for` and its
-        // own `debug_assert` compare against each other, so translating one
-        // without the other is a loud failure rather than a wrong write.
-        // **`compounds` is the exception: its slots are cleared, not
-        // translated.** `Interp::stem_slot` checks a carried slot against
-        // `self.activation().plan` -- the *enclosing* activation's, because
-        // that is the frame a fragment runs in -- and a fragment's names are
-        // resolved through `Interp::slot_of`, which reads the activation's
-        // `extra` after the plan's map misses. So a fragment can name a stem
-        // the enclosing plan has no entry for at all: `interpret "do zt. = 1
-        // to 3; end"` grows `ZT.` into `extra`, exactly as that function's own
-        // doc records. A translated slot would then name a real index that the
-        // enclosing plan cannot vouch for, which is the mismatch its tripwire
-        // exists to catch. `None` puts compound resolution back on the by-name
-        // path, which is where a fragment's has always been.
-        //
-        // `indents` and `lines` describe the fragment's text and are already
-        // right; `never_retraces` is the fragment's own answer.
         let mut compiled = local;
         compiled.names = compiled
             .names
@@ -1321,11 +791,6 @@ impl Interp {
 
 /// Whether a call names the `TRACE()` builtin, which sets the running
 /// activation's own `TRACE` setting where every other call cannot.
-///
-/// Case-insensitive because the two spellings reach here differently: a bare
-/// symbol arrives upcased, and `"trace"(...)` arrives exactly as written --
-/// which never resolves to the builtin, so answering `true` for it costs the
-/// optimisation on that body and nothing else.
 fn names_trace(name: &[u8]) -> bool {
     name.eq_ignore_ascii_case(b"TRACE")
 }
@@ -1337,13 +802,6 @@ mod tests {
     use rexx_parse::{Program, parse_interpret, parse_program};
 
     /// `indent_of` answers what `static_indent` answers, for every index.
-    ///
-    /// The table is filled by a separate traversal (`all_indents`), and
-    /// `all_indents_fills_what_static_indent_computes_for_every_corpus_program`
-    /// is what holds that traversal to this one. What this adds is the
-    /// wiring in between: an off-by-one in which entry an index reads gives
-    /// one instruction another's indent, and every arm of the program below
-    /// has a distinct value.
     #[test]
     fn indent_of_answers_what_static_indent_answers_at_every_index() {
         let source = b"if 1 = 1 then\n  do i = 1 to 2\n    say i\n  end\nelse\n  nop\nselect\n  when 1 = 0 then nop\n  otherwise\n    say 'o'\nend\n";
@@ -1386,16 +844,6 @@ mod tests {
 
     /// `line_at` answers what `ProgramSource::line_of` answers, for every
     /// index.
-    ///
-    /// `line_at`'s own `debug_assert_eq!` compares the two on every read, so
-    /// most of what this test could assert is asserted by the accessor
-    /// already -- what it adds is the table itself. An accessor that quietly
-    /// recomputed, or a `build` that filled nothing, would satisfy every
-    /// caller and leave the field empty, and only reading `plan.lines`
-    /// directly says which of the two happened.
-    ///
-    /// Every clause below is on a line of its own, so a table shifted by one
-    /// entry answers a different number at every index rather than at some.
     #[test]
     fn line_at_answers_what_line_of_answers_at_every_index() {
         let source = b"nop\nsay 1\nif 1 = 1 then\n  nop\nelse\n  nop\ndo i = 1 to 2\n  say i\nend\nsay 'done'\n";
@@ -1456,13 +904,6 @@ mod tests {
 
     /// `clause_line_at` answers what `clause_line` answers, at every index,
     /// with the override unset and with it set.
-    ///
-    /// This is the wiring the two accessors meet through, and the only place
-    /// the override's precedence over the table is stated as an assertion.
-    /// A table consulted *before* the override would give a fragment's
-    /// clauses the fragment's own line numbers instead of the enclosing
-    /// `INTERPRET` clause's -- which is a wrong `SIGL` and a wrong reported
-    /// line, in a construct the corpus exercises and no arithmetic notices.
     #[test]
     fn clause_line_at_answers_what_clause_line_answers_and_the_override_still_wins() {
         let source = b"nop\nsay 1\nif 1 = 1 then\n  nop\nelse\n  nop\ndo i = 1 to 2\n  say i\nend\nsay 'done'\n";
@@ -1508,14 +949,6 @@ mod tests {
 
     /// The table matches `ProgramSource::line_of` for every instruction of
     /// every corpus program that parses.
-    ///
-    /// The counterpart of
-    /// `all_indents_fills_what_static_indent_computes_for_every_corpus_program`
-    /// for the other constant of the source text, and it exists for the same
-    /// reason: `build`'s fill and the accessor's fallback are two spellings
-    /// of one rule, and a transcription can be wrong where the original is
-    /// right. The corpus rather than examples written here, because it grows
-    /// when a construct lands.
     #[test]
     fn build_fills_what_line_of_computes_for_every_corpus_program() {
         let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
@@ -1662,15 +1095,6 @@ mod tests {
     /// it. That is exactly the shape of gap that let the original `_ =>
     /// {}` catch-all through unnoticed: presence checks cannot fail on
     /// extra entries, only on missing ones.
-    ///
-    /// These two assert the plan's key set **exactly**, and both expect
-    /// nothing at all: `LEAVE`'s target is a block label matched against
-    /// `LEAVE`/`ITERATE`/`END`, never a variable read through `slot_of`
-    /// (`note_instruction`'s own comment on this, above); `.nil` is one of
-    /// `note`'s no-op `ExprKind` arms. An empty expected set cannot pass
-    /// vacuously -- there is no name a broken `build` could accidentally
-    /// omit and still match -- so these two carry the most weight per
-    /// assertion of anything in this module.
     #[test]
     fn build_registers_exactly_the_expected_set_not_merely_a_superset() {
         let cases: &[(&[u8], &[&str])] = &[(b"leave lbl", &[]), (b"say .nil", &[])];
@@ -1715,21 +1139,6 @@ mod tests {
 
     /// A method body's plan holds `SELF` and `SUPER`, and no other body's
     /// does.
-    ///
-    /// `Interp::enter_method_body` binds both before a method's first
-    /// instruction, through `Interp::slot_of`. Registering them here is what
-    /// keeps that binding off `slot_of`'s third source, which grows the frame
-    /// and inserts a boxed key into `Activation::extra` -- per send, for a
-    /// name the body may never mention. Registering them in a main body or a
-    /// `::ROUTINE` would be the opposite trade: two slots of frame width that
-    /// nothing there ever writes.
-    ///
-    /// Reached through `Interp::plan_for` rather than by handing `build` a
-    /// kind, because the kind is derived from the cache key
-    /// (`Interp::body_kind`) and it is that derivation, not the parameter,
-    /// that decides what a running body gets. All three bodies come from one
-    /// program, so a `body_kind` answering a single kind for everything fails
-    /// on whichever row it got wrong.
     #[test]
     fn only_a_method_body_holds_self_and_super() {
         let source = b"nop\n::routine r\n  nop\n::class k\n::method m\n  x = 1\n";
@@ -1793,48 +1202,6 @@ mod tests {
     }
 
     /// `build` records a compound's split under **the compound's own id**.
-    ///
-    /// The rows are a compound written as an expression, as a `DROP` target
-    /// and as a `DO` control variable, which is one row per filler they
-    /// reach: `note_compound_name` for the first two (through `note` and
-    /// through `note_variable_ref`) and `bind` for the third (through
-    /// `note_loop`). `note_variable_ref` also carries an `EXPOSE`,
-    /// `PROCEDURE EXPOSE` and `USE LOCAL` target, and `bind` also carries a
-    /// `PARSE VAR` source (`note_parse`) -- which is why the control
-    /// variable's fix went into `bind` rather than beside `note_loop`'s own
-    /// call, and measured, `i = 3; a.i = 'p q'; parse var a.i x y; say x y`
-    /// prints `p q` on the oracle and on both engines.
-    ///
-    /// **What this catches that no output comparison can: an entry that is
-    /// never written.** `Code::compound` falls back to splitting the
-    /// spelling and hands back the identical pieces, so a filler that stops
-    /// running leaves every corpus program and every `tail_key` assertion
-    /// green. Only reading the table back says so. The pieces are spelled
-    /// out here rather than compared against `CompoundName::split`, which
-    /// would be the same function on both sides of the assertion.
-    ///
-    /// **An entry written under the wrong id is a different failure, and not
-    /// what this test is needed for.** Nothing falls back for one: the table
-    /// answers, with another symbol's split, so it is a wrong answer rather
-    /// than a slow path. Measured, shifting every entry one id along reddens
-    /// output-level tests in `run/tests.rs` and the corpus sweep as well as this
-    /// one.
-    ///
-    /// The control-variable row is the one that was measured wrong: before
-    /// `bind` recorded a split, `do aa.ii = 1 to 2` reached `tail_key` with
-    /// no entry and re-split its name on every pass.
-    ///
-    /// **The slots are part of what is asserted, and `note_compound_name` and
-    /// `bind` disagree about them.** `note_compound_name` puts the stem and
-    /// each variable piece on the slot it assigned that name; `bind` assigns
-    /// no name a slot beyond the one it binds whole, so `AA.II`'s stem and
-    /// piece both carry `None` while `DD.JJ`'s and `V.I.7`'s carry a number.
-    /// (A stem-*shaped* name bound by `bind` does carry one, because there the
-    /// name bound whole and the stem are the same name;
-    /// `bind_keeps_a_stem_shaped_names_own_slot_as_its_stems` is that pair.)
-    /// The numbers are spelled out rather than looked back up out of
-    /// `plan.names`, which would be the same map on both sides of the
-    /// assertion.
     #[test]
     fn build_records_a_compounds_split_under_the_compounds_own_id() {
         let source = b"drop dd.jj; do aa.ii = 1 to 2; say v.i.7; end";
@@ -1939,13 +1306,6 @@ mod tests {
 
     /// One symbol recorded by `note_compound_name` and by `bind` keeps the
     /// slots, whichever order the pass reaches them in.
-    ///
-    /// `say v.i` takes `V.I` through `note_compound_name`, which assigns `V.`
-    /// and `I` slots; `do v.i = 1 to 2` then takes the **same** id through
-    /// `bind`, which assigns none. An overwrite there would leave the body's
-    /// every reference to `V.I` resolving its piece by name again, and change
-    /// no answer while doing it -- so nothing that compares output can see
-    /// this, and only the entry says so.
     #[test]
     fn a_control_variable_does_not_take_the_slots_off_a_compound_already_seen() {
         let source = b"say v.i; do v.i = 1 to 2; end";
@@ -1997,16 +1357,6 @@ mod tests {
 
     /// The other build order for one symbol, which rests on the other
     /// filler's rule.
-    ///
-    /// `do v.i = 1 to 2` reaches `bind` first and records a slotless entry;
-    /// the `say v.i` after the loop then reaches `note_compound_name`, whose
-    /// write is **unconditional** and is what replaces that entry with the
-    /// slotted one. Its neighbour above covers the reverse order, where
-    /// `bind`'s `get_or_insert_with` is what preserves the slots -- between
-    /// them the two rules are pinned in the direction each one decides.
-    /// Neither order can be seen from output: both end with a key resolved
-    /// the same way, and a piece with no slot answers identically through
-    /// `read_by_name`.
     #[test]
     fn a_compound_seen_after_the_control_variable_still_gets_its_slots() {
         let source = b"do v.i = 1 to 2; end; say v.i";
@@ -2057,21 +1407,6 @@ mod tests {
 
     /// **A compound tail piece can be bound in `extra` rather than in the
     /// plan, and this is the shape that reaches it.**
-    ///
-    /// `do za.zi = 1 to 3` binds the whole dotted `ZA.ZI` to one slot and
-    /// binds neither `ZA.` nor `ZI`, so the plan has no name `ZI` at all.
-    /// Resolving the piece at run time therefore misses the plan, misses
-    /// `extra`, and grows the frame -- recording `ZI` in `extra`, which is
-    /// where every later pass of the loop finds it. Measured on an
-    /// interpreter instrumented to print each growth: the loop above grows
-    /// `ZI` once and hits `extra` for it on every pass.
-    ///
-    /// That is why a piece's slot is an `Option` and not a `usize`. It is
-    /// also why a precomputed slot cannot shadow an `extra` binding: a slot
-    /// is put on a piece by `slot_for`, which is what puts the name in
-    /// `plan.names`, and `Interp::slot_of` reads `plan.names` before `extra`
-    /// -- so a piece either carries a slot and never consults `extra`, or
-    /// carries none and resolves exactly as it did before slots existed.
     #[test]
     fn a_tail_piece_with_no_plan_slot_binds_in_extra() {
         let mut interp = Interp::new();
@@ -2132,22 +1467,6 @@ mod tests {
 
     /// **A compound's stem can be bound in `extra` rather than in the plan,
     /// and this is the shape that reaches it.**
-    ///
-    /// The stem half of the question its neighbour above answers for a tail
-    /// piece, and the answer is the same: `do za.zi = 1 to 3` binds the whole
-    /// dotted `ZA.ZI` to one slot and binds neither `ZA.` nor `ZI`, so the
-    /// plan has no name `ZA.` at all. The loop's own read therefore misses
-    /// the plan, misses `extra`, and grows the frame -- recording `ZA.` in
-    /// `extra`, which is where every later pass finds it. Measured on an
-    /// interpreter instrumented to print each growth: that loop grows `ZA.`
-    /// once and hits `extra` for it on every pass, alongside `ZI`.
-    ///
-    /// That is why the stem's slot is an `Option` and not a `usize`. It is
-    /// also why a precomputed one cannot shadow an `extra` binding: a slot is
-    /// put on the stem by `slot_for`, which is what puts the name in
-    /// `plan.names`, and `Interp::slot_of` reads `plan.names` before `extra`
-    /// -- so a stem either carries a slot and never consults `extra`, or
-    /// carries none and resolves exactly as it did before slots existed.
     #[test]
     fn a_stem_with_no_plan_slot_binds_in_extra() {
         let mut interp = Interp::new();
@@ -2219,20 +1538,6 @@ mod tests {
     /// **`Plan::bind` records the stem's slot for a stem-shaped name and not
     /// for a compound-shaped one**, and the pair is what makes that a decision
     /// rather than a coincidence of one spelling.
-    ///
-    /// Both go through `bind` -- the assignment target and both `DO` control
-    /// variables -- and the split is recorded for all three. `ZT.` and `ZS.`
-    /// have no stem half distinct from themselves, so the slot bound to the
-    /// symbol *is* the stem's and the entry keeps it. `AA.II` does: `bind`
-    /// binds the whole dotted name to one slot and nothing called `AA.`, so
-    /// its stem carries `None` and `Interp::stem_slot` resolves it at every
-    /// reference.
-    ///
-    /// The numbers are spelled out rather than looked back up out of
-    /// `plan.names`, which is the map `slot_for` wrote them from and would be
-    /// the same map on both sides of the assertion. They are the pass's own,
-    /// in the order it assigned them: `ZT.` for the assignment, `ZS.` for the
-    /// first control variable, `AA.II` whole for the second.
     #[test]
     fn bind_keeps_a_stem_shaped_names_own_slot_as_its_stems() {
         let source = b"zt. = 'v'\ndo zs. = 1 to 2\nnop\nend\ndo aa.ii = 1 to 2\nnop\nend";
@@ -2458,10 +1763,6 @@ mod tests {
     /// **What may change the `TRACE` setting under a running chunk**, which is
     /// the whole of what lets `ir::compile` decide a body's value echoes once
     /// instead of gating each one.
-    ///
-    /// Each blocking route is paired with the nearest body that does *not*
-    /// block, because a guard that answered "may retrace" for everything would
-    /// satisfy the first half alone and cost only the optimisation -- silently.
     #[test]
     fn a_body_that_can_reach_the_trace_setting_is_the_one_that_says_so() {
         let retraces = |source: &[u8]| {

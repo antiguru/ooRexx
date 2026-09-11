@@ -11,70 +11,6 @@
 
 //! Running a Rexx program through the built C++ interpreter, and comparing
 //! its three observable channels against this crate's own.
-//!
-//! **One copy, shared by every differential harness.** `tests/corpus.rs`
-//! wrote this first and was its only user; `tests/builtin_status.rs` needs
-//! the identical locate-and-run-under-a-memory-limit behaviour, and a second
-//! copy of a subprocess wrapper is exactly the "one quantity, two
-//! formatters" shape `src/trace.rs`'s module doc records the cost of. Moving
-//! it here rather than making the second caller reimplement it is what keeps
-//! the memory limit, the missing-binary failure and the DEVIATION 0
-//! normalisation the same on both.
-//!
-//! # The oracle
-//!
-//! `/home/moritz/dev/repos/ooRexx/build/bin/rexx`, hardcoded rather than made
-//! configurable: the entire point of a differential test is "does the
-//! executor agree with *this* build", and an env var that could point it at a
-//! different one would let a stale binary answer for the current oracle with
-//! nothing to notice. If that binary is missing, [`locate`] **fails**,
-//! loudly, rather than skipping: a machine without the oracle reporting "0 of
-//! 0 matching" and going green would be indistinguishable from a machine with
-//! the oracle and a fully-passing corpus, which is exactly the
-//! silent-vacuous-harness shape this project keeps finding in its own
-//! instruments. A failure names the missing path and what to do about it;
-//! nothing here can go green by accident.
-//!
-//! # The memory limit
-//!
-//! Every oracle invocation is wrapped as `sh -c 'ulimit -v <KiB> && exec "$0"
-//! "$@"' <binary> <args...>`, matching the `( ulimit -v 1048576; ... )` this
-//! project runs by hand everywhere else it touches the oracle. Without it the
-//! interpreter requests gigabytes mid-range and is OOM-killed.
-//! `std::process::Command` has no direct rlimit hook; the alternative is an
-//! `unsafe` `pre_exec` closure calling `setrlimit`. The workspace lint is
-//! `unsafe_code = "deny"`, so that is an exception a site may be granted
-//! rather than one it cannot have -- and this one would buy nothing a shell
-//! builtin does not already do for free, which is why it was not asked for.
-//! `rust/CLAUDE.md` states the bar and `rexx-core/tests/unsafe_sites.rs`
-//! records the granted set. Verified directly, outside this test: `sh -c
-//! 'ulimit -v 1048576 && exec "$0" "$@"' python3 -c 'bytearray(2 * 1024 *
-//! 1024 * 1024)'` raises `MemoryError` under the limit and does not without
-//! it, and the same wrapper still runs an ordinary corpus program (`say
-//! 1/3`-shaped `arith_digits.rex`) to rc 0. The `"$0" "$@"` form passes the
-//! binary and its arguments as separate `argv` entries rather than
-//! interpolating them into the shell string, so no path needs escaping.
-//!
-//! # Why the invocation count is a field
-//!
-//! [`Oracle`] counts its own runs, and a caller can assert the total. A
-//! differential harness that classifies names rather than programs -- "if the
-//! name is in this table it is implemented, otherwise it is not" -- satisfies
-//! every set-equality and count assertion a status file can carry while
-//! running no program at all. The one thing such a classifier cannot fake is
-//! having started a subprocess, so the count is kept where the subprocess is
-//! started rather than where the loop is written.
-//!
-//! # stdin is never the terminal
-//!
-//! Both interpreters are given an empty stdin unless a caller supplies bytes
-//! for it ([`Oracle::run_with`]). A probe that read a line from the runner's
-//! own descriptor would otherwise block forever under a test harness, or --
-//! worse -- consume whatever that descriptor happened to hold, which is not
-//! the same on two machines. Supplying bytes explicitly is the only way any
-//! caller here gets a non-empty input, and the executor side of that is
-//! `rexx_exec::ProgramInput`, whose own doc makes the same argument about the
-//! in-process callers.
 
 // This module is pulled in by `mod support;` in more than one integration
 // test binary, and each one links only the part of it that binary uses. A
@@ -114,19 +50,6 @@ pub const ORACLE_DEADLINE: Duration = Duration::from_secs(10);
 
 /// How often [`wait_with_deadline`] polls [`Child::try_wait`] while a run is
 /// still outstanding.
-///
-/// **Why polling rather than `wait-timeout 0.2.0`.** That crate resolves
-/// offline in this machine's cargo cache (`cargo add -p rexx-exec --dry-run
-/// --offline wait-timeout@0.2.0` succeeds, exit 0, against
-/// `~/.cargo/registry/src/.../wait-timeout-0.2.0`), so it was a real option
-/// and not ruled out by the no-network constraint. It buys nothing here: its
-/// `wait_timeout` only replaces the polling loop below, and this harness
-/// still needs its own threads reading `stdout`/`stderr` concurrently so a
-/// chatty program cannot fill one pipe and deadlock the wait -- the same
-/// problem [`write_and_wait`]'s doc names for the write side. A dependency
-/// that would remove one loop and leave the harder half of the mechanism
-/// exactly as it is is not what "buys something" means, so this stays a
-/// plain poll and no dev-dependency is added.
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// Root of the built C++ oracle. See the module doc for why this is
@@ -144,14 +67,6 @@ pub struct Oracle {
 }
 
 /// How an oracle-side run ended.
-///
-/// A pure function of what [`ExitStatus::code`](std::process::ExitStatus::code)
-/// returned and whether [`wait_with_deadline`] is the one that ended the
-/// run, kept as a named type rather than an `i32` exit code:
-/// `status.code().unwrap_or(-1)` gives a signal death and a normal `exit -1`
-/// the identical representation, and a verdict function comparing exit
-/// codes reads the former as a divergence -- a wrong classification, not
-/// merely an imprecise one -- rather than the failure it is.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Termination {
     /// The process ran to completion and returned this status.
@@ -203,14 +118,6 @@ pub struct CppOutcome {
 
 impl CppOutcome {
     /// The process's own exit status.
-    ///
-    /// Panics if the run did not end that way -- every existing differential
-    /// caller in this tree assumes the oracle ran to completion and compares
-    /// bytes on that assumption; a [`did_not_finish`] check belongs before
-    /// this call wherever a timeout or a crash is a live possibility rather
-    /// than a bug. A panic here is what such an assumption gets when it is
-    /// wrong: a structural failure naming what actually happened, rather
-    /// than an ordinary exit code standing in for it.
     pub fn expect_exit_code(&self) -> i32 {
         match self.termination {
             Termination::Exited(code) => code,
@@ -220,10 +127,6 @@ impl CppOutcome {
 }
 
 /// Locates the oracle, or fails the test naming exactly what is missing.
-///
-/// A failure here, not a skip: see the module doc's "The oracle" section for
-/// why a missing binary must never let a differential test go green having
-/// compared nothing.
 pub fn locate() -> Oracle {
     let root = oracle_root();
     let binary = root.join("bin/rexx");
@@ -248,32 +151,12 @@ impl Oracle {
     /// Runs `path` through the oracle under the memory limit, from `path`'s
     /// own directory. See the module doc for the mechanism and how it was
     /// verified.
-    ///
-    /// The working directory matters and is not incidental: a Rexx call to
-    /// an unresolved name searches the current directory for an external
-    /// routine, so a program run from a directory holding unrelated `.rex`
-    /// files can execute one of them instead of failing. Measured on this
-    /// host, the same program reported error 44.1 rc 212 from a directory of
-    /// stale probes and 43.1 rc 213 from an empty one -- a different error, a
-    /// different exit status and a different meaning. Callers that synthesise
-    /// a program are therefore expected to give it a directory of its own.
     pub fn run(&self, path: &Path) -> CppOutcome {
         self.run_with(path, &[], None)
     }
 
     /// [`Oracle::run`], with command-line words after the program path and a
     /// choice of standard input.
-    ///
-    /// `args` are passed as separate `argv` entries, which the `"$0" "$@"`
-    /// wrapper the memory limit already needs forwards for free -- so nothing
-    /// here has to be escaped and the limit and the invocation count stay in
-    /// one place rather than being duplicated for a second entry point.
-    ///
-    /// `stdin` is `None` for the module doc's "stdin is never the terminal"
-    /// default, which stays a literal `Stdio::null()` rather than an
-    /// immediately-closed pipe: `/dev/null` is a seekable regular-ish
-    /// descriptor and a pipe is not, and `run`'s own behaviour must not change
-    /// shape because this method was added beside it.
     pub fn run_with(&self, path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
         let mut command = self.wrapped(path, args);
@@ -305,15 +188,6 @@ impl Oracle {
 
     /// [`Oracle::run_with`], given a **descriptor** for standard input instead
     /// of bytes to feed down a pipe.
-    ///
-    /// For the inputs a byte buffer cannot express: a closed descriptor, or one
-    /// whose `read` fails outright. `Stdio` is taken by value because it is
-    /// consumed by the spawn, so a caller comparing both interpreters builds
-    /// one for each side.
-    ///
-    /// Separate from `run_with` rather than replacing its `Option<&[u8]>`,
-    /// because a caller passing bytes should not have to construct a pipe
-    /// itself and because `Stdio` cannot express "feed these bytes".
     pub fn run_with_stdin(&self, path: &Path, args: &[&str], stdin: Stdio) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
         let mut child = self
@@ -344,10 +218,6 @@ impl Oracle {
 
     /// [`Oracle::run`] with `TZ` set, for a caller asking whether a program's
     /// answer depends on the clock and zone it is read under.
-    ///
-    /// The variable is set on the child alone; this process's own environment
-    /// is untouched, which matters because the in-process executor a
-    /// differential harness compares against reads the same one.
     pub fn run_in_zone(&self, path: &Path, zone: &str) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
         let child = self
@@ -369,12 +239,6 @@ impl Oracle {
     /// [`Oracle::run`] from a chosen working directory and with chosen
     /// environment entries, for a caller asking a question about how the
     /// interpreter finds a *second* file.
-    ///
-    /// The default working directory is the program's own, which is right for
-    /// a corpus program and is exactly what a search-order question has to be
-    /// able to vary: `::REQUIRES` looks in the program's directory and in the
-    /// current one, and those are the same place unless a caller separates
-    /// them. `environment` is applied to the child alone.
     pub fn run_in(&self, path: &Path, cwd: &Path, environment: &[(&str, &str)]) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
         let mut command = self.wrapped(path, &[]);
@@ -398,11 +262,6 @@ impl Oracle {
 
     /// The `sh -c 'ulimit … && exec "$0" "$@"'` invocation, the library path
     /// and the working directory, with standard input left for the caller.
-    ///
-    /// One builder rather than one per entry point: the memory limit is not
-    /// optional on any of them, and a second hand-rolled copy of this wrapper
-    /// is how one gets omitted. It deliberately does **not** touch the
-    /// invocation counter, so that each public method increments exactly once.
     fn wrapped(&self, path: &Path, args: &[&str]) -> Command {
         let mut command = Command::new("sh");
         command
@@ -426,24 +285,6 @@ impl Oracle {
 }
 
 /// Spawns `command`, writes `bytes` to its standard input, closes it, and waits.
-///
-/// **Used by `rexx-run` in `tests/input_oracle.rs`, not by the oracle side
-/// here.** `Oracle::run`, `run_with` and `run_with_stdin` carry a deadline
-/// and need [`wait_with_deadline`]'s poll loop for it, which this function's
-/// single blocking `wait_with_output` cannot express; `rexx-run` run as a
-/// subprocess carries no deadline of its own, so this stays the simpler,
-/// blocking form for its caller in `tests/input_oracle.rs`. Getting it
-/// wrong has one specific failure mode worth naming regardless: writing the
-/// whole buffer before reading any output deadlocks if the buffer is
-/// larger than a pipe and the
-/// program writes enough to fill its own. `wait_with_output` reads both
-/// output pipes concurrently, so the deadlock window is only the write
-/// below; the caller here feeds a handful of lines, far inside one pipe
-/// buffer.
-///
-/// A write failure is ignored deliberately: a program that exits before reading
-/// its input leaves this end broken (`EPIPE`), which is a legitimate outcome to
-/// compare rather than a harness error.
 pub fn write_and_wait(command: &mut Command, bytes: &[u8], path: &Path) -> std::process::Output {
     use std::io::Write;
     let mut child = command
@@ -462,49 +303,6 @@ pub fn write_and_wait(command: &mut Command, bytes: &[u8], path: &Path) -> std::
 
 /// Waits for `child` under [`ORACLE_DEADLINE`], reading both output pipes
 /// concurrently, and returns what it produced along with how it ended.
-///
-/// **Why this exists.** `Command::output` (and `Child::wait_with_output`,
-/// which it calls) blocks on `waitpid` with no deadline of its own -- so a
-/// program that never exits, `do forever; end` among them, hangs whichever
-/// test calls it, and hangs `cargo test --workspace` with it. This polls
-/// [`Child::try_wait`] instead, at [`POLL_INTERVAL`], and calls `kill()` the
-/// moment [`ORACLE_DEADLINE`] has passed.
-///
-/// **Why the reader threads report over a channel rather than being
-/// joined.** `read_to_end` returns only once *every* write end of a pipe is
-/// closed, not once the direct child dies -- and `kill()` above reaches only
-/// the direct child. A program that hands its own descriptor to a process
-/// of its own (`address system 'sleep 3600 &'`, still running when its
-/// parent exits) leaves that process holding the write end, so an
-/// unconditional `join()` here would block for that process's own lifetime
-/// regardless of how the child above was classified: this deadline would
-/// bound the wait and not the read, one gap wide enough for a single
-/// committed probe to hang `cargo test --workspace` for an hour. So each
-/// reader thread sends its buffer down a channel instead of being joined,
-/// and this function gives that channel a bounded, independent budget of
-/// its own -- [`ORACLE_DEADLINE`] again, but measured fresh from here rather
-/// than as whatever the process-wait loop above left over, since a direct
-/// child that exits at once (this shape's whole point) would otherwise
-/// leave the read almost no time to run. **The residual, honestly**: giving
-/// up on a channel does not reap what is blocking it. A grandchild that
-/// still holds the descriptor keeps running, and the reader thread stays
-/// parked in its `read` call for as long as that process does (or forever)
-/// -- a leaked background process and a leaked background thread in this
-/// test binary, not a hung suite. `Child` has no handle on a process it
-/// never spawned, so there is nothing further here to kill.
-///
-/// **Why the reader threads exist at all.** Polling `try_wait` instead of
-/// blocking on `wait` means nothing here is blocked reading `stdout`/`stderr`
-/// while the poll loop runs, so those two pipes are read on their own
-/// threads from the moment the child is spawned -- the same concurrent-read
-/// shape `wait_with_output` already uses internally, needed for the same
-/// reason [`write_and_wait`]'s doc names for the write side: a chatty
-/// program can fill a pipe's kernel buffer and block until something drains
-/// it, and nothing here may be that something only once a wait already
-/// returned.
-///
-/// `child`'s `stdin` is expected to already be closed or fully written by the
-/// caller -- this function only waits and reads the two output pipes.
 fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termination) {
     let mut stdout_pipe = child.stdout.take().expect("stdout was requested as a pipe");
     let mut stderr_pipe = child.stderr.take().expect("stderr was requested as a pipe");
@@ -585,15 +383,6 @@ fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termi
             // channels read empty. Free to do: a non-finish's bytes are a
             // structural failure, never a comparison, so nothing downstream
             // reads them.
-            //
-            // Only synthesised when the process-wait loop above found an
-            // `Exited` -- if it already found a non-finish of its own
-            // (`Signaled` or `TimedOut`), that classification is left alone
-            // rather than overwritten: a child that genuinely died from a
-            // signal must not be relabelled `TimedOut` merely because a
-            // descendant of its also kept a pipe open, since `Signaled`'s
-            // own doc distinguishes a crash from a timeout and a reader
-            // sent to the wrong one learns the wrong thing.
             if matches!(
                 classify_termination(code, deadline_exceeded),
                 Termination::Exited(_)
@@ -614,28 +403,12 @@ fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termi
 
 /// Truncates an in-process exit code to the single byte a real process's
 /// status would carry.
-///
-/// [`rexx_exec::Outcome::exit_code`] can be wider than a byte (`EXIT`'s own
-/// expression result, before `rexx-run`'s `as u8` wraps it for the OS), while
-/// the oracle subprocess's exit status is already a byte by construction --
-/// `std::process::ExitStatus::code` only ever returns what `WEXITSTATUS`
-/// gives. Comparing the two without this would make `exit 256` (in-process
-/// `256`, real process `0`) look like a divergence that `rexx-run`'s own
-/// wrapping already resolves.
 pub fn wrapped_exit_code(code: i32) -> i32 {
     i32::from(code as u8)
 }
 
 /// How `stderr` is compared: [`descriptor_diffs`]'s DEVIATION 0 normalisation
 /// (the default every corpus program gets unless it opts out), or raw bytes.
-///
-/// **Opt-in per program, not a global switch.** Phase 5a's own task brief asks
-/// for a way to "claim a byte-for-byte stderr comparison" -- a stricter claim
-/// than DEVIATION 0 makes -- without disturbing the normalised path everything
-/// else still relies on. `docs/superpowers/plans/phase-4-exclusions.txt`'s
-/// Deviation 0 stays the default and is pinned by
-/// `tests/support/mod.rs`'s own committed tests; this enum only adds a second,
-/// stricter mode a caller can select for one program at a time.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum StderrComparison {
     /// DEVIATION 0: both sides' `stderr` run through [`super::normalize_stderr`]
@@ -650,14 +423,6 @@ pub enum StderrComparison {
 }
 
 /// How `stdout` is compared: byte-for-byte, or as a sorted multiset of lines.
-///
-/// **Opt-in per program, exactly as [`StderrComparison::Multiset`] is.** Raw
-/// is the default and stays the default; the sorted mode exists for a program
-/// whose stdout is a hash-ordered collection's contents, an order neither
-/// interpreter reproduces for the other. `phase-4-exclusions.txt`'s
-/// Deviation 8 is the licence, and the opt-in list there IS the licence: a
-/// sorted comparison hides a genuine ordering defect in any program that
-/// takes it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum StdoutComparison {
     /// Byte-for-byte. The default.
@@ -667,9 +432,6 @@ pub enum StdoutComparison {
 }
 
 /// One side's `stdout` in the form [`StdoutComparison::Multiset`] compares.
-///
-/// The same shape as [`stderr_multiset`], and split the same way, so a
-/// truncated `stdout` still differs.
 pub fn stdout_multiset(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes).into_owned();
     let mut lines: Vec<&str> = text.split('\n').collect();
@@ -679,9 +441,6 @@ pub fn stdout_multiset(bytes: &[u8]) -> String {
 
 /// One side's `stderr` in the form [`StderrComparison::Multiset`] compares,
 /// exposed so the licence has one implementation and one control.
-///
-/// `split` on `\n` rather than `str::lines`, so the trailing empty element a
-/// final newline produces survives and a truncated `stderr` still differs.
 pub fn stderr_multiset(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes).into_owned();
     let mut lines: Vec<&str> = text.split('\n').collect();
@@ -691,29 +450,11 @@ pub fn stderr_multiset(bytes: &[u8]) -> String {
 
 /// Which of the three observable channels disagree, in a fixed order.
 /// Empty means the two interpreters agree.
-///
-/// DEVIATION 0: `stderr` is compared after collapsing each side's own
-/// trace-line indent run, not byte-exact -- see [`super`]'s module doc for
-/// the scope and `docs/superpowers/plans/phase-4-exclusions.txt` for why.
-/// Exit status, stdout, and every other byte of stderr stay byte-exact.
-///
-/// Thin wrapper over [`descriptor_diffs_with`] at [`StderrComparison::Normalized`],
-/// kept as its own function so every existing call site stays untouched.
 pub fn descriptor_diffs(rust: &Outcome, cpp: &CppOutcome) -> Vec<&'static str> {
     descriptor_diffs_with(rust, cpp, StderrComparison::Normalized)
 }
 
 /// Which of the three observable channels disagree, one field each.
-///
-/// **The answer callers should read, and [`descriptor_diffs_with`]'s labels
-/// are a rendering of it rather than a second copy.** A caller that needs to
-/// know *which* channel moved -- a verdict function, say -- reads these
-/// fields; a caller that needs to show a human what moved calls
-/// [`Self::labels`] or the `Vec`-returning wrapper. Recovering a channel by
-/// matching a label's text is the shape this type exists to remove:
-/// `contains` is a positive test, so a renamed or added label is not seen
-/// rather than reported, and a consumer built that way reads one input as
-/// permanently "did not differ" with nothing anywhere to notice.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct DescriptorDiff {
     pub stdout: bool,
@@ -728,11 +469,6 @@ impl DescriptorDiff {
     }
 
     /// The differing channels' names, in a fixed order, for a report.
-    ///
-    /// Derived from the fields on every call, so the rendering cannot claim a
-    /// channel the comparison did not find or omit one it did.
-    /// `labels_name_exactly_the_channels_that_differ` walks the whole cube of
-    /// three booleans and holds the two together.
     pub fn labels(self) -> Vec<&'static str> {
         let mut labels = Vec::new();
         if self.stdout {
@@ -760,10 +496,6 @@ pub fn descriptor_diff_with(
 }
 
 /// [`descriptor_diff_with`] with `stdout`'s comparison chosen as well.
-///
-/// Kept as the one place both channels' modes are applied, so that
-/// Deviation 8's licence has a single implementation the way Deviation 7's
-/// does.
 pub fn descriptor_diff_modes(
     rust: &Outcome,
     cpp: &CppOutcome,
@@ -821,13 +553,6 @@ mod tests {
 
     /// [`DescriptorDiff::labels`] names exactly the channels whose field is
     /// set, over every combination of the three.
-    ///
-    /// **This is what keeps the rendering and the answer one quantity.** The
-    /// labels are what a report prints and what `corpus.rs` tests for
-    /// emptiness; the fields are what a verdict function reads. A label
-    /// dropped from the rendering would make a real divergence look like
-    /// agreement to the emptiness test, and a label added would name a
-    /// channel nothing compared -- neither is visible from either side alone.
     #[test]
     fn labels_name_exactly_the_channels_that_differ() {
         for stdout in [false, true] {
@@ -929,15 +654,6 @@ mod tests {
 
     /// DEVIATION 8's control: [`stdout_multiset`] discards ORDERING and
     /// nothing else.
-    ///
-    /// **The mutation this exists to catch is the licence's own comparison
-    /// function going inert.** Replacing `stdout_multiset`'s body with
-    /// `String::new()` makes every pair below compare equal, so the five
-    /// "still differs" assertions fail; without them the whole corpus binary
-    /// stays green under that mutation, gate included, which is what a
-    /// licence with no control means. DEVIATION 7's
-    /// `the_multiset_comparison_discards_ordering_and_nothing_else` is the
-    /// same control over `stderr_multiset` and this is its counterpart.
     #[test]
     fn the_stdout_multiset_comparison_discards_ordering_and_nothing_else() {
         assert_eq!(
@@ -968,12 +684,6 @@ mod tests {
 
     /// DEVIATION 8's second control: only the multiset mode ignores stdout
     /// ordering, so the licence cannot leak to a program off the list.
-    ///
-    /// **The mutation this exists to catch is `StdoutComparison::Raw`'s arm
-    /// being made to compare multisets.** That widens the licence to every
-    /// corpus program at once and nothing else notices -- measured by the
-    /// review, 462 of 462 still matching. Here it makes the first assertion
-    /// fail.
     #[test]
     fn only_the_multiset_stdout_mode_ignores_ordering() {
         let rust = stdout_outcome(REORDERED);

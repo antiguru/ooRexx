@@ -11,37 +11,6 @@
 
 //! The crate-side watchdog: a run that does not terminate ends as a bounded,
 //! distinguishable outcome instead of running for ever.
-//!
-//! # The subject
-//!
-//! [`SELF_FORWARD`] is the one crate-side non-termination this project has
-//! found. `corpus/oracle-crashes.txt`'s own entry for the self-forward family
-//! carries the mechanism: the replied remainder is queued, and
-//! `Interp::run_deferred_replies` drains a queue each drained body refills, so
-//! no activation depth grows and `MAX_ACTIVATION_DEPTH` never fires. Measured
-//! 2026-09-02 at `6656d5a4f` on the crate alone, both engines, launched
-//! directly with `/proc/<pid>/stat` sampled over four seconds: 400 and 401
-//! user ticks -- 100% of a core -- with `VmRSS` flat at 17,844 kB and 17,828
-//! kB and the `rexx-run` thread parked in `futex_do_wait` joining. **A spin,
-//! not a park.**
-//!
-//! **A valued `reply` does not reproduce it**, and this file's own
-//! `a_valued_reply_ends_the_same_program` is that stated as a case rather than
-//! as a warning: the point of it is that a reader who shortens the program
-//! measures a different thing.
-//!
-//! **This file's programs are run against this crate only, never the
-//! oracle.** The self-forward family is in `corpus/oracle-crashes.txt`
-//! because it takes the oracle's C++ stack out at rc 139.
-//!
-//! # What is under test here and what is not
-//!
-//! Layer 1 -- the clause-boundary deadline -- and layer 2 -- `watchdog`'s
-//! bound on the wait -- have different reach, and that module's own doc says
-//! which catches what. Nothing here proves layer 2 against a run layer 1
-//! genuinely cannot see: no such crate-side program is known, so layer 2 is
-//! reached below by *withholding* a deadline rather than by a program that
-//! outruns one.
 
 mod watchdog;
 
@@ -54,8 +23,6 @@ use rexx_exec::{DEADLINE_EXIT, DEADLINE_REPORT, Invocation, Outcome, run_program
 const PATH: &str = "<deadline test>";
 
 /// A `REPLY` whose remainder forwards back into the method it is in.
-///
-/// The bare `reply` is load-bearing -- see this module's doc.
 const SELF_FORWARD: &[u8] =
     b"o = .K~new\no~m\nsay 'returned'\n::class K\n::method m\n  reply\n  forward message('M')\n";
 
@@ -71,13 +38,6 @@ fn under_deadline(text: &[u8], limit: Duration) -> Outcome {
 
 /// The witness: the self-forward ends at its deadline instead of running for
 /// ever, on both engines, and says so.
-///
-/// The three descriptors are asserted separately, and `stdout` is the one
-/// that says where the run got to: `say 'returned'` **does** run. `o~m`
-/// answers at the `REPLY`, the main body finishes normally and prints, and
-/// only then does `execute` reach the drain that never empties. So this
-/// program's non-termination is entirely after its own last clause, which is
-/// why a status alone would not have located it.
 #[test]
 fn the_self_forward_ends_at_its_deadline_on_both_engines() {
     let started = Instant::now();
@@ -109,10 +69,6 @@ fn the_self_forward_ends_at_its_deadline_on_both_engines() {
 /// The neighbour that says which half of the program is doing the work: the
 /// same shape with a *valued* `reply` terminates on its own, well inside a
 /// deadline it therefore never reaches.
-///
-/// Measured by the controller before this file existed: 0.03 s. Kept as a
-/// case because a reader shortening [`SELF_FORWARD`] to something easier to
-/// read is exactly how the wrong reading was reached once already.
 #[test]
 fn a_valued_reply_ends_the_same_program() {
     let text = b"o = .K~new\no~m\nsay 'returned'\n::class K\n::method m\n  reply 1\n  forward message('M')\n";
@@ -132,11 +88,6 @@ fn a_valued_reply_ends_the_same_program() {
 }
 
 /// A deadline that is never reached changes nothing, byte for byte.
-///
-/// The pair is the point: the same programs run with and without a deadline
-/// give identical descriptors, so the check cannot be perturbing a run that
-/// finishes inside it. Without this, an implementation that reported every
-/// run as abandoned would still pass the witness above.
 #[test]
 fn a_deadline_a_run_finishes_inside_changes_nothing() {
     let programs: &[&[u8]] = &[
@@ -160,13 +111,6 @@ fn a_deadline_a_run_finishes_inside_changes_nothing() {
 
 /// The deadline is not a Rexx condition: no trap takes it, and the handler
 /// that would have caught a real one never runs.
-///
-/// Both trap forms, because they reach a failure by different routes --
-/// `SIGNAL ON` through `Interp::offer_to_trap`, which declines everything
-/// that is not a raised condition, and `CALL ON` through the pending-trap
-/// queue, which a failure never enters at all. `ANY` rather than a named
-/// condition so that nothing about which condition it is can be the reason it
-/// does not fire.
 #[test]
 fn no_trap_catches_the_deadline() {
     let programs: &[&[u8]] = &[
@@ -189,12 +133,6 @@ fn no_trap_catches_the_deadline() {
 
 /// The report names no error number and no condition, so nothing reading
 /// stderr can classify it as a raised condition.
-///
-/// A `Raised`'s own report echoes the failing clause and then names an
-/// `Error <major>`; this echoes nothing and names no number at all. The
-/// contrast is asserted against a program that really does raise, so the test
-/// is comparing two live renderings rather than one rendering against a
-/// description of the other.
 #[test]
 fn the_report_is_not_a_condition() {
     let deadline = under_deadline(b"do forever; nop; end\n", SHORT);
@@ -216,12 +154,6 @@ fn the_report_is_not_a_condition() {
 
 /// A run that had already written to stderr is still read as one that did not
 /// finish.
-///
-/// `execute` appends its report **after** whatever the program wrote, so the
-/// deadline line is at the end and not the start. The control is in the test:
-/// the trace lines have to be there, or the two reads would agree for the
-/// wrong reason. `trace o` bounds what the loop writes -- `trace i` left on
-/// over `do forever` fills memory as fast as the machine can print.
 #[test]
 fn a_run_that_traced_before_its_deadline_still_reads_as_unfinished() {
     let outcome = under_deadline(b"trace i\nnop\ntrace o\ndo forever; nop; end\n", SHORT);
@@ -238,13 +170,6 @@ fn a_run_that_traced_before_its_deadline_still_reads_as_unfinished() {
 
 /// A deadline fires even where the failure is on a path that discards
 /// failures on purpose.
-///
-/// `Interp::run_one_uninit` throws away a raised condition and an `EXIT`
-/// because the oracle's own dispatcher does, so a finalizer that outlives the
-/// deadline is the one place a run could have been abandoned and still
-/// reported its main body's status. The control is the same program with a
-/// finalizer that returns: it exits 0 and prints, so what this measures is
-/// the loop and not the `UNINIT` machinery being broken.
 #[test]
 fn a_finalizer_that_outlives_the_deadline_is_still_reported() {
     let looping = b"o = .K~new\ndrop o\ncall gc 'Force'\nsay 'after'\n\
@@ -269,18 +194,6 @@ fn a_finalizer_that_outlives_the_deadline_is_still_reported() {
 }
 
 /// Every shape of unbounded run this crate can be made to take, bounded.
-///
-/// **The table is the exhaustiveness claim, made checkable.** A deadline that
-/// is honoured somewhere other than at every clause -- at a loop's own
-/// advance, at a `SIGNAL` transfer, at the reply drain -- rests on "every
-/// cycle passes through one of these sites", which is an assertion about this
-/// interpreter's control flow and not something a type can carry. This runs
-/// the shapes instead. It is worth having under the clause-boundary check
-/// too, where it is cheap and says what the bound is for.
-///
-/// A row that hangs does not fail this test, it hangs it. That is what
-/// `watchdog::run_bounded_with`'s outer bound is doing here: the row comes
-/// back either way, and the assertion is on which.
 #[test]
 fn every_unbounded_shape_this_crate_can_take_is_bounded() {
     let shapes: &[(&str, &[u8])] = &[
@@ -369,15 +282,6 @@ fn every_unbounded_shape_this_crate_can_take_is_bounded() {
 
 /// Layer 2: a run layer 1 is not watching still comes back, and the answer
 /// says which layer produced it.
-///
-/// **This is not a run layer 1 could not see** -- it is the self-forward with
-/// no deadline set, which is the only way to reach this arm in bounded time,
-/// since no crate-side program is known that layer 1 cannot see. Layer 2 is
-/// therefore proved as a mechanism and remains untested against a real
-/// subject of its own; `watchdog`'s module doc says so in the same terms.
-///
-/// The thread this abandons keeps running for the rest of this binary's life,
-/// at 100% of a core.
 #[test]
 fn layer_two_returns_for_a_run_layer_one_is_not_watching() {
     let started = Instant::now();
@@ -400,16 +304,6 @@ fn layer_two_returns_for_a_run_layer_one_is_not_watching() {
 }
 
 /// A sweep with the self-forward in it reddens that one row and completes.
-///
-/// The whole point of the two layers, and the shape a real gate has: the
-/// population is run through `rayon`'s `collect`, which does not finish until
-/// every element does. The two neighbours are what says the sweep completed
-/// rather than merely returning -- their answers are asserted, so a `collect`
-/// that gave up would fail here rather than pass with one row missing.
-///
-/// `run_bounded_with` at [`SHORT`] rather than `run_bounded` at
-/// `watchdog::ROW_DEADLINE`, so that this costs half a second rather than a
-/// minute; the durations are the only difference between them.
 #[test]
 fn a_sweep_containing_the_self_forward_reddens_one_row_and_completes() {
     use rayon::prelude::*;

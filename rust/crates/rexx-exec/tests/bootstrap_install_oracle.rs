@@ -11,47 +11,6 @@
 
 //! The directive halves of `CoreClasses.orx` and `StreamClasses.orx`,
 //! installed and then questioned, against the oracle.
-//!
-//! # Why a synthesised program and not a corpus row
-//!
-//! `corpus/` holds programs; these two files are read-only upstream sources
-//! that this repository tracks under `interpreter/`, and neither is a program
-//! a corpus row could name. `rexx-lib` embeds their bytes with a sha256 pin,
-//! and this file composes the two directive sections into one program that
-//! both interpreters can run. Nothing here holds a copy of what the files
-//! say -- the program is built from the embedded bytes on every run, so an
-//! upstream change reaches the comparison rather than being asserted against
-//! a stale transcript.
-//!
-//! # What the composed program is
-//!
-//! Each file's own executable prologue is dropped and replaced by the
-//! questions below, because **the prologue needs an argument neither
-//! interpreter supplies to a program run from the command line**: measured,
-//! `CoreClasses.orx` run directly is rc 159 on both, `Object "REXXPACKAGE"
-//! does not understand message "ADDCLASS"`, since `use arg rexxPackage` with
-//! nothing supplied leaves the symbol as its own name. What is left is every
-//! `::` directive of both files, which is what installs.
-//!
-//! # What it can and cannot see
-//!
-//! It sees the install: every `::CLASS`, `::METHOD`, `::ATTRIBUTE`,
-//! `::CONSTANT` and `::ANNOTATE` in both files, the `::METHOD ... EXTERNAL`
-//! binds, the `::CONSTANT` expressions that run at install time, and the
-//! `ACTIVATE` pass. `.TraceObject~option` is the question that separates a
-//! run that made that last pass from one that did not, because
-//! `TraceObject`'s own class-side `ACTIVATE` assigns it -- and the line
-//! before the assignment is `self~activate:super`, a message scope override,
-//! so this question also fails if that send stops working.
-//!
-//! **It cannot see the prologue**, which is the other half of the bootstrap:
-//! `.queue~inherit(.OrderedCollection)`, `.supplier~inheritInstanceMethods`
-//! and `.String~defineClassMethod` all run there. So the questions below are
-//! deliberately restricted to state this program's own directives decide, or
-//! that both sides agree on for their own reasons. Measured, and the reason
-//! for the restriction: `.Queue~superClasses` is `The Object class` and `The
-//! OrderedCollection class` on the oracle, whose own image ran that prologue
-//! at start, and `The Object class` here, which has not.
 
 mod support;
 
@@ -104,11 +63,6 @@ fn fresh_run_dir() -> PathBuf {
 
 /// One embedded file's directive section: everything from its first line
 /// beginning `::` onwards.
-///
-/// A file's prologue runs before its first directive and cannot contain one,
-/// so the first such line is where the executable half ends. What sits
-/// between the prologue's `exit` and that line is comment banner text, which
-/// this drops along with the prologue.
 fn directives_of(program: &rexx_lib::Program) -> &str {
     let text = std::str::from_utf8(program.source)
         .unwrap_or_else(|e| panic!("{} is not UTF-8: {e}", program.name));
@@ -137,26 +91,6 @@ fn composed_program() -> String {
 
 /// Both files' directives install, and the questions answer what the oracle
 /// answers on all three descriptors.
-///
-/// **What a degenerate implementation would do here**, since that is the test
-/// this crate's own Method rules ask of an assertion: a build that refused
-/// any directive in either file would exit 120 with a loud message on stderr,
-/// which no oracle run produces; a build that installed everything and
-/// skipped the `ACTIVATE` pass prints `OPTION` for the first question where
-/// the oracle prints `N`; reversing that pass, swapping the two arms of
-/// `Interp::receiver_has_scope`, and dropping `DefineClassMethod` from
-/// `native_classes`' `REMOVED_BY_IMAGE_SAVE` each redden something. All four
-/// were applied and run.
-///
-/// **None of the four is caught here and nowhere else**, and saying otherwise
-/// would be the "can fail is not adds coverage" claim `rust/CLAUDE.md`
-/// forbids: measured with this file moved out of `tests/`, the corpus
-/// differential catches the first three and
-/// `rexx-classes/tests/native_classes_wiring.rs` catches the fourth. What
-/// this file does that nothing else in the tree does is run **the two
-/// upstream files' own bytes** through both interpreters; every other
-/// instrument for the same properties runs a program written here or compares
-/// this crate against a second copy of itself.
 #[test]
 fn the_two_library_files_install_and_answer_what_the_oracle_answers() {
     if !gate_mode() {
@@ -214,11 +148,6 @@ fn the_two_library_files_install_and_answer_what_the_oracle_answers() {
 
 /// The composed program really is both files' directives and neither file's
 /// prologue.
-///
-/// Without this, a `directives_of` that answered the empty string would leave
-/// the differential above comparing two runs of the questions alone -- which
-/// would still pass on the oracle, whose image already answers every one of
-/// them, and would have installed nothing.
 #[test]
 fn the_composed_program_carries_both_files_directives_and_neither_prologue() {
     let text = composed_program();

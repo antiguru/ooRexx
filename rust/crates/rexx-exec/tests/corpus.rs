@@ -14,186 +14,6 @@
 //! both interpreters, compared byte for byte on stdout and exit code, and on
 //! stderr up to DEVIATION 0's own narrow indent normalisation (see the
 //! "DEVIATION 0" section below).
-//!
-//! **Every phase's subset file is read, not only the current phase's.** A
-//! construct a later phase implements cannot have its witness in
-//! `phase-4a.txt`, whose own header excludes those constructs by definition,
-//! so each phase adds a file and this runner unions them. 4b's Task 1 is the
-//! first task to make that true here; before it, this call site was the one
-//! `read_subset` caller of four still pinned to a single file, which would
-//! have left a 4b witness enumerated by `coverage.rs` and never actually run
-//! against the oracle by anything.
-//!
-//! **That is exactly what had happened again to `phase-4c.txt`.** It was
-//! added, `coverage.rs` read it, and this runner did not -- so four programs
-//! written as differential witnesses were only ever being *parsed*, and a
-//! criterion-1 witness that nothing runs is a witness that cannot fail.
-//! Adding the file here found no divergence in any of them, which is the
-//! outcome that makes it a correction rather than a change of behaviour.
-//!
-//! **This is a repeatable progress instrument, not a once-at-the-end gate.**
-//! It replaces the hand-run shell loop 4a used after every task (3 of 26
-//! programs matching before that phase's Task 9, 9 of 26 after -- a dated
-//! record of 4a, not a live figure), and every task that lands should be able
-//! to see its own effect by re-running it. See
-//! [`REPORT vs STRICT`](#report-vs-strict) below for how the same run serves
-//! both that daily use and a phase gate.
-//!
-//! The forward reference this paragraph used to carry -- "each of the two
-//! tasks still to land" -- was 4a's plan state and outlived it (review finding
-//! M2). Phase-relative counts of remaining tasks do not belong in a file that
-//! outlives the phase; the subset size does not either, which is why every
-//! figure this runner reports is computed from `subset.len()` at run time.
-//!
-//! # The oracle, the memory limit, and the three-descriptor comparison
-//!
-//! All three live in `tests/support/oracle.rs`, whose own module doc carries
-//! them in full: why the oracle path is hardcoded, why a missing binary is a
-//! loud failure rather than a skip, how the `ulimit -v` wrapper is built and
-//! how it was verified, and what [`support::oracle::descriptor_diffs`]
-//! compares. This file wrote them first and was their only user;
-//! `tests/builtin_status.rs` needs the identical behaviour, and one copy is
-//! what keeps the two harnesses' results comparable.
-//!
-//! # Owner grouping
-//!
-//! Every mismatch today is a *clean loud failure*: nothing produces a wrong
-//! answer, an unimplemented construct exits [`rexx_exec::NOT_IMPLEMENTED_EXIT`]
-//! with `rexx-exec: X is not implemented` on stderr, naming the construct.
-//! This is exactly the string the hand-run shell loop grepped for to
-//! partition failures by which task owns them, and doing the same thing here
-//! is what turns "17 mismatches" into an actionable list rather than a wall of
-//! diffs. A mismatch whose stderr does not have that shape is a genuine
-//! divergence rather than a gap, and is reported as `UNCLASSIFIED` with a
-//! bounded excerpt of all three channels, since that is the case a reader
-//! cannot otherwise diagnose from the summary alone.
-//!
-//! # REPORT vs STRICT
-//!
-//! [`GATE_ENV`] chosen as the switch, because that is what this phase's own
-//! ledger calls the distinction ("the strict switch, so it runs in report
-//! mode with a flag the gate flips"): unset or empty or `"0"` is REPORT mode,
-//! anything else is STRICT.
-//!
-//! REPORT (the default) always exits 0, however many programs disagree with
-//! the oracle, and prints the count, the full mismatch list and the
-//! owner breakdown. **The summary line itself carries the caveat that this is
-//! not the gate**, top and bottom, rather than leaving it to a doc comment
-//! nobody reads at the moment they see green: a `cargo test` line that means
-//! "17 of 26 disagree" is exactly the failure this project keeps finding in
-//! its own harnesses, and the worst place to introduce it is the instrument
-//! that measures the others.
-//!
-//! **The report does not rely on `--nocapture`.** `println!`/`eprintln!`
-//! inside a `#[test]` write through a *thread-local* sink libtest swaps in for
-//! the duration of the test, not through the process's real file descriptor
-//! 2 -- so a passing test's own prints are invisible under a plain `cargo
-//! test`, `--nocapture` or not, is a flag the reader has to already know to
-//! reach for, and documenting that flag as the answer is the same
-//! reader-has-to-already-know-to-ask shape as the silent pass this report
-//! exists to prevent. `emit_uncaptured` instead pipes the finished report into
-//! a `cat >&2` child process whose *stderr is inherited*: a child's inherited
-//! descriptor is dup'd from this process's own real fd 2 at spawn time, which
-//! the thread-local swap never touches, so the write reaches the terminal (or
-//! whatever `cargo test`'s own stderr is connected to) regardless of capture
-//! state. Verified, not assumed: a throwaway two-test crate
-//! (`a_captured_println_is_invisible` / `a_subprocess_write_bypasses_capture`)
-//! run under plain `cargo test`, no flags, showed the `println!` line nowhere
-//! in the terminal and the subprocess-written line printed inline between the
-//! two `test ... ok` lines.
-//!
-//! `demonstrate_the_report_reaches_a_plain_cargo_test` below is that same
-//! proof, kept in the tree rather than left as a one-off experiment. It cannot
-//! observe its *own* real fd 2 from inside itself with no `unsafe` (the only
-//! way to intercept a process's own inherited descriptor is a `dup2`-shaped
-//! syscall), so it instead re-executes **this same test binary**
-//! (`std::env::current_exe`) as a child, asking libtest for exactly one
-//! `#[ignore]`d probe test and *not* passing `--nocapture` -- the identical
-//! invocation `cargo test` itself uses on every test binary in the workspace.
-//! Piping that child's stdout and stderr back (`Command::output`) is legitimate
-//! here in a way it would not be for the real report: this process is the
-//! child's *parent*, so reading its pipes is not "capturing your own tests'
-//! output" but observing a separate process from outside, exactly what a
-//! human at a terminal does. Finding the probe's marker in that captured
-//! output demonstrates the mechanism survives an ordinary, flagless test run;
-//! not finding it would mean this file's whole premise is wrong.
-//!
-//! STRICT (`REXX_CORPUS_GATE=1 cargo test ...`) runs the identical comparison
-//! and fails the test if any program mismatches. The report is written the
-//! same way either way, so a gate failure and a report-mode run are equally
-//! visible; the assertion failure is what turns the mismatch into a non-zero
-//! exit, not what makes it legible.
-//!
-//! # DEVIATION 0: leading indentation on stderr is normalised
-//!
-//! The stderr comparison inside `support::oracle::descriptor_diffs` runs
-//! both sides through `support::normalize_stderr` first
-//! (`tests/support/mod.rs` has the full scope statement and its own
-//! negative-control tests). Exit status,
-//! stdout, and every other byte of stderr -- the clause text, the line
-//! numbers, a value line's own content, and the presence, absence and
-//! order of every line -- stay byte-exact; only the run of spaces between
-//! a trace line's own 3-byte marker and its content is collapsed. See
-//! `docs/superpowers/plans/phase-4-exclusions.txt`'s DEVIATION 0 for why:
-//! in short, that run is driven by a mutable counter the oracle itself
-//! restores inconsistently on two different loop-exit paths
-//! (`BaseDoInstruction.cpp:161` vs `:377`), so matching it byte-for-byte
-//! proves nothing the clause-sequence comparison does not already prove.
-//!
-//! **What still fails if indentation breaks in some other way.** DEVIATION
-//! 0 requires a small set of pinned witnesses, at nesting depth <= 3 with
-//! no completed loop, that are compared *without* normalisation. Those
-//! already existed before this comparison was written, as `rexx-exec/src/
-//! run/tests.rs` unit tests asserting an exact `FailureSite`/trace indent --
-//! normalisation cannot reach a unit test, since it lives only in this
-//! file's and `trace_oracle.rs`'s own comparison functions, so pinning
-//! them here is a matter of naming them rather than adding anything new:
-//! `one_two_and_three_enclosing_dos_indent_by_two_four_and_six`,
-//! `the_corrected_28x_indent_rule_matches_all_fourteen_probed_shapes`, and
-//! `an_absorbed_whencases_escaping_false_branch_reports_end_at_its_own_
-//! residual_indent`. **Not** `the_indent_after_a_loop_has_already_exited_
-//! is_not_left_over_from_it`: that one runs at top level, where the
-//! oracle's counter is already clamped at 0 and the correct and incorrect
-//! models agree, so it is not a witness for the gap this deviation carves
-//! out even though its own name suggests it is.
-//!
-//! **None of the three pinned witnesses demonstrates the counter defect
-//! itself** (review round 1, I2) -- that requires a completed loop pass
-//! followed by a failing control test, and all three raise on a *first*
-//! iteration, before any pass completes and before the loop the failure
-//! sits inside ever ends. They are correct pinned witnesses for lexical
-//! nesting depth, which is what DEVIATION 0's own "must still fail"
-//! requirement asks for; nothing pinned here exercises the counter gap
-//! itself, and no claim to the contrary should be read into their names.
-//!
-//! # Opting a program out of DEVIATION 0
-//!
-//! [`RAW_STDERR_COMPARISON`] names corpus programs compared byte-for-byte on
-//! `stderr`, through `support::oracle::StderrComparison::Raw`, rather than
-//! through DEVIATION 0's normalisation. A program belongs here when the run
-//! of spaces normalisation collapses is the thing the program exists to
-//! witness, and its own entry says which indent that is.
-//!
-//! # DEVIATION 7: one program's stderr is compared as a multiset of lines
-//!
-//! [`CONCURRENTLY_TRACED`] names the programs whose `stderr` is sorted on both
-//! sides before comparison, through `StderrComparison::Multiset`, because two
-//! threads write their trace lines to one descriptor and the order they reach
-//! it is not a specified observable. [`stderr_mode`] is where a program's
-//! comparison is chosen, and the scope, the controls and what the licence does
-//! **not** cover are `phase-4-exclusions.txt`'s Deviation 7.
-//!
-//! # DEVIATION 8: some programs' stdout is compared as a multiset of lines
-//!
-//! [`HASH_ORDERED_STDOUT`] names the programs whose `stdout` is sorted on both
-//! sides before comparison, through `StdoutComparison::Multiset`, because what
-//! they print is a hash-ordered collection's contents and neither
-//! interpreter's bucket order reproduces the other's. [`stdout_mode`] is where
-//! a program's comparison is chosen; the scope, the control and what the
-//! licence does **not** cover are `phase-4-exclusions.txt`'s Deviation 8.
-//! The list IS the licence: a sorted comparison hides a genuine ordering
-//! defect in any program that takes it, so an entry that does not need it is
-//! a red test rather than a harmless one.
 
 mod support;
 mod watchdog;
@@ -228,13 +48,6 @@ fn gate_mode() -> bool {
 /// same corpus program. Neither the list nor its count is assumed anywhere
 /// else in this file; both come from the files themselves, so the subset can
 /// grow or shrink with no change here.
-///
-/// **Task 0's Step 4.** Was a single-file reader (`&Path`); widened to `&[&Path]`
-/// so a later task's own subset file can run *alongside* `phase-4a.txt`
-/// rather than replacing it -- see `coverage.rs`'s own copy of this function
-/// for the fuller argument. The caller below passes every phase subset file
-/// there is: `phase-4a.txt` and `phase-4b.txt` since 4b's Task 1, and
-/// `phase-4c.txt` since 4c's Task 9, which found it had been left out.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();
@@ -254,13 +67,6 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
 }
 
 /// Runs the executor in process, on `path`.
-///
-/// `path` is passed through as-is, already canonicalised by the caller: a
-/// raised condition's report names the program by its absolute,
-/// dot-normalised path, the oracle prints exactly that, and `rexx-run`'s own
-/// `std::fs::canonicalize` is what makes the two agree. Passing anything else
-/// here would make every raising program mismatch on stderr regardless of
-/// whether the executor is right.
 fn run_rust(path: &Path) -> Outcome {
     let text = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let path_str = path
@@ -405,36 +211,15 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
 /// Corpus programs whose `stderr` is compared as a multiset of lines, per
 /// DEVIATION 7: `REPLY` under a package trace setting has two threads writing
 /// trace lines and their interleaving is not a specified observable.
-///
-/// Measured 2026-09-03 in `tests/directive_options.rs`, whose
-/// `the_licensed_list_names_exactly_the_programs_that_can_trace_from_two_threads`
-/// holds the same scope against the family's sources: thirty oracle runs of
-/// this program answered seven distinct stderr orderings, all the same
-/// multiset, while both crate engines answered one ordering thirty times.
 const CONCURRENTLY_TRACED: &[&str] = &["lang/directive_options_trace_reply.rex"];
 
 /// Corpus programs whose `stdout` is compared as a multiset of lines, per
 /// DEVIATION 8: what they print is the contents of a hash-ordered
 /// `StringTable`, whose iteration order is a bucket walk on both sides and
 /// reproduces on neither.
-///
-/// **Each entry owes a reason, and the entries here share one**: a `Package`
-/// table reader answers a fresh `StringTable`, and `DO OVER` on it iterates
-/// that table's own order. Printing only a count instead would pass while the
-/// members differed, which is the weaker witness this licence exists to
-/// avoid.
-///
-/// `the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`
-/// holds the list in both directions: every entry's raw stdout must actually
-/// differ, so a program that does not need the licence cannot sit here, and
-/// its sorted stdout must agree, so a real content difference is not hidden
-/// by it.
 const HASH_ORDERED_STDOUT: &[&str] = &["lang/package_writes.rex"];
 
 /// The `stdout` comparison one corpus entry gets.
-///
-/// Byte-for-byte is the default and every program not named in
-/// [`HASH_ORDERED_STDOUT`] keeps it.
 fn stdout_mode(rel_path: &str) -> StdoutComparison {
     if HASH_ORDERED_STDOUT.contains(&rel_path) {
         StdoutComparison::Multiset
@@ -444,10 +229,6 @@ fn stdout_mode(rel_path: &str) -> StdoutComparison {
 }
 
 /// The `stderr` comparison one corpus entry gets, and no entry may ask for two.
-///
-/// DEVIATION 0's normalisation is the default; [`RAW_STDERR_COMPARISON`] is
-/// stricter and [`CONCURRENTLY_TRACED`] is weaker, so a path on both lists
-/// would silently take whichever arm is written first.
 fn stderr_mode(rel_path: &str) -> StderrComparison {
     match (
         RAW_STDERR_COMPARISON.contains(&rel_path),
@@ -465,18 +246,6 @@ fn stderr_mode(rel_path: &str) -> StderrComparison {
 
 /// Every entry in [`RAW_STDERR_COMPARISON`], [`CONCURRENTLY_TRACED`] and
 /// [`HASH_ORDERED_STDOUT`] is a line some phase subset file actually names.
-///
-/// **[`stderr_mode`] matches by exact string equality against `rel_path`**,
-/// and nothing else checks that an entry corresponds to a real subset
-/// program. A path with any spelling difference from its subset line -- a
-/// typo, a missing `lang/` prefix, a stray trailing character -- would
-/// silently fail that equality and fall to the normalised comparison it
-/// never asked for: a green run reporting a claim that was never actually
-/// checked. Without this test, only a human reading the diff would catch
-/// that.
-///
-/// **Both lists hold entries, so this test is load-bearing rather than an
-/// iteration over zero rows.**
 #[test]
 fn every_opted_in_comparison_names_a_program_the_subset_runs() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
@@ -502,25 +271,6 @@ fn every_opted_in_comparison_names_a_program_the_subset_runs() {
 }
 
 /// [`stdout_mode`] answers the multiset mode for exactly the licensed list.
-///
-/// **The other direction of the licence.**
-/// [`the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`]
-/// says every entry needs the relaxation; this says nothing else gets it. The
-/// two together are what "the opt-in list IS the licence" means, and neither
-/// half implies the other: a `stdout_mode` that answered `Multiset` for every
-/// path would satisfy the first test and fail this one.
-///
-/// It walks the whole subset rather than a chosen few, and asserts the list is
-/// neither empty nor the whole of it, so this cannot pass over nothing.
-///
-/// **What it CANNOT catch, stated so nobody mistakes it for the guard on the
-/// list.** [`stdout_mode`]'s body *is* [`HASH_ORDERED_STDOUT`], so the equality
-/// this asserts is a tautology with respect to the list's contents: adding a
-/// path to the list passes here, because both sides of the comparison move
-/// together. What catches a list that has grown without earning it is
-/// [`the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`],
-/// whose raw-stdout half fails for any entry that did not need the relaxation.
-/// This test's subject is the *selection function*, not the list.
 #[test]
 fn the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
@@ -547,17 +297,6 @@ fn the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list() {
 
 /// DEVIATION 8's own control: for every program on [`HASH_ORDERED_STDOUT`],
 /// the two sides' `stdout` **differs** raw and **agrees** sorted.
-///
-/// **Both halves are the licence.** The sorted half is what the entry claims;
-/// the raw half is what stops the list growing to cover a program that never
-/// needed it -- a relaxation nothing has to earn is one nobody will remove.
-/// A program whose raw stdout already agrees belongs on neither list, and a
-/// program whose sorted stdout differs has a content defect the licence does
-/// not cover and must not hide.
-///
-/// **And it does not license asserting nothing.** A sorted comparison of two
-/// empty strings agrees with anything, so a listed program whose oracle stdout
-/// is empty is a failure naming that, exactly as Deviation 7's guard is.
 #[test]
 fn the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else() {
     let oracle = support::oracle::locate();
@@ -750,20 +489,6 @@ fn build_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: boo
 /// terminal under a plain `cargo test` with no `--nocapture` -- see the
 /// module doc's "REPORT vs STRICT" section for why `println!`/`eprintln!`
 /// cannot do this from inside a `#[test]`.
-///
-/// `sh -c 'cat >&2'` rather than `Command::new("cat")` directly: `cat`'s own
-/// stdout has to land on *this process's* real fd 2, and redirecting a
-/// child's stdout to a specific existing descriptor is exactly what a shell's
-/// `>&2` does; reaching for the same effect through `std::process::Stdio`
-/// alone would need a raw-fd constructor, which is `unsafe`. The workspace
-/// lint is `unsafe_code = "deny"`, so that is a grantable exception rather
-/// than a closed door, and it is not worth granting for something a shell
-/// builtin already does -- the bar is `rust/CLAUDE.md`'s and the granted set
-/// is asserted by `rexx-core/tests/unsafe_sites.rs`. Setting the `Command`'s
-/// own `stderr` to `Stdio::inherit()` is what makes that `>&2` resolve to the
-/// *real* fd 2:
-/// a child's inherited descriptor is dup'd from the parent's at spawn time,
-/// upstream of libtest's thread-local capture.
 fn emit_uncaptured(text: &str) {
     let mut child = Command::new("sh")
         .arg("-c")
@@ -789,50 +514,6 @@ fn emit_uncaptured(text: &str) {
 
 /// The runner itself. See the module doc for REPORT vs STRICT and how the
 /// oracle and the memory limit are handled.
-///
-/// Expected result at commit `e0e57825`: 9 of 26 matching, the
-/// remaining 17 partitioned as `DO` 10, `TRACE` 4, `SELECT` 2, `IF` 1 --
-/// reproduced with a standalone shell loop before this test was written.
-/// Tasks implementing `IF` and `SELECT` may move this number out from under a
-/// later run; that is expected, not a regression, and the fix is to re-run
-/// and record which commit was measured, not to adjust this comment to match
-/// a stale number.
-///
-/// Expected result at commit `a9420630`: **30 of 30 matching**, the subset
-/// being `phase-4a.txt`'s 29 programs plus `phase-4b.txt`'s one. Added as a
-/// second dated row rather than replacing the first, which is what the
-/// paragraph above asks for -- 4b's Task 1 re-ran and had a number, and
-/// recording it is the instruction, not merely leaving the older row intact
-/// (review's ruling on the dated figure).
-///
-/// Expected result at commit `27606888`: **47 of 47 matching**, the subset
-/// being those 42 plus `phase-4c.txt`'s five, which this call site had not
-/// been reading. All five matched on the first run, so the widening moved no
-/// number that was standing on anything.
-///
-/// Expected result at commit `1c519dfc`: **50 of 50 matching**, the subset
-/// being `phase-4a.txt`'s 30, `phase-4b.txt`'s 12 and `phase-4c.txt`'s 8. No
-/// call site moved between this row and the one above it; what moved is
-/// `phase-4c.txt`, which three later 4c tasks added programs to.
-///
-/// **The commit named is the one the number is true *at*, not the one the
-/// change was made against.** An earlier version of this row named
-/// `2070cd9d`, this change's parent, where the harness still read two files
-/// and reported 42 -- so the row was false as written, in the one way a dated
-/// row exists to prevent.
-/// The subset files this runner reads, in union order.
-///
-/// A named constant rather than a literal at the call site so that
-/// [`the_differential_reads_every_phase_subset_file`] can assert it against
-/// the corpus directory itself.
-///
-/// **Nothing else here can see a file dropped from this list.** The gate's own
-/// assertion is over `mismatches`, and a subset that lost a whole phase has no
-/// mismatches to report: measured, with `phase-4c.txt` removed, both plain
-/// mode and `REXX_CORPUS_GATE=1` exit 0 and the only thing that moves is the
-/// report's own "N of M matching" line, from 50 of 50 to 42 of 42. A number a
-/// reader might eyeball is not a check, and criterion 1 of the 4c gate rests
-/// on this figure.
 const SUBSET_FILES: &[&str] = &[
     "phase-4a.txt",
     "phase-4b.txt",
@@ -845,15 +526,6 @@ const SUBSET_FILES: &[&str] = &[
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
-///
-/// Read from the directory rather than listed a second time, so the assertion
-/// below cannot be satisfied by a copy of [`SUBSET_FILES`] edited in the same
-/// change, and so a subset file added later and never wired in here is red
-/// rather than silently unrun.
-///
-/// Duplicated from `collect_stress.rs` and `coverage.rs` rather than shared,
-/// for the reason `read_subset` above is duplicated: these are three
-/// integration-test binaries and none can `mod` another.
 fn phase_subset_files_on_disk() -> Vec<String> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
     let entries =
@@ -868,10 +540,6 @@ fn phase_subset_files_on_disk() -> Vec<String> {
 }
 
 /// The differential reads **every** phase subset file the corpus has.
-///
-/// The pin on *which files* this runner reads, which is a different question
-/// from what any of them contains -- `coverage.rs`'s
-/// `phase_*_subset_matches_the_committed_list` tests pin the contents.
 #[test]
 fn the_differential_reads_every_phase_subset_file() {
     assert_eq!(
@@ -916,12 +584,6 @@ fn read_unfiled(corpus_dir: &Path) -> Vec<(String, String)> {
 
 /// Every `corpus/lang/*.rex` on disk is either named by a phase subset file or
 /// named by [`UNFILED_FILE`], and never both.
-///
-/// **A program no subset file names is silently unrun.** `SUBSET_FILES` is
-/// pinned against the directory and `coverage.rs` pins each file's contents,
-/// and until this test nothing compared their union against `corpus/lang/` --
-/// found in 5c by committing a witness and watching the differential's
-/// headline not move.
 #[test]
 fn every_lang_program_is_run_or_named_unfiled() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");

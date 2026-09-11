@@ -12,13 +12,6 @@
 //! Every case here is a `build/bin/rexxc` measurement, reached through
 //! `::CONSTANT` for `is_number` and through `::OPTIONS DIGITS` and `TRACE` for
 //! `whole_number`.
-//!
-//! This module owns two delegations and one rule of its own, so the tests are
-//! split the same way. The number ACCEPTANCE rule is `rexx_num::Number::parse`'s
-//! and the CONVERSION is `Number::whole_value`'s, both tested exhaustively in
-//! that crate; what is tested here is that this crate reaches them, that the
-//! byte-to-`str` boundary between them behaves, and the `TRACE` setting rule,
-//! which is genuinely local.
 
 use super::*;
 
@@ -29,11 +22,6 @@ const TRACE_DIGITS: usize = 9;
 
 /// The two delegations are wired, and each answers the question this crate asks
 /// of it.
-///
-/// Deliberately thin. Every boundary case for acceptance lives in `rexx-num`'s
-/// `parse.rs` and its twelve differential sets, and every one for the conversion
-/// lives in its `whole.rs`. Restating them here would be the same duplication in
-/// the tests that the code just stopped having, and it would rot the same way.
 #[test]
 fn the_number_rules_are_reached_and_not_reimplemented() {
     // Acceptance: a number, whole or not, and something that is not one.
@@ -72,11 +60,6 @@ fn the_number_rules_are_reached_and_not_reimplemented() {
 
 /// The one thing between this crate and `rexx-num` that is this crate's own: the
 /// operands arrive as bytes and `Number::parse` takes a `&str`.
-///
-/// A literal may hold a non-UTF-8 byte, and such a literal is not a number.
-/// That is right rather than convenient: a symbol cannot hold a non-ASCII byte at
-/// all, because `LanguageParser::characterTable` is zero for every byte from 0x80
-/// to 0xFF, and a literal that holds one is not a number either.
 #[test]
 fn a_non_utf8_operand_is_not_a_number() {
     assert!(!is_number(&[b'1', 0xC3]));

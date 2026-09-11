@@ -185,29 +185,12 @@ fn line_span_indexes_the_same_bytes_line_returns() {
 // Reconstructing the text TRACE prints on a `*-*` line, from
 // `Instruction::clause_span` and the retained source. Reconstruction and line
 // lookup are the same concern from two directions, so both live in this file.
-//
-// Every expected string below is measured: `( ulimit -v 1048576;
-// build/bin/rexx FILE ) | cat -A`, captured 2026-07-28. The `*-*` text is the
-// oracle's line after stripping the line number, the marker and the leading
-// indentation, and NOTHING else: a trailing blank before a `then` and a
-// terminating `;` are part of the text.
-// ---------------------------------------------------------------------------
 
 /// One measured `*-*` line: the source line number the interpreter printed,
 /// the instruction the line came from, and the stripped text.
 type TracedLine = (usize, usize, &'static [u8]);
 
 /// Checks every measured `*-*` line against the clause it came from.
-///
-/// Per-line rather than sequence equality: `trace r` re-traces a loop body
-/// once per iteration, so the `*-*` lines outnumber the clauses and a count
-/// assertion would fail on any program containing a loop.
-///
-/// Completeness is the CALLER's obligation. Nothing here can know the oracle
-/// transcript, so a list that omits a `*-*` line still passes. The
-/// transcripts these lists were checked against, one per probe and
-/// unfiltered, live in
-/// `.superpowers/sdd/2026-07-28-phase-3-parser/task-3.9-report.md`.
 fn assert_traced(text: &[u8], traced: &[TracedLine]) {
     assert!(
         !traced.is_empty(),
@@ -352,12 +335,6 @@ fn probe_i_a_three_fragment_continuation_drops_every_terminator() {
 fn probe_j_a_multi_label_clause_is_one_clause_per_label() {
     // Scratch probe J, measured 2026-07-29: `a: b: nop` traces as three
     // clauses on one source line, each label with its own colon.
-    //
-    // This one pins span extraction, not the join. None of its three spans
-    // holds a terminator, so `span_bytes` alone already answers correctly
-    // and a `join_span` replaced by `span_bytes` leaves this test green.
-    // Measured: defeating the join reddens G, H and I but not J, so the
-    // four probes added here give three tests of the join, not four.
     let text = b"trace r\na: b: nop\ntrace off\n";
     assert_traced(
         text,

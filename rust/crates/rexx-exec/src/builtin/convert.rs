@@ -11,22 +11,6 @@
 
 //! The conversion builtins: `B2X`, `BITAND`, `BITOR`, `BITXOR`, `C2D`, `C2X`,
 //! `D2C`, `D2X`, `X2B`, `X2C`, `X2D` and `XRANGE`.
-//!
-//! # A hexadecimal or binary string is grouped, and the rule is a residue
-//!
-//! `StringUtil::validateGroupedSet` (`classes/support/StringUtil.cpp`) is the
-//! one scanner behind `X2C`, `X2B`, `B2X` and `X2D`, and its rule is not "each
-//! group is a whole number of bytes". It keeps a **running total** of the
-//! digits seen so far. At the first run of whitespace it records
-//! `total % modulus` as the *residue*; at every later run of whitespace, and
-//! once more at the end of the string, the running total must be congruent to
-//! that same residue. `modulus` is 2 for hexadecimal and 4 for binary.
-//!
-//! Because the total is cumulative, that is the same thing as saying the first
-//! group fixes the remainder and every group after it must be an exact
-//! multiple -- and the first group is left-padded rather than rejected.
-//! Measured:
-//!
 //! ```text
 //! x2c('414')       0414        an odd first group is padded
 //! x2c('4 1424')    041424      residue 1, then a group of 4
@@ -34,78 +18,11 @@
 //! x2c('414 243')   93.976      residue 1, then a group of 3
 //! b2x('101 0000')  50          residue 3, then a group of 4
 //! ```
-//!
-//! Whitespace here is **blank and horizontal tab and nothing else** --
-//! `RexxString::ch_SPACE` and `ch_TAB`, the same two bytes that separate
-//! words. Measured: `x2c('41'||'09'x||'42')` is `4142` while
-//! `x2c('41'||'0a'x||'42')` is 93.933, the invalid-character error, and every
-//! byte at or above `0x80` is invalid too. Whitespace at either *end* is
-//! 93.931/93.932 rather than a grouping error, and the position it names is
-//! the last byte of a trailing run: `x2c('41 42  ')` names position 7.
-//!
-//! # `X2C` and `X2B` disagree about an odd number of nibbles
-//!
-//! `X2C` packs, so it rounds up to a whole byte and pads the top nibble with
-//! zero; `X2B` expands, so it emits exactly four bits per nibble and pads
-//! nothing. Measured: `x2c('414')` is `'0414'x` and `x2b('414')` is
-//! `010000010100`, twelve bits. `B2X` is `X2C`-shaped in this respect -- it
-//! pads the first group up to four bits, so `b2x('1')` is `1` and
-//! `b2x('101 0000')` is `50`.
-//!
-//! # `NUMERIC DIGITS` bounds the value, and which end it bounds differs
-//!
-//! `C2D`/`X2D` are bounded on **output** (93.936/93.935) and `D2C`/`D2X` on
-//! **input** (93.929/93.928). Measured under one setting, so the asymmetry is
-//! visible in one program: at `DIGITS 9`, `c2d(copies('00'x,10)||'01'x)` is
-//! `1` from eleven bytes while `c2d('ffffffff'x)` is an error from four. On
-//! the other side, at `DIGITS 3`, `d2x('000123')` is `7B` while `d2x('1E3')`
-//! is an error -- the count is of the value's digits, not the text's.
-//!
-//! The digit count a value is measured by is `exponent + significand length`,
-//! with leading zeros removed and trailing zeros kept, which is the number of
-//! decimal digits its integer form is written with.
-//!
-//! # A length argument is a right-aligned window, and it turns the read signed
-//!
-//! For `C2D` and `X2D` a length shorter than the value truncates from the
-//! **left**, silently, and the top bit of what survives becomes a sign bit.
-//! Measured, and the two builtins disagree with each other because `X2D`
-//! counts the length in hexadecimal digits where `C2D` counts bytes:
-//!
 //! ```text
 //!             no length    ,1      ,2
 //! c2d('80'x)  128          -128    128
 //! x2d('80')   128          0       -128
 //! ```
-//!
-//! `x2d('80',1)` is `0` rather than `8` because the surviving half-byte has
-//! its top nibble masked off *after* the sign test, which for an odd length
-//! looks at bit `0x08` rather than `0x80`.
-//!
-//! For `D2C` and `D2X` the length is the width of the *result*, padded on the
-//! left with `0` for a non-negative value and `F` for a negative one, and
-//! truncated from the left when it is too small: `d2x(4096,2)` is `00`. A
-//! negative value with no length at all is 93.927.
-//!
-//! # `XRANGE` is variadic over pairs, and one of them swallows the others
-//!
-//! Each iteration consumes either a class name (one argument) or a
-//! start/end pair (two), and the pieces are concatenated -- `xrange('a','b',
-//! 'c','d')` is `abcd`. Argument 1 of a pair may be a class name **or** a
-//! single character (40.28); argument 2 may be a single character only
-//! (40.23).
-//!
-//! The oracle finishes early whenever it reaches a start/end pair with two or
-//! fewer arguments in the whole call, and that early return **discards
-//! whatever a preceding class name contributed**. Measured:
-//! `xrange('digit','z')` is 134 bytes, `'z'` through `'ff'x`, with no digits
-//! in front of them, while the three-argument `xrange('digit','z','q')` does
-//! include them. Two class names never reach that path, so
-//! `xrange('upper','lower')` is the full alphabet.
-//!
-//! The `cntrl` class begins with a NUL and is 33 bytes long, so its table is
-//! a byte slice with an explicit length rather than anything a C string could
-//! carry.
 
 use rexx_core::ObjRef;
 
@@ -118,10 +35,6 @@ use crate::error::{Failure, Notation, Raised};
 
 /// The two bytes that may separate the groups of a hexadecimal or binary
 /// string: `RexxString::ch_SPACE` and `ch_TAB`.
-///
-/// Measured rather than taken from the C++ alone:
-/// `x2c('41'||'09'x||'42')` converts, and every other byte below `0x20` --
-/// including a newline and a NUL -- is 93.933.
 fn is_blank(byte: u8) -> bool {
     byte == b' ' || byte == b'\t'
 }
@@ -161,11 +74,6 @@ fn modulus(notation: Notation) -> usize {
 
 /// Checks `text` against `notation`'s character set and grouping rule,
 /// answering how many digits it holds.
-///
-/// Mirrors `StringUtil::validateGroupedSet`, whose residue rule the module doc
-/// writes out. `text` is never the null string: every caller answers that
-/// case before getting here, which is also what the oracle does -- its own
-/// scanner reads the first byte before it looks at the length.
 fn validate_grouped(text: &[u8], notation: Notation) -> Result<usize, Failure> {
     if is_blank(text[0]) {
         return Err(Raised::misplaced_whitespace(notation, 1).into());
@@ -216,9 +124,6 @@ fn digits_of(text: &[u8], notation: Notation) -> impl Iterator<Item = u8> + '_ {
 }
 
 /// Packs a validated hexadecimal string into bytes, two nibbles at a time.
-///
-/// `StringUtil::packHex`. **The odd nibble is taken first**, which is what
-/// makes `x2c('414')` the two bytes `04 14` rather than `41 40`.
 fn pack_hex(text: &[u8]) -> Result<Vec<u8>, Failure> {
     if text.is_empty() {
         return Ok(Vec::new());
@@ -243,17 +148,6 @@ fn pack_hex(text: &[u8]) -> Result<Vec<u8>, Failure> {
 // ---- the bit builtins ----
 
 /// The body `BITAND`, `BITOR` and `BITXOR` share.
-///
-/// The result is as long as the **longer** argument, with the shorter one
-/// combined into its front and `pad` into its tail. Measured, the argument
-/// order does not matter: `c2x(bitand('00'x,'ffff'x))` is `00FF`, the same as
-/// the reversed call.
-///
-/// **`pad` is the operation's identity element when the call supplies none**,
-/// so the longer string's tail passes through unchanged -- which is why a
-/// default of `'00'x` for `BITAND` is wrong. Measured:
-/// `c2x(bitand('ffff'x,'00'x))` is `00FF`, one byte combined and one
-/// surviving, against `0000` when the call supplies a `'00'x` pad of its own.
 fn bit_operation(
     interp: &mut Interp,
     name: &'static [u8],
@@ -273,9 +167,6 @@ fn bit_operation(
 
 /// One bit operation once both strings and the pad are in hand, shared with
 /// `String~bitAnd`, `~bitOr` and `~bitXor`.
-///
-/// The caller supplies the pad already defaulted, because the default is the
-/// operation's own identity and only the caller knows which operation it is.
 pub(crate) fn bit_operation_over(
     interp: &Interp,
     first: &[u8],
@@ -368,9 +259,6 @@ pub(crate) fn x2c(
 }
 
 /// `X2C`'s answer once its argument is read, shared with `String~x2c`.
-///
-/// The one of the four that needs no `Interp`: `pack_hex` sizes its result
-/// from the input rather than from a length the caller supplies.
 pub(crate) fn x2c_bytes(string: &[u8]) -> Result<Vec<u8>, Failure> {
     pack_hex(string)
 }
@@ -433,9 +321,6 @@ fn base64_digit(byte: u8) -> Option<u8> {
 
 /// `String~encodeBase64`, `RexxString::encodeBase64`
 /// (`classes/StringClassConversion.cpp:90`).
-///
-/// Three bytes become four digits; a short final group is padded with the
-/// zero bits it does not have and then with `=`.
 pub(crate) fn encode_base64_bytes(source: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(source.len().div_ceil(3) * 4);
     for group in source.chunks(3) {
@@ -460,13 +345,6 @@ pub(crate) fn encode_base64_bytes(source: &[u8]) -> Vec<u8> {
 
 /// `String~decodeBase64`, `RexxString::decodeBase64` (`:153`). `None` is
 /// 93.962, which is the method's only refusal.
-///
-/// **`=` closes the last quartet and appears nowhere else.** It is legal as
-/// that quartet's fourth digit, or as its third when the fourth is one too,
-/// and the interpreter tests both the position and the quartet. Measured, all
-/// 93.962: `'YW=j'`, `'Y=WJ'`, `'YW==YWJj'` -- a well-formed pair, but not in
-/// the last quartet -- and `'YWJj===='`, whose final quartet is padding all
-/// the way to its first digit.
 pub(crate) fn decode_base64_bytes(source: &[u8]) -> Option<Vec<u8>> {
     if !source.len().is_multiple_of(4) {
         return None;
@@ -524,11 +402,6 @@ pub(crate) fn b2x_bytes(interp: &Interp, string: &[u8]) -> Result<Vec<u8>, Failu
 
 /// The slack the oracle adds to a conversion's working buffer,
 /// `NumberString::OVERFLOWSPACE`.
-///
-/// It is reproduced because the buffer is what refuses an absurd length: the
-/// allocation is asked for before any digit is computed, so
-/// `d2x(1,123456789012345678)` is Error 5 at rc 251 rather than a very long
-/// wait.
 const OVERFLOW_SPACE: usize = 2;
 
 /// The `NUMERIC DIGITS` in force at the call.
@@ -538,11 +411,6 @@ fn current_digits(interp: &Interp) -> u64 {
 
 /// Multiplies a little-endian base-`radix` accumulator by `factor` and adds
 /// `addend`.
-///
-/// One helper for both directions: `C2D`/`X2D` accumulate base ten by sixteens
-/// and `D2C`/`D2X` accumulate base sixteen by tens, which is
-/// `NumberString::multiplyBaseTen`/`addToBaseTen` and their base-sixteen
-/// twins.
 fn shift_in(accumulator: &mut Vec<u8>, radix: u32, factor: u32, addend: u32) {
     let mut carry = addend;
     for digit in accumulator.iter_mut() {
@@ -557,12 +425,6 @@ fn shift_in(accumulator: &mut Vec<u8>, radix: u32, factor: u32, addend: u32) {
 }
 
 /// How many digits an accumulator holds, counting an empty one as one.
-///
-/// The oracle's own count is `accumulator - highDigit`, and it starts at 1
-/// with nothing accumulated -- adding a zero digit never moves the high-water
-/// mark. That is what makes `d2x(0)` the one-character `0` rather than the
-/// null string, and what lets `numeric digits 1 ; c2d('0000000000'x)` answer
-/// `0` from ten bytes.
 fn digit_count(accumulator: &[u8]) -> usize {
     accumulator.len().max(1)
 }
@@ -582,10 +444,6 @@ fn render_decimal(accumulator: &[u8], negative: bool) -> Vec<u8> {
 }
 
 /// The body `C2D` and `X2D` share, `RexxString::x2dC2d`.
-///
-/// `character` is `C2D`: the argument is already bytes. Otherwise it is
-/// hexadecimal text, packed first, and the length argument counts hexadecimal
-/// digits rather than bytes.
 fn x2d_c2d(
     interp: &mut Interp,
     name: &'static [u8],
@@ -727,10 +585,6 @@ pub(crate) fn x2d(
 /// The pieces `D2X` and `D2C` need out of their first argument: a sign, the
 /// significand most significant first, and the power of ten its last digit
 /// stands for.
-///
-/// Leading zeros are dropped and trailing zeros kept, which is the oracle's
-/// own `NumberString` shape -- measured at `DIGITS 3`, where `d2x('000123')`
-/// converts and `d2x('12300')` does not.
 struct Decimal {
     negative: bool,
     /// Values `0..=9`. Exactly `[0]` when the value is zero, whatever the
@@ -740,15 +594,6 @@ struct Decimal {
 }
 
 /// Splits the rendered text of a value already known to be a number.
-///
-/// **Acceptance is [`Interp::to_number`]'s, not this function's**, and the
-/// split is done on the text afterwards for the same reason the oracle does
-/// it that way: `D2X`'s argument arrives as a string, and the oracle builds
-/// its `NumberString` from exactly these bytes. Nothing here has to reject
-/// anything, so the grammar it walks is only the shape a number's text can
-/// take -- blanks, a sign, digits around at most one point, and an exponent.
-/// `a_scan_takes_apart_every_text_the_number_parser_accepts` is what holds
-/// the two to that: this may be looser than the parser, never tighter.
 fn scan_decimal(text: &[u8]) -> Option<Decimal> {
     let mut index = 0usize;
     while index < text.len() && is_blank(text[index]) {
@@ -843,11 +688,6 @@ fn scan_decimal(text: &[u8]) -> Option<Decimal> {
 
 /// Whether `value` has a non-zero decimal within `digits` significant digits,
 /// `NumberString::hasSignificantDecimals`.
-///
-/// The setting is part of the question rather than a bound on the answer, and
-/// a program can see that: measured, `d2x('1.4')` is `1` at `DIGITS 1` and an
-/// error at `DIGITS 2`, because one digit of precision drops the `4` and it
-/// is below the rounding threshold.
 fn has_significant_decimals(value: &Decimal, digits: u64) -> bool {
     if value.exponent >= 0 {
         return false;
@@ -880,9 +720,6 @@ fn has_significant_decimals(value: &Decimal, digits: u64) -> bool {
 }
 
 /// The body `D2X` and `D2C` share, `NumberString::d2xD2c`.
-///
-/// `character` is `D2C`, which asks for twice as many hexadecimal digits and
-/// packs them at the end.
 fn d2x_d2c(
     interp: &mut Interp,
     name: &'static [u8],
@@ -906,13 +743,6 @@ fn d2x_d2c(
 
 /// `D2X`'s and `D2C`'s answer once the value is in hand, shared with
 /// `String~d2x` and `String~d2c`.
-///
-/// **The length is read through the caller's own closure, and the order is
-/// why.** The value's own check comes first, ahead of the length's range
-/// check -- measured, `d2c('abc',-1)` is 93.929 where `d2x('1.5',-1)`, a real
-/// number with a bad length, is 93.923. A caller that read its length before
-/// calling would report the wrong one of the two, and the builtin and the
-/// method do not share a length reader: 40.x against 93.923.
 pub(crate) fn d2x_d2c_over(
     interp: &mut Interp,
     text: &[u8],
@@ -1046,11 +876,6 @@ pub(crate) fn d2c(
 
 /// The twelve POSIX character classes `XRANGE` names, in the byte order the
 /// oracle returns them.
-///
-/// **Byte slices with explicit lengths, not C strings**: `CNTRL` begins with
-/// a NUL, and the oracle takes its length as `1 + strlen(class + 1)` for
-/// exactly that reason. Measured, `length(xrange('cntrl'))` is 33 and it
-/// begins `00010203`.
 const CHARACTER_CLASSES: &[(&[u8], &[u8])] = &[
     (
         b"alnum",
@@ -1195,12 +1020,6 @@ mod tests {
 
     /// An interpreter with a live top-level activation at `NUMERIC DIGITS
     /// digits`.
-    ///
-    /// The activation is what the `DIGITS`-sensitive four read their setting
-    /// from, so unlike the other builtin families these tests cannot run
-    /// against a bare `Interp`. The program it activates is a `NOP`: nothing
-    /// here executes an instruction, and only the settings on the frame
-    /// matter.
     fn interp_at(digits: &str) -> Interp {
         let mut interp = Interp::new();
         let program = Rc::new(parse_program(b"nop".to_vec()).expect("a NOP program parses"));
@@ -1230,10 +1049,6 @@ mod tests {
 
     /// Runs `name` over `arguments` at `digits`, each `None` standing for an
     /// omitted interior position, and answers the result's own bytes.
-    ///
-    /// Goes through [`dispatch`] rather than calling the implementation
-    /// directly, so every case here also exercises the arity check and the
-    /// name lookup that a real call would.
     fn call_at(digits: &str, name: &[u8], arguments: &[Option<&[u8]>]) -> Result<Vec<u8>, Failure> {
         let mut interp = interp_at(digits);
         let args: Vec<_> = arguments
@@ -1282,10 +1097,6 @@ mod tests {
     /// The alphabet every case set below draws from: the null string, a byte
     /// at or above `0x80`, a control byte, a NUL, and the two that separate
     /// groups.
-    ///
-    /// Named rather than written out at each site so a reader can see what
-    /// the coverage claim rests on, and so a case set that quietly narrowed
-    /// to printable ASCII would be visible.
     const BYTE_ALPHABET: &[&[u8]] = &[
         b"",
         b"a",
@@ -1303,11 +1114,6 @@ mod tests {
 
     /// `C2X` writes two upper-case digits per byte over the whole byte range,
     /// and `X2C` reverses it.
-    ///
-    /// The round trip is what makes the pair's agreement checkable without a
-    /// second table of expected bytes, and the sweep is all 256 values
-    /// because a rule stated for "printable characters" agrees with this one
-    /// everywhere a printable test could look.
     #[test]
     fn c2x_and_x2c_are_inverse_over_every_byte() {
         for byte in 0..=u8::MAX {
@@ -1332,12 +1138,6 @@ mod tests {
 
     /// The grouping rule: the first group fixes a residue and every later one
     /// must be an exact multiple, with the first group left-padded.
-    ///
-    /// Both moduli, because 2 and 4 are separate constants in the same
-    /// scanner and a hexadecimal-only test cannot see a binary one that
-    /// disagrees. Each refusal is paired with the neighbouring string that
-    /// converts, so the rule is pinned to the group sizes rather than to the
-    /// presence of a blank.
     #[test]
     fn a_grouped_string_carries_its_residue_to_the_end() {
         assert_eq!(answer(b"X2C", &[b"414"]), b"\x04\x14");
@@ -1361,21 +1161,6 @@ mod tests {
 
     /// The residue is checked **at every gap**, not only once at the end, and
     /// these are the strings that can tell the two apart.
-    ///
-    /// Every string below ends on the residue its first group set, so the
-    /// end-of-string check passes on all of them; each breaks the residue at
-    /// an *interior* gap and is refused for that alone. Without a separate
-    /// case of this shape the interior check is unwatched -- deleting it
-    /// leaves every other assertion in this module green, and these strings
-    /// then convert where the oracle raises.
-    ///
-    /// The counts, for a reader checking the arithmetic against
-    /// [`validate_grouped`]: `41 4 1 42` reaches the gaps at totals 2, 3 and
-    /// 4 against a residue of 0, and ends at 6; `414 2 434` reaches them at
-    /// 3 and 4 against a residue of 1, and ends at 7; `1010 10 10` reaches
-    /// them at 4 and 6 against a residue of 0, and ends at 8.
-    ///
-    /// [`validate_grouped`]: super::validate_grouped
     #[test]
     fn the_residue_is_checked_at_every_gap_and_not_only_at_the_end() {
         for subject in [b"41 4 1 42".as_slice(), b"414 2 434", b"41 4 1 4 2"] {
@@ -1405,11 +1190,6 @@ mod tests {
 
     /// Whitespace is blank and tab; every other byte below `0x20`, and every
     /// byte at or above `0x80`, is an invalid digit.
-    ///
-    /// Swept over the whole byte range rather than at a handful of plausible
-    /// separators, because the rules this one could wrongly be -- "any
-    /// `isspace`", "every byte below `0x21`" -- differ from it at bytes
-    /// nobody would write down.
     #[test]
     fn only_blank_and_tab_separate_groups() {
         for byte in 0..=u8::MAX {
@@ -1541,11 +1321,6 @@ mod tests {
 
     /// The bit builtins pass the longer string's tail through when no pad is
     /// supplied, and combine it with the pad when one is.
-    ///
-    /// The pad axis is crossed with both orders of unequal lengths and with
-    /// the null string, because an implementation that defaulted `BITAND`'s
-    /// pad to `'00'x` is right for every equal-length case and wrong for
-    /// every other one.
     #[test]
     fn an_omitted_pad_leaves_the_longer_strings_tail_alone() {
         assert_eq!(answer(b"BITAND", &[b"\xff\xff", b"\x00"]), b"\x00\xff");
@@ -1598,10 +1373,6 @@ mod tests {
 
     /// A length argument is a right-aligned window that truncates from the
     /// left, and the top of what survives is a sign bit.
-    ///
-    /// `C2D` and `X2D` are asserted side by side because they disagree: the
-    /// same `80` is `-128` at `C2D`'s length 1 and `0` at `X2D`'s, since one
-    /// counts bytes and the other nibbles.
     #[test]
     fn a_length_makes_the_read_a_signed_window() {
         assert_eq!(answer(b"C2D", &[b"\x80"]), b"128");
@@ -1690,10 +1461,6 @@ mod tests {
 
     /// `NUMERIC DIGITS` bounds `C2D`/`X2D` on the result and `D2C`/`D2X` on
     /// the value, and the four sub-codes are distinct.
-    ///
-    /// Crossed with the length argument, since the window decides what the
-    /// result is and therefore whether it fits: measured, `c2d('ff'x,1)` is
-    /// `-1` at `DIGITS 1` where `c2d('7f'x,1)` is 127 and does not fit.
     #[test]
     fn the_precision_bounds_the_result_one_way_and_the_value_the_other() {
         assert_eq!(answer_at("9", b"C2D", &[b"\x00\x00\x00\x00\x00\x01"]), b"1");
@@ -1754,11 +1521,6 @@ mod tests {
     /// A value with decimals converts when the decimals are insignificant
     /// *within the current precision*, which makes the same argument legal at
     /// one setting and an error at the next.
-    ///
-    /// The pair the rule turns on: `1.4` is `1` at `DIGITS 1`, because one
-    /// digit of precision drops the `4` and `4` is below the rounding
-    /// threshold, and an error at `DIGITS 2`, where the `4` is inside the
-    /// precision and is not a zero.
     #[test]
     fn decimals_are_significant_relative_to_the_precision() {
         assert_eq!(answer_at("1", b"D2X", &[b"1.4"]), b"1");
@@ -1814,17 +1576,6 @@ mod tests {
 
     /// The scan `D2X`/`D2C` split their argument with accepts every text the
     /// crate's own number parser does.
-    ///
-    /// The two are separate readers of the same grammar -- one decides
-    /// whether the argument is a number at all, the other takes it apart --
-    /// and a text the parser accepts and the scan does not would be a
-    /// silently wrong *error* where the oracle converts. Nothing else in the
-    /// module makes them agree, so this asserts it.
-    ///
-    /// One direction only, and deliberately: the scan is reached solely for a
-    /// text the parser has already accepted, so it is free to be looser. It
-    /// is, in exactly one respect -- it does not range-check the assembled
-    /// exponent, so `1E999999999999` is a number to it and not to the parser.
     #[test]
     fn a_scan_takes_apart_every_text_the_number_parser_accepts() {
         let subjects: &[&[u8]] = &[
@@ -1897,11 +1648,6 @@ mod tests {
 
     /// `XRANGE`'s twelve class tables, including the one that begins with a
     /// NUL.
-    ///
-    /// `cntrl` is asserted by its whole content rather than by its length
-    /// alone: a table built as a C string would be empty, and one built by
-    /// concatenating `00`..`1f` without the `7f` would be 32 bytes, so both
-    /// mistakes have to be visible.
     #[test]
     fn every_character_class_is_the_oracles_own_table() {
         let mut cntrl: Vec<u8> = (0x00..=0x1fu8).collect();
@@ -1992,10 +1738,6 @@ mod tests {
 
     /// A class name and a start/end pair mix, and the oracle's own early
     /// return discards a class when the whole call is two arguments.
-    ///
-    /// The three-argument form is asserted beside the two-argument one,
-    /// because that is the only pair that shows the discard is about the
-    /// argument count rather than about class names in general.
     #[test]
     fn a_two_argument_call_ending_in_a_range_drops_a_preceding_class() {
         let from_z: Vec<u8> = (b'z'..=0xff).collect();
@@ -2296,12 +2038,6 @@ mod tests {
     }
 
     /// Every result is text, so a later `NUMERIC DIGITS` cannot reshape it.
-    ///
-    /// The mutation this catches is building `C2D`'s or `X2D`'s answer
-    /// through `Interp::number` under the settings in force, which would
-    /// render one million as `1E+6` for a caller that later drops to
-    /// `DIGITS 1`. Only the numeric pair can show it, since the others never
-    /// produce anything a `DIGITS` setting could reshape.
     #[test]
     fn a_converted_number_is_text_that_no_later_digits_setting_reshapes() {
         for (name, argument, expected) in [

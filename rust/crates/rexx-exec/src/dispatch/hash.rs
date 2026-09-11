@@ -11,45 +11,6 @@
 
 //! The mapped collections' store, and the two classes that are the store with
 //! nothing on top.
-//!
-//! A child of [`super`] for [`super::collection`]'s reason: the rows point at
-//! `NativeMethod`s, whose parameter list names types only that module can.
-//!
-//! # The geometry is observable, and that is why it is ported rather than
-//! # invented
-//!
-//! Iteration order is bucket order. Measured on the oracle, a `Table` given
-//! the keys `zebra apple Mango q longer-key-name '' '  ' Z` in that order
-//! answers `allIndexes` as `'' '  ' longer-key-name Z zebra Mango apple q`;
-//! given the same keys in reverse it answers a different order again; and
-//! `.Table~new(100)` with the same keys answers a third. Forty integer keys
-//! come back `40,20,21,...` So a store that keeps insertion order diverges on
-//! `allIndexes`, `allItems`, `makeArray`, `supplier` and `do over` for every
-//! class in this phase, on any receiver holding more than a couple of
-//! entries.
-//!
-//! The rules are all in the C++ and all small:
-//!
-//! * `calculateBucketSize` is `max(capacity, 17)` forced odd, capped at
-//!   `1 << 30` (`classes/support/HashCollection.cpp:150`,
-//!   `HashCollection.hpp:126`);
-//! * the table is `bucketSize` primary slots plus an equal overflow area --
-//!   `allocateContents(bucketSize, bucketSize * 2)` (`HashCollection.cpp:84`);
-//! * the free chain runs upward from `bucketSize`
-//!   (`HashContents.cpp:145`), `put` appends at the END of a bucket's chain
-//!   (`:226`, `:275`), and the table is full when the free chain empties and
-//!   not when the item count reaches the total (`HashContents.hpp:297`);
-//! * growth doubles the TOTAL size and recalculates
-//!   (`HashCollection.cpp:96`), then `reMerge` re-adds in old bucket order
-//!   (`HashContents.cpp:1238`);
-//! * iteration walks buckets `0..bucketSize` and follows each chain
-//!   (`HashContents.hpp:104`-`:124`).
-//!
-//! A Python simulation of exactly that predicted the oracle's answer on four
-//! independent cases before any of this was written: the eight keys above,
-//! the same eight reversed, the same eight at `.Table~new(100)`, and forty
-//! integer keys -- which is the one that exercises growth, and which needed
-//! the free-chain fullness test to come out right.
 
 use super::{
     Arity, BehaviourId, Body, Cleared, Decoded, Failure, Interp, Loud, NativeMethod, ObjRef,
@@ -58,15 +19,6 @@ use super::{
 
 /// The five pool entries a hash store is, bound in the receiver's own pool
 /// under the `MapCollection` class as scope.
-///
-/// A pool rather than a new `Body` variant, for [`super::collection`]'s
-/// reason: `ScopePools` is already walked by the collector, so a store built
-/// out of `Array` objects is GC-visible the moment it exists -- which is spec
-/// D101's requirement, met by construction rather than by new collector code.
-///
-/// `INDEXES`, `ITEMS` and `NEXT` are parallel arrays of `totalSize` slots.
-/// An `INDEXES` hole is an available slot. `NEXT` holds a chain link, with
-/// `totalSize` itself standing for `NoMore` -- no slot has that number.
 const HASH_INDEXES: &[u8] = b"HASHINDEXES";
 const HASH_ITEMS: &[u8] = b"HASHITEMS";
 const HASH_NEXT: &[u8] = b"HASHNEXT";
@@ -74,14 +26,6 @@ const HASH_BUCKETS: &[u8] = b"HASHBUCKETS";
 const HASH_FREE: &[u8] = b"HASHFREE";
 
 /// The five pool entries one store occupies.
-///
-/// A `Directory` holds two of these at the same scope: the contents every
-/// mapped collection has, and the method table `setMethod` fills
-/// (`classes/DirectoryClass.cpp:496`). They are the same geometry, which is
-/// why this is a name set rather than a second structure -- measured, a
-/// directory given the methods `AAA` and `MMM` enumerates them `MMM AAA`,
-/// which is the order a plain directory gives those two names as ordinary
-/// entries.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Half {
     indexes: &'static [u8],
@@ -135,13 +79,6 @@ fn calculate_bucket_size(capacity: usize) -> usize {
 }
 
 /// The class the store's entries are bound under.
-///
-/// `Table` rather than `MapCollection`, which is the class every receiver in
-/// this phase really derives from: `MapCollection` is donated by
-/// `CoreClasses.orx` and the class registry does not answer `lookup` for it,
-/// so reaching for it here panicked on the first `t['k'] = 'v'`. The scope is
-/// only a namespace key -- `Queue`'s store hangs under `Array` for the same
-/// reason -- so a native class the registry always has is the right one.
 fn hash_scope(interp: &mut Interp) -> ObjRef {
     interp
         .classes()
@@ -150,22 +87,6 @@ fn hash_scope(interp: &mut Interp) -> ObjRef {
 }
 
 /// The two classes this task owns.
-///
-/// **Narrower than the set of receivers these bodies are reached for**, and
-/// that is the point. `Setup.cpp` donates `IdentityTable`'s `At`, `Put` and
-/// `[]` rows to `StringTable` and that whole set on to `Directory`
-/// (`memory/Setup.cpp:881`, `:933`), and `Set`, `Bag` and `Relation` take
-/// theirs the same way, so one method identity here serves seven classes
-/// exactly as one C++ function serves them upstream. Registering a body for
-/// `Table` registers it for all of them.
-///
-/// Each of the other five has its own semantics and its own task -- `Set`'s
-/// index-only rule, `Bag` and `Relation`'s multi-value `put`, the string
-/// classes' entry map -- so a receiver of one of them gets back exactly the
-/// refusal it had before this file existed, by way of [`not_this_task`].
-/// Measured as the instrument for that: with the guard missing, the
-/// method-body table reported 38 rows regressing from `answers` to
-/// `diverge`.
 const OWNED: &[&str] = &[
     "Table",
     "IdentityTable",
@@ -256,11 +177,6 @@ fn not_this_task(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Failur
 
 /// The classes whose instances get a store, named rather than derived for
 /// [`hash_scope`]'s reason.
-///
-/// Measured, oracle and crate agreeing, that this is the same set
-/// `MapCollection` would have given: these nine all answer `1` to
-/// `isSubClassOf(.MapCollection)` where `.Array`, `.List` and `.Queue` answer
-/// `0`.
 const STORE_HOLDERS: &[&str] = &[
     "Table",
     "IdentityTable",
@@ -366,15 +282,6 @@ fn install_store(interp: &mut Interp, receiver: ObjRef, half: Half, buckets: usi
 }
 
 /// The receiver's store, built at the minimum size on demand.
-///
-/// On demand for [`super::collection::store_of`]'s reason: upstream the
-/// contents belong to the object the allocator returns, so a subclass whose
-/// `INIT` does not forward still has them.
-/// The store `half` names, or `None` when the receiver has not installed it.
-///
-/// A `Directory` installs its method table only when `setMethod` is first
-/// sent, so every other class and every directory that has never been sent
-/// one pays a single absent-slot read per merged operation.
 fn read_store(interp: &mut Interp, receiver: ObjRef, half: Half) -> Result<Option<Store>, Failure> {
     let scope = hash_scope(interp);
     if let (Some(indexes), Some(items), Some(next), Some(buckets), Some(free)) = (
@@ -482,11 +389,6 @@ enum Keys {
     Equality,
     /// `StringHashContents`: the index's STRING VALUE, compared as bytes and
     /// hashed by the string hash.
-    ///
-    /// Measured on a `.Directory`: `d[1] = 'one'` answers to `d['1']` and
-    /// reports its index as `1`, so a number and its digits are one key; and
-    /// `d[.Array~new] = 'x'` is accepted rather than refused, so a non-string
-    /// index is taken by its string value rather than turned away.
     StringValue,
 }
 
@@ -539,11 +441,6 @@ fn get_hash_value(interp: &mut Interp, value: ObjRef) -> u64 {
 
 /// `RexxString::getObjectHashCode` (`classes/StringClass.cpp:220`): a
 /// `HASHCODE` answer turned back into a number.
-///
-/// Empty is 1; eight bytes or more are read as a little-endian `size_t`;
-/// anything shorter is read as a **signed** two-byte short, which for a
-/// one-character answer picks up the terminating null -- so a single byte
-/// `'80'x` is negative there and sign-extends.
 fn object_hash_code(text: &[u8]) -> u64 {
     if text.is_empty() {
         return 1;
@@ -720,8 +617,6 @@ fn expand(interp: &mut Interp, receiver: ObjRef, half: Half) -> Result<(), Failu
 
 /// Appends an entry at the end of its bucket's chain without looking for an
 /// index the table already holds -- `HashContents::append`'s half of `put`.
-///
-/// The caller has already made room.
 fn append_entry(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -765,11 +660,6 @@ fn append_entry(
 /// `HashContents::addFront` (`classes/support/HashContents.cpp:1650`): a new
 /// entry for an index the table already holds goes to the FRONT of that
 /// index's chain.
-///
-/// The bucket slot cannot move, so the entry that was there is copied into a
-/// free slot and chained behind the new one -- `HashContents::insert`
-/// (`:313`). Measured: a `Relation` given `k -> v1` then `k -> v2` answers
-/// `allAt('k')` as `v2,v1` and `at('k')` as `v2`.
 fn insert_front(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -967,9 +857,6 @@ fn method_store(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Store>, 
 }
 
 /// `DirectoryClass::unknownMethod`, or `None` when there is none.
-///
-/// Cleared by writing `.nil` rather than by dropping the pool entry, so that
-/// `unsetMethod('UNKNOWN')` needs no delete the pool does not offer.
 fn unknown_method(interp: &mut Interp, receiver: ObjRef) -> Option<ObjRef> {
     let scope = hash_scope(interp);
     pool_variable(interp, receiver, scope, UNKNOWN_METHOD).filter(|held| *held != ObjRef::NIL)
@@ -987,11 +874,6 @@ fn is_unknown_name(interp: &mut Interp, name: ObjRef) -> bool {
 }
 
 /// Runs a stored method with the directory as the receiver.
-///
-/// The item slot holds the minted [`rexx_core::MethodId`] rather than the
-/// `Method` object: nothing Rexx-visible reads the object back out --
-/// `Directory` has no method that answers one -- and minting per read would
-/// grow `method_bodies` without bound.
 fn run_stored_method(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1083,11 +965,6 @@ fn merged_has_index(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Res
 }
 
 /// Every (index, result) the method table answers, in its own store order.
-///
-/// Every entry is read out of the table before any of them runs: a body may
-/// write to the directory -- measured, a method that increments an entry
-/// answers 1, 2 and 3 over three reads -- and a walk interleaved with that
-/// would be following a chain its own callee had moved.
 fn method_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjRef)>, Failure> {
     let Some(store) = method_store(interp, receiver)? else {
         return Ok(Vec::new());
@@ -1126,10 +1003,6 @@ fn method_count(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure>
 
 /// `DirectoryClass::remove`: answers what `get` would -- which may run a
 /// method, or the unknown method -- and then drops the name from both halves.
-///
-/// Measured: with an `UNKNOWN` method set, `d~remove('nosuch')` answers what
-/// it returns, while `d~removeItem` over the same value answers `.nil`,
-/// because `removeItem` goes by `getIndex` and that does not consult it.
 fn take_merged(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1147,12 +1020,6 @@ fn take_merged(
 // ---- the shared surface ----
 
 /// The index argument the store's index-taking methods require.
-///
-/// **88.901 and not 93.903**, which is the split measured on a `.Table~new`:
-/// `at()`, `put()`, `put('v')`, `hasIndex()` and `remove()` all report
-/// `Missing argument; argument index is required.` -- the named form
-/// `HashCollection` raises -- while `hasItem()`, `index()` and
-/// `removeItem()`, which take an ITEM, report the positional 93.903.
 fn index_argument(args: &[Option<ObjRef>], position: usize) -> Result<ObjRef, Failure> {
     args.get(position - 1)
         .copied()
@@ -1442,12 +1309,6 @@ pub(super) fn native_hash_new(
 }
 
 // ---- `Stem` ----
-//
-// **`Stem` shares no entry point with the rest of this file**, which is spec
-// section 7's reason for giving it a task of its own rather than widening the
-// protocol: its store is the language's tails, it is a `MapCollection` by
-// inheritance alone, and `Body::Stem` already tells a dropped tail from an
-// absent one -- the distinction the collection surface has to respect.
 
 /// The stem's tails, as (name, value) pairs in the map's own order, with a
 /// dropped tail's `None` kept.
@@ -1469,13 +1330,6 @@ fn stem_tails(interp: &Interp, receiver: ObjRef) -> Vec<(Vec<u8>, Option<ObjRef>
 }
 
 /// The value a tail read answers.
-///
-/// **Three cases and not two.** A tail that holds something answers it; a
-/// tail that was DROPPED answers its own derived name, because
-/// `Body::Stem` keeps the tombstone; and a tail that was never assigned
-/// answers the stem's default, or its derived name when there is none.
-/// Measured on `s. = 'dflt'` with `s.b` dropped: `at('B')` is `S.B` and
-/// `at('ZZ')` is `dflt`.
 fn stem_read(interp: &mut Interp, receiver: ObjRef, tail: &[u8]) -> ObjRef {
     let (held, default, name) = match interp.heap.get(receiver).map(|object| &object.body) {
         Some(Body::Stem {
@@ -1568,22 +1422,6 @@ fn tail_order(left: &[u8], right: &[u8]) -> std::cmp::Ordering {
 
 /// The order a stem answers its tails in: post-order over the tree the
 /// insertions built.
-///
-/// **Ported rather than invented, and validated before it was written.**
-/// `CompoundVariableTable` is a balanced binary tree, not a hash table: keyed
-/// by [`tail_order`], rebalanced by a SINGLE rotation with a depth counter per
-/// side (`CompoundVariableTable.cpp:197`, `:273` -- there is no double
-/// rotation, which is where a textbook AVL and this part company), and walked
-/// in post-order by `first`/`next` (`:343`, `:405`).
-///
-/// A simulation of exactly that predicted the oracle on four independent
-/// cases before any of this existed: five string tails, twenty-five integer
-/// tails, seven mixed-length tails, and the five strings inserted backwards --
-/// which answers a different order from the same set, and is why the
-/// insertion ordinal has to be kept at all.
-///
-/// **Dropped tails keep their node**, so they shape the tree even though
-/// `allIndexes` does not name them.
 fn stem_order(tails: &[(Vec<u8>, Option<ObjRef>)]) -> Vec<usize> {
     let mut nodes: Vec<TailNode> = Vec::with_capacity(tails.len());
     let mut root: Option<usize> = None;
@@ -1751,9 +1589,6 @@ fn rebalance(nodes: &mut [TailNode], root: &mut Option<usize>, node: usize) {
 
 /// Every tail that holds something, which is what `items` counts and
 /// `allIndexes` names.
-///
-/// **A dropped tail is not one of them.** Measured, `s.a = 1`, `s.b = 2`,
-/// `s.c = 3` then `drop s.b` leaves `items` at 2 and `allIndexes` at `A,C`.
 fn stem_live(interp: &Interp, receiver: ObjRef) -> Vec<(Vec<u8>, ObjRef)> {
     let tails = stem_tails(interp, receiver);
     stem_order(&tails)
@@ -1812,11 +1647,6 @@ fn native_stem_all_items(
 /// this phase -- measured, `A,C` for a stem holding `A` and `C`, not `1,3`.
 /// The stem's own value, which is what `StemClass`'s forwarding methods send
 /// to -- the `value` field every one of them names.
-///
-/// An unassigned stem answers its derived name, the same rule
-/// [`stem_read`] applies to a never-assigned tail. Measured: a bare
-/// `.Stem~new` answers `''`, so `~length` through `unknown` is 0, while a
-/// `q.` assigned `hello` answers `hello` and `~length` is 5.
 fn stem_value(interp: &mut Interp, receiver: ObjRef) -> ObjRef {
     let (default, name) = match interp.heap.get(receiver).map(|object| &object.body) {
         Some(Body::Stem { default, name, .. }) => (*default, name.as_ref().to_vec()),
@@ -1828,13 +1658,6 @@ fn stem_value(interp: &mut Interp, receiver: ObjRef) -> ObjRef {
 /// `StemClass::request(class)` (`classes/StemClass.cpp`): `'ARRAY'` answers
 /// the stem's own `makeArray` -- which for a `Stem` is its TAILS -- and every
 /// other class is forwarded to the stem's value.
-///
-/// The argument is `stringArgument(requestclass, ARG_ONE)`, so it is the
-/// POSITIONAL 93 and not the named 88 -- measured, `request()` is rc 93 --
-/// and it is upper-cased, so `request('array')` answers an `Array` too.
-///
-/// The `ARRAY` limb repeats `requestArray`'s own `isBaseClass` split: a real
-/// `Stem` answers `makeArray()` directly, a subclass is sent `MAKEARRAY`.
 fn native_stem_request(
     interp: &mut Interp,
     cleared: Cleared,
@@ -1867,11 +1690,6 @@ fn native_stem_request(
 /// `StemClass::toDirectory`: a fresh `Directory` holding one entry per tail
 /// that HAS a value, keyed by the tail's name, added in the tail tree's own
 /// `first`/`next` order.
-///
-/// The answer's order is the DIRECTORY's, not the stem's: the names go in in
-/// tail order and come back in the store's. Measured, a stem with `X` and `Y`
-/// answers `allIndexes` `X,Y` and `allItems` `9,8`, and a stem one of whose
-/// two tails has been removed answers a directory of one.
 fn native_stem_to_directory(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1897,9 +1715,6 @@ fn native_stem_to_directory(
 
 /// `StemClass::unknownRexx(message, arguments)`: forwards the message and its
 /// argument array to the stem's value.
-///
-/// Measured: `q.` valued `hello` answers `q.~length` as 5, and a bare
-/// `.Stem~new`, whose value is the empty string, answers 0.
 fn native_stem_unknown(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1989,19 +1804,6 @@ fn native_stem_is_empty(
 
 /// The tail a subscript list names: the arguments' string values joined with
 /// `.`, **exactly as written**.
-///
-/// **The method path does not upper-case and the language path does.** A
-/// symbol in `s.a` is upper-cased when it is parsed, so the tail is `A`; a
-/// subscript in `obj['a']` is a string and stays `a`. Measured, and every
-/// line of it separates the two: after `s.a = 1`, `obj['A']` is 1 while
-/// `obj['a']` is the unset `S.a`; `obj['b'] = 2` leaves `allIndexes` reading
-/// `b,A`; and `s.b` afterwards is `S.B`, a different tail from the `b` the
-/// method wrote.
-///
-/// Task 5 upper-cased here and every probe it had used upper-case literals,
-/// so nothing saw it. Task 6's populated receiver -- `.Stem~new~~put('v1',
-/// 'k1')` -- is what made the method-body table report `allIndexes` and
-/// `makeArray` diverging.
 fn stem_tail(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
     let mut tail = Vec::new();
     for (at, argument) in args.iter().enumerate() {
@@ -2049,15 +1851,6 @@ fn native_stem_has_item(
         return Err(stem_refusal(interp, receiver, b"HASITEM"));
     }
     // Optional, unlike every other class's, where a missing item is 93.903.
-    //
-    // **Measured against an EMPTIED stem, and it cannot be measured any other
-    // way.** `hasItem()` and `index()` with no argument are a SIGSEGV on the
-    // oracle whenever the stem holds a tail -- both are in
-    // `corpus/oracle-crashes.txt`, and the probe that answered `0` here got
-    // that answer only because an earlier line in it had emptied the stem.
-    // So these two limbs are written from the one shape the oracle survives
-    // and nothing in the tree witnesses them; `stem_collection.rex` says so
-    // and leaves them out rather than asserting an answer it cannot check.
     let Some(wanted) = args.first().copied().flatten() else {
         return Ok(Some(crate::eval::logical(false)));
     };
@@ -2101,11 +1894,6 @@ fn stem_write(interp: &mut Interp, receiver: ObjRef, tail: Vec<u8>, value: Optio
 }
 
 /// `remove(tail)`: drops the tail and answers what it held, or `.nil`.
-///
-/// **A drop and not a delete.** `Body::Stem` keeps the tombstone, which is
-/// what makes a dropped tail read as its own derived name where an absent one
-/// reads as the stem's default -- measured, `drop s.b` then `s~at('B')` is
-/// `S.B` while `s~at('ZZ')` is the default.
 fn native_stem_remove(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -2186,11 +1974,6 @@ fn native_stem_empty(
 
 /// The name an entry method looks up, which is **upper-cased** where the
 /// index family's is not.
-///
-/// Measured on a `.Directory`: `d~setEntry('viaEntry', 9)` leaves
-/// `allIndexes` naming `VIAENTRY`, `d['viaEntry']` answering `.nil` and
-/// `d['VIAENTRY']` answering 9, and `d~entry('lower')` after `d['lower'] = 1`
-/// is `.nil` -- so the two families read one store through different names.
 fn entry_name(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
     let Some(name) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("index").into());
@@ -2302,18 +2085,6 @@ fn native_hash_set_entry(
 /// `DirectoryClass::setMethodRexx` (`classes/DirectoryClass.cpp:480`):
 /// attaches a method whose RESULT is the entry's item, recomputed on every
 /// read.
-///
-/// The index is `stringArgument(name, "index")->upper()`, so an omitted one
-/// is the named 88.901 and a number is fine -- measured, `setMethod()` is 88
-/// while `setMethod(5, 'return 1')` is rc 0. A third argument is 93, which
-/// the `Fixed(2)` arity reports.
-///
-/// An omitted method is a REMOVAL rather than an error, and either way the
-/// name is dropped from the contents: `contents->remove(entryname)` runs on
-/// both branches. Measured: `g['AAA'] = 'value'` then
-/// `setMethod('AAA', 'return 1')` then `unsetMethod('AAA')` leaves the
-/// directory empty, because the ordinary entry was destroyed rather than
-/// shadowed.
 fn native_directory_set_method(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -2646,10 +2417,6 @@ pub(super) fn native_bag_of(
 
 /// `SetClass::ofRexx`: a new `Set` of the receiver's own class holding the
 /// arguments, each of which is its own index.
-///
-/// Measured: `.Set~of('x','y')~items` is 2 and `.Set~of('x','x')~items` is 1,
-/// so the arguments go through the same index-only rule `put` applies rather
-/// than being appended.
 pub(super) fn native_set_of(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -2776,9 +2543,6 @@ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `RelationClass::` bodies, and only `HasItem` and `RemoveItem` are
     // `BagClass::` -- and those two answer the same thing here, because a
     // `Bag`'s index is its item.
-    //
-    // `ITEMS` and `SUPPLIER` take an optional index where every other class's
-    // take none, so they shadow the shared bodies rather than sharing them.
     ("Relation", "ALLAT", Arity::Fixed(1), native_relation_all_at),
     (
         "Relation",
@@ -2901,13 +2665,6 @@ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 /// `VariableDictionary::getVariableDirectory`
 /// (`execution/VariableDictionary.cpp`), which `RexxContext~variables`
 /// answers.
-///
-/// **A new object on every call**, which is measured rather than assumed:
-/// oracle rc 0, `(.context~variables == .context~variables)` is `0` where
-/// `(.context~package == .context~package)` is `1`.
-///
-/// Each key's string is pushed as a temporary as it is built, because the
-/// next allocation collects and the directory does not hold it yet.
 pub(super) fn directory_of(
     interp: &mut Interp,
     entries: Vec<(Vec<u8>, ObjRef)>,

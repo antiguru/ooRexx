@@ -12,11 +12,6 @@
 //! The op-stream serialiser: one line per op, read by the golden tests in
 //! `golden_tests.rs` and by [`crate::render_ir`], which the `rexx-ir` binary
 //! prints.
-//!
-//! **Nothing here is on any path the interpreter runs.** A chunk is never read
-//! back as text to execute it, so this file answers only to its two readers --
-//! which is what lets it name a field or leave one out on the grounds of what
-//! a reader can learn from it, as [`render`]'s own comments do.
 
 use rexx_parse::Operator;
 
@@ -24,10 +19,6 @@ use super::{Chunk, ConditionKeyword, NodePath, Op, PlanSlot};
 use crate::run::{QueueKeyword, ReturnKeyword};
 
 /// Renders `chunk` as one line per op: `"{index}: {OpName}[ field=value]*"`.
-///
-/// Exhaustive over [`Op`] with no catch-all arm, so a new variant that
-/// nobody teaches this function to render is a compile error here rather
-/// than a silently blank line in a golden test's expected output.
 pub(crate) fn render(chunk: &Chunk) -> String {
     let mut out = String::new();
     for (index, op) in chunk.ops.iter().enumerate() {
@@ -329,22 +320,6 @@ pub(crate) fn render(chunk: &Chunk) -> String {
 
 /// [`render`], with each clause-opening op followed by the line number and
 /// source text of the clause it opens.
-///
-/// **Only [`Op::Clause`] is annotated, and that is one annotation per
-/// clause.** Every other op that carries an instruction index sits *inside* a
-/// region and names that region's own instruction, so annotating them would
-/// repeat the same clause on every line of it. `Clause` is the op that opens
-/// a clause, and since the tree-walker went it is the only one: `Op::Generic`
-/// stood for a whole clause of its own and was the other.
-///
-/// **A separate function rather than a parameter on [`render`]**, so that the
-/// golden tests keep reading exactly the stream and nothing about the program
-/// it came from. Their expectations are op streams; a clause's source text is
-/// the same fact the test's own input already states.
-///
-/// A clause whose span the source cannot produce is annotated with what went
-/// wrong rather than skipped, for `Interp::clause_site`'s reason: a printer is
-/// the worst place to turn a reportable state into a blank line.
 pub(crate) fn render_annotated(
     chunk: &Chunk,
     body: &rexx_parse::CodeBody,
@@ -385,13 +360,6 @@ fn annotation(
 
 /// A binary operator, as the spelling it is written with -- except for the two
 /// concatenations, which are named.
-///
-/// `Operator::spelling` answers the empty string for abuttal and a single space
-/// for blank, because that is what the source holds and what the `>O>` line
-/// carries. Rendered straight, both come out as whitespace inside a
-/// space-separated line: `op=` followed by the next field, indistinguishable
-/// from each other and from a rendering bug. Naming them is what
-/// `Expr::shape` already does for the same two, in the same words.
 fn render_operator(op: Operator) -> &'static str {
     match op {
         Operator::Abuttal => "abut",
@@ -401,9 +369,6 @@ fn render_operator(op: Operator) -> &'static str {
 }
 
 /// An optional register operand: its index, or `-` for an op that has none.
-///
-/// A rendering rather than `Option`'s own `Debug`, so a golden expectation
-/// reads as one word per field.
 fn render_register(register: Option<u16>) -> String {
     match register {
         Some(register) => register.to_string(),
@@ -444,12 +409,6 @@ fn render_queue_keyword(keyword: QueueKeyword) -> &'static str {
 /// slot's own expression, and a step per child below it, `L` into a binary
 /// operator's left or a prefix operator's operand and `R` into a binary
 /// operator's right.
-///
-/// Spelled out rather than rendered as the encoding's own integer, because a
-/// golden expectation is read by a person: `root.L.R` says where the op sits
-/// and the bits behind it do not.
-/// An argument op's `src`: the register, or `omitted` for the position that
-/// carries no register at all.
 fn render_arg(src: u16) -> String {
     if src == Op::ARG_OMITTED {
         "omitted".to_string()
@@ -469,9 +428,6 @@ fn render_path(path: NodePath) -> String {
 
 /// A compiled read's or write's own slot, or `-` for one that resolves its
 /// own.
-///
-/// The same shape [`render_register`] uses, so an absent operand reads the
-/// same way whichever field it is.
 fn render_slot(at: PlanSlot) -> String {
     match at.resolved() {
         Some(at) => at.to_string(),

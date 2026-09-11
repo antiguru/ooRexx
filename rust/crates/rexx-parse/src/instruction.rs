@@ -10,34 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The instruction grammar: one clause in, one instruction out.
-//!
-//! Ported from `LanguageParser::nextInstruction` (`InstructionParser.cpp:122`)
-//! and the constructors below it.
-//!
-//! # Keywords are not reserved words
-//!
-//! Every one of the 35 instruction keywords is a legal variable name. `if = 2`
-//! assigns, `say if` prints 2, and `if if = 2 then say if` does both in one
-//! clause. A symbol is a keyword only by POSITION: the first token of a clause
-//! that is not a label and not an assignment. That is why recognition lives
-//! here rather than in the scanner, which cannot know a token's position in
-//! its clause, and why `ParseCtx::keywords` is consulted at exactly one place
-//! per table.
-//!
-//! `RexxToken::keyword()` (`KeywordConstants.cpp:510`) resolves against the
-//! upcased spelling of any symbol token, whatever its class, so `end.` and
-//! `if.1` do not match: their spellings are `END.` and `IF.1`. Recognition
-//! here is the same test, as an integer comparison against a pre-interned id.
-//!
-//! # What this does not decide
-//!
-//! The C++ splits instruction parsing in two. `nextInstruction` handles one
-//! clause and knows nothing about blocks; `translateBlock`
-//! (`LanguageParser.cpp:1176`) walks the whole body with a control stack and
-//! raises every misplaced-block error. This module is the first half. It
-//! carries one bit of the second half, `ClauseCursor`'s pending `THEN`,
-//! because `THEN` is the one keyword `nextInstruction` itself rejects, and
-//! nothing else. `parse_instructions` lists what the chain assembler owes.
 
 use std::ops::Range;
 
@@ -178,24 +150,11 @@ const SUB_WHILE: usize = 48;
 const SUB_WITH: usize = 49;
 
 /// The error the C++ raises where its own `switch` has no case left.
-///
-/// `reportException(Error_Interpretation_switch, ...)` appears at five points
-/// inside the loop grammar, each after an expression whose terminator set
-/// admits only the keywords the switch already handles, so none is reachable.
-/// They are reproduced as the same error rather than as a panic, because a
-/// panic on source input would be worse than an odd number, and left in place
-/// rather than dropped so that a future change to a terminator set surfaces
-/// here instead of silently taking a wrong branch.
 const UNREACHABLE_SWITCH: (u16, u16) = (49, 2);
 
 /// The sub-number of the missing-`THEN` error, which names the instruction
 /// that wanted it: `Error_Then_expected_if` is 18.1 and
 /// `Error_Then_expected_when` is 18.2.
-///
-/// Raised in two places, and `block::translate_block` owns the second: here
-/// when a clause that is not a `THEN` follows the `IF`, and there when the body
-/// ends before any clause does, which is the one shape with no offending clause
-/// to report against.
 pub(crate) fn missing_then_sub(which: PendingThen) -> u16 {
     match which {
         PendingThen::If => 1,
@@ -204,16 +163,6 @@ pub(crate) fn missing_then_sub(which: PendingThen) -> u16 {
 }
 
 /// Parses the clause the cursor is sitting on, advancing it.
-///
-/// `block` is the body being assembled, which four constructors read: `whenNew`
-/// asks it which `SELECT` is open, `guardNew` asks it which variables are
-/// exposed, and `exposeNew` and `useLocalNew` ask it whether anything precedes
-/// them. The last three also write to it. Nothing here pushes or pops the
-/// control stack: that is `block::translate_block`'s, which is also this
-/// function's only caller.
-///
-/// Panics on an exhausted cursor and on a clause whose first token is `::`,
-/// neither of which is an instruction. `translate_block` filters both.
 pub(crate) fn parse_instruction(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,
@@ -239,11 +188,6 @@ pub(crate) fn parse_instruction(
         // error fires instead. Both reject `if 1 = 1` followed by
         // `then: nop`, measured 35.1 for both the IF and the WHEN spelling,
         // and only the number differs.
-        //
-        // `tests::a_label_after_an_if_is_rejected_by_the_label_guard` pins
-        // both spellings. Without that test the guard could be deleted and
-        // nothing would fail, and then the program would start being
-        // ACCEPTED, with the label silently discarded.
         if parser.clause.label.is_some() || parser.first_keyword() != Some(KW_THEN) {
             // Reported against THIS clause, the offending one, and not against
             // the IF. The error carries both positions and only a source with
@@ -272,10 +216,6 @@ struct Inst<'a> {
     cursor: TokenCursor,
     clause: Clause,
     /// The byte offset every error is reported against.
-    ///
-    /// The start of the clause, not of the offending token: `syntaxError`
-    /// reports against `clauseLocation` even when it is handed a token, and
-    /// Task 3.8 turns this into a line number.
     clause_byte: usize,
 }
 
@@ -298,10 +238,6 @@ impl<'a> Inst<'a> {
     }
 
     /// Index of the next token that is not a blank, without consuming.
-    ///
-    /// `None` is the end of the clause, which is the C++'s `TOKEN_EOC`: the
-    /// terminating token is outside `Clause::tokens`, so running out of tokens
-    /// is exactly `isEndOfClause()`.
     fn peek_real_index(&self) -> Option<usize> {
         self.cursor.peek_real(self.ctx.tokens)
     }
@@ -313,11 +249,6 @@ impl<'a> Inst<'a> {
 
     /// Index of the `n`th token that is not a blank, counting the next one as
     /// zero, without consuming.
-    ///
-    /// This is the whole of what `markPosition`/`resetPosition` bought the C++
-    /// in `createLoop`: it looks two real tokens ahead to tell `DO name = expr`
-    /// from `DO name OVER expr` from `DO expr`, then consumes according to what
-    /// it found.
     fn nth_real_index(&self, n: usize) -> Option<usize> {
         let mut i = self.cursor.peek()?;
         let mut seen = 0;
@@ -354,9 +285,6 @@ impl<'a> Inst<'a> {
     }
 
     /// Steps the cursor to token index `to`.
-    ///
-    /// The C++ would `resetPosition` backwards. Nothing here ever does, so
-    /// this only moves forward and there is no `TokenCursor::back` to call.
     fn seek(&mut self, to: usize) {
         while self.cursor.position() < to {
             self.cursor.advance();
@@ -364,20 +292,11 @@ impl<'a> Inst<'a> {
     }
 
     /// A second cursor over the same clause, at the same position.
-    ///
-    /// This is what replaces `markPosition`/`resetPosition`: a caller that may
-    /// want to un-parse something parses it on one of these and keeps it only
-    /// on success. The range is the whole clause, so an error raised through it
-    /// still reports against the clause's first byte.
     fn trial(&self) -> TokenCursor {
         self.trial_from(self.cursor.position())
     }
 
     /// A second cursor over the same clause, positioned at token `at`.
-    ///
-    /// Used to re-present a token already consumed, which is the C++'s
-    /// `previousToken()` followed by a parse that may fail. The range is still
-    /// the whole clause, so an error reports against the clause's first byte.
     fn trial_from(&self, at: usize) -> TokenCursor {
         let mut trial = TokenCursor::new(self.clause.tokens.clone());
         while trial.position() < at {
@@ -431,14 +350,6 @@ impl<'a> Inst<'a> {
     // ---- finishing a clause ----
 
     /// The byte an `IF`'s or `WHEN`'s clause span ends at.
-    ///
-    /// Rule 2 ends an ordinary clause at the END of its terminating token, so
-    /// `nop;` traces with its semicolon. `RexxInstructionIf` instead sets the
-    /// end from the START of whatever token ended the condition
-    /// (`IfInstruction.cpp:64`), so both spellings lose bytes: measured,
-    /// `if 1 = 1   then    say "a"` keeps all three blanks before `then`, and
-    /// `if 1 = 1;` with `then` on the next line traces as `if 1 = 1` WITHOUT
-    /// its semicolon.
     fn condition_end(&self) -> usize {
         let terminator = self.peek_real_index().unwrap_or(self.clause.tokens.end);
         self.ctx
@@ -458,11 +369,6 @@ impl<'a> Inst<'a> {
 
     /// Consumes the clause with its span end moved to `end_at`, re-presenting
     /// whatever the cursor has not reached as the next clause.
-    ///
-    /// The span end is narrowed even when nothing follows, because the two
-    /// adjustments are independent: `if 1 = 1;` loses its semicolon whether or
-    /// not a `THEN` shares the line, and a `THEN` at the end of a line loses
-    /// the blanks after it.
     fn finish_split(
         self,
         cursor: &mut ClauseCursor,
@@ -510,11 +416,6 @@ impl<'a> Inst<'a> {
     }
 
     /// `labelNew` (`InstructionParser.cpp:2792`).
-    ///
-    /// Task 3.4 already ended the clause at the colon, so nothing is trimmed
-    /// here. Error 47.1 is raised at the point the C++ raises it, from
-    /// `isInterpret()` (`InstructionParser.cpp:155`): measured,
-    /// `interpret "here: nop"` is rc 47 with `found "HERE"`.
     fn label(&self, label: Range<usize>) -> Result<InstructionKind, ParseError> {
         if self.ctx.source.kind() == SourceKind::Interpret {
             return Err(self.error(47, 1));
@@ -533,11 +434,6 @@ impl<'a> Inst<'a> {
 
     /// The `symbol = expr` and `symbol (op)= expr` forms
     /// (`InstructionParser.cpp:180`-`196`, `assignmentNew`, `assignmentOpNew`).
-    ///
-    /// Recognised from the first two tokens with no blank skipped, which is
-    /// what the C++ does and is safe: a blank is only a token when the next
-    /// real character starts a symbol, a literal, a `(` or a `[`, so no blank
-    /// can sit before an `=`.
     fn assignment(&mut self) -> Result<Option<InstructionKind>, ParseError> {
         let Some(first) = self.peek_token(0) else {
             return Ok(None);
@@ -572,10 +468,6 @@ impl<'a> Inst<'a> {
     }
 
     /// The four message-term forms (`InstructionParser.cpp:207`-`250`).
-    ///
-    /// Parsed on a trial cursor, because a term with no message applied is not
-    /// a message instruction and the C++ resets its position when that
-    /// happens. `f(1)` and `"echo hi"` both come back here as commands.
     fn message(&mut self) -> Result<Option<InstructionKind>, ParseError> {
         let mut trial = self.trial();
         let Some(term) = parse_message_term(self.ctx, &mut trial)? else {
@@ -880,16 +772,6 @@ impl<'a> Inst<'a> {
     }
 
     /// `endNew` (`InstructionParser.cpp:2246`): an optional block name.
-    ///
-    /// The gate is `isSymbol()`, which is class-agnostic, so a number, a stem
-    /// and a compound are all legal block names as far as the parser is
-    /// concerned. Do not add a class check here. Measured, and all four are
-    /// block-MATCHING errors rather than parse errors, with the number chosen
-    /// by what the END failed to close: `do` / `end 1`, `end loop` and
-    /// `end a.` are Error 10.3, and the same three under a `select` are
-    /// Error 10.7. Only a token that is not a symbol at all is rejected here,
-    /// `end "x"` with 20.909, and only extra tokens after the name, `end a b`
-    /// with 21.909.
     fn end_name(&mut self) -> Result<Option<SymbolId>, ParseError> {
         let Some(token) = self.next_real() else {
             return Ok(None);
@@ -902,9 +784,6 @@ impl<'a> Inst<'a> {
     }
 
     /// `createLoop` (`InstructionParser.cpp:1994`), for both `DO` and `LOOP`.
-    ///
-    /// The two keywords share every form and differ in one place: bare `DO` is
-    /// a block and bare `LOOP` is `LOOP FOREVER`.
     fn create_loop(&mut self, is_loop: bool) -> Result<Loop, ParseError> {
         let mut label = None;
         let mut counter = None;
@@ -1027,10 +906,6 @@ impl<'a> Inst<'a> {
 
     /// `DO FOREVER`, `DO WHILE` and `DO UNTIL`, which differ only in the
     /// conditional that follows.
-    ///
-    /// `parseForeverLoop` (`InstructionParser.cpp:1860`) and the two `createLoop`
-    /// arms below it all reach `parseLoopConditional` with the cursor on the
-    /// keyword, so one function covers the three.
     fn plain_loop(
         &mut self,
         label: Option<SymbolId>,
@@ -1067,10 +942,6 @@ impl<'a> Inst<'a> {
 
     /// `newControlledLoop` (`InstructionParser.cpp:1265`):
     /// `DO i = initial TO t BY b FOR f`.
-    ///
-    /// The cursor is on the control variable and the `=` follows it. The three
-    /// keyword expressions may come in any order and each only once, and the
-    /// order is recorded because it is the evaluation order.
     fn controlled(
         &mut self,
         label: Option<SymbolId>,
@@ -1165,10 +1036,6 @@ impl<'a> Inst<'a> {
 
     /// `newDoWithLoop` (`InstructionParser.cpp:1582`):
     /// `DO WITH INDEX i ITEM v OVER expr`.
-    ///
-    /// The cursor is on the `INDEX` or `ITEM` keyword, the `WITH` having been
-    /// stepped past. At least one of the two variables is required and `OVER`
-    /// must follow both.
     fn do_with(
         &mut self,
         label: Option<SymbolId>,
@@ -1264,10 +1131,6 @@ impl<'a> Inst<'a> {
 
     /// `parseLoopConditional` (`InstructionParser.cpp:4600`): an optional
     /// trailing `WHILE` or `UNTIL`, and nothing after it.
-    ///
-    /// `unexpected` is the error for a token that is neither, which the C++
-    /// passes per caller: 27.901 from `parseForeverLoop` and `Error_None`
-    /// everywhere else, where the terminator set makes it unreachable.
     fn loop_conditional(
         &mut self,
         unexpected: (u16, u16),
@@ -1295,9 +1158,6 @@ impl<'a> Inst<'a> {
     }
 
     /// `addressNew` (`InstructionParser.cpp:563`).
-    ///
-    /// `ADDRESS` with nothing after it toggles between the current environment
-    /// and the previous one, which is why every field is optional.
     fn address(&mut self) -> Result<Address, ParseError> {
         let mut address = Address::default();
         let Some(index) = self.peek_real_index() else {
@@ -1511,10 +1371,6 @@ impl<'a> Inst<'a> {
     }
 
     /// `traceNew` (`InstructionParser.cpp:4124`), in its four forms.
-    ///
-    /// The order of the tests is what decides the shape: a symbol or a literal
-    /// is a whole number if it can be, an option string otherwise, and only a
-    /// token that is neither -- nor a signed number -- becomes an expression.
     fn trace(&mut self) -> Result<Trace, ParseError> {
         let Some(index) = self.peek_real_index() else {
             return Ok(Trace::Default);
@@ -1571,18 +1427,6 @@ impl<'a> Inst<'a> {
     }
 
     /// `guardNew` (`InstructionParser.cpp:2578`).
-    ///
-    /// The check behind `Error_Translation_guard_expose`, 99.913, is NOT made
-    /// here. The rule is that the `WHEN` expression must reference at least one
-    /// variable EXPOSED AT THAT POINT, and nothing weaker: measured, all three,
-    /// `guard on when 1` is 99.913 in the main program with no method and no
-    /// `EXPOSE` anywhere, `expose a` then `guard on when b` is 99.913 as well,
-    /// and only `expose a` then `guard on when a` is rc 0.
-    ///
-    /// So it is not a `translateBlock` check and not a method-only one --
-    /// `guardNew` raises it itself, from the variable set `setGuard`/`getGuard`
-    /// captured while the expression was parsed. It is deferred anyway, because
-    /// that set is per code body and this task holds no per-body state.
     fn guard(&mut self, block: &Block) -> Result<Guard, ParseError> {
         // Measured at run time: `interpret "guard on"` is Error 99.912.
         if self.ctx.source.kind() == SourceKind::Interpret {
@@ -1619,11 +1463,6 @@ impl<'a> Inst<'a> {
                 // capture is unconditional over the whole expression and those
                 // two paths are reached for exactly the variable references in
                 // it.
-                //
-                // Applies to GUARD OFF WHEN as well as GUARD ON WHEN, and in the
-                // main program as well as in a method. Both measured:
-                // `::method m` / `guard off when a` is 99.913, and
-                // `guard on when 1` with no method anywhere is 99.913.
                 if !self.guard_exposes(&condition, block) {
                     return Err(self.error(99, 913));
                 }
@@ -1692,9 +1531,6 @@ impl<'a> Inst<'a> {
     }
 
     /// One `FORWARD` option that takes a constant expression.
-    ///
-    /// `duplicate` is the sub-number of error 25 for a repeat and `missing`
-    /// that of error 35 for an absent expression.
     fn forward_option(
         &mut self,
         slot: &mut Option<Expr>,
@@ -1954,9 +1790,6 @@ impl<'a> Inst<'a> {
     }
 
     /// `useLocalNew` (`InstructionParser.cpp:2349`).
-    ///
-    /// Close to `processVariableList` but not the same: there is no `(name)`
-    /// form, a compound gets its own error, and the list may be empty.
     fn use_local(&mut self, block: &mut Block) -> Result<Use, ParseError> {
         // Measured at run time: `interpret "use local a"` is Error 99.915.
         if self.ctx.source.kind() == SourceKind::Interpret {
@@ -2106,10 +1939,6 @@ impl<'a> Inst<'a> {
     /// `callOnNew` (`InstructionParser.cpp:961`) and `signalOnNew` (`:3925`),
     /// which differ only in which conditions they accept and in four error
     /// numbers.
-    ///
-    /// `is_call` selects those: `CALL ON` accepts a strict subset of the
-    /// conditions, because a call trap cannot resume from the conditions that
-    /// have no continuation point.
     fn condition_trap(&mut self, on: bool, is_call: bool) -> Result<ConditionTrap, ParseError> {
         // `Error_Symbol_expected_on` is 20.911 and `Error_Symbol_expected_off`
         // is 20.912. Measured: `call on` is 20.911 and `call off` is 20.912.
@@ -2213,10 +2042,6 @@ impl<'a> Inst<'a> {
 
     /// `parseNew` (`InstructionParser.cpp:3102`), shared by `PARSE`, `ARG` and
     /// `PULL`.
-    ///
-    /// `short_form` is the source the `ARG` and `PULL` spellings imply. When it
-    /// is present there are no options and no source keyword to parse, and
-    /// UPPER is implied.
     fn parse_instruction_body(
         &mut self,
         short_form: Option<ParseSource>,
@@ -2305,11 +2130,6 @@ impl<'a> Inst<'a> {
 
     /// The template grammar (`InstructionParser.cpp:3239`-`3418`), shared by
     /// all three spellings.
-    ///
-    /// One entry per trigger, with `None` marking the comma that switches to
-    /// the next parse string. The trailing `End` trigger that assigns whatever
-    /// is left is only emitted when there are variables waiting for it, which
-    /// is what the C++ does with its `variableCount > 0` test.
     fn parse_template(&mut self, caseless: bool) -> Result<Vec<Option<ParseTrigger>>, ParseError> {
         let string_kind = if caseless {
             TriggerKind::Mixed
@@ -2419,10 +2239,6 @@ impl<'a> Inst<'a> {
     }
 
     /// The column a `+`, `-`, `=`, `<` or `>` trigger moves to.
-    ///
-    /// A numeric symbol or a parenthesised expression, and nothing else. A
-    /// VARIABLE is rejected: measured, `parse arg +x a` is rc 218, Error 38.2,
-    /// while `parse arg +(x) a` is rc 0.
     fn trigger_position(&mut self) -> Result<Expr, ParseError> {
         let Some(token) = self.next_real() else {
             // `Error_Invalid_template_missing`. Measured: `parse arg +` is
@@ -2451,11 +2267,6 @@ impl<'a> Inst<'a> {
 
     /// `processVariableList` (`InstructionParser.cpp:4469`), shared by `DROP`,
     /// `EXPOSE` and `PROCEDURE EXPOSE`.
-    ///
-    /// `missing` is the sub-number of error 20 for a token that cannot be a
-    /// variable and for an empty list, which names the instruction:
-    /// `Error_Symbol_expected_drop` is 20.901 and
-    /// `Error_Symbol_expected_expose` is 20.902.
     fn variable_list(&mut self, missing: u16) -> Result<Vec<VariableRef>, ParseError> {
         let mut out = Vec::new();
         while let Some(token) = self.next_real() {
@@ -2499,10 +2310,6 @@ impl<'a> Inst<'a> {
     }
 
     /// `LEAVE`'s and `ITERATE`'s optional block name.
-    ///
-    /// The two sub-numbers differ only in which keyword is named:
-    /// `Error_Symbol_expected_leave` is 20.907 and `Error_Invalid_data_leave`
-    /// is 21.907, against 20.908 and 21.908 for `ITERATE`.
     fn block_name(&mut self, sub: u16) -> Result<Option<SymbolId>, ParseError> {
         let Some(token) = self.next_real() else {
             return Ok(None);
@@ -2555,9 +2362,6 @@ impl<'a> Inst<'a> {
 
     /// `RexxToken::value`: the upcased spelling of a symbol, or a literal's
     /// decoded bytes.
-    ///
-    /// Panics on any other token, which no caller passes: every one has
-    /// already tested `isSymbol` or `isSymbolOrLiteral`.
     fn value_of(&self, token: &Token) -> Box<[u8]> {
         match &token.kind {
             TokenKind::Symbol { id, .. } => Box::from(self.ctx.symbols.name(*id).as_bytes()),
@@ -2576,10 +2380,6 @@ impl<'a> Inst<'a> {
 
     /// `ifNew` (`InstructionParser.cpp:2678`) and the `SELECT` half of
     /// `whenNew` (`:2708`), which share `RexxInstructionIf`.
-    ///
-    /// The condition is a logical list, so commas are an AND rather than an
-    /// array: measured, `if then nop`, `if , 1 = 1 then nop` and
-    /// `if 1 = 1, then nop` are all 35.929.
     fn if_instruction(
         mut self,
         cursor: &mut ClauseCursor,
@@ -2624,16 +2424,6 @@ impl<'a> Inst<'a> {
 
     /// Whether `condition` names at least one variable exposed at this point,
     /// which is what `GUARD ... WHEN` requires.
-    ///
-    /// Reproduces which references the C++ captures, and the set is narrower
-    /// than "every symbol in the expression": a constant, a `.name` environment
-    /// symbol and a literal are not variables and reach neither
-    /// `addSimpleVariable` nor `addStem`. A compound contributes its STEM, with
-    /// the trailing period, and each tail piece that is a variable rather than a
-    /// constant, which is what `addCompound` (`LanguageParser.cpp:2153`) looks
-    /// up. Measured both ways: `expose a.` / `guard on when a.1` is rc 0 while
-    /// `expose a` / `guard on when a.1` is 99.913, because the stem of `A.1` is
-    /// `A.` and not `A`.
     fn guard_exposes(&self, condition: &Expr, block: &Block) -> bool {
         let exposed = match &condition.kind {
             ExprKind::Variable(id) | ExprKind::Stem(id) => {
@@ -2671,9 +2461,6 @@ impl<'a> Inst<'a> {
 }
 
 /// A `SELECT` with nothing wired to it yet.
-///
-/// The `WHEN` list, the `OTHERWISE` and the `END` are all found later, by the
-/// assembler, so they are empty here rather than being guessed at.
 fn select_node(label: Option<SymbolId>, case: Option<Expr>) -> InstructionKind {
     InstructionKind::Select {
         label,
@@ -2686,13 +2473,6 @@ fn select_node(label: Option<SymbolId>, case: Option<Expr>) -> InstructionKind {
 
 /// Raises the error a non-variable symbol gets in a `DROP`, `EXPOSE`,
 /// `PROCEDURE EXPOSE` or `USE LOCAL` list.
-///
-/// `processVariableList` (`InstructionParser.cpp:4487`-`4496`) tests the
-/// symbol's CLASS where `needVariable` tests its spelling, and the two
-/// disagree on a constant that starts with a period. Measured, both
-/// directions: `drop .5` is 31.2 from here, `drop (.5)` is 31.3 from
-/// `addVariable`, and `do .5 = 1 to 2` is 31.3 as well. Reproduced as two
-/// functions rather than merged into one.
 fn need_variable_class(class: SymbolClass, byte: usize) -> Result<(), ParseError> {
     match class {
         SymbolClass::Variable | SymbolClass::Stem | SymbolClass::Compound => Ok(()),
@@ -2704,11 +2484,6 @@ fn need_variable_class(class: SymbolClass, byte: usize) -> Result<(), ParseError
 }
 
 /// The number of digits a `TRACE` skip count is converted under.
-///
-/// `traceNew` calls `requestNumber(debug_skip, number_digits())`, and
-/// `number_digits()` is the parse-time `NUMERIC DIGITS`, which is the default
-/// unless a `::OPTIONS DIGITS` directive changed it. That directive belongs to
-/// the directive parser, so the default is what applies here.
 const TRACE_DIGITS: usize = 9;
 
 #[cfg(test)]

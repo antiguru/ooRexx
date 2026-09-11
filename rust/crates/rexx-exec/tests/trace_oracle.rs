@@ -11,127 +11,6 @@
 
 //! Criterion 3 (D17): `TRACE` output matches the oracle byte for byte, over a
 //! committed table mapping each reachable prefix to a witness program.
-//!
-//! **This is the opposite strategy from `tests/corpus.rs`, deliberately.**
-//! `corpus.rs` shells out to the oracle *live*, every run, because it exists
-//! to track progress across tasks and a committed expectation would need
-//! regenerating on every task that changes behaviour. A trace witness is a
-//! fixed artefact instead, because its whole value is that it cannot drift
-//! silently, and capturing it needs a running oracle that a machine checking
-//! out this tree may not have. Neither is wrong; they answer different
-//! questions, and `rexx-parse/tests/sourceline_oracle.rs` is this design's
-//! own precedent -- unrelated to `TRACE` but the same "committed expectation,
-//! regenerate by a driver script" shape.
-//!
-//! **The prefix table**, all 19 from `RexxActivation.hpp:90`-`110`, and which
-//! witness (if any) below reaches it. Which of them a witness reaches, and who
-//! owns each of the rest, is [`PREFIX_COVERAGE`]'s -- asserted, not described
-//! here. One correction to the design spec's own "measured reachable from
-//! pure-4a code" list is worth keeping, because it was got wrong once: `>E>`
-//! is not on that list and is nevertheless reachable
-//! (`dotvariable_beyond_the_list.rex`).
-//!
-//! | prefix | witness |
-//! |---|---|
-//! | `*-*` | every witness below (asserted, not claimed -- see below) |
-//! | `>>>` | every witness below **except `trace_labels.rex`**, whose whole
-//!   output is three `*-*` lines (asserted) |
-//! | `>=>` | `compound_read_write.rex` (and `trace_output.rex`'s simple form) |
-//! | `>L>` | `trace_output.rex` |
-//! | `>V>` | `trace_output.rex`, `compound_read_write.rex` |
-//! | `>O>` | `trace_output.rex` |
-//! | `>K>` | `keyword_while.rex` (`WHILE`), `pull_queue.rex` (`PULL`/`LINEIN`) |
-//! | `>C>` | `compound_read_write.rex` |
-//! | `>P>` | `prefix_operators.rex` |
-//! | `>E>` (bonus, not required) | `dotvariable_beyond_the_list.rex` |
-//! | `>A>` | `call_arguments.rex`, `function_call.rex` |
-//! | `>F>` | `function_call.rex` |
-//! | `>R>` | `use_arg_alias.rex` |
-//! | `>M>` | `message_send.rex` |
-//! | `>.>` | `parse_placeholder.rex` |
-//! | `>N>` | `namespace_lookup.rex` |
-//!
-//! **Several witnesses below claim no prefix the table above does not
-//! already cover, and are here for a *content* difference instead** --
-//! something no prefix table can express. No count is given, deliberately:
-//! the sentence that stood here carried one, and it was stale within a
-//! commit of being written (re-review NEW-4). [`WITNESS_PREFIXES`] is the
-//! list, and it is the one this file's own test reads. The kinds, which is
-//! what a reader actually needs:
-//!
-//! * a value line that was **absent** -- `controlled_loop.rex` (a
-//!   `Controlled` loop's re-tested pass) and `exit_value.rex`
-//!   (`EXIT <expr>`'s own `>>>`);
-//! * a value line that was present and **wrong** --
-//!   `control_variable_reread.rex` (with the trip count that produced it);
-//! * a whole mode that emitted **nothing** -- `trace_labels.rex`;
-//! * a **condition** that was not raised -- `control_variable_novalue.rex`;
-//! * a value line that carried the **wrong stage of a transform** --
-//!   `pull_queue.rex`, where a bare `PULL`'s `>K>` is the line before the
-//!   upcase and its `>>>` the line after, and where `ARG` alone among the
-//!   sources emits no `>K>` at all.
-//!
-//! Every one of them is listed in [`WITNESS_PREFIXES`] for the prefixes it
-//! does emit, which is what keeps it inside this file's own drift check.
-//!
-//! **This table used to be prose only, and a branch review (H3,
-//! `branch-review-harness.md`) showed exactly what that cost**: replacing
-//! `keyword_while.rex` with a straight-line program emitting no `>K>` at
-//! all, regenerating its `.expected` from the live oracle with this file's
-//! own documented recipe, still passed all five tests that existed then --
-//! the byte-for-byte
-//! check compares this crate's output to the committed file and nothing
-//! else, so a witness that stopped witnessing its own prefix went
-//! unnoticed. [`WITNESS_PREFIXES`] and
-//! [`every_witness_still_emits_every_prefix_it_is_named_for`] turn the
-//! table above into an assertion: each witness's committed `.expected`
-//! stderr must contain every prefix this table claims for it, checked as a
-//! byte substring, and the union across every witness must be exactly
-//! [`CLAIMED_PREFIXES`] -- named rather than counted, because a count here is
-//! falsified by the next witness that lands and the name never is. A witness
-//! can still be swapped for a better one, but not for one that silently
-//! covers less.
-//!
-//! **NOTHING IN THIS FILE PINS A TRACE LINE'S INDENT, and no witness here
-//! can** (review round 1, F1). `check_witness` compares both sides through
-//! `support::normalize_stderr` (DEVIATION 0), which collapses exactly the
-//! space run between a trace line's marker and its content -- so a value
-//! line emitted at the wrong indent compares equal to one emitted at the
-//! right one. Measured rather than reasoned: replacing the `do_indent`/
-//! `loop_indent` split in `run.rs`'s own `LoopState::Controlled` arm with
-//! `loop_indent` alone leaves this file green while diverging from the
-//! oracle byte for byte, and the same holds for `>F>` emitted two columns
-//! in. **This file green, not the workspace**: the paragraph below names
-//! the unit test that catches both, and it is in the same workspace, so a
-//! sentence claiming the workspace stays green would contradict it twelve
-//! lines later. (It did, with a gate number that was stale as well --
-//! re-review NEW-3.)
-//!
-//! What *does* hold trace indents to the oracle: the `run.rs`/`lib.rs`/
-//! `error.rs` unit tests that assert an exact stderr string, which is
-//! outside either harness's comparison function, plus raw A/B probes in each
-//! task's own report. For Task 9's own two indents specifically that is
-//! `run/tests.rs`'s `task_9s_two_new_indents_are_the_oracles_own_and_
-//! normalisation_cannot_see_them`, which asserts both transcripts byte for
-//! byte and goes red under exactly the mutation that leaves this file green.
-//! **A comment in this file must not claim otherwise**; two did, and this
-//! paragraph replaces them.
-//!
-//! **The gap this file used to disclose here is closed, and
-//! `controlled_loop.rex` is the witness** (Task 9). A `Controlled`
-//! (`TO`-style) `DO`/`LOOP`'s own re-tested pass traces two more `>>>` lines
-//! (the control variable's pre- and post-increment value, `DoBlock::
-//! checkControl`, `DoBlock.cpp:182`-`205`) plus, under `TRACE I`, the `>V>`
-//! that reads it and the `>=>` that writes it back. That witness covers all
-//! four, in both modes, across an `ITERATE` and a negative `BY`, and it
-//! carries a `DO OVER` beside them as the neighbouring *passing* case --
-//! which pins that a `DO OVER` traces its own `>=>` at all, not the indent
-//! it traces it at. `keyword_while.rex` remains the `>K>` witness on its own
-//! merits (a real repeating construct, re-echoing its clause every pass,
-//! `>K>` re-firing every pass), not because it once dodged this gap.
-//!
-//! **Regeneration.** Every `.expected` file was captured with:
-//!
 //! ```bash
 //! ( ulimit -v 1048576; \
 //!   LD_LIBRARY_PATH=/path/to/ooRexx/build/lib \
@@ -140,27 +19,6 @@
 //! { echo "RC $rc"; echo "===STDOUT==="; cat /tmp/out; \
 //!   echo "===STDERR==="; cat /tmp/err; } > PROGRAM.expected
 //! ```
-//!
-//! The `</dev/null` is not decoration: `pull_queue.rex` reads the console, and
-//! without it the capture blocks on a terminal and consumes whatever a pipe
-//! happens to hold. `run_program`'s own default (`Invocation::none`, hence
-//! `ProgramInput::Nothing`) is the empty console, so a capture taken with any
-//! other input would be an expectation this crate can never reproduce.
-//!
-//! `trace_output.rex` and `pull_queue.rex` live in `rust/corpus/lang/` (both
-//! corpus subset members) rather than being duplicated here
-//! -- this test reads them from there by relative path, and only their own
-//! `.expected` files live in this directory.
-//!
-//! **DEVIATION 0**: `check_witness`'s own stderr comparison runs both sides
-//! through `support::normalize_stderr` (`tests/support/mod.rs`, shared with
-//! `tests/corpus.rs`) before comparing -- collapsing only the run of spaces
-//! between a trace line's own marker and its content, never anything else.
-//! This applies to the *comparison* alone. **Regeneration stays exact**:
-//! the recipe above captures the oracle's own raw bytes with no
-//! normalisation applied, so a committed `.expected` file remains real
-//! oracle output, indent counter defect included, for anyone regenerating
-//! one later.
 
 mod support;
 
@@ -394,25 +252,6 @@ fn parse_placeholder_covers_the_dummy_prefix_and_the_two_modes_disagreement() {
 /// fact about them that only a trace can show: for a bare `PULL`, the `>K>`
 /// line carries the value **before** the upcase while the `>>>` line after it
 /// carries the value after, so the two lines disagree on a single instruction.
-///
-/// Three claims, all held by `check_witness`'s byte-exact comparison rather
-/// than by the substring table below:
-///
-/// * `>K>` is emitted for `PULL` and for `LINEIN` under `TRACE R` **and**
-///   under `TRACE I`, so it is a `results` prefix. A witness in one mode alone
-///   passes against an engine that gated it on the other.
-/// * `ARG` and `PARSE ARG` emit **no** `>K>` in either mode -- the only
-///   sources that do not. An engine that emitted one adds a line the committed
-///   bytes do not have.
-/// * the pre-upcase split above, which an engine that traced the transformed
-///   value in `>K>` gets wrong while still printing the right answer on
-///   stdout.
-///
-/// Read from `rust/corpus/lang/` rather than duplicated here, the same way
-/// `trace_output.rex` is: that program is a `phase-4c.txt` member and will run
-/// live against the oracle once Task 15 wires that file into `tests/corpus.rs`,
-/// where today only `coverage.rs` parses it. Committing its expectation here is
-/// what makes its trace half checked *now*, offline, in the ungated suite.
 #[test]
 fn pull_queue_covers_the_line_reading_sources_in_both_modes() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang/pull_queue.rex");
@@ -424,11 +263,6 @@ fn pull_queue_covers_the_line_reading_sources_in_both_modes() {
 /// form whose line shows the target rather than the method's result. The
 /// argument-bearing send is what puts an `>A>` between the receiver's `>L>`
 /// and the `>M>`.
-///
-/// The tag is **quoted**, which is what separates this line from `>F>`:
-/// `traceMessage` passes `quoteTag = true` (`RexxActivation.hpp:349`) where
-/// `traceFunction` passes `false`. A witness for one does not cover the
-/// other.
 #[test]
 fn message_send_covers_the_message_result_line() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace_oracle/message_send.rex");
@@ -437,18 +271,6 @@ fn message_send_covers_the_message_result_line() {
 
 /// `>N>`: a namespace-qualified class lookup, `w:NsWidget` against a
 /// `::REQUIRES ... NAMESPACE w`.
-///
-/// The tag is `namespace:class`, both halves upcased and the pair
-/// **unquoted** -- `traceClassResolution` builds it as
-/// `n->concatWith(c, ':')` and passes `quoteTag` false
-/// (`RexxActivation.hpp:358`), which is what separates this line from `>M>`
-/// beside it.
-///
-/// **The one witness here that needs a second file**, `namespace_lookup_lib
-/// .cls`, which the `::REQUIRES` finds through the program's own directory --
-/// `check_witness` hands `run_program` this file's absolute path, so that
-/// directory is this one. Nothing in the transcript names either path, which
-/// is why the expectation can be committed where `>I>`/`<I<`'s cannot.
 #[test]
 fn namespace_lookup_covers_the_class_resolution_line() {
     let path =
@@ -602,16 +424,6 @@ enum Coverage {
     /// interpreters on every run and compares all three channels, so the
     /// comparison is as strict as `check_witness`'s -- it is the
     /// *expectation* that cannot be committed, not the check.
-    ///
-    /// **The reason is host dependence, and only one kind of line has it.**
-    /// `>I>`/`<I<` name the package by its absolute path, so a captured
-    /// `.expected` would be true on the machine that captured it and false
-    /// on the next; a live run gives both interpreters the same path in the
-    /// same process invocation. A prefix belongs here only when no committed
-    /// file could hold it, never as a shortcut around capturing one.
-    ///
-    /// [`every_live_witness_emits_its_prefix_and_is_run_by_the_corpus`] is
-    /// what keeps this from being a claim this file makes about itself.
     WitnessedLive(&'static str),
     /// Not reachable from the code this crate runs yet, and the phase named
     /// is where it becomes reachable. The string is spelled exactly as
@@ -624,31 +436,6 @@ enum Coverage {
 /// **Criterion 3's coverage measure** (D14 amendment 3). Without this table
 /// the honest statement is that the witnesses verify what they cover and
 /// *how much of the trace surface that is* is measured by nothing.
-///
-/// Every one of the oracle's nineteen prefixes appears exactly once, as
-/// [`Coverage::Witnessed`], as [`Coverage::WitnessedLive`], or with the phase
-/// that owns it. The owners:
-///
-/// * `+++` -- Phase 7. Four producers in the C++, and every one of them is
-///   behind something D18 defers. `RexxActivation.cpp:4468` is a command's
-///   non-zero `RC`, reached through `RexxActivation::command`, whose only
-///   two callers are `AddressInstruction.cpp:163` and
-///   `CommandInstruction.cpp:89` -- command dispatch, which D18 assigns to
-///   Phase 7 even though the `ADDRESS` *instruction* itself is not. The
-///   other three are interactive debug: `:4024` (`traceSourceString`, whose
-///   caller is guarded by `inDebug()` at `:4305`), `:4237` (the debug
-///   prompt, whose message text begins `+++`), and `Activity.cpp:1496`
-///   (`displayDebug`, likewise). So an `ADDRESS` instruction alone does not
-///   bring this prefix into reach; issuing a command does, and that is the
-///   half of `ADDRESS` that is not 4c's. See `phase-4-exclusions.txt`'s own
-///   `+++` row for the transcripts.
-///
-/// `>I>` and `<I<` were owned by 4c here and are now witnessed, by
-/// `corpus/lang/routine_dispatch.rex` rather than by a file in this
-/// directory. The gate is `tracingLabels() && isMethodOrRoutine()`
-/// (`RexxActivation.cpp:3655`) and that witness's block E supplies both
-/// halves from inside a `::ROUTINE`; the absolute package path in the line
-/// is why the expectation cannot be committed.
 const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     ("*-*", Coverage::Witnessed),
     ("+++", Coverage::Owned("Phase 7")),
@@ -672,16 +459,6 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
 ];
 
 /// The phase subset files this file reads, in union order.
-///
-/// **A named constant pinned against the directory below**, which is the
-/// arrangement `corpus.rs`, `coverage.rs`, `ir_recorded.rs` and
-/// `collect_stress.rs` each already have. Measured before the pin was added
-/// here: dropping `phase-5d.txt` from this list left this binary and those
-/// four green, because nothing compared the list with the directory -- so a
-/// phase subset file added and forgotten here would keep the check below
-/// measuring the union as it stood before, and a [`Coverage::WitnessedLive`]
-/// row whose program only that file names would rest on this file's own
-/// output rather than on the oracle.
 const SUBSET_FILES: &[&str] = &[
     "phase-4a.txt",
     "phase-4b.txt",
@@ -694,12 +471,6 @@ const SUBSET_FILES: &[&str] = &[
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
-///
-/// Read from the directory rather than listed a second time, so the assertion
-/// below cannot be satisfied by a copy of [`SUBSET_FILES`] edited in the same
-/// change. Duplicated from the four binaries named above rather than shared,
-/// for the reason each of them gives: these are integration-test binaries and
-/// none can `mod` another.
 fn phase_subset_files_on_disk() -> Vec<String> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
     let entries =
@@ -738,27 +509,6 @@ fn the_prefix_table_reads_every_phase_subset_file() {
 /// Each [`Coverage::WitnessedLive`] row's own chain, the analogue of
 /// [`every_witness_still_emits_every_prefix_it_is_named_for`] for a witness
 /// whose expectation lives in the live corpus.
-///
-/// Three links, and dropping any one of them makes the row a claim rather
-/// than a measurement:
-///
-/// 1. **The program emits the prefix.** Run here, in process, through the
-///    same `run_program` entry point every other check uses -- so a change
-///    that stops emitting the line goes red here even with no oracle on the
-///    machine.
-/// 2. **The corpus runs it against the oracle.** The path must appear in one
-///    of the phase subset files, which is what `tests/corpus.rs` reads; a
-///    program not listed there is compared with nothing, and this row would
-///    then rest on this file's own output alone.
-/// 3. **The file exists**, which the read in link 1 already settles.
-///
-/// What this cannot check is the *bytes*: that is link 2's job, and it is
-/// where the absolute package path stops being a problem, because both
-/// interpreters get the same one.
-///
-/// The union it reads is [`SUBSET_FILES`], which
-/// [`the_prefix_table_reads_every_phase_subset_file`] holds against the corpus
-/// directory: link 2 is only as wide as that list.
 #[test]
 fn every_live_witness_emits_its_prefix_and_is_run_by_the_corpus() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
@@ -819,26 +569,6 @@ const OUT_OF_SCOPE_PREFIX_COUNT: usize = 1;
 const OWNER_PHASES: &[&str] = &["Phase 7"];
 
 /// Criterion 3's coverage measure, asserted rather than printed.
-///
-/// **A printed number that no assertion reads cannot fail**, which is the
-/// whole reason this test exists in the shape it does: the number is a
-/// committed literal, and the four checks below are what make it mean
-/// something.
-///
-/// 1. The prefix set equals `support::TRACE_PREFIXES` -- the nineteen read
-///    from `RexxActivation.cpp`'s own `trace_prefix_table`. So this table
-///    cannot quietly drop a prefix (which would make the coverage fraction
-///    look better) or invent one (which would make it look worse).
-/// 2. The `Witnessed` subset equals `CLAIMED_PREFIXES`, which
-///    [`every_witness_still_emits_every_prefix_it_is_named_for`] has already
-///    tied to what the committed `.expected` files actually contain. That
-///    chain is what stops "witnessed" from being a claim this file makes
-///    about itself, and
-///    [`every_live_witness_emits_its_prefix_and_is_run_by_the_corpus`] is the
-///    same chain for the `WitnessedLive` rows.
-/// 3. Both counts match their committed literals and add up to the whole
-///    table.
-/// 4. Every owner names a phase from [`OWNER_PHASES`].
 #[test]
 fn the_trace_surfaces_coverage_is_eighteen_of_nineteen_with_an_owner_for_the_rest() {
     let mut listed: Vec<&str> = PREFIX_COVERAGE.iter().map(|(prefix, _)| *prefix).collect();

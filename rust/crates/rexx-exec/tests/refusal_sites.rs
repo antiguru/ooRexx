@@ -13,32 +13,6 @@
 //! `src/`, and the ones a message send itself can produce carry a verdict for
 //! an instance receiver. This file re-derives the enumeration from the source
 //! and holds the committed one equal to it.
-//!
-//! # Why the enumeration is derived rather than listed
-//!
-//! The verdicts answer a question a receiver is an input to -- a class object
-//! renders as its id and an instance as an article and a class id, and the
-//! frame above the error differs the same way. A constructor added after the
-//! walk would be a site nobody asked that question of, and prose saying "all
-//! of them" cannot see one arrive. Re-deriving is what makes the new site red
-//! here instead.
-//!
-//! # What this cannot see
-//!
-//! It does not re-run a probe. A verdict of `agrees` is a claim about a
-//! measurement taken once, and nothing here would notice the crate's answer
-//! moving away from the oracle's afterwards; `tests/corpus.rs` is what sees
-//! that, for the rows that reach it. What this sees is a **site** appearing,
-//! disappearing or moving files, which is the axis the walk's completeness
-//! rests on.
-//!
-//! # The scanner
-//!
-//! `#[cfg(test)] mod` blocks are excluded, so a constructor only a test builds
-//! is not a site; line comments are stripped, so a constructor named only in
-//! prose is not one either. Both matter: `Loud::parse` appears twice in
-//! comments and does not exist, and counting it is what made an earlier figure
-//! for this surface one too many.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -169,9 +143,6 @@ fn name_at(code: &str, from: usize) -> Option<&str> {
 }
 
 /// `Loud`/`Raised` constructors, keyed by name, as `(kind, definition site)`.
-///
-/// A signature may wrap, so the return type is read after the matching close
-/// paren rather than off the `fn` line.
 fn definitions(
     files: &BTreeMap<PathBuf, Vec<(usize, String)>>,
 ) -> BTreeMap<String, (String, String)> {
@@ -525,10 +496,6 @@ fn every_send_surface_row_is_walked() {
 /// identifier the constructor itself can produce, and a `no` requires it not to
 /// be -- so a row cannot say it walked a site without naming that site's own
 /// error number or message, and cannot say it did not while carrying one.
-///
-/// Without the second direction this would be the shape it exists to catch: an
-/// assertion that every site has a row, green over rows whose probe measured an
-/// access check that fires first.
 #[test]
 fn a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not() {
     let admissible = admissible();
@@ -574,14 +541,6 @@ fn a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not()
 
 /// The `answer` values more than one send-surface row carries, with the rows
 /// that carry them.
-///
-/// `admits` accepts an answer that is one of the constructor's own
-/// `syntax(M, N)` numbers, so two constructors raising the same number admit
-/// each other's rows and
-/// [`a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not`]
-/// cannot tell a transposition inside such a pair from the truth. Measured, at
-/// both entries below: swapping a pair's `answer` and `witness` together
-/// leaves every test in this file green.
 const SHARED_ANSWERS: &[(&str, &[&str])] = &[
     (
         "88.909",
@@ -602,8 +561,6 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
 
 /// The rows sharing an `answer` are the recorded ones, so the table's own
 /// header cannot go stale about what its check does not see.
-///
-/// The limit itself is not closed here: this says which pairs carry it.
 #[test]
 fn the_answers_more_than_one_row_shares_are_the_recorded_ones() {
     let mut by_answer: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -634,11 +591,6 @@ fn the_answers_more_than_one_row_shares_are_the_recorded_ones() {
 
 /// The scanner reads the source rather than a copy of the answer: the file it
 /// is pointed at decides what it finds.
-///
-/// Without this, [`the_table_holds_every_constructor_the_source_defines`]
-/// would be green over a scanner that found nothing at all and a table that
-/// was empty -- and the table is not empty, so the pair is what says the
-/// scanner ran.
 #[test]
 fn the_scanner_finds_constructors_and_only_constructors() {
     let derived = derived();

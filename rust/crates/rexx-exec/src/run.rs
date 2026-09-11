@@ -10,59 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The instruction loop: `Flow`, `step`, and the two functions that run it.
-//!
-//! `run_activation`, `step`, `step_in_temps_frame` and `run_fragment` moved
-//! here from Task 3's spike (`lib.rs`), `Flow` alongside them. This is where
-//! the design's "The borrow shape" is actually written down: clone the `Rc`
-//! into a local on entry, and derive every `&CodeBody` and `&Expr` from that
-//! local rather than from `self`. `run_activation`'s own doc comment carries
-//! the argument in full, including the version that does not compile, and
-//! none of it changed in the move -- `lib.rs` keeps `Code` itself, `Interp`,
-//! the entry point and the loud-failure catalogue, which is what makes the
-//! move safe: every field and every sibling method this file's functions
-//! reach into is already visible here, exactly as it was in the crate root.
-//!
-//! Task 9 is the first task to extend `step` rather than only prove its
-//! shape. `SAY` and `Assignment`'s `Variable` target, `EXIT` with no result,
-//! and `INTERPRET` under the spike flag are the spike's own witnesses and
-//! move unchanged. New here: `Assignment`'s `Stem`/`Compound` targets, all of
-//! `DROP`, all six spellings of `NUMERIC`, `EXIT` with a result, and `LABEL`/
-//! `NOP` as the no-ops they are.
-//!
-//! Task 10 is the first to make `Flow::Goto` live, for `IF`/`SELECT`/
-//! `SELECT CASE`. **`If` and `Select` each resolve their whole construct
-//! inside their own `step` arm**, running the winning branch through a
-//! bounded local loop (`run_bounded`, shaped like `run_fragment`'s) rather
-//! than leaving the outer `run_activation` loop to fall through the flat
-//! instruction list on its own. That is not a style choice: Phase 3 elides
-//! the C++'s synthetic end-of-branch markers, so `false_target` on an `If`
-//! lands exactly on its `Else` (never past it), and a matched branch's own
-//! completion, via plain `pc += 1`, lands on that exact same index -- the
-//! true and false arrivals are indistinguishable from `(instruction, pc)`
-//! alone, and only one of the two is supposed to enter the `Else`'s body.
-//! `SELECT`/`WHEN` has the same defect with no marker to disambiguate with
-//! at all. `run_bounded`'s doc comment carries the resolution. `Then`,
-//! `Else` and `Otherwise` step as pure no-ops (like `Label`), only ever read
-//! as data by `If`/`Select` or walked over inside a bounded loop. `When` and
-//! `WhenCase` no longer are (Task 13's absorbed-`WHEN` fix and its own F3):
-//! an ordinary, listed `When`/`WhenCase` is still never independently
-//! stepped for its own decision -- `Select`'s arm evaluates and dispatches
-//! it directly -- but one *absorbed* into another `When`/`WhenCase`'s own
-//! `THEN` (never collected into the enclosing `SELECT`'s own `whens` list,
-//! `ast.rs`'s own doc comment) is reached only by ordinary stepping, and its
-//! arm evaluates its condition and, for `WhenCase`, branches on the result.
-//!
-//! `run_activation` is the **activation stack**'s own driver, and having more
-//! than one activation to run is what shapes it rather than only adding arms:
-//! it reads the activation's own body selector instead of hardcoding
-//! `&program.main`, and it answers `Ended` rather than a bare
-//! `Option<ObjRef>`, because a callee has two ways out that differ in what
-//! the caller does next. `CALL`'s own work lives in `exec_call`, which is
-//! `run_fragment`'s counterpart at the other kind of level boundary -- both
-//! save and restore the same indent state and both `seal_site_level` on the
-//! way out, and the one place they differ (this one *clears*
-//! `clause_line_override` where the other *sets* it) is measured and stated
-//! at both.
 
 use crate::activation::{
     Activation, CallType, Entry, Inherited, InstanceVar, ReplyState, TraceEntry, Trap,
@@ -100,99 +47,12 @@ pub(crate) enum Flow {
     /// skips straight to their construct's true resume point, and
     /// `run_bounded`'s own internal loop applies one whenever a nested
     /// construct's target lands inside its range.
-    ///
-    /// **This includes inside a fragment.** A label inside `INTERPRET` text
-    /// is still error 47.1 (Task 1), so a fragment's `labels` is still
-    /// always empty and nothing there can jump to a *label* -- but Task 10
-    /// makes `IF`/`SELECT` able to appear (and jump) anywhere a `Code` body
-    /// can be stepped, a fragment's own included, with no label involved at
-    /// all. `run_fragment` no longer has an `unreachable!` on this variant.
-    /// It now runs through `run_bounded` for exactly this reason, and
-    /// `run_fragment`'s own doc comment carries the argument for why every
-    /// jump such a construct computes stays inside the fragment's own range.
     Goto(usize),
     Exit(Option<ObjRef>),
     /// `RETURN`, with the expression's value or `None` for the bare form.
     /// Live since Task 3.
-    ///
-    /// **Why none of the four variants above expresses this.** `Goto` moves
-    /// within one body; `Exit` ends the whole program and every activation
-    /// with it; `Leave`/`Iterate` are consumed by a `DO`/`SELECT` frame
-    /// inside the current activation. `RETURN` unwinds to the **activation**
-    /// boundary and no further -- past every enclosing `DO`, `SELECT` and
-    /// `IF` in the callee, and past no part of the caller. Measured: a
-    /// `return` inside a `do forever` inside a called routine resumes the
-    /// caller's next clause rather than looping, and `LEAVE`'s own search
-    /// (which does stop at those frames) is exactly the behaviour it must
-    /// not have.
-    ///
-    /// So it travels as data through the same channel `Exit` does -- every
-    /// `run_bounded` catch-all and every `Do`/`Select` forwarding arm already
-    /// passes anything they do not own straight out -- and `run_activation`
-    /// is the only thing that ever consumes it.
-    ///
-    /// **In the *main* body, with no caller, it ends the program with its
-    /// value, exactly like `EXIT`.** Measured: `say 'a'` / `return 5` /
-    /// `say 'b'` prints `a` and exits 5, and a bare `return` there exits 0.
-    /// `run_activation` reports it as `Ended::Returned` regardless and
-    /// `Interp::run` is what treats the two alike at the top -- kept apart
-    /// down here because a callee genuinely has to tell them apart.
     Return(Option<ObjRef>),
     /// `LEAVE`, bare (`None`) or by name. Live since Task 11.
-    ///
-    /// **Why this is a `Flow` variant and not an immediate `Err`:** `LEAVE`
-    /// finding its own target is not a failure, so it has to travel as data
-    /// through exactly the same channel `Goto`/`Exit` already do --
-    /// `run_bounded`'s own catch-all (`other => return Ok(other)`, its doc
-    /// comment names this variant by name as the reason it exists) forwards
-    /// it outward through any nested `IF` untouched, and `Do`/`Select`'s own
-    /// arms are the only two that ever inspect it, matching the oracle's own
-    /// rule that only a `SELECT`/`DO`/`LOOP` block ever participates in the
-    /// search (`RexxActivation::leaveLoop`, read directly and cited in the
-    /// report -- `IF`/`THEN`/`ELSE` never push a frame at all, so they are
-    /// transparent by construction, not by a case this crate has to add).
-    ///
-    /// **The invariant this crate's whole `Do`/`Select` design holds so this
-    /// variant is safe to use at all**: unlike `Goto`, a `Do`'s own
-    /// repetition is never expressed as a `Goto` back to its own body's top.
-    /// The trap that would create is exactly `run_bounded`'s own doc comment
-    /// warns about for a future `LEAVE`/`ITERATE` variant -- a `Goto` whose
-    /// target lands inside an *enclosing* `IF`/`SELECT`'s own range (a `DO`
-    /// nested in an `IF`'s `THEN`, iterating) is absorbed by that enclosing
-    /// `run_bounded` directly, never seen by the `DO`'s own arm again, which
-    /// would re-enter it as a first entry with its own state reset. `Do`'s
-    /// own arm therefore never returns to its caller until the *entire*
-    /// loop -- every iteration -- is over, one way or another: it drives its
-    /// own `run_bounded(body)` calls in an internal `loop {}` and only ever
-    /// returns a `Flow` once there is truly nothing left for it to decide.
-    /// `leave_and_iterate_survive_a_do_nested_in_an_ifs_then_iterating_repeatedly`
-    /// (`run/tests.rs`) pins exactly this shape: a `DO` with an `ITERATE`
-    /// in its body, nested inside an `IF`'s `THEN`, run enough times that a
-    /// version which instead returned a re-entry `Goto` to the loop's own
-    /// top would either loop forever (the `IF`'s own `run_bounded` silently
-    /// re-entering the `DO` as a fresh first pass on every `Goto`) or lose
-    /// the loop's own running total, depending on exactly how such a bug
-    /// were shaped -- either way, not the correct, small, printed result the
-    /// test asserts.
-    ///
-    /// The payload eagerly resolves the `LEAVE`/`ITERATE` instruction's own
-    /// clause and static indent (`LeaveOrigin`) at the moment it steps,
-    /// before any propagation: **28.1-28.4 (the "found nothing at all"
-    /// family) and 28.5 (the "found a name match, but it names something
-    /// that is not a loop" family) report at two different, both
-    /// oracle-measured, indentations that no longer-lived state can recover
-    /// once the search has moved on** -- see the report's own transcripts.
-    ///
-    /// **Boxed, and the box is what keeps `Flow` small.** [`LeaveOrigin`] is
-    /// 48 bytes, of which 24 are an inline `Vec<u8>`, and it is the widest
-    /// payload any variant here carries -- so holding it inline made every
-    /// `Flow` in the interpreter 64 bytes wide, and every clause returns one.
-    /// Measured on `emptyloop` with `perf stat -e instructions:u`: boxing it
-    /// takes `size_of::<Flow>()` from 64 to 24 and removes 950 million
-    /// instructions from a 40-billion-instruction run, 2.4% of the whole. The
-    /// allocation it adds is paid once per `LEAVE`/`ITERATE` *executed*, not
-    /// once per clause, and a loop executing one `LEAVE` per pass measured
-    /// 4.1% cheaper boxed as well, so the trade is favourable on both sides.
     Leave(Option<SymbolId>, Box<LeaveOrigin>),
     /// `ITERATE`, bare or by name. See `Leave`'s own doc comment; the two
     /// variants are handled by nearly identical logic in `Do`/`Select`'s own
@@ -203,66 +63,11 @@ pub(crate) enum Flow {
     Iterate(Option<SymbolId>, Box<LeaveOrigin>),
     /// `SIGNAL label` and `SIGNAL VALUE`, once the target resolves to an
     /// instruction index.
-    ///
-    /// **A distinct variant from `Goto`, and that is not merely for
-    /// clarity.** `Goto`'s own contract (`run_bounded`'s doc comment) is "in
-    /// range for the body currently being stepped", which is exactly wrong
-    /// for `SIGNAL`: the target always resolves against the running
-    /// *activation's* own body (`resolve_signal_target`, mirroring
-    /// `Interp::resolve_call`'s identical fix for `CALL`), and inside an
-    /// `INTERPRET` fragment that body is a completely different `Code` from
-    /// the one `run_fragment` is stepping.
-    ///
-    /// **The risk is real, and reusing `Goto` does not always fail -- which
-    /// is exactly why this needed a program built to collide, not a doc
-    /// comment alone (I1/I2, review round 1).** `run_fragment`'s own
-    /// `run_bounded(&code, 0, fragment.len())` absorbs any escaping
-    /// `Flow::Goto(target)` with `target <= fragment.len()` (`run_bounded`'s
-    /// own guard, `start == 0` here) as if it were its own, silently
-    /// resuming the fragment's own unrelated instruction at that position
-    /// instead of escaping -- and whether a given program collides depends
-    /// only on whether the target's index happens to be no greater than the
-    /// fragment's own instruction count, which has nothing to do with where
-    /// the label actually is. This file's own witness, `interpret "signal
-    /// there"`, does **not** collide even under a `Goto`-reuse build,
-    /// because `there:` sits well past that one-instruction fragment's own
-    /// length -- so that measurement alone was never evidence for this
-    /// decision. `signal_out_of_a_fragment_does_not_collide_with_the_
-    /// fragments_own_index_space` (`run/tests.rs`) is a program
-    /// built to collide instead (a label at index 2, a three-instruction
-    /// fragment) and does fail under the reuse, printing a wrong branch's
-    /// own output silently rather than crashing or hanging.
-    ///
-    /// **Nesting inside `DO`/`LOOP`, `IF` or `SELECT` needs no equivalent
-    /// care**, a fact worth recording because it looks like it should:
-    /// `rexx-parse` already rejects a label written inside any of the three
-    /// (47.2, 47.3, 47.4, measured), so a `SIGNAL` target can never sit
-    /// strictly inside a range `run_bounded` is currently absorbing a
-    /// `Goto` into. Reusing `Goto` there would very likely have worked by
-    /// construction; it is the fragment boundary alone that cannot
-    /// tolerate it.
-    ///
-    /// Forwarded exactly like `Exit`/`Return` by every `run_bounded`/
-    /// `do_body_outcome`/`leave_select`/`run_fragment` catch-all, and by
-    /// `If`'s own true-branch arm (`step`'s `InstructionKind::If` handling)
-    /// -- nothing in any of those needed its own arm for it -- and consumed
-    /// only by `run_activation`'s own top-level dispatch, the same way
-    /// `Goto` is.
     Signal(usize),
 }
 
 /// How one activation finished, which is not the same question as what value
 /// it produced.
-///
-/// A callee has two ways out that differ in what the *caller* does next, and
-/// the value alone cannot tell them apart -- `return` and `exit` with the same
-/// value are the same `Option` and the opposite instruction. A bare
-/// `Option<ObjRef>` is enough only while every activation is the program's own
-/// and every way out of it stops the program.
-///
-/// Measured, and the distinction is not cosmetic: `call sub` / `say 'after'`
-/// with `sub:` ending in `exit` never prints `after`, and with `sub:` ending
-/// in `return` it does.
 pub(crate) enum Ended {
     /// `RETURN`: the caller resumes at its next clause, with this value in
     /// `RESULT`.
@@ -288,10 +93,6 @@ impl Ended {
 
 /// Who emits a stepped clause's own `*-*` line
 /// ([`Interp::in_stepped_clause_with`]).
-///
-/// **Two answers rather than a `bool`**, because the two are not two settings
-/// of one switch: one asks the current `TRACE` setting and the other says the
-/// question has already been answered somewhere the clause unit cannot see.
 pub(crate) enum Echo {
     /// The clause unit asks [`Interp::tracing_clause`] and echoes if the
     /// answer is yes. Every tree-walker clause, and a promoted clause whose
@@ -305,34 +106,6 @@ pub(crate) enum Echo {
 
 /// A stepped clause that is open: [`Interp::enter_stepped_clause`] makes one
 /// and [`Interp::leave_stepped_clause`] spends it.
-///
-/// It carries what the clause's two halves have to hand each other and nothing
-/// else -- the GC temps frame to truncate to, the watermark the debug tripwire
-/// compares against, and the [`ClauseEntry`] the boundary itself needs. Every
-/// other thing the second half does is computed from arguments the caller
-/// already holds, which is what keeps this three fields rather than a copy of
-/// the clause's own state.
-///
-/// **What the watermark checks, and why it is here rather than in
-/// `pop_frame`.** `pop_frame` truncates to a watermark rather than popping one
-/// frame, and its own doc comment forbids a balance assertion there: `eval.rs`
-/// sites open a frame and then use `?`, so their own `pop_frame` goes
-/// unreached on the error path and is healed by the clause unit's
-/// unconditional, outer truncation -- an assertion inside `pop_frame` would
-/// fire on the ordinary error path of a correct program. That healing is
-/// exactly what makes `Err` uninteresting to check and `Ok` interesting: on
-/// the `Ok` path every site did run its own `pop_frame`, so the stack must be
-/// back at or above where this step found it. Below it means a step popped
-/// temps it did not own -- someone else's roots, dropped early, which is the
-/// direction that could turn into a use-after-free once a collector runs for
-/// real.
-///
-/// **`#[must_use]`, and what that does and does not close.** Nothing outside
-/// `clause.rs` can build the `ClauseEntry` inside this, so a leave with no
-/// enter in front of it does not compile; an enter whose token is dropped
-/// rather than spent warns. A token deliberately discarded is reached by
-/// neither, which is the same standing exposure `clause.rs`'s module doc names
-/// for the rest of that module's `pub(crate)` surface.
 #[must_use]
 pub(crate) struct SteppedClause {
     /// The clause boundary this entry opened.
@@ -345,19 +118,6 @@ pub(crate) struct SteppedClause {
 
 /// What a called name resolved to, decided in one place before any argument
 /// is evaluated.
-///
-/// The fourth outcome -- none of the three below -- is not a variant: it
-/// raises 43.1 at the point of decision, so nothing downstream can hold a
-/// `Resolved` that has nothing to run. Three variants, three paths, and the
-/// paths differ in more than which code runs: [`Interp::invoke_call`]'s own
-/// doc comment has what the builtin path deliberately skips and what a
-/// `::ROUTINE` starts from instead of inheriting.
-///
-/// **`Copy`, because a resolution is a value a call site may keep.**
-/// [`Interp::resolve_call`] answers one and nothing downstream mutates it;
-/// `crate::ir::Op::Call` records it against the op position it was resolved
-/// at, which needs the answer to be a plain value rather than a borrow of the
-/// table it came from.
 #[derive(Clone, Copy)]
 pub(crate) enum Resolved {
     /// A label in the *running activation's* body, at this instruction index.
@@ -365,13 +125,6 @@ pub(crate) enum Resolved {
     /// A builtin function name, and **which** builtin -- a row index, not a
     /// copy of the row, so nothing here can drift from the arity check and
     /// the code that live on that row together.
-    ///
-    /// Carrying it is what lets a call site keep its answer, which is the
-    /// property [`crate::builtin::BuiltinTarget`] was introduced for and did
-    /// not have while this variant was empty: resolution hashed the name to
-    /// decide it was a builtin, and the dispatch behind it hashed the same
-    /// name again to decide which one. A compiled call site resolves once and
-    /// hashes never again.
     Builtin(crate::builtin::BuiltinTarget),
     /// A `::ROUTINE` this program installed. `InstalledRoutine::directive` is
     /// the same integer `Activation::body` and `BodyKey::directive` carry.
@@ -379,24 +132,11 @@ pub(crate) enum Resolved {
     /// One of the interpreter's own embedded `.orx` sources, named by a
     /// `CALL` inside the library bootstrap -- `CoreClasses.orx:122` and
     /// `:124`.
-    ///
-    /// **Reachable only while the bootstrap runs.** The name resolution that
-    /// produces this variant is gated on
-    /// [`Interp::library_bootstrap`](crate::Interp), so a program writing
-    /// `call 'StreamClasses.orx'` gets the 43.1 it gets today rather than
-    /// running the interpreter's own library a second time.
     Library(&'static rexx_lib::Program),
 }
 
 /// Which of the two activation-pushing outcomes a resolved call took, kept
 /// past the push so the decisions that follow it can read it.
-///
-/// [`Resolved`] cannot serve here: `Resolved::Builtin` returns before any
-/// activation exists, and a type that still admits it would need a dead arm
-/// at each of those reads. Each is measured and each differs between the
-/// variants: whether `SIGL` is set, which constructor and pool the callee
-/// gets, what `activation_indent` the callee starts at, and the receiver its
-/// calling convention carries ([`entered_receiver`]).
 #[derive(Copy, Clone)]
 enum Entered {
     Label(usize),
@@ -404,13 +144,6 @@ enum Entered {
 }
 
 /// How the callee was reached: written in the program, or delivered to it.
-///
-/// **The distinction is the receiver's and nothing else's.** The oracle runs
-/// both through one function, `RexxActivation::run`, and the callers differ
-/// in the receiver they hand it: `RexxActivation::internalCall` passes its
-/// own (`execution/RexxActivation.cpp:3313`) and
-/// `RexxActivation::internalCallTrap` passes `OREF_NULL` (`:3343`), where
-/// `run` assigns it at `:474`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum CallEntry {
     /// A `CALL`, an internal function call, or either form reaching a
@@ -422,27 +155,6 @@ pub(crate) enum CallEntry {
 
 /// The receiver the callee's calling convention carries (D24), given the
 /// caller's own.
-///
-/// Measured on the oracle, all three arms, with a `::method priv class
-/// private` as the probe and `self~priv` as the send -- a private send is
-/// allowed exactly when the sending activation's receiver is the object being
-/// sent to (`RexxObject::checkPrivate`, `classes/ObjectClass.cpp:616`-`:620`):
-///
-/// * `CALL inner` inside a class method, `inner` sending `self~priv`: **rc 0**,
-///   `private-reached`. So a label call inherits.
-/// * the same send from that method's `CALL ON ERROR` handler: **rc 159**,
-///   `97.2 Object "The K class" cannot accept private message "PRIV" from this
-///   context.` So a trap does not.
-/// * the same send from a `::ROUTINE` the method called with `self` as its
-///   argument: **rc 159**, the same 97.2. So a routine does not.
-///
-/// The control for all three, `.K~priv` at the top level, is that same rc 159
-/// and 97.2 -- which is what says the two refusals above are the receiver's
-/// absence and not something about where the send was written.
-///
-/// **Latent in this crate today**, because no access scope is implemented
-/// here; what reads it is `Interp::caller`, and `Interp::resolve`'s callers
-/// are where the checks go.
 fn entered_receiver(entered: Entered, entry: CallEntry, caller: Option<ObjRef>) -> Option<ObjRef> {
     match (entered, entry) {
         (Entered::Label(_), CallEntry::Written) => caller,
@@ -452,19 +164,6 @@ fn entered_receiver(entered: Entered, entry: CallEntry, caller: Option<ObjRef>) 
 
 /// How many activations may be live at once before `CALL` raises 11.1
 /// ("Insufficient control stack space", `Raised::insufficient_stack`).
-///
-/// **The oracle's own number is 27,314** (measured: unbounded `call sub`
-/// recursion under `signal on syntax`, counting the depth reached), and this
-/// limit is deliberately *not* it. What decides ours is where our own native
-/// stack gives out, because one activation costs one `run_activation` Rust
-/// frame (D19's choice, I6) and a native overflow is the silent death this
-/// counter exists to convert into a reportable condition.
-///
-/// **Measured on this crate's own 512 MiB entry thread** (`lib.rs`'s
-/// `on_interpreter_thread`), by bisecting the depth at which `rexx-run`
-/// aborts. `cargo test`'s own debug profile is the binding one, and the
-/// second column is what the value below is chosen against:
-///
 /// ```text
 /// enclosing DO blocks per activation | deepest surviving (debug) | (release)
 ///                                  0 |                    22,534 |   133,150
@@ -472,85 +171,15 @@ fn entered_receiver(entered: Entered, entry: CallEntry, caller: Option<ObjRef>) 
 ///                                  5 |                     5,616 |         -
 ///                                 25 |                     1,403 |         -
 /// ```
-///
-/// The rows are ~23.8 KB for a bare activation and ~14.4 KB for each further
-/// `run_bounded` level inside it, in debug -- `run_bounded` costs a Rust
-/// frame per *lexical* nesting level, and the "0" row already includes one,
-/// since the recursion is guarded by an `IF`.
-///
-/// **So no fixed counter over activations can be a guarantee, and that is
-/// the honest reading of I34 rather than a caveat on it.** A body with about
-/// four or more block levels around its own recursive `CALL` still aborts
-/// natively before this fires: at 25 levels the abort is at 1,403, two
-/// orders below. The counter converts the realistic shapes -- flat and
-/// lightly nested recursion, which is what a recursive routine is -- and the
-/// budget it shares with `run_bounded` (and, once dispatch exists, dispatch)
-/// is what a real fix has to bound. That is a documented minimum stack or a
-/// shared depth budget, and it is not this task's.
-///
-/// **Nothing in this tree is on the small-stack cliff, but a `cargo test`
-/// thread is.** Every public entry point spawns the sized thread; a test
-/// reaching the crate internals directly does not, and on the default 2 MiB
-/// this crate's debug build survives fewer than 90 activations (measured: 80
-/// survives, 90 aborts). `tests/spike.rs`'s own recursion test says so at
-/// its definition -- it was written as a unit test first and aborted the
-/// binary.
-///
-/// The value is deliberately not the oracle's 27,314: that is above our own
-/// debug abort in every row above, so matching it would mean shipping a
-/// counter that never fires.
 pub(crate) const MAX_ACTIVATION_DEPTH: usize = 10_000;
 
 /// The longest `ADDRESS` environment name accepted, beyond which the
 /// instruction raises 29.1.
-///
-/// `MAX_ADDRESS_NAME_LENGTH` in `platform/unix/MiscSystem.cpp`. The C++ keeps
-/// one per platform rather than one language constant, and **both are 250,
-/// with identical `validateAddressName` bodies** -- `platform/windows/
-/// MiscSystem.cpp` read directly, not assumed from the unix one. So the
-/// per-platform spelling there is a structure, not a difference, and this
-/// single constant is faithful to both.
-///
-/// Measured against the oracle on this host: 250 bytes is accepted and
-/// reported back by `ADDRESS()` at length 250, 251 raises `Error 29.1` at
-/// rc 227.
-///
-/// **Only the two setting forms check it.** A bare `ADDRESS` swaps two names
-/// that were each validated when they were set, and `RexxActivation::
-/// toggleAddress` accordingly validates nothing.
 const MAX_ADDRESS_NAME_LENGTH: usize = 250;
 
 /// Where a `LEAVE`/`ITERATE` instruction itself sits, captured the instant
 /// it steps rather than reconstructed later -- see `Flow::Leave`'s own doc
 /// comment for why eagerly.
-///
-/// **`indent`'s own rule, corrected after review.** `indent` starts as
-/// `static_indent` applied to the `LEAVE`/`ITERATE`'s own index -- its full
-/// lexical depth, computed once when it steps -- and from there is the
-/// search's own running **residual**, updated (not merely read) as the
-/// `Flow` this is attached to propagates outward: every `SELECT` (always)
-/// and every `DO`/`LOOP` that either `is_loop` or carries an explicit
-/// `LABEL` (i.e. every one **except** an unlabelled `Simple` block) "owns a
-/// search frame," and when such a construct examines this `Flow` and does
-/// **not** consume it, it resets `indent` to *its own* `static_indent`
-/// (`pop_search_frame`) before forwarding -- mirroring the oracle's own
-/// `popBlockInstruction`, which restores `traceIndent` to the value saved
-/// when the frame it is popping was pushed. A construct that *does*
-/// consume the `Flow` (a match, successful or 28.5) does **not** reset
-/// anything itself; whatever `indent` already holds at that point is the
-/// answer. An unlabelled `Simple` block owns no frame and is fully
-/// transparent, exactly like `IF` (which never even sees this `Flow` at
-/// all, since it is not a block instruction and forwards everything
-/// through ordinary fallthrough).
-///
-/// This first shipped as two hardcoded shapes -- 28.1-28.4 always zero,
-/// 28.5 always the origin's own unmodified full lexical depth -- which
-/// happened to match every probe behind it because none of them mixed an
-/// `IF`/unlabelled-`Simple` intervenor with a `SELECT`/`DO`/`LOOP` one. A
-/// reviewer's fourteen-point probe (nine of theirs, plus this task's own
-/// five re-measured and added afterward) falsified seven of the fourteen
-/// under that rule and fits all fourteen under this one; the report has
-/// every transcript.
 pub(crate) struct LeaveOrigin {
     /// `None` only when `source` was `None` at the moment this instruction
     /// stepped, which **no caller produces**: `run_fragment` passes its own
@@ -561,19 +190,6 @@ pub(crate) struct LeaveOrigin {
     indent: usize,
     /// This `LEAVE`/`ITERATE` clause's own line, captured the same way and at
     /// the same moment as `site` and `indent`, and for the same reason.
-    ///
-    /// **Not `site`'s own line**, which is the fragment-relative one inside
-    /// an `INTERPRET`: this is `SIGL`'s quantity, so it honours
-    /// `clause_line_override` -- measured, a loop with an `ITERATE` inside
-    /// `interpret` text reports the enclosing `INTERPRET` clause's line for
-    /// the re-test, on the oracle and here.
-    ///
-    /// Read by `run_repeating`, through `do_body_outcome`, to answer "which
-    /// clause does this pass's loop re-test belong to": the oracle re-enters
-    /// the loop from whichever instruction transferred control back to it
-    /// (`RexxInstructionEnd::execute` and `RexxActivation::iterate` both call
-    /// `reExecute` themselves), so an `ITERATE` that cut a pass short owns
-    /// the re-test that follows it.
     clause_line: usize,
 }
 
@@ -597,11 +213,6 @@ enum DoOutcome {
 
 /// What a repeating `DO`/`LOOP`'s own header clause decided: run the body
 /// once more, or stop.
-///
-/// One type for the two ways to stop -- the control budget ran out, or a
-/// `WHILE` tested false -- because `run_repeating` does the identical thing
-/// for both, and a header clause that *failed* is the closure's own `Err`
-/// rather than a third variant here.
 enum HeaderOutcome {
     Continue,
     Stop,
@@ -626,35 +237,6 @@ impl ClauseValue for HeaderOutcome {
 /// Which clause a repeating `DO`/`LOOP`'s own header evaluation -- the
 /// control advance, a `WHILE` test, an `UNTIL` test -- belongs to on this
 /// pass.
-///
-/// **The rule is the oracle's own architecture rather than a fitted table.**
-/// The header is re-evaluated by `RexxInstructionBaseLoop::reExecute`, which
-/// nothing calls on its own: it is called *by* the instruction that transfers
-/// control back to the loop, and there are exactly three of those -- the
-/// `DO`/`LOOP` clause itself on entry (`RexxInstructionBaseLoop::execute`),
-/// the `END` clause when the body falls through
-/// (`RexxInstructionEnd::execute`'s `LOOP_BLOCK` arm), and an `ITERATE`
-/// (`RexxActivation::iterate`). Whichever of the three it was is still the
-/// current instruction while the header runs, so it is that clause's line
-/// `SIGL` reports and that clause's boundary a queued `CALL ON` handler is
-/// delivered at.
-///
-/// Measured on all three, with no trap anywhere so it is a plain `SIGL`
-/// question -- `do i = 1 to 3 while zs() < 3` with an `ITERATE` as the body's
-/// last clause reports `2, 4, 4` (the `DO` line, then the `ITERATE`'s twice),
-/// where the same loop without the `ITERATE` reports the `DO` line then
-/// `END`'s.
-///
-/// **`Copy`, with the `ITERATE`'s echo site held beside it rather than in it
-/// -- a measurement, not a taste.** Every pass boundary assigns this, and an
-/// owned `Vec<u8>` inside the enum makes that assignment a drop rather than a
-/// store: read the old discriminant, test it against each variant that owns
-/// nothing, branch, and only then write. Measured, the site held inside
-/// instead: 17.0 more `instructions:u` per pass boundary on both
-/// `bench-programs/emptyloop.rex` and `bench-programs/varlookup.rex`, which is
-/// +2.681% and +1.268%. More than the drop's own instructions, because it also
-/// denies `flat_loop_step_top` a register for the loop state's own address and
-/// leaves it reloading that off the stack around every use.
 #[derive(Clone, Copy)]
 enum HeaderClause {
     /// The first pass: the `DO`/`LOOP` clause's own line.
@@ -679,10 +261,6 @@ enum HeaderClause {
 /// measured, an `ITERATE` nested two blocks deep inside the body echoes at
 /// its own depth when it steps and at the *loop body's* depth on the failure
 /// path.
-///
-/// Read only while the tag beside it is [`HeaderClause::Iterate`], so a
-/// boundary that moves the tag off `Iterate` leaves this alone rather than
-/// clearing it -- clearing is the drop the split exists to remove.
 type IterateSite = Option<(usize, Vec<u8>)>;
 
 /// **SPIKE, not for commit.** One repeating loop being driven from the op
@@ -797,11 +375,6 @@ pub(crate) enum FlatStep {
 /// has already been evaluated and validated -- everything `LoopKind` can be
 /// except `Simple` (a block, never repeats, and `run_loop_with_header`'s own
 /// `Simple` arm never builds one of these at all) and `With` (the loud path).
-///
-/// `Count`, `OverItems` and `Controlled` all decrement whatever budget the
-/// oracle is measured to decrement once per candidate iteration, including
-/// one an `ITERATE` cuts short (measured: a `FOR 3` loop with an `ITERATE`
-/// on its first pass still stops after exactly three iterations, not four).
 enum LoopState {
     Forever,
     /// `DO expr`: a fixed repeat count, decremented to zero.
@@ -811,20 +384,6 @@ enum LoopState {
     /// `DO name OVER expr`, a **non-stem** target only (Deviation 1: a stem
     /// target takes the loud path in `run_loop_with_header` before one of
     /// these is ever built): binds `control` to each of `items` in turn.
-    ///
-    /// `snapshot` is one non-sparse `Body::Array` of the values to bind, which
-    /// [`Interp::over_snapshot`] builds, and `items` is its slots again so
-    /// that a pass reads one vector index rather than resolving a handle.
-    ///
-    /// **`snapshot` is the root and `items` is only a cursor**: every entry of
-    /// `items` is a slot of `snapshot`, so none of them can be collected while
-    /// it is rooted, and removing `snapshot` would leave `items` dangling.
-    /// A `LoopState` outlives the clause that built it on the compiled
-    /// engine's flattened path, so who roots `snapshot` differs by engine: the
-    /// tree-walker and the nested path are covered by `over_snapshot`'s own
-    /// `push_temp`, and the flattened path by the register write in
-    /// [`Interp::flat_loop_start`]. `remaining` is `FOR`'s own budget,
-    /// independent of how many items are left.
     OverItems {
         control: SymbolId,
         /// [`control_slot`], taken once when this loop was entered.
@@ -842,13 +401,6 @@ enum LoopState {
     Controlled {
         control: SymbolId,
         /// [`control_slot`], taken once when this loop was entered.
-        ///
-        /// **The one field here that is a cache rather than state**, and what
-        /// makes it safe is that a name's slot in a frame never moves: `Plan`
-        /// is immutable, an activation's `extra` bindings are only ever added
-        /// to, and `RootSet::grow_slots` appends. A slot that later becomes an
-        /// alias -- `PROCEDURE EXPOSE` -- keeps its index and is chased at
-        /// every read and write, so exposure does not invalidate this either.
         at: Option<usize>,
         current: ControlValue,
         to: Option<Number>,
@@ -859,19 +411,6 @@ enum LoopState {
         to_int: Option<i64>,
         by_int: Option<i64>,
         /// Whether the control variable is spelled simple, stem or compound.
-        ///
-        /// Taken when the loop is entered, because it is a property of the
-        /// name alone and the name is fixed by the parse: `control` is a
-        /// `SymbolId` this state owns, and the `Code` a pass is driven with
-        /// is the one that compiled it. Both halves of a pass read it from
-        /// here -- the re-read to pick how it reads, `bind_control` to pick
-        /// how it writes.
-        ///
-        /// **The resolved *name* is not cached and must not be**, only the
-        /// shape: a compound control resolves its tail afresh on every pass
-        /// against whatever the tail variable holds now. Measured against
-        /// the oracle, `a.=0; k=1; do a.k = 1 to 3; k=k+1; end` never
-        /// advances, because each pass reads and writes a different tail.
         shape: NameShape,
         /// Whether at least one candidate iteration has already been
         /// decided, which is exactly the oracle's own `!first` argument to
@@ -887,17 +426,6 @@ enum LoopState {
 }
 
 /// A controlled loop's running control value.
-///
-/// `Small` is not a different value from `Wide`, only a cheaper way to hold
-/// the same one: a counted loop spends its whole life on integers small
-/// enough to add in a register, and holding those as a `Number` costs a heap
-/// `Vec` per iteration for the increment and another for the bound test.
-///
-/// `Small` is produced **only** where the value was computed as an `i64` in
-/// the first place, never by converting a `Number` that arrived some other
-/// way. A `Number` carries its own spelling (`1.50` and `1.5` are different
-/// objects), and while every spelling this could hold renders the same, the
-/// conversion would be a second place where that has to stay true.
 enum ControlValue {
     Small(i64),
     Wide(Number),
@@ -915,18 +443,6 @@ impl ControlValue {
     /// The value as an integer the bound test may compare exactly, or `None`
     /// when the fuzzed comparison has to run instead. The caller supplies the
     /// other half of the interpreter's condition, that `NUMERIC FUZZ` is zero.
-    ///
-    /// **This asks which representation the value is in, not what it is
-    /// worth**, because that is the question the interpreter asks:
-    /// `RexxInteger::comp` (`interpreter/classes/IntegerClass.cpp`) takes its
-    /// exact path only when both sides are already integer objects that fit
-    /// `NUMERIC DIGITS` and `number_fuzz()` is zero, and anything else falls
-    /// to `NumberString::comp`. A `Wide` value is one this crate is holding as
-    /// a `Number` -- either a value with a fractional part, or an integer too
-    /// wide for `DIGITS` -- and neither reaches the exact path.
-    /// Deciding this by value would answer `Some` for a `Number` worth
-    /// `100000002` that reached that worth by rounding `100000002.0`, which
-    /// the interpreter never compares as two integers.
     fn small(&self, digits: u64) -> Option<i64> {
         match self {
             ControlValue::Small(value) => within_digits(*value, digits).then_some(*value),
@@ -936,14 +452,6 @@ impl ControlValue {
 }
 
 /// What one expression of a `DO`/`LOOP` header is for.
-///
-/// **The role decides three things at once**, and they are one fact rather
-/// than three: which `>K>` tag the value is echoed under, how it is validated,
-/// and which field of [`LoopHeaderValues`] it lands in. Keeping them on one
-/// enum is what lets both engines evaluate a header through the same
-/// [`Interp::accept_header_value`] while differing only in *what drives* the
-/// sequence -- a Rust loop over [`HeaderPlan`], or the compiled stream's own
-/// ops.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum HeaderRole {
     /// A controlled loop's own starting value. Echoed under no tag at all:
@@ -983,13 +491,6 @@ impl HeaderRole {
     }
 
     /// How a loud failure names the position this value sits in.
-    ///
-    /// Not [`HeaderRole::keyword`]: that answers `None` for `Initial`, which
-    /// is right for a `>K>` tag the oracle does not print and useless in a
-    /// message that has to say which of a header's expressions was refused.
-    /// The whole phrase rather than the keyword, because
-    /// [`Loud::object_position`] serves sites that are not header roles at
-    /// all.
     pub(crate) fn value_name(self) -> &'static str {
         match self {
             HeaderRole::Initial => "a DO header's initial value",
@@ -1006,16 +507,6 @@ impl HeaderRole {
 /// evaluated**, which is the order they were written in
 /// (`Controlled::order`, recorded because an expression can have side
 /// effects).
-///
-/// **One table, read by both engines.** `Interp::eval_loop_header` iterates it
-/// and `ir::compile` emits one group of ops per entry from the same iteration,
-/// so the evaluation order -- which is observable, and which interleaves
-/// evaluation with `>K>` emission -- is one implementation rather than a Rust
-/// loop and an op stream that have to be kept in step.
-///
-/// A fixed array rather than a `Vec`: a header is at most four expressions
-/// (`DO i = a TO b BY c FOR d`), and this is built once per loop entry on the
-/// tree-walker's own path.
 pub(crate) struct HeaderPlan {
     roles: [HeaderRole; 4],
     len: usize,
@@ -1046,25 +537,6 @@ impl HeaderPlan {
 
 /// The header of `body`, or `None` for a `DO`/`LOOP` this crate refuses
 /// **before evaluating anything**.
-///
-/// The three refusals are one answer here rather than three checks scattered
-/// through the construct, and that placement is the semantics: `do counter c
-/// with index i over x` fails loudly without evaluating `x`, and a stem `OVER`
-/// target is detected from its own syntax rather than by evaluating it
-/// (Deviation 1, `phase-4-exclusions.txt`: a stem target's tail order does not
-/// reproduce the oracle's).
-///
-/// `COUNTER`'s own running-count bookkeeping is Phase-5-shaped extra state that
-/// no other of `DO`/`LOOP`'s forms needs, and `DO WITH` sends `SUPPLIER` a
-/// message, which nothing in this crate answers.
-///
-/// **A parenthesised stem is caught too**, measured
-/// (`do_over_a_parenthesised_stem_target_is_also_caught`): a single
-/// parenthesised sub-expression collapses to that sub-expression's own
-/// `ExprKind` rather than being wrapped in `ExprKind::List`, so `(a.)` is
-/// already `ExprKind::Stem` here. What escapes is a stem reached through
-/// something that does not collapse this way -- a function call returning one
-/// -- and no test may write one either way.
 pub(crate) fn loop_header_plan(body: &Loop) -> Option<HeaderPlan> {
     if body.counter.is_some() {
         return None;
@@ -1108,10 +580,6 @@ pub(crate) fn loop_header_plan(body: &Loop) -> Option<HeaderPlan> {
 
 /// The expression `role` names in `kind`, or `None` when that kind has no
 /// expression for it.
-///
-/// A `None` a caller reaches is a role that did not come from
-/// [`loop_header_plan`] for this same node, which is the one way the two can
-/// come apart.
 fn header_expr_for(kind: &LoopKind, role: HeaderRole) -> Option<&Expr> {
     match (kind, role) {
         (LoopKind::Count(expr), HeaderRole::Count) => expr.as_ref(),
@@ -1127,14 +595,6 @@ fn header_expr_for(kind: &LoopKind, role: HeaderRole) -> Option<&Expr> {
 
 /// The expression of `body`'s header at `slot` -- the compiled stream's own
 /// addressing, where a slot is a position in [`HeaderPlan::roles`].
-///
-/// **The one resolution, read by the compiler and by both of the driver's
-/// entries.** `ir::compile` asks it which expression a slot's ops are emitted
-/// for, [`Interp::eval_chunk_expr`] asks it which expression an
-/// `ir::Op::EvalExpr` at that slot evaluates, and [`Interp::chunk_node_at`]
-/// asks it which expression an addressed op descends from -- so a slot means
-/// the same thing to all three by construction rather than by three tables
-/// agreeing.
 pub(crate) fn loop_header_slot(body: &Loop, slot: u32) -> Option<&Expr> {
     let plan = loop_header_plan(body)?;
     let role = *plan.roles().get(slot as usize)?;
@@ -1142,11 +602,6 @@ pub(crate) fn loop_header_slot(body: &Loop, slot: u32) -> Option<&Expr> {
 }
 
 /// One `DO`/`LOOP` header's evaluated and validated values.
-///
-/// **Filled one role at a time, in evaluation order**, because the order is
-/// observable: `do i = 1 to 'a' by zf()` raises on `TO` before `BY` is
-/// evaluated at all, so a shape that gathered every value first and validated
-/// afterwards would call `zf` where the oracle does not.
 #[derive(Default)]
 pub(crate) struct LoopHeaderValues {
     /// A controlled loop's starting value, rounded at the digits in force,
@@ -1184,12 +639,6 @@ pub(crate) enum ConditionTrace<'a> {
 }
 
 /// Which keyword ended the activation, for [`Interp::returned_value`].
-///
-/// **A tag rather than two functions**, because the two arms would otherwise
-/// be the same arm twice: `RETURN` and `EXIT` root, trace and carry their
-/// value identically, and differ only in which [`Flow`] they answer.
-/// Which arm of `RexxInternalObject::requestArray` a `FORWARD ARGUMENTS`
-/// value takes (`classes/ObjectClass.cpp:1646`).
 #[derive(Clone, Copy)]
 enum Conversion {
     /// An array answers itself.
@@ -1209,11 +658,6 @@ enum Conversion {
 /// (`classes/support/StringUtil.cpp:545`-`:638`): a piece per line end, one
 /// `\r` dropped from a piece that ends in one, and a trailing piece only
 /// where the text does not end at a separator.
-///
-/// Measured, oracle, through `FORWARD ARGUMENTS`: `''` is no arguments at
-/// all, `'p'` and `'p\n'` are both `[p]`, `'p\r\nq'` is `[p] [q]`,
-/// `'p\n\nq'` is `[p] [] [q]`, `'\nq'` is `[] [q]`, and a lone `\r` is
-/// kept.
 fn makearray_lines(text: &[u8]) -> Vec<&[u8]> {
     let mut pieces = Vec::new();
     let mut start = 0;
@@ -1239,12 +683,6 @@ pub(crate) enum ReturnKeyword {
 }
 
 /// Which end of the queue a line lands on, for [`Interp::queue_evaluated`].
-///
-/// **A tag rather than two functions**, for [`ReturnKeyword`]'s reason and
-/// with a witness in `step`'s own history: `PUSH` and `QUEUE` were already one
-/// arm choosing between `Queue::push` and `Queue::queue`, and this is that
-/// choice named. See `queue.rs`'s module doc for the measured LIFO/FIFO order
-/// the two spellings produce.
 #[derive(Clone, Copy)]
 pub(crate) enum QueueKeyword {
     Push,
@@ -1255,18 +693,6 @@ impl Interp {
     // ---- the instruction loop, which is what this spike is for ----
 
     /// Runs the current activation's body to completion.
-    ///
-    /// **This function is the architectural claim.** The discipline is: clone
-    /// the `Rc` into a local on entry, and derive every `&CodeBody` and
-    /// `&Expr` from that local. It compiles for exactly one reason, and the
-    /// reason is that `code` borrows `program` and `plan`, which are locals,
-    /// rather than borrowing `self` -- so `self.step(…)`, which takes
-    /// `&mut self`, has nothing to collide with.
-    ///
-    /// The version that does **not** compile, kept because the next phase to
-    /// touch this will want to know which shape is wrong. Reaching the body
-    /// through the activation and then stepping:
-    ///
     /// ```text
     /// fn run_activation_wrong(&mut self) -> Result<Option<ObjRef>, Loud> {
     ///     let body = &self.activations.last().expect("a live activation").program.main;
@@ -1276,15 +702,6 @@ impl Interp {
     ///     Ok(None)
     /// }
     /// ```
-    ///
-    /// The block below was captured by hand: the wrong version was written
-    /// into this file, built, and deleted again, and this is what rustc 1.96.1
-    /// printed. **Nothing re-checks it.** If the borrow checker's wording or
-    /// its choice of underline changes, this text goes stale and no test
-    /// fails, which is exactly why the doctests further down exist. Read it as
-    /// a record of what was seen once, not as an assertion about what rustc
-    /// does now:
-    ///
     /// ```text
     /// error[E0502]: cannot borrow `*self` as mutable because it is also borrowed as immutable
     ///    --> crates/rexx-exec/src/lib.rs:851:13
@@ -1296,77 +713,6 @@ impl Interp {
     /// 851 |             self.step_wrong(body, instruction)?;
     ///     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ mutable borrow occurs here
     /// ```
-    ///
-    /// Worth reading the second underline rather than the third: the borrow
-    /// that survives is not the argument, it is the **loop condition**.
-    /// Compiled here too, rather than reasoned about: replacing the body of
-    /// the loop with a `self.step_wrong_noargs()` that takes no arguments at
-    /// all gives the identical `E0502`, with `while body.instructions.get(…)`
-    /// underlined as the later use. So handing the body to `step` some other
-    /// way is not the fix. `Rc::clone` is the fix, because what has to change
-    /// is where `body` is rooted, not who it is passed to.
-    ///
-    /// The `Rc::clone` is what removes it, and it is not a workaround for the
-    /// borrow checker being conservative: the checker is right. An activation
-    /// can be replaced under a running loop, and a `&CodeBody` reached through
-    /// the activation would then point into a program the activation no longer
-    /// holds. The `Rc` in the local is what makes that impossible rather than
-    /// merely unlikely.
-    ///
-    /// # The pair of doctests below, and what they are worth
-    ///
-    /// **What keeps the function honest is the compiler.** This function would
-    /// not build if the discipline broke, which is the whole reason the
-    /// discipline is worth having and is a stronger guarantee than any test.
-    /// **What the pair below keeps honest is the documentation**, which is the
-    /// part with no compiler behind it: everything above is prose, and nothing
-    /// in the tree would notice if it stopped describing anything real.
-    ///
-    /// So the two snippets are a miniature of the same borrow, once in the
-    /// shape that compiles and once in the shape that does not. `cargo test`
-    /// runs both. A precondition that nothing states and that the pair
-    /// silently depends on: **rustdoc does collect doctests on private
-    /// items.** Confirmed rather than assumed, by putting a deliberately
-    /// failing snippet on a private method and watching it run. If it did not,
-    /// both of these would not exist rather than fail, and the pair would be
-    /// decoration.
-    ///
-    /// **Read them for what they prove and not more.** `compile_fail` proves
-    /// only "this does not compile", not "this fails with `E0502`". The
-    /// `compile_fail,E0502` spelling looks like it pins the code and does not:
-    /// measured on rustc 1.96.1, a doctest annotated `compile_fail,E0502`
-    /// whose body is `let x: u32 = "not a u32";` passes, and that is `E0308`.
-    /// A `compile_fail` snippet with a typo in it therefore passes for the
-    /// wrong reason, which is the standard trap with this attribute.
-    ///
-    /// What narrows it is the **first** snippet, which must compile. The two
-    /// differ only in how `body` is obtained, two lines against one, and share
-    /// everything else, so any breakage in the shared part fails the passing
-    /// twin instead of silently satisfying the failing one. Checked by
-    /// mutation rather than assumed: rewriting the passing snippet's
-    /// `Rc::clone` line into the failing snippet's shape makes it fail, and it
-    /// fails with `E0502`. One test says "the fix works", the other says "the
-    /// shape it fixes is still broken", and neither is worth much alone.
-    ///
-    /// Two residuals, the second larger than the first and worth stating
-    /// because the pair is easy to over-read.
-    ///
-    /// A typo confined to the failing snippet's own `let body = …` line passes
-    /// for the wrong reason and nothing here closes that.
-    ///
-    /// And **the miniature can drift away from this function.** It models
-    /// `Rc<CodeBody>` over a `Vec<u32>` with a two-argument `step`, where the
-    /// real thing has `Rc<Program>`, a three-field `Code<'a>` and a different
-    /// `step`. Nothing ties the two together. A future rewrite of
-    /// `run_activation` into a shape the miniature does not model leaves both
-    /// doctests green while the prose above them describes a function that no
-    /// longer exists. That is a real limit and not a reason to drop the pair:
-    /// the compiler is still what stops the *function* going wrong, and the
-    /// pair is still what stops this *comment* claiming a borrow error that
-    /// the language no longer produces.
-    ///
-    /// Compiles, because `body` borrows the local `program`:
-    ///
     /// ```
     /// use std::rc::Rc;
     /// struct CodeBody { instructions: Vec<u32> }
@@ -1384,9 +730,6 @@ impl Interp {
     ///     }
     /// }
     /// ```
-    ///
-    /// Does not compile, because `body` borrows `self`. One line different:
-    ///
     /// ```compile_fail
     /// use std::rc::Rc;
     /// struct CodeBody { instructions: Vec<u32> }
@@ -1411,26 +754,6 @@ impl Interp {
         // inside the creating activation rather than pushing its own, and
         // true for a `CALL` only because the `Call` arm pops the callee
         // before it returns.
-        //
-        // **That is now a real risk and the compiler will not mention it.**
-        // A `CALL` pushes an activation inside `step`, and if it ever
-        // returned with the callee still on the stack, this loop would carry
-        // on reading the callee's `pc` while executing the caller's body: a
-        // wrong answer, not a borrow error, because both are plain field
-        // accesses on `self`. The assertion below is what turns that into a
-        // failure at the first instruction instead of a debugging session,
-        // and it is why the `Call` arm's pop is unconditional across both the
-        // `Ok` and the `Err` path.
-        //
-        // The body comes from the activation's own selector rather than being
-        // hardcoded to `program.main` (Task 3): `body_of` is the one place
-        // that mapping lives, shared with `BodyKey::directive`'s own.
-        // **The one point at which the running activation and the calling
-        // convention it was entered under are both in place**, on every path
-        // that starts a body: `invoke_call_over` pushes before it replaces
-        // the convention and `enter_method_body` replaces before it pushes,
-        // so neither of those two sites can take the snapshot itself and a
-        // third site would be a list to keep in step.
         let arguments = Rc::clone(&self.call_context.arguments);
         // **The name is copied only where nothing else records it.** A
         // method activation already carries the message name it was entered
@@ -1470,11 +793,6 @@ impl Interp {
         // paired a plan with the wrong id would put a body's chunk under
         // another body's name -- a wrong answer rather than a miss, exactly
         // what `BodyKey::directive`'s own doc says about the selector.
-        //
-        // Unpinned by anything else today because production loads one
-        // program, so every `ProgramId` is 0 and `directive` alone
-        // discriminates. A read, never an insert: `plan_for` would paper over
-        // the mismatch by caching the plan a second time under the wrong key.
         let key = self.activation().body_key();
         debug_assert!(
             self.plans
@@ -1488,18 +806,6 @@ impl Interp {
         // no second engine and no selection left to make: `run_activation` is
         // the one function that runs a body, and this is where the stream is
         // entered.
-        //
-        // **A refusal raises rather than falling back** (`Loud::chunk_refused`).
-        // `None` from `chunk_for` is a body that does not fit the stream's
-        // index widths; it used to run the instruction loop that stood here,
-        // with `Interp::chunks_refused` counting the downgrade so it was not
-        // silent. The tree-walker was that fallback, so retiring it leaves
-        // nothing to fall back to.
-        //
-        // The setting in force *now* is what this body's chunk is looked up
-        // by, not the one the program started under: the setting is an input
-        // to compilation (D23), so entering a body under a second setting is
-        // entering a second chunk.
         let Some(chunk) = self.chunk_for(key, self.chunk_trace(), body, &plan) else {
             return Err(Loud::chunk_refused().into());
         };
@@ -1509,22 +815,6 @@ impl Interp {
     /// Transfers "is this the first instruction executed in this activation"
     /// to the step about to run, which `PROCEDURE` and `USE LOCAL` are the
     /// only readers of.
-    ///
-    /// A `Label` is transparent to it: measured, `call sub` into `sub:` /
-    /// `lbl2:` / `procedure` runs, while the same with a `nop` in place of
-    /// the second label is error 17.1. So a label neither grants the
-    /// permission nor spends it.
-    ///
-    /// Cleared *before* the step and carried across it on
-    /// `Interp::procedure_permitted`, which `step` takes on entry -- that is
-    /// what stops an `INTERPRET` fragment or an `IF` branch inheriting it,
-    /// measured through `sub: interpret "procedure"` being 17.1. See the
-    /// field's own doc comment.
-    ///
-    /// Extracted from `run_activation`'s loop so a second engine discharges
-    /// the same obligation rather than reimplementing it. It is per
-    /// *clause*, not per instruction-node, so an engine that begins a
-    /// clause without an `Instruction` in hand has to supply one.
     pub(crate) fn grant_procedure_permission(&mut self, instruction: &Instruction) {
         if !matches!(instruction.kind, InstructionKind::Label { .. }) {
             self.procedure_permitted =
@@ -1533,24 +823,6 @@ impl Interp {
     }
 
     /// Applies one clause's `Flow` to this activation.
-    ///
-    /// `Ok(None)` continues the body; `Ok(Some(_))` finishes the activation.
-    ///
-    /// Extracted from `run_activation`'s loop for the same reason as
-    /// `grant_procedure_permission`. The `Leave`/`Iterate` arms
-    /// are the reason this is worth extracting rather than copying: they are
-    /// error semantics, not plumbing.
-    ///
-    /// **`run_fragment`'s own `Leave`/`Iterate` arms are not a call site for
-    /// this, and the difference is the useful part.** They are the same
-    /// event at a different boundary, so they share the four constructors
-    /// and the `record_leave_failure` call -- but they resolve the name
-    /// against the *fragment's* symbol table, which is the last point at
-    /// which the id means anything, and they `seal_site_level` first.
-    /// Absorbing them would mean parameterising both, which buys nothing
-    /// here and would make one function answer to two boundaries.
-    /// A second engine wanting this behaviour at a *third* boundary should
-    /// re-read that before assuming one shared function covers it.
     pub(crate) fn apply_flow(
         &mut self,
         code: &Code<'_>,
@@ -1566,30 +838,6 @@ impl Interp {
             // already resolved against this activation's own body
             // (`resolve_signal_target`), which is exactly the body `code` is
             // bound to.
-            //
-            // **The transfer resets this activation's trace indent to the
-            // program's**, which is `RexxActivation::signalTo`'s own
-            // `settings.traceIndent = 0` read directly, beside the
-            // `blockNest = 0` that discards the block state this crate has
-            // no counter for. Both addends of [`Interp::printed_indent`] go,
-            // because the oracle's is one absolute counter rather than a
-            // base and an elevation: a `SIGNAL` out of an escaped `WHEN`
-            // would otherwise keep the elevation the escape put there.
-            //
-            // **Setting the base to `0` rather than restoring a saved one is
-            // the whole of it, and a label's own lexical indent is why that
-            // is enough.** The oracle refuses a label inside any block
-            // instruction -- measured, 47.2 inside a `DO`/`LOOP`, 47.3
-            // inside an `IF`, 47.4 inside a `SELECT` -- so a `SIGNAL`
-            // target's `static_indent` is always `0` and the sum is `0` with
-            // both addends cleared.
-            //
-            // Cleared on *this* activation, and `Interp::invoke_call`'s own
-            // save/restore is what keeps it there: a `SIGNAL` inside a
-            // `CALL`ed label echoes the rest of that label at the program's
-            // indent (measured, oracle `6 *-* onward:` where this crate read
-            // `6 *-*   onward:`), and the caller's own indent comes back
-            // when the callee returns.
             Flow::Signal(target) => {
                 self.activation_mut().pc = target;
                 self.activation_indent = 0;
@@ -1657,11 +905,6 @@ impl Interp {
     /// whoever called: [`Interp::step`] takes the permission and enters from
     /// `step_in_temps_frame`, and [`crate::ir::Op::Exec`] enters from inside
     /// the [`crate::ir::Op::Clause`] region that already opened the clause.
-    ///
-    /// **`first_instruction` is a parameter and not a `mem::take` here**,
-    /// because the two callers take it at different moments and neither may
-    /// take it twice: the region's own arm consumes it when the clause opens,
-    /// which is before this runs. `Procedure` and `Use` are what read it.
     pub(crate) fn exec_instruction(
         &mut self,
         code: &Code<'_>,
@@ -1728,10 +971,6 @@ impl Interp {
             // come from inside a fragment (`run_fragment`'s own propagating
             // arm, below), and the conversion needs nothing this loop knows
             // that `execute` does not already have.
-            //
-            // The rooting, the `>>>` line and the `Flow` are
-            // `Interp::returned_value`'s, shared with `RETURN`'s arm below and
-            // with `crate::ir::Op::Return`.
             InstructionKind::Exit { expression } => {
                 let value = match expression {
                     Some(expression) => Some(self.eval(code, expression)?),
@@ -1754,14 +993,6 @@ impl Interp {
             // `INTERPRET expr`: evaluate to a string, parse it as a fragment,
             // run it against **this** activation, through `run_fragment`. The
             // arm is thin because `run_fragment` is where the work is.
-            //
-            // The `Flow` `run_fragment` answers is forwarded unchanged.
-            // `Flow::Exit` crossing this arm is what makes `interpret "exit"`
-            // end the program rather than the fragment (measured, and pinned
-            // by `an_exit_inside_a_fragment_ends_the_program` in `lib.rs`);
-            // `Flow::Leave`/`Iterate` can no longer reach here at all, since
-            // the search does not cross the boundary -- `run_fragment`'s own
-            // doc comment has the oracle transcripts.
             InstructionKind::Interpret { expression } => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
@@ -1781,35 +1012,11 @@ impl Interp {
                 // shipped without this and was the only value-producing arm in
                 // the crate that traced nothing. Measured (`trace r`, `zz =
                 // 'nop'`, `interpret zz`), the oracle prints
-                //
                 // ```text
                 //      3 *-* interpret zz
                 //        >>>   "nop"
                 //      3 *-* nop
                 // ```
-                //
-                // and re-measured one `DO` deeper, where the `>>>` picks up
-                // that construct's own two spaces exactly as `Say`'s does.
-                //
-                // **Before `run_fragment`, not after, and that is not
-                // cosmetic**: the fragment's own stepping overwrites
-                // `current_value_indent` on every instruction it runs, so
-                // reading the field afterwards would report the *fragment's*
-                // last indent for the enclosing clause's own value.
-                //
-                // The third line above -- the fragment's own clause echo --
-                // is what the `run_fragment` call below produces. Handing
-                // `run_fragment` a `Some(&fragment.source)` and nothing else
-                // is not enough, for two independent reasons: the
-                // fragment's spans carry the *fragment's* line numbering
-                // where the oracle prints the enclosing `INTERPRET` clause's
-                // (measured, a raise inside fragment text reports line 3 and
-                // the naive fix reports line 1), and the fragment's clause
-                // would win `record_failure_at`'s first-wins race, taking the
-                // report off the enclosing clause instead of adding to it.
-                // The two lines below are the fix for the first and
-                // `run_fragment`'s own `seal_site_level` is the fix for the
-                // second.
                 self.trace_result(self.clause_state.current_value_indent, &text);
                 // **The fragment's level, with delta 0.** Measured: a
                 // fragment's clauses print at the enclosing `INTERPRET`
@@ -1823,62 +1030,6 @@ impl Interp {
                 // two spaces further in (`call sub1` at printed indent 4 into
                 // a flat routine echoes the callee's clause at 6), and which
                 // is Task 3's to add.
-                //
-                // **The rule above is complete except after a repetitive
-                // `DO`/`LOOP` that completed a body pass and then ended on a
-                // failing control test** -- count exhausted, `WHILE` false or
-                // `UNTIL` true alike. `static_indent` is a pure function of
-                // lexical nesting and the oracle's own counter is not: such a
-                // loop leaves later clauses two spaces lower. A zero-trip loop
-                // and one left by `LEAVE` do not do it, so the property is "a
-                // pass completed", not "a re-test failed".
-                //
-                // **The cause is a C++ defect, and stating the cause is the
-                // only version of this that has not needed correcting.**
-                // `traceIndent` is a counter; a loop ending normally restores
-                // the value `DoBlock` saved, while a loop whose control test
-                // fails takes a different exit path that bare-decrements it
-                // (`BaseDoInstruction.cpp:161` against `:377`). So the stray
-                // decrement survives exactly until some enclosing construct
-                // restores from its own saved block, and is discarded there.
-                //
-                // Four earlier revisions of this comment each stated a rule
-                // about *constructs* instead, and each drifted: the
-                // qualification predicate, the scope, accumulation, and the
-                // discarding class. `phase-4-exclusions.txt`'s row has the
-                // C++ citations and the measured tables. **Do not write a
-                // fifth construct-shaped rule here** -- if a shape is not in
-                // a table, work out which exit path it takes.
-                //
-                // That is a divergence with nothing to do with fragments,
-                // but it reaches this base from both sides --
-                // `interpret "do jj = 1 to 1; nop; end; say 1/0"` one `DO`
-                // deep reports 2 against the oracle's 0, and a completed loop
-                // *inside* a fragment lowers the **enclosing** program's later
-                // clauses, so the base is computed from an indent that has
-                // already drifted. See `phase-4-exclusions.txt`'s KNOWN GAP
-                // row on the re-tested pass's own *indent*, which is where
-                // this symptom lives -- the same pass's missing value lines
-                // were a different mechanism and closed separately at Task 9.
-                //
-                // `activation_indent` is the mechanism (`lib.rs`'s own doc
-                // comment on the field), **set rather than added**, and
-                // `indent_offset` is zeroed alongside it: the enclosing
-                // clause's `current_value_indent` already contains whatever
-                // escape elevation was in force, so leaving that field alone
-                // would count it twice -- measured on an `INTERPRET` in an
-                // escaped `OTHERWISE`'s own body one `DO` deep, where the
-                // oracle prints the fragment's clause at 12 and the
-                // double-counting version prints 16. A fragment is a fresh
-                // level, so it starts with a fresh escape elevation.
-                //
-                // All three are saved and restored rather than cleared, so a
-                // fragment inside a fragment cannot strand the outer one's
-                // values -- and restoring the line override is what makes the
-                // *inner* fragment inherit the outer's line rather than
-                // resolving one of its own, measured on `interpret 'interpret
-                // "say 2 & 1"'` where all three echoes carry the outermost
-                // line.
                 let base_indent = self.clause_state.current_value_indent;
                 let base_line = self.clause_site(source, instruction).map(|(line, _)| line);
                 let saved_base = std::mem::replace(&mut self.activation_indent, base_indent);
@@ -1978,33 +1129,6 @@ impl Interp {
             // `Select`'s own explicit arm, above, without ever calling
             // `step` on itself (its own body range never contains another
             // listed sibling's index).
-            //
-            // The old comment's own measurement was real but its conclusion
-            // was wrong: `select / when 1=1 then / when 2=2 then n=42 /
-            // otherwise / n=99 / end / say n` prints `0`, and that alone is
-            // consistent with *never evaluating* condition B just as much
-            // as with *evaluating it and discarding the answer*. The
-            // measurement that tells the two apart is a raising absorbed
-            // condition: `select / when 1=1 then / when 1/0 then nop / end`
-            // is rc **214**, `Error 42.3`, on the oracle -- so B's condition
-            // *is* evaluated for real, and simply never gets to take its
-            // own branch (confirmed the other direction too: `when 2=2
-            // then say 'x'` with no `otherwise` prints nothing but `after`,
-            // not `x` -- true or false, the absorbed consequence never
-            // runs). `Select`'s own arm already reasons this exactly right
-            // for a *listed* `WHEN`'s condition (raise first, decide
-            // second); this arm was the one place that reasoning did not
-            // reach, because nothing before this task's own review probed
-            // a raising absorbed condition -- every prior probe used a
-            // side-effect-free true one, which cannot distinguish the two
-            // models.
-            //
-            // `current_value_indent` is already correct here without any
-            // extra work: this instruction *is* being stepped through the
-            // ordinary `step_in_temps_frame` path (unlike a listed `WHEN`,
-            // which `Select`'s own arm overrides it for explicitly), so the
-            // clause echo and this trace both land at this absorbed
-            // clause's own static indent.
             InstructionKind::When { condition, .. } => {
                 self.eval_condition(
                     code,
@@ -2015,80 +1139,6 @@ impl Interp {
                 Ok(Flow::Next)
             }
             // `SELECT CASE`'s own absorbed form.
-            //
-            // **F3, fixed by review: unlike plain `WHEN`'s absorbed form,
-            // this one *does* branch, on the false side.** Measured:
-            // `select case 2 / when 2 then / when 3 then nop / otherwise
-            // say 'O' / end / say 'after'` prints `O` then `after` on the
-            // oracle; this crate, before this fix, printed only `after`.
-            // Read the parsed field values directly rather than guessed
-            // (`f3dbg`, a throwaway debug binary against `rexx_parse::
-            // parse_program`) to find the mechanism: the *outer*, listed
-            // `WhenCase`'s own `false_target` stops *before* the absorbed
-            // `WhenCase`'s own body (it bounds `Select`'s own `run_bounded`
-            // call to `[when_index+1, false_target)`, which ends exactly at
-            // the absorbed node's own index), so the absorbed body is
-            // structurally unreachable through that call *regardless* of
-            // this arm's own answer when it does **not** need to branch.
-            // The one case that does need to branch is a **false** match on
-            // the absorbed condition: the absorbed node's own `false_target`
-            // points past its own (unrun) body to whatever comes next in
-            // the *enclosing* body (`OTHERWISE`, here) -- outside the range
-            // the *outer* `WhenCase`'s own `run_bounded` call is bounded to,
-            // so `Flow::Goto(false_target)` escapes it unchanged exactly the
-            // way a `LEAVE`/`ITERATE` naming an enclosing construct already
-            // does (`run_bounded`'s own doc comment).
-            //
-            // **The one further change: whatever this `Goto` lands on
-            // reports every indent `self.indent_offset` spaces higher than
-            // its own ordinary `static_indent`, for as long as that stays
-            // non-zero.** Found by review, one perimeter deeper than the
-            // fix above (`select case 2 / when 2 then / when 3 then nop /
-            // end / say 'after'`, no `OTHERWISE`: `END`'s own 7.3 clause
-            // reports at indent 4, not `END`'s own ordinary `0`) --
-            // **and corrected once more by a second review** that found an
-            // absolute-replacement version of this field right for `END`
-            // only by coincidence (`0 + 4` and `4` are the same number) and
-            // wrong for F-EX1's own `OTHERWISE` redirect just below, whose
-            // ordinary marker level is `2`, not `0`. `lib.rs`'s own doc
-            // comment on `indent_offset` has the full argument and the
-            // measured `TRACE R` transcript pinning all three numbers
-            // (the absorbed condition's own `6`, `OTHERWISE`'s own marker
-            // at `6`, its own body at `8`) to one additive offset, `6 - 2`,
-            // not three different rules -- and why it is carried through a
-            // field rather than by growing `Flow::Goto` a payload every
-            // ordinary resume-`Goto` would then have to carry too.
-            //
-            // **A true match still never runs its own consequence**,
-            // confirmed by a dedicated probe (`t13_f3_true.rex`, this
-            // task's report) rather than assumed from the false case's own
-            // fix: "matches on both sides" is the coordinator's own
-            // phrase for this, meaning this crate's pre-F3 behaviour (fall
-            // through, `Flow::Next`) already agreed with the oracle for a
-            // true absorbed match, and F3 is entirely the false path's own
-            // fix.
-            //
-            // **The plain-`WHEN` sibling of this false path is
-            // deliberately left alone.** Its own false-absorbed shape is
-            // one line away from `select / when 1=0 then / when 2=2 then
-            // nop / end`, SF #2018's segfault -- the oracle cannot answer
-            // what a false absorbed plain `WHEN` should do because it
-            // crashes before answering anything, so there is no oracle
-            // byte to fix `InstructionKind::When`'s own arm against, and
-            // probing to find out is explicitly out of scope (this task's
-            // own coordinator, and `phase-4-exclusions.txt`'s standing rule
-            // against reproducing that crash).
-            //
-            // `current_case_text` is `lib.rs`'s own new field, the one
-            // hand-off a listed `WhenCase` already has (`case_text`,
-            // passed directly) that an absorbed one otherwise has no way
-            // to reach; `None` only if this is somehow absorbed inside a
-            // plain `SELECT` with no `CASE` expression at all, which the
-            // parser should never produce for a `WhenCase` node (only a
-            // `SELECT CASE` ever builds one) -- kept as a fallback that
-            // evaluates for side effects and never branches, rather than
-            // an `unreachable!`, on this crate's own rule against turning
-            // an unproven parser invariant into a crash.
             InstructionKind::WhenCase {
                 values,
                 false_target,
@@ -2146,14 +1196,6 @@ impl Interp {
             // doc comment for why `Do`'s own arm never returns until the
             // entire loop is over, one way or another.
             // `DO`/`LOOP`, `IF` and `SELECT` are **not** reachable here.
-            //
-            // Each compiles to a region of its own -- a header region ending
-            // in `Op::LoopRun`, a condition region ending in a jump, a scan
-            // chain -- so `Op::Exec`, which is the only caller of this
-            // function, is never emitted for one (`ir::compile`'s own arms).
-            // What stood here was the tree-walker's recursive walk: each arm
-            // called `run_bounded` over its own body, and `run_bounded` now
-            // takes a chunk.
             InstructionKind::Do(_)
             | InstructionKind::Loop(_)
             | InstructionKind::If { .. }
@@ -2188,17 +1230,6 @@ impl Interp {
             // path around this instruction entirely," which was true of
             // every path *it* controls directly and false of this one,
             // which escapes through it rather than being dispatched by it.
-            //
-            // **`EndStyle::Do`/`LabeledDo`/`Loop` used to fail loudly here,
-            // and no longer do.** Task 11's `Do`/`Loop` arm now resolves its
-            // own construct exactly the way `If`/`Select` already do,
-            // returning a `Goto` past this exact instruction on every exit
-            // path -- normal completion, a consumed `LEAVE`, or `UNTIL`
-            // finally holding. So this is reached only inside a bounded
-            // sub-loop, as inert filler, precisely like `Then`/`Else`/
-            // `When`/`Otherwise` above; nothing independently dispatches it
-            // for a decision of its own, and a plain no-op is what those
-            // four already do in that position.
             InstructionKind::End { closes, .. } => {
                 let closes = closes
                     .as_ref()
@@ -2287,11 +1318,6 @@ impl Interp {
             // boundary; `Flow::Return`'s own doc comment has why none of the
             // other variants expresses that, and why the main body's own
             // `RETURN` ends the program.
-            //
-            // The rooting, the `>>>` line and the `Flow` are
-            // `Interp::returned_value`'s, whose own doc has the two-indent
-            // measurement that says which of the two `>>>` lines a returned
-            // value produces belongs here.
             InstructionKind::Return { expression } => {
                 let value = match expression {
                     Some(expression) => Some(self.eval(code, expression)?),
@@ -2399,17 +1425,6 @@ impl Interp {
             // `parse_instruction_body` takes the implied source and sets
             // `upper` from it), so a second arm here would be a second copy of
             // the dispatch and nothing else.
-            //
-            // Confirmed rather than assumed, with arguments `mIxEd CaSe`: `arg
-            // n1 n2` gives `MIXED`/`CASE`, `parse arg n3 n4` gives
-            // `mIxEd`/`CaSe`, and `parse upper arg n5 n6` gives `MIXED`/`CASE`.
-            // `UPPER` is a keyword only *before* the source: `arg upper t4`
-            // assigns `UPPER = 'MIXED'` and `t4 = 'CASE'`, taking `UPPER` as an
-            // ordinary template target -- which needs no special handling here
-            // because `rexx-parse` has already resolved it that way.
-            //
-            // The template engine, the trace shape and the movement rules are
-            // `parse_template.rs`'s; this arm is the dispatch.
             InstructionKind::Parse(parse)
             | InstructionKind::Arg(parse)
             | InstructionKind::Pull(parse) => {
@@ -2421,17 +1436,6 @@ impl Interp {
             // constant `ADDRESS env`, the computed `ADDRESS VALUE expr` (and
             // its parenthesised spelling), and the bare toggle. See
             // `exec_address`.
-            //
-            // `ADDRESS env command` and any `WITH` redirection are the
-            // command dispatch, and both fail loudly naming Phase 7 --
-            // `instruction_owner` (`lib.rs`) draws the identical line, and
-            // `owners.rs`'s own `Address::Command`/`Address::Environment`
-            // rows are what hold the two matches equal.
-            //
-            // `io` without `command` is a real shape, not a defensive extra:
-            // `address foo with output stem o.` sets the environment *and*
-            // registers a redirection for later commands, which is the
-            // `RexxInstructionAddressWith` half of the instruction.
             InstructionKind::Address(address) => {
                 if address.command.is_some() || address.io.is_some() {
                     return Err(Loud::instruction(&instruction.kind).into());
@@ -2465,29 +1469,6 @@ impl Interp {
 
     /// A message send that is a clause of its own
     /// (`RexxInstructionMessage::execute`, `MessageInstruction.cpp:151`).
-    ///
-    /// **What it does that the expression form does not is settle `RESULT`**,
-    /// as a `CALL` does. Measured, `'abc'~length` followed by `say result`
-    /// prints `3`, and `'abc'~~length` prints `abc` -- the cascade's
-    /// replacement of the result by the target happens before `RESULT` is
-    /// set, not after.
-    ///
-    /// **The oracle's other branch drops `RESULT` for a send that produced no
-    /// value**, and only a Rexx body can produce one -- a primitive method's
-    /// implementation returns an `ObjRef` by its own signature. Measured on
-    /// `::method quiet class` ending in a bare `return`: after `result =
-    /// 'unset'` and `.K~quiet`, `symbol('RESULT')` is `LIT`.
-    ///
-    /// **There is no `>>>` line**, measured: the clause's own value is not a
-    /// result the instruction reports, so `>M>` is the last line a traced
-    /// send emits.
-    ///
-    /// `value` is the message-assignment form's right-hand side. The oracle
-    /// builds that form as an ordinary message instruction whose name has
-    /// gained a `=` and whose argument list has gained that value in front
-    /// (`MessageInstruction.cpp:76-88`), which is why it shares this arm
-    /// rather than having one of its own -- and why the scope-override check
-    /// applies to it too, measured: `x~a:super = 2` is 88.914.
     pub(crate) fn exec_message(
         &mut self,
         code: &Code<'_>,
@@ -2514,19 +1495,6 @@ impl Interp {
         // is the expression position's error and not this one's -- measured,
         // a whole-clause `.K~m` on a method ending in a bare `return` is
         // rc 0.
-        //
-        // The `enter_eval_node` pair is the one thing `eval` did for this
-        // node that is kept rather than dropped: it is where
-        // `MAX_EVAL_DEPTH` counts from, and this arm should count the term
-        // at the depth an expression would. **No probe here separates the
-        // two.** Measured, `(...)~length` as a whole clause and as an
-        // assignment's right-hand side both run at 50,000 nested
-        // parentheses and both refuse at 50,001, with this pair present and
-        // with it deleted -- so it is here to leave the depth where it was,
-        // not on the strength of an observable. The assignment form below
-        // takes no level, which is likewise where it stood already.
-        // `eval`'s other contribution, `trace_intermediate`, is an empty arm
-        // for `ExprKind::Message` and nothing is lost by not calling it.
         let mut assigned_name;
         let result = match value {
             None => {
@@ -2582,40 +1550,6 @@ impl Interp {
     }
 
     /// `PROCEDURE`, with or without an `EXPOSE` list (D9r).
-    ///
-    /// Two things happen here, in this order, and the order is the design:
-    /// every exposed name is resolved **while the caller's frame is still the
-    /// top one**, and only then does the callee get a frame of its own. That
-    /// is what lets a computed `expose (v)` naming a symbol no instruction
-    /// mentions go through `Interp::slot_of` -- which may call
-    /// `RootSet::grow_slots` -- without ever growing a non-top frame. The
-    /// invariant `grow_slots` asserts is therefore untouched:
-    /// it was not overlooked, it is what this ordering preserves.
-    ///
-    /// **The frame is allocated here and not at the `CALL`**, and that is
-    /// measured rather than a matter of taste. Whether a `PROCEDURE` is legal
-    /// is a property of how control arrived, not of the body's text: `call
-    /// sub` into `sub: procedure` runs, and falling through into the very
-    /// same `sub:` label raises 17.1. A precomputed per-body "does this start
-    /// with `PROCEDURE`" flag cannot distinguish the two, so there is nothing
-    /// for `CALL` to act on -- `Activation::first_instruction_pending` has
-    /// the full four-shape table.
-    ///
-    /// **Exposure is transitive, and the transitivity is in `slot_ref`.**
-    /// Measured: `a` exposes `n` to `b`, `b` exposes the same `n` to `c`, `c`
-    /// writes it, and `a` sees the write. Resolving `c`'s target through the
-    /// frame in force -- which is `b`'s, already carrying `b`'s own alias --
-    /// chases to `a` in one step. Binding to `b`'s storage instead would give
-    /// a silently wrong value two levels up.
-    ///
-    /// **One `PROCEDURE` can expose names that live in different frames**, so
-    /// the redirect is per slot and not one target frame for the whole
-    /// callee. Measured: `c: procedure expose n m` above, where `n` chases to
-    /// `a` and `m` stops at `b` because `m` was `b`'s own local -- `b` sees
-    /// both of `c`'s writes and `a` sees only `n`'s. An earlier statement of
-    /// this design called the redirect "a bitset over slot indices plus one
-    /// target `SlotFrame`"; that shape cannot represent this pair, and this
-    /// program is what shows it.
     fn exec_procedure(
         &mut self,
         code: &Code<'_>,
@@ -2626,12 +1560,6 @@ impl Interp {
         // after an internal `CALL` or function invocation. Both halves are
         // needed -- every other entry fails the second, and anything after
         // another instruction in the same activation fails the first.
-        //
-        // **A `::ROUTINE` is not an internal call**, measured on the oracle
-        // both ways round: `call sub` and `qq = sub()` into a `::routine sub`
-        // whose first instruction is `procedure` are 17.1 at rc 239, where
-        // the identical pair into an internal label runs. `Entry`'s own doc
-        // has the table, including the `::METHOD` row.
         let entered_by_internal_call = match self.activation().entry {
             Entry::InternalCall => true,
             Entry::TopLevel | Entry::Routine | Entry::Method => false,
@@ -2685,13 +1613,6 @@ impl Interp {
         // the caller's, taken at the call. The caller has to learn about it,
         // because after the isolation below this map is replaced and the
         // return path deliberately does not write it back.
-        //
-        // Measured, and it does not fall out of anything else: a caller with
-        // `nm = 'ZQXW'`, a callee `procedure expose (nm)` doing `interpret
-        // "zqxw = 'set-in-callee'"`, and the caller then reading `zqxw`
-        // through its own `interpret` prints `set-in-callee`. `ZQXW` appears
-        // in no instruction of either, so the plan has no slot for it and
-        // both sides reach it only through a run-time binding.
         let resolved = self.activation().extra.clone();
         if let Some(caller) = self.caller_activation_mut() {
             caller.extra = resolved;
@@ -2738,27 +1659,6 @@ impl Interp {
 
     /// `EXPOSE`: bind every name it lists to the receiving object's variable
     /// pool for the scope the running method was declared in.
-    ///
-    /// **The scope, not the receiver's class**, and that is the whole of what
-    /// keys a pool. With `sub subclass sup`, a class method on each exposing
-    /// `v`, and both sent to `.sub`, the two writes stand at once -- one
-    /// object holding one name at two values.
-    /// `corpus/lang/expose_two_scopes.rex` is that program, run against the
-    /// oracle on both engines; `rexx-core`'s `scope_pools.rs` holds the same
-    /// property against the storage directly, and
-    /// `a_pool_entry_belongs_to_one_scope_and_not_to_another` holds it against
-    /// this function.
-    ///
-    /// **The binding is per slot and lasts the activation**, so every later
-    /// route to the name -- a plan-resolved read, an `INTERPRET` fragment, a
-    /// `VALUE('V')` call, a `DROP` -- reaches the pool without knowing this
-    /// ran. `Interp::variable` and its two siblings are where that redirect is
-    /// applied.
-    ///
-    /// **Placement is the parser's rule and is not restated here.** An
-    /// `EXPOSE` that is not a method body's first instruction is 99.907 at
-    /// translation, measured, so what can reach this function is an `EXPOSE`
-    /// first in a body -- and a body that is not a method's, which is 98.992.
     pub(crate) fn exec_expose(
         &mut self,
         code: &Code<'_>,
@@ -2785,10 +1685,6 @@ impl Interp {
                 // from it. Reading the selector first, out of the frame, gets
                 // `[BETA][BETA]`: the frame's `LISTER` is unset, so its
                 // derived name `LISTER` is what spells the list.
-                //
-                // The selector is exposed itself as well as the words it
-                // spells, which is the same plurality `PROCEDURE EXPOSE` has
-                // and is what the reads above rest on.
                 VariableRef::Indirect(id) => {
                     let name = code.symbols.name(*id).as_bytes().into();
                     self.bind_exposed(owner, scope, name)?;
@@ -2845,26 +1741,6 @@ impl Interp {
 
     /// The object whose [`rexx_core::ScopePools`] a send to `receiver` binds
     /// into.
-    ///
-    /// **A class object gets one made for it.** `RexxClass` is an ordinary
-    /// object in the C++ and carries `objectVariables` like any other, which
-    /// is why `::method m class` may `EXPOSE` at all; here a class identity
-    /// names no arena slot, so the pools live in an arena object created on
-    /// first use and rooted for as long as the class is -- which is for ever
-    /// in this phase.
-    ///
-    /// **An instance is its own.** Its pools live in its own
-    /// [`rexx_core::Body::Instance`] and the collector reaches them by tracing
-    /// it, so they are safe exactly while something roots the instance. The
-    /// `SELF` slot is not that root, because a body may assign over it. What
-    /// roots it for a send a program writes is the temporary
-    /// [`Interp::message_term`] takes over the receiver, and for the `INIT`
-    /// send `~new` makes it is `native_new`'s own, because there
-    /// `message_term`'s temporary holds the class and not the new object.
-    /// `a_method_that_assigns_over_self_keeps_its_exposed_variables`
-    /// (`tests/collect_stress.rs`) reddens when the second goes.
-    ///
-    /// **Every other receiver is refused**, having nowhere to keep a pool.
     pub(crate) fn pool_owner(&mut self, receiver: ObjRef) -> Result<ObjRef, Failure> {
         if !self.heap.is_class(receiver) {
             if matches!(
@@ -2902,21 +1778,6 @@ impl Interp {
     }
 
     /// Every name one `PROCEDURE EXPOSE` list names, in source order.
-    ///
-    /// **The indirect form is plural and also exposes its own selector.**
-    /// Measured twice: with `list = 'ALPHA BETA'`, `procedure expose (list)`
-    /// exposes `ALPHA` and `BETA` and nothing else; and with `v = 'zzz'`,
-    /// `procedure expose (v)` exposes `v` *itself* as well as `ZZZ` -- the
-    /// callee reads `v` as `zzz` (the caller's value) and a write to either
-    /// name in the callee is visible in the caller. So the selector's own
-    /// name goes on the list beside the words its value spells.
-    ///
-    /// The value is split and validated exactly the way `DROP (v)`'s own arm
-    /// does it, through the same two functions, and for the same measured
-    /// reason: a word is upcased only after it validates, one word at a time,
-    /// never as a whole. Validation runs over the entire list before any of
-    /// it is used, so a bad word later in the list cannot leave half a
-    /// `PROCEDURE` performed.
     fn expose_names(
         &mut self,
         code: &Code<'_>,
@@ -2942,47 +1803,11 @@ impl Interp {
     }
 
     /// `USE ARG`, `USE STRICT ARG` and `USE LOCAL`.
-    ///
-    /// `USE LOCAL` is never legal here -- no entry this crate can construct
-    /// is a method invocation -- so implementing it means implementing which
-    /// of its two refusals applies. Measured on the oracle, in a clean
-    /// directory:
-    ///
     /// ```text
     /// as the program's own first instruction    98.993, rc 158
     /// as a ::ROUTINE's own first instruction    98.993, rc 158
     /// anywhere else                             99.910, rc 157
     /// ```
-    ///
-    /// 98.993 is "may only be used from method invocations" and 99.910 is
-    /// "must be the first instruction executed after a method invocation".
-    ///
-    /// **The 98.993 rows reach this function and the 99.910 arm does
-    /// not.** `rexx-parse` already enforces the placement rule
-    /// at parse time (`instruction.rs`'s own `use_local`, error 99.910, and
-    /// 99.915 for a fragment), so every shape that would take the second arm
-    /// fails before execution begins: the second instruction of a program,
-    /// after a label on its own line, after a label on the same line, after a
-    /// `PROCEDURE`, inside a `DO` block, inside an `IF`, and inside an
-    /// `INTERPRET` in two positions were tried, and every one was
-    /// intercepted. Those cases already answer the oracle's own number; what
-    /// they do not answer byte for byte is the clause echo, which is the
-    /// standing parse-error limitation `execute` documents (`lib.rs`).
-    ///
-    /// The arm is kept rather than collapsed, on the same reasoning
-    /// `Loud::missing_body` states for its own unreached arm: a rule the
-    /// parser happens to enforce first is not a guarantee this function can
-    /// rely on, and answering 98.993 unconditionally would be a silent wrong
-    /// answer the day that check moves. It carries no test, because a test
-    /// for it would necessarily pass through the parse-time path instead and
-    /// so could not fail if this arm were wrong.
-    ///
-    /// **The question the arm below asks is "is this a method invocation",
-    /// and not "was this entered by a call".** The two answers differ on a
-    /// `::ROUTINE`, which is entered by a call and is not a method
-    /// invocation: measured, `use local` first in one, reached by `CALL` and
-    /// as a function, is 98.993 both ways -- the top-level answer, not the
-    /// other one.
     fn exec_use(
         &mut self,
         code: &Code<'_>,
@@ -3025,25 +1850,6 @@ impl Interp {
 
     /// `USE ARG`/`USE STRICT ARG`: bind the call's arguments to this
     /// instruction's targets, positionally.
-    ///
-    /// Every rule below is measured, in a clean directory:
-    ///
-    /// * Extra arguments are ignored without `STRICT`. `call sub 1,2,3` into
-    ///   `use arg p` binds `p = 1`.
-    /// * An **absent** target is *dropped*, not left alone. `r = 'preset'`
-    ///   before a no-`PROCEDURE` `call sub 1` into `use arg p, r` makes both
-    ///   the callee and the caller read `r` as `R`. A probe using a target
-    ///   whose prior value equalled its own derived name could not have seen
-    ///   this.
-    /// * An omitted position (`call sub 1,,3`) holds its place: `use arg p,
-    ///   q, r` gives `[1] [Q] [3]`.
-    /// * A default fills an absent *or* omitted position: `call sub 1,,3`
-    ///   into `use arg p, q = 'dflt', r` gives `[1] [dflt] [3]`.
-    /// * `STRICT` adds two arity checks, and a default satisfies the
-    ///   minimum: `use strict arg p, q` with one argument is 40.3, while
-    ///   `use strict arg p, q = 'dflt'` with one argument runs.
-    /// * A trailing `...` suppresses the maximum check only. `use strict arg
-    ///   p, q, ...` takes four arguments; `use strict arg p` takes one.
     fn exec_use_arg(
         &mut self,
         code: &Code<'_>,
@@ -3096,16 +1902,6 @@ impl Interp {
 
     /// Binds one `USE ARG` target to one argument, or to its default, or to
     /// nothing.
-    ///
-    /// The `alias` case reads the argument's **value**, which carries the
-    /// variable it names: any `VariableReference` binds, however it reached
-    /// the call. Measured, oracle rc 0: `o = >vr` then `call sub o` into
-    /// `use arg >q` aliases exactly as `call sub >vr` does. It has **three**
-    /// separate measured refusals -- a supplied argument that is not a
-    /// reference is 88.928, an omitted position is 88.931, and a target that
-    /// is not currently unset is 98.995 ([`target_is_uninitialised`]).
-    ///
-    /// [`target_is_uninitialised`]: Interp::target_is_uninitialised
     fn bind_use_target(
         &mut self,
         code: &Code<'_>,
@@ -3215,12 +2011,6 @@ impl Interp {
                 // is the gating -- `>>>` is `results`, `>=>` is
                 // `intermediates`, so the pair is not one line's worth of
                 // conditional.
-                //
-                // **A dropped target traces neither**, which is the adjacent
-                // measured case rather than an omission here: `call sub 1,,3`
-                // into `use arg p, q, r` traces `>>>`/`>=>` for `P` and `R`
-                // and nothing at all for `Q` (`variable->drop(context)` has
-                // no trace call of its own).
                 let indent = self.clause_state.current_value_indent;
                 // `results` and not `intermediates`, though the pair below
                 // needs both: `results` is the weaker gate, true wherever
@@ -3256,42 +2046,6 @@ impl Interp {
 
     /// Whether a `USE ARG >name` target is in the uninitialised state the
     /// oracle requires of it.
-    ///
-    /// **The trigger is only "does this variable have a value". It is not
-    /// about exposure and not about locality**, despite error 98.995's own
-    /// wording ("it must be an uninitialized local variable"). The pair that
-    /// separates those hypotheses is measured, and without it the check would
-    /// very plausibly have been written as an exposure test and been wrong:
-    ///
-    /// * `procedure expose q` where the exposed `q` **holds a value** -> rc
-    ///   158, 98.995.
-    /// * `procedure expose q` where the exposed `q` is **unset** -> rc 0, the
-    ///   alias is installed, the caller prints `q: Q`.
-    ///
-    /// Exposure is identical in both; only the value differs. `DROP` restores
-    /// the uninitialised state, so `q = 'local'; drop q; use arg >q` succeeds.
-    /// Repeating `use arg >q` onto one target fits the same rule rather than
-    /// being a case of its own: the first alias makes `Q` read the caller's
-    /// variable, so it has a value by the second.
-    ///
-    /// **The stem exemption is this crate's own shape showing through, and it
-    /// is measured on both sides.** `read_stem` vivifies a fresh, empty
-    /// `Body::Stem` into the slot on a bare stem read (it must -- a stem's
-    /// object identity is observable through `b. = a.`), and `stem_drop`
-    /// leaves exactly the same thing. Neither is an initialised variable to
-    /// the language, and the oracle agrees: `say q.` then `use arg >q.`
-    /// succeeds, and so does `q.1 = 'x'; drop q.; use arg >q.`, while
-    /// `q.1 = 'local'` and `q. = 'dflt'` both raise. `is_uninitialised_stem`
-    /// has the full nine-row table, including the three rows that make the
-    /// test "no default and no tail that still has a value" rather than the
-    /// tempting "no default and no tails".
-    ///
-    /// **Keyed on the target's own name shape, not on the value's**, which is
-    /// the distinction a "value is an empty stem" test would get wrong.
-    /// Measured: `zz = q.` puts a fresh, empty stem object into a *simple*
-    /// variable, and `use arg >zz` then raises 98.995. `ZZ` is an initialised
-    /// simple variable that happens to hold a stem; `Q.` is a stem variable
-    /// nobody has written.
     fn target_is_uninitialised(&self, name: &[u8], frame: SlotFrame, index: usize) -> bool {
         match self.variable(frame, index) {
             None => true,
@@ -3300,12 +2054,6 @@ impl Interp {
     }
 
     /// One `USE ARG` target's variable name.
-    ///
-    /// A target is `parseVariableOrMessageTerm`, so the grammar admits a
-    /// message term here as well as a variable (`UseTarget::target`'s own
-    /// doc). Only the variable spellings are implemented, and a message term
-    /// fails loudly through the same `Loud::expression` path every other
-    /// unimplemented expression form uses rather than being approximated.
     fn use_target_name(&self, code: &Code<'_>, target: &UseTarget) -> Result<Vec<u8>, Failure> {
         match &target.target.kind {
             ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
@@ -3317,31 +2065,6 @@ impl Interp {
 
     /// Everything one `SAY` does once its expression has been evaluated:
     /// `>>>`, then the line itself.
-    ///
-    /// `None` is the bare `SAY`, which is a blank line **and** a traced null
-    /// string rather than a skipped clause (`RexxInstructionExpression::
-    /// evaluateStringExpression`'s own `else` arm: `traceResult(GlobalNames::
-    /// NULLSTRING)`).
-    ///
-    /// **The one implementation both engines enter**: `step`'s own `Say` arm
-    /// evaluates and calls this, and `crate::ir::Op::Say` does the same with a
-    /// register's value, so the trace line and the output cannot come apart
-    /// between them.
-    ///
-    /// **`inline`, and it is a measurement rather than a habit** --
-    /// [`Interp::assign_evaluated`]'s own doc comment carries the numbers, since
-    /// the two annotations were measured together.
-    ///
-    /// [`Interp::assign_evaluated`]: Interp::assign_evaluated
-    /// **Fallible since the required-string protocol reaches it**, which is
-    /// what makes `SAY` a `reqstr` dispatch site: an object with no string
-    /// value under a NOSTRING trap leaves through the `?` below, printing
-    /// nothing. Measured, oracle rc 0 under `signal on nostring`: `say
-    /// .environment` runs the handler and prints no line.
-    ///
-    /// **The `>>>` traces the converted string**, which is why the conversion
-    /// is above it: measured, `trace r` over `say .K` with a class-side
-    /// `makeString` returning `2` prints `>>>   "2"`.
     #[inline]
     pub(crate) fn say_evaluated(&mut self, value: Option<ObjRef>) -> Result<(), Failure> {
         let line = match value {
@@ -3360,36 +2083,6 @@ impl Interp {
 
     /// `GUARD ON`/`GUARD OFF`, with or without a `WHEN` expression
     /// (`RexxInstructionGuard::execute`, `instructions/GuardInstruction.cpp`).
-    ///
-    /// **SCHEDULING, and Phase 6 owns it.** The instruction reserves and
-    /// releases the receiver's scope against other activities. This
-    /// interpreter runs one, so nothing can hold the scope when the
-    /// reservation is asked for and nothing can be waiting on it when it is
-    /// given up: `guardOn` and `guardOff` are the two halves this arm has no
-    /// state to model, and a no-op is what an uncontended reservation does.
-    /// Measured, oracle rc 0: a class method whose body is `guard off` then
-    /// `guard on` then `guard off` answers its `return` value.
-    ///
-    /// **The method check is legality and stays.** `inMethod` is asked before
-    /// anything else and answers 99.911 -- measured rc 157, both as a
-    /// program's own clause and as a `::ROUTINE`'s: `GUARD can only be issued
-    /// in an object method invocation.` The clause echo is the ordinary one,
-    /// so `::ROUTINE`'s shape carries the sending clause under it.
-    ///
-    /// **A `WHEN` that does not hold blocks, and this refuses instead.** The
-    /// C++ evaluates the expression, and while it is false waits for another
-    /// activity to change one of the exposed variables the expression names
-    /// (`:167`-`:185`). With one activity nothing can, so the oracle itself
-    /// never leaves that loop: the program and its measured effect are
-    /// `corpus/oracle-crashes.txt` entry 7, which must not be run. A wait
-    /// that cannot end has no transcript to match, so it is loud.
-    ///
-    /// The `WHEN` that *does* hold is a no-op like the bare form, and its
-    /// `>K>` is the ordinary keyword-result line at this clause's own value
-    /// indent -- measured under `trace r`, `guard on when v = 1` echoes
-    /// `>K>   "WHEN" => "1"` and nothing else. The truth test is `WHEN`'s own
-    /// (`truthValue(Error_Logical_value_guard)`, `:167`), which is 34.902 and
-    /// not `IF`'s 34.1.
     fn exec_guard(&mut self, code: &Code<'_>, guard: &Guard) -> Result<Flow, Failure> {
         if self.activation().method_identity.is_none() {
             return Err(Raised::guard_outside_method().into());
@@ -3412,30 +2105,6 @@ impl Interp {
 
     /// `REPLY`, bare or with a value (`RexxInstructionReply::execute`,
     /// `instructions/ReplyInstruction.cpp:66`).
-    ///
-    /// The value goes to the sender at once and the rest of this method's
-    /// body is owed. `Flow::Return` is what hands the value over -- the
-    /// sending clause cannot tell a reply from a return, which is the whole
-    /// of the value half -- and [`ReplyState::Owed`] plus a `pc` on the
-    /// next clause is what says the body has not finished.
-    /// [`Interp::enter_method_body`] reads both.
-    ///
-    /// **LEGALITY, in the order the C++ takes it.** `inMethod` is asked
-    /// before the expression is evaluated and answers 99.919 -- measured rc
-    /// 157 as a program's own clause and as a `::ROUTINE`'s. The
-    /// one-per-invocation rule is asked *after*, inside `RexxActivation::
-    /// reply` (`execution/RexxActivation.cpp:1053`), so a second `REPLY`'s
-    /// own expression is evaluated and traced before 98.935 -- measured rc 0
-    /// with the first reply's value delivered, since the raise happens in the
-    /// resumed body and the sender has already been answered.
-    ///
-    /// **SCHEDULING, and Phase 6 owns it: the body must be a clause of the
-    /// method's own top level.** The oracle continues the remainder on
-    /// another activity, with every enclosing `DO`, `SELECT` and `IF` intact.
-    /// Resuming here means re-entering the body at an instruction index, and
-    /// an index alone cannot restore a loop's iteration state or an `IF`'s
-    /// branch -- so a `REPLY` under any of them would silently drop the
-    /// construct. [`top_level_clause`] is the test and this refusal is loud.
     fn exec_reply(
         &mut self,
         code: &Code<'_>,
@@ -3474,31 +2143,6 @@ impl Interp {
     /// `FORWARD`, with any of `TO`, `MESSAGE`, `CLASS`, `ARGUMENTS`, `ARRAY`
     /// and `CONTINUE` (`RexxInstructionForward::execute`,
     /// `instructions/ForwardInstruction.cpp:128`).
-    ///
-    /// **What is left unspecified comes from the context**, and that is
-    /// `RexxActivation::forward`'s own defaults
-    /// (`execution/RexxActivation.cpp:1335`-`:1347`): the target is the
-    /// receiver, the message is the name this method was entered under, and
-    /// the arguments are the ones it was entered with.
-    ///
-    /// **`CONTINUE` decides which of two instructions this is.** Continuing,
-    /// it is a message send whose value lands in `RESULT` and execution goes
-    /// on -- and a send that answered nothing **drops** `RESULT` rather than
-    /// leaving the previous one, measured: `result = 'preset'` then a
-    /// continued forward to a body ending in a bare `return` leaves
-    /// `symbol('RESULT')` at `LIT`. Not continuing, the send's value becomes
-    /// this method's, which [`Flow::Return`] is exactly.
-    ///
-    /// **A non-continuing self-forward is a licensed divergence and is not
-    /// the oracle's answer.** The send happens with this activation still on
-    /// the stack, so `Interp::enter_method_body`'s `MAX_ACTIVATION_DEPTH`
-    /// guard counts the recursion and answers 11.1 at rc 245. The oracle
-    /// stops its own activation *before* the send, so its depth guard never
-    /// sees the frames and the C++ stack goes instead -- `rc 139`,
-    /// `corpus/oracle-crashes.txt`. Matching that is not a target.
-    ///
-    /// **Legality is asked first and is 98.947 at rc 158**, measured as a
-    /// program's own clause and as a `::ROUTINE`'s.
     fn exec_forward(&mut self, code: &Code<'_>, forward: &Forward) -> Result<Flow, Failure> {
         let Some(identity) = self.activation().method_identity.as_ref() else {
             return Err(Raised::forward_outside_method().into());
@@ -3535,10 +2179,6 @@ impl Interp {
                 // fixed substitutions a `~name:scope` override's own check
                 // takes. Measured, `forward class (5) message('OTHER')` is
                 // 88.914 at rc 168.
-                //
-                // **Between the evaluate and the trace**, which is where the
-                // C++ raises it (`:168`-`:175`): under `trace i` an invalid
-                // `CLASS` writes its `>L>` line and no `>K>` line at all.
                 if !self.heap.is_class(value) {
                     return Err(Raised::scope_override_not_a_class().into());
                 }
@@ -3591,14 +2231,6 @@ impl Interp {
     /// 98.937 for a non-continuing `FORWARD` under a `REPLY` that carried a
     /// value, which is the one legality question `FORWARD` asks that is not
     /// about `FORWARD` (`execution/RexxActivation.cpp:1367`-`:1369`).
-    ///
-    /// **The condition is the replied value and not the reply**, which the
-    /// C++ spells as `result != OREF_NULL` over the field
-    /// `RexxActivation::reply` assigns (`:1050`-`:1062`). Measured, oracle,
-    /// a method replying and then forwarding to a sibling method: `reply
-    /// 'replied'` is rc 0 with the report on `stderr`, `EXIT cannot return a
-    /// value after a REPLY.`, and a bare `reply` is rc 0 with `stderr`
-    /// empty. `CONTINUE` is exempt on both sides: it answers nobody.
     fn forward_after_reply(&self, forward: &Forward) -> Result<(), Failure> {
         if forward.continue_ || !self.activation().replied_a_value {
             return Ok(());
@@ -3608,10 +2240,6 @@ impl Interp {
 
     /// One `FORWARD` option that is a single expression: its value, rooted,
     /// with the `>K>` line the oracle's `traceKeywordResult` writes.
-    ///
-    /// The line renders the object through `stringValue()`, which is
-    /// [`Interp::string_value_text`] here -- measured, `>K>   "TO" => "a K"`
-    /// for an instance and `>K>   "ARGUMENTS" => "an Array"` for an array.
     fn forward_keyword(
         &mut self,
         code: &Code<'_>,
@@ -3633,17 +2261,6 @@ impl Interp {
 
     /// The argument list a `FORWARD` sends, into a borrowed buffer so that
     /// [`Interp::exec_forward`] returns it on the failure path too.
-    ///
-    /// **`ARGUMENTS`, `ARRAY`, or the method's own arguments.** `ARGUMENTS expr`
-    /// hands its value to `requestArray` and trims the trailing omitted
-    /// positions (`ForwardInstruction.cpp:179`-`:210`); `ARRAY (a, b)`
-    /// evaluates its own expressions, tracing each as an argument; and with
-    /// neither, the method's own arguments go on unchanged.
-    ///
-    /// **`.nil` is 98.946 and a string is one argument**, both measured --
-    /// `requestArray` answers `TheNilObject` for the first and a one-item
-    /// array for the second. An object whose conversion this crate does not
-    /// build refuses loudly rather than silently sending the object itself.
     fn forward_arguments(
         &mut self,
         code: &Code<'_>,
@@ -3692,18 +2309,6 @@ impl Interp {
 
     /// `ARGUMENTS expr`'s value through `requestArray`
     /// (`instructions/ForwardInstruction.cpp:182`), appended to `values`.
-    ///
-    /// 98.946 wherever `RexxInternalObject::requestArray`
-    /// (`classes/ObjectClass.cpp:1646`) answers `TheNilObject`: `.nil`, a
-    /// class object, and an instance whose behaviour has no `MAKEARRAY`; and
-    /// for a multi-dimensional array, which converts to itself and fails the
-    /// instruction's own single-dimension test. Measured, oracle rc 158 for
-    /// `arguments (self)`, `arguments (.String)` and
-    /// `arguments (.array~new(2,2))`, and rc 0 `a seen 2 [x] [y]` for an
-    /// instance of a class defining `makeArray`.
-    ///
-    /// Refuses loudly for a conversion this crate does not build, rather
-    /// than sending the object itself as one argument.
     fn forward_arguments_converted(
         &mut self,
         value: ObjRef,
@@ -3789,10 +2394,6 @@ impl Interp {
     }
 
     /// One converted `ARGUMENTS` item, rooted as it is appended.
-    ///
-    /// The values a conversion produces are new strings that nothing else
-    /// holds, and the buffer they go into is not walked by the collector, so
-    /// each is rooted before the next allocation can run one.
     fn push_converted_argument(&mut self, bytes: &[u8], values: &mut Vec<Option<ObjRef>>) {
         let item = self.text(bytes);
         self.roots.push_temp(item);
@@ -3802,12 +2403,6 @@ impl Interp {
     /// A stem's assigned tails, ordered by `CompoundVariableTail::compare`
     /// (`classes/support/CompoundVariableTail.hpp:170`), which sorts on
     /// length first and bytes second.
-    ///
-    /// **This is not the oracle's own order**, which is a walk of the
-    /// balanced tree `CompoundVariableTable` builds and so depends on the
-    /// order the tails were assigned in; this crate's tails are a hash map
-    /// and hold no such order. The count agrees and the items do not, which
-    /// is a divergence recorded on Task 9's list.
     fn stem_assigned_tails(&self, value: ObjRef) -> Vec<Vec<u8>> {
         let Some(Body::Stem { tails, .. }) = self.heap.get(value).map(|object| &object.body) else {
             return Vec::new();
@@ -3823,43 +2418,6 @@ impl Interp {
 
     /// Everything a `RETURN` or an `EXIT` does once its expression has been
     /// evaluated: its `>>>`, and the `Flow` that leaves the activation.
-    ///
-    /// **The one implementation both engines enter**: `step`'s own `Return`
-    /// and `Exit` arms evaluate and call this, and `crate::ir::Op::Return`
-    /// does the same with a register's value.
-    ///
-    /// `None` is the bare form, which traces **no line at all** -- unlike a
-    /// bare `SAY`, which traces the null string. The oracle's
-    /// `RexxInstructionExit::execute` (`ExitInstruction.cpp`) evaluates
-    /// through `RexxInstructionExpression::evaluateExpression`
-    /// (`RexxInstruction.cpp:223`-`235`, read directly), whose own
-    /// `traceResult` runs only inside the `expression != OREF_NULL` arm; a
-    /// bare `RETURN` leaves `RESULT` unset where `RETURN ''` sets it, which is
-    /// the same distinction in the caller.
-    ///
-    /// The value's `>>>` fires **here**, at this clause's own indent, and a
-    /// caller reading `RESULT` traces a *second* one at its own -- measured,
-    /// `return 9` from a routine called at top level prints `>>>     "9"` then
-    /// `>>>   "9"`, two lines for one value at two indents. `exec_call` owns
-    /// the second; this owns the first. Measured for `EXIT` on a three-line
-    /// program with no condition and no call in it -- `trace r` / `say 'a'` /
-    /// `exit 0` traces `>>>   "0"` after the `exit 0` echo -- so the line
-    /// belongs to the instruction and not to anything around it.
-    ///
-    /// **The rooting here is one clause's, which is shorter than a value that
-    /// ends the program needs**, and that is true of either keyword: a
-    /// top-level `RETURN` exits with its value exactly as an `EXIT` does
-    /// (measured, `return 5` as a whole program is rc 5), and
-    /// [`Interp::apply_flow`] takes the surviving root on its `Flow::Return`
-    /// arm and its `Flow::Exit` arm alike. The temp pushed here is rooted like
-    /// every other `eval` result and the clause's own frame is popped before
-    /// the `Flow` has reached `run_activation`, so from there through the
-    /// activation teardown to `execute`'s `exit_code_for` call nothing on the
-    /// temps stack names it; `root_exit_value` (`lib.rs`) is what does, and
-    /// its own doc has the measurement that says the window is real rather
-    /// than theoretical. The compiled engine's own register is a second root
-    /// for the same value while its region runs, so this push is redundant
-    /// there and harmless.
     pub(crate) fn returned_value(
         &mut self,
         value: Option<ObjRef>,
@@ -3883,11 +2441,6 @@ impl Interp {
         // `:1413`. The bare form of either is legal after a reply and is
         // measured: `reply 'v'` then `say 'tail'` then `return` is rc 0 with
         // both lines printed and an empty stderr.
-        //
-        // `EXIT`'s C++ check is guarded by `isTopLevelCall()`, which a method
-        // activation is and an internal `CALL` inside one is not. The state
-        // read here is this activation's own and a `CALL` gets a fresh one,
-        // so the guard needs no counterpart.
         if value.is_some() && self.activation().reply != ReplyState::None {
             return Err(match keyword {
                 ReturnKeyword::Return => Raised::return_after_reply(),
@@ -3904,18 +2457,6 @@ impl Interp {
     /// Everything a `PUSH` or a `QUEUE` does once its expression has been
     /// evaluated: the `>>>` line, and the line itself onto one end of the
     /// queue.
-    ///
-    /// **The one implementation both engines enter**, `step`'s own arm and
-    /// `crate::ir::Op::Queue` alike.
-    ///
-    /// **`SAY`'s tail with a different sink**, and that is the oracle's own
-    /// shape rather than a convenience here: `RexxInstructionQueue::execute`
-    /// shares `SAY`'s `RexxInstructionExpression::evaluateStringExpression`
-    /// (`QueueInstruction.cpp:69`), so the value is rendered to string form
-    /// and traced exactly as [`Interp::say_evaluated`] renders and traces it,
-    /// and `None` queues a null string traced as one rather than being a
-    /// skipped clause. Reading a line back is `Interp::pull_line`'s
-    /// (`input.rs`), not this function's.
     pub(crate) fn queue_evaluated(
         &mut self,
         value: Option<ObjRef>,
@@ -3943,32 +2484,6 @@ impl Interp {
 
     /// Everything one assignment does once its value has been evaluated:
     /// `>>>`, then the write and the lines the write itself produces.
-    ///
-    /// **The one implementation both engines enter**, `step`'s own
-    /// `Assignment` arm and `crate::ir::Op::Store` alike -- which is what
-    /// keeps a stem target, a compound tail and the `>=>` line to one copy.
-    /// The target dispatch itself is [`Interp::assign_expr_target`], shared
-    /// with `PARSE`; its own doc comment carries which shapes `addVariable`
-    /// can build, and why its fourth arm is loud and is reachable from the
-    /// other caller but not from this one.
-    ///
-    /// **`inline` rather than `inline(always)`, and the difference was
-    /// measured on both.** With `perf stat -e instructions:u`, base against
-    /// head interleaved in one sitting, this annotation and
-    /// [`Interp::say_evaluated`]'s together are worth 722,000,000 user
-    /// instructions on the compiled stream's arm of
-    /// `bench-programs/varlookup.rex` -- 78.5657 against 77.8437 billion, 19
-    /// per body clause -- and read exactly zero on the tree-walker's arm and on
-    /// every cell of `bench-programs/emptyloop.rex`. `inline(always)` was
-    /// measured too and is worse overall: it recovers a further 76,000,000 here
-    /// and costs `emptyloop` 550,000,000 on **both** arms, a program whose loop
-    /// body enters neither function.
-    ///
-    /// [`Interp::say_evaluated`]: Interp::say_evaluated
-    ///
-    /// `at` is forwarded to [`Interp::assign_expr_target`] unchanged and is
-    /// that function's parameter rather than this one's; `None` is what a
-    /// caller with no earlier resolution passes.
     #[inline]
     pub(crate) fn assign_evaluated(
         &mut self,
@@ -4012,71 +2527,6 @@ impl Interp {
 
     /// Writes `value` through one assignment *target expression*, and traces
     /// the write.
-    ///
-    /// `rendered` is `value`'s own text, supplied rather than recomputed here:
-    /// every caller already has it, and rendering a number twice is how a
-    /// second rendering under a different `DIGITS` would get a chance to
-    /// disagree with the first (D15).
-    ///
-    /// **The two callers do not agree about whether the `other` arm can be
-    /// reached, and that was measured rather than reasoned from one of them.**
-    /// An `Assignment`'s target is whatever `addVariable` builds, which is
-    /// only the three shapes below (`ast.rs`'s own doc comment on
-    /// `Assignment`). A `PARSE` target is `parseVariableOrMessageTerm`, so the
-    /// grammar admits a message term there: measured, `parse value 'a b' with
-    /// q~x r` parses, and the oracle answers `Error 97.1` (`Object "Q" does
-    /// not understand message "X="`) where this crate reports a `Phase 5` gap.
-    /// So the arm is live for one caller and unreachable for the other, and it
-    /// is reported through `Loud::expression` rather than `unreachable!` for
-    /// both: a guarantee the grammar makes is not one the type system
-    /// enforces, and failing loudly beats trusting it.
-    ///
-    /// **Shared by `Assignment` and `PARSE`**, which is what makes a
-    /// compound `PARSE` target behave exactly as `a.i = value` does --
-    /// measured, `ii = 3; parse value 'one two' with aa.ii cc.` traces
-    /// `>C> AA.II => "AA.3"` then `>=> AA.II <= "one"` and stores the value
-    /// under the resolved tail.
-    /// `rendered` is `None` when no `>=>` line would print it, which every
-    /// arm below forwards unchanged to [`Interp::trace_assignment`].
-    ///
-    /// **An `Option` rather than an empty slice**, and the reason is the
-    /// defect it closes: `rendered` is a full copy of the assigned value, so
-    /// a caller that produced it unconditionally copied a value of any size
-    /// on a path that discards it -- measured, `x = copies('a',400000000)`
-    /// aborts the process at the project's own `ulimit -v 1048576` where the
-    /// oracle answers. The type is what makes the caller's guard visible
-    /// here: a `&[u8]` that is empty because tracing is off and a `&[u8]`
-    /// that is empty because the value is the null string are the same value,
-    /// and only one of them may be printed.
-    ///
-    /// **`at` is the slot a compiler already resolved a simple-variable target
-    /// to, and it is a parameter of *this* function rather than a store of its
-    /// own on purpose.** `crate::ir::Op::Store` carries one and the tree-walker
-    /// passes `None`, so both engines still arrive here and a stem target, a
-    /// compound tail and the `>=>` line stay one implementation -- a second
-    /// store path executed in the driver would be the two-implementations
-    /// defect the dual-engine gate exists to catch, however much faster it
-    /// measured. **Only the first arm below reads it**, and the other two find
-    /// their own slot on the entry `Code::compound` holds, which is the same
-    /// answer on both engines where an op's is the compiled one's alone.
-    ///
-    /// **A simple variable and a bare stem write the same slot; a compound
-    /// writes a different one; and the reason `at` serves only the first is
-    /// different again for each.** A simple variable and a bare stem both
-    /// write the slot their own symbol is bound to, and for a bare stem `at`
-    /// would therefore be the *right* number -- it is not supplied because
-    /// supplying it was tried at `bind_control` and measured to cost more than
-    /// it saves ([`control_slot`]'s own doc has the figures), and because
-    /// `Plan::bind` records that same slot on the entry, which reaches both
-    /// engines where an op reaches one. A compound writes the *stem's* slot,
-    /// a different name on a different slot that the entry carries separately
-    /// and `Code::stem` hands over, so `at` would be the wrong number there.
-    /// Both of those arms assert that no caller passed one.
-    ///
-    /// **`None` is always correct.** The slot is then resolved by the write
-    /// itself exactly as it was before any caller could supply one, which is
-    /// what `Interp::slot_of` does; a supplied slot is the same resolution
-    /// made earlier, from the plan's own map, and never a different answer.
     pub(crate) fn assign_expr_target(
         &mut self,
         code: &Code<'_>,
@@ -4102,12 +2552,6 @@ impl Interp {
             // `stem. = expr`: replace-and-rebind (D15a), through the
             // library `stem_assign` already builds -- this arm is the
             // dispatch, not new stem logic.
-            //
-            // `Code::compound` rather than `Code::stem`, though the two hold
-            // the same slot for a stem-shaped name: only the slot is wanted
-            // here, and `Code::stem`'s no-plan fallback splits the spelling to
-            // produce a name this arm already has, allocating a tail vector to
-            // throw away on every `INTERPRET`ed stem write.
             ExprKind::Stem(id) => {
                 // The tripwire `crate::ir::drive`'s `Op::Store` arm carries
                 // for the compiled side, here where **both** engines pass:
@@ -4129,15 +2573,6 @@ impl Interp {
             // `a.b = expr`: resolve the tail key the same way reading
             // `a.b` would (`eval_node`'s own `Compound` arm), then
             // mutate that one tail in place through `stem_set`.
-            //
-            // `>C>` before `>=>` (`RexxActivation.cpp:4791`-`4802`'s
-            // own order for a *read*; measured that a *write* through
-            // `ExpressionCompoundVariable::assign` announces the same
-            // resolved name first too): the tag is the compound's own
-            // **source spelling** (`a.i` stays `A.I` regardless of `i`'s
-            // value), and the resolved name is `stem_name` (the read site's
-            // own, matching `stem_set`'s own convention) concatenated with
-            // `key`.
             ExprKind::Compound(id) => {
                 // `read_symbol`'s own compound tripwire, on the writing
                 // side. A compound-shaped name **can** reach
@@ -4190,12 +2625,6 @@ impl Interp {
 
     /// Assigns `value` to the variable, whole stem, or one verbatim-keyed
     /// tail that `name`'s own spelling names.
-    ///
-    /// `drop_by_name`'s counterpart, dispatched by the same `shape_of` and
-    /// through the same stem entry points, so that `USE ARG` binding a stem
-    /// target does what an ordinary `stem. = value` assignment does --
-    /// measured, `call sub2 'val'` into `use arg st.` makes `st.` render as
-    /// `val`.
     fn assign_by_name(&mut self, name: &[u8], value: ObjRef) {
         match shape_of(name) {
             NameShape::Simple => {
@@ -4220,27 +2649,6 @@ impl Interp {
     /// Call` through `eval_call`, `eval.rs`) -- to `line`, always `self.
     /// current_clause_line` at the call site (`lib.rs`'s own doc comment on
     /// that field has why it is a field and not a parameter here).
-    ///
-    /// **A plain string, not a `Number`.** The oracle's own `RexxActivation::
-    /// signalTo`/`internalCall` (read directly, `execution/RexxActivation.
-    /// cpp`) both call `new_integer(lineNum)`, an integer object that always
-    /// renders in full decimal, never in exponential form -- measured here
-    /// too: `numeric digits 1` in force does not turn a two-digit `SIGL`
-    /// value into `2E+1` the way the identical magnitude would if it reached
-    /// the program as an arithmetic result. `self.text` gives that directly,
-    /// with no `created_digits` to reason about at all, matching how this
-    /// crate already renders an ordinary literal.
-    ///
-    /// Through `assign_by_name`, so `SIGL` gets exactly the pool-sharing
-    /// behaviour every other variable does: shared with the caller's frame
-    /// by default (measured, a callee with no `PROCEDURE` sees the value the
-    /// `CALL`/`SIGNAL` that reached it just set), isolated and starting
-    /// uninitialised once `PROCEDURE` allocates a frame of its own (measured,
-    /// `SIGL` reads back as the derived name `SIGL` inside a `PROCEDURE`d
-    /// callee that has not yet transferred control itself), and never
-    /// restored on the way out (measured, an inner `CALL`'s own `SIGL`
-    /// outlives that call's own return, all the way up to the main body,
-    /// exactly like any other shared-pool variable).
     fn set_sigl(&mut self, line: usize) {
         let value = self.counted_text(line);
         // Not through `assign_by_name`: that reads the name's shape and then
@@ -4264,27 +2672,6 @@ impl Interp {
 
     /// `SIGNAL ON`/`OFF` and `CALL ON`/`OFF`, which are one instruction with
     /// one flag between them.
-    ///
-    /// **Neither form transfers control here**, which is the whole reason
-    /// this arm is three lines: `ON` records a trap in the running
-    /// activation's table and `OFF` removes one, and the transfer -- or the
-    /// call -- happens later, in `run_activation`, if the condition is ever
-    /// raised.
-    ///
-    /// `label` rather than `on` is what tells the two apart, following
-    /// `ConditionTrap`'s own doc comment (`rexx-parse`): the parser has
-    /// already defaulted an `ON` with no `NAME` clause to the condition's own
-    /// name (`USER foo`'s default label is `FOO`, not `USER FOO`, measured),
-    /// and leaves `None` for `OFF` alone. Reading `on` as well would be two
-    /// sources for one fact.
-    ///
-    /// **`ON` over an already-enabled trap replaces it rather than being an
-    /// error**, and that is load-bearing rather than incidental: a trap is
-    /// removed when it fires, and re-arming inside the handler is how a
-    /// program traps the same condition twice. Measured -- a `SIGNAL ON
-    /// SYNTAX` handler that runs `signal on syntax name second` and then
-    /// divides by zero reaches `second`, where the same handler without the
-    /// re-arm gets the ordinary fatal report.
     pub(crate) fn exec_condition_trap(
         &mut self,
         trap: &ConditionTrap,
@@ -4338,24 +2725,6 @@ impl Interp {
     }
 
     /// The trap the running activation has enabled for `condition`, if any.
-    ///
-    /// **`ANY` is a fallback key, consulted only when the condition's own
-    /// name is not in the table.** Measured: `signal on any` traps a plain
-    /// `say 1/0`, with `SIGL` set exactly as a `signal on syntax` would set
-    /// it. The parser already accepts `ANY` for both `CALL ON` and `SIGNAL
-    /// ON` (`condition_trap`'s own comment records that measurement), so
-    /// without this lookup an `ANY` trap would be recorded and never fire.
-    ///
-    /// Returns a clone rather than a borrow: every caller goes on to call a
-    /// `&mut self` method in the same breath (`remove` the trap, then
-    /// `set_sigl`), which a borrow of the running activation held across would
-    /// make the `E0502` `run_activation`'s own doc comment writes out.
-    ///
-    /// **`None` where nothing is running**, rather than
-    /// [`Interp::activation`]'s panic: a send asked for outside any
-    /// activation has no trap table to consult and no trap, which is
-    /// [`Interp::nomethod`]'s reading and is what `dispatch.rs`'s own
-    /// `send_message` tests do.
     pub(crate) fn trap_for(&self, condition: &[u8]) -> Option<Trap> {
         let traps = &self.trap_frame()?.traps;
         traps
@@ -4371,42 +2740,6 @@ impl Interp {
     /// Turns an uninitialised variable read into a `NOVALUE` condition --
     /// but only when this activation has a `NOVALUE` trap that could take
     /// it.
-    ///
-    /// **Inherited item I13, and `Novalue::Unset`'s first reader.** D16 put
-    /// the flag on the read path from the start rather than leave a raise to
-    /// be retrofitted into it, and this is the retrofit that did not have to
-    /// happen.
-    ///
-    /// **Gated on the trap rather than raised unconditionally**, for two
-    /// reasons that both matter. An untrapped `NOVALUE` has no effect
-    /// whatever -- the read yields the derived name, measured, and that is
-    /// what every program in the corpus already depends on -- so raising and
-    /// then discarding would build a condition per uninitialised read on the
-    /// hottest path there is. And a `Raised::condition` carries no catalogue
-    /// entry, so one escaping untrapped would report `Error 0`; the gate is
-    /// what makes that unreachable rather than merely unlikely.
-    ///
-    /// The gate is the same test `offer_to_trap` will apply a moment later
-    /// -- same activation, same table, and a `call` trap excluded from both
-    /// -- so a condition raised here always finds the trap that let it be
-    /// raised. `CALL ON NOVALUE` is a parse error anyway; the `call` half is
-    /// reachable only through `CALL ON ANY`, which is measured not to catch
-    /// a condition that has no resumption point.
-    /// **The gate is `inline(always)` and the raise is `cold`, which is a
-    /// measurement rather than a decoration.** An initialised read -- every
-    /// read in a working program -- reaches only the first comparison, and
-    /// with the whole function out of line it paid a call and a `Result`
-    /// return to learn that. A plain `#[inline]` did not move it: the tail
-    /// looks up a trap and builds a condition, which is enough to put the
-    /// inliner off. Splitting says which half is hot instead of hinting.
-    /// Measured with the marginal method -- a body run at N and 2N
-    /// iterations, differenced -- `z = a` costs 449 user instructions per
-    /// execution undivided and 431 split.
-    ///
-    /// `read` is what the read produced, which for an uninitialised one is
-    /// the derived name -- the substitution `::OPTIONS NOVALUE SYNTAX`'s
-    /// 98.986 needs. It is a handle already in the caller's hand, so the
-    /// hot path pays nothing for carrying it.
     #[inline(always)]
     pub(crate) fn novalue_check(&self, novalue: Novalue, read: ObjRef) -> Result<(), Failure> {
         if novalue == Novalue::Set {
@@ -4419,11 +2752,6 @@ impl Interp {
     /// force turns this read into a raised `NOVALUE`, into
     /// `::OPTIONS NOVALUE SYNTAX`'s 98.986, or into neither -- the derived
     /// name `read_at` already produced.
-    ///
-    /// **The trap comes first**, measured on both sides: `signal on novalue`
-    /// takes the condition where `::options novalue syntax` is in force, and
-    /// so does `signal on any`, while `signal on syntax` alone takes the
-    /// escalated 98.986.
     #[cold]
     #[inline(never)]
     fn novalue_raised(&self, read: ObjRef) -> Result<(), Failure> {
@@ -4437,13 +2765,6 @@ impl Interp {
     }
 
     /// The bytes of the derived name an uninitialised read answered.
-    ///
-    /// **`Interp::to_text` is the general reader and takes `&mut self`**,
-    /// which [`Interp::novalue_raised`] cannot: its callers hold `self`
-    /// immutably. A derived name is always a string this crate built out of
-    /// bytes it had -- `Interp::derived_name` and `Interp::derived_tail_name`
-    /// are the two builders -- so the two arms below are the whole of it, and
-    /// the debug assertion is what says so when a third shape arrives.
     fn derived_name_text(&self, read: ObjRef) -> Vec<u8> {
         match read.decode() {
             rexx_core::Decoded::Text(inline) => inline.to_vec(),
@@ -4470,10 +2791,6 @@ impl Interp {
 
     /// Raises 98.972 where `::OPTIONS LOSTDIGITS SYNTAX` is in force and
     /// `operand` really does carry more digits than the precision in force.
-    ///
-    /// The gate is one already-hot bool and the rest is `#[cold]`, the split
-    /// [`Interp::novalue_check`] measures. `value` is the handle the operand's
-    /// bytes come from and is read only on the raising path.
     #[inline(always)]
     pub(crate) fn lostdigits_check(
         &mut self,
@@ -4487,9 +2804,6 @@ impl Interp {
     }
 
     /// The two-operand form, so an operator pays the gate once.
-    ///
-    /// Left first, which is the oracle's order: measured, `987654321 +
-    /// 123456789` at DIGITS 3 names `987654321`.
     #[inline(always)]
     pub(crate) fn lostdigits_check2(
         &mut self,
@@ -4507,11 +2821,6 @@ impl Interp {
 
     /// [`Interp::lostdigits_check`]'s armed half: the per-activation setting,
     /// then the operand's own digit count, then the operand's bytes.
-    ///
-    /// The order matters: `SIGNAL ON LOSTDIGITS` turns the escalation off for
-    /// its activation (`ConditionSyntax::disable_for`), so a program arming a
-    /// trap is not raised at here, and the bytes are fetched last because
-    /// that step is the only one that allocates.
     #[cold]
     #[inline(never)]
     fn lostdigits_raise(&mut self, operand: &Number, value: ObjRef) -> Result<(), Failure> {
@@ -4529,31 +2838,6 @@ impl Interp {
     /// Offers a failure escaping the running activation to that activation's
     /// trap table, and either transfers control or hands the failure back to
     /// keep unwinding.
-    ///
-    /// Called from `run_activation`'s own loop, once per instruction, on the
-    /// `Err` path alone -- so the *innermost* activation gets first refusal
-    /// and each enclosing one gets its turn as the failure propagates,
-    /// which is the outward walk [`Search::Here`] describes. `resolve_and_
-    /// run_call` has already restored the caller's `clause_state` by the time
-    /// the caller's own loop sees the failure, so `SIGL` below reads the
-    /// trapping activation's own clause line rather than the callee's --
-    /// measured, and the two really do differ: the same `say 1/0` reports
-    /// `SIGL` 9 when the callee traps it and 3 when the callee's trap is off
-    /// and the caller's fires instead.
-    ///
-    /// **Only a `SIGNAL ON` trap ever takes a failure here.** A `CALL ON`
-    /// trap resumes execution, and there is nothing to resume into once a
-    /// clause has failed -- measured rather than assumed, and measurable
-    /// only because `CALL ON ANY` is legal where `CALL ON SYNTAX` is a parse
-    /// error: `call on any name uh` with `say 1/0` is **not** trapped, it is
-    /// the ordinary fatal 42.3 at rc 214. So a `call` trap declines here and
-    /// the failure keeps unwinding. Every condition a `CALL ON` trap really
-    /// does catch reaches it through `Interp::pending_traps` instead, without
-    /// ever becoming a failure.
-    ///
-    /// Returns a `Flow` rather than a bare target so that
-    /// `run_activation`'s existing `match` does the transfer: `Flow::Signal`
-    /// is exactly "set this activation's `pc`", which is what a trap does.
     pub(crate) fn offer_to_trap(
         &mut self,
         code: &Code<'_>,
@@ -4620,11 +2904,6 @@ impl Interp {
         // trapped on line 3 and `say 2/0` untrapped on line 8 inside the
         // handler reports line 8, alone, and a version that kept the first
         // site reports line 3.
-        //
-        // Dropped from the *interpreter* but kept on the condition, because
-        // `RAISE PROPAGATE` re-raises this condition with its original
-        // clause echoed rather than the `raise propagate` clause --
-        // `ActiveCondition`'s own doc comment (`lib.rs`) has that transcript.
         let site = self.failure_site.take();
         let sites = std::mem::take(&mut self.failure_sites);
         self.set_sigl(self.clause_state.line());
@@ -4662,14 +2941,6 @@ impl Interp {
         // activation. This is the point where that is decided in favour of
         // "trapped here, execution continues", so it is the point where a
         // `CALL ON` handler queued by the same clause is owed its run.
-        //
-        // Measured, and the pair is what places it here rather than in
-        // `step_in_temps_frame`'s `Err` arm: `zq = sub() + 1/0` with both a
-        // `CALL ON USER` and a `SIGNAL ON SYNTAX` trap prints `UH ran` then
-        // `SH ran` -- so the queued handler runs even though its clause
-        // failed -- while the same clause in a routine whose own `SIGNAL OFF`
-        // sends the failure out of the activation entirely delivers nothing
-        // at all. One completes here; the other never does.
         if let Some(exit) = self.deliver_pending_traps(code)? {
             return Ok(Flow::Exit(exit.value()));
         }
@@ -4679,34 +2950,6 @@ impl Interp {
     /// Runs every handler this clause boundary owes, in the order the
     /// conditions were queued, and stops early only if one of them ends the
     /// program.
-    ///
-    /// **Bounded to what was already queued when the boundary began**, which
-    /// is what defers a handler's own requeue to the next clause --
-    /// `Interp::pending_traps` carries the transcripts for both halves.
-    /// Entries belonging to another activation are stepped over rather than
-    /// blocking the ones this activation owes; `PendingTrap::activation` has
-    /// why that identity is the right key. Entries queued in a different
-    /// `INTERPRET` fragment are stepped over the same way, for the reason
-    /// `PendingTrap::fragment_depth` states.
-    ///
-    /// **The wait is the measured part.** `zres = one(1)`, where `one`
-    /// raises a `CALL ON`-trapped condition and the handler assigns `zres`
-    /// itself, prints the *handler's* value -- so the assignment had already
-    /// stored the routine's result before the handler ran. `say 'a' one(1)
-    /// two(2)` in the same shape prints the whole line, `two`'s value
-    /// included, and only then the handler. Neither is what a trap that
-    /// fired at the raise would print.
-    ///
-    /// The trap is **held for the handler's duration and released
-    /// afterwards**, unlike a `SIGNAL ON` trap, which is removed and stays
-    /// removed. Measured: a handler that itself calls a routine raising the
-    /// same condition does not re-enter, and the program then carries on
-    /// normally rather than running the handler a second time later.
-    ///
-    /// "Held" is `Trap::delayed` since 4c Task 10 and was a `remove` with a
-    /// re-insert before it. The two agree on everything but
-    /// `CONDITION('S')`, which is why the change was needed and why nothing
-    /// else in this function's behaviour moved with it.
     pub(crate) fn deliver_pending_traps(
         &mut self,
         code: &Code<'_>,
@@ -4746,10 +2989,6 @@ impl Interp {
     }
 
     /// One queued condition's handler, run at the boundary that owes it.
-    ///
-    /// `Ok(None)` means the boundary may go on to the next entry: either the
-    /// handler returned, or this condition turned out to have no `CALL ON`
-    /// trap to run and is discarded.
     fn deliver_one_pending_trap(
         &mut self,
         code: &Code<'_>,
@@ -4864,23 +3103,6 @@ impl Interp {
         match ended {
             // The handler returned; execution resumes at the clause after
             // the one that finished.
-            //
-            // **And the enclosing condition comes back here** (fix round 1,
-            // corrected by round 2). A `RAISE PROPAGATE` after this point
-            // must see whatever was active *before* this handler ran, which
-            // is `None` in the common case -- measured, `call sub` (trapped,
-            // handler returns) followed by `raise propagate` is `98.918` at
-            // rc 158, where leaving this handler's own condition in place
-            // gave silence at rc 0 -- and is a real condition when a `SIGNAL`
-            // handler is running around it. See the `take` above.
-            //
-            // **Only on this arm, which is the measured half.** A `SIGNAL ON`
-            // handler that runs on -- `SIGNAL`s to another label and then
-            // propagates -- must still find the original condition, also
-            // measured (both interpreters re-raise the original 42.3 at rc
-            // 214). So the restore belongs to the point a *call* handler
-            // returns, not to handlers in general, and `offer_to_trap`
-            // deliberately has no equivalent.
             Ok(Ended::Returned(_)) => {
                 self.active_condition = enclosing;
                 Ok(None)
@@ -4892,14 +3114,6 @@ impl Interp {
             // it: every path that goes on to read `active_condition` passes
             // through `offer_to_trap` first, which overwrites the field
             // wholesale. So this line changes no output while that holds.
-            //
-            // Kept rather than deleted because the alternative is not
-            // "nothing" but "a wrong value that happens not to be read":
-            // leaving this handler's own condition in place is exactly the
-            // state the arm above exists to prevent, and it would become
-            // observable the day a read reaches it without passing through
-            // `offer_to_trap`. One line to be right by construction is
-            // cheaper than a comment explaining why being wrong is safe.
             Err(failure) => {
                 self.active_condition = enclosing;
                 Err(failure)
@@ -4907,36 +3121,12 @@ impl Interp {
             // `EXIT` inside the handler ends the program, exactly as it does
             // inside any other called routine. Nothing will read
             // `active_condition` again, so it is left as it is.
-            //
-            // **This match is the whole announcement of "a delivered handler
-            // only ever ends the program by `EXIT`"** (fix round 4). It used
-            // to be an `unreachable!` in `run_bounded` (round 2), then six
-            // copies of `Ok(Flow::Exit(ended.value()))` at the call sites
-            // (round 3) -- and `Ended::value()` collapses `Returned` and
-            // `Exited`, so those six would have turned a `RETURN` into an
-            // `EXIT` in silence. `HandlerExit` can only be built here, from
-            // this arm, so the arm above is the only thing that decides it.
             Ok(exited @ Ended::Exited(_)) => Ok(HandlerExit::from_ended(exited)),
         }
     }
 
     /// The trap the running activation's **caller** has enabled, or `None`
     /// at top level.
-    ///
-    /// `exec_raise`'s own lookup for the non-`SYNTAX` conditions, whose
-    /// search starts one level out ([`Search::Caller`]). Separate from
-    /// `trap_for` rather than parameterised by depth because these are the
-    /// only two depths anything asks about, and a depth parameter would read
-    /// as though arbitrary ones were meaningful.
-    ///
-    /// **A second difference from `trap_for`, and it is deliberate: this one
-    /// does not filter [`Trap::delayed`].** Matching a delayed handler and
-    /// then declining to run it is what the C++ does
-    /// (`RexxActivation::raiseCondition` queues without asking;
-    /// `processTraps` skips), and `deliver_pending_traps`'s own `trap_for`
-    /// is the decline. Measured rather than argued: a `CALL ON` handler that
-    /// calls a routine raising the same condition runs once on both
-    /// interpreters, byte for byte.
     fn caller_trap_for(&self, condition: &[u8]) -> Option<Trap> {
         let traps = &self.caller_activation()?.traps;
         traps
@@ -4946,15 +3136,6 @@ impl Interp {
     }
 
     /// `RAISE`, in all of its forms.
-    ///
-    /// # The delivery table, which is the whole instruction
-    ///
-    /// Nothing about `RAISE`'s grammar says that its tail decides *who* may
-    /// trap it, and that is what it does. Measured, against a three-level
-    /// call chain -- a two-level program gives identical bytes for the first
-    /// and third rows, which is why the first version of this table was
-    /// wrong:
-    ///
     /// ```text
     /// RAISE SYNTAX n.m RETURN [e]   search from the raising activation outward
     /// RAISE SYNTAX n.m             \  the OUTERMOST activation's trap only;
@@ -4963,63 +3144,12 @@ impl Interp {
     /// RAISE other ...              \  no trap at all -- the program ends, and
     /// RAISE other ... EXIT [e]     /  the condition's default action applies
     /// ```
-    ///
-    /// The three transcripts that force each row apart, each run twice, once
-    /// with the trap enabled in the middle routine and once with it enabled
-    /// in the main body as well:
-    ///
-    /// * `raise syntax 40.4` in `lev2`, `signal on syntax name mid` in
-    ///   `lev1`: **not trapped**, rc 216, `mid` never runs. Add `signal on
-    ///   syntax name outer` to the main body and `outer` runs, with `SIGL`
-    ///   set to the main body's `call lev1` clause -- so it skipped `lev1`
-    ///   and landed at the top.
-    /// * `say 1/0` in the same place: `mid` runs, with `SIGL` set to
-    ///   `lev2`'s own line. The ordinary search is not the `RAISE` one.
-    /// * `raise user foo return 'RETVAL'` in `fun` with `signal on user foo`
-    ///   in the main body: trapped, `SIGL` the main body's clause. The
-    ///   identical program with `raise syntax 40.4 return` reports `SIGL` as
-    ///   `fun`'s own `raise` line instead.
-    ///
-    /// **The table is a LABEL activation's, and the oracle does not apply it
-    /// across a `::ROUTINE` one.** Measured: `raise user boom` with no tail,
-    /// and with `EXIT`, inside a `::ROUTINE` reached by `CALL` runs the
-    /// caller's enabled USER trap on the oracle, where the same raise from an
-    /// internal label runs no trap on either side. This crate applies the
-    /// table's rule to both, so those two cells diverge on stdout at rc 0 --
-    /// recorded in `docs/superpowers/plans/phase-4-exclusions.txt` with the
-    /// whole matrix and the label control, and owned by no task here.
-    ///
-    /// # What the untrapped default action is, per condition
-    ///
-    /// Measured at top level with no trap enabled: `raise halt` is the fatal
-    /// `Error 4.1` at rc 252; `raise error 5`, `raise user foo` and friends
-    /// print nothing and exit 0. So `HALT` reports and the rest are silent,
-    /// and [`Raised::reportable`] is where that split lives.
-    ///
-    /// **A `SIGNAL ON HALT` in the same activation does not change that**,
-    /// which is the measurement that stops the last two rows above being
-    /// `Search::Top`: `signal on halt` immediately above `raise halt` still
-    /// gives the fatal report, where `signal on syntax` above `raise syntax
-    /// 40.4` traps. Hence [`Search::Nobody`] for one and [`Search::Top`] for
-    /// the other.
-    ///
-    /// # Evaluation order
-    ///
-    /// `rc`, then `DESCRIPTION`, then `ADDITIONAL`/`ARRAY`, then the
-    /// `RETURN`/`EXIT` value -- source order, and every one of them is
-    /// evaluated even when its value is then discarded, because an
-    /// expression that raises has to raise.
-    ///
-    /// `DESCRIPTION`'s value is evaluated and dropped: it is observable only
-    /// through `condition('D')`, a builtin this crate does not have, and the
-    /// untrapped report is measured to be byte-identical with and without it.
     fn exec_raise(&mut self, code: &Code<'_>, raise: &Raise) -> Result<Flow, Failure> {
         if raise.propagate {
             return self.exec_raise_propagate();
         }
         // Each option traces a `>K>` line as it is evaluated, in source
         // order, at this clause's own indent. Measured, all five spellings:
-        //
         // ```text
         // raise syntax 40.4 description 'zdesc' additional 'zadd'
         //   >K>   "SYNTAX" => "40.4"
@@ -5032,17 +3162,6 @@ impl Interp {
         //   >K>   "DESCRIPTION" => "zdesc"
         //   >K>   "RESULT" => "zret"
         // ```
-        //
-        // Those five are `trace r` transcripts, where `>A>` is invisible
-        // (`intermediates` only). `ARRAY`'s own element lines, and the fact
-        // that its `>K>` comes *after* them rather than before, are under
-        // `trace i` -- see the `raise.array` arm below.
-        //
-        // The **condition's own name** is the first keyword, and only for
-        // the three conditions that take a value after it -- `raise user
-        // marker` traces no line for the condition at all, which is why this
-        // is keyed on the value's presence rather than written out
-        // unconditionally.
         let indent = self.clause_state.current_value_indent;
         let rc_text = match &raise.rc {
             Some(expr) => {
@@ -5101,24 +3220,6 @@ impl Interp {
             // (.environment)` substitutes `INPUTOUTPUTSTREAM` -- the first
             // entry of the array the directory converts to -- and `raise user
             // zork additional (.array)` under a trap is rc 0 on both sides.
-            //
-            // A propagate never reaches here: `exec_raise` returns to
-            // `exec_raise_propagate` before any option is evaluated, so the
-            // `ADDITIONAL` expression is not evaluated at all under one. The
-            // divergence that leaves is recorded in `phase-4-exclusions.txt`
-            // and predates this refusal.
-            //
-            // **An array is what `requestArray` answers unchanged**, so its own
-            // slots are the substitution list -- which is exactly what the
-            // `ARRAY` spelling below builds, and the two are therefore
-            // byte-identical. Measured, three descriptors on each pair:
-            // `raise syntax 40.4 additional (1,,3)` and `... array (1,,3)`
-            // both report `maximum expected is .` at rc 216, the empty slot
-            // substituting empty in each, and `... additional ('R',,'X')`
-            // against `... array ('R',,'X')` the same at `in invocation of R`.
-            // `RexxObject::requestArray` answers `this` for an array rather
-            // than `makeArray()`, so an empty slot holds its place here as it
-            // does there.
             let converted = raise.condition.eq_ignore_ascii_case(b"SYNTAX");
             let slots = if converted {
                 self.array_slots_of(value)
@@ -5155,7 +3256,6 @@ impl Interp {
             // first and said so in a comment that claimed "the elements
             // produce no lines of their own"; both halves are false.
             // Measured, `trace i` / `raise syntax 40.4 array('R',,'X')`:
-            //
             // ```text
             //   >L>   "R"
             //   >A>   "R"
@@ -5166,15 +3266,6 @@ impl Interp {
             //   >A>   "X"
             //   >K>   "ARRAY" => "an Array"
             // ```
-            //
-            // **`>A>` twice per supplied element, once for an omitted one**,
-            // which is the oracle's own shape rather than a transcription
-            // slip here: `RaiseInstruction.cpp:229`-`237` calls
-            // `traceArgument(arg)` on both sides of the `put` into the
-            // array, and the omitted arm calls it once with the null string.
-            // Reproduced as measured rather than "cleaned up" to one line,
-            // because criterion 2 is byte-for-byte agreement, not agreement
-            // with what the C++ ought to have done.
             for item in items {
                 let Some(expr) = item else {
                     // An omitted position (`array (1,,3)`) **holds its
@@ -5201,21 +3292,6 @@ impl Interp {
                 // (.environment)` and `array (.array, 'b')` are all rc 216
                 // and byte-identical here. A check on this arm refused all
                 // three.
-                //
-                // **`stringValue()` renders them, in the substitution and on
-                // both trace lines alike**, which the `ADDITIONAL` arm above
-                // reaches through the same [`Interp::string_value_text`]. A
-                // nested array is where that parts from the string value:
-                // measured, three descriptors, `raise syntax 93.900 array
-                // ((1,2),3)` reports `Error 93.900:  an Array.` and traces
-                // `>A>   "an Array"` twice for the inner list, where joining
-                // its elements reported and traced `1` and `2` on two lines.
-                //
-                // **The two arms share the renderer and not the slots**, and
-                // that is the shape of the construct rather than a compromise:
-                // an `ARRAY` list's elements come from the parse and there is
-                // no array object to read slots off, where `ADDITIONAL`'s one
-                // value is the array and its slots are the whole list.
                 let rendered = self.string_value_text(value);
                 self.trace_argument(indent, &rendered);
                 self.trace_argument(indent, &rendered);
@@ -5345,38 +3421,6 @@ impl Interp {
     }
 
     /// `RAISE PROPAGATE`: re-raise the condition whose handler is running.
-    ///
-    /// **Measured, and it is not "raise it again in the caller".** From
-    /// inside a `SIGNAL ON SYNTAX` handler, with another `SIGNAL ON SYNTAX`
-    /// enabled one and two levels out, `raise propagate` is trapped by
-    /// *neither* -- it is fatal, at the same rc the untrapped condition
-    /// would have had, with the whole echo stack printed and the major line
-    /// missing its ` running <path> line <n>` span
-    /// ([`Delivery::positionless`]). So it goes to nobody.
-    ///
-    /// With no handler running at all it is `98.918`, "No active condition
-    /// available for PROPAGATE", at rc 158 -- also measured, and the reason
-    /// `active_condition` is an `Option` rather than something assumed
-    /// present.
-    ///
-    /// A condition with no report to give ends the program silently instead,
-    /// which is the `USER` half: measured, `raise propagate` inside a `CALL
-    /// ON USER FOO` handler prints nothing more and exits 0.
-    ///
-    /// **What used to be a stated residual here is now measured, and it was
-    /// a divergence** (fix round 1's finding 2). This comment said
-    /// `active_condition` is "never cleared, so a `RAISE PROPAGATE` reached
-    /// after a handler has finished re-raises that handler's condition where
-    /// the oracle *may well* answer 98.918. Nothing measured pins that shape
-    /// either way." One probe pinned it: the oracle does answer 98.918, and
-    /// we answered silence at rc 0. `deliver_pending_traps` clears the field
-    /// in its `Ended::Returned` arm now.
-    ///
-    /// The clearing is deliberately *not* symmetric. A `SIGNAL ON` handler
-    /// that runs on -- `SIGNAL`s to another label and only then propagates --
-    /// must still find its condition, also measured, so `offer_to_trap` has
-    /// no equivalent line and a condition stays active for as long as its
-    /// `SIGNAL` handler's activation does.
     fn exec_raise_propagate(&mut self) -> Result<Flow, Failure> {
         let Some(active) = &self.active_condition else {
             return Err(Raised::syntax(98, 918, Vec::new()).into());
@@ -5411,16 +3455,6 @@ impl Interp {
     /// at this phase every internal `CALL` target shares its caller's exact
     /// body (no `::routine` directive gives it one of its own yet) -- not
     /// because `SIGNAL` reaches across an activation boundary on its own.
-    ///
-    /// **No fallback, unlike `CALL`'s builtin/external search.** A `SIGNAL`
-    /// target is only ever a label; the oracle's own answer when nothing
-    /// matches is Error 16.1, and this crate can raise it directly rather
-    /// than deferring to a later phase's table the way `resolve_and_run_
-    /// call`'s own unresolved-name path has to.
-    /// `SIGNAL label`, past the point where the label's bytes are known:
-    /// resolve, record `SIGL`, and answer the transfer.
-    ///
-    /// **One implementation, entered from `step` and from `Op::Signal`.**
     pub(crate) fn signal_to_label(&mut self, name: &[u8]) -> Result<Flow, Failure> {
         let target = self.resolve_signal_target(name)?;
         // Set only once the target actually resolves -- an unresolved
@@ -5433,10 +3467,6 @@ impl Interp {
 
     /// `SIGNAL VALUE expr`, past the expression: its `>K>` echo, then the
     /// same search and transfer a written label takes.
-    ///
-    /// `value` must already be rooted by its caller -- a temp on the
-    /// tree-walker, a register on the compiled stream -- because the render
-    /// below can collect.
     pub(crate) fn signal_to_value(&mut self, value: ObjRef) -> Result<Flow, Failure> {
         let text = self.to_text(value).to_vec();
         // `>K>` names the object and the search reads the conversion, which
@@ -5470,34 +3500,6 @@ impl Interp {
 
     /// Resolves `name` to the thing a call of it runs, with no argument
     /// evaluated and nothing entered.
-    ///
-    /// **The resolution half of a call, and the seam every route goes
-    /// through.** `exec_call` (`CALL`), `eval_call` (`ExprKind::Call`'s
-    /// expression form, `eval.rs`) and `crate::ir::Op::Call` each ask this
-    /// and then hand the answer to [`Interp::invoke_call`], so the four-step
-    /// order below is decided in one place -- which is what stops `CALL
-    /// length 'abc'` and `say length('abc')` answering differently.
-    ///
-    /// **It takes no `Code`, and that is the contract rather than an
-    /// omission**: the search goes against the running *activation's* body,
-    /// which the body a caller happens to be walking is not inside an
-    /// `INTERPRET` fragment.
-    ///
-    /// `search_labels` is false for `CALL "name"` and for `ExprKind::Call`'s
-    /// `CallTarget::Literal`, and its own call sites have the measurements.
-    ///
-    /// **Resolution order is internal label, then builtin, then `::ROUTINE`,
-    /// then the external file this crate answers 43.1 in place of**, and the
-    /// name is settled against all four *before* an argument is evaluated --
-    /// [`Resolved`]'s three variants for the three that run something, and an
-    /// immediate raise for the fourth. The order matters both ways round: a
-    /// label wins over a builtin of the same name, and a builtin wins over
-    /// anything behind it.
-    ///
-    /// The external file is Phase 7's, and 43.1 is the oracle's own answer for
-    /// every program that has no such file beside it: measured in a clean
-    /// directory, `call zorkolo` gives 43.1 rc 213 `Could not find routine
-    /// "ZORKOLO".`
     pub(crate) fn resolve_call(
         &self,
         name: &[u8],
@@ -5529,21 +3531,6 @@ impl Interp {
         // label miss and that return would have placed it upstream of the
         // evaluation it consumes. Deciding all four outcomes first is what
         // lets one argument loop serve three of them.
-        //
-        // **The order is measured in both directions.** A label wins over a
-        // builtin of the same name; a builtin wins over a `::ROUTINE` of the
-        // same name (`call max 1, 9` with a `::routine max` present reports
-        // 9, and the routine never runs), so a `::ROUTINE` search in front of
-        // the builtin step would silently run the wrong routine. A quoted
-        // target is a second order rather than the same one: `call
-        // 'ZORKOLO'` skips the internal `zorkolo:` label -- `search_labels`
-        // is already false for it -- and still reaches the `::routine`.
-        //
-        // The routine lookup upcases both sides (`Interp::routines`' own
-        // doc), where the builtin step in front of it is case-sensitive:
-        // measured, `call 'max' 1, 9` is 43.1 and `call 'MAX' 1, 9` is 9, and
-        // that asymmetry is exactly what makes a `::routine 'max'` reachable
-        // at all.
         let resolved = match label {
             Some(target) => Resolved::Label(target),
             // **`resolve` rather than `is_builtin`, and it answers the same
@@ -5592,11 +3579,6 @@ impl Interp {
 
     /// The `::ROUTINE` `name` reaches from the running package: one the
     /// package declared itself, then one a `::REQUIRES` imported.
-    ///
-    /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:898`), whose two
-    /// steps are `findLocalRoutine` and `findPublicRoutine`. A required file's
-    /// non-`PUBLIC` routine is in neither table for the requiring package --
-    /// measured, `Could not find routine "PRIVR".`
     fn installed_routine(&self, name: &[u8]) -> Option<InstalledRoutine> {
         let program = self.running_activation()?.program_id;
         let upper = name.to_ascii_uppercase();
@@ -5615,14 +3597,6 @@ impl Interp {
 
     /// Takes the shared value buffer **with the caller's run intact**, and the
     /// depth to build above it.
-    ///
-    /// **It used to clear**, which is the same mistake in both directions: the
-    /// enclosing call's arguments were discarded on the way in and this run's
-    /// were left behind on the way out. A send in a builtin's argument
-    /// position then handed that builtin its own arguments plus the send's --
-    /// measured, `say length('abc'~copies(1))` answered `3` on the oracle and
-    /// raised 40.4 here. The mark is the same discipline
-    /// [`Interp::run_over_pushed_args`] uses.
     pub(crate) fn take_value_buffer(&mut self) -> (Vec<Option<ObjRef>>, usize) {
         let buffer = std::mem::take(&mut self.value_buffer);
         let mark = buffer.len();
@@ -5638,33 +3612,6 @@ impl Interp {
 
     /// One builtin call: its arguments evaluated in the caller, then the row
     /// run over them.
-    ///
-    /// **Evaluates into its own buffer of values**, before an `Argument` is
-    /// ever built. A builtin wants the values and nothing else: the
-    /// `Reference` half of an `Argument` exists for `USE ARG >`, which no
-    /// builtin has, so building a `Vec<Option<Argument>>` here would only be
-    /// something to copy into a `Vec<Option<ObjRef>>` before handing it over.
-    /// That the shape of this path is worth caring about is a measurement:
-    /// with `perf` on `bench-programs/strings.rex`, whose loop makes four
-    /// builtin calls, the call path was 14.76% of samples -- more than any
-    /// builtin it dispatches.
-    ///
-    /// The evaluation itself is shared with the label path
-    /// (`eval_traced_argument`), so the `>p` reference form still traces its
-    /// `>O>` line here exactly as it does for a label call, and `>A>` fires
-    /// once per position with the omitted ones included.
-    ///
-    /// **A value and not an [`Ended`], which is the reason this is reachable
-    /// from outside [`Interp::invoke_call`] at all.** A builtin runs no
-    /// activation, so it can neither exit nor return nothing: `Ended`'s two
-    /// variants are both the same answer for it, and `Result<Ended, Failure>`
-    /// is wider than a register pair where `Result<ObjRef, Failure>` is not.
-    /// `Interp::eval_call_resolved` wants the value and enters here directly;
-    /// `invoke_call` wraps the same call for the callers that hold an `Ended`.
-    ///
-    /// See `builtin`'s own module doc for what this deliberately does *not*
-    /// do that the label path does -- `SIGL`, the depth guard and the
-    /// activation level, with a probe for each.
     pub(crate) fn invoke_builtin_call(
         &mut self,
         code: &Code<'_>,
@@ -5698,75 +3645,6 @@ impl Interp {
 
     /// Evaluates the arguments of a call already resolved to `resolved` and
     /// runs it, in its own nested activation where it has one.
-    ///
-    /// **The invocation half, and the counterpart to
-    /// [`Interp::resolve_call`].** Every route into a call reaches this:
-    /// `exec_call` (`CALL`, which goes on to settle `RESULT` and translate the
-    /// outcome into a `Flow`), `eval_call` (`ExprKind::Call`, `eval.rs`, which
-    /// never touches `RESULT` and has no `Flow` to report through since `eval`
-    /// returns a value rather than a step outcome), and `crate::ir::Op::Call`.
-    ///
-    /// **Shared rather than duplicated.** Every caller needs the identical
-    /// argument evaluation and its `>A>` lines, the identical
-    /// `MAX_ACTIVATION_DEPTH` guard and the identical five-piece level
-    /// bookkeeping around the nested `run_activation` -- measured to matter
-    /// for the expression form too (`trace r` under a flat `zz = f(1) + 1`
-    /// echoes `f`'s own clauses at the calling clause's indent plus two, the
-    /// same D2r rule `CALL` already carries) -- and a second hand-copied
-    /// version of this is exactly the drift this crate's other shared tables
-    /// (`owners.rs`, `phase-4-exclusions.txt`) exist to avoid one level up.
-    ///
-    /// **The builtin outcome runs no activation at all**, which is measured
-    /// and is why it returns from the middle of this function rather than
-    /// joining the label path below: `builtin`'s own module doc has the three
-    /// observables -- `SIGL`, the `>A>` argument lines and the activation
-    /// level -- with the probe for each. The arguments are evaluated for it by
-    /// exactly the same loop the label path uses, which is what makes those
-    /// `>A>` lines identical without anything here arranging it.
-    ///
-    /// `code` is the body the **argument expressions** are written in, which
-    /// is the caller's own and is not what `resolve_call` searched.
-    ///
-    /// `call_type` is which invocation form got here, and it is a parameter
-    /// because only the caller knows: a `::ROUTINE` body reached by `CALL`
-    /// and the same body reached as a function are the same `Entry::Routine`
-    /// and answer different `PARSE SOURCE` second words ([`CallType`]'s own
-    /// doc has the measurement). The label path below ignores it and takes
-    /// the enclosing activation's instead, which is measured too and is why
-    /// the field travels in [`Inherited`].
-    ///
-    /// **That parameter costs one instruction per builtin call and every
-    /// program pays it**, because `Resolved::Builtin` returns from the middle
-    /// of this function before any activation exists: a builtin materialises
-    /// the argument and nothing ever reads it. Measured over a five-round
-    /// interleaved sitting, `instructions:u` per pass, against the sitting
-    /// before it -- `strings` calls four builtins per pass and moved +4.0004
-    /// (tw) / +4.0000 (ir); `alloc4c` calls one and moved +0.67 (tw) / +1.01
-    /// (ir), where the tw figure is inside that arm's own round spread for
-    /// the sitting and so does not resolve an effect this small -- it is the
-    /// ir arm that carries `alloc4c`'s agreement with the model, and
-    /// `strings` that carries the model; `emptyloop` and `varlookup` call
-    /// none and moved by under a
-    /// thousandth; `arith` and `compound` call none and moved by less than
-    /// the unchanged pinned build's own drift on those axes. That is 0.030%
-    /// of `strings` and 0.009% (tw) of `alloc4c`, an order of magnitude under
-    /// this phase's 1% floor, which is why it was accepted.
-    ///
-    /// **The cheaper shape, named here so it is not rediscovered as a
-    /// cost:** keep the value off the path a builtin takes. [`Entered`] is
-    /// already the type that exists only past the builtin return, so a call
-    /// type carried on it would leave the builtin arm with nothing to
-    /// materialise. That one is not built here and has not been measured, so
-    /// what is known about it is the cost and the direction, not the win.
-    ///
-    /// **A caller that has already resolved the name to a builtin wants
-    /// [`Interp::invoke_builtin_call`] instead**, and that is the other half
-    /// of the same shape: an entry point the call site chooses carries no
-    /// call type to materialise, and it answers a value rather than an
-    /// `Ended`, which is wider than a register pair and travels through
-    /// memory. `Interp::eval_call_resolved` takes it. What still arrives
-    /// here with a builtin is the `CALL` instruction's own route, which holds
-    /// an `Ended` for its `Flow` regardless.
     pub(crate) fn invoke_call(
         &mut self,
         code: &Code<'_>,
@@ -5782,29 +3660,6 @@ impl Interp {
         // 1/0` is Error 42.3
         // reported against the `CALL` clause, at rc 214, and a version that
         // skipped evaluation would run the callee instead.
-        //
-        // An omitted position (`call sub 1,,3` parses as `[Some, None,
-        // Some]`) stays a `None` here rather than being skipped or closed
-        // up: measured, that call into three `USE ARG` targets gives `[1]
-        // [Q] [3]`, so an omission holds its place and leaves its target
-        // unset instead of shifting the ones after it. Task 3 evaluated and
-        // discarded these; Task 5 keeps them, which is what that comment
-        // said whoever landed `USE ARG` would do.
-        //
-        // **`>A>` fires here, once per position, omitted ones included**
-        // (Task 9). The indent is the *calling* clause's own, read fresh on
-        // each pass rather than captured once, because an argument
-        // expression can itself contain a call whose callee overwrites
-        // `current_value_indent` -- `invoke_call` restores it on
-        // the way out, so re-reading it is what keeps a second argument's
-        // own line at the caller's indent rather than at the first
-        // argument's callee's. Measured (`trace i`): `call sub 1,,3` traces
-        // `>A>   "1"`, `>A>   ""`, `>A>   "3"`, in that order, each right
-        // after its own argument's `>L>`/`>V>` lines.
-        // **The builtin path returns from here**, before an `Argument` is ever
-        // built and before any activation exists -- [`Interp::
-        // invoke_builtin_call`] is the whole of it, and its own doc says what
-        // it does not do that the label path below does.
         if let Resolved::Builtin(target) = resolved {
             return Ok(Ended::Returned(Some(
                 self.invoke_builtin_call(code, target, name, args)?,
@@ -5834,17 +3689,6 @@ impl Interp {
     }
 
     /// One compiled call over the arguments its own ops already evaluated.
-    ///
-    /// **The values stand on [`Interp::call_args`] rather than being passed
-    /// as a slice**, because a builtin needs `&mut Interp` and the arguments
-    /// at once: the stack is taken out for the duration and put back with
-    /// this call's own run removed. A callee that pushes runs of its own
-    /// starts from an empty stack and leaves it empty, so what comes back is
-    /// what went out.
-    ///
-    /// `name` is only ever read on a failure -- an unresolved routine names
-    /// itself, and a function returning nothing names itself -- so the caller
-    /// recovers it from the op's address rather than on every execution.
     pub(crate) fn call_over_pushed_args(
         &mut self,
         resolved: Resolved,
@@ -5858,14 +3702,6 @@ impl Interp {
 
     /// Runs `body` over the argument run standing above `mark`, with the
     /// stack lent out for the duration and this run removed on the way back.
-    ///
-    /// **The stack is taken out rather than borrowed**, because `body` needs
-    /// `&mut Interp` and the values at once. What that leaves behind is an
-    /// empty stack, which is exactly what a callee pushing runs of its own
-    /// should start from.
-    ///
-    /// **Restored before the outcome is read**, so a raised condition leaves
-    /// the stack as an ordinary return does.
     fn run_over_pushed_args(
         &mut self,
         mark: usize,
@@ -5905,18 +3741,6 @@ impl Interp {
 
     /// One `::ROUTINE` entered from a native method body: `Routine~call`,
     /// `~callWith` and `~'[]'`.
-    ///
-    /// **A `SUBROUTINE` call and not a `FUNCTION` one**, which is observable
-    /// two ways and measured on both: `parse source` inside a routine reached
-    /// through `~call` answers `LINUX SUBROUTINE <the declaring file>` at rc
-    /// 0, and a routine that returns nothing answers nothing rather than
-    /// raising 44 here -- the 91.999 the caller then sees names the *message*
-    /// (`CALL`, `[]`), so it comes from the send and not from this call.
-    ///
-    /// The name is only ever read on a failure, and no failure below can
-    /// report it: the two arms that name one are the builtin path, which
-    /// `Resolved::Routine` is not on, and `no_data_returned`, which this does
-    /// not raise.
     pub(crate) fn call_over_installed_routine(
         &mut self,
         installed: InstalledRoutine,
@@ -5936,13 +3760,6 @@ impl Interp {
 
     /// [`Interp::invoke_call`] past its argument evaluation: everything a
     /// callee needs once its arguments are values.
-    ///
-    /// **Split out for the compiled call path**, which evaluates arguments
-    /// through ops of its own (`Op::PushArg`) and so arrives here holding
-    /// values where `invoke_call` arrives holding expressions. Both reach one
-    /// copy of the activation bookkeeping below, which is what keeps `SIGL`,
-    /// the depth guard and the level accounting from drifting apart between
-    /// the two.
     pub(crate) fn invoke_call_over(
         &mut self,
         resolved: Resolved,
@@ -5985,13 +3802,6 @@ impl Interp {
         // inherits: the same pair `resolve_call` searched, read again here
         // rather than threaded out of it, because what they are wanted for is
         // building the callee rather than finding it.
-        //
-        // **Below the builtin return rather than above it**, which is where
-        // the same three reads used to sit when resolution and invocation were
-        // one function: a builtin runs no activation at all, so it has no
-        // callee to build and the `Rc::clone` would be a refcount pair it
-        // never uses. Every builtin call in an expression reaches this, which
-        // is the shape `bench-programs/strings.rex` runs four of per pass.
         let program = Rc::clone(&self.activation().program);
         let program_id = self.activation().program_id;
         let selector = self.activation().body;
@@ -6006,15 +3816,6 @@ impl Interp {
         // and `sub`'s own `SIGL` as the `CALL`'s line -- a version setting
         // `SIGL` before evaluating arguments would report the argument as
         // the `CALL`'s own line instead.
-        //
-        // **Not on the `::ROUTINE` path, and both halves of that are
-        // measured.** `signal there` / `there:` / `call rtn` leaves the
-        // caller's own `SIGL` at 1, the `SIGNAL`'s line, so a routine call
-        // does not overwrite it; and `sigl` read inside the routine prints
-        // the derived name `SIGL`, so nothing sets one in the routine's own
-        // pool either. This one line writes the *caller's* pool for a label
-        // (the two share it) and would write the *routine's* for a routine,
-        // so both probes would go wrong if it ran on both paths.
         if matches!(entered, Entered::Label(_)) {
             self.set_sigl(self.clause_state.line());
         }
@@ -6037,16 +3838,6 @@ impl Interp {
                 // and `pop_slots` is deliberately not called on the way out
                 // because the frame is not this activation's to free. Task
                 // 5's `PROCEDURE` is what will ever push a frame of its own.
-                //
-                // `extra` is cloned in and moved back out for the same
-                // reason: it is the *name* half of that one pool (`plan.rs`'s
-                // own `slot_of`), and leaving the callee with an empty one
-                // would strand a name bound at run time inside it. Measured
-                // on the oracle -- a callee running `interpret "zork = 42"`
-                // and a caller then saying `zork` prints 42, which needs the
-                // binding as well as the slot to cross the return. Empty in
-                // every program that has no `INTERPRET` and no `DROP (v)`,
-                // which is why the clone is not a cost worth avoiding.
                 let caller = self.activation();
                 let plan = Rc::clone(&caller.plan);
                 let frame = caller.frame;
@@ -6162,65 +3953,6 @@ impl Interp {
         // of them, and one differs from it deliberately -- the fifth,
         // `clause_state`, is not level state for the callee at all, and is
         // saved and restored for a different reason stated where it is:
-        //
-        // * `activation_indent` is **set** to the calling clause's printed
-        //   indent plus two (D2r). Measured at three shapes rather than one,
-        //   because "2 x depth" agrees with the truth at caller indent 0 and
-        //   parts company immediately after: a flat `call` echoes the callee
-        //   at 2, one `DO` deep at 4, two `DO`s deep at 6.
-        //   **A `::ROUTINE` gets 0 instead**, which is the same fact as
-        //   `TRACE` not crossing into one seen from the other side: measured,
-        //   a routine called from inside two nested `DO` blocks and turning
-        //   `trace r` on itself echoes its own clauses at indent 0, not at 6.
-        // * `indent_offset` is zeroed alongside it, exactly as the fragment
-        //   case is and for the same reason -- the calling clause's printed
-        //   indent already contains any escape elevation, and leaving this
-        //   would count it twice.
-        // * `clause_line_override` is **cleared**, where `INTERPRET` sets it.
-        //   Each activation's echo carries its *own* line, and the clearing
-        //   is what makes that true inside a fragment: measured, `interpret
-        //   "call sub"` on line 2 echoes the fragment's `call sub` at line 2
-        //   and the callee's own clauses at lines 4, 5 and 6. Leaving the
-        //   enclosing override in force would print all six as line 2.
-        // * `call_context` is set to this call's own name and arguments, so
-        //   a `USE ARG` inside the callee reads its own rather than an
-        //   enclosing call's (added by Task 5, and saved here rather than
-        //   anywhere else precisely because of the finding just below:
-        //   `current_value_indent`, the fourth piece at the time, had gone
-        //   unrestored, unobservable until two activations per clause
-        //   became reachable).
-        //
-        // * `clause_state` (`current_value_indent`/`current_clause_line`,
-        //   bundled -- that struct's own doc comment has the property that
-        //   puts the two of them here rather than among the four above)
-        //   is **saved whole and restored whole**, never set to anything
-        //   new going in: `run_activation` -> `step_in_temps_frame`
-        //   overwrites both fields on every clause the callee steps, the
-        //   same way the caller's own next clause would regardless. Before
-        //   `ExprKind::Call` at most one activation could be entered per
-        //   clause, and that next clause's own `step_in_temps_frame`
-        //   re-set both fields before anything read them -- so a version
-        //   missing this restore passes every test with no more than one
-        //   call per clause in it, and `say f(1) + g(2)` (two activations,
-        //   one clause) is what makes the omission observable at all.
-        //   `current_value_indent`'s own restore is review finding C1
-        //   (Task 4 fix round 1): without it, `g`'s own base indent (and
-        //   everything computed from it, including the enclosing clause's
-        //   own `>>>`) reads `f`'s last clause instead of the caller's own.
-        //   `current_clause_line`'s is Task 6 fix round 2, found the
-        //   identical way after shipping without it: without this line,
-        //   `g`'s own `SIGL` (`set_sigl` reading `current_clause_line`)
-        //   reads `f`'s own last line instead of the calling clause's.
-        //   `current_clause_line_is_restored_after_a_nested_expression_call`
-        //   (`run/tests.rs`) is what fails if this one line is
-        //   ever removed a second time; `current_value_indent_is_restored_
-        //   after_a_nested_expression_call` is its own sibling for the
-        //   other field.
-        //   The pair is `save_clause_state`/`restore_clause_state` rather
-        //   than two plain assignments (fix round 4): a `ClauseState` this
-        //   function could copy freely was also one it could *replace*, which
-        //   is a clause line set with no boundary attached -- the exact thing
-        //   `clause.rs` exists to make unwritable.
         let saved_clause_state = self.save_clause_state();
         let callee_indent = match entered {
             Entered::Label(_) => saved_clause_state.value_indent() + 2,
@@ -6291,7 +4023,6 @@ impl Interp {
         // (`RexxActivation.cpp:1455`-`1469`), and a routine invocation is one
         // of those. Measured on the oracle, rc 0 every time, and the shapes
         // matter because the exit arrives here by three different routes:
-        //
         // ```text
         // call rtn / say result       ::routine rtn ; exit 5      ->  5, and main runs on
         // n1 = rtn() / say n1         ::routine rtn ; exit 7      ->  7
@@ -6299,13 +4030,6 @@ impl Interp {
         // call rtn / say 'after'      a label INSIDE the routine exits 9 -> "after" runs
         // call rtn / say 'after'      interpret "exit 4" in the routine  -> "after" runs
         // ```
-        //
-        // The second and fourth arrive as `Failure::Exited` rather than as
-        // `Ended::Exited`, because an `EXIT` reached through an expression
-        // call has no `Flow` to travel on (`Failure::Exited`'s own doc,
-        // `error.rs`). Both are the same event and both stop here. Falling
-        // off the routine's own end is the same rule seen from the other
-        // side: measured, it leaves `RESULT` unset and the caller runs on.
         let ended = match ended {
             Ok(Ended::Exited(value)) | Err(Failure::Exited(value))
                 if matches!(entered, Entered::Routine(_)) =>
@@ -6334,12 +4058,6 @@ impl Interp {
 
     /// [`Interp::resolve_call`] followed by [`Interp::invoke_call`], with
     /// nothing remembered in between.
-    ///
-    /// **The uncached composition, which is what every tree-walker route
-    /// uses.** A call site that can name itself -- a compiled
-    /// `crate::ir::Op::Call`, which has an op position to hang an answer on --
-    /// keeps the resolution instead and calls the two halves itself; nothing
-    /// here has such a name, so it resolves afresh every time.
     pub(crate) fn resolve_and_run_call(
         &mut self,
         code: &Code<'_>,
@@ -6355,22 +4073,6 @@ impl Interp {
 
     /// Builds the object a `>name` or `<name` term answers: the variable
     /// `inner` names, rather than the value it holds.
-    ///
-    /// The variable's storage moves into a cell first
-    /// ([`rexx_core::RootSet::promote`]), because the reference is an
-    /// ordinary value and may outlive the activation -- measured on the
-    /// oracle, a `procedure` returning `>v` answers a reference whose
-    /// `~value` still reads `42` and whose `~value =` still writes after the
-    /// return. An `EXPOSE`d name has no slot to promote and needs none: its
-    /// value is in the receiving object's pool, which the reference keeps
-    /// alive itself.
-    ///
-    /// The inner node is always a `Variable` or a `Stem` (`rexx-parse`'s own
-    /// doc on `ExprKind::VariableReference`; anything else is error 20.930 at
-    /// parse time). The `other` arm is the same belt-and-braces shape the
-    /// `Assignment` arm's own comment describes: a guarantee the grammar
-    /// makes is not one the type system enforces, and this crate fails loudly
-    /// rather than trusting it blindly.
     pub(crate) fn variable_reference(
         &mut self,
         code: &Code<'_>,
@@ -6407,11 +4109,6 @@ impl Interp {
 
     /// One call argument, evaluated, rooted and traced -- the step both call
     /// paths share.
-    ///
-    /// Whether `expr` is an argument this can evaluate without `eval`'s own
-    /// wrapper -- see [`eval_leaf_argument`].
-    ///
-    /// [`eval_leaf_argument`]: Interp::eval_leaf_argument
     #[inline(always)]
     fn leaf_argument(&self, expr: &Expr) -> bool {
         !self.tracing_intermediates()
@@ -6423,28 +4120,6 @@ impl Interp {
 
     /// One argument's value, for a shape whose evaluation produces that
     /// value and nothing else.
-    ///
-    /// `eval` wraps every node in the depth bookkeeping and a post-order
-    /// trace hook. The hook answers to `intermediates`, so with tracing off
-    /// an argument that is a bare literal, constant symbol or variable read
-    /// pays the wrapper for a line that is never emitted. Measured on
-    /// `bench-programs/strings.rex`, evaluating each argument one extra time
-    /// costs 25.05% of the program, and taking this route for its leaves
-    /// gives back 8.88%.
-    ///
-    /// **The depth bookkeeping stays.** `StackSpan`'s own `max_depth` is
-    /// observable and both engines' tests compare it, so this enters through
-    /// [`Interp::enter_eval_node`] and leaves the same way `eval` does; only
-    /// the hook is skipped, and only once its gate has already answered.
-    ///
-    /// **A reference argument is not a leaf.** `call sub >v` parses to its
-    /// own expression kind, which this does not admit, so its `>O>` line is
-    /// still traced. Measured against the oracle, `call sub >vv` with a
-    /// `use arg > a` that assigns still writes `vv` in the caller.
-    ///
-    /// The value is rooted here for the same reason
-    /// [`Interp::eval_traced_argument`] roots its own: the callee's frame is
-    /// not open yet, and everything between here and it can allocate.
     fn eval_leaf_argument(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
         let anchor = 0u8;
         self.enter_eval_node(&raw const anchor)?;
@@ -6469,31 +4144,6 @@ impl Interp {
     }
 
     /// A call's resolution, held back until its arguments have run.
-    ///
-    /// **A name that matches nothing cannot be reported before the arguments
-    /// have had their chance to raise.** The C++ resolves a call's target at
-    /// parse time -- `externalTarget`, `targetInstruction` and `builtinIndex`
-    /// are fields of the instruction -- and
-    /// `RexxInstructionCall::execute` then evaluates the arguments before it
-    /// dispatches on any of them (`instructions/CallInstruction.cpp:166`, the
-    /// line commented "evaluate the arguments first"). A resolution that
-    /// happens at run time here therefore owes the same order, which this
-    /// gives it: on success nothing changes, and on failure the arguments run
-    /// first and any condition they raise is reported instead.
-    ///
-    /// Measured against the oracle: `call nosuch 1/0` is 42.3 and not 43.1,
-    /// and under `trace i`, `call nosuch 1, 2` traces `>L> "1"`, `>A> "1"`,
-    /// `>L> "2"`, `>A> "2"` and only then reports 43.1. Both hold for the
-    /// `nosuch(1, 2)` expression form too.
-    ///
-    /// The compiled paths need none of this: their arguments are ops that
-    /// have already run by the time the call op resolves.
-    /// **The body is `#[cold]` and the wrapper is not**, because the failure
-    /// is the only case this exists for and every resolved call pays whatever
-    /// stands in front of it. Measured with the loop written inline here:
-    /// `bench-programs/strings.rex` retired 2,999,401 more instructions --
-    /// one per iteration -- over a program that never fails to resolve
-    /// anything.
     #[inline(always)]
     pub(crate) fn resolved_after_arguments(
         &mut self,
@@ -6538,11 +4188,6 @@ impl Interp {
     }
 
     /// Runs one named `CALL`: `resolve_call`, then [`Interp::invoke_named_call`].
-    ///
-    /// See `resolve_call`'s own doc for the resolution order and
-    /// `invoke_call`'s for the argument evaluation and indent bookkeeping this
-    /// used to carry directly, and why both are shared with `eval_call`
-    /// (`eval.rs`) rather than duplicated.
     fn exec_call(
         &mut self,
         code: &Code<'_>,
@@ -6558,12 +4203,6 @@ impl Interp {
     /// The `CALL` instruction past its resolution: [`Interp::invoke_call`],
     /// then settle `RESULT` and translate the outcome into this instruction's
     /// own `Flow`.
-    ///
-    /// **Split from `exec_call` so that a compiled call site can enter here**
-    /// with a resolution it kept from an earlier execution
-    /// (`crate::ir::Op::Call`). Everything a `CALL` does that
-    /// `ExprKind::Call` does not is in this function and nowhere else, so the
-    /// two routes cannot come to settle `RESULT` differently.
     pub(crate) fn invoke_named_call(
         &mut self,
         code: &Code<'_>,
@@ -6589,14 +4228,6 @@ impl Interp {
 
     /// What a `CALL` does with the outcome its callee handed back: the
     /// caller's own `>>>` and `RESULT`.
-    ///
-    /// `base_indent` is the `CALL` clause's own printed indent, captured
-    /// before the callee ran -- the callee overwrites `current_value_indent`
-    /// with its own clauses'.
-    ///
-    /// **Shared by both call paths rather than copied**, because the rules
-    /// below are the difference between a `CALL` and a function call and
-    /// nothing about how the arguments were evaluated.
     fn settle_call_result(&mut self, ended: Ended, base_indent: usize) -> Result<Flow, Failure> {
         let value = match ended {
             // `EXIT` inside the callee ends the program rather than the
@@ -6639,13 +4270,6 @@ impl Interp {
 
     /// [`Interp::invoke_named_call`] over arguments the compiled stream has
     /// already evaluated onto the argument stack above `mark`.
-    ///
-    /// **The same split `call_over_pushed_args` makes for a call in an
-    /// expression, made for the instruction**, and it is a different function
-    /// rather than a `CallType` on that one because the two differ after the
-    /// callee returns, not before: a subroutine settles `RESULT` and may hand
-    /// back an `EXIT` that leaves the program, where a function must produce a
-    /// value and raises 44.1 when it does not.
     pub(crate) fn invoke_named_call_over_pushed_args(
         &mut self,
         resolved: Resolved,
@@ -6689,21 +4313,6 @@ impl Interp {
     /// Opens a stepped clause of `code`: everything
     /// [`Interp::in_stepped_clause_with`] owes before the clause's own work
     /// runs.
-    ///
-    /// Half of the clause unit rather than a function in its own right. The
-    /// closure form above is the unit's contract and the other entry shape
-    /// into these same two halves; `clause.rs`'s module doc has why there are
-    /// two shapes, and [`SteppedClause`] has what the token does and does not
-    /// close.
-    ///
-    /// **`inline(always)` for the reason the closure form carries**, and the
-    /// measurement there was taken on the whole unit rather than on either
-    /// half.
-    ///
-    /// [`DeadlineCounted`](crate::clause::DeadlineCounted) is
-    /// [`Interp::enter_clause`]'s own obligation, taken by the caller for the
-    /// reason that type carries: this half cannot fail, and counting a clause
-    /// against a deadline can.
     #[inline(always)]
     #[allow(
         clippy::too_many_arguments,
@@ -6736,10 +4345,6 @@ impl Interp {
         // is left untouched here -- `TIME('R')`'s own lazy reset needs it
         // still readable one call later, and clearing it here is what an
         // earlier version of this did instead.
-        //
-        // **Reached together with the `>I>` decay below through one borrow**,
-        // because both write the activation that is executing right now and
-        // each reach for it is a null check on the running slot.
         let activation = self.activation_mut();
         activation.clock_stale = true;
         // `>I>`'s own "am I still on the first instruction" decay
@@ -6753,9 +4358,6 @@ impl Interp {
         // counts them all. Measured before the move: `if 1=1 then trace l` as
         // a routine's first clause announced the pair here and nothing on the
         // oracle.
-        //
-        // At the *top*, before the clause runs, because `Pending -> Allowed`
-        // is what a `TRACE` inside this very clause must see.
         activation.trace_entry = activation.trace_entry.stepped();
         // `TRACE`'s own `*-*` clause echo (D17), and the single insertion
         // point for it -- exactly the analogue of `eval`'s own split from
@@ -6765,34 +4367,6 @@ impl Interp {
         // `Otherwise`/`When`/`WhenCase`/`Label`) included, matching the
         // oracle's own `RexxInstruction::traceInstruction`, which every one
         // of those calls too from its own `execute`.
-        //
-        // **Not the whole story for a `DO`/`LOOP`.** The oracle's own `DO`
-        // instruction is re-executed once per iteration, so its own clause
-        // (and `END`'s) echoes again on every pass -- this call site fires
-        // exactly once, when the `DO`/`LOOP` instruction is first stepped,
-        // because `run_loop`/`run_repeating` resolve every iteration inside
-        // *this* one `step` call rather than returning between passes
-        // (`Flow::Leave`'s own doc comment has the reason: a `Goto`-shaped
-        // re-entry risks the absorption trap that design avoids). The
-        // per-iteration re-echo is `run_repeating`'s own, separate call
-        // into `trace_clause` -- see its doc comment.
-        // `current_value_indent` (`lib.rs`'s own doc comment on the field)
-        // is set here **unconditionally**, not only when `trace_mode.all`
-        // -- `INTERMEDIATES` implies `all` (`TraceMode`'s own doc comment),
-        // never the reverse, so anything that reads this field is already
-        // gated by its own `intermediates` check; setting it plainly is
-        // cheaper than a second `if` that would just repeat that gate.
-        //
-        // `printed_indent` rather than `static_indent` directly, so that
-        // *which* offsets apply is one fact in one place -- see its own doc
-        // comment for what it adds and why open-coding it was a defect.
-        // **The chunk's own table where the driver had one to hand over.**
-        // Both answers are properties of where the clause is written, so the
-        // compiler settled them and what is left here is `activation_indent`
-        // and `indent_offset`, which only a running interpreter knows. The
-        // `source` and override tests keep the shortcut exactly equivalent to
-        // the reads it replaces: `clause_line_at` answers `None` with no
-        // source, and honours `clause_line_override` ahead of any table.
         let shortcut = match position {
             Some(position) if source.is_some() && self.clause_line_override.is_none() => {
                 Some(position)
@@ -6863,9 +4437,6 @@ impl Interp {
         // frame across to the matching half, which is where the check reads
         // them; that type's own doc comment has what it checks and why it is
         // there rather than in `pop_frame`.
-        //
-        // Cheap enough to leave on in debug and absent in release: one
-        // `Vec::len` before and after, and a comparison.
         let temps_at_entry = self.roots.temps_len();
         let frame = self.roots.push_frame();
         SteppedClause {
@@ -6878,12 +4449,6 @@ impl Interp {
     /// Closes the stepped clause `entry` opened, around `ran` -- everything
     /// [`Interp::in_stepped_clause_with`] owes once the clause's own work has
     /// run.
-    ///
-    /// **`ran` is the clause's own result as a value**, which is what lets a
-    /// caller whose work is a loop rather than a closure reach this at all;
-    /// `Interp::leave_clause` has the whole of that reasoning, and the `Err`
-    /// this answers is the boundary's rather than the clause's exactly as it
-    /// is there.
     #[inline(always)]
     pub(crate) fn leave_stepped_clause<T: ClauseValue>(
         &mut self,
@@ -6931,24 +4496,6 @@ impl Interp {
 
     /// The stepped-clause boundary for a clause that produced **neither a
     /// `Flow` nor a failure**, with nothing queued to deliver.
-    ///
-    /// Everything [`Interp::leave_stepped_clause`] does, minus the parts that
-    /// exist for a value: there is no failure, so no site to record, and no
-    /// outcome to build. What is left is releasing the temps frame and
-    /// spending the entry.
-    ///
-    /// **Why it is a second function rather than a fast path inside the
-    /// first.** `leave_stepped_clause` takes and answers
-    /// `Result<ClauseOutcome<T>, Failure>`, and building that value is the
-    /// cost this avoids -- a fast path *inside* it would still have to
-    /// construct the answer. Measured on a loop whose body is `nop`, the one
-    /// line calling `leave_clause` was 25.8% of the program's user
-    /// instructions (`perf record -e instructions:u`, `perf report --sort
-    /// srcline`), against a clause that does no work at all.
-    ///
-    /// The caller owes the `pending_traps` check, because it is the caller
-    /// that knows whether this exit is available; `spend_clause_entry`
-    /// re-asserts it in debug.
     #[inline(always)]
     pub(crate) fn finish_plain_clause(&mut self, entry: SteppedClause) {
         debug_assert!(
@@ -6964,34 +4511,6 @@ impl Interp {
 
     /// One stepped clause's `*-*` echo, **if the setting in force echoes a
     /// clause of that kind**, at `indent`.
-    ///
-    /// The gate is `tracing_clause` rather than `trace_mode().all` so that
-    /// the decision lives in one place, and it is a gate at all because
-    /// `clause_site` allocates the clause's text.
-    ///
-    /// **`is_label` is what makes `TRACE L` produce anything at all** (4b
-    /// Task 9, review round 1, F8): the oracle's `RexxInstructionLabel::
-    /// execute` traces through `traceLabel` and nothing else, and that gate is
-    /// `tracingLabels()`, true under `L` as well as `A`/`R`/`I`. This is the
-    /// only clause-echo site a `LABEL` ever reaches, so it is the only one
-    /// that has to ask. Measured under `trace l`: a fallen-through label, a
-    /// `CALL` target and a `SIGNAL` target all echo, in that one program's
-    /// whole stderr, and every other clause is silent.
-    ///
-    /// **`inline(always)`, and it is a measurement rather than a habit.** This
-    /// is one call per clause of every body on either engine, and on an
-    /// untraced run the gate is the whole of what it does. Left to the
-    /// inliner's own judgement it is emitted as a function and costs
-    /// `bench-programs/emptyloop.rex` **525,000,000 user instructions** --
-    /// 38.0009 against 38.5259 billion on the tree-walker, and 40.4009 against
-    /// 40.9259 on the compiled stream (`perf stat -e instructions:u`).
-    ///
-    /// **Counted in instructions and not in seconds, and that is not a
-    /// preference.** `emptyloop`'s wall clock on this machine moves about 2%
-    /// between builds that execute an identical instruction count, which is
-    /// larger than most of what is being decided here -- a wall-clock reading
-    /// reported a regression on the tree-walker arm that its own instruction
-    /// count denies.
     #[inline(always)]
     pub(crate) fn echo_stepped_clause(
         &mut self,
@@ -7010,11 +4529,6 @@ impl Interp {
     /// The same echo with **no gate at all**, for a caller that has already
     /// decided ([`crate::ir::Op::TraceClause`], whose presence in a chunk is
     /// that decision).
-    ///
-    /// `trace_stepped_clause`'s own `tracing_clause` gate is bypassed by
-    /// passing `is_label` through unchanged and calling the formatter
-    /// directly, so the bytes are the ones `echo_stepped_clause` would have
-    /// produced and only the question of *whether* differs.
     pub(crate) fn echo_compiled_clause(
         &mut self,
         source: Option<&ProgramSource>,
@@ -7029,44 +4543,6 @@ impl Interp {
     /// Resolves `instruction`'s own clause (and its statically-derived
     /// indent, `static_indent`) into `self.failure_site`, first call wins,
     /// when `source` is `Some`.
-    ///
-    /// **The guard is not here and is not spelled `is_none()`.** It is an
-    /// early `if self.failure_site.is_some() { return; }` at the top of
-    /// [`Interp::record_failure_at`], which this function's own last line
-    /// delegates to.
-    ///
-    /// The shared half of `step_in_temps_frame`'s own resolution (its doc
-    /// comment has the full argument for why the *first* caller to run this
-    /// is always the right one) -- factored out so `Select`'s own arm can
-    /// call it directly for a `When`/`WhenCase` whose *condition* raises,
-    /// which never goes through `step_in_temps_frame` at all since that
-    /// instruction's own `step` arm never runs for a decision of its own.
-    ///
-    /// `index` is `instruction`'s own position in `code.body.instructions`,
-    /// needed (beyond what `step_in_temps_frame` already required it for)
-    /// so `static_indent` has something to walk the flat instruction list
-    /// up to.
-    ///
-    /// Goes through `printed_indent`, same as `step_in_temps_frame`'s own
-    /// indent computation, so both offsets apply here exactly as they do
-    /// anywhere else.
-    ///
-    /// **An earlier version of this paragraph said the escape elevation "is
-    /// always `0` here in practice". That was false about `indent_offset`
-    /// alone, before any fragment base existed.** Measured with the addend
-    /// dropped from this function and no `INTERPRET` in the program: a `WHEN`
-    /// *condition* that raises, inside a nested `SELECT` inside an escaped
-    /// `OTHERWISE`, reports at 6 where the oracle prints 10 -- which is
-    /// exactly the `Select`-direct-call case the claim was about. So the
-    /// conclusion was retracted correctly and the premise behind it was kept
-    /// and is also wrong; both go.
-    ///
-    /// Once the same machinery carried an `INTERPRET` fragment's base it was
-    /// wrong more often rather than newly wrong: the base is non-zero for the
-    /// whole life of the fragment, `Select`'s direct calls included. The base
-    /// has its own field now (`activation_indent`), the addend is emphatically
-    /// **not** always zero, and nothing below may
-    /// assume it is.
     pub(crate) fn record_failure_site(
         &mut self,
         code: &Code<'_>,
@@ -7080,16 +4556,6 @@ impl Interp {
 
     /// Assigns `blame`'s own clause to `self.failure_site` at exactly
     /// `indent` spaces, first call wins, when `source` is `Some`.
-    ///
-    /// The common tail `record_failure_site` itself uses (computing
-    /// `indent` from `blame`'s own position first) and that `Do`'s own
-    /// `WHILE`/`UNTIL` checks call directly with a *different* indent --
-    /// neither corresponds to a flat instruction position `static_indent`
-    /// resolves correctly on its own (`static_indent`'s own doc comment has
-    /// the full argument), so `Do`'s own arm computes `WHILE`'s/`UNTIL`'s
-    /// indent itself and hands it straight to this function rather than
-    /// asking `record_failure_site` to guess between two different, both
-    /// correct, answers for the same instruction index.
     fn record_failure_at(
         &mut self,
         source: Option<&ProgramSource>,
@@ -7115,12 +4581,6 @@ impl Interp {
 
     /// The frame a level in a package a `::REQUIRES` loaded contributes, or
     /// `None` for a level in the program the command line started.
-    ///
-    /// The clause is echoed exactly as [`FailureSite::Clause`] echoes it and
-    /// only the report's `running <name> line <n>` span differs. Measured,
-    /// oracle rc 214: a required file whose first clause is `say 1/0` echoes
-    /// `1 *-* say 1/0` above the requiring `::REQUIRES` clause and reports
-    /// `Error 42 running <the required file> line 1`.
     fn required_package_site(
         &self,
         line: usize,
@@ -7139,12 +4599,6 @@ impl Interp {
 
     /// The frame a level inside a method compiled from source text
     /// contributes, or `None` for a level in a program's own body.
-    ///
-    /// The clause is echoed exactly as [`FailureSite::Clause`] echoes it and
-    /// only the report's `running <name> line <n>` span differs, because the
-    /// oracle compiles such a source into an executable of its own name --
-    /// measured, oracle rc 214: a one-off whose body is `return 1/0` echoes
-    /// `1 *-* return 1/0` and then reports `Error 42 running MM line 1:`.
     fn compiled_method_site(&self, line: usize, text: &[u8], indent: usize) -> Option<FailureSite> {
         let program_id = self.running_activation()?.program_id;
         let name = self.compiled_method_names.get(&program_id)?.to_vec();
@@ -7158,21 +4612,6 @@ impl Interp {
 
     /// The frame a level in the interpreter's own library contributes, or
     /// `None` for a level in a program's own package.
-    ///
-    /// **An image-saved package carries no source and the oracle says so
-    /// rather than echoing a clause**: `PackageClass::traceBack` asks
-    /// `source->extract(location)` first and falls to
-    /// `RexxActivation::formatSourcelessTraceLine` when it answers nothing
-    /// (`classes/PackageClass.cpp:575`-`:589`). This crate keeps the
-    /// library's text -- it has to, since it runs the file rather than
-    /// loading an image -- so the same question is asked of the *program*
-    /// instead: a frame in a program `Interp::bootstrap_library` loaded is a
-    /// frame in a package the oracle saved.
-    ///
-    /// Measured, oracle and both engines, `say .Validate~number('LENGTH',
-    /// 'abc')`: `  3700 *-*       Method NUMBER with scope "Validate" in
-    /// package "REXX" (no source available).` and `Error 88 running REXX
-    /// line 3700`.
     fn sourceless_site(&mut self, line: usize, indent: usize) -> Option<FailureSite> {
         let program_id = self.running_activation()?.program_id;
         if !self.library_programs.contains(&program_id) {
@@ -7242,24 +4681,6 @@ impl Interp {
 
     /// Assigns `origin`'s own captured site to `self.failure_site`, first
     /// call wins, at `origin`'s own captured indent.
-    ///
-    /// **Corrected after review.** This crate's first cut of the
-    /// LEAVE/ITERATE indent family hardcoded the exhausted-search family
-    /// (28.1-28.4) to zero and reported `origin.indent` unmodified for
-    /// 28.5, on the theory that those were the only two shapes the
-    /// oracle's own indent could take. A reviewer's fourteen-point probe
-    /// falsified that in seven cases (re-measured independently against
-    /// the oracle before changing anything -- see the report): the actual
-    /// rule is that `origin.indent` is the search's own *residual*, updated
-    /// every time a frame the search examines is popped rather than
-    /// matched, and this function's only job now is to report whatever
-    /// `origin.indent` already holds by the time either family reaches its
-    /// own resolution point -- there is exactly one caller-facing function
-    /// for both families, because the difference between them was never in
-    /// how the site gets recorded, only in how far the search walked before
-    /// giving up. See `Do`'s and `Select`'s own arms (`do_body_outcome`,
-    /// `leave_select`) for where the residual is actually updated, and
-    /// `LeaveOrigin`'s own doc comment for the rule in full.
     fn record_leave_failure(&mut self, origin: &LeaveOrigin) {
         self.record_failure_site_at(origin.site.clone(), origin.indent);
     }
@@ -7283,18 +4704,6 @@ impl Interp {
     /// The clause boundary a promoted construct owes once the branch it chose
     /// has finished -- **the one `step_in_temps_frame` runs for the
     /// tree-walker and flattening removed.**
-    ///
-    /// `IF` and `SELECT` each end their own *header* clause before running
-    /// anything else (`clause.rs`'s whole rule), and both engines do that the
-    /// same way. What the tree-walker also has, and a flattened construct does
-    /// not, is the wrapper around the whole arm: `step_in_temps_frame_with`
-    /// opens a clause for the `IF`/`SELECT` instruction, resolves the branch
-    /// inside it, and runs a boundary on the way out. A promoted construct is a
-    /// run of ops with no wrapper, so that boundary has to be an op.
-    ///
-    /// **It is not a spare boundary, and the program that says so is this
-    /// one:**
-    ///
     /// ```text
     /// call on user zx name h        /* h raises zy */
     /// call on user zy name g        /* g says SIGL */
@@ -7303,27 +4712,6 @@ impl Interp {
     /// end
     /// say 'after'
     /// ```
-    ///
-    /// `h` runs at the body clause's own boundary and its `RAISE ... RETURN`
-    /// **leaves a new trap queued behind it**, and a boundary drains only the
-    /// entries that were queued when it began, so that new trap is not one that
-    /// boundary owes. The last member clause's boundary is therefore not the
-    /// last boundary with work to do, and without this one `g` runs after
-    /// `say 'after'` instead of before it, at the wrong `SIGL`. Oracle
-    /// and tree-walker print `G ran 4` then `after`; the compiled stream
-    /// printed `after` then `G ran 6`, and in debug tripped `in_clause`'s own
-    /// assertion. The `IF` spelling of the same program is the same defect.
-    ///
-    /// **The line is left alone**, which is what makes `SIGL` agree: the oracle
-    /// closes a branch with a synthetic instruction Phase 3 elides (`ast.rs`'s
-    /// "Why there is no node for the synthetic end of a branch"), and a clause
-    /// with no source position of its own does not move `SIGL` off the last
-    /// clause that had one. Measured across four spellings: the delivered
-    /// handler reports the branch's last clause's line.
-    ///
-    /// `flow` is what the branch answered, passed through so it is rooted
-    /// across a delivered handler exactly as `step_in_temps_frame_with`'s own
-    /// `ClauseValue for Flow` roots it.
     pub(crate) fn end_promoted_branch(
         &mut self,
         code: &Code<'_>,
@@ -7339,18 +4727,6 @@ impl Interp {
     /// A `SELECT CASE`'s own `CASE` expression: the whole of what the
     /// `SELECT` header clause does, and the value every `WHEN CASE` of that
     /// `SELECT` is compared against.
-    ///
-    /// **One implementation, entered from both engines.** `step`'s own
-    /// `Select` arm calls it inside the header's `in_clause` and keeps the
-    /// value in a local for the scan; `ir::compile` emits it as the one op of
-    /// the header's clause region and keeps the value in a register of the
-    /// enclosing scope, which is what makes it outlive the member clauses that
-    /// read it. What each engine does with the answer differs; deriving it
-    /// does not.
-    ///
-    /// The value is pushed as a temp because the text is taken from it after
-    /// the clause boundary has run, and a `CALL ON` handler delivered there
-    /// allocates.
     pub(crate) fn select_case(
         &mut self,
         code: &Code<'_>,
@@ -7375,24 +4751,6 @@ impl Interp {
         // then. Measured: the handler `h:` of a `select case raiser()` at top
         // level echoes at `12 *-*     h:` on the oracle, where the `SELECT`
         // clause itself echoes unindented.
-        //
-        // Here rather than at either engine's own call site because this
-        // function is the shared one: the tree-walker calls it inside the
-        // header's `in_clause` and the compiled stream reaches it from the
-        // one `crate::ir::Op::EvalExpr` of the header's clause region, and
-        // both boundaries are past this line.
-        //
-        // **A `SELECT` with no `CASE` never reaches here, so nothing settles
-        // its boundary -- and that is a gap rather than an absence.** A
-        // boundary delivers whatever is pending, not only what its own clause
-        // queued: a `CALL ON` handler ending in `raise ... return` leaves a
-        // second condition for the next boundary to take. Measured under
-        // `trace r` on both engines, a plain `select` reached that way echoes
-        // the second handler two columns short of the oracle, while `select
-        // case 1` -- the same program with a scrutinee that queues nothing
-        // either -- agrees, because this line runs for it. So what decides is
-        // whether anything settled the boundary, never what the clause
-        // queued. Recorded in `tests/ir_recorded_cases/loop-header-boundaries`.
         self.settle_block_indent(true, indent);
         Ok(value)
     }
@@ -7401,12 +4759,6 @@ impl Interp {
     /// against, and `Interp::current_case_text` for the **absorbed** ones that
     /// have no other way to reach it (`lib.rs`'s own doc comment on the
     /// field).
-    ///
-    /// **Called after the header clause has ended, by both engines**, so a
-    /// `CALL ON` handler delivered at that clause's boundary cannot be the
-    /// last writer of the field. That placement is the whole content of this
-    /// function, which is why it is one function rather than an assignment
-    /// written out at each engine's own call site.
     pub(crate) fn open_select_case(&mut self, value: Option<ObjRef>) -> Option<Vec<u8>> {
         let text = value.map(|value| self.to_text(value).to_vec());
         self.current_case_text = text.clone();
@@ -7414,28 +4766,6 @@ impl Interp {
     }
 
     /// One listed `WHEN`/`WHEN CASE`'s own condition, and whether it holds.
-    ///
-    /// **The tree-walker's entry for both, and the compiled stream's for a
-    /// `WHEN CASE` and for a `WHEN` whose condition `native_shape`
-    /// declined**: a plain `WHEN` whose condition compiled does not come
-    /// through here at all -- its ops leave the value in a register and
-    /// `crate::ir::Op::Condition` enters [`Interp::condition_value`] with it,
-    /// which is the half the two share, tagged so that 34.2 is still the
-    /// raiser.
-    ///
-    /// **The work of one clause, and nothing a clause owes around it.** The
-    /// caller opens the clause with [`Interp::in_stepped_clause`], so the
-    /// `*-*` echo, the value indent this reads back, the `SIGL` line, the
-    /// boundary and *both* failure sites -- the condition's own and the
-    /// boundary's -- are that unit's, entered from both engines through it
-    /// rather than written out beside each caller. The call site in `Select`'s
-    /// own arm has what a hand-rolled version of that list measured as.
-    ///
-    /// The answer is a `bool` because that is what the clause produces: a
-    /// Rexx logical value already consumed into one, with no `ObjRef` whose
-    /// only root was this clause's temps frame (`ClauseValue for bool`).
-    /// Where a matched `WHEN` sends control is [`when_targets`], read from
-    /// the same node by whichever engine needs it.
     pub(crate) fn scan_when(
         &mut self,
         code: &Code<'_>,
@@ -7478,13 +4808,6 @@ impl Interp {
     /// restored now that the whole dispatch -- marker and body alike -- is
     /// finished reading it, and then `leave_select` decides where control
     /// goes.
-    ///
-    /// **One function because it is one rule, and both engines reach it.** A
-    /// raise leaves the offset unrestored deliberately: `run_otherwise`'s own
-    /// `?` returns before this is called, and a raise that is not trapped is
-    /// fatal, so nothing runs afterward to see a stale value -- the same
-    /// reasoning `lib.rs`'s doc comment gives for never restoring it after
-    /// `END`'s own 7.3 either.
     pub(crate) fn leave_otherwise(
         &mut self,
         code: &Code<'_>,
@@ -7506,27 +4829,6 @@ impl Interp {
 
     /// Turns the `Flow` a `SELECT`'s own matched `WHEN` or `OTHERWISE` body
     /// produced into this `SELECT`'s own answer.
-    ///
-    /// `Flow::Next` becomes `Goto(resume)`, exactly the shape every branch
-    /// gave before Task 11. A `LEAVE`/`ITERATE` naming this `SELECT`'s own
-    /// `label` (`Some` only for `SELECT LABEL name` -- an ordinary clause
-    /// label in front of a `SELECT` is a separate `Label` instruction and
-    /// never reaches `label` at all, measured 28.3/28.4 exactly as for an
-    /// unlabelled loop) is consumed here: a matching `LEAVE` resumes past
-    /// the whole `SELECT`; a matching `ITERATE` is **28.5**, because
-    /// `SELECT` is never a repetitive loop (`RexxInstructionSelect::isLoop`
-    /// answers `false` unconditionally, read directly in the report) --
-    /// measured, `ITERATE` never accepts a non-loop target even when the
-    /// name matches. Everything else -- an unnamed `LEAVE`/`ITERATE` (a
-    /// `SELECT` is never a bare target either, same reason), or one naming
-    /// something else -- is **not matched, but not untouched either**: a
-    /// `SELECT` always owns a search frame (unconditionally, labelled or
-    /// not -- unlike `Do`'s own unlabelled-`Simple` exception), so
-    /// forwarding it outward resets `origin.indent` to this `SELECT`'s own
-    /// `static_indent` first (`LeaveOrigin`'s own doc comment has the full
-    /// rule and the oracle transcripts that pin it). `Exit` and a `Goto`
-    /// that escaped `run_bounded`'s own range pass through with nothing
-    /// touched, same as always.
     pub(crate) fn leave_select(
         &mut self,
         code: &Code<'_>,
@@ -7565,23 +4867,6 @@ impl Interp {
     /// a `SELECT` always owns a frame) and `do_body_outcome` (calls it only
     /// when the `Do`/`Loop` in question owns one, i.e. skips an unlabelled
     /// `Simple` block).
-    ///
-    /// **The one site that adds `activation_indent` without going through
-    /// `printed_indent`, and the asymmetry is deliberate.** `origin.indent`
-    /// is an absolute printed indent, so it needs the activation base:
-    /// measured, `do z = 1 to 1` around `interpret "do jj = 1 to 1; leave
-    /// zz; end"` reports the `LEAVE` at 2 on the oracle, and this function
-    /// is what decides it -- the search walks out past the fragment's own
-    /// `DO`, resetting the residual to that `DO`'s lexical position, which
-    /// is 0 *within the fragment* and 2 in the program. Two further shapes
-    /// (the same through a `SELECT`, and through two nested `DO`s) give 2 as
-    /// well. But it must **not** pick up `indent_offset`: this function's
-    /// whole contract is restoring the value saved when the frame was
-    /// pushed, and an escape elevation belongs to the dispatch that is
-    /// currently running rather than to a frame being unwound. The
-    /// fourteen-point probe behind that rule leaves it exactly as it was,
-    /// because `activation_indent` is `0` in every one of those fourteen
-    /// shapes.
     fn pop_search_frame(
         &self,
         code: &Code<'_>,
@@ -7595,43 +4880,12 @@ impl Interp {
         // measured, `iterate lab` inside an inner loop attributes the outer
         // loop's re-test to the `ITERATE`'s line, not to anything about the
         // frames in between.
-        //
-        // Updated through the existing box rather than built as a fresh
-        // `LeaveOrigin`, so forwarding a flow past a construct moves a
-        // pointer instead of copying the site's own buffer.
         origin
     }
 
     /// `target`'s own **absolute printed indent**: its lexical
     /// `static_indent`, plus the activation base it is running under, plus
     /// any escape elevation currently in force.
-    ///
-    /// **The one place either offset is applied, and it exists because
-    /// open-coding it was a defect.** The six sites that needed
-    /// `+ self.indent_offset` each wrote it out, and one of them -- the
-    /// `WHEN` scan in `Select`'s own arm -- did not.
-    ///
-    /// **The divergence does not need a fragment.** The missing
-    /// addend is already wrong for a nested `SELECT` inside an escaped
-    /// `OTHERWISE`, with no `INTERPRET` anywhere: measured under `trace r`,
-    /// `select case 2` / `when 2 then` / `when 3 then nop` / `otherwise` /
-    /// `select` / `when 1 = 1 then nop` / `end` / `end` printed the inner
-    /// `WHEN` at 6 where the oracle prints 10. A plain `SELECT` inside an
-    /// `INTERPRET` inside one `DO` also hits it, and that is not deep nesting.
-    ///
-    /// The distinction matters because the old doc bounded the consequence
-    /// with "no corpus or spec example nests this deeply", and that false
-    /// bound is why nobody looked. Replacing it with a narrower false bound
-    /// -- "it only became live once a fragment base rode the field" -- would
-    /// set the same trap for the next reader. A missing addend is not
-    /// something a reader notices, so the fix is to leave nothing to notice.
-    ///
-    /// `static_indent` itself is untouched and stays a pure function of
-    /// `(instructions, target)` -- see its own doc comment for why that
-    /// matters. This adds the two pieces of running state on top of it, and
-    /// is deliberately *not* where the 40-column clamp lives: that is on the
-    /// `*-*` echo alone (`trace::MAX_CLAUSE_INDENT`), and clamping here would
-    /// truncate every `>>>` value line too.
     pub(crate) fn printed_indent(&self, code: &Code<'_>, target: usize) -> usize {
         // The table when this body has one, and the walk when it does not --
         // an `INTERPRET` fragment is the case with none, and its instruction
@@ -7645,62 +4899,6 @@ impl Interp {
 
     /// Runs `code.body.instructions[start..end]` in place, one instruction at
     /// a time through `step_in_temps_frame`, and answers what happened.
-    ///
-    /// **Why this exists at all.** Phase 3 elides the C++'s synthetic
-    /// end-of-branch markers (`ast.rs`'s own "Why there is no node for the
-    /// synthetic end of a branch"), so a flat instruction list has nowhere to
-    /// hang "the THEN branch just finished, skip the ELSE" or "one true WHEN
-    /// ends the whole SELECT" other than on the branch instruction itself.
-    /// Concretely, traced by hand against `block.rs`: `if c then A else B`
-    /// gives `If.false_target == Else`'s own index, so the true path (fall
-    /// through `A`, land on `Else` by `pc += 1`) and the false path (`Goto`
-    /// straight to `Else`) arrive at the *identical* `(instruction, pc)`, and
-    /// only one of the two arrivals is supposed to enter `B`. `SELECT`/`WHEN`
-    /// has the same defect with no marker at all: a matched `WHEN`'s body,
-    /// left to fall through on its own, lands on the next `WHEN` and would
-    /// test it again (`select_when_bodies.rex` is written to catch exactly
-    /// that). Per-instruction dispatch on `(instruction, pc)` alone cannot
-    /// tell these two arrivals apart, and a per-activation block stack would
-    /// resolve it trivially but does not exist yet (`Activation`'s own doc
-    /// comment: Task 11's).
-    ///
-    /// **The fix confines itself to a range instead.** `If`/`Select` compute
-    /// the winning branch's `[start, end)` directly from data already on the
-    /// node (`If`'s `false_target`, `Select`'s `whens`/`false_target`/`exit`)
-    /// and run exactly that range here, then return one `Flow::Goto` past
-    /// the whole construct -- so the ambiguous fallthrough this function
-    /// would otherwise produce never reaches the outer loop at all. Nested
-    /// constructs are safe under this with no extra bookkeeping, because
-    /// `block.rs` assembles an inner branch's own jump targets to close
-    /// before the outer one's does, so they always fall inside (or exactly
-    /// at the boundary of) whichever range encloses them.
-    ///
-    /// **What this owns, and what it does not.** A `Flow::Next` advances the
-    /// local `pc` by one. A `Flow::Goto(target)` is only "mine" when `target`
-    /// is inside `[start, end]` (`end` inclusive: a nested construct's own
-    /// resume point landing exactly on my own boundary is normal completion,
-    /// not an escape) -- anything else, this returns immediately and
-    /// unchanged, exactly as received. That covers `Flow::Exit`, and is
-    /// written to keep covering `LEAVE`/`ITERATE` too:
-    /// `leave sel` on a labelled `SELECT` has to unwind out of a nested Rust
-    /// call the same way `Flow::Exit` already does here, and a `Flow`
-    /// variant this function does not recognise is deliberately the same
-    /// case as one whose `Goto` target falls outside the range -- both fall
-    /// to the catch-all below and propagate outward rather than being
-    /// matched (and silently mishandled) by name.
-    ///
-    /// Reaching `end` exactly, whether by `pc += 1` or by an in-range `Goto`,
-    /// is the only way this returns `Ok(Flow::Next)`. Every other exit
-    /// returns the escaping `Flow` unchanged, and the caller (`If`/`Select`)
-    /// must check which happened rather than assume the former.
-    ///
-    /// `source` is forwarded to `step_in_temps_frame` unchanged, purely so it
-    /// can resolve the failing clause's own site rather than the caller's --
-    /// see that function's own doc comment.
-    ///
-    /// `engine` decides only which driver each member clause is stepped
-    /// through, and nothing about this loop's own absorption rule
-    /// ([`BodyEngine`]'s own doc comment).
     fn run_bounded(
         &mut self,
         code: &Code<'_>,
@@ -7715,21 +4913,6 @@ impl Interp {
 
     /// One header value's own `>K>` line, at the `DO`/`LOOP` clause's own
     /// indent, for the roles the oracle echoes one for.
-    ///
-    /// **`current_value_indent` rather than a recomputed `static_indent`**, and
-    /// **not** `loop_indent` (`+2`, `WHILE`/`UNTIL`'s own level): measured,
-    /// `>K>   "TO" => "2"` sits at the same indent as `do i = 1 to 2` itself,
-    /// because these header expressions are evaluated once at loop entry,
-    /// before the body's own frame exists at all
-    /// (`control_setup_expressions_are_unindented_unlike_the_loop_body_they_precede`
-    /// makes the identical point about a *raise* at this same point).
-    ///
-    /// Read here rather than captured before the header's first evaluation, so
-    /// that both engines read the same field at the same point rather than
-    /// agreeing by an argument about what an evaluation can leave behind. The
-    /// two are the same answer: `Interp::invoke_call` restores
-    /// `current_value_indent` on the way out, which
-    /// `current_value_indent_is_restored_after_a_call` pins.
     pub(crate) fn echo_header_value(&mut self, role: HeaderRole, value: ObjRef) {
         let Some(keyword) = role.keyword() else {
             return;
@@ -7748,21 +4931,6 @@ impl Interp {
 
     /// Validates one header value against whatever its role requires and files
     /// it in `values`.
-    ///
-    /// `initial`/`to`/`by` need only be *numeric* (41.1 if not, via
-    /// `arith_operand` -- the same check ordinary arithmetic already makes),
-    /// never *whole*: measured, `do i = 1.5 to 3` is legal and steps by
-    /// fractional values. A count is the exception, checked against
-    /// `whole_nonneg` -- 26.2 for a bare `DO`'s own repeat count and 26.3 for a
-    /// `FOR`, which is the only way the two differ.
-    ///
-    /// **The digits in force are read where they are used**, which is the
-    /// oracle's "current `NUMERIC DIGITS` at loop entry" rule
-    /// (`round_via_unary_plus`'s own doc comment has the citation). Every read
-    /// inside one header gives the same answer: `NUMERIC DIGITS` changes only
-    /// by executing an instruction, this activation executes none between its
-    /// own header's expressions, and a called routine's own setting does not
-    /// survive its return.
     pub(crate) fn accept_header_value(
         &mut self,
         role: HeaderRole,
@@ -7805,11 +4973,6 @@ impl Interp {
             // to the value instead (`:127`), which is a message to the object
             // and is 97.1 rather than a conversion -- `eval.rs`'s
             // `object_operand_tests` is that half.
-            //
-            // 26.2 and 26.3 name the **object**, not the conversion:
-            // `reportException` is passed `result` (`:99`, `:106`), measured,
-            // oracle rc 230 with a class-side `makeString` returning `'xx'` --
-            // `do .K` reports `found "The K class"`.
             HeaderRole::For | HeaderRole::OverFor => {
                 let converted = self.required_string_value(value)?;
                 values.for_remaining = Some(match self.whole_nonneg(converted) {
@@ -7849,29 +5012,6 @@ impl Interp {
     /// `OverLoop::setup`'s conversion
     /// (`instructions/DoBlockComponents.cpp:233`): the array whose items a
     /// `DO OVER` binds in turn.
-    ///
-    /// **`isArray(result)` is the PRIMITIVE test, not "an array or a subclass
-    /// of one".** Measured: a subclass of `Array` overriding `makeArray`
-    /// iterates the override, which only the `requestArray` limb reaches --
-    /// the direct limb would have called `ArrayClass::makeArray` and answered
-    /// the slots. In this crate that test is exactly `Body::Array`, because a
-    /// user subclass of `Array` is an ordinary instance whose pool holds one.
-    ///
-    /// `requestArray` (`classes/ObjectClass.cpp:1646`) is **two paths keyed on
-    /// `isBaseClass()`**: a base-class object answers `makeArray()` through a
-    /// direct virtual call with no message send, and anything else is sent
-    /// `REQUEST` with `'ARRAY'`. Both were measured through the difference a
-    /// send makes: a subclass of `Table` overriding `makeArray` answers the
-    /// override, and a class overriding `request` itself answers from
-    /// `request` with the argument `ARRAY`.
-    ///
-    /// The RESULT faces the same primitive test -- measured, a `makeArray`
-    /// answering an `Array` subclass is 98.913 -- and everything that fails it
-    /// raises `Error_Execution_noarray` naming the ORIGINAL object, not the
-    /// conversion's answer.
-    ///
-    /// `makeArray` runs exactly once per loop, measured with a counter, which
-    /// is why the conversion is here rather than in [`Interp::over_snapshot`].
     fn over_target_array(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
         if self.array_slots_of(value).is_some() {
             return Ok(value);
@@ -7903,14 +5043,6 @@ impl Interp {
 
     /// The one `DO OVER` target this crate still refuses: one of the
     /// interpreter's own directories.
-    ///
-    /// `.environment` and `.local` answer `MAKEARRAY`, so the protocol above
-    /// would iterate them -- but this crate models them as a SUBSET of the
-    /// oracle's, so iterating one differs in MEMBERSHIP and not merely in
-    /// order. Measured, `.local` iterates ten entries on the oracle and none
-    /// here. Every other object now goes through `requestArray` and either
-    /// converts or raises 98.913 as upstream does, which is what a class
-    /// object, a `Package`, a `Method` and a `RexxContext` all do.
     fn over_target_gap(&mut self, value: ObjRef) -> Option<&'static str> {
         if !matches!(
             self.heap.get(value).map(|object| &object.body),
@@ -7924,12 +5056,6 @@ impl Interp {
 
     /// Whether `value` is a `StringTable` -- `.methods`, `.routines`,
     /// `.resources`, or a package's `~publicClasses`.
-    ///
-    /// Asked of the object's own class rather than of its `Body`, because
-    /// every one of the interpreter's own objects is a `Body::Native` and the
-    /// ones that are not iterable here must keep refusing.
-    /// [`ObjectModel::iterable_collection_class`] carries why `Directory` is
-    /// not in this set.
     fn is_hash_collection(&mut self, value: ObjRef) -> bool {
         let Some(Body::Native(native)) = self.heap.get(value).map(|object| &object.body) else {
             return false;
@@ -7940,18 +5066,6 @@ impl Interp {
 
     /// The values a `DO OVER` binds its control variable to: the **non-empty**
     /// slots of what [`Interp::over_target_array`] converts the target into.
-    ///
-    /// `OverLoop::setup` takes `makeArray()`, the non-sparse copy, and
-    /// `DoBlock::checkOver` then walks it to `lastIndex()`. Measured,
-    /// `do e over (1,,3)` yields `1` and `3` where `do e over (1,.nil,3)`
-    /// yields `1`, `The NIL object` and `3` -- an explicit `.nil` is an item
-    /// and an empty slot is not.
-    ///
-    /// **The array is what roots the items and the vector is what a pass
-    /// reads**, so a loop's whole item list costs one rooted handle and a pass
-    /// costs no handle resolution. The conversion happens here and not where
-    /// the header value was accepted, because this is the level whose rooting
-    /// covers the loop.
     fn over_snapshot(&mut self, value: ObjRef) -> Result<(ObjRef, Vec<ObjRef>), Failure> {
         // The one collection whose order is this crate's rather than the
         // oracle's answers from its own walk -- see
@@ -7991,44 +5105,6 @@ impl Interp {
     }
 
     /// A `StringTable`'s indexes, as the values a `DO OVER` binds in turn.
-    ///
-    /// **The order is this crate's and not the oracle's, and that is a
-    /// divergence a program can see.** The oracle iterates its `HashContents`
-    /// bucket-ascending (`classes/support/HashContents.cpp:489`), the bucket
-    /// being `key->getHashValue() % bucketSize`. Sorted key order is chosen
-    /// instead because it is deterministic and because every use inside the
-    /// interpreter's own bootstrap is order-insensitive: `CoreClasses.orx:63`
-    /// and `StreamClasses.orx:45` each put one distinct key into
-    /// `.environment` and one into the package per pass, so the state they
-    /// leave is the same under any permutation, and neither prints.
-    ///
-    /// **What closing it would take is not one answer, because the oracle's
-    /// order is only reproducible for some keys.** A string's
-    /// `getHashValue` is `31*h + byte` over its own content
-    /// (`classes/StringClass.hpp:328`) and a number's delegates to its string
-    /// value, so for a **string-keyed** table the order is fixed -- measured,
-    /// ten oracle runs of one eight-key `StringTable` give one output -- and
-    /// reproducing it needs `HashContents` modelled *and* this crate's
-    /// insertion sequence matching the oracle's for that table, which holds
-    /// for a package's public classes and not for `.environment`. Every other
-    /// key's `getHashValue` is `RexxObject::identityHash`, `((uintptr_t)this)
-    /// ^ UINTPTR_MAX` (`classes/ObjectClass.hpp:340`), so its bucket is an
-    /// address: measured, ten oracle runs of one eight-object
-    /// `IdentityTable` give **five** distinct orders, each a rotation of one
-    /// cyclic sequence as ASLR shifts every index by the same delta.
-    /// **For those the oracle does not match itself and there is nothing to
-    /// match.**
-    ///
-    /// **What that costs**: a program that iterates a table and prints its
-    /// indexes gets this crate's order rather than the oracle's. No corpus
-    /// program does, and `corpus/README.md`'s determinism rule is where the
-    /// prohibition on adding one lives -- an object-keyed collection's order
-    /// is not merely unmatched there but unmatchable.
-    ///
-    /// Each index is rooted as it is built, for the reason
-    /// [`LoopState::OverItems`] gives: they are fresh strings the collection
-    /// itself does not hold, so nothing else keeps them reachable across the
-    /// allocation of the next one.
     fn hash_collection_indexes(&mut self, table: ObjRef) -> Vec<ObjRef> {
         let Some(Body::Native(native)) = self.heap.get(table).map(|object| &object.body) else {
             return Vec::new();
@@ -8046,22 +5122,6 @@ impl Interp {
 
     /// One controlled-loop header value as the `Number` the loop runs on:
     /// numeric (41.1 if not) and rounded at the digits in force.
-    ///
-    /// **R12 reaches here, and this is the one numeric surface it reaches that
-    /// is not an operator.** `round_via_unary_plus` is a real unary `+` on the
-    /// oracle too, so `do i = 1 to .array` sends `+` to the object and answers
-    /// 97.1 -- measured, and measured in all three positions, which is why the
-    /// check is here rather than on the left-hand one. `FOR` and a bare `DO`'s
-    /// repeat count do **not** reach it: they go through `whole_nonneg`, which
-    /// reads the value's text, so both implementations answer 26.3 and 26.2
-    /// from that text alike. `NUMERIC DIGITS` does not reach it either, by a
-    /// different route: `exec_numeric` renders the value with `to_text` and
-    /// hands the bytes to `set_digits_str`, so it never asks for a number at
-    /// all.
-    ///
-    /// A test in front rather than a rewrite of the failing path, unlike every
-    /// other R12 site: a header value is evaluated once per loop entry, not
-    /// once per iteration, so there is no hot path here to keep clear of.
     fn header_number(&mut self, role: HeaderRole, value: ObjRef) -> Result<Number, Failure> {
         let entry_digits = self.activation().settings.digits();
         // **A tagged integer no wider than `DIGITS` is its own rounding**, so
@@ -8071,13 +5131,6 @@ impl Interp {
         // Neither of the two checks the general path makes can fail here --
         // the tag holds no object for `operator_operand_gap` to find, and an
         // integer is numeric -- so this answers directly.
-        //
-        // **The header is a hot path, which it does not look like.** Measured
-        // against the -O3 oracle: `do n = 1 to N ; do j = 1 to 1 ; end ; end`
-        // costs 1366 cycles an outer iteration here against its 596, and the
-        // inner header runs once per iteration of the loop above it -- an
-        // entry, not an iteration, is still per-iteration work when the loop
-        // is nested.
         if let Decoded::SmallInt(small) = value.decode()
             && within_digits(small, entry_digits)
         {
@@ -8126,11 +5179,6 @@ impl Interp {
 
     /// A `DO`/`LOOP` past its header: the construct itself, driven from the
     /// values whichever engine evaluated that header produced.
-    ///
-    /// **This is the whole of the loop that is not its header**, and it is one
-    /// function so that a promoted `DO`/`LOOP` reaches every iteration, every
-    /// trace echo and the `LEAVE`/`ITERATE` search through the same code the
-    /// tree-walker does.
     #[allow(
         clippy::too_many_arguments,
         reason = "the same argument `run_repeating`'s own allow makes: every parameter is state one DO/LOOP needs"
@@ -8187,10 +5235,6 @@ impl Interp {
                 // that requeues ahead of `do` / `say 'body'` / `end`: the
                 // oracle runs the requeued handler with `SIGL` naming the `DO`
                 // and prints its output ahead of `body`.
-                //
-                // Entered whether or not anything is queued, exactly as
-                // `InstructionKind::Select`'s own clause is: what decides is
-                // whether the boundary exists, never what the clause queued.
                 let do_line = self
                     .clause_line_at(code, index, instruction, source)
                     .unwrap_or_else(|| self.clause_state.line());
@@ -8217,16 +5261,6 @@ impl Interp {
                     // report: `if 1 = 1 then do / say 'x' / end` traces
                     // `end` on its own line even though the block never
                     // repeats.
-                    //
-                    // `Iterated` cannot arrive here and is folded in rather
-                    // than made an `unreachable!`: `is_loop` is `false` for a
-                    // `Simple` block, so a bare `ITERATE` is never matched
-                    // (it escapes to look further out) and a *named* one that
-                    // matches this block's own label is error 28.5 inside
-                    // `do_body_outcome` before it can return. Folding it in
-                    // means a future `LoopKind` that does reach it echoes
-                    // `END` once, which is what a fall-through does, rather
-                    // than aborting.
                     DoOutcome::FellThrough | DoOutcome::Iterated { .. } => {
                         // **`END` is a clause of its own, and its boundary is
                         // where a condition queued by the block's last body
@@ -8239,10 +5273,6 @@ impl Interp {
                         // `SAY` that follows the block; without this clause
                         // it ran after that `SAY` had already printed, on
                         // both engines.
-                        //
-                        // Only on the pass that reaches `END`: an escape
-                        // returns above, and the oracle's `END` is jumped
-                        // straight over by a `LEAVE`.
                         let end_instruction = &code.body.instructions[end_index];
                         let end_line = self
                             .clause_line_at(code, end_index, end_instruction, source)
@@ -8345,29 +5375,6 @@ impl Interp {
     /// own clause **boundary** runs at: one level in when that instruction's
     /// block is still open once the clause has finished, the clause's own
     /// indent when it is not.
-    ///
-    /// **The clause echoes at one indent and ends at another, and only the
-    /// boundary can see the difference.** In the oracle a block instruction
-    /// traces its clause, evaluates whatever expressions that clause carries,
-    /// and only then calls `newBlockInstruction`, whose
-    /// `settings.traceIndent++` is the block's own level --
-    /// `RexxInstructionBaseLoop::execute` evaluates its control expressions
-    /// in `setup` first, and `RexxInstructionSelectCase::execute` evaluates
-    /// its `CASE` scrutinee and traces the `>K>` for it first. So the counter
-    /// at the end of that one instruction reads one deeper than its own echo.
-    /// A loop's iteration test that fails then calls `terminate`, which pops
-    /// the block and takes the level back off again; a `SELECT`'s clause has
-    /// no such path, so `open` is what each caller knows and this cannot
-    /// work out for itself.
-    ///
-    /// What observes it is a `CALL ON` handler delivered at this boundary,
-    /// since `internalCallTrap` bases the handler's own activation on
-    /// whatever the counter reads then. Measured under `trace r` with a
-    /// handler `h:`, both directions of each header shape, because a fix
-    /// that moved the entered case alone would have broken the rest. The
-    /// oracle's own first handler line, with the line number each program
-    /// happened to put `h:` on:
-    ///
     /// ```text
     /// do zi = 1 to raiser()      raiser returns 1 -> 10 *-*     h:
     /// do zi = 1 to raiser()      raiser returns 0 -> 10 *-*   h:
@@ -8377,19 +5384,6 @@ impl Interp {
     /// do until raiser() > 0      test false       -> 13 *-*     h:
     /// select case raiser()       always open      -> 12 *-*     h:
     /// ```
-    ///
-    /// **A level is two columns, and it is derived here rather than passed
-    /// in**: measured, a `WHEN`'s own condition sits two columns in from its
-    /// `SELECT` and a loop body two in from its `DO`. Taking the deeper
-    /// indent as a second argument would put two same-typed indents side by
-    /// side at a call site, and handing them over the wrong way round is
-    /// exactly the two-column answer this function exists to stop.
-    ///
-    /// **Nothing but the boundary reads what this writes.** Whatever runs
-    /// next -- a loop body's first clause, the clause a loop resumes at, a
-    /// `SELECT`'s own first `WHEN` -- sets the field again through
-    /// `step_in_temps_frame` before anything traces, so this is not a value
-    /// that survives the clause it belongs to.
     fn settle_block_indent(&mut self, open: bool, clause_indent: usize) {
         self.clause_state.current_value_indent = if open {
             clause_indent + 2
@@ -8412,13 +5406,6 @@ impl Interp {
     /// bottom-of-iteration bookkeeping, which for an `UNTIL` loop includes
     /// testing `UNTIL` right there -- see the report for the full
     /// transcript).
-    ///
-    /// `do_index`/`do_instruction` are the `DO`/`LOOP` instruction's own
-    /// position and node, needed only for `WHILE`'s own attribution
-    /// (`end_index` is `END`'s own, for `UNTIL`'s) -- neither corresponds
-    /// to a flat position `static_indent` resolves on its own, so both
-    /// indents are computed here rather than asked of it (`record_failure_at`'s
-    /// own doc comment).
     #[allow(
         clippy::too_many_arguments,
         reason = "every parameter is load-bearing state one repeating DO/LOOP needs; splitting it into a struct is Task 13's to consider if it too needs this shape"
@@ -8460,18 +5447,6 @@ impl Interp {
         // exactly once (`step_in_temps_frame`'s own doc comment). `false`
         // on entry because the *first* pass's echo already happened there,
         // before `run_loop_with_header` ever called into this function.
-        //
-        // **`UNTIL` gets no echo here at all, only its own further down.**
-        // Measured (re-verifying this task's F4 fix rather than assuming
-        // the existing re-echo covered it): a multi-pass `DO UNTIL` shows
-        // exactly *one* `DO`/`LOOP` re-echo per completed pass, sitting
-        // between `END` and the `UNTIL` test itself, never a second one
-        // here too -- `UNTIL`'s own re-entry *is* the loop's only decision
-        // point for this shape (there is no separate "test `WHILE`, then
-        // maybe run the body again" event to echo for, unlike every other
-        // `LoopConditional`/`LoopState` shape), so echoing both here and
-        // at `UNTIL`'s own site would double it. `is_until_loop` decides
-        // which of the two echo sites is live for this call, never both.
         let is_until_loop = matches!(conditional, Some(cond) if cond.until);
         let mut first_pass = true;
         // Which clause the loop header's own evaluation belongs to on this
@@ -8504,11 +5479,6 @@ impl Interp {
             // sub()` reports `SIGL` 4 -- the `DO` clause's own line -- for
             // the first test, and delivers a `CALL ON` handler queued by
             // `sub()` right there rather than after the whole loop.
-            //
-            // On iterations after the first the re-test belongs to whichever
-            // clause transferred control back here -- `END` on a
-            // fall-through, the `ITERATE` itself on an `ITERATE`. See
-            // `HeaderClause`.
             let do_line = self
                 .clause_line_at(code, do_index, do_instruction, source)
                 .unwrap_or_else(|| self.clause_state.line());
@@ -8526,18 +5496,6 @@ impl Interp {
                 // a body that leaves it non-numeric fails the `BY` addition
                 // on the next re-test. Measured, three shapes, all `trace r`
                 // with `ii = 'abc'` in a `do ii = 1 to 3` body:
-                //
-                // * falling through to `END` -> `     4 *-*   end`, then
-                //   `Error 41 ... line 4`;
-                // * an `ITERATE` in the body -> `     5 *-*   iterate`, line 5;
-                // * that same `ITERATE` two blocks deeper -> still its own
-                //   line, and still at the *body's* indent rather than its
-                //   own lexical one, which is why `loop_indent` is passed
-                //   here rather than `LeaveOrigin::indent` being reused.
-                //
-                // The first pass is deliberately left alone: it is reached
-                // from the `DO` clause itself, which is exactly what the
-                // enclosing `step_in_temps_frame` already blames.
                 let outcome = 'header: {
                     let advanced = match it.loop_advance(code, &mut state, do_indent, loop_indent) {
                         Ok(advanced) => advanced,
@@ -8719,41 +5677,6 @@ impl Interp {
     /// What one repeating `Do`/`Loop`'s own body just produced, translated
     /// into what `run_repeating`/`run_loop_with_header`'s own `Simple` arm
     /// does next.
-    ///
-    /// `Ok(DoOutcome::FellThrough)`/`Ok(DoOutcome::Iterated(_))`: proceed to
-    /// whatever bottom-of-iteration test/advance comes next. The two used to
-    /// be one answer, `Ok(None)`, on the argument that they are the identical
-    /// next *step* -- true of the control flow and false of the clause
-    /// attribution, which is fix round 4's NEW-1: the oracle re-enters a loop
-    /// from whichever instruction transferred control back to it, so a pass
-    /// that ended in `ITERATE` gives the following re-test the `ITERATE`'s
-    /// own clause where a pass that fell through gives it `END`'s.
-    /// `Ok(DoOutcome::Escaped(f))`: stop, and `f` is this construct's own
-    /// final answer -- either `Goto(resume)` (a consumed `LEAVE`) or an
-    /// unconsumed `Flow` to propagate outward unchanged (`Exit`, a `Goto`
-    /// that escaped `run_bounded`'s own range, or a `LEAVE`/`ITERATE` naming
-    /// something else). `Err`: a named `ITERATE` matched `label`, but
-    /// `is_loop` is `false` -- 28.5, `ITERATE` never accepts a labelled
-    /// block, only a loop (measured).
-    ///
-    /// `is_loop` is `false` only for `LoopKind::Simple`
-    /// (`run_loop_with_header`'s own `Simple` arm passes it); every
-    /// `LoopState` variant `run_repeating` drives is a real, repetitive loop
-    /// and passes `true`.
-    ///
-    /// **Whether this construct "owns a search frame" (`LeaveOrigin`'s own
-    /// doc comment has the rule and the oracle transcripts) is `is_loop ||
-    /// label.is_some()`, not `is_loop` alone.** A labelled `Simple` block
-    /// does not repeat, but it is still leavable by name and still resets
-    /// the search's own residual indent when a `LEAVE`/`ITERATE` naming
-    /// something else is forwarded past it -- only an *unlabelled* `Simple`
-    /// block is fully transparent, touching nothing as a `LEAVE`/`ITERATE`
-    /// passes through.
-    ///
-    /// `do_index` is this `Do`/`Loop` instruction's own position, needed
-    /// only to compute that reset (`pop_search_frame`); it is *not* used
-    /// for clause attribution here, since nothing in this function raises
-    /// against this instruction's own clause.
     fn do_body_outcome(
         &mut self,
         code: &Code<'_>,
@@ -8921,15 +5844,6 @@ impl Interp {
         // 1 to 1 ; end ; end`: -5.871% retired instructions, with
         // `__memmove_avx_unaligned_erms` falling from 8.41% of the program's
         // cycles to 2.52%.
-        //
-        // **The struct literal is what does it, and writing the fields one at
-        // a time through the box instead is worse** -- measured, the same
-        // program at -5.271% and `rexxcps` at -0.365% against -0.424%. The
-        // literal has one destination and the compiler builds it there; a run
-        // of field stores does not coalesce back into that.
-        //
-        // The spare goes back to the pool on the paths that never drive it, so
-        // a loop its own header ends costs no allocation either.
         let mut boxed = match self.flat_spares.pop() {
             Some(spare) => spare,
             None => Box::new(FlatLoop::vacant()),
@@ -9093,11 +6007,6 @@ impl Interp {
 
     /// **SPIKE.** An `UNTIL` loop's own bottom-of-pass test: `Some(flow)` is
     /// the loop finishing, `None` is carrying on to the header.
-    ///
-    /// The test belongs to whichever clause transferred control back to the
-    /// loop, which is the same clause the *next* header test belongs to --
-    /// `HeaderClause`'s own doc comment has the oracle transcript that tells
-    /// the two candidates apart.
     fn flat_loop_until(
         &mut self,
         code: &Code<'_>,
@@ -9139,11 +6048,6 @@ impl Interp {
 
     /// **SPIKE.** Who a failing header re-test is blamed on: the clause that
     /// transferred control back to the loop, at the body's indent.
-    ///
-    /// **Its own function, and `#[cold]` rather than inline.** It sits inside
-    /// the closure the clause unit runs, and a closure that carries it inline
-    /// costs the *succeeding* path: measured on `bench-programs/emptyloop.rex`,
-    /// whose header never fails, about 70 instructions per pass.
     #[cold]
     #[inline(never)]
     fn blame_header_failure(
@@ -9182,22 +6086,6 @@ impl Interp {
 
     /// **SPIKE.** The header re-test, in its own clause: `Some(flow)` is the
     /// loop finishing, `None` is one more pass.
-    ///
-    /// **A `WHILE` takes `flat_loop_header_while` instead, and the split is a
-    /// measurement rather than a shape.** The two differ by one test, so one
-    /// function with a branch is the obvious form -- and the branch is inside
-    /// the closure the clause unit runs, where carrying it costs the loops
-    /// that have no `WHILE` about 70 instructions per pass on
-    /// `bench-programs/emptyloop.rex`. `flat_loop_step` asks which of the two
-    /// this loop wants once per pass, outside that closure.
-    ///
-    /// **`inline(always)`, and it is a measurement rather than a habit.** This
-    /// is one call per pass of every flattened loop, and the inliner's own
-    /// judgement changed the moment `WHILE` was added beside it: measured on
-    /// `bench-programs/emptyloop.rex`, left alone it is emitted as a function
-    /// and the flat path goes from 3.08% ahead of the nested one to 3.37%
-    /// behind, with `flat_loop_header` appearing in the profile at 8.44% where
-    /// it had not appeared at all.
     #[inline(always)]
     fn flat_loop_header(
         &mut self,
@@ -9233,9 +6121,6 @@ impl Interp {
     /// **SPIKE.** [`Interp::flat_loop_header`] for a loop that carries a
     /// `WHILE`: the same advance, then the condition, both inside the one
     /// clause the oracle re-enters to make this decision.
-    ///
-    /// `inline(never)` so that the branch above it stays a call this loop's
-    /// shape decides once, rather than code the loops without a `WHILE` carry.
     #[inline(never)]
     fn flat_loop_header_while(
         &mut self,
@@ -9294,33 +6179,6 @@ impl Interp {
     /// measured, `do i = 5 to 3 / say never / end / say i` prints `5`: the
     /// control variable is bound to its own value even for a loop that ends
     /// up running zero iterations.
-    ///
-    /// **Also where a `Controlled` loop's `BY` increment happens**, moved
-    /// here from a separate bottom-of-pass `loop_step` at Task 9, because
-    /// the oracle traces the value on *both* sides of that addition and a
-    /// split that had already added it could not name the pre-increment
-    /// value at all (the KNOWN GAP this closes, `DoBlock::checkControl`,
-    /// `DoBlock.cpp:182`-`205`, read directly). Nothing else moved with it:
-    /// no instruction runs between the old site and this one -- the only
-    /// events in between are `END`'s or an `ITERATE`'s own transfer -- so
-    /// the settings the addition runs under are the same ones it ran under
-    /// before.
-    ///
-    /// The two indents are the **same clause's**, and which one a line takes
-    /// is measured rather than derived. `do_indent` is the `DO`/`LOOP`
-    /// clause's own printed indent and `loop_indent` is two further in:
-    ///
-    /// * A `Controlled` loop's **first** control assignment is the oracle's
-    ///   own loop *setup*, before the block is pushed, so it prints at
-    ///   `do_indent` -- measured, `trace i` / `do ii = 1 to 2` shows
-    ///   `>=>   II <= "1"` at the same indent as `>K>   "TO" => "2"`.
-    /// * Everything on a re-tested pass prints at `loop_indent`: `>V>`,
-    ///   `>>>`, `>>>`, `>=>`, all four two spaces further in than the
-    ///   `DO`'s own echo, in the same column as the body's clauses.
-    /// * A `DO OVER`'s assignment prints at `loop_indent` even though it
-    ///   only ever happens once (`checkOver` runs with the block already
-    ///   pushed, unlike a controlled loop's setup) -- measured, `do qq over
-    ///   'ab'` shows `>=>     QQ <= "ab"` two in from its own `>K>`.
     fn loop_advance(
         &mut self,
         code: &Code<'_>,
@@ -9399,66 +6257,12 @@ impl Interp {
                 // `traceResult` the sum, then `control->assign` (`>=>`).
                 // The `!first` is exactly `stepped` here. `trace i` /
                 // `do ii = 1 to 2`'s own second pass:
-                //
                 // ```text
                 //   >V>     II => "1"
                 //   >>>     "1"
                 //   >>>     "2"
                 //   >=>     II <= "2"
                 // ```
-                //
-                // and the same program under `trace r` shows only the two
-                // `>>>` lines, which is the gating: `>V>`/`>=>` are
-                // `intermediates`, both `>>>` are `results`.
-                //
-                // **The oracle binary on this machine emits neither `>>>`
-                // line, and that is its age rather than a disagreement.**
-                // Its `DoBlock::checkControl` has no `traceResult` call at
-                // all; the two above were added between the version it was
-                // built from and the `interpreter/` this crate reimplements.
-                // Measured 2026-08-20 against both oracle builds. So the
-                // transcript here is read off this repository's C++, and a
-                // probe of this arm against the oracle will differ by
-                // exactly these two lines.
-                //
-                // **The pair is emitted before either termination test**, on
-                // the failing pass as well -- measured, `do ii = 1 to 3`
-                // traces `>>>     "3"` then `>>>     "4"` on the pass that
-                // ends the loop, so these are not "the values of an
-                // iteration that ran".
-                //
-                // **`control->evaluate` is a genuine READ of the variable,
-                // not a look at the loop's own saved value, and the two part
-                // company the moment a body writes to the control variable**
-                // (review round 1, F2). Measured: `do ii = 1 to 3 ; ii = 10 ;
-                // end ; say ii` prints `11` on the oracle -- it reads `10`
-                // back, adds `1`, and `11 > 3` ends the loop after one pass.
-                // Reusing `current` here instead ran three passes and printed
-                // `4`, and the `>V>` line above then positively stated a
-                // value the oracle contradicts. So the value below is read
-                // out of the variable pool, and `current` is only ever the
-                // *header's* value now -- on the first pass, and never
-                // again.
-                //
-                // Two adjacent shapes fall out of that read rather than
-                // needing their own handling, and both are measured: a body
-                // that `DROP`s the control variable reads the derived name
-                // (`>>>   "II"`, then 41.1 `Nonnumeric value ("II")`), and a
-                // body that assigns a non-numeric reads it and fails the same
-                // way (41.1, `("abc")`). The reader's own miss answer and
-                // `arith_operand`'s own raiser produce both without a special
-                // case here. **Which reader, and why it is not the obvious
-                // one, is the paragraph below** -- this one said
-                // `read_by_name` until round 2 changed it and left the
-                // sentence behind, which is the same defect twice on one
-                // arm.
-                //
-                // **Bound before the decision, not after** -- measured
-                // against the oracle, `do i = 5 to 3 / say never / end /
-                // say i` prints `5`: the control variable takes its own
-                // header value even for a loop that goes on to run zero
-                // iterations, for *either* reason a candidate iteration can
-                // fail below (an exhausted `FOR` budget or the `TO` bound).
                 let digits = self.activation().settings.digits();
                 // **The ordinary counted pass, answered without reaching any
                 // of the code below.** Every branch of the arm from here on
@@ -9470,11 +6274,6 @@ impl Interp {
                 // slot, compare -- and, because both handles are tagged
                 // integers rather than heap objects, no temporaries frame
                 // for the collector to walk.
-                //
-                // The gate is deliberately a conjunction of the cheapest
-                // available tests and never re-derives anything: `cached_
-                // digits == digits` is what makes `to_int`/`by_int` usable,
-                // exactly as the invalidation below defines them.
                 if *stepped
                     && *shape == NameShape::Simple
                     && *cached_digits == digits
@@ -9540,18 +6339,6 @@ impl Interp {
                 // frame per pass, the `NOVALUE` check, two temps, the trace
                 // renderings and `bind_control`'s dispatch on shape -- none of
                 // which a simple untraced control variable needs.
-                //
-                // **The variable is read back here exactly as the integer arm
-                // reads it**, so a body that assigns to the control variable
-                // is still honoured: `do ii = 1 to 3; ii = 10; end; say ii`
-                // prints `11` because this read answers `10`. Reusing
-                // `current` instead would print `4`, which is the defect the
-                // general path's own comment records.
-                //
-                // Non-numeric and unset both fall through rather than being
-                // handled: `self.variable` answers `None` for an unset slot,
-                // and `controlled_step_wide` is the same raiser the general
-                // path uses, so 41.1's report is unchanged.
                 if *stepped
                     && *shape == NameShape::Simple
                     && *cached_digits == digits
@@ -9642,31 +6429,6 @@ impl Interp {
                     // handler and exits 0, where `read_by_name` here gave a
                     // spurious 41.1 at rc 215. `read_by_name` reports
                     // nothing to its caller and cannot express that.
-                    //
-                    // **And `novalue_check` runs before any tracing**, which
-                    // is measured rather than tidy: under `trace i` the
-                    // oracle's failing re-test emits the `DO` re-echo and
-                    // then nothing at all -- no `>V>`, no `>>>` -- because
-                    // the raise happens inside the evaluation, before
-                    // `traceResult` is reached.
-                    //
-                    // With no `NOVALUE` trap armed, `novalue_check` is a
-                    // no-op and the derived name flows on to fail 41.1 on
-                    // `("II")`, which is the untrapped shape and still
-                    // matches.
-                    // **The re-test's own read goes through the same three
-                    // shapes `bind_control`'s write does**: a compound's
-                    // tail is resolved fresh here too, against whichever
-                    // *current* value the tail variable holds on *this*
-                    // pass, not the tail the loop's header resolved once at
-                    // setup.
-                    // Measured against the oracle: `a.=0; i=1; Do a.i=1 To
-                    // 3; If i>7 Then Leave; i=i+1; End; say i` answers `8`,
-                    // not `4` -- the body's own `i=i+1` moves which tail of
-                    // `a.` this read (and the write after it) resolves to on
-                    // the very next pass, so the loop's own `TO 3` bound
-                    // keeps comparing against a fresh, still-default `0`
-                    // tail instead of the one `a.i` incremented.
                     let (previous, novalue, resolved) = match shape {
                         NameShape::Simple => {
                             // `read_at` with the slot `control_slot` took when
@@ -9728,18 +6490,6 @@ impl Interp {
                     // an operand too wide for `DIGITS` is rounded before the
                     // addition, so the exact `i64` sum would be the wrong
                     // answer.
-                    //
-                    // **The value in force has to be an integer too, and its
-                    // tag does not answer that.** `ObjRef::small_int` is
-                    // admitted on what a value *renders* as (D15), so a
-                    // `Number` that reached a whole rendering by rounding --
-                    // `100000002.0` at `DIGITS 9` -- comes back tagged. The
-                    // interpreter's `NumberString` stays one through its own
-                    // `+`, so a loop that started fractional keeps comparing
-                    // its bound fuzzily forever; carrying `current`'s
-                    // representation across the step is what reproduces that.
-                    // Measured at `DIGITS 9 FUZZ 8`,
-                    // `do zi = 100000002.0 to 100000001` does not terminate.
                     let stepped = match (&*current, previous.decode()) {
                         (ControlValue::Small(_), Decoded::SmallInt(value))
                             if within_digits(value, digits) =>
@@ -9807,30 +6557,6 @@ impl Interp {
                     // `numeric_less` reaches it through a subtraction, which
                     // allocates twice per pass for what an `i64` comparison
                     // answers outright.
-                    //
-                    // **A non-zero `FUZZ` disqualifies the exact path**, which
-                    // is why `fuzz == 0` guards the integer arm. The
-                    // interpreter reaches the bound test as an ordinary Rexx
-                    // comparison -- `DoBlock::checkControl` calls
-                    // `result->callOperatorMethod(compare, to)` -- and
-                    // `RexxInteger::comp`
-                    // (`interpreter/classes/IntegerClass.cpp`) subtracts
-                    // directly only when both sides are integer objects that
-                    // fit `NUMERIC DIGITS` *and* `number_fuzz() == 0`.
-                    // Anything else falls to the fuzzed `NumberString::comp`.
-                    // Measured at `DIGITS 9 FUZZ 8`, `do zi = 100000002 to
-                    // 100000001` keeps running, and so does the same loop with
-                    // the bound spelled `100000002.0`; at `FUZZ 0` both run no
-                    // passes at all.
-                    //
-                    // **Matched on the three `Option`s together rather than
-                    // threaded through a `?` chain**, which is codegen rather
-                    // than style: written as an immediately-invoked closure
-                    // returning `Option<(i64, i64, i64)>`, LLVM left the
-                    // closure out of line and returned the tuple through
-                    // memory. Measured with callgrind on
-                    // `do i = 1 to 300000`, that line cost 53 instructions a
-                    // pass, 16 of them in the closure's own body.
                     let within = match (current.small(digits), to_int, by_int) {
                         (Some(current), Some(to), Some(by)) if fuzz == 0 => {
                             if by < 0 {
@@ -9855,13 +6581,6 @@ impl Interp {
 
     /// One controlled pass's step where the control variable is not an
     /// integer the tag holds, or the sum leaves what `DIGITS` admits.
-    ///
-    /// **Out of line so that its `Number` locals do not size
-    /// [`Interp::loop_advance`]'s own frame**, which every pass pays for
-    /// whether it comes here or not; the same reason `derived_name` is not
-    /// an arm of `read_at`. Measured: with the three wide paths written
-    /// inline, `loop_advance` allocated a 696-byte frame on every pass; with
-    /// them out of line it allocates 248.
     #[inline(never)]
     fn controlled_step_wide(
         &mut self,
@@ -9899,13 +6618,6 @@ impl Interp {
     /// A controlled loop's `TO` test where either side is wider than an
     /// `i64` comparison answers. Out of line for the reason
     /// [`Interp::controlled_step_wide`] gives.
-    ///
-    /// `signum`, not `numeric_less` against a zero built for the occasion:
-    /// `numeric_order`'s first act is to compare the two operands' signs and
-    /// answer from them alone whenever they differ, and one of them being
-    /// zero is exactly that case, so neither `digits` nor `fuzz` can reach
-    /// the answer. `a_negative_by_is_what_comparing_it_against_zero_says`
-    /// holds the two against each other rather than this paragraph doing it.
     #[inline(never)]
     fn controlled_within_wide(
         current: &ControlValue,
@@ -9925,39 +6637,6 @@ impl Interp {
 
     /// Writes `value` into `control`'s own variable, through whichever of
     /// the three shapes (`shape_of`) its own spelling is.
-    ///
-    /// **Traces its own `>=>` (and, for a compound, the `>C>` ahead of it),
-    /// at `indent`** (Task 9). Every write to a control variable is an
-    /// assignment to the oracle and traces like one: `control->assign
-    /// (context, result)` in both `DoBlock::checkOver` (`DoBlock.cpp:165`)
-    /// and `DoBlock::checkControl` (`:197`), and again in a controlled
-    /// loop's own setup. `indent` is the caller's, not this function's to
-    /// derive, because the same write is traced at two different indents
-    /// depending on which of those three events it is -- `loop_advance`'s
-    /// own arms have the measured rule.
-    ///
-    /// The simple-variable case stays a direct slot write, with its own
-    /// `intermediates` gate kept below it (see that arm's own comment for
-    /// the measurement behind the gate). A stem or compound control instead
-    /// goes through `assign_expr_target`'s own `Stem`/`Compound` arms --
-    /// the same tail resolution, against `j`'s *current* value, that `say
-    /// cv.j` already uses -- built here from a synthetic `Expr` around
-    /// `control`'s own `SymbolId` rather than duplicated, since that is the
-    /// oracle-verified logic an ordinary `cv.j = expr` assignment already
-    /// runs. Measured, `j=7; do cv.j = 1 to 3; say cv.j; end`: the oracle
-    /// prints `1`/`2`/`3` and this crate, before this fix, printed `CV.7`
-    /// three times, because `Controlled::control` is a bare `SymbolId` and
-    /// the old code ran every shape through the simple-variable slot write
-    /// unconditionally, so a compound's tail was never resolved at all.
-    ///
-    /// `at` is [`control_slot`]'s answer for this loop, taken once when it was
-    /// entered: the same resolution the `Simple` arm below makes for itself
-    /// when it is `None`, and read by that arm alone. The other two arms hand
-    /// [`Interp::assign_expr_target`] a literal `None` and let it find the slot
-    /// on the entry `Code::compound` holds -- for the stem because forwarding
-    /// this one costs every controlled loop 2 instructions a pass
-    /// ([`control_slot`]'s own doc has the measurement), and for the compound
-    /// because the slot it writes is the stem's rather than this symbol's.
     fn bind_control(
         &mut self,
         code: &Code<'_>,
@@ -9997,25 +6676,6 @@ impl Interp {
                 // the check below is not a second decision about whether to
                 // *print*: it decides whether to *build* the two `Vec`s, and
                 // it exists because this function runs once per loop pass.
-                //
-                // **Kept on a measurement, not on a pattern.** A
-                // 2,000,000-pass `do ii = 1 to 2000000` under `TRACE OFF`,
-                // release build, three runs each: 3.13/3.13/3.15 s with this
-                // check and 3.22/3.22/3.23 s without it -- about 40 ns per
-                // pass, which is the two allocations. Small, real, and a
-                // fixed number that stays true however the rest of the file
-                // changes.
-                //
-                // Two earlier versions of this note argued from sibling
-                // sites instead and were false both times (review round 1
-                // F9, re-reviews NEW-5 and NEW-F1): first that other tracing
-                // sites share the shape, then that this is the only one --
-                // the second sentence quoted a search command whose own
-                // search term it contained, so committing the evidence
-                // changed the answer. Neither claim was load-bearing. Do not
-                // restore either; if the question ever matters, the compiler
-                // and the profiler answer it, and this comment should not
-                // try to.
                 if self.tracing_intermediates() {
                     let name = code.symbols.name(control).as_bytes().to_vec();
                     let rendered = self.string_value_text(value);
@@ -10055,24 +6715,6 @@ impl Interp {
     /// respectively; the caller supplies which raiser applies, since that
     /// is the only way the two differ), and answers it as a `u64`, or
     /// `None` if it fails either check.
-    ///
-    /// **Corrected after the branch review's F3 (Important, a silently
-    /// wrong answer).** This used to convert under `rexx_num::
-    /// ARGUMENT_DIGITS` (18, `Numerics::ARGUMENT_DIGITS`'s own width), on
-    /// the reasoning "a loop bound is no more digits-limited than `EXIT`'s
-    /// own result is" -- wrong by measurement, not merely stale: `EXIT`
-    /// genuinely does convert under `ARGUMENT_DIGITS` (`lib.rs`'s
-    /// `exit_code_for`, unaffected by this fix, `exit 12345` under `digits
-    /// 3` matches the oracle at rc 57 on both sides), but a loop bound does
-    /// not. The oracle's own `ForLoop::setup` (`DoBlockComponents.cpp`
-    /// ~80-100, verified by containment) rounds under the *current*
-    /// `NUMERIC DIGITS` (`requestNumber(count, number_digits())`) before
-    /// asking whether the result is whole -- the same rule `TRACE`'s own
-    /// skip count uses (`Number::whole_value`'s own doc comment states the
-    /// contrast between the two rules directly), not `EXIT`'s. Measured:
-    /// `numeric digits 3; do 12345; end` is error 26.2, rc 230 on the
-    /// oracle; this crate ran clean, rc 0, before this fix. `do i = 1 to
-    /// 99999 for 12345` under `digits 3` is 26.3 on the oracle, same gap.
     pub(crate) fn whole_nonneg(&mut self, value: ObjRef) -> Option<u64> {
         let digits = usize::try_from(self.activation().settings.digits()).ok()?;
         // **A tagged integer already is the answer**, when it is small enough
@@ -10094,19 +6736,6 @@ impl Interp {
 
     /// An `IF`'s own condition, evaluated as the whole of the `IF` clause's
     /// work.
-    ///
-    /// **The tree-walker's entry, and the compiled stream's only for a
-    /// condition `native_shape` declined**: `step`'s `If` arm calls it inside
-    /// its own `in_clause`, and `Op::EvalExpr` calls it for the compiled
-    /// form's `Clause` region. A condition that compiled does not come through
-    /// here at all -- its ops leave the value in a register and
-    /// `crate::ir::Op::Condition` enters [`Interp::condition_value`] with it,
-    /// which is the half the two share. The indent it traces at is
-    /// read from `current_value_indent` rather than recomputed, for the same
-    /// reason `Assignment`'s own arm reads it: `in_stepped_clause` has already
-    /// set it to this clause's own printed indent, and recomputing
-    /// `static_indent(index)` would drop both the activation base and any
-    /// escape elevation in force.
     fn eval_if_condition(&mut self, code: &Code<'_>, condition: &Expr) -> Result<bool, Failure> {
         let indent = self.clause_state.current_value_indent;
         self.eval_condition(
@@ -10119,33 +6748,6 @@ impl Interp {
 
     /// The expression an op's address names: expression `slot` of
     /// `instruction`, then `path`'s steps down from that slot's root.
-    ///
-    /// **The address is a slot and a route, not a slot alone**, which is what
-    /// lets an op name a node *inside* an expression rather than only the
-    /// whole of one. [`NodePath::ROOT`] is the whole of it, so a call that is
-    /// the slot's own expression resolves with no descent at all.
-    ///
-    /// **The slot arms are the slots `compile` enters `push_native` for**, and
-    /// that is the whole rule. An addressed op exists only where the whole
-    /// slot compiled natively, so a slot `compile` never offers to
-    /// `push_native` -- a `SELECT CASE`'s expression -- holds no node any op
-    /// names and must never reach here.
-    ///
-    /// **These are not a subset of [`Interp::eval_chunk_expr`]'s arms, and
-    /// containment is the wrong invariant to hold them to**, because the two
-    /// functions answer different questions: this one resolves a call inside a
-    /// slot that compiled, and that one evaluates a slot that declined. A slot
-    /// is in both exactly when it is offered to `push_native` *and* its
-    /// declining fallback is [`crate::ir::Op::EvalExpr`], and slots part
-    /// company in both directions: a plain `WHEN`'s condition is here and not
-    /// there, because a declining one stays on [`crate::ir::Op::WhenTest`]
-    /// doing the whole job, and a `SELECT CASE`'s expression is there and not
-    /// here, because it is never offered to `push_native` at all.
-    ///
-    /// `None` for a slot this does not name and for a step that lands on a
-    /// node with no such child. Both are `Loud::call_op_off_its_node` at the
-    /// caller, which is this crate's standing answer for a stream state that
-    /// cannot arise rather than a panic.
     pub(crate) fn chunk_node_at(
         instruction: &Instruction,
         slot: u16,
@@ -10219,25 +6821,6 @@ impl Interp {
 
     /// Expression `slot` of `instruction`, evaluated as the compiled stream's
     /// [`crate::ir::Op::EvalExpr`] asks.
-    ///
-    /// `instruction` is the clause of the region the op sits in, handed over by
-    /// the driver rather than looked up from the op's own index: the two are the
-    /// same instruction by construction and `compile` asserts it.
-    ///
-    /// The answer is the expression's own Rexx value. An `If` has one
-    /// expression, slot `0`, and its value is a logical one: `eval_condition`
-    /// has already validated it as exactly `0` or `1`, so it is stored as the
-    /// small integer of that name and `Op::JumpUnless` reads it back without
-    /// repeating the validation. A `SELECT CASE` has one too, slot `0`, and
-    /// its value is stored as it came: nothing branches on it, and every
-    /// `WHEN CASE` of that `SELECT` compares its own values against this one's
-    /// text.
-    ///
-    /// **Loud rather than a panic for every shape that is not one this
-    /// stream emits**, which is this crate's standing rule for a state the
-    /// type system admits and the compiler does not produce: a promotion that
-    /// emits an `EvalExpr` for a third instruction adds the arm here that
-    /// gives it meaning.
     pub(crate) fn eval_chunk_expr(
         &mut self,
         code: &Code<'_>,
@@ -10327,23 +6910,6 @@ impl Interp {
     }
 
     /// Evaluates `condition` and answers whether it holds, for `IF`/`WHEN`.
-    ///
-    /// **A comma list checks itself, and it does so before this function has
-    /// the value.** `ExprKind::Logical` is evaluated through `eval`'s own
-    /// dispatch to `eval_logical_list`, which checks that each element it
-    /// evaluates is exactly `0`/`1`, raises 34.6 on the first that is not,
-    /// stops at the first that is `0`, and otherwise answers `b"0"` or `b"1"`
-    /// and nothing else. So the `checked` this hands
-    /// [`Interp::condition_value`] spares a check that could not have failed,
-    /// rather than one that would have raised the wrong number. A single,
-    /// non-list expression never passes through `eval_logical_list` at all
-    /// (there is no list to iterate), so nothing has checked it yet, and
-    /// `raise` is the keyword-specific raiser for that case.
-    ///
-    /// **What the two numbers distinguish is where the raise happened, and
-    /// that is measured**: `if 'x', 1 then` is 34.6 on the oracle, from inside
-    /// the list and whichever element failed, while `if 'x' then` is 34.1,
-    /// from the keyword.
     fn eval_condition(
         &mut self,
         code: &Code<'_>,
@@ -10358,26 +6924,6 @@ impl Interp {
 
     /// Everything an evaluated condition value still owes: its `>>>` or `>K>`
     /// line, and the answer to whether it holds.
-    ///
-    /// **Split from the evaluation so that the tail is one implementation**,
-    /// entered by any caller that has a condition value in hand however it
-    /// came by it.
-    ///
-    /// `checked` is whether whatever produced `value` has already validated it
-    /// as exactly `0`/`1`, in which case the answer is read back rather than
-    /// checked again. `raise` is the keyword-specific raiser for the unchecked
-    /// case, chosen by whichever caller had the condition in hand.
-    ///
-    /// **The flag decides an answer for the compiled caller and not for the
-    /// tree-walker.** `crate::ir::Op::Condition` hands over a value it read out
-    /// of a register with nothing having validated it, so it passes `false`;
-    /// measured, a driver that passed `true` there answers `if 'x' then` false
-    /// instead of raising 34.1. [`Interp::eval_condition`] passes `true` only
-    /// for a comma list, and `eval_logical_list` answers `b"0"` or `b"1"` and
-    /// nothing else, so the check it skips is one that could not have failed.
-    /// Measured: forcing that `true` to `false` leaves the whole workspace
-    /// green, which is what says the tree-walker's half of this flag is a
-    /// spared check rather than a different answer.
     pub(crate) fn condition_value(
         &mut self,
         value: ObjRef,
@@ -10457,10 +7003,6 @@ impl Interp {
 
     /// Whether a condition's rendered text holds, and the failure when it is
     /// neither `0` nor `1`.
-    ///
-    /// A free function rather than a method because both arms of
-    /// [`Interp::condition_value`] call it while a rendering borrows `self` --
-    /// which is the whole point of the arm that does not copy.
     fn condition_holds(
         checked: bool,
         text: &[u8],
@@ -10478,32 +7020,6 @@ impl Interp {
     /// `case_text`, matching on the first that does (an OR of `==`, the
     /// opposite of a plain `WHEN`'s comma list, which is an AND checked for
     /// `0`/`1` -- `ast.rs`'s own doc comment on `WhenCase`).
-    ///
-    /// **Reasoned rather than routed through `apply_binary`'s own
-    /// `Operator::StrictEqual`, and this is why.** The design's own
-    /// "Expression evaluation" section states the strict family's rule in
-    /// full: "there is no padding and the shorter string is less" -- for an
-    /// *ordering* comparison. Equality has no "less" to fall back on, so
-    /// under that same rule two strict operands are equal if and only if
-    /// they are the same length and every byte matches, which is exactly
-    /// `==` on the two `Vec<u8>`s below and needs no numeric awareness or
-    /// `rexx-num` call to compute. Measured, matching D15's own example:
-    /// `select case '007'` does not match `when 7`, because `"007"` and
-    /// `"7"` are not byte-identical. Calling `apply_binary` would answer the
-    /// same and is reachable from here, but only one side of this comparison
-    /// is a value: it would mean allocating one to hold `case_text` so that
-    /// `compare_values` could render it straight back to the bytes already
-    /// in hand.
-    /// `indent` traces two `>>>` lines per value tested, up to and including
-    /// whichever one matches (`WhenCaseInstruction.cpp:154`/`158`:
-    /// `traceResult(compareValue)` then `traceResult(result)`, "result"
-    /// being the comparison's own `0`/`1` outcome, not a second copy of the
-    /// value) -- measured, `select case 1 + 1 / when 2 then ...`:
-    /// `>>>   "2"` (the one `values` entry evaluated) then `>>>   "1"`
-    /// (matched). Stops at the first match, mirroring the early `return
-    /// Ok(true)` below -- an oracle transcript with more than one `values`
-    /// entry and no match on the first would need its own probe to confirm
-    /// every untested entry gets the same pair, which this task did not run.
     fn test_case_when(
         &mut self,
         code: &Code<'_>,
@@ -10527,92 +7043,10 @@ impl Interp {
 
     /// Parses `text` as an `INTERPRET` fragment and runs it **inside the
     /// current activation**.
-    ///
-    /// This is the case that stresses the lifetime, and the three things it
-    /// proves are:
-    ///
-    /// * The fragment's `Rc` is a **local** that outlives the nested loop, the
-    ///   same shape `run_activation` uses, one level down. The enclosing
-    ///   loop's own local `Rc<Program>` is untouched and still anchors the
-    ///   instruction that is mid-execution.
-    /// * The nested loop's program counter is a **local `usize`**, not the
-    ///   activation's, because the activation's is sitting on the `INTERPRET`
-    ///   instruction and has to still be there afterwards. A `LEAVE`/
-    ///   `ITERATE` naming an outer loop could not target anything inside a
-    ///   fragment for the measured reason that a fragment can never have a
-    ///   label at all: one inside `INTERPRET` text is error 47.1 (Task 1), so
-    ///   `body.labels` is always empty. `IF`/`SELECT` need no label and can
-    ///   still appear and jump *inside* a fragment, which is why this reuses
-    ///   `run_bounded` (Task 10) rather than the hand-rolled loop this
-    ///   function used to have: every jump such a construct computes stays
-    ///   within `[0, code.body.instructions.len())` by construction
-    ///   (`resolve_targets` clamps everything else to `None`, and `None`
-    ///   defaults to the body's own length), so `run_bounded` always "owns"
-    ///   it and never mistakes it for an escape.
-    /// * No frame is pushed. The fragment's assignments land in the enclosing
-    ///   frame's slots, which is what `fragment_plan` resolves them against,
-    ///   and it is why `RootSet::grow_slots`'s top-frame assertion holds here.
-    ///
-    /// That bullet covers only the *inward* direction -- a label inside the
-    /// fragment cannot be targeted, because there are none.
-    ///
-    /// # The outward direction, measured
-    ///
-    /// **A `LEAVE`/`ITERATE` search never crosses this boundary.** The
-    /// fragment's own body is where the search ends: one that reaches the
-    /// end of `run_bounded` below is the exhausted search, and raises
-    /// 28.1/28.2/28.3/28.4 here, exactly as `run_activation` does when the
-    /// same `Flow` reaches the top of the *program*. Measured on the oracle,
-    /// every one of the four families and both block shapes -- the report
-    /// has the full transcripts, and this is the summary:
-    ///
-    /// | fragment text | enclosing construct | oracle |
-    /// |---|---|---|
-    /// | `leave outer` | `do label outer while 1` | 28.3, rc 228 |
-    /// | `leave idx` | `do idx = 1 to 3` | 28.3, rc 228 |
-    /// | `leave` | `do kk = 1 to 3` | 28.1, rc 228 |
-    /// | `iterate` | `do kk = 1 to 3` | 28.2, rc 228 |
-    /// | `iterate outer` | `do label outer idx = 1 to 3` | 28.4, rc 228 |
-    /// | `leave choose` | `select label choose` | 28.3, rc 228 |
-    ///
-    /// So an enclosing loop is invisible from inside the text, including to
-    /// a **bare** `LEAVE` -- which is the case worth pointing at, because
-    /// "the fragment runs inside the enclosing activation" would predict the
-    /// opposite, and until this was measured that is what this function did
-    /// (it forwarded a bare `Leave` outward, and the enclosing `DO` consumed
-    /// it). A loop written *inside* the fragment is unaffected and still
-    /// works normally: its own `run_loop` consumes the `Flow` before it ever
-    /// reaches this point (measured: `interpret "do jj = 1 to 5; ...; if jj
-    /// = 2 then leave; end"` prints two lines and exits 0).
-    ///
-    /// This also settles F-EX2, the branch review's finding that the
-    /// `SymbolId` in a named `Flow::Leave`/`Iterate` is interned in the
-    /// fragment's own fresh `SymbolTable` (`parse_interpret`'s doc) and is
-    /// meaningless to every consumer above this function, all of which
-    /// resolve against the *program's* table -- silently, since nothing
-    /// about a mismatched id looks wrong at the type level. That fix was a
-    /// loud refusal, placed here because here is where the id can still be
-    /// named correctly. The refusal is gone and the placement is why: the
-    /// name is resolved against `fragment.symbols` at the same point, and
-    /// turned into the condition the oracle actually raises. Nothing past
-    /// this function ever sees the id.
-    ///
-    /// **The report names both clauses, innermost first, each carrying the
-    /// enclosing `INTERPRET`'s line number** -- measured, `do outer = 1 to 1`
-    /// around `interpret "leave outer"` on line 2:
-    ///
     /// ```text
     ///      2 *-*   leave outer
     ///      2 *-*   interpret "leave outer"
     /// ```
-    ///
-    /// Both are produced. The `LEAVE`'s own clause is the innermost entry:
-    /// `leave_origin` resolves a real site because this function passes
-    /// `Some(&fragment.source)`, `record_leave_failure` records it, and the
-    /// `seal_site_level` call beside it closes this level so the enclosing
-    /// `INTERPRET` clause can still record its own. Both arms below need that
-    /// call separately from the `run_bounded` error path above, because a
-    /// `Flow::Leave` reaches here as an `Ok` and only becomes an `Err` here.
     fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Failure> {
         let fragment: Rc<Fragment> = match parse_interpret(text) {
             Ok(fragment) => Rc::new(fragment),
@@ -10622,23 +7056,6 @@ impl Interp {
             // text did not parse: ...` at rc 120. `error.rs`'s own `impl
             // From<&ParseError> for Raised` has the transcript and states
             // exactly what the conversion cannot carry.
-            //
-            // **No level is sealed here, and that is a real one-line
-            // divergence rather than an oversight.** The oracle echoes the
-            // failing *fragment* clause too, at indent 0 whatever the
-            // enclosing indent (measured: two `DO`s deep, the fragment's
-            // `do forever then` still prints at 0 while the `INTERPRET`
-            // prints at 4, so it is not this task's activation base under
-            // another name -- a parse-time echo simply carries no indent).
-            // Reproducing it needs the failing clause's *text*, and
-            // `ParseError` carries the clause's start byte with no end, so
-            // there is no span to cut. Guessing one -- to end of source, or
-            // to the next `;` -- is right for a single-clause fragment and
-            // silently wrong for `interpret "do jj = 1 to 1; do forever
-            // then; end"`, whose echo is `do forever then;` and not the rest
-            // of the text. Closing it wants a clause span on `ParseError`,
-            // which is a `rexx-parse` change; `execute`'s own parse arm
-            // records the same gap for the top-level path.
             Err(error) => return Err(Raised::from(&error).into()),
         };
 
@@ -10656,10 +7073,6 @@ impl Interp {
             // computed the way they were before either table existed; it needs
             // one now because a fragment compiles, and a chunk's `Op::Load`
             // and `Op::Store` carry plan slots.
-            //
-            // The two views agree by construction: `slots` above is this
-            // plan's own `by_symbol`, which is what `Code::slot_for`'s
-            // `debug_assert` compares against `plan.names`.
             plan: Some(&fragment_plan),
         };
 
@@ -10667,25 +7080,6 @@ impl Interp {
         // it has to propagate rather than stop here -- `run_bounded`'s own
         // catch-all does exactly that for anything it does not own, `Exit`
         // included, with nothing fragment-specific to add.
-        //
-        // **`Some(&fragment.source)`.** The fragment
-        // resolves its own clauses: its spans are the only thing that
-        // can, and the `Interpret` arm has already put the enclosing clause's
-        // line and indent in place so the *text* comes from here while the
-        // *line* and the indent base do not. `?` is deliberately not used --
-        // an error has to seal this level before it propagates, or the
-        // enclosing `INTERPRET` clause's own `step_in_temps_frame` will find
-        // `failure_site` already full and record nothing.
-        // **A fragment compiles to a chunk of its own.** It is a different
-        // body from the one an enclosing chunk's `op_of` indexes, so it gets
-        // its own stream and its own register region rather than borrowing
-        // either. Not cached: an `INTERPRET`'s text is built at run time and a
-        // cache keyed by it would hold every string the program ever
-        // interprets.
-        //
-        // Compiled against `fragment_plan` above, whose slots are already the
-        // enclosing frame's -- which is what makes a fragment's `Op::Store`
-        // write the variable the enclosing body would.
         let chunk = match crate::ir::compile(&fragment.body, &fragment_plan, self.chunk_trace()) {
             Ok(chunk) => chunk,
             Err(_) => {
@@ -10722,11 +7116,6 @@ impl Interp {
         // `run_activation`'s own four arms, deliberately -- same four
         // constructors, same `record_leave_failure` call -- because it is
         // the same event happening at a different boundary.
-        //
-        // `fragment.symbols` is what resolves the name, and this is the last
-        // point at which it can: the id is interned in the fragment's own
-        // fresh table (F-EX2, above), so nothing outside this function could
-        // name it correctly even if it wanted to.
         match flow {
             Flow::Leave(name, origin) => {
                 self.record_leave_failure(&origin);
@@ -10752,29 +7141,6 @@ impl Interp {
 
     /// Closes off the level that is unwinding now, so the level above it can
     /// record its own clause.
-    ///
-    /// `Interp::failure_site` is first-wins *within* a level; this is what
-    /// makes "a level" mean something. It moves whatever this level recorded
-    /// onto `Interp::failure_sites` (innermost first, since the innermost
-    /// level always seals first) and leaves the slot empty for the enclosing
-    /// clause's own `step_in_temps_frame` to fill on the way out.
-    ///
-    /// **Called only on an error path, and only by a construct that opened a
-    /// level** -- `run_fragment` and `Interp::invoke_call`. The rule is the
-    /// same for both: seal before the failure
-    /// leaves the callee, never after. Sealing a level that recorded nothing
-    /// is a no-op, which is what gives a fragment that failed to parse one
-    /// echo instead of two.
-    ///
-    /// **Nothing here clears either field, and that is deliberate**: this
-    /// function is the *unwinding* half, and a level that seals still has a
-    /// report to give. Clearing is the *trapping* half, which is
-    /// `offer_to_trap`'s (inherited item I11) -- it empties both
-    /// the slot and this stack, because a trapped condition prints no report
-    /// at all and its sites must not survive to be printed against a later,
-    /// untrapped one. The two-raise transcript in
-    /// `a_second_raise_after_a_trapped_one_reports_its_own_site` is what
-    /// observes that.
     pub(crate) fn seal_site_level(&mut self) {
         if let Some(site) = self.failure_site.take() {
             self.failure_sites.push(site);
@@ -10783,20 +7149,6 @@ impl Interp {
 
     /// Drops one `DROP` target: a plain variable, a whole stem, one tail, or
     /// the `(v)` indirect form.
-    ///
-    /// **`Direct` resolves a compound's tail pieces as variables; `Indirect`
-    /// is a subsidiary list, not a single name.** `Direct(id)`'s name came
-    /// through the scanner, so a compound-shaped spelling still has real
-    /// tail pieces to resolve -- `tail_key`, exactly what a `Compound`
-    /// expression's own read or `Assignment`'s own write already does.
-    ///
-    /// `Indirect(id)`'s value is **blank- or tab-separated list of variable
-    /// symbols, each validated and dropped on its own**, not one verbatim
-    /// name -- a fix-round correction to this function's first version,
-    /// which treated the whole value as a single name and let three classes
-    /// of bad input through silently. Measured, the six rows that pin it
-    /// down (all against the oracle):
-    ///
     /// ```text
     /// a=1; b=2; v='a b'      ; drop (v); say a; say b   ->  A / B  (both dropped)
     /// x=1;      v=' x '      ; drop (v); say x           ->  X      (trimmed)
@@ -10805,29 +7157,6 @@ impl Interp {
     /// w=1;      v='(w)'      ; drop (v)                  ->  Error 20.928
     /// a=1;      v='a'        ; drop (v); say a           ->  A      (agrees with the old reading)
     /// ```
-    ///
-    /// The last row is why every pre-fix test passed: a single-word,
-    /// already-valid, unpadded value is exactly where "split, validate,
-    /// resolve each" and "resolve the whole value" coincide. The `(w)` row
-    /// is what rules out a recursive reading -- a parenthesised entry is
-    /// 20.928, "Symbol expected as an indirect variable name", the same
-    /// error any other not-a-symbol word gets (`a-b` gives the identical
-    /// 20.928, `found "a-b"`), not a second round of indirection.
-    ///
-    /// **Validation runs over the whole list before any drop happens.**
-    /// Measured: `a=1; b=2; v='a 9 b'; drop (v)` raises 31.2 on `"9"` and
-    /// leaves *both* `a` and `b` at `1` and `2` -- `a` is never dropped even
-    /// though it sits before the bad word. So this collects every word's
-    /// validated, upcased name first (`validate_indirect_word`, which can
-    /// fail) and only then drops each one (`drop_by_name`, which cannot),
-    /// rather than interleaving the two.
-    ///
-    /// **The value is upcased only after validation, one word at a time,
-    /// never as a whole.** Measured: `v = 'x'; x = 1; drop (v); say x`
-    /// prints `X` -- each word is upcased exactly as the scanner would have
-    /// upcased it had it been written directly, because `DROP (v)` never
-    /// goes through the scanner at all. A `Direct` name is already upcased,
-    /// by `SymbolTable::intern`, long before this ever runs.
     fn drop_variable(&mut self, code: &Code<'_>, variable: &VariableRef) -> Result<(), Failure> {
         match variable {
             VariableRef::Direct(id) => {
@@ -10858,16 +7187,6 @@ impl Interp {
 
     /// Drops the variable, whole stem, or one verbatim-keyed tail `name`'s
     /// own spelling names, dispatched by `shape_of`.
-    ///
-    /// Shared by `Direct`'s `Simple`/`Stem` cases (an already-upcased
-    /// compile-time name) and by every word of an indirect subsidiary list
-    /// (already validated and upcased by `validate_indirect_word`) -- both
-    /// are "a plain string names a variable, resolve it with no further
-    /// symbol lookup", the same operation `drop_variable`'s own doc comment
-    /// says the two cases share. **Not** used for `Direct`'s `Compound` case:
-    /// a source-level compound's tail pieces are still symbols to resolve
-    /// (`tail_key`), which this function's uniform verbatim split at the
-    /// first period does not do.
     fn drop_by_name(&mut self, name: &[u8]) {
         match shape_of(name) {
             NameShape::Simple => {
@@ -10889,41 +7208,6 @@ impl Interp {
 
     /// `NUMERIC DIGITS`/`FUZZ`/`FORM`, in every spelling the parser produces
     /// (`NumericSetting`, `rexx-parse`'s own `instruction.rs::numeric`).
-    ///
-    /// `DIGITS`/`FUZZ` with no expression reset to the package default --
-    /// measured, `numeric digits 3; numeric digits; y = 1/3; say y` gives
-    /// `0.333333333`, the DIGITS-9 rendering, and the reset is reported
-    /// exactly as if `"9"` had been typed rather than as some sentinel
-    /// meaning "no change": `numeric digits 20; numeric fuzz 15; numeric
-    /// digits` raises 33.1 with `("9")` as the rejected candidate. `FORM`
-    /// alone (`FormDefault`) resets the same way, to `SCIENTIFIC` -- measured,
-    /// `numeric form engineering; numeric form; say form()` gives
-    /// `SCIENTIFIC`. This crate has no `::OPTIONS` to move the package default
-    /// away from `Scientific`, which is why `FormDefault` and `FormScientific` do
-    /// the identical thing below; a later phase's `::OPTIONS FORM` is what
-    /// would make the two differ, and should split this arm rather than
-    /// assume they stay equal.
-    /// `TRACE`'s four forms (D17). `Trace::Default` (bare `TRACE`) and the
-    /// `Trace::Setting` letters that are recognised but have nothing visible
-    /// to show in this crate's scope (`C`/`E`/`F`/`N`/`O`) are all silent
-    /// (measured: `trace` alone and `trace value 'N'` produce no output).
-    /// They are still six distinct settings rather than one, because
-    /// `TRACE()` reports which was asked for -- `TraceMode::letter` has that
-    /// measurement, and bare `TRACE` is `NORMAL` rather than `OFF`.
-    ///
-    /// **`L` is not in that list** and was until Task 9's review round 1:
-    /// it lands on `TraceMode::LABELS` and echoes every executed `LABEL`
-    /// clause. Corrected at the re-review (NEW-2), which found this arm
-    /// still naming the old answer one commit after the behaviour changed.
-    ///
-    /// `Trace::Setting`'s own bytes were already validated by `rexx-parse`'s
-    /// `check_trace_setting` at parse time, so `.expect()` rather than
-    /// propagating the `Err` arm -- a `Trace::Setting` this crate ever sees
-    /// cannot carry an unrecognised letter. `Trace::Value`'s text has no
-    /// such guarantee (it is computed at run time from an arbitrary Rexx
-    /// expression), which is the one path that can reach `mode_from_
-    /// setting`'s `Err` for real, and does through `raised_invalid_trace_
-    /// letter`.
     fn exec_trace(&mut self, code: &Code<'_>, setting: &Trace) -> Result<(), Failure> {
         match setting {
             Trace::Default => {
@@ -10980,49 +7264,6 @@ impl Interp {
 
     /// `>I>`, if this activation is a `::ROUTINE` still on its first
     /// instruction and the setting just installed traces labels.
-    ///
-    /// **The gate is two predicates that no single field expresses**,
-    /// `tracingLabels() && isMethodOrRoutine()` (`RexxActivation.cpp:3655`),
-    /// plus the once-only pair on the activation. Each half is measured on
-    /// its own:
-    ///
-    /// * `tracingLabels()` -- the routine's own `trace` instruction fires
-    ///   these lines for exactly **A, I, L and R**, verified by running the
-    ///   same routine under all nine accepted letters; `n`, `c`, `e`, `f` and
-    ///   `o` produce zero stderr. `TraceMode::labels` is that predicate.
-    /// * `isMethodOrRoutine()` -- a main body never announces one. Measured,
-    ///   `trace l` as a program's own first clause emits nothing, and
-    ///   `::options trace labels` in a file whose only code is a main body
-    ///   likewise.
-    /// * `traceEntryAllowed` -- the `trace` must be the routine's **first**
-    ///   instruction. Measured, a routine whose first clause is `n0 = 0` and
-    ///   whose second is `trace r` echoes its clauses and announces nothing.
-    /// * `traceEntryDone` -- once per activation, and the second of two calls
-    ///   into the same routine announces its own pair, not a third line
-    ///   (measured, `call rtn` twice gives `>I>`/`<I<` twice).
-    ///
-    /// **The caller's setting is not one of the halves and cannot be.**
-    /// Measured, `trace l` in a caller targeting a routine emits nothing at
-    /// all -- a routine inherits no `TraceMode`, so the only setting this
-    /// ever reads is one the routine itself installed.
-    ///
-    /// **A dynamic `TRACE VALUE` reaches this too**, and that is the C++'s
-    /// own second route rather than an accident: `earlyTraceEntry`'s code
-    /// analysis (`:3630`-`:3641`) demands a *non-dynamic* `TRACE`, but
-    /// `setTrace` calls `traceEntry` unconditionally, and by then the flags
-    /// are installed and `traceEntryAllowed` is still true. Measured,
-    /// `trace value 'l'` as a routine's first clause announces both lines.
-    /// This crate implements the `setTrace` route only; the code-analysis
-    /// route exists in the C++ to announce the entry *before* a guarded
-    /// method takes its object lock, and with no methods and no locks here
-    /// nothing can run between the two points, so no probe separates them.
-    ///
-    /// **`::OPTIONS TRACE LABELS` is a third route and this crate does not
-    /// implement it.** Measured, a routine with no `trace` instruction of its
-    /// own, in a file carrying `::options trace labels`, announces both lines
-    /// with identical bytes. `::OPTIONS` is a declared Phase 5 gap
-    /// (`directive_gap`, `lib.rs`), so such a program is refused here rather
-    /// than running without the lines.
     pub(crate) fn trace_invocation_entry(&mut self) {
         if !self.activation().trace_entry.may_announce() {
             return;
@@ -11040,15 +7281,6 @@ impl Interp {
 
     /// `>I>` for a body whose package's `::OPTIONS TRACE` put a
     /// label-tracing setting in force before its first clause.
-    ///
-    /// **The oracle's second route into the same pair**, and the one
-    /// [`Interp::trace_invocation_entry`] cannot serve: that one needs a
-    /// `TRACE` instruction executing as the body's own first clause, and
-    /// `::OPTIONS TRACE` runs no instruction at all. Measured, `::options
-    /// trace r` in a file whose `::ROUTINE` has no `trace` of its own: the
-    /// oracle prints the `>I>` and `<I<` pair around the routine's clauses.
-    /// `<I<` needs nothing of its own -- [`Interp::trace_invocation_exit`]
-    /// reads the `TraceEntry::Done` this leaves.
     pub(crate) fn trace_package_invocation_entry(&mut self) {
         if !self.trace_mode().labels || self.activation().trace_entry != TraceEntry::Pending {
             return;
@@ -11062,17 +7294,6 @@ impl Interp {
     }
 
     /// `<I<`, on every way a routine activation can end.
-    ///
-    /// Called with the callee still on the activation stack, because both
-    /// halves of the gate are read off it. Measured on all four endings, and
-    /// all four announce it: `return`, `exit`, falling off the routine's own
-    /// end, and an untrapped condition -- where the line lands **before** the
-    /// error report's own clause echoes, which is the order this crate
-    /// produces anyway since the report is written at the very end.
-    ///
-    /// `tracingLabels()` is re-read here rather than assumed from
-    /// the `Done` state: measured, a routine whose body is `trace l` then
-    /// `trace off` announces `>I>` and no `<I<`.
     pub(crate) fn trace_invocation_exit(&mut self) {
         if self.activation().trace_entry != TraceEntry::Done {
             return;
@@ -11089,22 +7310,6 @@ impl Interp {
 
     /// Gives a fragment its own `>I>` count, and answers with the enclosing
     /// state for [`Interp::leave_fragment`] to put back.
-    ///
-    /// **A fragment is a separate activation in the C++ and is not one here**,
-    /// which is the whole reason this is two functions rather than the plain
-    /// decay every other nested construct gets. `RexxActivation.cpp:3644`-
-    /// `:3652` gates an interpret activation's own announcement on
-    /// `tracingLabels() && parent->isMethodOrRoutine() &&
-    /// parent->traceEntryAllowed && !parent->traceEntryDone`, so the fragment
-    /// counts its own clauses from zero, but only when the enclosing
-    /// `INTERPRET` was itself the routine's first clause.
-    ///
-    /// `nested` is the `isMethodOrRoutine()` half: an interpret activation is
-    /// neither, so a fragment inside a fragment can never announce however
-    /// its own clauses fall. Measured, and it is the row that separates this
-    /// from a plain reset -- `interpret "interpret 'trace l'"` as a routine's
-    /// only clause writes zero bytes on the oracle, where
-    /// `interpret "trace l"` writes both lines.
     fn enter_fragment(&mut self, nested: bool) -> TraceEntry {
         let enclosing = self.activation().trace_entry;
         let entry = if enclosing.may_announce() && !nested {
@@ -11118,12 +7323,6 @@ impl Interp {
 
     /// Puts the enclosing state back after a fragment, **except** that a
     /// fragment which announced leaves the activation `Done`.
-    ///
-    /// That exception is `RexxActivation.cpp:3664`, `if (isInterpret())
-    /// parent->traceEntryDone = true`, and it is what the `<I<` owes its
-    /// existence to: measured, `interpret "trace l"` as a routine's only
-    /// clause emits `>I>` **and** `<I<`, so the announcement has to survive
-    /// the fragment it happened in.
     fn leave_fragment(&mut self, enclosing: TraceEntry) {
         if self.activation().trace_entry != TraceEntry::Done {
             self.activation_mut().trace_entry = enclosing;
@@ -11133,15 +7332,6 @@ impl Interp {
     /// What the running activation announces itself as, or `None` when it
     /// announces nothing at all -- which is the `isMethodOrRoutine()` half of
     /// the gate, expressed as the lookup that would supply the substitutions.
-    ///
-    /// A `::ROUTINE` names itself by the **directive's** own spelling,
-    /// verbatim. Measured: `::routine 'zork'` announces `"zork"` and
-    /// `::routine MiXeD` announces `"MIXED"`, the second because the scanner
-    /// upcases a bare symbol before the directive parser sees it.
-    ///
-    /// A `::METHOD` names itself by the **message** name and its defining
-    /// scope instead, both taken from `Activation::method_identity` --
-    /// see [`MethodIdentity`] for why neither is read off the directive.
     fn invocation_subject(&self) -> Option<Announced> {
         if let Some(identity) = &self.activation().method_identity {
             return Some(Announced::Method {
@@ -11160,34 +7350,12 @@ impl Interp {
 
     /// `ADDRESS`'s three environment-naming forms. The caller has already
     /// turned the command and `WITH` forms away.
-    ///
-    /// # The two forms upcase differently, and it is the cheap thing to get
-    /// wrong
-    ///
-    /// `rexx-parse` has already resolved this: `environment` is a symbol's
-    /// *upcased* spelling or a literal's verbatim bytes (`ast::Address`'s own
-    /// doc), so nothing here folds case. Measured on the oracle, four
-    /// spellings of the same intent:
-    ///
     /// ```text
     /// address envC                    ->  ENVC
     /// address 'LiTeRaL'               ->  LiTeRaL
     /// nm = 'mIxEd'; address value nm  ->  mIxEd
     /// nm = 'mIxEd'; address (nm)      ->  mIxEd
     /// ```
-    ///
-    /// So the computed forms never upcase, and the constant one does only
-    /// because a symbol token is already upcased when it is read.
-    ///
-    /// # Order of operations on the computed form
-    ///
-    /// Evaluate, trace the value, *then* validate the length -- the same
-    /// order `RexxInstructionAddress::execute` has (`traceResult` precedes
-    /// `SystemInterpreter::validateAddressName`), and measured: under `trace
-    /// r` a 251-byte name traces its own `>>>` line and only then raises
-    /// 29.1. The value line is `>>>` under `TRACE I` as well as under
-    /// `TRACE R`, measured -- unlike a `PARSE` target's, it is not a choice
-    /// of prefix between the two modes.
     fn exec_address(
         &mut self,
         code: &Code<'_>,
@@ -11351,35 +7519,6 @@ impl Interp {
 
     /// Evaluates `expression`, or answers `default` when there is none
     /// (`NUMERIC DIGITS`/`FUZZ` alone).
-    ///
-    /// A `String` rather than the value's own bytes: `set_digits_str`/
-    /// `set_fuzz_str` take `&str`, and a Rexx value's bytes are not
-    /// guaranteed UTF-8. `from_utf8_lossy` is this crate's own standing choice
-    /// for exactly that gap (`Raised::nonnumeric`'s substitution text,
-    /// `error.rs`), and a lossy byte cannot parse as a valid DIGITS/FUZZ
-    /// value either way, so the conversion still ends in the right error
-    /// family rather than silently accepting mangled input.
-    ///
-    /// **`>K>` traces only when `expression` is `Some` (F2, branch review,
-    /// Important).** `RexxInstructionNumeric::execute` calls
-    /// `traceKeywordResult` for `DIGITS`/`FUZZ`/`FORM` alike whenever an
-    /// expression is present (`NumericInstruction.cpp:98`/`135`/`174`,
-    /// verified by containment) -- measured, `trace r; numeric digits 9`
-    /// emits `>K>   "DIGITS" => "9"` after the clause echo, and a bare
-    /// `numeric digits`/`numeric fuzz` (no expression, "restore to the
-    /// previous value") traces nothing at all, confirming the gate is on
-    /// the expression's presence and not on the keyword. Before the
-    /// validating `set_digits_str`/`set_fuzz_str` call, same reason
-    /// `setup_controlled` already traces `TO`/`BY`/`FOR` before validating
-    /// them: measured, `numeric digits 'x'` under `trace r` emits `>K>
-    /// "DIGITS" => "x"` and *then* raises 26.5, not the reverse.
-    /// **The lent result buffer, and the caller hands it back.** The operand
-    /// used to be copied into an owned `Vec` and then copied again into an
-    /// owned `String` for `set_digits_str`, which takes `&str`. The buffer is
-    /// taken *after* the expression is evaluated, so a builtin call inside
-    /// that expression gets the buffer for its own result first.
-    /// `from_utf8_lossy` borrows in the caller for every operand that is
-    /// valid UTF-8, which is every operand that can parse as a count.
     fn numeric_operand(
         &mut self,
         code: &Code<'_>,
@@ -11411,25 +7550,6 @@ impl Interp {
 
     /// `instruction`'s own clause text and the 1-based line to print it against,
     /// or `None` when `source` is `None`.
-    ///
-    /// **`Interp::clause_line_override` is why this is a method and not a free
-    /// function.** The line and the text do not always come
-    /// from the same place: inside an `INTERPRET` fragment the text is the
-    /// fragment's (its spans index the fragment's own source, and nothing else
-    /// can resolve them) while the line is the enclosing `INTERPRET` clause's,
-    /// measured. Threading that override through the four call sites --
-    /// `step_in_temps_frame`, `record_failure_at`, `leave_origin`,
-    /// `run_otherwise` -- would give each of them a parameter about a construct
-    /// none of them otherwise knows exists, so it reads the field instead,
-    /// exactly as `current_value_indent` and `indent_offset` already do.
-    ///
-    /// `source: None` has no caller: `run_fragment` passes
-    /// `Some(&fragment.source)`, which is what gives the report an echo
-    /// per level. The parameter is still an `Option` because collapsing it is a
-    /// mechanical change across every signature that threads it, which is a
-    /// restructuring rather than this task's -- **but nothing below may assume a
-    /// site is unresolvable any more**, and the comments that used to say so
-    /// have been corrected rather than left standing.
     pub(crate) fn clause_site(
         &self,
         source: Option<&ProgramSource>,
@@ -11475,20 +7595,6 @@ impl Interp {
     /// [`Interp::clause_line`] for a caller that knows the instruction's
     /// **index**, which is what lets the answer come from `Plan::lines`
     /// rather than from a search.
-    ///
-    /// The same rule as `clause_line` and the same `clause_line_override`
-    /// honoured the same way, so a fragment's clauses keep reporting the
-    /// enclosing `INTERPRET` clause's line; `Plan::line_at` is only reached
-    /// once the override has declined, and a body with no plan takes the
-    /// search exactly as it did before the table existed -- the shape
-    /// `printed_indent` already has for `Plan::indents`.
-    ///
-    /// **`index` and `instruction` must name the same clause**, since the
-    /// first indexes the table and the second supplies the span the fallback
-    /// and the tripwire search on. Every caller derives one from the other,
-    /// and the `debug_assert!` says so rather than trusting it: the two
-    /// coming apart is a wrong line number, which is silent in every program
-    /// that neither raises nor traces.
     pub(crate) fn clause_line_at(
         &self,
         code: &Code<'_>,
@@ -11525,132 +7631,6 @@ impl Interp {
 /// Task 11's whole indentation feature, and the design decision at its
 /// centre: **computed fresh from the flat instruction list every time,
 /// never carried on a running `Interp` counter.**
-///
-/// Task 10's own report concluded the depth is derivable from the AST
-/// statically, with no runtime block stack, and this task's own oracle
-/// probes confirm it (the report has the full transcripts): a clause's
-/// indentation never depends on which iteration of an enclosing loop is
-/// currently running, only on how many `DO`/`LOOP` bodies, matched `IF`
-/// branches and `SELECT` scans lexically enclose it -- exactly the
-/// information `If`'s `false_target`, `Select`'s `whens`/`otherwise`/`end`
-/// and `Loop`'s `end` already carry, with nothing further to add.
-///
-/// # That last paragraph is measurably false
-///
-/// **The oracle's indent is not a pure function of lexical nesting.** Any
-/// repetitive `DO`/`LOOP` that **completes at least one body pass** and then
-/// ends because a **control test fails** decrements the oracle's own counter
-/// one time too many, so later clauses print two spaces lower than their
-/// lexical depth. Count exhausted, `WHILE` false and `UNTIL` true all qualify.
-/// Measured, no `INTERPRET` and no `CALL` anywhere -- `do` / `do jj = 1 to 1`
-/// / `nop` / `end` / `say 1/0` / `end` reports the `say` at **0** on the
-/// oracle and at 2 here, and `n=0; do while n = 0; n = 1; end` in the same
-/// position does the same.
-///
-/// A **zero-trip** loop (`do while 0 = 1`, `do jj = 1 to 0`, `do 0`), a loop
-/// left by **`LEAVE`**, and a non-repetitive block (`IF`, `SELECT`, plain
-/// `DO`) do not. **The distinguishing property is whether a body pass
-/// completed, not whether a re-test failed** -- a zero-trip loop's first test
-/// also fails, and an earlier revision of this comment drew exactly that
-/// wrong conclusion from the zero-trip row.
-///
-/// **The cause is a C++ defect, and naming the cause is the only version of
-/// this that has not needed correcting.** `settings.traceIndent` is a mutable
-/// counter. A loop ending normally restores the value `DoBlock` saved at
-/// construction (`BaseDoInstruction.cpp:161`); a loop whose control test fails
-/// takes a different exit path that bare-decrements it (`:377`). So a stray
-/// decrement survives until some enclosing construct restores from its own
-/// saved block, and is discarded there.
-///
-/// **An earlier revision of this paragraph enumerated the discarding
-/// constructs and was falsified by `do label q ... end`** -- a plain,
-/// non-repetitive `DO` carrying a `LABEL` discards it too, because
-/// `SimpleDoInstruction.cpp:78-89` creates the saved block only when a `LABEL`
-/// is present. That was the fourth construct-shaped rule here to drift, after
-/// the qualification predicate, the scope, and accumulation.
-///
-/// **Do not write a fifth.** If a shape is not in a measured table, work out
-/// which exit path it takes. `phase-4-exclusions.txt`'s row carries the C++
-/// citations and every table.
-///
-/// It happens on the same *occasion* as the control variable's own value
-/// lines -- a re-tested pass -- but **not by the same mechanism, and they do
-/// not close together.** Closing the value lines -- the `BY` increment in
-/// `loop_advance` -- does not close this indent, which is not this function's
-/// to fix. **What matters here is that the
-/// paragraph above reads as settled and is not**, so a later reader does not
-/// build on it: this function computes the *lexical* indent, and closing the
-/// gap means modelling the oracle's counter rather than making this function
-/// impure.
-///
-/// `the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it`
-/// (`run/tests.rs`) does not catch it, and the reason is worth
-/// keeping: it runs at top level, where the oracle's counter is already at 0
-/// and cannot go lower. That is the same "at indent 0 the base is 0" blind
-/// spot that hid two of four mutations in one round.
-///
-/// **A mutable counter was the design first tried here, and it was dropped
-/// once it became clear what it would cost to keep correct.** It would need
-/// to be incremented and decremented in exact lockstep on *every* exit path
-/// out of *every* `IF`/`SELECT`/`DO` arm, including every `?`-propagated
-/// error path and the `Goto`-absorption case `Flow::Leave`'s own doc comment
-/// describes -- precisely the shape of defect this crate's own skipped-
-/// `pop_frame` discussion elsewhere warns is easy to introduce and hard to
-/// notice, because the symptom is two spaces of wrong stderr that no
-/// existing test asserts on. A pure function of `(instructions, target)`
-/// cannot desync from anything, because there is no state to desync: asking
-/// it twice for the same `target` on the same body always gives the same
-/// answer, computed the same way, whether the failure happens on a loop's
-/// first pass or its thousandth. `the_indent_after_a_loop_has_already_exited_
-/// is_not_left_over_from_it` (`run/tests.rs`) is the test that would
-/// have caught a live counter's most likely failure mode -- a raise reached
-/// *after* a loop's own body has already run and exited, at a shallower
-/// lexical depth, where a counter not perfectly unwound on every path out of
-/// the loop would over-indent and a purely static answer cannot.
-///
-/// **The one place this recomputes something rather than reading it back**
-/// is `WHILE`/`UNTIL`: neither corresponds to a *distinct* flat instruction
-/// position with the right semantics (`WHILE` shares the `DO`/`LOOP`
-/// instruction's own clause, tested *inside* the loop's own frame; `UNTIL`
-/// shares the `END`'s, likewise inside), so `Do`'s own arm adds the loop's
-/// own two spaces on top of `static_indent(instructions, do_index)` directly
-/// at its two call sites rather than asking this function to guess which of
-/// two different, correct answers a `DO`/`LOOP` instruction's *own* index
-/// means (measured: `do i = 1 to 3 for 1/0`'s control-setup failure is
-/// unindented at that same index, while `do while 1/0` is indented two).
-///
-/// Recurses into whichever construct's own range contains `target`, adding
-/// that construct's contribution before descending -- see the report for
-/// the additive model (two per `DO`/`LOOP`, four per matched `IF` branch,
-/// two for a `SELECT`'s own scan plus four more for a matched `WHEN`'s
-/// `THEN` or two more for `OTHERWISE`) and the oracle transcripts that pin
-/// each number, including the two the brief this task started from did not
-/// state: a `WHEN`'s own condition sits at the `SELECT`'s own two, not zero,
-/// and `OTHERWISE`'s own body is two more, not the `WHEN`-`THEN` shape's
-/// four more.
-/// Fills `out[i]` with the static clause indent of every position in
-/// `[start, end)`, in one walk of the range.
-///
-/// The same traversal [`indent_in_range`] performs to answer for a single
-/// target, doing every position at once. That function answers one index by
-/// walking from the start of the body, so asking it for all of them costs
-/// the body's length squared; this costs the body's length.
-///
-/// **Every arm is the same arm, transcribed.** Each `return k` there becomes
-/// one assignment of `base + k` here, and each `return k +
-/// indent_in_range(a, b, target)` becomes a recursive fill of `[a, b)` at
-/// `base + k`. Where that function decides between an equality case and a
-/// range case, this one fills the range first and then writes the equality
-/// case over it -- the equality checks come first there, so they must win
-/// here. `whens` is walked in reverse for the same reason: that function
-/// answers from the *first* matching entry, and a later fill would otherwise
-/// overwrite an earlier one.
-///
-/// A transcription is a second statement of a dozen separately measured
-/// oracle behaviours, and it can be wrong where the original is right.
-/// `every_corpus_program_fills_the_indents_static_indent_computes` is what
-/// holds them together, over every program in the corpus rather than over
-/// examples chosen here.
 fn fill_indents(
     instructions: &[Instruction],
     start: usize,
@@ -11975,16 +7955,6 @@ fn indent_in_range(instructions: &[Instruction], start: usize, end: usize, targe
 
 /// Which of the three variable shapes `name`'s own spelling is, from an
 /// already-interned (or already-upcased runtime) name alone.
-///
-/// Reproduces the scanner's own classification (`scanner.rs::scan_symbol`,
-/// `SymbolClass::{Variable,Stem,Compound}`) as a pure function of the byte
-/// string, which is all a `DROP` target has by the time it reaches here --
-/// a direct target's name came from the scanner originally, but an indirect
-/// one (`DROP (v)`) never did, so this cannot simply read a tag the AST
-/// already carries. The rule is exactly the scanner's: no period is a simple
-/// variable; exactly one period, and it is the last byte, is a stem;
-/// anything else with a period -- two or more, or one not at the end -- is a
-/// compound.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum NameShape {
     Simple,
@@ -11995,54 +7965,6 @@ pub(crate) enum NameShape {
 /// The frame slot a loop's control variable writes and re-reads, resolved
 /// **once, when the loop is entered**, or `None` for a control this cannot
 /// answer for.
-///
-/// **Simple spellings only, and a stem control and a compound control are
-/// declined for different reasons.**
-/// A compound control resolves a tail key afresh on every pass --
-/// measured, `a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say i`
-/// answers `8`, because the body moves which tail the control is -- so there
-/// is no slot to resolve ahead of the pass that uses it.
-/// A stem control **does** have one, and it is taken: `Plan::bind` puts its
-/// spelling and its id on a single slot, and records that slot on the entry
-/// `Code::compound` hands back, which is where `bind_control`'s stem arm and
-/// the re-test's stem read each take it from. `None` here says the loop does
-/// not need to carry it, not that there is nothing to carry.
-///
-/// **Carrying it here was measured, and it costs more than it saves.**
-/// Forwarding this answer from `bind_control`'s stem arm into
-/// `Interp::assign_expr_target` replaces a compile-time `None` at that call
-/// site with a value, and **2 instructions then appear on every pass of every
-/// controlled loop**, simple controls included, which never enter that arm at
-/// all: `perf stat -e instructions:u`, `do i = 1 to 25000000; nop; end` at
-/// +50,000,000 and `do i = 1 to 19000000` with two simple assignments at
-/// +38,000,000, where the same binary against itself spans 1,348 and 1,576.
-/// **Attributed by partial revert and not by reading the assembly**: undoing
-/// that one line and nothing else returns the first to a figure
-/// indistinguishable from base -- 27,150,813,214 against a base of
-/// 27,150,813,500, inside that axis's own span -- and recomputing the slot
-/// inside the arm instead costs +100,000,000. Why the generated code changes
-/// was not established. Taking the slot from the entry
-/// leaves both axes where they were and keeps the stem loop's own saving.
-///
-/// **Declining the compound is unobservable, and it is written down as such
-/// rather than defended as a guard.** `bind_control` and the re-test both
-/// select their arms by the same `shape_of`, and neither compound arm reads
-/// this answer, so a slot resolved for a compound control would be computed
-/// and discarded. Measured: answering for a compound control as well leaves
-/// the whole workspace suite green, this crate's own loop tests included. What
-/// it buys is that the value this function returns means what its name says at
-/// every call site, not that anything downstream is stopped.
-///
-/// **It reads the plan's own map and nothing else, which is what makes it
-/// free of side effects.** `Interp::slot_of` would *grow* the frame for a
-/// name nobody has bound, and doing that at loop entry rather than at the
-/// first write would bind a name earlier than the interpreter does. `None`
-/// leaves both the write and the re-read resolving their own slot exactly
-/// as they did before this existed.
-///
-/// The answers agree because they come from one map: `Plan::bind` gives a
-/// symbol the slot its *name* already has, so `by_symbol[id]` and
-/// `slot_of(name)` cannot disagree for a name the plan holds.
 fn control_slot(code: &Code<'_>, control: SymbolId) -> Option<usize> {
     match shape_of(code.symbols.name(control).as_bytes()) {
         NameShape::Simple => code.slot_for(control),
@@ -12064,17 +7986,6 @@ pub(crate) fn shape_of(name: &[u8]) -> NameShape {
 /// Splits an indirect wrapper's value into its subsidiary list's words --
 /// `DROP (v)`, `EXPOSE (v)` and `PROCEDURE EXPOSE (v)` all spell the same
 /// list and reach the same split.
-///
-/// A blank (`' '`) or a tab (`'\t'`) separates words, any run of either
-/// counts as one separator, and an empty word never results -- measured,
-/// `'a    b'` and a leading/trailing-blank `'  a  b  '` both give exactly
-/// `["a", "b"]`, and a `'09'x` (tab) byte between two names splits them the
-/// same way a space does. A newline or carriage return does **not**
-/// separate: `'a' || '0a'x || 'b'` is one word, `"a\nb"`, which then fails
-/// `validate_indirect_word`'s character check and raises 20.928 rather than
-/// splitting. An all-blank or empty value yields no words at all, which is
-/// why `drop (v)` on an empty or blanks-only `v` is a silent no-op on the
-/// oracle rather than an error.
 fn split_indirect_words(text: &[u8]) -> impl Iterator<Item = &[u8]> {
     text.split(|&b| b == b' ' || b == b'\t')
         .filter(|word| !word.is_empty())
@@ -12090,26 +8001,6 @@ fn is_symbol_byte(b: u8) -> bool {
 
 /// Validates one word of an indirect subsidiary list and answers its upcased
 /// name, or the condition the oracle raises for it.
-///
-/// Three ways a word can fail, checked in the order the oracle's own error
-/// numbers imply (a character-set check before either shape check, since a
-/// word with an illegal character is never inspected for its *first*
-/// character at all -- measured, `'a-b'` and `'(w)'` both give 20.928, not
-/// 31.2/31.3, even though neither starts with a digit or a period):
-///
-/// * any byte outside the symbol character set (`is_symbol_byte`) -- 20.928,
-///   "Symbol expected as an indirect variable name"; this is also what rules
-///   out treating a parenthesised entry as a nested indirect reference,
-///   since `(`/`)` are not symbol characters and so are rejected the same
-///   way any other stray punctuation is, not by a dedicated recursion guard;
-/// * a leading digit -- 31.2, "Variable symbol must not start with a
-///   number", matching `SymbolClass::Constant`'s own first-byte rule;
-/// * a leading period -- 31.3, "Variable symbol must not start with a
-///   '.'" (measured on a bare `"."` too, not only a longer dot-led word).
-///
-/// Every substitution is the word's **own, unmodified** bytes -- measured,
-/// `'.X'`/`'9abc'` report `found ".X"`/`found "9abc"`, not the upcased form
-/// -- so upcasing happens only on the success path, after every check.
 fn validate_indirect_word(word: &[u8]) -> Result<Vec<u8>, Failure> {
     if !word.iter().copied().all(is_symbol_byte) {
         return Err(raised_symbol_expected(word).into());
@@ -12124,13 +8015,6 @@ fn validate_indirect_word(word: &[u8]) -> Result<Vec<u8>, Failure> {
 
 /// What [`Interp::run_bounded`]'s absorption rule says about one clause's
 /// `Flow`, in a range bounded by `[start, end]`.
-///
-/// **One rule, two loops.** The instruction-level loop and the op-level one
-/// both decide through [`absorb`] and differ only in what they do with the
-/// answer: an `Advance` moves an instruction counter by one or an op counter
-/// to the op after the clause, and a `Resume` maps its instruction index
-/// through the chunk's own table in the op case. Writing the range test twice
-/// is how the two would come to disagree about which `Goto` is an escape.
 pub(crate) enum Absorbed {
     /// Nothing to redirect: continue after the clause that produced it.
     Advance,
@@ -12141,13 +8025,6 @@ pub(crate) enum Absorbed {
 }
 
 /// [`Absorbed`] for `flow` in the range `[start, end]`.
-///
-/// `end` is inclusive, and deliberately: a nested construct's own resume point
-/// landing exactly on this range's boundary is normal completion, not an
-/// escape. Everything that is not a `Next` or an in-range `Goto` escapes,
-/// including a `Flow` variant this function does not name -- which is the
-/// same case as an out-of-range `Goto` on purpose, so a new variant
-/// propagates outward rather than being silently mishandled by a wrong arm.
 pub(crate) fn absorb(flow: Flow, start: usize, end: usize) -> Absorbed {
     match flow {
         Flow::Next => Absorbed::Advance,
@@ -12157,13 +8034,6 @@ pub(crate) fn absorb(flow: Flow, start: usize, end: usize) -> Absorbed {
 }
 
 /// Where an `IF` sends control on each of its two paths.
-///
-/// **One computation, read by both engines.** `step`'s own `If` arm runs
-/// `[index + 1, false_target)` and answers `Goto(resume)`; `ir::compile`
-/// emits a `JumpUnless` to `false_target` and, when the two differ, a `Jump`
-/// to `resume` at the end of the true branch. Having each work the pair out
-/// for itself is how the two would come to disagree about which instruction an
-/// `ELSE` starts at.
 pub(crate) struct IfTargets {
     /// Where control goes when the condition is false: the `ELSE` when there
     /// is one, otherwise the instruction after the `THEN` branch.
@@ -12188,14 +8058,6 @@ pub(crate) fn if_targets(instructions: &[Instruction], raw: Option<usize>) -> If
 }
 
 /// Where a listed `WHEN` sends control once its own condition holds.
-///
-/// **One computation, read by both engines**, exactly as [`IfTargets`] is.
-/// `step`'s own `Select` arm runs `[when + 1, body_end)` and hands whatever
-/// comes back to `leave_select`, which answers `Goto(resume)` for a branch
-/// that finished; `ir::compile` lays the same range out as the ops between
-/// this `WHEN`'s clause region and the next one's, and the driver opens a
-/// frame over exactly it. Having each work the pair out for itself is how the
-/// two would come to disagree about where a matched branch ends.
 pub(crate) struct WhenTargets {
     /// One past the last instruction of this `WHEN`'s own branch: the next
     /// listed `WHEN`, the `OTHERWISE`, or the enclosing `SELECT`'s `END`.
@@ -12226,11 +8088,6 @@ pub(crate) fn otherwise_resume(len: usize, end: Option<usize>) -> SelectResume {
 
 /// [`WhenTargets`] for a listed `When`/`WhenCase` node, against the body it
 /// belongs to.
-///
-/// `len` is that body's own instruction count, which is what a `None` target
-/// means (`InstructionKind::When`'s own doc). The panic is the parser's
-/// invariant that a `SELECT`'s `whens` collects nothing else, the same one
-/// `Interp::scan_when` states.
 pub(crate) fn when_targets(kind: &InstructionKind, len: usize) -> WhenTargets {
     match kind {
         InstructionKind::When {
@@ -12247,11 +8104,6 @@ pub(crate) fn when_targets(kind: &InstructionKind, len: usize) -> WhenTargets {
 }
 
 /// What a `SELECT` node tells whoever is running one of its branches.
-///
-/// `step`'s own `Select` arm has these in scope from the `match` that
-/// destructured the node; the driver, which arrives at a branch through an op
-/// carrying an instruction index and nothing else, reads them back from the
-/// same node through [`select_parts`].
 pub(crate) struct SelectParts {
     /// `SELECT LABEL name`'s own label, which a `LEAVE`/`ITERATE` may name.
     pub(crate) label: Option<SymbolId>,
@@ -12281,18 +8133,11 @@ pub(crate) fn select_parts(kind: &InstructionKind) -> Option<SelectParts> {
 /// One past the last instruction of a `SELECT`'s `OTHERWISE` branch, which is
 /// also where control resumes once that branch has finished: its own `END`,
 /// where the `EndStyle::Otherwise` arm does nothing.
-///
-/// `len` is the body's instruction count, which is what a `None` `end` means.
-/// One computation for the same reason [`when_targets`] is one.
 pub(crate) fn otherwise_range(len: usize, end: Option<usize>) -> usize {
     end.unwrap_or(len)
 }
 
 /// Where a `LEAVE` naming a `SELECT` resumes: past the `END` that closes it.
-///
-/// The same answer a listed `WHEN` carries in its own `exit` (`ast.rs`: "the
-/// instruction after the enclosing `SELECT`'s `END`"), computed for the
-/// `OTHERWISE` branch, which has no node of its own to carry it.
 pub(crate) fn select_exit(len: usize, end: Option<usize>) -> usize {
     match end {
         Some(end) => (end + 1).min(len),
@@ -12302,14 +8147,6 @@ pub(crate) fn select_exit(len: usize, end: Option<usize>) -> usize {
 
 /// Where a `SELECT` sends control when one of its branches is over, which is
 /// **two answers and not one**.
-///
-/// They coincide for a matched `WHEN` and differ for `OTHERWISE`. The pairing
-/// is built by [`when_resume`] and [`otherwise_resume`] rather than at each
-/// engine's own call site, so that the rule deciding *which* of the two a
-/// branch gets is one thing in one place: measured under `trace r`, a `LEAVE`
-/// naming a `SELECT` from inside its `OTHERWISE` echoes no `end` clause where
-/// the same branch falling through echoes one, and a single answer cannot be
-/// right for both.
 #[derive(Clone, Copy)]
 pub(crate) struct SelectResume {
     /// A branch that ran off its own end. `OTHERWISE`'s falls through onto the
@@ -12324,27 +8161,9 @@ pub(crate) struct SelectResume {
 }
 
 /// What a `SELECT` does with a `Flow` that escaped the branch it was running.
-///
-/// **The tree-walker's decision, and the compiled stream expresses the same
-/// one as layout rather than as a second copy of this.** `run_bounded` owns
-/// one range, so a `Flow::Goto` onto the `OTHERWISE` marker escapes it and
-/// leaves the construct entirely unless something recognises the target --
-/// which is what this is for. In the stream `Chunk::op_of` *is* the resume
-/// table and the op that opens `OTHERWISE`'s frame sits at the marker's entry
-/// in it, so every arrival there already opens that frame
-/// (`Interp::leave_branch`'s own doc comment has what was measured).
 pub(crate) enum SelectEscape {
     /// The flow lands exactly on this `SELECT`'s own `OTHERWISE` marker, so
     /// that branch runs **with this `SELECT`'s search frame still standing**.
-    ///
-    /// An absorbed `WhenCase`'s false-branch escape is the one thing that
-    /// produces it: a bare `Flow::Goto` past the matched branch's own bounds,
-    /// which forwarded unrecognised would run `OTHERWISE`'s body under
-    /// whichever outer construct received the `Goto`, with no `SELECT` frame
-    /// for a `LEAVE`/`ITERATE` inside it to find. Measured, `select label s
-    /// case 2` / `when 2 then` / `when 3 then nop` / `otherwise say 'O'` /
-    /// `leave s` / `end`: oracle `O`, `after`, rc 0, where forwarding it
-    /// outward is `Error 28.3`, rc 228.
     Otherwise(usize),
     /// Anything else, `leave_select`'s to resolve.
     Forward(Flow),
@@ -12360,10 +8179,6 @@ pub(crate) fn select_escape(otherwise: Option<usize>, flow: Flow) -> SelectEscap
 }
 
 /// Where the *true* branch resumes, given where the false one goes.
-///
-/// `target` is the `If`'s own `false_target`: an `ELSE`'s index when there is
-/// one, in which case the true branch resumes past that `ELSE`'s own branch
-/// (`Else::then_exit`), and otherwise already the resume itself.
 fn skip_else(instructions: &[Instruction], target: usize) -> usize {
     match instructions.get(target).map(|i| &i.kind) {
         Some(InstructionKind::Else { then_exit }) => then_exit.unwrap_or(instructions.len()),
@@ -12374,19 +8189,6 @@ fn skip_else(instructions: &[Instruction], target: usize) -> usize {
 /// Whether `index` is a clause of `body`'s own top level -- reached by
 /// falling from the instruction before it, with no `DO`, `LOOP`, `SELECT` or
 /// `IF` construct enclosing it.
-///
-/// Walks the fall-through chain from the body's first instruction, stepping
-/// over each construct as a unit: a `DO`/`LOOP`/`SELECT` ends at the `END`
-/// that closes it, and an `IF` ends where its false branch resumes, past an
-/// `ELSE`'s own branch when there is one ([`skip_else`], which is the same
-/// resolution the `If` arm makes at run time). Every index the walk lands on
-/// is top level and every index it steps over is not, so this answers for any
-/// index in the body.
-///
-/// A construct whose closing index is missing -- `None` on a `Loop::end`, a
-/// `Select::end` -- can only be a body still being assembled, which nothing
-/// runs; the walk treats it as reaching the body's end, so the answer for
-/// anything after it is `false` rather than a panic.
 fn top_level_clause(body: &CodeBody, index: usize) -> bool {
     let instructions = &body.instructions;
     let len = instructions.len();
@@ -12441,10 +8243,6 @@ pub(crate) fn raised_if_not_logical(found: &[u8]) -> Raised {
 /// substitution, the operand's own rendered text. `truthValue(Error_Logical_
 /// value_guard)` at `instructions/GuardInstruction.cpp:167` is what selects
 /// this sub-number over `IF`'s and `WHEN`'s.
-///
-/// **LEGALITY, and Phase 6 keeps it.** The expression is evaluated and its
-/// value checked before anything waits on it, so the raise is the oracle's
-/// answer whatever a scheduler then does with a `false`.
 fn raised_guard_not_logical(found: &[u8]) -> Raised {
     Raised::syntax(34, 902, vec![found.to_vec()])
 }
@@ -12465,32 +8263,11 @@ pub(crate) fn raised_when_not_logical(found: &[u8]) -> Raised {
 /// expressions of SELECT are false; OTHERWISE expected.", no substitutions
 /// (measured against `interpreter/messages/rexxmsg.xml`'s own `<Text>` for
 /// major 7 sub 003, which carries no `<Sub>` tag).
-///
-/// Raised from `End`'s own arm, not `Select`'s -- `EndStyle::Select`'s own
-/// doc comment says reaching that `END` at run time *is* the error, and
-/// `Select`'s arm sends every other outcome around this instruction
-/// entirely (`Flow::Goto` past it on a match, or onto it exactly on no
-/// match/no `OTHERWISE`), so the clause `run_activation`'s failure path
-/// echoes is the `END`'s own, matching the oracle (measured, rc 249).
 fn raised_select_no_when() -> Raised {
     Raised::syntax(7, 3, Vec::new())
 }
 
 /// Converts a `rexx-num` settings failure into a `Raised`.
-///
-/// `ArithError` has a `sub_code` accessor `rexx-num` made `pub` expressly for
-/// `error.rs`'s own `From` impl (that impl's doc comment says so);
-/// `SettingsError`'s equivalent is still private, and nothing asked for it to
-/// change for this one caller. The `(major, sub)` pairs below are copied from
-/// `settings.rs`'s own doc comments on each variant rather than read through
-/// an accessor that does not exist yet. The pair then goes through
-/// `Raised::syntax`.
-/// Turns `RAISE SYNTAX`'s own argument into the condition it names, or into
-/// the condition the oracle raises when it names nothing.
-///
-/// **Three outcomes, all measured.** Two of them arise only because `RAISE`
-/// lets a program name an arbitrary error number.
-///
 /// ```text
 /// raise syntax 40.4       -> 40.4       the catalogue entry
 /// raise syntax 40         -> 40.0       ditto, major line only (sub 0)
@@ -12502,45 +8279,6 @@ fn raised_select_no_when() -> Raised {
 /// raise syntax 3.5        -> 98.941     found "3005"
 /// raise syntax 0 / 100 / 999 / 'abc' / 40.1000 / '40.'  -> 33.904
 /// ```
-///
-/// **The major must be 1..=99 and the sub 0..=999**; anything else -- a
-/// non-number, zero, `100`, `40.1000` -- is `33.904`, "Incorrect expression
-/// result following SYNTAX keyword of RAISE instruction", rc 223. Both bounds
-/// measured at their boundary: `99` is accepted and `100` is not, `40.999` is
-/// accepted and `40.1000` is not.
-///
-/// **Each half is a Rexx number, not a Rust integer literal** (fix round 2's
-/// NEW 4). `Number::parse` then `whole_value` is what the oracle's own
-/// `RexxString::numberValue` does, and it is observable: `'4E1'` is major 40,
-/// and `'40.1E2'` has sub 100. A decimal point with nothing after it is
-/// rejected outright, where no decimal point at all means sub 0 -- measured,
-/// `raise syntax '40.'` is 33.904 and `raise syntax 40` is the `(40, 0)`
-/// entry.
-///
-/// **The sub is the digits after the point as a number in their own right**,
-/// not as a fraction: `.4` is 4, `.001` is 1, `.10` is 10. Measured through
-/// `raise syntax 40.001`, which renders `(40, 1)`.
-///
-/// **A well-formed pair the catalogue does not know is `98.941`**, rc 158,
-/// and its own `&1` is the *composed* number `major * 1000 + sub` -- except
-/// when the catalogue has no `(major, 0)` entry at all, where it is the
-/// original `major.sub`. Measured: `40.10` gives `"40010"` and `3.5` gives
-/// `"3005"`, while `1` gives `"1.0"` and `2.1` gives `"2.1"`.
-///
-/// That exception is the oracle's own structure rather than a curve fit, and
-/// the re-review confirmed it in the C++: `createExceptionObject` raises
-/// 98.941 with a dot-formatted substitution when the *primary* message is
-/// missing, `buildMessage` raises it with the integer form when only the
-/// *secondary* is. Two call sites, two forms. The branch below asks
-/// `lookup(major, 0)`, which is exactly "is the primary message there".
-///
-/// **How many majors take the dot form is not two.** An earlier version of
-/// this comment said majors 1 and 2 were the only ones in 1..=99 with no
-/// `(major, 0)` entry; counted from the generated catalogue there are 45 (1,
-/// 2, 12, 32, 50-87, 94, 95, 96). The code was never wrong -- it looks the
-/// major up rather than hard-coding a pair -- but the claim was asserted
-/// from two probes rather than counted, which is the error the round it
-/// appeared in was supposed to be about.
 fn raise_syntax_condition(text: &[u8], additional: Vec<Vec<u8>>) -> Raised {
     /// One half of the argument as a Rexx number: `numberValue`, then a
     /// whole-number check. `None` for anything that is not a whole number,
@@ -12577,28 +8315,12 @@ fn raise_syntax_condition(text: &[u8], additional: Vec<Vec<u8>>) -> Raised {
 }
 
 /// A `RAISE`'s condition name as `Raised::condition` carries it.
-///
-/// Always owned: the name comes from the program's own text (`USER FOO` is
-/// built by the parser from the symbol after `USER`), which is exactly the
-/// case `Cow` is there for. Every condition this crate raises on its own
-/// stays on the borrowed side.
 fn condition_name(name: &[u8]) -> Cow<'static, str> {
     Cow::Owned(String::from_utf8_lossy(name).into_owned())
 }
 
 /// [`raised_from_settings`] with the operand's own rendering in place of the
 /// string the required-string protocol converted it to.
-///
-/// `RexxInstructionNumeric::execute` reports **`result`** -- the value the
-/// expression produced -- at each of `Error_Invalid_whole_number_digits`,
-/// `Error_Invalid_whole_number_fuzz` and `Error_Invalid_subkeyword_form`
-/// (`instructions/NumericInstruction.cpp:105`, `:141`, `:189`), so a
-/// `makeString` answering something unusable is reported by the object rather
-/// than by its answer. Measured, oracle rc 230: `numeric digits .K` with a
-/// class-side `makeString` returning `'xx'` reports `found "The K class"`.
-///
-/// `FuzzNotBelowDigits` names two settings and no operand, so it keeps its
-/// own substitutions.
 fn raised_naming_the_operand(error: SettingsError, operand: &[u8]) -> Raised {
     let names_the_operand = matches!(
         error,
@@ -12693,17 +8415,6 @@ fn raised_iterate_wrong_kind(found: &[u8]) -> Raised {
 /// operators; a controlled loop's own bound test and its `BY`'s sign are
 /// the same rule applied to two `Number`s this crate already holds, not a
 /// different one).
-///
-/// **The empty byte slices are provably unused, not a placeholder standing
-/// in for something forgotten.** `compare_decoded`'s own body only reads
-/// its `bytes` arguments when at least one side's `Option<Number>` is
-/// `None` (the string-fallback and strict families) -- every call here
-/// passes `Some` on both sides and a non-strict `CompareOp`, so the branch
-/// that would read `a`/`b` is never taken. Passing real text would cost an
-/// unwanted `Number::format` round-trip (rendering, then reparsing, which
-/// is not exactly what a fresh comparison of the already-held `Number`s
-/// would give at the boundary of a value too wide for `digits` to hold
-/// exactly) for bytes the function does not use.
 fn numeric_less(a: &Number, b: &Number, digits: u64, fuzz: u64) -> Result<bool, ArithError> {
     compare_decoded(b"", Some(a), b"", Some(b), digits, fuzz, CompareOp::Less)
 }
@@ -12721,17 +8432,6 @@ fn numeric_less(a: &Number, b: &Number, digits: u64, fuzz: u64) -> Result<bool, 
 /// entry, under digits 3, and stay that width even after digits widens);
 /// this crate gave `1.23 / 2.23456 / 3.23456` before this fix (the exact
 /// parse survived into the wider-digits passes untouched).
-///
-/// `Number::zero().add(number, digits)` rather than `Number::round_to`:
-/// unary `+` is `0 + number` under the active digits (`eval.rs`'s own
-/// `PrefixOp::Plus` arm does exactly this, though for an `ObjRef` this
-/// function has no need to produce -- `LoopState::Controlled`'s own fields
-/// are `Number`, not `ObjRef`), and `round_to`'s own doc comment
-/// distinguishes the two: rounding alone is not what "prefix +" means, and
-/// the oracle's citation is explicitly the operator, not a bare rounding.
-/// A free function taking `&Number`/`u64` rather than a method, matching
-/// `numeric_less`, just above: it needs no `&self` either, and reads only
-/// what `rexx_num` already exposes as `pub`.
 fn round_via_unary_plus(number: &Number, digits: u64) -> Result<Number, ArithError> {
     Number::zero().add(number, digits)
 }

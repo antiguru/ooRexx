@@ -974,14 +974,6 @@ fn trunc_defaults_places_to_zero() {
 }
 
 // ---- places/before beyond i32 range -----------------------------------
-//
-// `places` (TRUNC) and `before`/`after` (FORMAT) are `u32`, and the
-// interpreter genuinely accepts values past `i32::MAX` -- it just returns a
-// correspondingly huge string. These three each materialise a
-// multi-gigabyte `String` (the whole point is proving the arithmetic
-// doesn't panic/wrap at that scale), so they check only `.len()`, matching
-// `length(...)` on the interpreter side rather than the differential
-// harness, which the reviewer asked not to carry these magnitudes into.
 
 // The next three allocate 2.1 GB, 3.0 GB and 2.1 GB respectively, and
 // `cargo test` runs tests concurrently, so together they peak at 12.5 GB

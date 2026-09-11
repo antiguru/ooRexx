@@ -11,60 +11,6 @@
 
 //! The arity probe: what a documented method does when it is sent an argument
 //! list it could accept, measured against the oracle.
-//!
-//! One machine, two tables. `tests/collection_arity.rs` drives it over the
-//! collections and `tests/introspection_arity.rs` over Phase 5i's
-//! introspection classes; each driver names its own four files, refresh
-//! variable and header through a [`Layout`].
-//!
-//! # The rule that makes a table mean anything
-//!
-//! **A row's argument list is real only if the ORACLE completes the send.**
-//! The probe prints `SENT` after the send; an oracle run that does not reach
-//! it is a harness failure for that row and not a data point, and
-//! [`unsent_rows`] is what a driver turns into a test failure.
-//!
-//! Without the rule the instrument is defeated two ways that both read green:
-//! fill in argument lists for a couple of rows and leave the rest empty, or
-//! send two arguments to everything and let both sides agree on 93.902.
-//!
-//! # The verdicts
-//!
-//! * `agree` -- the oracle and the crate give identical three descriptors.
-//! * `send-differs` -- the receiver was built on both sides and the send
-//!   differs. This is the per-row signal.
-//! * `setup-differs` -- one side could not build the receiver at all, so the
-//!   row says nothing about its own method. **That is a phase's headline
-//!   measurement rather than a harness fault**: the receiver files
-//!   deliberately use the richest receiver the *oracle* can build rather than
-//!   the richest both sides can.
-//! * `exempt` -- a row with a committed reason instead of a list.
-//! * `no-value` -- under [`Layout::compare_values`], a send both sides
-//!   completed that returned no result, so there was nothing to compare
-//!   beyond the three descriptors. Deliberately not `agree`.
-//! * `unstable` -- a row marked [`UNSTABLE`], whose value the oracle does not
-//!   reproduce between two of its own runs.
-//!
-//! # What `agree` does not say
-//!
-//! With [`Layout::compare_values`] off the send is a bare statement whose
-//! result the probe never prints, so `agree` says the three descriptors match
-//! -- that neither side raised -- and not that the two sides answered the
-//! same value. That is a property of this probe and holds for every table it
-//! drives that way, `corpus/collection-arity.tsv` included, whose own header
-//! predates the flag and does not say it. A task sizing itself from an
-//! `agree` row of such a table still owes that row a witness that reads what
-//! it answered.
-//!
-//! # Hygiene that no flag gates
-//!
-//! [`Layout::compare_values`] and [`Layout::fixture`] are per driver, but the
-//! probe directory's substitution out of every side's streams and the
-//! rendering of control characters in evidence are not: they run for every
-//! table this probe drives. That they change nothing in
-//! `corpus/collection-arity.tsv` is a property of what its rows answer today
-//! rather than of this code, and that table's byte identity is what would
-//! notice if it stopped being one.
 
 #![allow(dead_code)]
 
@@ -79,49 +25,18 @@ pub const EXEMPT: &str = "EXEMPT:";
 
 /// A row whose send the ORACLE refuses by design, where that refusal is the
 /// measurement rather than a bad argument list.
-///
-/// `Pointer~new` and `Buffer~new` are the case it exists for: the reference
-/// says instances come only from native code, the oracle answers `93.967`,
-/// and no argument list makes it answer anything else -- so the rule that a
-/// list is real only if the oracle completes the send has no better list to
-/// ask for. The row is still measured: the three sides are compared on the
-/// refusal, and a crate that refuses differently reads `send-differs`.
-///
-/// **The rule is inverted rather than waived**, by
-/// [`refusals_the_oracle_completes`]: a row marked this way that the oracle
-/// *does* complete is a failure, so the marker cannot hide a bad list. The
-/// send is made with no arguments.
 pub const REFUSED: &str = "REFUSED:";
 
 /// A row whose answered value the ORACLE does not reproduce between two of
 /// its own runs, so no value comparison could say anything about it.
-///
-/// `Object~hashCode` and `~identityHash` are the case it exists for. The
-/// value is not printed for such a row and the verdict is `unstable`, which
-/// is `corpus/method-bodies.txt`'s own word for an answer no verdict can rest
-/// on. The send is made with no arguments.
-///
-/// **The rule is inverted rather than waived**, by
-/// [`stable_rows_marked_unstable`]: a row marked this way whose two oracle
-/// runs answer the same thing is a failure, so the marker cannot hide a
-/// divergence.
 pub const UNSTABLE: &str = "UNSTABLE:";
 
 /// A one-line program the probe directory always holds, so that a row whose
 /// send needs a file on disk has one to name.
-///
-/// `Method~newFile`, `Routine~newFile`, `Package~findProgram` and
-/// `Package~loadPackage` take a file name and the oracle raises `3.1` for one
-/// that is not there; the probe writes a single file and cannot be that file
-/// as well, because loading the running program re-executes it.
 pub const FIXTURE: &str = "source.rex";
 pub const NONE: &str = "--";
 
 /// What the probe directory is called in the evidence column.
-///
-/// Its real name carries a pid and a nanosecond timestamp, and
-/// `Package~findProgram` answers the absolute path of [`FIXTURE`], so a row
-/// quoting it verbatim would rewrite itself on every refresh.
 const PROBE_DIR: &str = "<probe directory>";
 
 /// The four files one table is derived from and written to, plus what the
@@ -141,22 +56,12 @@ pub struct Layout {
     pub refresh_env: &'static str,
     pub header: &'static str,
     /// Whether every file carries an `arm` column and both arms are measured.
-    ///
-    /// `corpus/collection-arity.tsv` predates the column and does not carry
-    /// it; widening that file would move bytes no task asked to move.
     pub arm_column: bool,
     /// Whether the probe assigns the send's result and prints `vv~string`, so
     /// that a row completing on both sides with different answers reads
     /// `send-differs` rather than `agree`.
-    ///
-    /// Off for `corpus/collection-arity.tsv`, whose committed bytes are this
-    /// task's control and whose verdicts are earlier phases' measurements.
     pub compare_values: bool,
     /// Whether the probe directory holds [`FIXTURE`].
-    ///
-    /// The oracle searches the working directory for an external routine and
-    /// the probe runs there, so writing it for a driver that has no row
-    /// needing a file would change that driver's environment.
     pub fixture: bool,
     /// Distinguishes this driver's probe directories from another's.
     pub probe_prefix: &'static str,
@@ -222,10 +127,6 @@ pub fn read_table(path: &Path, fields: usize) -> Vec<Vec<String>> {
 }
 
 /// Every receiver in a receivers file, keyed by (class, arm).
-///
-/// This is a free function rather than a [`Layout`] method so that a caller
-/// wanting only the receivers -- `introspection_scopes.rs` does -- does not
-/// have to fabricate a layout whose write target would be an input file.
 pub fn read_receivers(file: &str, arm_column: bool) -> HashMap<(String, String), Receiver> {
     let fields = if arm_column { 5 } else { 2 };
     read_table(&corpus_root().join(file), fields)
@@ -350,22 +251,6 @@ impl Layout {
 
 /// The probe for one row: build the receiver, announce it, send, announce
 /// that.
-///
-/// The message name is quoted because `[]` and `[]=` are not symbols. Under
-/// `values` the send is an assignment and the answer is printed, so a method
-/// returning no result raises `91.999` at the assignment; the trap reads that
-/// one code as a completed send with nothing to compare rather than as a
-/// refusal, which is what keeps such a row out of the harness rule. That
-/// handler builds the code from `rc` and `condition('E')` rather than from
-/// `condition('O')~code`, so reaching it asks nothing of a side under test
-/// that the send itself did not: a probe whose handler a side cannot run
-/// measures the probe.
-///
-/// A `call` receiver puts both the setup and the send inside an internal
-/// routine, because a `.context` built in one activation is dead in its
-/// caller (`98.981`) and a stack with one frame on it has no caller to
-/// describe. The `SYNTAX` trap then sits in the main program, where the
-/// condition arrives after the routine unwinds.
 pub fn program(receiver: &Receiver, method: &str, arguments: &str, values: bool) -> String {
     let call = if arguments == NONE {
         format!("r~'{method}'")
@@ -434,9 +319,6 @@ fn run(command: &mut Command) -> Three {
 }
 
 /// The probe directory's own name, out of both streams and under one name.
-///
-/// Applied to every side, so it cannot make two sides that answered
-/// differently compare equal.
 fn scrub(three: Three, dir: &Path) -> Three {
     let dir = dir.display().to_string();
     (
@@ -596,8 +478,6 @@ fn last_line(text: &str) -> String {
 // ---- what the drivers assert ----
 
 /// Refresh the table, or answer the rows that moved against the committed one.
-///
-/// Under the refresh variable the table is rewritten and the answer is empty.
 pub fn table_disagreements(layout: &Layout) -> Vec<(Row, Row)> {
     let measured: Vec<Row> = measured(layout).into_iter().map(|(row, _)| row).collect();
     if layout.refreshing() {
@@ -650,10 +530,6 @@ pub fn unsent_rows(layout: &Layout) -> Vec<String> {
 }
 
 /// The rows marked [`REFUSED`] whose send the oracle does in fact complete.
-///
-/// This is the inversion that keeps the marker from being an escape hatch: a
-/// row is only allowed to skip the `SENT` requirement while the oracle really
-/// does refuse it.
 pub fn refusals_the_oracle_completes(layout: &Layout) -> Vec<String> {
     let refused = refused_keys(layout);
     measured(layout)
@@ -682,11 +558,6 @@ fn refused_keys(layout: &Layout) -> std::collections::HashSet<(String, String, S
 }
 
 /// The rows marked [`UNSTABLE`] whose two oracle runs answer the same thing.
-///
-/// The classification is a measurement -- the oracle is run twice and its own
-/// two answers compared -- rather than a sentence in a header, so a row that
-/// starts reproducing loses the marker instead of hiding a divergence behind
-/// it.
 pub fn stable_rows_marked_unstable(layout: &Layout) -> Vec<String> {
     let receivers = layout.receivers();
     let dir = probe_dir(layout.probe_prefix);
@@ -719,10 +590,6 @@ pub fn stable_rows_marked_unstable(layout: &Layout) -> Vec<String> {
 
 /// The documented rows with no list at all, and the native rows whose upstream
 /// arity is not zero and that are sent nothing.
-///
-/// This is what defeats "fill in the two control rows and leave the rest
-/// empty": an empty list on a method that takes arguments is caught here
-/// rather than read as agreement.
 pub fn rows_missing_arguments(layout: &Layout) -> Vec<String> {
     let arms: &[&str] = if layout.arm_column {
         &["instance", "class"]
@@ -799,9 +666,6 @@ mod tests {
 
     /// The program text `corpus/collection-arity.tsv` was derived with, spelled
     /// out rather than described.
-    ///
-    /// Every byte of that committed table is downstream of this, so the shape
-    /// is asserted rather than left to a diff someone remembers to run.
     #[test]
     fn a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program() {
         assert_eq!(

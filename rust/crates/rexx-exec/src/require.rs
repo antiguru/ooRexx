@@ -11,18 +11,6 @@
 
 //! Where a `::REQUIRES` name is looked for: the routes it is searched over,
 //! the extensions appended to it, and the name the file is then known by.
-//!
-//! `InterpreterInstance::resolveProgramName`
-//! (`runtime/InterpreterInstance.cpp:1167`) under `RESOLVE_REQUIRES`, over the
-//! entry order `SysSearchPath` builds
-//! (`platform/unix/SysInterpreterInstance.cpp:123`) and the per-name search
-//! `SysFileSystem::primitiveSearchName` does
-//! (`platform/unix/SysFileSystem.cpp:396`).
-//!
-//! **The candidate list is produced whole and separately from the file
-//! system**, so that the route order and the extension order can be asserted
-//! without a directory to put files in: a narrowed search turns an honest
-//! refusal into a loud wrong answer, and that is the property worth pinning.
 
 /// The extension `RESOLVE_REQUIRES` tries ahead of every other, and the one
 /// thing that makes a `::REQUIRES` search differ from an external call's.
@@ -39,11 +27,6 @@ const CURRENT_DIRECTORY: &str = ".";
 /// The path entries a `::REQUIRES` inside a package at `program_dir` is
 /// searched over, in order: the requiring program's own directory, the current
 /// directory, `REXX_PATH`, then `PATH`.
-///
-/// `rexx_path` and `sys_path` are the environment's own values, passed in
-/// rather than read here so that the order is testable without touching
-/// process state. An empty entry is dropped, matching `SysSearchPath::addPath`
-/// and `SysFileSystem::searchPath`'s own `::` skip.
 pub(crate) fn search_entries(
     program_dir: Option<&str>,
     rexx_path: Option<&str>,
@@ -71,21 +54,6 @@ pub(crate) fn search_entries(
 const PATH_SEPARATOR: char = ':';
 
 /// Every path a `::REQUIRES` of `name` tries, in the order it tries them.
-///
-/// `parent_extension` is the requiring program's own extension, which the
-/// oracle prefers over its defaults, and `entries` is [`search_entries`]'
-/// answer.
-///
-/// A name that already carries an extension gets none appended and is searched
-/// once; a name that does not is searched under `.cls`, then the requiring
-/// program's own extension, then the defaults, then bare. Each of those is a
-/// whole pass over `entries`, so a `.cls` in the last entry of `PATH` is found
-/// ahead of a `.rex` in the requiring program's own directory -- measured
-/// against the oracle, which answers the `.cls`.
-///
-/// `requires` is `RESOLVE_REQUIRES`, and [`REQUIRES_EXTENSION`] is the whole
-/// of what it selects. `Package~findProgram` passes `RESOLVE_DEFAULT`
-/// (`classes/PackageClass.cpp:955`) and so never tries it.
 pub(crate) fn candidates(
     name: &str,
     entries: &[String],
@@ -164,13 +132,6 @@ fn has_directory(name: &str) -> bool {
 /// `path` made absolute against `cwd` and reduced to one spelling:
 /// `SysFileSystem::canonicalizeName` followed by `normalizePathName`
 /// (`platform/unix/SysFileSystem.cpp:628`, `:687`).
-///
-/// Lexical, and deliberately so -- the oracle resolves no symlink here, so a
-/// name reached through one keeps the spelling it was reached by, which is
-/// what `PARSE SOURCE` and a traceback then report.
-///
-/// A leading `~` is left alone rather than expanded: `resolveTilde` is the
-/// oracle's own step and nothing in this crate's differential reaches it.
 pub(crate) fn normalize(path: &str, cwd: &str) -> String {
     let absolute = if path.starts_with('/') {
         path.to_string()
@@ -197,13 +158,6 @@ mod tests {
     /// The four routes, in the oracle's own order: the requiring program's
     /// directory first, then the current directory, then `REXX_PATH`, then
     /// `PATH`.
-    ///
-    /// **Measured on the oracle, one route at a time**, each with the file
-    /// present in exactly one of the four and absent from the rest: a
-    /// `::requires 'lib.rex'` answers `from-SUBDIR`, `from-CWD`,
-    /// `from-REXXPATH` and `from-PATH` respectively, and the pairs
-    /// program-directory/cwd and `REXX_PATH`/`PATH` answer the first of each
-    /// when both hold one.
     #[test]
     fn the_four_routes_are_searched_in_the_oracles_order() {
         let entries = search_entries(Some("/prog/"), Some("/rp1:/rp2"), Some("/pp"));
@@ -240,13 +194,6 @@ mod tests {
 
     /// The extension order, and that a whole pass over the path happens per
     /// extension rather than per directory.
-    ///
-    /// **Measured on the oracle**: with `lib`, `lib.cls`, `lib.rex` and
-    /// `lib.REX` all beside a `main.rex` that requires `lib`, the answer is
-    /// `lib.cls`; a `main.REX` requiring the same name answers `lib.REX` and a
-    /// `main` with no extension answers `lib.REX`, which is the first default.
-    /// And a `lib.cls` reachable only through `PATH` beats a `lib.rex` in the
-    /// requiring program's own directory.
     #[test]
     fn the_extension_order_is_cls_then_the_parents_then_the_defaults() {
         let entries = search_entries(Some("/prog/"), None, None);
@@ -279,11 +226,6 @@ mod tests {
     }
 
     /// `RESOLVE_DEFAULT` drops the `.cls` step and keeps every other.
-    ///
-    /// `Package~findProgram` is the caller that passes it
-    /// (`classes/PackageClass.cpp:955`), so a name with no extension resolves
-    /// there to a `.REX` where a `::REQUIRES` of the same name resolves to a
-    /// `.cls` sitting beside it.
     #[test]
     fn the_default_resolve_does_not_try_the_requires_extension() {
         assert_eq!(
@@ -293,9 +235,6 @@ mod tests {
     }
 
     /// A name that already carries an extension gets none appended.
-    ///
-    /// **Measured**: `::requires 'lib.rex'` with only a `lib.rex.cls` beside
-    /// the program is 43.901 at rc 213.
     #[test]
     fn a_name_with_an_extension_is_searched_once() {
         assert_eq!(
@@ -306,9 +245,6 @@ mod tests {
 
     /// The lower-case second pass, and that it is the whole name that is
     /// lowered while the extension keeps the case it was appended in.
-    ///
-    /// **Measured**: `::requires 'LIB'` and `::requires 'LIB.REX'` both find a
-    /// `lib.rex` sitting beside the program.
     #[test]
     fn each_extension_is_tried_in_the_written_case_and_then_in_lower_case() {
         assert_eq!(
@@ -333,11 +269,6 @@ mod tests {
     /// A name qualified enough to stand on its own is checked directly and the
     /// path is not searched, where a name merely carrying a directory is
     /// searched over every entry.
-    ///
-    /// **Measured**: with a `sub/lib.rex` under both the requiring program's
-    /// directory and the current directory, `::requires 'sub/lib.rex'` answers
-    /// the program's own and `::requires './sub/lib.rex'` answers the current
-    /// directory's.
     #[test]
     fn a_directory_qualified_name_bypasses_the_path() {
         let entries = search_entries(Some("/prog/"), None, None);

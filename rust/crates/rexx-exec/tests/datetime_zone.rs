@@ -1,46 +1,5 @@
 //! `DATE` and `TIME` read the host's local zone, and the witness for that has
 //! to pin the zone rather than the clock.
-//!
-//! # Why this is not a `corpus/builtin-probes.txt` row
-//!
-//! That file's own rule is that **nothing in it may read the clock**, and its
-//! `DATE` and `TIME` rows are deliberately conversions of a *given* value
-//! (`date('S','2026-08-04','I')`) for exactly that reason. A no-argument
-//! reading cannot go there whatever it answers, so the containment argument in
-//! `docs/superpowers/plans/phase-4-exclusions.txt` stays true and this file is
-//! where the clock-reading half is compared instead.
-//!
-//! # What makes a wall-clock comparison deterministic anyway
-//!
-//! The two interpreters are launched seconds apart, so no reading of *now*
-//! can be compared byte for byte -- `time('N')` never could be. `TIME('O')`
-//! can: it answers the **zone offset**, not the instant, and that is constant
-//! across a launch pair for every zone except during the one second a DST
-//! transition lands between them. [`ZONES`] is therefore chosen so that most
-//! of its entries have no DST at all, and the property under test -- that the
-//! crate reads the same zone the oracle does -- is one every entry can show.
-//!
-//! `TZ` is set on both children. The oracle's `localtime` honours it and so
-//! does this crate's own path, and that is the whole claim: two independent
-//! implementations, one environment variable, one answer.
-//!
-//! # The two limbs, and why one probe cannot cover both
-//!
-//! `SystemInterpreter::getCurrentTime` fills a timestamp's calendar fields
-//! *and* its offset; `BuiltinFunctions.cpp:1114` and `:1375` then port that
-//! offset onto a timestamp parsed from an input value. Those are separate
-//! code paths here and each needs its own line:
-//!
-//! * `time('O')` reads the clock's own offset -- the first limb.
-//! * `time('O','12:34:56','N')` parses an input value, which starts from a
-//!   cleared timestamp, and then reads *its* offset -- the second. Measured:
-//!   with the port removed this answers `0` while the line above is
-//!   unaffected, so a single-line probe would have missed it entirely.
-//!
-//! `time('O','3600000000','O')` is **not** a witness for the second limb and
-//! is here to record that: its input style copies the current timestamp
-//! rather than clearing one, so it never reaches the ported assignment and
-//! answers `3600000000` either way.
 
 mod support;
 
@@ -51,15 +10,6 @@ use std::process::Command;
 use support::oracle::{Termination, locate};
 
 /// The zones each probe is run under, with why each earns its place.
-///
-/// `UTC` is the control: it is the answer a crate that ignored the zone
-/// entirely would give for every entry, so a run where only `UTC` passes is a
-/// run that proves nothing. `Asia/Kolkata` has no DST and a half-hour offset,
-/// which catches an implementation carrying whole hours. `Etc/GMT+12` is
-/// negative -- the sign convention is the thing most easily inverted, and
-/// `local_minus_utc` is positive east of Greenwich where the `Etc` names run
-/// the other way. `America/New_York` observes DST, so its offset depends on
-/// *when* the probe runs rather than only where.
 const ZONES: &[&str] = &["UTC", "Asia/Kolkata", "Etc/GMT+12", "America/New_York"];
 
 /// One line per probe, each a program and what it is the witness for.
@@ -86,9 +36,6 @@ fn probe_dir() -> PathBuf {
 }
 
 /// This crate's three descriptors for `path` under `zone`, as a subprocess.
-///
-/// In process would not do: `TZ` is read per process, so the executor would
-/// answer under the test binary's own zone whatever this passed it.
 fn run_crate(path: &Path, zone: &str) -> (Vec<u8>, Vec<u8>, i32) {
     let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
         .arg(path)

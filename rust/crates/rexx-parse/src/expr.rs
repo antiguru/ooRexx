@@ -10,33 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The expression grammar: hand-written recursive descent, per D10.
-//!
-//! One `Parser` method per `LanguageParser` method, so the error sites line up:
-//! `expression`, `full_subexpression`, `subexpression`, `message_subterm`,
-//! `subterm`, `message`, `collection_message`, `arg_list`, `logical`,
-//! `qualified_symbol` and `variable_reference_term` answer to
-//! `parseExpression`, `parseFullSubExpression`, `parseSubExpression`,
-//! `parseMessageSubterm`, `parseSubTerm`, `parseMessage`,
-//! `parseCollectionMessage`, `parseArgList`, `parseLogical`,
-//! `parseQualifiedSymbol` and `parseVariableReferenceTerm`.
-//!
-//! # Precedence, and why prefix operators are not in the table
-//!
-//! `RexxToken::precedence` (`Token.cpp:111`) ranks only *dyadic* operators.
-//! The C++ drives them with a stack machine that pops while
-//! `token->precedence() <= second->precedence()` (`LanguageParser.cpp:2924`),
-//! which makes every level left-associative. Recursive descent gets the same
-//! shape by recursing on the right at `prec + 1`.
-//!
-//! Prefix `+`, `-` and `\` appear nowhere in that table. They are parsed in
-//! `message_subterm`, which recurses on *itself* for the operand, so a
-//! prefix operator swallows a whole message subterm before any dyadic operator
-//! is considered and can never lose a binding contest. That is why `-2 ** 2`
-//! is 4 where C and Python give -4, and it is a property of where the parse
-//! sits rather than of a number.
-//!
-//! Every level below was checked against `build/bin/rexx`, and the probe sits
-//! beside the assertion that depends on it in `tests.rs`.
 
 use std::ops::Range;
 
@@ -48,64 +21,12 @@ use crate::token::{
 /// How many levels of nested expression the parser will descend before
 /// raising `11.1`, "Insufficient control stack space; cannot continue
 /// execution", instead of recursing one level deeper.
-///
-/// **One budget, shared by both recursions that consume it**, and the sharing
-/// is a correctness requirement rather than a simplification. Two constructs
-/// re-enter expression parsing: a grouping `(...)`, through `subterm`'s
-/// `LeftParen` arm, and a call or collection argument list, `f(...)` or
-/// `a[...]`, through `arg_list`. They descend through different code and cost
-/// different amounts of stack per level, but they spend the *same* stack. Two
-/// separate budgets of this size would let a program alternating them, say
-/// `f((f((...))))`, reach twice this depth and abort exactly as it did before
-/// any counter existed. `tests/deep.rs`'s
-/// `parens_and_calls_share_one_budget_rather_than_one_each` is that argument
-/// as a test.
-///
-/// Chosen between measured cliffs on both sides, all four wrapped at
-/// `ulimit -v 1048576` for the oracle and taken on the 512 MiB thread D19
-/// gives `rexx-exec`'s public entry point for this parser, debug build,
-/// because debug is what binds:
-///
-/// | construct | oracle starts raising 11.1 | this parser aborted natively |
-/// |---|---|---|
-/// | `say ((((...'a'...))))` | [39,900, 39,950], noisy between | [88,800, 89,000] |
-/// | `say f(f(...'a'...))` | [34,500, 34,760] | [91,948, 92,337] |
-///
-/// 50,000 sits **above both oracle cliffs**, which is the direction to err in:
-/// a lower limit would refuse programs the oracle accepts, raising a condition
-/// where the reference implementation returns an answer, and that is a worse
-/// failure than the one below. And it sits well under the shallower of the two
-/// native cliffs, which is what `MEASURED_NATIVE_CLIFF` pins.
-///
-/// Exact depth parity with the oracle is not achievable -- every cliff above
-/// is a stack artifact of one of two unrelated implementations, not a language
-/// rule -- so this is a chosen approximation and not a reproduction. Programs
-/// between roughly 34,600 and 50,000 levels diverge: the oracle already raises
-/// 11.1 there and this parser still succeeds.
-///
-/// Nothing real goes near this. Counting actual nesting across every `.rex`
-/// file in `rust/corpus/` and `rust/corpus-l1/`, 12,103 files, the **deepest
-/// parenthesis nesting anywhere is 5**. The limit exists for adversarial or
-/// generated input, not for programs anyone writes.
-///
-/// One known off-by-one, harmless and cheaper to state than to remove:
-/// `parse_constant_expression`'s own `LeftParen` arm calls
-/// `full_subexpression` directly rather than through `subterm`, so the
-/// outermost parenthesis of a `RAISE`, `FORWARD`, `USE ARG` default or
-/// `ADDRESS ... WITH` operand is not counted and those four constructs get an
-/// effective limit of `MAX_EXPR_DEPTH + 1`. Everything nested inside still
-/// descends through the counted arm.
 pub const MAX_EXPR_DEPTH: u32 = 50_000;
 
 /// The shallowest native stack overflow measured for any recursion
 /// `MAX_EXPR_DEPTH` guards, on the 512 MiB thread, debug: 88,800 levels of
 /// grouping parentheses parsed and 89,000 aborted, against 91,948 and 92,337
 /// for nested calls.
-///
-/// Recorded as a constant rather than only in prose so the assertion below can
-/// use it. A limit at or above this number would raise `11.1` only for depths
-/// the process no longer survives reaching, which is the same silent abort the
-/// counter was added to remove, arrived at by a plausible-looking edit.
 const MEASURED_NATIVE_CLIFF: u32 = 88_800;
 
 const _: () = assert!(
@@ -116,14 +37,6 @@ const _: () = assert!(
 
 /// Dyadic operator precedence, ported from `RexxToken::precedence`
 /// (`Token.cpp:111`).
-///
-/// Level 0 is "the bottom of the heap" in the C++, for a token that is not an
-/// operator at all. Nothing reaches this function with such a token, because
-/// `parse_subexpression` matches on the token kind first, so the only entries
-/// that matter are 1 through 8.
-///
-/// Level 8 belongs to `\`, which never gets here: a `\` in a dyadic position
-/// is error 35.1. It is kept so the table is a faithful mirror.
 fn precedence(op: Operator) -> u8 {
     match op {
         Operator::Backslash => 8,
@@ -155,11 +68,6 @@ fn precedence(op: Operator) -> u8 {
 }
 
 /// Which tokens end the expression being parsed.
-///
-/// A runtime parameter rather than a type, mirroring the `TERM_*` bit flags
-/// (`Token.hpp:521`-`538`), because the same grammar is entered from contexts
-/// that stop on different tokens and a parenthesised subexpression drops the
-/// enclosing set entirely.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct Terminators(u32);
 
@@ -202,11 +110,6 @@ impl Terminators {
 
     /// The union of two sets. Every real set is a named constant, so this
     /// exists only for the test that builds one the C++ never would.
-    ///
-    /// `cfg(test)` states that contract rather than leaving a dead-code
-    /// allowance to state it. Task 3.7 removed the allowance by becoming a real
-    /// caller of the rest of this block, and this method was the one item no
-    /// caller reached.
     #[cfg(test)]
     pub(super) const fn with(self, flag: Terminators) -> Terminators {
         Terminators(self.0 | flag.0)
@@ -225,17 +128,6 @@ const SUBKEY_WHILE: usize = 48;
 const SUBKEY_WITH: usize = 49;
 
 /// Parses one required expression, stopping at `term`.
-///
-/// Commas make an array-building list, as at the top level of an assignment's
-/// right-hand side.
-///
-/// `missing` is the sub-number to raise when the expression turns out to be
-/// absent, and the caller supplies it because the interpreter's number depends
-/// on which instruction wanted the expression: measured, `r =` is 35.918 and
-/// `interpret` with nothing after it is 35.912. This mirrors
-/// `requiredExpression(terminators, error)` (`LanguageParser.hpp:228`), whose
-/// 18 call sites pass 5 distinct terminator sets and 13 distinct error codes,
-/// every one of them in the 35.9xx block.
 pub(crate) fn parse_expr(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -250,8 +142,6 @@ pub(crate) fn parse_expr(
 }
 
 /// Parses an expression that may be absent, stopping at `term`.
-///
-/// `LanguageParser::parseExpression` (`LanguageParser.cpp:2725`).
 pub(crate) fn parse_expression(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -261,23 +151,6 @@ pub(crate) fn parse_expression(
 }
 
 /// Parses a conditional, where a comma-separated list is a logical AND.
-///
-/// `LanguageParser::parseLogical` (`LanguageParser.cpp:4264`), used by `IF`,
-/// `WHEN`, `GUARD`, `WHILE` and `UNTIL`.
-///
-/// Every element is required, the first one included, so this never yields an
-/// absent expression. Measured: `if then nop`, `if , 1 = 1 then nop` and
-/// `if 1 = 1, then nop` are all 35.929. That makes the C++'s own
-/// `requiredLogicalExpression` null check (`LanguageParser.hpp:220`) dead code,
-/// which is why the C++ never varies the number.
-///
-/// `missing` is threaded anyway, because one caller needs a different number
-/// and cannot get it today: `whenNew` parses a `WHEN` inside a `SELECT CASE`
-/// with `parseCaseWhenList`, whose empty-element error is 35.934 rather than
-/// 35.929, and choosing between the two needs the enclosing block. Measured,
-/// both directions: `select case 1` with `when , then nop` is 35.934, and
-/// plain `select` with the same `WHEN` is 35.929. Every caller here passes
-/// 929; the `SELECT CASE` case becomes one argument at one call site.
 pub(crate) fn parse_logical(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -289,13 +162,6 @@ pub(crate) fn parse_logical(
 
 /// Parses a `WHEN`'s clause inside `SELECT CASE`: one or more values to compare
 /// against the `SELECT`'s own expression.
-///
-/// `LanguageParser::parseCaseWhenList` (`LanguageParser.cpp:3168`). Where
-/// `parse_logical` collapses a one-element list to that element and a longer one
-/// to an AND, this keeps the list, because the elements are values rather than
-/// conditions. A missing element is 35.934 where the logical form's is 35.929,
-/// and both were measured: `select case 1` / `when 1, then nop` is 35.934, plain
-/// `select` / `when 1 = 1, then nop` is 35.929.
 pub(crate) fn parse_case_when_list(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -305,10 +171,6 @@ pub(crate) fn parse_case_when_list(
 }
 
 /// Parses an argument list up to `closer`, which is consumed.
-///
-/// `LanguageParser::parseArgList` (`LanguageParser.cpp:3083`). `None` for
-/// `closer` is the `TERM_EOC` form, where the list runs to the end of the
-/// clause and there is no bracket to match: `CALL f a, b` uses it.
 pub(crate) fn parse_arg_list(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -319,11 +181,6 @@ pub(crate) fn parse_arg_list(
 
 /// Parses the expression inside a `(`, whose `(` is already consumed, and
 /// consumes the `)`.
-///
-/// `LanguageParser::parenExpression` (`LanguageParser.cpp:2695`). A comma does
-/// NOT build a list here, unlike `parse_constant_expression`'s parenthesised
-/// form: `parenExpression` calls `parseSubExpression` where
-/// `parseConstantExpression` calls `parseFullSubExpression`.
 pub(crate) fn parse_paren_expression(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -339,11 +196,6 @@ pub(crate) fn parse_paren_expression(
 
 /// Parses the restricted expression form that `RAISE`, `FORWARD`, `USE ARG`
 /// defaults and `ADDRESS ... WITH` accept.
-///
-/// `LanguageParser::parseConstantExpression` (`LanguageParser.cpp:2632`): a
-/// literal, a constant symbol, or a parenthesised expression, and nothing
-/// else. `None` means the clause ended, which every caller turns into its own
-/// error. Anything present that is not one of the three is 35.1.
 pub(crate) fn parse_constant_expression(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -389,15 +241,6 @@ pub(crate) fn parse_constant_expression(
 
 /// Parses a term that is a message send, or reports that the clause does not
 /// start with one.
-///
-/// `LanguageParser::parseMessageTerm` (`LanguageParser.cpp:3500`). A term with
-/// no `~`, `~~` or `[` applied to it is NOT a message term, so `"echo hi"` and
-/// `f(1)` both come back `None` and are commands.
-///
-/// **On `Ok(None)` this may have consumed tokens, so the caller must discard
-/// `cursor`.** The C++ marks its position and resets it. Nothing rewinds
-/// here, so a caller parses the trial on a cursor it is willing to throw away
-/// and keeps it only when a term comes back.
 pub(crate) fn parse_message_term(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -407,10 +250,6 @@ pub(crate) fn parse_message_term(
 
 /// Parses a `PARSE` or `USE ARG` assignment target: a message term, or a
 /// variable.
-///
-/// `LanguageParser::parseVariableOrMessageTerm` (`LanguageParser.cpp:3455`).
-/// Carries the same discard contract as `parse_message_term`, and for the same
-/// reason.
 pub(crate) fn parse_variable_or_message_term(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -446,10 +285,6 @@ pub(crate) fn parse_variable_or_message_term(
 }
 
 /// Raises the error a non-variable symbol gets where a variable was required.
-///
-/// `LanguageParser::needVariable` (`LanguageParser.cpp:885`): a stem and a
-/// compound both pass, and the error number depends on the spelling rather
-/// than on the class, because the C++ tests the first character.
 pub(crate) fn need_variable(
     ctx: &ParseCtx,
     id: SymbolId,
@@ -477,36 +312,12 @@ struct Parser<'a, 'c> {
     ctx: &'a ParseCtx<'a>,
     cursor: &'c mut TokenCursor,
     /// The byte offset every error is reported against.
-    ///
-    /// The start of the clause, not of the offending token. Measured: a clause
-    /// `r = 1 +,` continued onto a line holding `* 2` reports 35.1 on the
-    /// clause's line even though the `*` is on the next one, and `r = (1,`
-    /// continued likewise reports 36.901 on the clause's line.
     clause_byte: usize,
     /// How many levels of nested expression are currently open: a grouping
     /// `(...)` through `subterm`'s `TokenKind::LeftParen` arm, plus an
     /// argument list through `arg_list`, counted together against
     /// `MAX_EXPR_DEPTH` before descending one level further, so either raises
     /// `11.1` instead of exhausting the native stack.
-    ///
-    /// Zero at the start of every top-level expression parse, which is
-    /// correct: one `Parser` is built fresh per clause-level expression (see
-    /// the free functions above), so nesting in one expression is never
-    /// carried into an unrelated one. Checked rather than assumed: every
-    /// caller of the free functions that build a `Parser` and consume a `(`
-    /// sits in `instruction.rs` at clause level, and none is reachable from
-    /// inside an expression parse, so this counter cannot be reset part way
-    /// down a nesting.
-    ///
-    /// One recursion is deliberately **not** counted here and it is a
-    /// recorded gap, not an oversight: a prefix-operator chain, `- - - -1`,
-    /// recurses in `message_subterm`, which calls itself for its operand and
-    /// never passes through either counted site. Measured, it aborts between
-    /// 1,150 and 1,200 levels on a default 2 MiB thread and is not reachable
-    /// on a sized one at any depth anyone has produced. Closing it needs a
-    /// second check in `message_subterm` and its own oracle cliff, neither of
-    /// which Task 3d had, and unlike the call recursion it does not reach the
-    /// sized path.
     expr_depth: u32,
 }
 
@@ -534,10 +345,6 @@ impl<'a, 'c> Parser<'a, 'c> {
     }
 
     /// The next token, or `None` at the end of the clause.
-    ///
-    /// `None` is not merely exhaustion: `split_clauses` leaves the clause's
-    /// terminating `Eoc` out of the token range, so running out of tokens *is*
-    /// the end of clause the C++ sees as `TOKEN_EOC`.
     fn peek(&self) -> Option<&'a Token> {
         self.cursor.peek().map(|i| &self.ctx.tokens[i])
     }
@@ -580,16 +387,6 @@ impl<'a, 'c> Parser<'a, 'c> {
             TokenKind::RightBracket => term.has(Terminators::SQRIGHT),
             // Only a simple variable can be a keyword terminator, so `TO.`
             // and `1` never stop an expression however the flags are set.
-            //
-            // The `KEYWORD` gate has no observable effect on any set the C++
-            // builds, because every one that carries a keyword flag also
-            // carries `TERM_KEYWORD` (`Token.hpp:532`-`538`), and a set
-            // without one fails the inner match anyway. It is a fast path
-            // there, skipping the `subKeyword()` lookup, and is kept here for
-            // the same reason and so the mirror is complete. Removing it fails
-            // no test built from a real terminator set, which is why
-            // `tests::the_keyword_gate_is_what_admits_a_keyword_terminator`
-            // constructs one the C++ never would.
             TokenKind::Symbol {
                 id,
                 class: SymbolClass::Variable,
@@ -609,10 +406,6 @@ impl<'a, 'c> Parser<'a, 'c> {
     }
 
     /// The byte extent of tokens `from` up to the cursor's current position.
-    ///
-    /// Used as the extent every non-leaf node is built with. `Expr::new`
-    /// widens it by each child, so a node's span contains its operands even
-    /// where a construct's own tokens do not enclose them.
     fn extent(&self, from: usize) -> Range<usize> {
         let to = self.cursor.position();
         let start = self
@@ -677,10 +470,6 @@ impl<'a, 'c> Parser<'a, 'c> {
 
     /// The comma-separated loop that `parseLogical` (`LanguageParser.cpp:4264`)
     /// and `parseCaseWhenList` (`:3168`) share.
-    ///
-    /// The two functions are the same loop with two differences: the error a
-    /// missing element raises, and what is built from the result. Neither
-    /// tolerates an omitted element, unlike an argument list.
     fn comma_list(&mut self, term: Terminators, missing: u16) -> Result<Vec<Expr>, ParseError> {
         self.skip_blanks();
         let mut parts: Vec<Expr> = Vec::new();
@@ -708,12 +497,6 @@ impl<'a, 'c> Parser<'a, 'c> {
     }
 
     /// The precedence loop.
-    ///
-    /// Recursing on the right at `prec + 1` is what makes every level
-    /// left-associative, matching the C++'s `>` rather than `>=` comparison
-    /// when it decides whether to stop popping. Measured with `a = 2 b = 2
-    /// c = 1`: `a = b = c` is 1, which is `(a = b) = c`, where right
-    /// association would give 0. `2 ** 3 ** 2` is 64, not 512.
     fn binary_rest(
         &mut self,
         mut left: Expr,
@@ -943,13 +726,6 @@ impl<'a, 'c> Parser<'a, 'c> {
     /// The `:superclass` override's term, which must pass
     /// `isVariableOrDot` (`Token.hpp:576`): a simple variable, a stem, a
     /// compound variable or a dot symbol.
-    ///
-    /// A stem and a compound both parse here even though neither can name a
-    /// class usefully, and that is the interpreter's behaviour rather than an
-    /// oversight: measured with `rexxc`, `a~b:c.`, `a~b:c.d` and `a~b:c.d.e`
-    /// all translate, and `a~b:c.` then fails at *run* time with 88.914. The
-    /// gate must not be widened past those four classes, because `a~b:1`,
-    /// `a~b:1e5` and `a~b:.` are all error 20.917.
     fn super_class_term(&mut self, term: Terminators) -> Result<Expr, ParseError> {
         let Some(token) = self.peek() else {
             return Err(self.error(20, 917));
@@ -980,9 +756,6 @@ impl<'a, 'c> Parser<'a, 'c> {
 
     /// `parseVariableReferenceTerm` (`LanguageParser.cpp:3719`): a prefix `>`
     /// or `<` on a simple variable or a stem.
-    ///
-    /// Anything else is error 20.930. Measured: `>a` and `>a.` parse, while
-    /// `>a.b`, `>1` and `>"x"` are 20.930.
     fn variable_reference_term(&mut self, from: usize) -> Result<Expr, ParseError> {
         self.skip_blanks();
         let Some(token) = self.peek() else {
@@ -1011,25 +784,12 @@ impl<'a, 'c> Parser<'a, 'c> {
 
     /// `parseArgList` (`LanguageParser.cpp:3083`): comma-separated arguments
     /// up to `closer`, which is consumed.
-    ///
-    /// A closed `(` or `[` construct disambiguates by itself, so the caller's
-    /// terminators are dropped and only the closer is looked for. `None` is
-    /// the `TERM_EOC` form, which has no bracket to match and runs to the end
-    /// of the clause: `CALL f a, b` and `SIGNAL`'s argument lists use it.
-    ///
-    /// Trailing omitted arguments are dropped, which is not cosmetic:
-    /// measured with a routine that reports `arg()`, `f(,)` passes 0
-    /// arguments, `f(1,)` passes 1 and `f(,1)` passes 2.
     fn arg_list(&mut self, closer: Option<Tag>) -> Result<Vec<Option<Expr>>, ParseError> {
         // Task 3d: an argument list re-enters expression parsing, so
         // `f(f(f(...)))` and `a[a[a[...]]]` recurse once per nesting level
         // exactly as grouping parentheses do, through different code and off
         // the same stack. Counted against the same budget for the reason
         // `MAX_EXPR_DEPTH`'s doc gives.
-        //
-        // Once around the whole argument loop rather than once per argument:
-        // `f(a, b, c)` is one level of nesting and three siblings, so counting
-        // per argument would charge a wide call as though it were a deep one.
         if self.expr_depth >= MAX_EXPR_DEPTH {
             return Err(self.error(11, 1));
         }
@@ -1078,10 +838,6 @@ impl<'a, 'c> Parser<'a, 'c> {
 
     /// `parseMessageTerm` (`LanguageParser.cpp:3500`): a subterm with at least
     /// one `~`, `~~` or `[` applied to it.
-    ///
-    /// `None` when the clause does not start with one, which is the common
-    /// case: every keyword instruction and every command reaches here first.
-    /// Nothing is rewound on `None`, see `parse_message_term`.
     fn message_term(&mut self) -> Result<Option<Expr>, ParseError> {
         let Some(token) = self.peek() else {
             return Ok(None);
@@ -1240,9 +996,6 @@ impl<'a, 'c> Parser<'a, 'c> {
 
     /// `parseQualifiedSymbol` (`LanguageParser.cpp:3261`): `ns:name`, either a
     /// qualified call or a class lookup.
-    ///
-    /// The colon is already consumed. The name must be a symbol, of any
-    /// class: measured, `foo:1` and `1:foo` both parse.
     fn qualified_symbol(&mut self, namespace: SymbolId, from: usize) -> Result<Expr, ParseError> {
         let Some(token) = self.peek() else {
             return Err(self.error(20, 923));
@@ -1274,9 +1027,6 @@ impl<'a, 'c> Parser<'a, 'c> {
 }
 
 /// The leaf node a symbol token stands for, from its scanned class.
-///
-/// `addText` (`LanguageParser.cpp:2333`) treats `SYMBOL_DUMMY` and
-/// `SYMBOL_CONSTANT` alike: both are values rather than variables.
 pub(crate) fn symbol_kind(id: SymbolId, class: SymbolClass) -> ExprKind {
     match class {
         SymbolClass::Dummy | SymbolClass::Constant => ExprKind::Constant(id),

@@ -11,11 +11,6 @@
 
 //! Tokens, symbol interning, the keyword tables, and the context every
 //! `parse_*` function is handed.
-//!
-//! This module is the parser's shared vocabulary rather than only the token
-//! type: `ParseError`, `SymbolTable`, `Keywords`, `ParseCtx` and
-//! `TokenCursor` all live here because every later parsing task names them
-//! and none of them belongs to one task alone.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -28,15 +23,6 @@ use crate::selector::SelectorTable;
 
 /// A parse-time error, identified the way the interpreter identifies it: a
 /// major number and a sub-number, as in `13.1` or `99.943`.
-///
-/// Minimal on purpose. The message table, the substitution values and the
-/// mapping from `byte` to a reported line belong to Task 3.8; every task
-/// from the scanner on returns this type, so it exists now.
-///
-/// `message` and `line` are in `error.rs`. There is no substitution-value
-/// field: Task 3.8 removed the empty `subs` it had been given rather than
-/// half-filling it, and `error.rs`'s module note records the measurement that
-/// decided it.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ParseError {
     /// The major error number, e.g. 13 for `Error 13: Invalid character in
@@ -48,20 +34,6 @@ pub struct ParseError {
     /// The byte offset the error is *reported against*, which is the start of
     /// the clause being translated and not the offending character. The name
     /// reads like the latter; it is not.
-    ///
-    /// The interpreter reports a syntax error against the clause: measured, a
-    /// clause `say 1,` continued onto a line holding `'unclosed` reports error
-    /// 6.2 on line 1, and the same holds for 6.1, 13.1 and 15.3. Task 3.8
-    /// resolves this with `ProgramSource::line_of`.
-    ///
-    /// If Task 3.8 ever fills `subs`, it will need the offending position as a
-    /// *second* field rather than by redefining this one, because several
-    /// messages quote the offending text while still being reported against
-    /// the clause: 13.1 quotes `"ä" ('C3A4'X)` and 15.3 quotes `found "g"`.
-    ///
-    /// Task 3.8 did not fill it, so that second field does not exist either.
-    /// Whoever adds substitution values still owes it, and the paragraph above
-    /// still says why.
     pub byte: usize,
 }
 
@@ -82,37 +54,6 @@ impl SymbolId {
     /// zero-based, and assigned in interning order**, so `n` distinct symbols
     /// occupy exactly `0..n` and `SymbolTable::len` is the length a caller
     /// needs to size a `Vec`.
-    ///
-    /// Exists so a per-body table can be a `Vec` indexed by id rather than a
-    /// `HashMap<SymbolId, _>`. Variable lookup is 8.1% of runtime on the mixed
-    /// benchmark and 32.2% on stem-heavy code (D16), and hashing an integer to
-    /// reach a slot that an array index already reaches is the kind of cost
-    /// that is invisible in a profile spread across every variable read.
-    ///
-    /// This reveals no invariant that was not already public: `intern` assigns
-    /// `SymbolId(names.len())` before pushing, and `name` indexes `names` by
-    /// this value directly, so the density guarantee was already load-bearing
-    /// on a public path. `symbol_ids_are_dense_and_zero_based` pins it.
-    ///
-    /// # An id belongs to one table, and misusing it is quiet
-    ///
-    /// The value means nothing against a different `SymbolTable`, and the two
-    /// ways that goes wrong are worth telling apart, because only one of them
-    /// is loud:
-    ///
-    /// * If the value is out of the other table's range, indexing panics, and
-    ///   so does `name`.
-    /// * **If it is in range, you get a different symbol and no complaint at
-    ///   all.** That is the case to design against, and this accessor makes it
-    ///   easier to reach, since a raw `usize` can be carried anywhere a
-    ///   `SymbolId` could not.
-    ///
-    /// The concrete way to hit it in this crate: a `Fragment` carries **its
-    /// own** `SymbolTable`, built fresh by every `parse_interpret` call, so id
-    /// 7 in a fragment and id 7 in the program whose `INTERPRET` produced it
-    /// name unrelated symbols. Anything resolving a fragment's names against
-    /// an enclosing body has to go through the text, `fragment.symbols
-    /// .name(id)`, never through the number.
     pub fn index(self) -> usize {
         self.0 as usize
     }
@@ -121,13 +62,6 @@ impl SymbolId {
 /// Interns upcased symbol spellings. Owned by `ProgramSource`'s parse, handed
 /// to `Program` so Phase 4 can resolve a `SymbolId` back to text for error
 /// messages and `SIGNAL`'s label lookup.
-///
-/// What this buys, measured with the scanner rather than estimated:
-/// `CoreClasses.orx` holds 8,118 symbol occurrences over 526 distinct upcased
-/// symbols, and `StreamClasses.orx` 2,121 over 273. So this replaces ten
-/// thousand short-string allocations with that many hash probes plus a few
-/// hundred `Box<str>`. It also turns keyword recognition and variable lookup
-/// into integer comparisons.
 #[derive(Default, Debug)]
 pub struct SymbolTable {
     by_name: HashMap<Box<str>, SymbolId>,
@@ -137,17 +71,6 @@ pub struct SymbolTable {
 impl SymbolTable {
     /// Intern `text`, upcasing it. Returns the same id for every spelling that
     /// differs only in case.
-    ///
-    /// `to_ascii_uppercase` is byte-identical to the interpreter's
-    /// `translateChar` over everything this can receive, and the reason is
-    /// `LanguageParser::characterTable` (`Scanner.cpp:60`): it maps only `!`,
-    /// `.`, `0`-`9`, `?`, `A`-`Z`, `_` and `a`-`z`, and is **zero for every byte
-    /// from 0x80 to 0xFF**. A non-ASCII byte therefore cannot be part of a
-    /// symbol at all -- `bäc = 2` is a parse-time error 13.1, `Incorrect
-    /// character in program "ä" ('C3A4'X)`. This matters because the scanner
-    /// works over bytes so that a UTF-8 sequence survives a round trip, which
-    /// is true of literals and comments and must not be read as licence to
-    /// admit non-ASCII into a symbol, where it would silently under-upcase.
     pub fn intern(&mut self, text: &str) -> SymbolId {
         // Cow, not Box<str>, because `Box<str>: From<&str>` copies: building
         // the key eagerly would allocate on the lookup path even when the
@@ -188,13 +111,6 @@ impl SymbolTable {
 
 /// An operator's identity, mirroring the operator range of `TokenSubclass`
 /// (`Token.hpp:110`-`141`) in that order.
-///
-/// Two of these are never scanned: `Abuttal`, which the parser synthesises
-/// where two terms sit side by side with nothing between them, and `Blank`,
-/// which is the subclass the C++ gives `TOKEN_BLANK` and which
-/// `TokenKind::Blank` carries here instead. `Concatenate` is both, scanned
-/// from `||` and synthesised. All three are listed because a later task's
-/// precedence table is indexed by this enum.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Operator {
     Plus,
@@ -233,15 +149,6 @@ pub enum Operator {
 
 impl Operator {
     /// The canonical source spelling.
-    ///
-    /// Canonical because two spellings can scan to one operator: `\`, `0xAA`
-    /// and `0xAC` all give `Backslash`, so this returns the ASCII one rather
-    /// than the source bytes. Recover the source bytes from the token's span
-    /// where the distinction matters.
-    ///
-    /// `Abuttal` has no spelling at all and gives the empty string, because
-    /// the parser synthesises it where two terms sit side by side with nothing
-    /// between them.
     pub fn spelling(self) -> &'static str {
         match self {
             Operator::Plus => "+",
@@ -282,14 +189,6 @@ impl Operator {
 
 /// What kind of thing a symbol names, from `scanSymbol`'s classification
 /// (`Scanner.cpp:1527`-`1593`).
-///
-/// The C++ additionally tags a pure-integer constant that fits the platform's
-/// integer width with `INTEGER_CONSTANT` (`Scanner.cpp:1546`). That flag only
-/// selects an internal number representation (`LanguageParser.cpp:2371`
-/// builds an integer object instead of a string plus number-string) and has
-/// no observable effect, so it is not reproduced. Reproducing it would also
-/// mean reproducing a platform-dependent digit limit, 9 on a 32-bit build and
-/// 18 on a 64-bit one.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum SymbolClass {
     /// A lone `.`, the placeholder in a `PARSE` template (`SYMBOL_DUMMY`).
@@ -310,13 +209,6 @@ pub enum SymbolClass {
 }
 
 /// The 19 token classes of `TokenClass` (`Token.hpp:77`), in that order.
-///
-/// `Null`, `Prefix`, `Point` and `Continue` are never produced. They are not
-/// produced by the C++ either: a grep over `interpreter/` finds
-/// `TOKEN_PREFIX`, `TOKEN_POINT`, `TOKEN_CONTINUE` and `TOKEN_NULL` only in
-/// the enum declaration itself. They are listed so that this enum is a
-/// faithful mirror, and so that a reader comparing the two files does not go
-/// looking for a class that was dropped.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TokenKind {
     /// `TOKEN_NULL`. Never produced.
@@ -363,10 +255,6 @@ pub enum TokenKind {
 }
 
 /// `TokenKind` without its payloads, for asserting token *shape*.
-///
-/// One variant per `TokenKind` variant. Assert shape with `Tag` and identity
-/// with the `SymbolId` separately, because a test that asserts both at once
-/// cannot say which failed.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Tag {
     Null,
@@ -431,11 +319,6 @@ impl TokenKind {
 }
 
 /// One token: what it is, and where it came from.
-///
-/// The span is a byte range into the retained source. It is kept for every
-/// token including a symbol, because the source spelling is observable even
-/// though the identity is upcased: `sourceline(1)` on `abc = 1` returns
-/// `abc = 1`, and `trace r` on `aBc = 2` prints `aBc = 2`.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Token {
     pub kind: TokenKind,
@@ -459,10 +342,6 @@ impl KeywordSet {
     }
 
     /// The table index of `id`, or `None` if `id` is not in this set.
-    ///
-    /// Linear over at most 50 `SymbolId`s, which is a handful of `u32`
-    /// comparisons in cache and needs no ordering. Do NOT sort this and do not
-    /// binary-search it: an entry's position IS its meaning to the caller.
     pub fn index_of(&self, id: SymbolId) -> Option<usize> {
         self.ids.iter().position(|&k| k == id)
     }
@@ -480,13 +359,6 @@ impl KeywordSet {
 
 /// The pre-interned spelling tables. Built by `scan` before it reads any
 /// source, so a keyword test never hashes a string.
-///
-/// One table per C++ table, in `KeywordConstants.cpp` order: 35 keyword
-/// instructions, 50 `subKeywords`, 12 `conditionKeywords`, 10
-/// `parseOptions`, 9 `directives`, 40 `subDirectives`. They are separate
-/// because the same spelling means different things in different positions:
-/// `VALUE` is a `parseOptions` entry and a sub-keyword of several
-/// instructions, and nothing may conflate them.
 #[derive(Debug)]
 pub struct Keywords {
     pub instructions: KeywordSet,
@@ -499,12 +371,6 @@ pub struct Keywords {
 
 impl Keywords {
     /// Interns all six tables into `symbols`.
-    ///
-    /// This runs per `SymbolTable`, so an `INTERPRET` in a loop pays the whole
-    /// set every iteration and `Program::symbols` always carries names that
-    /// never appear in the source. Both are accepted: the alternative is a
-    /// shared table, and a shared table cannot hand out stable ids per
-    /// program.
     pub fn new(symbols: &mut SymbolTable) -> Self {
         Keywords {
             instructions: KeywordSet::new(symbols, &INSTRUCTIONS),
@@ -689,13 +555,6 @@ const SUB_DIRECTIVES: [&str; 40] = [
 
 /// Everything a `parse_*` function needs that is not the clause it is
 /// parsing.
-///
-/// A `Clause` holds a range into the token vector, so a function given only a
-/// clause cannot reach the tokens; this bundles them with the two tables that
-/// every instruction and directive parser consults.
-///
-/// Crate-internal: nothing above the parser names it. Phase 4 consumes the
-/// AST, not the token stream it was built from.
 pub(crate) struct ParseCtx<'a> {
     /// Read by the instruction parser for `SourceKind`, which decides whether
     /// a label is error 47.1. The expression grammar needs only the tokens.
@@ -705,23 +564,9 @@ pub(crate) struct ParseCtx<'a> {
     /// symbol in the program. Tasks 3.6 and 3.7 need it to compare a clause's
     /// first symbol against the pre-interned keyword ids, and Task 3.6 needs it
     /// to recover a label's spelling when it builds `Program::labels`.
-    ///
-    /// Not for error substitutions: this phase does not reproduce them.
-    ///
-    /// Read-only is not quite enough for the expression grammar: a message
-    /// name taken from a literal, as in `a~'length'`, has to be upcased and
-    /// has to be interned, and `scan` never saw it as a symbol. `selectors`
-    /// below is where those go, which is why `ExprKind::Message` carries a
-    /// `Selector` where every other name carries a `SymbolId`.
     pub(crate) symbols: &'a SymbolTable,
     /// The message names this parse has interned, which is what
     /// `ExprKind::Message` holds one of.
-    ///
-    /// **A cell, because every `parse_*` function takes `&ParseCtx`** and a
-    /// message name is minted while one of them runs -- unlike `symbols`,
-    /// which `scan` has already filled. Each borrow is taken and dropped
-    /// inside the expression that interns one name, so no two are live at
-    /// once.
     pub(crate) selectors: &'a RefCell<SelectorTable>,
     /// Every reserved *spelling* this parser recognises, pre-interned by `scan`
     /// before it reads any source, so their ids are fixed and every keyword
@@ -730,23 +575,11 @@ pub(crate) struct ParseCtx<'a> {
     pub(crate) keywords: &'a Keywords,
     /// The `::RESOURCE` bodies `scan` copied out, keyed by the index of the
     /// `::` token that opened each directive.
-    ///
-    /// Here rather than passed to the directive parser as an argument, because a
-    /// resource body is scan output that a `parse_*` function consults and that
-    /// is exactly what this struct bundles. Empty for almost every program: only
-    /// `::RESOURCE` fills it.
     pub(crate) resources: &'a [ResourceBody],
 }
 
 /// A position inside one clause's token range, not inside the whole vector,
 /// so an expression parser cannot walk off the end of its clause.
-///
-/// Crate-internal, for the same reason as `ParseCtx`.
-///
-/// Forward only. The C++ consumes a token and calls `previousToken` to put it
-/// back; the grammar here peeks and only then consumes, so it never rewinds.
-/// A `back` method existed and was removed once the expression grammar showed
-/// it had no caller, and Tasks 3.6 and 3.7 are the same style.
 pub(crate) struct TokenCursor {
     /// Index range into `ParseCtx::tokens` that this cursor may visit.
     range: Range<usize>,
@@ -780,13 +613,6 @@ impl TokenCursor {
 
     /// `nextReal` without consuming: index of the next token that is not a
     /// blank.
-    ///
-    /// `None` is the C++'s `TOKEN_EOC`. A clause's terminating token is outside
-    /// the range this cursor was built from, so running out of range is exactly
-    /// `isEndOfClause()`.
-    ///
-    /// `tokens` must be the slice the range indexes, which is
-    /// `ParseCtx::tokens`.
     pub(crate) fn peek_real(&self, tokens: &[Token]) -> Option<usize> {
         let mut i = self.peek()?;
         while i < self.range.end && tokens[i].kind.tag() == Tag::Blank {
@@ -808,20 +634,11 @@ impl TokenCursor {
 
     /// Index of the first token this cursor may visit, whatever it has already
     /// yielded.
-    ///
-    /// A cursor is built from one clause's token range, so this is the clause's
-    /// first token, which is what a parse error is reported against.
     pub(crate) fn start(&self) -> usize {
         self.range.start
     }
 
     /// One past the last token index this cursor may visit.
-    ///
-    /// With `start` and `position`, this is enough to build a second cursor
-    /// over the same clause at the same place, which is how a parse that may
-    /// have to be abandoned is run: on a cursor the caller is willing to
-    /// discard. That is the forward-only replacement for the C++'s
-    /// `markPosition`/`resetPosition` pair, and it is why there is no `back`.
     pub(crate) fn end(&self) -> usize {
         self.range.end
     }

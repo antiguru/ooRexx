@@ -1,14 +1,5 @@
 //! Task 3's own probes: the metaclass graph (D44, R6) and the native class
 //! set [`native_classes`] builds.
-//!
-//! Every oracle-derived fact here is reproduced from
-//! `oracle-probes/task3_fixround1.rex` (fix round 1) or from the probes
-//! named in `task-3-report.md` (the original submission), each run as
-//! `( ulimit -v 1048576; LD_LIBRARY_PATH=.../ooRexx/build/lib .../ooRexx/build/bin/rexx FILE )`
-//! against `/home/moritz/dev/repos/ooRexx/build/bin/rexx`, from a fresh
-//! scratch directory, never the scratchpad root -- `task3_fixround1.rex` is
-//! committed precisely so this claim is checkable rather than merely
-//! asserted.
 
 use rexx_classes::{
     ClassKind, ClassRegistry, InheritRefusal, MethodSlot, deferred_classes, native_classes,
@@ -79,23 +70,6 @@ fn class_is_an_instance_of_itself_by_identity() {
 /// `MethodDict::merge`'s distinguishing half against `merge_methods` alone
 /// is that it carries the metaclass's *scope* into the class-behaviour, not
 /// only its method entries.
-///
-/// This deliberately does not read `class_behaviour_has_scope(class, class)`:
-/// `cascade_build` calls `target.add_scope(class)` *unconditionally* right
-/// after the merge branch (`class_graph.rs`, the `own`/`target.add_scope`
-/// lines following the merge), so a class's own scope lands in its own
-/// class-behaviour regardless of whether the merge ran at all -- that
-/// self-referential read cannot distinguish `merge` from `merge_methods`.
-/// The one scope no other path can ever add is the metaclass's, read from a
-/// class that is neither the metaclass itself nor descended from it:
-/// `Widget` here is an ordinary `subclass Object`, so `.Class` is not among
-/// its ancestors and `cascade_build`'s ordinary ancestor walk never visits
-/// it -- the *only* way `.Class`'s scope can reach `Widget`'s
-/// class-behaviour is the metaclass-merge branch, and only the
-/// scope-copying half of `merge` (not `merge_methods`) marks it present.
-/// Measured: substituting `merge_methods` for `merge` at the
-/// `cascade_build` call site makes this test fail while every other test in
-/// the crate stays green (`task-3-report.md` carries the transcript).
 #[test]
 fn the_metaclass_merge_carries_the_metaclasss_scope_not_just_its_methods() {
     let (mut r, object, class) = bootstrap_object_and_class();
@@ -206,14 +180,6 @@ fn block_name_for(token: &str) -> &str {
 /// versa -- which is also exactly what
 /// `every_checklist_entry_is_registered_in_the_directory_setup_cpp_names`
 /// (`native_classes.rs`'s own internal test) checks from the other side.
-///
-/// **Either directory answers here**, because the split between them is
-/// which name `.environment` gains and nothing about the class object: a
-/// class `addToSystem` registered is wired, cascaded and `REXX_DEFINED`
-/// exactly like the rest, and every property the callers assert holds of it.
-/// Measured on the oracle, `.RexxInfo~class~metaClass` is `The Class class`
-/// and `.RexxInfo~class~superClass` is `The Object class`, the same pair
-/// every environment-registered class answers.
 fn native_class_ids(r: &ClassRegistry) -> Vec<(&'static str, ObjRef)> {
     let deferred = deferred_classes();
     setup_class_names()
@@ -1100,20 +1066,6 @@ fn every_untouched_class_matches_its_recorded_own_instance_method_set() {
 /// `RexxInfo`'s own instance methods, exact -- the class the environment
 /// reaches only through an instance, so its dictionary is what decides
 /// whether a message to `.RexxInfo` resolves at all.
-///
-/// Measured on the oracle at rc 0 with
-/// `do idx over .RexxInfo~class~methods(.nil)~allIndexes~sort; say idx; end`.
-/// The scope-exact `methods(.RexxInfo~class)` answered the identical set on
-/// the same run, so what the live, fully-booted oracle holds for this class
-/// is what `Setup.cpp` alone put there.
-///
-/// **The absences are the point, and each is a measured oracle answer**:
-/// `ID` is absent, which is why `.RexxInfo~id` raises 97.1 and why
-/// the class wiring row ends at rc 159, and `FILESEPARATOR` is absent while
-/// the documented spellings `PATHSEPARATOR` and `DIRECTORYSEPARATOR` are
-/// present. Measured, `.RexxInfo~hasMethod('ID')` and
-/// `.RexxInfo~hasMethod('FILESEPARATOR')` are both `0` where every other
-/// name below answers `1`.
 #[test]
 fn rexxinfos_own_instance_methods_are_setup_cpps_and_carry_no_id() {
     let r = native_classes(&mut mint);
@@ -1156,11 +1108,6 @@ fn rexxinfos_own_instance_methods_are_setup_cpps_and_carry_no_id() {
 
 /// The kernel directory keeps `RexxInfo` out of the environment one, which
 /// is what makes `.RexxInfo` an instance entry rather than a class entry.
-///
-/// **Both directions**, because either alone is satisfied by a degenerate
-/// registry: absent from `lookup` alone is what a class nobody built looks
-/// like, and present in `system_lookup` alone says nothing about whether
-/// `registered()` will hand the name to `.environment` as well.
 #[test]
 fn a_system_class_is_absent_from_the_environment_registration() {
     let r = native_classes(&mut mint);
@@ -1187,12 +1134,6 @@ fn a_system_class_is_absent_from_the_environment_registration() {
 /// `.Array~method("SORT")` answers `a Method` -- the decoy that says
 /// `SORT`'s absence from `Queue` is the removal rather than a donation that
 /// never happened.
-///
-/// The pair is asserted here as well as through the corpus because the
-/// corpus can only see it through `~method`: a build that modelled hiding
-/// as removal would answer the wrong thing to one row and the right thing
-/// to the other, and a build that modelled removal as hiding would swap
-/// them.
 #[test]
 fn hiding_leaves_a_tombstone_where_removal_leaves_nothing() {
     let r = native_classes(&mut mint);
@@ -1886,13 +1827,6 @@ fn every_setup_class_is_native_or_deferred_with_a_reason() {
 
 /// **This registry mints nothing.** Every class it holds was given its
 /// identity by the caller, which is what keeps this crate free of the heap.
-///
-/// **This replaces the test that asserted the opposite.** Until Phase 5j
-/// `reserve_id` minted identities out of `rexx_core::CLASS_SLOT_BASE`'s
-/// reserved range and the test here asserted that no such identity could
-/// equal an arena handle. Since 5j a class *is* an arena object, so the
-/// property worth pinning is the layering one: `rexx-classes` receives
-/// identities and never creates them.
 #[test]
 fn the_registry_holds_the_identities_it_was_given_and_mints_none() {
     let mut given: Vec<ObjRef> = Vec::new();

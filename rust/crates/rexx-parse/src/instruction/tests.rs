@@ -1,14 +1,5 @@
 //! The instruction grammar, pinned against `build/bin/rexx` and
 //! `build/bin/rexxc`.
-//!
-//! Every accepted case below was checked with `rexxc`, which is a parse-only
-//! oracle, and every rejected case carries the number and sub-number `rexxc`
-//! reported. Both directions are tested for every gate: a test that only
-//! checks the accepted cases catches one error and misses its opposite.
-//!
-//! In-crate rather than under `tests/`, because `ParseCtx`, `ClauseCursor` and
-//! `parse_instruction` are all `pub(crate)` and an integration test is a
-//! separate crate.
 
 use std::cell::RefCell;
 
@@ -700,13 +691,6 @@ fn an_empty_loop_conditional_is_the_logical_list_error_not_the_per_keyword_one()
     // `Error_Invalid_expression_logical_list` itself as soon as a sub-expression
     // comes back null, so no caller reaches its own number. Measured under
     // `rexxc`, both spellings:
-    //
-    //   Error 35 running FILE line 1:  Invalid expression.
-    //   Error 35.929:  Missing expression in logical expression list.
-    //
-    // Pinned because nothing pinned it before, which is how this shipped as
-    // 908/909 through a green suite while the IF arm two thousand lines away
-    // had the rule right and said why.
     assert_eq!(err("do while\nend"), (35, 929));
     assert_eq!(err("do until\nend"), (35, 929));
     // The controlled forms reach the same site, so they answer the same way.
@@ -1523,8 +1507,6 @@ fn the_trace_number_gate_is_exactly_the_oracles() {
     // The number test runs BEFORE the option test, so a numeric-looking
     // setting is a skip count and everything else is an option string. Both
     // directions of the boundary are measured against rexxc.
-    //
-    // Whole and within nine digits, so a skip count:
     assert_eq!(setting_shape("trace 1e2"), "skip 100");
     assert_eq!(setting_shape("trace 123456789"), "skip 123456789");
     // Not whole, or wider than nine digits, so not a number -- and then not a
@@ -1749,14 +1731,6 @@ fn address_with_rejects_what_the_oracle_rejects() {
 // ---- Step 4: every keyword reaches its own instruction node ----
 
 /// One legal clause per keyword, and the node it must produce.
-///
-/// Every entry was run through `build/bin/rexxc` and is rc 0. The three that
-/// look wrong are not: measured, `procedure`, `leave` and `iterate` all parse
-/// standing alone and fail only at run time, with Error 17.1, 28.1 and 28.2,
-/// from `RexxActivation.cpp:1250`, `:1214` and `:1161`. They are deliberately
-/// NOT wrapped in a routine or a loop to make them legal, because standing
-/// alone IS the behaviour under test: a parser that rejected them would
-/// diverge on every program holding an unreachable LEAVE.
 const KEYWORD_CLAUSES: &[(&str, &str)] = &[
     ("ADDRESS", "address system"),
     ("ARG", "arg a"),
@@ -1831,12 +1805,6 @@ fn every_keyword_reaches_its_instruction_node() {
 
 /// The corpus programs that hold no `::` directive, so the whole file is one
 /// code body and a short parse would be a failure rather than a boundary.
-///
-/// The third field is the instruction count, pinned. A count is what makes the
-/// test below an assertion rather than a restatement of the parse, and the
-/// instruction total is NOT the clause total, because rule 4 splits a clause
-/// into as many as three. A change in either the splitting or the dispatch
-/// moves it.
 const CORPUS: &[(&str, &str, usize)] = &[
     (
         "lang/keyword_as_variable.rex",
@@ -2007,17 +1975,6 @@ fn a_label_after_an_if_is_rejected_by_the_label_guard() {
     // THEN of a pending IF, because Task 3.4 has already split the colon off
     // and the C++'s own failure path -- carry on into the leftover `:` -- no
     // longer exists here.
-    //
-    // Measured, both spellings: `if 1 = 1` / `then: nop` is rc 221, Error
-    // 35.1, and `select` / `when 1 = 1` / `then: nop` / `end` is 35.1 too.
-    // Here they are 18.1 and 18.2. Both reject, and the numbers differ.
-    //
-    // Delete the `label.is_some()` half of that guard and these two lines are
-    // the only thing that fails: the program then parses as THEN followed by
-    // NOP with the label silently discarded, which the oracle rejects. The
-    // deviation is ACCEPTED only because both sides reject, so an untested
-    // guard would turn it into a wrongly accepted program with nothing saying
-    // so.
     assert_eq!(err("if 1 = 1\nthen: nop"), (18, 1));
     assert_eq!(err("select\nwhen 1 = 1\nthen: nop\nend"), (18, 2));
     // The other direction, three ways. A label spelled THEN standing alone is
@@ -2037,34 +1994,6 @@ fn a_missing_then_is_reported_on_the_offending_clauses_line() {
     // with blank lines between the IF and the offending clause can tell them
     // apart -- with the two adjacent, moving one moves the other and both
     // readings fit. The discriminating case:
-    //
-    //     1  nop
-    //     2  if 1 = 1
-    //     3
-    //     4
-    //     5  nop
-    //        Error 18 running ... line 5:  THEN expected.
-    //        Error 18.1:  IF instruction on line 2 requires matching THEN ...
-    //
-    // The line the error is REPORTED on is the offending clause's. The IF's is
-    // a message substitution, which this phase does not reproduce, so
-    // `ParseError::byte` is the offender's. All six rows measured:
-    //
-    //   | program                                    | main | substitution |
-    //   |--------------------------------------------|------|--------------|
-    //   | nop / if(2) / nop(3)                       |   3  |      2       |
-    //   | nop / nop / nop / if(4) / nop(5)           |   5  |      4       |
-    //   | nop / if(2) / blank / blank / nop(5)       |   5  |      2       |
-    //   | select / when(2) / nop(3) / end            |   3  |      2       |
-    //   | select / when(2) / blanks / nop(5) / end   |   5  |      2       |
-    //   | nop / nop / if(3), no offender             |   3  |      3       |
-    //   | nop / if(2..3 continued), no offender      |   2  |      2       |
-    //   | nop / if(2..3 continued) / nop(4)          |   4  |      2       |
-    //
-    // The no-offender rows are the only ones where the two coincide, and they
-    // are why the IF's byte is kept at all: there is no offending clause to
-    // report against. The continued-IF row narrows it further, to the clause's
-    // START rather than anywhere else inside it.
     for (source, sub, line) in [
         ("nop\nif 1 = 1\nnop\n", 1, 3),
         ("nop\nnop\nnop\nif 1 = 1\nnop\n", 1, 5),

@@ -11,53 +11,6 @@
 
 //! Command-line arguments and a non-empty console, compared against the
 //! running oracle.
-//!
-//! # Why this is a harness of its own
-//!
-//! `tests/corpus.rs` runs every program with **no arguments and stdin at
-//! `/dev/null`**, and cannot do otherwise: a corpus entry is a path and
-//! nothing else, and the corpus's one standing rule (`corpus/README.md`, "The
-//! one rule: determinism") is that a program's output is the same on every
-//! machine, which an interactive console is not. So the whole argument model
-//! and every console read past end of input are outside what any corpus
-//! program can observe. `corpus/lang/pull_queue.rex` covers what *is* in
-//! reach -- the queue, and reading an exhausted console -- and says so in its
-//! own header.
-//!
-//! # Why it drives the binary rather than calling `run_program`
-//!
-//! Every other differential harness in this crate calls `run_program` in
-//! process, and that would be the wrong instrument here, because **the two
-//! things under test both live in `bin/rexx-run.rs`**: turning `argv` into one
-//! argument string, and choosing `ProgramInput::Stdin` rather than the default
-//! that reads nothing. An in-process comparison would supply the joined string
-//! and the input bytes itself and so would test neither decision -- it would
-//! compare this file's idea of the command line against the oracle's, which is
-//! a check on this file. Running the binary compares one whole command line
-//! against the other.
-//!
-//! `rexx_exec::join_command_line`'s own unit tests cover the joining rule row
-//! by row against measured oracle bytes; what is added here is that
-//! `rexx-run`'s `argv` actually reaches it, and that stdin actually reaches
-//! `.input`.
-//!
-//! # What each case is for
-//!
-//! [`CASES`] carries the reason per row. The two that no other check in the
-//! tree can reach are the **absent versus empty argument** pair -- `rexx p.rex`
-//! against `rexx p.rex ""` -- and the **`\r\n` collapse**, and both are the
-//! kind of near-miss that produces a plausible wrong answer rather than a
-//! failure.
-//!
-//! # The gate
-//!
-//! Gated on `REXX_CORPUS_GATE`, the switch `tests/corpus.rs` and
-//! `tests/parse_version_oracle.rs` already use, so an offline checkout is not
-//! asked to produce an oracle. That protection is partial and saying otherwise
-//! would be false: `tests/builtin_status.rs` invokes the oracle with no gate at
-//! all, so a machine without the oracle already cannot run this crate's default
-//! suite. The gate is followed because it is the convention for a check whose
-//! whole subject is a comparison against the oracle.
 
 mod support;
 
@@ -112,11 +65,6 @@ struct Case {
 /// The program every argument row runs. Prints the argument three ways --
 /// through `PARSE ARG`, through the upcasing `ARG` short form, and through
 /// `USE ARG` -- so a row's divergence names which reader disagreed.
-///
-/// `USE ARG` is the one of the three that distinguishes an absent argument
-/// from an empty one, because an unbound target reads as its own derived name
-/// (`P`) where a target bound to the null string reads as nothing. `PARSE ARG`
-/// answers the null string either way.
 const ARG_PROGRAM: &str = "\
 parse arg n1 n2 n3
 say \"parse arg [\" || n1 || \"][\" || n2 || \"][\" || n3 || \"]\"
@@ -145,10 +93,6 @@ say \"4 \" || length(n4) || \" \" || c2x(n4)
 /// runs as a method against the class object with an argument list of its
 /// own, so the command line the program was invoked with is not what `ARG`
 /// reads inside it.
-///
-/// The main body prints the same readings, which is what makes the row
-/// discriminate: an implementation that let the expression see the program's
-/// own arguments prints the same bracketed text on both lines.
 const CONSTANT_ARG_PROGRAM: &str = "\
 say \"constant [\" || .K~c || \"]\"
 say \"program  [\" || arg() || \"][\" || arg(1) || \"]\"
@@ -166,13 +110,6 @@ say \"strict [\" || p || \"]\"
 
 /// Fills the queue, reads it back, and then keeps reading past the end of it
 /// into the console.
-///
-/// `PUSH` inserts at the head and `QUEUE` appends at the tail, so `c`/`b`/`a`
-/// written in that order come back `a`, `c`, `b`; only the bare `PULL`
-/// upcases. The two reads after that fall through to the console, which is
-/// what pins the queue as a store consulted *before* `.input` rather than a
-/// buffer in front of it -- with lines on the console, a reader that drained
-/// the console first would print them in the first three fields.
 const QUEUE_PROGRAM: &str = "\
 push \"c\"
 queue \"b\"
@@ -381,16 +318,6 @@ const CASES: &[Case] = &[
 
 /// Runs `rexx-run` the way a shell would, with the same `argv` and the same
 /// console the oracle gets.
-///
-/// `CARGO_BIN_EXE_rexx-run` is Cargo's own path to the binary built for this
-/// test target, so there is no chance of driving a stale copy from `PATH`.
-/// No memory limit wrapper: the limit exists for the oracle, which requests
-/// gigabytes mid-range without it.
-///
-/// **No `REXX_ENGINE`, so every row here compares the default engine alone**,
-/// which is what `corpus.rs`'s own differential does with `Invocation::none()`.
-/// A row whose subject is not the engines is no worse covered here than in the
-/// corpus; a row that wanted both would have to set the variable itself.
 fn run_rust(path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
     command
@@ -425,9 +352,6 @@ fn run_rust(path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
 /// `support::oracle::descriptor_diffs`'s comparison, because that one takes a
 /// `rexx_exec::Outcome` from an in-process run and both sides here are
 /// subprocesses.
-///
-/// DEVIATION 0 applies to stderr the same way it does there: each side's own
-/// trace-line indent runs are collapsed before comparing.
 fn diffs(rust: &CppOutcome, cpp: &CppOutcome) -> Vec<&'static str> {
     let mut out = Vec::new();
     if rust.stdout != cpp.stdout {
@@ -545,13 +469,6 @@ fn command_line_arguments_and_the_console_agree_with_the_oracle() {
 
 /// An unreadable console is end of input, not an error, and both interpreters
 /// agree on that.
-///
-/// Separate from [`CASES`] because it needs a descriptor rather than bytes:
-/// stdin is bound to a **directory**, so the `read` itself fails with `EISDIR`
-/// rather than reporting end of file. Measured on the oracle before this crate
-/// was written to match: the null string, rc 0, empty stderr. That is the whole
-/// justification for `Input::read_line` answering `None` for an I/O error, and
-/// without this test that answer would be an unwitnessed choice to swallow one.
 #[test]
 fn an_unreadable_console_is_end_of_input() {
     if !gate_mode() {

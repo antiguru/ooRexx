@@ -12,20 +12,6 @@
 //! `Method`'s and `Routine`'s own readers -- `classes/MethodClass.cpp`,
 //! `classes/RoutineClass.cpp` and the `BaseExecutable` rows both share, bound
 //! by `memory/Setup.cpp:1089`-`:1113` and `:1128`-`:1143`.
-//!
-//! A child of [`super`] for the reason [`super::rexx_info`] is one: the rows
-//! point at [`super::NativeMethod`]s, whose parameter list names types only
-//! that module can.
-//!
-//! # Both classes read one thing, and it is not the object
-//!
-//! `BaseExecutable::source` and `BaseExecutable::getPackage` are
-//! `code->getSource()` and `code->getPackage()`, and the seven `is*` flags are
-//! a word on the method object that the *directive* filled in. So every reader
-//! here starts from [`crate::ExecutableSource`] -- which directive declared
-//! this object -- and the answer for an object with no directive is
-//! `BaseCode`'s: an empty `Array` (`execution/BaseCode.cpp:120`) and the
-//! `REXX` package.
 
 use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, ObjRef, Raised, array_of_texts};
 use crate::plan::Package;
@@ -68,10 +54,6 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 ];
 
 /// Which flag one of the `Method` readers answers.
-///
-/// `UNGUARDED_FLAG` is the stored bit and `isGuarded()` is its negation
-/// (`classes/MethodClass.hpp:113`), which is why the default answer is `1`
-/// for this one flag and `0` for the other six.
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum Flag {
     Abstract,
@@ -85,11 +67,6 @@ enum Flag {
 
 /// What the four setters have changed on one `Method` object, over what its
 /// directive declared.
-///
-/// Three fields and not four: `setGuarded` and `setUnguarded` write the one
-/// `UNGUARDED_FLAG` in both directions, while `setPrivate` and `setProtected`
-/// only ever set their bit -- there is no `setPublic` or `setUnprotected` row
-/// on `Method` (`memory/Setup.cpp:1097`-`:1108`).
 #[derive(Copy, Clone, Default)]
 pub(crate) struct MethodFlagWrites {
     pub(crate) unguarded: Option<bool>,
@@ -99,11 +76,6 @@ pub(crate) struct MethodFlagWrites {
 
 /// The `ExecutableSource` this receiver reports on, or the refusal for a
 /// receiver this crate did not build.
-///
-/// The refusal is an internal inconsistency rather than a program's doing: a
-/// receiver reaches here only by resolving one of these names at `Method` or
-/// `Routine`, and every object of either class this crate hands out is
-/// recorded as it is built.
 fn source_of(interp: &Interp, receiver: ObjRef) -> Result<ExecutableSource, Failure> {
     interp
         .executable_sources
@@ -263,11 +235,6 @@ fn answer_flag(
 
 /// `MethodClass::setUnguardedRexx`, `setGuardedRexx`, `setPrivateRexx` and
 /// `setProtectedRexx`: each writes one bit and returns `OREF_NULL`.
-///
-/// **They answer no result at all**, which the C++'s `return OREF_NULL` makes
-/// them and which is measured: oracle rc 165, `say m~setGuarded` is
-/// `91.999 Message "SETGUARDED" did not return a result.` So a witness sends
-/// them as statements, and each is read back through its own `is*`.
 fn set_guarded(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -330,30 +297,6 @@ fn write_flag(
 /// `MethodClass::setSecurityManager` and `RoutineClass::setSecurityManager`,
 /// each of which is `code->setSecurityManager(manager)`
 /// (`classes/MethodClass.cpp:209`, `classes/RoutineClass.cpp:275`).
-///
-/// **The answer is the code object's kind and not a constant.**
-/// `RexxCode::setSecurityManager` puts the manager on the package and returns
-/// true (`execution/RexxCode.cpp:245`-`:249`); every other code object takes
-/// `BaseCode::setSecurityManager`, which returns false unconditionally
-/// (`execution/BaseCode.cpp:133`). Measured, oracle rc 0, one program: a
-/// written `::method`, an `::attribute ... GET` with a body and a
-/// `::routine` answer `1`; a primitive, a generated accessor, a `::constant`
-/// getter, an `abstract` method and an `EXTERNAL` method answer `0`.
-///
-/// **The argument-taking form is refused, and the refusal is the ruling.**
-/// The manager it installs is consulted at the next environment-symbol
-/// lookup -- measured, oracle rc 159: `m~setSecurityManager(.Object~new)`
-/// then `.routines~rr~class~id` is
-/// `97.1 Object "an Object" does not understand message "LOCAL".`, and the
-/// same program without that line is rc 0. Storing the manager and answering
-/// here would run on at rc 0 where the oracle raises, so the interception
-/// points D12 owns are named instead.
-///
-/// **The no-argument form is provably inert**, which is what makes it
-/// answerable: measured, `m~setSecurityManager` with no argument leaves
-/// `.routines~rr` answering. `.nil` is an argument and not an absence --
-/// measured, it installs a manager and the next lookup is `97.1` against
-/// `The NIL object`.
 fn set_security_manager(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -370,9 +313,6 @@ fn set_security_manager(
 
 /// Whether this executable's body is a `RexxCode` -- the distinction
 /// `setSecurityManager` answers and `~source` reads.
-///
-/// A `RexxCode` is what `translateBlock` produced, so it is exactly the
-/// directives that own a [`rexx_parse::CodeBody`] and carry no `EXTERNAL`.
 fn is_rexx_code(interp: &Interp, source: ExecutableSource) -> bool {
     let (program, directive) = match source {
         ExecutableSource::Main { .. } => return true,
@@ -398,12 +338,6 @@ fn is_rexx_code(interp: &Interp, source: ExecutableSource) -> bool {
 
 /// `BaseExecutable::getPackage`: the package the declaring directive belongs
 /// to, and `REXX` for an executable no directive declared.
-///
-/// Measured, oracle rc 0: `.Object~method('objectName')~package~name` is
-/// `REXX`, a `::method` in a file answers that file's own path, and
-/// `.Routine~new('NEWR', 'return 42')~package~name` is `NEWR` -- the
-/// executable's own name, which is what [`Interp::package_path`] answers for a
-/// program compiled from source text.
 fn package(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -439,22 +373,6 @@ fn source(
 /// The physical lines `RexxCode::getSource` answers for one code block:
 /// `Some(i)` is directive `i`'s own body and `None` is the program's main
 /// section.
-///
-/// `RexxCode::getSource` is `package->extractSource(location)` over the block
-/// location `LanguageParser::translateBlock` recorded: it **starts where the
-/// parser stood when the block began and ends just before the clause that
-/// terminated it** (`parser/LanguageParser.cpp:1190`-`:1193` and
-/// `:1626`-`:1671`), so the answer is whole physical lines from the one after
-/// the directive -- line 1, for a main section -- to the one before the next
-/// directive, blank lines and whole-line comments included. Measured, oracle
-/// rc 0: a `::method` followed by a blank line, a comment line,
-/// `  return 1  /* trailing */`, a blank line and a second comment line
-/// answers all five, in order.
-///
-/// **A directive with no body of its own answers nothing**, which is
-/// `BaseCode::getSource`'s empty array and not an empty range: an `ABSTRACT`
-/// method, a generated accessor, a `::CONSTANT` getter and an `EXTERNAL`
-/// binding each carry a `BaseCode` that never saw the source.
 fn block_source_lines(
     interp: &Interp,
     program: ProgramId,
@@ -509,17 +427,6 @@ fn block_source_lines(
 }
 
 /// The line a block begins on, and the byte within the text it begins at.
-///
-/// **A clause ended by `;` leaves the block starting on its own line**, where
-/// one ended by the line itself leaves it starting on the next -- the two
-/// positions `nextClause` can leave the scanner in, and
-/// `blockLocation.setStart(lineNumber, lineOffset)`
-/// (`parser/LanguageParser.cpp:1193`) records whichever it is. Measured,
-/// oracle rc 0: `::method MSEMI; return 7` answers `Array(1)` holding
-/// `< return 7>`, an `::attribute ... get` whose first body line is
-/// `  a = 1;   b = 2` answers `<   b = 2>` and the body's remaining lines,
-/// and one whose first body line ends `a = 1;` answers an **empty** first
-/// line rather than dropping it.
 fn block_first_line(text: &rexx_parse::ProgramSource, start: usize) -> (usize, usize) {
     // The `;` may be inside the clause's own span or just past it, which is a
     // difference between a directive clause and a body clause and not one the
@@ -536,12 +443,6 @@ fn block_first_line(text: &rexx_parse::ProgramSource, start: usize) -> (usize, u
 
 /// The line a block ends on, and the byte it ends at, for a block terminated
 /// by the directive clause beginning at `next`.
-///
-/// **A directive that does not begin its line cuts that line short**, which is
-/// `translateBlock`'s `else` arm (`parser/LanguageParser.cpp:1657`) against
-/// the `getOffset() == 0` arm above it. Measured, oracle rc 0:
-/// `  return 1; ::method B` answers `Array(1)` holding `<  return 1; >`, the
-/// bytes up to the `::` and no further.
 fn block_last_line(text: &rexx_parse::ProgramSource, next: usize) -> (usize, usize) {
     let line = text.line_of(next);
     match text.line_span(line) {
@@ -558,17 +459,6 @@ fn block_last_line(text: &rexx_parse::ProgramSource, next: usize) -> (usize, usi
 
 /// The byte the block whose source is being extracted begins after, or `None`
 /// for a directive that owns no `RexxCode` at all.
-///
-/// **An `::ATTRIBUTE` with a body begins one clause late, and that is the
-/// oracle's own answer rather than an approximation of it.**
-/// `LanguageParser::attributeDirective` decides between a generated accessor
-/// and a real method by calling `hasBody()`
-/// (`parser/DirectiveParser.cpp:1771`), which consumes the next clause and
-/// `reclaimClause()`s it -- reclaiming the clause but not the scanner's line
-/// position, so `translateBlock` records a start past that first clause.
-/// Measured, oracle rc 0: `::attribute ATTMULTI get` over `  a = 1`,
-/// `  b = 2`, `  return a + b` answers `Array(2)` beginning at `  b = 2`,
-/// while the `::method` beside it answers both of its own lines.
 fn block_start(program: &Program, directive: usize) -> Option<usize> {
     let clause_end = program.directives.get(directive)?.clause_span.end;
     match &program.directives[directive].kind {
@@ -586,16 +476,6 @@ fn block_start(program: &Program, directive: usize) -> Option<usize> {
 /// `RoutineClass::callRexx` and the `[]` bound to the same body
 /// (`memory/Setup.cpp:1137`-`:1138`): run the routine over the arguments
 /// given, and answer what it returned.
-///
-/// **A `SUBROUTINE` call, in the routine's own package.** Measured, oracle rc
-/// 0: `parse source` inside a routine reached through `~call` answers
-/// `LINUX SUBROUTINE <the declaring file>`, `arg()` is the count `~call`
-/// passed, and a routine calling a second routine of its own package resolves
-/// it.
-///
-/// **A routine that returns nothing is 91.999**, which is
-/// [`Interp::call_over_values`]' own answer for a function call: measured,
-/// oracle, `say .routines~noret~call` on a bare `return` is 91 at rc 165.
 fn call(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -606,13 +486,6 @@ fn call(
 }
 
 /// `RoutineClass::callWithRexx`: the same call over an argument array.
-///
-/// **`arrayArgument(args, ARG_ONE)` and not the named overload**, which is
-/// the whole of the difference and is measured: oracle rc 163,
-/// `.routines~rr~callWith` is `93.903 Missing argument in method; argument 1
-/// is required.` where the named overload would report `argument arguments`,
-/// and `~callWith(.nil)` is `98.913 Unable to convert object "The NIL object"
-/// to a single-dimensional array value.`
 fn call_with(
     interp: &mut Interp,
     _cleared: Cleared,

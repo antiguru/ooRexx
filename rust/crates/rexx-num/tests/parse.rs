@@ -184,17 +184,6 @@ fn the_negative_threshold_is_on_the_raw_exponent_not_the_adjusted_one() {
 
 /// `from_i64` builds what parsing the same integer's decimal spelling
 /// builds.
-///
-/// It exists to skip that `String`, so equality with it is the whole
-/// contract. `i64::MIN` is in the grid because it is the one value with no
-/// positive counterpart, and a sign-then-negate implementation gets exactly
-/// that one wrong.
-///
-/// **Every decade boundary is in the grid, with the value just below it.**
-/// `from_i64` computes the digit count up front and then writes each digit at
-/// the place that count implies, so a width that is wrong for one decade
-/// alone misplaces every digit of that decade and of no other -- which a grid
-/// of hand-picked values passes by not landing there.
 #[test]
 fn from_i64_builds_what_parsing_the_same_spelling_builds() {
     let mut grid = vec![0i64, 1, -1, 9, 10, -10, 12345, -12345, i64::MAX, i64::MIN];
@@ -219,17 +208,6 @@ fn from_i64_builds_what_parsing_the_same_spelling_builds() {
 
 /// `parse_bytes` refuses a byte string that is not UTF-8, which is what lets
 /// the `from_utf8` guard in front of it go.
-///
-/// The refusing and the accepting halves are both here on purpose. A parser
-/// that simply refused everything would satisfy the first alone, and one that
-/// let a high byte through as a digit or as ignorable padding would satisfy
-/// neither -- each row's ASCII neighbour is the number the same bytes spell
-/// once the offending byte is gone, so the pair says the refusal is about
-/// that byte and not about the shape around it.
-///
-/// `0x80` and `0xFF` are each invalid UTF-8 alone in any position; `0xC3`
-/// begins a two-byte sequence and is invalid unfinished, which is the case a
-/// length check would miss.
 #[test]
 fn a_byte_string_that_is_not_utf8_is_not_a_number() {
     for (bytes, ascii) in [
@@ -256,9 +234,6 @@ fn a_byte_string_that_is_not_utf8_is_not_a_number() {
 }
 
 /// `parse_bytes` is what `parse` is, over the same input.
-///
-/// Every `&str` in `CANONICAL` reaches the parser as bytes either way, so a
-/// disagreement here means the two entry points stopped sharing a body.
 #[test]
 fn the_byte_entry_point_agrees_with_the_str_one() {
     for (input, _) in CANONICAL {

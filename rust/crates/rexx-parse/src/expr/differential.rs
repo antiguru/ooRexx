@@ -1,26 +1,5 @@
 //! The differential check: 4,240 generated expressions, evaluated under
 //! `build/bin/rexx` and again over the parsed tree.
-//!
-//! A parse tree cannot be compared to the interpreter directly, so this
-//! compares *results*. Any divergence on a well-formed expression is a
-//! precedence or associativity error, because nothing else in the pipeline
-//! differs: the arithmetic itself is `rexx-num`, which Phase 2 already pinned
-//! against the same interpreter.
-//!
-//! The corpus and its answers live in `rust/corpus/expr/precedence.tsv`, whose
-//! header records how it was generated. Answers are baked in rather than
-//! recomputed, which is how every other test in this crate treats the oracle:
-//! `cargo test` must not need a built C++ interpreter.
-//!
-//! # What the evaluator is not
-//!
-//! Deliberately bounded to what settles precedence: numeric and string
-//! literals, simple variables from a fixed table, the arithmetic and
-//! comparison operators through `rexx-num`, concatenation explicit and
-//! abuttal, the logical operators, prefix `+ - \`, and parentheses. A call, a
-//! message send or a compound variable is `Unsupported` here and is asserted
-//! on by shape in `tests.rs` instead. Growing this evaluator any further would
-//! be starting Phase 4 inside a test.
 
 use rexx_num::{CompareOp, DivOp, Number};
 
@@ -66,10 +45,6 @@ fn number(text: &str) -> Result<Number, Failure> {
 }
 
 /// A logical operand, which must be exactly `0` or `1`.
-///
-/// Measured: `' 1 ' & 1`, `'1.0' & 1`, `1.0 & 1` and `'01' & 1` are all error
-/// 34.901, `Logical value must be exactly "0" or "1"`. So this is a byte
-/// comparison and not a numeric one.
 fn logical(text: &str) -> Result<bool, Failure> {
     match text {
         "0" => Ok(false),
@@ -83,10 +58,6 @@ fn boolean(value: bool) -> String {
 }
 
 /// The `rexx-num` comparison for a Rexx comparison operator.
-///
-/// The negated spellings map onto the positive ones, which the interpreter
-/// agrees with: measured, `2 \> 2` and `2 <= 2` are both 1, `3 \> 2` and
-/// `3 <= 2` are both 0, and `'2 ' \>> '2'` and `'2 ' <<= '2'` are both 0.
 fn compare_op(op: Operator) -> Option<CompareOp> {
     Some(match op {
         Operator::Equal => CompareOp::Equal,
@@ -156,10 +127,6 @@ fn binary(op: Operator, left: &str, right: &str) -> Result<String, Failure> {
         // interpreter does not short-circuit: measured, `1 | 0 || 0` raises
         // 34.901 on `"00"` even though the left operand is already 1, and
         // `2 = 3 & 4` raises on `4` even though the left operand is 0.
-        //
-        // Writing this as `logical(left)? && logical(right)?` passes the corpus
-        // on 4,206 of 4,240 cases and fails the other 34, which is what caught
-        // it: Rust's `&&` and `||` do short-circuit.
         Operator::And | Operator::Or | Operator::Xor => {
             let (left, right) = (logical(left)?, logical(right)?);
             return Ok(boolean(match op {
@@ -201,19 +168,6 @@ const CORPUS: &str = include_str!("../../../../corpus/expr/precedence.tsv");
 
 /// The error numbers that mean the interpreter rejected the expression at
 /// translation time rather than while running it.
-///
-/// The generator emits a handful of syntactically invalid expressions, and
-/// they are worth keeping: `2 \3` is one, because no blank token is emitted
-/// before a `\` and so the `\` lands in a dyadic position, which is 35.1.
-///
-/// This list is wider than the corpus header's, which names 35, 36, 37, 19 and
-/// 20. Those five are the ones the generator actually produces today; 6, 13 and
-/// 25 are unmatched comment, invalid character and invalid subkeyword, which are
-/// translation errors too and would have to be classified the same way if a
-/// regenerated corpus ever emitted one. The list is deliberately the property,
-/// every translation-time number, rather than an inventory of what is currently
-/// exercised, because an inventory silently reclassifies a row the day the
-/// generator changes.
 const SYNTAX_ERRORS: &[&str] = &["6", "13", "19", "20", "25", "35", "36", "37"];
 
 #[test]

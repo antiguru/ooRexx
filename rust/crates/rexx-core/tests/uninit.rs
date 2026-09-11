@@ -98,14 +98,6 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
 
 /// Flagging an object that was flagged and cleared before the collection
 /// reports it once, not once per flagging.
-///
-/// **This is the registry's one hazard**, and it is the only place it is
-/// pinned: the collector reads a list `set_uninit` appends to rather than
-/// walking the arena, so an object that is cleared and flagged again holds
-/// two entries unless clearing takes its own away. Both are live and both
-/// flagged, so both would be reported, and `UNINIT` would run twice for one
-/// object. Deleting the registry filter in `Heap::clear_uninit_all`
-/// reddens this and nothing else in the workspace.
 #[test]
 fn an_object_flagged_twice_across_a_clear_is_reported_once() {
     let mut heap = Heap::new();
@@ -127,13 +119,6 @@ fn an_object_flagged_twice_across_a_clear_is_reported_once() {
 
 /// A flagged object that stays unreachable across several collections is
 /// resurrected every time and reported once.
-///
-/// **Both halves are load-bearing and they pull in opposite directions.** The
-/// flag is the object's only root, so a collection that stopped resurrecting
-/// it would sweep an object whose finalizer has not run; and a caller
-/// recording every report has to scan what it already holds unless the
-/// reports are unique, which is what made a program with many pending
-/// finalizers quadratic.
 #[test]
 fn a_still_unreachable_flagged_object_is_reported_once_and_resurrected_every_time() {
     let mut heap = Heap::new();
@@ -157,10 +142,6 @@ fn a_still_unreachable_flagged_object_is_reported_once_and_resurrected_every_tim
 }
 
 /// `take_uninit_flagged` answers every flagged object and leaves none behind.
-///
-/// The termination sweep's entry point: after it, the objects are ordinary
-/// and the next collection takes them, which is what makes them finalizable
-/// exactly once.
 #[test]
 fn taking_the_flagged_objects_clears_every_flag() {
     let mut heap = Heap::new();

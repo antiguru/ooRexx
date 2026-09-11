@@ -10,61 +10,12 @@
 /*----------------------------------------------------------------------------*/
 
 //! A [`Number`]'s decimal digits, held inline while they are few.
-//!
-//! One byte per decimal digit is what the interpreter also stores, but it
-//! stores them *in* the object: `NumberString` ends in `char numberDigits[4]`,
-//! a trailing flexible array, and arithmetic runs in a `char
-//! resultBufFast[FAST_BUFFER]` stack buffer with `FAST_BUFFER = 48`, so a
-//! small number costs no separate allocation at all. A `Vec<u8>` per `Number`
-//! costs one, plus the `free` that matches it and a fresh pair for every
-//! clone.
-//!
-//! [`Digits`] is that answer in safe Rust: an inline array for the small case
-//! and a `Vec<u8>` for the rest. It derefs to `[u8]`, so every read is the
-//! slice operation it always was; only construction and the few in-place
-//! edits go through methods here.
-//!
-//! [`Number`]: crate::Number
 
 /// How many decimal digits fit without a heap allocation.
-///
-/// **Two bounds from the language set this, and it is above both.**
-///
-/// * `NUMERIC DIGITS` defaults to 9. Every operator truncates its operands to
-///   `working_length(digits)` -- `digits + 1`, so ten -- and an addition can
-///   carry into an eleventh digit, so eleven is the widest intermediate the
-///   default setting produces.
-/// * [`Number::from_i64`] is the door a machine integer takes into this
-///   crate, and an `i64` is at most nineteen decimal digits. That function's
-///   own reservation already writes nineteen down, rounded to twenty.
-///
-/// **What bounds it above is layout, not a benchmark.** Measured with
-/// `size_of` over candidate capacities: at twenty, `Digits` is 32 bytes and
-/// `Number` 40; at thirty-one, `Number` reaches 48. `rexx-core`'s `Body::Num`
-/// holds a `Number` beside a `u32`, a `Form` and an `Option<Vec<u8>>`, and
-/// `Body`'s width is set by its widest variant -- so a `Number` past 40 bytes
-/// widens every arena slot, and one at 40 does not. `the_capacity_is_the_one
-/// _the_language_asks_for` holds both ends of that.
-///
-/// [`Number::from_i64`]: crate::Number::from_i64
-/// **Thirty rather than twenty, and the difference is free.** `Digits` is an
-/// enum over a 24-byte `Vec`, so its width is set by that arm until the
-/// inline buffer passes it: measured with `size_of`, every capacity from
-/// twenty to thirty gives `Digits` 32 bytes and `Number` 40, and thirty-one
-/// is where `Number` reaches 48. Twenty spilled every intermediate that ran
-/// one digit past it, and at `NUMERIC DIGITS 20` -- which works at
-/// `digits + 1` -- that is every kept product and every division working
-/// value.
 pub(crate) const INLINE_DIGITS: usize = 30;
 
 /// Most significant digit first, each value 0..=9 -- the same contract
 /// [`Number::digits`] always had, with the storage decided by length.
-///
-/// `Inline`'s `len` is the number of live bytes at the front of `buf`;
-/// nothing reads past it, and every method that extends the live region
-/// writes the bytes it exposes rather than trusting what was left there.
-///
-/// [`Number::digits`]: crate::Number
 #[derive(Clone)]
 pub(crate) enum Digits {
     Inline { len: u8, buf: [u8; INLINE_DIGITS] },
@@ -132,10 +83,6 @@ impl Digits {
     }
 
     /// Moves the live digits to the heap, reserving room for `extra` more.
-    ///
-    /// A `Digits` never comes back from the heap once it has been here: the
-    /// allocation is already paid, and re-inlining a shrinking vector would
-    /// free and re-allocate for a value that is about to grow again.
     fn spill(&mut self, extra: usize) {
         if let Digits::Inline { len, buf } = self {
             let live = &buf[..*len as usize];
@@ -203,12 +150,6 @@ impl Digits {
 
     /// Drops `count` digits from the front, which is what stripping leading
     /// zeros does.
-    ///
-    /// **Zero returns at once, and that is the common call.** Every
-    /// `Number::assemble` ends here, and a number written without a leading
-    /// zero -- almost all of them -- asks for nothing to be dropped. Without
-    /// this the inline arm still runs `copy_within(0..len, 0)`, which is a
-    /// `memmove` of the live digits onto themselves.
     #[inline(always)]
     pub(crate) fn drop_front(&mut self, count: usize) {
         if count == 0 {
@@ -309,11 +250,6 @@ mod tests {
     use crate::{CompareOp, DivOp, Form, Number};
 
     /// The same value with its digits forced onto the heap.
-    ///
-    /// Which arm holds a number's digits is not supposed to be observable in
-    /// any answer, and that is a claim about every operation rather than
-    /// about the container -- so it is checked by running the operations
-    /// twice rather than by inspecting the container twice.
     fn heaped(n: &Number) -> Number {
         Number {
             negative: n.negative,
@@ -356,10 +292,6 @@ mod tests {
     }
 
     /// Every operation, on both arms, over the boundary population.
-    ///
-    /// This is the test the inline arm exists to be held to: it hand-shifts
-    /// bytes where a `Vec` called into the standard library, and the failure
-    /// that produces is a wrong digit rather than a crash.
     #[test]
     fn every_operation_answers_the_same_with_the_digits_on_the_heap() {
         let values = population();

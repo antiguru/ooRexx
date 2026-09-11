@@ -1,13 +1,5 @@
 //! Embeds the Rexx-written part of the interpreter's own library from the C++
 //! tree at build time.
-//!
-//! The C++ tree is the source of truth and these files are read-only. Each is
-//! pinned by the sha256 recorded beside its path, so a file that changes
-//! underneath this crate is a build failure and not a silent divergence: the
-//! bootstrap's whole verification rests on the bytes being the shipped ones.
-//!
-//! Nothing generated is written into `src/` -- it goes to `OUT_DIR` and is
-//! `include!`d, following `crates/rexx-inventory/build.rs`.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -15,11 +7,6 @@ use std::path::{Path, PathBuf};
 /// One embedded program: the name a `CALL` inside the bootstrap resolves it
 /// by, the path it is read from relative to this crate, and its pinned
 /// sha256.
-///
-/// **The `unix` platform file, not the `windows` one.** Both are tracked and
-/// CI runs five platforms; `interpreter/platform/windows/PlatformObjects.orx`
-/// is neither read nor embedded here, and a Windows build would need its own
-/// row. The unix file's whole content is one comment line.
 struct Source {
     name: &'static str,
     path: &'static str,
@@ -81,10 +68,6 @@ fn main() {
 }
 
 /// SHA-256 of `bytes`, lower-case hex.
-///
-/// Written here rather than taken as a build-dependency: this workspace's
-/// lockfile has no digest crate in it and the whole use is one hash of three
-/// files at build time. FIPS 180-4 section 6.2, transcribed.
 fn sha256_hex(bytes: &[u8]) -> String {
     const K: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,

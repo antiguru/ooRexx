@@ -10,37 +10,11 @@
 /*----------------------------------------------------------------------------*/
 
 //! The Rexx parser: source retention, scanning, and the grammar.
-//!
-//! The behaviour reproduced here was measured against `build/bin/rexx`
-//! rather than taken from the ANSI standard; where they differ, the
-//! interpreter wins.
 
 // Phase 3 built this crate bottom up, one layer per task, so a layer's entry
 // point had no non-test caller until the layer above it landed. `cargo clippy
 // --all-targets` compiles the library once with `cfg(test)` off, and there each
 // such item was dead.
-//
-// Dead-code allowances marked exactly those items, in `directive.rs` and
-// `instruction.rs`, each carrying a trailing `deleted by Task 3.N` on the
-// attribute line itself so the set was greppable and each entry named the task
-// that removed it. The phase gate's grep is anchored to attribute syntax, so
-// naming the lint in prose like this is fine and no rule against it applies.
-//
-// Task 3.7 removed the one in `expr.rs` that way, and the one item there no
-// caller reached, `Terminators::with`, carries `cfg(test)` instead: it is
-// test-only rather than not-yet-called, and those are different contracts.
-// Task 3.7b removed the last three, in `directive.rs`'s `parse_directive` and
-// `instruction.rs`'s `parse_instructions` and `parse_instruction`, by becoming
-// their caller below. None remain. Task 3.7c added `block.rs` with a non-test
-// caller from the start, and `parse_instructions` no longer exists: assembling
-// a body is `translate_block`'s, and it is the only caller of
-// `parse_instruction`.
-//
-// An expect attribute cannot be used instead of allow: the lint fires in the
-// library compilation and not in the library-as-test one, so the expectation
-// would be unfulfilled in the second and that is a warning of its own. There
-// is no crate-wide allowance, deliberately, because a blanket one would also
-// hide code that is dead by mistake.
 
 mod ast;
 mod block;
@@ -86,18 +60,6 @@ use crate::token::ParseCtx;
 
 /// A whole program: everything `translate` produces from one source buffer
 /// (`LanguageParser.cpp:735`-`765`).
-///
-/// `source` and `symbols` travel with the nodes rather than being handed back
-/// separately, because every node's span is a *byte* range into `source` and
-/// every `SymbolId` is meaningless without `symbols` -- Phase 4 resolves a name
-/// back to text through it to report errors and to implement `SIGNAL VALUE`.
-///
-/// Accepts every valid program and rejects invalid block structure: an unclosed
-/// `DO`, an `END` with nothing open, a `WHEN` outside a `SELECT`. The main
-/// body is held as a `CodeBody`, the same type a directive's body has, so an
-/// evaluator can borrow one `&CodeBody` for whichever body it is running
-/// rather than cloning `instructions` and `labels` out of two sibling fields
-/// -- see `CodeBody`'s own doc for what each of those fields means.
 #[derive(Debug)]
 pub struct Program {
     pub source: ProgramSource,
@@ -114,28 +76,6 @@ pub struct Program {
 
 /// What `INTERPRET` produces: one code body, parsed at *run time* rather than
 /// at build time, from the string an `INTERPRET` instruction is about to run.
-///
-/// Carries its own source for the same reason `Program` does: the instruction
-/// spans index it and nothing else. It carries its own `SymbolTable` for the
-/// same reason, and the ids in it are **not** comparable with the enclosing
-/// `Program`'s -- `parse_interpret` builds a fresh table every call, so id 7
-/// in a fragment and id 7 in the program that ran the `INTERPRET` name
-/// unrelated symbols. Phase 4 must resolve a fragment symbol through the
-/// fragment's own table, and if it ever needs to match a fragment name against
-/// an enclosing variable it has to go through the text, `fragment.symbols
-/// .name(id)`, because there is deliberately no name-to-id lookup on
-/// `SymbolTable`.
-///
-/// No `directives` field: a directive is not legal inside `INTERPRET` text
-/// (error 99.914), and `parse` raises that before a `Fragment` is ever built.
-/// `body` does carry a `labels` map, because every `CodeBody` has one, but it
-/// is always empty here: a label is not legal inside `INTERPRET` text either,
-/// already enforced with error 47.1 where `parse_instruction` builds a
-/// `Label` node, so nothing ever populates it. Measured directly (Task 1),
-/// both the label-alone and the label-as-a-`SIGNAL`-target shapes: `signal on
-/// syntax` around `interpret "lab: nop"` and around `interpret "signal lab;
-/// lab: nop"` both give `condition('o')~code` `47.1`, "INTERPRET data must not
-/// contain labels; found "LAB"."
 #[derive(Debug)]
 pub struct Fragment {
     pub source: ProgramSource,
@@ -144,10 +84,6 @@ pub struct Fragment {
 }
 
 /// Parses a whole program from `text`.
-///
-/// `text` is a build-time source -- a file's bytes or an equivalent buffer --
-/// not the string an `INTERPRET` is about to run. Use `parse_interpret` for
-/// that.
 pub fn parse_program(text: Vec<u8>) -> Result<Program, ParseError> {
     let source = ProgramSource::new(text, SourceKind::Program);
     let parsed = parse(&source)?;
@@ -160,20 +96,6 @@ pub fn parse_program(text: Vec<u8>) -> Result<Program, ParseError> {
 }
 
 /// Parses a program whose physical lines are given one per element.
-///
-/// This is `ArrayProgramSource` (`parser/ProgramSource.cpp:560`) rather than
-/// a buffer split on its terminators, and the difference is observable:
-/// nothing inside an element divides it, so a `\r`, a `\n` or a Ctrl-Z there
-/// is a character in the program rather than a line boundary. What the
-/// interpreter compiles a method or a routine from is an array like this,
-/// a string source having been wrapped in a one-element one first
-/// (`execution/BaseExecutable.cpp:174`-`:177`).
-///
-/// A `Program` and not a `Fragment`: `LanguageParser::generateMethod` runs
-/// the same `compileSource` a file does and takes the main section as the
-/// executable (`parser/LanguageParser.cpp:590`-`:608`), so directives are
-/// accepted here where an `INTERPRET` raises 99.914 for one, and a label is
-/// accepted where an `INTERPRET` raises 47.1.
 pub fn parse_lines(lines: &[&[u8]]) -> Result<Program, ParseError> {
     let source = ProgramSource::from_lines(lines);
     let parsed = parse(&source)?;
@@ -186,16 +108,6 @@ pub fn parse_lines(lines: &[&[u8]]) -> Result<Program, ParseError> {
 }
 
 /// Parses the string an `INTERPRET` instruction is about to run.
-///
-/// Differs from `parse_program` in three measured ways: directives are
-/// rejected (99.914, one check right after the main body rather than per
-/// directive, matching `LanguageParser.cpp:1119`'s `nextClause();
-/// syntaxError(...)`), labels are rejected (47.1, already enforced where
-/// `parse_instruction` builds a `Label` node), and a `ParseError`'s `byte` is
-/// a position inside the ONE-LINE fragment text, not inside the program that
-/// called `INTERPRET`. Resolving that byte to "the `INTERPRET` instruction's
-/// own line" is the caller's job, not this crate's, which is why
-/// `Fragment::source` is retained rather than made redundant by it.
 pub fn parse_interpret(text: Vec<u8>) -> Result<Fragment, ParseError> {
     let source = ProgramSource::new(text, SourceKind::Interpret);
     let parsed = parse(&source)?;
@@ -226,22 +138,6 @@ struct Parsed {
 }
 
 /// The composition shared by both entry points.
-///
-/// The borrow order is fixed and it compiles for exactly one reason: every
-/// span that survives into `Instruction`/`Directive`/`Expr` is a **byte**
-/// range into `source`, never a token index, so `instructions` and
-/// `directives` can outlive `ctx` -- which borrows `source`, `scanned.tokens`,
-/// `scanned.symbols` and `scanned.keywords` -- letting `ctx`, and the borrows
-/// it holds, be dropped at the end of this function while `source` and
-/// `scanned.symbols` move on into whichever of `Program`/`Fragment` the caller
-/// is building. If any node held a token index instead, this would not
-/// compile, which would be the correct outcome rather than something to work
-/// around.
-///
-/// One `ClauseCursor`, built once. `translate_block` already stops at the
-/// first `::` clause and leaves the cursor sitting there, so the directive
-/// loop below picks up exactly where it left off -- no second `split_clauses`
-/// call and no re-deriving where the main body ended from a fresh one.
 fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
     let scanned = scan(source)?;
     // Declared ahead of `ctx`, which borrows it, and dropped with the parse.
@@ -285,13 +181,6 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
         // raises 99.916 on its own -- measured for all five kinds that can never
         // have a body (`::CLASS`, `::OPTIONS`, `::REQUIRES`, `::ANNOTATE`,
         // `::RESOURCE`).
-        //
-        // A body gets its own `translate_block` call, which is what makes it a
-        // code body rather than a continuation of the one before: its own
-        // control stack, so a `DO` may not be closed across the directive; its
-        // own label table; and its own `EXPOSE` placement rule, so a body's
-        // first instruction may be an `EXPOSE` even though the main program
-        // already had one. Measured, all three.
         if let Some(slot) = directive_body(&mut directive.kind) {
             *slot = translate_block(&ctx, &mut cursor)?;
         }
@@ -306,10 +195,6 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
 }
 
 /// The body slot of a directive that carries one, for the assembler to fill.
-///
-/// `None` for a directive shape that can never have a body, and also for one
-/// that can but does not: an external `::ROUTINE`, say. See each field's own
-/// doc comment in `ast.rs` for which is which.
 pub(crate) fn directive_body(kind: &mut DirectiveKind) -> Option<&mut CodeBody> {
     match kind {
         DirectiveKind::Method(method) => method.body.as_mut(),

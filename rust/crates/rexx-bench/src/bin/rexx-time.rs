@@ -11,21 +11,6 @@
 
 //! A minimal stand-in for `hyperfine`: run a command a fixed number of times
 //! and report min/median/mean wall time.
-//!
-//! `hyperfine` is not installed in this environment and cannot be installed
-//! (no network), so Task 0.7's cold-start measurement (D2's gate) needs its
-//! own timer. Runs the command N times after a warm-up and reports
-//! min/median/mean, plus max for context.
-//!
-//! Usage: `rexx-time [--warmup N] [--runs N] <command> [args...]`
-//! (a leading `--` before the command is accepted and skipped, for
-//! readability at call sites).
-//!
-//! The launch-and-wall-clock step and the min/median/mean/max reduction live
-//! in [`rexx_bench::timing`], shared with `rexx-bench-suite`. What stays here
-//! is the command line and the report; the measured quantity is unchanged,
-//! and the committed Phase 0 cold-start numbers remain numbers this binary
-//! still produces.
 
 use rexx_bench::timing::{Capture, Summary, time_once};
 use std::process::ExitCode;

@@ -11,34 +11,6 @@
 
 //! A program that never finishes reddens the oracle harness at its
 //! deadline, rather than hanging it.
-//!
-//! # What this proves and what it does not
-//!
-//! `do forever; end` is run through `support::oracle::Oracle::run` -- the
-//! same entry point every other differential test in this crate uses -- and
-//! the assertion is that the call **returns** with
-//! [`Termination::TimedOut`], inside a bounded amount of wall time, rather
-//! than blocking forever the way an undeadlined `Command::output` does. The
-//! control this is measured against -- the same program with no deadline
-//! anywhere in the path -- is measured by hand rather than run here.
-//!
-//! This proves nothing about the crate side, which runs **in-process** and
-//! has a bound of its own: `Invocation::with_deadline` and `tests/watchdog`,
-//! whose two docs say which of them catches what. An in-process run still
-//! cannot be *killed* -- a Rust thread cannot be -- so the crate side's outer
-//! layer abandons a thread where this file's kill reaps a process.
-//!
-//! # The gate
-//!
-//! Gated on `REXX_CORPUS_GATE`, but not for the reason that gates most of
-//! this crate's oracle-invoking harnesses: `corpus.rs`, `builtin_status.rs`
-//! and `state_builtin_oracle.rs` put every program they own through
-//! `wait_with_deadline` on a plain `cargo test` already, so the deadline
-//! **mechanism** -- a broken poll loop, a misclassified normal exit --
-//! would already redden ungated. What only this file checks, and only under
-//! the gate, is that the **kill** itself fires: proving that costs the full
-//! `ORACLE_DEADLINE`, which is worth keeping out of a plain `cargo test`,
-//! where nothing else in this crate deliberately runs that long.
 
 mod support;
 
@@ -150,18 +122,6 @@ fn a_program_that_never_finishes_reddens_at_the_deadline_instead_of_hanging() {
 /// A program whose only "problem" is a background process holding its own
 /// end of the pipe open still returns promptly, rather than blocking for
 /// that process's own lifetime the way an unbounded `read_to_end` would.
-///
-/// `address system 'sleep 30 &'` forks a background `sleep` that inherits
-/// the same stdout descriptor and then keeps running after `rexx` itself
-/// exits at `say 'done'`; nothing kills that descendant, since `Child`
-/// tracks only the direct process, so without a bound of its own on the
-/// read this call blocks for the descendant's own lifetime -- thirty
-/// seconds here, and unboundedly for a probe that backgrounds something
-/// longer-lived. `Termination::TimedOut` rather than `Exited(0)` is the
-/// right answer too: the transcript could not be read in full, so this run
-/// is a structural failure to whatever calls it, not a byte comparison
-/// against a `done\n` that in fact reached the pipe but was never
-/// retrieved.
 #[test]
 fn a_background_process_holding_the_pipe_open_does_not_hang_the_run() {
     if !gate_mode() {

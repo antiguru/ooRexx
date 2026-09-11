@@ -11,51 +11,11 @@
 
 //! The numeric builtins: `ABS`, `FORMAT`, `MAX`, `MIN`, `RANDOM`, `SIGN` and
 //! `TRUNC`.
-//!
-//! # Every one of them is a method call on its first argument
-//!
-//! `BUILTIN(ABS)` and its six neighbours (`expression/BuiltinFunctions.cpp`)
-//! all have the same body: take argument 1, and send it the method of the same
-//! name with the remaining arguments. That is not an implementation detail --
-//! it is what a program sees, because the two layers raise **different
-//! errors**:
-//!
 //! ```text
 //! max('a',1,3)   93.943   MAX method target must be a number; found "a".
 //! max(1,'a',3)   93.904   Method argument 1 must be a number; found "a".
 //! max(1,2,'a')   93.904   Method argument 2 must be a number; found "a".
 //! ```
-//!
-//! Argument 1 answers with the *builtin's* name and a different sub-code from
-//! arguments 2 and up, and the position those report is the **method's** own,
-//! one lower than the call's. `RexxString`'s `ArithmeticMethod` macro
-//! (`classes/StringClass.cpp:1060`) is where the first of those comes from:
-//! it converts the target and reports 93.943 naming the method when the
-//! conversion fails, and every one of the seven goes through it.
-//!
-//! # `41.1` is never one of these builtins' own errors
-//!
-//! `40.x` is rc 216 and `93.x` is rc 163, as they are for the string
-//! families. `41.1` is rc 215 and turns up in `SIGN`'s test group, which
-//! makes it look like a third code this family raises. It is not: a
-//! non-numeric value reaches arithmetic *before* the call when the argument
-//! expression contains an operator, and only after it otherwise. Measured,
-//! `sign(-1E1234567890)` is 41.1 because the unary minus runs first, while
-//! `sign('-1E1234567890')` is 93.943 from inside `SIGN`. Nothing here raises
-//! `41.1`.
-//!
-//! # What each returns, and why only some of them capture D15's pair
-//!
-//! `FORMAT` and `TRUNC` build a `RexxString` (`formatInternal` and
-//! `truncInternal` both end in `raw_string`), so their results are text and a
-//! later `NUMERIC DIGITS` cannot reshape them. `RANDOM` answers a
-//! `RexxInteger` (`new_integer`), whose spelling is likewise its own and
-//! fixed -- measured, `numeric digits 3 ; say random(12345,12345)` is
-//! `12345` and not `1.23E+4` -- so it is built as text here too, the rule
-//! `WORDS` and `LENGTH` already follow. `ABS`, `SIGN`, `MAX` and `MIN`
-//! produce numbers, and those capture the `DIGITS`/`FORM` pair in force at
-//! the call (D15). Measured with the setting changed in between:
-//!
 //! ```rexx
 //! numeric digits 5 ; x = max(123456789,1) ; numeric digits 12 ; say x
 //!   -> 1.2346E+8, not 123456789
@@ -64,16 +24,6 @@
 //! numeric digits 3 ; x = format(1.23456,,4) ; numeric digits 9 ; say x
 //!   -> 1.2300, which is text and could not have moved
 //! ```
-//!
-//! # The ones that take a number round it first, and never raise LOSTDIGITS
-//!
-//! `ABS`, `TRUNC`, `FORMAT`, `MAX` and `MIN` each begin with
-//! `prepareNumber(digits, ROUND)`, so an argument wider than the current
-//! `NUMERIC DIGITS` is silently reduced rather than reported. Measured:
-//! `numeric digits 3 ; trunc(123456,2)` is `123000.00`, and
-//! `keyword/LOSTDIGITS.testGroup:388` asserts `TRUNC` raises no condition for
-//! it. `SIGN` is exempt because rounding cannot change a sign, and `RANDOM`
-//! takes no number at all -- its three arguments are integers.
 
 use std::cmp::Ordering;
 
@@ -85,11 +35,6 @@ use crate::Interp;
 use crate::error::{Failure, Raised};
 
 /// The `NUMERIC` settings this family reads, fetched once per call.
-///
-/// All three, because `MAX`/`MIN` need `FUZZ` for their comparison where the
-/// other five do not: measured, `numeric fuzz 3 ; max(100000000.0,100000001)`
-/// is `100000000` -- the two compare equal at the reduced precision, so the
-/// target keeps the answer -- while the same call at `fuzz 0` is `100000001`.
 struct Numeric {
     digits: u64,
     fuzz: u64,
@@ -106,10 +51,6 @@ fn current(interp: &Interp) -> Numeric {
 }
 
 /// Argument 1 as a number, or the 93.943 that names this builtin.
-///
-/// `found` is the value's own rendered bytes, so a value whose spelling and
-/// rendering differ reports the rendering -- the same rule
-/// `Raised::argument_not_whole` carries its own measurement for.
 fn target_number(
     interp: &mut Interp,
     name: &'static [u8],
@@ -127,12 +68,6 @@ fn target_number(
 
 /// The range half of an optional non-negative argument, after
 /// [`super::whole_number`] has already done the type half.
-///
-/// `method_position` is the position the 93.906 message names, which is the
-/// *method's* own numbering: one lower than the call's, because argument 1 is
-/// the method target rather than a method argument. Measured,
-/// `trunc(1.5,-1)` and `format(1,-1)` both report `Method argument 1` for
-/// their own argument 2.
 fn non_negative(value: Option<i64>, method_position: usize) -> Result<Option<i64>, Failure> {
     match value {
         Some(value) if value < 0 => Err(Raised::argument_not_non_negative(
@@ -146,17 +81,6 @@ fn non_negative(value: Option<i64>, method_position: usize) -> Result<Option<i64
 
 /// A width the result is padded out to, as the `u32` `rexx-num` takes, having
 /// first asked the allocator for it.
-///
-/// **Both refusals are Error 5 at rc 251, and both are measured.** The oracle
-/// reaches this by being refused by the allocator rather than by testing
-/// against a limit, so this asks the same question the same way (see
-/// `Raised::system_resources`): `format(1,3000000000)` and
-/// `trunc(1,4294967296)` are both `System resources exhausted.`, while
-/// `format(1,999999999)` and `trunc(1,999999999)` succeed and produce results
-/// of 999,999,999 and 1,000,000,001 bytes.
-///
-/// The reservation is released again before the result is built, so the peak
-/// is one buffer of this size rather than two.
 fn padding_width(value: i64) -> Result<u32, Failure> {
     let width = u32::try_from(value).map_err(|_| Failure::from(Raised::system_resources()))?;
     fresh_buffer(width as usize)?;
@@ -177,10 +101,6 @@ pub(crate) fn abs(
 
 /// [`abs`]'s answer once its target is a `Number`, shared with `String~abs`
 /// the way [`sign_of`] is shared with `String~sign`.
-///
-/// The rounding is the oracle's `copyForCurrentSettings`, and it is not
-/// skipped for an already-positive value: measured, `numeric digits 3 ;
-/// abs(1.23456)` is `1.23`, the same answer `abs(-1.23456)` gives.
 pub(crate) fn abs_of(interp: &mut Interp, value: &Number) -> ObjRef {
     let Numeric { digits, form, .. } = current(interp);
     interp.number(value.abs().into_round(digits), saturate(digits), form)
@@ -193,9 +113,6 @@ pub(crate) fn digits_setting(interp: &Interp) -> u64 {
 }
 
 /// `String~FLOOR`, `~CEILING` and `~ROUND`, which differ only in `take`.
-///
-/// These have no BIF spelling, so unlike [`trunc_of`] there is no second
-/// caller; they are here for the `NUMERIC` settings rather than to be shared.
 pub(crate) fn integer_of(
     interp: &mut Interp,
     value: &Number,
@@ -208,9 +125,6 @@ pub(crate) fn integer_of(
 /// `String~MODULO`'s answer once its target and divisor are both in hand:
 /// the `//` remainder, with the divisor added back when that came out
 /// negative.
-///
-/// A zero remainder keeps its sign-free self rather than gaining a divisor:
-/// measured, `'-10'~modulo(5)` is `0`.
 pub(crate) fn modulo_over(
     interp: &mut Interp,
     value: &Number,
@@ -240,11 +154,6 @@ pub(crate) fn sign(
 
 /// [`sign`]'s answer once its target is a `Number`, shared with `String~sign`
 /// so the builtin and the method cannot come to disagree.
-///
-/// No rounding here, unlike `ABS` above: rounding cannot turn a non-zero
-/// value into a zero one, so `NumberString::Sign`'s own `copyIfNecessary` can
-/// never change the answer. Measured, `sign(-0.0)` is `0` -- every spelling of
-/// zero is unsigned, which is `Number::signum`'s rule.
 pub(crate) fn sign_of(interp: &mut Interp, value: &Number) -> ObjRef {
     let Numeric { digits, form, .. } = current(interp);
     let answer = Number::parse(&value.signum().to_string()).expect("-1, 0 and 1 are all numbers");
@@ -254,21 +163,11 @@ pub(crate) fn sign_of(interp: &mut Interp, value: &Number) -> ObjRef {
 // ---- TRUNC and FORMAT ----
 
 /// `TRUNC(number, decimals)`.
-///
-/// **The three checks are in the oracle's own order, which is observable**:
-/// argument 2's *type* first, then argument 1's, then argument 2's *range*.
-/// Measured, three programs that differ only in argument 2:
-///
 /// ```text
 /// trunc('AB.CD','V')   40.12   TRUNC argument 2 must be a whole number; found "V".
 /// trunc('AB.CD',-1)    93.943  TRUNC method target must be a number; found "AB.CD".
 /// trunc(1.5,-1)        93.906  Method argument 1 must be zero or a positive whole number.
 /// ```
-///
-/// That falls out of where each check lives rather than from a chosen
-/// sequence: `BUILTIN(TRUNC)` converts the arguments (40.12), `RexxString::
-/// trunc` converts the target (93.943), and `NumberString::trunc`'s own
-/// `optionalNonNegative` runs last (93.906).
 pub(crate) fn trunc(
     interp: &mut Interp,
     name: &'static [u8],
@@ -281,10 +180,6 @@ pub(crate) fn trunc(
 
 /// [`trunc`]'s answer once its target and its places are in hand, shared with
 /// `String~trunc`.
-///
-/// `places` has already had its range checked -- the builtin does that after
-/// reading its target and the method before, which is the one ordering the two
-/// forms do not share.
 pub(crate) fn trunc_of(
     interp: &mut Interp,
     value: &Number,
@@ -296,17 +191,6 @@ pub(crate) fn trunc_of(
 }
 
 /// `FORMAT(number, before, after, expp, expt)`.
-///
-/// Same three-layer order as [`trunc`], with all four optional arguments
-/// type-checked before the target is: measured, `format('a','x')` is 40.12
-/// naming argument 2, not the 93.943 the target alone would give, and
-/// `format('a',1,-1)` is 93.943 rather than argument 3's 93.906.
-///
-/// `expp` and `expt` are not symmetric and the difference is easy to get
-/// backwards. `expp == 0` **suppresses** exponential form and beats
-/// everything else; `expt == 0` merely sets the trigger to zero, which almost
-/// always forces it. Measured: `format(12345,,,0,0)` is `12345` while
-/// `format(12345,,,2,0)` is `1.2345E+04`.
 pub(crate) fn format(
     interp: &mut Interp,
     name: &'static [u8],
@@ -330,9 +214,6 @@ pub(crate) fn format(
 
 /// [`format`]'s answer once its target and its four widths are in hand, shared
 /// with `String~format`.
-///
-/// All four have had their range checked already, for the reason
-/// [`trunc_of`] gives.
 pub(crate) fn format_over(
     interp: &mut Interp,
     value: &Number,
@@ -361,9 +242,6 @@ pub(crate) fn format_over(
     // line the oracle draws -- measured, at the identical width,
     // `format(1,,,3000000000)` is `1` at rc 0 while `format(1,,,3000000000,0)`
     // is `System resources exhausted.` at rc 251.
-    //
-    // Saturating into `u32` to *ask* the question is exact, because only
-    // `expp == 0` changes the answer and zero is never saturated.
     let displayed = value
         .format_exponent(
             digits,
@@ -403,10 +281,6 @@ pub(crate) enum Extreme {
 
 impl Extreme {
     /// The comparison outcome that makes a candidate the new answer.
-    ///
-    /// Strict, so a tie keeps the earlier value -- which the oracle's
-    /// `maxMin` states explicitly (`rc > 0 && compResult > 0`) and its
-    /// integer path repeats with a bare `v > maxValue`.
     fn wins(self, ordering: Ordering) -> bool {
         match self {
             Extreme::Max => ordering == Ordering::Greater,
@@ -416,14 +290,6 @@ impl Extreme {
 
     /// [`wins`] as a `rexx-num` predicate, for the general path, where the
     /// comparison honours `FUZZ` and so cannot be a bare `Ord`.
-    ///
-    /// **Both ends need their own strict operator; one of them plus a
-    /// negation is wrong.** `CompareOp::Greater` answers `false` for *equal*
-    /// as well as for *less*, so reading a `false` as "the candidate wins"
-    /// for `MIN` swaps on every tie -- measured, `min(1,1.0)` is `1` on the
-    /// oracle and was `1.0` here until this took `Less` for `MIN`.
-    ///
-    /// [`wins`]: Extreme::wins
     fn op(self) -> CompareOp {
         match self {
             Extreme::Max => CompareOp::Greater,
@@ -439,28 +305,6 @@ const REXX_INTEGER_DIGITS: usize = 18;
 
 /// The value's own integer form, when the oracle would be holding it as a
 /// `RexxInteger` rather than a `NumberString` or a `RexxString`.
-///
-/// **This distinction is observable and this crate has no type that carries
-/// it, so it is read back off the value's own rendering.** The oracle's rule
-/// is a property of a literal's *spelling*: `LanguageParser::addVariable`
-/// builds an integer object exactly when the token `isIntegerConstant()`,
-/// which `Scanner.cpp:1546` sets for a run of digits no longer than
-/// [`REXX_INTEGER_DIGITS`] with no leading zero unless the whole symbol is
-/// `0`. A leading `-` is admitted here because the negation of such a literal
-/// stays an integer object -- measured, `max(-1,,3)` and `max(1,,3)` answer
-/// alike.
-///
-/// Measured, the shapes this must and must not accept, each through
-/// `max(X,,3)`, whose two answers are 93.903 for an integer target and 40.5
-/// for anything else: `1`, `+1`, `-1`, `1+0`, `10/2` and `2*3` are integers;
-/// `01`, `1.0`, `1.`, `1e1`, `1.0+0` and a 19-digit literal are not.
-///
-/// **The one shape it gets wrong is a string that spells an integer**:
-/// `max('1',,3)` and `max(word('1 2',1),,3)` are 40.5 on the oracle, because
-/// a `RexxString` never becomes an integer object however it reads, and 93.903
-/// here. Nothing in this crate's value model separates `1` from `'1'` --
-/// `eval.rs` builds both as text -- so no rule available at this layer can
-/// tell them apart.
 fn integer_object(text: &[u8]) -> Option<i64> {
     let digits = text.strip_prefix(b"-").unwrap_or(text);
     if digits.is_empty() || digits.len() > REXX_INTEGER_DIGITS {
@@ -478,10 +322,6 @@ fn integer_object(text: &[u8]) -> Option<i64> {
 /// `Numerics::isValid(value, digits)` (`runtime/Numerics.hpp:191`): whether
 /// an integer object still fits the precision in force, capped at
 /// [`REXX_INTEGER_DIGITS`].
-///
-/// Measured through the same `max(X,,3)` pair as [`integer_object`]:
-/// `numeric digits 9 ; max(12345,,3)` is 93.903 and `numeric digits 3 ;
-/// max(12345,,3)` is 40.5, for the identical call.
 fn valid_under(value: i64, digits: u64) -> bool {
     let width = digits.min(REXX_INTEGER_DIGITS as u64) as u32;
     // `10i64.pow(18)` is the largest this can compute and fits comfortably.
@@ -509,20 +349,10 @@ pub(crate) fn min(
 /// The body both of them share, and the one place in this file where the
 /// answer depends on which *representation* the target has rather than only
 /// on its value.
-///
-/// `RexxInteger::Max`/`::Min` (`classes/IntegerClass.cpp:1578`) is a fast path
-/// over integer objects that falls back to `NumberString::maxMin`
-/// (`classes/NumberStringMath.cpp:240`) the moment any operand is not one.
-/// The two disagree about an **omitted** argument, and a program can see it:
-///
 /// ```text
 /// max(1,,3)     93.903  Missing argument in method; argument 0 is required.   rc 163
 /// max(1.0,,3)   40.5    Missing argument in invocation of MAX; argument 1 ...  rc 216
 /// ```
-///
-/// Different major, different position base, different exit code, for calls
-/// that differ only in a decimal point. See [`integer_object`] for what this
-/// crate can and cannot tell apart there.
 fn max_min(
     interp: &mut Interp,
     name: &'static [u8],
@@ -547,18 +377,6 @@ fn max_min(
 }
 
 /// `MAX`'s and `MIN`'s general path, shared with `String~max` and `String~min`.
-///
-/// **The integer fast path is not here and the method rows do not want it.**
-/// `RexxInteger::Max` is a different class's method; `RexxString::Max` reaches
-/// `NumberString::maxMin` unconditionally, so a `String` receiver always takes
-/// this. What the two paths disagree about is an omitted argument -- measured,
-/// `max(1,,3)` is 93.903 at rc 163 and `max(1.0,,3)` is 40.5 at rc 216 -- and
-/// `integer_object`'s own doc records the one shape this crate cannot tell
-/// apart there.
-///
-/// `objects` runs parallel to `rest` and carries each argument as the caller
-/// first had it: a refusal renders the *object*, not the conversion, so
-/// `'5'~max(.array)` reports `found "The Array class"`.
 pub(crate) fn max_min_over(
     interp: &mut Interp,
     name: &'static [u8],
@@ -611,18 +429,6 @@ pub(crate) fn max_min_over(
 
 /// `RexxInteger::Max`/`::Min`'s fast path, or `None` when the oracle would
 /// have fallen through to `NumberString::maxMin` with the whole argument list.
-///
-/// The answer is the winning **object**, not a recomputed value, which is
-/// what the C++ returns (`return maxObject`) and is why a lone `MIN` argument
-/// can come back untouched by the precision in force.
-///
-/// **`MIN` answers a lone target before testing it against `DIGITS` and `MAX`
-/// does not**, which is deliberate upstream -- `RexxInteger::Min` carries a
-/// comment saying the check was moved so that `RexxInteger.testGroup` can
-/// tell the two representations apart from inside Rexx. Measured, and the
-/// only place in this family where `MAX` and `MIN` answer differently for
-/// reasons other than direction: at `numeric digits 3`, `min(12345)` is
-/// `12345` while `max(12345)` is `1.23E+4`.
 fn integer_path(
     interp: &mut Interp,
     target: ObjRef,
@@ -691,20 +497,6 @@ fn randomize(seed: u64) -> u64 {
 }
 
 /// `RANDOM(minimum, maximum, seed)`.
-///
-/// **The requirement is a stream, not a seed.** `bif/RANDOM.testGroup` seeds
-/// once, makes 99 further *unseeded* calls, re-seeds with the same value and
-/// repeats, and requires all 100 numbers to match; a generator that re-seeds
-/// on every call satisfies "seedable and deterministic" and fails that. The
-/// state therefore lives on the interpreter (`Interp::random_seed`) and every
-/// call advances it.
-///
-/// Reproducing the generator exactly rather than merely being deterministic
-/// buys a real property: a *seeded* stream matches the oracle number for
-/// number, across processes. Measured -- `random(1,999999999,12345)` is
-/// `776163098` on `build/bin/rexx`, and the following two unseeded calls in
-/// the same program are `950445098` and `552120333`, identically on three
-/// separate runs. An unseeded first call is not reproducible on either side.
 pub(crate) fn random(
     interp: &mut Interp,
     name: &'static [u8],
@@ -717,12 +509,6 @@ pub(crate) fn random(
     // The seed is validated and *applied* before the range is looked at,
     // which is `RexxActivation::random`'s own first statement. A call that
     // then fails its range check has still moved the stream on.
-    //
-    // Every one of this builtin's messages substitutes the **converted**
-    // integer and not the argument's own text, because the C++ hands
-    // `reportException` the `RexxInteger` rather than the operand. Measured
-    // with the two forms apart: `random(1,2,'-1.0')` reports `found "-1"`,
-    // and `random('5.0','1.0')` reports `("5")` and `("1")`.
     if let Some(seed) = seed
         && seed < 0
     {
@@ -737,12 +523,6 @@ pub(crate) fn random(
     // minimum. Measured, `random(0)` is always `0` while `random(1,,2)` --
     // the same lone argument with a seed behind it -- answered `313`, which
     // is above it.
-    //
-    // `BUILTIN(RANDOM)`'s own special case for `argcount == 2` with both
-    // range arguments omitted is not reproduced, because it cannot be
-    // reached and would not change the answer if it were: a trailing
-    // omission is not an argument (`random(,)` arrives with none at all),
-    // and the values it substitutes are `DEFAULT_MIN`/`DEFAULT_MAX` anyway.
     let (mut low, high) = match (minimum, maximum, seed) {
         (Some(low), None, None) => (DEFAULT_MIN, low),
         (Some(low), None, Some(_)) => (low, DEFAULT_MAX),
@@ -794,13 +574,6 @@ fn next_seed(interp: &mut Interp, seed: Option<i64>) -> u64 {
 }
 
 /// The starting state for a program that never supplies a seed.
-///
-/// The oracle's is `Activity::getRandomSeed`, which folds the C library's
-/// `rand()` in and is genuinely different per process. This does the same job
-/// from the clock and the process id: what matters is only that an unseeded
-/// program is not reproducible, since anything that *is* reproducible on the
-/// oracle goes through a seed and starts from [`next_seed`]'s own branch
-/// instead.
 fn initial_seed() -> u64 {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -866,10 +639,6 @@ mod tests {
 
     /// Runs `name` over `arguments`, each `None` standing for an omitted
     /// interior position, and answers the result's own bytes.
-    ///
-    /// Goes through [`dispatch`] rather than calling an implementation
-    /// directly, so every case here exercises the arity check and the name
-    /// lookup a real call would.
     fn call_in(
         interp: &mut Interp,
         name: &[u8],
@@ -930,10 +699,6 @@ mod tests {
 
     /// Argument 1 raises a different number from arguments 2 and up, and the
     /// position those name is one lower than the call's.
-    ///
-    /// The whole family's shape in one test: 93.943 names the builtin,
-    /// 93.904 names a *method* position. A mutation that answers 93.943 for
-    /// every argument, or that reports `index + 2`, fails here.
     #[test]
     fn the_target_and_the_later_arguments_raise_different_numbers() {
         for name in [
@@ -987,11 +752,6 @@ mod tests {
 
     /// An omitted `MAX` argument answers differently depending on which
     /// representation argument 1 has, and both halves are pinned.
-    ///
-    /// The integer path reports 93.903 with a **0-based** position; the
-    /// general path reports 40.5 naming the routine and a 1-based one. A
-    /// mutation that keeps only one of the two, or that increments the
-    /// integer path's index, fails here.
     #[test]
     fn an_omitted_argument_answers_differently_on_the_two_paths() {
         assert_eq!(
@@ -1040,10 +800,6 @@ mod tests {
 
     /// A tie keeps the incumbent at **both** ends, which needs a strict
     /// operator for each.
-    ///
-    /// `MIN` implemented as "not greater" swaps on every equal comparison and
-    /// answers `1.0` for the first case below; the oracle answers `1`. Found
-    /// by the differential sweep, not by reading the code.
     #[test]
     fn a_tie_keeps_the_earlier_value_at_both_ends() {
         assert_eq!(answer(b"MIN", &[b"1", b"1.0"]), b"1");
@@ -1083,8 +839,6 @@ mod tests {
     }
 
     /// `FORMAT` rounds half up away from zero, not to even.
-    ///
-    /// A banker's-rounding implementation answers `2` for the first case.
     #[test]
     fn format_rounds_half_up_away_from_zero() {
         let after = |value: &'static [u8], places: &'static [u8]| {
@@ -1116,9 +870,6 @@ mod tests {
     /// 93.942 substitutes the number as `FORMAT` has it when it gives up --
     /// rounded by `after`, and reframed by the exponential decision -- not
     /// the argument it was handed.
-    ///
-    /// A mutation that substitutes the original operand answers `1.5`, `99.996`
-    /// and `123456.789` for the three below.
     #[test]
     fn the_oversize_message_names_the_number_as_it_stands_at_the_failure() {
         assert_eq!(
@@ -1219,11 +970,6 @@ mod tests {
 
     /// The three validation layers run in the oracle's own order, which a
     /// program can tell apart because each names a different number.
-    ///
-    /// Argument 2's *type* beats argument 1's, which beats argument 2's
-    /// *range* -- so an implementation that validated its own arguments
-    /// front to back would answer 93.943 for the first row and 93.906 for
-    /// the second.
     #[test]
     fn the_three_validation_layers_run_in_the_oracles_order() {
         assert_eq!(
@@ -1335,10 +1081,6 @@ mod tests {
     /// The five builtins that answer a *number* capture the `DIGITS`/`FORM`
     /// pair at the call, and the two that answer *text* have nothing a later
     /// setting could reshape (D15).
-    ///
-    /// The mutation this catches is rendering a result through the settings
-    /// in force at the *read* rather than at the call. Only a program that
-    /// changes a setting in between can see it, which is what this does.
     #[test]
     fn a_result_is_rendered_under_the_settings_that_produced_it() {
         // DIGITS moved down after the value was made.
@@ -1413,10 +1155,6 @@ mod tests {
 
     /// `RANDOM`'s argument validation, including the two errors that are
     /// easy to swap.
-    ///
-    /// A lone negative argument is the *maximum*, so it is a reversed range
-    /// (40.33) and not a bad seed (40.13); the omitted argument's
-    /// substitution is the null string.
     #[test]
     fn random_validates_its_range_and_its_seed_separately() {
         assert_eq!(
@@ -1459,13 +1197,6 @@ mod tests {
 
     /// A seeded stream continues across later *unseeded* calls, and it is
     /// the oracle's own stream number for number.
-    ///
-    /// **The stream is the requirement, not the seed.** `RANDOM.testGroup`
-    /// seeds once and then makes 99 unseeded calls before re-seeding and
-    /// requiring the whole run to repeat, so an implementation that re-seeds
-    /// per call is deterministic and still wrong. Re-seeding here restarts
-    /// the identical three numbers, which is what a per-call reseed could
-    /// not produce for calls two and three.
     #[test]
     fn a_seed_starts_a_stream_that_later_calls_continue() {
         let seeded = [b"1".as_slice(), b"999999999", b"12345"];
@@ -1501,14 +1232,6 @@ mod tests {
     /// `RANDOM`'s answer keeps its own spelling whatever `DIGITS` and `FORM`
     /// say, because the oracle answers a `RexxInteger` and not a value
     /// carrying the D15 pair.
-    ///
-    /// **The probe varies `DIGITS` *and* uses a value whose rendering can
-    /// change, and it needs both.** Three separate instruments were blind to
-    /// this for three separate reasons: the differential sweep excludes
-    /// `RANDOM` by rule (D11); every other test in this module runs at
-    /// `DIGITS 9`, where no answer in range can go exponential; and
-    /// `builtin-probes.txt` asked `random(5,5)`, which matches at every
-    /// setting. `random(12345,12345)` at `DIGITS 3` is the whole test.
     #[test]
     fn a_random_answer_keeps_its_own_spelling_at_every_precision() {
         let degenerate = [Some(b"12345".as_slice()), Some(b"12345")];
@@ -1563,12 +1286,6 @@ mod tests {
         // which is what decides whether there is an exponent to pad, and
         // measured they answer `1` at rc 0 and `System resources exhausted.`
         // at rc 251 respectively.
-        //
-        // The width is nine quintillion rather than a merely huge one on
-        // purpose: a `cargo test` process has no `ulimit -v`, so a 3 GB
-        // reservation can genuinely succeed here and then build a 3 GB
-        // string. Only a width no allocator anywhere can supply makes this
-        // assertion mean the same thing on every machine.
         assert_eq!(
             call(
                 b"FORMAT",

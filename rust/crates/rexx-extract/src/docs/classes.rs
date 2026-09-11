@@ -11,24 +11,6 @@
 
 //! Table C's class rows and method rows: the documented class set, and one
 //! row per (class, method, arm, status).
-//!
-//! **How a method is keyed to a class.** Each `cls*` section opens with a
-//! generated class table whose `<member>`s name the class's own `mth*`
-//! sections and whose `xi:include`s pull in the method sets it receives from a
-//! mixin. Neither of the two rules a reader reaches for first is correct
-//! alone: keying by the class's own section span loses every included set --
-//! measured, `.Array~new~hasMethod("UNION")` is `1` and `UNION` is not among
-//! `clsArray`'s own titles -- and keying by an `mth<Class>` name prefix
-//! collides, since `mthString*` matches `StringTable`'s set. The table is the
-//! book's own answer to the question and is what this module reads.
-//!
-//! **Where the method's name comes from.** From its `mth*` section's `<title>`
-//! in every case but one: a group heading (`Comparison Methods` and its three
-//! siblings) documents operator methods that have no title anywhere, and the
-//! class table spells those out in the text after the `<xref>` --
-//! `mthObjectComparisonMethods` is followed by `= == &lt;> >&lt; \= \==`. A
-//! title-keyed row set omits every one of them, and they are real: measured,
-//! `"a"~hasMethod("=")` is `1`.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -106,10 +88,6 @@ pub struct Route {
 
 /// A class's status together with, for a `covered` class, the route its
 /// instance arm constructs with.
-///
-/// The route rides inside the status because it is what the status
-/// claims: there is no way to reach [`Coverage::Covered`] without naming the
-/// route the derived probe then constructs with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Coverage {
     Covered(Route),
@@ -144,24 +122,6 @@ impl Coverage {
 }
 
 /// What a bare `~new` does on the oracle, per `.environment` class entry.
-///
-/// **Measured, not derived**, and committed here for the same reason
-/// `extract_bif.rs`'s `PER_GROUP` commits its counts: nothing in `oodocs/`
-/// says it, and the derivation needs it. The sweep iterates `.environment`,
-/// sends `~new` to every entry answering `~isA(.Class)`, and traps `SYNTAX`
-/// in a `::routine` -- a label inside the loop would be error 47.2. Run
-/// 2026-08-21 against the pinned 5.3 oracle: rc 0, empty stderr, 62 class
-/// entries, 38 constructing, 24 raising, none hanging inside a 60 s bound.
-///
-/// `new` means a bare `~new` returns an instance; anything else is the
-/// `condition('O')~code` it raised.
-///
-/// **Nothing re-measures this**, by decision: the spec rules that a class's
-/// membership of the constructible set is not re-checked by the gate tables,
-/// and that the review instrument is a diff of the committed row set. What
-/// *is* checked on every run is that these names are exactly the class set the
-/// books produce, which is what would catch the books and the image drifting
-/// apart.
 pub const CONSTRUCTION: &[(&str, &str)] = &[
     ("ALARM", "93.901"),
     ("ALARMNOTIFICATION", "new"),
@@ -230,10 +190,6 @@ pub const CONSTRUCTION: &[(&str, &str)] = &[
 /// The committed construction program for a class whose bare `~new` raises:
 /// the Rexx expression the instance arm binds `o` to, taken from the book's
 /// own syntax for obtaining an instance of that class.
-///
-/// A name here makes the class `covered`, and `covered` means nothing else --
-/// the derived probe opens with this expression rather than with a bare
-/// `~new`.
 pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
     (
         "CASELESSCOLUMNCOMPARATOR",
@@ -261,9 +217,6 @@ pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
 
 /// The directive a committed construction program needs below the probe's
 /// readbacks, for a route whose expression reads what a directive defines.
-///
-/// `.routines~r` is the reference's own shape (`oneof.xml:457`-`:458`, whose
-/// example pairs `.routines~talk~call(...)` with a `::routine talk` below it).
 pub const CONSTRUCTION_DIRECTIVES: &[(&str, &str)] = &[("ROUTINE", "::routine r")];
 
 /// What `class-set.txt`'s construction and directives fields hold for a row
@@ -272,15 +225,6 @@ pub const NO_PROGRAM: &str = "-";
 
 /// The owner `class-set.txt`'s `method-owner` column carries for a class whose
 /// method rows are not [`DEFAULT_METHOD_OWNER`]'s.
-///
-/// `File`, `Stream` and `StreamSupplier` need `stream_init`, the stream read
-/// path and `file_qualify`, and `Alarm` and `Ticker` need the timer entry
-/// points; `crates/rexx-exec/src/dispatch/native.rs` files those under Phase 7
-/// and Phase 6 respectively. `StackFrame` waits on a `RexxContext` method body
-/// and a `StackFrame` object model, which no phase owns.
-///
-/// A name here that the class set does not carry is a panic in [`class_rows`]:
-/// a typo would otherwise fall silently to the default.
 pub const METHOD_OWNER: &[(&str, &str)] = &[
     ("Alarm", "6"),
     ("File", "7"),
@@ -308,17 +252,6 @@ pub fn method_owner(name: &str) -> &'static str {
 
 /// A sentence of the reference saying the user cannot construct a class, with
 /// the line it is on and the status it grounds.
-///
-/// Each row is re-read on every run -- [`class_rows`] asserts the sentence is
-/// still at the cited line -- so a citation that goes stale reddens instead of
-/// being carried.
-///
-/// **`unreachable` belongs to a row whose sentence says instances come only
-/// from native code**, and to no other. A row whose sentence says the user
-/// cannot construct one and names a Rexx-level route to obtain one makes a
-/// different claim; those are `not-covered`, with a documented and trivial
-/// opt-in construction program available and none committed. The `Status` in
-/// each row below is which of the two it is.
 pub const UNCONSTRUCTIBLE: &[(&str, usize, usize, &str, Status)] = &[
     (
         "Buffer",
@@ -400,24 +333,6 @@ const TITLE_XREFSTYLE: &str = "select:title";
 
 /// Class-table members whose `xrefstyle` **overrides** the displayed name, and
 /// the text it displays instead.
-///
-/// `template:<text>` replaces the rendered link text outright, so the book's
-/// own table shows a name the target section's `<title>` does not carry:
-/// `clsDateTime`'s constructor entry displays `new (Inherited Class Method)`
-/// and points at `mthDateTimeInit`, whose title is `init`. Measured,
-/// **both names answer** -- `.DateTime~hasMethod("NEW")` is `1` and
-/// `.DateTime~new~hasMethod("INIT")` is `1` -- so the row set carries both,
-/// the title's name and the displayed one.
-///
-/// **This is a named exception list and [`method_rows`] asserts against it**,
-/// in the shape `hierarchy`'s `ArgUtil` assertion already uses. Rule 1 there
-/// and this rule here are the same hazard: an extractor misreading the book in
-/// a direction nothing downstream contradicts. The both-directions check is
-/// structurally blind to both, because a row that was never derived has no arm
-/// to disagree about and the committed file agrees perfectly with its absence.
-///
-/// The style text is part of the key, so an upstream edit to the displayed
-/// name reddens rather than being read as the old one.
 const TEMPLATE_MEMBERS: &[(&str, &str)] = &[
     ("mthDateTimeInit", "template:new (Inherited Class Method)"),
     ("mthRexxQueueNew", "template:new (Inherited Class Method)"),
@@ -493,9 +408,6 @@ pub fn class_sections(books: &[Book]) -> Vec<(&Book, &Section)> {
 
 /// The class set: every `cls*` section, minus [`EXCLUDED_CLASS`], plus
 /// [`UNDOCUMENTED_CLASS`].
-///
-/// `argutil_citation` is the `file:line` of the XML comment that stands in for
-/// `ArgUtil`'s missing section, which is the only citation it has.
 pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
     let sentences = unconstructible_index(books);
     let mut out = Vec::new();
@@ -577,18 +489,6 @@ pub fn class_rows(books: &[Book], argutil_citation: &str) -> Vec<ClassRow> {
 
 /// Re-reads each [`UNCONSTRUCTIBLE`] quotation at the lines it cites, so a
 /// citation that has gone stale reddens rather than being carried.
-///
-/// **A row's span is the lines its own quoted text occupies**, not the lines
-/// the book's whole sentence occupies. `Buffer`'s sentence begins on a line
-/// above the one cited for it; the row quotes the clause, so the row cites the
-/// clause's line. A span written as a range is one whose quotation crosses a
-/// line break.
-///
-/// The span is joined, tag-stripped and whitespace-collapsed before the
-/// substring test, because a quotation may cross a line break and may carry
-/// inline markup -- `VariableReference`'s carries a `<methodname>`. A raw
-/// substring test on one line could then only be written for the part of a
-/// quotation that happens to fit, which is a citation to part of a claim.
 fn unconstructible_index(
     books: &[Book],
 ) -> BTreeMap<&'static str, (usize, usize, &'static str, Status)> {
@@ -635,14 +535,6 @@ fn collapse(text: &str) -> String {
 }
 
 /// A class's coverage and the sentence `class-set.txt` states it in.
-///
-/// A committed [`CONSTRUCTION_PROGRAMS`] entry is what makes a class
-/// `covered` where a bare `~new` raises; it may not be committed for a class
-/// whose sentence makes it [`Status::Unreachable`], which is D73's guard.
-/// [`CONSTRUCTION`] carries no row for the class whose `.environment` entry
-/// is an instance rather than the class object, since the sweep behind it
-/// sends `~new` only to class objects; [`class_rows`] asserts every other
-/// name has one.
 fn coverage_of(
     name: &str,
     sentence: Option<(usize, usize, &'static str, Status)>,
@@ -765,8 +657,6 @@ fn method_sections(books: &[Book]) -> BTreeMap<String, (String, usize, String)> 
 }
 
 /// The method rows, one per (class, method, arm).
-///
-/// `includes` maps a `*classmethods.xml` file name to its text.
 pub fn method_rows(
     books: &[Book],
     includes: &BTreeMap<String, String>,
@@ -894,17 +784,6 @@ fn listed_members(text: &str, source: &str, base_line: usize) -> Vec<Listed> {
 
 /// Every name the book **displays** for one class-table member, each with
 /// whether it came from the `xrefstyle` rather than from the target's title.
-///
-/// Normally exactly one, the target section's own `<title>`. A member whose
-/// `xrefstyle` overrides the displayed text yields two: the title's name and
-/// the displayed one, because measured on the oracle both answer.
-///
-/// **Panics on any other `xrefstyle`**, which is the guard: a `template:`
-/// member added upstream, or one whose displayed text changes, reddens instead
-/// of being read as its target's title. Nothing downstream can see that
-/// mistake -- the row it should have produced was never derived, so it has no
-/// arm to disagree about and the both-directions check compares the extractor
-/// with itself.
 fn displayed_names(
     section: &str,
     xrefstyle: Option<&str>,
@@ -934,9 +813,6 @@ fn displayed_names(
 }
 
 /// The method names one class-table member yields, and the arm each takes.
-///
-/// Every hard case the spec names is a branch here, in the order they have to
-/// be tried.
 fn names_of(section: &str, title: &str, trailing: &str, source: &str) -> Vec<(String, Arm)> {
     // The revision-marker entity is glued to the name with no space, and no
     // DTD-resolving escape is available -- see `xml`'s own doc.
@@ -985,13 +861,6 @@ struct Marker {
 
 /// Every parenthetical a `mth*` title ends with, lowercased, and the arm it
 /// carries.
-///
-/// The suffix's case wobbles -- `Class method` beside `Class Method` -- so the
-/// match is case-insensitive. `(Inherited Class Method)` occurs once and is
-/// class-side like the rest of its family. **`(inline if)` is not a kind
-/// marker**: it says nothing about the arm and is a gloss on the `?` operator.
-/// It still has to come off the name, because `?` is what the oracle answers
-/// and `? (inline if)` is what a title-verbatim extractor would ask for.
 const TITLE_PARENTHETICALS: &[(&str, Option<Arm>)] = &[
     ("class method", Some(Arm::Class)),
     ("inherited class method", Some(Arm::Class)),
@@ -1002,10 +871,6 @@ const TITLE_PARENTHETICALS: &[(&str, Option<Arm>)] = &[
 ];
 
 /// Splits a trailing `(...)` off a title and reads the arm it carries, if any.
-///
-/// Panics on a parenthetical this list does not know, rather than guessing:
-/// an unknown one is either a new kind marker whose arm nobody has decided or
-/// a gloss that has to come off the name, and both are wrong to absorb.
 fn split_marker(title: &str) -> (&str, Option<Marker>) {
     let trimmed = title.trim_end();
     let Some(open) = trimmed.rfind('(') else {
@@ -1050,11 +915,6 @@ pub fn unreferenced_sections(books: &[Book], rows: &[MethodRow]) -> Vec<(String,
 
 /// Every class in the class set that has no method row, with the reason its
 /// method set is empty.
-///
-/// Derived rather than described, because the alternative is a reader with the
-/// two committed files and no report -- which is every reader until the plan
-/// closes -- finding a class with zero method rows and no stated reason, and
-/// having to decide whether it is deliberate or a row that went missing.
 pub fn classes_without_method_rows(
     class_rows: &[ClassRow],
     method_rows: &[MethodRow],

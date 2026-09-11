@@ -11,56 +11,6 @@
 
 //! `DATATYPE`, `SYMBOL`, `VALUE` and `VAR`: the four builtins that ask what a
 //! *name* is, rather than what a value is.
-//!
-//! # A Rexx symbol is classified once and read three different ways
-//!
-//! `SYMBOL`, `VAR` and `VALUE` all start from the identical question --
-//! `LanguageParser::scanSymbol` (`parser/Scanner.cpp:1792`), run on the
-//! argument's own text -- and then answer it differently. [`classify`] is
-//! that one classification, ported byte for byte from `scanSymbol` rather
-//! than from the ANSI grammar or the documentation, because the accepted
-//! symbol-character set (`!.?_0-9A-Za-z`, `LanguageParser::characterTable`,
-//! `parser/Scanner.cpp:60`) and the exponent-tail lookback it needs are both
-//! easier to get wrong from prose than from the scanner that actually runs.
-//!
-//! * [`SymbolKind::Bad`] -- not a symbol at all: empty, over 250 bytes, or
-//!   containing a byte outside the accepted set. `SYMBOL` answers `BAD`;
-//!   `VAR` and `DATATYPE('S')` answer `0`/false; `VALUE` raises 40.26.
-//! * [`SymbolKind::Numeric`] / [`SymbolKind::Literal`] /
-//!   [`SymbolKind::LiteralDot`] -- a constant, never a variable, whatever
-//!   the pool holds. `SYMBOL` answers `LIT` unconditionally (measured,
-//!   `1abc` -- digit-led but not a number -- is `LIT`, not `BAD`); `VAR`
-//!   answers `0`; `VALUE` returns the (upcased) text itself and raises
-//!   40.26 if a new value was offered, because none of the three is
-//!   assignable (`VariableDictionary::getVariableRetriever`,
-//!   `execution/VariableDictionary.cpp:738`, builds a constant retriever for
-//!   all three and never checks `exists()` for them).
-//! * [`SymbolKind::Name`] / [`SymbolKind::Stem`] / [`SymbolKind::CompoundName`]
-//!   -- a real variable, stem or compound. `SYMBOL`/`VAR` ask whether it has
-//!   ever been given a value; `VALUE` reads (and optionally writes) it.
-//!
-//! # `VALUE`'s three-argument form is a different builtin wearing the same name
-//!
-//! A *present* third argument selects the external-pool form
-//! (`value(name, , 'ENVIRONMENT')`), which this crate does not implement --
-//! see [`Loud::value_selector`]. The two-argument form
-//! (`value('myvar','NEWVAL')`) is 4c's, and the discriminator is the third
-//! argument's presence, not its content: `value('myvar',,'')` still selects
-//! the external-pool form, because an *empty* argument is a present one.
-//!
-//! # `DATATYPE`'s options are validated against a fixed 13-letter set
-//!
-//! `"ABILMNOSUVWX9"` is `StringUtil::dataType`'s own default arm
-//! (`classes/support/StringUtil.cpp:1132`), not the documentation's
-//! description of the function -- the two agree here, but the error message
-//! is what a byte-exact comparison is checked against. Only the option's
-//! first byte is read, upcased; an *omitted* second argument selects the
-//! one-argument `NUM`/`CHAR` form, and a *present but empty* one is 93.915
-//! with `found "?"` -- the oracle substitutes that placeholder for the
-//! control byte (`0x00`, an empty string's own terminator) the same way it
-//! substitutes one for any other control byte in a report line
-//! (`error.rs`'s own `displayable`), so this builtin only has to raise with
-//! the raw byte and the existing renderer does the rest.
 
 use rexx_core::ObjRef;
 use rexx_num::Number;
@@ -70,10 +20,6 @@ use crate::error::{Failure, Raised};
 use crate::{Interp, Loud, Novalue};
 
 /// What `LanguageParser::scanSymbol` classifies a piece of text as.
-///
-/// Named after the oracle's own `StringSymbolType` (`classes/StringClass.hpp:56`)
-/// less `STRING_BAD_VARIABLE`'s and `STRING_NUMERIC`'s C++ spelling, which
-/// this crate's own naming convention would otherwise collide with.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum SymbolKind {
     /// Empty, over 250 bytes, or containing a byte outside `!.?_0-9A-Za-z`
@@ -112,14 +58,6 @@ fn is_symbol_byte(byte: u8) -> bool {
 /// bytes rather than an interned, already-validated source token, because
 /// this is the one caller that has to classify text a running program built
 /// at any byte value.
-///
-/// Case does not change the answer -- every test below is `isSymbolCharacter`,
-/// `isDigit`, or an explicit `to_ascii_uppercase` on the one exponent-sign
-/// byte -- so callers needing the *canonical* (upcased) spelling of a real
-/// variable upcase before or after calling this as convenient; `datatype`
-/// below does not upcase at all, matching `StringUtil::dataType`'s own
-/// case-preserving checks, while `symbol`/`var`/`value` upcase first,
-/// matching `VariableDictionary::getVariableRetriever`'s `variable->upper()`.
 fn classify(text: &[u8]) -> SymbolKind {
     let len = text.len();
     if len == 0 || len > MAX_SYMBOL_LENGTH {
@@ -259,11 +197,6 @@ pub(crate) const DATATYPE_OPTIONS: &str = "ABILMNOSUVWX9";
 
 /// `DATATYPE(string)` / `DATATYPE(string, type)`: what kind of data a string
 /// holds, or whether it matches one named type.
-///
-/// The one-argument form is not a third question -- `RexxString::dataType`
-/// (`classes/StringClassMisc.cpp:328`) answers it by running the very same
-/// check `'N'` runs and choosing between two words from the boolean, so
-/// [`SymbolKind`] plays no part here at all except through option `S`/`V`.
 pub(crate) fn datatype(
     interp: &mut Interp,
     _name: &[u8],
@@ -295,14 +228,6 @@ pub(crate) fn datatype_kind(text: &[u8]) -> &'static [u8] {
 
 /// Whether `text` is of the kind `letter` names, shared with
 /// `String~dataType`, or `None` when `letter` is not one of the thirteen.
-///
-/// **The refusal is the caller's**, and the two callers do not spell it the
-/// same way: both raise 93.915 naming the letter rather than the whole option
-/// -- `DATATYPE` is the one option argument in this interpreter that does --
-/// but the method reaches it through its own reader.
-///
-/// `letter` is already uppercased. An empty option arrives here as `0`, which
-/// matches nothing and so answers `None`.
 pub(crate) fn datatype_matches(interp: &Interp, text: &[u8], letter: u8) -> Option<bool> {
     let matched = match letter {
         b'A' => !text.is_empty() && text.iter().all(u8::is_ascii_alphanumeric),
@@ -342,23 +267,6 @@ pub(crate) fn datatype_matches(interp: &Interp, text: &[u8], letter: u8) -> Opti
 
 /// Whether `name`'s own slot currently holds a value, growing the slot if it
 /// has none yet.
-///
-/// Growing costs nothing observable: a freshly grown slot has no value
-/// either way, so calling this on a name nothing has ever touched changes
-/// nothing a later read or write would see -- the property `Interp::
-/// slot_of`'s own doc states.
-///
-/// **Matches two different oracle checks with one shape**, because they
-/// turn out to be the same test. `RexxActivation::localVariableExists`
-/// (`execution/RexxActivation.hpp:515`) asks whether a simple variable's
-/// dictionary entry holds a value; `localStemVariableExists` (`:507`) asks
-/// only whether a stem's entry exists *at all* -- but in this crate every
-/// stem-installing operation (`read_stem`, `stem_set`, `stem_assign`,
-/// `stem_drop`) always leaves a `Body::Stem` object behind, dropped stems
-/// included, so "has a value" and "was ever installed" coincide for a
-/// bare stem's own slot the same way they do not for a compound tail
-/// (`compound_tail_exists`, below, needs the tombstone-aware answer
-/// `Interp::stem_get` already computes).
 fn slot_has_value(interp: &mut Interp, name: &[u8]) -> bool {
     let slot = interp.slot_of(name);
     let frame = interp.activation().frame;
@@ -369,16 +277,6 @@ fn slot_has_value(interp: &mut Interp, name: &[u8]) -> bool {
 /// on every remaining period and resolves each piece into `stem_get`/
 /// `stem_set`'s joined key, substituting a variable's *current* value for
 /// any piece that is not itself a literal.
-///
-/// `VariableDictionary::buildCompoundVariable`'s non-direct form
-/// (`execution/VariableDictionary.cpp:923`, `direct == false`): a piece that
-/// is empty or starts with an ASCII digit stands for itself, and any other
-/// piece is a plain variable name, read through `Interp::read_by_name` --
-/// which itself derives the piece's own (upcased) name when the variable is
-/// unset, matching a normal compound read. **Not** `Interp::tail_key`, which
-/// resolves a *parsed* compound expression's `SymbolId`-tagged pieces; this
-/// one starts from a runtime string with no such tagging; the two agree in
-/// shape because both port the same oracle rule.
 fn resolve_compound_key(interp: &mut Interp, tail_source: &[u8]) -> Vec<u8> {
     let mut key = Vec::new();
     for (index, piece) in tail_source.split(|&byte| byte == b'.').enumerate() {
@@ -399,13 +297,6 @@ fn resolve_compound_key(interp: &mut Interp, tail_source: &[u8]) -> Vec<u8> {
 /// Whether one compound tail -- `name`, already upcased and classified as
 /// [`SymbolKind::CompoundName`] -- currently has a value, tombstones and
 /// stem-level defaults included.
-///
-/// `StemClass::compoundVariableExists`'s own test
-/// (`classes/StemClass.hpp:139`): the tail's own entry if it has one
-/// (present-but-tombstoned counts as "no"), else the stem's own default if
-/// it was ever given one, else "no" -- exactly [`Novalue`]'s two producers
-/// already distinguish in `Interp::stem_get`, so this reuses that answer
-/// rather than re-deriving it.
 fn compound_tail_exists(interp: &mut Interp, name: &[u8]) -> bool {
     let dot = name
         .iter()
@@ -418,19 +309,6 @@ fn compound_tail_exists(interp: &mut Interp, name: &[u8]) -> bool {
 }
 
 /// `SYMBOL(name)`: what kind of symbol `name` is -- `BAD`, `LIT` or `VAR`.
-///
-/// **The three answers do not line up with [`SymbolKind`] one for one.**
-/// `BAD` is [`SymbolKind::Bad`] alone; every constant shape (`Numeric`,
-/// `Literal`, `LiteralDot`) is `LIT` unconditionally, because
-/// `VariableDictionary::getVariableRetriever` builds a *string* retriever
-/// for all three and `isString(variable)` short-circuits the `exists()`
-/// check `BUILTIN(SYMBOL)` would otherwise run -- measured, `SYMBOL('1abc')`
-/// is `LIT` though `1abc` is not a number, and `SYMBOL('.foo')` is `LIT`
-/// though `.foo` classifies as a *variable* retriever (`RexxDotVariable`):
-/// its `exists()` is the inherited default, unconditionally `false`
-/// (`expression/ExpressionBaseVariable.hpp:61`), so a dot name reaches `LIT`
-/// by the other route and no dot-variable subsystem is needed to answer it.
-/// Only `Name`/`Stem`/`CompoundName` ever ask the variable pool at all.
 pub(crate) fn symbol(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let text = required_string(interp, args, 1);
     let upper = text.to_ascii_uppercase();
@@ -457,11 +335,6 @@ pub(crate) fn symbol(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Resul
 
 /// `VAR(name)`: whether `name` is a variable (simple, stem or compound) that
 /// currently has a value.
-///
-/// The same three-way split [`symbol`] makes, collapsed to a boolean: every
-/// constant shape is unconditionally false for the identical reason
-/// `symbol`'s own doc gives (`BUILTIN(VAR)`'s `isString` check is the same
-/// short-circuit).
 pub(crate) fn var(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let text = required_string(interp, args, 1);
     let upper = text.to_ascii_uppercase();
@@ -478,15 +351,6 @@ pub(crate) fn var(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<O
 /// A constant name's read answer: a dot-prefixed name resolved the way
 /// `RexxDotVariable::getValue` resolves one, and the upcased text itself for
 /// every other constant shape.
-///
-/// **`VALUE`'s one-argument form and the expression form are the same
-/// resolution and not the same answer for three names.**
-/// `VariableDictionary::getVariableRetriever` builds an ordinary
-/// `RexxDotVariable` for a leading-dot symbol, so this reaches the identical
-/// order `.NAME` takes -- but the *expression* `.NIL`/`.TRUE`/`.FALSE` is a
-/// `SpecialDotVariable` the parser resolved already, which this route never
-/// sees. Measured on the oracle with `::class True` in the file: `say .TRUE`
-/// prints `1`, `say value('.TRUE')` prints `The TRUE class`.
 fn literal_value(interp: &mut Interp, upper: &[u8]) -> Result<ObjRef, Failure> {
     if upper.first() == Some(&b'.') {
         return interp.dot_variable(upper);
@@ -496,12 +360,6 @@ fn literal_value(interp: &mut Interp, upper: &[u8]) -> Result<ObjRef, Failure> {
 
 /// `VALUE(name)` / `VALUE(name, newvalue)`: reads (and optionally writes)
 /// the variable, stem or compound `name` names.
-///
-/// **The third argument's presence, not its value, is the whole
-/// discriminator** -- see [`Loud::value_selector`]. Checked first and
-/// unconditionally, before `name` is even classified: the oracle's own
-/// `BUILTIN(VALUE)` reads all three arguments before doing anything else
-/// with any of them (`expression/BuiltinFunctions.cpp:1818`-`1822`).
 pub(crate) fn value(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     if arg(args, 3).is_some() {
         return Err(Loud::value_selector().into());
@@ -985,18 +843,12 @@ mod tests {
     /// tell an upcased insert from a verbatim one. These four do have a
     /// case, or a byte no lossy conversion may touch, and each is measured
     /// against the oracle directly:
-    ///
     /// ```text
     /// value('ab*')             found "ab*"              (BAD, via the first call site)
     /// value('1e1','x')         found "1e1"               (a constant given a new value, the second)
     /// value('abc.def*','x')    found "abc.def*"
     /// value('a'||'80'x)        found "a" + the raw byte 0x80
     /// ```
-    ///
-    /// `VALUE.testGroup:88`'s `test008` (`value(.zl)` where `.zl` holds
-    /// `'lowercase garbage'`) reaches this same raiser; the fifth row below
-    /// is that transcript with the `.zl` indirection resolved, since this
-    /// crate has no `.local` to build the indirection through.
     #[test]
     fn value_40_26_substitutes_the_arguments_own_bytes_case_and_all() {
         assert_eq!(

@@ -12,74 +12,6 @@
 //! The machinery a Phase 5 gate table is built out of: the verdict function,
 //! the two-engine crate run, the structural channel, the gate modes and the
 //! report.
-//!
-//! A gate table is a committed row set, one probe program per row, and a
-//! verdict per row that comes from **running** that program under both
-//! interpreters. Nothing here holds a copy of what the oracle answers: the
-//! oracle is re-read on the run that uses it, so a row cannot pass by
-//! agreeing with a recording of itself.
-//!
-//! # The verdict function
-//!
-//! [`verdict`] maps the three-descriptor comparison -- exit status, `stdout`,
-//! `stderr` -- onto five cells: [`Verdict::Agree`], [`Verdict::DivergeStatus`],
-//! [`Verdict::DivergeStdout`], [`Verdict::DivergeStderr`] and
-//! [`Verdict::DivergeBoth`]. Its input is three booleans, so its domain is a
-//! cube of eight points, and it is written as eight literal `match` arms over
-//! that cube rather than as a chain of `if`s. **That is what makes "mutually
-//! exclusive and jointly exhaustive" a compiler property rather than a claim
-//! in a comment**: a missing point is a non-exhaustive `match` and a duplicated
-//! one is an unreachable pattern, and both are errors here. There is no
-//! fallthrough arm and therefore no precedence question --
-//! [`the_verdict_function_partitions_the_descriptor_cube`] walks all eight
-//! points from the outside and checks the five preimages partition them.
-//!
-//! # `loud` is not a verdict
-//!
-//! [`is_loud`] is a predicate on the **crate's own output alone**: this crate
-//! declining to answer, at [`rexx_exec::NOT_IMPLEMENTED_EXIT`] with a
-//! `rexx-exec: ` line on `stderr`. It says nothing about the oracle, so it is
-//! a column of its own that can co-fire with any of the five cells. The
-//! distinction it draws is between a gap and a wrong answer: a row that is
-//! not `agree` and not loud is this crate answering, confidently, something
-//! other than what the oracle answers.
-//!
-//! # Both engines run, and a disagreement is structural
-//!
-//! [`run_on_both_engines`] runs the probe twice in process, through
-//! `Invocation::with_engine`, and asserts **before any verdict exists** that
-//! the two agree on all three descriptors and that neither refused a body to
-//! the other. Both assertions are unconditional and name the program: neither
-//! the engines disagreeing nor the ir arm quietly running on the tree-walker
-//! is a fact about the oracle, so routing either through a verdict channel a
-//! gate mode can relax would let it be absorbed silently.
-//!
-//! `REXX_ENGINE` is deliberately not used. It is read once per process by the
-//! `rexx-run` binary, which cannot give two arms inside one `cargo test`
-//! process; `Invocation` is `run_program`'s own parameter and is what makes a
-//! per-run choice expressible.
-//!
-//! # Structural versus verdict
-//!
-//! A [`Structural`] failure -- a missing probe, an oracle run that did not
-//! finish, the two engines disagreeing, a derived set differing from its
-//! committed file in either direction -- is red in **every** mode.
-//! [`assert_no_structural_failures`] is called unconditionally and before any
-//! gated assertion. A row without a probe is one of these, never a skip.
-//!
-//! A verdict failure is red only under [`CORPUS_GATE_ENV`], and then only for
-//! a row whose owning phase is closing ([`PHASE_GATE_ENV`]) or already closed
-//! ([`CLOSED_PHASES`]). Outside that, a table is a progress report that always
-//! exits zero and prints the same text it prints under the gate.
-//!
-//! # The report reaches a plain `cargo test`
-//!
-//! [`emit_uncaptured`] writes through a `sh -c 'cat >&2'` child whose `stderr`
-//! is inherited, for the reason `corpus.rs`'s module doc gives in full:
-//! `println!` inside a `#[test]` goes to a thread-local sink libtest swaps in,
-//! so a passing test's own prints are invisible under a plain `cargo test`
-//! whatever flags are passed, while a child's inherited descriptor is dup'd
-//! from this process's real fd 2 at spawn time.
 
 // This module is written to be linked by more than one gate-table test
 // binary, and each links only the part of it that binary uses. A helper used
@@ -105,9 +37,6 @@ use crate::support::oracle::{
 pub mod orx;
 
 /// Which of the three observable channels a row's two sides disagree on.
-///
-/// Three independent booleans, taken straight from the comparison and not
-/// yet collapsed. [`verdict`] is the only thing that collapses them.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Descriptors {
     pub status: bool,
@@ -157,10 +86,6 @@ impl Verdict {
 }
 
 /// The five cells, over the cube of three booleans.
-///
-/// **Eight literal arms, no wildcard.** See the module doc: writing the
-/// domain out point by point is what hands exhaustiveness and non-overlap to
-/// the compiler, and it is why no cell has to be tried before another.
 pub fn verdict(differs: Descriptors) -> Verdict {
     match (differs.status, differs.stdout, differs.stderr) {
         (false, false, false) => Verdict::Agree,
@@ -174,15 +99,6 @@ pub fn verdict(differs: Descriptors) -> Verdict {
     }
 }
 /// Runs one probe in process and hands back its outcome.
-///
-/// `abs` is passed to the executor as-is, already canonicalised by the
-/// caller, because a raised condition's report names the program by its
-/// absolute dot-normalised path and the oracle prints exactly that.
-///
-/// **This used to run the probe on both engines and require them to agree
-/// before any verdict existed.** That check is gone with the second engine;
-/// the refusal check below is the half that survives, and it is the half
-/// that could always fail on its own.
 pub fn run_gate_probe(abs: &Path) -> Outcome {
     let text = fs::read(abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
     let path = abs
@@ -210,24 +126,6 @@ pub fn run_gate_probe(abs: &Path) -> Outcome {
 
 /// Compares a crate outcome against an oracle outcome on all three channels,
 /// with `stderr` compared **raw**.
-///
-/// **Raw, never normalised, and that is not a preference.** The default
-/// [`StderrComparison::Normalized`] is DEVIATION 0 and collapses the run of
-/// spaces after a trace line's own marker. Here `stderr` equality is an
-/// *input* to [`verdict`], so normalising would silently turn a
-/// [`Verdict::DivergeStderr`] row into [`Verdict::Agree`] -- a green row
-/// making a byte-for-byte claim that was never checked byte for byte.
-///
-/// **The producer is asked for a typed answer, not for prose to re-parse.**
-/// `descriptor_diff_with` returns a field per channel; its `Vec<&'static str>`
-/// sibling is a *rendering* for a report, and recovering a channel from that
-/// list by matching a label's text makes a rename in the producer read here as
-/// "this channel did not differ" -- silently, permanently, and in a direction
-/// `contains` cannot report, since a label it does not recognise is simply not
-/// found.
-///
-/// The caller checks the oracle run finished before calling this: the exit
-/// status of a killed or crashed process is not an answer to compare.
 pub fn compare_raw(crate_side: &Outcome, oracle: &CppOutcome) -> Descriptors {
     let diff = descriptor_diff_with(crate_side, oracle, StderrComparison::Raw);
     Descriptors {
@@ -238,12 +136,6 @@ pub fn compare_raw(crate_side: &Outcome, oracle: &CppOutcome) -> Descriptors {
 }
 
 /// Whether this crate declined to answer, rather than answering.
-///
-/// A predicate on the crate's output alone -- see the module doc for why that
-/// makes it a column and not a verdict. The exit code and the marker are both
-/// required: a program is free to `EXIT` with whatever
-/// [`rexx_exec::NOT_IMPLEMENTED_EXIT`] happens to be, and a `rexx-exec: ` line
-/// can only come from this crate's own refusal path.
 pub fn is_loud(outcome: &Outcome) -> bool {
     wrapped_exit_code(outcome.exit_code) == rexx_exec::NOT_IMPLEMENTED_EXIT
         && String::from_utf8_lossy(&outcome.stderr)
@@ -264,21 +156,12 @@ pub fn refused_construct(stderr: &[u8]) -> Option<String> {
 }
 
 /// One failure that is red in every mode.
-///
-/// `subject` is what failed -- a row, a probe path, a file -- and `detail`
-/// says what about it. Kept as a struct rather than a formatted string so a
-/// caller cannot conflate a structural failure with a verdict by matching on
-/// prose.
 pub struct Structural {
     pub subject: String,
     pub detail: String,
 }
 
 /// Fails the test if anything structural happened, whatever the mode.
-///
-/// Called before any gated assertion, so a report-mode run -- most runs --
-/// cannot let a table that lost a probe, or whose engines disagree, pass as
-/// a table whose rows merely have not landed yet.
 pub fn assert_no_structural_failures(failures: &[Structural]) {
     if failures.is_empty() {
         return;
@@ -304,9 +187,6 @@ pub const PHASE_GATE_ENV: &str = "REXX_PHASE_GATE";
 
 /// The phases whose rows stay gated for the rest of the project, without
 /// anyone having to set [`PHASE_GATE_ENV`].
-///
-/// A phase is added here in the commit that closes it, and from then on a
-/// regression in one of its rows is red under [`CORPUS_GATE_ENV`] alone.
 pub const CLOSED_PHASES: &[&str] = &["5a", "5b", "5c", "5d", "5e", "5f", "5g", "5h", "5i", "5j"];
 
 /// Whether [`CORPUS_GATE_ENV`] is asking for the gate rather than the report.
@@ -326,28 +206,16 @@ pub fn closing_phase() -> Option<String> {
 }
 
 /// Whether a verdict mismatch on a row owned by `phase` is red.
-///
-/// Both halves are required: the corpus gate says "a mismatch is an exit
-/// status" and the phase says "and this row is one whose mismatch counts".
-/// A row owned by a phase that is neither closing nor closed is reported and
-/// never gated, whatever the corpus gate says.
 pub fn verdict_is_gated(phase: &str) -> bool {
     corpus_gate() && (closing_phase().as_deref() == Some(phase) || CLOSED_PHASES.contains(&phase))
 }
 
 /// The name a row is reported and gated under when the oracle did not answer
 /// its question at all, so no comparison of the two sides means anything.
-///
-/// Not a [`Verdict`]: the five cells partition the descriptor cube, and this
-/// is the case where the cube has nothing in it to partition.
 pub const UNANSWERED: &str = "unanswered";
 
 /// The label a row is reported and tallied under, whether or not it has a
 /// verdict.
-///
-/// Both gate tables render `None` the same way because they are read
-/// together: one string, in the module both already link, rather than a copy
-/// per binary that nothing holds equal.
 pub fn verdict_label(verdict: Option<Verdict>) -> &'static str {
     match verdict {
         Some(verdict) => verdict.label(),
@@ -356,10 +224,6 @@ pub fn verdict_label(verdict: Option<Verdict>) -> &'static str {
 }
 
 /// Splits a program's `stdout` into its lines.
-///
-/// Empty input is no lines rather than one empty line. `split` on an empty
-/// slice yields one empty slice, which would make a program that printed
-/// nothing look as though it had answered.
 pub fn stdout_lines(bytes: &[u8]) -> Vec<&[u8]> {
     if bytes.is_empty() {
         return Vec::new();
@@ -453,18 +317,6 @@ impl Report {
 
 /// Writes `text` to the real, process-level stderr, so it reaches the
 /// terminal under a plain `cargo test` with no `--nocapture`.
-///
-/// `sh -c 'cat >&2'` rather than `Command::new("cat")` directly: `cat`'s own
-/// stdout has to land on *this process's* real fd 2, which is exactly what a
-/// shell's `>&2` does, and reaching the same effect through `Stdio` alone
-/// would need a raw-fd constructor, which is `unsafe`. The workspace lint is
-/// `unsafe_code = "deny"`, so that is a grantable exception rather than a
-/// closed door -- and it is not worth granting for something a shell builtin
-/// already does, which is the bar `rust/CLAUDE.md` sets and
-/// `rexx-core/tests/unsafe_sites.rs` records the granted set of.
-/// `Stdio::inherit()` on the child's own stderr is what makes that
-/// `>&2` resolve to the real descriptor, upstream of libtest's thread-local
-/// capture.
 pub fn emit_uncaptured(text: &str) {
     let mut child = Command::new("sh")
         .arg("-c")

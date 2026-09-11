@@ -14,24 +14,6 @@
 //! `>=>`, `>L>`, `>V>`, `>O>`, `>K>`, `>C>`, `>P>`, `>E>`) plus the three
 //! 4b's calls add (`>A>`, `>F>`, `>R>`, Task 9) -- and the classification a
 //! `TRACE`/`TRACE VALUE` setting goes through to become one.
-//!
-//! **What lives here is formatting and classification, never *when* to
-//! call it.** `run.rs`'s `step_in_temps_frame` (the clause echo, and the
-//! loop drivers' own re-echo) and `eval.rs`'s `eval` (the post-order
-//! intermediate-value hook) own the call sites, because they are the two
-//! places D17 names as already having the one-insertion-point shape this
-//! task needs to reuse rather than re-derive. This module owns turning
-//! "prefix, tag, value, indent" into the oracle's exact bytes, and nothing
-//! about when that tuple becomes available.
-//!
-//! **All format constants below are read from `RexxActivation.cpp:3565`-
-//! `3611`, not inferred from output**: `trace_prefix_table` (the 19
-//! three-byte prefixes), `LINENUMBER = 6`, `PREFIX_OFFSET = 7`,
-//! `PREFIX_LENGTH = 3`, `INDENT_SPACING = 2`, `QUOTES_OVERHEAD = 2`,
-//! `TRACE_OVERHEAD = 15`, `VALUE_MARKER = " => "`,
-//! `ASSIGNMENT_MARKER = " <= "`. Every byte offset below is that source's
-//! arithmetic, re-derived rather than copied as a magic number, and cross-
-//! checked against `cat -A` transcripts in this task's own report.
 
 use crate::Interp;
 use crate::error::Raised;
@@ -44,39 +26,6 @@ use rexx_parse::{Operator, PrefixOp};
 /// `traceCommands`/`traceErrors`/`traceFailures` have nothing to show;
 /// interactive debug pausing does not exist on this non-interactive runtime
 /// at all).
-///
-/// **A four-field struct, not the oracle's `FlagSet<TraceFlag, 32>`.**
-/// `TraceSetting.cpp:49`-`54`'s own flag combinations reduce to four
-/// observable questions for a program this crate can run: is every clause
-/// echoed (`all`, `TRACE_PREFIX_CLAUSE`), is a traced instruction's own
-/// computed value shown (`results`, `TRACE_PREFIX_RESULT`/`_KEYWORD`), is
-/// *every* intermediate step of evaluating it shown too (`intermediates`,
-/// every other value prefix plus `TRACE_PREFIX_ASSIGNMENT`), and is a
-/// `LABEL` clause echoed (`labels`)? `results` is true whenever
-/// `intermediates` is (measured: `TRACE I`'s own flag set is `TRACE R`'s
-/// plus one more bit, `traceIntermediatesFlags` a strict superset of
-/// `traceResultsFlags`) and `labels` is true whenever `all` is, so these are
-/// not four independent booleans in practice, but naming an invariant type
-/// over fields that are always checked together would be D16's own
-/// `Novalue` shape solving a problem this struct does not have.
-///
-/// **It said "a three-field struct... exactly three observable questions
-/// for a program 4a can run" and that was right for 4a and wrong here**:
-/// 4b's Task 9 review round 1 measured the fourth, `TRACE L`, which this
-/// crate answered with silence. The count in a sentence like that is a
-/// claim about the language, and it goes stale the way a table does.
-///
-/// **[`letter`] is not a fifth observable question, it is the setting's own
-/// name**, and it is here because a program can *read the setting back*
-/// rather than only watch what it does. `TRACE()` answers
-/// `TraceSetting::toString`, which is a pure function of the stored flags,
-/// and the four booleans above are lossy in exactly the direction that
-/// answer needs: `C`, `E`, `F`, `N` and `O` all leave every one of them
-/// false while the oracle reports five different letters. So the letter is
-/// stored rather than derived, and the booleans stay the only thing the
-/// tracing code itself consults.
-///
-/// [`letter`]: TraceMode::letter
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct TraceMode {
     /// `TRACE_PREFIX_CLAUSE` (`*-*`): every stepped instruction's own clause
@@ -102,30 +51,9 @@ pub(crate) struct TraceMode {
     /// `setTraceLabels`. So this is `true` under `A`/`R`/`I` too, where
     /// `all` already covers it, and the only mode it decides anything in is
     /// `L`.
-    ///
-    /// **The condition is "the `LABEL` instruction executed", not any list
-    /// of ways control can arrive**, and that distinction cost a wrong
-    /// sentence here: this said `trace l` echoes "a fallen-through label, a
-    /// `CALL` target and a `SIGNAL` target", which reads as a closed set and
-    /// is not one -- an internal *function* call reaches a label too. The
-    /// C++ site above enumerates the whole condition in one line; nothing
-    /// enumerates the routes, so nothing here should count them.
     pub(crate) labels: bool,
     /// The byte `TraceSetting::toString` (`runtime/TraceSetting.cpp:62`-`119`)
     /// renders this setting as, and so the byte `TRACE()` answers.
-    ///
-    /// One byte and never two, because the `?` prefix that would make it two
-    /// is not carried -- `mode_from_setting` skips `?` rather than tracking
-    /// it, and `phase-4-exclusions.txt`'s own row says the prefix "is
-    /// silently ignored". Measured consequence, on stdout rather than the
-    /// stderr that row describes: after `trace ?r`, the oracle's `trace()`
-    /// is `?R` and this crate's is `R`.
-    ///
-    /// Nothing in the tracing code reads this. It exists so that the five
-    /// settings with nothing to show -- `C`, `E`, `F`, `N`, `O` -- stay
-    /// distinguishable to a program that asks, and it is the reason
-    /// [`TraceMode::NORMAL`] and [`TraceMode::OFF`] are two constants with
-    /// identical behaviour rather than one.
     pub(crate) letter: u8,
 }
 
@@ -135,27 +63,6 @@ impl TraceMode {
     /// this crate's own scope has nothing to show for (D18 excludes
     /// commands; errors/failures are command-condition machinery, not built
     /// here), so all five behave identically here.
-    ///
-    /// **They are five constants and not one, and only [`letter`] tells them
-    /// apart.** `TRACE()` reports the setting the program asked for, and the
-    /// oracle answers `O`, `N`, `C`, `E` and `F` respectively -- measured,
-    /// `trace commands` then `trace('O')` gives `C`.
-    ///
-    /// **[`NORMAL`] and not this one is the initial state**, measured: `say
-    /// trace()` as the first clause of a program with no `TRACE` instruction
-    /// prints `N`. `TraceSetting`'s own default construction runs
-    /// `setTraceNormal`, and bare `TRACE` returns to it -- also measured,
-    /// `trace r` then `trace` then `trace()` gives `N`.
-    ///
-    /// **`setTraceLabels` used to be the sixth name in that list and is
-    /// not any more**: `TRACE L` has something to show -- the label clauses
-    /// it echoes -- and [`TraceMode::LABELS`] is where it goes now. Round 1
-    /// changed the count in the sentence above and left the name in it, so
-    /// the two contradicted each other; the re-review (NEW-6) caught that
-    /// and this is the corrected pair.
-    ///
-    /// [`letter`]: TraceMode::letter
-    /// [`NORMAL`]: TraceMode::NORMAL
     pub(crate) const OFF: TraceMode = TraceMode {
         all: false,
         results: false,
@@ -233,21 +140,6 @@ impl TraceMode {
 
 /// Everything `crate::ir::compile` is allowed to read out of a [`TraceMode`],
 /// and so everything a compiled chunk's identity depends on.
-///
-/// **This type is the cache key, and `compile` takes it instead of a
-/// `TraceMode` for exactly that reason.** A chunk carries an emission decision
-/// taken when it was compiled, so two chunks for one body can differ and the
-/// cache has to tell them apart; a compiler handed the whole `TraceMode` could
-/// read a field the key does not carry, and the failure that produces is a
-/// cached chunk answering for a setting it was not compiled under. Narrowing
-/// the argument is what makes that unexpressible rather than forbidden.
-///
-/// [`echoes`] is the whole of what compilation asks, and it is the same
-/// question [`Interp::tracing_clause`] answers at run time -- one rule, called
-/// from both, so a chunk compiled to echo and a clause run without one cannot
-/// come to disagree about which clauses echo.
-///
-/// [`echoes`]: ChunkTrace::echoes
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct ChunkTrace(u8);
 
@@ -258,45 +150,13 @@ impl ChunkTrace {
     const LABELS: u8 = 2;
     /// [`TraceMode::intermediates`]: a literal, a read, an operator's result,
     /// an argument and a call's result each echo a line of their own.
-    ///
-    /// **A key bit like the two above, and for the same reason**: it decides
-    /// which value-echo ops a chunk carries at all, so two chunks for one body
-    /// can differ by it and `Interp::chunk_for` must not hand one back for the
-    /// other. `ir::compile` reads it beside [`crate::plan::Plan::never_retraces`],
-    /// which is what says the answer cannot change under the chunk while it
-    /// runs.
     const INTERMEDIATES: u8 = 4;
 
     /// [`TraceMode::results`]: a traced instruction's own top-level computed
     /// value echoes, as `>>>` or -- for a loop header -- as `>K>`.
-    ///
-    /// **A key bit like the three above, and it was missing.** Without it
-    /// `TRACE A` and `TRACE R` pack to the same byte, so `Interp::chunk_for`
-    /// hands a chunk compiled under one back for the other; the observable
-    /// was a loop header's `>K>` line vanishing under `TRACE R`, because
-    /// `ir::compile` gated [`crate::ir::Op::TraceKeyword`] on
-    /// [`ChunkTrace::intermediates`] where [`TraceMode::results`] is the flag
-    /// that owns that line. Measured against the oracle, `do i = 1 to 2`:
-    /// `>K>` prints under `R` and `I` and under neither `A` nor `N`.
     const RESULTS: u8 = 8;
 
     /// What `compile` reads out of the setting in force.
-    ///
-    /// **`inline(always)`, and it is a measurement rather than a habit.** These
-    /// four -- this, [`ChunkTrace::echoes`], [`Interp::tracing_clause`] and
-    /// [`Interp::chunk_trace`] -- are the chain every clause of every body
-    /// walks on both engines, and without them the `ChunkTrace` this builds is
-    /// materialised instead of folded away. Removing all four costs
-    /// `bench-programs/emptyloop.rex` 100,000,000 user instructions, 38.0009
-    /// against 38.1009 billion on the tree-walker and 40.4009 against 40.5009
-    /// on the compiled stream (`perf stat -e instructions:u`). Measured as a
-    /// group and not one at a time, so the number belongs to the four
-    /// together.
-    ///
-    /// **They are the whole of "the tree-walker pays nothing for this type".**
-    /// It reads a projection only the compiled stream's compiler needs, so
-    /// without the folding it would be paying for a second engine's
-    /// bookkeeping.
     #[inline(always)]
     pub(crate) fn of(mode: TraceMode) -> ChunkTrace {
         // **One byte and not three `bool` fields, which is a measurement.**
@@ -314,17 +174,6 @@ impl ChunkTrace {
     }
 
     /// Whether a `*-*` line prints for a clause of this kind.
-    ///
-    /// The `||` reduces to `clauses` in every mode but `L`, because `labels`
-    /// is true wherever `clauses` is ([`TraceMode::labels`]'s own doc comment
-    /// has the flag sets that make that so).
-    ///
-    /// **`inline(always)` is measured**: one of the group of four
-    /// [`ChunkTrace::of`] carries the number for, worth 100,000,000 user
-    /// instructions on `bench-programs/emptyloop.rex` between them.
-    /// Whether the value echoes -- `>L>`, `>V>`, `>O>`, `>A>`, `>F>` and the
-    /// header's `>K>` -- print at all, which is what decides whether a chunk
-    /// carries an op for each of them.
     #[inline(always)]
     pub(crate) fn intermediates(self) -> bool {
         self.0 & ChunkTrace::INTERMEDIATES != 0
@@ -341,21 +190,6 @@ impl ChunkTrace {
     /// This setting with [`ChunkTrace::INTERMEDIATES`] and
     /// [`ChunkTrace::RESULTS`] masked off, which is what `Interp::run_ops`
     /// compares its chunk against per promoted clause.
-    ///
-    /// **The staleness check is about the clause echo alone, and must not see
-    /// either value-echo bit.** A chunk that left its value echoes out was
-    /// compiled for a body [`crate::plan::Plan::never_retraces`] answered for,
-    /// so the setting it was keyed under cannot change while it runs; a chunk
-    /// that kept them gates every one at run time and is right either way. So
-    /// either bit can differ between a running chunk and the setting in force
-    /// only where nothing reads the difference.
-    ///
-    /// **Masking rather than comparing the whole byte is a measurement.**
-    /// Comparing all three costs `bench-programs/emptyloop.rex` 0.723% of
-    /// retired instructions -- 100,018,461 over 25,000,000 passes, four an
-    /// iteration -- which is [`ChunkTrace::of`]'s own recorded cost for this
-    /// type being materialised instead of folded away, and the same shape:
-    /// a third component is one comparison more than the fold survives.
     #[inline(always)]
     pub(crate) fn clause_echoes(self) -> ChunkTrace {
         ChunkTrace(self.0 & (ChunkTrace::CLAUSES | ChunkTrace::LABELS))
@@ -374,33 +208,6 @@ impl ChunkTrace {
 /// first *other* byte decides, case-insensitively; everything after that one
 /// byte is ignored. An empty string, or one made only of `?`s, is
 /// `setTraceNormal`'s silent answer.
-///
-/// Returns the offending byte, verbatim (not uppercased), on anything not in
-/// `"ACEFILNOR"` -- the nine letters `rexx-inventory`'s own 24.1 message
-/// names. Used for **both** `Trace::Setting` (already validated at parse
-/// time by `rexx-parse`'s own `check_trace_setting`, so its call site can
-/// `.expect()` this always returning `Ok`) and `Trace::Value` (computed at
-/// run time from an arbitrary Rexx expression, never validated by anything
-/// before this call), which is why this returns a `Result` at all rather
-/// than assuming a valid letter the way a `Trace::Setting`-only version
-/// could.
-///
-/// **The nine letters map to nine distinct answers**, five of which behave
-/// identically and differ only in what `TRACE()` reports -- see
-/// [`TraceMode::letter`]. An empty setting is `setTraceNormal`
-/// (`TraceSetting.cpp:141`-`146`), measured: `trace value ''` then
-/// `trace()` gives `N`.
-///
-/// A string of nothing but `?`s is the oracle's *debug toggle*, which keeps
-/// whatever setting is in force and flips the interactive flag. This crate
-/// answers [`TraceMode::OFF`] for it instead, which is what it answered
-/// before the letter existed; getting it right needs the current setting as
-/// an input and the interactive flag as a field, and `phase-4-exclusions.
-/// txt`'s `TRACE ?` row owns both halves. Measured divergence, and the
-/// builtin's setter form reaches it as well as the instruction: `trace l`
-/// then `trace ?` then `trace()` is `?L` on the oracle and `O` here, and so
-/// is `trace l` then `trace('?')` -- where the value that call *returns*,
-/// `L`, is right on both.
 pub(crate) fn mode_from_setting(bytes: &[u8]) -> Result<TraceMode, u8> {
     for &byte in bytes {
         if byte == b'?' {
@@ -463,12 +270,6 @@ pub(crate) fn is_whole_number(text: &[u8]) -> bool {
 /// 0` raises it exactly like `trace 5`), because this runtime has no
 /// interactive debugging at all for a nonzero skip count to be valid *from*.
 /// No substitution value, matching the catalogue's `(24, 901)` entry.
-///
-/// Through `Raised::syntax` rather than a bare struct literal, which is what
-/// this and its neighbour were until 4b's Task 7 gave `Raised` a field no
-/// raiser cares about (`Delivery`). That constructor's own doc comment has
-/// the argument; the short version is that twenty-one copies of `condition:
-/// "SYNTAX"` each had to name the new field, and one call does not.
 pub(crate) fn raised_numeric_trace_interactive_only() -> Raised {
     Raised::syntax(24, 901, Vec::new())
 }
@@ -496,59 +297,17 @@ fn push_indent(out: &mut Vec<u8>, indent: usize) {
 
 /// Runs the oracle's display rule over the trace line that starts at
 /// `line_start`, which is the last thing each formatter below does.
-///
-/// **This is `RexxActivation::processTraceInfo`'s own
-/// `traceLine->stringTrace()`** (`execution/RexxActivation.cpp:5249`), which
-/// every live trace line passes through on its way to `traceOutput`. The
-/// rule itself and its 256-value measurement live in `error.rs`'s
-/// `displayable`, beside the other route to the same C++ function.
-///
-/// Applied per completed line rather than once over `self.trace`, because
-/// the trace buffer is appended to across a whole run and a single pass at
-/// the end would have no moment to run at. The three formatters that finish
-/// a line each call this; `push_operator` does not, since it delegates to
-/// `push_tagged`, which does.
-///
-/// Measured, and the reason this exists separately from the report's own
-/// application: `trace r` over `say 'p'||'02'x||'q'` prints `"p?q"` on the
-/// oracle's `>>>` line and agrees with us on stdout, where the raw byte
-/// belongs.
 fn make_displayable(out: &mut [u8], line_start: usize) {
     crate::error::displayable(&mut out[line_start..]);
 }
 
 /// The widest indent a `*-*` clause echo ever prints, in spaces.
-///
-/// **The cap is on the `*-*` echo alone, and it is on the total printed
-/// indent rather than on any of the quantities that add up to it.** Measured
-/// against the oracle with plain nested `DO`s around a failing clause and no
-/// call anywhere (4b Task 2's report has the programs): depth 18 prints 36,
-/// depth 19 prints 38, depth 20 prints 40, and depths 21, 25 and 30 all
-/// print 40 as well. Measured the same way with a fragment on top of a
-/// nest -- 20 `DO`s around `interpret "do jj = 1 to 1; say 1/0; end"` -- the
-/// fragment's own clause would sit at 42 and prints 40, so the cap applies
-/// after the activation base is added, not to either part alone.
-///
-/// **A value line is not capped**, which is what rules out putting this
-/// inside `static_indent` or inside [`push_indent`]: measured under `trace
-/// r` at nesting depth 25, the `*-*` echo prints 40 while the `>>>` value
-/// line for the same clause prints its full 50 ([`push_prefixed_blanks`]'s
-/// own `3 + indent`, so 53 blanks after the prefix). One clamp, at the one
-/// formatter that has it, and nowhere upstream of that.
 pub(crate) const MAX_CLAUSE_INDENT: usize = 40;
 
 /// `TRACE_PREFIX_CLAUSE` (`*-*`): `line`'s own clause, `text`, indented by
 /// `indent` spaces (Task 11's `static_indent`, unchanged and reused, per
 /// this module's own doc comment on why "when" is not this module's job),
 /// clamped at [`MAX_CLAUSE_INDENT`].
-///
-/// **The only `*-*` formatter in the crate.** `error.rs`'s `Raised::report`
-/// used to hold a second copy of these four lines, byte-identical to this
-/// one and documented as such -- "one quantity with two formatters, not two
-/// quantities", the second formatter D17's own retrofit note names. 4b's
-/// Task 2 had to clamp that one quantity and found the cheapest way to keep
-/// two formatters agreeing is to have one of them; `report` calls this now,
-/// so the clamp is applied once because there is one place to apply it.
 pub(crate) fn push_clause(out: &mut Vec<u8>, line: usize, indent: usize, text: &[u8]) {
     let line_start = out.len();
     out.extend_from_slice(format!("{line:>6} *-* ").as_bytes());
@@ -562,9 +321,6 @@ pub(crate) fn push_clause(out: &mut Vec<u8>, line: usize, indent: usize, text: &
 /// `_PREFIX` when called with the matching `prefix` and no tag: an
 /// untagged, quoted value alone -- `push_prefixed_blanks` builds the header
 /// and its own fixed-plus-indent gap, this just quotes `value` after it.
-///
-/// Measured (this task's report, Step 2, `trace_output.rex`): `>L>   "1"`
-/// is 7 blanks, `>L>`, 3 blanks, `"1"`.
 pub(crate) fn push_value(out: &mut Vec<u8>, prefix: &str, indent: usize, value: &[u8]) {
     let line_start = out.len();
     push_prefixed_blanks(out, prefix, indent);
@@ -576,17 +332,6 @@ pub(crate) fn push_value(out: &mut Vec<u8>, prefix: &str, indent: usize, value: 
 /// (the unused six-wide line-number field plus its trailing space,
 /// `PREFIX_OFFSET = 7`), then `prefix`, then a further blank run out to
 /// where the quoted value or tag starts.
-///
-/// That trailing run is `3 + indent`, **not** `indent` alone -- read off
-/// `RexxActivation.cpp`'s own `dataOffset = TRACE_OVERHEAD +
-/// indent_levels*INDENT_SPACING - 2`: with `indent` here already the
-/// doubled quantity `static_indent` returns (spaces, not levels), that is
-/// `(15 + indent - 2) - 10 = 3 + indent` bytes after the prefix ends at
-/// byte 10. Measured the same way, indent 0: `>L>   "1"` is the prefix then
-/// exactly 3 blanks then the quote, and `>=>   X <= "2"`'s 3 blanks before
-/// `X` are the identical run -- the fixed 3 is shared by every value-
-/// bearing line regardless of whether what follows is a bare quote or a
-/// tag, only `indent` on top of it moves.
 fn push_prefixed_blanks(out: &mut Vec<u8>, prefix: &str, indent: usize) {
     debug_assert_eq!(prefix.len(), 3, "every trace prefix is exactly 3 bytes");
     out.extend(std::iter::repeat_n(b' ', 7));
@@ -658,20 +403,6 @@ impl Interp {
     /// **one** decision behind both formatters below, and behind the
     /// `run.rs` call site's own guard against building a clause's text when
     /// nothing will print it.
-    ///
-    /// `all` covers every clause; `labels` covers a `LABEL` clause only, and
-    /// is the only field that decides anything under `TRACE L`.
-    ///
-    /// The rule itself lives in [`ChunkTrace::echoes`], because
-    /// `crate::ir::compile` asks the identical question at compile time and a
-    /// second copy of it is how a chunk compiled to echo and a clause run
-    /// without one would come to disagree.
-    ///
-    /// **`inline(always)` is measured**: one of the group of four
-    /// [`ChunkTrace::of`] carries the number for, worth 100,000,000 user
-    /// instructions on `bench-programs/emptyloop.rex` between them. This is
-    /// the one every clause of every body on either engine calls, so it is
-    /// where the group's cost is actually spent.
     #[inline(always)]
     pub(crate) fn tracing_clause(&self, is_label: bool) -> bool {
         self.chunk_trace().echoes(is_label)
@@ -679,10 +410,6 @@ impl Interp {
 
     /// The part of the setting in force that a chunk's identity depends on
     /// ([`ChunkTrace`]).
-    ///
-    /// **`inline(always)` is measured**: one of the group of four
-    /// [`ChunkTrace::of`] carries the number for, worth 100,000,000 user
-    /// instructions on `bench-programs/emptyloop.rex` between them.
     #[inline(always)]
     pub(crate) fn chunk_trace(&self) -> ChunkTrace {
         ChunkTrace::of(self.trace_mode())
@@ -785,17 +512,6 @@ impl Interp {
     }
 
     /// One literal's own `>L>` line, from the value rather than from its text.
-    ///
-    /// **The one implementation both engines enter.** `eval.rs` reaches it
-    /// from its own post-order hook, as a side effect of evaluating the
-    /// literal; `crate::ir::Op::TraceLiteral` reaches it from a register,
-    /// because a native constant load evaluates nothing and so has no side
-    /// effect to carry the line -- which is exactly the defect the mechanics
-    /// spike shipped.
-    ///
-    /// The gate is asked before the value is rendered rather than inside
-    /// [`Interp::trace_literal`] alone, because rendering allocates a copy of
-    /// the value and an untraced run must not pay for it.
     #[inline(always)]
     pub(crate) fn echo_literal(&mut self, value: ObjRef) {
         if !self.tracing_intermediates() {
@@ -848,11 +564,6 @@ impl Interp {
     /// result, tagged with `namespace:class` and unquoted --
     /// `traceClassResolution` builds the tag as `n->concatWith(c, ':')` and
     /// passes `quoteTag` false (`RexxActivation.hpp:358`).
-    ///
-    /// Measured, `trace i` over `say w:Widget`:
-    /// `       >N>   W:WIDGET => "The WIDGET class"`, followed by the `>>>`
-    /// the `SAY` owes. Both halves of the tag arrive upcased, because a
-    /// qualifier and a qualified name are both symbols.
     pub(crate) fn trace_namespace(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
         if !self.trace_mode().intermediates {
             return;
@@ -862,19 +573,6 @@ impl Interp {
 
     /// The `>O>` line one binary operator's result owes, from the value
     /// itself, at the indent the clause in force is tracing values at.
-    ///
-    /// **One function for both engines**, the shape [`Interp::echo_literal`]
-    /// has and for the same reason: `eval.rs` emits this line as a side effect
-    /// of *evaluating* a binary node, and a compiled `crate::ir::Op::Arith`
-    /// computes without evaluating, so the line has to come from an op of its
-    /// own (`crate::ir::Op::TraceOperator`). Two emissions that could disagree
-    /// about the tag or the indent would be a divergence nothing but an exact
-    /// stderr comparison could see.
-    ///
-    /// **Every binary operator traces this way** -- arithmetic, comparison,
-    /// logical and concatenation alike -- which is why the operator arrives as
-    /// an `Operator` rather than as the arithmetic subset: the tag is
-    /// `Operator::spelling`, whatever the family.
     pub(crate) fn echo_operator(&mut self, op: Operator, value: ObjRef) {
         if !self.tracing_intermediates() {
             return;
@@ -896,19 +594,6 @@ impl Interp {
 
     /// The `>P>` line one prefix operator's result owes, from the value
     /// itself, at the indent the clause in force is tracing values at.
-    ///
-    /// **One function for both engines**, the shape [`Interp::echo_operator`]
-    /// has and for the same reason: `eval.rs` emits this line as a side effect
-    /// of *evaluating* a prefix node, and a compiled `crate::ir::Op::Prefix`
-    /// computes without evaluating, so the line has to come from an op of its
-    /// own (`crate::ir::Op::TracePrefix`).
-    ///
-    /// **A prefix operator's line is `>P>` and never `>O>`**, which is why
-    /// this is a function of its own rather than [`Interp::echo_operator`]
-    /// with a `PrefixOp`: the two markers are different bytes, reproducing the
-    /// C++ `tracePrefix`/`traceOperator` pair that calls one
-    /// `traceOperatorValue` with a different `TracePrefix` each
-    /// ([`Interp::trace_prefix_op`] has the citation).
     pub(crate) fn echo_prefix_op(&mut self, op: PrefixOp, value: ObjRef) {
         if !self.tracing_intermediates() {
             return;
@@ -952,11 +637,6 @@ impl Interp {
     /// `RexxInstruction.cpp:144`-`162`, read directly: `traceArgument` right
     /// after each `evaluate`, and `traceArgument(NULLSTRING)` -- an empty
     /// value line, not a skipped one -- for an omitted position).
-    ///
-    /// Gated on `intermediates` (`traceArgument`'s own
-    /// `if (settings.intermediateTrace)`), measured both ways: `trace i` /
-    /// `call sub 1,,3` shows `>A>   "1"`, `>A>   ""`, `>A>   "3"`, and the
-    /// same program under `trace r` shows none of the three.
     pub(crate) fn trace_argument(&mut self, indent: usize, value: &[u8]) {
         if !self.trace_mode().intermediates {
             return;
@@ -968,18 +648,6 @@ impl Interp {
     /// returned value, tagged with the routine's name, unquoted
     /// (`traceFunction`/`RexxActivation.hpp:347`-`348`, `quoteTag = false`,
     /// like `>V>` and unlike `>K>`).
-    ///
-    /// **The instruction form has no equivalent line**, which is measured
-    /// rather than inferred from the C++ alone: `zz = sub(1, 2)` traces
-    /// `>F>   SUB => "3"` after the callee's own two `>>>` lines, while
-    /// `call sub 1, 2` traces no `>F>` anywhere -- the oracle's own
-    /// `traceFunction` call sits in `ExpressionFunction::evaluate`
-    /// (`ExpressionFunction.cpp:228`), which the `CALL` instruction does not
-    /// go through at all.
-    ///
-    /// `indent` is the **caller's** own clause indent, not the callee's:
-    /// measured, the `>F>` line above sits at the enclosing assignment's
-    /// indent while the callee's `>>>` lines sit two further in.
     pub(crate) fn trace_function(&mut self, indent: usize, name: &[u8], value: &[u8]) {
         if !self.trace_mode().intermediates {
             return;
@@ -990,14 +658,6 @@ impl Interp {
     /// `>M>` (`TRACE_PREFIX_MESSAGE`): a message send's own result, tagged
     /// with the message name, **quoted** (`traceMessage`,
     /// `RexxActivation.hpp:349`, `quoteTag = true`, unlike `>F>`).
-    ///
-    /// Measured: `say 'abc'~length` under `trace i` gives
-    /// `       >M>   "LENGTH" => "3"`, and the line sits at the sending
-    /// clause's own indent -- inside one `DO` it is
-    /// `       >M>     "LENGTH" => "3"`.
-    ///
-    /// Both the expression form and the instruction form emit it; the
-    /// instruction form emits **no** `>>>` beside it, measured.
     pub(crate) fn trace_message(&mut self, indent: usize, name: &[u8], value: &[u8]) {
         if !self.trace_mode().intermediates {
             return;
@@ -1012,15 +672,6 @@ impl Interp {
     /// useRef->getName())`, that order), so `orig = 'PP'; call sub >orig`
     /// into `use arg >q` traces `>R>     "ORIG" => "Q"` -- names on both
     /// sides, no value anywhere on the line.
-    ///
-    /// **Gated on `results`, not `intermediates`** (`traceVariableAlias`'s
-    /// own `if (tracingResults())`, unlike every other prefix this task
-    /// added): measured, the same program under `trace r` still shows the
-    /// `>R>` line with no other value line around it, and under `trace l`
-    /// shows **no `>R>`** -- not "nothing at all", which this sentence said
-    /// and which the same task's own measurements falsify (review round 1,
-    /// F5): under `trace l` both sides echo the callee's `sub:` label
-    /// clause and neither emits a value line of any kind.
     pub(crate) fn trace_alias(&mut self, indent: usize, reference: &[u8], target: &[u8]) {
         if !self.trace_mode().results {
             return;
@@ -1038,17 +689,6 @@ impl Interp {
 
     /// `>.>` (`TRACE_PREFIX_DUMMY`): what a `PARSE` template's `.`
     /// placeholder just consumed, untagged, with no assignment behind it.
-    ///
-    /// Gated on `intermediates` (`ParseTrigger.cpp:285` calls
-    /// `traceIntermediate`, whose own body is `if
-    /// (settings.intermediateTrace)`, `RexxActivation.hpp:339`), which is
-    /// measured rather than taken from the C++ alone: `parse value 'one two'
-    /// with p . q` under `trace i` emits `>.>   ""` between the two `>=>`
-    /// lines, and the same program under `trace r` emits no `>.>` at all --
-    /// two `>>>` lines for `P` and `Q` and nothing for the placeholder.
-    ///
-    /// **Emitted even when the placeholder consumed nothing**, which is why
-    /// the line above is `>.>   ""` and not absent.
     pub(crate) fn trace_dummy(&mut self, indent: usize, value: &[u8]) {
         if !self.trace_mode().intermediates {
             return;
@@ -1075,32 +715,6 @@ impl Interp {
 
     /// `value`'s rendered bytes, **or `None` when no intermediate-value
     /// trace line would print them**.
-    ///
-    /// **A copy of a value of any size, on a path that usually discards it.**
-    /// Every formatter above takes `&[u8]` and every call site therefore
-    /// renders into a fresh `Vec` first, because `to_text` borrows `self` and
-    /// the formatter needs `&mut self`. That copy is unavoidable; paying for
-    /// it when the formatter is about to return without printing is not, and
-    /// it is not a performance question -- an allocation this crate cannot
-    /// satisfy **aborts the process** rather than raising, where the oracle
-    /// answers. Measured at the project's own `ulimit -v 1048576`: `say
-    /// length(copies('a',400000000))` is `400000000` at rc 0 on the oracle
-    /// and SIGABRT at rc 134 here, from exactly one such copy.
-    ///
-    /// **The guard is paired with the render rather than written beside it**,
-    /// which is the whole reason this is a function. A guard written at a
-    /// call site can name the wrong `TraceMode` field, and the failure mode
-    /// is a trace line that silently stops printing -- so the two spellings
-    /// are the two this returns, and each names the same field its own
-    /// formatters check. Use [`Interp::result_text`] for `>>>`/`>K>`/`>R>`
-    /// and this for every other value-bearing prefix.
-    ///
-    /// **The rendering is `stringValue()` and not the string value a string
-    /// context asks for**, which is [`Interp::string_value_text`]'s own
-    /// distinction: `RexxActivation::traceValue` renders through
-    /// `stringValue()`, so an array traces as `an Array` where `SAY` prints
-    /// its items joined. Measured under `trace i`, `a = .Array~superClasses`
-    /// prints `>M>   "SUPERCLASSES" => "an Array"`.
     #[inline(always)]
     pub(crate) fn intermediate_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
         self.trace_mode()
@@ -1111,13 +725,6 @@ impl Interp {
     /// `value`'s rendered bytes, or `None` when no **result-level** trace line
     /// would print them -- [`Interp::intermediate_text`]'s sibling, and its
     /// doc has the argument for both.
-    ///
-    /// `>>>`, `>K>` and `>R>` are the three prefixes gated on `results`.
-    /// Choosing between the two functions is choosing which prefix the
-    /// rendered bytes are for, and getting it wrong drops a line under
-    /// exactly one `TRACE` letter: `results` is true wherever
-    /// `intermediates` is, so a `>>>` site guarded by `intermediates` prints
-    /// under `TRACE I` and not under `TRACE R`.
     #[inline(always)]
     pub(crate) fn result_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
         self.trace_mode()
@@ -1127,37 +734,12 @@ impl Interp {
 
     /// `>I>`/`<I<` (`TRACE_PREFIX_INVOCATION`/`_INVOCATION_EXIT`): a routine
     /// activation's own entry and exit announcement.
-    ///
-    /// **Not a value line and not a clause echo**, so it goes through neither
-    /// [`push_value`] nor [`push_clause`], and it takes no indent: the C++
-    /// writes the message straight into a buffer whose first
-    /// `INSTRUCTION_OVERHEAD` bytes are blanks with the prefix laid over
-    /// bytes 7..10 (`traceEntryOrExit`, `RexxActivation.cpp:3678`-`3713`), so
-    /// the content always begins at byte 11 regardless of nesting.
-    ///
-    /// The text is one of two messages, chosen by `traceEntryOrExit`'s own
-    /// `context->isMethod()` test (`RexxActivation.cpp:3696`-`3702`): message
-    /// 101018, `Routine <q>&1</q> in package <q>&2</q>.`
-    /// (`interpreter/messages/rexxmsg.xml:6471`), or the method form,
-    /// `Method <q>&1</q> with scope <q>&2</q> in package <q>&3</q>.`
-    /// (`:6480`), where `<q>` is a double quote. Confirmed with `cat -A`, and
-    /// there is no trailing whitespace on either:
-    ///
     /// ```text
     ///        >I> Routine "RTN" in package "/abs/path/own_a.rex".$
     ///        <I< Routine "RTN" in package "/abs/path/own_a.rex".$
     ///        >I> Method "M" with scope "K" in package "/abs/path/p5.rex".$
     ///        <I< Method "M" with scope "K" in package "/abs/path/p5.rex".$
     /// ```
-    ///
-    /// Seven blanks, the prefix, **one** blank, then the message, and the
-    /// trailing period is outside the closing quote. [`Announced`] carries
-    /// what each form's substitutions are and where they come from.
-    ///
-    /// Unguarded, unlike every formatter above: both callers
-    /// (`trace_invocation_entry`/`trace_invocation_exit`, `run.rs`) have a
-    /// two-part gate of their own that no `TraceMode` field expresses on its
-    /// own, and a third partial gate here would be a second place to keep it.
     pub(crate) fn trace_invocation(&mut self, prefix: &str, subject: &Announced, package: &[u8]) {
         let line_start = self.trace.len();
         self.trace.extend(std::iter::repeat_n(b' ', 7));
@@ -1203,12 +785,6 @@ mod tests {
     /// Every formatter that finishes a line puts it through the oracle's
     /// display rule, and the rule reaches the whole line rather than the
     /// quoted value alone.
-    ///
-    /// Measured: `trace r` over `say 'p'||'02'x||'q'` prints `>>>   "p?q"`
-    /// on the oracle, with the raw byte still on stdout where it belongs.
-    /// The clause echo carries source bytes and obeys the same rule; the
-    /// tag does too, which is why `push_tagged` is checked separately from
-    /// `push_value` rather than assumed to follow from it.
     #[test]
     fn every_completed_trace_line_is_made_displayable() {
         let mut out = Vec::new();
@@ -1383,12 +959,6 @@ mod tests {
     /// (`traceArgument`/`traceFunction` against `traceVariableAlias`,
     /// `RexxActivation.hpp:340`/`:347`/`:370`, and measured -- `trace r` on
     /// an aliasing `USE ARG >q` shows `>R>` and nothing else).
-    ///
-    /// Written as three modes against three prefixes rather than one
-    /// assertion per prefix, because the failure this catches is a gate
-    /// copied from the neighbouring method: under `RESULTS` a wrongly
-    /// `intermediates`-gated `>R>` disappears, and under `RESULTS` a wrongly
-    /// `results`-gated `>A>`/`>F>` appear.
     #[test]
     fn the_two_argument_prefixes_are_intermediates_and_the_alias_prefix_is_results() {
         let mut interp = Interp::new();
@@ -1428,12 +998,6 @@ mod tests {
     /// **not** requiring `intermediates`, matching `trace r` alone already
     /// showing both).
     /// Pushes the one activation these gates read their mode from.
-    ///
-    /// Needed since Task 3 moved `trace_mode` from `Interp` onto
-    /// `Activation`: `Interp::trace_mode` is the *running* activation's, so
-    /// there has to be one before anything can be traced or set. The program
-    /// is empty because nothing here runs it -- the tests below call the
-    /// three sink functions directly.
     fn activate_empty(interp: &mut Interp) {
         use std::rc::Rc;
 

@@ -15,10 +15,6 @@ use std::path::Path;
 /// Removes the parts of an interpreter's output that legitimately differ
 /// between two runs of the *same* interpreter: absolute paths and line
 /// endings.
-///
-/// Anything this function strips is invisible to the differ, so strip as
-/// little as possible. Every addition here is a class of divergence the
-/// project can no longer detect.
 pub fn normalize(raw: &Outcome, cwd: &Path) -> Outcome {
     Outcome {
         stdout: normalize_stream(&raw.stdout, cwd),

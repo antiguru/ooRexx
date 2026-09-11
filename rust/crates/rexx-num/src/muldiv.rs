@@ -10,9 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! Multiplication and division.
-//!
-//! Ported from `NumberString::Multiply` (`NumberStringMath2.cpp:106`) and
-//! `NumberString::Division` (`:331`), which serves `/`, `%` and `//`.
 
 use crate::{ArithError, Digits, Number};
 
@@ -41,10 +38,6 @@ impl Number {
 
     /// `left * right` by long multiplication over the digit vectors, which is
     /// what [`Number::mul`] runs wherever [`exact_integer_product`] declines.
-    ///
-    /// Both operands arrive already truncated to the working length and
-    /// already known non-zero, because `mul` decides both before choosing
-    /// between the two routes.
     #[inline(always)]
     fn mul_long(left: &Number, right: &Number, digits: u64) -> Result<Number, ArithError> {
         let product = mul_magnitudes(&left.digits, &right.digits);
@@ -90,24 +83,6 @@ impl Number {
 
 /// The exact product, when both operands are plain integers whose digits and
 /// product an `i64` holds, and the product needs no rounding at `digits`.
-///
-/// **Every step the general path takes is the identity under those
-/// conditions**, which is what makes this a shortcut rather than a second
-/// implementation: neither operand is longer than the working length, so
-/// `truncated_to` borrows; the exact product is no longer than `digits`, so
-/// nothing is dropped into the exponent and `into_round` returns it
-/// unchanged; and it carries no leading zero for `assemble` to strip. What is
-/// skipped is the `Vec<u16>` accumulator and the digit-by-digit long
-/// multiplication over it.
-///
-/// The product's own width is either `width` or one less, so testing `width`
-/// declines a product that would in fact have fitted. That is deliberate: the
-/// cases it turns away cost the general path, and deciding them exactly would
-/// cost every case the leading-digit product it takes to know.
-///
-/// `Number::div`'s remainder is where this pays. It multiplies the integer
-/// quotient by the divisor at a working precision it inflates well past the
-/// setting in force, so that product is exact by construction.
 fn exact_integer_product(left: &Number, right: &Number, digits: u64) -> Option<Number> {
     if left.exponent != 0 || right.exponent != 0 {
         return None;
@@ -130,12 +105,6 @@ fn exact_integer_product(left: &Number, right: &Number, digits: u64) -> Option<N
 }
 
 /// Exact product of two digit vectors, most significant first.
-///
-/// Leading zeros are stripped. The C++ derives its accumulator length from a
-/// pointer to the first significant digit, so a product that does not carry
-/// into the top position simply has one fewer digit -- unlike subtraction,
-/// where the zero left by a borrow is a real digit and must be counted.
-/// Keeping it here makes `1 * 1` round to 0 at DIGITS 1.
 fn mul_magnitudes(a: &[u8], b: &[u8]) -> Digits {
     let mut out = vec![0u16; a.len() + b.len()];
     for (i, x) in a.iter().rev().enumerate() {
@@ -221,28 +190,6 @@ impl Number {
         // after the `calc_exp < 0` early returns above because the C++
         // allocates after its equivalent ones: a `%`/`//` whose quotient
         // has no integer part never reaches the allocation at all.
-        //
-        // Division is NOT the only operation the interpreter sizes this way.
-        // `addSub` requests `2D+1` (`NumberStringMath.cpp:808`), `Multiply`
-        // `2(D+1)+1` (`NumberStringMath2.cpp:146`), and power `2(2(D+e+1)+1)`
-        // with `e` the exponent's digit count (`NumberStringMath2.cpp:902`),
-        // all past the same `FAST_BUFFER` cutoff. Those three have no
-        // reservation here, so `+`, `-`, `*` and `**` return a result where
-        // the interpreter raises error 5. That is a recorded deviation rather
-        // than an oversight: error 5 is resource exhaustion, the boundary is
-        // whatever malloc grants and so is machine-dependent, and in the
-        // middle of the range the interpreter is OOM-killed rather than
-        // raising 5 at all. `phase-2-gate.md` carries the reasoning.
-        // Reproducing it would have to mirror the per-operation request sizes
-        // above and the zero-operand short-circuits that precede them,
-        // because the oracle accepts `'2.0'+0` at the same DIGITS that makes
-        // `'2.0'+3` fail.
-        //
-        // A reservation must NOT go inside `sub` or `mul` themselves:
-        // `compare` calls `sub`, the `%`/`//` remainder tail calls both at
-        // inflated precision, and the oracle's comparison at max DIGITS
-        // succeeds because `NumberString::comp`'s fast path never allocates
-        // by DIGITS. Any future fix belongs at the operator entry points.
         let total_digits = digits.saturating_add(1).saturating_mul(2).saturating_add(1);
         if total_digits > FAST_BUFFER {
             let request = usize::try_from(total_digits.saturating_mul(3)).unwrap_or(usize::MAX);
@@ -357,24 +304,10 @@ impl Number {
 }
 
 /// The widest divisor [`short_divide`] can carry in a machine word.
-///
-/// Its running remainder is always below the divisor, and one more numerator
-/// digit takes it to `remainder * 10 + digit`. With the divisor under
-/// `10^18` that value stays under `10^19`, which a `u64` holds -- `u64::MAX`
-/// is above `1.8 * 10^19`. Nineteen would not fit.
-///
-/// The bound is on the *divisor*, and `Number::div` truncates its operands to
-/// `working_length(digits)`, so every division at the default `NUMERIC
-/// DIGITS 9` is inside it whatever its operands look like.
 const SHORT_DIVISOR_DIGITS: usize = 18;
 
 /// Divides two digit strings, returning `want` quotient digits, the residue,
 /// and how many powers of ten the quotient was scaled by.
-///
-/// Both routes below produce the same digits; which one runs is decided by
-/// whether the divisor fits a machine word. That agreement is asserted rather
-/// than argued: `divide_route_tests` runs the two against each other over a
-/// grid of numerators, divisors and widths.
 fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, i32) {
     if d.len() <= SHORT_DIVISOR_DIGITS {
         let divisor = d
@@ -394,19 +327,6 @@ fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, i32) {
 /// [`long_divide`] for a divisor a `u64` holds, which is the schoolbook short
 /// division: one hardware divide per quotient digit, and no working storage
 /// at all.
-///
-/// **The digit it produces is the digit the wide path produces**, because
-/// that path's inner loop is subtracting the divisor out of the running
-/// remainder until what is left is smaller -- which is the quotient and the
-/// residue of exactly this division. The remainder enters each step below the
-/// divisor, so `remainder * 10 + digit` is below ten times it and the digit
-/// is a digit.
-///
-/// The stopping rules are the wide path's, restated against a `u64`
-/// remainder: a quotient that has not started yet swallows a zero digit, a
-/// remainder of zero with the numerator exhausted ends the division early so
-/// that `1 / 1` is `1` rather than a padded `1.00000000`, and `shift` counts
-/// the zeros appended past the numerator's own digits.
 fn short_divide(n: &[u8], divisor: u64, divisor_len: usize, want: usize) -> (Digits, i32) {
     let mut remainder = 0u64;
     let mut q = Digits::new();
@@ -536,11 +456,6 @@ fn wide_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, i32) {
     // remainder good enough to report has to be recomputed at exact
     // precision rather than read off the division (see `DivOp::Remainder`
     // above). Building it cost a `split_off`, which allocates.
-    //
-    // **`rem` stays a `Vec` rather than becoming a `Digits`.** The inline type
-    // saves the allocations, and costs more than they are worth: `push` and
-    // `as_mut_slice` branch on which arm holds the digits, and both sit inside
-    // the per-digit inner loop where a vector hands out a pointer instead.
     (q, shift)
 }
 
@@ -618,12 +533,6 @@ mod mul_shortcut_tests {
 
     /// Wherever the shortcut answers, it answers what the long multiplication
     /// answers.
-    ///
-    /// This is the whole of its licence: it exists to skip work, so any
-    /// disagreement is a defect in it rather than a second opinion. The
-    /// precisions span both sides of every operand width in the population,
-    /// because what the shortcut may take is decided against the precision
-    /// and not against the operands alone.
     #[test]
     fn the_integer_shortcut_answers_what_the_long_multiplication_answers() {
         let population = population();
@@ -719,12 +628,6 @@ mod divide_route_tests {
     }
 
     /// The two routes answer the same quotient and the same scaling.
-    ///
-    /// This is the whole licence for having two: the short one exists to skip
-    /// the guess-and-subtract, so any disagreement is a defect in it rather
-    /// than a second opinion. `want` spans both sides of every numerator
-    /// width in the population, because where the division stops decides how
-    /// many digits either route emits.
     #[test]
     fn a_short_divisor_divides_the_same_way_the_wide_path_does() {
         let population = strings();
@@ -769,10 +672,6 @@ mod divide_route_tests {
 
     /// The constant is the widest divisor whose remainder survives taking one
     /// more numerator digit, and one digit wider it would not.
-    ///
-    /// `short_divide`'s remainder is below the divisor, so the value it forms
-    /// is at most `(divisor - 1) * 10 + 9`; the bound is checked against the
-    /// widest divisor of each width rather than argued about.
     #[test]
     fn the_short_divisor_width_is_the_one_a_machine_word_holds() {
         let widest = |width: u32| 10u128.pow(width) - 1;
@@ -784,11 +683,6 @@ mod divide_route_tests {
     /// Either side of the width where the route changes, through the operator
     /// itself, so the boundary is exercised as a division and not only as a
     /// property of the constant.
-    ///
-    /// The two quotients are the oracle's own, measured at `NUMERIC DIGITS
-    /// 20`, and they differ in magnitude as well as in digits -- the pair is
-    /// one divisor digit apart, so a route that dropped or gained a scaling
-    /// step would show here rather than in a last-digit disagreement.
     #[test]
     fn a_divisor_either_side_of_the_route_boundary_divides_correctly() {
         let short = "999999999999999999";

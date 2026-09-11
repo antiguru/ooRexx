@@ -10,9 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The `NUMERIC` settings, and the errors that changing them can raise.
-//!
-//! Constraints and error numbers were measured against ooRexx 5.3.0; see
-//! `rust/corpus/num/settings.rex`.
 
 use crate::Number;
 
@@ -143,26 +140,6 @@ fn max_value_for_digits(digits: u64) -> u64 {
 /// first dropped digit), every decimal digit that remains must reduce to
 /// zero -- literal zeros, or all nines consumed by the carry -- and the
 /// result must not exceed `max_value_for_digits(digits)`.
-///
-/// Re-derived against `build/bin/rexx` from starting DIGITS 1, 3, 9, 10,
-/// 18, 20 and 30. The observations that pin each branch below:
-///
-/// - `numeric digits 1000` at DIGITS 3 fails; the same at DIGITS 4 is fine.
-///   Positions count, not significant digits: `10` fails at DIGITS 1 and
-///   `1e2` fails at DIGITS 2, though both have one-digit mantissas.
-/// - `numeric digits 999.9999` at DIGITS 4 *succeeds* and sets 1000: the
-///   rounding carry runs through the all-nines decimals. `999.6` at DIGITS 3
-///   fails only because its carry lands on 1000, one position too wide.
-/// - `numeric digits 0.99999999995` at DIGITS 9 sets 1 -- the carry can
-///   ripple up from entirely below the decimal point.
-/// - `1000000000000000000` (10^18) fails even at DIGITS 30: the
-///   `MAX_WHOLENUMBER` ceiling caps `max_value_for_digits`.
-///
-/// Ported from `NumberString::unsignedNumberValue`
-/// (`NumberStringClass.cpp:632`) plus its helper `checkIntegerDigits`
-/// (`:937`); this cannot be phrased as a check on `Number::format`'s output,
-/// because the rounded rendering of `0.99999999995` at DIGITS 9 is
-/// `1.00000000` -- a decimal point in the very case the interpreter accepts.
 fn unsigned_whole_number(text: &str, digits: u64) -> Option<u64> {
     let n = Number::parse(text)?;
     if n.is_zero() {
@@ -261,9 +238,6 @@ impl Settings {
     /// `::OPTIONS DIGITS n`, whose operand the directive parser has already
     /// converted with `Numerics::ARGUMENT_DIGITS` rather than with the
     /// setting in force.
-    ///
-    /// The FUZZ check is the one [`Settings::set_digits_str`] makes, because
-    /// `optionsDirective` makes it too (`DirectiveParser.cpp:988`).
     pub fn set_digits(&mut self, value: u64) -> Result<(), SettingsError> {
         self.set_digits_checked(value, || SettingsError::DigitsNotWhole {
             found: value.to_string(),
@@ -272,22 +246,6 @@ impl Settings {
 
     /// `NUMERIC DIGITS` with no operand: the package default, and it makes
     /// the same FUZZ check the operand form makes.
-    ///
-    /// `NumericInstruction.cpp`'s no-operand arm is
-    /// `if (defaultDigits <= context->fuzz())` before `setDigits`, the same
-    /// test the expression arm runs against its own candidate. The rejected
-    /// value it names is the **default**, not the setting in force: measured
-    /// with `DIGITS 30` and `FUZZ 20` in force, `numeric digits` is 33.1 at
-    /// rc 223 reading `Value of NUMERIC DIGITS ("9") must exceed value of
-    /// NUMERIC FUZZ ("20")`.
-    ///
-    /// `default` is the package's own DIGITS, which `::OPTIONS DIGITS` moves
-    /// off nine -- measured, `::options digits 12` then `numeric digits 30`
-    /// then `numeric digits` answers 12.
-    ///
-    /// The ANSI draft agrees for the unmoved default: `X3J18-199X` 8.3.15.1
-    /// gives the no-operand form `Value = 9` and then runs the same
-    /// `if Value<=#Fuzz.#Level then #Raise 'SYNTAX',33.1`.
     pub fn reset_digits(&mut self, default: u64) -> Result<(), SettingsError> {
         if default <= self.fuzz {
             return Err(SettingsError::FuzzNotBelowDigits {
@@ -346,12 +304,6 @@ impl Settings {
 
     /// `NUMERIC FUZZ` with no operand: the package default, checked against
     /// the DIGITS in force.
-    ///
-    /// The interpreter's own guard is `if (defaultFuzz >= context->digits())`
-    /// before `setFuzz`, and it fires once `::OPTIONS FUZZ` moves the default
-    /// off zero: measured, `::options digits 12 fuzz 5` with `numeric fuzz 0`
-    /// and `numeric digits 3` in force makes a bare `numeric fuzz` 33.1 at rc
-    /// 223 reading `("3") ... ("5")`.
     pub fn reset_fuzz(&mut self, default: u64) -> Result<(), SettingsError> {
         if default >= self.digits {
             return Err(SettingsError::FuzzNotBelowDigits {
@@ -415,10 +367,6 @@ mod tests {
 
     /// The reset refuses exactly what the operand form refuses, and names the
     /// same two values -- the default it wanted to store and the FUZZ in force.
-    ///
-    /// Measured with `DIGITS 30` and `FUZZ 20` in force: both `numeric digits`
-    /// and `numeric digits 9` are 33.1 at rc 223, reading
-    /// `Value of NUMERIC DIGITS ("9") must exceed value of NUMERIC FUZZ ("20")`.
     #[test]
     fn the_digits_reset_refuses_what_the_operand_form_refuses() {
         let mut settings = Settings::default();

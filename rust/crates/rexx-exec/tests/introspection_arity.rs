@@ -12,29 +12,6 @@
 //! `corpus/introspection-arity.tsv` (Phase 5i Task 0): what each documented
 //! introspection method does when it is sent an argument list it could
 //! accept.
-//!
-//! The probe, the verdicts and the harness rule are `support::arity`; this
-//! file is the four files, the header and the refresh variable.
-//!
-//! # Why this exists at all
-//!
-//! Before it, every class in Phase 5i had no arity row anywhere, and the only
-//! instrument that had run them was `corpus/method-bodies.txt` -- whose own
-//! header says a zero-argument send to a method needing arguments records
-//! agreement about an *arity error*. **No task in this phase may cite that
-//! column as a reason a row needs no work.** This table is what it reads
-//! instead.
-//!
-//! # What it carries that `collection-arity.tsv` does not
-//!
-//! An `arm` column. This phase's own `loud` rows that are class methods --
-//! `Package~defaultOptions`, `Method~loadExternalMethod`, `Method~newFile`,
-//! `Routine~loadExternalRoutine`, `Routine~newFile` -- would be left unsized
-//! by an instance-only table.
-//!
-//! Refresh with
-//!   `REXX_INTROSPECTION_ARITY_REFRESH=1 cargo test --release -p rexx-exec \
-//!        --test introspection_arity`
 
 mod support;
 
@@ -131,11 +108,6 @@ fn the_oracle_completes_every_send() {
 }
 
 /// A row marked `REFUSED:` is one the oracle really does refuse.
-///
-/// The marker lets `Pointer~new` and `Buffer~new` be measured on their
-/// refusal, which is the whole of what those rows are. Inverting the harness
-/// rule rather than waiving it is what stops the marker being an escape hatch
-/// for a bad argument list.
 #[test]
 fn every_refused_row_is_really_refused() {
     let completed = arity::refusals_the_oracle_completes(&layout());
@@ -143,12 +115,6 @@ fn every_refused_row_is_really_refused() {
 }
 
 /// A row marked `UNSTABLE:` is one the oracle really does not reproduce.
-///
-/// The marker suppresses this row's value comparison, so it has to be earned
-/// by the oracle's own two answers differing rather than claimed in a header.
-/// A failure here means one of two things: the row's answer stopped being
-/// address-derived, or two addresses collided. The first wants the marker
-/// dropped and a real comparison; the second wants the test run again.
 #[test]
 fn every_unstable_row_is_really_unstable() {
     let stable = arity::stable_rows_marked_unstable(&layout());
@@ -157,10 +123,6 @@ fn every_unstable_row_is_really_unstable() {
 
 /// Every documented row has a list, and a native row whose upstream arity is
 /// not zero is sent something.
-///
-/// This is what defeats "fill in the two control rows and leave the rest
-/// empty": an empty list on a method that takes arguments is caught here
-/// rather than read as agreement.
 #[test]
 fn every_row_is_sent_something_its_arity_needs() {
     let wrong = arity::rows_missing_arguments(&layout());

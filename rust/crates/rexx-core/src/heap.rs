@@ -26,8 +26,6 @@ enum Slot {
 /// footprint claim is actually about -- `Body`'s own bound in `body.rs` is
 /// the term that moves it. Measured at 96 across a change that took
 /// `rexx_num::Number` from 32 bytes to 40 without either width shifting.
-///
-/// An upper bound rather than an equality, for the reason `Body`'s carries.
 const _: () = assert!(size_of::<Slot>() <= 96);
 
 impl Slot {
@@ -48,11 +46,6 @@ pub struct CollectStats {
     pub pending_uninit: Vec<ObjRef>,
     /// The class objects this collection freed, as they were before their
     /// slots' generations moved on.
-    ///
-    /// The caller keys tables by a class -- its name, its place in the class
-    /// graph, its `~objectName` -- and those rows go with it. The heap cannot
-    /// drop them itself: it does not know what a class is beyond a `Body`
-    /// variant.
     pub freed_classes: Vec<ObjRef>,
 }
 
@@ -62,31 +55,9 @@ pub struct Heap {
     live: usize,
     marks: Vec<bool>,
     /// The slots this heap will never sweep, in allocation order.
-    ///
-    /// **A root the heap holds itself**, which is what "immortal" means here.
-    /// The alternative shapes were a slot range of its own and a per-slot flag
-    /// the sweeper reads. A separate range would need a second store behind
-    /// [`Heap::get`], which is the hottest read in the interpreter and would
-    /// pay a branch on every value; a flag would need the marker to trace
-    /// these anyway, so that an immortal object's *children* survive with it.
-    /// Seeding the mark phase from here does both jobs at once: they are
-    /// marked, so the sweeper skips them by the rule it already has, and
-    /// whatever they reach is marked with them.
-    ///
-    /// Nothing removes an entry. That is the contract, not an omission: an
-    /// interned constant is reachable from a compiled stream that lives as
-    /// long as the program does.
     immortal: Vec<ObjRef>,
     /// Every handle [`Heap::set_uninit`] has flagged and no collection has
     /// since found gone or cleared.
-    ///
-    /// **An over-approximation on purpose**, which is what lets the sweep
-    /// consult it instead of walking the arena: an entry whose object has had
-    /// its flag cleared, or whose slot has been swept, is dropped the next
-    /// time a collection reads the list, and `collect` re-reads the flag
-    /// before acting on an entry. Under-approximating would be the unsound
-    /// direction, and the field `Object::has_uninit` is crate-private so that
-    /// [`Heap::set_uninit`] is the only way into the flagged state.
     uninit: Vec<ObjRef>,
     /// How many times `collect` has run, ever. Exists for Task 16's
     /// collect-on-every-allocation gate criterion (4a exit gate, criterion
@@ -121,26 +92,6 @@ impl Heap {
     }
 
     /// Marks from the roots, then sweeps everything unmarked.
-    ///
-    /// **`rexx-exec` calls this on its own now**, from `Interp::alloc_with`
-    /// (`lib.rs`) when the live-object count reaches that module's watermark,
-    /// as well as on every allocation under the opt-in stress mode
-    /// `run_program_collect_every_alloc` turns on. So every allocation site in
-    /// that crate is a collection point, and a value held only in a Rust local
-    /// across one is a use-after-free rather than a cost.
-    ///
-    /// **A missed root does not show as a crash, and the instrument that finds
-    /// one is the stress mode.** It collects strictly more often than any
-    /// watermark can, so a program that survives it survives the production
-    /// trigger. A stale handle *misses* rather than aliasing -- a swept slot's
-    /// generation is incremented, which is what the generation is for -- so
-    /// the failure is a loud `a live value` or a wrong answer, never a silent
-    /// read of another object.
-    ///
-    /// The one window this crate's own callers used to leave open is closed:
-    /// `EXIT`'s result outlives the temps frame that rooted it, all the way to
-    /// `exit_code_for`, and `Interp::root_exit_value` is the root that spans
-    /// it. Its doc comment carries the measurement.
     pub fn collect(&mut self, roots: &RootSet) -> CollectStats {
         self.collections += 1;
         self.marks.clear();
@@ -179,17 +130,6 @@ impl Heap {
         }
 
         // Pass 1: clear weak references whose target did not survive.
-        //
-        // This runs BEFORE the uninit resurrection below, matching the oracle
-        // -- MemoryObject::markObjects at RexxMemory.cpp:426-433 calls
-        // checkWeakReferences() then checkUninit(), and the comment at :422
-        // gives the reason: "so that the uninit list doesn't mark any of the
-        // weakly referenced items. We don't want an object placed on the
-        // uninit queue to end up strongly referenced later."
-        //
-        // Swapping these two passes is observable: a weak reference to an
-        // unreachable but uninit-pending object reads .nil under this order
-        // and reads the live object under the other one.
         for slot in weak_marked {
             let slot = slot as usize;
             let Slot::Live { object, .. } = &self.slots[slot] else {
@@ -214,10 +154,6 @@ impl Heap {
         // everything they reach so the finalizer never sees a half-collected
         // graph. They are reported, not swept; the caller clears the flag
         // once the finalizer has run, and the next collection takes them.
-        //
-        // Read from the registry `set_uninit` maintains rather than from a
-        // walk of the arena, and the flag is re-read here so that an entry
-        // whose object has been cleared or swept decides nothing and leaves.
         let mut pending_uninit = Vec::new();
         let mut resurrect: Vec<ObjRef> = Vec::new();
         if !self.uninit.is_empty() {
@@ -324,23 +260,6 @@ impl Heap {
     }
 
     /// Allocates an object this heap will never sweep.
-    ///
-    /// For a value that is interned once and read for the rest of the run --
-    /// a compiled stream's string constants. **The handle needs no root of the
-    /// caller's**, which is the whole point: it can be stored in a structure
-    /// the collector does not walk, and handed out for as long as that
-    /// structure lives.
-    ///
-    /// Not a way to avoid thinking about lifetime. Every allocation made here
-    /// is held for the life of the `Heap`, so a caller that interned per
-    /// *execution* rather than per distinct constant would leak steadily and
-    /// the collector could not tell it was happening.
-    /// A built-in class object, which is a root for the life of the run.
-    ///
-    /// Immortal rather than flagged or range-checked: `collect` chains
-    /// `immortal` into its initial work list, so such a class is marked and
-    /// what it holds is marked with it, and the sweeper skips it by the rule
-    /// it already has.
     pub fn mint_class(&mut self) -> ObjRef {
         self.alloc_immortal(BehaviourId::OBJECT, Body::Class { owned: Vec::new() })
     }
@@ -354,11 +273,6 @@ impl Heap {
     /// Records that `r`'s object defines `UNINIT`, so the collector
     /// resurrects and reports it rather than sweeping it. Answers whether the
     /// handle named a live object.
-    ///
-    /// **The only way into that state**, which is why `Object::has_uninit` is
-    /// readable outside this crate and not writable: `collect` finds the
-    /// flagged objects through the list this appends to, and a flag set behind
-    /// its back would be a finalizer that never runs.
     pub fn set_uninit(&mut self, r: ObjRef) -> bool {
         let Some(slot) = self.resolve(r) else {
             return false;
@@ -375,10 +289,6 @@ impl Heap {
 
     /// Every handle still flagged, oldest first, with the flag cleared and
     /// the registry emptied, for a caller running every pending finalizer.
-    ///
-    /// **The flag is what kept these objects reachable**, since `collect`
-    /// resurrects a flagged object rather than sweeping it. A caller that
-    /// allocates before it has finished with the answer must root it.
     pub fn take_uninit_flagged(&mut self) -> Vec<ObjRef> {
         let registry = std::mem::take(&mut self.uninit);
         let mut flagged = Vec::new();
@@ -401,18 +311,6 @@ impl Heap {
     /// Undoes [`Heap::set_uninit`] for a batch, for the caller reporting that
     /// their finalizers have run. The next collection sweeps them like any
     /// other object.
-    ///
-    /// **The registry entries go with the flags**, because dropping them
-    /// lazily lets one object hold two: clearing and re-flagging before the
-    /// next collection pushes a second, and both are then live and flagged,
-    /// so the collection reports the same object twice and the finalizer runs
-    /// twice. Measured -- `set`, `clear`, `set`, `collect` answers a
-    /// two-element `pending_uninit` without the filter below, where a walk of
-    /// the arena answers one.
-    ///
-    /// One pass of the registry rather than one pass per handle: the sweep
-    /// this serves runs every flagged object, so a `retain` per object is
-    /// quadratic in the number of finalizers.
     pub fn clear_uninit_all(&mut self, objects: &[ObjRef]) {
         for &r in objects {
             let Some(slot) = self.resolve(r) else {
@@ -432,47 +330,11 @@ impl Heap {
     }
 
     /// How many objects this heap has interned as immortal.
-    ///
-    /// The instrument for the paragraph above: a program's count is the number
-    /// of *distinct* constants its compiled streams hold, and a count that
-    /// tracks executions instead is the leak that would otherwise be invisible.
     pub fn immortal_count(&self) -> usize {
         self.immortal.len()
     }
 
     /// Allocates without ever collecting, whatever else is enabled.
-    ///
-    /// Named `_uncollected` rather than plain `alloc_with`, on request, so
-    /// that a **new** allocation site written the natural way announces at
-    /// the call site that it is bypassing the stress hook, rather than
-    /// silently matching the four existing `rexx-exec` sites that already
-    /// went through the friendly-named wrapper before this rename existed. A
-    /// fifth allocation site added later that keeps calling this name
-    /// directly would not fail anything -- the stress mode would just
-    /// quietly collect less often than it claims to, which is exactly the
-    /// vacuity shape this project keeps finding in its own instruments. The
-    /// obviously-correct choice for production code is
-    /// `rexx_exec::Interp::alloc_with` (`lib.rs`), which calls this and then
-    /// decides whether to collect; this method stays `pub` because
-    /// `rexx-core`'s own tests allocate directly with no `Interp` in scope
-    /// at all, and forcing every one of those through a heavier entry point
-    /// would buy this rule nothing they can bypass just as easily.
-    /// **`#[inline]`, and the whole out-of-line copy goes away with it**:
-    /// every call site takes it, `nm` finds no symbol for it afterwards, and
-    /// `.text` *shrinks* by 6,744 bytes -- the argument marshalling an
-    /// 80-byte `Body` needs at each site cost more than the bodies do.
-    /// Measured in retired instructions: `rexxcps` -0.363%, `emptyloop`
-    /// -0.180%, `varlookup` -0.094%, `compound` -0.048%, `alloc4c` and
-    /// `strings` unmoved -- the two axes that allocate most are the two that
-    /// do not move, so what this buys is the call and not the allocation.
-    /// `#[inline(always)]` is worse on every axis (`rexxcps` -0.328%,
-    /// `strings` +0.035%).
-    ///
-    /// **The 80-byte copy into the slot is still there and this does not
-    /// touch it.** The body arrives by value from a caller that built it on
-    /// its own stack, so the free-list arm reads 80 bytes and writes 80;
-    /// removing that needs the caller to construct into the slot, which is
-    /// an interface change rather than an attribute.
     #[inline]
     pub fn alloc_with_uncollected(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
         self.live += 1;
@@ -542,11 +404,6 @@ impl Heap {
     }
 
     /// Whether `r` names a class object.
-    ///
-    /// **The body is the answer**, not the handle: since Phase 5j a class is
-    /// an ordinary arena object, so this is a resolve and a discriminant test
-    /// rather than a range check. `false` for a handle that resolves to
-    /// nothing, which is what a collected class reads as.
     pub fn is_class(&self, r: ObjRef) -> bool {
         matches!(
             self.get(r).map(|object| &object.body),
@@ -560,26 +417,6 @@ impl Heap {
 
     /// Whether the next allocation would **grow** the arena rather than reuse
     /// a slot an earlier collection freed.
-    ///
-    /// The pressure signal a collector wants, and the reason it is exposed
-    /// rather than derived from `live_count` and `slot_capacity`: it is the
-    /// branch `alloc_with_uncollected` is about to take, so a caller testing
-    /// it is asking the allocator's own question and not reconstructing it.
-    ///
-    /// **It is this crate's stand-in for the oracle's allocation failure.**
-    /// `NormalSegmentSet::handleAllocationFailure`
-    /// (`interpreter/memory/MemorySegment.cpp:1135`) collects, then calls
-    /// `adjustMemorySize` -- "now that we have good GC data, decide if we
-    /// need to adjust the heap size" -- then retries. The oracle can trigger
-    /// on failure because it owns its segments; this crate takes each
-    /// object's payload from `malloc`, which does not fail, it grows the
-    /// process until the OOM killer arrives. There is no failure event here,
-    /// and this branch is the moment that means the same thing: the arena is
-    /// about to ask for more.
-    ///
-    /// It answers `true` for a fresh heap, which has no free list yet, so a
-    /// caller needs a growth allowance of its own as well -- exactly the
-    /// second half of the oracle's shape.
     pub fn will_grow(&self) -> bool {
         self.free_head.is_none()
     }

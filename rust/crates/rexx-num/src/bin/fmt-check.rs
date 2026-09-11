@@ -1,13 +1,4 @@
 //! Differential harness for FORMAT and TRUNC.
-//!
-//! Reads `digits|func|number|a1|a2|a3|a4` lines, where an empty argument
-//! field means the argument was omitted, and prints `line=result`, matching
-//! the driver in `../../tests/data-format-oracle.rex` that produces the
-//! interpreter's answers.
-//!
-//! A digits field ending in `E` -- `9E` -- means the case runs under
-//! `NUMERIC FORM ENGINEERING`. Both sides parse it the same way, so the two
-//! forms can share one case file.
 use rexx_num::{Form, FormatError, Number};
 
 /// An empty field means the argument was omitted. Anything else must parse:

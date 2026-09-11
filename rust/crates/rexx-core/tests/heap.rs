@@ -62,22 +62,6 @@ fn arrays_hold_handles_to_other_objects() {
 }
 
 /// **A class identity and an arena handle can never be the same handle.**
-///
-/// Both counters start at their own base and the arena's is asserted never to
-/// reach the class range (`Heap::alloc_with_uncollected`), so the two spaces
-/// are disjoint by construction. This is what says so.
-///
-/// A class object is an ordinary arena object: it has a slot, it has a
-/// generation, and it is told from a value by its body rather than by its
-/// handle.
-///
-/// **This replaces the test that asserted the opposite.** Until Phase 5j a
-/// class identity came from a reserved range above `CLASS_SLOT_BASE` and
-/// resolved to no object at all, and the test here asserted exactly that. The
-/// spec's §4.0 says why that was given up; what is asserted now is the
-/// property the change buys — a freed class handle *misses*, where a
-/// reserved-range identity had no generation to move on and would have
-/// aliased the next class defined.
 #[test]
 fn a_class_is_an_ordinary_arena_object_and_a_freed_one_misses() {
     let mut heap = Heap::new();

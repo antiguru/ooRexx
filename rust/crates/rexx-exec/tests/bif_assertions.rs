@@ -13,62 +13,6 @@
 //! lifts out of `ootest/ooRexx/base/bif/` through `rexx_exec`'s public entry
 //! point, and checks each the way the ooTest framework's own `assertSame`
 //! does.
-//!
-//! # Two populations, not one
-//!
-//! A **value row** is one `self~assertSame(A, B)` in a body with no
-//! `expectSyntax`. It becomes a four-part program -- the `NUMERIC` settings in
-//! force, the body's assignment prelude, `say A`, `say B` -- and passes when
-//! the two output lines are byte-identical. Byte-identical rather than asking
-//! `rexx_exec` to evaluate `==` itself, for `assertions.rs`'s reason: the
-//! rendering of a number is what this is checking, and making the executor's
-//! own comparison operator the judge would put the code under test in the
-//! judge's seat.
-//!
-//! A **raise row** stands for a body that opens `self~expectSyntax(major.sub)`.
-//! There the framework's trap is a frame up (`OOREXXUNIT.CLS:1563`) and the
-//! raise abandons the body, so `assertSame` is never entered and its second
-//! argument is never compared to anything. Such a row's program evaluates the
-//! call's arguments in order and passes when the program raises exactly
-//! `major.sub` -- major and sub together, so a row expecting `40.5` cannot be
-//! satisfied by `40.9`. See `rexx_extract::bif`'s own doc for the mechanism and
-//! for why emitting these as value rows would be confidently backwards.
-//!
-//! # A measurement, not a threshold
-//!
-//! This harness's headline -- how many rows pass -- is **reported and not
-//! gated**. `base/bif` is the whole builtin surface, including the fifteen
-//! names D4 excludes and everything Phase 5 and Phase 7 own, so a number over
-//! it is a progress signal rather than a statement about 4c's scope.
-//!
-//! What *does* have teeth is [`the_exempt_set_matches_the_current_failures`],
-//! and it runs under a plain `cargo test` rather than behind [`GATE_ENV`].
-//! That is deliberate: a measurement nobody gates on, policed by an assertion
-//! nobody runs, is coverage that does not exist. The set assertion is checked
-//! in both directions -- a listed row that starts passing is as red as an
-//! unlisted row that starts failing -- so an improvement shows up in a diff
-//! instead of being quietly absorbed.
-//!
-//! # The attribution column is derived
-//!
-//! For a row that fails **loudly**, `rust/corpus/bif-exempt.txt`'s second
-//! column is the owner string `rexx-exec`'s own message carries
-//! (`instruction_owner` / `expr_owner`), re-read on every run, so the file
-//! cannot drift from those tables. The same two limits apply as to
-//! `keyword-exempt.txt`: a derived owner says what a row hits *first*, not
-//! what would make it pass, and the non-loud categories
-//! ([`RowOutcome::attribution`]'s constants) are compared against a file
-//! holding the same constant, where what still has teeth is *membership*.
-//!
-//! # REPORT vs STRICT
-//!
-//! [`GATE_ENV`] switches an always-green progress report into a run that also
-//! fails on an unaccounted row, matching `corpus.rs`'s `REXX_CORPUS_GATE`,
-//! `assertions.rs`'s `REXX_ASSERTIONS_GATE` and `keyword_assertions.rs`'s
-//! `REXX_KEYWORD_GATE`. `emit_uncaptured` pipes the report through a child
-//! process whose stderr is inherited, because a `println!` inside a `#[test]`
-//! reaches libtest's thread-local capture sink and not the terminal; see
-//! `corpus.rs`'s module doc for the measurement behind that.
 
 mod watchdog;
 
@@ -88,10 +32,6 @@ use std::process::{Command, Stdio};
 /// The path every row is reported under. There is no real file behind one --
 /// the program is assembled from one `.testGroup` assertion -- so this is a
 /// label, in the same spirit as `assertions.rs`'s `ROW_PATH`.
-///
-/// It carries a `.` in its basename on purpose:
-/// [`parse_condition_number`]'s first-line rejection turns on the reported
-/// path not parsing as a bare integer.
 const ROW_PATH: &str = "/nonexistent/bif-row.rex";
 
 /// Env var that flips this test from a progress report into a run that fails
@@ -124,11 +64,6 @@ fn exempt_path() -> PathBuf {
 struct Row {
     /// `GROUP::METHOD#N`, `N` being the 1-based position of this row among the
     /// rows its own method yielded.
-    ///
-    /// The occurrence number is not decoration: a `base/bif` method routinely
-    /// carries several `assertSame` calls, and `COPIES.testGroup` writes the
-    /// same two operand texts in more than one of them, so `(group, method,
-    /// expr, expected)` is not a key.
     key: String,
     kind: RowKind,
 }
@@ -140,10 +75,6 @@ enum RowKind {
 
 /// Every row in the suite, in sorted file order, plus the per-reason
 /// accounting for the `assertSame` calls that did not become one.
-///
-/// The drop counts are reported here and **pinned** on the extractor's own
-/// side (`rexx-extract/tests/extract_bif.rs`); a second copy of the literals
-/// would be one more thing to drift rather than a cross-check.
 fn collect() -> (Vec<Row>, BTreeMap<DropReason, (usize, usize)>, usize) {
     let dir = suite_root();
     let groups = find_test_groups(&dir);
@@ -201,10 +132,6 @@ fn next_key(seen: &mut BTreeMap<String, usize>, group: &str, method: &str) -> St
 
 /// A program that establishes one row's state and then `SAY`s each of
 /// `clauses` in order.
-///
-/// `NUMERIC DIGITS`/`FORM` first, always, and never a shared default: a row
-/// evaluated at the wrong precision can render an answer that still happens to
-/// match, and would then pass while testing the wrong thing.
 fn program(digits: u32, form: Form, prelude: &[String], clauses: &[&str]) -> Vec<u8> {
     let mut text = String::new();
     writeln!(text, "numeric digits {digits}").unwrap();
@@ -383,13 +310,6 @@ fn classify_raise(expect: RaiseExpectation, outcome: Outcome) -> RowOutcome {
 
 /// Finds `major`/`sub` in the oracle-format report's second line, `Error
 /// <major>.<sub>:  <message>.`.
-///
-/// The report's *first* line, `Error <major> running <path> line <n>:  ...`,
-/// also starts with `Error ` but never parses this way: its segment before the
-/// first `:` is `<major> running <path> line <n>`, whose half before the first
-/// `.` is non-numeric text. Duplicated from `assertions.rs` rather than shared,
-/// because two integration tests in the same `tests/` directory are separate
-/// binaries and neither can `mod` the other.
 fn parse_condition_number(stderr: &[u8]) -> Option<(u32, u32)> {
     let text = String::from_utf8_lossy(stderr);
     for line in text.lines() {
@@ -453,18 +373,6 @@ fn committed_exempt() -> BTreeMap<String, String> {
 /// Polices the committed exempt set itself, in every mode, independent of
 /// [`GATE_ENV`]: the current failure set must equal the committed one exactly,
 /// attribution included.
-///
-/// Both directions matter and neither is the "real" one. A listed row that
-/// starts passing means the exemption is stale, and the fix is to edit the
-/// file -- which shows up in a diff -- not for the harness to stop forgiving it
-/// on its own. An unlisted row that starts failing is a regression with nothing
-/// accounting for it. And a row whose attribution changes means its blocker
-/// moved between phases, which should not be able to happen silently.
-///
-/// **Not behind [`GATE_ENV`]**, unlike the report below. The headline this
-/// harness produces is explicitly a measurement rather than a threshold, so if
-/// the set assertion were behind the env var too, nothing anyone runs would
-/// police `base/bif` at all.
 #[test]
 fn the_exempt_set_matches_the_current_failures() {
     let (rows, _, _) = collect();
@@ -725,13 +633,6 @@ fn emit_uncaptured(text: &str) {
 
 /// The falsification proof: perturbing one passing value row's expression must
 /// make exactly that row fail.
-///
-/// Prepends `'ZZZ-FALSIFICATION-MARKER' ||` inside a fresh pair of parentheses
-/// around the whole expression rather than appending to its text. Concatenation
-/// binds tighter than comparison in Rexx, so appending to an operand that
-/// itself contains a top-level comparison would regroup the expression instead
-/// of changing its value -- `assertions.rs`'s own falsification proof hit
-/// exactly that.
 #[test]
 fn the_falsification_proof() {
     let (rows, _, _) = collect();
@@ -763,13 +664,6 @@ fn the_falsification_proof() {
 }
 
 /// A raise row is satisfied by the exact `major.sub`, not by the major alone.
-///
-/// Constructed rather than found, because the corpus contains no body that
-/// raises the right major with the wrong sub -- and a harness that waited for
-/// one would be testing the corpus rather than itself. Both codes below are
-/// real `base/bif` ones under the same major: `40.12` is a builtin's argument
-/// of the wrong type and `40.5` is a required argument omitted, which is
-/// exactly the pair `C2D.testGroup`'s own `expectSyntax` bodies distinguish.
 #[test]
 fn a_raise_row_needs_the_sub_number_too() {
     let row = RaiseRow {
@@ -819,29 +713,11 @@ fn a_raise_row_needs_the_sub_number_too() {
 /// categories [`RowOutcome::attribution`] emits for a row that neither passes
 /// nor names a construct. Nothing else, so a typo cannot quietly become a new
 /// category that the set-equality test then happily matches against itself.
-///
-/// Each derived category also carries its exact row count, including the ones
-/// standing at zero.
 #[test]
 fn every_exempt_attribution_is_a_known_phase_or_a_declared_outcome() {
     const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
 
     // The count is the whole point of this table, not decoration on it.
-    //
-    // A phase string names who will do the work and `UNATTRIBUTED:` names the
-    // construct that has to be built; these three name neither, so a row
-    // carrying one is a divergence nothing owns. Accepting the spelling
-    // without pinning the count means a future value divergence can be
-    // repaired by adding a row: the set-equality test goes green again, the
-    // headline drops by one, and nothing asserts on the headline.
-    //
-    // `MISMATCH` is the sharp one -- both renderings produced output and they
-    // differ, which is the single thing this differential exists to detect --
-    // and the only rows of that shape this extraction has ever produced were
-    // twelve that three drop reasons then removed. A category pinned at zero
-    // fails the first time the corpus grows one, which is exactly when a
-    // reader needs to know; `extract_bif.rs`'s `DropReason` table pins its own
-    // zeroes for the same reason.
     const DERIVED: &[(&str, usize)] = &[("MISMATCH", 0), ("RAISE-MISMATCH", 0), ("ANOMALY", 3)];
 
     let names: Vec<&str> = DERIVED.iter().map(|(name, _)| *name).collect();

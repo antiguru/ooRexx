@@ -10,21 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! `Raised`: the payload of a real Rexx condition.
-//!
-//! **Only the payload exists here.** Task 12 ("Errors, the message
-//! catalogue, and the exit code") owns the message catalogue, the
-//! oracle's exact two-line stderr format, the clause echo, and the
-//! `256 - number` exit-code mapping -- none of that is built in this
-//! task. What exists is enough to assert *which* condition was raised
-//! (the condition name, the number and sub-number, and the substitution
-//! values), not to reproduce what the oracle prints for it. A test
-//! against this type checks "did `1/0` raise 42.3", never "does stderr
-//! read `Error 42.3: ...` and does the process exit 214".
-//!
-//! `Failure` is the other half: `step` and everything above it can fail
-//! either because 4a does not implement a construct (`Loud`, `lib.rs`) or
-//! because a real condition was raised (`Raised`), and a clause containing
-//! an expression can do either, so the propagation type has to carry both.
 
 use crate::Loud;
 use rexx_core::ObjRef;
@@ -34,134 +19,40 @@ use std::borrow::Cow;
 
 /// Which activations may trap one raise, walking outward from the one that
 /// raised it.
-///
-/// **Three answers, not one, and the differences are measured rather than
-/// derived from the grammar.** Nothing about `RAISE`'s syntax says that its
-/// tail decides who is allowed to catch it, and every one of these was found
-/// by running the three-level shape that tells them apart -- a two-level
-/// program gives the same bytes for all three.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Search {
     /// From the activation that raised, outward level by level. Every
     /// ordinary condition (`say 1/0`, an unset variable under `SIGNAL ON
     /// NOVALUE`), and `RAISE SYNTAX ... RETURN`.
-    ///
-    /// Measured for the ordinary case: `say 1/0` inside a `PROCEDURE`d
-    /// routine, with `SIGNAL ON SYNTAX` enabled only in its caller, traps
-    /// *in the routine* -- the handler reads the routine's own isolated
-    /// pool, and `SIGL` is the routine's raising line. Turning the trap off
-    /// in the routine makes the same condition trap in the caller instead,
-    /// with `SIGL` set to the caller's `call` clause, which is the outward
-    /// half.
     #[default]
     Here,
     /// From the **caller** of the activation that raised, outward -- the
     /// raising activation's own (inherited) trap is skipped.
-    ///
-    /// `RAISE <anything but SYNTAX> ... RETURN`. Measured: `raise user foo
-    /// return 'RETVAL'` inside `fun`, with `signal on user foo` in the main
-    /// body, traps with `SIGL` set to the main body's own clause -- not to
-    /// `fun`'s `raise` line, which is what `Here` gives and which is exactly
-    /// what the identical program with `raise syntax 40.4 return` does
-    /// report. The two spellings differ in nothing but the condition.
-    ///
-    /// **"Outward" stops at the caller, and that is measured rather than a
-    /// limitation.** Task 7's report listed one-level-only as a residual --
-    /// "if the grandparent has a trap and the parent does not, we ignore the
-    /// condition where the oracle might propagate to it". Built and run: with
-    /// `signal on user foo` in the main body, `signal off user foo` in
-    /// `lev1`, and `raise user foo return` in `lev2`, the oracle does **not**
-    /// reach the main body's handler either -- `lev1` simply resumes. So the
-    /// search really does end at the caller, and this is a behaviour rather
-    /// than a residual.
     Caller,
     /// The **outermost** activation only; every level it unwinds through
     /// skips its own trap check.
-    ///
-    /// `RAISE SYNTAX` with no `RETURN`/`EXIT` tail, and `RAISE SYNTAX ...
-    /// EXIT`. Measured at three levels: with `SIGNAL ON SYNTAX` enabled in
-    /// the *middle* routine and nowhere else, a tail-less `raise syntax
-    /// 40.4` in the innermost is **not** trapped -- it is the ordinary fatal
-    /// report at rc 216. Enable it in the main body as well and the main
-    /// body's trap is the one that fires, with `SIGL` set to the main body's
-    /// own `call` clause, the middle routine's trap still untouched.
     Top,
     /// No activation at all may trap this -- it is already the condition's
     /// default action, on its way to the report.
-    ///
-    /// Two producers, both measured. `RAISE HALT` with no `RETURN` tail:
-    /// `signal on halt` on the line immediately above it does **not** fire,
-    /// and the program gets the fatal `Error 4.1` at rc 252 -- which is what
-    /// separates this from [`Search::Top`], since at top level `Top` would
-    /// have offered it to exactly that trap. And `RAISE PROPAGATE`, which is
-    /// trapped by no enclosing handler at either of the two depths it was
-    /// measured at.
     Nobody,
 }
 
 /// How one raise in flight must be delivered, beside the payload it carries.
-///
-/// Every field is at its default for every condition an *expression* or an
-/// ordinary instruction raises, which is every raiser in the crate except
-/// `RAISE` itself -- so [`Raised::syntax`] supplies the default and the
-/// thirty-odd raiser functions never mention it.
-///
-/// **Three functions in `run.rs` write these fields, not one** (fix round 1's
-/// finding 6, which corrects a line here that named only the first):
-/// `exec_raise` sets `search` from the tail and the condition,
-/// `exec_raise_propagate` sets both fields, and `offer_to_trap` performs the
-/// load-bearing [`Search::Caller`] -> [`Search::Here`] rewrite as a raise
-/// declines its first level. That last one is the writer a reader most needs
-/// to know about, since it is the only one that mutates a `Delivery` already
-/// in flight.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Delivery {
     pub(crate) search: Search,
     /// Render the major line as `Error 42:  ...` rather than
     /// `Error 42 running <path> line 8:  ...`.
-    ///
-    /// `RAISE PROPAGATE`'s own form, measured at two nesting depths: the
-    /// clause echoes above it are unchanged (one per level, innermost
-    /// first), and only the ` running <path> line <n>` span is dropped.
     pub(crate) positionless: bool,
     /// Render the major line as `Error 88 running <path>:  ...`: the program
     /// name, and no ` line <n>` after it.
-    ///
-    /// **Not a narrower [`Delivery::positionless`]** -- that one drops the
-    /// program name too. `Activity::display` adds ` line <n>` only
-    /// when the condition object carries a `POSITION`
-    /// (`concurrency/Activity.cpp:1453`-`:1459`), and a raise from inside a
-    /// native method's own activation carries none, because the native body
-    /// has no Rexx clause to be at. Measured, oracle: `.k~sep(1)` on a class
-    /// method bound to `file_separator` writes the `Compiled method` line and
-    /// the sending clause exactly as `'abc'~length(1)` does, and then `Error
-    /// 88 running <path>:  Invalid argument.` with no line -- where
-    /// `'abc'~length(1)`, whose 93.902 is raised by the send rather than from
-    /// inside the body, writes `Error 93 running <path> line 2:`.
     pub(crate) lineless: bool,
 }
 
 /// One value a catalogue message interpolates: **bytes, not text**.
-///
-/// A Rexx string is a byte string, and a substitution is usually one --
-/// `left('ab', zz)` puts `zz`'s own rendering into 40.12's `found "&3"`, and
-/// nothing constrains it to UTF-8. Passing it through `String` costs the
-/// bytes that are not: measured, `say copies('ab','FF'x)` reports
-/// `found "\377"` from the oracle, where a lossy conversion reports
-/// `found "\357\277\275"` -- U+FFFD, three bytes for one, on a channel the
-/// differential harness compares byte for byte.
-///
-/// The sanitising the oracle *does* apply is a different thing and happens
-/// later, at [`displayable`], on the whole line rather than on the value.
 type Substitution = Vec<u8>;
 
 /// The substitutions a sibling crate's error carries, as bytes.
-///
-/// `rexx-num` and `rexx-parse` build their own substitution lists as
-/// `String`, which is right for them: every value they interpolate is a
-/// number's rendering or a catalogue-supplied fragment, never arbitrary
-/// program data. This is the one-way widening at the boundary, so the field
-/// itself can stay [`Substitution`]s.
 pub(crate) fn into_substitutions(values: Vec<String>) -> Vec<Substitution> {
     values.into_iter().map(String::into_bytes).collect()
 }
@@ -174,70 +65,26 @@ pub(crate) struct Raised {
     /// keyed by (`Activation::traps`). It is carried as a field rather than
     /// hardcoded at each call site because the spec's own shape includes it
     /// and 4b's `NOVALUE` and `RAISE` do set it to something else.
-    ///
-    /// **`Cow` rather than `&'static str` since 4b's Task 7**, and for
-    /// exactly one condition family: `RAISE USER foo` names the condition
-    /// `USER FOO`, built from the program's own text, where every other
-    /// condition name in the language is one of a fixed set. The borrowed
-    /// case stays allocation-free, which is every raise the crate makes on
-    /// its own.
-    ///
-    /// The `#[expect(dead_code)]` that used to sit here is **deleted rather
-    /// than moved**: `SIGNAL ON`/`CALL ON` read this field to decide whether
-    /// a trap matches, which is the reader it was waiting for.
     pub(crate) condition: Cow<'static, str>,
     pub(crate) number: u16,
     pub(crate) sub: u16,
     /// What `&1`, `&2`, ... in this error's catalogue entry stand for.
-    ///
-    /// See [`Substitution`] for why these are bytes.
     pub(crate) additional: Vec<Substitution>,
     /// What a trapping handler reads back from `RC`, or `None` to leave `RC`
     /// alone.
-    ///
-    /// Measured, three rows, and the third is what makes this a field rather
-    /// than "always the major":
-    ///
     /// ```text
     /// signal on syntax  ; say 1/0            -> handler sees RC = 42
     /// signal on syntax  ; raise syntax 40.4  -> handler sees RC = 40  (not 40.4)
     /// signal on novalue ; say zunset         -> handler sees RC = RC  (untouched)
     /// ```
-    ///
-    /// So it is the *major* for every `SYNTAX` condition however it arose --
-    /// which is why [`Raised::syntax`] fills this in from `number` and no
-    /// raiser has to think about it -- and it is untouched for a condition
-    /// with no catalogue number. `RAISE ERROR n`/`RAISE FAILURE n` is the one
-    /// case that is neither: `n` is the value, measured at `rc= 5` for `raise
-    /// error 5`, and `exec_raise` sets it there.
     pub(crate) rc: Option<Vec<u8>>,
     /// `RAISE ... DESCRIPTION expr`'s rendered value, which a trapping
     /// handler reads back through `CONDITION('D')`.
-    ///
-    /// `None` is "no `DESCRIPTION` clause", and `CONDITION('D')` answers the
-    /// null string for it -- measured, `raise syntax 40.4` trapped and
-    /// `say 1/0` trapped both give `D` as empty, where `raise syntax 40.4
-    /// description 'zd'` gives `zd`.
-    ///
-    /// **`NOVALUE`'s own description is the variable's derived name and is
-    /// not carried here.** Measured, `signal on novalue` with `say
-    /// zunsetvar` gives `D` as `ZUNSETVAR`; nothing on the read path passes
-    /// the name to `novalue_check`, so `builtin::state`'s `CONDITION`
-    /// refuses that one option-and-condition pair loudly rather than
-    /// answering the null string it would otherwise produce.
     pub(crate) description: Option<Vec<u8>>,
     pub(crate) delivery: Delivery,
 }
 
 /// Which of the two grouped digit notations a validation error is about.
-///
-/// The oracle carries the same distinction as a `bool hex` parameter threaded
-/// through `StringUtil::validateGroupedSet` (`classes/support/StringUtil.cpp`),
-/// which picks between paired catalogue entries at each of its three
-/// failures. It is a type here so that a caller validating a binary string
-/// cannot name the hexadecimal message: the three raisers below take this and
-/// choose the sub-code themselves, rather than each call site writing a
-/// number down.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Notation {
     Hex,
@@ -247,14 +94,6 @@ pub(crate) enum Notation {
 impl Raised {
     /// A `SYNTAX` condition with an ordinary delivery -- the shape every
     /// raiser outside `RAISE` itself has.
-    ///
-    /// `pub(crate)` since 4b's Task 7, which is when `Raised` gained a field
-    /// no raiser cares about: `run.rs` and `trace.rs` each built their own
-    /// `Raised { condition: "SYNTAX", .. }` literals, twenty-one copies of
-    /// the same two constant fields, and every one of them would have had to
-    /// name `delivery` too. Calling this instead means a field added here is
-    /// free for all of them, which is the same argument `ClauseState` makes
-    /// one level up.
     pub(crate) fn syntax(number: u16, sub: u16, additional: Vec<Substitution>) -> Raised {
         Raised {
             condition: Cow::Borrowed("SYNTAX"),
@@ -268,17 +107,6 @@ impl Raised {
     }
 
     /// A condition that is not `SYNTAX`, carrying no catalogue entry.
-    ///
-    /// **`number`/`sub` are `0` and can never be rendered**, which is a
-    /// property of how these are raised rather than a hope. Measured, the
-    /// untrapped default action for `USER`, `ERROR`, `FAILURE`, `NOVALUE`,
-    /// `NOSTRING`, `NOTREADY` and `LOSTDIGITS` is to *ignore* the condition
-    /// -- `raise error 5` at top level with no trap prints nothing and exits
-    /// 0 -- so `exec_raise` applies that default itself and one of these
-    /// never reaches `execute`'s reporting arm. `HALT` is the one non-syntax
-    /// condition whose default *is* fatal (`Error 4.1`, rc 252, measured),
-    /// and it is built through [`Raised::syntax`]'s numbered path instead,
-    /// precisely so it has a catalogue entry to render.
     pub(crate) fn condition(name: Cow<'static, str>) -> Raised {
         Raised {
             condition: name,
@@ -292,14 +120,6 @@ impl Raised {
     }
 
     /// Whether this condition would *report* if nothing traps it.
-    ///
-    /// `false` is exactly [`Raised::condition`]'s own zero-numbered kind,
-    /// whose untrapped default action is measured to be silence. The check
-    /// is spelled on `number` rather than on the condition name because the
-    /// name is open-ended (`USER anything`) while the numbering is not, and
-    /// because `HALT` -- the one non-`SYNTAX` condition whose default action
-    /// *is* a report -- is built through the numbered path precisely so this
-    /// answers `true` for it.
     pub(crate) fn reportable(&self) -> bool {
         self.number != 0
     }
@@ -395,20 +215,10 @@ impl Raised {
     /// completion without a value to hand back -- a bare `RETURN`, measured
     /// against the oracle in a clean directory: `say f(1)` into `f: return`
     /// gives rc 212 and
-    ///
     /// ```text
     /// Error 44 running .../f.rex line 1:  Function or message did not return data.
     /// Error 44.1:  No data returned from function "F".
     /// ```
-    ///
-    /// `name` is the resolved label's own spelling (already upcased for a
-    /// `CallTarget::Symbol`, which is the only target this can ever fire
-    /// for -- a `CallTarget::Literal` never resolves at all in this phase,
-    /// see `eval_call`'s own doc). **Not** the same path as running off the
-    /// end of the routine with no `RETURN` at all: that is `Ended::Exited`,
-    /// measured to end the whole program silently (rc 0, no stdout) rather
-    /// than raise anything, exactly as falling off the end of a `CALL`ed
-    /// routine already does (`Interp::invoke_call`'s own doc, `run.rs`).
     pub(crate) fn no_data_returned(name: &[u8]) -> Raised {
         Raised::syntax(44, 1, vec![name.to_vec()])
     }
@@ -417,29 +227,6 @@ impl Raised {
     /// `::ROUTINE` of the running program. `name` is the target **as the
     /// call site spells it** -- upcased for a bare symbol, verbatim for a
     /// quoted literal or a `CALL (expr)` target.
-    ///
-    /// Measured in a clean directory, all rc 213: `call zorkolo` with
-    /// nothing of that name gives `Could not find routine "ZORKOLO".`;
-    /// `call 'max' 1, 9` gives `Could not find routine "max".` while `call
-    /// 'MAX' 1, 9` reaches the builtin and answers 9, because the builtin
-    /// table is matched case-sensitively; `nm = 'max'; call (nm) 1, 9` is
-    /// the same 43.1 for the same reason.
-    ///
-    /// **The oracle searches one more place before answering this, and this
-    /// crate does not**: an external Rexx file named for the target. Measured
-    /// in a directory holding `zorkolo.rex`, `call zorkolo` runs that file at
-    /// rc 0, and with a `::ROUTINE zorkolo` in the calling program the
-    /// routine wins instead. External routine resolution is Phase 7's
-    /// (`phase-4-exclusions.txt` carries both transcripts), so on this crate
-    /// a program that would have found a file gets this condition. That is a
-    /// narrower difference than it looks: the substitution, the number, the
-    /// sub and the exit code are the oracle's own for every program with no
-    /// such file beside it.
-    ///
-    /// Not truncated, unlike `Loud::unresolved_call`'s own message:
-    /// this is the oracle's answer rather than a report about this crate, so
-    /// a `CALL (v)` carrying a megabyte in `v` names a megabyte here exactly
-    /// as the oracle does.
     pub(crate) fn routine_not_found(name: &[u8]) -> Raised {
         Raised::syntax(43, 1, vec![name.to_vec()])
     }
@@ -447,15 +234,6 @@ impl Raised {
     /// 43.902: a `ns:name(...)` or `CALL ns:name` whose namespace resolved and
     /// whose public routines do not hold `name`. Two substitutions, the
     /// routine name and the namespace, both upcased by the scanner.
-    ///
-    /// `CallInstruction.cpp:455`, reached after `findPublicRoutine` answers
-    /// nothing. Measured, rc 213 with the earlier output kept: a required
-    /// file's non-`PUBLIC` `::ROUTINE privr` reached as `w:privr()` reports
-    /// `Error 43.902:  Routine "PRIVR" not found in namespace "W".`
-    ///
-    /// **The `REXX` namespace holds no routine at all**, measured:
-    /// `rexx:length('abc')` is this error naming `"LENGTH"` and `"REXX"`,
-    /// not the builtin.
     pub(crate) fn namespace_routine_not_found(name: &[u8], namespace: &[u8]) -> Raised {
         Raised::syntax(43, 902, vec![name.to_vec(), namespace.to_vec()])
     }
@@ -463,11 +241,6 @@ impl Raised {
     /// 98.987: a namespace qualifier no `::REQUIRES ... NAMESPACE` of the
     /// running package registered. Two substitutions, the namespace and the
     /// **package's own path**.
-    ///
-    /// Measured, rc 158: `say q:Widget` with only a `namespace w` registered
-    /// reports `Error 98.987:  Namespace "Q" not found in package
-    /// "<path>".`, and `::class Sub subclass q:Widget` reports the same
-    /// against the requiring file's path from the directive's own clause.
     pub(crate) fn namespace_not_found(namespace: &[u8], package: &str) -> Raised {
         Raised::syntax(
             98,
@@ -478,10 +251,6 @@ impl Raised {
 
     /// 98.988: a namespace that resolved and whose public classes do not hold
     /// the name. Two substitutions, the class name and the namespace.
-    ///
-    /// Measured, rc 158: a required file's non-`PUBLIC` `::class Hidden`
-    /// reached as `w:Hidden` reports `Error 98.988:  Class "HIDDEN" not found
-    /// in namespace "W".`, and `rexx:Zork` reports the same against `"REXX"`.
     pub(crate) fn namespace_class_not_found(name: &[u8], namespace: &[u8]) -> Raised {
         Raised::syntax(98, 988, vec![name.to_vec(), namespace.to_vec()])
     }
@@ -490,32 +259,12 @@ impl Raised {
     /// point the `REXX` package does not export. `entry` is the name the
     /// directive resolved against -- its third word, or the method's own name
     /// upcased -- and the message quotes it as it was resolved.
-    ///
-    /// **A translation-time refusal on the oracle**, so the file is refused
-    /// before its own first clause: `createNativeMethod` raises it from
-    /// inside the directive parse (`parser/DirectiveParser.cpp:1385`).
-    /// Measured, a file whose first clause is `say "prolog ran"`: rc 166,
-    /// **stdout empty**, the directive's own clause echoed, `Error 90 ...
-    /// External name not found.` and `Error 90.998:  Unable to find external
-    /// method "no_such_entry_point_xyz".`
     pub(crate) fn external_method_not_found(entry: &[u8]) -> Raised {
         Raised::syntax(90, 998, vec![entry.to_vec()])
     }
 
     /// 88.922: more arguments than a `LIBRARY REXX` entry point's own
     /// signature declares.
-    ///
-    /// **Not [`Raised::too_many_method_arguments`], and the difference is
-    /// measured on both.** A primitive method's count is checked by
-    /// `CPPCode::run` and reports 93.902; a native library method's is
-    /// checked inside `NativeActivation` and reports this one. Measured, on
-    /// two programs differing only in which method they call with an
-    /// argument: `'abc'~length(1)` is `93.902 Too many arguments in
-    /// invocation of method; 0 expected.` at rc 163, and `.k~sep(1)` on a
-    /// class method bound to `file_separator` is `88.922 Too many arguments
-    /// in invocation; 0 expected.` at rc 168.
-    ///
-    /// [`Delivery::lineless`] carries the other half of the difference.
     pub(crate) fn too_many_external_arguments(arity: usize) -> Raised {
         let mut raised = Raised::syntax(88, 922, vec![arity.to_string().into_bytes()]);
         raised.delivery.lineless = true;
@@ -524,13 +273,6 @@ impl Raised {
 
     /// 99.903: two `::ROUTINE` directives of the same name in one program.
     /// No substitutions -- the message names neither.
-    ///
-    /// Measured: two `::routine zork` directives give rc 157, the second
-    /// directive's own clause echoed, `Error 99 ... Translation error.` and
-    /// `Error 99.903:  Duplicate ::ROUTINE directive instruction.` A
-    /// translation-time refusal on the oracle rather than an install-time
-    /// one, which is why it is reported before the main body's first clause
-    /// here too.
     pub(crate) fn duplicate_routine() -> Raised {
         Raised::syntax(99, 903, Vec::new())
     }
@@ -538,21 +280,6 @@ impl Raised {
     /// 99.901: two `::CLASS` directives of one name in one program, and
     /// 99.942: two `::RESOURCE` directives of one name. No substitutions --
     /// neither message names anything.
-    ///
-    /// **Both are keyed by the upcased name, whatever the directive spelled.**
-    /// `classDirective` compares `commonString(name->upper())`
-    /// (`parser/DirectiveParser.cpp:347`, `:349`) and `resourceDirective` the
-    /// same (`:2277`, `:2316`). Measured, all rc 157 echoing the second
-    /// directive: `::CLASS a` beside `::CLASS A` and `::CLASS a` beside
-    /// `::CLASS "A"` are each `Error 99.901: Duplicate ::CLASS directive
-    /// instruction.`, and two `::RESOURCE d` bodies are `Error 99.942:
-    /// Duplicate ::RESOURCE directive instruction.`
-    ///
-    /// **One table per directive kind, so the names do not collide across
-    /// kinds**: measured, oracle rc 0 on `::CLASS r` beside `::ROUTINE r` and
-    /// on `::RESOURCE d` beside `::ROUTINE d`. `isDuplicateClass` asks
-    /// `classDependencies` (`:217`-`:220`) where `resourceDirective` asks
-    /// `resources` (`:2316`).
     pub(crate) fn duplicate_class() -> Raised {
         Raised::syntax(99, 901, Vec::new())
     }
@@ -566,19 +293,6 @@ impl Raised {
     /// 99.902, 99.931 and 99.932: two member directives of one class writing
     /// the same dictionary key. No substitutions -- none of the messages
     /// names anything.
-    ///
-    /// **Which of the three a collision reports is the *later* directive's
-    /// kind, not the earlier one's**, because `checkDuplicateMethod` takes
-    /// the error code from its caller and every caller passes its own
-    /// (`parser/DirectiveParser.cpp:507`-`:530`, and the call sites at
-    /// `:822`, `:1664` and `:1926`). Measured, all rc 157 echoing the second
-    /// directive: `::METHOD m CLASS` twice under one `::CLASS` is
-    /// `Error 99.902: Duplicate ::METHOD directive instruction.`,
-    /// `::ATTRIBUTE p` twice is `99.931: Duplicate ::ATTRIBUTE directive
-    /// instruction.`, `::CONSTANT c` twice is `99.932: Duplicate ::CONSTANT
-    /// directive instruction.`, and `::METHOD "p="` followed by
-    /// `::ATTRIBUTE p` is the **attribute's** 99.931 -- the setter key the
-    /// attribute generates is what collides.
     pub(crate) fn duplicate_member(kind: &DirectiveKind) -> Raised {
         let sub = match kind {
             DirectiveKind::Attribute(_) => 931,
@@ -590,14 +304,6 @@ impl Raised {
 
     /// 99.905: a `CLASS` keyword on a member directive with no `::CLASS`
     /// above it. No substitutions.
-    ///
-    /// **The message names `::METHOD` whatever directive carried the
-    /// keyword**, because it is `checkDuplicateMethod`'s own refusal and that
-    /// function takes one error code for this arm regardless of the one its
-    /// caller passed for a duplicate (`parser/DirectiveParser.cpp:512`-`:515`).
-    /// Measured, both rc 157: `::METHOD m CLASS` alone in a file and
-    /// `::ATTRIBUTE p CLASS` alone in a file each report `Error 99.905: CLASS
-    /// keyword on ::METHOD directive requires a matching ::CLASS directive.`
     pub(crate) fn class_keyword_needs_class() -> Raised {
         Raised::syntax(99, 905, Vec::new())
     }
@@ -605,73 +311,18 @@ impl Raised {
     /// 98.909: a `::CLASS` directive naming a `SUBCLASS` or an `INHERIT`
     /// target no name resolves to. One substitution, the target's upcased
     /// spelling.
-    ///
-    /// Measured, rc 158 with stdout empty: `::class b subclass zzznotaclass`
-    /// after `say 'main'` gives `Error 98.909:  Class "ZZZNOTACLASS" not
-    /// found.` with the directive's own clause echoed and the program's first
-    /// clause never run. `::class d inherit c` with no `c` anywhere is the
-    /// same error naming `"C"`, and so is `::CLASS K INHERIT M PUBLIC`
-    /// naming `"PUBLIC"` -- `INHERIT` consumes every remaining token of the
-    /// clause, so the trailing keyword is read as a class name and never
-    /// reaches an access check.
-    ///
-    /// **No `Compiled method` frame on this one**, measured: the oracle
-    /// resolves each `INHERIT` target before sending `INHERIT` to the class
-    /// object (`ClassDirective::install`,
-    /// `interpreter/instructions/ClassDirective.cpp:222` for the lookup and
-    /// `:230` for the send), so the
-    /// report opens with the directive's own echo. The refusals that come
-    /// out of the send itself carry one.
     pub(crate) fn class_not_found(name: &[u8]) -> Raised {
         Raised::syntax(98, 909, vec![name.to_vec()])
     }
 
     /// 98.908: a `::CLASS` directive naming a `METACLASS` target no name
     /// resolves to. One substitution, the target's upcased spelling.
-    ///
-    /// A separate error from [`Raised::class_not_found`], because
-    /// `ClassDirective::install` resolves the metaclass through its own
-    /// `reportException` (`ClassDirective.cpp:180`). Measured, rc 158 with
-    /// stdout empty: `::class k metaclass zzznotaclass` after `say 'main ran'`
-    /// gives `Error 98.908:  Metaclass "ZZZNOTACLASS" not found.` with the
-    /// directive's own clause echoed. The spelling is upcased even when the
-    /// reference is a quoted literal -- measured, `::class k metaclass
-    /// "zzzm"` names `"ZZZM"`.
-    ///
-    /// **No `Compiled method` frame**, measured: the oracle raises this from
-    /// the directive's own install, before it calls anything on the class it
-    /// is about to derive from.
     pub(crate) fn metaclass_not_found(name: &[u8]) -> Raised {
         Raised::syntax(98, 908, vec![name.to_vec()])
     }
 
     /// 99.927: a `METACLASS` target that resolves to a class which is not a
     /// metaclass. One substitution, the target's `~defaultName`.
-    ///
-    /// A *translation* error on the oracle, rc 157, raised from install:
-    /// `RexxClass::subclass` tests the metaclass it was handed before it
-    /// builds anything (`ClassClass.cpp:1572`). Measured on `::class k
-    /// metaclass object`: `Error 99 ... Translation error.` and `Error
-    /// 99.927:  "The Object class" is not a valid metaclass.`, the
-    /// directive's own clause echoed and stdout empty.
-    ///
-    /// **Raised even where the metaclass is then discarded**: measured,
-    /// `::CLASS S MIXINCLASS Class METACLASS Object` is the same 99.927,
-    /// although deriving from `.Class` overrides the `METACLASS` the
-    /// directive names (`ClassGraph::define_class`).
-    ///
-    /// **A `::CLASS` directive's own 99.927 carries no `Compiled method`
-    /// frame**, measured, although `RexxClass::subclass` is the body of the
-    /// `~subclass` *method*: a directive calls it rather than sending it, so
-    /// no activation of it is on the stack to contribute a frame.
-    /// `Interp::inherit_mixin`'s `INHERIT` is the contrasting case in the
-    /// same install.
-    ///
-    /// **The same error reached by a send carries one**, and that is the pair
-    /// which says the frame follows the route rather than the error. Measured
-    /// at rc 157: `.object~subclass("k", .Object)` reports `       *-*
-    /// Compiled method "SUBCLASS" with scope "Class".` above the sending
-    /// clause, and `Interp::invoke` is what puts it there.
     pub(crate) fn bad_metaclass(metaclass: &[u8]) -> Raised {
         Raised::syntax(99, 927, vec![metaclass.to_vec()])
     }
@@ -679,17 +330,6 @@ impl Raised {
     /// 98.990: `::CLASS ... ABSTRACT` on a class that is a metaclass. One
     /// substitution, the class's own `~id`, and the message quotes nothing
     /// around it.
-    ///
-    /// Measured, rc 158 with stdout empty, on `::CLASS S MIXINCLASS Class
-    /// ABSTRACT`: `Error 98.990:  Class S is a metaclass and cannot be made
-    /// ABSTRACT.` The id is upcased because the directive's own name is --
-    /// `::class s mixinclass class abstract` names `S`.
-    ///
-    /// **Raised after the directive's other refusals**, because
-    /// `makeAbstract` is the last thing `ClassDirective::install` does
-    /// (`ClassDirective.cpp:247`-
-    /// `:249`): measured, the same directive with `INHERIT zzznotaclass`
-    /// after it is 98.909, not this.
     pub(crate) fn abstract_metaclass(id: &[u8]) -> Raised {
         Raised::syntax(98, 990, vec![id.to_vec()])
     }
@@ -698,10 +338,6 @@ impl Raised {
     /// takes -- `Error_Invalid_argument_list`. It substitutes the argument's
     /// position, the values it may take (already quoted, as the caller writes
     /// them), and the value found.
-    ///
-    /// Measured, rc 168, on `self~setMethod('MM', 'return 1', 'BOGUS')`:
-    /// `Error 88.916:  Argument 3 must be one of "FLOAT" or "OBJECT"; found
-    /// "BOGUS".`
     pub(crate) fn not_one_of(position: usize, values: &[u8], found: &[u8]) -> Raised {
         Raised::syntax(
             88,
@@ -717,11 +353,6 @@ impl Raised {
     /// 98.991: `run`, `setMethod` or `unsetMethod` sent from somewhere
     /// `RexxObject::checkRestrictedMethod` does not allow (D66). One
     /// substitution, the method's own name.
-    ///
-    /// Measured, rc 158, from a class method of a class the receiver is not
-    /// an instance of: `Error 98.991:  Method SETMETHOD may only be invoked
-    /// from a method of the same object or one of its classes.`, under a
-    /// `Compiled method "SETMETHOD" with scope "Object".` frame.
     pub(crate) fn restricted_method(name: &[u8]) -> Raised {
         Raised::syntax(98, 991, vec![name.to_vec()])
     }
@@ -729,11 +360,6 @@ impl Raised {
     /// 98.989: `~new` on an `ABSTRACT` class -- `RexxClass::checkAbstract`
     /// (`classes/ClassClass.cpp:1741`). One substitution, the class's own
     /// `~id`, unquoted.
-    ///
-    /// Measured, rc 158, on `::class ab abstract` with `say .ab~new`:
-    /// `Error 98.989:  Class AB is ABSTRACT and cannot be directly created.`,
-    /// above it the sending clause and above that `       *-* Compiled method
-    /// "NEW" with scope "Object".`
     pub(crate) fn abstract_class(id: &[u8]) -> Raised {
         Raised::syntax(98, 989, vec![id.to_vec()])
     }
@@ -741,21 +367,12 @@ impl Raised {
     /// 98.972: an arithmetic operand carrying more digits than the precision
     /// in force, under `::OPTIONS LOSTDIGITS SYNTAX`. One substitution, the
     /// operand's own string value.
-    ///
-    /// The substitution is the operand's bytes rather than a rendering of the
-    /// number they parsed to: measured, `0001.23456789` keeps its leading
-    /// zeros and `1.23456789e2` reports `1.23456789E2`, not `123.456789`.
     pub(crate) fn lostdigits(operand: &[u8]) -> Raised {
         Raised::syntax(98, 972, vec![operand.to_vec()])
     }
 
     /// 98.942: an `INHERIT` target that is not a `MIXINCLASS`. One
     /// substitution, the target's `~defaultName`.
-    ///
-    /// Measured, rc 158 with stdout empty, on `::class c` followed by
-    /// `::class d inherit c`: `Error 98.942:  Class "The C class" must be a
-    /// MIXINCLASS for INHERIT.`, above it the directive's own echo, and above
-    /// *that* `       *-* Compiled method "INHERIT" with scope "Class".`
     pub(crate) fn inherit_needs_a_mixinclass(mixin: &[u8]) -> Raised {
         Raised::syntax(98, 942, vec![mixin.to_vec()])
     }
@@ -763,10 +380,6 @@ impl Raised {
     /// 98.943: an `INHERIT` target whose base class the inheriting class does
     /// not already have in scope. Three substitutions: the inheriting class,
     /// the mixin, and the mixin's base class, each a `~defaultName`.
-    ///
-    /// Measured, rc 158, on `::CLASS P` / `::CLASS M MIXINCLASS P` /
-    /// `::CLASS K INHERIT M`: `Error 98.943:  Class "The K class" is not a
-    /// subclass of "The M class" base class "The P class".`
     pub(crate) fn inherit_base_class(class: &[u8], mixin: &[u8], base: &[u8]) -> Raised {
         Raised::syntax(98, 943, vec![class.to_vec(), mixin.to_vec(), base.to_vec()])
     }
@@ -774,10 +387,6 @@ impl Raised {
     /// 98.944: an `INHERIT` target that is already part of the inheriting
     /// class's own hierarchy, in either direction. Two substitutions, the
     /// inheriting class's `~defaultName` and the mixin's.
-    ///
-    /// Measured, rc 158, on `::CLASS M MIXINCLASS Object` / `::CLASS K
-    /// INHERIT M M`: `Error 98.944:  Class "The K class" cannot inherit from
-    /// itself, a superclass, or a subclass ("The M class").`
     pub(crate) fn recursive_inherit(class: &[u8], mixin: &[u8]) -> Raised {
         Raised::syntax(98, 944, vec![class.to_vec(), mixin.to_vec()])
     }
@@ -785,14 +394,6 @@ impl Raised {
     /// 98.945: a class named as an `~inherit` position or as an `~uninherit`
     /// target that the receiving class does not inherit. Two substitutions,
     /// the receiver's `~defaultName` and the named class's.
-    ///
-    /// Measured, rc 158 with stdout empty. On `::class M mixinclass Object`
-    /// with `::class K`, `.K~uninherit(.M)` gives `Error 98.945:  Class "The
-    /// K class" has not inherited class "The M class".` The same message
-    /// answers `.K~inherit(.M1, .M2)` for a position `.M2` that is not in
-    /// the list, naming `.M2` rather than the mixin, and
-    /// `.K~uninherit(.M)` for `::class K subclass M`, where `.M` *is* in the
-    /// list but at the one position `uninherit` refuses.
     pub(crate) fn not_inherited(class: &[u8], other: &[u8]) -> Raised {
         Raised::syntax(98, 945, vec![class.to_vec(), other.to_vec()])
     }
@@ -800,62 +401,23 @@ impl Raised {
     /// 98.985: one of the five class mutators sent to a class the image
     /// itself defines. No substitutions -- the message names neither the
     /// class nor the method.
-    ///
-    /// Measured, rc 158 with stdout empty, on `.Array~define("ZORK",
-    /// .methods~z)` in a file carrying a `::method z`: `Error 98.985:  User
-    /// additions are not allowed to the REXX language classes.`, above it
-    /// the sending clause's echo, and above *that* `       *-* Compiled
-    /// method "DEFINE" with scope "Class".`
-    ///
-    /// **Raised before the method validates anything else**, which is what
-    /// makes the frame line the only part that varies between the five:
-    /// measured, `.Array~inherit()` reports this and not the 88.901 the same
-    /// send to a `::class` of one's own reports.
     pub(crate) fn rexx_defined_class() -> Raised {
         Raised::syntax(98, 985, Vec::new())
     }
 
     /// 98.981: a `RexxContext` whose activation has ended. No substitutions.
-    ///
-    /// `Error_Execution_context_not_active`, which `RexxContext::checkValid`
-    /// (`classes/ContextClass.cpp:147`) raises and which every one of that
-    /// class's own readers calls first. Measured, rc 158 with stdout empty,
-    /// on a `.context` returned out of a `::routine` and read after the
-    /// return: `Error 98.981:  Target RexxContext is no longer active.`
-    /// under `       *-* Compiled method "NAME" with scope "RexxContext".`
-    ///
-    /// **A `StackFrame` captured from the same context does not raise it**,
-    /// measured in the same program: it answers its `~name`, `~line`,
-    /// `~traceLine`, `~type`, `~target`, `~invocation`, `~context` and a
-    /// two-item `~arguments` afterwards, because a frame is a snapshot taken
-    /// when `stackFrames` built it and a context is a live handle.
     pub(crate) fn context_not_active() -> Raised {
         Raised::syntax(98, 981, Vec::new())
     }
 
     /// 98.984: `~addClass` or `~addPublicClass` sent to the package the
     /// primitive classes belong to. No substitutions.
-    ///
-    /// `PackageClass::checkRexxPackage`, which `addClassRexx` and
-    /// `addPublicClassRexx` each call before they store anything
-    /// (`classes/PackageClass.cpp:1931`, `:1949`). Measured, rc 158 with
-    /// stdout empty: `.Array~package~addClass("ZZ", .Array)` reports
-    /// `Error 98.984:  User additions are not allowed to the REXX package.`
-    /// under `       *-* Compiled method "ADDCLASS" with scope "Package".`
     pub(crate) fn rexx_package_addition() -> Raised {
         Raised::syntax(98, 984, Vec::new())
     }
 
     /// 98.911: `::CLASS` directives whose declared targets cannot be put in
     /// an order. One substitution, the program's own path.
-    ///
-    /// Measured, rc 158 with stdout empty, on `::class a subclass b` with
-    /// `::class b subclass a`, on `::class a subclass a` alone, on
-    /// `::CLASS K INHERIT K`, and on `::class a metaclass b` with
-    /// `::class b metaclass a`. Each gives `Error 98.911:  Cyclic
-    /// inheritance in program "<path>".` and echoes the **first** of the
-    /// class directives involved, which is what a resolver reporting the
-    /// first target it could not place reports.
     pub(crate) fn cyclic_inheritance(path: &str) -> Raised {
         Raised::syntax(98, 911, vec![path.as_bytes().to_vec()])
     }
@@ -863,10 +425,6 @@ impl Raised {
     /// 43.901: a `::REQUIRES` whose name the four-route search did not find.
     /// One substitution, **the name as the directive wrote it** rather than
     /// anything the search built from it.
-    ///
-    /// Measured, rc 213 with stdout empty: `::requires 'lib.rex'` with no such
-    /// file reports `Error 43 running <path> line 2:  Routine not found.` and
-    /// `Error 43.901:  Could not find file "lib.rex" for ::REQUIRES.`
     pub(crate) fn requires_file_not_found(name: &[u8]) -> Raised {
         Raised::syntax(43, 901, vec![name.to_vec()])
     }
@@ -874,14 +432,6 @@ impl Raised {
     /// 3.1: `Method~newFile` or `Routine~newFile` naming a file that cannot
     /// be read. One substitution, **the name as the program wrote it** rather
     /// than anything resolved from it.
-    ///
-    /// Measured, oracle rc 253 with stdout empty:
-    /// `.Method~newFile('nope.rex')` reports
-    /// `Error 3 running <path> line 1:  Failure during initialization.` and
-    /// `Error 3.1:  Failure during initialization: File "nope.rex" is
-    /// unreadable.`, under a `Compiled method "NEWFILE" with scope "Method".`
-    /// frame, and `.Routine~newFile` reports the same pair under its own
-    /// class's frame.
     pub(crate) fn executable_file_unreadable(name: &[u8]) -> Raised {
         Raised::syntax(3, 1, vec![name.to_vec()])
     }
@@ -889,25 +439,12 @@ impl Raised {
     /// 99.917: `loadExternalMethod` or `loadExternalRoutine` given a
     /// descriptor that is not an external name specification. One
     /// substitution, the descriptor.
-    ///
-    /// **Raised before any library is looked for**, which is what makes it
-    /// answerable here: measured, oracle rc 157,
-    /// `.Method~loadExternalMethod('M9', 'garbage')` reports
-    /// `Error 99.917:  Incorrect external name specification "garbage".`
-    /// under a `Compiled method "LOADEXTERNALMETHOD" with scope "Method".`
-    /// frame, on a machine where a well-formed descriptor naming the same
-    /// missing library answers `.nil` instead.
     pub(crate) fn bad_external_specification(descriptor: &[u8]) -> Raised {
         Raised::syntax(99, 917, vec![descriptor.to_vec()])
     }
 
     /// 98.952: a `::REQUIRES` naming a package whose own directives are still
     /// installing. One substitution, the **resolved** path.
-    ///
-    /// Measured, rc 158 with stdout empty, on a pair of files each requiring
-    /// the other and on a file requiring itself: the report echoes one
-    /// `::REQUIRES` clause per level of the chain and names the file the
-    /// second reference resolved to.
     pub(crate) fn circular_requires(path: &str) -> Raised {
         Raised::syntax(98, 952, vec![path.as_bytes().to_vec()])
     }
@@ -915,14 +452,6 @@ impl Raised {
     /// 99.906: a `::CONSTANT` directive's parenthesised expression form with
     /// no `::CLASS` directive anywhere before it in the file. No
     /// substitutions -- the message names neither directive.
-    ///
-    /// Measured: `::constant sep (1+2)` alone in a file gives rc 157, the
-    /// directive's own clause echoed, `Error 99 ... Translation error.` and
-    /// `Error 99.906:  A ::CONSTANT directive with an expression requires a
-    /// matching ::CLASS directive.` A translation-time refusal, exactly like
-    /// [`Raised::duplicate_routine`] beside it, and for the same reason: the
-    /// oracle finds this by reading the directive list, not by installing
-    /// anything.
     pub(crate) fn constant_needs_class() -> Raised {
         Raised::syntax(99, 906, Vec::new())
     }
@@ -936,13 +465,6 @@ impl Raised {
     /// and each `syntaxError` call passing a bare C string for `&1`
     /// (`parser/DirectiveParser.cpp:1983`, `:2010`, `:2037`, `:2090`,
     /// `:2172`).
-    ///
-    /// Measured, rc 157 with stdout empty and the `::ANNOTATE` clause echoed,
-    /// one probe per keyword: `::ANNOTATE target class "NOSUCH" not found.`
-    /// and the same line for `routine`, `method`, `attribute` and `constant`.
-    /// A target the file declares *below* the `::ANNOTATE` reports it too,
-    /// because the tables the C++ searches hold only what the walk has
-    /// already reached.
     pub(crate) fn missing_annotation_target(kind: &str, name: &[u8]) -> Raised {
         Raised::syntax(99, 945, vec![kind.as_bytes().to_vec(), name.to_vec()])
     }
@@ -951,29 +473,12 @@ impl Raised {
     /// the running activation's own body. `name` is the resolved target's
     /// own bytes -- already upcased for a bare symbol, verbatim for a quoted
     /// literal or a `SIGNAL VALUE` expression's rendered text.
-    ///
-    /// **No fallback exists, unlike `CALL`'s own builtin/external search**:
-    /// a `SIGNAL` target is only ever a label, so this is the oracle's real
-    /// answer and not a placeholder for a table a later phase owns. Measured
-    /// in a clean directory: `signal nowhere` gives rc 240 and
-    /// `Label "NOWHERE" not found.`; `signal "sub"` (quoted, lowercase) with
-    /// `sub:` present gives the same error naming `"sub"` verbatim, because
-    /// the label itself is stored upcased and a quoted target is matched
-    /// case-sensitively rather than upcased on the way in -- `signal Sub`
-    /// (a bare, mixed-case symbol) and `signal "SUB"` both resolve.
     pub(crate) fn label_not_found(name: &[u8]) -> Raised {
         Raised::syntax(16, 1, vec![name.to_vec()])
     }
 
     /// 17.1: a `PROCEDURE` that is not the first instruction executed after
     /// an internal `CALL` or function invocation. No substitutions.
-    ///
-    /// Measured at all four shapes, in a clean directory, all rc 239: at top
-    /// level; as the first instruction of a label *fallen into* rather than
-    /// called; after a `NOP` in a called routine; and inside `interpret
-    /// "procedure"` as a called routine's first clause. Two labels between
-    /// the call and the `PROCEDURE` do **not** raise it --
-    /// `Activation::first_instruction_pending` carries that whole table.
     pub(crate) fn procedure_out_of_place() -> Raised {
         Raised::syntax(17, 1, Vec::new())
     }
@@ -981,11 +486,6 @@ impl Raised {
     /// 40.3: `USE STRICT ARG` with fewer arguments than it has targets
     /// without defaults. `routine` is the callee's own resolved name, upcased,
     /// and `minimum` counts the targets that must be supplied.
-    ///
-    /// Measured: `call sub2 1` into `use strict arg p, q` gives rc 216 and
-    /// `Not enough arguments in invocation of SUB2; minimum expected is 2.`
-    /// A target carrying a default satisfies the minimum -- `use strict arg
-    /// p, q = 'dflt'` with one argument runs and prints `[1][dflt]`.
     pub(crate) fn not_enough_arguments(routine: &[u8], minimum: usize) -> Raised {
         Raised::syntax(
             40,
@@ -996,11 +496,6 @@ impl Raised {
 
     /// 40.4: `USE STRICT ARG` with more arguments than it has targets, and
     /// no trailing `...`.
-    ///
-    /// Measured: `call sub2 1,2,3` into `use strict arg p` gives rc 216 and
-    /// `Too many arguments in invocation of SUB2; maximum expected is 1.`
-    /// With `use strict arg p, q, ...` the same three arguments run clean, so
-    /// `allow_optionals` suppresses this check and not the 40.3 one.
     pub(crate) fn too_many_arguments(routine: &[u8], maximum: usize) -> Raised {
         Raised::syntax(
             40,
@@ -1012,19 +507,6 @@ impl Raised {
     /// 40.5: a required argument was **omitted in place** rather than left
     /// off the end -- `substr('abc',,2)`. `routine` is the callee's own name,
     /// upcased, and `position` is 1-based.
-    ///
-    /// Measured, rc 216: `say substr('abc',,2)` gives
-    /// `Missing argument in invocation of SUBSTR; argument 2 is required.`
-    ///
-    /// **A distinct answer from 40.3, and the two are told apart by where the
-    /// omission is, not by how many arguments were written.** Measured, an
-    /// omission at the *end* of the list is not an argument at all: `q(1,)`
-    /// into `q: return arg()` answers 1, `q(1,,2,,)` answers 3, and `q(,)`
-    /// answers 0 -- so `say length('abc',)` runs and prints 3 where `say
-    /// length(,)` is 40.3 with a minimum of 1, not 40.5. `rexx-parse` already
-    /// drops those trailing positions (`ExprKind::List`'s own doc comment,
-    /// citing `parseArgList`'s `realcount`), so an argument list arriving here
-    /// has interior omissions only.
     pub(crate) fn missing_argument(routine: &[u8], position: usize) -> Raised {
         Raised::syntax(
             40,
@@ -1037,33 +519,10 @@ impl Raised {
     /// `routine` is the builtin's own name as its table row spells it,
     /// `position` is 1-based **in the call's own argument list**, and `found`
     /// is the argument's own **rendered value**.
-    ///
-    /// That `found` is the rendered value -- not the source spelling, and not
-    /// a re-rendering under the `DIGITS` in force at the call -- is measured
-    /// rather than assumed, with a program in which all three differ:
-    ///
     /// ```text
     /// numeric digits 3 ; zz = 2 / 3 ; numeric digits 9 ; say left('ab', zz)
     /// ->  40.12  LEFT argument 2 must be a whole number; found "0.667".
     /// ```
-    ///
-    /// The spelling is `zz`; the current-`DIGITS` rendering would be
-    /// `0.666666667`; `0.667` is the value's own rendering, fixed by the
-    /// `DIGITS 3` in force when the division created it (D15). The same
-    /// program with the same value in a *pad* position reports `found
-    /// "0.667"` under [`argument_not_a_pad`]'s 40.23, so the two sub-codes
-    /// answer the question the same way.
-    ///
-    /// **What counts as a whole number here is not the current `NUMERIC
-    /// DIGITS`.** The oracle converts through `Numerics::ARGUMENT_DIGITS`,
-    /// which is 18 on a 64-bit build, and measured in both directions:
-    /// `numeric digits 2 ; left('ab','1.0000001')` is 40.12 where a
-    /// two-digit conversion would have rounded it to a whole `1`, and
-    /// `left('ab','1.0000000000000000000004')` succeeds, because rounding
-    /// *that* to 18 digits leaves `1`. A value needing more than 18 digits is
-    /// rejected however it is spelled -- `left('ab','1E18')` is 40.12.
-    ///
-    /// [`argument_not_a_pad`]: Raised::argument_not_a_pad
     pub(crate) fn argument_not_whole(routine: &[u8], position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             40,
@@ -1079,15 +538,6 @@ impl Raised {
     /// 40.23: a builtin's pad argument is not exactly one character.
     /// Substitutions as [`argument_not_whole`]'s, and `found` is the
     /// rendered value for the same measured reason.
-    ///
-    /// **A pad is checked whether or not it could ever be used**, measured:
-    /// `left('',0,'xx')` and `right('',0,'xx')` are both 40.23 though the
-    /// result is the null string either way, and `substr('abc',0,5,'xx')` is
-    /// 40.23 rather than the 93.924 its zero position would otherwise give.
-    /// The null string is not a pad either -- `space('a b c',1,'')` is 40.23
-    /// with `found ""`.
-    ///
-    /// [`argument_not_whole`]: Raised::argument_not_whole
     pub(crate) fn argument_not_a_pad(routine: &[u8], position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             40,
@@ -1105,30 +555,10 @@ impl Raised {
     /// does not, or classifies as a constant while the call also supplies a
     /// new value for it. `routine` and `position` as [`argument_not_whole`]'s;
     /// `found` is the argument's **own bytes, verbatim -- never upcased**.
-    ///
-    /// `expression/BuiltinFunctions.cpp:1840`'s
-    /// `reportException(Error_Incorrect_call_symbol, "VALUE", IntegerOne,
-    /// variable)` passes `BUILTIN(VALUE)`'s own local `variable`, and
-    /// `VariableDictionary::getVariableRetriever` (`execution/
-    /// VariableDictionary.cpp:739`) upcases a *parameter it took by value*
-    /// (`variable = variable->upper();`) -- a reassignment local to that
-    /// function's own stack frame, which never reaches back into the
-    /// caller's copy. So the classification runs upcased and the message
-    /// substitutes the original spelling regardless. Measured, case
-    /// preserved both sides: `value('ab*')` reports `found "ab*"`, not
-    /// `found "AB*"`.
-    ///
-    /// **One message, two reasons the C++ does not distinguish** -- the
-    /// identical call site fires whether the name failed to classify as a
-    /// symbol at all or classified as a constant that a new value was
-    /// offered to. Measured, rc 216 both:
-    ///
     /// ```text
     /// value('*')      Error 40.26:  VALUE argument 1 must be a valid symbol; found "*".
     /// value('5','x')  Error 40.26:  VALUE argument 1 must be a valid symbol; found "5".
     /// ```
-    ///
-    /// [`argument_not_whole`]: Raised::argument_not_whole
     pub(crate) fn argument_not_a_symbol(routine: &[u8], position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             40,
@@ -1144,25 +574,6 @@ impl Raised {
     /// 40.14: a builtin's argument converted to a whole number but is not
     /// strictly positive. Substituted as the same three slots -- routine,
     /// position, found -- as [`argument_not_whole`]'s.
-    ///
-    /// **`found` here is the converted whole number, not the rendered
-    /// value -- the opposite of [`argument_not_whole`]'s.** This error fires
-    /// only after the argument has converted successfully, so an integer
-    /// exists and the oracle substitutes it, where 40.12 fires on a value
-    /// that never converted and has only its own rendering to give. Measured,
-    /// rc 216 both sides: `say arg(0.0)` reports `found "0"`, not `found
-    /// "0.0"`.
-    ///
-    /// **A different layer from [`invalid_position`]'s 93.924, and the pair
-    /// is what tells them apart.** Measured, rc 216 in both cases here:
-    /// `arg(0)` and `arg(-1)` are this error naming `ARG argument 1`, and
-    /// `sourceline(0)` is this error naming `SOURCELINE argument 1` -- where
-    /// `word('a b c',0)` is 93.924 at rc 163, because that one is the String
-    /// method's own `positionArgument` rather than the BIF wrapper's
-    /// `positive_integer`.
-    ///
-    /// [`argument_not_whole`]: Raised::argument_not_whole
-    /// [`invalid_position`]: Raised::invalid_position
     pub(crate) fn argument_not_positive(routine: &[u8], position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             40,
@@ -1178,15 +589,6 @@ impl Raised {
     /// 40.34: `SOURCELINE`'s line number is past the end of the program.
     /// The message names the routine itself, so the only substitutions are
     /// the requested line and the program's own line count.
-    ///
-    /// Measured, rc 216 for a one-line program: `say sourceline(99)` gives
-    /// `SOURCELINE argument 1 ("99") must be less than or equal to the
-    /// number of lines in the program (1).`
-    ///
-    /// `requested` is the converted whole number, not the rendered value, for
-    /// the reason [`argument_not_positive`]'s doc gives.
-    ///
-    /// [`argument_not_positive`]: Raised::argument_not_positive
     pub(crate) fn sourceline_out_of_range(requested: &[u8], lines: usize) -> Raised {
         Raised::syntax(
             40,
@@ -1198,14 +600,6 @@ impl Raised {
     /// 40.903: a builtin's argument is outside the fixed range 0-99, which
     /// is the only range this catalogue entry can name -- the bounds are in
     /// the message text, not substituted.
-    ///
-    /// Measured, rc 216: `errortext(-1)` and `errortext(100)` both give
-    /// `ERRORTEXT argument 1 must be in the range 0-99; found "..."`.
-    ///
-    /// `found` is the converted whole number, not the rendered value, for
-    /// the reason [`argument_not_positive`]'s doc gives.
-    ///
-    /// [`argument_not_positive`]: Raised::argument_not_positive
     pub(crate) fn argument_out_of_range(routine: &[u8], position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             40,
@@ -1221,23 +615,6 @@ impl Raised {
     /// 40.904: a builtin's option argument is not one of the letters that
     /// builtin accepts. `valid` is substituted verbatim, so its own quoting
     /// is the caller's to supply.
-    ///
-    /// **The two spellings of `valid` are both the oracle's**, measured:
-    /// `condition('Z')` gives `must be one of ACDEIORS` with the letters
-    /// bare, while `gc('x')` gives `must be one of "force", "Force", "f",
-    /// "F"` with each alternative quoted -- the C++ passes a plain
-    /// `"ACDEIORS"` in one place and a `new_string` carrying its own quotes
-    /// in the other.
-    ///
-    /// **The null string is rejected rather than treated as omitted**:
-    /// `condition('')` is this error with `found ""`.
-    ///
-    /// A sibling of [`invalid_option`], not a duplicate: that one is 93.915,
-    /// raised by the *operation* layer, names no routine and no position,
-    /// and exits 163. This one is the BIF wrapper's, names both, and exits
-    /// 216.
-    ///
-    /// [`invalid_option`]: Raised::invalid_option
     pub(crate) fn argument_not_in_list(
         routine: &[u8],
         position: usize,
@@ -1265,35 +642,18 @@ impl Raised {
     /// measured, rc 216: `date(,'','f')` gives `DATE argument 2, "", is not
     /// in the format described by argument 3, "F".` and `date('D','367',
     /// 'D')` (2026 is not a leap year) gives the same shape naming `"D"`.
-    ///
-    /// **Position 2 and position 3 are fixed text in the message, not
-    /// substituted** -- `RexxErrorMessages.h`'s own catalogue entry spells
-    /// them literally, so this always reads "argument 2" and "argument 3"
-    /// regardless of which builtin raised it (`TIME` has no fifth argument
-    /// to disagree with that).
     pub(crate) fn date_format_invalid(routine: &[u8], found: &[u8], style: u8) -> Raised {
         Raised::syntax(40, 19, vec![routine.to_vec(), found.to_vec(), vec![style]])
     }
 
     /// 40.29: `TIME`'s elapsed-time output styles (`E`/`R`) refuse an input
     /// conversion argument outright, before the input is even parsed.
-    ///
-    /// Measured, rc 216: `time('r','12:00:00')` gives `TIME conversion to
-    /// format "R" is not allowed.` -- `style` is the **output** style's own
-    /// upcased byte, not the input style's.
     pub(crate) fn invalid_conversion(routine: &[u8], style: u8) -> Raised {
         Raised::syntax(40, 29, vec![routine.to_vec(), vec![style]])
     }
 
     /// 40.43: a `DATE`/`TIME` separator argument is not exactly one
     /// non-alphanumeric byte and not the null string either.
-    ///
-    /// Measured, rc 216: `date(,,,'a')` gives `DATE argument 4 must be a
-    /// single non-alphanumeric character or the null string; found "a".`
-    /// `found` is the separator argument's own bytes, whatever their length
-    /// -- a multi-byte separator reaches this the same way a single
-    /// alphanumeric one does, since the oracle's own test is one `||`
-    /// condition covering both.
     pub(crate) fn separator_not_a_char(routine: &[u8], position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             40,
@@ -1309,7 +669,6 @@ impl Raised {
     /// 40.44: a `DATE`/`TIME` argument's own format is incompatible with a
     /// separator supplied elsewhere in the call. Three call sites share this
     /// one shape, each measured:
-    ///
     /// ```text
     /// date('b',,,'')                    DATE argument 1, "B", is a format incompatible
     ///                                    with the separator specified in argument 4.
@@ -1319,13 +678,6 @@ impl Raised {
     ///                                    incompatible with the separator specified in
     ///                                    argument 5.
     /// ```
-    ///
-    /// The first two name a **style byte** (upcased, one character) as
-    /// `value`; the third names the **input argument itself**, verbatim and
-    /// un-upcased, because that call site fires when parsing already failed
-    /// with an input separator in play, not when a style was merely
-    /// incompatible with one -- `position`/`value`/`other_position` are the
-    /// caller's to supply correctly for each of the three.
     pub(crate) fn format_incompatible_separator(
         routine: &[u8],
         position: usize,
@@ -1347,18 +699,6 @@ impl Raised {
     /// 93.923: a length argument converted to a whole number but is
     /// negative. No routine name and no position in the message, only the
     /// value.
-    ///
-    /// **A different major from the 40.x family, and a different exit code**:
-    /// measured, `say substr('abc',2,-1)` is `Error 93 ... Incorrect call to
-    /// method.` / `Error 93.923:  Invalid length argument specified; found
-    /// "-1".` at **rc 163**, where every 40.x above is rc 216.
-    ///
-    /// `found` is the value **after** conversion to a whole number, not the
-    /// argument's own text, and that is measured with the two spellings
-    /// apart: `left('ab','-1.0')`, `left('ab',' -1 ')` and
-    /// `left('ab','-1e0')` all report `found "-1"`. The 40.12 above reports
-    /// the argument's text instead, so the two families genuinely disagree
-    /// about what they name.
     pub(crate) fn invalid_length(found: &[u8]) -> Raised {
         Raised::syntax(93, 923, vec![found.to_vec()])
     }
@@ -1367,14 +707,6 @@ impl Raised {
     /// or negative. Same shape and same rc 163 as [`invalid_length`], and
     /// `found` is likewise the converted value -- measured,
     /// `substr('abc','0.0')` reports `found "0"`.
-    ///
-    /// Which of the two a builtin raises is per argument, not per
-    /// constraint: measured, `substr('abc',0)` is 93.924 while
-    /// `substr('abc',2,-1)` is 93.923, and `insert('-','abc',-1)` is neither
-    /// (see [`argument_not_non_negative`]).
-    ///
-    /// [`invalid_length`]: Raised::invalid_length
-    /// [`argument_not_non_negative`]: Raised::argument_not_non_negative
     pub(crate) fn invalid_position(found: &[u8]) -> Raised {
         Raised::syntax(93, 924, vec![found.to_vec()])
     }
@@ -1385,9 +717,6 @@ impl Raised {
     /// `.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')` reports `Incorrect
     /// pad or character argument specified; found "xx".`, and `''` and `12`
     /// report `found ""` and `found "12"`.
-    ///
-    /// [`invalid_length`]: Raised::invalid_length
-    /// [`invalid_position`]: Raised::invalid_position
     pub(crate) fn incorrect_pad(found: &[u8]) -> Raised {
         Raised::syntax(93, 922, vec![found.to_vec()])
     }
@@ -1399,13 +728,6 @@ impl Raised {
     /// `copies('ab',-1)` reports `Method argument 1`, `insert('-','abc',-1)`
     /// reports `Method argument 2` and `changestr('a','banana','X',-1)`
     /// reports `Method argument 3`, from builtin positions 2, 3 and 4.
-    ///
-    /// The third of the trio with [`invalid_length`] and
-    /// [`invalid_position`], at the same rc 163 and with `found` likewise
-    /// the converted value: `copies('ab','-1.0')` reports `found "-1"`.
-    ///
-    /// [`invalid_length`]: Raised::invalid_length
-    /// [`invalid_position`]: Raised::invalid_position
     pub(crate) fn argument_not_non_negative(position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             93,
@@ -1418,17 +740,6 @@ impl Raised {
     /// builtin accepts. `valid` is the accepted set as the oracle spells it
     /// in the message, and `found` is the **whole option string**, not the
     /// letter that was rejected.
-    ///
-    /// Measured, both parts: `strip('ab','Xyz')` gives `Method option must
-    /// be one of "BLT"; found "Xyz".` and `verify('a','b','Xyz')` gives the
-    /// same shape with `"MN"`. The null string is rejected too, with `found
-    /// ""` -- `strip('ab','')` and `verify('abcde','abc','')` are both
-    /// 93.915 -- so an empty option is not "omitted".
-    ///
-    /// Only the first letter is examined, and case-insensitively: measured,
-    /// `strip('  ab  ','Leading')` and `strip('  ab  ','l')` both strip
-    /// leading blanks only, and `verify('abcde','abc','Nope')` is 4, the
-    /// same as `'N'`.
     pub(crate) fn invalid_option(valid: &str, found: &[u8]) -> Raised {
         Raised::syntax(93, 915, vec![valid.as_bytes().to_vec(), found.to_vec()])
     }
@@ -1436,43 +747,16 @@ impl Raised {
     /// 5: a result string too large to allocate. No sub-number and no
     /// substitution, which is why this is the one raiser here built with a
     /// sub of `0`: measured, `say left('ab','999999999999999999')` prints
-    ///
     /// ```text
     ///      1 *-* say left('ab','999999999999999999')
     /// Error 5 running /abs/p.rex line 1:  System resources exhausted.
     /// ```
-    ///
-    /// at rc 251, with **no** `Error 5.x:` second line -- exactly what
-    /// `Raised::report` already writes for a zero sub.
-    ///
-    /// The oracle reaches this by asking the allocator and being refused,
-    /// not by testing the requested size against a limit: `right`, `center`,
-    /// `space`, `substr`, `copies`, `insert` and `overlay` were each
-    /// measured reporting it for a length argument of `123456789012345678`,
-    /// the same value at which `left` above succeeds in converting the
-    /// argument and fails to allocate. Reproducing the *mechanism* rather than a
-    /// threshold is why the call sites ask `Vec::try_reserve_exact` -- a
-    /// chosen cut-off would be a number this project could not measure, and
-    /// an unguarded allocation of that size aborts the process rather than
-    /// raising anything.
     pub(crate) fn system_resources() -> Raised {
         Raised::syntax(5, 0, Vec::new())
     }
 
     /// 40.28: an argument that has to be either a character class name or a
     /// single character is neither. Substitutions as [`argument_not_whole`]'s.
-    ///
-    /// The neighbour of [`argument_not_a_pad`]'s 40.23, and the two really do
-    /// split by argument position rather than by value: measured,
-    /// `xrange('a','zz')` is 40.23 naming argument 2 where `xrange('zz','a')`
-    /// is this one naming argument 1, for the same offending string.
-    ///
-    /// The null string reaches it too -- `xrange('')` is 40.28 with
-    /// `found ""` -- because the oracle tests for a length of exactly one and
-    /// treats everything else as a class name to look up.
-    ///
-    /// [`argument_not_whole`]: Raised::argument_not_whole
-    /// [`argument_not_a_pad`]: Raised::argument_not_a_pad
     pub(crate) fn argument_not_a_pad_or_class_name(
         routine: &[u8],
         position: usize,
@@ -1491,10 +775,6 @@ impl Raised {
 
     /// 93.927: `D2X`/`D2C` were asked to convert a negative value without a
     /// length to hold the sign extension. No substitutions.
-    ///
-    /// Measured, both at rc 163: `say d2x(-1)` and `say d2c(-1)` are
-    /// `Length must be specified to convert a negative value.`, and the same
-    /// calls with any length at all succeed -- `d2x(-1,1)` is `F`.
     pub(crate) fn length_required_for_negative() -> Raised {
         Raised::syntax(93, 927, Vec::new())
     }
@@ -1504,14 +784,6 @@ impl Raised {
     /// value**, which is the pair with [`argument_not_whole`]'s measurement:
     /// `numeric digits 3 ; zz = 2 / 3 ; numeric digits 9 ; say d2x(zz)`
     /// reports `found "0.667"`.
-    ///
-    /// **The setting bounds the value, not the text**, measured in both
-    /// directions at `DIGITS 3`: `d2x('000123')` is `7B`, since the leading
-    /// zeros are not digits of the value, while `d2x('1E3')` and `d2x(1000)`
-    /// are both this error -- one thousand needs four digits however it is
-    /// spelled.
-    ///
-    /// [`argument_not_whole`]: Raised::argument_not_whole
     pub(crate) fn d2x_value_not_whole(found: &[u8]) -> Raised {
         Raised::syntax(93, 928, vec![found.to_vec()])
     }
@@ -1519,33 +791,17 @@ impl Raised {
     /// 93.929: [`d2x_value_not_whole`]'s twin for `D2C`, measured to be the
     /// same rule with a different number -- `d2c('abc')` and `d2x('abc')`
     /// differ only in the sub-code and the routine the text names.
-    ///
-    /// [`d2x_value_not_whole`]: Raised::d2x_value_not_whole
     pub(crate) fn d2c_value_not_whole(found: &[u8]) -> Raised {
         Raised::syntax(93, 929, vec![found.to_vec()])
     }
 
     /// 93.935: `X2D`'s *result* does not fit the current `NUMERIC DIGITS`.
     /// The substitution is the setting itself, not the value.
-    ///
-    /// **The bound is on the result and not on how many bytes went in**,
-    /// which is what separates this from [`d2x_value_not_whole`]'s check.
-    /// Measured at `DIGITS 3`: `x2d('ff')` is 255 and `x2d('ffff')` is this
-    /// error naming 3.
-    ///
-    /// [`d2x_value_not_whole`]: Raised::d2x_value_not_whole
     pub(crate) fn x2d_result_too_large(digits: u64) -> Raised {
         Raised::syntax(93, 935, vec![digits.to_string().into_bytes()])
     }
 
     /// 93.936: [`x2d_result_too_large`]'s twin for `C2D`.
-    ///
-    /// The pair of measurements that shows the bound is the result's:
-    /// `numeric digits 9 ; c2d(copies('00'x,10)||'01'x)` is `1` from eleven
-    /// bytes, while `numeric digits 9 ; c2d('ffffffff'x)` is this error from
-    /// four.
-    ///
-    /// [`x2d_result_too_large`]: Raised::x2d_result_too_large
     pub(crate) fn c2d_result_too_large(digits: u64) -> Raised {
         Raised::syntax(93, 936, vec![digits.to_string().into_bytes()])
     }
@@ -1553,11 +809,6 @@ impl Raised {
     /// 93.931/93.932: a hexadecimal or binary string carries whitespace where
     /// it may not -- at the very start, or at the very end. `position` is
     /// 1-based.
-    ///
-    /// Measured, all rc 163: `x2c(' 4142')` names position 1, `x2c('4142 ')`
-    /// names 5, and `x2c('41 42  ')` names 7 -- the *last* of a trailing run,
-    /// not the first. The binary twin is the same shape: `b2x(' 1010')` names
-    /// position 1 and `b2x('1010 ')` names 5.
     pub(crate) fn misplaced_whitespace(notation: Notation, position: usize) -> Raised {
         let sub = match notation {
             Notation::Hex => 931,
@@ -1569,13 +820,6 @@ impl Raised {
     /// 93.933/93.934: a byte that is neither a digit of the notation nor one
     /// of the two bytes that may separate its groups. The substitution is the
     /// offending byte itself.
-    ///
-    /// It is a byte and not text: measured, `x2c('41'||'ff'x)` reports the
-    /// raw `0xff` and `x2c('41'||'01'x)` reports `?`, which is
-    /// [`displayable`]'s rule applied to the finished line rather than
-    /// anything this raiser does.
-    ///
-    /// [`displayable`]: crate::error::displayable
     pub(crate) fn invalid_digit(notation: Notation, character: u8) -> Raised {
         let sub = match notation {
             Notation::Hex => 933,
@@ -1586,10 +830,6 @@ impl Raised {
 
     /// 93.976/93.977: the groups of a hexadecimal or binary string are not
     /// sized as the notation requires. No substitutions.
-    ///
-    /// Measured: `x2c('414 243')` is 93.976, where `x2c('414 2434')` and
-    /// `b2x('101 0000')` both convert. The rule those three share is written
-    /// out where it is enforced, in `builtin/convert.rs`'s module doc.
     pub(crate) fn invalid_grouping(notation: Notation) -> Raised {
         let sub = match notation {
             Notation::Hex => 976,
@@ -1601,16 +841,6 @@ impl Raised {
     /// 40.13: `RANDOM`'s seed is negative. `routine` is the builtin's own
     /// name, `position` is 1-based in the call's argument list, and `found`
     /// is the argument's rendered value.
-    ///
-    /// **The negative argument this reports is the seed and never the
-    /// range**, which is the pair worth keeping together: measured,
-    /// `random(1,2,-1)` is this error naming `argument 3`, while
-    /// `random(-1)` -- also a negative argument, also `RANDOM` -- is
-    /// [`random_bounds_reversed`]'s 40.33 instead, because a lone argument is
-    /// the *maximum* and a maximum below the default minimum of zero is a
-    /// reversed range rather than a bad value.
-    ///
-    /// [`random_bounds_reversed`]: Raised::random_bounds_reversed
     pub(crate) fn argument_not_non_negative_call(
         routine: &[u8],
         position: usize,
@@ -1630,13 +860,6 @@ impl Raised {
     /// 40.32: `RANDOM`'s range is wider than the generator's own limit of
     /// 999,999,999. The two substitutions are the *arguments as written*,
     /// and an omitted one is the null string.
-    ///
-    /// Measured, rc 216: `random(0,1000000000)` is `RANDOM difference
-    /// between argument 1 ("0") and argument 2 ("1000000000") must not
-    /// exceed 999,999,999.`, and `random(999999999999999999)` -- one
-    /// argument, which is the *maximum* -- reports `argument 1 ("999999999999999999")`
-    /// and `argument 2 ("")`, echoing the position the call used rather than
-    /// the role the value played.
     pub(crate) fn random_range_too_wide(minimum: &[u8], maximum: &[u8]) -> Raised {
         Raised::syntax(40, 32, vec![minimum.to_vec(), maximum.to_vec()])
     }
@@ -1645,8 +868,6 @@ impl Raised {
     /// [`random_range_too_wide`]'s, including the null string for an omitted
     /// argument -- measured, `random(-1)` reports `argument 1 ("-1")` and
     /// `argument 2 ("")`.
-    ///
-    /// [`random_range_too_wide`]: Raised::random_range_too_wide
     pub(crate) fn random_bounds_reversed(minimum: &[u8], maximum: &[u8]) -> Raised {
         Raised::syntax(40, 33, vec![minimum.to_vec(), maximum.to_vec()])
     }
@@ -1656,40 +877,11 @@ impl Raised {
     /// measured rather than mistranscribed: `max(1,,3)` reports `argument 0`,
     /// `max(1,2,,4)` reports `argument 1` and `max(1,2,3,,5)` reports
     /// `argument 2`.
-    ///
-    /// Two separate off-by-ones make that so, and the C++ has both.
-    /// `RexxInteger::Max` (`classes/IntegerClass.cpp:1578`) passes the
-    /// arguments *after* the target, so its index 0 is the call's argument 2;
-    /// and it hands that index to `requiredArgument(argument, arg)`
-    /// (`runtime/MethodArguments.hpp:99`) unincremented, where that helper's
-    /// parameter is documented as "the position of the argument for the error
-    /// message" and the neighbouring `NumberString::maxMin` passes `arg + 1`
-    /// for the identical loop.
-    ///
-    /// The non-integer path raises [`missing_argument`]'s 40.5 at rc 216 for
-    /// the same shape, one higher and naming the routine -- see
-    /// `builtin/numeric.rs` for which target reaches which.
-    ///
-    /// [`missing_argument`]: Raised::missing_argument
     pub(crate) fn missing_method_argument(position: usize) -> Raised {
         Raised::syntax(93, 903, vec![position.to_string().into_bytes()])
     }
 
     /// 93.952: a method source array holds something that is not a string.
-    ///
-    /// `stringArrayArgument` (`classes/StringClassUtil.cpp:417`) walks
-    /// `1..=lastIndex()` and raises for an entry that is absent or has no
-    /// string value, so the walk stops at the last item and a longer array
-    /// with nothing beyond it is accepted. Measured, oracle: a literal array
-    /// `('return 1', , 'nop')` -- `~items` 2, `lastIndex` 3 -- is this error
-    /// at rc 163, while `.array~new(3)` with only its first item assigned is
-    /// rc 0.
-    ///
-    /// `position` is the argument name the caller passes down, and the
-    /// callers do not agree on one: measured, `~define` reports `Method
-    /// argument method is an array ...` (`classes/ClassClass.cpp:849`) while
-    /// `~defineMethods` and `~subclass`'s class-method table both report
-    /// `method source` (`:1265`).
     pub(crate) fn method_source_not_all_strings(position: &str) -> Raised {
         Raised::syntax(93, 952, vec![position.as_bytes().to_vec()])
     }
@@ -1698,21 +890,12 @@ impl Raised {
     /// `arity` is the count the method **declares**, not the count that
     /// arrived -- measured, `'abc'~length(1)` reports `0 expected` and
     /// `'abc'~hasMethod('a','b')` reports `1 expected`, both at rc 163.
-    ///
-    /// A trailing omitted argument is not one that arrived: measured,
-    /// `'abc'~hasMethod(,)` is 93.903 rather than this, because the argument
-    /// list's own count drops trailing omissions, while
-    /// `'abc'~hasMethod(,'x')` is this error.
     pub(crate) fn too_many_method_arguments(arity: usize) -> Raised {
         Raised::syntax(93, 902, vec![arity.to_string().into_bytes()])
     }
 
     /// 93.953: a method argument that has to be one of a set of classes is
     /// none of them. `wanted` is the description the raise site supplies.
-    ///
-    /// Measured at rc 163: `.Package~new('X', 'Y', 'Z')` reports `Method
-    /// argument 3 could not be converted to type Method, Routine, or Package
-    /// object.`
     pub(crate) fn argument_not_convertible(position: usize, wanted: &str) -> Raised {
         Raised::syntax(
             93,
@@ -1726,17 +909,11 @@ impl Raised {
 
     /// 93.900: `Error_Incorrect_method_user_defined`, whose whole message the
     /// raise site supplies.
-    ///
-    /// Measured at rc 163: `p~options('DIGITS', '')` reports `argument 2 must
-    /// not be empty.`
     pub(crate) fn method_user_defined(text: &str) -> Raised {
         Raised::syntax(93, 900, vec![text.as_bytes().to_vec()])
     }
 
     /// 93.905: a method argument that has to be a whole number is not one.
-    ///
-    /// Measured at rc 163: `.Package~defaultOptions('C', 'x')` reports
-    /// `Method argument 2 must be a whole number; found "x".`
     pub(crate) fn method_argument_not_whole(position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             93,
@@ -1746,172 +923,72 @@ impl Raised {
     }
 
     /// 93.965: a message resolved to an `ABSTRACT` method.
-    ///
-    /// `name` is the **message** as the send spelled it after upcasing, not
-    /// the directive's own name and not the declaring class: `AbstractCode::run`
-    /// substitutes its `messageName` argument (`execution/CPPCode.cpp:526`).
-    /// Measured at rc 163, one program each: `::method "MiXeD" class abstract`
-    /// sent as `.K~"MiXeD"` reports `Method MIXED`, and
-    /// `::attribute a class abstract` assigned as `.K~a = 3` reports
-    /// `Method A=` -- the setter's own key, `=` included.
-    ///
-    /// **Raised at the send with no frame of its own**, which is what
-    /// separates it from every 93.9xx a primitive method raises: measured,
-    /// the report is the sending clause and the two catalogue lines, with no
-    /// `Compiled method` line above them.
     pub(crate) fn abstract_method(name: &[u8]) -> Raised {
         Raised::syntax(93, 965, vec![name.to_vec()])
     }
 
     /// 93.901: a method was given fewer arguments than it needs.
     /// `expected` is the count the oracle names.
-    ///
-    /// `Error_Incorrect_method_minarg`, which
-    /// `ArrayClass::validateSingleDimensionIndex` raises for zero subscripts
-    /// (`classes/ArrayClass.cpp:1334`-`:1335`). Measured at rc 163:
-    /// `(1,2)~at()` and `(1,2)[]` both report `Not enough arguments for
-    /// method; 1 expected.`, and so does `(1,2)~at(,)`, whose trailing
-    /// omission the argument list's own count drops.
     pub(crate) fn not_enough_method_arguments(expected: usize) -> Raised {
         Raised::syntax(93, 901, vec![expected.to_string().into_bytes()])
     }
 
     /// 93.966: a `Queue` insertion or replacement index is past its last
     /// item.
-    ///
-    /// `Error_Incorrect_method_queue_index`, raised by
-    /// `QueueClass::checkInsertIndex` (`classes/QueueClass.cpp:113`) when
-    /// `position > lastItem`. Its own comment says why a `Queue` differs from
-    /// an `Array` here: "the position must be location of an existing item
-    /// within the bounds of the queue, unlike an array which can insert at
-    /// empty slots or beyond the existing bounds". Both `insertRexx` and
-    /// `putRexx` call it. Measured at rc 163 on a two-item queue:
-    /// `q~insert('k', 4)` and `q~put('k', 4)` both report `Incorrect queue
-    /// index "4".`
     pub(crate) fn incorrect_queue_index(position: usize) -> Raised {
         Raised::syntax(93, 966, vec![position.to_string().into_bytes()])
     }
 
     /// 93.967: a class whose instances come only from native code was sent
     /// `NEW`.
-    ///
-    /// `Error_Unsupported_new_method`, raised by `PointerClass::newRexx`
-    /// (`classes/PointerClass.cpp:142`) and `BufferClass::newRexx`
-    /// (`classes/BufferClass.cpp:89`) as the whole of their bodies, and by
-    /// `StackFrameClass.cpp:127`, `ContextClass.cpp:99`,
-    /// `VariableReference.cpp:100` and `RexxInfoClass.cpp:92` beside them.
-    ///
-    /// `id` is `((RexxClass *)this)->getId()` -- the **receiver** class, not
-    /// the scope the method is compiled in. Measured at rc 163: with
-    /// `::class P subclass Pointer`, `.P~new` reports `NEW method is not
-    /// supported for the P class.` under a trace line naming scope `Pointer`.
     pub(crate) fn unsupported_new_method(id: &[u8]) -> Raised {
         Raised::syntax(93, 967, vec![id.to_vec()])
     }
 
     /// 93.918: a `Queue` index names a position it does not hold.
-    ///
-    /// `Error_Incorrect_method_index`, which `QueueClass::putRexx` raises
-    /// when `validateIndex` under `IndexAccess` refuses -- a queue does not
-    /// grow to meet a `put` the way an array does. The substitution is the
-    /// index as written. Measured at rc 163 on a one-item queue:
-    /// `q~put('Y', 99)` reports `Incorrect list index "99".`
     pub(crate) fn incorrect_list_index(index: &[u8]) -> Raised {
         Raised::syntax(93, 918, vec![index.to_vec()])
     }
 
     /// 98.975: a sort was asked to order an array with a hole in it.
-    ///
-    /// `Error_Execution_sparse_array`. The substitution is the 1-based
-    /// position of the first empty slot. Measured at rc 158: an array holding
-    /// `[1]`, `[3]` and `[5]` answers `~sort` with `Missing array element at
-    /// position 2.` -- so the sort family refuses a sparse receiver rather
-    /// than skipping the holes the way `allItems` does.
     pub(crate) fn missing_array_element(position: usize) -> Raised {
         Raised::syntax(98, 975, vec![position.to_string().into_bytes()])
     }
 
     /// 93.954: a method that only works on a single-dimensional array was
     /// sent to one with more.
-    ///
-    /// `Error_Incorrect_method_array_dimension`, raised by
-    /// `ArrayClass::checkMultiDimensional` (`classes/ArrayClass.cpp:426`),
-    /// whose four callers are `APPEND`, `INSERT`, `DELETE` and `SECTION` and
-    /// nothing else. The substitution is the method name in upper case.
-    /// Measured at rc 163: `.Array~new(2,3)~delete(1)` reports `Method
-    /// "DELETE" can be used only on a single-dimensional array.`
     pub(crate) fn single_dimension_only(method: &str) -> Raised {
         Raised::syntax(93, 954, vec![method.as_bytes().to_vec()])
     }
 
     /// 93.949: a `Set` or a `Bag` was given an index that is not its value.
-    ///
-    /// `Error_Incorrect_method_nomatch`, raised by
-    /// `IndexOnlyHashCollection::validateValueIndex`
-    /// (`classes/support/HashCollection.cpp:1138`) with no substitutions. The
-    /// index is optional for those two classes and, when it is given, it must
-    /// equal the value. Measured at rc 163: `.Set~new~put('c','d')`.
     pub(crate) fn index_does_not_match() -> Raised {
         Raised::syntax(93, 949, Vec::new())
     }
 
     /// 26.903: a `COMPARE` method answered something that is not a whole
     /// number.
-    ///
-    /// `Error_Invalid_whole_number_compare`, raised by
-    /// `ArrayClass::WithSortComparator::compare` after `numberValue` refuses
-    /// the result (`classes/ArrayClass.cpp:2909`). The substitution is the
-    /// result as written. Measured at rc 230: a comparator answering `'abc'`
-    /// reports `Result of a COMPARE method call did not result in a whole
-    /// number; found "abc".`
     pub(crate) fn compare_result_not_whole(found: &[u8]) -> Raised {
         Raised::syntax(26, 903, vec![found.to_vec()])
     }
 
     /// 26.902: a `COMPARETO` method answered something that is not a whole
     /// number.
-    ///
-    /// [`Raised::compare_result_not_whole`]'s sibling for the default order,
-    /// which is `RexxInternalObject::compareTo`
-    /// (`classes/ObjectClass.cpp:245`) rather than a comparator. Measured at
-    /// rc 230, sorting two instances of a class whose `COMPARETO` answers
-    /// `'zzz'`: `Result of a COMPARETO method call did not result in a whole
-    /// number; found "zzz".`
     pub(crate) fn compare_to_result_not_whole(found: &[u8]) -> Raised {
         Raised::syntax(26, 902, vec![found.to_vec()])
     }
 
     /// 93.937: a `Supplier` was asked for a pair it no longer has.
-    ///
-    /// `Error_Incorrect_method_supplier`. No substitutions. Measured at
-    /// rc 163 on an exhausted supplier and on one built over two empty
-    /// arrays: `No more supplier items available.` -- and `~item`, `~index`
-    /// and `~next` all raise it, so stepping past the end is an error rather
-    /// than a no-op.
     pub(crate) fn no_more_supplier_items() -> Raised {
         Raised::syntax(93, 937, Vec::new())
     }
 
     /// 93.926: an array subscript list is longer than the array's dimension.
-    ///
-    /// `Error_Incorrect_method_maxsub`, raised by the same function's
-    /// `indexCount > 1` branch for a fixed-dimension array
-    /// (`classes/ArrayClass.cpp:1320`-`:1322`) and by
-    /// `validateMultiDimensionIndex` for a list longer than the dimensions
-    /// array (`:1424`). **Not 93.902**, and that is what `Arity::Counted`
-    /// exists for: measured at rc 163, `(1,2)~at(1,2)` reports `Too many
-    /// subscripts for array; 1 expected.` where `.environment~at(1,2)`, whose
-    /// row carries a count, reports 93.902.
     pub(crate) fn too_many_subscripts(expected: usize) -> Raised {
         Raised::syntax(93, 926, vec![expected.to_string().into_bytes()])
     }
 
     /// 93.925: an array subscript list is shorter than the array's dimension.
-    ///
-    /// `Error_Incorrect_method_minsub`, `validateMultiDimensionIndex`
-    /// (`classes/ArrayClass.cpp:1419`). Measured at rc 163,
-    /// `m = .array~new(2,3)`: `m[1]` reports `Not enough subscripts for
-    /// array; 2 expected.`
     pub(crate) fn not_enough_subscripts(expected: usize) -> Raised {
         Raised::syntax(93, 925, vec![expected.to_string().into_bytes()])
     }
@@ -1919,23 +996,12 @@ impl Raised {
     /// 93.959: an array size or dimension product past
     /// `ArrayClass::MaxFixedArraySize`. `max` is that bound, which the
     /// message names.
-    ///
-    /// Measured at rc 163: `.array~new(100000000000000001)` reports `An array
-    /// cannot contain more than 100000000000000000 elements.`
     pub(crate) fn array_too_big(max: usize) -> Raised {
         Raised::syntax(93, 959, vec![max.to_string().into_bytes()])
     }
 
     /// 93.907: a method argument is not a positive whole number.
     /// `position` is 1-based and `found` the argument's own rendered bytes.
-    ///
-    /// `RexxInternalObject::requiredPositive` (`classes/ObjectClass.cpp:1564`)
-    /// converts under `Numerics::ARGUMENT_DIGITS` and rejects zero, so the
-    /// admitted set is the whole numbers from 1 to 18 digits wide. Measured at
-    /// rc 163: `(1,2)~at(0)`, `(1,2)~at(-1)`, `(1,2)~at(1.5)`, `(1,2)~at('x')`
-    /// and `(1,2)~at(1000000000000000000)` each report `Method argument 1 must
-    /// be a positive whole number; found "<value>".`, while `(1,2)~at(1.0)`,
-    /// `(1,2)~at('  3  ')` and `(1,2)~at(999999999999999999)` are answers.
     pub(crate) fn method_argument_not_positive(position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             93,
@@ -1946,41 +1012,18 @@ impl Raised {
 
     /// 88.914: a `target~name:scope` override whose scope expression did not
     /// evaluate to a class object.
-    ///
-    /// The two substitutions are fixed at the raise site in the oracle too
-    /// (`reportException(Error_Invalid_argument_noclass, "SCOPE", "Class")`,
-    /// `ExpressionMessage.cpp:168`), so this constructor takes none.
-    /// Measured at rc 168: `say "abc"~length:super` reports `Argument SCOPE
-    /// must be an instance of the Class class.`
     pub(crate) fn scope_override_not_a_class() -> Raised {
         Raised::syntax(88, 914, vec![b"SCOPE".to_vec(), b"Class".to_vec()])
     }
 
     /// 93.957: a `target~name:scope` override whose scope is a class object
     /// the receiver's own behaviour was never given.
-    ///
-    /// `RexxObject::validateScopeOverride` raises it as
-    /// `reportException(Error_Incorrect_method_array_noclass, this, scope)`
-    /// (`classes/ObjectClass.cpp:1957`), so both substitutions are objects
-    /// rendered by `stringValue()`. Measured at rc 163:
-    /// `'abc'~length:.Array` reports `Target object "abc" is not a subclass
-    /// of the message override scope (The Array class).`, and
-    /// `.k~tag:.Array` on a class object reports `Target object "The K
-    /// class" ...`.
     pub(crate) fn scope_override_not_a_scope(target: &[u8], scope: &[u8]) -> Raised {
         Raised::syntax(93, 957, vec![target.to_vec(), scope.to_vec()])
     }
 
     /// 88.914: an argument the method requires to be a class object is not
     /// one. `argument` is the name the raise site substitutes.
-    ///
-    /// The oracle's `classArgument(other, TheClassClass, "class")`
-    /// (`runtime/MethodArguments.hpp:727`) passes the name, so it varies with
-    /// the method where [`scope_override_not_a_class`]'s is fixed. Measured
-    /// at rc 168: `.Array~isA('abc')` and `.Array~isSubclassOf('abc')` both
-    /// report `Argument class must be an instance of the Class class.`
-    ///
-    /// [`scope_override_not_a_class`]: Raised::scope_override_not_a_class
     pub(crate) fn argument_not_a_class(argument: &str) -> Raised {
         Raised::syntax(
             88,
@@ -1992,10 +1035,6 @@ impl Raised {
     /// 88.914 for a class other than `.Class`: `classArgument(routine,
     /// TheRoutineClass, "routine")` and its neighbours, which substitute the
     /// argument's name and the required class's id.
-    ///
-    /// Measured at rc 168: `p~addRoutine('X', 5)` reports `Argument routine
-    /// must be an instance of the Routine class.` and `p~addPackage(5)`
-    /// reports `Argument package must be an instance of the Package class.`
     pub(crate) fn argument_not_an_instance(argument: &str, class: &str) -> Raised {
         Raised::syntax(
             88,
@@ -2008,10 +1047,6 @@ impl Raised {
     /// `Error_Incorrect_method_list`. It substitutes the argument's position,
     /// the list as the raise site spells it (its own quoting included), and
     /// the value found.
-    ///
-    /// Measured at rc 163: `.Package~defaultOptions('FORM')` reports `Method
-    /// argument 1 must be one of "D[efineDefaultOptions] or
-    /// C[ountOverrides]"; found "FORM".`
     pub(crate) fn method_argument_not_in_list(position: usize, list: &str, found: &[u8]) -> Raised {
         Raised::syntax(
             93,
@@ -2026,34 +1061,17 @@ impl Raised {
 
     /// 88.901: a method argument the oracle names rather than numbers was
     /// omitted.
-    ///
-    /// The named overload of `stringArgument` raises it
-    /// (`runtime/MethodArguments.hpp:161`, whose `OREF_NULL` arm is
-    /// `reportException(Error_Invalid_argument_noarg, name)`). Measured at rc
-    /// 168: `.Array~method()` reports `Missing argument; argument method name
-    /// is required.` and `.Array~isSubclassOf()` reports `argument class`.
     pub(crate) fn missing_named_argument(argument: &str) -> Raised {
         Raised::syntax(88, 901, vec![argument.as_bytes().to_vec()])
     }
 
     /// 88.909: a method argument has no string value. `position` is
     /// 1-based in the method's own argument list.
-    ///
-    /// Measured at rc 168: `'abc'~hasMethod(.nil)` reports `Argument 1 must
-    /// have a string value.`, where `'abc'~hasMethod(5)` answers `0` --
-    /// a number has a string value and `.nil` does not.
     pub(crate) fn argument_needs_a_string_value(position: usize) -> Raised {
         Raised::syntax(88, 909, vec![position.to_string().into_bytes()])
     }
 
     /// 88.909 for an argument the oracle names rather than numbers.
-    ///
-    /// `stringArgument`'s overloads differ in exactly this substitution --
-    /// `runtime/MethodArguments.hpp:136` takes a position and `:161` takes a
-    /// name -- and `RexxClass::method` passes `"method name"`
-    /// (`classes/ClassClass.cpp:987`). Measured at rc 168:
-    /// `.Array~method(.nil)` reports `Argument method name must have a string
-    /// value.`
     pub(crate) fn named_argument_needs_a_string_value(argument: &str) -> Raised {
         Raised::syntax(88, 909, vec![argument.as_bytes().to_vec()])
     }
@@ -2061,14 +1079,6 @@ impl Raised {
     /// 88.910: a pad argument the oracle names rather than numbers is a
     /// string that is not exactly one byte. `found` is the argument's own
     /// rendered bytes.
-    ///
-    /// `padArgument`'s named overload (`classes/StringClassUtil.cpp:275`),
-    /// where the positional overload's is [`incorrect_pad`]'s 93.922.
-    /// Measured at rc 168:
-    /// `.MutableBuffer~new('abcdef')~replaceAt('a', 1, 1, 'xx')` reports
-    /// `Argument pad is an invalid pad or character argument; found "xx".`
-    ///
-    /// [`incorrect_pad`]: Raised::incorrect_pad
     pub(crate) fn named_argument_invalid_pad(argument: &str, found: &[u8]) -> Raised {
         Raised::syntax(88, 910, vec![argument.as_bytes().to_vec(), found.to_vec()])
     }
@@ -2076,14 +1086,6 @@ impl Raised {
     /// 88.911: a length argument the oracle names rather than numbers did not
     /// convert to a non-negative whole number. `found` is the argument's own
     /// rendered bytes.
-    ///
-    /// `lengthArgument`'s named overload (`classes/StringClassUtil.cpp:87`),
-    /// where the positional overload's is [`invalid_length`]'s 93.923.
-    /// Measured at rc 168:
-    /// `.MutableBuffer~new('abcdef')~replaceAt('a', 1, '-1.0')` reports
-    /// `Argument length is an invalid length value; found "-1.0".`
-    ///
-    /// [`invalid_length`]: Raised::invalid_length
     pub(crate) fn named_argument_invalid_length(argument: &str, found: &[u8]) -> Raised {
         Raised::syntax(88, 911, vec![argument.as_bytes().to_vec(), found.to_vec()])
     }
@@ -2091,14 +1093,6 @@ impl Raised {
     /// 88.912: a position argument the oracle names rather than numbers did
     /// not convert to a positive whole number. `found` is the argument's own
     /// rendered bytes.
-    ///
-    /// `positionArgument`'s named overload
-    /// (`classes/StringClassUtil.cpp:225`), where the positional overload's
-    /// is [`invalid_position`]'s 93.924. Measured at rc 168:
-    /// `.MutableBuffer~new('abcdef')~replaceAt('a', '0.0')` reports `Argument
-    /// position is an invalid position value; found "0.0".`
-    ///
-    /// [`invalid_position`]: Raised::invalid_position
     pub(crate) fn named_argument_invalid_position(argument: &str, found: &[u8]) -> Raised {
         Raised::syntax(88, 912, vec![argument.as_bytes().to_vec(), found.to_vec()])
     }
@@ -2106,31 +1100,18 @@ impl Raised {
     /// 93.915: a method's option argument is not one of the letters it
     /// accepts. `options` is the accepted set as the oracle spells it and
     /// `found` is the argument's own rendered bytes.
-    ///
-    /// Measured at rc 163: `.Array~superClasses~makeString('X')` reports
-    /// `Method option must be one of "CL"; found "X".`
     pub(crate) fn method_option_not_recognised(options: &str, found: &[u8]) -> Raised {
         Raised::syntax(93, 915, vec![options.as_bytes().to_vec(), found.to_vec()])
     }
 
     /// 93.970: `Class~copy`, which the oracle answers for no class object.
     /// `object` is the receiver's own string value.
-    ///
-    /// `RexxClass::copyRexx` (`classes/ClassClass.cpp:166`) is nothing but
-    /// this raise. Measured at rc 163: `.K~copy` reports `COPY method is not
-    /// supported for object The K class.`
     pub(crate) fn copy_not_supported(object: &[u8]) -> Raised {
         Raised::syntax(93, 970, vec![object.to_vec()])
     }
 
     /// 93.972: a `~send`/`~start` message name that is neither a string nor
     /// an array. `found` is the value's own string value.
-    ///
-    /// `RexxObject::decodeMessageName` reaches it through `requestArray`
-    /// answering `TheNilObject` (`classes/ObjectClass.cpp:2137`-`:2140`).
-    /// Measured at rc 163: `o~send(.nil)` reports `A message name argument
-    /// must be a string or an array with 2 elements; found "The NIL
-    /// object".`
     pub(crate) fn message_name_shape(found: &[u8]) -> Raised {
         Raised::syntax(93, 972, vec![found.to_vec()])
     }
@@ -2138,10 +1119,6 @@ impl Raised {
     /// 93.946: a `~send`/`~start` message name that is an array of any shape
     /// but a single dimension of two elements
     /// (`classes/ObjectClass.cpp:2143`-`:2146`). No substitution.
-    ///
-    /// Measured at rc 163: `o~send(('M', .K, 'extra'))` and a one-item array
-    /// both report `A message array must be a single-dimensional array with 2
-    /// elements.`
     pub(crate) fn message_array_shape() -> Raised {
         Raised::syntax(93, 946, vec![])
     }
@@ -2149,32 +1126,18 @@ impl Raised {
     /// 97.1: the receiver's behaviour answers no method of that name.
     /// `target` is the receiver's own **string value** and `name` the
     /// message as the send spells it, already upcased by the parser.
-    ///
-    /// Measured at rc 159: `'abc'~nosuch` reports `Object "abc" does not
-    /// understand message "NOSUCH".`, and `.nil~nosuch` reports `Object "The
-    /// NIL object"`, which is `.nil`'s own string value rather than a
-    /// special case of this message.
     pub(crate) fn no_method(target: &[u8], name: &[u8]) -> Raised {
         Raised::syntax(97, 1, vec![target.to_vec(), name.to_vec()])
     }
 
     /// 97.2: the method is `PRIVATE` and `RexxObject::checkPrivate` refused
     /// the caller. The substitutions are [`Raised::no_method`]'s.
-    ///
-    /// Measured at rc 159, on `::class K` with `::method m class private`:
-    /// `say .K~m` reports `Object "The K class" cannot accept private
-    /// message "M" from this context.`
     pub(crate) fn private_method(target: &[u8], name: &[u8]) -> Raised {
         Raised::syntax(97, 2, vec![target.to_vec(), name.to_vec()])
     }
 
     /// 97.3: the method is `PACKAGE` and the caller is in another package.
     /// The substitutions are [`Raised::no_method`]'s.
-    ///
-    /// Measured at rc 159, on a `::class K public` carrying `::method m
-    /// package` in a required file: `o = .K~new; say o~m` reports `Object "a
-    /// K" cannot accept package scope message "M" from a different package
-    /// caller.`
     pub(crate) fn package_scope_method(target: &[u8], name: &[u8]) -> Raised {
         Raised::syntax(97, 3, vec![target.to_vec(), name.to_vec()])
     }
@@ -2182,56 +1145,17 @@ impl Raised {
     /// 97.4: a `::CONSTANT` accessor whose expression form has not been
     /// evaluated yet. `target` is the receiver's own string value and `name`
     /// the constant, upcased as the directive installed it.
-    ///
-    /// **Reachable, and it is the install passes that make it so.** The
-    /// expressions are resolved in a pass of their own after every class is
-    /// built, so a class-side `INIT` -- which runs while its class is being
-    /// built -- reads a constant that has no value yet. Measured at rc 159,
-    /// on `::class A` carrying `::constant c (2+3)` and an `init` class
-    /// method that says `self~c`: `Constant "C" of object "The A class" has
-    /// not been initialized.`
-    ///
-    /// **The arguments are in [`Raised::no_method`]'s order and the template
-    /// is not.** `rexxmsg.xml`'s entry reads `Constant "&2" of object "&1"`
-    /// where 97.1's reads `Object "&1" ... message "&2"`, and `reportNomethod`
-    /// passes the receiver ahead of the name either way
-    /// (`concurrency/ActivityManager.hpp:509`-`:515`), so the receiver stays
-    /// first here and the catalogue does the reordering.
     pub(crate) fn constant_not_initialized(target: &[u8], name: &[u8]) -> Raised {
         Raised::syntax(97, 4, vec![target.to_vec(), name.to_vec()])
     }
 
     /// The `NOMETHOD` condition a dispatch miss raises, whose untrapped
     /// rendering is [`Raised::no_method`]'s own 97.1.
-    ///
-    /// **`report` is the syntax error this condition degrades to** -- 97.1
-    /// for a name the behaviour does not answer, and 97.2 or 97.3 for an
-    /// access scope that refused the caller. `reportNomethod` takes that
-    /// error code as its first argument and offers the same condition
-    /// whichever it is (`classes/ObjectClass.cpp:1009`), so the items below
-    /// are read off the send rather than off the code.
-    ///
-    /// Built from a caller's `Raised` so the catalogue coordinates are
-    /// written once each, and differing from it in what a trapping handler
-    /// reads back -- the table below is that difference. Measured, `say 'abc'~nosuchmsg`
-    /// under `signal on nomethod` against the same send under `signal on
-    /// syntax`:
-    ///
     /// ```text
     ///                C           D            E    RC
     /// nomethod trap  NOMETHOD    NOSUCHMSG    ''   untouched
     /// syntax   trap  SYNTAX      ''           1    97
     /// ```
-    ///
-    /// `RC` is left alone by the non-`SYNTAX` rule [`Raised::rc`] states,
-    /// the description is the message name, and `E` needs nothing here: the
-    /// `CODE` item is a `SYNTAX` condition's alone, so `offer_to_trap` fills
-    /// it in from the condition's name rather than from the numbering this
-    /// one keeps for its report.
-    ///
-    /// **`Interp::nomethod` decides which of them to raise**, and it
-    /// raises this one only when something can take it, so the report path
-    /// below is a fallback rather than the answer this shape is for.
     pub(crate) fn nomethod(report: Raised, name: &[u8]) -> Raised {
         Raised {
             condition: Cow::Borrowed("NOMETHOD"),
@@ -2243,23 +1167,6 @@ impl Raised {
 
     /// The `NOSTRING` condition the required-string protocol raises when the
     /// receiver has no string value and something is armed to take it.
-    ///
-    /// `readable` is the rendering the protocol was about to use, which is
-    /// `stringValue()`, and it is the condition's description. Measured,
-    /// oracle rc 0 under `signal on nostring` over `say .array`:
-    /// `CONDITION('C')` `NOSTRING`, `CONDITION('D')` `The Array class`,
-    /// `CONDITION('E')` the null string and `RC` untouched.
-    ///
-    /// **There is no catalogue entry beneath this one**, unlike `NOMETHOD`'s:
-    /// an untrapped NOSTRING is not an error at all --
-    /// `Activity::raiseCondition` returns and the rendering is used
-    /// (`classes/ObjectClass.cpp:1249`, `:1284`) -- which is why
-    /// `Interp::required_string_dispatch` raises this only when a trap can
-    /// take it.
-    ///
-    /// `CONDITION('A')` would be the object itself, and this carries no place
-    /// to put one; that option is already the loud refusal
-    /// `Loud::builtin_option_object` makes for every condition.
     pub(crate) fn nostring(readable: &[u8]) -> Raised {
         Raised {
             description: Some(readable.to_vec()),
@@ -2269,12 +1176,6 @@ impl Raised {
 
     /// 98.973, what `::OPTIONS NOSTRING SYNTAX` turns an untrapped NOSTRING
     /// into (`Activity::raiseCondition`, `concurrency/Activity.cpp:615`).
-    ///
-    /// `readable` is the same `stringValue()` rendering [`Raised::nostring`]
-    /// makes the condition's description, and it is this message's one
-    /// substitution -- measured, `::options nostring syntax` over `say
-    /// .array` is rc 158 reading `Object "The Array class" does not have a
-    /// string representation.`
     pub(crate) fn nostring_syntax(readable: &[u8]) -> Raised {
         Raised::syntax(98, 973, vec![readable.to_vec()])
     }
@@ -2282,21 +1183,12 @@ impl Raised {
     /// 98.986, what `::OPTIONS NOVALUE SYNTAX` turns an untrapped NOVALUE
     /// into (`RexxActivation::handleNovalueEvent`,
     /// `execution/RexxActivation.cpp:2648`).
-    ///
-    /// `name` is the variable's derived name, which is what the unset read
-    /// answered -- measured, `::options novalue syntax` over `say zzzundef`
-    /// is rc 158 reading `Reference to unassigned variable "ZZZUNDEF".`
     pub(crate) fn unassigned_variable(name: &[u8]) -> Raised {
         Raised::syntax(98, 986, vec![name.to_vec()])
     }
 
     /// 91.999: a message used where a value was wanted returned none.
     /// `name` is the message as the send spells it, already upcased.
-    ///
-    /// Measured at rc 165, on `::class K` with `::method m class` ending in a
-    /// bare `return`: `say .K~m` reports `No result object.` and `Message
-    /// "M" did not return a result.` The same send as a whole clause is rc 0,
-    /// so this belongs to the expression position and not to the send.
     pub(crate) fn no_result(name: &[u8]) -> Raised {
         Raised::syntax(91, 999, vec![name.to_vec()])
     }
@@ -2306,14 +1198,6 @@ impl Raised {
     /// `isMethod()` arm (`execution/RexxActivation.cpp:5057`), reached from
     /// `PackageClass::traceBack` (`classes/PackageClass.cpp:589`) when
     /// `source->extract` answers nothing.
-    ///
-    /// **Unlike [`Raised::compiled_method_line`] this is the clause text
-    /// alone**, with no line-number field and no `*-*` marker: an image-saved
-    /// package still knows which *line* the method was on, so the oracle
-    /// formats the line number and the marker around this exactly as it does
-    /// around a source clause. Measured, the prefix `  3700 *-*       ` is
-    /// byte-identical between the oracle's sourceless frame and this crate's
-    /// echo of the same clause.
     pub(crate) fn sourceless_method_line(name: &[u8], scope: &str, package: &[u8]) -> Vec<u8> {
         let substitutions = vec![name.to_vec(), scope.as_bytes().to_vec(), package.to_vec()];
         match rexx_inventory::errors::lookup(101, 24) {
@@ -2324,15 +1208,6 @@ impl Raised {
 
     /// The same for an activation that is a whole program rather than a
     /// method -- `formatSourcelessTraceLine`'s `else` arm.
-    ///
-    /// **Its `isRoutine()` sibling (101.25) is not built.** `isRoutine()` is
-    /// `activationContext == EXTERNALCALL` (`execution/RexxActivation.hpp:171`),
-    /// which an ordinary `CALL 'file'` runs under
-    /// (`instructions/CallInstruction.cpp:459`), so the arm the oracle would
-    /// take for a failure inside `CoreClasses.orx:122`'s or `:124`'s callee
-    /// is that one and this crate would answer 101.26. Both are bounded the
-    /// same way: reachable only if the bootstrap itself fails, which ends
-    /// the interpreter.
     pub(crate) fn sourceless_program_line(package: &[u8]) -> Vec<u8> {
         match rexx_inventory::errors::lookup(101, 26) {
             Some(entry) => substitute(entry.text, &[package.to_vec()]),
@@ -2342,13 +1217,6 @@ impl Raised {
 
     /// The traceback line a native (C++-implemented, here Rust-implemented)
     /// method activation contributes, rendered whole.
-    ///
-    /// `Message_Translations_compiled_method_invocation` carries its own
-    /// leading blank line-number field and `*-*` marker, unlike a source
-    /// clause's echo, which `crate::trace::push_clause` assembles around the
-    /// clause text. Measured: `       *-* Compiled method "LENGTH" with
-    /// scope "String".`, and the line is unindented even for a send nested
-    /// two `DO` levels deep.
     pub(crate) fn compiled_method_line(name: &[u8], scope: &str) -> Vec<u8> {
         let substitutions = vec![name.to_vec(), scope.as_bytes().to_vec()];
         match rexx_inventory::errors::lookup(101, 20) {
@@ -2362,8 +1230,6 @@ impl Raised {
     /// the call's own numbering -- measured, `max(1,'a',3)` reports `Method
     /// argument 1` for the call's argument 2, and `max(1,2,'a')` reports
     /// `Method argument 2`.
-    ///
-    /// `found` is the argument's rendered value, at rc 163.
     pub(crate) fn method_argument_not_a_number(position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             93,
@@ -2375,52 +1241,17 @@ impl Raised {
     /// 93.943: the value a numeric builtin was handed as its *target* is not
     /// a number. `method` is the name the message uses, which is the
     /// builtin's own; `found` is the value's rendered bytes.
-    ///
-    /// Measured at rc 163 for all of `ABS`, `SIGN`, `TRUNC`, `FORMAT`, `MAX`
-    /// and `MIN`: `abs('abc')` is `ABS method target must be a number; found
-    /// "abc".`, and `max('a',1,3)` names `MAX` while `max(1,'a',3)` is
-    /// [`method_argument_not_a_number`]'s 93.904 instead. So argument 1 and
-    /// arguments 2+ answer with different numbers for the same offending
-    /// value, which is the split `RexxString`'s `ArithmeticMethod` macro
-    /// (`classes/StringClass.cpp:1060`) makes: the target goes through it and
-    /// the rest do not.
-    ///
-    /// The null string and a lone blank reach it too -- `abs('')` reports
-    /// `found ""` and `abs(' ')` reports `found " "`.
-    ///
-    /// **Not 41.1.** A non-numeric value only reaches arithmetic here after
-    /// the builtin has been entered, and the two are told apart by where the
-    /// conversion happens: measured, `sign('-1E1234567890')` is this error at
-    /// rc 163, while `sign(-1E1234567890)` is 41.1 at rc 215 because the
-    /// unary minus converts the value before `SIGN` is ever called.
-    ///
-    /// [`method_argument_not_a_number`]: Raised::method_argument_not_a_number
     pub(crate) fn method_target_not_a_number(method: &[u8], found: &[u8]) -> Raised {
         Raised::syntax(93, 943, vec![method.to_vec(), found.to_vec()])
     }
 
     /// 93.940: `~MODULO`'s target is a number but not a whole one.
-    ///
-    /// `method` is always `MODULO` -- it is the only raiser
-    /// (`NumberString::modulo`, `classes/NumberStringClass.cpp:3622`) -- and
-    /// `found` is the target's rendered bytes.
-    ///
-    /// Beaten by [`method_target_not_a_number`] and beats everything about
-    /// the divisor: measured, `'abc'~modulo()` is 93.943 and
-    /// `'1.5'~modulo()` is this rather than the 93.903 the missing argument
-    /// would give on its own.
-    ///
-    /// [`method_target_not_a_number`]: Raised::method_target_not_a_number
     pub(crate) fn method_target_not_whole(method: &[u8], found: &[u8]) -> Raised {
         Raised::syntax(93, 940, vec![method.to_vec(), found.to_vec()])
     }
 
     /// 93.962: `~decodeBase64`'s receiver is not a Base64 encoding. No
     /// substitutions -- the message names neither the method nor the value.
-    ///
-    /// It is that method's only refusal, and covers every way the text can be
-    /// wrong: a length that is not a multiple of four, a byte outside the
-    /// alphabet, and a `=` anywhere but closing the last quartet.
     pub(crate) fn invalid_base64() -> Raised {
         Raised::syntax(93, 962, Vec::new())
     }
@@ -2428,14 +1259,6 @@ impl Raised {
     /// 88.928: `USE ARG >name` where the caller did not pass a variable
     /// reference. `position` is 1-based; `found` is the argument's own
     /// **rendered value**.
-    ///
-    /// That `found` is the value and not the argument's spelling is measured
-    /// rather than assumed, because the obvious probe cannot tell them apart:
-    /// a variable named `caller` reports `found "caller"` whichever rule
-    /// holds. Three programs that do discriminate, all rc 168 -- `zebra =
-    /// 'orig'; call sub2 zebra` reports `found "orig"`, a literal argument
-    /// `'literal-value'` reports its own text, and passing it second reports
-    /// `The 2 argument`.
     pub(crate) fn not_a_variable_reference(position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             88,
@@ -2446,29 +1269,12 @@ impl Raised {
 
     /// 88.931: `USE ARG >name` where the caller omitted that position
     /// entirely. `position` is 1-based.
-    ///
-    /// A different sub-number from [`not_a_variable_reference`]'s 88.928, and
-    /// measured rather than assumed to be the same: `call sub2 1` into `use
-    /// arg p, >q` gives rc 168 and `Argument 2 was omitted. A
-    /// VariableReference argument is required.`, where passing a *wrong-kind*
-    /// value in that position gives 88.928 instead. An omission and a bad
-    /// value are two different complaints here.
-    ///
-    /// [`not_a_variable_reference`]: Raised::not_a_variable_reference
     pub(crate) fn variable_reference_omitted(position: usize) -> Raised {
         Raised::syntax(88, 931, vec![position.to_string().into_bytes()])
     }
 
     /// 88.929: `USE ARG >name` where the target is a **stem** and the caller
     /// passed a reference to a **simple** variable.
-    ///
-    /// `reference` is the *caller's* variable name, not the target's -- the
-    /// opposite of 98.995 below, and measured rather than assumed with a
-    /// variable whose value differs from its name: `p = 'value-not-name'`
-    /// passed as `>p` into `use arg >q.` reports rc 168 and `The 1 argument
-    /// must be a VariableReference for a Stem variable; found "P".` The same
-    /// position under 88.928 reports `value-not-name`, so the two families
-    /// genuinely disagree about what they name.
     pub(crate) fn not_a_stem_variable_reference(position: usize, reference: &[u8]) -> Raised {
         Raised::syntax(
             88,
@@ -2479,13 +1285,6 @@ impl Raised {
 
     /// 88.930: the mirror of [`not_a_stem_variable_reference`] -- the target
     /// is a **simple** variable and the caller passed a **stem** reference.
-    ///
-    /// Measured: `p.1 = 'value-not-name'` passed as `>p.` into `use arg >q`
-    /// gives rc 168 and `... must be a VariableReference for a simple
-    /// variable; found "P.".` The name carries the trailing period, which is
-    /// the stem's own spelling and needs no shaping here.
-    ///
-    /// [`not_a_stem_variable_reference`]: Raised::not_a_stem_variable_reference
     pub(crate) fn not_a_simple_variable_reference(position: usize, reference: &[u8]) -> Raised {
         Raised::syntax(
             88,
@@ -2496,182 +1295,70 @@ impl Raised {
 
     /// 98.995: `USE ARG >name` whose target is not currently unset. `name` is
     /// the target's own spelling.
-    ///
-    /// Measured, rc 158: `p = 'p-orig'; q = 'q-orig'; call sub >p` into `use
-    /// arg >q` gives `Unable to reference variable "Q"; it must be an
-    /// uninitialized local variable.` A stem target reports its own spelling
-    /// including the period -- `Q.` -- which is what `use_target_name`
-    /// already produces, so neither case needs shaping here.
-    ///
-    /// **The message's "local" is not the condition.** An exposed target
-    /// raises this when it holds a value and does not when it is unset;
-    /// `run.rs`'s `target_is_uninitialised` has that pair and is where the
-    /// rule lives.
     pub(crate) fn variable_reference_not_uninitialised(name: &[u8]) -> Raised {
         Raised::syntax(98, 995, vec![name.to_vec()])
     }
 
     /// 98.992: `EXPOSE` outside a method invocation. No substitutions.
-    ///
-    /// Measured, rc 158, in two shapes: as a program's own first instruction,
-    /// and as a `::ROUTINE`'s. Both give `The EXPOSE instruction may only be
-    /// used from method invocations.`
-    ///
-    /// **The other refusal, 99.907, is the parser's**, and is a translation
-    /// error rather than a condition: an `EXPOSE` that is not a method body's
-    /// first instruction never runs at all, which `rexx-parse` already
-    /// enforces (a label ahead of it and a `SAY` ahead of it were both
-    /// measured at 99.907, rc 157, with the program's own output empty). So
-    /// the placement rule is not restated here; what reaches this function is
-    /// an `EXPOSE` in a body that is not a method's.
     pub(crate) fn expose_outside_method() -> Raised {
         Raised::syntax(98, 992, Vec::new())
     }
 
     /// 99.911: `GUARD` outside a method invocation. No substitutions.
-    ///
-    /// Measured, rc 157, in two shapes: as a program's own clause, and as a
-    /// `::ROUTINE`'s. Both give `GUARD can only be issued in an object method
-    /// invocation.` under an `Error 99 ... Translation error.` major line,
-    /// which is the catalogue's own family for the number rather than a
-    /// statement about when it is raised -- the check runs at
-    /// `RexxInstructionGuard::execute`, not at translation.
     pub(crate) fn guard_outside_method() -> Raised {
         Raised::syntax(99, 911, Vec::new())
     }
 
     /// 99.919: `REPLY` outside a method invocation. No substitutions.
-    ///
-    /// [`guard_outside_method`]'s twin, measured at the same two shapes and
-    /// the same rc 157: `REPLY can only be issued in an object method
-    /// invocation.`
-    ///
-    /// [`guard_outside_method`]: Raised::guard_outside_method
     pub(crate) fn reply_outside_method() -> Raised {
         Raised::syntax(99, 919, Vec::new())
     }
 
     /// 98.947: `FORWARD` outside a method invocation. No substitutions.
-    ///
-    /// The same legality question [`guard_outside_method`] and
-    /// [`reply_outside_method`] ask, at a **different major**: measured rc
-    /// 158, as a program's own clause and as a `::ROUTINE`'s, `FORWARD can
-    /// only be issued in an object method invocation.` under an `Error 98
-    /// ... Execution error.` line, where those two are 99 at rc 157.
-    ///
-    /// [`guard_outside_method`]: Raised::guard_outside_method
-    /// [`reply_outside_method`]: Raised::reply_outside_method
     pub(crate) fn forward_outside_method() -> Raised {
         Raised::syntax(98, 947, Vec::new())
     }
 
     /// 98.946: a `FORWARD ARGUMENTS` value `requestArray` cannot answer as a
     /// single-dimensional array. No substitutions.
-    ///
-    /// Measured rc 158, `forward message('OTHER') arguments (.nil)`:
-    /// `FORWARD arguments must be a single-dimensional array of values.` The
-    /// oracle tests `requestArray`'s answer for `TheNilObject` or a
-    /// multi-dimensional array (`instructions/ForwardInstruction.cpp:189`-
-    /// `:191`), and both halves are reachable here: measured rc 158 for
-    /// `arguments (.array~new(2,2))` as well.
-    ///
-    /// **A value that is neither is not this error**: measured rc 0,
-    /// `arguments ('abc')` reaches the callee as one argument spelling
-    /// `abc`, because a string's own `makeArray` answers a one-item array.
     pub(crate) fn forward_arguments() -> Raised {
         Raised::syntax(98, 946, Vec::new())
     }
 
     /// 98.935: a second `REPLY` in one method invocation. No substitutions.
-    ///
-    /// Measured, oracle **rc 0**: a class method replying `one` and then
-    /// `two` delivers `one` to the sender, and the raise is reported on
-    /// stderr from the resumed body, where nothing is left to carry an exit
-    /// status. `REPLY can be issued only once per method invocation.`
     pub(crate) fn reply_twice() -> Raised {
         Raised::syntax(98, 935, Vec::new())
     }
 
     /// 98.936: `RETURN` with a value after a `REPLY`. No substitutions.
-    ///
-    /// Measured, oracle **rc 0**, `RETURN cannot return a value after a
-    /// REPLY.` -- the same rc-0-with-a-traceback shape [`reply_twice`]
-    /// carries, and for the same reason. A bare `RETURN` there is rc 0 with
-    /// an empty stderr.
-    ///
-    /// [`reply_twice`]: Raised::reply_twice
     pub(crate) fn return_after_reply() -> Raised {
         Raised::syntax(98, 936, Vec::new())
     }
 
     /// 98.937: `EXIT` with a value after a `REPLY`. No substitutions.
-    ///
-    /// [`return_after_reply`]'s twin: `EXIT cannot return a value after a
-    /// REPLY.` Measured on a program whose main body ends `exit 7` after the
-    /// send: rc **7**, so the resumed body's raise leaves the exit status the
-    /// main body settled.
-    ///
-    /// [`return_after_reply`]: Raised::return_after_reply
     pub(crate) fn exit_after_reply() -> Raised {
         Raised::syntax(98, 937, Vec::new())
     }
 
     /// 98.993: `USE LOCAL` as the first instruction executed of a top-level
     /// program. No substitutions.
-    ///
-    /// Measured, rc 158: `use local outer` on line 1 of a program gives `The
-    /// USE LOCAL instruction may only be used from method invocations.`
-    /// [`use_local_not_first`] is the other of the two refusals, and what
-    /// decides between them is the entry kind -- `exec_use`'s own arm.
-    ///
-    /// [`use_local_not_first`]: Raised::use_local_not_first
     pub(crate) fn use_local_outside_method() -> Raised {
         Raised::syntax(98, 993, Vec::new())
     }
 
     /// 99.910: `USE LOCAL` anywhere other than the first instruction executed
     /// of a top-level program. No substitutions.
-    ///
-    /// Measured, rc 157, at three shapes: as the *second* instruction of a
-    /// program, as the first instruction of a called routine, and after a
-    /// `PROCEDURE` in a called routine. The second of those is the one that
-    /// makes this the wider case -- a called routine's first instruction is
-    /// still "not first after a *method* invocation", so it lands here rather
-    /// than on 98.993.
     pub(crate) fn use_local_not_first() -> Raised {
         Raised::syntax(99, 910, Vec::new())
     }
 
     /// 29.1: an `ADDRESS` environment name longer than the platform's limit.
-    ///
-    /// Both substitutions are the oracle's own: the limit as a decimal, then
-    /// the whole rejected name. **Untruncated**, unlike every `Loud` message
-    /// in this crate -- measured at 251 bytes in, 251 bytes quoted back on
-    /// both the constant and the `VALUE` form, so a bound here would be a
-    /// divergence rather than a safeguard.
-    ///
-    /// The limit is a caller's argument rather than a constant read here,
-    /// because it is per platform: `MAX_ADDRESS_NAME_LENGTH` in
-    /// `platform/unix/MiscSystem.cpp` and a separate one under `windows/`.
-    /// The message quotes whichever the running platform used, so the number
-    /// that bounded the name and the number in the text are one value.
     pub(crate) fn environment_name_too_long(limit: usize, found: &[u8]) -> Raised {
         Raised::syntax(29, 1, vec![limit.to_string().into_bytes(), found.to_vec()])
     }
 
     /// 88.913: a method argument the oracle names is not a single-dimensional
     /// array. The substitution is that name.
-    ///
-    /// `arrayArgument`'s named overload
-    /// (`runtime/MethodArguments.hpp:703`, whose `isMultiDimensional` arm
-    /// raises at `:714`). Measured at rc 168:
-    /// `o~sendWith('M', .array~new(2,2))` reports `Argument message arguments
-    /// must be a single-dimensional array.` and `self~run(source, 'A',
-    /// .array~new(2,2))` reports the same for `argument array`.
-    ///
-    /// [`object_not_single_dimensional`] is the other overload's raise.
-    ///
-    /// [`object_not_single_dimensional`]: Raised::object_not_single_dimensional
     pub(crate) fn argument_not_single_dimensional(argument: &str) -> Raised {
         Raised::syntax(88, 913, vec![argument.as_bytes().to_vec()])
     }
@@ -2679,31 +1366,12 @@ impl Raised {
     /// 98.913: an argument the oracle numbers rather than names is not a
     /// single-dimensional array. The substitution is the value's own string
     /// value.
-    ///
-    /// `arrayArgument`'s positional overload
-    /// (`runtime/MethodArguments.hpp:675`, raising at `:687`). Measured at rc 158:
-    /// `o~startWith('M', .array~new(2,2))` reports `Unable to convert object
-    /// "an Array" to a single-dimensional array value.` -- the object and not
-    /// the position, so the two overloads differ in more than their number.
-    ///
-    /// [`argument_not_single_dimensional`] is the other overload's raise.
-    ///
-    /// [`argument_not_single_dimensional`]: Raised::argument_not_single_dimensional
     pub(crate) fn object_not_single_dimensional(found: &[u8]) -> Raised {
         Raised::syntax(98, 913, vec![found.to_vec()])
     }
 }
 
 /// Converts a `rexx-num` arithmetic failure into a `Raised`.
-///
-/// The `(major, sub)` pair comes from `ArithError::sub_code`, made `pub` in
-/// `rexx-num` for exactly this caller (`4a320f1c`) rather than hand-copied
-/// here: this task originally flagged that `sub_code` was private and
-/// shipped a two-variant stopgap covering only what its own tests had
-/// independently verified against the oracle (`DivideByZero`,
-/// `PowerExponentNotWhole`), sub `0` elsewhere. The accessor landing
-/// retires that stopgap -- every `ArithError` variant now gets its real
-/// sub-number, not only the two this task happened to exercise.
 impl From<ArithError> for Raised {
     fn from(error: ArithError) -> Raised {
         // `additional()` and `sub_code()` both borrow, so either can run
@@ -2716,16 +1384,6 @@ impl From<ArithError> for Raised {
 
 /// Converts a `rexx-num` `FORMAT` failure into a `Raised`, the same way
 /// [`From<ArithError>`] converts an arithmetic one.
-///
-/// `FormatError`'s two variants are 93.941 and 93.942, and both carry their
-/// substitution *values* rather than rendered text -- which matters, because
-/// what each substitutes is not the argument the program wrote. `format(1,0)`
-/// reports the rounded value `"1"` and the requested width `"0"`, and
-/// `format(1e10,,,1,0)` reports the *reframed mantissa* `"1"` rather than the
-/// number itself. Both are `rexx-num`'s own measurements; nothing here
-/// re-derives them.
-///
-/// [`From<ArithError>`]: Raised
 impl From<FormatError> for Raised {
     fn from(error: FormatError) -> Raised {
         let additional = error.additional();
@@ -2736,31 +1394,12 @@ impl From<FormatError> for Raised {
 
 /// Converts a `rexx-parse` translation failure into the condition the oracle
 /// raises for it.
-///
-/// **Measured, and the reason this exists** (4b Task 2, Step 5b): `interpret
-/// "do forever then"` on line 2 of a two-line program gives the oracle
-///
 /// ```text
 ///      2 *-* do forever then
 ///      2 *-* interpret "do forever then"
 /// Error 27 running /abs/p1.rex line 2:  Invalid DO or LOOP syntax.
 /// Error 27.901:  Incorrect data following FOREVER keyword on the loop; found "THEN".
 /// ```
-///
-/// at rc 229 -- a real, trappable SYNTAX condition, not a translation-time
-/// refusal. Before this, a fragment that did not parse was a `Loud` failure
-/// at rc 120, which was correct-but-loud while `INTERPRET` was unreachable
-/// and a live divergence once 4b's Task 1 made it reachable.
-///
-/// **What this does not carry, and it is not an oversight.** `ParseError`
-/// has a major, a sub and the clause's start byte, and deliberately no
-/// substitution values -- `rexx-parse`'s own `error.rs` module note has the
-/// measurement behind that decision and what it owes Phase 4. So the sub
-/// line renders its catalogue template with `&1` passed through where the
-/// oracle writes `found "THEN"`. Everything else matches: the condition, the
-/// major, the sub, the exit code, and the enclosing clause echoes. That is
-/// the same bound `execute`'s own top-level parse arm already states, and
-/// closing it is the same job in both places.
 impl From<&ParseError> for Raised {
     fn from(error: &ParseError) -> Raised {
         Raised::syntax(error.code, error.sub, Vec::new())
@@ -2786,9 +1425,6 @@ pub(crate) enum Failure {
     /// `varlookup` -0.77%, `emptyloop` -0.62%, the pinned `rexxcps` -0.58%,
     /// `compound` -0.54%, `arith` -0.18% -- one direction on every axis, which
     /// is what separates this from the +-0.5% a relayout moves things by.
-    ///
-    /// The allocation it adds is on the path that reports a construct this
-    /// crate does not implement, which runs once and then the program stops.
     Loud(Box<Loud>),
     Raised(Box<Raised>),
     /// **Not a failure at all** -- `EXIT` inside a routine reached through
@@ -2817,11 +1453,6 @@ pub(crate) enum Failure {
     /// set, and is being abandoned at a clause boundary
     /// ([`Deadline`](crate::clause::Deadline), whose own doc has what that
     /// bound does and does not reach).
-    ///
-    /// It is a harness bound, not language behaviour: it carries nothing, so
-    /// there is no condition name or error number to render, and
-    /// `Interp::offer_to_trap` declines every failure that is not
-    /// [`Failure::Raised`], so nothing can trap it.
     Deadline,
 }
 
@@ -2839,22 +1470,6 @@ impl From<Raised> for Failure {
 
 /// Where a failing clause was found -- `Interp::failure_site`'s own type
 /// (`lib.rs`), and what `run.rs`'s `record_failure_site` fills in.
-///
-/// [`FailureSite::Clause`]'s fields are named rather than positional **on
-/// purpose**: `line` and `indent` are both bare `usize`s, and a position-only
-/// tuple lets the two transpose with nothing to catch it -- the failure mode
-/// would be plausible-looking, wrong stderr, not a compile error or a panic.
-/// Naming the fields removes that whole class rather than trusting call-site
-/// order.
-///
-/// **One of these per *activation-like level*, not per nesting level.** 4b's
-/// Task 2 turned the single site into a stack of them (`ClauseSite::sites`),
-/// and the unit the stack counts is measured: an error inside three nested
-/// `DO`s echoes once, not four times, while the same error inside an
-/// `INTERPRET` fragment echoes twice and inside a fragment inside a fragment
-/// three times. `Interp::failure_site` stays first-wins *within* a level and
-/// `run.rs`'s own `seal_site_level` is what closes one off and starts the
-/// next.
 #[derive(Clone)]
 pub(crate) enum FailureSite {
     /// A level whose failing clause is source text, echoed under its own
@@ -2883,19 +1498,6 @@ pub(crate) enum FailureSite {
     },
     /// A level whose `running <name> line <n>` span names something other
     /// than the running program's path, `name` being what it names.
-    ///
-    /// **It still has a line and an indent**, unlike
-    /// [`FailureSite::Rendered`], and its `text` is echoed under the number
-    /// and the `*-*` marker exactly as a [`FailureSite::Clause`]'s is. Two
-    /// levels reach it:
-    ///
-    /// * a level in a package that carries no source, whose `text` is the
-    ///   catalogue message `PackageClass::traceBack` prints when
-    ///   `source->extract` misses (`classes/PackageClass.cpp:575`-`:589`);
-    /// * a level in a method compiled from source text, whose `text` is its
-    ///   own clause -- measured, oracle rc 214, a one-off whose body is
-    ///   `return 1/0` echoes `1 *-* return 1/0` and reports `Error 42
-    ///   running MM line 1:`.
     Named {
         line: usize,
         indent: usize,
@@ -2906,10 +1508,6 @@ pub(crate) enum FailureSite {
     /// activation, whose whole echo line is a catalogue entry
     /// ([`Raised::compiled_method_line`]) carrying its own blank
     /// line-number field, `*-*` marker and text.
-    ///
-    /// It contributes no line number to the report's `running <path> line
-    /// <n>` span -- measured, `'abc'~length(1)` on line 3 of a program
-    /// reports `line 3`, the sending clause's, with this echo above it.
     Rendered(Vec<u8>),
 }
 
@@ -2925,9 +1523,6 @@ impl FailureSite {
 
     /// What a [`FailureSite::Named`] reports in place of the program's path,
     /// or `None` for a site whose level reports that path.
-    ///
-    /// Asked only of the entry [`FailureSite::line`] answered for, since the
-    /// report names one level's line and that level's name together.
     pub(crate) fn reported_name(&self) -> Option<&[u8]> {
         match self {
             FailureSite::Named { name, .. } => Some(name),
@@ -2937,10 +1532,6 @@ impl FailureSite {
 
     /// The clause text a [`FailureSite::Clause`] echoes, or the whole
     /// rendered line of a [`FailureSite::Rendered`].
-    ///
-    /// `#[cfg(test)]` because the report reads the two variants apart rather
-    /// than through one accessor: it needs the line number and the indent
-    /// alongside, and only a test asks a site for its text on its own.
     #[cfg(test)]
     pub(crate) fn text(&self) -> &[u8] {
         match self {
@@ -2951,8 +1542,6 @@ impl FailureSite {
 
     /// The spaces a [`FailureSite::Clause`]'s text is prefixed with, or
     /// `None` for a rendered site, whose line carries its own leading blanks.
-    ///
-    /// `#[cfg(test)]`, for the reason [`FailureSite::text`] gives.
     #[cfg(test)]
     pub(crate) fn indent(&self) -> Option<usize> {
         match self {
@@ -2964,13 +1553,6 @@ impl FailureSite {
 
 /// Where the failing clause is, which is everything the report needs from
 /// outside this module.
-///
-/// Passed in rather than reached for: `error.rs` owns the *format*, and the
-/// instruction loop owns knowing which clause failed. That split is why this
-/// module needs no access to `Interp`, the program or the source. Built from
-/// the `FailureSite` stack plus the one thing it does not carry, the
-/// program's own path -- `execute` (`lib.rs`) is the one place both are in
-/// hand together.
 pub(crate) struct ClauseSite<'a> {
     /// The program's path **as the oracle prints it**, absolute. Measured:
     /// the major line carries the full path, and `rexx-oracle`'s `normalize`
@@ -2979,80 +1561,25 @@ pub(crate) struct ClauseSite<'a> {
     /// One entry per activation-like level the condition escaped through,
     /// **innermost first** -- 4b's Task 2, and the whole reason this is a
     /// slice rather than the single site 4a carried.
-    ///
-    /// Measured against the oracle (`interpret "say 2 & 1"` on line 2 of a
-    /// two-line program):
-    ///
     /// ```text
     ///      2 *-* say 2 & 1
     ///      2 *-* interpret "say 2 & 1"
     /// ```
-    ///
-    /// Each entry carries its own line and its own **absolute** printed
-    /// indent, which is why this module does no arithmetic on either: an
-    /// inner level's line is not derivable from an outer one's (measured,
-    /// every echo of a fragment carries the *enclosing* `INTERPRET` clause's
-    /// line, not the fragment's own), and its indent is not derivable from
-    /// the depth of the stack (measured, a fragment's own clauses sit at the
-    /// enclosing clause's indent plus whatever nests them *inside* the
-    /// fragment: `interpret "do jj = 1 to 1; say 2 & 1; end"` at top level
-    /// echoes the inner clause at 2 and the `INTERPRET` at 0).
-    ///
-    /// Empty only in the "nothing recorded" case `execute` guards, which
-    /// prints no echo at all rather than a blank one.
     pub(crate) sites: &'a [FailureSite],
 }
 
 impl Raised {
     /// `256 - major`, the whole rule.
-    ///
-    /// Verified across nine majors rather than the four the plan recorded:
-    /// 7 -> 249, 24 -> 232, 25 -> 231, 26 -> 230, 33 -> 223, 34 -> 222,
-    /// 41 -> 215, 42 -> 214, 98 -> 158.
-    ///
-    /// This is also why `NOT_IMPLEMENTED_EXIT` must stay outside 157..=253:
-    /// majors 3 to 99 fill that band, so a loud failure inside it would be
-    /// indistinguishable from a raised condition and a program *expecting*
-    /// that condition would pass against a gap.
     pub(crate) fn exit_code(&self) -> i32 {
         256 - i32::from(self.number)
     }
 
     /// The exact bytes the oracle writes to stderr for this condition.
-    ///
-    /// Three lines, and every part of the shape is measured rather than
-    /// inferred (`say 1` then a `SELECT` with no true `WHEN`, `cat -A`):
-    ///
     /// ```text
     ///      4 *-* end
     /// Error 7 running /abs/path/f.rex line 4:  WHEN or OTHERWISE expected.
     /// Error 7.3:  All WHEN expressions of SELECT are false; OTHERWISE expected.
     /// ```
-    ///
-    /// * The **clause echo appears with trace off**, which is the part that
-    ///   surprises: this is not trace output and is not suppressed by
-    ///   `TRACE OFF`.
-    /// * The line number is **right-aligned in a six-character field**,
-    ///   measured at one, two and three digits: `     4`, `    12`, `   105`.
-    /// * **Two spaces after each colon**, on both error lines.
-    /// * The major line's text is the catalogue's `(major, 0)` entry and the
-    ///   sub line's is `(major, sub)`.
-    ///
-    /// **There is one echo line per entry in `site.sites`, innermost first**
-    /// (4b's Task 2), so the three-line shape above is the one-entry case and
-    /// not a special case in the code. The **line the major line names is the
-    /// innermost entry's**, measured: `interpret "say 2 & 1"` on line 2 names
-    /// line 2, and a raise on line 8 of a routine called from line 3 names
-    /// line 8, not 3.
-    ///
-    /// **One raise renders the major line without its position span**, and
-    /// only one: `RAISE PROPAGATE`, whose report reads `Error 42:  ...` where
-    /// every other raise reads `Error 42 running <path> line 8:  ...`. See
-    /// [`Delivery::positionless`], which is the flag, and the loop above,
-    /// which is unaffected -- the echo lines are the same either way.
-    ///
-    /// `SAY` output goes to stdout and all of this to stderr, so their
-    /// relative order is not observable (D17).
     pub(crate) fn report(&self, site: &ClauseSite<'_>) -> Vec<u8> {
         let mut out = Vec::new();
         // `trace::push_clause` rather than a second copy of the same four
@@ -3140,17 +1667,6 @@ impl Raised {
     }
 
     /// One catalogue entry with this error's substitutions applied.
-    ///
-    /// The text comes from `rexx-inventory`'s generated table, derived from
-    /// `interpreter/messages/rexxmsg.xml`, never hand-transcribed here: 704
-    /// messages the tree already generates, and criterion 1 compares these
-    /// bytes exactly.
-    ///
-    /// A miss renders visibly rather than panicking or rendering empty. The
-    /// catalogue and the oracle come from one source, so a miss is a bug in
-    /// this crate's numbering, and the error path is the worst possible place
-    /// to abort: it would turn a reportable condition into a crash, which is
-    /// the outcome the whole failing-loudly rule exists to prevent.
     fn message(&self, major: u16, sub: u16) -> Vec<u8> {
         match rexx_inventory::errors::lookup(major, sub) {
             Some(entry) => substitute(entry.text, &self.additional),
@@ -3160,18 +1676,6 @@ impl Raised {
 }
 
 /// Replaces `&1`, `&2`, ... with the raiser's substitution values.
-///
-/// The catalogue spells substitutions the way `rexxmsg.xml` does, so this is
-/// the one piece of message rendering that is ours rather than generated.
-/// Scans rather than chaining `replace`, so a substitution value that itself
-/// contains `&2` cannot be re-substituted -- a real risk here, since these
-/// values are arbitrary Rexx data (`say '&1' + 1` puts `&1` in the message).
-///
-/// An `&` not followed by a digit, and a digit with no matching value, are
-/// both passed through unchanged rather than swallowed.
-///
-/// Bytes out, not text: see [`Substitution`]. The catalogue's own template is
-/// `&str` because `rexxmsg.xml` is, and only the values can be arbitrary.
 fn substitute(text: &str, values: &[Substitution]) -> Vec<u8> {
     let mut out = Vec::with_capacity(text.len());
     let mut bytes = text.as_bytes().iter().copied().peekable();
@@ -3195,45 +1699,10 @@ fn substitute(text: &str, values: &[Substitution]) -> Vec<u8> {
 }
 
 /// The oracle's own rule for putting arbitrary Rexx bytes on a report line.
-///
-/// **A byte below `0x20` other than tab, carriage return and line feed
-/// becomes `?`; every other byte, including every byte at or above `0x80`,
-/// is written through unchanged.** That is `RexxString::stringTrace`
-/// (`classes/StringClass.cpp`), which the oracle applies to *whole output
-/// lines* rather than to the values inside them: `Activity::display` sends
-/// every traceback echo, the major line and the secondary line through
-/// `displayUsingTraceOutput` -> `processTraceInfo`, whose first act is
-/// `traceLine->stringTrace()`.
-///
-/// Measured independently of the source, by driving all 256 byte values
-/// through a builtin that reports the offending argument
-/// (`say copies('ab','NN'x)` for the ones that are not valid counts, and
-/// `say left('ab',5,'NNNN'x)` for the digits, which are):
-///
 /// ```text
 /// rendered as ?  :  00-08  0b-0c  0e-1f
 /// rendered raw   :  09-0a  0d     20-ff
 /// ```
-///
-/// The echo obeys the same rule, measured with a raw `0x01` inside a source
-/// literal: the oracle echoes `say copies('a?b','x')`.
-///
-/// # The two callers, and the one C++ function they both correspond to
-///
-/// `processTraceInfo` is the single sink, and the oracle reaches it two ways.
-/// This crate has one application per way, so the pairing can be checked
-/// rather than taken on trust:
-///
-/// | this crate | oracle |
-/// |---|---|
-/// | [`Raised::report`] | `Activity::display` (`concurrency/Activity.cpp:1414`) -> `RexxActivation::displayUsingTraceOutput` (`execution/RexxActivation.cpp:5262`) -> `processTraceInfo` |
-/// | `trace.rs`'s line formatters | `RexxActivation::processTraceInfo` (`execution/RexxActivation.cpp:5249`) directly, for every live `TRACE` line |
-///
-/// Applying it twice to the same bytes is harmless and happens on a report's
-/// clause echoes, which `push_clause` has already sanitised: `?` is `0x3f`,
-/// above the threshold, so a second pass is the identity.
-///
-/// [`Raised::report`]: Raised::report
 pub(crate) fn displayable(bytes: &mut [u8]) {
     for byte in bytes {
         if *byte < 0x20 && !matches!(*byte, b'\t' | b'\n' | b'\r') {
@@ -3247,13 +1716,6 @@ mod tests {
     use super::*;
 
     /// One `FailureSite`, for the tests that predate the stack.
-    ///
-    /// Every assertion below that used to build a `ClauseSite { line, text,
-    /// indent }` directly now builds a one-entry stack through this, and the
-    /// **expected bytes in those tests are unchanged**: that is the check
-    /// that the stack's one-element case is byte-identical to what 4a
-    /// shipped, and it is worth more as an untouched expectation than as a
-    /// new test asserting the same thing.
     fn one(line: usize, text: &[u8], indent: usize) -> Vec<FailureSite> {
         vec![FailureSite::Clause {
             line,
@@ -3264,9 +1726,6 @@ mod tests {
 
     /// The 7.3 transcript, captured from `build/bin/rexx` with `cat -A` so the
     /// trailing bytes are the oracle's and not a guess.
-    ///
-    /// Program: `say 1` / `select` / `when 1=0 then nop` / `end`. Stdout gets
-    /// `1`; all three lines below go to stderr; rc is 249.
     #[test]
     fn the_7_3_report_matches_the_oracle_byte_for_byte() {
         let raised = Raised::syntax(7, 3, vec![]);
@@ -3285,11 +1744,6 @@ mod tests {
     }
 
     /// A substituted message, and a clause echo that keeps its trailing space.
-    ///
-    /// Captured: `if 'x' then nop` on line 12 of a twelve-line program echoes
-    /// `    12 *-* if 'x' ` -- the span stops at the start of `then`, so the
-    /// space before it belongs to the clause. Trimming it would diverge on
-    /// every `IF`.
     #[test]
     fn a_substituted_message_and_a_clause_echo_that_keeps_its_trailing_space() {
         let raised = Raised::not_logical(b"x");
@@ -3327,9 +1781,6 @@ mod tests {
     }
 
     /// `256 - major`, over every major 4a is measured to raise.
-    ///
-    /// Nine, not the four the plan recorded, each confirmed by running the
-    /// construct under the oracle and reading `$?`.
     #[test]
     fn the_exit_code_is_256_minus_the_major() {
         for (major, sub, rc) in [
@@ -3355,11 +1806,6 @@ mod tests {
 
     /// Every raiser family 4a is measured to produce has catalogue text for
     /// both its lines.
-    ///
-    /// This is the test that would have caught a hand-transcribed catalogue
-    /// going stale, and it is why the text is looked up rather than written
-    /// here: it asserts the entries *exist* and are non-empty, never what they
-    /// say, so it cannot drift from `rexxmsg.xml` the way a copy would.
     #[test]
     fn every_measured_family_has_catalogue_text() {
         for (major, sub) in [
@@ -3399,10 +1845,6 @@ mod tests {
     }
 
     /// A substitution value containing `&1` is not re-substituted.
-    ///
-    /// Reachable from a Rexx program: `say '&1' + 1` raises 41.1 with the
-    /// operand text `&1`, so a `replace`-chaining implementation would expand
-    /// the value into itself. Scanning once is what makes that impossible.
     #[test]
     fn a_substitution_value_containing_an_ampersand_digit_is_left_alone() {
         let raised = Raised::nonnumeric(b"&1");
@@ -3435,14 +1877,6 @@ mod tests {
 
     /// Task 11's own addition: `site.indent` prefixes the clause echo with
     /// that many spaces, and nothing else on the report moves.
-    ///
-    /// Captured against the oracle: `do i = 1 to 3 / say 1/0 / end`
-    /// reports `     2 *-*   say 1/0` -- two spaces for the one enclosing
-    /// `DO`. Kills a mutation that applies the indent to the wrong line (the
-    /// `Error 42 running ...` line, say), one that appends it after `text`
-    /// instead of before, and one that never applies it at all (which the
-    /// pre-existing `indent: 0` tests above would not catch, since they are
-    /// silent about anything `indent` does when it is nonzero).
     #[test]
     fn the_indent_field_prefixes_the_clause_echo_with_that_many_spaces() {
         let raised = Raised::syntax(42, 3, vec![]);
@@ -3462,18 +1896,6 @@ mod tests {
     /// 4b Task 2: one echo line per entry, innermost first, each carrying its
     /// own line and its own absolute indent -- and the major line naming the
     /// **innermost** entry's line, not the outermost.
-    ///
-    /// The expected bytes are the oracle's, from a program whose two levels
-    /// disagree on both quantities at once, which is what makes the assertion
-    /// able to fail. Captured (4b Task 2's report, `c2.rex`): a `CALL` two
-    /// `DO`s deep, at printed indent 4 on line 3, into a flat routine whose
-    /// `say 1/0` is on line 8 and prints at indent 6.
-    ///
-    /// A one-entry implementation fails this (one echo instead of two); an
-    /// outermost-first walk fails it (the two echoes swap); reading the line
-    /// from the *last* entry fails it (`line 3` instead of `line 8`); and
-    /// deriving either entry's indent from its position in the stack fails it
-    /// (nothing about `[6, 4]` follows from `[inner, outer]`).
     #[test]
     fn the_report_echoes_one_line_per_level_innermost_first() {
         let raised = Raised::syntax(42, 3, vec![]);
@@ -3506,14 +1928,6 @@ mod tests {
 
     /// The clause echo saturates at 40 columns, and the two error lines do
     /// not move when it does.
-    ///
-    /// Measured against the oracle with nested `DO`s and no call at all: 18
-    /// levels print 36, 19 print 38, 20 print 40, and 21, 25 and 30 all print
-    /// 40. The 19/20/21 rows are the ones that pin the boundary; 25 is there
-    /// because a clamp written as `if indent == 42` would pass 21 and fail
-    /// it. `trace.rs`'s own `MAX_CLAUSE_INDENT` doc has the value-line half
-    /// of the measurement, which is what keeps the clamp out of
-    /// `static_indent`.
     #[test]
     fn the_clause_echo_saturates_at_forty_columns() {
         for (indent, expected) in [(36usize, 36usize), (38, 38), (40, 40), (42, 40), (50, 40)] {
@@ -3540,18 +1954,6 @@ mod tests {
     /// A `ParseError` becomes the SYNTAX condition the oracle raises for it,
     /// with the parser's own major and sub and the matching `256 - major`
     /// exit code.
-    ///
-    /// The pair is the oracle's, measured through `INTERPRET` rather than
-    /// invented here: `interpret "do forever then"` is 27.901 at rc 229 and
-    /// `interpret "if"` is 35.929 at rc 221. Asserting the exit code as well
-    /// as the numbers is what makes this fail for an implementation that
-    /// kept the loud path's `NOT_IMPLEMENTED_EXIT`.
-    ///
-    /// `condition` is deliberately not asserted: it is still `expect(dead_
-    /// code)` until 4b's `SIGNAL ON` reads it for real, and a test reading it
-    /// would fulfil that expectation in `cfg(test)` builds only, turning the
-    /// annotation into a warning under `--all-targets` without giving the
-    /// field the genuine reader its own doc comment is waiting for.
     #[test]
     fn a_parse_error_becomes_the_condition_the_oracle_raises() {
         for (code, sub, rc) in [(27u16, 901u16, 229i32), (35, 929, 221)] {

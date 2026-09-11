@@ -10,37 +10,12 @@
 /*----------------------------------------------------------------------------*/
 
 //! Cutting the token vector into clauses.
-//!
-//! Ported from `LanguageParser::nextClause` (`LanguageParser.cpp:1009`) for the
-//! terminator rules, and from the label arm of
-//! `LanguageParser::nextInstruction` (`InstructionParser.cpp:150`-`176`) for the
-//! rule that a label's colon ends a clause.
-//!
-//! The label rule is implemented here even though the C++ implements it one
-//! layer up, in the instruction parser. That is possible because a label is
-//! recognisable from the token stream alone: a symbol or a literal, immediately
-//! followed by a colon, at the start of a clause. `THEN`, `ELSE` and
-//! `OTHERWISE` also end a clause mid-line in the C++, and those cannot move
-//! down here, because only the instruction parser knows whether a `THEN` token
-//! is the `THEN` of an open `IF` or a variable named `then`. They stay with the
-//! instruction parser and narrow a clause that this function produced.
 
 use std::ops::Range;
 
 use crate::token::{ParseCtx, ParseError, Tag, Token};
 
 /// One clause: the tokens it holds, and the source text `TRACE` prints for it.
-///
-/// `tokens` and `span` move independently and neither is derivable from the
-/// other. An instruction that ends mid-clause moves the *next* clause's token
-/// range forward while narrowing its own `span` end, and the two adjustments
-/// are separate, so bytes between them belong to no clause at all.
-///
-/// Crate-internal: a clause is scaffolding for building instructions, and its
-/// span is copied into the instruction it produces, so nothing above the parser
-/// names it.
-///
-/// Task 3.6 is the first non-test reader of all three fields.
 #[derive(Clone, Debug)]
 pub(crate) struct Clause {
     /// Index range into the `ParseCtx::tokens` slice, terminating token
@@ -51,33 +26,12 @@ pub(crate) struct Clause {
     /// the END of the terminating token. An explicit `;` is therefore inside the
     /// span. For an end of line the span stops at the last byte of the line's
     /// content, excluding the line terminator.
-    ///
-    /// Measured against `build/bin/rexx` with `trace r`, which prints exactly
-    /// these bytes: `nop;` traces with its semicolon, `here:` with its colon,
-    /// `say 1 ;` with the blank before the semicolon, `say 1;   ` *without* the
-    /// blanks after it, and `say 1 -- trailing comment` with the whole comment,
-    /// because there the terminator is the line end rather than the `--`.
     pub(crate) span: Range<usize>,
     /// The label's own token range, when the clause is `name:`.
     pub(crate) label: Option<Range<usize>>,
 }
 
 /// Splits `tokens` into clauses.
-///
-/// A clause ends at a `;`, at an uncontinued line end, or at end of file, all
-/// three of which reach here as an `Eoc`. A label's `:` ends a clause too.
-/// The `Eoc` and the `:` are terminators and belong to no clause's `tokens`,
-/// but both are inside the clause's `span`.
-///
-/// Expects the token vector `scan` produces, whose invariants are stated on
-/// `Scanned::tokens`: no `Eoc` is first, no two are adjacent, and the last
-/// token is one. A slice that ends mid-clause instead ends the final clause at
-/// its last token.
-///
-/// The `Result` is part of the interface every later parsing stage shares. No
-/// input reaches an error return here: the terminator rules cannot fail, and
-/// the one label error the C++ raises, error 47.1 for a label in `INTERPRET`
-/// text, needs the source kind that this function is not given.
 pub(crate) fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError> {
     let mut clauses = Vec::new();
     let mut index = 0;
@@ -133,18 +87,6 @@ pub(crate) fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError>
 }
 
 /// Which instruction is still waiting for its `THEN`, and where it is.
-///
-/// This is the whole of the control stack that the instruction parser keeps,
-/// and it exists because `THEN` is the one keyword whose legality the C++
-/// decides in `nextInstruction` itself: a `THEN` reached there is always error
-/// 8.1, because a real one is consumed by `translateBlock` while it finishes
-/// the `IF` (`LanguageParser.cpp:1329`-`1360`). One entry is therefore enough
-/// to keep both directions right, and the two variants are needed because the
-/// missing-`THEN` error names which instruction wanted it: measured, `if 1 = 1`
-/// followed by `nop` is 18.1 and a `WHEN` in the same shape is 18.2.
-///
-/// Every other block-structure decision needs the full stack and belongs to
-/// the task that assembles the instruction chain.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum PendingThen {
     If,
@@ -152,10 +94,6 @@ pub(crate) enum PendingThen {
 }
 
 /// The clause list being parsed, and a position in it.
-///
-/// Owns the list rather than borrowing a slice, because an instruction that
-/// ends mid-clause has to re-present the remainder as a clause of its own and
-/// that remainder is not an element of the list. See `split_before`.
 pub(crate) struct ClauseCursor {
     clauses: Vec<Clause>,
     /// Next index in `clauses`, used only when `pending` is None.
@@ -167,13 +105,6 @@ pub(crate) struct ClauseCursor {
     /// Set when the clause just parsed was an `IF` or `WHEN` whose `THEN` has
     /// not been seen yet, with the byte its own clause started at. Read and
     /// cleared by the next clause's parse.
-    ///
-    /// # This byte is the SUBSTITUTION value, not the reported line
-    ///
-    /// A missing-`THEN` error carries two independent positions, and only a
-    /// source with blank lines between the `IF` and the offending clause can
-    /// tell them apart, because otherwise moving one moves the other:
-    ///
     /// ```text
     /// 1  nop
     /// 2  if 1 = 1
@@ -183,17 +114,6 @@ pub(crate) struct ClauseCursor {
     ///    Error 18 running ... line 5:  THEN expected.
     ///    Error 18.1:  IF instruction on line 2 requires matching THEN clause.
     /// ```
-    ///
-    /// The line the error is REPORTED on is 5, the offending clause's, and this
-    /// byte is the 2: `syntaxError(Error_Then_expected_if, instruction)` passes
-    /// the instruction so that its line can be substituted INTO the message.
-    /// This phase does not reproduce substitutions, so `ParseError::byte` is
-    /// the offending clause's and not this one.
-    ///
-    /// It is stored anyway because of the one case where there is no offending
-    /// clause at all: an `IF` at the end of a code body, where the two
-    /// positions coincide. Measured, and `nop` / `nop` / `if 1 = 1` reports
-    /// line 3 in both fields.
     pending_then: Option<(PendingThen, usize)>,
 }
 
@@ -224,57 +144,17 @@ impl ClauseCursor {
 
     /// Record that the clause just parsed was an `IF` or `WHEN` whose `THEN`
     /// is still to come, whether on this line or the next.
-    ///
-    /// `byte` is that instruction's own clause start. It is the missing-`THEN`
-    /// message's substitution value rather than the line the error is reported
-    /// on, and is used only when there is no offending clause to report
-    /// against. See the field's documentation.
     pub(crate) fn expect_then(&mut self, which: PendingThen, byte: usize) {
         self.pending_then = Some((which, byte));
     }
 
     /// Whether a `THEN` is expected next, clearing the expectation.
-    ///
-    /// Called once per clause parsed, so that the expectation lasts exactly
-    /// one clause: that is what makes a `THEN` anywhere else error 8.1.
     pub(crate) fn take_expected_then(&mut self) -> Option<(PendingThen, usize)> {
         self.pending_then.take()
     }
 
     /// End the current clause at byte `end_at`, and re-present tokens `at..`
     /// as the next clause starting at token `at`'s own start byte.
-    ///
-    /// **This is not a partition, and that is the whole point.** The oracle
-    /// makes two independent adjustments with a gap between them, so bytes
-    /// between `end_at` and the next clause's start belong to NO clause. Two
-    /// positions are required. A single cut point cannot reproduce the
-    /// interpreter, and one that tried would be wrong on one side or the other.
-    ///
-    /// Callers pass `end_at` as follows:
-    ///
-    /// * `IF`/`WHEN` pass the START byte of whatever token ended the
-    ///   condition, so the condition clause keeps its trailing blanks.
-    ///   `RexxInstructionIf` does `setEnd(...)` from that token's start
-    ///   (`IfInstruction.cpp:58`-`66`). Measured both spellings:
-    ///   `if 1 = 1   then    say "a"` traces the condition as `if 1 = 1   `
-    ///   with all three blanks, and `if 1 = 1;` with `then` on the next line
-    ///   traces as `if 1 = 1` WITHOUT its semicolon, where `nop;` traces with
-    ///   one. Only the first spelling reaches this function, because the
-    ///   second leaves nothing to re-present.
-    /// * `THEN`/`ELSE`/`OTHERWISE` pass their own keyword token's END byte,
-    ///   so the keyword clause carries no blank on either side.
-    ///   `RexxInstructionThen` takes the token's whole location
-    ///   (`ThenInstruction.cpp:76`). `RexxClause::trim` (`Clause.cpp:138`)
-    ///   moves only the start, which is why the two ends move separately.
-    ///
-    /// Measured, for `if 1 = 1   then    say "a"` under `trace r`: the
-    /// condition clause keeps all THREE trailing blanks, `then` carries none
-    /// on either side despite four following it, and `say "a"` starts at `say`
-    /// with zero leading blanks. The four blanks after `then` are in no clause.
-    ///
-    /// Panics if `at` is outside the current clause's token range, or if
-    /// `end_at` is outside the current clause's byte span. Both are parser
-    /// bugs rather than source errors.
     pub(crate) fn split_before(&mut self, ctx: &ParseCtx, at: usize, end_at: usize) -> Clause {
         let cur = self
             .next_clause()

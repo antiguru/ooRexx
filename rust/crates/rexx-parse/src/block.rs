@@ -10,39 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! Block structure: the control stack, and assembling one code body.
-//!
-//! Ported from `LanguageParser::translateBlock` (`LanguageParser.cpp:1176`),
-//! with the errors it reaches through `blockError` (`:4180`),
-//! `RexxInstructionSelect::matchEnd` (`SelectInstruction.cpp:181`) and
-//! `RexxBaseBlockInstruction::matchEnd`/`matchLabel`
-//! (`BaseDoInstruction.cpp:139`/`:172`).
-//!
-//! # Why this owns the clause loop rather than post-processing a chain
-//!
-//! `translateBlock` is not a pass over a finished instruction list, and it
-//! cannot be reorganised into one. Three `nextInstruction` constructors read
-//! block state while they parse:
-//!
-//! * `whenNew` (`InstructionParser.cpp:2708`) asks `topBlockInstruction()`
-//!   whether a `SELECT` is open, which decides both whether the `WHEN` is legal
-//!   at all (error 9.1) and which grammar its clause follows.
-//! * `guardNew` (`:2646`) needs the exposed-variable table to know whether the
-//!   `GUARD` expression named an exposed variable (error 99.913).
-//! * `exposeNew` and `useLocalNew` (`:2315`, `:2349`) read `lastInstruction` to
-//!   check that nothing precedes them (errors 99.907 and 99.910).
-//!
-//! So the block state has to exist while clauses are being parsed, and this
-//! module drives `parse_instruction` rather than running after it.
-//!
-//! # What the control stack holds
-//!
-//! A stack of instruction indices, not of nodes, because the instructions live
-//! in a `Vec` (`pushDo`/`popDo`/`topDo`/`topDoType`/`topBlockInstruction`,
-//! `LanguageParser.hpp:306`-`312`). Two frames stand for something with no
-//! instruction of its own: the bottom frame, which is the C++'s dummy first
-//! instruction, and the frame that marks a finished `THEN` or `WHEN` branch,
-//! which is the C++'s `RexxInstructionEndIf`. See `Instruction` for why that
-//! marker is not a node here.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -56,10 +23,6 @@ use crate::token::{ParseCtx, ParseError, SymbolId, SymbolTable, Tag};
 
 /// What a control-stack frame stands for: the `InstructionKeyword` values that
 /// `pushDo` can put on the stack, and nothing else.
-///
-/// A bare `IF` or `WHEN` is never pushed -- the `THEN` attached to it is -- so
-/// there is no variant for either, and `isControl()` therefore coincides with
-/// `isBlock()` for everything that can be here.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Control {
     /// `KEYWORD_FIRST`: the dummy instruction at the bottom of the stack, which
@@ -88,10 +51,6 @@ enum Control {
 impl Control {
     /// `isBlock()` (`RexxInstruction.hpp:137`, `OtherwiseInstruction.hpp:55`):
     /// whether an `END` can close this.
-    ///
-    /// Also answers `isControl()` for anything on the stack. The C++ splits the
-    /// two because `isControl()` is additionally true for a bare `IF`
-    /// (`IfInstruction.hpp:64`), and an `IF` is never pushed.
     fn is_block(self) -> bool {
         matches!(
             self,
@@ -132,13 +91,6 @@ impl Frame {
 }
 
 /// Which enclosing block a `WHEN` found, which is all `whenNew` needs.
-///
-/// `topBlockInstruction()` (`LanguageParser.cpp:1772`) drills past the `THEN`
-/// and branch-end frames to the innermost real block, so a `WHEN` after an
-/// earlier `WHEN` in the same `SELECT` still finds that `SELECT`. Measured both
-/// ways: `select` / `when 1 = 1 then nop` / `when 2 = 2 then nop` / `end` is
-/// rc 0, while a `WHEN` inside a `DO` inside a `SELECT` is 9.1, because the `DO`
-/// is a block and stops the search.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum EnclosingSelect {
     /// A plain `SELECT`, so the clause is a logical condition.
@@ -160,13 +112,6 @@ pub(crate) struct Block<'a> {
     labels: BTreeMap<Box<[u8]>, usize>,
     control: Vec<Frame>,
     /// The `IF` or `WHEN` most recently added, and whether it was a `WHEN`.
-    ///
-    /// The C++ finishes the `IF` and builds its `THEN` inside one iteration,
-    /// because `translateBlock` consumes the `THEN` token itself. Here the
-    /// `THEN` arrives as its own clause from `parse_instruction`, so the pairing
-    /// is carried across one iteration. Nothing can come between the two: a
-    /// clause after an `IF` that is not its `THEN` is error 18.1 or 18.2, which
-    /// `ClauseCursor` already raises.
     pending_then: Option<(usize, bool)>,
     /// `exposedVariables` (`LanguageParser.hpp:504`): the names an `EXPOSE`
     /// listed. `None` until the first `EXPOSE`, which is not the same as empty
@@ -179,14 +124,6 @@ pub(crate) struct Block<'a> {
     /// Every variable name referenced by an instruction already in the chain,
     /// which is the part of `variables` (`LanguageParser.hpp:502`) that is
     /// observable from here.
-    ///
-    /// It exists for one reason: `addCompound` (`LanguageParser.cpp:2124`)
-    /// returns early on a cache hit, BEFORE reaching the `addStem` and
-    /// `addSimpleVariable` calls that would capture a guard variable, where
-    /// `addSimpleVariable` and `addStem` themselves capture unconditionally and
-    /// say so in a comment. So a compound reference feeds a `GUARD ... WHEN`
-    /// only the first time that exact spelling appears in the body. See
-    /// `compound_is_cached`.
     referenced: BTreeSet<Box<[u8]>>,
 }
 
@@ -230,21 +167,11 @@ impl<'a> Block<'a> {
 
     /// `lastInstruction->isType(KEYWORD_FIRST)`: whether nothing has been added
     /// to this body yet, which is what `EXPOSE` and `USE LOCAL` require.
-    ///
-    /// A label counts as something, because `addClause` adds one: measured,
-    /// `::method m` / `lab:` / `expose a` is 99.907.
     pub(crate) fn at_body_start(&self) -> bool {
         self.instructions.is_empty()
     }
 
     /// `isExposed` (`LanguageParser.cpp:1991`).
-    ///
-    /// The three cases are ordered, and the order is what makes `USE LOCAL`
-    /// mean the opposite of `EXPOSE`: with an `EXPOSE` present only the listed
-    /// names are exposed, with a `USE LOCAL` present every name EXCEPT the
-    /// listed ones is, and with neither nothing is. Measured all three:
-    /// `expose a` / `guard on when b` is 99.913, `use local b` /
-    /// `guard on when a` is rc 0, and `guard on when a` with neither is 99.913.
     pub(crate) fn is_exposed(&self, name: &[u8]) -> bool {
         if let Some(exposed) = &self.exposed {
             return exposed.iter().any(|n| n.as_ref() == name);
@@ -258,41 +185,18 @@ impl<'a> Block<'a> {
     /// Whether a compound variable of this exact spelling has already been
     /// referenced by an instruction in this body, which makes `addCompound`
     /// return it from the cache and capture nothing.
-    ///
-    /// Measured, and the direction is the surprising one: an EARLIER reference
-    /// makes a LATER guard illegal. `::method m` / `expose a.` /
-    /// `guard on when a.1` is rc 0, and inserting `say a.1` between the two is
-    /// 99.913. Seventeen shapes measured, including that two guards on one
-    /// compound reject the second, that the reverse order is accepted, that a
-    /// simple variable and a stem are unaffected because their own `addVariable`
-    /// paths capture unconditionally, and that the cache is per body.
-    ///
-    /// Almost certainly an upstream defect rather than a design: the comment on
-    /// the capture call in `addSimpleVariable` (`LanguageParser.cpp:2069`) says
-    /// "we need to always perform the capturing test", and `addCompound`'s early
-    /// return defeats exactly that. The oracle defines behaviour, so it is
-    /// reproduced.
     pub(crate) fn compound_is_cached(&self, name: &[u8]) -> bool {
         self.referenced.contains(name)
     }
 
     /// `expose` (`LanguageParser.cpp:2218`), called for each symbol an `EXPOSE`
     /// lists.
-    ///
-    /// Not called for the `EXPOSE (list)` indirect form, which
-    /// `processVariableList` handles on a different path
-    /// (`InstructionParser.cpp:4505`): measured, `::method m` / `expose (a)` /
-    /// `guard on when a` is 99.913, so an indirect name is not exposed as far as
-    /// this check is concerned.
     pub(crate) fn expose(&mut self, name: Box<[u8]>) {
         self.exposed.get_or_insert_with(Vec::new).push(name);
     }
 
     /// `autoExpose` (`LanguageParser.cpp:2232`): a `USE LOCAL` inverts the
     /// exposure rule, and seeds the local list with the five special names.
-    ///
-    /// Measured, the seeding is observable: `use local a` / `guard on when self`
-    /// is 99.913, because `SELF` is local and so not exposed.
     pub(crate) fn auto_expose(&mut self) {
         self.local = Some(
             [b"SUPER".as_slice(), b"SELF", b"RC", b"RESULT", b"SIGL"]
@@ -334,11 +238,6 @@ impl<'a> Block<'a> {
     // ---- the chain ----
 
     /// `addClause` (`LanguageParser.cpp:2544`): append, and nothing else.
-    ///
-    /// Also the one place a label enters the label table, so that the table
-    /// holds indices into this body's chain. First occurrence wins, matching
-    /// `addLabel` (`:2559`), whose own comment says a duplicate label is legal
-    /// and only the first can be a target.
     fn add_clause(&mut self, instruction: Instruction) -> usize {
         let index = self.instructions.len();
         if let InstructionKind::Label { name } = &instruction.kind {
@@ -370,9 +269,6 @@ impl<'a> Block<'a> {
 
     /// Where control resumes after everything added so far, which is the C++'s
     /// `->nextInstruction` of whatever currently ends the chain.
-    ///
-    /// The value can be one past the end while assembly is still running, and
-    /// `resolve_targets` turns that into `None`.
     fn next_index(&self) -> usize {
         self.instructions.len()
     }
@@ -395,12 +291,6 @@ impl<'a> Block<'a> {
 
     /// `flushControl` (`LanguageParser.cpp:1919`): close out whatever branch the
     /// arrival of `instruction` completes, adding it in the right place.
-    ///
-    /// Returns where `instruction` landed. The synthetic branch-end markers the
-    /// C++ adds here have no node, so where each would sit is recorded as the
-    /// jump target of the instruction that jumps: `next_index()` at the moment
-    /// the marker would be appended is exactly that marker's own
-    /// `->nextInstruction`.
     fn flush_control(&mut self, instruction: Option<Instruction>) -> Option<usize> {
         let mut instruction = instruction;
         let mut added = None;
@@ -452,12 +342,6 @@ impl<'a> Block<'a> {
     // ---- errors ----
 
     /// The byte an error about the state of the block is reported against.
-    ///
-    /// `blockError` sets `clauseLocation` from `lastInstruction`
-    /// (`LanguageParser.cpp:4182`), so this is the last instruction ADDED and
-    /// not the last clause read. Measured with blank lines to separate the two:
-    /// `do` / `nop` / `nop` / `nop` with no `END` reports the third `nop`'s line
-    /// and carries the `DO`'s line only as a substitution.
     fn last_byte(&self) -> usize {
         self.instructions
             .last()
@@ -468,9 +352,6 @@ impl<'a> Block<'a> {
 
     /// `blockError` (`LanguageParser.cpp:4180`): an unclosed block at the end of
     /// the body, with one number per block kind.
-    ///
-    /// The C++ also has arms for a bare `IF`, `WHEN` and `WHEN_CASE`, which
-    /// cannot be reached because none of the three is ever pushed.
     fn block_error(&self, kind: Control) -> ParseError {
         let sub = match kind {
             // `Error_Incomplete_do_do`. Measured: `do label a` / `nop` is 14.1
@@ -485,13 +366,6 @@ impl<'a> Block<'a> {
             // holding the THEN and this reports against the THEN instruction,
             // whose span is that keyword: measured, `if 1 = 1` / blank / `then`
             // at end of file reports line 5 and substitutes line 3.
-            //
-            // That equality is not free. It holds because Task 3.4 splits a
-            // `THEN` off into a clause of its own, so the THEN instruction's
-            // span starts where the clause the C++ reports against starts. A
-            // change that stopped splitting there would break it silently, which
-            // is what `a_then_or_else_with_nothing_after_it_is_14_3_or_14_4`
-            // pins with the blank-line spelling.
             Control::IfThen | Control::WhenThen => 3,
             // `Error_Incomplete_do_else`.
             Control::Else => 4,
@@ -509,12 +383,6 @@ impl<'a> Block<'a> {
     }
 
     /// The misplaced-label check (`LanguageParser.cpp:1224`-`1244`).
-    ///
-    /// Three numbers from one condition, and which one depends on what is open.
-    /// `EndThen` is deliberately absent from every arm: a label there may be
-    /// sitting in front of an `ELSE`, which the `ELSE` itself checks, so it is
-    /// allowed here. Measured both ways: `if 1 = 1 then nop` / `lab:` / `nop` is
-    /// rc 0, and the same with `else nop` last is 47.3.
     fn label_error(&self, byte: usize) -> Option<ParseError> {
         let sub = match self.top().kind {
             Control::IfThen | Control::Else => 3,
@@ -541,13 +409,6 @@ impl<'a> Block<'a> {
 
     /// `matchLabel` (`BaseDoInstruction.cpp:172`) and the name half of
     /// `RexxInstructionSelect::matchEnd` (`SelectInstruction.cpp:181`).
-    ///
-    /// Four errors, and which one fires depends on both what the `END` failed to
-    /// close and whether that block had a name at all. All four measured:
-    /// `do label a` / `end b` is 10.2, `do` / `end 1` is 10.3,
-    /// `select label a` / `end b` is 10.4, and `select` / `end 1` is 10.7.
-    /// Reported against the `END`, which the C++ passes as `endLocation` rather
-    /// than letting `clauseLocation` stand.
     fn match_label(
         block_label: Option<SymbolId>,
         end_name: Option<SymbolId>,
@@ -667,10 +528,6 @@ impl<'a> Block<'a> {
             // `IFTHEN` or `WHENTHEN` on top -- it pops an ELSE outright and
             // rewrites a THEN into a branch-end marker. The type this arm tests
             // for therefore cannot be present.
-            //
-            // 24 probes agree, across both shapes on one line and on separate
-            // lines, nested in a DO, with a named END, and inside a method. Every
-            // one answers 10.1. `Error_Unexpected_end_nodo`.
             return Err(ParseError::new(10, 1, end_byte));
         }
         // An END on an OTHERWISE really closes the SELECT behind it.
@@ -695,10 +552,6 @@ impl<'a> Block<'a> {
 
     /// Turns every jump target that points one past the end of the chain into
     /// `None`, which is what "control falls out of this body" means.
-    ///
-    /// A target is recorded from `next_index()` while assembly is still running,
-    /// so a branch that turns out to be the last thing in the body records an
-    /// index that never gets an instruction.
     fn resolve_targets(&mut self) {
         let len = self.instructions.len();
         for instruction in &mut self.instructions {
@@ -744,30 +597,6 @@ impl<'a> Block<'a> {
 }
 
 /// Calls `f` with the name of every variable REFERENCE in `instruction`.
-///
-/// This is which slots reach `addVariable` in the C++, and it is not simply
-/// "every symbol": a block name, a loop or `SELECT` label, a routine name, an
-/// `ADDRESS` environment and a condition trap's label are all symbols that name
-/// something other than a variable, and none of them touches the cache.
-/// Measured, both directions, twenty shapes: `do label a.1` / `end a.1`,
-/// `leave a.1`, `iterate a.1`, `select label a.1`, `signal a.1`, `call a.1`,
-/// `address a.1` and `signal on syntax name a.1` all leave a later
-/// `guard on when a.1` legal, while `drop a.1`, `expose a.1`,
-/// `procedure expose a.1`, `parse var a.1 x`, `parse value 1 with a.1`,
-/// `use arg a.1`, `do a.1 = 1 to 2`, `numeric digits a.1`, `interpret a.1`,
-/// a bare `a.1` command and `a.1~string` all make it 99.913.
-///
-/// The order names arrive in does not matter, because the caller keeps a set and
-/// consults it only for instructions already in the chain.
-///
-/// Every name is reported, not only compound ones. A simple variable and a stem
-/// capture unconditionally whatever the cache holds, so their entries are never
-/// read, and a compound spelling can only ever match another compound spelling.
-/// Classifying a bare `SymbolId` here would mean re-deriving the scanner's rule
-/// for `SymbolClass::Compound` in a second place.
-///
-/// The `match` is exhaustive on purpose: a new `InstructionKind` fails to
-/// compile here rather than silently contributing nothing.
 fn for_each_variable_name(
     instruction: &Instruction,
     symbols: &SymbolTable,
@@ -970,19 +799,6 @@ fn visit_refs(variables: &[VariableRef], symbols: &SymbolTable, f: &mut impl FnM
 }
 
 /// Calls `f` with the name of every variable reference in one expression.
-///
-/// A constant, a `.name` environment symbol and a literal are not variables and
-/// reach neither `addSimpleVariable` nor `addStem`, so none is reported.
-///
-/// An explicit stack rather than recursion through `for_each_child`, because
-/// `add_clause` calls this on every instruction as it is parsed, so a
-/// left-leaning expression tree the width of one clause overflows the stack
-/// while the program is still being read. Measured (Task 3b): the corpus's
-/// `deep_nested_expr.rex`, a 3000-term `1 + 1 + ...` chain, aborted here on a
-/// default 2 MiB thread; the cliff was 2450 terms. `referenced`, the only
-/// thing this feeds, is a `BTreeSet` read only through `.contains`, so the
-/// order names arrive in is not observable and an explicit stack is free to
-/// visit in a different order than the recursive version did.
 fn visit_expr(expr: &Expr, symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
     let mut stack: Vec<&Expr> = vec![expr];
     while let Some(expr) = stack.pop() {
@@ -997,9 +813,6 @@ fn visit_expr(expr: &Expr, symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
 }
 
 /// Which stack frame a block instruction opens.
-///
-/// An `OTHERWISE` is a block too, but it is pushed by its own arm of the switch
-/// rather than from here, so it is not listed.
 fn opens(kind: &InstructionKind) -> Option<Control> {
     match kind {
         InstructionKind::Do(body) | InstructionKind::Loop(body) => Some(match body.kind {
@@ -1014,30 +827,12 @@ fn opens(kind: &InstructionKind) -> Option<Control> {
 
 /// `isControl()`: whether the instruction joins the chain immediately instead of
 /// going through `flushControl`.
-///
-/// True for every `DO`/`LOOP` and `SELECT`, which derive from
-/// `RexxBlockInstruction` (`RexxInstruction.hpp:139`), and additionally for a
-/// bare `IF` (`IfInstruction.hpp:64`). NOT for a `WHEN`, whose own comment there
-/// says a `WHEN` is part of its `SELECT` rather than a control type of its own,
-/// and NOT for an `OTHERWISE`, which overrides only `isBlock`
-/// (`OtherwiseInstruction.hpp:55`) and derives from `RexxInstruction` rather than
-/// from `RexxBlockInstruction`, so it inherits `isControl() == false`.
-///
-/// An `OTHERWISE` therefore goes through `flushControl`, and that is invisible:
-/// the branch-end frames have already been popped by the time it is reached, so
-/// the `SELECT` is on top and `flushControl` only appends. It is spelled the
-/// C++'s way anyway, because a comment claiming otherwise would be wrong.
 fn is_control(kind: &InstructionKind) -> bool {
     opens(kind).is_some() || matches!(kind, InstructionKind::If { .. })
 }
 
 /// Assembles one code body, from the clause the cursor is sitting on up to the
 /// first `::` directive clause or the end of the source.
-///
-/// This is `translateBlock` (`LanguageParser.cpp:1176`) with its own clause
-/// loop: `parse_instruction` is called from inside it, so that the constructors
-/// which read block state see the state as it stood when their clause was
-/// reached.
 pub(crate) fn translate_block(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,
@@ -1067,14 +862,6 @@ pub(crate) fn translate_block(
 
         let Some(instruction) = pending else {
             // End of the body with an IF or WHEN whose THEN never arrived.
-            //
-            // A directive can end a body as well as end of file can, and the two
-            // report differently. `nextClause()` succeeds on the `::` clause, so
-            // `clauseLocation` moves to it and that is the reported line, with
-            // the IF's line only substituted. At end of file nothing moves and
-            // the two coincide. Measured both: `nop` / blank / `if 1 = 1` /
-            // blank / `::routine r` reports line 5 and substitutes line 3, while
-            // `nop` / blank / `nop` / blank / `if 1 = 1` reports line 5 for both.
             if let Some((which, byte)) = cursor.take_expected_then() {
                 let byte = cursor.peek().map_or(byte, |clause| clause.span.start);
                 return Err(ParseError::new(18, missing_then_sub(which), byte));

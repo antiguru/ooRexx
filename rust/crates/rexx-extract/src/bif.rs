@@ -11,113 +11,11 @@
 
 //! The fourth extraction mode, for `ootest/ooRexx/base/bif`, and the only one
 //! that is a *reuse* of an earlier mode rather than a new shape.
-//!
-//! # What it reuses, and what it had to add
-//!
-//! The unit is [`crate::AssertionRow`], unchanged: `base/bif` tests
-//! **functions**, so an assertion's meaning is fixed by the `NUMERIC`
-//! settings and a short assignment prelude, exactly as in `base/expressions`.
-//! The denominator is [`crate::keyword::count_assert_same`], the comment
-//! blanker is [`crate::keyword::blank_comments`], and the conservation law is
-//! `keyword`'s: `rows() + raises + dropped() == count_assert_same(source)`,
-//! with every lost call carried by a counted [`DropReason`] rather than by one
-//! anonymous total.
-//!
-//! Three things had to be added, because without them a scan modelled on
-//! `base/expressions` is not merely incomplete -- it is **confidently wrong**
-//! on calls it does emit, which the conservation law cannot see.
-//!
-//! ## File-scoped fixture resolution, stem-aware
-//!
-//! A body reads values another body in the same file set on `.local`:
-//! `WORD.testGroup`'s `test000` writes `.local~v8 = 'one two  three …'` and 30
-//! later bodies open with `v8. = .v8`. Lifted alone, `.v8` is an unset
-//! environment symbol that renders as the literal `.V8`, so the row would
-//! assert that `word('.V8', 4)` is `'four'`.
-//!
-//! [`Fixtures`] collects every `.local~NAME =` in the file and substitutes the
-//! assignment's own source text, parenthesised so nothing regroups. **A name
-//! the file assigns more than one distinct text to is not resolved but
-//! dropped** ([`DropReason::UnresolvedFixture`]): which value is in force then
-//! depends on the order the framework happened to run the bodies in, and
-//! `STRIP.testGroup` reassigns `.s` five times inside a loop. A fixture whose
-//! own text names another fixture is resolved recursively, under a depth
-//! bound.
-//!
-//! Stem-awareness is the part that is easy to leave out and hard to see
-//! missing: `v8. = .v8` assigns a **stem default**, and the body then reads
-//! `v8.10`, a compound variable whose tail was never assigned and which
-//! therefore takes that default. Matching assigned names exactly says `v8.10`
-//! is unassigned; matching the stem says it is not.
-//!
-//! ## `NUMERIC` carried forward within the body
-//!
-//! Carried sequentially like `base/expressions`, and it matters more here:
-//! the bodies that set it have literal operands and therefore *look*
-//! self-contained. `ABBREV.testGroup`'s `Numeric Digits 1` is the shape --
-//! both operands of the assertion are literals and the setting is the only
-//! thing that decides the answer.
-//!
-//! ## `::options novalue`, which inverts what a body means from outside it
-//!
-//! A file carrying `::options novalue` (or `::options all`, which implies it
-//! -- verified on the oracle, not read off the grammar) makes reading an
-//! unassigned symbol **raise** 98.986. Without one, the same symbol evaluates
-//! to its own uppercased name, which is the idiom
-//! `BITAND.testGroup:185`'s `assertSame(bitand('3', nv2.3), '02'x||'V2.3')`
-//! relies on. Same body text, opposite meaning, and the deciding directive is
-//! outside the body.
-//!
-//! So the symbol-equals-own-name resolution is applied only in a file with no
-//! such directive; under one, a row reading an unassigned symbol is dropped
-//! ([`DropReason::NoValueUnderOptions`]). That is the conservative direction
-//! on purpose: a dropped row costs coverage, while a wrongly resolved one
-//! asserts a value the interpreter must never produce.
-//!
-//! # `expectSyntax` suppresses rows rather than annotating them
-//!
-//! `self~expectSyntax` (`framework/OOREXXUNIT.CLS:1322`) wraps nothing; it
-//! sets a flag on the TestCase instance. The check is a frame up, in the
-//! framework's own `doTheTest` (`:1563`), which installs `signal on any name
-//! exceptionHandler` **in the framework method** and then sends the test
-//! method. A matching condition returns immediately (`:1599`). So a raise
-//! inside a test body abandons the rest of that body, and the dominant shape
-//! puts the raiser inside `assertSame`'s own argument list:
-//!
 //! ```text
 //! ::method "test_21"                       -- C2D.testGroup:129
 //!    self~expectSyntax(40.5)
 //!    self~assertSame(C2D(,-1), '-1')
 //! ```
-//!
-//! Measured on the oracle, `c2d(,-1)` is 40.5 at rc 216. `'-1'` is not an
-//! expected value; nothing ever compares anything to it. An extractor that
-//! ignored the `expectSyntax` would emit *"`C2D(,-1)` equals `'-1'`"* --
-//! backwards, and `rows + dropped == calls` would balance and certify it.
-//!
-//! Hence: a body's `assertSame` calls at or after its `expectSyntax` yield no
-//! [`crate::AssertionRow`] at all. The first of them instead yields a
-//! [`RaiseRow`], which carries the syntax code and the expression that must
-//! raise it, and **every** suppressed call counts as dropped, so the
-//! conservation law still closes over them.
-//!
-//! The expectation is method-scoped, not file-scoped: `clearCondition` is
-//! called only from `Assert~init` and `TestSuite` builds one instance per test
-//! method.
-//!
-//! # Segmenting at any `::`, not at the next `::method`
-//!
-//! [`segments`] ends a body at the next `::` directive of **any** kind.
-//! Ending it at the next `::method` swallows the `::routine`s that follow a
-//! short method into it -- `CONDITION.testGroup`'s three-line
-//! `test_novalue_override` is followed by three of them -- and invents both a
-//! coupled body and the calls inside those routines.
-//!
-//! An `assertSame` inside a `::routine` is a condition handler's assertion and
-//! genuinely runs, but it is reachable only via a raise from some *other*
-//! body, so there is no method to attribute it to and no prelude that makes it
-//! stand alone. Those are dropped under their own
-//! [`DropReason::RoutineBody`].
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -127,15 +25,6 @@ use crate::keyword::{
 use crate::{AssertionRow, Form, RaiseExpectation};
 
 /// Whether `c` may appear in a Rexx symbol.
-///
-/// **Wider than [`crate::keyword::is_symbol_char`], and the difference is not
-/// cosmetic.** That one answers "does the method name `assertSame` end here",
-/// for which letters, digits and `_` are the whole question. This one has to
-/// read whole symbols out of an expression, where `.` is what makes `.v8` an
-/// environment symbol rather than an operator followed by a variable, and what
-/// makes `v8.10` a compound variable rather than two tokens. Reusing the
-/// narrower predicate here reads `.v8` as the symbol `v8` and silently stops
-/// resolving every `.local` fixture in the corpus.
 fn is_symbol_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '!' | '?')
 }
@@ -152,11 +41,6 @@ const ASSERT_SAME: &str = "self~assertsame";
 const FIXTURE_DEPTH: usize = 8;
 
 /// Why a `self~assertSame` occurrence did not become an [`AssertionRow`].
-///
-/// The same device as [`crate::keyword::DropReason`] and for the same reason:
-/// these are the accounting for `calls - rows - raises`, and a single total
-/// says only that something was lost. Variants standing at zero are kept and
-/// counted, so the first occurrence of one is visible rather than absorbed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DropReason {
     /// Not inside a `::method` whose name begins `test`: the file's prolog, a
@@ -208,30 +92,13 @@ pub enum DropReason {
     OtherExpectation,
     /// The call's own text carries `U+FFFD`, so the bytes it was written with
     /// did not survive being read as UTF-8.
-    ///
-    /// Six `base/bif` groups hold raw bytes above `0x7F` that are not valid
-    /// UTF-8 -- `C2X.testGroup` writes 250 literal `AA`x bytes -- and a lossy
-    /// read turns each into one replacement character three bytes long. A row
-    /// built from that text is not the assertion the file makes: `translate`
-    /// over a three-byte "character" answers differently from `translate` over
-    /// the one byte that was written.
     NonUtf8Source,
     /// An earlier `self~assertSame` in the same body changed the variable pool
     /// while its own arguments were being evaluated, so this row's state is not
     /// what its prelude says.
-    ///
-    /// `VALUE(name, newvalue)` is the case: `VALUE.testGroup`'s `test051` runs
-    /// `assertSame(17, value(n,'abc'))` and then `assertSame('abc', value(n))`,
-    /// where the second row is true only because the first one *assigned*. A
-    /// row schema whose prelude is assignments cannot carry that, and emitting
-    /// the later rows anyway states values the interpreter must never produce.
     SideEffectingAssertion,
     /// The call reads the clock or the random generator, so two evaluations of
     /// it need not agree (decision D11).
-    ///
-    /// `DATE` and `TIME` are only clock reads when no input value is supplied;
-    /// `base/bif` overwhelmingly passes one, which is why 716 `DATE` rows are
-    /// deterministic and a handful are not.
     ClockDependent,
 }
 
@@ -284,9 +151,6 @@ impl DropReason {
 }
 
 /// One body's worth of `self~assertSame` calls lost to a single reason.
-///
-/// One entry per (body, reason) pair rather than per call, so that a reader
-/// counting bodies and a reader counting calls both get the number they meant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockedBody {
     pub group: String,
@@ -301,20 +165,6 @@ pub struct BlockedBody {
 
 /// A body whose `self~expectSyntax` says something must **raise**, rather than
 /// a row saying an expression must equal something.
-///
-/// `operands` is the first `self~assertSame`'s two arguments at or after the
-/// `expectSyntax`, **in evaluation order and both of them**. Both, because
-/// which one raises is not fixed: `base/bif` writes the call under test in the
-/// first position (`assertSame(C2D(,-1), '-1')`) and in the second
-/// (`assertSame('one', word((v8.),1))`) in different files, so a consumer
-/// keeping only one of them would be checking the literal half of some bodies.
-/// In evaluation order, because that is what makes reproducing the raise a
-/// matter of evaluating them in sequence: Rexx evaluates a message send's
-/// arguments left to right, and the framework's trap is a frame up, so
-/// whichever of the two raises first is what the body is asserting.
-///
-/// Neither operand is an *expected value* here. Under the oracle the call is
-/// never entered, so nothing is ever compared to either.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RaiseRow {
     pub group: String,
@@ -380,14 +230,6 @@ struct Segment {
 /// Every `self~assertSame` in `source` that could become an
 /// [`AssertionRow`], plus the [`RaiseRow`]s its `expectSyntax` bodies stand
 /// for and the per-reason accounting for everything else.
-///
-/// `group` is a caller-supplied label (typically the `.testGroup` file's stem)
-/// copied verbatim into every entry; this function has no notion of files.
-///
-/// Guarantees `rows.len() + raises.len() + dropped() == count_assert_same(
-/// source)`. The `raises` term is there because a `RaiseRow` is made from a
-/// real `assertSame` call and that call is *also* counted dropped: see
-/// [`extract_bif`]'s own conservation test for the exact arithmetic.
 pub fn extract_bif(group: &str, source: &str) -> BifExtraction {
     let mut out = BifExtraction::default();
     let blanked = blank_comments(source);
@@ -450,9 +292,6 @@ pub fn extract_bif(group: &str, source: &str) -> BifExtraction {
 
 /// Splits the comment-blanked file into one [`Segment`] per `::` directive,
 /// plus a leading `Other` for the prolog.
-///
-/// **At any `::`, not at the next `::method`.** See the module doc for the
-/// count that gets wrong.
 fn segments(blanked: &[&str]) -> Vec<Segment> {
     let mut out = Vec::new();
     let mut kind = SegmentKind::Other;
@@ -523,13 +362,6 @@ fn collect_routine_names(blanked: &[&str]) -> BTreeSet<String> {
 
 /// Whether the file carries a directive that makes reading an unassigned
 /// symbol raise.
-///
-/// **`::options all` counts.** Verified on the oracle rather than read off the
-/// grammar: a program whose only directive is `::options all syntax` fails
-/// `say abc` with `Error 98.986, Reference to unassigned variable "ABC"`,
-/// exactly as `::options novalue error` does. Matching only the `novalue`
-/// spelling would leave five files reading as though the idiom were safe in
-/// them.
 fn has_novalue_option(blanked: &[&str]) -> bool {
     blanked.iter().any(|line| {
         let lower = line.trim_start().to_ascii_lowercase();
@@ -755,11 +587,6 @@ impl<'a> BodyScan<'a> {
 
     /// The reason this pair of resolved operands cannot become a row, or `None`
     /// if it can.
-    ///
-    /// Both hazards here are properties of the *text after resolution*, not of
-    /// the body's control flow, which is why they are checked at the point a
-    /// row would be built rather than as a statement is read: a fixture
-    /// substitution can bring either one in from another method entirely.
     fn usable(&self, expr: &str, expected: &str) -> Option<DropReason> {
         let carries = |needle: fn(&str) -> bool| {
             needle(expr) || needle(expected) || self.prelude.iter().any(|line| needle(line))
@@ -859,11 +686,6 @@ impl<'a> BodyScan<'a> {
 
     /// A whole-line single-clause assignment, with its right-hand side's
     /// fixtures already substituted.
-    ///
-    /// `Ok(None)` when the line is not an assignment at all. `Err` when it is
-    /// one whose right-hand side cannot be resolved, which blocks the body:
-    /// every later assertion would run under state this scanner cannot
-    /// reproduce.
     fn assignment(&self, blank: &str) -> Result<Option<(String, String)>, DropReason> {
         let is_name_char =
             |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '!' | '?');
@@ -894,10 +716,6 @@ impl<'a> BodyScan<'a> {
 
     /// Whether `name` -- a lowercased symbol read out of an expression -- is
     /// bound by something this body assigned.
-    ///
-    /// Stem-first, which is the whole point: `v8. = .v8` assigns a stem
-    /// default and `v8.10` is a compound variable that takes it, so an exact
-    /// match on the assigned names says `v8.10` is unassigned and is wrong.
     fn is_assigned(&self, name: &str) -> bool {
         if self.assigned.contains(name) {
             return true;
@@ -936,12 +754,6 @@ impl<'a> BodyScan<'a> {
 
     /// `text` with each `.NAME` the file's `.local` fixtures define replaced
     /// by that fixture's own source text, parenthesised.
-    ///
-    /// Parenthesised because the substituted text is an arbitrary expression
-    /// and the site it lands in is arbitrary too: `.v256||copies(' ',32511)`
-    /// spliced bare into a larger concatenation would regroup rather than
-    /// substitute. Recursive under a depth bound, because a fixture may name
-    /// another (`OVERLAY.testGroup`'s `.vres1`).
     fn substitute(&self, text: &str, depth: usize) -> Result<String, DropReason> {
         let runs = symbol_runs(text);
         if runs
@@ -1028,12 +840,6 @@ struct SymbolRun {
 }
 
 /// The symbol runs in `text` that stand outside any string literal.
-///
-/// A hex or binary suffix is not one. `'2A'x` is a single literal whose `x`
-/// binds to the preceding quote, so reporting that `x` as a symbol would have
-/// this scanner ask whether a variable named `x` was assigned -- and
-/// `BITAND.testGroup` writes `'02'x||'V2.3'` in an expected value, where a
-/// spurious `x` under `::options novalue` would drop a row that is fine.
 fn symbol_runs(text: &str) -> Vec<SymbolRun> {
     let bytes = text.as_bytes();
     let mut out = Vec::new();
@@ -1086,10 +892,6 @@ fn symbol_runs(text: &str) -> Vec<SymbolRun> {
 
 /// The top-level arguments of the call whose `(` stands at `open`, verbatim
 /// and untrimmed, or `None` if the parenthesis never closes.
-///
-/// An omitted argument is an empty slice, which is exactly what the caller
-/// needs: `date('B', , 'S')` supplies no input date and therefore reads the
-/// clock, while `date('B', tmpd)` does not.
 fn call_arguments(text: &str, open: usize) -> Option<Vec<&str>> {
     let bytes = text.as_bytes();
     if bytes.get(open) != Some(&b'(') {
@@ -1134,11 +936,6 @@ fn call_arguments(text: &str, open: usize) -> Option<Vec<&str>> {
 
 /// Whether `text` calls a builtin whose answer is not a function of its
 /// arguments (decision D11).
-///
-/// `RANDOM` always is one. `DATE` and `TIME` are only when no input value is
-/// supplied: with a second argument they reformat what they are given, which is
-/// how `base/bif` writes almost all of them, and a run of those is as
-/// repeatable as any other row.
 fn clock_dependent(text: &str) -> bool {
     for run in symbol_runs(text) {
         if !run.is_call {
@@ -1162,11 +959,6 @@ fn clock_dependent(text: &str) -> bool {
 
 /// Whether `text` calls `VALUE` in its **setter** form, which assigns to the
 /// variable pool as a side effect of being evaluated.
-///
-/// Two or more arguments is the setter; one is the reader. The third argument
-/// selects an external pool, which is outside 4c's scope (D4) and would fail
-/// loudly rather than silently assign -- but a caller treating it as a setter
-/// too is the conservative reading and costs one row.
 fn assigns_via_value(text: &str) -> bool {
     symbol_runs(text).into_iter().any(|run| {
         run.is_call
@@ -1177,10 +969,6 @@ fn assigns_via_value(text: &str) -> bool {
 
 /// Parses `self~expectSyntax`'s argument, already known (case-insensitively)
 /// to follow that prefix: exactly `(major.sub)`.
-///
-/// `None` for anything else, including the array form
-/// `(major.sub, message inserts...)` the method also accepts. Rather than
-/// guess which comma-separated item is the code, the caller blocks the body.
 fn parse_raise_expectation(rest: &str) -> Option<RaiseExpectation> {
     let inner = rest.strip_prefix('(')?.strip_suffix(')')?.trim();
     if inner.contains(',') {

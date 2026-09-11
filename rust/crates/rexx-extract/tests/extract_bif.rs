@@ -1,31 +1,5 @@
 //! The pins on the `base/bif` extractor: conservation, absolute committed
 //! literals, a real floor, and the ooTest revision they were measured at.
-//!
-//! # Why conservation alone would be a tautology, and what makes it one here
-//!
-//! `rows + dropped == calls` holds trivially at `0 + 0 == 0` (nothing scanned)
-//! and at `0 + N == N` (everything dropped). What makes it non-vacuous is that
-//! `calls` is counted **independently of the extractor**, by
-//! [`rexx_extract::keyword::count_assert_same`], which does not parse Rexx and
-//! only counts a substring -- so a scanner that silently sees nothing cannot
-//! satisfy it, and neither can one that drops everything, because
-//! [`the_row_floor`] states a real lower bound on the rows side.
-//!
-//! # `raises` is inside `dropped`, not beside it
-//!
-//! A [`rexx_extract::bif::RaiseRow`] is built from a real `self~assertSame`
-//! call, and that call is *also* counted dropped
-//! ([`rexx_extract::bif::DropReason::ExpectedRaise`]). So the law is
-//! `rows + dropped == calls` with `raises` outside it, and the raise rows are a
-//! second, smaller population carved out of the dropped side rather than a
-//! third term. Stating it the other way would double-count them.
-//!
-//! # The denominator is the *exact* `assertSame` spelling
-//!
-//! `base/bif` holds 6,293 exact `self~assertSame` occurrences and 5
-//! `self~assertSameList`, a different method that a prefix test would swallow.
-//! The 424-call `assertTrue`/`assertEquals`/`assertFalse` tail is a different
-//! assertion again and nothing here claims anything about it.
 
 use rexx_extract::bif::{DropReason, extract_bif};
 use rexx_extract::find_test_groups;
@@ -36,11 +10,6 @@ use std::path::{Path, PathBuf};
 /// The ooTest revision every absolute literal below was measured at. Named in
 /// each failure message so a red count is diagnosable as `svn up` rather than
 /// as a regression in this repository.
-///
-/// `ootest/` is **not** checked-in test data: it is git-ignored, has zero
-/// tracked files, and exists only as an SVN working copy of
-/// `svn.code.sf.net/p/oorexx/code-0/test/trunk`. Read it back with
-/// `svn info ootest`.
 const OOTEST_REVISION: &str = "r13178";
 
 /// What a red absolute-literal test most likely means, appended to every such
@@ -84,10 +53,6 @@ fn measure() -> Vec<(String, usize, usize, usize)> {
 
 /// The absolute committed literals, measured at [`OOTEST_REVISION`]. Each row
 /// is `(group, assertSame calls, value rows, raise rows)`.
-///
-/// `dropped` is not a fourth column: conservation makes it `calls - rows`
-/// exactly, so a column arithmetically forced by the others would pin nothing
-/// they do not already pin.
 const PER_GROUP: &[(&str, usize, usize, usize)] = &[
     ("ABBREV", 130, 109, 4),
     ("ABS", 49, 44, 5),
@@ -217,11 +182,6 @@ fn base_bif_yields_the_measured_counts() {
 }
 
 /// Every [`DropReason`]'s own count, including the ones standing at zero.
-///
-/// A category pinned at zero fails loudly the first time the corpus grows one,
-/// which is exactly when a reader needs to know -- and it is the only thing
-/// that tells "this shape does not occur" apart from "this shape is not
-/// detected".
 #[test]
 fn the_drop_reasons_account_for_every_call_outside_the_population() {
     const EXPECTED: &[(DropReason, usize, usize)] = &[
@@ -281,11 +241,6 @@ fn the_drop_reasons_account_for_every_call_outside_the_population() {
 
 /// A real lower bound on the rows side, so that conservation cannot be
 /// satisfied by an extractor that drops everything.
-///
-/// Deliberately far below the committed figure: this is the floor, and
-/// [`base_bif_yields_the_measured_counts`] is what pins the exact number. A
-/// floor that tracked the exact count would go red for every improvement, which
-/// is the opposite of what a floor is for.
 #[test]
 fn the_row_floor() {
     const FLOOR: usize = 4000;
@@ -300,11 +255,6 @@ fn the_row_floor() {
 
 /// A `self~expectSyntax` suppresses every `assertSame` at or after it, and
 /// **only** those.
-///
-/// The refusal and its adjacent success in one test, because the rule is about
-/// ordering and a test of the refusal alone would also pass for an extractor
-/// that suppressed the whole body unconditionally. `LINEOUT.testGroup:207` is
-/// the corpus's one real instance of the second ordering.
 #[test]
 fn expect_syntax_suppresses_only_what_follows_it() {
     let after =
@@ -342,11 +292,6 @@ fn expect_syntax_suppresses_only_what_follows_it() {
 
 /// A body is segmented at the next `::` directive of any kind, not at the next
 /// `::method`.
-///
-/// The corpus case is `CONDITION.testGroup`'s three-line
-/// `test_novalue_override`, which is followed by three `::routine`s. Segmenting
-/// at `^::method` swallows them into it, which both invents assertions in the
-/// method and hides the ones that are genuinely a trap handler's.
 #[test]
 fn a_routine_after_a_method_is_not_part_of_it() {
     let source = "::method 'test_short'\n   self~assertSame(1, 1)\n\n\
@@ -367,12 +312,6 @@ fn a_routine_after_a_method_is_not_part_of_it() {
 
 /// Under `::options novalue` an unassigned symbol raises, so a row reading one
 /// is dropped; without it the same row resolves.
-///
-/// Both directions in one test, because the whole hazard is that the body text
-/// is identical and only a file-level directive decides what it means.
-/// `::options all` counts as `novalue` -- verified on the oracle, where a
-/// program whose only directive is `::options all syntax` fails `say abc` with
-/// `Error 98.986`.
 #[test]
 fn options_novalue_inverts_whether_an_unassigned_symbol_is_resolvable() {
     const BODY: &str = "::method 'test_nv'\n   self~assertSame('NV', nv)\n";
@@ -402,11 +341,6 @@ fn options_novalue_inverts_whether_an_unassigned_symbol_is_resolvable() {
 
 /// A `.local` fixture is substituted stem-aware, and a name the file sets twice
 /// is not substituted at all.
-///
-/// `WORD.testGroup`'s shape: `v8. = .v8` assigns a stem default and the body
-/// then reads `v8.10`, a compound whose tail was never assigned. An exact-name
-/// match on the assigned set calls `v8.10` unassigned and, in a `novalue` file,
-/// drops a row that is fine.
 #[test]
 fn a_local_fixture_is_substituted_and_an_ambiguous_one_is_not() {
     let source = "::method 'test000'\n   .local~v8 = 'one two three four'\n\n\
@@ -442,10 +376,6 @@ fn a_local_fixture_is_substituted_and_an_ambiguous_one_is_not() {
 
 /// An `assertSame` whose own arguments assign through `VALUE` invalidates the
 /// rows behind it, and not the row it is part of.
-///
-/// `VALUE.testGroup`'s `test051` is the shape: `assertSame(17, value(n,'abc'))`
-/// is itself true, because the setter answers the *old* value, and the next
-/// assertion is true only because that call assigned.
 #[test]
 fn a_value_setter_blocks_the_assertions_behind_it() {
     let source = "::method 'test_setter'\n   v = 17\n   n = 'v'\n   \
@@ -470,10 +400,6 @@ fn a_value_setter_blocks_the_assertions_behind_it() {
 
 /// A `DATE`/`TIME` call with an input value is deterministic and a bare one is
 /// not, and only the second is dropped (decision D11).
-///
-/// This matters because the harness runs a value row's two operands as two
-/// separate programs: a clock read that moved between them would report a
-/// divergence that is nothing but the clock.
 #[test]
 fn a_clock_read_is_dropped_and_a_reformat_is_not() {
     let bare = "::method 'test_clock'\n   self~assertSame(8, length(date('S')))\n";

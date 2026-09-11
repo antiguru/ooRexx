@@ -11,45 +11,6 @@
 
 //! The phase's error gate: what this parser rejects, what it accepts, and the
 //! number, sub-number and line it reports, all against `build/bin/rexxc`.
-//!
-//! Two directions, because either alone is satisfiable without meaning
-//! anything. **Soundness**: every program the oracle refuses to TRANSLATE, this
-//! parser rejects with the same number and sub-number on the same line.
-//! **Completeness**: every program the oracle translates, this parser accepts,
-//! and so is every program it rejects for a reason that is not a translation
-//! error. A parser that rejected nothing would pass the first half and fail the
-//! second, and one that rejected everything the reverse.
-//!
-//! Which of those a row is, is a **field in the corpus** and not something
-//! derived from the error number here. See the corpus header for why: the two
-//! install-time classes are 98.903 and 90.999, so a `98.9xx` prefix rule would
-//! have covered half of them and read as correct.
-//!
-//! The oracle's answers are baked into `rust/corpus/errors/parse-errors.tsv`
-//! rather than recomputed, the same way `corpus/expr/precedence.tsv` bakes in
-//! the interpreter's expression values: `cargo test` must not need a built C++
-//! interpreter. That file's own header records how it was generated. Nothing in
-//! it is this parser's answer, so a divergence surfaces as a failure here and
-//! never as an expected value.
-//!
-//! The `samples/` and bootstrap half of the completeness direction reads the
-//! real files instead, because all 303 of them are in the tree already and all
-//! 303 get rc 0 from `rexxc` (measured), so there is no per-file expectation to
-//! curate.
-//!
-//! # What the corpus cannot reach, and what covers it instead
-//!
-//! Every corpus program is `SourceKind::Program`, because `rexxc` compiles files
-//! and cannot be pointed at an `INTERPRET` string. The `INTERPRET`-only errors
-//! are therefore measured through the condition object instead, and
-//! `the_interpret_only_errors_match_the_condition_objects_own_code` holds those
-//! measurements.
-//!
-//! One input is deliberately absent rather than unreachable: an input holding
-//! *two* errors, where eager scanning reports the later one. `Task 3.3` records
-//! that deviation and `the_eager_scan_deviation_still_deviates` pins it, outside
-//! the corpus, because a corpus row for it would enshrine our answer as the
-//! expected one.
 
 use std::path::{Path, PathBuf};
 
@@ -63,10 +24,6 @@ enum Class {
     Translation,
     /// `rexxc` rejected it for something outside the program text, a library or
     /// an external routine it could not bind. This parser must accept it.
-    ///
-    /// Not "after translating it": both codes fire mid-translation, and `rexxc`
-    /// has no install step yet reports them. See the corpus header for the raise
-    /// sites and the measurement.
     Install,
     /// `rexxc` answered rc 0.
     Accepted,
@@ -91,10 +48,6 @@ fn corpus_path() -> PathBuf {
 }
 
 /// Reverses the corpus file's escaping: `\\`, `\t`, `\n`, `\r` and `\xNN`.
-///
-/// A program is bytes and not text -- a literal may hold anything, and one case
-/// here is a non-UTF-8 byte pair -- so this produces `Vec<u8>` and the escaping
-/// exists precisely so that a row stays one line of a text file.
 fn unescape(field: &str, row: usize) -> Vec<u8> {
     let bytes = field.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -192,10 +145,6 @@ fn parse(program: &[u8]) -> Result<(), ParseError> {
 }
 
 /// Whether `text` holds an `&`-and-digit substitution placeholder.
-///
-/// A second implementation of `error.rs`'s own check, deliberately: a test that
-/// called the code under test to decide what "unfilled" means would pass however
-/// that code was broken.
 fn holds_placeholder(text: &str) -> bool {
     text.char_indices().any(|(at, c)| {
         c == '&'
@@ -508,11 +457,6 @@ fn no_message_the_corpus_raises_holds_an_unfilled_substitution() {
 // ---- the recorded deviations, each pinned in both directions ----
 
 /// Whether `(ours, oracle)` is the recorded label-colon deviation.
-///
-/// A rule rather than a list of programs, so a new program of the same shape is
-/// classified instead of failing, while a new *shape* still fails. The count
-/// asserted below is what stops it from silently absorbing more than the two
-/// cases it was written for.
 fn label_colon_deviation(ours: Option<(u16, u16)>, oracle: (u16, u16)) -> bool {
     matches!((ours, oracle), (Some((18, 1 | 2)), (35, 1)))
 }
@@ -522,10 +466,6 @@ fn a_then_label_is_a_missing_then_here_and_a_bad_expression_there() {
     // Structural, not a near miss: Task 3.4 splits `then:` into a label, so the
     // clause the oracle finds an invalid expression in does not exist by the time
     // the grammar runs. Both reject, which is the part that matters.
-    //
-    // Measured, `if 1 = 1` then `then: nop`:
-    //     Error 35 running <file> line 2:  Invalid expression.
-    //     Error 35.1:  Incorrect expression detected at ":".
     let error = parse(b"if 1 = 1\nthen: nop").expect_err("both reject it");
     assert_eq!((error.code, error.sub), (18, 1));
 }
@@ -575,14 +515,6 @@ fn the_eager_scan_deviation_still_deviates() {
     // Task 3.3's recorded deviation, and the only one with no corpus row: this
     // input holds TWO errors, and a row for it would record our answer as the
     // expected one and stop the gate being able to see it.
-    //
-    // Measured, `say )` on line 1 and `'unclosed` on line 3:
-    //     1 *-* say )
-    //     Error 37 running <file> line 1:  Unexpected ",", ")", or "]".
-    //     Error 37.2:  Unmatched ")" in expression.
-    // The interpreter interleaves scanning and parsing and so reports the FIRST
-    // error. Task 3.3 scans the whole program up front, so the later scan error
-    // is raised before the earlier parse error is ever reached.
     let program = b"say )\n\n'unclosed\n";
     let source = ProgramSource::new(program.to_vec(), SourceKind::Program);
     let error = parse_program(program.to_vec()).expect_err("both reject it");
@@ -648,18 +580,6 @@ fn the_interpret_only_errors_match_the_condition_objects_own_code() {
     // string. A `signal on syntax` trap around an `interpret` is what exposes
     // these, and `condition('o')~code` is the number. Measured under
     // `build/bin/rexx`, all seven, one file each:
-    //
-    //     interpret "expose a"       -> code=99.908  errortext=Translation error.
-    //     interpret "guard on"       -> code=99.912  errortext=Translation error.
-    //     interpret "use local a"    -> code=99.915  errortext=Translation error.
-    //     interpret "forward to 1"   -> code=99.923  errortext=Translation error.
-    //     interpret "reply 1"        -> code=99.924  errortext=Translation error.
-    //     interpret "::routine r"    -> code=99.914  errortext=Translation error.
-    //     interpret "x: nop"         -> code=47.1    errortext=Unexpected label.
-    //
-    // `condition('o')~position` is 2 for every one of them, the line of the
-    // `INTERPRET` instruction itself and not a position inside the fragment,
-    // which is why no line is asserted here.
     let cases: &[(&str, (u16, u16))] = &[
         ("expose a", (99, 908)),
         ("guard on", (99, 912)),
@@ -717,9 +637,6 @@ fn an_interpret_fragment_that_is_legal_is_still_accepted() {
 // ---- completeness over the files that are in the tree already ----
 
 /// Every `.rex` file under `samples/`, found with a recursive walk.
-///
-/// Not a glob: `samples/*.rex` is only the 36 top-level files, and the criterion
-/// is over all 301.
 fn sample_programs() -> Vec<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../samples");
     let mut found = Vec::new();

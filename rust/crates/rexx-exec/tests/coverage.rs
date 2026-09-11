@@ -14,112 +14,6 @@
 //! variant is either constructed by a program in `rust/corpus/phase-4a.txt`,
 //! or carries the phase that owns it. The differential half -- the subset
 //! runs with zero divergences against the oracle -- is `tests/corpus.rs`.
-//!
-//! # The owner table lives in `owners.rs`
-//!
-//! `Owner`, the `tags!` macro, the seven `*_TAGS` tables and their tag
-//! functions, `Coverage`, `EXPECTED_OUT_OF_SCOPE` and `SPLIT_TABLE_PHASES`
-//! all live in `owners.rs` now, `#[path]`-included below as `mod owners`,
-//! rather than being defined here by hand. `loud.rs` includes the identical
-//! file the same way. See `owners.rs`'s own module doc for why (item I36)
-//! and for what still has to be kept in sync by hand regardless (Step 5's
-//! five pinned items).
-//!
-//! # Variant identity, never `keyword()`
-//!
-//! `InstructionKind::keyword()` maps both `When` and `WhenCase` to `"WHEN"`
-//! (`ast.rs:912`), because they are the same clause under two grammar
-//! productions. A coverage test keyed on that string would let any `WHEN`
-//! satisfy `WhenCase` too, and the gap analysis that produced this file's
-//! witness list made exactly that mistake on its first run (see
-//! `criterion-1-coverage-gap.md`). Every tag below therefore comes from the
-//! `match` pattern on the variant itself, through the [`tags!`] macro, and
-//! never from a keyword table.
-//!
-//! # The owner arm is not free-form
-//!
-//! A variant this crate does not implement does not get a witness; it gets an owner
-//! string instead. Left unchecked that is an escape hatch -- a variant that
-//! turns out hard to implement could be relabelled someone else's rather than
-//! given a witness -- so two things are enforced here rather than assumed:
-//!
-//! * The owner string must be one of `"4b"`, `"4c"`, `"Phase 5"` or
-//!   `"Phase 7"`, spelled exactly as the split table
-//!   (`docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
-//!   split") spells them. [`Owner::Phase`] is the only constructor that can
-//!   hold a string at all, and [`assert_owner_strings_are_split_table_phases`]
-//!   checks every one actually used.
-//! * The **set** of out-of-scope variants is pinned against a hardcoded literal
-//!   ([`EXPECTED_OUT_OF_SCOPE`]) rather than merely "whatever the `tags!`
-//!   tables currently say", so relabelling a variant shows up as a diff
-//!   against a committed expectation and not as a silent pass. This is the
-//!   same device `phase-4-exclusions.txt` uses for the builtin exclusion set,
-//!   one level down.
-//!
-//! `ExprKind` had six out-of-scope variants at Task 16 gate time and has
-//! none now. Five of the six were not in the design spec at all -- the spec
-//! names only `Message`
-//! outright. The other five (`Call`, `QualifiedCall`, `ClassResolver`,
-//! `List`, `VariableReference`) were a judgement call made at Task 16 gate
-//! time by the team lead ("main"), on request, because the spec's only other
-//! relevant sentence ("argument attachment inside Call, QualifiedCall,
-//! Message, List and VariableReference is exercised by 4b and 4c") names two
-//! phases jointly for five variants, which is not an owner a `match` arm can
-//! return. The reasoning for each is recorded in `docs/superpowers/plans/
-//! phase-4-exclusions.txt`'s "EXPRKIND OWNERSHIP" section; this file's
-//! [`tags!`] invocation for `ExprKind` must stay in sync with that section by
-//! hand, the same relationship `tests/assertions.rs`'s `EXEMPT` list has with
-//! the exclusions file's own builtin set.
-//!
-//! **Every `ExprKind` variant is in scope now.** That is not a claim that
-//! every call target runs: a builtin-named call still fails loudly, through
-//! `Loud::unresolved_call` naming `4c`, which is a claim on the resolution
-//! steps rather than on the variant -- see `eval_call`'s own doc
-//! (`eval.rs`) for the order.
-//!
-//! Which variants remain, and who owns each, is `owners.rs`'s `EXPR_TAGS` and
-//! [`EXPECTED_OUT_OF_SCOPE`]; both are asserted here rather than described.
-//!
-//! # `Operator::Backslash` is not owed to anyone
-//!
-//! It cannot appear in an `ExprKind::Binary` node by construction -- `\` is
-//! prefix-only, and one in a dyadic position is error 35.1, in **both**
-//! implementations. That is not a gap 4b or 4c will close, so it does not get
-//! a phase string: [`Owner::Unreachable`] says so explicitly, and
-//! [`only_backslash_is_unreachable`] pins that it is the only variant in any
-//! of the seven enums marked that way. Demanding a witness for it would
-//! demand a program that cannot exist, which is the same shape as
-//! `LoopKind::With` needing `SUPPLIER` -- except `With` really is owed to
-//! Phase 5, and `Backslash` is owed to nobody.
-//!
-//! # Method
-//!
-//! Parse-only, like Phase 3's `variants.rs`. This criterion is about what the
-//! subset's *programs* construct, not about running them -- the differential
-//! half in `tests/corpus.rs` is what proves they execute correctly. The walk
-//! below is `rexx-parse/tests/gate_walk`'s shared module, trimmed to what the
-//! subset actually contains (`::ROUTINE`, `::CLASS`, `::METHOD`, `::ATTRIBUTE`
-//! and `::CONSTANT`, and no other directive -- `assert_program_has_only_admitted_directives`
-//! guards that assumption rather than silently ignoring one, and
-//! `each_instruction` walks the body of each kind that has one) and reproduced
-//! here rather than imported, because an integration test cannot reach
-//! another crate's `tests/` module and this crate's own `Cargo.toml`
-//! deliberately keeps `rexx-parse` as a normal, not dev, dependency for
-//! reasons unrelated to this file.
-//!
-//! # The builtin exclusion set, owed to `phase-4-exclusions.txt` by Task 16
-//!
-//! Unrelated to the seven enums above, but the file's own gate item ("The
-//! exclusions file") asks for a set assertion so its 15 whole and 3 partial
-//! builtin exclusions cannot drift from what `BuiltinFunctions.cpp`'s table
-//! actually contains, the way the enum owner sets above cannot drift from
-//! the split table. `rexx-inventory` already generates
-//! [`rexx_inventory::builtins::NAMES`] from that table at build time (81
-//! entries, table order), so [`the_builtin_exclusion_set_matches_the_committed_file`]
-//! checks the file's 18 names against it directly rather than trusting the
-//! file's own count. This is the one thing in this file that is not about
-//! `InstructionKind`/`ExprKind`/etc; it lives here because coverage.rs is
-//! this task's only permitted file that can hold a `cargo test`.
 
 use std::collections::HashSet;
 use std::fs;
@@ -150,19 +44,6 @@ use owners::{
 /// Whether `kind` is one of the directive kinds this walker admits without
 /// panicking: `::ROUTINE`, `::METHOD` and `::ATTRIBUTE`, each walked into by
 /// `each_instruction` below, plus the ones that own no body for it to walk.
-///
-/// The list is the match below rather than this sentence; the test beside
-/// this function walks every one of `DirectiveKind`'s variants and holds each
-/// against its own arm.
-///
-/// **Exhaustive over `DirectiveKind`'s own nine variants**
-/// (`rexx-parse/src/ast.rs:1353`-`1368`), not a string comparison against a
-/// hand-typed table. A tenth variant added to that enum is a compile error
-/// here until this match says whether it is admitted, and there is no string
-/// for a typo to hide in: the previous version of this function compared
-/// `d.kind.keyword()` against a `&[&str]` literal, which nothing checked was
-/// even a real directive keyword, let alone in sync with the enum it meant
-/// to track.
 fn is_admitted_directive_kind(kind: &DirectiveKind) -> bool {
     match kind {
         DirectiveKind::Routine(_)
@@ -185,12 +66,6 @@ fn assert_program_has_only_admitted_directives(path: &Path, p: &Program) {
 
 /// [`assert_program_has_only_admitted_directives`] with the predicate as a
 /// parameter.
-///
-/// **Its only other caller is the negative control**, which needs a predicate
-/// that refuses something: every `DirectiveKind` variant is admitted now, so
-/// a control passing the real predicate would have no subject and would go
-/// green over an empty list. Passing one is what keeps the panic path itself
-/// witnessed.
 fn assert_directives_admitted_by(path: &Path, p: &Program, admit: fn(&DirectiveKind) -> bool) {
     let others: Vec<&str> = p
         .directives
@@ -212,24 +87,6 @@ fn assert_directives_admitted_by(path: &Path, p: &Program, admit: fn(&DirectiveK
 /// [`is_admitted_directive_kind`]'s real answer for a real parsed instance of
 /// that kind -- not only `::ATTRIBUTE`, which `an_unadmitted_directive_still_panics`
 /// below covers alone.
-///
-/// **What this catches that the single-keyword negative control does not.**
-/// Measured: mutating `is_admitted_directive_kind` to also admit
-/// `DirectiveKind::Constant(_)` (moving it into the `true` arm) left every
-/// other test in this file green, `an_unadmitted_directive_still_panics`
-/// included, because that test only ever constructs `::ATTRIBUTE`. This test
-/// instead parses one minimal instance of every directive kind -- the same
-/// nine literals `rexx-parse/src/directive/tests.rs`'s own
-/// `every_directive_keyword_reaches_its_node` uses, reproduced here rather
-/// than imported for the reason this file's own module doc gives (an
-/// integration test cannot reach another crate's `tests/` module) -- and
-/// checks each one against a committed true/false expectation, so moving
-/// **any** variant across [`is_admitted_directive_kind`]'s arms in either
-/// direction reddens here specifically, with the wrong keyword named in the
-/// failure. Which variants sit on which side is that function's own match and
-/// is not restated here: `every_directive_keyword_reaches_its_node`'s literal
-/// list and this test's own `cases` table together enumerate the kinds, and
-/// the assertion below is what holds them equal.
 #[test]
 fn every_directive_keyword_is_correctly_admitted_or_refused() {
     let cases: &[(&str, &str, bool)] = &[
@@ -270,11 +127,6 @@ fn every_directive_keyword_is_correctly_admitted_or_refused() {
 /// implemented and committing it would redden the corpus differential (see
 /// `docs/superpowers/plans/2026-08-15-phase-5a-native-layer.md`'s Task 1
 /// brief).
-///
-/// **Measured before this task widened the walker:** run against the
-/// then-named `assert_program_has_only_routine_directives`, this exact
-/// program panicked with `has a \`::\` directive this walker does not follow
-/// into (["CLASS"])`. Task 1's report carries the full transcript.
 #[test]
 fn a_class_directive_is_admitted_without_panicking() {
     let p = parse_program(b"::CLASS K\n".to_vec()).expect("::CLASS K parses");
@@ -284,11 +136,6 @@ fn a_class_directive_is_admitted_without_panicking() {
 /// **[`each_instruction`] descends into a `::METHOD` and a `::ATTRIBUTE`
 /// body**, which is what makes a construct written only inside one count
 /// toward criterion 1.
-///
-/// Paired with a `::ROUTINE` in the same program, so the assertion cannot be
-/// satisfied by a walk that visits every directive's body indiscriminately
-/// and one that visits none reads differently from one that visits only the
-/// routine: the three keywords are distinct, and all three must arrive.
 #[test]
 fn the_walker_descends_into_a_method_body_and_an_attribute_body() {
     let p = parse_program(
@@ -313,12 +160,6 @@ fn the_walker_descends_into_a_method_body_and_an_attribute_body() {
 /// Pairs with the success above: a directive kind the predicate refuses must
 /// still panic, or a widening silently removed the guard rather than widening
 /// it.
-///
-/// **The predicate is a stand-in and has to be**, because
-/// [`is_admitted_directive_kind`] now admits every variant of the enum: this
-/// control's subject is the assertion's own reporting path, not which kinds
-/// are admitted, and [`every_directive_keyword_is_correctly_admitted_or_refused`]
-/// is what holds the real predicate against every variant.
 #[test]
 #[should_panic(expected = "has a `::` directive this walker does not admit")]
 fn an_unadmitted_directive_still_panics() {
@@ -548,25 +389,6 @@ fn exprs_of_loop<'a>(l: &'a Loop, f: &mut impl FnMut(&'a Expr)) {
 }
 
 /// Every instruction of the main body **and of every `::ROUTINE` body**.
-///
-/// Descending into a routine is what lets
-/// `assert_program_has_only_admitted_directives` admit `::ROUTINE` without
-/// also admitting a hole: the guard exists to stop a subset program hiding
-/// constructs from criterion 1 inside a body nothing walks.
-///
-/// **Every directive kind that owns a `CodeBody` is descended into**, which
-/// is the same set `rexx_exec`'s own `body_of` turns into a `&CodeBody`:
-/// `::ROUTINE`, `::METHOD` and `::ATTRIBUTE`. `::CLASS` owns no body of its
-/// own, and a `::CONSTANT`'s parenthesised value is an expression rather than
-/// an instruction, so neither can carry an `Instruction` for this walk to
-/// miss; both are admitted by the guard above and visited here as nothing.
-///
-/// Descending into a method body **cannot hide anything**, in either
-/// direction: the only consumer, `every_in_scope_variant_is_witnessed_by_the_
-/// phase_subsets`, reports `Coverage::unwitnessed`, so a wider walk can only
-/// move a variant from unwitnessed to witnessed. What it changes is that a
-/// construct written only inside a `::METHOD` body now counts as a witness,
-/// where before the same program witnessed nothing at all.
 fn each_instruction<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Instruction)) {
     for i in &p.main.instructions {
         visit(i);
@@ -608,12 +430,6 @@ fn each_expr<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Expr)) {
 /// The union of every non-comment, non-blank line across `list_paths`, in
 /// first-seen order, each entry appearing once even if two files name the
 /// same corpus program.
-///
-/// A slice rather than one `&Path`, so a later phase's own subset file can run
-/// *alongside* `phase-4a.txt` rather than replacing it -- every earlier-phase
-/// witness stays exercised as later phases add their own subset files, instead
-/// of each phase's own harness run choosing between the earlier programs and
-/// its own and losing the other's coverage.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();
@@ -677,18 +493,6 @@ fn corpus_dir() -> PathBuf {
 }
 
 /// The subset files the union-coverage run reads, in union order.
-///
-/// A named constant rather than a literal at the call site so that
-/// [`the_union_reads_every_phase_subset_file`] can assert it against the
-/// corpus directory itself.
-///
-/// **Dropping a file from this list is caught today, but only incidentally.**
-/// It fails `every_in_scope_variant_is_witnessed_by_the_phase_subsets` --
-/// measured, removing `phase-4c.txt` reports `4 in-scope variant(s)
-/// unwitnessed: Parse, Arg, Pull, Address::Environment` -- and that depends on
-/// the dropped phase still owning a variant no earlier phase witnesses. It is
-/// a property of the corpus as it stands, not an invariant: the moment those
-/// variants gain a witness elsewhere, the file can be dropped silently.
 const SUBSET_FILES: &[&str] = &[
     "phase-4a.txt",
     "phase-4b.txt",
@@ -701,15 +505,6 @@ const SUBSET_FILES: &[&str] = &[
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
-///
-/// Read from the directory rather than listed a second time, so the assertion
-/// below cannot be satisfied by a copy of [`SUBSET_FILES`] edited in the same
-/// change, and so a subset file added later and never wired in here is red
-/// rather than silently unread.
-///
-/// Duplicated from `corpus.rs` and `collect_stress.rs` rather than shared, for
-/// the reason `read_subset` above is duplicated: these are three
-/// integration-test binaries and none can `mod` another.
 fn phase_subset_files_on_disk() -> Vec<String> {
     let dir = corpus_dir();
     let entries =
@@ -724,10 +519,6 @@ fn phase_subset_files_on_disk() -> Vec<String> {
 }
 
 /// The coverage union reads **every** phase subset file the corpus has.
-///
-/// The pin on *which files* the union site reads. The three
-/// `phase_*_subset_matches_the_committed_list` tests below pin each file's
-/// contents and say nothing about whether anything reads it.
 #[test]
 fn the_union_reads_every_phase_subset_file() {
     assert_eq!(
@@ -815,29 +606,6 @@ fn phase_4a_subset_matches_the_committed_list() {
 
 /// `phase-4b.txt`'s exact line list, the same device [`EXPECTED_SUBSET`] is
 /// for `phase-4a.txt`, and added for the same reason.
-///
-/// **What its absence costs was measured, and it was not
-/// theoretical.** Removing **one entry at a time** from `phase-4b.txt` and
-/// running this file: for **nine of the twelve, that one deletion leaves it
-/// green**, because [`every_in_scope_variant_is_witnessed_by_the_phase_subsets`]
-/// only needs *some* program to construct each variant, and by the end of 4b
-/// most variants have several witnesses. Only `call_expression`,
-/// `use_arg_forms` and `push_queue` construct something nothing else in the
-/// union does.
-///
-/// **Distributively, not collectively**: removing all nine at once *does* fail
-/// this file (`3 in-scope variant(s) unwitnessed: Interpret, Signal, Raise`).
-/// The single silent deletion is what this pin is for.
-///
-/// The worst case is `lang/condition_traps.rex`, the 4b gate's criterion 8
-/// witness and the declared corpus catcher for **one** of `mutate-4b.sh`'s
-/// mutations (row 6, `SIGL` off by one -- each corpus-catching mutation
-/// diverges on exactly one program, so none can claim more): with its line
-/// removed the corpus reported `41 of 41 matching` at exit 0, this file
-/// passed, and `collect_stress` passed -- three criteria reporting MET with
-/// one criterion's entire subject deleted, and the headline count shrinking
-/// silently. A "N of N matching" harness cannot notice a missing program;
-/// only a committed list can.
 const EXPECTED_SUBSET_4B: &[&str] = &[
     "lang/interpret_dynamic.rex",
     "lang/interpret_error_echo.rex",
@@ -1387,10 +1155,6 @@ fn phase_5b_subset_matches_the_committed_list() {
 
 /// `phase-5c.txt`'s exact line list, the same device [`EXPECTED_SUBSET_5A`]
 /// and [`EXPECTED_SUBSET_5B`] are for their own files.
-///
-/// Written whole rather than grown a task at a time: 5c's witnesses waited in
-/// test binaries of their own until its method rows could be owned per class,
-/// and Phase 5d's Task 1 is where they land.
 const EXPECTED_SUBSET_5C: &[&str] = &[
     // The three interim witnesses, each moved here from its own binary.
     "lang/variable_reference.rex",
@@ -1576,16 +1340,6 @@ fn phase_5d_subset_matches_the_committed_list() {
 
 /// Criterion 1's coverage property, read against the **union** of every
 /// phase's subset file rather than `phase-4a.txt` alone.
-///
-/// A later phase's witness cannot live in `phase-4a.txt`, whose own header
-/// excludes those constructs by definition -- `INTERPRET` is the first such
-/// case. Reading the union rather than swapping the file
-/// is what keeps every earlier witness exercised as later phases add their own
-/// subsets, which is why `read_subset` takes a slice at all.
-///
-/// [`EXPECTED_SUBSET`]'s own test deliberately does **not** widen with this
-/// one: it pins `phase-4a.txt`'s exact line list, and a union would destroy
-/// that.
 #[test]
 fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
     let mut instructions = Coverage::new("InstructionKind", INSTRUCTION_TAGS);
@@ -1682,13 +1436,6 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
 /// list makes against that file's builtin set. Changing a name there without
 /// changing the file (or vice versa) is exactly the drift this test exists to
 /// catch.
-///
-/// **The literal lives in `rexx_inventory::builtins`, not here.** A private
-/// `const` in this file is unreachable from any other test binary and from
-/// `src/`, and the same list is what a builtin dispatch consults and what
-/// `tests/builtin_status.rs` derives its `excluded` rows from. One copy, in
-/// the crate that already holds the generated builtin table, is what keeps
-/// those three readers agreeing.
 use rexx_inventory::builtins::EXCLUDED as EXCLUDED_BUILTINS;
 
 #[test]

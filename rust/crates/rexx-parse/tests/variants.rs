@@ -12,18 +12,6 @@
 //! Phase 3 gate: every `Instruction` and `Expr` variant is constructed at
 //! least once by parsing `rust/corpus/lang/` and `samples/` together, asserted
 //! by enumerating the variants rather than by inspection.
-//!
-//! The enumeration cannot go stale. Each `tags!` invocation expands to a
-//! `match` with no wildcard arm, so adding a variant to any of these enums
-//! makes this file fail to compile, and the tag list the assertion checks
-//! against is generated from the same invocation rather than written twice.
-//!
-//! `DirectiveKind` and the kind-bearing sub-enums (`LoopKind`, `Call`,
-//! `Signal`, `Use`, `Trace`, `ParseSource`) are gated on the same machinery,
-//! beyond the criterion's literal wording, because Phase 4 dispatches on those
-//! too: the C++'s 52 instruction classes collapse into them, so "every
-//! `InstructionKind` variant" alone would leave 23 loop classes covered by one
-//! tag.
 
 mod gate_walk;
 

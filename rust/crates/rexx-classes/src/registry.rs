@@ -11,22 +11,6 @@
 
 //! `ClassRegistry`: class objects, and the name-to-class registry, over
 //! [`ClassGraph`](crate::ClassGraph).
-//!
-//! A class object is an [`ObjRef`] identity plus its id string; everything
-//! else the brief lists (two behaviour ids, the superclass list, the
-//! subclass list) is `ClassGraph`'s own `ClassDef`, already carrying them --
-//! this module owns identity allocation and the id string, `ClassGraph`
-//! owns the cascade. The registry is the name half: a class is found by the
-//! string a `::CLASS` directive or a primitive bootstrap gave it, matching
-//! oracle's `TheEnvironment->put(classObj, className)`
-//! (`Setup.cpp:203`) -- one uppercased name resolves to one class, exactly
-//! that direction, nothing about `.environment`/`.local`/`.NAME` resolution
-//! order itself (D33's, not this module's).
-//!
-//! What this module does not do: allocate an `ObjRef` for anything other
-//! than a class (no ordinary object arena), or resolve a name through any
-//! path other than this flat table (no `.environment`/`.local` chain, no
-//! `.context`/`.rexxinfo`-style dynamic instance).
 
 use crate::class_graph::{ClassGraph, ClassKind, InheritRefusal};
 use crate::method_dict::MethodSlot;
@@ -46,11 +30,6 @@ pub struct ClassRegistry {
     default_names: NameMap<ObjRef, String>,
     /// `~objectName=`'s store for a class object, keyed by identity, holding
     /// only the classes something has renamed.
-    ///
-    /// Separate from `default_names` because `~defaultName` keeps answering
-    /// the declared form after a rename, and because a class identity is the
-    /// one handle the arena does not hold, so there is no object to put the
-    /// name in -- every other renameable object carries its own.
     object_names: NameMap<ObjRef, String>,
     /// Uppercased name -> identity, the registry's own lookup direction --
     /// oracle's `TheEnvironment->put(classObj, getUpperGlobalName(name))`.
@@ -126,13 +105,6 @@ impl ClassRegistry {
 
     /// Allocate a fresh identity and give it an id string, **without**
     /// registering the name -- what a `::CLASS` directive creates.
-    ///
-    /// The oracle files an installed class against the package
-    /// (`PackageClass::addInstalledClass`) and never into the environment;
-    /// only `completeSystemClass`, an image-build path, does the latter. So a
-    /// `::CLASS` named `Array` must not displace the environment's own
-    /// `Array`, which registering it here would do -- [`Self::registered`] is
-    /// what `.environment` is populated from.
     pub fn define_unregistered_class(
         &mut self,
         id: ObjRef,
@@ -151,18 +123,6 @@ impl ClassRegistry {
     /// **kernel** directory rather than the environment one -- oracle's
     /// `addToSystem(name, currentClass)`, which is what
     /// `EndSpecialClassDefinition` expands to (`Setup.cpp:396`-`:398`).
-    ///
-    /// A class registered here answers [`Self::system_lookup`] and neither
-    /// [`Self::lookup`] nor [`Self::registered`], which is the difference a
-    /// program can see: measured on the oracle, `.RexxInfo` renders as `a
-    /// RexxInfo` (the instance `addToEnvironment` put there, not the class),
-    /// and `::CLASS K SUBCLASS RexxInfo` is `99.949 "REXXINFO" is not a
-    /// valid class` at rc 157.
-    ///
-    /// Distinct from [`Self::define_unregistered_class`], which is a
-    /// `::CLASS` directive's class: that one is filed against a package and
-    /// this one against a directory, so a later phase that models either
-    /// table has each of them in exactly one place.
     pub fn define_system_class(
         &mut self,
         id: ObjRef,
@@ -188,30 +148,12 @@ impl ClassRegistry {
 
     /// [`Self::lookup`] for a caller that already holds the uppercased name as
     /// bytes, which every `.NAME` resolution does.
-    ///
-    /// **Two allocations shorter than the `lookup` path it replaces**, and
-    /// that is the whole reason it exists: reaching `lookup` from bytes cost a
-    /// `String::from_utf8_lossy` at the call site and a
-    /// `to_ascii_uppercase` inside it, both of which copy a name this table is
-    /// already keyed by. `from_utf8` validates without copying, and a name
-    /// that is not UTF-8 cannot be a key here, so rejecting it answers `None`
-    /// exactly as a miss does.
-    ///
-    /// The caller owes the uppercasing, which is the same contract
-    /// `Interp::rexx_package_class` and its neighbours already state for their
-    /// own `upper` arguments.
     pub fn lookup_upper(&self, upper: &[u8]) -> Option<ObjRef> {
         self.by_name.get(std::str::from_utf8(upper).ok()?).copied()
     }
 
     /// The kernel directory's own lookup: what [`Self::define_system_class`]
     /// registered, and nothing [`Self::lookup`] answers.
-    ///
-    /// **No `.NAME` reaches this**, which is the whole reason the two tables
-    /// are separate: this answers a bootstrap that needs a system class's
-    /// identity to build something out of it -- an instance of it in
-    /// `.environment` -- and never a name resolution, which reads
-    /// [`Self::lookup`] alone.
     pub fn system_lookup(&self, name: &str) -> Option<ObjRef> {
         self.by_system_name.get(&name.to_ascii_uppercase()).copied()
     }
@@ -224,20 +166,12 @@ impl ClassRegistry {
     /// `~defaultName` -- `RexxClass::defaultName` (`ClassClass.cpp:614`),
     /// which is the id with `The ` in front and ` class` behind it, and is
     /// what `SAY` prints for a class object.
-    ///
-    /// Stored rather than assembled on demand because the one caller that
-    /// needs it renders a value through a shared borrow and has nowhere to put
-    /// a freshly built string.
     pub fn default_name(&self, class: ObjRef) -> &str {
         &self.default_names[&class]
     }
 
     /// `~objectName` for a class object: what `~objectName=` last stored, or
     /// [`Self::default_name`] for a class nothing has renamed.
-    ///
-    /// This is `RexxObject::stringValue`'s answer and so the bytes `SAY`
-    /// prints, which is why the rename is visible through every rendering of
-    /// the class object and not only through the `~objectName` message.
     pub fn object_name(&self, class: ObjRef) -> &str {
         match self.object_names.get(&class) {
             Some(name) => name,
@@ -252,9 +186,6 @@ impl ClassRegistry {
 
     /// Every class this registry answers [`Self::lookup`] for, as
     /// (uppercased name, identity).
-    ///
-    /// The oracle's `completeSystemClass` puts exactly this pair into
-    /// `.environment` (`Setup.cpp:203`), which is the one consumer.
     pub fn registered(&self) -> impl Iterator<Item = (&str, ObjRef)> {
         self.by_name.iter().map(|(name, id)| (name.as_str(), *id))
     }
@@ -263,28 +194,6 @@ impl ClassRegistry {
     /// (`ClassClass.cpp:1615`, `:736`/`:803` for the primitive bootstrap
     /// path) -- [`ClassGraph::owning_class`], **not**
     /// [`ClassGraph::metaclass`].
-    ///
-    /// **They part iff the superclass is a metaclass and is not the
-    /// named-or-inherited metaclass** -- measured, and stated as an `iff`
-    /// because deriving from a metaclass is necessary and not sufficient.
-    /// `::CLASS T SUBCLASS MC METACLASS M1` parts, answering `~class` `M1`
-    /// and `~metaClass` `MC`, and so does `::CLASS T2 SUBCLASS MC` with no
-    /// `METACLASS` named, answering `Class` and `MC`. But
-    /// `::CLASS M3 SUBCLASS MC METACLASS MC` answers `MC` to both, and so do
-    /// `::class MC MIXINCLASS Class` and `::class Z SUBCLASS Class` -- every
-    /// one of those derives from a metaclass, and coincides because the
-    /// superclass is the metaclass in play.
-    ///
-    /// Anywhere the superclass is not a metaclass, nothing overrides and the
-    /// two agree: measured, `.string~class~id` and `.string~metaclass~id` are
-    /// both `"Class"`, and so are `.object`'s and `.class`'s own. Every class
-    /// `native_classes` builds names `.Object` as its superclass, or is
-    /// `.Object` itself and names none, so none of them derives from a
-    /// metaclass at all.
-    ///
-    /// An ordinary (non-class) object's `~class` is unrelated to any
-    /// metaclass concept -- out of scope here, since this registry models
-    /// only class objects.
     pub fn class_of(&self, class: ObjRef) -> ObjRef {
         self.graph.owning_class(class)
     }
@@ -326,10 +235,6 @@ impl ClassRegistry {
     }
 
     /// Drops every row keyed by a class the collector took.
-    ///
-    /// **The destructuring is exhaustive and has no `..`**, so a table added
-    /// to this type is a compile error here until someone decides whether a
-    /// collected class leaves a row in it.
     pub fn expunge(&mut self, dead: &[ObjRef]) {
         let ClassRegistry {
             graph,
@@ -363,27 +268,6 @@ impl ClassRegistry {
 
     /// The class objects with a class-side `UNINIT`, in the order the
     /// oracle's termination sweep runs them, **taken out of the registry**.
-    ///
-    /// Draining is `runUninits` removing each entry before running it
-    /// (`memory/RexxMemory.cpp:362`), and it is what keeps a class from
-    /// being finalized twice when the sweep makes more than one pass.
-    ///
-    /// `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`) walks
-    /// `uninitTable`, an `IdentityTable` built at
-    /// `HashCollection::DefaultTableSize`, and `HashContents::iterateNext`
-    /// (`classes/support/HashContents.cpp:489`) takes buckets in index order
-    /// and the overflow chain within a bucket, which `HashContents::put`
-    /// appends to. A class object's bucket comes from
-    /// `RexxClass::getHashValue` (`classes/ClassClass.cpp:209`), which is the
-    /// hash of the class's **id string** rather than of its address -- the
-    /// reason this order reproduces where an instance's does not.
-    ///
-    /// The oracle transcripts this reproduces are the cases in
-    /// `tests/uninit_sweep_order.rs`, which asserts them.
-    ///
-    /// **Predicts the oracle only while its table has not expanded.**
-    /// `HashCollection::expandContents` doubles the bucket count and rehashes
-    /// every entry; twenty entries do not reach that, measured above.
     pub fn take_uninit_classes_in_sweep_order(&mut self) -> Vec<ObjRef> {
         let mut sweep = self.graph.take_uninit_classes();
         sweep.sort_by_key(|&class| uninit_bucket(self.id_string(class).as_bytes()));
@@ -500,11 +384,6 @@ impl ClassRegistry {
     /// instance behaviour: the scope the winning entry came from, and the
     /// method it names -- oracle's `RexxBehaviour::methodLookup`, which
     /// `RexxObject::messageSend` (`ObjectClass.cpp:866`) calls.
-    ///
-    /// The scope comes back because a caller needs it for more than the
-    /// lookup: it is the class whose `~id` the oracle names in a native
-    /// method's own traceback line, and it is the starting point a further
-    /// scope-override send would take.
     pub fn lookup_instance_method(&self, class: ObjRef, name: &str) -> Option<(ObjRef, MethodId)> {
         self.graph
             .lookup_at(self.graph.instance_behaviour_handle(class), name)
@@ -521,11 +400,6 @@ impl ClassRegistry {
     /// holds -- oracle's `RexxBehaviour::methodLookup`, which
     /// `RexxObject::messageSend` (`ObjectClass.cpp:866`) calls on
     /// `behaviour` and not on the class.
-    ///
-    /// The scope comes back because a caller needs it for more than the
-    /// lookup: it is the class whose `~id` the oracle names in a native
-    /// method's own traceback line, and it is the starting point a further
-    /// scope-override send would take.
     pub fn lookup_at(&self, handle: BehaviourHandle, name: &str) -> Option<(ObjRef, MethodId)> {
         self.graph.lookup_at(handle, name)
     }
@@ -581,10 +455,6 @@ impl ClassRegistry {
 
     /// A scope-override message resolution against the class object itself --
     /// the class-behaviour twin of [`Self::lookup_from_scope_at`].
-    ///
-    /// `RexxObject::superMethod` reads the *receiver's* behaviour, and for a
-    /// send to a class object that behaviour is the class behaviour, so the
-    /// override applies on this side as well as the instance side.
     pub fn lookup_class_method_from_scope(
         &self,
         class: ObjRef,
@@ -623,11 +493,6 @@ impl ClassRegistry {
     /// `define` costs is spent for no reason here -- accepted rather than
     /// building a second populate-then-cascade-once primitive, since no
     /// axis this task is guarded against (D35) ever calls it.
-    ///
-    /// Returns the minted [`MethodId`] -- added for Phase 5a Task 4's own
-    /// caller, which records a `(program, directive)` pair against it so a
-    /// later dispatch can find the method's own body; nothing in this crate
-    /// itself needs the value back.
     pub fn add_instance_method(&mut self, class: ObjRef, name: &str) -> MethodId {
         let method = self.next_method_id();
         self.graph.define(class, name, method);
@@ -644,10 +509,6 @@ impl ClassRegistry {
     }
 
     /// The native methods `Setup.cpp` marks private, in mint order.
-    ///
-    /// The flattened cascade copies a defining class's entry, its
-    /// [`MethodId`] included, into every heir's behaviour, so one identity
-    /// here covers every receiver that answers the name.
     pub fn private_native_methods(&self) -> &[MethodId] {
         &self.private_native_methods
     }
@@ -655,9 +516,6 @@ impl ClassRegistry {
     /// Install a directly-added class (static) method -- oracle's
     /// `AddClassMethod`, matching [`ClassGraph::class_define`]'s own
     /// bootstrap-only semantics (no cascade, no handle reallocation).
-    ///
-    /// Returns the minted [`MethodId`], for the same reason
-    /// [`Self::add_instance_method`] does.
     pub fn add_class_method(&mut self, class: ObjRef, name: &str) -> MethodId {
         let method = self.next_method_id();
         self.graph.class_define(class, name, method);
@@ -668,10 +526,6 @@ impl ClassRegistry {
     /// `name` naming a [`MethodId`] the caller already holds --
     /// `RexxClass::defineClassMethod` (`classes/ClassClass.cpp:883`), which
     /// writes both the class behaviour and `classMethodDictionary`.
-    ///
-    /// [`Self::add_class_method`] beside it mints its own id, which is what
-    /// `Setup.cpp`'s `AddClassMethod` wants and what a caller installing a
-    /// method object of its own must not have.
     pub fn define_class_method(&mut self, class: ObjRef, name: &str, method: MethodId) {
         self.graph.class_define(class, name, method);
     }
@@ -751,22 +605,6 @@ impl ClassRegistry {
     /// donates from `source`'s own *unflattened* dictionary and rewrites
     /// that dictionary's scopes as it goes. See
     /// [`ClassGraph::inherit_instance_methods`].
-    ///
-    /// **`Setup.cpp`'s `InheritInstanceMethods(source)` macro is a different
-    /// C++ function** -- `RexxBehaviour::inheritInstanceMethods`
-    /// (`RexxBehaviour.cpp:350`), which donates from `source`'s already
-    /// *flattened* behaviour filtered to `source`'s own scope and leaves the
-    /// donor alone. `native_classes.rs`'s replay loop calls
-    /// [`Self::donate_instance_methods`] for it, and
-    /// [`MethodDict::replace_methods_from`] carries what conflating the two
-    /// costs: the donor's own entries end up carrying the recipient's scope,
-    /// which is invisible until something rebuilds the donor's behaviour and
-    /// is then a wrong scope in a traceback frame.
-    ///
-    /// The `Setup.cpp` donors are `Array` -> `Queue` (`:775`),
-    /// `IdentityTable` -> `Table`/`StringTable`/`Set`/`Relation` (`:861`,
-    /// `:881`, `:908`, `:958`), `StringTable` -> `Directory` (`:933`) and
-    /// `Relation` -> `Bag` (`:988`).
     pub fn inherit_instance_methods(&mut self, class: ObjRef, source: ObjRef) {
         self.graph.inherit_instance_methods(class, source);
     }
@@ -793,19 +631,6 @@ impl ClassRegistry {
 
 /// Which bucket of the oracle's uninit table a class object with id `id`
 /// lands in.
-///
-/// `RexxString::getStringHash` (`classes/StringClass.hpp:328`) folds
-/// `h = 31 * h + stringData[i]` over the bytes into a `size_t`, with
-/// `stringData` a signed `char`, and `HashContents::hashIndex` reduces that
-/// modulo the bucket count (`classes/support/HashContents.hpp:204`).
-///
-/// **Over the bytes the id still has, which for a non-ASCII id are not the
-/// oracle's.** A class id reaches this crate through
-/// `String::from_utf8_lossy`, so a byte outside UTF-8 is already a
-/// replacement character by the time an id string exists. Measured, oracle
-/// rc 0: `.Object~subclass('<0xE9>A')~id` is `E941` there and `EFBFBD41`
-/// here, with no `UNINIT` anywhere -- a pre-existing divergence in class ids
-/// that this function inherits rather than introduces.
 fn uninit_bucket(id: &[u8]) -> usize {
     /// `HashCollection::DefaultTableSize`, which `new_identity_table` builds
     /// the uninit table at (`classes/IdentityTableClass.hpp:69`).

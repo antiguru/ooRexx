@@ -11,11 +11,6 @@
 
 //! `message`, `line` and the placeholder rule that decides between the two
 //! table rows an error has.
-//!
-//! Every message text asserted here was printed by `build/bin/rexxc`, not read
-//! out of the XML: the point of the table being generated is that the text comes
-//! from the C++ tree, so a test that quoted the XML back at itself would pass
-//! against a table that renders it wrongly.
 
 use crate::token::ParseError;
 use crate::{ProgramSource, SourceKind};
@@ -40,11 +35,6 @@ fn a_second_sub_message_that_needs_no_substitution_is_also_the_message() {
     // A separate test rather than a second assertion above, because a shared
     // `#[test]` hid a wrong expectation twice in this task: the first assertion
     // fails, the run stops, and the second is never evaluated.
-    //
-    // `rexxc` on `nop` then a blank line then `end` prints, verbatim:
-    //     3 *-* end
-    //     Error 10 running <file> line 3:  Unexpected or unmatched END.
-    //     Error 10.1:  END has no corresponding DO, LOOP, or SELECT.
     assert_eq!(
         ParseError::new(10, 1, 0).message(),
         "END has no corresponding DO, LOOP, or SELECT."

@@ -33,19 +33,6 @@ use crate::trace::ChunkTrace;
 /// The compile-time register stack (the plan's Decisions section: "register
 /// allocation is a compile-time stack, and the chunk records its high-water
 /// mark").
-///
-/// `mark` takes the current top, `alloc` hands out the next index, and
-/// `release` puts the top back to a mark. A promoted clause takes a mark when
-/// its [`Op::Clause`] is emitted and releases to it at the clause's `end`, so
-/// two sibling clauses reuse the same registers and a clause nested inside
-/// another's region cannot reclaim the enclosing one's. A construct whose
-/// state outlives its member clauses allocates in the *enclosing* scope,
-/// before those clauses are emitted, which is what puts its registers below
-/// every mark they take.
-///
-/// The withdrawn alternative was the spike's whole-chunk monotonic counter: it
-/// allocates a register per assignment and never reuses one, so a long body
-/// reserves a region proportional to its length.
 struct Registers {
     /// The next index `alloc` hands out.
     next: u16,
@@ -56,10 +43,6 @@ struct Registers {
 }
 
 /// A saved register top, handed back to [`Registers::release`].
-///
-/// A newtype rather than a bare `u16` so a register index and a mark cannot
-/// be passed to each other's function: both are positions in the same stack
-/// and the compiler is otherwise the only thing keeping them apart.
 #[derive(Clone, Copy)]
 struct Mark(u16);
 
@@ -90,9 +73,6 @@ impl Registers {
 
     /// Puts the top back to `mark`, so every register allocated since is
     /// handed out again.
-    ///
-    /// The high-water mark is untouched: it is what the region has to be
-    /// *sized* to, and a register released is still one the run needed.
     fn release(&mut self, mark: Mark) {
         self.next = mark.0;
     }
@@ -104,23 +84,9 @@ impl Registers {
 
 /// The constant table [`Op::Const`] indexes, built as the pass goes and
 /// **interned**: a literal written twice gets one entry.
-///
-/// **The interning is what the table is for, not a refinement of it.** Every
-/// entry is a heap allocation, so an un-interned table costs one allocation
-/// per literal *occurrence* -- which on a straight-line body is one per
-/// clause, paid at compile time -- and the mechanics spike measured that
-/// artifact swamping the difference it existed to measure.
-///
-/// `index` borrows the body's own literal bytes rather than owning a second
-/// copy of each key, so a repeated literal costs a hash and a comparison and
-/// no allocation at all. That is the whole reason this is a struct with a
-/// lifetime instead of a `HashMap<Box<[u8]>, u32>`: the owning form allocates
-/// once per *distinct* literal for the key as well as for the entry.
 struct Constants<'a> {
     /// One entry per distinct literal, in the order they were first seen,
     /// which is what [`Chunk::consts`] becomes.
-    ///
-    /// [`Chunk::consts`]: super::Chunk
     values: Vec<Box<[u8]>>,
     /// Which entry a literal's bytes already have.
     index: HashMap<&'a [u8], u32>,
@@ -135,10 +101,6 @@ impl<'a> Constants<'a> {
     }
 
     /// The entry `bytes` has, adding one if this is the first occurrence.
-    ///
-    /// The refusal is the constant half of the one error `compile` has (the
-    /// plan's Decisions section: "op, constant and instruction indices are
-    /// `u32`").
     fn intern(&mut self, bytes: &'a [u8]) -> Result<u32, ChunkTooLarge> {
         if let Some(&at) = self.index.get(bytes) {
             return Ok(at);
@@ -153,14 +115,6 @@ impl<'a> Constants<'a> {
 
 /// A jump whose target is an instruction index the forward pass has not
 /// reached yet, and the op that has to be rewritten once it has.
-///
-/// **The pass is single and forward, so every branch target is a
-/// backpatch.** An `IF`'s false path lands on an instruction after it and its
-/// true path resumes past the `ELSE`, and neither op index exists when the
-/// `IF` itself is compiled. Recording the pair and resolving it after the
-/// loop is what keeps the pass single, and resolving it through `op_of` is
-/// what keeps a target an *instruction* position everywhere else: `Flow::Goto`
-/// carries instruction indices too, so both spaces meet in exactly one table.
 struct Patch {
     /// The op to rewrite.
     op: u32,
@@ -173,22 +127,10 @@ struct Patch {
 /// An op that has to be emitted in front of an instruction's own first op,
 /// so that arriving at that instruction from elsewhere runs it and falling
 /// into the instruction from the op before it does not.
-///
-/// This is the [`Chunk::op_of`]/`first_op_of` split, from the emitting side:
-/// `op_of` names whichever of these is in front, and `first_op_of` names the
-/// instruction's own op. Both entries in the table below are cases where an
-/// arrival has to do something the instruction itself does not.
-///
-/// [`Chunk::op_of`]: super::Chunk
 enum Before {
     /// The end of an `IF`'s true branch: the clause boundary the tree-walker's
     /// own wrapper runs there ([`Op::EndBranch`]), and the jump past the `ELSE`
     /// when there is one to skip.
-    ///
-    /// **Every `IF` registers one**, because the boundary is owed whether or
-    /// not there is anything to jump over. `resume` is `None` for the `IF`
-    /// whose true branch falls straight through to where the false path
-    /// lands, which is every `IF` without an `ELSE`.
     ThenEnd { resume: Option<usize> },
     /// A `SELECT`'s [`Op::EnterOtherwise`], in front of the `OTHERWISE` marker
     /// whose branch it opens a frame over. The `SELECT` is at this index.
@@ -196,20 +138,11 @@ enum Before {
     /// A `SELECT` branch runs out in front of this instruction
     /// ([`Op::EndWhen`]): a listed `WHEN`'s own `false_target`, or the end of
     /// the `OTHERWISE` body.
-    ///
-    /// **One per branch that can end here rather than one per instruction**,
-    /// because nested `SELECT`s can run out at the same instruction and each
-    /// owes its own frame a close.
     SelectBranchEnd,
 }
 
 /// What a listed `WHEN` needs from the `SELECT` that collected it, recorded
 /// when that `SELECT` compiles and read when the `WHEN` itself does.
-///
-/// A table indexed by instruction rather than a lookup from the `WHEN` back to
-/// its `SELECT`: the pass is forward and a `SELECT` always compiles before its
-/// own `whens`, so the answer is already known by the time it is wanted, and
-/// nothing has to search for it.
 struct WhenInfo {
     /// The `SELECT` this `WHEN` belongs to.
     select: u32,
@@ -229,21 +162,9 @@ struct WhenInfo {
 
 /// Which op a jump to an instruction means, for the one instruction where
 /// the two differ: the `ELSE` a branch-end jump sits in front of.
-///
-/// **Arriving at an `ELSE` means two different things and the tree-walker
-/// tells them apart by which loop is running.** `run_bounded`'s own doc
-/// comment states it: "the true path (fall through A, land on `Else` by
-/// `pc += 1`) and the false path (`Goto` straight to `Else`) arrive at the
-/// identical `(instruction, pc)`, and only one of the two arrivals is
-/// supposed to enter B". A flat stream has two *op* positions there instead,
-/// which is what lets it answer both without a second engine -- and this is
-/// the field that says which one a jump wants.
 #[derive(Clone, Copy)]
 enum PatchKind {
     /// The instruction's own first op: run the instruction.
-    ///
-    /// The `IF`'s own false path, and nothing else. It is the one arrival
-    /// that must enter the `ELSE` marker.
     Enter,
     /// Where control resumes when it arrives at this instruction from
     /// anywhere else, which is `Chunk::op_of`'s own answer: the branch-end
@@ -254,46 +175,6 @@ enum PatchKind {
 }
 
 /// Compiles `body` into a [`Chunk`], once, whole.
-///
-/// Every instruction in `body.instructions` compiles (D21: "every
-/// instruction compiles, nothing refuses" is about instructions). A `DO` or
-/// `LOOP` becomes a [`Op::Clause`] region holding its header's own evaluation
-/// and ending in [`Op::LoopRun`], whose body clauses the driver steps; an `IF`
-/// becomes a [`Op::Clause`] region that evaluates its condition and jumps; a
-/// `SELECT` becomes one such region per listed `WHEN` as well as for its own
-/// header, laid out as a scan chain with a frame opened over whichever branch
-/// wins; an `Assignment` and a `SAY` each become a region that produces one
-/// value and then writes or prints it; an instruction whose whole execution
-/// is one `Interp::exec_instruction` call becomes a region holding a single
-/// [`Op::Exec`]. **Every instruction compiles, and every one compiles to a
-/// region** -- the fallthrough arm names its kinds rather than spelling `_`,
-/// so a kind added later cannot reach it unnoticed.
-///
-/// **`plan` is read for one thing: the slot a promoted read or write resolves
-/// to.** The rule a compiled assignment's target has to keep is that a stem, a
-/// compound tail and the `>=>` line stay one implementation -- `Op::Store` goes
-/// through `Interp::assign_expr_target`, which is what `step`'s own arm calls,
-/// and a store path in the driver that wrote a slot itself would be the second
-/// one. What that rule forbids is the *dispatch*, not the resolution: the slot
-/// travels as an argument into that one function, which uses it in the arm
-/// where it means anything and ignores it in the two where it does not. A
-/// promoted read is the same shape one function over, `Interp::read_at` taking
-/// the slot it would otherwise resolve from this same map.
-///
-/// The one error is a machine width, not a language construct (the plan's
-/// Decisions section: "the compiler has one error, and it is a machine
-/// width"). Op indices are `u32` and register indices `u16`, so a body whose
-/// stream or register file would exceed either is refused rather than wrapped
-/// -- unreachable in practice at this task, since nothing produces four
-/// billion instructions in a test and an `IF` allocates one register it then
-/// releases, but the check is the contract [`ChunkTooLarge`] documents.
-///
-/// **`trace` is an input to the result, not a hint** (D23). It decides which
-/// promoted clauses get an [`Op::TraceClause`] of their own, so two chunks for
-/// one body can differ and `Interp::chunk_for` keys on it as well as on the
-/// body. A [`ChunkTrace`] rather than a whole `TraceMode`, because the
-/// argument *is* the key: a compiler that could read a field the key does not
-/// carry would cache a chunk under a name that does not identify it.
 pub(crate) fn compile(
     body: &CodeBody,
     plan: &Plan,
@@ -309,12 +190,6 @@ pub(crate) fn compile(
     // safe is the second half: the setting can change *while* a chunk runs, and
     // an op that is not in the stream cannot be gated back on, so a body that
     // can reach the setting keeps its echoes and its run-time gate.
-    //
-    // Measured over `bench-programs/`, `instructions:u`: `strings.rex` -3.70%,
-    // `varlookup.rex` -2.94%, `alloc4c.rex` -2.36%, `compound.rex` -2.23%, a
-    // pinned `rexxcps` -1.78% and `arith.rex` -0.69%. Those streams are between
-    // 29% and 38% value-echo ops, every one of which an untraced run dispatched
-    // to reach a gate that answered no.
     let echoes_values = trace.intermediates() || !plan.never_retraces();
     // **The header's `>K>` line is a *result*, not an intermediate**, so it
     // asks a different bit than the echoes above. `TraceMode::results`' own
@@ -449,19 +324,6 @@ pub(crate) fn compile(
                 // fewer.** An equality rather than a bound, because the two
                 // directions are different defects and only one of them is
                 // harmful.
-                //
-                // Above `header_top` is a register a slot allocated and did not
-                // hand back. Nothing reuses it until the `END`, so it is waste
-                // rather than corruption -- measured, leaking one per slot with
-                // this line removed leaves the `ir_recorded` suite green and moves
-                // golden streams and nothing else.
-                //
-                // Below `header_top` is a header value's own register handed
-                // back early, which `LoopState` still reads for the rest of the
-                // construct: that is the hazard the enclosing-scope allocation
-                // above exists to prevent, and it is what the equality guards
-                // against a future change. `push_native` cannot produce it
-                // today, because it releases only to a mark it took itself.
                 debug_assert_eq!(
                     registers.mark().0,
                     header_top.0,
@@ -500,13 +362,6 @@ pub(crate) fn compile(
             // not the branch's). So the region is the condition's ops and the
             // jump that reads them, and the register the condition lands in is
             // released at its end.
-            //
-            // **`push_value` is deliberately not used here, because the
-            // fallback is not the same op.** A condition `native_shape`
-            // declines stays one `Op::EvalExpr` doing the whole job,
-            // validation and `>>>` included, through `eval_chunk_expr`'s own
-            // `If` arm -- so an `Op::Condition` behind it would trace the value
-            // twice and validate it twice.
             InstructionKind::If {
                 condition,
                 false_target,
@@ -682,10 +537,6 @@ pub(crate) fn compile(
             // none, and falls to the absorbed arm below, where `Op::Exec`
             // runs it through `Interp::exec_instruction`'s own arm for the
             // kind.
-            //
-            // The clause is the condition and nothing else, same as an `IF`'s,
-            // and `EnterWhen` sits past the region because opening the frame is
-            // the branch's business rather than the clause's.
             InstructionKind::When { .. } | InstructionKind::WhenCase { .. }
                 if when_info[index].is_some() =>
             {
@@ -930,11 +781,6 @@ pub(crate) fn compile(
             // of the print, and one arm rather than two because the keyword is
             // all that differs -- read off the kind here exactly as `step`'s
             // own `PUSH`/`QUEUE` arm reads its end of the queue.
-            //
-            // **The op is the last of the region and control does not come
-            // back to it**, so nothing follows it inside the region and
-            // `close_region` marks the end the driver settles the `Flow`
-            // against.
             InstructionKind::Return { expression } | InstructionKind::Exit { expression } => {
                 let keyword = if matches!(instruction.kind, InstructionKind::Return { .. }) {
                     ReturnKeyword::Return
@@ -1028,12 +874,6 @@ pub(crate) fn compile(
             // instruction has no expression slot for, so either one keeps the
             // whole clause on `Op::Call` and leaves the arguments, the `>A>`
             // lines and their intermediates to `Interp::invoke_call`.
-            //
-            // The other three `Call` forms fall to the delegating
-            // `Op::Exec` region below.
-            // `CALL ON`/`OFF` resolves no name at all, `CALL (expr)` learns
-            // its name at run time and `CALL ns:name` is Phase 5's loud gap;
-            // the first two have their own witnesses in `golden_tests.rs`.
             InstructionKind::Call(call) if matches!(&**call, Call::Named { .. }) => {
                 let Call::Named { args, .. } = &**call else {
                     unreachable!("the guard above admits only `Call::Named`")
@@ -1162,43 +1002,6 @@ pub(crate) fn compile(
             // each and computes nothing, so the clause region is the whole of
             // what they do and it holds no op but its own echo
             // ([`Op::Clause`]'s own doc comment).
-            //
-            // **A `LABEL` is one of them, and it is the one with machinery
-            // around it.** It is a jump target, so `Chunk::op_of` has to keep
-            // naming it -- which it does, because a region opens at the
-            // instruction's own entry, which is what `Chunk::op_of` names. It
-            // echoes under `TRACE L` where an ordinary clause does not, which
-            // [`echoes`] already asks through `ChunkTrace::echoes` and
-            // `Interp::echo_compiled_clause` already answers by passing
-            // `is_label` through. And it must not spend the activation's
-            // first-instruction permission, which is
-            // `Interp::grant_procedure_permission`'s own label arm: it never
-            // grants for a label, so `procedure_permitted` is false when this
-            // region takes it and `first_instruction_pending` survives to the
-            // instruction after -- which is what makes `sub:` followed by
-            // `PROCEDURE` legal.
-            //
-            // **`ELSE` and `OTHERWISE` are here too, and the machinery each
-            // is reached through survives untouched.** An `ELSE` is entered by
-            // the `IF`'s own false target and skipped by a finished true
-            // branch, which is why it has two `op_of` entries
-            // ([`PatchKind`]); an `OTHERWISE` is entered through the
-            // [`Op::EnterOtherwise`] that opens its frame. Both keep working
-            // because a region opens at the instruction's own entry, and
-            // `Before` ops still precede it --
-            // the same property that already made a `LABEL` a legal jump
-            // target. Untraced, each region is one op, so no index moves at
-            // all; traced, it is two and the indices after it shift by one.
-            //
-            // **`END` is not here, and that is a measurement.** It is not a
-            // marker: its `EndStyle::Select` arm raises 7.3, so it carries an
-            // [`Op::Exec`] and takes the arm above. It is also barely
-            // executed, because every construct returns a `Flow` that resumes
-            // *past* its own `END` -- counted under a scratch build, zero
-            // `END` clauses are stepped over a whole run of
-            // `samples/rexxcps.rex` and six over the whole corpus, against
-            // 700,002 `THEN` on `rexxcps` alone -- which is why it shares the
-            // delegating op rather than earning one of its own.
             InstructionKind::Nop
             | InstructionKind::Then
             | InstructionKind::Else { .. }
@@ -1229,12 +1032,6 @@ pub(crate) fn compile(
             // region owes the echo, the boundary, the temps frame, the
             // deadline count and the failing clause's site, and
             // [`Op::Exec`] owes the work.
-            //
-            // `Call` here is every form but `Call::Named`, which has its own
-            // promotion above. `Command` and `Options` reach
-            // `Loud::instruction` from inside `exec_instruction` exactly as
-            // they do from `step`, since neither has an arm there: promoting
-            // them moves where the refusal is raised from and not whether.
             InstructionKind::Command { .. }
             | InstructionKind::End { .. }
             | InstructionKind::Drop { .. }
@@ -1266,16 +1063,6 @@ pub(crate) fn compile(
             // another `WHEN`'s consequence, so the enclosing `SELECT` never
             // collected it and it is nobody's listed branch. The listed forms
             // took their own arm above; this is what falls past it.
-            //
-            // Both have an arm in `Interp::exec_instruction` already and
-            // neither resolves anything a region could hold, so the
-            // delegating op covers them whole. **The plain form evaluates its
-            // condition for the side effects and never branches; the `CASE`
-            // form does branch, on the false side, through
-            // `Flow::Goto(false_target)`** -- which leaves this region the way
-            // a `LEAVE` naming an enclosing construct does, as
-            // `RegionEnd::Flowed`, and is settled by the range that owns the
-            // target rather than here.
             InstructionKind::When { .. } | InstructionKind::WhenCase { .. } => {
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
@@ -1358,25 +1145,6 @@ pub(crate) fn compile(
 
 /// The ops that leave expression `slot` of instruction `index` in register
 /// `dst`.
-///
-/// **What compiles natively is [`native_shape`]'s answer, and nothing here
-/// restates it** -- that function is the enumeration, and a second copy of the
-/// list in prose is one that stops agreeing with it. Everything it declines --
-/// a `.name` is one such expression -- is evaluated by `eval.rs`
-/// through [`Op::EvalExpr`], which is trace-identical to what the tree-walker
-/// does with the same expression because it is the same call, and stays
-/// identical because nothing this region emits sits between one evaluation and
-/// the next.
-///
-/// **`expr` is the whole of the instruction's expression at `slot`, and the
-/// choice is taken for the whole of it.** An expression holding one node with
-/// no op falls to `EvalExpr` entire, however much of the rest of it would have
-/// compiled.
-///
-/// **[`NodePath::ROOT`] is where the address starts**, because `expr` *is*
-/// slot `slot`'s own expression: the route down to it has no steps in it, and
-/// every step below is one [`native_shape`] and [`push_native`] take together
-/// as they descend.
 #[expect(
     clippy::too_many_arguments,
     reason = "the emission sinks, the plan a read resolves its slot against, and the address an \
@@ -1418,23 +1186,6 @@ fn push_value<'a>(
 
 /// Whether `expr` compiles to native ops entire, with `eval.rs` not entered
 /// for any part of it.
-///
-/// **Asked once, at the whole expression, and it is what licenses
-/// [`push_native`]'s own unreachable arm.** The recursion below descends into
-/// an operator's operands, and a subexpression has nowhere to fall back to: an
-/// [`Op::EvalExpr`] names an expression *slot* of an instruction, so emitting
-/// one for an operand would re-evaluate the whole instruction's expression
-/// instead of that operand. So the decision is taken for the whole tree before
-/// anything is emitted, and an expression with one unpromotable node anywhere
-/// inside it stays one `EvalExpr`.
-///
-/// **`path` is `expr`'s own address**, the route [`push_native`] writes into
-/// an op emitted for this node, and `None` is a node the width of a
-/// [`NodePath`] does not reach. **Only the call arm reads it.** A call's op
-/// names the node it sits at, so a call with no address has no op; every other
-/// shape here is computed from registers and is addressed by nothing, so a
-/// depth past the width costs it nothing and a call-free expression promotes
-/// however deep it runs.
 fn native_shape(expr: &Expr, path: Option<NodePath>) -> bool {
     match &expr.kind {
         ExprKind::Literal(_)
@@ -1462,33 +1213,12 @@ fn native_shape(expr: &Expr, path: Option<NodePath>) -> bool {
 
 /// The address of one child of the node addressed by `path`: the right child
 /// when `right`, and the left or only one otherwise.
-///
-/// `None` for a child the width does not reach, and `None` propagated from a
-/// parent that had no address either -- the two are the same answer here,
-/// because what a caller does with it is the same.
-///
-/// The `right` flag is the one `Interp::chunk_node_at` reads back, and the
-/// children it names are the ones that descent walks: a binary operator's two
-/// operands and a prefix operator's only one.
 fn descend(path: Option<NodePath>, right: bool) -> Option<NodePath> {
     path?.child(right)
 }
 
 /// The ops that leave `expr` -- which [`native_shape`] has already accepted --
 /// in register `dst`.
-///
-/// **Each split is what the expression is rather than what is convenient.** A
-/// literal's value is bytes the node already carries, so it becomes a native
-/// [`Op::Const`] against the interned table plus the `>L>` line that loading it
-/// owes. A bare symbol's value is in a frame slot, so it becomes a native
-/// [`Op::Load`] plus the `>V>` line that reading it owes. A binary operator's
-/// value is computed from its two operands' registers, so it becomes their ops
-/// followed by [`Op::Arith`] or [`Op::Binary`] plus the `>O>` line that
-/// applying it owes, and a prefix operator's is the same with one operand,
-/// [`Op::Prefix`] and the `>P>` line that operator's own trace is. A call's
-/// value is what running it answers, so it becomes [`Op::CallExpr`] plus the
-/// `>F>` line that owes -- and that op is addressed rather than computed,
-/// which is why `index`, `slot` and `path` come down here at all.
 #[expect(
     clippy::too_many_arguments,
     reason = "the emission sinks, the plan a read resolves its slot against, and the address a \
@@ -1637,10 +1367,6 @@ fn push_native<'a>(
             // Behind the operation rather than in front of it, because
             // `eval.rs` emits this line post-order, with the value in hand --
             // so an inner operator's line precedes the outer one's.
-            //
-            // `Op::TracePrefix` and not `Op::TraceOperator`: a prefix operator
-            // traces `>P>`, which is a different line from the `>O>` every
-            // binary operator traces.
             if echoes_values {
                 ops.push(Op::TracePrefix { op: *op, src: dst });
             }
@@ -1663,12 +1389,6 @@ fn push_native<'a>(
             // the name lookup and one `eval` entry per argument; measured on
             // a ladder of `zq = length(s)` clauses, a builtin call cost 617
             // instructions against the -O3 interpreter's 293.
-            //
-            // `native_shape` with no address is exactly the right test: it
-            // declines a call, so an argument holding one keeps the whole
-            // call on `Op::CallExpr` rather than nesting argument runs, and
-            // it declines the `>v` reference form, which `USE ARG >` writes
-            // back through and a value on a stack cannot carry.
             if args
                 .iter()
                 .all(|arg| arg.as_ref().is_none_or(|expr| native_shape(expr, None)))
@@ -1755,29 +1475,6 @@ fn push_native<'a>(
 
 /// The slot one assignment *target* resolves to, or [`PlanSlot::UNRESOLVED`]
 /// for a target that does not write a slot by name.
-///
-/// **A simple variable only, and the two it declines are declined for
-/// different reasons.**
-/// A compound target resolves a tail key at the write site and mutates one
-/// tail through `stem_set`, which writes the *stem's* slot and not the
-/// symbol's own -- the same asymmetry [`PlanSlot`]'s own doc comment records
-/// for a compound *read* -- so the number this could answer with is one
-/// `Interp::assign_expr_target`'s compound arm has no use for, and that arm
-/// asserts it was not given one.
-/// A bare stem target **does** write the symbol's own slot, and the number is
-/// available: `Plan::bind` binds a stem-shaped spelling whole, so
-/// `by_symbol[id]` holds it. It is `UNRESOLVED` here because `Plan::bind`
-/// records that same slot on the entry `Code::compound` hands back, and
-/// `assign_expr_target`'s stem arm reads it from there -- which answers on
-/// the tree-walker as well, where an op answers only for the compiled engine.
-/// Carrying it here as well would be a second source for one number.
-///
-/// The map is the plan's `by_symbol`, which is what `Code::slots` is a view of
-/// at run time, so the compiled answer and `Interp::slot_of`'s are one
-/// resolution made at two times ([`push_read`]'s own doc comment has the
-/// argument in full).
-///
-/// [`PlanSlot`]: super::PlanSlot
 fn write_slot(plan: &Plan, target: &Expr) -> PlanSlot {
     match &target.kind {
         ExprKind::Variable(id) => plan
@@ -1789,22 +1486,6 @@ fn write_slot(plan: &Plan, target: &Expr) -> PlanSlot {
 
 /// The two ops one bare-symbol read is: the load, and the `>V>`/`>C>` line
 /// that reading it owes.
-///
-/// **The slot comes from the plan's own `by_symbol` map**, which is the map
-/// `Code::slots` is a view of at run time, so the compiled answer and the
-/// run-time one are one resolution made at two times rather than two
-/// resolutions. `Plan::build` is exhaustive over the body, so a symbol read by
-/// an instruction of it is bound -- but that is a property of another function,
-/// and a read whose symbol is not in the map simply resolves its own slot the
-/// way every read did before this op existed.
-///
-/// **A compound is never resolved here**, and it is the case that makes the
-/// unresolved arm ordinary rather than defensive: what a compound read goes
-/// through is the *stem's* slot and a tail key worked out at the read site, and
-/// `Plan::note_compound_name` binds those by name with no `SymbolId` to hang
-/// them on ([`PlanSlot`]'s own doc comment).
-///
-/// [`PlanSlot`]: super::PlanSlot
 fn push_read(
     ops: &mut Vec<Op>,
     echoes_values: bool,
@@ -1837,13 +1518,6 @@ fn push_read(
 }
 
 /// Whether a promoted clause of `instruction` echoes under `trace`.
-///
-/// The same question `Interp::tracing_clause` asks at run time, through the
-/// same [`ChunkTrace::echoes`], so the compiled answer and the run-time one
-/// cannot disagree. `is_label` is read off the instruction rather than assumed
-/// false: nothing here says a `LABEL` can never be promoted, and a rule that
-/// held only because of what happens to be promoted today is the kind that
-/// stops holding without anything going red.
 fn echoes(trace: ChunkTrace, instruction: &Instruction) -> bool {
     trace.echoes(matches!(instruction.kind, InstructionKind::Label { .. }))
 }
@@ -1858,13 +1532,6 @@ fn push_echo(ops: &mut Vec<Op>, echo: bool, index: u32) {
 }
 
 /// Emits the ops that go in front of one instruction, innermost first.
-///
-/// **Reversed, because registration order is outermost first.** A construct
-/// registers its own entry when *it* compiles, and an enclosing construct
-/// compiles before the one nested inside it; control leaves the inner branch
-/// first, so the inner boundary runs first. The one entry that can carry a
-/// jump is the outermost, which reversal puts last -- and it has to be last,
-/// since every op after a jump at the same position is unreachable.
 fn emit_before(
     ops: &mut Vec<Op>,
     patches: &mut Vec<Patch>,
@@ -1917,13 +1584,6 @@ fn emit_before(
 
 /// Records that `mark` is dead by the time the instruction this slot belongs to
 /// is reached, keeping **the lowest** mark any construct wants released there.
-///
-/// Two constructs can end at the same instruction -- a `DO` block closing one
-/// instruction before the `SELECT` whose `WHEN` holds it -- and by that point
-/// both have finished, so every register above the lower of the two marks is
-/// dead. Keeping the higher one instead would leave the outer construct's
-/// registers allocated for the rest of the body, which costs reservation
-/// without being wrong; keeping the lower one is what actually hands them back.
 fn release_to(slot: &mut Option<Mark>, mark: Mark) {
     let lowest = match *slot {
         Some(existing) if existing.0 <= mark.0 => existing,
@@ -1934,14 +1594,6 @@ fn release_to(slot: &mut Option<Mark>, mark: Mark) {
 
 /// Rewrites the [`Op::Clause`] at `at` so that its `end` is the position one
 /// past everything pushed since -- the region's own end.
-///
-/// **A region is opened, emitted, and then closed from the stream's own length**,
-/// rather than opened with a length worked out ahead of the ops it describes. A
-/// length computed ahead is the emitted shape written twice inside one arm, once
-/// as pushes and once as arithmetic, and for a region whose ops depend on the
-/// node -- a `DO`/`LOOP` header, which is one group per expression written -- the
-/// second copy is a second traversal that has to agree with the first. Closing
-/// from the length cannot disagree with what was pushed.
 fn close_region(ops: &mut [Op], at: u32) -> Result<(), ChunkTooLarge> {
     let end = op_index(ops)?;
     match &mut ops[at as usize] {
@@ -1953,11 +1605,6 @@ fn close_region(ops: &mut [Op], at: u32) -> Result<(), ChunkTooLarge> {
 
 /// Every clause's [`ClausePosition`], or an empty table where the plan cannot
 /// supply one for each.
-///
-/// **All or nothing, so the driver's own check is one test rather than one
-/// per clause.** A plan built without source has no line table at all, and a
-/// line or indent past `u32` has no entry that would fit; either way the
-/// driver reads the plan as it did before this table existed.
 fn clause_positions(body: &CodeBody, plan: &Plan) -> Box<[ClausePosition]> {
     let len = body.instructions.len();
     if plan.lines.len() != len || plan.indents.len() != len {
@@ -1985,19 +1632,6 @@ fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
 
 /// **Every [`Op::TraceClause`] is the first op of a [`Op::Clause`] region**,
 /// which is both halves of that op's own contract at once.
-///
-/// The echo reads `Interp::clause_state`'s value indent and the instruction
-/// the enclosing region opened, so an echo the driver reached outside a region
-/// prints against whatever the last clause left there. And the tree-walker
-/// echoes a clause before it computes anything, so an echo anywhere but first
-/// puts the clause's `*-*` line after a value line it must precede.
-///
-/// Checking it needs only the op before: a `Clause` whose `end` is past this
-/// position is a region that has just opened and has emitted nothing else yet.
-///
-/// An unconditional `assert!` rather than a `debug_assert!`, so the release
-/// build carries the same guarantee, and it is one linear scan per body
-/// against a compile that has already walked the same list.
 fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         if !matches!(op, Op::TraceClause { .. }) {
@@ -2018,20 +1652,6 @@ fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
 /// **Every [`Op::TraceLiteral`] sits immediately behind the [`Op::Const`] or
 /// [`Op::LoadConstant`] whose own register it reads**, which is both halves of
 /// that op's contract at once.
-///
-/// Either load, because the two produce the same `>L>` line and this op is the
-/// echo for both.
-///
-/// `eval.rs` emits a literal's `>L>` line post-order, with the value in hand,
-/// so an echo in front of its load prints whatever the register held before --
-/// and an echo further behind it prints after value lines that the oracle puts
-/// after this one. Reading a *different* register is the third way the pair
-/// comes apart, and it is the one no ordering check would see: the line would
-/// be in the right place with the wrong value in it.
-///
-/// An unconditional `assert!` rather than a `debug_assert!`, so the release
-/// build carries the same guarantee, and it is one linear scan per body
-/// against a compile that has already walked the same list.
 fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceLiteral { src } = op else {
@@ -2057,20 +1677,6 @@ fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
 /// **Every [`Op::TraceRead`] sits immediately behind the [`Op::Load`] it
 /// echoes**, reading that op's register and repeating its symbol and its read
 /// kind -- all three halves of that op's contract at once.
-///
-/// [`assert_literal_echoes_follow_their_load`]'s two failures, plus one a
-/// literal's echo cannot have: the tag. `>V>` names the symbol that was read,
-/// so an echo carrying another op's symbol prints the right value under the
-/// wrong name.
-///
-/// **Adjacency is what keeps a compound's two lines together**, and it is
-/// load-bearing rather than tidy: the `>C>` in front of the `>V>` is emitted
-/// by the load, where the tail it resolved is still in hand
-/// (`Interp::read_symbol`), so an op between the two would print them apart.
-///
-/// An unconditional `assert!` rather than a `debug_assert!`, so the release
-/// build carries the same guarantee, and it is one linear scan per body
-/// against a compile that has already walked the same list.
 fn assert_read_echoes_follow_their_load(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceRead { symbol, read, src } = op else {
@@ -2101,19 +1707,6 @@ fn assert_read_echoes_follow_their_load(ops: &[Op]) {
 /// **Every [`Op::TraceOperator`] sits immediately behind the [`Op::Arith`] or
 /// [`Op::Binary`] it echoes**, reading that op's destination register and
 /// repeating its operator.
-///
-/// [`assert_read_echoes_follow_their_load`]'s three failures in this op's own
-/// terms. The position is what puts the line where `eval.rs` puts it -- and a
-/// chain emits one operation/`TraceOperator` pair per operator, so an echo one
-/// place out prints the inner operator's line after the outer one's. The
-/// register is what makes it the right value, since a chain reuses `dst` for
-/// every operator in it. The operator is the tag: `>O>` names the operator that
-/// was applied, so an echo carrying another op's prints the right value under
-/// the wrong sign.
-///
-/// An unconditional `assert!` rather than a `debug_assert!`, so the release
-/// build carries the same guarantee, and it is one linear scan per body
-/// against a compile that has already walked the same list.
 fn assert_operator_echoes_follow_their_op(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceOperator { op: echoed, src } = op else {
@@ -2139,17 +1732,6 @@ fn assert_operator_echoes_follow_their_op(ops: &[Op]) {
 
 /// **Every [`Op::TracePrefix`] sits immediately behind the [`Op::Prefix`] it
 /// echoes**, reading that op's destination register and repeating its operator.
-///
-/// The failures [`assert_operator_echoes_follow_their_op`] checks for -- the
-/// position, the register and the tag -- in this op's own terms. The tag is the
-/// one worth spelling out again: `>P>` carries the prefix operator's own
-/// spelling, so an echo behind the wrong [`Op::Prefix`], or one carrying a
-/// `PrefixOp` that operation does not, lands in the right place with the wrong
-/// sign in it.
-///
-/// An unconditional `assert!` rather than a `debug_assert!`, so the release
-/// build carries the same guarantee, and it is one linear scan per body
-/// against a compile that has already walked the same list.
 fn assert_prefix_echoes_follow_their_op(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TracePrefix { op: echoed, src } = op else {
@@ -2175,25 +1757,6 @@ fn assert_prefix_echoes_follow_their_op(ops: &[Op]) {
 /// **Every [`Op::TraceFunction`] sits immediately behind the [`Op::CallExpr`]
 /// it echoes**, reading that op's destination register and repeating its whole
 /// address.
-///
-/// The failures [`assert_operator_echoes_follow_their_op`] checks for -- the
-/// position, the register and the tag -- in this op's own terms, and the tag
-/// is a different thing here. `>F>` carries no operator; what it carries is
-/// the node, because `trace_intermediate` reads the expression at the address
-/// to decide the tag it prints under. So the pair has to agree on `index`,
-/// `slot` **and** `path`, and an echo addressing some other node lands the
-/// right value on the wrong line -- or, where that node is not a call at all,
-/// raises `Loud::call_op_off_its_node` at run time from an op `compile` was
-/// content with.
-///
-/// **The width of a call op's address is what makes this worth asserting.** An
-/// address that is only ever [`NodePath::ROOT`] agrees by construction; one
-/// that carries a route agrees only because [`push_native`]'s call arm was
-/// written to push the same one twice.
-///
-/// An unconditional `assert!` rather than a `debug_assert!`, so the release
-/// build carries the same guarantee, and it is one linear scan per body
-/// against a compile that has already walked the same list.
 fn assert_call_echoes_follow_their_op(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceFunction {
@@ -2240,33 +1803,6 @@ fn assert_call_echoes_follow_their_op(ops: &[Op]) {
 /// **Every [`Op::TraceKeyword`] is immediately followed by the
 /// [`Op::LoopHeaderValue`] that files the value it echoes**, reading that op's
 /// register and naming that op's role.
-///
-/// The other echo ops here look one place *back*, at the op that computed their
-/// register. This one cannot: a header value is its expression's own ops, so
-/// what sits in front of a `>K>` is the last of those -- a load, an operation,
-/// a call, each with its own echo behind it, or one [`Op::EvalExpr`] where the
-/// slot declined. What is fixed is the pair on the other side: the echo and the
-/// validation of one header value, in that order and on one register.
-///
-/// Both halves of that pairing are measured on the oracle and recorded in
-/// `ir_recorded_cases/loop-header-boundaries`: `do i = 1 to 'a' by 2` under
-/// `trace r` prints `>K>   "TO" => "a"` for the very value that then raises
-/// 41.1, so the echo precedes the validation; and `do i = 1 to 'a' by zf()`
-/// never calls `zf`, so the validation precedes the next value's evaluation.
-/// An echo separated from its value by anything is one of those two orders
-/// broken.
-///
-/// **What this adds is the shape of the failure, not coverage, and that is
-/// measured rather than assumed.** Emitting the echo in front of the slot's own
-/// ops instead of behind them, with this check removed, moves the population,
-/// loop-shape and case-file sweeps and `trace_oracle`'s control-variable
-/// transcripts -- because the echo then reads a register nothing has written
-/// and prints `>K>   "TO" => "The NIL object"`. What this turns that into is a
-/// refusal at compile time naming the op.
-///
-/// An unconditional `assert!` rather than a `debug_assert!`, so the release
-/// build carries the same guarantee, and it is one linear scan per body
-/// against a compile that has already walked the same list.
 fn assert_keyword_echoes_precede_their_value(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceKeyword { role: echoed, src } = op else {
@@ -2288,21 +1824,6 @@ fn assert_keyword_echoes_precede_their_value(ops: &[Op]) {
 
 /// Every [`Op::Exec`] region holds nothing but its own [`Op::Clause`], the
 /// optional [`Op::TraceClause`] between them, and the `Exec` itself.
-///
-/// **This is what lets `Interp::region_procedure_permitted` be a field rather
-/// than a value the driver keeps live across the region loop.** The region
-/// takes the `PROCEDURE` permission into that field when it opens and `Exec`
-/// reads it; an op between the two that drove a clause of its own would open
-/// a region and overwrite the field first. Neither `Clause` nor `TraceClause`
-/// drives one, and the two arms that emit `Exec` emit exactly this shape --
-/// which is the part that could stop being true without anything going red.
-///
-/// **What it does not check is a stream with no `Exec` in the region**, which
-/// is every other region and is none of this check's business: the field is
-/// written by all of them and read by none.
-///
-/// An unconditional `assert!` for [`assert_region_ops_name_their_clause`]'s
-/// reason, and one linear scan of a list `compile` has already walked.
 fn assert_exec_regions_hold_nothing_else(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::Clause { end, .. } = op else {
@@ -2324,29 +1845,6 @@ fn assert_exec_regions_hold_nothing_else(ops: &[Op]) {
 
 /// **Every index-bearing op inside a [`Op::Clause`] region names that region's
 /// own clause.**
-///
-/// That is what lets the driver read the instruction off the region once and
-/// hand it to every op inside it, instead of looking each op's own `index` up
-/// again -- measured, three bounds-checked lookups of the same instruction per
-/// promoted clause where the tree-walker makes one. Each op keeps its `index`,
-/// because that is what says which instruction the op belongs to and it is what
-/// a golden stream is read against; nothing at run time resolves it.
-///
-/// The property holds by construction -- every one of these ops is emitted from
-/// the arm of the instruction whose region it is -- and that is exactly the kind
-/// of claim that stops holding without anything going red.
-///
-/// **What this adds is the shape of the failure, not coverage, and that is
-/// measured rather than assumed.** Making an assignment's value op name the
-/// instruction after it reddens six tests with this check removed -- the
-/// dual-engine population sweep, the branch, loop and case-file harnesses and the
-/// known-divergence table all notice -- so the suite already sees a mis-indexed
-/// op. What it sees is a divergence in a program's output; what this turns that
-/// into is a refusal at compile time naming the op and both instructions.
-///
-/// An unconditional `assert!` rather than a `debug_assert!`, so the release
-/// build carries the same guarantee, and it is one linear scan per body
-/// against a compile that has already walked the same list.
 fn assert_region_ops_name_their_clause(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::Clause { index, end } = op else {
@@ -2446,11 +1944,6 @@ mod tests {
 
     /// Two sibling clauses reuse the same registers, and a clause nested
     /// inside another's mark does not.
-    ///
-    /// This is the discipline the plan's Decisions section fixes, and the one
-    /// the withdrawn whole-chunk monotonic counter fails: under that counter
-    /// the second sibling would get register 2, and the high-water mark would
-    /// grow with the body's length rather than with its depth.
     #[test]
     fn a_released_register_is_handed_out_again_and_a_nested_one_is_not() {
         let mut registers = Registers::new();
@@ -2479,10 +1972,6 @@ mod tests {
 
     /// The high-water mark is the deepest the stack ever reached, not the
     /// number of registers handed out and not what is live at the end.
-    ///
-    /// Both halves matter: a `Chunk::registers` taken from the live count
-    /// would reserve nothing for a body whose every clause released, and one
-    /// taken from the number of `alloc` calls would reserve four here.
     #[test]
     fn the_high_water_mark_is_the_deepest_the_stack_reached() {
         let mut registers = Registers::new();
@@ -2502,14 +1991,6 @@ mod tests {
     /// rather than wrapped, which is the register half of the one error
     /// `compile` has (the plan's Decisions section: "the compiler has one
     /// error, and it is a machine width rather than a language construct").
-    ///
-    /// Driven through the allocator directly: no program this crate parses
-    /// reaches that many live registers, so a test that tried to write one
-    /// would be measuring the parser instead.
-    ///
-    /// The last index handed out is `u16::MAX - 1` rather than `u16::MAX`,
-    /// because it is the *count* that has to fit: a region of `u16::MAX + 1`
-    /// registers is what a chunk could not record the size of.
     #[test]
     fn a_register_file_wider_than_u16_is_refused() {
         let mut registers = Registers::new();
@@ -2526,10 +2007,6 @@ mod tests {
     /// A trace op that is inside a region but not at its head, which is the
     /// half of [`Op::TraceClause`]'s contract that a check for "inside a
     /// region" alone would miss.
-    ///
-    /// The arrangement is exactly what emitting the echo after the condition
-    /// produces, and it prints the clause's `*-*` line after the `>>>` line
-    /// that condition traces.
     #[test]
     #[should_panic(expected = "not the first op of a Clause region")]
     fn a_trace_op_after_the_regions_first_op_is_refused() {
@@ -2756,9 +2233,6 @@ mod tests {
     /// the read still has a correct answer and the run-time path is what
     /// computes it, so the whole body must not fall back to the tree-walker for
     /// something that is only an optimisation.
-    ///
-    /// The reserved value is one below the width's own maximum, which is what
-    /// separates "no slot" from "the last slot that fits".
     #[test]
     fn a_slot_too_wide_for_a_compiled_read_is_unresolved_rather_than_refused() {
         assert_eq!(PlanSlot::of(0).resolved(), Some(0));
@@ -2787,11 +2261,6 @@ mod tests {
 
     /// An op inside a region that names the instruction *next* to the region's
     /// clause, which is the arrangement the driver cannot detect.
-    ///
-    /// The driver reads the instruction off the region once and hands it to every
-    /// op inside it, so an op naming a neighbour is not a lookup that fails: it
-    /// silently evaluates the wrong instruction's expression, or writes through
-    /// the wrong assignment's target, and every line around it still matches.
     #[test]
     #[should_panic(expected = "names instruction 1 inside the region of clause 0")]
     fn a_region_op_naming_a_neighbouring_instruction_is_refused() {
@@ -2811,14 +2280,6 @@ mod tests {
     }
 
     /// An op that drives clauses of its own, inside the region of an `Exec`.
-    ///
-    /// **The defect this stands for is silent and not a crash.** `Op::LoopRun`
-    /// opens regions of its own, each of which takes the `PROCEDURE`
-    /// permission into `Interp::region_procedure_permitted`, so the `Exec`
-    /// after it would read the last body clause's take instead of its own --
-    /// `false` where its clause had earned `true`, which turns a legal
-    /// `PROCEDURE` into error 17.1 only when the construct is an activation's
-    /// first instruction.
     #[test]
     #[should_panic(expected = "op 2 sits in the Exec region of clause 0")]
     fn an_exec_region_holding_an_op_that_drives_clauses_is_refused() {
@@ -2833,10 +2294,6 @@ mod tests {
     /// The two arrangements that must stay accepted: the shape `compile`
     /// actually emits, echoed and not, and a region with no `Exec` in it at
     /// all, whose ops this check has no opinion about.
-    ///
-    /// Without the second, the refusal above is satisfied by a check that
-    /// refuses every region holding anything but an echo -- which is every
-    /// promoted construct in the language.
     #[test]
     fn the_emitted_exec_shapes_and_every_other_region_are_accepted() {
         assert_exec_regions_hold_nothing_else(&[
@@ -2871,11 +2328,6 @@ mod tests {
     /// The neighbouring arrangement that must stay accepted: two regions, each
     /// of whose ops names its own clause, with an index-bearing op *outside* any
     /// region naming a third instruction.
-    ///
-    /// Without this the refusals above are satisfied by a check that refuses
-    /// every stream holding more than one instruction index -- and the ops past a
-    /// region's end genuinely do name other instructions, which is what
-    /// `Op::SelectCaseText` is.
     #[test]
     fn ops_naming_their_own_region_clause_are_accepted() {
         assert_region_ops_name_their_clause(&[

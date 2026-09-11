@@ -11,72 +11,6 @@
 
 //! Where the builtin implemented/not-implemented boundary sits, measured
 //! rather than described, and committed as `rust/corpus/builtin-status.txt`.
-//!
-//! For every name in `rexx_inventory::builtins::NAMES` this derives one of
-//! four statuses and asserts the derivation equals the committed file, in
-//! both directions. A task that implements a builtin re-runs this, sees
-//! exactly which rows flipped, and commits them.
-//!
-//! # Why the boundary is a file and not prose
-//!
-//! `rust/CLAUDE.md`'s own rule: phase status is a mutable aggregate, and it
-//! is the one that rots. "Owned by 4c", "the twelve builtins so far" and
-//! "not yet implemented" are all claims about where this boundary sits, and
-//! the boundary moves every time a task lands. The measured evidence for the
-//! rule is a contrast between two media -- a derived-and-policed table
-//! needed no correction across thirteen tasks, while a one-line count
-//! comment stating the same kind of fact in prose rotted four times. This
-//! file is the derived-and-policed medium for the builtins, which is what
-//! makes asserting the boundary cheaper than writing about it.
-//!
-//! # The four statuses
-//!
-//! * `excluded` -- the name is excluded outright from Phase 4
-//!   (`rexx_inventory::builtins::wholly_excluded`, which is
-//!   `docs/superpowers/plans/phase-4-exclusions.txt`'s fifteen). Nothing is
-//!   run for it: there is no probe and no oracle invocation.
-//! * `loud` -- the executor exited [`rexx_exec::NOT_IMPLEMENTED_EXIT`]. The
-//!   gap is declared rather than silent, which is the contract every
-//!   unimplemented construct in this crate holds to.
-//! * `implemented` -- stdout, stderr and exit status all matched the oracle
-//!   on this name's probe.
-//! * `divergent` -- neither. A wrong answer, not a missing one.
-//!
-//! # Three statuses are outcomes; `divergent` is a defect
-//!
-//! A divergence is the failure mode this whole project is organised to
-//! prevent: an implementation that runs, returns, and is wrong. Committing a
-//! `divergent` row is therefore not "recording a status" but recording a
-//! known-wrong answer, and it requires a `KNOWN GAP: <NAME>` marker in the
-//! exclusions file naming it, which [`every_divergent_row_has_a_known_gap`]
-//! enforces. Without that, a divergence could be absorbed into this file by
-//! the same one-line edit that records a legitimate flip.
-//!
-//! # Why the oracle invocation count is asserted
-//!
-//! Consider a classifier of the shape `if EXCLUDED.contains(n) { excluded }
-//! else if DISPATCHED.contains(n) { implemented } else { loud }`. It
-//! satisfies set equality against the committed file, every count, and the
-//! `divergent`-is-empty rule -- while running no program at all and
-//! measuring nothing. The one thing it cannot do is start a subprocess, so
-//! [`support::oracle::Oracle`] counts its own runs and
-//! [`the_status_file_matches_a_live_differential_run`] asserts the total
-//! equals the number of in-scope names. That assertion is the difference
-//! between this file being a measurement and being a second copy of the
-//! exclusion list.
-//!
-//! # Each probe gets a directory of its own
-//!
-//! A Rexx call to an unresolved name searches the current directory for an
-//! external routine, so a directory holding another probe's `.rex` file is a
-//! directory where a call can silently run the wrong program. Measured on
-//! this host, the same program reported error 44.1 rc 212 from a directory
-//! of stale probes and 43.1 rc 213 from a fresh empty one. Every probe here
-//! is written as `probe.rex` into a freshly created directory named for its
-//! builtin, and both interpreters are pointed at that same absolute path --
-//! which also matters for the comparison itself, since a raised condition's
-//! report names the program by its path and the two sides must print the
-//! same one.
 
 mod support;
 
@@ -273,11 +207,6 @@ fn measure(oracle: &Oracle, run_root: &Path, name: &str, program: &str) -> Measu
 
 /// Whether `haystack` contains `name` as a whole word -- neither preceded nor
 /// followed by an ASCII alphanumeric.
-///
-/// The boundary check is the whole point. `WORD` is a prefix of `WORDS`,
-/// `WORDINDEX`, `WORDLENGTH` and `WORDPOS`, so a plain substring test would
-/// let `routine "WORDS" is not implemented` pass as evidence that the `WORD`
-/// row failed on `WORD`.
 fn mentions_as_word(haystack: &[u8], name: &str) -> bool {
     let text = String::from_utf8_lossy(haystack);
     let bytes = text.as_bytes();
@@ -299,25 +228,11 @@ struct Run {
     measured: BTreeMap<String, Measured>,
     oracle_invocations: usize,
     /// Every distinct `(stdout, stderr, exit)` this crate's executor produced.
-    ///
-    /// Counted rather than collected into a flag because the question it
-    /// answers is whether the executor *read the program it was given*. An
-    /// invocation counter cannot answer it: a `run_program` replaced by a
-    /// canned `Outcome` is still called once per name, so the count is right
-    /// and the measurement is worthless. A constant reply collapses this set
-    /// to one entry whatever the probes say, which is the shape the
-    /// assertion tests for.
     rust_outcomes: usize,
     in_scope: Vec<&'static str>,
 }
 
 /// Classifies every name in `NAMES`, running a probe for each in-scope one.
-///
-/// Called by each test below rather than shared through a `static`: the runs
-/// are seconds apart at most, and a lazily-shared oracle handle would make
-/// the invocation-count assertion depend on which tests libtest chose to run
-/// and in what order -- an assertion that changes meaning under `--exact` is
-/// not an assertion.
 fn classify() -> Run {
     let probes: BTreeMap<String, String> = read_tab_rows(&probes_path()).into_iter().collect();
     let in_scope = rexx_inventory::builtins::in_scope();
@@ -520,24 +435,6 @@ fn the_status_file_matches_a_live_differential_run() {
     // `run_program` replaced by a canned reply is still called once per
     // name, so counting calls proves nothing. What proves the executor read
     // its input is that its replies differ across inputs.
-    //
-    // This assertion adds no coverage today and is kept for two other
-    // reasons, stated because "it can fail" is not "it catches something".
-    // Measured by mutation: a constant loud reply fails this AND
-    // `every_loud_row_is_loud_about_its_own_builtin`, and an executor run on
-    // a fixed program fails set equality with 66 `divergent` rows. Both
-    // mutations die without this line. What it adds is (a) a failure whose
-    // message names the actual defect -- the alternative diagnosis is "a
-    // loud row named the wrong builtin", which sends a reader after the
-    // message text rather than the harness -- and (b) coverage that does not
-    // shrink: the loud-row test covers only `loud` rows, so its reach falls
-    // to nothing as the builtins land, while this holds for every status.
-    //
-    // The floor is 2 rather than 66 so the assertion keeps its meaning as
-    // builtins land. Two builtins may legitimately agree on all three
-    // descriptors -- `say gc()` and some future probe could both print `0`
-    // at exit 0 -- and an assertion that breaks when correct code is added
-    // gets weakened by whoever meets it.
     assert!(
         run.rust_outcomes >= 2,
         "this crate's executor produced the same (stdout, stderr, exit) for \
@@ -549,14 +446,6 @@ fn the_status_file_matches_a_live_differential_run() {
 }
 
 /// A `loud` row must be loud about *its own* builtin.
-///
-/// The failure this catches is a probe that reaches some other unimplemented
-/// name first, which makes the row answer for that name instead: measured,
-/// a draft that rendered the bit operations with `c2x(...)` reported
-/// `routine "C2X" is not implemented` for BITAND, BITOR, BITXOR, D2C and
-/// XRANGE, so five rows would have stayed `loud` for as long as C2X was --
-/// long after their own builtin worked. Nothing in the status file itself
-/// distinguishes that from an honest gap.
 #[test]
 fn every_loud_row_is_loud_about_its_own_builtin() {
     let run = classify();
@@ -583,14 +472,6 @@ fn every_loud_row_is_loud_about_its_own_builtin() {
 
 /// The names `src/builtin/string.rs` runs, which must every one read
 /// `implemented`.
-///
-/// **A written-down list, and deliberately so.** Which builtins share a file
-/// is not derivable from anything the status harness can see, and a *derived*
-/// check -- "every row in `IMPLEMENTED` reads implemented" -- cannot catch
-/// the failure this exists for: a family delivered three names short has
-/// three fewer table rows, three rows still reading `loud`, and passes. So
-/// the list is the assertion, and the cost of it going stale is a failing
-/// test naming the exact name.
 const STRING_FAMILY: &[&str] = &[
     "ABBREV",
     "CENTER",
@@ -618,11 +499,6 @@ const STRING_FAMILY: &[&str] = &[
 ];
 
 /// Every name in [`STRING_FAMILY`] is committed `implemented`.
-///
-/// `the_status_file_matches_a_live_differential_run` above already refuses a
-/// row that disagrees with a live run, so this adds the one thing that check
-/// cannot: that these particular names are the ones that agree, rather than
-/// however many happen to be finished.
 #[test]
 fn every_string_builtin_is_implemented() {
     let committed: BTreeMap<_, _> = read_tab_rows(&status_path()).into_iter().collect();

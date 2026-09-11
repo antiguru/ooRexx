@@ -11,24 +11,12 @@
 
 //! Timing one subprocess, summarising a set of such timings, and putting a
 //! distribution-free confidence interval around the median of them.
-//!
-//! One copy, two callers. `src/bin/rexx-time.rs` is the cold-start timer
-//! Phase 0's D2 gate uses; `src/bin/rexx-bench-suite.rs` is the interleaved
-//! two-interpreter harness. Both need "launch a command, wall-clock it, do it
-//! N times, reduce"; a second implementation of that is a second definition
-//! of the quantity, and the two harnesses' numbers would then not be
-//! comparable even when they agree.
 
 use std::io;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// What a timed run does with the child's standard output and standard error.
-///
-/// `rexx-time` discards both, so no pipe read sits inside its timing window.
-/// The suite collects both, because a run whose output is never looked at
-/// cannot be checked for having done the work its label claims -- a program
-/// that died on its first clause is very fast.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Capture {
     Discard,
@@ -54,12 +42,6 @@ impl Completed {
 
 /// Runs `program` once with `args` and `env` overlaid on this process's
 /// environment, and reports what it cost.
-///
-/// The child's standard input is always `/dev/null`. A timing harness that
-/// let a child inherit its own descriptor would either block forever on a
-/// program that reads a line, or consume whatever that descriptor happened to
-/// hold, which is not the same on two machines. Nothing timed here reads
-/// input, so this is a guard rather than a change of measured quantity.
 pub fn time_once(
     program: &str,
     args: &[String],
@@ -108,12 +90,6 @@ pub struct Summary {
 impl Summary {
     /// Sorts `samples` in place and reduces them. `None` for an empty set,
     /// so a harness that collected nothing reports that rather than a zero.
-    ///
-    /// `median` is the upper of the two middle elements at even counts
-    /// (`samples[len / 2]`) rather than their mean. Not because that is the
-    /// better estimator -- it is not -- but because it is what `rexx-time`
-    /// has reported since Phase 0, and the committed cold-start baseline is a
-    /// number produced by this expression.
     pub fn of(samples: &mut [Duration]) -> Option<Summary> {
         if samples.is_empty() {
             return None;
@@ -144,20 +120,6 @@ pub struct MedianInterval {
 /// The narrowest distribution-free interval for the median of `n` samples
 /// whose coverage still reaches `target_coverage`, or `None` when no interval
 /// over `n` samples reaches it.
-///
-/// Distribution-free rather than a normal approximation or a bootstrap, and
-/// this is the statistic every later measurement in this phase must match.
-/// Run times here are not normal -- they are bounded below by the work and
-/// have a long right tail from scheduling -- so a mean-and-standard-error
-/// interval would be describing a distribution the samples do not have. A
-/// bootstrap would need an RNG and would make the reported interval depend on
-/// a seed. The sign-test interval needs neither: with `B` the number of
-/// samples below the true median, `B ~ Binomial(n, 1/2)` whatever the
-/// distribution's shape, so `P(x_(k+1) <= median <= x_(n-k))` is exactly
-/// `1 - 2 * P(B <= k)` and is computed here rather than looked up.
-///
-/// Coverage falls as `k` rises, so the largest `k` that still clears the
-/// target is the narrowest interval that does.
 pub fn median_interval_indices(n: usize, target_coverage: f64) -> Option<MedianInterval> {
     // `0.5^n` underflows f64 below about n = 1075, and a sample set that
     // large is not something this harness produces. Refusing is better than
@@ -193,12 +155,6 @@ mod tests {
     use super::*;
 
     /// The nine-pair sample the suite takes, at the 95% the gate is stated in.
-    ///
-    /// Pins the endpoints, not only that some interval came back: an
-    /// implementation that always returned the full range `0..n-1` would
-    /// satisfy "an interval exists" and would report the whole sample as the
-    /// confidence interval, which overlaps everything and can never decide a
-    /// gate.
     #[test]
     fn nine_samples_at_95_percent_give_the_second_and_eighth() {
         let interval = median_interval_indices(9, 0.95).expect("9 samples admit a 95% interval");

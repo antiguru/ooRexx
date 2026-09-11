@@ -10,29 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! `MethodDict`: a flat name-to-method map plus scope ordering.
-//!
-//! This is the oracle's `MethodDictionary` (`interpreter/behaviour/MethodDictionary.cpp`).
-//! One `MethodDict` is used two ways in this crate: as a class's own,
-//! unflattened dictionary (the oracle's `instanceMethodDictionary` /
-//! `classMethodDictionary`, holding only what that one class defines
-//! directly, always at its own scope) and as a behaviour's flattened
-//! dictionary (the oracle's `RexxBehaviour::methodDictionary`, built by
-//! merging a chain of the former). `ClassGraph` (`class_graph.rs`) is what
-//! tells the two apart and drives the merge between them.
-//!
-//! Both of the oracle's ways of taking a name back out are modelled.
-//! [`MethodDict::remove_method`] is `MethodDictionary::removeMethod`
-//! (`MethodDictionary.cpp:334`), which deletes the entry outright, and
-//! [`MethodSlot::Hidden`] is `MethodDictionary::hideMethod` (`:348`),
-//! which is `put(TheNilObject, name)` -- an entry that is present and
-//! resolves to nothing. The two part where a reader can see them:
-//! `RexxClass::method` retrieves from the class's own dictionary with
-//! `getMethod` and hands back the `.nil` it finds (`ClassClass.cpp:991`,
-//! and its own comment), while `RexxBehaviour::methodLookup` turns that
-//! same `.nil` into `OREF_NULL` so a send routes to `UNKNOWN`
-//! (`RexxBehaviour.cpp:444`-`:448`). Measured on the shipped oracle at
-//! rc 0: `.Stem~method("==")` prints `The NIL object` where
-//! `.Queue~method("SORT")` raises 97.1.
 
 use rexx_core::{MethodId, NameMap, ObjRef};
 use std::collections::BTreeSet;
@@ -66,34 +43,6 @@ impl MethodSlot {
 
 /// A flat name-to-method(s) map, plus the scope ordering a scope-override
 /// send needs to resolve correctly.
-///
-/// `entries[name]` keeps every scope that defines `name`, front to back in
-/// **priority order**: index 0 is what an ordinary (unscoped) lookup
-/// returns, matching the oracle's `MethodDictionary::addMethod`, which
-/// always prepends a genuinely new (name, scope) pair
-/// (`HashContents::addFront`) and replaces in place when the scope repeats.
-///
-/// `scope_list` is the oracle's `scopeList`: every scope folded into this
-/// dictionary, in the order it was folded in. `scope_orders` is the
-/// oracle's `scopeOrders`: for each scope, a **snapshot of `scope_list`
-/// taken just before that scope was added** (`MethodDictionary::addScope`).
-/// That snapshot is what a scope-override send searches -- `findSuperMethod`
-/// only considers a method whose scope is the starting scope itself or
-/// appears in that scope's own snapshot -- and it is also where
-/// `resolveSuperScope`'s "immediate superscope" comes from: the snapshot's
-/// last entry.
-///
-/// Both maps are [`NameMap`] for the reason its own `NameHasher` states, and
-/// the class library is where that reason is sharpest: building it inserts
-/// every method of every class into a flattened dictionary per class per
-/// side, before a program's first clause runs. Measured on `startup.rex`
-/// (`say 1`), `RandomState` here cost **17.5%** of the whole process's
-/// retired instructions.
-///
-/// **A fixed seed also makes `entries` iterate the same way every run**,
-/// where `RandomState` did not. Nothing depended on the old variation: a
-/// corpus program is required to print the same bytes on every run, so an
-/// output reading this order would already have been unstable.
 #[derive(Clone, Default)]
 pub struct MethodDict {
     entries: NameMap<String, Vec<MethodSlot>>,
@@ -136,10 +85,6 @@ impl MethodDict {
     /// `scope` is replaced in place (matching `addMethod`'s same-scope
     /// branch); otherwise the new entry becomes the highest-priority entry
     /// for `name`, matching `addFront`.
-    ///
-    /// A tombstone under `name` is not a same-scope match and is not
-    /// replaced, because `addMethod`'s scope test reads `getScope()` off the
-    /// entry it is comparing and the oracle's own `.nil` answers no scope.
     pub fn add_method(&mut self, name: &str, scope: ObjRef, method: MethodId) {
         let key = name.to_ascii_uppercase();
         let list = self.entries.entry(key).or_default();
@@ -156,13 +101,6 @@ impl MethodDict {
     /// another class, so we want to ensure that any existing method by that
     /// name is completely removed" (`MethodDictionary.cpp:200`-`:202`, over
     /// the `put` at `:211`).
-    ///
-    /// This is the write every path into a class's **own** dictionary takes:
-    /// `Setup.cpp`'s `AddMethod` through `RexxBehaviour::defineMethod`,
-    /// `RexxClass::defineMethod` (`ClassClass.cpp:864`) and
-    /// `replaceMethods`, which `~defineMethods` reaches (`:536`).
-    /// [`Self::add_method`] is the merge's write instead, and the two part
-    /// over a tombstone: this one displaces it, that one goes in front of it.
     pub fn replace_method(&mut self, name: &str, scope: ObjRef, method: MethodId) {
         let key = name.to_ascii_uppercase();
         self.entries
@@ -173,11 +111,6 @@ impl MethodDict {
     /// whatever was already there behind it -- `addMethod`'s own no-method
     /// branch, which is an unconditional `addFront(TheNilObject, name)`
     /// (`MethodDictionary.cpp:166`-`:171`).
-    ///
-    /// This is the arm a merge takes: a cascade folds an ancestor's methods
-    /// in first and this class's own dictionary last, so a name the ancestor
-    /// defines and this class hides ends up with the tombstone in front of
-    /// it, which is exactly what makes the hidden name stop resolving.
     fn add_hidden(&mut self, name: &str) {
         let key = name.to_ascii_uppercase();
         self.entries
@@ -191,11 +124,6 @@ impl MethodDict {
     /// omitted-second-argument arm of `RexxClass::defineMethod`
     /// (`ClassClass.cpp:836`-`:843`), which reaches `replaceMethod`'s `put`
     /// at `:864` with the same `.nil`.
-    ///
-    /// A `put` names one entry, and this replaces the whole list, which are
-    /// the same operation on the dictionary this is called for: a class's
-    /// own, unflattened dictionary holds one entry per name, always at that
-    /// class's own scope.
     pub fn hide_method(&mut self, name: &str) {
         let key = name.to_ascii_uppercase();
         self.entries.insert(key, vec![MethodSlot::Hidden]);
@@ -275,31 +203,6 @@ impl MethodDict {
     /// under `scope`, leaving `source` untouched -- the oracle's
     /// `MethodDictionary::replaceMethods(source, filterScope, scope)`
     /// (`behaviour/MethodDictionary.cpp:251`).
-    ///
-    /// **This is `Setup.cpp`'s `InheritInstanceMethods` macro and not
-    /// `Class~inheritInstanceMethods`**, which are two different functions
-    /// in the C++ with the same name. The macro is
-    /// `RexxBehaviour::inheritInstanceMethods` (`RexxBehaviour.cpp:350`) and
-    /// reaches this; the Rexx method is `RexxClass::inheritInstanceMethods`
-    /// (`ClassClass.cpp:558`) and reaches [`Self::set_method_scope`], which
-    /// rewrites the donor. Conflating them leaves the donor's own entries
-    /// carrying the recipient's scope: measured, with `Queue`'s
-    /// `InheritInstanceMethods(Array)` taking the mutating route,
-    /// `.array~at('x')` reports `Compiled method "AT" with scope "Queue".`
-    /// the moment anything rebuilds `.Array`'s behaviour, where the oracle
-    /// says `"Array"`.
-    ///
-    /// **The filter selects nothing on the input this crate passes**, and
-    /// that is worth saying rather than leaving to be discovered: the C++
-    /// donates from the donor's *merged* behaviour, where filtering is what
-    /// takes only the donor's own rows, and `ClassGraph::donate_instance_
-    /// methods` passes the donor's own dictionary, every row of which is
-    /// already at the donor's scope. It is kept because it is the C++'s own
-    /// guard and because it is what a merged source would need.
-    ///
-    /// A tombstone is copied whatever the filter says, matching
-    /// `replaceMethods`' `isMethod(method)` test: a `.nil` entry carries no
-    /// scope to compare.
     pub fn replace_methods_from(&mut self, source: &MethodDict, filter: ObjRef, scope: ObjRef) {
         for (name, list) in &source.entries {
             for entry in list.iter().rev() {
@@ -364,11 +267,6 @@ impl MethodDict {
     /// `start_scope`'s own snapshot. Returns `None` if `start_scope` was
     /// never folded into this dictionary, exactly like the oracle's
     /// belt-and-braces `scopeOrders->get` miss.
-    ///
-    /// A tombstone is stepped over rather than answered or stopped at
-    /// (`MethodDictionary.cpp:453`, the `!= TheNilObject` test inside the
-    /// loop), so a hidden name can still resolve through a `SUPER` send to
-    /// the scope that defines it.
     pub fn lookup_from_scope(&self, name: &str, start_scope: ObjRef) -> Option<(ObjRef, MethodId)> {
         let visible = self.scope_orders.get(&start_scope)?;
         let list = self.entries.get(&name.to_ascii_uppercase())?;

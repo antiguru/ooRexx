@@ -11,57 +11,10 @@
 
 //! The `PARSE` template engine: a byte string and a template in, assignments
 //! out.
-//!
-//! Two layers, and the split is the design rather than tidiness. [`Cursor`]
-//! is the whole of the *movement* rule -- the five positions below and the
-//! operations that move them -- and it knows nothing about expressions,
-//! tracing, variables or where its string came from, so it is unit-testable
-//! against measured oracle bytes with no `Interp` in sight. [`Interp::
-//! exec_parse`] is the driver: it evaluates trigger operands, emits the trace
-//! lines, and assigns the targets. A *source* is one arm of
-//! [`Interp::parse_strings`] and touches neither layer's logic -- including
-//! the two that read a line rather than evaluating a value, `PARSE PULL` and
-//! `PARSE LINEIN`, whose whole contribution here is calling one of
-//! `input.rs`'s two readers and handing back what it returned.
-//!
-//! # The five positions
-//!
-//! `start`/`end` bound the section the current trigger's targets are carved
-//! out of. `pattern_start`/`pattern_end` bound the *match* the last trigger
-//! made -- equal for every numeric trigger, `needle.len()` apart for a string
-//! one -- and they are what the next trigger measures from. `subcurrent` is
-//! how far into `start..end` the word-by-word carving has got.
-//!
-//! Two positions rather than one is the whole reason `-n` and `<n` are
-//! unrelated operations rather than variants (measured, source
-//! `'abcdefghij'`):
-//!
 //! ```text
 //! parse value 'abcdefghij' with p 5 q -2 r  ->  [abcd][efghij][cdefghij]
 //! parse value 'abcdefghij' with p 5 q <2 r  ->  [abcd][cd]    [cdefghij]
 //! ```
-//!
-//! `-n` moves the *match* position back and hands the target everything from
-//! the old match to the end of the string; `<n` hands the target exactly the
-//! `n` bytes ending at the match position. Same movement, unrelated
-//! assignment.
-//!
-//! It is also why a relative trigger *after a string pattern* measures from
-//! the match's start while the next target begins after the match's end:
-//! measured, `p 'c' q` and `p 'c' +1 q` are identical, and `p 'c' -1 q` gives
-//! `q = 'bcdefghij'`.
-//!
-//! # Targets belong to the trigger they precede
-//!
-//! `rexx-parse` accumulates targets and attaches them to the *next* trigger
-//! (`instruction.rs`'s `parse_template`), emitting a trailing `End` trigger
-//! for the ones with no trigger after them. So in `p 5 q -2 r`, `p` is
-//! assigned when `5` fires, `q` when `-2` fires, and `r` by the `End`
-//! trigger. Reading it the other way round -- `q` attached to `5` -- produces
-//! a wrong answer that looks right on `p 5 q` and parts company immediately
-//! after; the trace cannot tell the two apart, because an `End` trigger emits
-//! no line of its own, so this was settled by value rather than by
-//! transcript.
 
 use crate::error::{Failure, Raised};
 use crate::{Code, Interp, Loud};
@@ -69,54 +22,15 @@ use rexx_core::ObjRef;
 use rexx_parse::{ExprKind, Parse, ParseSource, ParseTrigger, TriggerKind};
 
 /// The platform name `PARSE SOURCE`'s first word carries.
-///
-/// Measured on this host: `parse source` answers `LINUX COMMAND <path>` with
-/// the program's own absolute path. Which word other platforms use was not
-/// measured, since one machine cannot show it.
-///
-/// `SystemInterpreter::getPlatformName` (`platform/unix/MiscSystem.cpp:81`)
-/// answers this same `ORX_SYS_STR`, so `RexxInfo~platform` reads it too.
 pub(crate) const PLATFORM: &[u8] = b"LINUX";
 
 /// `PARSE VERSION`'s string.
-///
-/// **This is the oracle's own build identity, and it is a claim about a
-/// binary rather than about this crate.** Measured 2026-08-05 against the
-/// `build/` present then: interpreter name and version, then the language
-/// level, then the interpreter's *build date*. Nothing here can derive the
-/// third field, so it is recorded verbatim from the measurement.
-///
-/// **`tests/parse_version_oracle.rs` is the only thing that can notice this
-/// going stale, and it has to run the oracle to do it.** A rebuilt oracle
-/// moves the build date with nothing in this crate changing, so that harness
-/// runs `parse version` through both interpreters and compares -- gated on
-/// `REXX_CORPUS_GATE`, since its whole subject is the oracle. An assertion
-/// comparing this constant against a literal copy of itself would go green
-/// through every rebuild there has ever been; that shape was here and is gone.
-///
-/// No corpus program prints it: a committed differential over a build date
-/// would break on the next rebuild and say nothing about this engine, and the
-/// corpus's own determinism rule excludes it anyway.
-///
-/// `RexxInfo~name` is this same string -- `RexxInfo::initialize` assigns
-/// `Interpreter::getVersionString()`, which is what `PARSE VERSION` reads --
-/// and the fields below are cut back out of it.
 pub(crate) const VERSION: &[u8] = b"REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026";
 
 /// `RexxInfo~version`: `ORX_VER.ORX_REL.ORX_MOD`, which
 /// `RexxInfo::initialize` renders with the same `%d.%d.%d` that
 /// `Interpreter::getVersionString` (`runtime/Version.cpp:73`) embeds in
 /// [`VERSION`].
-///
-/// **Cut out of [`VERSION`] rather than kept beside it.** `Version.cpp:73`
-/// assembles that string from `ORX_VER`, `ORX_REL`, `ORX_MOD`, the pointer
-/// width, the language level and `__DATE__`; holding the pieces here would
-/// put that assembly rule in this crate as a second thing that can be wrong,
-/// and only `tests/parse_version_oracle.rs` could notice. Derived, every
-/// field moves with the constant and none of them can drift from `~name`.
-///
-/// The cuts are computed at compile time, so a [`VERSION`] missing a
-/// delimiter fails the build rather than a test.
 pub(crate) const VERSION_NUMBER: &[u8] = part(VERSION, UNDERSCORE + 1, PAREN);
 
 /// `RexxInfo~majorVersion`: `ORX_VER`, [`VERSION_NUMBER`]'s first field.
@@ -126,9 +40,6 @@ pub(crate) const MAJOR_VERSION: &[u8] = part(VERSION_NUMBER, 0, FIRST_DOT);
 pub(crate) const RELEASE: &[u8] = part(VERSION_NUMBER, FIRST_DOT + 1, SECOND_DOT);
 
 /// `RexxInfo~modification`: `ORX_MOD`, [`VERSION_NUMBER`]'s third field.
-///
-/// **Not `RexxInfo~revision`**, which is `ORX_BLD` and appears nowhere in
-/// [`VERSION`] -- see `dispatch::rexx_info`.
 pub(crate) const MODIFICATION: &[u8] = part(VERSION_NUMBER, SECOND_DOT + 1, VERSION_NUMBER.len());
 
 /// `RexxInfo~languageLevel`: `Interpreter::getLanguageLevelString()`, the
@@ -158,11 +69,6 @@ const BIT_BLANK: usize = seek(VERSION, b' ', 0);
 const LEVEL_BLANK: usize = seek(VERSION, b' ', BIT_BLANK + 1);
 
 /// The offset of the first `byte` at or after `from`.
-///
-/// # Panics
-///
-/// When there is none, which for every caller here is a const evaluation and
-/// so a compile error.
 const fn seek(bytes: &[u8], byte: u8, from: usize) -> usize {
     let mut at = from;
     while at < bytes.len() {
@@ -186,20 +92,6 @@ fn is_blank(byte: u8) -> bool {
 }
 
 /// Where one `PARSE` clause's templates get their strings.
-///
-/// **Every source but `ARG` produces exactly one string**, and carrying that
-/// one string in a `Vec` cost an allocation per clause for a container that
-/// was never asked to hold a second element. Measured with `heaptrack` on
-/// `samples/rexxcps.rex`, whose loop parses on every iteration, removing it
-/// took the program from 505,446 allocations to 466,246.
-///
-/// `ARG` is the one source with more than one string, and it **names the
-/// argument each template will read rather than rendering them all up
-/// front**. A template's string is finished with before the next one starts,
-/// so at most one is live at a time and the rest of
-/// [`Interp::parse_buffers`] stays available to a nested `PARSE`; a template
-/// list shorter than the argument list renders nothing for the arguments it
-/// never reaches; and there is no outer vector to lend, return or bound.
 enum ParseStrings {
     /// A single-string source. The slot empties on the first take, so a
     /// template past the first parses the null string -- which is the rule
@@ -210,10 +102,6 @@ enum ParseStrings {
 }
 
 /// One template's parse string and the five positions the triggers move.
-///
-/// Owns its string because the comma fence replaces it wholesale and because
-/// `UPPER`/`LOWER` transform it on the way in, so there is nothing outside to
-/// borrow from that lives long enough.
 pub(crate) struct Cursor {
     string: Vec<u8>,
     length: usize,
@@ -299,11 +187,6 @@ impl Cursor {
     /// `=n`, and a bare numeric symbol. Column `n` is origin one, so a zero
     /// and a one are the same position -- measured, `p 0 q` and `p 1 q` both
     /// give the whole string twice.
-    ///
-    /// Shares `+n`'s rule about direction: forward of the current position
-    /// gives the target `[current, new)`, and anything else gives it
-    /// `[current, END]`. Equal counts as backward, measured: `p 5 q 5 r`
-    /// gives `r = 'efghij'`, not the null string.
     fn absolute(&mut self, column: usize) {
         let offset = column.saturating_sub(1);
         self.start = self.pattern_end;
@@ -343,15 +226,6 @@ impl Cursor {
 
     /// A literal or `(expr)` pattern. Searches from the end of the last
     /// match, so searches are non-overlapping.
-    ///
-    /// **An absent pattern matches at END**: the section becomes the whole
-    /// remainder and the match position goes to the end, so a following
-    /// target gets the null string. Measured, `p 'z' q` gives `p` the whole
-    /// string and `q = ''`.
-    ///
-    /// **The empty pattern behaves as absent**, measured (`p '' q` is
-    /// identical to `p 'z' q`) -- which is why this cannot be a plain
-    /// substring search, where an empty needle matches at position zero.
     fn search(&mut self, needle: &[u8]) {
         self.match_at(
             find(&self.string, needle, self.pattern_end, false),
@@ -360,14 +234,6 @@ impl Cursor {
     }
 
     /// [`search`] under `PARSE CASELESS`.
-    ///
-    /// **ASCII letters only**, verified against a byte alphabet: pattern
-    /// `'e9'x` does not match a source byte `'c9'x` and the reverse does not
-    /// either, `'5b'x` does not match `'7b'x`, and `'3f'x` does not match
-    /// `'5f'x` -- every byte at or above `0x80`, and every non-letter, matches
-    /// only itself.
-    ///
-    /// [`search`]: Cursor::search
     fn caseless_search(&mut self, needle: &[u8]) {
         self.match_at(
             find(&self.string, needle, self.pattern_end, true),
@@ -396,14 +262,6 @@ impl Cursor {
 
     /// The next blank-delimited word of the current section, as a range into
     /// [`string`], or an empty range once the section is used up.
-    ///
-    /// **The leading-blank skip is bounded by the whole string, not by the
-    /// section's end**, which is `getWord`'s own shape rather than an
-    /// oversight: the C++ scans for a non-blank relying on the string's
-    /// terminating NUL and only then tests the section end
-    /// (`ParseTarget.cpp:423`-`433`).
-    ///
-    /// [`string`]: Cursor::string
     fn next_word(&mut self) -> std::ops::Range<usize> {
         if self.subcurrent >= self.end {
             return 0..0;
@@ -450,10 +308,6 @@ impl Cursor {
 
 /// The first offset at or after `from` where `needle` occurs in `haystack`,
 /// or `None`.
-///
-/// An **empty needle never matches**, which is the measured behaviour of an
-/// empty pattern (see [`Cursor::search`]) and the one place this differs from
-/// an ordinary substring search.
 fn find(haystack: &[u8], needle: &[u8], from: usize, caseless: bool) -> Option<usize> {
     if needle.is_empty() || from > haystack.len() {
         return None;
@@ -500,10 +354,6 @@ impl Interp {
     }
 
     /// `value`'s text in a buffer from the pool.
-    ///
-    /// The buffer is taken **before** the render, because
-    /// [`Interp::to_text`] hands back a borrow of `self` and nothing else may
-    /// touch the interpreter while it is live.
     fn rendered_into_parse_buffer(&mut self, value: ObjRef) -> Vec<u8> {
         let mut buffer = self.take_parse_buffer();
         buffer.extend_from_slice(&self.to_text(value));
@@ -523,10 +373,6 @@ impl Interp {
     }
 
     /// Hands back the string a template walk did not consume.
-    ///
-    /// `Arg` holds no buffer of its own -- it renders each argument when the
-    /// template that reads it starts, into a buffer the cursor then owns -- so
-    /// a walk that stopped short of the arguments has nothing here to return.
     fn give_parse_strings(&mut self, strings: ParseStrings) {
         match strings {
             ParseStrings::One(Some(string)) => self.give_parse_buffer(string),
@@ -536,23 +382,6 @@ impl Interp {
 
     /// `PARSE ARG`'s string for the template at argument position `at`, in a
     /// buffer from the pool.
-    ///
-    /// An omitted position (`call sub 1,,3`) and a position past the last
-    /// argument are both the null string, which is the rule
-    /// [`Interp::parse_strings`] records the measurement for.
-    ///
-    /// **The value is read here rather than at the clause's start, so an
-    /// argument a later template reads has to survive everything the earlier
-    /// templates allocate.** It does, because an argument's value is rooted as
-    /// a temporary of the *caller*, below every watermark this activation's
-    /// clauses take, and so stays reachable for as long as the callee runs.
-    /// `a_late_parse_arg_template_survives_collection` runs that under
-    /// collect-on-every-allocation rather than arguing it; removing the
-    /// caller-side `push_temp` it names makes that test panic.
-    ///
-    /// A trigger operand that calls a routine replaces `call_context` and puts
-    /// it back, so the arguments a later template reads are still this
-    /// activation's own.
     fn argument_text(&mut self, at: usize) -> Result<Vec<u8>, Failure> {
         let argument = match self.call_context.arguments.get(at) {
             Some(Some(argument)) => Some(*argument),
@@ -571,45 +400,6 @@ impl Interp {
     }
 
     /// One `PARSE` instruction: resolve the source, then walk the template.
-    ///
-    /// The trace shape, all of it measured (`trace i` unless a line is said
-    /// to be results-only):
-    ///
-    /// | construct | lines, in order |
-    /// |---|---|
-    /// | source `VALUE` | `>L>` from the expression, then `>K> "VALUE" => "<src>"`, then `>>> "<src>"` |
-    /// | source `VAR` | `>C>`/`>V>` from the read, then `>K> "VAR" => "<src>"`, then `>>>` |
-    /// | source `SOURCE`/`VERSION` | `>K> "<kw>" => "<src>"`, then `>>>` |
-    /// | source `ARG` | **no `>K>` at all** -- straight to `>>>` |
-    /// | a positional trigger | `>L> "<n>"` then `>>> "<n>"`, **before** the preceding target is assigned |
-    /// | `String`/`Mixed` | the same pair; caseless is not distinguishable in the trace |
-    /// | an assigned target | `>=> NAME <= "<value>"`, or `>>> "<value>"` under `TRACE R` |
-    /// | a `.` placeholder | `>.> "<consumed>"`, emitted even when it consumed nothing |
-    /// | `End` | nothing |
-    /// | the comma fence | `>>> "<next template's source>"` |
-    ///
-    /// **A target's own line is a choice between two prefixes, not two
-    /// independent gates**, which is the one thing a `trace i` survey cannot
-    /// see and this crate got told about only by measuring `trace r`:
-    /// `ParseTrigger::parse` (`instructions/ParseTrigger.cpp:274`-`280`)
-    /// assigns -- whose own `traceAssignment` is the `intermediates`-gated
-    /// `>=>` -- and then emits `traceResult` only `if
-    /// (!context->tracingIntermediates())`. Measured both ways on one
-    /// program: `parse value 'abcdefghij' with p1 5 q1` under `trace i` traces
-    /// `>=> P1 <= "abcd"` and `>=> Q1 <= "efghij"`, and under `trace r` traces
-    /// `>>> "abcd"` and `>>> "efghij"` in their place.
-    ///
-    /// A trigger's operand is evaluated **before** the preceding target is
-    /// assigned, measured: for `p 5 q -2 r` the order is `>L>"5"`, `>>>"5"`,
-    /// `>=>P`, `>L>"2"`, `>>>"2"`, `>=>Q`, `>=>R`. The traced literal for
-    /// `+3`/`-2`/`>3`/`<2` is the bare number without the sign, because that
-    /// is the operand expression `rexx-parse` recorded.
-    ///
-    /// `evaluated` is `PARSE VALUE`'s source, for the caller that has already
-    /// computed it: the compiled stream evaluates that expression into a
-    /// register of its own, so [`super::ir::Op::Parse`] hands the value in
-    /// where `step` passes `None` and this evaluates it. Every other source
-    /// ignores the argument, having no expression to be handed.
     pub(crate) fn exec_parse(
         &mut self,
         code: &Code<'_>,
@@ -644,11 +434,6 @@ impl Interp {
 
     /// Steps to the next parse string, applying `UPPER`/`LOWER` and tracing
     /// the result.
-    ///
-    /// `UPPER`/`LOWER` transform the **source** before parsing, where
-    /// `CASELESS` leaves it alone and folds only the comparison. Measured
-    /// over a byte alphabet, the transform is ASCII-only: `'e0'x` and `'c1'x`
-    /// are unchanged by both, while `'61'x` upcases to `'41'x`.
     fn next_template(
         &mut self,
         strings: &mut ParseStrings,
@@ -679,17 +464,6 @@ impl Interp {
 
     /// The strings this `PARSE` will consume, in template order, and the
     /// source's own `>K>` line.
-    ///
-    /// One entry for every source but `ARG`, which contributes one per
-    /// argument of the running activation -- an omitted position becoming the
-    /// null string rather than closing up, measured: `call sub 'one two',
-    /// 'three four', , 'five'` into `parse arg c1 , c2 , c3 , c4` gives
-    /// `[one two][three four][][five]`.
-    ///
-    /// A template past the last string parses the null string, which
-    /// [`Interp::next_template`] gets for free from the single slot emptying
-    /// and from [`Interp::argument_text`] answering for a position no argument
-    /// occupies.
     fn parse_strings(
         &mut self,
         code: &Code<'_>,
@@ -707,17 +481,6 @@ impl Interp {
         let (keyword, value) = match &parse.source {
             // `PARSE VALUE WITH template`, with no expression at all, is
             // legal and parses the null string.
-            //
-            // **And it traces a literal's `>L>` line for a null string that
-            // no expression produced**, which is the parser's doing rather
-            // than this instruction's: `LanguageParser`'s own `SUBKEY_VALUE`
-            // arm substitutes `GlobalNames::NULLSTRING` for a missing
-            // expression, so by the time `RexxInstructionParse::execute` runs
-            // there is a literal to evaluate and the line is that evaluation's
-            // side effect. (`execute`'s own `expression != OREF_NULL` guard is
-            // unreachable for the same reason.) Measured: `parse value with a1
-            // a2` under `trace i` traces `>L>   ""` and then `>K>   "VALUE" =>
-            // ""`, in that order.
             ParseSource::Value(None) => {
                 self.trace_literal(indent, b"");
                 ("VALUE", Subject::Bytes(Vec::new()))
@@ -780,13 +543,6 @@ impl Interp {
             // `PULL` takes the queue's head when there is one, `LINEIN` never
             // consults the queue at all -- and `input.rs` owns that rule and
             // the measurements behind it.
-            //
-            // The `>K>` line below therefore carries the line **before** any
-            // `UPPER` transform, because `next_template` is what applies the
-            // transform and it runs after this. Measured, `pull n3` on a line
-            // reading `skipped three`: `>K> "PULL" => "skipped three"` and
-            // then `>>> "SKIPPED THREE"`, the two lines disagreeing on the
-            // same instruction.
             ParseSource::Pull => ("PULL", Subject::Bytes(self.pull_line())),
             ParseSource::LineIn => ("LINEIN", Subject::Bytes(self.linein_line())),
         };
@@ -818,13 +574,6 @@ impl Interp {
     }
 
     /// `PARSE VAR`'s source: the variable read, in all three name shapes.
-    ///
-    /// Mirrors `eval_node`'s own three arms rather than routing through
-    /// `eval`, because the AST carries a bare `SymbolId` here and not an
-    /// `Expr` to evaluate. The trace lines are the read's, not the
-    /// instruction's -- measured, `parse var aa.ii p` traces `>C> AA.II =>
-    /// "AA.3"` then `>V> AA.II => "one two"` before the `>K>` line, exactly
-    /// as `say aa.ii` would.
     fn read_parse_var(
         &mut self,
         code: &Code<'_>,
@@ -973,11 +722,6 @@ impl Interp {
 
     /// Carves the current section into this trigger's targets: a blank
     /// delimited word each, and the whole remainder for the last one.
-    ///
-    /// Extra targets get the null string rather than being skipped --
-    /// measured, `parse value 'a b' with p q r s` gives `[a][b][][]` -- which
-    /// falls out of `next_word`/`remainder` answering empty once the section
-    /// is used up, with no separate case here.
     fn assign_targets(
         &mut self,
         code: &Code<'_>,
@@ -1010,13 +754,6 @@ impl Interp {
                     // changed: of the `slot_of` calls that program makes,
                     // 2,800,003 were `PARSE` targets and every one of them
                     // resolved to the slot `by_symbol` already held.
-                    //
-                    // **A `Variable` target only.** A stem-shaped or
-                    // compound-shaped target takes its slot from the plan's
-                    // own `CompoundName` entry inside `assign_expr_target`,
-                    // and those two arms assert that this argument is `None`
-                    // -- the guard exists because this is the call site most
-                    // likely to break it.
                     let at = match &target.kind {
                         ExprKind::Variable(id) => code.slot_for(*id),
                         _ => None,
@@ -1356,15 +1093,6 @@ mod tests {
     /// it, and every source reaches its own string -- run through
     /// `run_program`, so the `step` arm and [`Interp::apply_trigger`]'s own
     /// dispatch are inside what is being tested.
-    ///
-    /// **The tests above cannot catch a dispatch swap and this was measured
-    /// rather than assumed.** They call `Cursor`'s methods by name, so
-    /// sending `MinusLength` to `Cursor::backward` in `apply_trigger` leaves
-    /// all eight of them green. Every row below is oracle output, and the rows
-    /// are chosen so that no two kinds agree on their own row: `+n` and `>n`
-    /// coincide for a non-zero offset, which is what the `+0`/`>0` pair is
-    /// for, and `-n` and `=n` coincide on the *second* field, which is what
-    /// the third field separates.
     #[test]
     fn every_trigger_kind_and_source_reaches_its_own_operation() {
         let d = "d = 'abcdefghij'\n";
@@ -1431,16 +1159,6 @@ mod tests {
 
     /// A `PARSE ARG` template past the first reads an argument that every
     /// earlier template's allocations have had a chance to collect.
-    ///
-    /// **Run under collect-on-every-allocation**, because an ordinary run
-    /// reaches the second template long before the heap is due a collection
-    /// and so cannot ask the question at all. Measured to have teeth:
-    /// removing `eval_traced_argument`'s `push_temp` panics this at `to_text`'s
-    /// "a live value".
-    ///
-    /// The adjacent ordinary run is the other half: without it a mode that
-    /// silently declined to collect would satisfy this on its own, and the
-    /// `collections > 0` assertion is the same guard from the other side.
     #[test]
     fn a_late_parse_arg_template_survives_collection() {
         // **The arguments are built by concatenation rather than written as
@@ -1477,18 +1195,6 @@ mod tests {
 
     /// `PARSE SOURCE` and `PARSE VERSION` reach their own strings, which no
     /// other source's answer can be mistaken for.
-    ///
-    /// The path is the one `run_program` was handed, so this pins the
-    /// plumbing as well as the string: an engine that left it empty prints
-    /// `LINUX COMMAND ` with nothing after it.
-    ///
-    /// The expected version line is built from [`VERSION`] rather than written
-    /// out again. This asks whether the `Version` source reaches that constant
-    /// -- which is all a test inside this crate can ask -- and leaves *whether
-    /// the constant is still the oracle's answer* to the one harness that can
-    /// tell, `tests/parse_version_oracle.rs`. Two copies of the string would
-    /// only mean two places to edit in step, which is what a self-comparison
-    /// is.
     #[test]
     fn source_and_version_carry_their_own_strings() {
         let outcome = crate::run_program(
@@ -1504,11 +1210,6 @@ mod tests {
 
     /// The `RexxInfo` fields reassemble into [`VERSION`] exactly as
     /// `runtime/Version.cpp:73` assembles it.
-    ///
-    /// Written as the assembly rather than as six expected strings, so it
-    /// holds for whatever [`VERSION`] the next oracle rebuild puts here. Six
-    /// expected strings would be a second copy of the constant, which is the
-    /// shape its own doc comment rules out.
     #[test]
     fn the_version_fields_reassemble_into_the_constant() {
         let mut rebuilt = b"REXX-ooRexx_".to_vec();
@@ -1544,9 +1245,6 @@ mod tests {
     /// the conversion is bounded by the **active** `NUMERIC DIGITS` rather
     /// than by a fixed width -- measured, `numeric digits 2` makes `+(100)`
     /// fail where the default 9 digits accept it.
-    ///
-    /// Both halves matter: the adjacent passing case is what stops the rule
-    /// being read as "wide operands are refused".
     #[test]
     fn a_positional_operand_must_be_a_whole_number_within_the_active_digits() {
         let refused: &[&str] = &[

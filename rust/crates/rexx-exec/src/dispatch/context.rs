@@ -12,46 +12,6 @@
 //! `RexxContext`'s and `StackFrame`'s readers -- `classes/ContextClass.cpp`
 //! and `classes/StackFrameClass.cpp`, bound by `memory/Setup.cpp:1211`-`:1238`
 //! and `:1700`-`:1723`.
-//!
-//! A child of [`super`] for the reason [`super::rexx_info`] is one: the rows
-//! point at [`super::NativeMethod`]s, whose parameter list names types only
-//! that module can.
-//!
-//! # A context is a live handle and a frame is a snapshot
-//!
-//! `RexxContext` holds a `RexxActivation *` and every one of its readers calls
-//! `checkValid` first (`ContextClass.cpp:147`), so a context whose activation
-//! has ended raises `98.981`. A `StackFrameClass` holds no activation at all --
-//! its constructor copies the type, name, executable, target, arguments,
-//! traceback line, line number and invocation id out of the activation
-//! (`RexxActivation::createStackFrame`, `RexxActivation.cpp:5006`) -- so it
-//! answers those after the frame is gone.
-//!
-//! Measured on the oracle, rc 0, both objects captured inside `snapshot('p1',
-//! 'p2')` and read after it returned: `f~name` is `SNAPSHOT`, `f~line` is the
-//! line the frame was built at, `f~traceLine` is that clause's own echo,
-//! `f~type` is `ROUTINE`, `f~target` is `The NIL object`, `f~arguments~items`
-//! is `2`, and `c~name` is `Error 98.981 Target RexxContext is no longer
-//! active.` So the two representations here are different in kind and not
-//! merely in lifetime: a frame is built from [`Snapshot`]'s entries and a
-//! context is resolved back to its activation on every send.
-//!
-//! # Which activation a context names
-//!
-//! [`Interp::context_depth`] scans the activation stack for the one whose
-//! `Activation::context_object` is this receiver, and its `None` is
-//! `checkValid`'s null pointer. Nothing else can answer it: the object is
-//! created by `Interp::context_object` and stored on the activation, and an
-//! activation that has returned no longer stands anywhere.
-//!
-//! # `~stackFrames` is the whole current stack, not the receiver's own
-//!
-//! `RexxContext::getStackFrames` delegates to `activity->generateStackFrames`
-//! (`concurrency/Activity.cpp:1141`), which walks the **activity's** frame
-//! chain from the innermost. Measured: a context captured in `r` and sent
-//! `~stackFrames` from inside a routine `r` called two levels deeper answers
-//! that deeper stack, not `r`'s. The `skipFirst` argument removes the native
-//! `stackFrames` frame itself, which this crate never pushes.
 
 use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, ObjRef, Raised, hash};
 use crate::activation::{Activation, Entry};
@@ -60,12 +20,6 @@ use rexx_core::{BehaviourId, Body};
 
 /// `RexxContext`'s and `StackFrame`'s instance methods. Chained into
 /// `ObjectModel::build` beside [`super::NATIVE_METHODS`].
-///
-/// Every row is declared at a parameter count of zero
-/// (`Setup.cpp:1218`-`:1232` and `:1706`-`:1717`), so an argument is refused
-/// before a body runs -- measured, `.context~digits(1)` and
-/// `.context~stackFrames[1]~type(1)` are both `93.902 Too many arguments in
-/// invocation of method; 0 expected.` on the oracle and here.
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("RexxContext", "ARGS", Arity::Fixed(0), context_args),
     (
@@ -136,12 +90,6 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 
 /// `RexxContext`'s and `StackFrame`'s **class** methods, chained into
 /// `ObjectModel::build` beside [`super::NATIVE_CLASS_METHODS`].
-///
-/// `AddClassMethod("New", ..., A_COUNT)` at `Setup.cpp:1213` and `:1702`, both
-/// bodies `reportException(Error_Unsupported_new_method, getId())` and nothing
-/// else -- the same site `Pointer` and `Buffer` share. Measured, oracle rc 163
-/// both: `NEW method is not supported for the RexxContext class.` and the same
-/// for `StackFrame`.
 pub(super) static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
         "RexxContext",
@@ -159,12 +107,6 @@ pub(super) static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &
 
 /// The entry keys one `StackFrame`'s snapshot is stored under, on the
 /// `NativeObject` the frame is.
-///
-/// **The `NativeObject` entry map is the storage rather than a struct of its
-/// own**, because every field is an `ObjRef` and the collector already traces
-/// those entries -- a parallel side table keyed by the frame's own handle
-/// would be a set of roots nothing walks, which is project memory
-/// `oorexx-rust-fresh-allocations-in-a-closure` one layer up.
 mod key {
     pub(super) const TYPE: &[u8] = b"TYPE";
     pub(super) const NAME: &[u8] = b"NAME";
@@ -178,10 +120,6 @@ mod key {
 
 /// One activation's fields as `StackFrameClass`'s constructor copies them,
 /// gathered before anything is allocated.
-///
-/// **Read out of the activation in one pass and allocated from afterwards**,
-/// which is the borrow shape rather than a preference: every value below is
-/// built with `&mut Interp` and the activation is reached through `&self`.
 struct Snapshot {
     kind: &'static [u8],
     name: Vec<u8>,
@@ -195,15 +133,6 @@ struct Snapshot {
 impl Interp {
     /// Where in the activation stack the `RexxContext` `receiver` belongs,
     /// counted from the innermost -- `0` is the running activation.
-    ///
-    /// `None` is `RexxContext::checkValid`'s null `activation`
-    /// (`ContextClass.cpp:147`): a context whose activation has ended stands
-    /// nowhere, and every reader on that class turns it into `98.981`.
-    ///
-    /// **A scan rather than a map from object to activation**, because the
-    /// answer has to go stale exactly when the activation ends and a map
-    /// would have to be pruned there. The depth is bounded by the call depth
-    /// and this is an introspection path.
     fn context_depth(&self, receiver: ObjRef) -> Option<usize> {
         self.frames()
             .position(|activation| activation.context_object == Some(receiver))
@@ -241,12 +170,6 @@ fn depth_of(interp: &Interp, receiver: ObjRef) -> Result<usize, Failure> {
 
 /// `RexxContext::getDigits`: `activation->digits()`, the setting **in force**
 /// at that context.
-///
-/// **Not the default, which is what `.RexxInfo~digits` answers** -- the two
-/// classes give one method name two meanings, and the difference is measured:
-/// oracle rc 0, after `numeric digits 5; numeric form engineering; numeric
-/// fuzz 2`, `.context~digits .context~form .context~fuzz` is `5 ENGINEERING 2`
-/// where `.RexxInfo~`'s three are `9 SCIENTIFIC 0`.
 fn context_digits(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -287,9 +210,6 @@ fn context_form(
 
 /// `RexxContext::getLine`: `activation->getContextLine()`, the line of the
 /// clause that context is **currently executing**.
-///
-/// [`crate::activation::ClauseSnapshot`] is where the value is kept and why it
-/// cannot be derived from `Activation::pc`.
 fn context_line(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -303,10 +223,6 @@ fn context_line(
 
 /// `RexxContext::getName`: `activation->getCallname()` -- the name this
 /// context was invoked under, and the program's own path at the top level.
-///
-/// **The name as the caller wrote it.** Measured, oracle rc 0: `call MiXeD`
-/// into `::routine MiXeD` answers `MIXED` (the parser upcased the symbol) and
-/// `call 'lower'` into `::routine 'lower'` answers `lower`.
 fn context_name(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -332,18 +248,6 @@ fn context_invocation(
 }
 
 /// `RexxContext::getThread`: `activation->getActivity()->getIdntfr()`.
-///
-/// **A constant, and it is already wrong.** `Activity::getIdntfr`
-/// (`concurrency/Activity.cpp:108`) mints one id per *system thread* off a
-/// counter of its own, so the first thread to ask is `1`. This crate runs
-/// every activation on the one interpreter thread, and `Object~start` does
-/// **not** refuse: it runs the send, so a method that has `REPLY`d is on
-/// another thread on the oracle and on the same one here. Measured, rc 0 and
-/// stderr identical, a `::method` that replies and then reads
-/// `.context~thread`: the oracle answers a different id from the main
-/// thread's `1` and this answers `1`. The id itself is not fixed -- it counts
-/// system threads the interpreter has touched -- so what diverges is that it
-/// differs at all, not which number it is.
 fn context_thread(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -356,14 +260,6 @@ fn context_thread(
 
 /// `RexxContext::getInterpreter`:
 /// `activation->getActivity()->getInstance()->getIdntfr()`.
-///
-/// **A constant, and unlike [`context_thread`] it is correct**: the id is
-/// minted per `InterpreterInstance` off a third counter, and a `rexx-run`
-/// process creates one instance, so there is one instance to have an id and
-/// `1` is its. Nothing a program can do makes a second -- `~start` makes a
-/// second *thread* within the one instance, which is why the two rows part.
-/// Measured, rc 0 both sides, a `::method` that `REPLY`s and then reads both:
-/// `interp= 1` on the oracle and here, where `thread=` differs.
 fn context_interpreter(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -376,14 +272,6 @@ fn context_interpreter(
 
 /// `RexxContext::getRS`: `activation->getContextReturnStatus()`, which is
 /// `.nil` unless `settings.isReturnStatusSet()`.
-///
-/// **`.nil` is the answer for every program this crate can run, and the state
-/// it reads is the one a command clause writes.** `settings.returnStatus` is
-/// set by `RexxActivation::command`; a command clause is D12/Phase 7's and
-/// fails loudly here, which is the same position `.RS` itself is in
-/// (`Interp::rexx_variable`, `environment.rs`). So this is not a constant
-/// standing in for something unimplemented -- it is the unset branch, and
-/// nothing this crate runs can take the other one.
 fn context_rs(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -396,13 +284,6 @@ fn context_rs(
 
 /// `RexxContext::getCondition`: a **copy** of the condition object the
 /// activation is handling, and `.nil` when it is handling none.
-///
-/// **The `.nil` arm is answered and the other refuses.** Building the object
-/// is `CONDITION('O')`'s own job and that is not implemented -- `builtin::
-/// state::condition` refuses option `O` loudly with the same message -- so
-/// answering `.nil` inside a handler would be a wrong answer where the oracle
-/// hands back a `Directory`. Measured, oracle rc 0: `.context~condition` is
-/// `The NIL object` outside a handler.
 fn context_condition(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -417,17 +298,6 @@ fn context_condition(
 
 /// `RexxContext::getPackage`: the package of the program **the receiver's own
 /// activation** belongs to (`ContextClass.cpp:160`).
-///
-/// **The one route to a running program's package object**, which is why it
-/// is a row of its own: measured, `.Array~package~name` is `REXX`, so a class
-/// the bootstrap registered reaches the interpreter's own package and not this
-/// one.
-///
-/// **The same object `~package` answers for a class that program declared**,
-/// because both go through `Interp::package_object`'s cache under one key.
-/// Measured, oracle rc 0, with `::class K public`: `.context~package ==
-/// .K~package` is `1`, `.context~package == .context~package` is `1`, and
-/// `.context~package == .Array~package` is `0`.
 fn context_package(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -442,10 +312,6 @@ fn context_package(
 
 /// `RexxContext::getArgs`: the arguments the context's activation was entered
 /// with, as a fresh `Array`.
-///
-/// An omitted position holds its place as an empty slot, the same hole
-/// `arg(n, 'A')` reports. Measured, oracle rc 0: `call rtn 'aa', , 'cc'` reads
-/// `~items` `2` and `~size` `3` inside `rtn`, with `a[2] == .nil` true.
 fn context_args(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -458,24 +324,6 @@ fn context_args(
 
 /// `RexxContext::getVariables`: `activation->getAllLocalVariables()`, a fresh
 /// `Directory` of the context's own variable pool.
-///
-/// **Only the names that have a value**, which is
-/// `VariableDictionary::getVariableDirectory`'s own test -- a name the plan
-/// reserved and nothing assigned, and a name a `DROP` cleared, are both
-/// absent. Measured, oracle rc 0, on a program whose only assignments are
-/// `me`, `vv` and a stem: the directory has `~items` `3`.
-///
-/// **A stem is one entry under its own trailing-period name and a compound is
-/// none.** Measured: with `a. = 'def'` and `a.1 = 'one'`, the keys are `A.`
-/// and `B` alone, `d['A.']~class~id` is `Stem`, and `d~hasIndex('A.1')` is
-/// `0`. That falls out here rather than being special-cased: this crate's plan
-/// binds a compound-shaped name to a slot of its own that no read or write
-/// ever fills (`plan::CompoundName`, whose reads go through the stem's slot),
-/// so the value test excludes it.
-///
-/// **`SELF` and `SUPER` appear in a method**, measured -- the oracle's local
-/// dictionary holds them and so does this crate's frame, since
-/// `Interp::enter_method_body` writes them into slots like any other name.
 fn context_variables(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -505,15 +353,6 @@ fn context_variables(
 
 /// `RexxContext::getExecutable`: `activation->getExecutable()`, the `Method`
 /// or `Routine` object this context is running.
-///
-/// **The object the rest of the interpreter already hands out for that same
-/// executable, not a fresh one**, and the identity is measured: oracle rc 0,
-/// inside `::routine r`, `.context~executable == .routines['R']` is `1`, and
-/// inside `::method m` of `::class kk`, `.context~executable ==
-/// .kk~method('M')` is `1`. So a `::ROUTINE` answers out of the `.ROUTINES`
-/// table and a `::METHOD` out of `Interp::method_objects`; only a program's
-/// own main section has no existing cache and gets
-/// [`Interp::program_routine_objects`].
 fn context_executable(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -575,16 +414,6 @@ fn routine_entry_name(
 
 /// `RexxContext::getStackFrames`: every frame of the running stack, innermost
 /// first.
-///
-/// **The activity's frames and not the receiver's own**, which is the
-/// delegation `Activity::generateStackFrames` makes and is measured: a context
-/// captured in one routine answers the stack in force where it is *sent*, not
-/// where it was made.
-///
-/// **`skipFirst` has nothing to remove here.** The oracle passes `true` to
-/// drop the native `stackFrames` invocation's own frame; this crate runs a
-/// native method inside the sending activation and pushes none, so the
-/// innermost frame is already the sender's.
 fn context_stack_frames(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -724,12 +553,6 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
 /// `RexxActivation::getTraceBack`: this frame's own clause as `TRACE` prints
 /// it -- `PackageClass::traceBack` (`classes/PackageClass.cpp:561`) over the
 /// instruction's source location and the trace indent in force.
-///
-/// **Built by the same function every `*-*` echo is** ([`crate::trace::
-/// push_clause`]), so the two cannot come to disagree about the six-wide line
-/// number field, the marker or the indent. The trailing newline is the echo
-/// sink's and not part of the string: measured, `f~traceLine` is
-/// `    40 *-* f = .context~stackFrames` with nothing after it.
 fn trace_line_text(interp: &Interp, snapshot: &Snapshot) -> Vec<u8> {
     let text = interp
         .programs
@@ -771,11 +594,6 @@ fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
 }
 
 /// The value one `StackFrame` snapshot entry holds.
-///
-/// The refusal is an internal inconsistency rather than a program's doing: a
-/// receiver reaches here only by resolving one of these names at
-/// `StackFrame`, and every frame this crate hands out is built by
-/// [`build_frame`] with all of them filled.
 fn frame_entry(interp: &Interp, receiver: ObjRef, name: &[u8]) -> Result<ObjRef, Failure> {
     match interp.heap.get(receiver).map(|held| &held.body) {
         Some(Body::Native(native)) => native

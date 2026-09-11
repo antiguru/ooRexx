@@ -52,11 +52,6 @@ impl BehaviourTable {
     }
 
     /// Resolves a message by walking the superclass chain.
-    ///
-    /// The visited set is not defensive programming: the bootstrap object
-    /// graph is genuinely cyclic -- `.class` is an instance of itself -- so a
-    /// chain walk that assumed acyclicity would hang during startup rather
-    /// than in some exotic user program.
     pub fn lookup(&self, id: BehaviourId, name: &str) -> Option<MethodId> {
         let name = name.to_ascii_uppercase();
         let mut visited = Vec::new();

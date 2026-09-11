@@ -1,11 +1,5 @@
 //! Scanner behaviour, pinned against `build/bin/rexx` and
 //! `build/bin/rexxc`.
-//!
-//! Every expectation here that names an interpreter behaviour was measured,
-//! not inferred. `rexxc` gives the parse verdict without executing, which is
-//! the only way to assert the negative direction (*this file parses*);
-//! `rexx`'s output is used where both spellings parse and only the printed
-//! result distinguishes them, as with `say a/*c*/b` against `say a b`.
 
 use rexx_parse::{
     Operator, ProgramSource, Scanned, SourceKind, SymbolClass, SymbolId, Tag, Token, TokenKind,
@@ -962,10 +956,6 @@ fn scan_always_answers_with_tokens_or_an_error_number() {
     // pass having accounted for every character, so a mis-ported bound would
     // be a panic rather than a wrong answer. `scan` must always answer, with
     // tokens or with an error number.
-    //
-    // The alphabet is the characters that steer the scanner: both quotes, both
-    // literal markers, hex and non-hex digits, both whitespace kinds, both
-    // continuation characters, the comment delimiters, and a line end.
     let steering = b"'\"xb4g10 \t-,/*\n";
     let mut count = 0;
     for_every_string(steering, 4, |bytes| {

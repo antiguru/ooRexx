@@ -11,30 +11,6 @@
 
 //! Table D's row set: the directive and option surface, from `dire.xml` and
 //! from `DirectiveParser.cpp`, unioned.
-//!
-//! **The union is the row set, and a name in one source only is a row of its
-//! own**, because that asymmetry is where the two authorities disagree and is
-//! the thing worth a probe.
-//!
-//! **Position, and why the parser settles it.** The markup does not
-//! distinguish an option from an option's *value*: `::OPTIONS`' `<option>`
-//! occurrences include `ENGINEERING`, `SCIENTIFIC`, `INHERIT` and `NOINHERIT`,
-//! which the prose says are values of `FORM` and of `NUMERIC`. The parser's
-//! `switch` nesting says which is which, so the row key is
-//! (directive, keyword, position).
-//!
-//! **What this reads on the parser side, which is wider than "the
-//! `SUBDIRECTIVE_*` arms of its own switch", and the two reasons.** Those four
-//! `::OPTIONS` values reach the parser as `SUBKEY_*` arms, not
-//! `SUBDIRECTIVE_*` ones, so the narrower rule marks four real, implemented
-//! keywords as documented-only and cross-referenced -- four false rows. And
-//! `::RESOURCE`'s `END` is recognised by an `if` rather than a `case`
-//! (`DirectiveParser.cpp:2295`) and documented only in a railroad SVG and an
-//! example, so under the narrower rule it is not a row at all, though it is
-//! both documented and implemented. This module therefore reads every
-//! `SUBDIRECTIVE_*` and `SUBKEY_*` token inside a directive function and
-//! records in `evidence` which form each is, so the narrower set is recovered
-//! by filtering rather than lost.
 
 use std::collections::BTreeMap;
 
@@ -312,10 +288,6 @@ enum Token<'a> {
 
 /// A C++ scanner that yields braces and identifiers and nothing else, with
 /// comments and literals skipped.
-///
-/// Counting braces off raw text would be enough for this file today; it is
-/// done properly because a brace inside a string or a comment is a silent
-/// off-by-one in the nesting that decides every `value-of(...)` position.
 struct Scanner<'a> {
     text: &'a str,
     at: usize,

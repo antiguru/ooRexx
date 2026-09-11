@@ -12,35 +12,6 @@
 //! The single owner table `coverage.rs` (criterion 1, parse coverage) and
 //! `loud.rs` (criterion 5, loud failures) both read, instead of each
 //! hand-maintaining its own copy (inherited item I36).
-//!
-//! An integration test cannot `mod` another test binary's directory, so the
-//! sharing goes through `#[path = "owners.rs"] mod owners;` -- see
-//! `coverage.rs`'s and `loud.rs`'s own top for that line, and
-//! [`the_two_harnesses_include_this_exact_file`] below for the regression
-//! guard that a divergent private copy cannot silently reappear.
-//!
-//! This file is itself a normal, cargo-discovered integration test (it lives
-//! directly under `tests/`, like `coverage.rs` and `loud.rs`), so its own
-//! tests below run under `cargo test --test owners` in addition to running a
-//! second and third time as part of `coverage`'s and `loud`'s own binaries
-//! (each `#[path]`-including this same source). That tripling is deliberate:
-//! it is what makes `cargo test -p rexx-exec --test coverage` alone (without
-//! also running `owners`) still verify this file's own invariants.
-//!
-//! # `#![allow(dead_code)]`, file-wide
-//!
-//! Three independent binaries compile this file (`owners`, `coverage`,
-//! `loud`), and no single one of them calls every item below -- `Coverage::
-//! unwitnessed`, for instance, is `coverage.rs`'s own and `loud.rs` never
-//! calls it, while `loud.rs`'s own consumers need `EXPECTED_OUT_OF_SCOPE`
-//! only through `coverage.rs`. Denying `dead_code` per item would need a
-//! different `#[allow]`/`#[expect]` shape in each of the three
-//! compilations for the same source line, and `#[expect]` in particular
-//! would be *wrong* here: it demands the lint actually fire, and whether it
-//! fires for a given item depends on which of the three binaries is
-//! compiling it. A file-wide `allow` is the honest statement of what this
-//! file is -- a shared library of data and functions meant to be used
-//! selectively by its callers, not a self-contained test module.
 #![allow(dead_code)]
 
 use std::collections::HashSet;
@@ -68,31 +39,6 @@ pub(crate) enum Owner {
 /// the tag; this is that macro widened to also carry ownership, because
 /// criterion 1 and criterion 5 both need ownership from one invocation for
 /// the same reason Phase 3's needed the tag alone from one.
-///
-/// # The `split` form
-///
-/// A variant whose forms do not share one owner takes a trailing `split
-/// PATTERN in (EXPR) { .. }` section, which expands to a nested `match` on
-/// `EXPR` and contributes one row per arm to `$list`. Any number of sections
-/// may follow the main block, one per such variant. Both matches stay
-/// wildcard-free, so a new variant of either enum is a compile error here.
-///
-/// `split` rather than an ordinary row for two different reasons, one per
-/// variant that uses it, and the sections look different because of it.
-///
-/// * `Call`'s arms live behind a `Box` (`InstructionKind::Call(Box<Call>)`)
-///   and box patterns are unstable, so `InstructionKind::Call(Call::Named {
-///   .. })` is not a pattern that can be written; the arms are only reachable
-///   by dereferencing into a second `match`, and `EXPR` is that dereference.
-/// * `Address`'s forms are not arms at all. One variant carries a struct
-///   whose *fields* say which form it is, so there is no pattern to name them
-///   with; `EXPR` is a `bool` and the two arms are `true` and `false`. An
-///   exhaustive match over `bool` is as wildcard-free as one over an enum.
-///
-/// The sections are trailing, and the rows they contribute therefore land at
-/// the end of `$list`, because a matcher cannot alternate two row shapes
-/// inside one repetition without a token muncher. Every consumer sorts or
-/// counts, so `$list`'s order carries nothing.
 macro_rules! tags {
     ($fn_name:ident, $list:ident, $ty:ty,
      { $($pat:pat => ($name:literal, $owner:expr)),+ $(,)? }
@@ -204,10 +150,6 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
 // The four resolve by four different rules -- a label search, a run-time
 // target, a namespace's public routines, and a condition trap -- so a single
 // row would say less than these four do about what has been checked.
-//
-// This grain is what lets `src/lib.rs`'s `instruction_owner` be compared
-// against this table row for row, with nothing hand-maintained in between.
-// `loud.rs`'s `every_out_of_scope_variant_fails_loudly` is that comparison.
 split InstructionKind::Call(c) in (&**c) {
     rexx_parse::Call::Named { .. } => ("Call::Named", Owner::InScope),
     rexx_parse::Call::Dynamic { .. } => ("Call::Dynamic", Owner::InScope),
@@ -224,10 +166,6 @@ split InstructionKind::Call(c) in (&**c) {
 // environment, and `WITH` says where a command's three streams go; both need
 // the command dispatch `InstructionKind::Command` needs, and carry that same
 // owner (D18).
-//
-// A `bool` rather than a pattern, because the two jobs are told apart by
-// which *fields* of one struct are filled, not by which arm of an enum is
-// present. `instruction_owner` writes the identical expression.
 split InstructionKind::Address(a) in (a.command.is_some() || a.io.is_some()) {
     true => ("Address::Command", Owner::Phase("Phase 7")),
     false => ("Address::Environment", Owner::InScope),
@@ -337,12 +275,6 @@ tags!(operator_tag, OPERATOR_TAGS, Operator, {
 });
 
 /// One category's seen-set against its full `(tag, owner)` list.
-///
-/// `seen` is `pub(crate)` rather than accessed only through a method:
-/// `coverage.rs`'s own corpus walk inserts into it directly (`instructions.
-/// seen.insert(...)`), from the parent module this struct is now shared
-/// into rather than defined in, and `pub(crate)` is exactly as wide as that
-/// access already was when this struct lived inside `coverage.rs` itself.
 pub(crate) struct Coverage {
     pub(crate) category: &'static str,
     pub(crate) all: &'static [(&'static str, Owner)],
@@ -387,9 +319,6 @@ impl Coverage {
 /// owner arm above that is not also made here is a test failure, which is
 /// the point: relabelling a variant is a plan amendment, not a drive-by
 /// `match` edit.
-///
-/// **Pinned literal 1 of 5** this file's own module doc (below, "What is
-/// pinned here") tracks for Step 5's own purposes.
 pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Command", "Phase 7"),
     // The one arm-grained row. `ADDRESS`'s other form is in scope, and so is
@@ -402,12 +331,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
 /// Every phase name the split table names, spelled exactly as it spells them.
 /// `docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
 /// split" table and its "assigned elsewhere" paragraph.
-///
-/// **A name stays here because the split table names it, not because some row
-/// above currently uses it.** This is the set of spellings an owner is allowed
-/// to have; a phase that owes nothing right now can owe something again if a
-/// later audit reassigns a variant, and dropping its name would turn that
-/// reassignment into a test failure with no defect behind it.
 pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
 
 #[test]
@@ -493,21 +416,6 @@ fn variant_counts_match_the_audited_split() {
     // variant across the line edits both the column it left and the column
     // it joined, and this test is what makes that a pair rather than a
     // choice.
-    //
-    // **`INSTRUCTION_TAGS` is one row per separately owned unit, not one per
-    // variant**: a variant, or an arm where a variant is split. So its
-    // length exceeds `InstructionKind`'s 40 variants by the extra rows the
-    // two `split` sections contribute, 3 for `Call` and 1 for `Address`.
-    // `only_backslash_is_unreachable` and
-    // `out_of_scope_set_matches_the_committed_expectation` are what
-    // police the rows themselves; these are the totals.
-    //
-    // "In scope" means this crate answers the same bytes the oracle answers,
-    // not that every spelling of the keyword runs. `USE LOCAL` still only
-    // fails here -- its one legal placement, first in a `::METHOD` body, is
-    // loud -- but the placements that fail do so with the oracle's own
-    // 98.993/99.910, measured, which is the same distinction `Procedure`
-    // draws for a misplaced `PROCEDURE`: error 17.1, and not a gap.
     assert_eq!(INSTRUCTION_TAGS.len(), 44);
     assert_eq!(
         INSTRUCTION_TAGS
@@ -601,41 +509,3 @@ fn the_two_harnesses_include_this_exact_file() {
 // which phase owns it) must update every one of the five items below in the
 // same change, or one of the tests above (or in `coverage.rs`/`loud.rs`)
 // fails.
-//
-// 1. **`EXPECTED_OUT_OF_SCOPE`**, above: the pinned `(category, tag, phase)`
-//    set every out-of-scope variant must appear in exactly once. Checked by
-//    `out_of_scope_set_matches_the_committed_expectation`.
-// 2. **`coverage.rs`'s `EXPECTED_SUBSET`**: the exact line list of
-//    `phase-4a.txt`, checked by that file's own
-//    `phase_4a_subset_matches_the_committed_list`. Unrelated to variant
-//    ownership directly, but a task that widens the L0 subset (adding a
-//    program) has to extend this list in the same change, or the test
-//    fails on the new, unlisted line.
-// 3. **This file's own [`variant_counts_match_the_audited_split`]**: the
-//    hardcoded `InstructionKind` phase counts and the two `ExprKind` ones.
-//    A variant moving in scope changes the `InScope` count and whichever
-//    phase count it left, and both sides of that move must be edited
-//    together. `loud.rs`'s own `in_scope_counts_match_the_audited_split`
-//    carries a copy of the `InScope` figure and moves with it.
-// 4. **`loud.rs`'s `INSTRUCTION_WITNESSES`/`EXPR_WITNESSES`**: one witness
-//    row per phase-owned row of this file's tables, at this file's grain --
-//    so `Call`'s witness names an arm, because the `split` section gives
-//    each arm its own row here. The moment a variant or arm moves in scope,
-//    its witness must be *deleted*, not merely left stale, or
-//    `assert_witness_set_is_complete` fails the other way (an extra witness
-//    with no matching phase-owned tag).
-// 5. **`src/lib.rs`'s `instruction_owner`/`expr_owner`**: the third copy of
-//    this same ownership data, separate by construction because production
-//    code cannot depend on anything under `tests/`. **Separate is no longer
-//    unchecked.** A variant moving in scope, or changing owner, must move
-//    there too, and `loud.rs`'s `every_out_of_scope_variant_fails_loudly`
-//    is what fails if it does not: the owner it requires the emitted
-//    message to end with is read straight out of the tables above, so the
-//    two are compared to each other rather than each to a copy. That
-//    comparison covers the phase-owned rows, which are the reachable ones.
-//    An owner written onto a variant this crate implements is data no
-//    execution path reads, and **nothing covers it** -- measured, giving
-//    `InstructionKind::Say` an owner leaves the whole suite green. It needs
-//    no cover, being unreachable, but an edit there should not expect any.
-//    `lib.rs`'s own doc has the one exception, `Do`/`Loop`, and names the
-//    four `run.rs` tests that pin it.

@@ -11,18 +11,6 @@
 
 //! D73's guard: a class `corpus/docs/class-set.txt` marks `unreachable` still
 //! has no route to an instance, on both engines and on the oracle.
-//!
-//! `unreachable` is grounded in a sentence of the reference saying instances
-//! come only from native code, and gate table C reads it as the reason a
-//! whole instance arm has no answer. Nothing else asserts on that status, so
-//! a class that quietly started constructing would leave those rows reported
-//! as impossible while an instance existed.
-//!
-//! The set comes from the status column rather than from a list of names, so
-//! a class that becomes `unreachable` later is guarded by existing. Both
-//! sides are asserted and both sides' three descriptors are reported: the
-//! oracle's refusal is what makes the status a claim about the language, and
-//! this crate's is what makes it a claim about this build.
 
 mod gate_tables;
 mod support;
@@ -71,10 +59,6 @@ fn unreachable_classes() -> Vec<(String, String)> {
 }
 
 /// Whether an outcome is a run that reached the `say` below the construction.
-///
-/// The construction answering is the only thing this guard forbids, so the
-/// discriminator is the probe's own output rather than an exit code: a raise
-/// and a refusal differ from each other and neither prints a line.
 fn constructed(stdout: &[u8]) -> bool {
     !stdout.is_empty()
 }

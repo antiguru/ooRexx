@@ -10,25 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The directive grammar, pinned against `build/bin/rexxc`.
-//!
-//! Every accepted case below was checked with `rexxc`, which is a parse-only
-//! oracle, and every rejected case carries the number and sub-number `rexxc`
-//! reported. Both directions are tested for every gate: a test that only checks
-//! the accepted cases catches one error and misses its opposite.
-//!
-//! In-crate rather than under `tests/`, because `ParseCtx`, `ClauseCursor` and
-//! `parse_directive` are all `pub(crate)` and an integration test is a separate
-//! crate. Task 3.6's tests live here for the same reason.
-//!
-//! # What an rc of 0 does and does not prove
-//!
-//! `rexxc` runs more than the parse: it installs the package, which resolves
-//! external libraries and checks duplicates. Two rows below therefore cite a
-//! NON-zero rc as their evidence, and cite it deliberately, because reaching a
-//! run-time failure proves the parse succeeded: measured,
-//! `::ROUTINE r EXTERNAL "LIBRARY x"` is Error 98.903 at rc 158 and
-//! `::METHOD m CLASS` with no `::CLASS` above it is 99.905. Neither is a parse
-//! error and neither is raised here.
 
 use std::cell::RefCell;
 
@@ -58,11 +39,6 @@ use super::{
 
 /// Parses `text` whole, the way `translate` does: one code body, then every `::`
 /// clause through `parse_directive` with that directive's own body after it.
-///
-/// The same composition the public entry point uses, minus building a `Program`,
-/// because the directives are what is asserted here. Driving `parse_directive`
-/// over every `::` clause of a real file is what makes the `CoreClasses.orx`
-/// test possible.
 fn parse_with_symbols(
     text: &str,
     kind: SourceKind,
@@ -144,10 +120,6 @@ fn keywords_of(directives: &[Directive]) -> Vec<&'static str> {
 }
 
 /// A canonical rendering of every directive in `text`, one string each.
-///
-/// Space-separated so that no two different nodes render alike: every optional
-/// field either contributes a token or contributes nothing, and no field's token
-/// can be produced by another field.
 fn shapes(text: &str) -> Vec<String> {
     let (directives, symbols) = parse_with_symbols(text, SourceKind::Program)
         .unwrap_or_else(|e| panic!("{text:?} failed to parse: {e:?}"));
@@ -557,9 +529,6 @@ fn the_five_shared_spellings_mean_different_things_by_position() {
 
 /// A table pairing every sub-directive with a directive that carries it, and a
 /// second pairing every one with a directive that does not.
-///
-/// Both directions, because a table of accepted cases alone would pass with an
-/// option loop that accepted everything.
 #[test]
 fn every_sub_directive_is_reachable_and_every_one_is_refusable() {
     // Each row was run through `rexxc`. Thirty-eight are rc 0; the two that are
@@ -1341,11 +1310,6 @@ fn a_clause_that_is_not_a_directive_and_a_directive_that_is_not_known() {
 }
 
 /// `getRetriever`'s name check, 99.925, at all four of its call sites.
-///
-/// It is a purely local check on the name's own text, and it is easy to miss
-/// because the `syntaxError` lives in `LanguageParser.cpp` rather than in the
-/// 2,867 lines of `DirectiveParser.cpp`. Both directions, and the controls that
-/// say where the check is NOT applied.
 #[test]
 fn an_attribute_name_must_be_a_variable_name() {
     // The three kinds a variable name can be, all rc 0.
@@ -1436,14 +1400,6 @@ fn a_body_error_is_reported_against_the_body_and_not_the_directive() {
     // `checkDirective` saves `clauseLocation` and restores it only AFTER the
     // error, so `nextClause()` has already moved it. The oracle prints the
     // WHOLE message, and it names line 5:
-    //
-    //   5 *-* return 1
-    //   Error 99 running ... line 5:  Translation error.
-    //   Error 99.933:  Abstract methods cannot have a method body.
-    //
-    // The blank lines are what make the two positions distinguishable: without
-    // them the directive's byte and the body's byte sit on adjacent lines and
-    // moving one moves the other.
     let text = "::method m abstract\n\n\n\n  return 1\n";
     assert_eq!(err(text), (99, 933));
     let offender = text.find("  return").expect("the body clause is there");

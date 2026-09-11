@@ -11,20 +11,6 @@
 
 //! The `::REQUIRES` search, the cycle report and `::OPTIONS NOPROLOG`, each
 //! against the oracle.
-//!
-//! **Kept beside `corpus/phase-5d.txt`, which names
-//! `lang/package_requires.rex`.** That program is the witness for what
-//! `::REQUIRES` imports, and the differential runs it. What this binary has
-//! that no corpus program can express: every row here sets a **working
-//! directory and two environment variables** of its own and writes the
-//! required files into directories it creates, which is the only way to
-//! separate the four search routes from each other.
-//!
-//! **The required files are `.cls`** here and in the corpus, because every
-//! corpus scan selects `*.rex`; the spelling also exercises the extension step
-//! the search tries first. `corpus/README.md`'s "Two shapes work" is the rule.
-//!
-//! Three descriptors compared separately and raw.
 
 mod support;
 
@@ -47,14 +33,6 @@ struct Route {
 
 /// The four routes, the precedence between them, and the refusal when none
 /// holds the file.
-///
-/// **The order is the oracle's own, measured one route at a time**
-/// (`SysSearchPath`, `platform/unix/SysInterpreterInstance.cpp:123`): the
-/// requiring program's own directory, then the current directory, then
-/// `REXX_PATH`, then `PATH`. The `all` row is what says the first of them
-/// wins; without it four rows that each find their own copy would pass under
-/// a search that consulted only one of the four, since no row would ever have
-/// two candidates.
 const ROUTES: &[(&str, Route)] = &[
     (
         "progdir",
@@ -94,12 +72,6 @@ const ROUTES: &[(&str, Route)] = &[
 ];
 
 /// What stays on `PATH` behind the directory each row plants its file in.
-///
-/// The oracle is spawned through `sh`, which `Command::new` looks up on the
-/// child's own `PATH` -- so a row that replaced the variable outright would
-/// fail to start the interpreter rather than measure its search. Neither
-/// directory holds a `reqlib.cls`, and both sides are given the identical
-/// string, so what the row varies is still one directory.
 const SHELL_PATH: &str = "/bin:/usr/bin";
 
 /// A directory of this run's own, so that a stale copy of the required file
@@ -120,11 +92,6 @@ fn fresh_root(name: &str) -> PathBuf {
 
 /// Runs `rexx-run` on `path` from `cwd` with `environment` set, the same three
 /// descriptors the oracle side answers with.
-///
-/// A subprocess rather than `run_program` in this process, and the reason is
-/// the subject: the routes are a working directory and two environment
-/// variables, and setting either of those in-process is `unsafe` in this
-/// edition and would reach every other test in the binary besides.
 fn run_rust_in(path: &Path, cwd: &Path, environment: &[(&str, &str)]) -> (Vec<u8>, Vec<u8>, i32) {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
     command.arg(path).current_dir(cwd);
@@ -145,13 +112,6 @@ fn run_rust_in(path: &Path, cwd: &Path, environment: &[(&str, &str)]) -> (Vec<u8
 /// Each of the four routes finds the required file on its own, the first of
 /// them wins when all four hold a copy, and a name no route holds is the
 /// oracle's own 43.901 rather than anything quieter.
-///
-/// **The two sides are compared on all three descriptors and the answer is
-/// asserted as well**, because a search this crate had narrowed to one route
-/// and an oracle that found the file elsewhere would still agree on a row
-/// where only that one route holds it -- and a row where neither finds
-/// anything agrees on two refusals. The `answer` column is what separates
-/// "both found the same file" from "both found nothing".
 #[test]
 fn each_of_the_four_search_routes_finds_the_required_file() {
     let oracle = locate();
@@ -278,11 +238,6 @@ fn the_earliest_route_wins_when_every_one_of_them_holds_a_copy() {
 
 /// A `::REQUIRES` chain that returns to a package whose own directives are
 /// still installing is the oracle's 98.952, with one clause echo per level.
-///
-/// **The whole chain, not only the message**: the report names the file the
-/// second reference resolved to and the level it was reached from, and a
-/// crate that detected the cycle at the wrong level would give the same
-/// message under a different `running <name> line <n>` span.
 #[test]
 fn a_requires_cycle_is_the_oracles_own_report() {
     let oracle = locate();
@@ -338,11 +293,6 @@ fn a_requires_cycle_is_the_oracles_own_report() {
 /// `::OPTIONS NOPROLOG` suppresses the leading code section of a required
 /// file and leaves its directives installed, and does nothing at all to a
 /// file run as the program.
-///
-/// **The pair is the point.** A crate that ignored the keyword agrees with
-/// the oracle on the second row and prints one line too many on the first; a
-/// crate that suppressed the section everywhere agrees on the first and
-/// prints one too few on the second.
 #[test]
 fn noprolog_suppresses_a_required_files_prologue_and_not_a_programs_own() {
     let oracle = locate();

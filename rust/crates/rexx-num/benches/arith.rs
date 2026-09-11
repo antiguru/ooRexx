@@ -1,29 +1,5 @@
 //! D9 arithmetic dimension: replays `rust/bench-programs/arith.rex` directly
 //! against `Number`, rather than through an interpreter.
-//!
-//! ## What this does and does not establish
-//!
-//! `interpreter/arith` (the C++ baseline, `docs/superpowers/plans/perf-baseline.md`)
-//! times a Rexx program: parsing, instruction dispatch, variable lookup and
-//! arithmetic, all together. This benchmark performs only the arithmetic --
-//! the same operators, the same operand values, the same `DIGITS` settings,
-//! the same iteration count -- with the loop and operand values inlined as
-//! Rust rather than interpreted as Rexx source. There is no lexer, no
-//! parser, no bytecode dispatch and no variable-lookup-by-name anywhere in
-//! this file.
-//!
-//! A ratio between this number and the C++ baseline is therefore a
-//! statement about the arithmetic engine alone, not about end-to-end
-//! interpreter speed -- the Rust interpreter does not exist yet (Phase 2 is
-//! `rexx-num` and its neighbours; dispatch and lookup are later phases). Do
-//! not read a favourable ratio here as evidence the eventual Rust
-//! interpreter will match or beat the C++ one on this program; it says
-//! nothing about the cost this benchmark does not pay.
-//!
-//! ## Operation count
-//!
-//! `arith.rex` runs 500,000 iterations of:
-//!
 //! ```text
 //! numeric digits 9
 //! a = i / 3
@@ -33,15 +9,6 @@
 //! d = c ** 2 // 5
 //! total = total + b + d
 //! ```
-//!
-//! i.e. per iteration: 2 divides, 1 multiply, 1 subtract and 1 power at
-//! DIGITS 9 or 20 as shown, 1 remainder-divide, and 2 adds into a running
-//! accumulator -- 8 `Number` operations per iteration, 4,000,000 total. `i`
-//! is parsed fresh from its decimal string each iteration (there is no
-//! integer-valued `Number` constructor to reuse instead), matching the fact
-//! that the loop variable is a new value every time; the five literal
-//! operands (`3`, `7`, `2`, `5`, `1`) are parsed once outside the loop, since
-//! they do not change.
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use rexx_num::{DivOp, Number};

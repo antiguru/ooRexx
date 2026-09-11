@@ -10,69 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The directive grammar: one `::` clause in, one directive out.
-//!
-//! Ported from `LanguageParser::nextDirective` (`DirectiveParser.cpp:64`) and
-//! the nine functions it dispatches to.
-//!
-//! # Two tables, resolved by position
-//!
-//! The token after `::` resolves against `RexxToken::directives[]`, nine rows,
-//! and every token after that against `RexxToken::subDirectives[]`, forty rows.
-//! Five spellings are rows of both -- `ATTRIBUTE`, `CLASS`, `CONSTANT`,
-//! `METHOD` and `ROUTINE` -- so `::CLASS c SUBCLASS d` uses `CLASS` at the top
-//! level while `::METHOD m CLASS` uses it as an option, and only position tells
-//! them apart. That is the same positional rule the instruction grammar uses,
-//! and for the same reason: a directive keyword is not a reserved word.
-//!
-//! # A third table, at two points
-//!
-//! Two option arguments resolve against `subKeywords[]` instead, because the
-//! C++ calls `token->subKeyword()` there: `::OPTIONS FORM` takes `SCIENTIFIC`
-//! or `ENGINEERING` (`DirectiveParser.cpp:1007`) and `::OPTIONS NUMERIC` takes
-//! `INHERIT` or `NOINHERIT` (`DirectiveParser.cpp:1339`). This is not a
-//! detail that could be papered over with `subDirectives[]`: `NOINHERIT`,
-//! `SCIENTIFIC` and `ENGINEERING` are rows of `subKeywords[]` alone, and
-//! measured, `::OPTIONS NUMERIC NOINHERIT` and `::OPTIONS FORM ENGINEERING`
-//! are both rc 0.
-//!
-//! # What this does not do
-//!
-//! A directive's *body* is not parsed here. `::METHOD` and `::ROUTINE` hand a
-//! body to `translateBlock`, which is the task that assembles the instruction
-//! chain. This module only decides whether a body belongs to the directive and
-//! records that in the node. The one thing it does look at is the clause that
-//! FOLLOWS, and only through `checkDirective` and `hasBody`, which need nothing
-//! but that clause's first token.
-//!
-//! Nothing that needs the accumulated package is done here either, because this
-//! function returns one directive and the accumulator is the caller's. That
-//! leaves these to the caller, each measured:
-//!
-//! * The duplicate checks. `::CLASS c` twice is 99.901, `::ROUTINE r` twice is
-//!   99.903, `::RESOURCE d` twice is 99.942, and the method, attribute and
-//!   constant duplicates are 99.902, 99.931 and 99.932.
-//! * 99.906, a `::CONSTANT` with an expression outside any `::CLASS`. Measured,
-//!   `::CONSTANT c (1+2)` alone in a file is 99.906 and the same directive
-//!   under a `::CLASS` is rc 0.
-//! * 99.905, a `::METHOD ... CLASS` with no `::CLASS` above it.
-//! * 99.945, a `::ANNOTATE` naming a target that does not exist yet.
-//! * 33.1, a `DIGITS` and `FUZZ` pair where the first does not exceed the
-//!   second. Both directions raise it and neither is checkable from one
-//!   directive: measured, `::options fuzz 9` alone is 33.1 against the default
-//!   `DIGITS` of 9, `::options digits 3 fuzz 5` is 33.1 on the FUZZ, and
-//!   `::options fuzz 5 digits 3` is 33.1 on the DIGITS. It is a
-//!   `reportException` rather than a `syntaxError`.
-//! * 98.903 and 90.998/90.999, resolving an `EXTERNAL` library or entry point.
-//!   Those are run-time failures of a program that parsed: measured,
-//!   `::METHOD m EXTERNAL "LIBRARY nosuch"` is rc 158, not a parse error.
-//! * 99.916 for a non-directive clause where a directive was due, which is what
-//!   the next call to `nextDirective` raises, and **99.914** (not 99.915, which
-//!   is `Error_Translation_use_local_interpret` and unrelated) for a directive
-//!   inside `INTERPRET` text. `translate` raises 99.914 once, before any
-//!   directive is parsed (`LanguageParser.cpp:1119`), rather than per directive:
-//!   measured with `interpret "::routine r"` inside an installed trap,
-//!   `condition('o')~code` is `99.914` and the message is "INTERPRET data must
-//!   not contain directive instructions."
 
 use crate::ast::{
     Access, Annotate, Annotation, AnnotationTarget, AttributeDirective, AttributeStyle,
@@ -156,20 +93,10 @@ const SUBKEY_NOINHERIT: usize = 29;
 const SUBKEY_SCIENTIFIC: usize = 37;
 
 /// The marker that ends a `::RESOURCE` body when the directive names none.
-///
-/// `GlobalNames::DEFAULT_RESOURCE_END`. Compared verbatim, so the case matters:
-/// measured, a body closed by `::end` instead of `::END` is Error 99.943.
 const DEFAULT_RESOURCE_END: &[u8] = b"::END";
 
 /// Parses the `::` clause the cursor is sitting on, advancing it past that
 /// clause.
-///
-/// This is `nextDirective` (`DirectiveParser.cpp:64`) including its own two
-/// guards: a clause that does not start with `::` is 99.916 and a `::` not
-/// followed by a symbol is 20.916, so a caller may hand this any clause.
-///
-/// Panics on an exhausted cursor, which is `noClauseAvailable()` and is the
-/// caller's loop condition rather than an error.
 pub(crate) fn parse_directive(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,
@@ -186,11 +113,6 @@ pub(crate) fn parse_directive(
 }
 
 /// One directive clause's parse in progress.
-///
-/// Shaped like the instruction grammar's `Inst`, with one difference that
-/// matters: the clause is already CONSUMED from the `ClauseCursor` by the time
-/// this exists, because `checkDirective` and `hasBody` both look at the clause
-/// that follows and could not see it otherwise.
 struct Dir<'a> {
     ctx: &'a ParseCtx<'a>,
     /// Position inside `clause.tokens`.
@@ -198,9 +120,6 @@ struct Dir<'a> {
     clause: Clause,
     /// The byte offset every error is reported against: the start of the
     /// clause, not of the offending token.
-    ///
-    /// The exception is `checkDirective`, which reports against the FOLLOWING
-    /// clause and builds its error without this field. See `check_directive`.
     clause_byte: usize,
 }
 
@@ -251,11 +170,6 @@ impl<'a> Dir<'a> {
 
     /// The `SUB_DIRECTIVES` index of `token`, or `None` when it is not a symbol
     /// or not in that table.
-    ///
-    /// Both misses are the same error at every call site, because the C++ tests
-    /// `!token->isSymbol()` and the switch's `default` with one error code each
-    /// time. Measured on `::CLASS`: `::class c,` and `::class c junk` are both
-    /// 25.901.
     fn sub_directive(&self, token: &Token) -> Option<usize> {
         match &token.kind {
             TokenKind::Symbol { id, .. } => self.ctx.keywords.sub_directives.index_of(*id),
@@ -283,13 +197,6 @@ impl<'a> Dir<'a> {
     }
 
     /// `RexxToken::upperValue()`: like `value_of`, but a literal is upcased too.
-    ///
-    /// ASCII-only, and that is exact rather than approximate: `RexxString::upper`
-    /// upcases through `Utilities::toUpper`, which is
-    /// `isLower(c) ? c & ~0x20 : c` with `isLower` spelled `c >= 'a' && c <= 'z'`
-    /// (`common/Utilities.hpp:52`). So a non-ASCII byte in a literal is left
-    /// alone by the interpreter too, and `make_ascii_uppercase` matches it byte
-    /// for byte.
     fn upper_value_of(&self, token: &Token) -> Box<[u8]> {
         let mut value = self.value_of(token).into_vec();
         value.make_ascii_uppercase();
@@ -336,13 +243,6 @@ impl<'a> Dir<'a> {
 
     /// `getRetriever` (`LanguageParser.cpp:2507`): a name that an attribute
     /// method will read and write must be a variable name.
-    ///
-    /// `Error_Translation_invalid_attribute`, 99.925. This is a purely local
-    /// check on the name's own text, so it belongs here and not to the caller.
-    /// Measured: `::ATTRIBUTE 3`, `::ATTRIBUTE .a` and `::METHOD m DELEGATE 5`
-    /// are all 99.925, while `::ATTRIBUTE a.`, `::ATTRIBUTE a.b` and
-    /// `::METHOD 3` are rc 0, so the rule admits a stem and a compound and is
-    /// not applied to a plain method name at all.
     fn require_variable_name(&self, name: &[u8]) -> Result<(), ParseError> {
         if is_variable_name(name) {
             return Ok(());
@@ -354,12 +254,6 @@ impl<'a> Dir<'a> {
 
     /// `checkDirective` (`DirectiveParser.cpp:154`): if a clause follows, it
     /// must be a directive.
-    ///
-    /// Reported against the OFFENDING clause and not against the directive.
-    /// `checkDirective` saves `clauseLocation` and restores it only AFTER the
-    /// error, so `nextClause()` has already moved it: measured, `::method m
-    /// abstract` on line 1 with `return 1` on line 2 reports
-    /// `line 2: Translation error` with `99.933`.
     fn check_directive(
         &self,
         cursor: &ClauseCursor,
@@ -377,10 +271,6 @@ impl<'a> Dir<'a> {
 
     /// `hasBody` (`DirectiveParser.cpp:189`): whether a non-directive clause
     /// follows.
-    ///
-    /// The one place a directive's parse depends on what comes after it rather
-    /// than only rejecting it. `::ATTRIBUTE a GET` with a body is a method
-    /// written in Rexx and without one is a generated getter, and both are rc 0.
     fn has_body(&self, cursor: &ClauseCursor) -> bool {
         cursor
             .peek()
@@ -484,10 +374,6 @@ impl<'a> Dir<'a> {
     }
 
     /// `parseClassReference` (`DirectiveParser.cpp:287`).
-    ///
-    /// `code`/`sub` is the caller's "nothing there" error, which differs per
-    /// keyword: 19.906 for `METACLASS`, 19.907 for `SUBCLASS`, 19.913 for
-    /// `MIXINCLASS` and 19.908 for `INHERIT`.
     fn class_reference(&mut self, code: u16, sub: u16) -> Result<ClassRef, ParseError> {
         let Some(token) = self.next_real() else {
             return Err(self.error(code, sub));
@@ -749,12 +635,6 @@ impl<'a> Dir<'a> {
 
     /// `decodeExternalMethod` (`DirectiveParser.cpp:1403`) and the routine
     /// form (`DirectiveParser.cpp:2649`-`2749`).
-    ///
-    /// `registered` admits the `REGISTERED` spelling, which only `::ROUTINE`
-    /// accepts. Measured: `::method m external "junk"` and
-    /// `::routine r external "junk"` are both 99.917, and
-    /// `::routine r external "registered x"` gets past the parse to 90.999
-    /// while there is no method spelling that does.
     fn decode_external(
         &self,
         spec: Option<&[u8]>,
@@ -831,10 +711,6 @@ impl<'a> Dir<'a> {
 
     /// `translateConstantExpression` (`LanguageParser.cpp:1725`), entered with
     /// the `(` already consumed.
-    ///
-    /// A comma list is allowed, because this is `requiredExpression(TERM_RIGHT)`
-    /// and a required expression admits one: measured, `::constant c (1,2)`
-    /// gets past the parse to 99.906, the same error `(1+2)` gets.
     fn constant_expression(&mut self) -> Result<Expr, ParseError> {
         // `Error_Invalid_expression_missing_constant`. Measured:
         // `::constant c ()` is 35.936.
@@ -850,11 +726,6 @@ impl<'a> Dir<'a> {
 
     /// The signed-number value form that `::CONSTANT` and `::ANNOTATE` share
     /// (`DirectiveParser.cpp:1886`-`1907` and `2230`-`2251`).
-    ///
-    /// A `+` or `-` followed by a CONSTANT symbol whose concatenation is a
-    /// number. All three conditions are separate: measured, `::constant c *5`
-    /// fails on the operator, `-.true` on the symbol's class, and `-5x` and
-    /// `-1e` on the number test, and all four report the same error.
     fn signed_constant(&mut self, code: u16, sub: u16) -> Result<Box<[u8]>, ParseError> {
         let Some(token) = self.next_real() else {
             return Err(self.error(code, sub));
@@ -1117,12 +988,6 @@ impl<'a> Dir<'a> {
     // ---- ::RESOURCE ----
 
     /// `resourceDirective` (`DirectiveParser.cpp:2266`).
-    ///
-    /// The body itself was copied out by `scan`, which had to: the lines are not
-    /// Rexx and tokenising them would invent errors the interpreter does not
-    /// raise. Measured, a body holding `this is 'unmatched and /* unclosed` gets
-    /// rc 0. So this validates the directive and picks up the body `scan`
-    /// already found.
     fn resource(&mut self) -> Result<DirectiveKind, ParseError> {
         let name = self.require_name(19, 920)?;
         let mut end_marker: Box<[u8]> = Box::from(DEFAULT_RESOURCE_END);
@@ -1220,21 +1085,6 @@ impl<'a> Dir<'a> {
 }
 
 /// Whether `name` spells a variable: a simple name, a stem, or a compound.
-///
-/// `LanguageParser::scanSymbol(RexxString *)` (`Scanner.cpp:1792`) sorts a
-/// string into seven kinds and `getRetriever` accepts exactly three of them,
-/// `STRING_NAME`, `STRING_STEM` and `STRING_COMPOUND_NAME`. All three share one
-/// test, which is why this is a predicate rather than a classification: the name
-/// must be 1 to `MAX_SYMBOL_LENGTH` bytes, must hold only symbol characters, and
-/// must not start with a `.` or a digit, because a name that does is a number or
-/// a literal symbol instead. Measured: a 250-byte name is rc 0 and a 251-byte
-/// one is 99.925.
-///
-/// The one wrinkle is real and reproduced. A `+` or `-` is admitted when it sits
-/// after an `E` and is followed only by digits, because `scanSymbol` looks for an
-/// exponent before giving up, and then the compound test is reached anyway. So
-/// `::ATTRIBUTE "a.e+5"` is rc 0 while `::ATTRIBUTE "a-b"` and
-/// `::ATTRIBUTE "1e+5"` are 99.925.
 fn is_variable_name(name: &[u8]) -> bool {
     if name.is_empty() || name.len() > MAX_SYMBOL_LENGTH {
         return false;
@@ -1247,11 +1097,6 @@ fn is_variable_name(name: &[u8]) -> bool {
         // A non-symbol character stops the walk. The only one that can still
         // leave a name is an exponent's sign: not last, preceded by an `E`, and
         // followed by digits alone.
-        //
-        // `scan == 0` is guarded here where the C++ is not: it reads
-        // `*(scan - 1)` unconditionally, which is one byte before the string
-        // data. A name starting with a sign is not a variable under any reading,
-        // so rejecting it needs no measurement.
         if scan + 1 >= name.len() || scan == 0 {
             return false;
         }

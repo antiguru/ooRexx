@@ -10,12 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! `FLOOR`, `CEILING` and `ROUND`, and the wholeness test `MODULO` gates on.
-//!
-//! These have no BIF spelling: they reach a program only as methods on a
-//! numeric string, so unlike `TRUNC` there is no second caller to keep in
-//! step. They are here rather than in `format` because each one moves the
-//! value to a neighbouring integer, and only this crate can see the digits
-//! that decides.
 
 use crate::{Digits, Number};
 
@@ -29,11 +23,6 @@ enum Toward {
 
 impl Number {
     /// Implements `~FLOOR`: the largest integer not exceeding this value.
-    ///
-    /// Rounds to `digits` FIRST, so the answer is a function of the rounded
-    /// value and not of the text. Measured at DIGITS 9,
-    /// `'123456789.5'~floor` is `123456790` -- ten digits round to
-    /// `123456790`, which has no decimals left to take a floor of.
     pub fn floor(&self, digits: u64) -> String {
         self.to_integer(digits, Toward::Lower).trunc(digits, 0)
     }
@@ -44,26 +33,12 @@ impl Number {
     }
 
     /// Implements `~ROUND`: the nearest integer, halves away from zero.
-    ///
-    /// The interpreter's own comment describes this as `floor(number + .5)`,
-    /// which is a different function on the negative side, and the code does
-    /// not do it. Measured: `'-2.5'~round` is `-3`, where `floor(-2)` would
-    /// be `-2`.
     pub fn round(&self, digits: u64) -> String {
         self.to_integer(digits, Toward::Nearest).trunc(digits, 0)
     }
 
     /// Whether this value is a whole number at `digits` precision, the test
     /// `~MODULO` refuses its target on.
-    ///
-    /// `digits` is the setting the value was CREATED under
-    /// (`NumberString::createdDigits`), which for a string operand is the
-    /// current `NUMERIC DIGITS`. It bounds the exponent, not the digit
-    /// count, and the two come apart: at DIGITS 9 `'1234567890'` is whole
-    /// here because its exponent is zero and the length is never consulted,
-    /// while `'1E9'` is not, because its adjusted length of ten exceeds the
-    /// setting. Measured, `'1234567890'~modulo(7)` is `3` and
-    /// `'1E9'~modulo(7)` is 93.940.
     pub fn is_integer(&self, digits: u64) -> bool {
         if self.is_zero() || self.exponent == 0 {
             return true;

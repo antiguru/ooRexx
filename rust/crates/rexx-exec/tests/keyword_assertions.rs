@@ -13,106 +13,6 @@
 //! `keyword` module lifts out of `ootest/ooRexx/base/keyword/` through
 //! `rexx_exec`'s public entry point, and checks each `self~assertSame` the
 //! way the ooTest framework's own `assertSame` does.
-//!
-//! # A body, not a row
-//!
-//! `tests/assertions.rs` runs one two-line program per assertion, because in
-//! `base/expressions` an assertion's meaning is fixed by a short assignment
-//! prelude. `base/keyword` tests **statements**: an assertion's meaning is
-//! the loop, `IF` or `SIGNAL` that ran before it, so the unit here is the
-//! whole method body, rewritten once by the extractor and run once. See
-//! `rexx_extract::keyword`'s own doc for the rewrite and the measurement
-//! behind it.
-//!
-//! # How a body reports
-//!
-//! Each `self~assertSame(A, B)` became `say '@@ASSERTSAME n' ((A) == (B))`
-//! ([`rexx_extract::keyword::ASSERTION_MARKER`]), so a body's own stdout
-//! carries one marker line per assertion **execution** -- several for an
-//! assertion inside a loop. A body passes when it exits 0, emits at least
-//! one marker, and every marker reads `1`.
-//!
-//! **"At least one" is load-bearing and is not a formality.** An assertion
-//! inside a loop that never runs emits nothing, and a harness that only
-//! checked "no marker says 0" would call that a pass having verified
-//! nothing -- the exact vacuous shape this project keeps finding in its own
-//! instruments. [`RunOutcome::NoAssertionExecuted`] is a distinct,
-//! non-passing outcome, and
-//! [`a_body_whose_assertions_never_run_is_not_a_pass`] is the constructed
-//! witness for it, since no body in the corpus does this today.
-//!
-//! # The committed exempt set, and why its attribution cannot rot
-//!
-//! `rust/corpus/keyword-exempt.txt` names every body that does not pass, with
-//! what stands between it and passing. For a body that fails **loudly** that
-//! column is **derived, not asserted by hand**: it is the owner string
-//! `rexx-exec`'s own message carries (`instruction_owner` / `expr_owner`),
-//! re-read on every run and compared against the file, so it cannot disagree
-//! with the interpreter's own tables.
-//!
-//! **Two limits on that, both understated by an earlier version of this
-//! paragraph.**
-//!
-//! First, a derived owner says **what blocks the body first**, not what would
-//! make it pass. Those differ whenever a second blocker stands behind the
-//! first, and here they are known to differ for at least four bodies (see
-//! "Bodies that are not their method" below). So a `4c` row means "4c is what
-//! it hits today", and the file's **`4c` rows are an upper bound on what
-//! landing the rest of 4c would fix** -- at least four of them would still not
-//! pass. Named rather than counted: the count is a row total in a file every
-//! task edits, so a number here is falsified by the next task that lands and
-//! the description never is.
-//!
-//! Second, the `defect:` rows are **not** derived: [`RunOutcome::attribution`]
-//! maps every [`RunOutcome::AssertionFailed`] to one constant string, so for
-//! those rows the set test compares a constant against a file holding the
-//! same constant. What still has teeth there is *membership*, not the label:
-//! a body that starts failing its assertions and is not already listed goes
-//! red as an unaccounted failure, so a new one cannot be quietly absorbed
-//! under the existing tag. Anyone adding a second defect class has to split
-//! the constant by hand, and nothing here will remind them.
-//!
-//! # Bodies that are not their method
-//!
-//! Extraction lifts a body out of its `.testGroup` and runs it alone, which
-//! is not always faithful. Four are known not to be, found by running every
-//! extracted program under the C++ oracle:
-//!
-//! * `CALL::test_expression`, `CALL::test_literal`, `CALL::test_on_name` --
-//!   the oracle itself fails these at `Error 43, Routine not found` (rc 213),
-//!   because the body calls `::routine`s defined elsewhere in the file that a
-//!   standalone program does not carry.
-//! * `NUMERIC::test_42` -- exits **3** under the oracle, because the body
-//!   falls through into its own `dig: Return digits()` and a program's
-//!   `RETURN` value becomes its exit status.
-//!
-//! All four are listed `4c` today because `rexx-exec` blocks on an
-//! **unresolved routine call** first -- measured, in order: `routine
-//! "label"`, `routine ""`, `routine "CHARIN"`, `routine "DIGITS"`. Only the
-//! last two are builtins; the first two are precisely the `::routine`s the
-//! bullets above say the standalone program does not carry, so for those the
-//! `4c` label and the real problem are the same missing routine seen from
-//! two sides. Nothing here is currently wrong -- but when 4c lands these
-//! four will not simply start passing, and their labels will need revisiting
-//! rather than deleting. The exempt-set test is what forces that: their
-//! measured attribution will stop matching the file and go red.
-//!
-//! [`the_exempt_set_matches_the_current_failures`] asserts the set in both
-//! directions, in every mode: a listed body that starts passing is as red as
-//! an unlisted body that starts failing. That is `tests/assertions.rs`'s own
-//! device, and the reason for it is unchanged -- an improvement should show
-//! up in a diff, not be quietly absorbed by a harness that decides for
-//! itself what to forgive.
-//!
-//! # REPORT vs STRICT
-//!
-//! [`GATE_ENV`] switches an always-green progress report into the phase
-//! gate, matching `corpus.rs`'s `REXX_CORPUS_GATE` and `assertions.rs`'s
-//! `REXX_ASSERTIONS_GATE`. `emit_uncaptured` pipes the report through a
-//! child process whose stderr is inherited, because a `println!` inside a
-//! `#[test]` reaches libtest's thread-local capture sink and not the
-//! terminal; see `corpus.rs`'s module doc for the fuller argument and the
-//! measurement behind it, which is not re-derived here.
 
 use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome, run_program};
 use rexx_extract::find_test_groups;
@@ -158,23 +58,12 @@ fn exempt_path() -> PathBuf {
 }
 
 /// Every extracted body in the suite, in sorted file order.
-///
-/// The row and drop counts are **not** re-pinned here: they already live on
-/// the extractor's own side (`rexx-extract/tests/extract_keyword.rs`), and a
-/// second copy would be one more thing to drift rather than a cross-check.
-/// What this asserts is only that the extraction is not silently empty.
 fn collect_bodies() -> Vec<KeywordBody> {
     collect().0
 }
 
 /// Every extracted body, plus the per-reason accounting for the calls that
 /// did **not** become one.
-///
-/// The report shows both halves because they answer different questions and
-/// a reader given only the second would mistake the pass rate's denominator
-/// for the group's assertion count. The counts themselves are pinned on the
-/// extractor's side (`rexx-extract/tests/extract_keyword.rs`); here they are
-/// reported, not asserted.
 fn collect() -> (Vec<KeywordBody>, BTreeMap<DropReason, (usize, usize)>) {
     let dir = suite_root();
     let groups = find_test_groups(&dir);
@@ -212,20 +101,6 @@ fn collect() -> (Vec<KeywordBody>, BTreeMap<DropReason, (usize, usize)>) {
 #[derive(Debug)]
 enum RunOutcome {
     /// Exited 0, emitted at least one marker, and every marker read `1`.
-    ///
-    /// `verified` is how many **distinct** `self~assertSame` calls actually
-    /// ran, counted by marker index, not how many the body contains and not
-    /// how many marker lines it printed. Those three differ, in both
-    /// directions: an assertion inside a loop prints one line per pass while
-    /// remaining a single distinct assertion, and an assertion in a branch
-    /// that is not taken prints nothing at all while still being one the
-    /// body contains. Crediting the static count would report an unexecuted
-    /// assertion as verified; crediting the line count would report one
-    /// assertion as several. The totals the run reports are in
-    /// `docs/superpowers/plans/l1-coverage.md` and in criterion 10 of
-    /// `docs/superpowers/plans/phase-4b-gate.md`, which is where they can be
-    /// re-measured; quoting one here would be a gate total that nothing in
-    /// this file asserts.
     Pass { verified: usize },
     /// Emitted markers and at least one read `0`: an assertion the ooTest
     /// suite asserts holds does not hold here.
@@ -407,14 +282,6 @@ fn measured_failures() -> (BTreeMap<String, String>, usize, usize) {
 /// Polices the committed exempt set itself, in every mode, independent of
 /// [`GATE_ENV`]: the current failure set must equal the committed one
 /// exactly, attribution included.
-///
-/// Both directions matter and neither is the "real" one. A listed body that
-/// starts passing means the exemption is stale, and the fix is to edit the
-/// file -- which shows up in a diff -- not for the harness to stop forgiving
-/// it on its own. An unlisted body that starts failing is a regression with
-/// nothing accounting for it. And a body whose attribution changes means its
-/// blocker moved between phases, which is a fact about the plan and should
-/// not be able to happen silently.
 #[test]
 fn the_exempt_set_matches_the_current_failures() {
     let (measured, _, _) = measured_failures();
@@ -452,11 +319,6 @@ fn the_exempt_set_matches_the_current_failures() {
 }
 
 /// The runner. REPORT by default, STRICT under [`GATE_ENV`].
-///
-/// STRICT fails on exactly the same condition
-/// [`the_exempt_set_matches_the_current_failures`] asserts, so the gate adds
-/// no second notion of correctness; what it adds is the report, and a
-/// non-zero exit for a caller that wants one.
 #[test]
 fn keyword_assertions_differential() {
     let (bodies, dropped) = collect();
@@ -708,17 +570,6 @@ fn emit_uncaptured(text: &str) {
 
 /// The falsification proof: perturbing one passing body's assertion must
 /// make exactly that body fail.
-///
-/// Perturbs the **left** operand of the first marker's comparison, by
-/// prepending `'ZZZ-FALSIFICATION-MARKER' ||` immediately inside its opening
-/// parenthesis. Prepending inside the existing parens rather than appending
-/// to the raw operand text is what keeps this safe: a body's operands are
-/// ordinary program text, concatenation binds tighter than comparison in
-/// Rexx, and appending to text that itself contains a top-level comparison
-/// would regroup the expression instead of changing its value
-/// (`assertions.rs`'s own falsification proof hit exactly that and wraps in
-/// parens for the same reason). The parens here are grouping only, so
-/// nothing outside them is regrouped.
 #[test]
 fn the_falsification_proof() {
     let bodies = collect_bodies();
@@ -754,12 +605,6 @@ fn the_falsification_proof() {
 }
 
 /// A body that emits no marker has verified nothing and must not pass.
-///
-/// Constructed rather than found: no body in the corpus does this today, and
-/// a test that waited for one to appear would be a test of the corpus rather
-/// than of this harness. The shape is real -- an assertion inside a loop
-/// whose bounds exclude every iteration -- and it is precisely what a
-/// "no marker said 0, therefore pass" rule would wave through.
 #[test]
 fn a_body_whose_assertions_never_run_is_not_a_pass() {
     let never = KeywordBody {
@@ -785,12 +630,6 @@ fn a_body_whose_assertions_never_run_is_not_a_pass() {
 }
 
 /// An assertion inside a loop is checked on **every** pass, not once.
-///
-/// That is the property the unconditional `SAY` rewrite buys over a
-/// conditional one, and it is what `base/keyword` needs: `DO`'s own tests
-/// put the assertion inside the loop they are testing. A harness that
-/// checked only the last marker, or that counted markers as if they were
-/// assertions, would differ here.
 #[test]
 fn an_assertion_inside_a_loop_is_checked_on_every_pass() {
     let body = KeywordBody {
@@ -818,13 +657,6 @@ fn an_assertion_inside_a_loop_is_checked_on_every_pass() {
 /// emits for a body that neither passes nor names a construct. Nothing else,
 /// so a typo cannot quietly become a new category that the set-equality test
 /// then happily matches against itself.
-///
-/// **The last two are here because they are this file's own string
-/// constants, not hand-written attributions.** A `RAISED` row says the body
-/// exited non-zero for a reason the harness cannot name -- it names no
-/// phase, because the harness has nothing to derive one from -- and the
-/// exempt file's own header is where the cause for such a row is written
-/// down. Requiring a phase there would mean inventing one.
 #[test]
 fn every_exempt_attribution_is_a_known_phase_or_a_declared_defect() {
     const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
@@ -842,17 +674,6 @@ fn every_exempt_attribution_is_a_known_phase_or_a_declared_defect() {
 
 /// A body can pass having run only *some* of its assertions, and the credit
 /// it gets is what ran -- not its static count.
-///
-/// This is the witness for the reporting category that names such bodies,
-/// which stands at **zero** against the corpus today. A category at zero
-/// asserts nothing unless it can fire, which is the gap review finding M8
-/// was raised for; the same requirement applies to a report line as to a
-/// `DropReason`, so it gets the same treatment.
-///
-/// The shape is real rather than contrived: an assertion inside a branch
-/// that is not taken. Under the ooTest framework such a method also passes
-/// having checked less than it contains, so the outcome is right -- what
-/// would be wrong is crediting it the two assertions it was written with.
 #[test]
 fn a_body_that_runs_only_some_of_its_assertions_is_credited_only_those() {
     let partial = KeywordBody {

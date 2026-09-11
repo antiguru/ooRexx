@@ -11,35 +11,6 @@
 
 //! Sending to a `LIBRARY REXX` entry point this phase does not implement is
 //! loud and names the phase that owes it a body (D37).
-//!
-//! # Why this is not a corpus row
-//!
-//! The oracle *answers* every one of these programs, because it has the body
-//! this crate has not built: measured, `.k~probe` on a class method bound to
-//! `stream_chars` is `48.1 Failure in system service: Stream not
-//! initialized.` at rc 208, where this crate is `rexx-exec:` at rc 120. A
-//! refusal the oracle does not share is not expressible as a differential
-//! row, so the corpus gate cannot see one of these turn into a wrong answer
-//! and this file is the instrument that can. The bind itself *is* a
-//! differential row -- `corpus/lang/directive_method_external_missing.rex`
-//! and its siblings under the same stem -- and that half is gated there.
-//!
-//! # What each program shows that the message alone does not
-//!
-//! Every program prints one line **before** the send. So `stdout` holding it
-//! separates the failures that would otherwise look alike: an install
-//! that refused the directive prints nothing, and a bind that succeeded
-//! before a send that refused prints the line. Without that, a regression
-//! moving the refusal back to install time would leave this file green.
-//!
-//! # What this cannot see
-//!
-//! Nothing here says the refusal is the *right* answer for the entry point;
-//! it says the crate declines rather than answering. The entry point each
-//! program names is read out of the program's own text and checked against
-//! the registry, so a program rewritten to name an implemented entry is
-//! caught, but a program rewritten to fail for an unrelated reason before its
-//! send would print nothing and fail on `stdout` rather than on its message.
 
 mod gate_tables;
 mod support;
@@ -70,13 +41,6 @@ fn corpus_dir() -> PathBuf {
 }
 
 /// The entry point a program names, read out of its own text.
-///
-/// **Read rather than passed in**, so a program and the row this file checks
-/// it against cannot drift: the only spelling of the entry point is the one
-/// the interpreter itself will resolve.
-///
-/// Directive clauses only, which is what keeps a comment saying what the
-/// program is for from reading as a second bind.
 fn entry_point_named_by(text: &str, probe: &Path) -> String {
     let mut found: Vec<String> = Vec::new();
     for line in text
@@ -118,10 +82,6 @@ fn row_for(entry: &str) -> NativeEntryPoint {
 
 /// Every family the registry names has a program, and every program has a
 /// family.
-///
-/// **Both directions, and a missing program is a failure rather than a
-/// skip**: one family fewer is one refusal nothing runs, and the run stays
-/// green over whatever is left.
 #[test]
 fn every_family_has_a_program_and_every_program_has_a_family() {
     let families: BTreeSet<String> = rexx_exec::native_entry_points()
@@ -212,10 +172,6 @@ fn invoking_an_unimplemented_entry_point_is_loud_and_names_its_phase() {
 
 /// The entry points this phase implements are exactly the ones the plan
 /// pulls forward from Phase 7.
-///
-/// **Asserted over the names and not over a count**, so implementing a
-/// further entry point and deferring one of these are both failures rather
-/// than one of them being invisible.
 #[test]
 fn the_implemented_entry_points_are_the_ones_the_plan_names() {
     let implemented: BTreeSet<&str> = rexx_exec::native_entry_points()
@@ -232,10 +188,6 @@ fn the_implemented_entry_points_are_the_ones_the_plan_names() {
 }
 
 /// None of these programs is a corpus row.
-///
-/// The oracle answers every one of them, so a phase subset file listing one
-/// would make the corpus differential red -- and the corpus has no skip
-/// mechanism, so that red would have to be fixed by removing evidence.
 #[test]
 fn no_family_program_is_a_corpus_row() {
     let corpus = corpus_dir();

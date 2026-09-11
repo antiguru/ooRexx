@@ -10,23 +10,6 @@
 /*----------------------------------------------------------------------------*/
 
 //! The both-directions check over `corpus/docs/`, and the D56 revision stamp.
-//!
-//! **Both directions, and that is the point.** A row that stops being derived
-//! is as red as one that appears, which is the property
-//! `corpus/keyword-exempt.txt` already has and the reason these row sets are
-//! committed rather than derived at gate time.
-//!
-//! **What this cannot see**, said here rather than left implied: it fires when
-//! one side moves and not when both move together in one commit -- a
-//! regeneration. That is a diff for a human, deliberately, and it is why the
-//! committed row sets are reviewed as artifacts rather than waved through as
-//! generated output.
-//!
-//! **`oodocs/` is git-ignored and none of CI's five platforms has it**, so
-//! every check here fires on one developer machine per gate rather than
-//! continuously. It **fails** when `oodocs/` is absent unless the run is
-//! explicitly marked docs-less with `REXX_DOCS_LESS=1` (D56), because a check
-//! that silently skips is a failure mode this project has shipped.
 
 use rexx_extract::docs::{self, classes, hierarchy};
 use std::collections::{BTreeMap, BTreeSet};
@@ -44,8 +27,6 @@ fn corpus_docs() -> PathBuf {
 }
 
 /// The `oodocs/` checkout, or `None` when it is absent **and** the run says so.
-///
-/// Absent without the marker is a failure, not a skip.
 fn oodocs() -> Option<PathBuf> {
     let root = repo_root().join("oodocs");
     if root.join(docs::REXXREF).is_dir() {
@@ -147,12 +128,6 @@ fn the_row_set_directory_holds_exactly_the_row_sets() {
 
 /// Rule 1 of the hierarchy derivation, seen firing against the real book
 /// rather than asserted to work.
-///
-/// The other two rules are witnessed by running the edge set against the
-/// oracle, because their edges fail there when present. This one is not:
-/// `.ArgUtil~superClasses` is exactly `The Object class`, so an extractor that
-/// skips the comment blanking emits an extra edge the oracle confirms, and the
-/// end-to-end run stays at zero failures over a wrong member set.
 #[test]
 fn skipping_the_comment_blanking_fires_the_argutil_assertion() {
     let Some(root) = oodocs() else { return };
@@ -190,10 +165,6 @@ fn skipping_the_comment_blanking_fires_the_argutil_assertion() {
 
 /// A committed construction program is only evidence if something runs it,
 /// and what runs it is the instance-arm probe its class's method rows share.
-///
-/// Measured: `Buffer`, `Singleton`, `Validate` and `ArgUtil` have no
-/// instance-arm row, so a program committed for one of them would make the
-/// class `covered` with nothing on either side ever constructing.
 #[test]
 fn every_committed_construction_program_has_an_instance_arm_to_run_it() {
     let methods: &'static str = Box::leak(committed("class-methods.txt").into_boxed_str());
@@ -305,14 +276,6 @@ fn the_concept_row_set_carries_the_two_sections_the_gate_was_written_for() {
 }
 
 /// Every method row's `origin` lands on a line that names the row's `section`.
-///
-/// The header promises `origin` is where the name came from, and for most rows
-/// that is the `<section id="mth...">` line while for a row whose class-table
-/// member overrides the displayed name it is the `<member><xref linkend="mth...">`
-/// line. Both spellings carry the id, so one assertion covers both -- and it is
-/// the assertion that catches an offset error, which is how a member's line
-/// inside a section slice can come out counted from the section instead of from
-/// the file.
 #[test]
 fn every_method_rows_origin_line_names_its_section() {
     let Some(root) = oodocs() else { return };

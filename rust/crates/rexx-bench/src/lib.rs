@@ -32,12 +32,6 @@ pub const BINARY_VAR: &str = "REXX_BENCH_BINARY";
 /// The programs the criterion harness (`benches/interpreter.rs`) benchmarks,
 /// in report order. `startup` is listed first because it is the one program
 /// this suite is not sizing for 0.5-2s -- see `bench-programs/startup.rex`.
-///
-/// Not every program in `bench-programs/` is here; see [`NOT_BENCHMARKED`] for
-/// the ones deliberately left out and why. The two together are asserted
-/// against the directory by `the_benchmark_list_accounts_for_every_program`,
-/// so a program added later is either benchmarked or exempted on purpose
-/// rather than silently uncovered.
 pub static PROGRAMS: &[&str] = &[
     "startup",
     "dispatch",
@@ -63,18 +57,6 @@ pub static PROGRAMS: &[&str] = &[
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does
 /// not benchmark.
-///
-/// **Membership here is a claim about the program, and the claim is checked.**
-/// A program belongs here when it measures and reports its own timing: it
-/// prints a figure the harness cannot produce, and timing the whole process
-/// instead would measure the sum of the parts it separates.
-/// `the_exemptions_are_true_of_the_programs_they_name` asserts that in both
-/// directions, so appending a name here cannot turn a red assertion green
-/// unless the program really does time itself.
-///
-/// `heapshape` reports a build time and a forced-collection pause on standard
-/// output, and only the second is comparable with anything; its own header
-/// says not to use the sum. `d1-decision.md` runs it directly for that reason.
 pub static NOT_BENCHMARKED: &[&str] = &["heapshape"];
 
 /// Resolves `REXX_BENCH_BINARY` into an `Interpreter`, deriving its library
@@ -108,22 +90,11 @@ pub fn program_path(name: &str) -> PathBuf {
 }
 
 /// Directory holding the control programs, resolved the same way.
-///
-/// Separate from [`programs_dir`] on purpose: `rexx-bench-suite` asserts its
-/// axis list against that directory in both directions, so a program placed
-/// there becomes a dimension of the committed baseline. A control is not a
-/// dimension of anything -- see `bench-control/README.md`.
 pub fn controls_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench-control")
 }
 
 /// REXXCPS 2.2 with its loop counts fixed, resolved the same way.
-///
-/// Outside `bench-programs/` for the reason a control is: the axis list is
-/// asserted against that directory in both directions, and this is one
-/// program reported on its own terms rather than a dimension of the baseline.
-/// It has no `n = <digits>` line for [`programs_dir`]'s consumers to read.
-/// `bench-rexxcps/README.md` has the provenance.
 pub fn rexxcps_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench-rexxcps/rexxcps.rex")
 }
@@ -133,13 +104,6 @@ mod tests {
     use super::*;
 
     /// Every program in `bench-programs/` is either benchmarked or exempted.
-    ///
-    /// The criterion harness iterates [`PROGRAMS`] and nothing else looks at
-    /// the directory, so a program added there and not added here is a
-    /// dimension the harness silently stops covering while every number it
-    /// prints stays correct. Asserted rather than described, because the
-    /// subject is two lists in this repository and either can change without
-    /// a sentence about them being reread.
     #[test]
     fn the_benchmark_list_accounts_for_every_program() {
         let mut accounted: Vec<String> = PROGRAMS
@@ -176,14 +140,6 @@ mod tests {
 
     /// A control differs from the axis it controls by a known amount, and by
     /// nothing else.
-    ///
-    /// Both halves are asserted because either can fail silently. A control
-    /// that drifted from its axis anywhere but the loop bound would still look
-    /// like a 1% control and would have stopped being one; a bound edited to a
-    /// rounder number would change the size of the effect the instrument is
-    /// asked to resolve, with nothing in the file to notice. The escalation
-    /// rule reads a tight interval as sensitivity only because this pair is
-    /// what it says it is.
     #[test]
     fn the_control_differs_from_its_axis_only_in_the_loop_bound() {
         let axis = program_path("alloc4c");
@@ -230,10 +186,6 @@ mod tests {
     }
 
     /// Whether a benchmark program measures and reports its own timing.
-    ///
-    /// `TIME('R')`/`TIME('E')` is how a Rexx program reads its own elapsed
-    /// clock, and case does not matter in Rexx, so the source is folded before
-    /// the search.
     fn reports_its_own_timing(program: &str) -> bool {
         let path = program_path(program);
         let text = std::fs::read_to_string(&path)
@@ -243,25 +195,6 @@ mod tests {
 
     /// Each exemption is true of the program it names, and no benchmarked
     /// program qualifies for one.
-    ///
-    /// Without this, [`NOT_BENCHMARKED`] is a place to put a name. Someone
-    /// facing a red `the_benchmark_list_accounts_for_every_program` can
-    /// satisfy it by appending, and the program is then exempt from the
-    /// criterion harness with nothing anywhere claiming it should be -- which
-    /// is how this project has twice had a corpus subset shrink in silence.
-    /// Reproduced before this test was written: a dummy program dropped into
-    /// `bench-programs/` turned that assertion red, and adding its name to
-    /// `NOT_BENCHMARKED` turned it green again.
-    ///
-    /// **"Fails on this crate" would not have worked as the property.**
-    /// `dispatch` and `alloc` exit 120 on this crate exactly as `heapshape`
-    /// does, and both are benchmarked, so failing here does not distinguish
-    /// the two lists at all. A check keyed on it would have passed for
-    /// `heapshape` by coincidence, and would have forced the wrong decision at
-    /// Phase 5, when `heapshape` starts running and its real reason for
-    /// exemption still holds. The criterion harness runs whatever
-    /// `REXX_BENCH_BINARY` names, which for the committed baseline is the C++
-    /// oracle, where every program in the directory runs.
     #[test]
     fn the_exemptions_are_true_of_the_programs_they_name() {
         assert!(

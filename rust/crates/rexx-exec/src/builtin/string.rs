@@ -10,53 +10,11 @@
 /*----------------------------------------------------------------------------*/
 
 //! The string builtins.
-//!
-//! # Two layers of argument checking, and the order between them is observable
-//!
-//! The oracle validates a builtin's arguments twice, in two places that
-//! disagree about both the error family and the exit code, and a program can
-//! tell which ran first.
-//!
-//! * The **call layer** converts each argument to the kind the builtin
-//!   declared, walking the argument list left to right. A value that is not a
-//!   whole number is `40.12` and a pad that is not one character is `40.23`,
-//!   both at rc 216, and both name the routine and the argument's position in
-//!   the *call*.
-//! * The **operation layer** then range-checks the converted values in the
-//!   order the underlying string operation reads them. A negative length is
-//!   `93.923`, a non-positive position is `93.924` and a negative count is
-//!   `93.906`, all at **rc 163**, and none of them names the routine.
-//!
-//! Every conversion happens before any range check, measured at each of the
-//! three shapes that can tell them apart:
-//!
 //! ```text
 //! say substr('abc',0,5,'xx')          40.23  (the pad, not the zero position)
 //! say translate('abc',,,'$',0,'q')    40.12 argument 6  (not the zero start)
 //! say verify('a','b','X','q')         40.12 argument 4  (not the bad option)
 //! ```
-//!
-//! So each function below reads its arguments in position order through
-//! [`whole_number`] and [`pad_byte`], and only then applies [`length_of`],
-//! [`position_of`], [`count_of`] and [`option_letter`].
-//!
-//! # Results are text, not numbers
-//!
-//! A builtin answering a count or an offset creates its result as text, for
-//! the reason [`length`]'s own comment gives and measured the same way for
-//! each: under `numeric digits 1`, `pos('a','bbbbbbbbba')`,
-//! `lastpos('a','bbbbbbbbba')`, `compare('bbbbbbbbba','bbbbbbbbbz')`,
-//! `countstr('a','aaaaaaaaaa')` and `verify('bbbbbbbbba','b')` all print
-//! `10`, where a value carrying `DIGITS 1` as its created pair would render
-//! `1E+1`. D15 stays visible from the other side on the same value: bound to
-//! `n` under `numeric digits 1`, `say n` is `10` and `say n + 0` is `1E+1`.
-//!
-//! # Bytes, not characters
-//!
-//! Every length, position and case conversion here is over bytes.
-//! `Utilities::toUpper`/`toLower` (`common/Utilities.hpp`) fold only `A`-`Z`
-//! and `a`-`z`, so a byte outside ASCII is left alone -- measured,
-//! `upper('e9'x)` and `lower('c9'x)` return their argument unchanged.
 
 use rexx_core::ObjRef;
 
@@ -74,23 +32,6 @@ use crate::error::{Failure, Raised};
 const DEFAULT_STRIP_SET: &[u8] = b" \t";
 
 /// `LENGTH(string)`: how many bytes the argument renders as.
-///
-/// **The result is a plain integer whose rendering does not depend on
-/// `NUMERIC DIGITS`, so it is created as text and not through
-/// `Interp::number`.** Measured: `numeric digits 1 ; say
-/// length('abcdefghij')` prints `10`, where a value carrying `DIGITS 1` as
-/// its created pair would render `1E+1`. It is a *value*, not a *number*
-/// whose precision was captured -- and D15 is still visible from the other
-/// side, measured on the same value: built under `numeric digits 3` and read
-/// back under `numeric digits 1`, `say n` is still `16` while `say n + 0` is
-/// `2E+1`, because the addition is a new operation creating a new number
-/// under the digits then in force. `set_sigl` (`run.rs`) creates a line
-/// number the same way and for the same reason.
-///
-/// Bytes, not characters: measured, `say length('1.50')` is 4 and `say
-/// length('')` is 0. `to_text` is what the oracle's own `REQUIRED_STRING`
-/// conversion corresponds to, so a number argument is measured by its
-/// rendering -- `say length(1.50)` is 4, not 3.
 pub(crate) fn length(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let value = arg(args, 1).expect("check_arity admitted LENGTH's one required argument");
     // The borrow of `interp` ends with this statement, which is what lets the
@@ -101,22 +42,6 @@ pub(crate) fn length(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Resul
 
 /// The upper-cased first letter of an option argument, checked against the
 /// set the builtin accepts.
-///
-/// `None` for an omitted argument, so the caller supplies the default; an
-/// argument that is present but empty is an error rather than a default,
-/// which is measured (`strip('ab','')` is 93.915).
-///
-/// **A first byte of `0x00` is accepted and is not any of the letters**,
-/// which is the oracle's own answer and not a kindness of this one. The
-/// check there is `strchr(validOptions, option) == NULL` over an ASCII-Z
-/// string (`optionArgument`, `classes/StringClassUtil.cpp`), and `strchr`
-/// finds the terminating NUL, so a NUL option passes a test written to
-/// reject anything outside the set. Measured, and the callers below then
-/// answer whatever their own "none of the letters" branch says:
-/// `strip('  ab  ','00'x)` is `  ab  ` unstripped, `verify('abcde','abc','00'x)`
-/// is 1 -- the answer `'M'` gives, not `'N'`'s. Only the first byte decides:
-/// `strip('  ab  ','00'x||'L')` is unstripped and `strip('  ab  ','L'||'00'x)`
-/// strips leading. Every other control byte is refused as usual.
 fn option_letter(option: Option<&[u8]>, valid: &str) -> Result<Option<u8>, Failure> {
     let Some(option) = option else {
         return Ok(None);
@@ -158,51 +83,6 @@ pub(crate) fn delete_range(bytes: &mut Vec<u8>, begin: usize, range: Option<usiz
 
 /// The 1-based offset of the first `needle` at or after `start` that
 /// `StringUtil::pos` finds within `range` bytes of `start`, or 0 for no match.
-///
-/// `start` is 0-based here, as `StringUtil::pos`'s own parameter is.
-/// A null needle never matches, measured: `pos('','banana')` is 0.
-///
-/// **The window is not "the match has to fit inside it", and no positional
-/// rule describes what the oracle does.** `StringUtil::pos` sets `endpointer`
-/// to one past the last position at which the whole needle would fit, finds
-/// the needle's first byte with `memchr` over `endpointer - haypointer` bytes,
-/// and on a candidate whose first byte matched but whose whole did not,
-/// rescans from `haypointer + 1` **with that same length** -- recomputed from
-/// the candidate it just rejected rather than from the position it resumes at.
-/// Every rescan therefore ends at `endpointer + 1`, so a match may begin one
-/// byte later than the window allows, but only once the scan has already hit
-/// the first byte inside the window.
-///
-/// Measured 2026-08-14, and the pair is what rules a positional rule out:
-/// `pos('an','axan',1,3)` is 3 while `pos('an','zxan',1,3)` is 0, and those
-/// two haystacks differ only in a decoy `a` inside the window. The overrun is
-/// one byte and does not accumulate, because each rescan measures its length
-/// from the candidate it rejected and so ends at `endpointer + 1` however many
-/// it has rejected: `pos('an','axaxan',1,4)` is 0 and `pos('an','axaxan',1,5)`
-/// is 5. It also holds for a longer needle -- `pos('abc','axxabc',1,5)` is 4
-/// and `pos('abc','zxxabc',1,5)` is 0.
-///
-/// **It is an upstream defect and not a documented extension**, and the
-/// oracle's own caseless twin is the evidence: `caselessPos` walks
-/// `_range - needle_length + 1` probes one at a time and cannot overrun, so
-/// measured, `'axan'~caselessPos('an',1,3)` is 0 where `'axan'~pos('an',1,3)`
-/// is 3 -- one search, one set of arguments, two answers. Reproduced here
-/// regardless, because what this crate is measured against is what the oracle
-/// prints.
-///
-/// **One thing the oracle does here that this deliberately does not, and it
-/// is DEVIATION 3 in `docs/superpowers/plans/phase-4-exclusions.txt`,
-/// licensed by Moritz rather than decided by this crate.** The overrun
-/// position can be the byte one past the end of the haystack, where the C++
-/// reads the `RexxString`'s NUL terminator and matches a needle whose last
-/// byte is `'00'x`: measured, `pos('a'||'00'x,'aa')` is 2 over a two-byte
-/// haystack, a match running past the string. This declines to invent that
-/// byte and answers 0. There is no oracle behaviour to agree with past `pos`
-/// itself -- measured the same day, `changestr('a'||'00'x,'aa','ZZZ')` copies
-/// through that match and the interpreter dies with **SIGSEGV, rc 139**. The
-/// divergence is confined to a needle whose last byte is `'00'x` searched to
-/// the end of the haystack, which is the only way the overrun position can
-/// fall past it.
 pub(crate) fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
     // `haystack.len() - start` underflows for a start past the end, which is
     // exactly the case the guard below rejects; taking the saturating
@@ -218,24 +98,11 @@ pub(crate) fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: 
     // Measured with `perf` on `bench-programs/strings.rex`, whose loop runs
     // `pos` and `changestr` over a 43-byte haystack for a 3-byte needle,
     // `__memcmp_evex_movbe` was 4.98% of samples -- more than `pos` itself.
-    //
-    // The first byte alone would do; the last is included because it costs
-    // one more load on the candidates that pass the first test and rules out
-    // the needles whose interior repeats, which is the shape a match-heavy
-    // haystack has.
     let first = needle[0];
     let last = needle.len() - 1;
     // One past the last start at which the whole needle fits. The first byte
     // is found a word at a time ([`find_byte`]) and only a position holding it
     // is tested further.
-    //
-    // **The scan is what costs**, which is why the word step is on the scan
-    // and not on the compare. Measured with `perf annotate` on the release
-    // build over `bench-programs/strings.rex`, whose loop searches a 43-byte
-    // haystack for a three-byte needle: looking for the first byte one byte
-    // per iteration puts 47% of this function's own samples in the four
-    // instructions that do it -- a `cmp` against the first byte, an increment,
-    // a bound test and a branch.
     let starts = range - last;
     // Whether the scan below reached a first byte at all, which is the
     // question the overrun path asks. Recorded as the scan runs so that path
@@ -259,12 +126,6 @@ pub(crate) fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: 
     // oracle reaches it only after its own scan has found the first byte among
     // those starts. `saw_first` records exactly that, so asking it is asking
     // whether the oracle's loop would have run at all.
-    //
-    // **A one-byte needle cannot get here**, which is why there is no guard
-    // for it: `last` is then `0`, the scan above covers the whole window, and
-    // it succeeds for any window holding the first byte -- so a failure means
-    // `saw_first` is false. The C++ returns before its loop in that case and
-    // reaches the same answer by its own route.
     if !saw_first {
         return 0;
     }
@@ -281,31 +142,6 @@ pub(crate) fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: 
 }
 
 /// The index of the first `byte` in `hay`, or `None`.
-///
-/// The answer is `hay.iter().position(|&b| b == byte)` and the tail below is
-/// written that way. What the leading loop buys is the rate: `position` is a
-/// byte at a time and does not vectorise, because an early exit makes the trip
-/// count depend on the data.
-///
-/// **The word step is the standard zero-byte search**, `haszero` from Bit
-/// Twiddling Hacks and what `core`'s own `slice::memchr` runs: `word - LOW`
-/// borrows into a byte's high bit exactly when that byte is `00`, `!word`
-/// keeps only the bytes that were under `0x80` to begin with, and `HIGH`
-/// discards everything but the flag. XOR-ing the searched byte in first turns
-/// "is zero" into "is `byte`".
-///
-/// **The mask can flag a byte that does not match, and never below the first
-/// one that does**, which is why the lowest set bit is the answer and not
-/// merely one of them: a false flag at byte *j* needs a borrow to arrive from
-/// byte *j-1*, a borrow leaves a byte only when that byte is `00` after the
-/// XOR or is itself borrowed into, and byte 0 is borrowed into by nothing --
-/// so no borrow reaches any byte at or below the first true match.
-/// `find_byte_agrees_with_position` runs that claim against `position` rather
-/// than resting on the argument.
-///
-/// `from_le_bytes` rather than `from_ne_bytes` so that byte *k* of memory is
-/// always at bit `8k`, which makes `trailing_zeros` the index on either
-/// endianness. On a little-endian target it compiles to nothing.
 pub(crate) fn find_byte(hay: &[u8], byte: u8) -> Option<usize> {
     const LOW: u64 = 0x0101_0101_0101_0101;
     const HIGH: u64 = 0x8080_8080_8080_8080;
@@ -326,36 +162,12 @@ pub(crate) fn find_byte(hay: &[u8], byte: u8) -> Option<usize> {
 
 /// The 1-based offset of the last `needle` that ends at or before `start`
 /// and begins no earlier than `range` bytes before that end, or 0.
-///
-/// **The whole match must fall inside the window -- both ends, not "begins
-/// there" alone and not "ends there" alone.** `StringUtil::lastPos`
-/// (`classes/support/StringUtil.cpp:341-403`) clips the window once, before
-/// scanning (`startPoint = stringData + haystackLen - range`), and its
-/// primitive then walks backward with a fixed candidate count and a plain
-/// `memcmp` per position -- no `memchr` fast path, nothing that recomputes
-/// its own search length from a rejected candidate. **Do not infer
-/// `find_forward`'s rescan here**: it has no counterpart in this function,
-/// which is why this crate's code was already correct and needed no fix
-/// alongside POS's. Measured, a decoy sharing the needle's first byte
-/// inside the window changes nothing: `lastpos('345','Y3Y345YYYYYY',8,4)` is
-/// 0 and `lastpos('345','Y3Y345YYYYYY',8,5)` is 4, exactly where "must fully
-/// fit" places the boundary and one range short of where `find_forward`'s
-/// overrun would have let the same decoy through.
 pub(crate) fn find_backward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
     find_backward_with(haystack, needle, start, range, <[u8]>::eq)
 }
 
 /// [`find_backward`] with ASCII case folded away, `StringUtil::caselessLastPos`
 /// (`classes/support/StringUtil.cpp:418-478`).
-///
-/// **This twin does share its scan**, which is the opposite of what
-/// [`caseless_find_forward`] records and had to be measured rather than
-/// assumed: the C++'s two backward primitives are one function bar the
-/// comparator -- both clip the window once and walk a fixed candidate count
-/// backward -- so folding the compare is the whole difference. Measured over
-/// `.MutableBuffer~new('yAyaBcYYYYYY')`, the decoy that pins "the whole match
-/// must fall inside the window" lands identically on both:
-/// `caselessLastPos('abc',8,4)` is 0 and `caselessLastPos('abc',8,5)` is 4.
 pub(crate) fn caseless_find_backward(
     haystack: &[u8],
     needle: &[u8],
@@ -389,32 +201,12 @@ fn find_backward_with(
 }
 
 /// Whether two byte runs are equal with ASCII case folded away.
-///
-/// `StringUtil::caselessCompare` (`classes/support/StringUtil.cpp:654`)
-/// compares through `Utilities::toUpper` (`common/Utilities.hpp:52`), which
-/// shifts `a`-`z` and nothing else -- a byte at or above `0x80` is a negative
-/// `char` there and is left alone, which is [`u8::to_ascii_uppercase`]'s rule
-/// too, so the folding is the same one [`case_shift_bytes`] already applies.
-/// `eq_ignore_ascii_case` folds to lower rather than to upper and that is the
-/// same equivalence: each shifts exactly `{X, x}` together and moves nothing
-/// else.
 pub(crate) fn caseless_eq(left: &[u8], right: &[u8]) -> bool {
     left.eq_ignore_ascii_case(right)
 }
 
 /// The 1-based offset of the first `needle` at or after `start` and within
 /// `range` bytes of it, with ASCII case folded away, or 0.
-///
-/// **This is not [`find_forward`] with a folded compare, and the difference is
-/// the overrun.** `StringUtil::caselessPos`
-/// (`classes/support/StringUtil.cpp:268-303`) walks `range - needle + 1`
-/// probes one at a time from the start of the window and cannot reach past
-/// it, where `pos` recomputes its `memchr` length from each rejected
-/// candidate and can. Measured, oracle rc 0, over `.MutableBuffer~new('axan')`:
-/// `pos('an',1,3)` is 3 and `caselessPos('an',1,3)` is 0 -- one search, one
-/// set of arguments, two answers. So DEVIATION 3 has no counterpart here
-/// either: the position one past the window is never probed, and there is no
-/// terminator byte to decline to invent.
 pub(crate) fn caseless_find_forward(
     haystack: &[u8],
     needle: &[u8],
@@ -433,23 +225,12 @@ pub(crate) fn caseless_find_forward(
 }
 
 /// How many non-overlapping `needle`s `haystack` holds, stopping at `limit`.
-///
-/// Non-overlapping is measured: `countstr('aa','aaaa')` is 2, not 3.
 pub(crate) fn count_occurrences(haystack: &[u8], needle: &[u8], limit: usize) -> usize {
     count_with(haystack, needle, limit, find_forward)
 }
 
 /// [`count_occurrences`] with ASCII case folded away,
 /// `StringUtil::caselessCountStr` (`classes/support/StringUtil.cpp:1220`).
-///
-/// **The inner search is [`caseless_find_forward`] and not the folded form of
-/// [`find_forward`]**, because that is which one the C++ calls. Both callers
-/// search the whole remainder, and at that range the overrun position always
-/// falls one past the haystack, so no argument distinguishes the two --
-/// measured on the oracle over every haystack of up to five bytes and every
-/// needle of up to three drawn from `ab`, `countStr` and `caselessCountStr`
-/// agree on all 882, where the same loop with upper-case needles disagrees on
-/// 768.
 pub(crate) fn caseless_count_occurrences(haystack: &[u8], needle: &[u8], limit: usize) -> usize {
     count_with(haystack, needle, limit, caseless_find_forward)
 }
@@ -479,10 +260,6 @@ fn count_with(
 
 /// `StringUtil::makearray`'s default separator (`classes/support/StringUtil.cpp:545`):
 /// the lines of `text`.
-///
-/// An `LF` separates and a trailing one terminates rather than separating, a
-/// `CR` immediately before an `LF` is dropped with it, a lone `CR` is
-/// ordinary data, and the empty text has no lines at all.
 pub(crate) fn line_slices(text: &[u8]) -> Vec<&[u8]> {
     let mut lines = Vec::new();
     let mut rest = text;
@@ -500,11 +277,6 @@ pub(crate) fn line_slices(text: &[u8]) -> Vec<&[u8]> {
 /// `StringUtil::makearray` with an explicit separator
 /// (`classes/support/StringUtil.cpp:552`-`:640`): the pieces of `text`
 /// between occurrences of `separator`.
-///
-/// The `CR` rule of [`line_slices`] does not apply here -- `checkCR` is
-/// cleared as soon as a separator is given -- an empty `separator` answers
-/// one piece per byte, and a `separator` longer than `text` leaves the whole
-/// text as one piece.
 pub(crate) fn split_slices<'a>(text: &'a [u8], separator: &[u8]) -> Vec<&'a [u8]> {
     if separator.is_empty() {
         return text.chunks(1).collect();
@@ -540,19 +312,6 @@ fn in_set(byte: u8, set: &[u8]) -> bool {
 // ---- the builtins ----
 
 /// `CENTER(string, length [,pad])`, and `CENTRE` under its other spelling.
-///
-/// One implementation for both names, reached from two [`super::IMPLEMENTED`]
-/// rows: the oracle's two `BUILTIN` bodies are identical bar the name they
-/// report, and the name arrives as a parameter so the messages differ without
-/// the code doing. Measured, they do differ -- `centre('ab',6,'--')` names
-/// `CENTRE` where `center('ab',6,'--')` names `CENTER`.
-///
-/// **When the padding or the truncation does not divide evenly, the odd
-/// character goes to the right**, and both halves of that are measured:
-/// `center('ab',5,'-')` is `-ab--`, one pad left and two right, and
-/// `center('abcdef',5)` is `abcde`, nothing dropped from the left and one
-/// byte from the right. A wider truncation drops from both --
-/// `center('abcdef',3)` is `bcd`.
 pub(crate) fn center(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let width = whole_number(interp, name, args, 2)?.expect("check_arity admitted the width");
@@ -566,14 +325,6 @@ pub(crate) fn center(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
 
 /// `CENTER`'s answer once its two arguments are checked, shared with
 /// `String~center` so the builtin and the method cannot come to disagree.
-///
-/// `None` is the oracle's `return this` arm (`classes/StringClassSub.cpp:59`):
-/// a width equal to the receiver's own length answers the receiver itself, and
-/// only a method has a receiver object to answer with.
-///
-/// A width shorter than the receiver truncates from both ends rather than
-/// padding, and the odd byte comes off the left -- measured,
-/// `'abcd'~center(1)` is `b` and `'abcde'~center(1)` is `c`.
 pub(crate) fn center_bytes(
     interp: &Interp,
     string: &[u8],
@@ -613,10 +364,6 @@ pub(crate) fn left(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<O
 
 /// `LEFT`'s answer once its two arguments are checked, shared with
 /// `String~left`.
-///
-/// **The one of these four with no `return this` arm**
-/// (`classes/StringClassSub.cpp:248`), so it answers bytes rather than an
-/// `Option`: a width equal to the receiver's length still builds a copy.
 pub(crate) fn left_bytes(
     interp: &Interp,
     string: &[u8],
@@ -648,9 +395,6 @@ pub(crate) fn right(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
 
 /// `RIGHT`'s answer once its two arguments are checked, shared with
 /// `String~right`.
-///
-/// `None` is the oracle's `return this` arm (`classes/StringClassSub.cpp:485`),
-/// which `LEFT` beside it does not have.
 pub(crate) fn right_bytes(
     interp: &Interp,
     string: &[u8],
@@ -689,10 +433,6 @@ pub(crate) fn substr_bytes(
 }
 
 /// `SUBSTR(string, n [,length] [,pad])`.
-///
-/// **A start past the end is not an error**, unlike a start of zero:
-/// measured, `substr('abcdef',7)` is the null string and
-/// `substr('abcdef',7,3,'.')` is `...`, where `substr('abc',0)` is 93.924.
 pub(crate) fn substr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let start = whole_number(interp, name, args, 2)?.expect("check_arity admitted the position");
     let requested = whole_number(interp, name, args, 3)?;
@@ -707,11 +447,6 @@ pub(crate) fn substr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
 }
 
 /// `DELSTR(string [,n] [,length])`.
-///
-/// **Both numeric arguments are optional and `n` defaults to 1**, so a
-/// one-argument call deletes the whole string: measured,
-/// `delstr('abcdef')` is the null string and `delstr('abcdef',,2)` is
-/// `cdef`.
 pub(crate) fn delstr(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let mut string = required_string(interp, args, 1);
     let start = whole_number(interp, name, args, 2)?;
@@ -765,11 +500,6 @@ pub(crate) fn insert_bytes(
 }
 
 /// `INSERT(new, target [,n] [,length] [,pad])`.
-///
-/// **`n` is a count of characters to skip, not a position**, which is why
-/// zero is legal here and an error in `OVERLAY`: measured,
-/// `insert('-','abc',0)` is `-abc` while `overlay('XY','abcdef',0)` is
-/// 93.924. A negative `n` is 93.906, not 93.924.
 pub(crate) fn insert(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let new = required_string(interp, args, 1);
     let target = required_string(interp, args, 2);
@@ -819,12 +549,6 @@ pub(crate) fn overlay_bytes(
 }
 
 /// `OVERLAY(new, target [,n] [,length] [,pad])`.
-///
-/// **A zero length still extends the target out to `n`**, which is the shape
-/// that looks like a no-op and is not: measured, `overlay('XY','abc',5,0)` is
-/// `abc` followed by one blank and `overlay('','abc',6,1)` is `abc` followed
-/// by three, while `overlay('XY','abc',3,0)` and `overlay('XY','abc',4,0)`
-/// are both `abc` unchanged, since neither reaches past the end.
 pub(crate) fn overlay(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let new = required_string(interp, args, 1);
     let target = required_string(interp, args, 2);
@@ -843,12 +567,6 @@ pub(crate) fn overlay(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
 }
 
 /// `POS(needle, haystack [,start] [,range])`.
-///
-/// The two trailing arguments are ooRexx's own extension; `range` counts bytes
-/// from `start`, and roughly a match has to fit inside it -- measured,
-/// `pos('an','banana',1,3)` is 2 and `pos('an','banana',1,2)` is 0. Only
-/// roughly: [`find_forward`] carries the one position the oracle searches
-/// beyond that, and why.
 pub(crate) fn pos(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     // The numeric arguments are converted first so that the two strings can
     // be read through shared borrows afterwards; `required_render`'s own doc
@@ -873,15 +591,6 @@ pub(crate) fn pos(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
 }
 
 /// `LASTPOS(needle, haystack [,start] [,range])`.
-///
-/// `start` defaults to the end of the haystack and `range` to the haystack's
-/// **whole length**, not to what is left of it from `start` -- the two
-/// builtins do not mirror each other, since `LASTPOS`'s range extends
-/// *backwards*. The distinction takes a needle before the start position to
-/// see at all: measured, `lastpos('b','banana',5)` is 1, where a range
-/// defaulting to `len - start + 1` would have searched only the two bytes
-/// before position 5 and answered 0 -- which is what
-/// `lastpos('b','banana',5,2)` does answer.
 pub(crate) fn lastpos(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let needle = required_string(interp, args, 1);
     let haystack = required_string(interp, args, 2);
@@ -912,11 +621,6 @@ pub(crate) fn reverse(
 }
 
 /// `STRIP(string [,option] [,chars])`.
-///
-/// **`chars` is a set, not a pad**, so it takes any number of characters and
-/// an empty one strips nothing at all: measured,
-/// `strip('+-+-a-+b-+-+',,'-+')` is `a-+b` and `strip('abc','B','')` is
-/// `abc`.
 pub(crate) fn strip(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let option = optional_string(interp, args, 2);
@@ -929,11 +633,6 @@ pub(crate) fn strip(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result
 
 /// `STRIP`'s answer once its option and set are read, shared with
 /// `String~strip`.
-///
-/// **`set` is `None` for an omitted argument and `Some(b"")` for a null
-/// string, and the two differ**: omitted takes the whitespace default while a
-/// null string is an empty set that removes nothing. A pure slice of the
-/// input, so nothing here can allocate or fail.
 pub(crate) fn strip_bytes<'a>(string: &'a [u8], option: u8, set: Option<&[u8]>) -> &'a [u8] {
     let set = set.unwrap_or(DEFAULT_STRIP_SET);
     let mut kept = string;
@@ -1007,10 +706,6 @@ pub(crate) fn copies(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
 }
 
 /// `COPIES`'s answer once its count is checked, shared with `String~copies`.
-///
-/// `None` is the oracle's `return this` arm for a count of one
-/// (`classes/StringClassMisc.cpp:288`). A count of zero, or an empty receiver
-/// at any count, is the null string.
 pub(crate) fn copies_bytes(
     interp: &Interp,
     string: &[u8],
@@ -1035,10 +730,6 @@ pub(crate) fn copies_bytes(
 
 /// `ABBREV(information, info [,length])`: whether `info` is a prefix of
 /// `information` at least `length` bytes long.
-///
-/// Case-sensitive, measured: `abbrev('Print','PRI')` is 0. The result is the
-/// text `1` or `0` rather than a boolean object -- measured,
-/// `datatype(abbrev('a','a'))` is `NUM` and `abbrev('a','a') + 1` is 2.
 pub(crate) fn abbrev(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let information = required_string(interp, args, 1);
     let info = required_string(interp, args, 2);
@@ -1054,11 +745,6 @@ pub(crate) fn abbrev(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
 
 /// `ABBREV`'s answer once its two strings and its length are read, shared with
 /// `String~abbrev`.
-///
-/// `minimum` is `None` for an omitted length, which means the candidate's own
-/// length. An empty candidate with a zero minimum abbreviates anything,
-/// including the empty string -- measured, `abbrev('','')` is 1 where
-/// `abbrev('','x')` is 0.
 pub(crate) fn abbrev_holds(information: &[u8], info: &[u8], minimum: Option<usize>) -> bool {
     abbrev_holds_over(information, info, minimum, false)
 }
@@ -1111,10 +797,6 @@ pub(crate) fn compare_at(first: &[u8], second: &[u8], pad: u8) -> usize {
 }
 
 /// [`compare_at`] ignoring case, shared with `String~caselessCompare`.
-///
-/// **The pad is compared caselessly too**, which is what keeps this from being
-/// `compare_at` over two upcased copies: measured,
-/// `'abc'~caselessCompare('ABCXX','x')` is 0.
 pub(crate) fn caseless_compare_at(first: &[u8], second: &[u8], pad: u8) -> usize {
     compare_at_over(first, second, pad, true)
 }
@@ -1151,10 +833,6 @@ fn compare_at_over(first: &[u8], second: &[u8], pad: u8, caseless: bool) -> usiz
 
 /// `compareTo`'s three-way comparison of a region of two strings, shared with
 /// `String~compareTo` and `String~caselessCompareTo`.
-///
-/// `RexxString::primitiveCompareTo` (`classes/StringClassMisc.cpp:1097`):
-/// `start` is 1-based, and a start past both strings is 0 while a start past
-/// only one of them decides the answer on its own.
 pub(crate) fn compare_to_over(
     first: &[u8],
     second: &[u8],
@@ -1217,12 +895,6 @@ pub(crate) fn changestr_bytes(
 
 /// [`changestr_bytes`] with ASCII case folded away,
 /// `MutableBuffer::caselessChangeStr` (`classes/MutableBufferClass.cpp:1136`).
-///
-/// The C++ writes the three length branches out twice and the second copy
-/// differs from the first only in calling `caselessPos` and
-/// `caselessCountStr`, so the search is the parameter and the rebuild is
-/// shared -- and the search is [`caseless_find_forward`], not a folded
-/// [`find_forward`], for [`caseless_count_occurrences`]'s reason.
 pub(crate) fn caseless_changestr_bytes(
     out: &mut Vec<u8>,
     haystack: &[u8],
@@ -1256,10 +928,6 @@ fn changestr_with(
     // `bench-programs/strings.rex`, whose loop changes a 43-byte haystack
     // three million times, that second search is 2.4% of the whole program's
     // `instructions:u`.
-    //
-    // The haystack is the floor rather than the answer's own length, which is
-    // not known until the search has run: a result that never grows past it is
-    // one that changed nothing or shortened, and those reserve once.
     reserve(out, haystack.len())?;
     let mut next = 0;
     let mut changes = 0;
@@ -1325,35 +993,10 @@ pub(crate) fn changestr(
 }
 
 /// `TRANSLATE(string [,tableout] [,tablein] [,pad] [,start] [,range])`.
-///
-/// **With all three of `tableout`, `tablein` and `pad` omitted this is
-/// `UPPER`**, start and range included: measured, `translate('abcdef')` is
-/// `ABCDEF` and `translate('abcdef',,,,2,3)` is `aBCDef`.
-///
-/// **An omitted `tablein` means "the byte is its own index"; a supplied one
-/// means "look the byte up"**, and the two differ even when the supplied
-/// table is empty: measured, `translate('abcdef','123')` is six blanks
-/// (every byte's index is past the end of a three-byte `tableout`, so every
-/// byte becomes the pad) while `translate('abcdef','','')` is `abcdef`
-/// unchanged (no byte is found in an empty table, so none is translated).
-///
-/// **A known divergence lives in exactly that distinction.** The oracle does
-/// not ask whether `tablein` was supplied; it compares the argument's
-/// *address* against its own null-string singleton
-/// (`tablei != GlobalNames::NULLSTRING` in `RexxString::translate`), and
-/// several builtins return that singleton rather than a fresh empty string.
-/// So a null string that came from one of them takes the omitted path, and a
-/// null string written as a literal does not. Measured, on one line each:
-///
 /// ```text
 /// zz = ''          ; say '['translate('abcdef','123',zz)']'   ->  [abcdef]
 /// zz = left('abc',0) ; say '['translate('abcdef','123',zz)']' ->  [      ]
 /// ```
-///
-/// This crate answers `[abcdef]` for both, because its value model has no
-/// null-string singleton to be identical to and no rule that would give one
-/// meaning. Reproducing it would mean giving a string's *identity*
-/// observable meaning, which nothing else in Rexx has.
 pub(crate) fn translate(
     interp: &mut Interp,
     name: &[u8],
@@ -1426,22 +1069,6 @@ fn window(bytes: &mut [u8], start: usize, range: Option<usize>) -> Option<&mut [
 }
 
 /// `VERIFY(string, reference [,option] [,start] [,range])`.
-///
-/// `N` (the default) answers where the first byte *outside* `reference` is,
-/// `M` where the first byte inside it is.
-///
-/// **An empty `reference` under `N` answers the start position whatever the
-/// range**, which is the one place a zero range does not mean "no answer":
-/// measured, `verify('abc','',,,0)` is 1 and `verify('abc','',,2,0)` is 2,
-/// where the same calls with a non-empty reference are 0.
-///
-/// **The two branches test different letters, and collapsing them into one
-/// flag is wrong.** An empty reference asks `opt == VERIFY_MATCH` and a
-/// non-empty one asks `opt == VERIFY_NOMATCH` (`StringUtil::verify`), so an
-/// option that is neither -- the `0x00` byte [`option_letter`] admits -- takes
-/// the *second* arm of both. Measured, and this pair is what separates them:
-/// `verify('abcde','','00'x)` is 1, the answer `'N'` gives, while
-/// `verify('abcde','abc','00'x)` is 1, the answer `'M'` gives.
 pub(crate) fn verify(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let reference = required_string(interp, args, 2);
@@ -1509,17 +1136,6 @@ pub(crate) fn upper(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
 }
 
 /// The body `LOWER`, `UPPER` and `TRANSLATE`'s no-table form share.
-///
-/// It is one function because the oracle makes it one: `RexxString::translate`
-/// forwards to `upperRexx` when neither table and no pad was given, so the
-/// defaults, the range capping and the two range checks are the same code
-/// there as well.
-/// `start` and `range` arrive already converted but not yet range-checked, so
-/// this is where 93.924 and 93.923 come from for all three.
-///
-/// **A start past the end and a zero range are both no-ops, not errors**:
-/// measured, `lower('ABCDEF',9)` and `lower('ABCDEF',3,0)` both answer their
-/// argument unchanged.
 fn case_shifted(
     interp: &mut Interp,
     mut string: Vec<u8>,
@@ -1560,10 +1176,6 @@ mod tests {
 
     /// Runs `name` over `arguments`, each `None` standing for an omitted
     /// interior position, and answers the result's own bytes.
-    ///
-    /// Goes through [`dispatch`] rather than calling the implementation
-    /// directly, so every case here also exercises the arity check and the
-    /// name lookup that a real call would.
     fn call(name: &[u8], arguments: &[Option<&[u8]>]) -> Result<Vec<u8>, Failure> {
         let mut interp = Interp::new();
         let args: Vec<_> = arguments
@@ -2112,9 +1724,6 @@ mod tests {
 
     /// Every conversion runs before every range check, at the three shapes
     /// that can tell the two layers apart.
-    ///
-    /// The adjacent success matters as much as the refusal: with the bad pad
-    /// removed, each of these calls reaches the range error it was hiding.
     #[test]
     fn the_call_layer_is_checked_before_the_operation_layer() {
         assert_eq!(
@@ -2171,10 +1780,6 @@ mod tests {
 
     /// A result too large to allocate is the oracle's own Error 5, not a
     /// process abort.
-    ///
-    /// `999999999999999999` is the largest whole number `ARGUMENT_DIGITS`
-    /// admits, so this is the pair either side of the boundary: one more
-    /// digit is a 40.12 at the call layer and never reaches the allocator.
     #[test]
     fn a_result_too_large_to_allocate_is_the_oracles_own_error_5() {
         let failure =
@@ -2213,11 +1818,6 @@ mod tests {
 
     /// The whole-number conversion runs at `ARGUMENT_DIGITS`, not at the
     /// caller's `NUMERIC DIGITS`, and the two disagree in both directions.
-    ///
-    /// Measured on the oracle: `numeric digits 2 ; left('ab','1.0000001')`
-    /// is 40.12 where a two-digit conversion would have rounded it whole,
-    /// and `left('ab','1.0000000000000000000004')` is `a` because rounding
-    /// *that* to eighteen digits leaves exactly 1.
     #[test]
     fn the_whole_number_conversion_uses_the_argument_precision() {
         assert_eq!(
@@ -2238,10 +1838,6 @@ mod tests {
 
     /// A count or offset is created as text, so `NUMERIC DIGITS` cannot
     /// reach it.
-    ///
-    /// The builtins here are the ones that answer a number rather than a
-    /// slice of their argument; the mutation this catches is building the
-    /// result through `Interp::number` under the settings in force.
     #[test]
     fn a_counting_builtin_answers_text_that_no_digits_setting_reshapes() {
         let mut interp = Interp::new();
@@ -2292,14 +1888,6 @@ mod tests {
 
     /// A substitution carries the argument's own bytes, and the report
     /// applies the oracle's display rule to them.
-    ///
-    /// The two halves are separate defects and each needs its own witness. A
-    /// byte at or above `0x80` reaches the message intact -- a `String`-shaped
-    /// substitution would turn `FF` into U+FFFD's three bytes -- while a
-    /// control byte reaches it as `?`. Both measured, and both live in the
-    /// committed ooTest groups: `COPIES` test095/231/372/538, `DELSTR`
-    /// test17, `INSERT` test035/066 and `SUBSTR` test019/048 pass a
-    /// high-byte argument where a whole number is required.
     #[test]
     fn a_substitution_carries_bytes_and_the_report_makes_them_displayable() {
         assert_eq!(
@@ -2344,10 +1932,6 @@ mod tests {
 
     /// A `0x00` first byte is an accepted option letter that is none of the
     /// letters, and each caller answers with its own "neither" branch.
-    ///
-    /// See [`option_letter`] for the `strchr` reading this comes from. The
-    /// adjacent refusal is what pins it to the NUL rather than to control
-    /// bytes generally.
     #[test]
     fn a_null_option_byte_is_accepted_and_matches_no_letter() {
         assert_eq!(answer(b"STRIP", &[b"  ab  ", &[0x00]]), b"  ab  ");
@@ -2427,18 +2011,6 @@ mod tests {
     /// Every builtin whose answer is a count, a length, an index or a
     /// position hands it back in the tagged representation, through
     /// `Interp::counted`.
-    ///
-    /// **Nothing in the answer's bytes can tell the two representations
-    /// apart** -- that is exactly why the swap is safe -- so a call site put
-    /// back to `interp.text(n.to_string().as_bytes())` leaves every
-    /// byte-comparing test in this file and in `word.rs` green and fails
-    /// only here. The tag is also what the change is *for*: a heap operand
-    /// alone sends a clause down the general decimal path, because
-    /// `Interp::arith_small_int` answers only when both operands carry it.
-    ///
-    /// `dispatch` is the entry point rather than the ten implementations, so
-    /// this reaches `word.rs`'s four names as well as `string.rs`'s six --
-    /// one enumeration of the set, in one place.
     #[test]
     fn a_counted_answer_is_tagged_rather_than_a_heap_string() {
         /// A builtin's name, the arguments to call it with, and the integer
@@ -2473,12 +2045,6 @@ mod tests {
         // substring of digits keeps its own bytes, because those bytes are
         // the value and no integer stands behind them.
         // `SUBSTR('012345',1,3)` is `012`, which no `SmallInt` renders.
-        //
-        // **Asserted as "not a `SmallInt`" rather than as "a heap object"**,
-        // which is what it used to say. Three bytes now travel in the handle
-        // itself, so the old spelling pinned the storage rather than the
-        // rule, and would have failed for a value that is still exactly as
-        // correct.
         let (handle, bytes) = call_handle(b"SUBSTR", &[b"012345", b"1", b"3"]);
         assert!(
             !matches!(handle.decode(), Decoded::SmallInt(_)),
@@ -2494,26 +2060,6 @@ mod scan_tests {
 
     /// [`find_byte`]'s word step against the byte-at-a-time answer it stands
     /// in for, at every length from empty to past the step's own width.
-    ///
-    /// **The haystacks are built out of `00`, `01`, `80` and an ordinary
-    /// letter**, which is the shape the borrow argument in [`find_byte`]'s own
-    /// doc turns on: `01` is the value a borrow arriving from below turns into
-    /// `ff`, so it is what a mask flags falsely, and `80` is already high
-    /// before the mask. Bytes drawn from the whole range reach that trio by
-    /// accident and rarely.
-    ///
-    /// **This is where the word step's contract is pinned, and it is not
-    /// pinned anywhere else.** Both halves measured by mutation: answering
-    /// with the mask's highest set bit rather than its lowest reddens this and
-    /// also reddens a test the crate already had, while dropping the word
-    /// offset the tail's own index is measured from reddens *only* this --
-    /// that answer is never larger than the true one, so `find_forward`'s
-    /// caller re-scans and still lands on the right byte, leaving the whole
-    /// interpreter's behaviour intact and only its rate ruined.
-    ///
-    /// The `assert_eq` names `position` as the answer, so a `find_byte` that
-    /// simply called it would pass -- which is the point: what is being fixed
-    /// is the result, and the word step is free to reach it any way it likes.
     #[test]
     fn find_byte_agrees_with_position() {
         let alphabet = [0x00u8, 0x01, 0x80, b'a'];

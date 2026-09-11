@@ -10,26 +10,10 @@
 /*----------------------------------------------------------------------------*/
 
 //! Addition and subtraction.
-//!
-//! Both align the operands on their least significant digit, work on plain
-//! digit vectors, and then round to `DIGITS`.
-//!
-//! The subtle part is *when* leading zeros are stripped. A borrow out of the
-//! top of a subtraction, or an absent carry out of an addition, leaves a
-//! leading zero in the raw result, and the interpreter counts that zero
-//! toward the result's digit count and rounds **before** normalising it away.
-//! That is observable:
-//!
 //! ```text
 //! DIGITS 9:   1e9 - 1  ->  1.00000000E+9    not 999999999
 //! DIGITS 10:  1e9 - 1  ->  999999999
 //! ```
-//!
-//! At `DIGITS 9` the raw result is `0999999999` -- ten digits -- so rounding
-//! to nine discards a `9` and carries all the way up to `1000000000`. At
-//! `DIGITS 10` the same ten digits fit and the exact answer survives.
-//! Stripping the zero first, which is the obvious thing to do, gets every
-//! such case wrong.
 
 use std::borrow::Cow;
 
@@ -136,12 +120,6 @@ impl Number {
 
             // Exactly one of the adjusted exponents is non-zero: the more
             // significant operand's. The other operand is the one shortened.
-            //
-            // The C++ also decrements the adjusted exponent here, because it
-            // feeds the digit-copy loops further down. This port re-derives
-            // the alignment from the shortened operands instead, so that
-            // bookkeeping would be dead -- but a port of the multiply or
-            // divide paths should not assume the same.
             if adjusted_left_exp != 0 {
                 let taken = adjust.min(adjusted_left_exp);
                 drop_low_digits(&mut right_digits, taken);
@@ -229,29 +207,6 @@ thread_local! {
 
 /// The exact sum, when both operands align into an `i64` mantissa and the
 /// result needs no rounding at `digits`.
-///
-/// **The digits are already a scaled integer**, so an addition of two of them
-/// is an addition of two machine integers once the smaller exponent is made
-/// common -- and the exponent it is made common at is the result's, because
-/// nothing is dropped. The general path below reaches the same answer by
-/// cloning both digit vectors, aligning them into fresh ones and adding those
-/// digit by digit.
-///
-/// **Every step it skips is the identity here.** The shortening block wants a
-/// pair spanning more than the working length, which a result no wider than
-/// `digits` cannot be; `into_round` returns a result that short unchanged;
-/// and `assemble`'s leading-zero strip has nothing to strip, because the
-/// digits come from the sum's own magnitude rather than from an aligned
-/// vector that can start with the zero a borrow left.
-///
-/// A width one past the wider operand is the most an addition carries, so
-/// testing that bound declines a sum that would in fact have fitted. As with
-/// the multiply, deciding it exactly would cost every call the addition it
-/// takes to know.
-///
-/// The zero sum returns the canonical zero rather than one carrying
-/// `min_exp`: a subtraction that cancels has no decimal places left to show,
-/// and the general path's own cancelling arm says the same.
 fn exact_small_sum(
     left: &Number,
     right: &Number,
@@ -312,13 +267,6 @@ fn compare_magnitudes(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
 }
 
 /// Sum of two aligned digit vectors.
-///
-/// A carry digit is emitted only when there actually is a carry. Emitting an
-/// unconditional leading slot would be wrong: the zero counts toward the
-/// result length, and at small DIGITS settings rounding then keeps the zero
-/// and throws the real digits away -- `1 + 1` at DIGITS 1 comes out as 0.
-/// Subtraction is different: its leading zero is a real digit produced by the
-/// borrow, and must be kept.
 #[inline(always)]
 fn add_magnitudes(a: &[u8], b: &[u8]) -> Digits {
     let n = a.len().max(b.len());
@@ -417,12 +365,6 @@ mod add_shortcut_tests {
 
     /// `+` and `-` answer the same whether or not the shortcut is allowed to
     /// take them.
-    ///
-    /// This is the whole of its licence: it exists to skip work, so any
-    /// disagreement is a defect in it rather than a second opinion. Both
-    /// operators are here because the shortcut carries the signs itself
-    /// rather than deferring to the magnitude comparison the long path uses,
-    /// and a subtraction is where those two can differ.
     #[test]
     fn the_small_sum_shortcut_answers_what_the_digit_addition_answers() {
         let population = population();
