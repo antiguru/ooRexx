@@ -614,11 +614,12 @@ impl Interp {
     // **Bundling the four range-invariant arguments into a struct was tried and
     // rejected**, so that nobody spends the session on it again. It does what
     // it promises to `instructions:u` -- 6 fewer per range entry, 1 fewer per
-    // `Op::Generic` clause -- and on `cycles:u` it moves both arms of
-    // `bench-programs/emptyloop.rex` far more than that in opposite directions:
-    // the tree-walker arm, which never enters this function, 8.61 to 7.96
-    // billion cycles, and the compiled arm 8.63 to 9.12, taking that axis'
-    // cycle ratio from 1.00 to 1.15 while its instruction count falls.
+    // delegated clause -- and on `cycles:u` it moves
+    // `bench-programs/emptyloop.rex` far more than that. Measured while the
+    // tree-walker still existed, so the figures come as a pair: its arm, which
+    // never entered this function, 8.61 to 7.96 billion cycles, and the
+    // compiled arm 8.63 to 9.12, taking that axis' cycle ratio from 1.00 to
+    // 1.15 while its instruction count falls.
     // Reproduced across two sittings and two builds, with branch misses at
     // 70,000 out of 6.3 billion branches either way, so it is not prediction.
     // No mechanism below "the layout changed" was found, and a change with that
@@ -855,10 +856,10 @@ impl Interp {
                     // taking a `?` past the boundary that owes it a site.
                     //
                     // Only the ops that are part of a clause's own work appear
-                    // here. An op that runs a whole clause of its own does not,
-                    // and cannot: `compile` asserts no `Generic` sits inside a
-                    // region, because it echoes the clause and the echo is not
-                    // idempotent.
+                    // here. An op that opens a clause of its own does not:
+                    // `compile` emits one region per instruction and never
+                    // nests one inside another, so the only `Op::Clause` in
+                    // `(here, end)` would be one this compiler does not emit.
                     //
                     // The register mark the plan's Decisions section describes
                     // is a compile-time quantity -- the allocator releases to it
@@ -2856,15 +2857,14 @@ pub(crate) fn resume_counters() {
 //
 // `run_chunk_entries` counts *activations* driven, which cannot see the one
 // thing promoting a construct changes: whether a clause **inside** that
-// construct reaches the stream at all. Both engines produce identical bytes
-// for every program by construction here, and an activation entered is one
-// entry either way, so this is the only observable that separates a body
-// driven from the chunk from a body driven straight into the tree-walker.
+// construct reaches the stream at all. An activation entered is one entry
+// however its body is compiled, so this is the observable that separates a
+// construct whose clauses reach the stream from one whose clauses do not.
 //
-// Counted where a clause *begins*, which is every op that opens one: a
-// `Generic` and a promoted `Clause` region. So a construct that moves from one
-// of those shapes to another does not change the count, and a construct whose
-// clauses stop reaching the stream does.
+// Counted where a clause *begins*, which is the one op that opens one,
+// `Op::Clause`. So a construct that changes the shape of its region does not
+// change the count, and a construct whose clauses stop reaching the stream
+// does.
 //
 // Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
 #[cfg(test)]

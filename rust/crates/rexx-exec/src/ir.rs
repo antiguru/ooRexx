@@ -166,9 +166,9 @@ pub(crate) enum Op {
     /// this op is the whole of both. Falling off the end of an empty region
     /// leaves the counter at `end`, which is where a one-clause op leaves it.
     ///
-    /// **No `Generic` op may sit inside `(here, end)`**, which `compile`
-    /// asserts: it runs a whole clause through `step_in_temps_frame`, which
-    /// echoes the clause itself, and the echo is not idempotent. An op that
+    /// **Every op inside `(here, end)` belongs to this region's own
+    /// instruction**, which `assert_region_ops_name_their_clause` checks for
+    /// the ops that carry an index by requiring each to name it. An op that
     /// runs clauses belonging to something other than this region's own
     /// instruction is a different thing and is allowed -- [`Op::LoopRun`]
     /// reaches the body's clauses through `run_bounded` and [`Op::Call`]

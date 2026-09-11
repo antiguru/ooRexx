@@ -103,11 +103,6 @@ fn a_message_send_clause_compiles_to_a_region_ending_in_one_message_op() {
             "the stream for {:?} is\n{rendered}",
             String::from_utf8_lossy(source)
         );
-        assert!(
-            !rendered.contains("Generic"),
-            "the stream for {:?} holds a Generic op:\n{rendered}",
-            String::from_utf8_lossy(source)
-        );
     }
 
     // The whole stream for the plain form, so that the region's own bounds and

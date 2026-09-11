@@ -9,19 +9,14 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! Engine selection: which bodies the driver actually runs.
+//! What the driver did: which bodies it drove and which clauses it stepped.
 //!
-//! **Output cannot answer this and these tests do not ask it to.** Every op
-//! resolves its clause through the same functions the tree-walker's own loop
-//! calls, so the two engines produce identical bytes on every program -- a
-//! selection test comparing output would stay green with selection deleted.
-//! What separates them is what the driver did: which bodies it drove
-//! ([`super::run_chunk_entries`]) and which clauses it stepped
+//! **Output cannot answer this and these tests do not ask it to.** A construct
+//! compiles to one region shape or another without changing a byte of what a
+//! program prints, so a test reading output stays green across a change of
+//! shape. What separates the shapes is the count: which bodies the driver
+//! drove ([`super::run_chunk_entries`]) and which clauses it stepped
 //! ([`super::clause_op_entries`]).
-//!
-//! **Both counting tests name their engine and neither reads a default**, so
-//! what they assert stays true whatever the default becomes. Which engine the
-//! default *is* belongs to `Invocation`, and `invocation.rs` asserts it there.
 
 use super::super::{CALL_SITE_CACHE, QUICKENING};
 use super::{

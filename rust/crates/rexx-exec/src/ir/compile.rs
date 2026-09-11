@@ -475,8 +475,8 @@ pub(crate) fn compile(
                 close_region(&mut ops, at)?;
                 // **SPIKE.** A repeating loop's `END` carries the op that ends
                 // a pass. `Simple` is left alone: it does not repeat, so it has
-                // no pass to end, and its `END` stays the `Generic` that no
-                // range ever reaches.
+                // no pass to end, and its `END` stays the delegating
+                // `Op::Exec` region that no range ever reaches.
                 if let Some(end) = body_node.end
                     && end < len
                     && !matches!(body_node.kind, LoopKind::Simple)
@@ -679,8 +679,9 @@ pub(crate) fn compile(
             // A **listed** `WHEN`/`WHEN CASE`: one whose `SELECT` collected it,
             // which is what `when_info` holds an entry for. An *absorbed* one
             // -- itself another `WHEN`'s consequence, never collected -- has
-            // none, and falls to `Generic` below, where `step`'s own arm
-            // evaluates it and branches exactly as it does for the tree-walker.
+            // none, and falls to the absorbed arm below, where `Op::Exec`
+            // runs it through `Interp::exec_instruction`'s own arm for the
+            // kind.
             //
             // The clause is the condition and nothing else, same as an `IF`'s,
             // and `EnterWhen` sits past the region because opening the frame is
@@ -1028,7 +1029,8 @@ pub(crate) fn compile(
             // whole clause on `Op::Call` and leaves the arguments, the `>A>`
             // lines and their intermediates to `Interp::invoke_call`.
             //
-            // The other three `Call` forms fall to `Generic` below.
+            // The other three `Call` forms fall to the delegating
+            // `Op::Exec` region below.
             // `CALL ON`/`OFF` resolves no name at all, `CALL (expr)` learns
             // its name at run time and `CALL ns:name` is Phase 5's loud gap;
             // the first two have their own witnesses in `golden_tests.rs`.
@@ -1164,7 +1166,7 @@ pub(crate) fn compile(
             // **A `LABEL` is one of them, and it is the one with machinery
             // around it.** It is a jump target, so `Chunk::op_of` has to keep
             // naming it -- which it does, because a region opens at the
-            // instruction's own entry exactly where its `Generic` op sat. It
+            // instruction's own entry, which is what `Chunk::op_of` names. It
             // echoes under `TRACE L` where an ordinary clause does not, which
             // [`echoes`] already asks through `ChunkTrace::echoes` and
             // `Interp::echo_compiled_clause` already answers by passing
@@ -1182,8 +1184,8 @@ pub(crate) fn compile(
             // branch, which is why it has two `op_of` entries
             // ([`PatchKind`]); an `OTHERWISE` is entered through the
             // [`Op::EnterOtherwise`] that opens its frame. Both keep working
-            // because a region opens at the instruction's own entry exactly
-            // where its `Generic` op sat, and `Before` ops still precede it --
+            // because a region opens at the instruction's own entry, and
+            // `Before` ops still precede it --
             // the same property that already made a `LABEL` a legal jump
             // target. Untraced, each region is one op, so no index moves at
             // all; traced, it is two and the indices after it shift by one.
@@ -1213,7 +1215,8 @@ pub(crate) fn compile(
             }
             // **SPIKE.** The `END` of a repeating loop, which the flattened
             // form reaches by falling out of the body rather than by a range
-            // check. An `END` closing anything else keeps the `Generic` below.
+            // check. An `END` closing anything else keeps the delegating
+            // `Op::Exec` region below.
             InstructionKind::End { .. } if loop_of_end[index].is_some() => {
                 ops.push(Op::LoopNext {
                     index: loop_of_end[index].expect("the guard just observed it"),
