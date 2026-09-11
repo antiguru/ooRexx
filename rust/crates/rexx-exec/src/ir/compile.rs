@@ -1177,20 +1177,32 @@ pub(crate) fn compile(
             // instruction after -- which is what makes `sub:` followed by
             // `PROCEDURE` legal.
             //
-            // **`ELSE` and `OTHERWISE` execute the same way and are not
-            // here.** Each is reached through machinery this arm does not
-            // touch -- an `ELSE` through the `IF`'s own false target, an
-            // `OTHERWISE` through the [`Op::EnterOtherwise`] that sits at its
-            // entry -- so each is its own promotion with its own witnesses.
+            // **`ELSE` and `OTHERWISE` are here too, and the machinery each
+            // is reached through survives untouched.** An `ELSE` is entered by
+            // the `IF`'s own false target and skipped by a finished true
+            // branch, which is why it has two `op_of` entries
+            // ([`PatchKind`]); an `OTHERWISE` is entered through the
+            // [`Op::EnterOtherwise`] that opens its frame. Both keep working
+            // because a region opens at the instruction's own entry exactly
+            // where its `Generic` op sat, and `Before` ops still precede it --
+            // the same property that already made a `LABEL` a legal jump
+            // target. Untraced, each region is one op, so no index moves at
+            // all; traced, it is two and the indices after it shift by one.
             //
             // **`END` is not here, and that is a measurement.** It is not a
-            // marker: its `EndStyle::Select` arm raises 7.3. It is also barely
+            // marker: its `EndStyle::Select` arm raises 7.3, so it carries an
+            // [`Op::Exec`] and takes the arm above. It is also barely
             // executed, because every construct returns a `Flow` that resumes
             // *past* its own `END` -- counted under a scratch build, zero
             // `END` clauses are stepped over a whole run of
             // `samples/rexxcps.rex` and six over the whole corpus, against
-            // 700,002 `THEN` on `rexxcps` alone.
-            InstructionKind::Nop | InstructionKind::Then | InstructionKind::Label { .. } => {
+            // 700,002 `THEN` on `rexxcps` alone -- which is why it shares the
+            // delegating op rather than earning one of its own.
+            InstructionKind::Nop
+            | InstructionKind::Then
+            | InstructionKind::Else { .. }
+            | InstructionKind::Otherwise
+            | InstructionKind::Label { .. } => {
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
                 ops.push(Op::Clause {
@@ -1222,6 +1234,7 @@ pub(crate) fn compile(
             // they do from `step`, since neither has an arm there: promoting
             // them moves where the refusal is raised from and not whether.
             InstructionKind::Command { .. }
+            | InstructionKind::End { .. }
             | InstructionKind::Drop { .. }
             | InstructionKind::Call(..)
             | InstructionKind::Procedure { .. }
@@ -1247,16 +1260,14 @@ pub(crate) fn compile(
                 });
                 close_region(&mut ops, at)?;
             }
-            // Still `Generic`: the two `WHEN` forms an enclosing `SELECT`
-            // never collected, the `ELSE`/`OTHERWISE` markers, and an `END`
-            // closing anything but a repeating loop.
-            InstructionKind::When { .. }
-            | InstructionKind::WhenCase { .. }
-            | InstructionKind::Else { .. }
-            | InstructionKind::Otherwise
-            | InstructionKind::End { .. } => ops.push(Op::Generic {
-                index: instruction_index(index)?,
-            }),
+            // **All that is left on `Generic`**: a `WHEN` or `WHEN CASE` that
+            // is itself another `WHEN`'s consequence, so the enclosing
+            // `SELECT` never collected it and it is nobody's listed branch.
+            InstructionKind::When { .. } | InstructionKind::WhenCase { .. } => {
+                ops.push(Op::Generic {
+                    index: instruction_index(index)?,
+                })
+            }
         }
     }
     // A branch that ends at the body's own end still owes its boundary, and

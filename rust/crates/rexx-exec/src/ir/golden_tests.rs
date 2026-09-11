@@ -268,9 +268,9 @@ fn a_call_nested_past_the_paths_width_leaves_the_slot_general() {
 /// its own note said that promoting `DROP` or `NUMERIC` should redden it and
 /// that the answer was to pick a different unpromoted instruction.** That
 /// answer is no longer available and the note is gone with it: the kinds still
-/// on `Generic` are the absorbed `WHEN`s, `ELSE`, `OTHERWISE` and a
-/// non-repeating `END`, and every one of them needs an enclosing `IF` or
-/// `SELECT`, so no body can be all-`Generic` any more. What the test was
+/// on `Generic` are the two absorbed `WHEN` forms, and each needs an
+/// enclosing `SELECT`, so no body can be all-`Generic` any more. What the
+/// test was
 /// really pinning -- one op per instruction, carrying that instruction's own
 /// index -- transfers to `Op::Exec` and outlives `Op::Generic` entirely.
 #[test]
@@ -797,12 +797,13 @@ fn a_constant_symbol_is_a_native_load() {
 /// echo a load owes; `Op::LoopHeaderValue` is what the slot still owes either
 /// way, which is why this promotion needed no op of its own.
 ///
-/// The body clause and the `END` are still `Generic`. The `END` op is never
-/// reached -- `run_bounded`'s range stops before it and the loop's own resume
-/// is one past it -- and it is emitted anyway because `op_of` is indexed by
-/// instruction, so an instruction without an op would shift every later entry.
+/// The body clause is a marker region and the `END` is an [`super::Op::
+/// LoopNext`], which is what a repeating loop's `END` carries. Neither is
+/// `Generic`, and the `END`'s op is emitted whether or not it is reached
+/// because `op_of` is indexed by instruction, so an instruction without an op
+/// would shift every later entry.
 #[test]
-fn a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_generic() {
+fn a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_a_marker() {
     let chunk = compile_for_test(b"do i = 1 to 3\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&chunk),
@@ -876,7 +877,8 @@ fn a_block_has_an_empty_header_region_and_a_do_over_for_echoes_both_its_target_a
         "0: Clause index=0 end=2\n\
          1: LoopRun index=0\n\
          2: Clause index=1 end=3\n\
-         3: Generic index=2\n"
+         3: Clause index=2 end=5\n\
+         4: Exec index=2\n"
     );
     assert_eq!(block.registers, 0, "a block evaluates nothing to hold");
 
@@ -1127,7 +1129,7 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
          9: Say index=2 src=0\n\
          10: EndBranch\n\
          11: Jump target=16\n\
-         12: Generic index=3\n\
+         12: Clause index=3 end=13\n\
          13: Clause index=4 end=16\n\
          14: Const dst=0 konst=1\n\
          15: Say index=4 src=0\n\
@@ -1334,15 +1336,16 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
          24: Say index=6 src=0\n\
          25: EndWhen\n\
          26: EnterOtherwise select=0\n\
-         27: Generic index=7\n\
+         27: Clause index=7 end=28\n\
          28: Clause index=8 end=31\n\
          29: Const dst=0 konst=2\n\
          30: Say index=8 src=0\n\
          31: EndWhen\n\
-         32: Generic index=9\n\
-         33: Clause index=10 end=36\n\
-         34: Const dst=0 konst=3\n\
-         35: Say index=10 src=0\n"
+         32: Clause index=9 end=34\n\
+         33: Exec index=9\n\
+         34: Clause index=10 end=37\n\
+         35: Const dst=0 konst=3\n\
+         36: Say index=10 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1351,7 +1354,7 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
     );
     assert_eq!(
         chunk.op_of,
-        vec![0, 2, 9, 10, 13, 21, 22, 25, 28, 31, 33, 36]
+        vec![0, 2, 9, 10, 13, 21, 22, 25, 28, 31, 34, 37]
     );
 }
 
@@ -1399,10 +1402,11 @@ fn a_select_cases_own_value_outlives_the_registers_its_whens_take() {
          18: Const dst=1 konst=1\n\
          19: Say index=6 src=1\n\
          20: EndWhen\n\
-         21: Generic index=7\n\
-         22: Clause index=8 end=25\n\
-         23: Const dst=0 konst=2\n\
-         24: Say index=8 src=0\n"
+         21: Clause index=7 end=23\n\
+         22: Exec index=7\n\
+         23: Clause index=8 end=26\n\
+         24: Const dst=0 konst=2\n\
+         25: Say index=8 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1444,8 +1448,8 @@ fn a_whens_branch_end_is_emitted_in_front_of_an_ifs() {
 
 /// Without an `OTHERWISE` the scan runs out onto the `END`, whose own 7.3 is
 /// what "every WHEN was false" means -- so the last `WHEN`'s `JumpUnless`
-/// names the `END`'s **own** op (18, the `Generic`) and no frame is open when
-/// it runs.
+/// names the `END`'s **own** op (18, the `Op::Clause` that opens its region)
+/// and no frame is open when it runs.
 ///
 /// The neighbouring case to the one above, and it is what says the
 /// `EnterOtherwise` there belongs to the `OTHERWISE` rather than being emitted
@@ -1471,10 +1475,11 @@ fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
          11: Const dst=0 konst=0\n\
          12: Say index=3 src=0\n\
          13: EndWhen\n\
-         14: Generic index=4\n\
-         15: Clause index=5 end=18\n\
-         16: Const dst=0 konst=1\n\
-         17: Say index=5 src=0\n"
+         14: Clause index=4 end=16\n\
+         15: Exec index=4\n\
+         16: Clause index=5 end=19\n\
+         17: Const dst=0 konst=1\n\
+         18: Say index=5 src=0\n"
     );
 }
 
@@ -1502,7 +1507,8 @@ fn a_when_condition_outside_the_native_set_stays_one_when_test() {
          6: Clause index=2 end=7\n\
          7: Clause index=3 end=8\n\
          8: EndWhen\n\
-         9: Generic index=4\n"
+         9: Clause index=4 end=11\n\
+         10: Exec index=4\n"
     );
 }
 
@@ -1538,7 +1544,8 @@ fn a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot() {
          15: Clause index=3 end=16\n\
          16: Clause index=4 end=17\n\
          17: EndWhen\n\
-         18: Generic index=5\n"
+         18: Clause index=5 end=20\n\
+         19: Exec index=5\n"
     );
 }
 
@@ -1574,7 +1581,8 @@ fn an_absorbed_when_compiles_to_generic() {
          11: EndWhen\n\
          12: Clause index=4 end=13\n\
          13: Clause index=5 end=14\n\
-         14: Generic index=6\n"
+         14: Clause index=6 end=16\n\
+         15: Exec index=6\n"
     );
 }
 
@@ -1619,21 +1627,22 @@ fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {
          11: Const dst=0 konst=0\n\
          12: Say index=2 src=0\n\
          13: EndBranch\n\
-         14: Jump target=20\n\
-         15: Generic index=3\n\
-         16: Clause index=4 end=20\n\
-         17: TraceClause index=4\n\
-         18: Const dst=0 konst=1\n\
-         19: Say index=4 src=0\n\
-         20: Clause index=5 end=24\n\
-         21: TraceClause index=5\n\
-         22: Const dst=0 konst=2\n\
-         23: Say index=5 src=0\n"
+         14: Jump target=21\n\
+         15: Clause index=3 end=17\n\
+         16: TraceClause index=3\n\
+         17: Clause index=4 end=21\n\
+         18: TraceClause index=4\n\
+         19: Const dst=0 konst=1\n\
+         20: Say index=4 src=0\n\
+         21: Clause index=5 end=25\n\
+         22: TraceClause index=5\n\
+         23: Const dst=0 konst=2\n\
+         24: Say index=5 src=0\n"
     );
     // The echo op addresses no register, so the extra op changes nothing the
     // driver has to reserve.
     assert_eq!(chunk.registers, 2);
-    assert_eq!(chunk.op_of, vec![0, 7, 9, 13, 16, 20, 24]);
+    assert_eq!(chunk.op_of, vec![0, 7, 9, 13, 17, 21, 25]);
 }
 
 /// A traced `SELECT CASE`: **one echo per promoted clause, and exactly one**.
@@ -1646,10 +1655,13 @@ fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {
 /// * `SelectCaseText` stays **outside** the region, one op further along than
 ///   it was untraced -- it is not part of the clause and the echo must not
 ///   have pulled it in;
-/// * the `END` gets no echo op at all. It is `Generic`, so its echo comes from
-///   the tree-walker's own clause unit and a second one here would print that
-///   clause twice. Every promoted clause in the stream does carry one -- the
-///   `THEN` markers among them, whose whole region is the echo -- which is the
+/// * the `END` carries an echo op of its own like every other promoted
+///   clause. It used to be `Generic`, which took its echo from the
+///   tree-walker's own clause unit and could not have carried a second one
+///   without printing that clause twice; now its region owns the echo and
+///   `Op::Exec` owns the 7.3. Every promoted clause in the stream carries one
+///   -- the `THEN` markers among them, whose whole region is the echo --
+///   which is the
 ///   pair that says the op follows the region rather than the construct.
 #[test]
 fn a_traced_select_echoes_its_header_and_each_listed_when() {
@@ -1688,11 +1700,13 @@ fn a_traced_select_echoes_its_header_and_each_listed_when() {
          25: Const dst=1 konst=1\n\
          26: Say index=6 src=1\n\
          27: EndWhen\n\
-         28: Generic index=7\n\
-         29: Clause index=8 end=33\n\
-         30: TraceClause index=8\n\
-         31: Const dst=0 konst=2\n\
-         32: Say index=8 src=0\n"
+         28: Clause index=7 end=31\n\
+         29: TraceClause index=7\n\
+         30: Exec index=7\n\
+         31: Clause index=8 end=35\n\
+         32: TraceClause index=8\n\
+         33: Const dst=0 konst=2\n\
+         34: Say index=8 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -1723,8 +1737,18 @@ fn two_constructs_ending_at_one_instruction_release_to_the_lower_mark() {
     )
     .expect("compiles");
     let stream = render(&chunk);
+    // **Located by the last `EndWhen` rather than by op index.** The indices
+    // here move whenever anything before them changes how many ops an
+    // instruction takes -- promoting the `END` off `Op::Generic` shifted them
+    // by one -- and an index in the pattern makes this test report a register
+    // that was handed back correctly as one that was not.
+    let after_select = stream
+        .rsplit_once("EndWhen\n")
+        .expect("the SELECT closes a branch")
+        .1;
     assert!(
-        stream.contains("19: LoadConstant dst=0\n20: LoopHeaderValue role=Initial src=0"),
+        after_select.contains("LoadConstant dst=0\n")
+            && after_select.contains("LoopHeaderValue role=Initial src=0\n"),
         "the loop after the whole SELECT did not get register 0 back: {stream}"
     );
     assert_eq!(
