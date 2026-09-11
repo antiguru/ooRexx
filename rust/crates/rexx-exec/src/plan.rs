@@ -1191,6 +1191,29 @@ impl Interp {
     /// run-time target land. Growth is what happens when neither has it:
     /// `RootSet::grow_slots` extends the frame, and the name is recorded
     /// **here**, because the plan is an `Rc` and cannot be extended.
+    /// The slot `name` is already bound to in this activation, without
+    /// binding one for it.
+    ///
+    /// **[`Interp::slot_of`]'s own first two steps, and the invariant a
+    /// carried slot is checked against.** A slot travels on a `CompoundName`
+    /// or in a compiled op because `slot_of` answered it, and that answer is
+    /// the plan's name map *or* the activation's `extra` -- not the map
+    /// alone. An `INTERPRET` fragment is what makes the difference
+    /// observable: its plan resolves every name through `slot_of` against the
+    /// **enclosing** activation, so a name the enclosing body never wrote
+    /// grows into `extra` and the slot a fragment carries for it is one the
+    /// enclosing plan has no entry for.
+    ///
+    /// Growth is what this leaves out, deliberately: a check that bound a
+    /// slot would answer `Some` for every name it was asked about.
+    pub(crate) fn bound_slot_of(&self, name: &[u8]) -> Option<usize> {
+        let activation = self.activation();
+        activation
+            .plan
+            .slot_of(name)
+            .or_else(|| activation.extra.get(name).copied())
+    }
+
     pub(crate) fn slot_of(&mut self, name: &[u8]) -> usize {
         let activation = self.activation();
         if let Some(slot) = activation.plan.slot_of(name) {
@@ -1219,7 +1242,7 @@ impl Interp {
     ///
     /// The result is returned rather than cached, for the reason `BodyKey`
     /// gives.
-    pub(crate) fn fragment_plan(&mut self, fragment: &Fragment) -> Vec<Option<usize>> {
+    pub(crate) fn fragment_plan(&mut self, fragment: &Fragment) -> (Vec<Option<usize>>, Plan) {
         // The same upfront pass, run against the fragment's own body, which
         // numbers its names 0..n in walk order. Those numbers are local to the
         // fragment and mean nothing to the enclosing frame; the loop below is
@@ -1244,11 +1267,55 @@ impl Interp {
         }
         let enclosing: Vec<usize> = by_local.iter().map(|name| self.slot_of(name)).collect();
 
-        local
+        let translation: Vec<Option<usize>> = local
             .by_symbol
             .iter()
             .map(|entry| entry.map(|local_slot| enclosing[local_slot]))
-            .collect()
+            .collect();
+
+        // **The same plan with every slot it names moved into the enclosing
+        // frame**, which is what lets a fragment compile at all: a chunk's
+        // `Op::Load` and `Op::Store` carry plan slots, and a fragment's own
+        // numbering means nothing in the frame those ops write.
+        //
+        // Every field that holds a slot is translated and nothing else moves.
+        // `names` and `by_symbol` are the two maps `Code::slot_for` and its
+        // own `debug_assert` compare against each other, so translating one
+        // without the other is a loud failure rather than a wrong write.
+        // **`compounds` is the exception: its slots are cleared, not
+        // translated.** `Interp::stem_slot` checks a carried slot against
+        // `self.activation().plan` -- the *enclosing* activation's, because
+        // that is the frame a fragment runs in -- and a fragment's names are
+        // resolved through `Interp::slot_of`, which reads the activation's
+        // `extra` after the plan's map misses. So a fragment can name a stem
+        // the enclosing plan has no entry for at all: `interpret "do zt. = 1
+        // to 3; end"` grows `ZT.` into `extra`, exactly as that function's own
+        // doc records. A translated slot would then name a real index that the
+        // enclosing plan cannot vouch for, which is the mismatch its tripwire
+        // exists to catch. `None` puts compound resolution back on the by-name
+        // path, which is where a fragment's has always been.
+        //
+        // `indents` and `lines` describe the fragment's text and are already
+        // right; `never_retraces` is the fragment's own answer.
+        let mut compiled = local;
+        compiled.names = compiled
+            .names
+            .iter()
+            .map(|(name, slot)| (name.clone(), enclosing[*slot]))
+            .collect();
+        compiled.by_symbol = translation.clone();
+        compiled.result_slot = compiled.result_slot.map(|slot| enclosing[slot]);
+        compiled.sigl_slot = compiled.sigl_slot.map(|slot| enclosing[slot]);
+        for entry in compiled.compounds.iter_mut().flatten() {
+            entry.stem_at = None;
+            for tail in entry.tails.iter_mut() {
+                if let TailPiece::Variable { at, .. } = tail {
+                    *at = None;
+                }
+            }
+        }
+
+        (translation, compiled)
     }
 }
 
@@ -2355,7 +2422,7 @@ mod tests {
         activate(&mut interp, program);
 
         let fragment = parse_interpret(b"newvar = 7".to_vec()).expect("fragment parses");
-        let slots = interp.fragment_plan(&fragment);
+        let (slots, plan) = interp.fragment_plan(&fragment);
         // The table is sized by the fragment's own symbol table and is mostly
         // `None`; what the fragment *names* is the count of bound entries.
         assert_eq!(
@@ -2366,6 +2433,22 @@ mod tests {
 
         let enclosing_slot = interp.slot_of(b"NEWVAR");
         let fragment_slot = slots.iter().flatten().next().copied().expect("one entry");
+        // **The remapped plan names the same slot**, which is the half the
+        // compiled path depends on: a chunk's ops carry plan slots, and a plan
+        // still numbering the fragment's own names would write into whatever
+        // the enclosing frame happens to hold at that index.
+        assert_eq!(
+            plan.names.get(b"NEWVAR".as_slice()).copied(),
+            Some(enclosing_slot),
+            "the remapped plan's name map still holds the fragment's own \
+             local numbering"
+        );
+        assert_eq!(
+            plan.by_symbol.iter().flatten().copied().collect::<Vec<_>>(),
+            vec![enclosing_slot],
+            "the remapped plan's by_symbol disagrees with the translation \
+             `Code::slots` is built from"
+        );
         assert_eq!(
             fragment_slot, enclosing_slot,
             "the fragment's own id must resolve to the SAME slot the \

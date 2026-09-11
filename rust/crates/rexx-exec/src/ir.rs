@@ -1219,13 +1219,18 @@ impl ConditionKeyword {
 /// clause attribution, the `LEAVE`/`ITERATE` search -- is above this and is
 /// shared.
 ///
-/// **A fragment is never `Chunk`.** `INTERPRET` text compiles to no chunk (the
-/// plan's Decisions section: "a fragment does not compile to a chunk in this
-/// phase"), and its `Code` is a different body from the one a chunk's
-/// `op_of` indexes, so `run_fragment` passes `TreeWalker` unconditionally.
+/// **A fragment is a `Chunk` like any other body.** `INTERPRET` text used to
+/// compile to none -- the plan's Decisions section said "a fragment does not
+/// compile to a chunk in this phase" -- and `run_fragment` passed the
+/// tree-walker unconditionally. It compiles its own chunk now, against the
+/// plan `Interp::fragment_plan` remaps into the enclosing frame.
+///
+/// **One variant, and it stays an enum.** The alternative was the pair of
+/// values it carries, passed as two arguments through every caller; keeping
+/// the type means `run_bounded`'s signature says what it needs rather than
+/// how it is spelled.
 #[derive(Clone, Copy)]
 pub(crate) enum BodyEngine<'a> {
-    TreeWalker,
     /// The clauses are stepped from `chunk`, whose `op_of` indexes exactly the
     /// body `Code::body` names, with `registers` naming the region
     /// `Interp::run_chunk` reserved for it.
@@ -1675,8 +1680,9 @@ pub(crate) struct Chunk {
     /// The register allocator's high-water mark (the plan's Decisions
     /// section: "the chunk records its high-water mark").
     /// `Interp::run_chunk` reserves this many registers before running a
-    /// chunk and truncates them away on the way out.
-    registers: u16,
+    /// chunk and truncates them away on the way out, and `Interp::run_fragment`
+    /// does the same for the chunk an `INTERPRET` compiles.
+    pub(crate) registers: u16,
     /// One entry per instruction, in instruction order, or **empty when this
     /// body's plan cannot supply every entry** -- a body planned without
     /// source has no line table, and a clause line or indent too wide for a

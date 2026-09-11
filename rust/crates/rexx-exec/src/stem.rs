@@ -206,7 +206,7 @@ impl Interp {
                     // than failing, which is a wrong value found by chasing
                     // it.
                     debug_assert!(
-                        at.is_none() || self.activation().plan.slot_of(name) == *at,
+                        at.is_none() || self.bound_slot_of(name) == *at,
                         "a compound tail piece names a slot this activation's plan does not \
                          give its name"
                     );
@@ -319,9 +319,9 @@ impl Interp {
                 // somewhere else and would read another variable's value
                 // rather than fail.
                 debug_assert_eq!(
-                    self.activation().plan.slot_of(name),
+                    self.bound_slot_of(name),
                     Some(slot),
-                    "a stem read names a slot this activation's plan does not give its name"
+                    "a stem read names a slot this activation has not bound to its name"
                 );
                 slot
             }
@@ -395,9 +395,9 @@ impl Interp {
                 // writes whatever else lives at that index rather than
                 // failing, which is a wrong value found by chasing it.
                 debug_assert_eq!(
-                    self.activation().plan.slot_of(stem_name),
+                    self.bound_slot_of(stem_name),
                     Some(slot),
-                    "a stem names a slot this activation's plan does not give its name"
+                    "a stem names a slot this activation has not bound to its name"
                 );
                 slot
             }

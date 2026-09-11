@@ -1653,65 +1653,6 @@ impl Interp {
         Ok(None)
     }
 
-    /// Runs one instruction.
-    ///
-    /// `code` is the caller's, so everything reached through it outlives every
-    /// `&mut self` call in here. The `Assignment` arm is the clearest case:
-    /// `name` is a `&[u8]` pulled out of `code.symbols` and it stays valid
-    /// across `self.eval(…)`, which the same slice read out of `self` would
-    /// not.
-    ///
-    /// **Every `eval` result is rooted before anything else runs.** `eval`
-    /// hands back an unrooted handle by design, so its caller owns the moment
-    /// it becomes a root, and here that is a `push_temp` on the line after
-    /// each call. The instruction loops open a temps frame around this call
-    /// and close it after, so what is pushed here lives exactly one clause.
-    /// Not doing it would happen to work in an ordinary run, because
-    /// `Heap::alloc_with_uncollected` never collects on its own, and would
-    /// become a use-after-free the day something does, found by chasing a
-    /// wrong value rather than by a compiler message. **Task 16's
-    /// collect-on-every-allocation mode is that something, opt in**, and this
-    /// discipline is what it verified: with the mode on, deleting one
-    /// `push_temp` in `eval_arithmetic` panics seven of the subset's
-    /// programs.
-    ///
-    /// `index` is `instruction`'s own position in `code.body.instructions`,
-    /// added for Task 10: `If` and `Select` need their own position to
-    /// compute a branch's start (`index + 1`, past the `Then`/`When` node
-    /// itself), and nothing else in `self.activation().pc` can stand in for
-    /// it here, because a nested call (from inside `run_bounded`) is
-    /// stepping an instruction the activation's own `pc` is not pointing at.
-    ///
-    /// `source`, also added for Task 10, is threaded through to `If`/
-    /// `Select`'s own `run_bounded` calls purely so `step_in_temps_frame`
-    /// can resolve *its own* clause when an error escapes from inside one --
-    /// without it, an error raised several `run_bounded` levels deep would
-    /// only ever be attributed to the outermost `If`/`SELECT` that
-    /// `run_activation` itself was stepping, which is wrong for exactly the
-    /// same reason `run_activation`'s own doc comment gives for popping this
-    /// activation before resolving a site: the last place the failing
-    /// instruction is in hand has to be the one that resolves it. **Every
-    /// caller passes `Some`**, `run_fragment` included: a fragment resolves
-    /// its clauses against its own source, with the
-    /// enclosing clause's line and indent supplied separately
-    /// (`Interp::clause_site`'s own doc comment has why the two come apart).
-    /// The parameter stays an `Option` only because collapsing it is a
-    /// mechanical change across every signature that threads it.
-    fn step(
-        &mut self,
-        code: &Code<'_>,
-        index: usize,
-        instruction: &Instruction,
-        source: Option<&ProgramSource>,
-    ) -> Result<Flow, Failure> {
-        // Taken on entry, unconditionally, so that this call consumes it and
-        // every nested `step` below it -- a fragment's, an `IF` branch's --
-        // sees `false`. Only `run_activation` ever sets it. `Procedure` and
-        // `Use` are the two arms that read it.
-        let first_instruction = std::mem::take(&mut self.procedure_permitted);
-        self.exec_instruction(code, index, instruction, source, first_instruction)
-    }
-
     /// One instruction's own work, with the clause unit already discharged by
     /// whoever called: [`Interp::step`] takes the permission and enters from
     /// `step_in_temps_frame`, and [`crate::ir::Op::Exec`] enters from inside
@@ -1998,56 +1939,6 @@ impl Interp {
             // branch" -- confirmed by tracing `block.rs` by hand, it is the
             // `Else` instruction's own index when there is one, landing
             // *on* it rather than past it.
-            InstructionKind::If {
-                condition,
-                false_target,
-            } => {
-                let targets = if_targets(&code.body.instructions, *false_target);
-                let false_target = targets.false_target;
-                // **The `IF` clause ends when its condition has been
-                // evaluated**, not when the branch it chose has finished
-                // running (fix round 4, re-review finding NEW-2). In the
-                // oracle `RexxInstructionIf::execute` evaluates the condition
-                // and returns; `THEN` and everything under it are separate
-                // instructions its own loop fetches, each with a clause
-                // boundary of its own. Here the true branch runs inside this
-                // same `step`, so without this the first clause of that
-                // branch collected the boundary the `IF` owed. Measured: `if
-                // sub() = 'SV'` on line 3 with `then say ...` on line 4
-                // reports `SIGL` 3 on the oracle and reported 4 here. The
-                // one-line spelling agrees either way, which is why five
-                // rounds of probes never separated them.
-                let line = self.clause_state.line();
-                let holds =
-                    match self.in_clause(code, line, |it| it.eval_if_condition(code, condition))? {
-                        ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
-                        ClauseOutcome::Ran(holds) => holds?,
-                    };
-                if holds {
-                    let resume = targets.resume;
-                    match self.run_bounded(
-                        code,
-                        index + 1,
-                        false_target,
-                        source,
-                        BodyEngine::TreeWalker,
-                    )? {
-                        Flow::Next => Ok(Flow::Goto(resume)),
-                        other => Ok(other),
-                    }
-                } else {
-                    // Nothing to skip on the false path: whether
-                    // `false_target` names an `Else` (whose own body then
-                    // runs, and only traces on the way in, per its own doc
-                    // comment) or is simply where control resumes with no
-                    // `ELSE` at all, the outer loop's ordinary fallthrough
-                    // already lands in the right place with no ambiguity --
-                    // that is only true of the false path. See
-                    // `run_bounded`'s doc comment for why the true path
-                    // cannot rely on the same thing.
-                    Ok(Flow::Goto(false_target))
-                }
-            }
 
             // A pure marker: only ever reached inside `If`'s own bounded
             // sub-loop (the true branch, right after the `IF`) or via
@@ -2075,138 +1966,6 @@ impl Interp {
             // `WhenCase`'s own `THEN`) is the exception, and is
             // independently stepped -- see the `When`/`WhenCase` arm,
             // below, for both halves.
-            InstructionKind::Select {
-                label,
-                case,
-                whens,
-                otherwise,
-                end,
-            } => {
-                let len = code.body.instructions.len();
-                // **The `SELECT` clause ends when its `CASE` expression has
-                // been evaluated** -- same rule and same reason as `IF`'s,
-                // just above: the oracle's `RexxInstructionSelect::execute`
-                // returns here, and every `WHEN` after it is an instruction
-                // of its own. Measured: `select case sub()` on line 3 with
-                // `when 'SV' then say ...` on line 4 reports `SIGL` 3 on the
-                // oracle and reported 4 here. Entered unconditionally, `CASE`
-                // or no `CASE`, because the oracle's boundary is after the
-                // instruction rather than after the expression. **A plain
-                // `SELECT`'s clause queues nothing itself and its boundary
-                // still has work**: a condition an earlier clause queued and
-                // that clause's handler requeued is delivered here, measured
-                // under `trace r` on both engines.
-                let select_line = self.clause_state.line();
-                let mut case_value: Option<ObjRef> = None;
-                match self.in_clause(code, select_line, |it| {
-                    let Some(case_expr) = case else {
-                        return Ok(());
-                    };
-                    case_value = Some(it.select_case(code, case_expr)?);
-                    Ok(())
-                })? {
-                    ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
-                    ClauseOutcome::Ran(ran) => ran?,
-                }
-                // The hand-off an absorbed `WhenCase` needs and nothing else
-                // threads to it -- `lib.rs`'s own doc comment on
-                // `current_case_text` has the full argument, including the
-                // disclosed nested-`SELECT CASE` limitation.
-                let case_text = self.open_select_case(case_value);
-                for &when_index in whens {
-                    let when_instruction = &code.body.instructions[when_index];
-                    // **Each listed `WHEN` is a clause of its own, and the
-                    // clause unit is what says so** -- `in_stepped_clause`,
-                    // the same entry point an unpromoted instruction reaches
-                    // through `step_in_temps_frame`, rather than a bare
-                    // `in_clause` with the rest of a clause's obligations
-                    // written out beside it. In the oracle every `WHEN` is an
-                    // instruction the activation's loop fetches separately, so
-                    // a condition queued while testing one is delivered before
-                    // the next `WHEN`, before `OTHERWISE`, and before a matched
-                    // `WHEN`'s own body; all three were measured wrong before
-                    // a boundary existed here at all.
-                    //
-                    // **What the clause unit discharges that the hand-rolled
-                    // version did not, and both were measured.** The clause
-                    // echo, the value indent and the *condition's* own failure
-                    // site were written out at this call site; the failure site
-                    // of the clause's **boundary** was not, so a `CALL ON`
-                    // handler delivered here and failing was blamed on the
-                    // enclosing `SELECT`. Measured against the oracle: `call on
-                    // user zx name h` / `select` / `when raiser() = 'V' then
-                    // ...` with a handler that divides by zero echoes `3 *-*
-                    // when raiser() = 'V'`, and this arm echoed `2 *-* select`.
-                    // The indent was wrong for the same reason and in the same
-                    // program: the hand-rolled version passed the `WHEN`'s
-                    // indent to `scan_when` as an argument and never wrote it
-                    // to `current_value_indent`, so the handler's own
-                    // activation was based two columns short of the oracle's.
-                    let scanned =
-                        self.in_stepped_clause(code, when_index, when_instruction, source, |it| {
-                            it.scan_when(code, when_instruction, case_text.as_deref())
-                        })?;
-                    let holds = match scanned {
-                        ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
-                        ClauseOutcome::Ran(ran) => ran?,
-                    };
-                    if holds {
-                        let targets = when_targets(&when_instruction.kind, len);
-                        let body_end = targets.body_end;
-                        let resume = when_resume(&targets);
-                        let flow = self.run_bounded(
-                            code,
-                            when_index + 1,
-                            body_end,
-                            source,
-                            BodyEngine::TreeWalker,
-                        )?;
-                        // F-EX1, and the classifier is [`select_escape`] so
-                        // that both engines make this decision once. **Do not
-                        // clear `indent_offset` on the redirect**: `OTHERWISE`'s
-                        // own marker *and its whole body* need the offset still
-                        // active through the dispatch (`lib.rs`'s own doc
-                        // comment on `indent_offset` has the measured
-                        // transcript), and what restores it to `0` is the end
-                        // of that dispatch, not its start.
-                        return match select_escape(*otherwise, flow) {
-                            SelectEscape::Otherwise(target) => {
-                                self.run_otherwise(code, index, *label, target, *end, source)
-                            }
-                            SelectEscape::Forward(flow) => {
-                                self.leave_select(code, index, *label, resume, flow)
-                            }
-                        };
-                    }
-                }
-                match otherwise {
-                    // Task 11: **used to be** a plain `Goto` onto the
-                    // `OTHERWISE` marker, left for the outer loop's own
-                    // ordinary fallthrough to run -- correct for clause
-                    // attribution (nothing here ever needed a bounded
-                    // sub-loop to get *that* right, and the fallthrough
-                    // still lands exactly on `END` with nothing to skip,
-                    // same as before), but wrong for `LEAVE`/`ITERATE`: this
-                    // `SELECT` never gets a chance to recognise its own
-                    // label from inside a branch it does not itself call
-                    // `run_bounded` over. So `OTHERWISE`'s own body is now
-                    // `[otherwise_index + 1, end)`, run the same way a
-                    // matched `WHEN`'s is -- attribution is unaffected
-                    // (`step_in_temps_frame`'s own resolution does not care
-                    // which loop dispatched it), and a `LEAVE`/`ITERATE`
-                    // naming this `SELECT`'s own label from inside
-                    // `OTHERWISE` is now caught here too.
-                    Some(otherwise_index) => {
-                        self.run_otherwise(code, index, *label, *otherwise_index, *end, source)
-                    }
-                    // Landing exactly on `END` is deliberate: that is what
-                    // makes 7.3's clause echo the `END`'s and not the
-                    // `SELECT`'s (`End`'s own arm, below, is where it
-                    // raises). No body ran, so there is nothing for a
-                    // `LEAVE`/`ITERATE` to have escaped from here.
-                    None => Ok(Flow::Goto(end.unwrap_or(len))),
-                }
-            }
 
             // **Fixed after review: this used to be a bare `Ok(Flow::Next)`,
             // and that was a silently wrong answer, not a formatting gap.**
@@ -2386,24 +2145,19 @@ impl Interp {
             // `If`/`Select` already established: see `Flow::Leave`'s own
             // doc comment for why `Do`'s own arm never returns until the
             // entire loop is over, one way or another.
-            InstructionKind::Do(body) | InstructionKind::Loop(body) => {
-                // **Anything that reaches `step` is being stepped by the
-                // tree-walker**, which is a property of this function's own
-                // signature rather than of what its callers happen to pass:
-                // `step` takes no [`BodyEngine`], so there is no engine here to
-                // forward and none can be threaded in without changing it. A
-                // promoted `DO`/`LOOP` does not come through here at all -- its
-                // header is a compiled clause region and `ir::Op::LoopRun`
-                // enters `run_loop_with_header` with the chunk's own engine.
-                self.run_loop(
-                    code,
-                    index,
-                    instruction,
-                    body,
-                    source,
-                    BodyEngine::TreeWalker,
-                )
-            }
+            // `DO`/`LOOP`, `IF` and `SELECT` are **not** reachable here.
+            //
+            // Each compiles to a region of its own -- a header region ending
+            // in `Op::LoopRun`, a condition region ending in a jump, a scan
+            // chain -- so `Op::Exec`, which is the only caller of this
+            // function, is never emitted for one (`ir::compile`'s own arms).
+            // What stood here was the tree-walker's recursive walk: each arm
+            // called `run_bounded` over its own body, and `run_bounded` now
+            // takes a chunk.
+            InstructionKind::Do(_)
+            | InstructionKind::Loop(_)
+            | InstructionKind::If { .. }
+            | InstructionKind::Select { .. } => Err(Loud::instruction(&instruction.kind).into()),
 
             // `LEAVE`/`ITERATE`, bare or by name -- Task 11. Resolves to
             // data, not a failure (`Flow::Leave`'s own doc comment): whether
@@ -6932,161 +6686,6 @@ impl Interp {
         outcome
     }
 
-    /// Runs one instruction inside its own temps frame.
-    ///
-    /// The frame is opened and closed **here rather than inside `step`**,
-    /// because `step` returns through a dozen `?` paths and a frame closed on
-    /// only some of them is worse than none: it would leak on exactly the
-    /// paths nobody tests. Closing it around the call covers every exit,
-    /// including the loud failures.
-    ///
-    /// One clause is the right lifetime for a temporary. It is also what the
-    /// C++ does, and it is why `step` can push freely without deciding when to
-    /// let go.
-    ///
-    /// **A `DO`/`LOOP` clause is the one instruction whose frame outlives a
-    /// single pass, and the two sites that pushed per pass now carry frames
-    /// of their own.** `run_loop`/`run_repeating` resolve an entire
-    /// multi-pass loop inside this one call -- the doc comment two paragraphs
-    /// below explains why a `Goto`-shaped re-entry cannot be used instead --
-    /// so anything pushed per pass and left to *this* frame would accumulate
-    /// for the loop's whole run rather than one iteration's, at one `ObjRef`
-    /// per pass plus whatever heap object each one pins. `loop_advance`'s
-    /// `Controlled` arm and `eval_condition` are the two that push per pass,
-    /// and each opens and pops a frame around its own pushes; the header
-    /// values `eval_loop_header` pushes are deliberately *not* inside either,
-    /// because a `DO OVER`'s target has to stay reachable for the loop's own
-    /// lifetime and this frame is the one that gives it that.
-    ///
-    /// **Also resolves the failing clause's site, when one escapes and
-    /// `source` is `Some`.** Moved here from `run_activation`'s own error
-    /// path (Task 10), because `run_activation` only ever sees the outermost
-    /// instruction it was stepping, and Task 10 nests `step_in_temps_frame`
-    /// calls arbitrarily deep through `If`/`Select`'s own `run_bounded` --
-    /// without this, an error raised inside a `WHEN`'s branch would be
-    /// misattributed to the enclosing `SELECT`'s own clause (measured
-    /// against the oracle before this existed: a `1/0` inside a matched
-    /// `WHEN`'s `THEN` reported the `SELECT`'s line and text, not the
-    /// failing clause's).
-    ///
-    /// **This alone is not enough for a `WHEN`/`WhenCase` whose own
-    /// *condition* raises**, and a second, real defect this task's own
-    /// review found: `Select`'s own arm evaluates a `When`/`WhenCase`'s
-    /// condition directly, as data, and never opens a `step_in_temps_frame`
-    /// for the `When`/`WhenCase` instruction itself (that instruction's own
-    /// `step` arm is a pure no-op, per the `When`/`WhenCase` arm's own doc
-    /// comment) -- so a raise there has no inner wrapper call to be the
-    /// "innermost" one, and would still be attributed to the `SELECT`.
-    /// Measured: `select` / `when 'x' then nop` / `end` reported the
-    /// `SELECT`'s own line and clause, not the `WHEN`'s. `Select`'s own arm
-    /// calls `record_failure_site` directly, past `code.body.instructions[
-    /// when_index]`, on exactly that path -- see its own call sites there.
-    ///
-    /// An early `if self.failure_site.is_some() { return; }` at the top of
-    /// [`Interp::record_failure_at`] is the guard that makes the *first*
-    /// resolution win, which is always the most specific one available: the
-    /// deepest `step_in_temps_frame` call, or `Select`'s own direct call for
-    /// a `When`/`WhenCase` condition, always runs before any enclosing
-    /// propagation reaches an outer wrapper.
-    ///
-    /// **First-wins is per *level*, and an `INTERPRET` fragment is a level.**
-    /// `run_fragment` calls `seal_site_level` on its way out, so the clause
-    /// this guard protects is the first one recorded *since the current level
-    /// opened*, not the first one recorded in the whole run. Without that,
-    /// the fragment's own clause would win the race outright and the
-    /// enclosing `INTERPRET` would never be echoed at all -- which is the
-    /// second of the two ways the obvious one-line fix was measured wrong.
-    pub(crate) fn step_in_temps_frame(
-        &mut self,
-        code: &Code<'_>,
-        index: usize,
-        instruction: &Instruction,
-        source: Option<&ProgramSource>,
-    ) -> Result<Flow, Failure> {
-        match self.in_stepped_clause(code, index, instruction, source, |it| {
-            it.step(code, index, instruction, source)
-        })? {
-            ClauseOutcome::Ran(flow) => flow,
-            ClauseOutcome::Ended(exit) => Ok(Flow::Exit(exit.value())),
-        }
-    }
-
-    /// Everything one clause of `code` owes, around whatever `work` is: the
-    /// clock invalidation, the `>I>` decay, the value indent, the clause line
-    /// and boundary, the clause echo, the GC temps frame with its watermark
-    /// tripwire, and the failing clause's own site -- **whether the failure is
-    /// the clause's own or its boundary's**.
-    ///
-    /// **The one clause unit, and both engines enter it.**
-    /// `step_in_temps_frame_with` passes `step`, so an unpromoted instruction
-    /// gets exactly what it always did. A promoted clause passes the work its
-    /// [`crate::ir`] ops do instead, which is what stops a flattened construct
-    /// re-deriving any of the list above -- the defect a second implementation
-    /// of this function would be.
-    ///
-    /// `work`'s return type is what `ClauseValue` is chosen from, which is the
-    /// question "does this carry an `ObjRef` whose only root was this clause's
-    /// temps frame?"; `clause.rs`'s own doc has why that has to be answered
-    /// explicitly and what it still does not close.
-    ///
-    /// **Both failure sites are recorded here rather than by the caller**, and
-    /// that is not tidiness. The `Err` this function answers is the
-    /// *boundary's* -- a `CALL ON` handler delivered at the end of this clause
-    /// that itself raised -- and the clause the oracle blames for it is this
-    /// one, the one whose boundary ran the handler, not the enclosing
-    /// instruction. Measured: a failing handler queued by an `IF`'s own
-    /// condition echoes `2 *-* if raiser() = 'V'`, and with the record left to
-    /// the caller a promoted `IF` echoed nothing there while an unpromoted one
-    /// echoed correctly -- the two engines diverging on a program's stderr.
-    /// A caller that has to remember is a caller that can forget, and one did.
-    ///
-    /// **`inline(always)`, and it is a measurement rather than a habit.** This
-    /// wraps `Interp::in_clause`, so a clause step that reaches `step` passes
-    /// through two generic-over-a-closure layers; left to the inliner's own
-    /// judgement neither collapses, and the `work` closure is emitted as a
-    /// function of its own that every clause calls. Measured on `emptyloop`
-    /// with `perf stat -e instructions:u`, this annotation together with
-    /// `in_clause`'s own removes 1.075 billion instructions from a 40-billion
-    /// run, 2.7% of the whole, on the tree-walker and the compiled stream
-    /// alike. `#[inline]` alone reads zero.
-    #[inline(always)]
-    pub(crate) fn in_stepped_clause<T: ClauseValue>(
-        &mut self,
-        code: &Code<'_>,
-        index: usize,
-        instruction: &Instruction,
-        source: Option<&ProgramSource>,
-        work: impl FnOnce(&mut Self) -> Result<T, Failure>,
-    ) -> Result<ClauseOutcome<T>, Failure> {
-        self.in_stepped_clause_with(Echo::Gated, code, index, instruction, source, work)
-    }
-
-    /// [`Interp::in_stepped_clause`], naming who emits this clause's `*-*`
-    /// echo.
-    ///
-    /// A promoted clause can carry the echo as an op ([`Echo::Compiled`])
-    /// instead, so the answer is an argument rather than a constant. Two
-    /// shapes take it: this closure form, and [`Interp::enter_stepped_clause`]
-    /// for a caller running the clause's own work in a loop of its own.
-    #[inline(always)]
-    pub(crate) fn in_stepped_clause_with<T: ClauseValue>(
-        &mut self,
-        echo: Echo,
-        code: &Code<'_>,
-        index: usize,
-        instruction: &Instruction,
-        source: Option<&ProgramSource>,
-        work: impl FnOnce(&mut Self) -> Result<T, Failure>,
-    ) -> Result<ClauseOutcome<T>, Failure> {
-        let counted = self.count_clause_against_deadline()?;
-        // The tree-walker reaches a clause with no chunk in hand, so it reads
-        // the plan as this always did.
-        let entry =
-            self.enter_stepped_clause(echo, code, index, instruction, source, None, counted);
-        let ran = work(self);
-        self.leave_stepped_clause(entry, code, index, instruction, source, ran)
-    }
-
     /// Opens a stepped clause of `code`: everything
     /// [`Interp::in_stepped_clause_with`] owes before the clause's own work
     /// runs.
@@ -7875,50 +7474,6 @@ impl Interp {
         }
     }
 
-    /// Runs a `SELECT`'s own `OTHERWISE`, `leave_select`-wrapped -- the one
-    /// dispatch every path that reaches `OTHERWISE` must go through,
-    /// whether it got there the ordinary way (no `WHEN` matched) or through
-    /// F-EX1's own escape redirect (a matched `WHEN`'s own bounded body
-    /// produced a bare `Flow::Goto` landing exactly on `otherwise_index`).
-    /// Extracted from what was `Select`'s own inline `Some(otherwise_index)`
-    /// arm, unchanged in behaviour, so the second call site cannot drift
-    /// from the first one's.
-    ///
-    /// **The `OTHERWISE` marker is inside the range, not in front of it**, so
-    /// it is stepped by the same clause unit every other instruction reaches
-    /// and its `*-*` echo, its value indent and its boundary are that unit's
-    /// rather than written out here. `step`'s own `Otherwise` arm is the
-    /// no-op the marker's execution is. That is also what lets `ir::compile`
-    /// emit the marker as an ordinary op: an engine that had to reproduce a
-    /// hand-rolled echo would be reproducing it, not sharing it.
-    fn run_otherwise(
-        &mut self,
-        code: &Code<'_>,
-        index: usize,
-        label: Option<SymbolId>,
-        otherwise_index: usize,
-        end: Option<usize>,
-        source: Option<&ProgramSource>,
-    ) -> Result<Flow, Failure> {
-        let otherwise_end = otherwise_range(code.body.instructions.len(), end);
-        let flow = self.run_bounded(
-            code,
-            otherwise_index,
-            otherwise_end,
-            source,
-            BodyEngine::TreeWalker,
-        )?;
-        // Restores the offset to `0` now that `OTHERWISE`'s own whole
-        // dispatch (marker and body alike) is finished reading it --
-        // `?` above already returned early without reaching this line if
-        // `run_bounded` raised, which this crate's own rule leaves
-        // unrestored deliberately: a raise that is not trapped is fatal, so
-        // nothing runs afterward to see a stale value, the same reasoning
-        // `lib.rs`'s own doc comment gives for never restoring it after
-        // `END`'s own 7.3 either.
-        self.leave_otherwise(code, index, label, otherwise_end, end, flow)
-    }
-
     /// Leaving a `SELECT`'s `OTHERWISE` branch: the escape elevation is
     /// restored now that the whole dispatch -- marker and body alike -- is
     /// finished reading it, and then `leave_select` decides where control
@@ -8154,126 +7709,8 @@ impl Interp {
         source: Option<&ProgramSource>,
         engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
-        match engine {
-            BodyEngine::TreeWalker => self.run_bounded_instructions(code, start, end, source),
-            // The op-level counterpart. It walks the same range under the
-            // same absorption rule ([`absorb`], which both loops decide
-            // through), and the whole of the difference is the space its
-            // program counter lives in: a promoted construct is a run of ops
-            // *inside* one instruction's position, so a loop stepping one
-            // instruction at a time cannot enter it.
-            BodyEngine::Chunk { chunk, registers } => {
-                self.run_bounded_from_chunk(code, chunk, registers, start, end, source)
-            }
-        }
-    }
-
-    /// [`Interp::run_bounded`]'s tree-walker arm: one instruction at a time,
-    /// straight into the tree-walker's own clause unit.
-    fn run_bounded_instructions(
-        &mut self,
-        code: &Code<'_>,
-        start: usize,
-        end: usize,
-        source: Option<&ProgramSource>,
-    ) -> Result<Flow, Failure> {
-        let mut pc = start;
-        while pc < end {
-            let instruction = &code.body.instructions[pc];
-            let flow = self.step_in_temps_frame(code, pc, instruction, source)?;
-            match absorb(flow, start, end) {
-                Absorbed::Advance => pc += 1,
-                Absorbed::Resume(target) => pc = target,
-                Absorbed::Escaped(other) => return Ok(other),
-            }
-        }
-        Ok(Flow::Next)
-    }
-
-    /// `DO`/`LOOP`, every kind. Resolves the whole construct -- header
-    /// validation, every iteration, `LEAVE`/`ITERATE`, `WHILE`/`UNTIL` --
-    /// inside this one call, exactly the discipline `If`/`Select` already
-    /// hold: see `Flow::Leave`'s own doc comment for why a `Do` must never
-    /// return to its caller mid-loop.
-    ///
-    /// **`COUNTER`, `DO WITH` and a stem `OVER` target all take the loud
-    /// path, decided before a single header expression is evaluated.** That
-    /// is [`loop_header_plan`]'s answer and its doc comment has why each of
-    /// the three is refused; deciding all three in one place is what makes
-    /// `do counter c with index i over x` -- two of them at once -- fail
-    /// loudly without evaluating `x` either.
-    ///
-    /// **One implementation, entered from both engines.** `engine` reaches
-    /// exactly one thing: which driver steps each of the body's clauses
-    /// ([`BodyEngine`]). Nothing below branches on it -- not the header, not
-    /// `WHILE`/`UNTIL`, not the label search, not a single trace echo -- which
-    /// is what makes promoting `DO`/`LOOP` an extraction rather than a second
-    /// loop to keep in step with this one.
-    ///
-    /// **The compiled stream enters at the second half rather than here.** A
-    /// promoted `DO`/`LOOP` evaluates its own header as ops -- one group per
-    /// entry of the same [`HeaderPlan`] this function iterates, each ending in
-    /// the `ir::Op::LoopHeaderValue` that validates and files that value --
-    /// and then reaches [`Interp::run_loop_with_header`] with what they
-    /// produced, so the two engines share the *validation* of each value and
-    /// the whole of the construct below it, and differ only in what drives the
-    /// header's sequence.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "the same argument `run_repeating`'s own allow makes: every parameter is state one DO/LOOP needs"
-    )]
-    fn run_loop(
-        &mut self,
-        code: &Code<'_>,
-        index: usize,
-        instruction: &Instruction,
-        body: &Loop,
-        source: Option<&ProgramSource>,
-        engine: BodyEngine<'_>,
-    ) -> Result<Flow, Failure> {
-        // A refused `DO`/`LOOP` has no header to evaluate, and the refusal
-        // itself belongs to `run_loop_with_header` rather than here, so that
-        // both engines reach it through one function. The compiled stream
-        // emits an empty header region and that same op for a refused loop
-        // for exactly this reason: a compiler that refused on its own would
-        // be a second copy of the decision, and the copy that panicked
-        // instead was invisible to the whole workspace.
-        let values = match loop_header_plan(body) {
-            Some(plan) => self.eval_loop_header(code, body, &plan)?,
-            None => LoopHeaderValues::default(),
-        };
-        self.run_loop_with_header(code, index, instruction, body, source, engine, values)
-    }
-
-    /// Evaluates every expression of `body`'s header, in `plan`'s order,
-    /// echoing each value under its own `>K>` tag as it goes.
-    ///
-    /// **The interleaving is the semantics, not an implementation detail.**
-    /// The oracle evaluates `TO`, echoes it, validates it, and only then
-    /// evaluates `BY`: measured, `do i = 1 to 'a' by 2` echoes `>K>  "TO" =>
-    /// "a"` and raises 41.1 with no `>K>  "BY"` line at all. So the echo and
-    /// the validation both sit inside this loop rather than after it.
-    ///
-    /// `push_temp` roots each value for the whole of the `DO` clause, which is
-    /// what a `DO OVER`'s target needs: `LoopState::OverItems` holds handles
-    /// into that target for the loop's own lifetime, and the loop runs inside
-    /// this clause.
-    fn eval_loop_header(
-        &mut self,
-        code: &Code<'_>,
-        body: &Loop,
-        plan: &HeaderPlan,
-    ) -> Result<LoopHeaderValues, Failure> {
-        let mut values = LoopHeaderValues::default();
-        for &role in plan.roles() {
-            let expr = header_expr_for(&body.kind, role)
-                .expect("the plan names only roles this node has an expression for");
-            let value = self.eval(code, expr)?;
-            self.roots.push_temp(value);
-            self.echo_header_value(role, value);
-            self.accept_header_value(role, value, &mut values)?;
-        }
-        Ok(values)
+        let BodyEngine::Chunk { chunk, registers } = engine;
+        self.run_bounded_from_chunk(code, chunk, registers, start, end, source)
     }
 
     /// One header value's own `>K>` line, at the `DO`/`LOOP` clause's own
@@ -11208,17 +10645,22 @@ impl Interp {
         // An owned `Fragment` would do here, since nothing but this loop reads
         // it. It is an `Rc` because an `INTERPRET` inside a fragment makes this
         // function reentrant and each level anchors its own.
-        let slots = self.fragment_plan(&fragment);
+        let (slots, fragment_plan) = self.fragment_plan(&fragment);
         let code = Code {
             body: &fragment.body,
             symbols: &fragment.symbols,
             slots: &slots,
-            // A fragment carries no plan of its own -- `fragment_plan` keeps
-            // only the id-to-enclosing-slot translation out of the one it
-            // builds, for the reason `Code::plan` gives -- so its clause
-            // indents and its compound splits are both computed the way they
-            // were before either table existed.
-            plan: None,
+            // **A fragment carries its own plan, with every slot translated
+            // into the enclosing frame** (`Interp::fragment_plan`). It used to
+            // carry none, so its clause indents and compound splits were
+            // computed the way they were before either table existed; it needs
+            // one now because a fragment compiles, and a chunk's `Op::Load`
+            // and `Op::Store` carry plan slots.
+            //
+            // The two views agree by construction: `slots` above is this
+            // plan's own `by_symbol`, which is what `Code::slot_for`'s
+            // `debug_assert` compares against `plan.names`.
+            plan: Some(&fragment_plan),
         };
 
         // `exit` inside `INTERPRET` ends the program, not the fragment, so
@@ -11234,15 +10676,38 @@ impl Interp {
         // an error has to seal this level before it propagates, or the
         // enclosing `INTERPRET` clause's own `step_in_temps_frame` will find
         // `failure_site` already full and record nothing.
-        let flow = match self.run_bounded(
+        // **A fragment compiles to a chunk of its own.** It is a different
+        // body from the one an enclosing chunk's `op_of` indexes, so it gets
+        // its own stream and its own register region rather than borrowing
+        // either. Not cached: an `INTERPRET`'s text is built at run time and a
+        // cache keyed by it would hold every string the program ever
+        // interprets.
+        //
+        // Compiled against `fragment_plan` above, whose slots are already the
+        // enclosing frame's -- which is what makes a fragment's `Op::Store`
+        // write the variable the enclosing body would.
+        let chunk = match crate::ir::compile(&fragment.body, &fragment_plan, self.chunk_trace()) {
+            Ok(chunk) => chunk,
+            Err(_) => {
+                self.seal_site_level();
+                return Err(Loud::chunk_refused().into());
+            }
+        };
+        let registers = self.roots.reserve_temps(chunk.registers as usize);
+        let ran = self.run_bounded(
             &code,
             0,
             code.body.instructions.len(),
             Some(&fragment.source),
-            // A fragment compiles to no chunk, and its `Code` is a different
-            // body from the one an enclosing chunk's `op_of` indexes.
-            BodyEngine::TreeWalker,
-        ) {
+            BodyEngine::Chunk {
+                chunk: &chunk,
+                registers,
+            },
+        );
+        // Truncated on both paths, exactly as `run_chunk` does: a region left
+        // behind would keep its registers rooted for the rest of the run.
+        self.roots.pop_frame(registers);
+        let flow = match ran {
             Ok(flow) => flow,
             Err(failure) => {
                 self.seal_site_level();
