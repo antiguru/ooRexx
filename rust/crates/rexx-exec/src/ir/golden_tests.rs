@@ -69,9 +69,10 @@ fn traced() -> ChunkTrace {
 /// resolution, and a send keeps none. A field added here would show as a
 /// rendered `site=` in these strings.
 ///
-/// **What the region itself is worth**: an `Op::Generic` instruction may not
-/// sit inside a `Clause` region, so a compiler that left this construct
-/// general would render `0: Generic index=0` alone and every line below would
+/// **What the region itself is worth**: before the tree-walker was retired an
+/// unpromoted instruction compiled to an `Op::Generic` that could not sit
+/// inside a `Clause` region, so a compiler that left this construct general
+/// would render `0: Generic index=0` alone and every line below would
 /// differ. `corpus_shape_tests` states the same property over every corpus
 /// program; this states the exact stream each form compiles to, which that
 /// one does not read.
@@ -264,7 +265,7 @@ fn a_call_nested_past_the_paths_width_leaves_the_slot_general() {
 /// load-bearing rather than arbitrary: a program written out of instructions
 /// with compiled operands says nothing about the delegating op at all.
 ///
-/// **This test used to assert the same shape for [`super::Op::Generic`], and
+/// **This test used to assert the same shape for `Op::Generic`, and
 /// its own note said that promoting `DROP` or `NUMERIC` should redden it and
 /// that the answer was to pick a different unpromoted instruction.** That
 /// answer is no longer available and the note is gone with it: the kinds still
@@ -1550,19 +1551,32 @@ fn a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot() {
 }
 
 /// An **absorbed** `WHEN` -- one that is itself another `WHEN`'s consequence
-/// rather than a branch its `SELECT` collected -- compiles to
-/// [`super::Op::Generic`] and takes no region, so nothing this promotion emits
-/// reaches it.
+/// rather than a branch its `SELECT` collected -- compiles to a region of its
+/// own holding a single [`super::Op::Exec`].
 ///
 /// The instructions are `SELECT`, `WHEN 1 = 1`, `THEN`, `WHEN 2 = 2`, `THEN`,
-/// `nop`, `END`, so instruction 3 is the absorbed one and op 13 is its whole
-/// compiled form. There is no `Clause index=3` anywhere in the stream.
+/// `nop`, `END`, so instruction 3 is the absorbed one and ops 10 and 11 are
+/// its whole compiled form. **Its region nests inside the listed `WHEN`'s own
+/// branch**, between that branch's `EnterWhen` and `EndWhen`, which is
+/// ordinary: a `Clause` region inside a region is how every branch's clauses
+/// compile.
 ///
 /// The pair with the streams above is the point: a listed `WHEN` and an
 /// absorbed one are the same instruction kind, and what tells them apart is
-/// whether some `SELECT` named the index.
+/// whether some `SELECT` named the index. The listed one gets its condition's
+/// ops, an `Op::Condition` and a `JumpUnless` that joins the scan chain; the
+/// absorbed one gets none of that, because nothing collected it to scan to.
+/// `Interp::exec_instruction`'s own `When` arm is what then evaluates its
+/// condition for the side effects without branching -- and its `WhenCase`
+/// sibling is the one that *does* branch, on the false side, out of this
+/// region through `Flow::Goto`.
+///
+/// **This test used to assert that the absorbed form compiled to
+/// `Op::Generic` and that no `Clause index=3` appeared anywhere.**
+/// Both stopped being true when it was promoted, which is what left
+/// `Op::Generic` with no emitter at all.
 #[test]
-fn an_absorbed_when_compiles_to_generic() {
+fn an_absorbed_when_compiles_to_its_own_region() {
     let chunk = compile_for_test(b"select\n  when 1 = 1 then when 2 = 2 then nop\nend\n")
         .expect("compiles");
     assert_eq!(
@@ -1574,15 +1588,16 @@ fn an_absorbed_when_compiles_to_generic() {
          4: LoadConstant dst=1\n\
          5: Binary op== lhs=0 rhs=1 dst=0\n\
          6: Condition index=1 reg=0 keyword=WHEN\n\
-         7: JumpUnless reg=0 target=14\n\
+         7: JumpUnless reg=0 target=15\n\
          8: EnterWhen select=0 when=1\n\
          9: Clause index=2 end=10\n\
-         10: Generic index=3\n\
-         11: EndWhen\n\
-         12: Clause index=4 end=13\n\
-         13: Clause index=5 end=14\n\
-         14: Clause index=6 end=16\n\
-         15: Exec index=6\n"
+         10: Clause index=3 end=12\n\
+         11: Exec index=3\n\
+         12: EndWhen\n\
+         13: Clause index=4 end=14\n\
+         14: Clause index=5 end=15\n\
+         15: Clause index=6 end=17\n\
+         16: Exec index=6\n"
     );
 }
 

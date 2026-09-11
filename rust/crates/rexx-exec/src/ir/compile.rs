@@ -265,10 +265,9 @@ enum PatchKind {
 /// wins; an `Assignment` and a `SAY` each become a region that produces one
 /// value and then writes or prints it; an instruction whose whole execution
 /// is one `Interp::exec_instruction` call becomes a region holding a single
-/// [`Op::Exec`]. What is left for [`Op::Generic`] is the absorbed `WHEN`
-/// forms, `ELSE`, `OTHERWISE`, and an `END` closing anything but a repeating
-/// loop -- and the fallthrough arm that emits it names those kinds rather
-/// than spelling `_`, so a kind added later cannot join the set unnoticed.
+/// [`Op::Exec`]. **Every instruction compiles, and every one compiles to a
+/// region** -- the fallthrough arm names its kinds rather than spelling `_`,
+/// so a kind added later cannot reach it unnoticed.
 ///
 /// **`plan` is read for one thing: the slot a promoted read or write resolves
 /// to.** The rule a compiled assignment's target has to keep is that a stem, a
@@ -1260,13 +1259,32 @@ pub(crate) fn compile(
                 });
                 close_region(&mut ops, at)?;
             }
-            // **All that is left on `Generic`**: a `WHEN` or `WHEN CASE` that
-            // is itself another `WHEN`'s consequence, so the enclosing
-            // `SELECT` never collected it and it is nobody's listed branch.
+            // An **absorbed** `WHEN` or `WHEN CASE`: one that is itself
+            // another `WHEN`'s consequence, so the enclosing `SELECT` never
+            // collected it and it is nobody's listed branch. The listed forms
+            // took their own arm above; this is what falls past it.
+            //
+            // Both have an arm in `Interp::exec_instruction` already and
+            // neither resolves anything a region could hold, so the
+            // delegating op covers them whole. **The plain form evaluates its
+            // condition for the side effects and never branches; the `CASE`
+            // form does branch, on the false side, through
+            // `Flow::Goto(false_target)`** -- which leaves this region the way
+            // a `LEAVE` naming an enclosing construct does, as
+            // `RegionEnd::Flowed`, and is settled by the range that owns the
+            // target rather than here.
             InstructionKind::When { .. } | InstructionKind::WhenCase { .. } => {
-                ops.push(Op::Generic {
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
                     index: instruction_index(index)?,
-                })
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                ops.push(Op::Exec {
+                    index: instruction_index(index)?,
+                });
+                close_region(&mut ops, at)?;
             }
         }
     }
@@ -1296,7 +1314,6 @@ pub(crate) fn compile(
         }
     }
 
-    assert_clause_regions_hold_no_generic_op(&ops);
     assert_trace_ops_open_a_clause_region(&ops);
     assert_literal_echoes_follow_their_load(&ops);
     assert_read_echoes_follow_their_load(&ops);
@@ -1962,44 +1979,6 @@ fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
     u32::try_from(index).map_err(|_| ChunkTooLarge { what: "op stream" })
 }
 
-/// **No `Generic` op sits inside a [`Op::Clause`] region.**
-///
-/// It runs a whole clause through `Interp::step_in_temps_frame`, which echoes
-/// the clause itself -- and the echo is not idempotent, so a clause already
-/// opened by a `Clause` op would echo twice. The compiler is where this can be
-/// checked at all: the driver sees one op at a time and cannot tell an op it
-/// reached by falling into a region from one it jumped to.
-///
-/// An op that runs clauses belonging to something other than this region's own
-/// instruction is not one of these and is deliberately not checked for:
-/// [`Op::LoopRun`]'s are its construct's body, stepped by a nested driver entry,
-/// and [`Op::Call`]'s are a nested activation's, stepped by a driver of its
-/// own.
-///
-/// **`Generic` and not "any op that opens a clause", which the name used to
-/// say.** A nested [`Op::Clause`] inside a region is ordinary and not a
-/// defect: an `IF`'s region spans its branches, and each branch's clauses are
-/// regions of their own. So this scan names the one op whose presence is
-/// wrong, and the two exclusions above say why the others are not it.
-///
-/// An unconditional `assert!` rather than a `debug_assert!`, so the release
-/// build carries the same guarantee. It is one linear scan per body, once,
-/// against a compile that has already walked the same list.
-fn assert_clause_regions_hold_no_generic_op(ops: &[Op]) {
-    for (at, op) in ops.iter().enumerate() {
-        let Op::Clause { end, .. } = op else {
-            continue;
-        };
-        for inside in ops[at + 1..(*end as usize).min(ops.len())].iter() {
-            assert!(
-                !matches!(inside, Op::Generic { .. }),
-                "a Clause region at op {at} holds an op that opens a clause of its own, \
-                 so the clause would be echoed twice"
-            );
-        }
-    }
-}
-
 /// **Every [`Op::TraceClause`] is the first op of a [`Op::Clause`] region**,
 /// which is both halves of that op's own contract at once.
 ///
@@ -2012,8 +1991,9 @@ fn assert_clause_regions_hold_no_generic_op(ops: &[Op]) {
 /// Checking it needs only the op before: a `Clause` whose `end` is past this
 /// position is a region that has just opened and has emitted nothing else yet.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
-/// reason, and it is the same linear scan's worth of work.
+/// An unconditional `assert!` rather than a `debug_assert!`, so the release
+/// build carries the same guarantee, and it is one linear scan per body
+/// against a compile that has already walked the same list.
 fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         if !matches!(op, Op::TraceClause { .. }) {
@@ -2045,8 +2025,9 @@ fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
 /// comes apart, and it is the one no ordering check would see: the line would
 /// be in the right place with the wrong value in it.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
-/// reason, and it is the same linear scan's worth of work.
+/// An unconditional `assert!` rather than a `debug_assert!`, so the release
+/// build carries the same guarantee, and it is one linear scan per body
+/// against a compile that has already walked the same list.
 fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceLiteral { src } = op else {
@@ -2083,8 +2064,9 @@ fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
 /// by the load, where the tail it resolved is still in hand
 /// (`Interp::read_symbol`), so an op between the two would print them apart.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
-/// reason, and it is the same linear scan's worth of work.
+/// An unconditional `assert!` rather than a `debug_assert!`, so the release
+/// build carries the same guarantee, and it is one linear scan per body
+/// against a compile that has already walked the same list.
 fn assert_read_echoes_follow_their_load(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceRead { symbol, read, src } = op else {
@@ -2125,8 +2107,9 @@ fn assert_read_echoes_follow_their_load(ops: &[Op]) {
 /// was applied, so an echo carrying another op's prints the right value under
 /// the wrong sign.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
-/// reason, and it is the same linear scan's worth of work.
+/// An unconditional `assert!` rather than a `debug_assert!`, so the release
+/// build carries the same guarantee, and it is one linear scan per body
+/// against a compile that has already walked the same list.
 fn assert_operator_echoes_follow_their_op(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceOperator { op: echoed, src } = op else {
@@ -2160,8 +2143,9 @@ fn assert_operator_echoes_follow_their_op(ops: &[Op]) {
 /// `PrefixOp` that operation does not, lands in the right place with the wrong
 /// sign in it.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
-/// reason, and it is the same linear scan's worth of work.
+/// An unconditional `assert!` rather than a `debug_assert!`, so the release
+/// build carries the same guarantee, and it is one linear scan per body
+/// against a compile that has already walked the same list.
 fn assert_prefix_echoes_follow_their_op(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TracePrefix { op: echoed, src } = op else {
@@ -2203,8 +2187,9 @@ fn assert_prefix_echoes_follow_their_op(ops: &[Op]) {
 /// that carries a route agrees only because [`push_native`]'s call arm was
 /// written to push the same one twice.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
-/// reason, and it is the same linear scan's worth of work.
+/// An unconditional `assert!` rather than a `debug_assert!`, so the release
+/// build carries the same guarantee, and it is one linear scan per body
+/// against a compile that has already walked the same list.
 fn assert_call_echoes_follow_their_op(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceFunction {
@@ -2275,8 +2260,9 @@ fn assert_call_echoes_follow_their_op(ops: &[Op]) {
 /// and prints `>K>   "TO" => "The NIL object"`. What this turns that into is a
 /// refusal at compile time naming the op.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
-/// reason, and it is the same linear scan's worth of work.
+/// An unconditional `assert!` rather than a `debug_assert!`, so the release
+/// build carries the same guarantee, and it is one linear scan per body
+/// against a compile that has already walked the same list.
 fn assert_keyword_echoes_precede_their_value(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::TraceKeyword { role: echoed, src } = op else {
@@ -2318,8 +2304,9 @@ fn assert_keyword_echoes_precede_their_value(ops: &[Op]) {
 /// op. What it sees is a divergence in a program's output; what this turns that
 /// into is a refusal at compile time naming the op and both instructions.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
-/// reason, and it is the same linear scan's worth of work.
+/// An unconditional `assert!` rather than a `debug_assert!`, so the release
+/// build carries the same guarantee, and it is one linear scan per body
+/// against a compile that has already walked the same list.
 fn assert_region_ops_name_their_clause(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::Clause { index, end } = op else {
@@ -2350,8 +2337,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::LoopNext { index }
                 | Op::Signal { index, .. }
                 | Op::Parse { index, .. } => Some(*index),
-                Op::Generic { .. }
-                | Op::TraceKeyword { .. }
+                Op::TraceKeyword { .. }
                 | Op::LoopHeaderValue { .. }
                 | Op::Clause { .. }
                 | Op::SelectCaseText { .. }
@@ -2413,9 +2399,9 @@ mod tests {
     use rexx_parse::{SymbolId, SymbolTable};
 
     use super::{
-        Op, PlanSlot, Registers, SymbolRead, assert_clause_regions_hold_no_generic_op,
-        assert_literal_echoes_follow_their_load, assert_read_echoes_follow_their_load,
-        assert_region_ops_name_their_clause, assert_trace_ops_open_a_clause_region,
+        Op, PlanSlot, Registers, SymbolRead, assert_literal_echoes_follow_their_load,
+        assert_read_echoes_follow_their_load, assert_region_ops_name_their_clause,
+        assert_trace_ops_open_a_clause_region,
     };
 
     /// Two sibling clauses reuse the same registers, and a clause nested
@@ -2497,48 +2483,6 @@ mod tests {
         );
     }
 
-    /// The assertion `compile` runs over what it emitted, shown firing on the
-    /// arrangement it forbids.
-    ///
-    /// Built here rather than by mutating the compiler, so the witness stays
-    /// in the tree: a `Generic` op inside a `Clause` region would open a
-    /// second clause for an instruction whose clause is already open, and
-    /// `step_in_temps_frame` echoes the clause on the way in, so the echo
-    /// would appear twice.
-    #[test]
-    #[should_panic(expected = "holds an op that opens a clause of its own")]
-    fn a_generic_op_inside_a_clause_region_is_refused() {
-        assert_clause_regions_hold_no_generic_op(&[
-            Op::Clause { index: 0, end: 3 },
-            Op::EvalExpr {
-                index: 0,
-                slot: 0,
-                dst: 0,
-            },
-            Op::Generic { index: 1 },
-        ]);
-    }
-
-    /// The neighbouring arrangement that must stay accepted: the same ops
-    /// with the `Generic` one *past* the region's end.
-    ///
-    /// Without this the assertion above is satisfied by a check that refuses
-    /// every stream, which is the shape that would make every `IF` a refusal
-    /// and every body a tree-walker body.
-    #[test]
-    fn a_generic_op_after_a_clause_region_is_accepted() {
-        assert_clause_regions_hold_no_generic_op(&[
-            Op::Clause { index: 0, end: 3 },
-            Op::EvalExpr {
-                index: 0,
-                slot: 0,
-                dst: 0,
-            },
-            Op::JumpUnless { reg: 0, target: 3 },
-            Op::Generic { index: 1 },
-        ]);
-    }
-
     /// A trace op that is inside a region but not at its head, which is the
     /// half of [`Op::TraceClause`]'s contract that a check for "inside a
     /// region" alone would miss.
@@ -2568,7 +2512,7 @@ mod tests {
     #[should_panic(expected = "not the first op of a Clause region")]
     fn a_trace_op_outside_a_clause_region_is_refused() {
         assert_trace_ops_open_a_clause_region(&[
-            Op::Generic { index: 0 },
+            Op::Exec { index: 0 },
             Op::TraceClause { index: 1 },
         ]);
     }
@@ -2832,7 +2776,7 @@ mod tests {
     #[should_panic(expected = "names instruction 2 inside the region of clause 1")]
     fn a_trace_op_naming_a_neighbouring_instruction_is_refused() {
         assert_region_ops_name_their_clause(&[
-            Op::Generic { index: 0 },
+            Op::Exec { index: 0 },
             Op::Clause { index: 1, end: 4 },
             Op::TraceClause { index: 2 },
             Op::EvalExpr {

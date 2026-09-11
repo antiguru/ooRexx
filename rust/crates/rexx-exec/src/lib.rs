@@ -1419,8 +1419,8 @@ impl Loud {
     ///
     /// * `Op::Call`, which `ir::compile` emits only for a `CALL` instruction's
     ///   `Named` form, so reaching it there means the op names an instruction
-    ///   that is not a `CALL` at all, or one whose `CALL` is a form that stays
-    ///   `Op::Generic`;
+    ///   that is not a `CALL` at all, or one whose `CALL` is a form that
+    ///   compiles to a plain `Op::Exec` region instead;
     /// * `Op::CallExpr`, whose `slot` and `path` reach no node of the clause,
     ///   or reach one that is not a call;
     /// * `Op::TraceFunction`, whose echo walks that same address to the node

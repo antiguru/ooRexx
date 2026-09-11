@@ -32,9 +32,6 @@ pub(crate) fn render(chunk: &Chunk) -> String {
     let mut out = String::new();
     for (index, op) in chunk.ops.iter().enumerate() {
         match op {
-            Op::Generic { index: at } => {
-                out.push_str(&format!("{index}: Generic index={at}\n"));
-            }
             Op::TraceKeyword { role, src } => {
                 out.push_str(&format!("{index}: TraceKeyword role={role:?} src={src}\n"));
             }
@@ -333,12 +330,12 @@ pub(crate) fn render(chunk: &Chunk) -> String {
 /// [`render`], with each clause-opening op followed by the line number and
 /// source text of the clause it opens.
 ///
-/// **Only [`Op::Generic`] and [`Op::Clause`] are annotated, and that is one
-/// annotation per clause.** Every other op that carries an instruction index
-/// sits *inside* a `Clause` region and names that region's own instruction, so
-/// annotating them would repeat the same clause on every line of it. These two
-/// are the ops that stand for a whole clause: `Generic` runs one through the
-/// tree-walker, `Clause` opens a promoted one.
+/// **Only [`Op::Clause`] is annotated, and that is one annotation per
+/// clause.** Every other op that carries an instruction index sits *inside* a
+/// region and names that region's own instruction, so annotating them would
+/// repeat the same clause on every line of it. `Clause` is the op that opens
+/// a clause, and since the tree-walker went it is the only one: `Op::Generic`
+/// stood for a whole clause of its own and was the other.
 ///
 /// **A separate function rather than a parameter on [`render`]**, so that the
 /// golden tests keep reading exactly the stream and nothing about the program
@@ -358,7 +355,7 @@ pub(crate) fn render_annotated(
     // sequences are walked together rather than the line being re-derived.
     for (line, op) in render(chunk).lines().zip(chunk.ops.iter()) {
         out.push_str(line);
-        if let Op::Generic { index } | Op::Clause { index, .. } = op {
+        if let Op::Clause { index, .. } = op {
             out.push_str(&annotation(*index, body, source));
         }
         out.push('\n');

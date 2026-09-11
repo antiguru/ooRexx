@@ -220,7 +220,6 @@ impl ClauseValue for RegionEnd {
 #[cold]
 fn undriven_op_name(op: &Op) -> &'static str {
     match op {
-        Op::Generic { .. } => "Generic",
         Op::TraceKeyword { .. } => "TraceKeyword",
         Op::LoopHeaderValue { .. } => "LoopHeaderValue",
         Op::LoopRun { .. } => "LoopRun",
@@ -712,30 +711,6 @@ impl Interp {
                 return Err(Loud::chunk_map_too_short().into());
             };
             let (flow, next) = match op {
-                // **`Generic` delegates to `step_in_temps_frame`, not to
-                // `step`.** `step` is not the clause unit: its wrapper carries
-                // the per-clause clock invalidation, the `>I>` trace-entry
-                // decay, `current_value_indent`, the `SIGL` clause line, the
-                // clause boundary through `in_clause`, the clause echo, the GC
-                // temps frame with its watermark tripwire, and failure-site
-                // resolution. That call is also why **no `Clause` op precedes
-                // a `Generic` one**: it echoes the clause itself, the echo is
-                // not idempotent, and `compile` asserts the arrangement.
-                Op::Generic { index } => {
-                    #[cfg(test)]
-                    count_clause_op_entry();
-                    let index = *index as usize;
-                    let Some(instruction) = code.body.instructions.get(index) else {
-                        return Err(Loud::chunk_map_too_short().into());
-                    };
-                    if granting {
-                        self.grant_procedure_permission(instruction);
-                        granting = self.procedure_permitted
-                            || matches!(instruction.kind, InstructionKind::Label { .. });
-                    }
-                    let flow = self.step_in_temps_frame(code, index, instruction, source)?;
-                    (flow, pc + 1)
-                }
                 Op::Clause { index, end } => {
                     #[cfg(test)]
                     count_clause_op_entry();
@@ -2285,9 +2260,6 @@ impl Interp {
                                     }
                                     Op::Jump { target } => {
                                         break 'region *target;
-                                    }
-                                    Op::Generic { .. } => {
-                                        break 'cold Err(Loud::op_not_driven("Generic").into());
                                     }
                                     Op::LoopNext { .. } => {
                                         break 'cold Err(Loud::op_not_driven("LoopNext").into());

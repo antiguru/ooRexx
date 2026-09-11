@@ -15,9 +15,17 @@
 //! `golden_tests.rs` pins the op stream of a handful of hand-written programs
 //! exactly; the corpus differential pins that every body *compiled*. Neither
 //! sees a promotion that stops firing for a construct in some shape the
-//! golden set does not spell out, because the corpus harness compares the two
-//! engines' output and a construct that falls back to `Op::Generic` produces
-//! the same output by delegating to the tree-walker.
+//! golden set does not spell out.
+//!
+//! **The reason it was written no longer exists, and the check it makes
+//! does.** It was built because the dual-engine comparison could not see a
+//! promotion stop firing: the instruction fell back to `Op::Generic`, which
+//! delegated to the tree-walker, and both arms then printed the same bytes.
+//! There is no fallback now. What remains true is that a promotion can stop
+//! firing without changing a program's output at all -- the clause still
+//! runs, through `Op::Exec` rather than through its own compiled ops -- and
+//! an output differential of any kind is blind to that. This harness reads
+//! the stream instead.
 //!
 //! So this module states the promotion set as a **derived expectation**: for
 //! every body of every corpus program, what construct each instruction is
@@ -50,8 +58,9 @@
 //! than argued.** Each mutation below was applied to `compile` and the whole
 //! workspace run under it with `--no-fail-fast`.
 //!
-//! * Making `CALL name` fall through to `Op::Generic` -- a whole promotion
-//!   ceasing to fire -- reddens this, and reddens tests in `golden_tests.rs`
+//! * Making `CALL name` fall through to a plain `Op::Exec` region -- a whole
+//!   promotion ceasing to fire -- reddens this, and reddens tests in
+//!   `golden_tests.rs`
 //!   and `drive/tests.rs` as well, and aborts `tests/spike.rs` on a stack
 //!   overflow. **For that mutation this file adds nothing**; it is a more
 //!   direct signal rather than a new one.
@@ -123,7 +132,6 @@ impl Root {
             Op::CallNamed { .. }
             | Op::PushArg { .. }
             | Op::TraceArgument { .. }
-            | Op::Generic { .. }
             | Op::TraceKeyword { .. }
             | Op::LoopHeaderValue { .. }
             | Op::LoopRun { .. }
@@ -164,8 +172,8 @@ impl Root {
 ///
 /// `listed` is the set of instruction indices some `SELECT` collected as its
 /// own `WHEN`s: an *absorbed* `WHEN` -- itself another `WHEN`'s consequence --
-/// is nobody's listed branch and compiles to `Op::Generic`, so it is not in
-/// the set. Computed from the `SELECT` nodes rather than from `compile`'s own
+/// is nobody's listed branch and compiles to a plain `Op::Exec` region with
+/// none of the scan-chain ops a listed one gets, so it is not in the set. Computed from the `SELECT` nodes rather than from `compile`'s own
 /// `when_info`, for the reason the module doc gives.
 ///
 /// **The `None` arm carries no claim.** An instruction outside the set may
@@ -405,14 +413,6 @@ fn check_body(
         Err(error) => panic!("{where_}: compile refused this body: {error:?}"),
     };
     let regions = regions(&chunk);
-    let generic: Vec<u32> = chunk
-        .ops
-        .iter()
-        .filter_map(|op| match op {
-            Op::Generic { index } => Some(*index),
-            _ => None,
-        })
-        .collect();
     let listed = listed_whens(body);
 
     for (index, instruction) in body.instructions.iter().enumerate() {
@@ -422,12 +422,11 @@ fn check_body(
         let at = u32::try_from(index).expect("a corpus body is not four billion instructions");
         *seen.constructs.entry(construct).or_default() += 1;
 
-        assert!(
-            !generic.contains(&at),
-            "{where_}: instruction {index} ({construct}) is in the minimum promotion set and \
-             compiled to Op::Generic\n{}",
-            render(&chunk)
-        );
+        // **The `Op::Generic` check that stood here is gone with the op.** It
+        // asserted that a construct in the minimum promotion set had not
+        // fallen back; nothing can fall back now, so the question is
+        // unaskable. What it was really protecting is the line below: the
+        // instruction opened a region of its own.
         let region = regions.get(&at).unwrap_or_else(|| {
             panic!(
                 "{where_}: instruction {index} ({construct}) opened no Clause region\n{}",
@@ -620,9 +619,9 @@ fn corpus_programs() -> Vec<String> {
 ///
 /// The net the phase-4e gate's criterion 6 asks for. It is what would go red
 /// if a promotion silently stopped firing for a construct in a shape
-/// `golden_tests.rs` does not spell out -- and the corpus differential would
-/// not, because an instruction that falls back to `Op::Generic` produces
-/// byte-identical output by delegating to the tree-walker.
+/// `golden_tests.rs` does not spell out -- and an output differential would
+/// not, because an instruction that falls back to a plain `Op::Exec` region
+/// runs the same clause and prints the same bytes.
 ///
 /// One test over the whole population rather than one per program: the
 /// population is read at run time from a directory, so there is no list to

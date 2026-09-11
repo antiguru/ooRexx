@@ -16,20 +16,15 @@
 //! instruction: an `Op::Clause` that opens the clause, whatever the
 //! instruction's own work needs, and the region's end.
 //!
-//! Two ops stand for a whole instruction rather than a piece of one.
-//! `Op::Exec` runs the instruction at its index through
-//! `Interp::exec_instruction`, the same arm the tree-walker's own `step`
-//! runs, with the clause unit around it supplied by its region.
-//! `Op::Generic` instead runs the whole clause through the tree-walker's
-//! clause unit (`Interp::step_in_temps_frame`, and `clause.rs` for the
-//! boundary it carries), which is why it may not sit inside a region -- it
-//! echoes the clause itself, and the echo is not idempotent.
+//! `Op::Exec` is the one op that stands for a whole instruction rather than
+//! a piece of one: it runs the instruction at its index through
+//! `Interp::exec_instruction`, with the clause unit around it supplied by
+//! its region.
 //!
-//! `Generic` is what is left of the tree-walker in this stream and it is
-//! being retired: the kinds still reaching it are the absorbed `WHEN` forms,
-//! `ELSE`, `OTHERWISE`, and an `END` closing anything but a repeating loop.
-//! A construct is promoted by teaching `compile` to emit a region for it,
-//! never by changing what either op means.
+//! **Every instruction compiles to a region.** There is no fallback op and
+//! no second engine behind one: `Op::Generic`, which ran a whole clause
+//! through the tree-walker's own clause unit, is gone along with the
+//! tree-walker itself.
 //!
 //! `Interp::chunk_for` (`plan.rs`, beside `plan_for`, under the same
 //! `BodyKey`) is the cache: a body compiles once, on first entry, and the
@@ -133,12 +128,9 @@ impl Op {
 /// execution is one `Interp::exec_instruction` call compiles to a `Clause`
 /// region holding a single `Op::Exec`; a construct with operands or control
 /// flow of its own compiles to a region holding those, followed by whatever
-/// jumps it needs. `Op::Generic` is the one op that is not in a region at
-/// all, and the set reaching it is listed on this module.
+/// jumps it needs. Every op is inside a region: the stream has no op that
+/// stands outside one.
 pub(crate) enum Op {
-    /// Delegates the instruction at `index` back to the tree-walker's own
-    /// clause unit, which runs the whole clause.
-    Generic { index: u32 },
     /// Echoes the `>K>` line of one `DO`/`LOOP` header value, from register
     /// `src`, under the tag [`HeaderRole`] gives it.
     ///
@@ -1009,7 +1001,7 @@ pub(crate) enum Op {
     ///
     /// **Only `CALL name` and `CALL "name"`.** `CALL ON`/`OFF` resolves no name
     /// at all, and `CALL (expr)` learns its name at run time, so neither
-    /// reaches this op -- `compile` leaves both as [`Op::Generic`].
+    /// reaches this op -- `compile` gives both a plain [`Op::Exec`] region.
     ///
     /// **The last op of a [`Op::Clause`] region, and inside it** rather than
     /// after it: the whole call runs inside the `CALL` clause exactly as it
@@ -1057,11 +1049,11 @@ pub(crate) enum Op {
     /// nothing to keep between executions -- which is the one field that
     /// separates it from [`Op::Call`], whose `site` is a classic-call cache.
     ///
-    /// **What the promotion buys is the clause region, not a cache.** An
-    /// instruction left as [`Op::Generic`] cannot sit inside one (see
-    /// [`Op::Clause`]'s own rule), so the clause echo, the `SIGL` line, the
-    /// temps frame, the condition-delivery boundary and the failing clause's
-    /// own site would all come from `Interp::step_in_temps_frame` instead of
+    /// **What the promotion buys is the resolution, not the clause region.**
+    /// Every instruction gets a region now; what this op adds on top of one
+    /// is the cached call site. The clause echo, the `SIGL` line, the temps
+    /// frame, the condition-delivery boundary and the failing clause's own
+    /// site all come from [`Op::Clause`] rather than from
     /// this stream. With the op, `tests/ir_dual.rs` compares two genuinely
     /// different routes to the same clause for every corpus program that
     /// sends a message as a whole clause.
@@ -1080,11 +1072,12 @@ pub(crate) enum Op {
     /// pool for the running method's scope, through `Interp::exec_expose`,
     /// which is the tree-walker's own arm.
     ///
-    /// **What the promotion buys is the clause region**, exactly as
-    /// [`Op::Message`]'s does: an instruction left as [`Op::Generic`] cannot
-    /// sit inside one, so the clause echo, the `SIGL` line, the temps frame
-    /// and the failing clause's own site would come from
-    /// `Interp::step_in_temps_frame` instead of this stream. `EXPOSE` echoes
+    /// **What this op buys over [`Op::Exec`] is nothing at all today**, and
+    /// it predates it: both are one call into the arm the instruction names,
+    /// inside a region that owes the clause echo, the `SIGL` line, the temps
+    /// frame and the failing clause's own site. It stays a distinct op
+    /// because it reads one field off its clause where `Exec` matches the
+    /// kind, which is a resolution a later task can deepen. `EXPOSE` echoes
     /// its clause and emits nothing else -- measured under `::options trace i`,
     /// the line is `     5 *-* expose v` with no `>V>` beside it -- so there
     /// is no trace op to emit here and the region's own echo is the whole of
@@ -1110,12 +1103,12 @@ pub(crate) enum Op {
     /// `samples/rexxcps.rex` are the candidates if one ever does -- each runs
     /// often enough for an axis to notice.
     ///
-    /// **What the promotion buys is the clause region**, exactly as
-    /// [`Op::Expose`]'s does. That is the whole point of the op: an
-    /// instruction left as [`Op::Generic`] cannot sit inside a region, so its
-    /// clause echo, `SIGL` line, temps frame, deadline count and failure site
-    /// all come from `Interp::step_in_temps_frame`. Inside a region they come
-    /// from [`Op::Clause`], which discharges the same list from the same code.
+    /// **The clause unit around this op is [`Op::Clause`]'s**, which owes the
+    /// clause echo, the `SIGL` line, the temps frame, the deadline count and
+    /// the failing clause's own site. This op owes only the instruction's own
+    /// work. Before the tree-walker was retired the two halves came from
+    /// `Interp::step_in_temps_frame` together, for every instruction the
+    /// compiler had not promoted.
     ///
     /// **The last op of a [`Op::Clause`] region, and inside it**, for the
     /// reason [`Op::Message`] is.
