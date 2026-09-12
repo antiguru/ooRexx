@@ -2742,6 +2742,51 @@ impl Interp {
             .cloned()
     }
 
+    /// Raises `NOTREADY` for the stream named `name` -- the name **as the
+    /// program wrote it**, which is what `CONDITION('D')` answers.
+    ///
+    /// Three outcomes, all measured 2026-09-12. A `SIGNAL ON` trap takes it
+    /// as a failure, so the raising clause is abandoned. A `CALL ON` trap
+    /// queues it against the running activation, and `leave_clause` runs the
+    /// handler once the clause finishes -- measured, the clause prints its
+    /// own empty value first and the next clause runs after the handler.
+    /// Untrapped it is silent unless `::OPTIONS NOTREADY SYNTAX` is in force,
+    /// which makes it 98.974 at rc 158.
+    ///
+    /// **The caller answers normally after `Ok`**: a raise never changes what
+    /// the failing call returns -- the residual, `1`, or the null string.
+    pub(crate) fn raise_notready(&mut self, name: &[u8]) -> Result<(), Failure> {
+        match self.trap_for(b"NOTREADY") {
+            Some(trap) if trap.call => {
+                self.pending_traps.push_back(PendingTrap {
+                    condition: b"NOTREADY".as_slice().into(),
+                    rc: None,
+                    description: Some(name.to_vec()),
+                    // The **running** activation, not its caller: a native
+                    // method raises inside the clause that sent to it, and
+                    // that clause is still running. The routine-return path
+                    // queues against the caller because its own activation is
+                    // being popped; nothing is popped here.
+                    activation: self.activation().id,
+                    queued_during_delivery: false,
+                    fragment_depth: self.fragment_depth,
+                });
+                Ok(())
+            }
+            Some(_) => Err(Raised {
+                description: Some(name.to_vec()),
+                ..Raised::condition(Cow::Borrowed("NOTREADY"))
+            }
+            .into()),
+            None => {
+                if self.condition_raises_syntax(b"NOTREADY") {
+                    return Err(Raised::notready_syntax(name).into());
+                }
+                Ok(())
+            }
+        }
+    }
+
     /// Turns an uninitialised variable read into a `NOVALUE` condition --
     /// but only when this activation has a `NOVALUE` trap that could take
     /// it.

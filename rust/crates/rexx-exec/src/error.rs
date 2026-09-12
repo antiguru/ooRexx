@@ -1225,6 +1225,14 @@ impl Raised {
         Raised::syntax(98, 973, vec![readable.to_vec()])
     }
 
+    /// 98.974, what `::OPTIONS NOTREADY SYNTAX` turns an untrapped NOTREADY
+    /// into (`Activity::raiseCondition`, `concurrency/Activity.cpp:619`).
+    /// `name` is the stream's name as the program wrote it, not the qualified
+    /// path -- measured, `Stream "n.txt" is not ready.` at rc 158.
+    pub(crate) fn notready_syntax(name: &[u8]) -> Raised {
+        Raised::syntax(98, 974, vec![name.to_vec()])
+    }
+
     /// 98.986, what `::OPTIONS NOVALUE SYNTAX` turns an untrapped NOVALUE
     /// into (`RexxActivation::handleNovalueEvent`,
     /// `execution/RexxActivation.cpp:2648`).

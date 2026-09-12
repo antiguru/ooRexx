@@ -1,0 +1,39 @@
+count 38
+/* CALL ON NOTREADY: the raising clause finishes with its own empty value, the
+   handler runs at the clause boundary, and the next clause runs after it.
+   Inside the handler the trap is held, which is what CONDITION('S') reports as
+   DELAY. */
+say 'call on notready'
+c = .Stream~new('n.txt')
+c~lineout('one')
+c~close
+call on notready name caught
+s = .Stream~new('n.txt')
+say 'first [' || s~linein || ']'
+say 'second [' || s~linein || ']'
+say 'after the clause'
+say 'state [' || s~state || '] [' || s~description || ']'
+say 'close [' || s~close || ']'
+/* A read past the end raises; the counts do not. */
+t = .Stream~new('n.txt')
+say 'linein [' || t~linein || ']'
+say 'linein [' || t~linein || ']'
+say 'lines and chars at the end raise nothing:' t~lines t~chars
+say 'close [' || t~close || ']'
+/* A name nothing resolves to raises once for each count, and each still
+   answers 0. */
+n = .Stream~new('nosuch.txt')
+say 'missing lines' n~lines
+say 'missing chars' n~chars
+say 'state [' || n~state || '] [' || n~description || ']'
+/* A write to a stream opened for reading raises and answers 1. */
+r = .Stream~new('n.txt')
+say 'open read [' || r~open('read') || ']'
+say 'lineout to it' r~lineout('nope')
+say 'state [' || r~state || '] [' || r~description || ']'
+say 'close [' || r~close || ']'
+exit 0
+
+caught:
+say '  handler C=' condition('C') 'D=' condition('D') 'I=' condition('I') 'S=' condition('S')
+return

@@ -499,6 +499,8 @@ pub(super) fn open(
     if parsed.read_only && !std::fs::metadata(&path).is_ok_and(|meta| meta.is_file()) {
         let state = require_mut(interp, receiver)?;
         state.status = StreamStatus::Error(ENOENT);
+        let name = state.name.clone();
+        interp.raise_notready(&name)?;
         return Ok(Some(
             interp.text_built(format!("ERROR:{ENOENT}").into_bytes()),
         ));
@@ -519,6 +521,8 @@ pub(super) fn open(
             let errno = error.raw_os_error().unwrap_or(ENOENT);
             let state = require_mut(interp, receiver)?;
             state.status = StreamStatus::Error(errno);
+            let name = state.name.clone();
+            interp.raise_notready(&name)?;
             return Ok(Some(
                 interp.text_built(format!("ERROR:{errno}").into_bytes()),
             ));
@@ -531,6 +535,8 @@ pub(super) fn open(
     if metadata.as_ref().is_none_or(std::fs::Metadata::is_dir) {
         let state = require_mut(interp, receiver)?;
         state.status = StreamStatus::Error(ENOENT);
+        let name = state.name.clone();
+        interp.raise_notready(&name)?;
         return Ok(Some(
             interp.text_built(format!("ERROR:{ENOENT}").into_bytes()),
         ));
@@ -734,6 +740,11 @@ fn fail_open(
     let errno = error.raw_os_error().unwrap_or(ENOENT);
     let state = require_mut(interp, receiver)?;
     state.status = StreamStatus::Error(errno);
+    let name = state.name.clone();
+    // Every entry point that opens implicitly raises when the open fails --
+    // measured, `lines` and `chars` on a name nothing resolves to each fire a
+    // `CALL ON NOTREADY` handler once, and both still answer 0.
+    interp.raise_notready(&name)?;
     Ok(false)
 }
 
@@ -779,8 +790,14 @@ pub(super) fn charin(
     open.last_op_was_read = true;
     reset_line_positions(open);
     let short = read.len() < wanted;
-    if short {
+    let name = if short {
         state.status = StreamStatus::Error(0);
+        Some(state.name.clone())
+    } else {
+        None
+    };
+    if let Some(name) = name {
+        interp.raise_notready(&name)?;
     }
     Ok(Some(interp.text_built(read)))
 }
@@ -828,6 +845,8 @@ pub(super) fn linein(
         }
         None => {
             state.status = StreamStatus::NotReady;
+            let name = state.name.clone();
+            interp.raise_notready(&name)?;
             Ok(Some(interp.text(b"")))
         }
     }
@@ -894,7 +913,10 @@ pub(super) fn charout(
         Err(error) => {
             let errno = error.raw_os_error().unwrap_or(0);
             state.status = StreamStatus::Error(errno);
-            Ok(Some(interp.text_built(data.len().to_string().into_bytes())))
+            let name = state.name.clone();
+            let residual = data.len().to_string().into_bytes();
+            interp.raise_notready(&name)?;
+            Ok(Some(interp.text_built(residual)))
         }
     }
 }
@@ -921,6 +943,8 @@ pub(super) fn lineout(
     if require(interp, receiver)?.mode.read_only {
         let state = require_mut(interp, receiver)?;
         state.status = StreamStatus::Error(EACCES);
+        let name = state.name.clone();
+        interp.raise_notready(&name)?;
         return Ok(Some(interp.text(b"1")));
     }
     let state = require_mut(interp, receiver)?;
@@ -959,6 +983,8 @@ pub(super) fn lineout(
         Err(error) => {
             let errno = error.raw_os_error().unwrap_or(0);
             state.status = StreamStatus::Error(errno);
+            let name = state.name.clone();
+            interp.raise_notready(&name)?;
             Ok(Some(interp.text(b"1")))
         }
     }

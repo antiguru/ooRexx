@@ -31,3 +31,8 @@ lang/stream_open_errors.rex
 lang/stream_chars_lines.rex
 lang/stream_line_ends.rex
 lang/stream_write_positions.rex
+
+# Task 7: NOTREADY -- which operations raise it, what a handler reads back, and
+# the two delivery shapes.
+lang/stream_notready_signal.rex
+lang/stream_notready_trap.rex
