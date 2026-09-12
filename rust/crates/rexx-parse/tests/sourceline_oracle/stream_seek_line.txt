@@ -1,0 +1,51 @@
+count 50
+/* Line positioning clamps at the bottom to line 1 and at the top to the last
+   line plus one, QUERY POSITION recomputes a line position a CHARIN threw
+   away, and the write line position sits one past the read one. */
+say 'seek line'
+seed = .Stream~new('f.txt')
+zz = seed~lineout('alpha')
+zz = seed~lineout('beta')
+zz = seed~lineout('gamma')
+zz = seed~close
+s = .Stream~new('f.txt')
+say 'open' s~open('read')
+say 'l99 [' || s~seek('99 read line') || ']'
+say 'l0 [' || s~seek('0 read line') || ']'
+say 'ltline0 [' || s~seek('<0 read line') || ']'
+say 'ltline1 [' || s~seek('<1 read line') || ']'
+say 'l2 [' || s~seek('=2 read line') || ']'
+say 'readchar [' || s~query('position read char') || ']'
+say 'linein [' || s~linein || ']'
+say 'close' s~close
+/* A BOTH open keeps two pointers until a seek naming neither READ nor WRITE
+   collapses them onto one. */
+w = .Stream~new('f.txt')
+say 'open' w~open('both')
+say 'linein [' || w~linein || ']'
+say 'rchar [' || w~query('position read char') || ']'
+say 'wchar [' || w~query('position write char') || ']'
+say 'rline [' || w~query('position read line') || ']'
+say 'wline [' || w~query('position write line') || ']'
+say 'seek5 [' || w~seek('5') || ']'
+say 'rchar [' || w~query('position read char') || ']'
+say 'wchar [' || w~query('position write char') || ']'
+say 'close' w~close
+/* A CHARIN leaves no line position behind, so QUERY POSITION counts the file
+   through the character position rather than answering zero. SYS is asked
+   first because the recount moves the descriptor the SYS position reports. */
+p = .Stream~new('f.txt')
+say 'open' p~open('read')
+say 'charin [' || p~charin(1, 3) || ']'
+say 'sys [' || p~query('position sys') || ']'
+say 'readline [' || p~query('position read line') || ']'
+say 'readchar [' || p~query('position read char') || ']'
+say 'close' p~close
+/* A write-only open defaults QUERY POSITION to the write pointer, and can
+   still position by line, because WRITE opens the descriptor read-write. */
+o = .Stream~new('f.txt')
+say 'open' o~open('write')
+say 'default [' || o~query('position') || ']'
+say 'seek [' || o~seek('=2') || ']'
+say 'line [' || o~seek('=2 line') || ']'
+say 'close' o~close

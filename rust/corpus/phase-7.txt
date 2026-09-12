@@ -39,3 +39,7 @@ lang/stream_notready_trap.rex
 
 # Task 8: QUERY STREAMTYPE answers from the open descriptor, not the name.
 lang/stream_streamtype.rex
+lang/stream_seek.rex
+lang/stream_seek_line.rex
+lang/stream_seek_errors.rex
+lang/stream_lineout_position.rex

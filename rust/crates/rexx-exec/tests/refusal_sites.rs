@@ -557,6 +557,12 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
             "scope_override_not_a_class",
         ],
     ),
+    // The same subcode by design: the catalogue's one substitution is whatever
+    // the raiser passes, a position for one and the word `SEEK` for the other.
+    (
+        "93.903",
+        &["missing_method_argument", "missing_argument_named"],
+    ),
 ];
 
 /// The rows sharing an `answer` are the recorded ones, so the table's own

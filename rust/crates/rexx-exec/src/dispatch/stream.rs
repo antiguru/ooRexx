@@ -574,9 +574,9 @@ pub(super) fn open(
         read_position: 1,
         write_position,
         line_read: 1,
-        line_write: 1,
+        line_write: 0,
         line_read_char: 1,
-        line_write_char: 1,
+        line_write_char: 0,
         line_size: 0,
         last_op_was_read: true,
         transient,
@@ -755,9 +755,9 @@ fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result
         read_position: 1,
         write_position: if for_write { size as i64 + 1 } else { 1 },
         line_read: 1,
-        line_write: 1,
+        line_write: 0,
         line_read_char: 1,
-        line_write_char: 1,
+        line_write_char: 0,
         line_size: 0,
         last_op_was_read: !for_write,
         transient,
@@ -983,17 +983,25 @@ pub(super) fn lineout(
         interp.raise_notready(&name)?;
         return Ok(Some(interp.text(b"1")));
     }
+    let mode = require(interp, receiver)?.mode;
     let state = require_mut(interp, receiver)?;
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"1")));
     };
-    // **A line number written as a character position**, which is what the
-    // oracle's `setLineWritePosition` converts instead: measured,
-    // `lineout('TWO',2)` on a three-line file leaves the write position at 19.
-    // Unwitnessed today and left as it stands; the line-positioning task owns
-    // the conversion.
+    // `setLineWritePosition`: a line number names a line, not a character, so
+    // it goes through the same walk `SEEK ... LINE` uses. Writing at the number
+    // itself overwrites whatever happens to sit at that offset.
     if let Some(line) = line {
-        open.write_position = as_position(line);
+        let record_length = if mode.record_based {
+            mode.record_length
+        } else {
+            0
+        };
+        let (from_line, from_char) = (open.line_write, open.line_write_char);
+        let (number, at) = seek_line(open, as_position(line), record_length, from_line, from_char);
+        open.line_write = number;
+        open.line_write_char = at;
+        open.write_position = at;
     }
     let Some(data) = data else {
         return Ok(Some(interp.text(b"0")));
@@ -1012,8 +1020,20 @@ pub(super) fn lineout(
     match write_at(&mut open.file, offset_of(at), &bytes) {
         Ok(()) => {
             let appended = at == size + 1 || at == size;
-            open.write_position = at + bytes.len() as i64;
+            // **Measured, and the two disagree**: after a write placed by line
+            // number the pointer lands at the end of the file plus what was
+            // written, not after the bytes. An append reaches the same answer
+            // by either arithmetic.
+            open.write_position = if line.is_some() {
+                size + bytes.len() as i64 + 1
+            } else {
+                at + bytes.len() as i64
+            };
             open.last_op_was_read = false;
+            if open.line_write > 0 {
+                open.line_write += 1;
+                open.line_write_char = open.write_position;
+            }
             if appended && open.line_size != 0 {
                 open.line_size += 1;
             } else if !appended {
@@ -1136,6 +1156,431 @@ fn whole_number(interp: &mut Interp, value: ObjRef, which: usize) -> Result<u64,
 /// The errno a write to a read-only stream reports, which the stream layer
 /// chooses rather than the system call reporting it.
 const EACCES: i32 = 13;
+
+/// Which end a `SEEK` offset is measured from.
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum SeekFrom {
+    Start,
+    End,
+    Forward,
+    Backward,
+}
+
+/// What a `SEEK` option string parsed to.
+struct Positioning {
+    style: SeekFrom,
+    style_set: bool,
+    read: bool,
+    write: bool,
+    by_char: bool,
+    by_line: bool,
+    offset: Option<i64>,
+}
+
+/// `streamPosition`'s option table. **Every word takes one letter**, unlike
+/// OPEN's per-option minimums, so `r`, `w`, `c` and `l` all match; a bare
+/// number is the offset, and anything else fails.
+fn parse_positioning(options: &[u8]) -> Result<Positioning, ()> {
+    let mut parsed = Positioning {
+        style: SeekFrom::Start,
+        style_set: false,
+        read: false,
+        write: false,
+        by_char: false,
+        by_line: false,
+        offset: None,
+    };
+    let mut tokens = Tokens::new(options);
+    while let Some(token) = tokens.next() {
+        let style = match token {
+            b"=" => Some(SeekFrom::Start),
+            b"<" => Some(SeekFrom::End),
+            b"+" => Some(SeekFrom::Forward),
+            b"-" => Some(SeekFrom::Backward),
+            _ => None,
+        };
+        if let Some(style) = style {
+            if parsed.style_set {
+                return Err(());
+            }
+            parsed.style = style;
+            parsed.style_set = true;
+            continue;
+        }
+        if matches(token, b"READ") {
+            if parsed.read || parsed.write {
+                return Err(());
+            }
+            parsed.read = true;
+        } else if matches(token, b"WRITE") {
+            if parsed.read || parsed.write {
+                return Err(());
+            }
+            parsed.write = true;
+        } else if matches(token, b"CHAR") {
+            if parsed.by_char || parsed.by_line {
+                return Err(());
+            }
+            parsed.by_char = true;
+        } else if matches(token, b"LINE") {
+            if parsed.by_char || parsed.by_line {
+                return Err(());
+            }
+            parsed.by_line = true;
+        } else if parsed.offset.is_none() {
+            // The fallback token: an offset, once, and digits only -- which
+            // is why `seek 1e1` and `seek =1.5` are the bare 93.
+            match to_number(token) {
+                Some(number) => parsed.offset = Some(as_position(number)),
+                None => return Err(()),
+            }
+        } else {
+            return Err(());
+        }
+    }
+    Ok(parsed)
+}
+
+/// A token against a table word, caselessly over the token's own length.
+fn matches(token: &[u8], word: &[u8]) -> bool {
+    !token.is_empty()
+        && word.len() >= token.len()
+        && word[..token.len()].eq_ignore_ascii_case(token)
+}
+
+/// `stream_position`, which both `~seek` and `~position` bind: moves a
+/// position and answers where it landed. Nothing is range-checked -- `<99` on
+/// a 29-byte file answers `-69` and the stream stays `READY`.
+pub(super) fn position(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let options = match args.first().copied().flatten() {
+        Some(value) => interp.to_text(value).into_owned(),
+        None => Vec::new(),
+    };
+    let Ok(mut parsed) = parse_positioning(&options) else {
+        return Err(Raised::syntax(93, 0, Vec::new()).into());
+    };
+    // Both checks come **after** parsing: a transient stream with a bad option
+    // answers the bare 93, not 93.958.
+    if require(interp, receiver)?
+        .open
+        .as_ref()
+        .is_some_and(|open| open.transient)
+    {
+        return Err(Raised::transient_positioning().into());
+    }
+    let Some(offset) = parsed.offset else {
+        return Err(Raised::missing_argument_named("SEEK").into());
+    };
+    let mode = require(interp, receiver)?.mode;
+    require_mut(interp, receiver)?.status = StreamStatus::Ready;
+    // Neither READ nor WRITE given: whichever the open admits, and both when
+    // it admits both. An unopened stream admits neither and so takes the both
+    // branch -- measured, a seek on one moves both pointers to the target.
+    let collapse = if parsed.read || parsed.write {
+        false
+    } else if mode.read_only {
+        parsed.read = true;
+        false
+    } else if mode.write_only {
+        parsed.write = true;
+        false
+    } else {
+        parsed.read = true;
+        parsed.write = true;
+        true
+    };
+    // The implicit open comes after the flags and never creates the file: a
+    // seek naming one that does not exist answers 0 and leaves state ERROR.
+    // Asking for the read-shaped open is what selects that, because it is the
+    // `operation_nocreate` one whichever pointer is about to move.
+    if !ensure_open(interp, receiver, false)? {
+        return Ok(Some(interp.text(b"0")));
+    }
+    let record_length = if mode.record_based {
+        mode.record_length
+    } else {
+        0
+    };
+    let state = require_mut(interp, receiver)?;
+    let Some(open) = state.open.as_mut() else {
+        return Ok(Some(interp.text(b"0")));
+    };
+    // The C++ branches on `last_op_was_read` here and its own comment says the
+    // flag is always true (`bugs:#1739`); measured, both pointers move together
+    // whichever operation ran last, so this does not branch.
+    if collapse {
+        open.write_position = open.read_position;
+        open.line_write = open.line_read;
+    }
+    if parsed.read {
+        open.line_size = 0;
+    }
+    if !parsed.by_char && !parsed.by_line {
+        parsed.by_char = true;
+    }
+    let offset = if parsed.style == SeekFrom::Backward {
+        -offset
+    } else {
+        offset
+    };
+    let size = size_of(&open.file) as i64;
+    if parsed.by_char {
+        let current = if parsed.read {
+            open.read_position
+        } else {
+            open.write_position
+        };
+        // `setPosition` seeks and adds one, so an absolute offset is used as
+        // written and everything else lands relative, unchecked either way.
+        let landed = match parsed.style {
+            SeekFrom::Start => offset,
+            SeekFrom::End => size - offset + 1,
+            SeekFrom::Forward | SeekFrom::Backward => current + offset,
+        };
+        reset_line_positions(open);
+        if parsed.read {
+            open.read_position = landed;
+            if parsed.write {
+                open.write_position = landed;
+            }
+        } else {
+            open.write_position = landed;
+        }
+        return Ok(Some(interp.text_built(landed.to_string().into_bytes())));
+    }
+    // Line positioning on a stream that cannot read answers 0.
+    if !(mode.read_write || mode.read_only) {
+        return Ok(Some(interp.text(b"0")));
+    }
+    let (current_line, current_char) = if parsed.read {
+        (open.line_read, open.line_read_char)
+    } else {
+        (open.line_write, open.line_write_char)
+    };
+    let target = match parsed.style {
+        SeekFrom::Start => offset,
+        SeekFrom::End => as_position(line_count(open, record_length)) - offset,
+        SeekFrom::Forward | SeekFrom::Backward => as_position(current_line) + offset,
+    };
+    // Clamped at the bottom only: `seek 99 read line` on a three-line file
+    // answers 4, and `seek 0 read line` answers 1.
+    let (line, at) = seek_line(
+        open,
+        target.max(1),
+        record_length,
+        current_line,
+        current_char,
+    );
+    if parsed.read {
+        open.line_read = line;
+        open.line_read_char = at;
+        open.read_position = at;
+        if parsed.write {
+            open.line_write = line;
+            open.line_write_char = at;
+            open.write_position = at;
+        }
+    } else {
+        open.line_write = line;
+        open.line_write_char = at;
+        open.write_position = at;
+    }
+    Ok(Some(interp.text_built(line.to_string().into_bytes())))
+}
+
+/// The lines a stream holds, for a `<n` line seek. A record-based stream
+/// divides rather than scans, and a partial trailing record still counts.
+fn line_count(open: &mut rexx_core::OpenFile, record_length: u64) -> u64 {
+    let size = size_of(&open.file);
+    match size.checked_div(record_length) {
+        Some(whole) => whole + u64::from(!size.is_multiple_of(record_length)),
+        None => count_lines_from(&mut open.file, 1).unwrap_or(0),
+    }
+}
+
+/// Walks to the start of `target`, answering the line it reached and that
+/// line's character position. A target past the last line stops at the end,
+/// which is what clamps `seek 99 read line` to the last line plus one.
+fn seek_line(
+    open: &mut rexx_core::OpenFile,
+    target: i64,
+    record_length: u64,
+    current_line: u64,
+    current_char: i64,
+) -> (u64, i64) {
+    if target <= 1 {
+        return (1, 1);
+    }
+    if record_length > 0 {
+        let line = u64::try_from(target).unwrap_or(1);
+        return (line, as_position(record_length) * (target - 1) + 1);
+    }
+    // `seekToVariableLine`: already being there is a no-op that leaves a
+    // mid-line character position alone, and a backward move restarts the walk
+    // from line 1 rather than scanning backwards.
+    if as_position(current_line) == target {
+        return (current_line, current_char);
+    }
+    let (mut line, mut at) = if current_line == 0 || as_position(current_line) > target {
+        (1u64, 1i64)
+    } else {
+        (current_line, current_char)
+    };
+    while (line as i64) < target {
+        match read_line_from(&mut open.file, offset_of(at)).unwrap_or(None) {
+            Some((_, next)) => {
+                at = next;
+                line += 1;
+            }
+            None => break,
+        }
+    }
+    (line, at)
+}
+
+/// `getLineReadPosition`: the tracked read line, recomputed from the character
+/// position when a character operation invalidated it -- measured, a `CHARIN`
+/// of three bytes leaves `QUERY POSITION READ LINE` answering 1, not 0.
+fn line_read_position(open: &mut rexx_core::OpenFile, record_length: u64) -> i64 {
+    if record_length > 0 {
+        return (open.read_position - 1) / as_position(record_length) + 1;
+    }
+    if open.line_read == 0 {
+        open.line_read = count_lines_upto(&mut open.file, open.read_position).unwrap_or(0);
+    }
+    open.line_read_char = open.read_position;
+    as_position(open.line_read)
+}
+
+/// `getLineWritePosition`, which differs from the read side by a trailing
+/// `+ 1`: measured, a write position at the end of a three-line file answers 4
+/// where the read position on line 2 answers 2. The tracker starts untracked,
+/// so a stream that has written nothing recomputes here rather than answering
+/// the 1 an initialised tracker would hold.
+fn line_write_position(open: &mut rexx_core::OpenFile, record_length: u64) -> i64 {
+    if record_length > 0 {
+        let reclen = as_position(record_length);
+        return open.write_position / reclen + i64::from(open.write_position % reclen != 0);
+    }
+    if open.line_write == 0 {
+        open.line_write = count_lines_upto(&mut open.file, open.write_position).unwrap_or(0) + 1;
+    }
+    open.line_write_char = open.write_position;
+    as_position(open.line_write)
+}
+
+/// `queryLinePosition`: which line a 1-based character position lies in,
+/// counting from the start of the file, an unterminated tail counting as a
+/// line. **The range runs through that position rather than up to it** -- the
+/// C++ counts `[0, position - 1]` inclusive, so position 1 counts one byte and
+/// answers 1, which is what makes a write position of 1 answer line 2.
+fn count_lines_upto(file: &mut std::fs::File, position: i64) -> std::io::Result<u64> {
+    let bytes = offset_of(position.max(1));
+    let mut count = 0;
+    let mut at = 1u64;
+    let mut remaining = bytes;
+    let mut last = b'\n';
+    while remaining > 0 {
+        let want = usize::try_from(remaining.min(CHUNK as u64)).unwrap_or(CHUNK);
+        let chunk = read_from(file, at, want)?;
+        let Some(tail) = chunk.last() else { break };
+        count += chunk.iter().filter(|byte| **byte == b'\n').count() as u64;
+        last = *tail;
+        at += chunk.len() as u64;
+        remaining -= chunk.len() as u64;
+    }
+    if last != b'\n' {
+        count += 1;
+    }
+    Ok(count)
+}
+
+/// `stream_query_position`: `SYS` answers the descriptor's own offset, and
+/// the rest answer a logical position. An unopened stream answers the null
+/// string, a transient one answers `1`.
+pub(super) fn query_position(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let options = match args.first().copied().flatten() {
+        Some(value) => interp.to_text(value).into_owned(),
+        None => Vec::new(),
+    };
+    let mut sys = false;
+    let mut read = false;
+    let mut write = false;
+    let mut by_char = false;
+    let mut by_line = false;
+    let mut tokens = Tokens::new(&options);
+    // Each token is mutually exclusive with a set of the others and the check
+    // runs before the flag is set, so a repeat is an error too: `SYS` combines
+    // with nothing and `READ WRITE` is a bare 93, while `READ LINE` is the pair
+    // `StreamSupplier~init` itself sends.
+    while let Some(token) = tokens.next() {
+        let clash = if matches(token, b"SYS") {
+            let clash = sys || read || write || by_char || by_line;
+            sys = true;
+            clash
+        } else if matches(token, b"READ") {
+            let clash = sys || read || write;
+            read = true;
+            clash
+        } else if matches(token, b"WRITE") {
+            let clash = sys || read || write;
+            write = true;
+            clash
+        } else if matches(token, b"CHAR") {
+            let clash = sys || by_char || by_line;
+            by_char = true;
+            clash
+        } else if matches(token, b"LINE") {
+            let clash = sys || by_char || by_line;
+            by_line = true;
+            clash
+        } else {
+            true
+        };
+        if clash {
+            return Err(Raised::syntax(93, 0, Vec::new()).into());
+        }
+    }
+    let mode = require(interp, receiver)?.mode;
+    let state = require_mut(interp, receiver)?;
+    let Some(open) = state.open.as_mut() else {
+        return Ok(Some(interp.text(b"")));
+    };
+    if open.transient {
+        return Ok(Some(interp.text(b"1")));
+    }
+    if sys {
+        use std::io::Seek;
+        let at = open.file.stream_position().unwrap_or(0);
+        return Ok(Some(interp.text_built(at.to_string().into_bytes())));
+    }
+    // Neither given: the write position only for a write-only stream.
+    if !read && !write {
+        write = mode.write_only;
+    }
+    let record_length = if mode.record_based {
+        mode.record_length
+    } else {
+        0
+    };
+    let answer = match (write, by_line) {
+        (true, true) => line_write_position(open, record_length),
+        (true, false) => open.write_position,
+        (false, true) => line_read_position(open, record_length),
+        (false, false) => open.read_position,
+    };
+    Ok(Some(interp.text_built(answer.to_string().into_bytes())))
+}
 
 /// `stream_close`: `READY:` for a stream that was open, and the null string
 /// for one that never was. Either way the state goes back to `UNKNOWN`.

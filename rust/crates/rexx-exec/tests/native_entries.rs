@@ -58,6 +58,8 @@ const IMPLEMENTED: &[&str] = &[
     "stream_lineout",
     "stream_lines",
     "stream_open",
+    "stream_position",
+    "stream_query_position",
     "stream_state",
     "stream_uninit",
 ];

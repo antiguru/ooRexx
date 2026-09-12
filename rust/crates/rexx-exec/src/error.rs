@@ -881,6 +881,23 @@ impl Raised {
         Raised::syntax(93, 903, vec![position.to_string().into_bytes()])
     }
 
+    /// 93.903 for a caller that names its missing argument rather than
+    /// numbering it. **Same subcode as [`Raised::missing_method_argument`]
+    /// and not a duplicate of it**: the catalogue's one substitution is
+    /// whatever the raiser passes, and `SEEK` passes a word where `MAX`/`MIN`
+    /// pass a position -- measured, `s~seek('write')` is `argument SEEK is
+    /// required`.
+    pub(crate) fn missing_argument_named(argument: &str) -> Raised {
+        Raised::syntax(93, 903, vec![argument.as_bytes().to_vec()])
+    }
+
+    /// 93.958: a transient stream cannot be positioned. Raised **after** the
+    /// options are parsed, so a transient stream with a bad option answers the
+    /// bare 93 instead -- measured on `/dev/null` opened for writing.
+    pub(crate) fn transient_positioning() -> Raised {
+        Raised::syntax(93, 958, Vec::new())
+    }
+
     /// 93.952: a method source array holds something that is not a string.
     pub(crate) fn method_source_not_all_strings(position: &str) -> Raised {
         Raised::syntax(93, 952, vec![position.as_bytes().to_vec()])

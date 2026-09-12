@@ -1,0 +1,57 @@
+/* LINEOUT with a line number writes at that line's character offset and
+   overwrites in place, so a shorter replacement leaves behind whatever it did
+   not cover. The write pointer afterwards is the end of the file plus what was
+   written, which is not where the bytes went; the two disagree in the oracle
+   and this reproduces the disagreement. Each block seeds its own file, because
+   a shared one would carry the previous block's edit. */
+say 'lineout position'
+seed = .Stream~new('f.txt')
+zz = seed~lineout('alpha')
+zz = seed~lineout('beta')
+zz = seed~lineout('gamma')
+zz = seed~close
+s = .Stream~new('f.txt')
+say 'open' s~open('both')
+say 'lineout at 2 [' || s~lineout('TWO', 2) || ']'
+say 'wchar [' || s~query('position write char') || ']'
+say 'wline [' || s~query('position write line') || ']'
+say 'close' s~close
+f = .Stream~new('f.txt')
+say 'f size [' || f~query('size') || ']'
+say 'f bytes [' || c2x(f~charin(1, 40)) || ']'
+say 'close' f~close
+/* The pointer does not follow the pointer the caller had just set: a write
+   pointer parked at 3 still reports from the end of the file. */
+seed2 = .Stream~new('g.txt')
+zz = seed2~lineout('alpha')
+zz = seed2~lineout('beta')
+zz = seed2~lineout('gamma')
+zz = seed2~close
+g = .Stream~new('g.txt')
+say 'open' g~open('both')
+say 'seek w 3 [' || g~seek('=3 write') || ']'
+say 'lineout at 2 [' || g~lineout('X', 2) || ']'
+say 'wchar [' || g~query('position write char') || ']'
+say 'close' g~close
+h = .Stream~new('g.txt')
+say 'g size [' || h~query('size') || ']'
+say 'g bytes [' || c2x(h~charin(1, 40)) || ']'
+say 'close' h~close
+/* And it tracks the file's size rather than the position held at open: a
+   CHAROUT that grows the file moves where the next line write reports from. */
+seed3 = .Stream~new('k.txt')
+zz = seed3~lineout('alpha')
+zz = seed3~lineout('beta')
+zz = seed3~lineout('gamma')
+zz = seed3~close
+k = .Stream~new('k.txt')
+say 'open' k~open('both')
+say 'charout ext [' || k~charout('12345678', 18) || ']'
+say 'seek w 3 [' || k~seek('=3 write') || ']'
+say 'lineout at 2 [' || k~lineout('X', 2) || ']'
+say 'wchar [' || k~query('position write char') || ']'
+say 'close' k~close
+m = .Stream~new('k.txt')
+say 'k size [' || m~query('size') || ']'
+say 'k bytes [' || c2x(m~charin(1, 60)) || ']'
+say 'close' m~close

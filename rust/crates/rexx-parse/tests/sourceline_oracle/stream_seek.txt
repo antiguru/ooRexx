@@ -1,0 +1,49 @@
+count 48
+/* Where a SEEK lands. Nothing is range-checked anywhere: a seek past either
+   end is accepted, answers the arithmetic result, and leaves the stream
+   READY. A seek on a stream nothing has opened opens it without creating it,
+   and a READ seek throws away the cached line count. */
+say 'seek'
+seed = .Stream~new('f.txt')
+zz = seed~lineout('alpha')
+zz = seed~lineout('beta')
+zz = seed~lineout('gamma')
+zz = seed~close
+s = .Stream~new('f.txt')
+say 'open' s~open('read')
+say 'size [' || s~query('size') || ']'
+say 'eq3 [' || s~seek('=3') || ']'
+say 'plus2 [' || s~seek('+2') || ']'
+say 'minus1 [' || s~seek('-1') || ']'
+say 'lt0 [' || s~seek('<0') || ']'
+say 'lt1 [' || s~seek('<1') || ']'
+say 'lt99 [' || s~seek('<99') || ']'
+say 'state [' || s~state || ']'
+say 'close' s~close
+/* position and seek are the same method under two names. */
+n = .Stream~new('f.txt')
+say 'open' n~open('read')
+say 'position [' || n~position('=4') || ']'
+say 'close' n~close
+/* A seek on an unopened stream opens it and moves both pointers, because an
+   unopened stream admits neither reading nor writing and so takes the both
+   branch. */
+u = .Stream~new('f.txt')
+say 'unopened [' || u~seek('=3') || ']'
+say 'state [' || u~state || ']'
+say 'read [' || u~query('position read char') || ']'
+say 'write [' || u~query('position write char') || ']'
+say 'close' u~close
+/* The implicit open never creates the file. */
+m = .Stream~new('missing.txt')
+say 'missing [' || m~seek('=3') || ']'
+say 'state [' || m~state || ']'
+/* A READ seek clears the cached line count, so LINES counts again. */
+c = .Stream~new('f.txt')
+say 'open' c~open('read')
+say 'lines [' || c~lines || ']'
+say 'linein [' || c~linein || ']'
+say 'lines [' || c~lines || ']'
+say 'seek [' || c~seek('=1 read char') || ']'
+say 'lines [' || c~lines || ']'
+say 'close' c~close
