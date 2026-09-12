@@ -41,6 +41,20 @@ fn require_mut(interp: &mut Interp, receiver: ObjRef) -> Result<&mut StreamState
     }
 }
 
+/// A write argument's bytes. `LINEOUT` and `CHAROUT` require a *string
+/// value*, not a string rendering: an object answering `makeString` writes
+/// what that answers, and one answering none refuses. Measured,
+/// `.stdout~charout(.K~new)` is `Argument 1 must have a string value` at
+/// rc 168 where `~string` would have answered `a K`, and an instance whose
+/// class defines `makeString` writes what the method returns.
+/// The refusal's own `Compiled method` traceback line comes from the dispatch
+/// layer, not from here -- measured, blaming it at this site as well puts the
+/// line in twice.
+fn write_text(interp: &mut Interp, value: ObjRef) -> Result<Vec<u8>, Failure> {
+    let text = super::required_string_argument(interp, value, 1)?;
+    Ok(interp.to_text(text).into_owned())
+}
+
 /// The qualified path as a `String`, for the file-system calls below.
 fn qualified_path(interp: &Interp, receiver: ObjRef) -> Result<String, Failure> {
     let state = require(interp, receiver)?;
@@ -1093,11 +1107,10 @@ pub(super) fn charout(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let data = args
-        .first()
-        .copied()
-        .flatten()
-        .map(|value| interp.to_text(value).into_owned());
+    let data = match args.first().copied().flatten() {
+        Some(value) => Some(write_text(interp, value)?),
+        None => None,
+    };
     let start = optional_position(interp, args.get(1).copied().flatten(), 2)?;
     if data.is_none() && start.is_none() {
         return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));
@@ -1149,11 +1162,10 @@ pub(super) fn lineout(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let data = args
-        .first()
-        .copied()
-        .flatten()
-        .map(|value| interp.to_text(value).into_owned());
+    let data = match args.first().copied().flatten() {
+        Some(value) => Some(write_text(interp, value)?),
+        None => None,
+    };
     let line = optional_position(interp, args.get(1).copied().flatten(), 2)?;
     if data.is_none() && line.is_none() {
         return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));

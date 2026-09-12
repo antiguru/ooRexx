@@ -54,3 +54,7 @@ lang/local_std_objects.rex
 # The standard streams take no part in finalization, so a finalizer still
 # reaches every route after `.local` holds them.
 lang/uninit_after_std_streams.rex
+
+# A stream write requires a string value: `makeString` decides what an object
+# writes, and an array writes its items joined by a newline.
+lang/stream_write_conversion.rex
