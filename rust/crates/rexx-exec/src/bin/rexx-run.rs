@@ -29,8 +29,17 @@ fn main() -> ExitCode {
     // matches where the oracle does the same thing -- its own launcher
     // (`utilities/rexx/platform/unix/rexx.cpp`'s `main`) builds `arg_buffer`
     // from `argv` and the interpreter never sees the separate words.
+    // This process owns real descriptors, so reading them here is the one
+    // place it is legitimate: `QUERY STREAMTYPE` and 93.958 both turn on
+    // whether a standard stream is transient, and the interpreter itself
+    // writes to a buffer and cannot know.
     let invocation = rexx_exec::join_command_line(args.map(|arg| arg.as_bytes().to_vec()))
-        .with_input(rexx_exec::ProgramInput::Stdin);
+        .with_input(rexx_exec::ProgramInput::Stdin)
+        .with_standard_transient(std::array::from_fn(|fd| {
+            use std::os::unix::fs::FileTypeExt;
+            std::fs::metadata(format!("/proc/self/fd/{fd}"))
+                .is_ok_and(|meta| meta.file_type().is_char_device() || meta.file_type().is_fifo())
+        }));
 
     let text = match std::fs::read(&path) {
         Ok(text) => text,

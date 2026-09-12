@@ -69,7 +69,7 @@ mod string;
 
 // `Stream`'s `LIBRARY REXX` entry points. A child of this module because a
 // body takes the seam's `Cleared`, which cannot be named outside it.
-mod stream;
+pub(crate) mod stream;
 
 // The collection classes' primitive methods, chained the same way.
 mod collection;

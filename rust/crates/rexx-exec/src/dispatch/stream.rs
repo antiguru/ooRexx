@@ -18,7 +18,7 @@
 use chrono::TimeZone;
 use rexx_core::{Body, NativeState, ObjRef, StandardStream, StreamState, StreamStatus};
 
-use super::Cleared;
+use super::{Cleared, new_instance};
 use crate::error::Raised;
 use crate::{Failure, Interp};
 
@@ -45,6 +45,43 @@ fn require_mut(interp: &mut Interp, receiver: ObjRef) -> Result<&mut StreamState
 fn qualified_path(interp: &Interp, receiver: ObjRef) -> Result<String, Failure> {
     let state = require(interp, receiver)?;
     Ok(String::from_utf8_lossy(&state.qualified).into_owned())
+}
+
+/// One of the three standard streams, built for `.local` rather than by a
+/// program. **Not `paths::normalize`d**: measured, `.stdout~qualify` answers
+/// the bare `STDOUT`, where every other stream answers a path, so the
+/// qualified name is the name. Ready from the start (`~state` `READY`,
+/// `~description` `READY:`) and marked with `standard`, which is what parts it
+/// from the ordinary `Stream` a program builds for the same name --
+/// `.Stream~new('STDOUT')` is a different object.
+///
+/// No `INIT` runs, so the `stream_name` object variable `::METHOD string`
+/// exposes is assigned here; an unset exposed variable would otherwise render
+/// as its own derived name.
+pub(crate) fn standard_stream(
+    interp: &mut Interp,
+    class: ObjRef,
+    which: StandardStream,
+) -> Result<ObjRef, Failure> {
+    let name: &[u8] = match which {
+        StandardStream::In => b"STDIN",
+        StandardStream::Out => b"STDOUT",
+        StandardStream::Err => b"STDERR",
+    };
+    let object = new_instance(interp, class)?;
+    let named = interp.text(name);
+    interp.set_pool_variable(object, class, b"STREAM_NAME", named);
+    let mut state = StreamState::new(name.to_vec(), name.to_vec());
+    state.standard = Some(which);
+    state.status = StreamStatus::Ready;
+    let Some(held) = interp.heap.get_mut(object) else {
+        unreachable!("new_instance just allocated and rooted it")
+    };
+    let Body::Instance { native, .. } = &mut held.body else {
+        unreachable!("new_instance allocates Body::Instance")
+    };
+    *native = Some(Box::new(NativeState::Stream(state)));
+    Ok(object)
 }
 
 /// `stream_init`: records the name as written and the path it resolves to.
@@ -782,6 +819,70 @@ fn fail_open(
     Ok(false)
 }
 
+/// Which standard stream `receiver` is, when it is one. Every entry point
+/// below asks this before opening anything: a standard stream has no
+/// `OpenFile` and never touches the file system, so its branch has to come
+/// ahead of `ensure_open`, which would otherwise open a *file* named `STDOUT`.
+fn standard_of(interp: &Interp, receiver: ObjRef) -> Result<Option<StandardStream>, Failure> {
+    Ok(require(interp, receiver)?.standard)
+}
+
+/// A write to a standard stream: to the sink for the two output ones, and a
+/// refusal for `.STDIN`. Answers what the entry point answers -- `0` written,
+/// or the residual count. Measured: `.stdin~lineout('x')` raises `NOTREADY`
+/// and answers `1`, and the raise happens whether or not a trap is armed.
+fn standard_write(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    which: StandardStream,
+    bytes: &[u8],
+    residual: &[u8],
+) -> Result<Option<ObjRef>, Failure> {
+    match which {
+        StandardStream::Out => interp.write_out(bytes),
+        StandardStream::Err => interp.write_err(bytes),
+        StandardStream::In => {
+            let state = require_mut(interp, receiver)?;
+            state.status = StreamStatus::Error(EACCES);
+            let name = state.name.clone();
+            interp.raise_notready(&name)?;
+            return Ok(Some(interp.text_built(residual.to_vec())));
+        }
+    }
+    let state = require_mut(interp, receiver)?;
+    state.status = StreamStatus::Ready;
+    Ok(Some(interp.text(b"0")))
+}
+
+/// Whether the descriptor behind a standard stream is transient, as the
+/// `Invocation` reported it. **Not read from this process**: the interpreter
+/// writes to a buffer rather than a descriptor, so the host's own fds say
+/// nothing about the embedding's, and reading them made one program answer
+/// differently under a binary, a test harness and a library.
+fn standard_is_transient(interp: &Interp, which: StandardStream) -> bool {
+    interp.standard_transient[match which {
+        StandardStream::In => 0,
+        StandardStream::Out => 1,
+        StandardStream::Err => 2,
+    }]
+}
+
+/// Positioning a transient stream is 93.958, and a standard stream reaches
+/// that check by what the `Invocation` says rather than by an `OpenFile` it
+/// does not have. **Only when the descriptor is transient**: measured against
+/// the oracle, the same `CHAROUT( , 'xxxxx', 15)` answers `0` and writes when
+/// fd 1 is a regular file and raises when it is a pipe.
+fn refuse_transient_position(
+    interp: &Interp,
+    which: StandardStream,
+    positioned: bool,
+) -> Result<(), Failure> {
+    if positioned && standard_is_transient(interp, which) {
+        return Err(Raised::transient_positioning().into());
+    }
+    Ok(())
+}
+
 /// Everything a `charin`/`charout` invalidates: the line positions and the
 /// cached count (`StreamInfo::resetLinePositions`).
 fn reset_line_positions(open: &mut rexx_core::OpenFile) {
@@ -804,6 +905,38 @@ pub(super) fn charin(
         Some(value) => whole_number(interp, value, 2)?,
         None => 1,
     };
+    if let Some(which) = standard_of(interp, receiver)? {
+        refuse_transient_position(interp, which, start.is_some())?;
+        let StandardStream::In = which else {
+            return Ok(Some(interp.text(b"")));
+        };
+        let wanted = usize::try_from(length).unwrap_or(usize::MAX);
+        // A zero-length ask reads nothing and leaves the state alone, as it
+        // does on the file path: measured, `.stdin~charin( , 0)` answers the
+        // null string and `~description` stays `READY:`, where treating it as
+        // a read of nothing would leave `ERROR:0`.
+        if wanted == 0 {
+            return Ok(Some(interp.text(b"")));
+        }
+        let read = interp.input_bytes(wanted);
+        // Three outcomes, not two, and the standard stream's rule is its own
+        // rather than the file path's. Measured over a six-byte standard
+        // input: asking for 50 answers all six and leaves `NOTREADY:EOF`,
+        // asking for exactly six answers them and stays `READY:`, and a
+        // further ask answers nothing and leaves `ERROR:0`.
+        let status = match read.len() {
+            0 => StreamStatus::Error(0),
+            got if got < wanted => StreamStatus::NotReady,
+            _ => StreamStatus::Ready,
+        };
+        let state = require_mut(interp, receiver)?;
+        state.status = status;
+        if status != StreamStatus::Ready {
+            let name = state.name.clone();
+            interp.raise_notready(&name)?;
+        }
+        return Ok(Some(interp.text_built(read)));
+    }
     if !ensure_open(interp, receiver, false)? {
         return Ok(Some(interp.text(b"")));
     }
@@ -852,6 +985,31 @@ pub(super) fn linein(
     };
     if !matches!(count, 0 | 1) {
         return Err(Raised::syntax(93, 0, Vec::new()).into());
+    }
+    if let Some(which) = standard_of(interp, receiver)? {
+        refuse_transient_position(interp, which, line.is_some())?;
+        let StandardStream::In = which else {
+            return Ok(Some(interp.text(b"")));
+        };
+        if count == 0 {
+            return Ok(Some(interp.text(b"")));
+        }
+        return match interp.input_line() {
+            Some(text) => {
+                // A read that succeeds clears whatever a refused write left:
+                // measured, `.stdin~lineout` leaves `ERROR:13` and the next
+                // `.stdin~linein` reads its line and answers `READY:` again.
+                require_mut(interp, receiver)?.status = StreamStatus::Ready;
+                Ok(Some(interp.text_built(text)))
+            }
+            None => {
+                let state = require_mut(interp, receiver)?;
+                state.status = StreamStatus::NotReady;
+                let name = state.name.clone();
+                interp.raise_notready(&name)?;
+                Ok(Some(interp.text(b"")))
+            }
+        };
     }
     if !ensure_open(interp, receiver, false)? {
         return Ok(Some(interp.text(b"")));
@@ -923,6 +1081,12 @@ pub(super) fn charout(
     if data.is_none() && start.is_none() {
         return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));
     }
+    if let Some(which) = standard_of(interp, receiver)? {
+        refuse_transient_position(interp, which, start.is_some())?;
+        let data = data.unwrap_or_default();
+        let residual = data.len().to_string().into_bytes();
+        return standard_write(interp, receiver, which, &data, &residual);
+    }
     if !ensure_open(interp, receiver, true)? {
         let residual = data.as_ref().map_or(0, Vec::len);
         return Ok(Some(interp.text_built(residual.to_string().into_bytes())));
@@ -972,6 +1136,12 @@ pub(super) fn lineout(
     let line = optional_position(interp, args.get(1).copied().flatten(), 2)?;
     if data.is_none() && line.is_none() {
         return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));
+    }
+    if let Some(which) = standard_of(interp, receiver)? {
+        refuse_transient_position(interp, which, line.is_some())?;
+        let mut bytes = data.unwrap_or_default();
+        bytes.push(b'\n');
+        return standard_write(interp, receiver, which, &bytes, b"1");
     }
     if !ensure_open(interp, receiver, true)? {
         return Ok(Some(interp.text(b"1")));
@@ -1066,6 +1236,16 @@ pub(super) fn chars(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    if let Some(which) = standard_of(interp, receiver)? {
+        let StandardStream::In = which else {
+            return Ok(Some(interp.text(b"0")));
+        };
+        // An unmeasurable source answers `1` while it is live: measured, a
+        // pipe on the oracle's own standard input answers `1` where a
+        // redirected regular file answers the true byte count.
+        let left = interp.input_remaining().unwrap_or(1);
+        return Ok(Some(interp.text_built(left.to_string().into_bytes())));
+    }
     if !ensure_open(interp, receiver, false)? {
         return Ok(Some(interp.text(b"0")));
     }
@@ -1094,6 +1274,14 @@ pub(super) fn lines(
             .is_some_and(|byte| byte.eq_ignore_ascii_case(&b'N')),
         None => false,
     };
+    if let Some(which) = standard_of(interp, receiver)? {
+        let StandardStream::In = which else {
+            return Ok(Some(interp.text(b"0")));
+        };
+        let left = interp.input_remaining_lines().unwrap_or(1);
+        let answer = if quick { u64::from(left > 0) } else { left };
+        return Ok(Some(interp.text_built(answer.to_string().into_bytes())));
+    }
     if !ensure_open(interp, receiver, false)? {
         return Ok(Some(interp.text(b"0")));
     }
@@ -1266,6 +1454,9 @@ pub(super) fn position(
     };
     // Both checks come **after** parsing: a transient stream with a bad option
     // answers the bare 93, not 93.958.
+    if let Some(which) = standard_of(interp, receiver)? {
+        refuse_transient_position(interp, which, true)?;
+    }
     if require(interp, receiver)?
         .open
         .as_ref()

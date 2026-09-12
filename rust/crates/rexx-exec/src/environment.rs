@@ -602,7 +602,23 @@ impl Interp {
         directory
     }
 
-    /// The entry `scope`'s directory holds for `name`, if any.
+    /// The entry `scope`'s directory holds for `name`, if any -- **minting one
+    /// of the three standard streams on the first ask**, which is the one
+    /// entry this crate builds late rather than with the directory.
+    ///
+    /// The embedded bootstrap is itself Rexx and evaluates `.environment` while
+    /// it installs (`CoreClasses.orx:55`, `:65`), forcing this model into
+    /// existence before `StreamClasses.orx` has run -- so the `Stream` class
+    /// does not exist when the directory is built and the three cannot be put
+    /// there then. The oracle has no such ordering problem: its
+    /// `LocalServer~initInstance` runs once every class is in place. Nothing
+    /// can observe the difference, because a program's own first clause is the
+    /// earliest anything can look at `.local`.
+    ///
+    /// The mint lives here rather than in the caller so that one clearance is
+    /// spent on one `env_seam::directory` call: `Admitted` is deliberately not
+    /// `Copy`, and the seam's whole claim is that counting those calls bounds
+    /// the reads that reach a directory.
     fn directory_entry(
         &mut self,
         admitted: env_seam::Admitted,
@@ -617,7 +633,37 @@ impl Interp {
         let Body::Native(native) = &object.body else {
             unreachable!("both directories are allocated as Body::Native")
         };
-        native.entry(name)
+        if let Some(found) = native.entry(name) {
+            return Some(found);
+        }
+        if scope != EnvScope::Local {
+            return None;
+        }
+        let which = match name {
+            b"STDIN" => rexx_core::StandardStream::In,
+            b"STDOUT" => rexx_core::StandardStream::Out,
+            b"STDERR" => rexx_core::StandardStream::Err,
+            _ => return None,
+        };
+        // **Through the package publics, not the class registry.** A `::CLASS`
+        // directive calls `define_unregistered_class`, which by its own
+        // contract records the class "without registering the name", so
+        // `classes().lookup("Stream")` never finds one the embedded
+        // `StreamClasses.orx` declared. `rexx_package_class` is the search
+        // `.Stream` itself resolves through, and the route Task 9's
+        // `resolve_stream` already uses.
+        //
+        // **No panic on a miss.** Before `StreamClasses.orx` installs there is
+        // nothing to build, and the ordinary refusal is the right answer for
+        // one name -- an `expect` here would be every program.
+        let class = self.rexx_package_class(b"STREAM")?;
+        let built = crate::dispatch::stream::standard_stream(self, class, which).ok()?;
+        let held = self.heap.get_mut(handle).expect("a rooted directory");
+        let Body::Native(native) = &mut held.body else {
+            unreachable!("both directories are allocated as Body::Native")
+        };
+        native.set_entry(name, built);
+        Some(built)
     }
 
     /// Writes `name` into `scope`'s directory, through the same seam a read

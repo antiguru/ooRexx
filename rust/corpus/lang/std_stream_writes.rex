@@ -1,0 +1,69 @@
+/* The three standard streams as objects: what they are named, what they
+   answer, and where their bytes go. An unterminated CHAROUT and a following
+   SAY share one buffer, so the byte order below is the whole point of routing
+   both through the same sink. .STDERR writes leave on the other descriptor.
+
+   Nothing here reads from .STDOUT or .STDERR, and that is deliberate rather
+   than an omission: measured, a CHARIN sent to .STDOUT rewinds the shared
+   descriptor, so every later SAY overwrites what came before and the program
+   destroys its own transcript. Those sends are real behaviour and belong in a
+   program that writes nothing after them.
+
+   Nothing here redirects input either: the harness runs every program with an
+   empty standard input, which is a live descriptor nothing has drained -- so
+   CHARS starts at 1 while LINES starts at 0, and both reach 0 once a read has
+   found the end. */
+say 'standard streams'
+say 'out string  [' || .stdout~string || ']'
+say 'in  string  [' || .stdin~string || ']'
+say 'err string  [' || .stderr~string || ']'
+say 'out class   [' || .stdout~class~id || ']'
+say 'out state   [' || .stdout~state || ']'
+say 'out descr   [' || .stdout~description || ']'
+say 'out qualify [' || .stdout~qualify || ']'
+/* The bootstrap object and a Stream a program builds for the same name are
+   different objects with different state: the built one resolves its name
+   against the current directory and has never been opened. */
+built = .Stream~new('STDOUT')
+say 'same object [' || (built == .stdout) || ']'
+say 'built string[' || built~string || ']'
+say 'built state [' || built~state || ']'
+/* One buffer, in program order: the CHAROUT has no terminator, so the SAY
+   after it continues the same line. */
+zz = .stdout~charout('A')
+say 'B'
+zz = .stdout~charout('C')
+zz = .stdout~lineout('D')
+say 'E'
+say 'charout rc  [' || .stdout~charout('') || ']'
+say 'lineout rc  [' || .stdout~lineout('F') || ']'
+/* .STDIN refuses a write and says why, and the refusal does not stop a later
+   read from succeeding. */
+w = .stdin~lineout('nope')
+s = .stdin~state
+d = .stdin~description
+say 'in write rc [' || w || ']'
+say 'in state    [' || s || ']'
+say 'in descr    [' || d || ']'
+/* An undrained empty input: the two counters disagree, and both fall to 0
+   once a read has found the end. */
+say 'in lines0   [' || .stdin~lines || ']'
+say 'in chars0   [' || .stdin~chars || ']'
+say 'in read     [' || .stdin~linein || ']'
+say 'in lines1   [' || .stdin~lines || ']'
+say 'in chars1   [' || .stdin~chars || ']'
+say 'in state1   [' || .stdin~state || ']'
+say 'in descr1   [' || .stdin~description || ']'
+/* CHARIN over a drained input answers nothing and leaves ERROR:0, which is
+   what parts it from LINEIN's NOTREADY:EOF. */
+say 'in charin   [' || .stdin~charin || ']'
+say 'in descr2   [' || .stdin~description || ']'
+/* Both output streams stay ready throughout, and the states are per stream
+   rather than shared. */
+say 'out state1  [' || .stdout~state || ']'
+say 'err state1  [' || .stderr~state || ']'
+/* Written last so the stderr transcript is one block: a CHAROUT and a LINEOUT
+   share that descriptor the same way. */
+zz = .stderr~charout('1')
+zz = .stderr~lineout('2')
+exit 0

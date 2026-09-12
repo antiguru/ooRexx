@@ -54,6 +54,19 @@ pub struct Invocation {
     /// The environment the interpreter reads and writes, or `None` to copy the
     /// process's at start.
     environment: Option<Vec<(Vec<u8>, Vec<u8>)>>,
+    /// Whether each standard descriptor -- input, output, error, in that
+    /// order -- is transient: a terminal, a pipe or a character device rather
+    /// than a regular file.
+    ///
+    /// **A property of the embedding, not of this process.** The interpreter
+    /// never writes to a descriptor -- `SAY` appends to a buffer the caller
+    /// drains -- so the only honest source for this is whoever owns the
+    /// descriptors. Positioning a transient stream is 93.958 and
+    /// `QUERY STREAMTYPE` answers `TRANSIENT`, both Rexx-visible, so reading
+    /// the host's own `/proc/self/fd` here would make one program answer
+    /// differently under a binary, a test harness and a library embedding.
+    /// Defaults to all transient, which is what a terminal is.
+    standard_transient: [bool; 3],
 }
 
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
@@ -78,6 +91,7 @@ impl Invocation {
             deadline: None,
             directory: None,
             environment: None,
+            standard_transient: [true; 3],
         }
     }
 
@@ -85,6 +99,16 @@ impl Invocation {
     pub fn with_directory(self, directory: std::path::PathBuf) -> Invocation {
         Invocation {
             directory: Some(directory),
+            ..self
+        }
+    }
+
+    /// The same invocation, told which standard descriptors are transient --
+    /// input, output, error, in that order. A caller that owns real
+    /// descriptors reads them here; one that does not leaves the default.
+    pub fn with_standard_transient(self, standard_transient: [bool; 3]) -> Invocation {
+        Invocation {
+            standard_transient,
             ..self
         }
     }
@@ -131,6 +155,7 @@ impl Invocation {
             deadline: self.deadline,
             directory: self.directory,
             environment: self.environment,
+            standard_transient: self.standard_transient,
         }
     }
 }
@@ -143,6 +168,7 @@ pub(crate) struct InvocationParts {
     pub(crate) deadline: Option<Duration>,
     pub(crate) directory: Option<std::path::PathBuf>,
     pub(crate) environment: Option<Vec<(Vec<u8>, Vec<u8>)>>,
+    pub(crate) standard_transient: [bool; 3],
 }
 
 /// The one argument string a list of command-line words becomes, or `None`

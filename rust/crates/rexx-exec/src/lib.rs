@@ -1863,6 +1863,11 @@ struct Interp {
     /// measurement and the line rule; `ProgramInput`'s own doc has why the
     /// process's real standard input is never what this holds by default.
     input: Input,
+    /// Whether each standard descriptor -- input, output, error, in that
+    /// order -- is transient, which decides `QUERY STREAMTYPE` and whether
+    /// positioning a standard stream is 93.958. Taken from the `Invocation`,
+    /// never from this process: see `Invocation::standard_transient`.
+    standard_transient: [bool; 3],
     /// `RANDOM`'s generator state: the seed the next call will scramble, or
     /// `None` before any call has drawn one.
     random_seed: Option<u64>,
@@ -2178,6 +2183,10 @@ impl Interp {
             // ever replaces this, and only from an `Invocation` that named a
             // source. `ProgramInput`'s own doc has the argument.
             input: Input::new(ProgramInput::Nothing),
+            // All transient, for the same reason `input` reads nothing: only
+            // `execute` replaces this, and only from an `Invocation` whose
+            // caller owns real descriptors.
+            standard_transient: [true; 3],
             random_seed: None,
             elapsed_anchor: None,
             pending_elapsed_reset: false,
@@ -3052,6 +3061,13 @@ impl Interp {
     /// with it in program order.
     pub(crate) fn write_out(&mut self, bytes: &[u8]) {
         self.out.extend_from_slice(bytes);
+    }
+
+    /// [`Interp::write_out`] for the other descriptor: the trace sink, which
+    /// becomes `Outcome::stderr`. `.STDERR`'s writes land here, so they
+    /// interleave with trace output and never with `SAY`'s.
+    pub(crate) fn write_err(&mut self, bytes: &[u8]) {
+        self.trace.extend_from_slice(bytes);
     }
 
     /// `SETLOCAL`: saves the directory and the whole environment, and answers
@@ -4586,6 +4602,9 @@ impl Interp {
             env: _,
             cwd: _,
             locals: _,
+            // Three flags describing the embedding's descriptors: no `ObjRef`,
+            // so nothing here is reachable from the collector.
+            standard_transient: _,
         } = self;
         // The context objects of the activations on the stack. **The one
         // object an activation owns outright**: everything else it holds is
@@ -4885,6 +4904,7 @@ fn execute(
     let parts = invocation.into_parts();
     let (argument, deadline) = (parts.argument, parts.deadline);
     interp.input = Input::new(parts.input);
+    interp.standard_transient = parts.standard_transient;
     if let Some(directory) = parts.directory {
         interp.cwd = directory;
     }

@@ -56,8 +56,6 @@
 # the row first -- give it a phase, or record it as a KNOWN GAP -- and then
 # move the number to match, deliberately.
 #
-CHAROUT::test_stdout_ret2#1	Phase 7
-CHAROUT::test_stdout_start#1	Phase 7
 RXQUEUE::test_rxqueue_create_one_arg#1	Phase 10
 RXQUEUE::test_rxqueue_create_session#1	Phase 10
 RXQUEUE::test_rxqueue_get#1	Phase 10
