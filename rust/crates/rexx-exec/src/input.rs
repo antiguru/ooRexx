@@ -29,8 +29,10 @@
 
 use std::io::{BufRead, Cursor, Read};
 
-use crate::Interp;
+use rexx_core::ObjRef;
+
 use crate::invocation::ProgramInput;
+use crate::{Failure, Interp};
 
 /// `.input`'s position: the one line cursor every input construct advances.
 pub(crate) struct Input {
@@ -188,22 +190,47 @@ impl Input {
 
 impl Interp {
     /// One line for `PULL` and `PARSE PULL`: the queue's head if the queue has
-    /// one, and otherwise the next line of `.input`.
-    pub(crate) fn pull_line(&mut self) -> Vec<u8> {
+    /// one, and otherwise [`Interp::linein_line`].
+    ///
+    /// **The queue is asked first and the route is not asked at all when it
+    /// answers** -- measured, a program with one line pushed reads it and the
+    /// destination sees a single `LINEIN`, for the second read.
+    pub(crate) fn pull_line(&mut self) -> Result<Vec<u8>, Failure> {
         match self.queue.pop() {
-            Some(line) => line,
+            Some(line) => Ok(line),
             None => self.linein_line(),
         }
     }
 
-    /// One line for `PARSE LINEIN`: always `.input`, never the queue.
-    pub(crate) fn linein_line(&mut self) -> Vec<u8> {
-        self.input.read_line().unwrap_or_default()
+    /// One line for `PARSE LINEIN`: always the route, never the queue.
+    ///
+    /// **A message, not a descriptor read.** Measured, the oracle sends
+    /// `LINEIN` with no arguments to whatever `.local` holds under `INPUT`, so
+    /// a program that redirects the destination answers the instruction. End
+    /// of input raises `NOTREADY` for the same reason: the untouched route
+    /// ends at `.STDIN`, whose own `LINEIN` raises it -- measured, `PARSE
+    /// LINEIN` and `PARSE PULL` on empty input are both rc 9 under a trap
+    /// where this crate used to answer an empty line and carry on.
+    ///
+    /// A missing or `.nil` entry reads the descriptor instead, which is this
+    /// crate's licensed answer where the oracle dies
+    /// (`corpus/oracle-crashes.txt` entry 11b).
+    pub(crate) fn linein_line(&mut self) -> Result<Vec<u8>, Failure> {
+        let route = self.local_route(b"INPUT")?;
+        let Some(route) = route.filter(|route| *route != ObjRef::NIL) else {
+            return Ok(self.input.read_line().unwrap_or_default());
+        };
+        let caller = self.caller();
+        let answer = self.send_message(route, crate::dispatch::LINEIN, None, &[], caller)?;
+        Ok(match answer {
+            Some(value) => self.to_text(value).into_owned(),
+            None => Vec::new(),
+        })
     }
 
-    /// [`Interp::linein_line`] keeping the end-of-input answer apart from an
-    /// empty line: `.STDIN~LINEIN` sets `NOTREADY` on the first and not the
-    /// second, where `PARSE LINEIN` cannot tell them apart.
+    /// The reader behind `.STDIN~LINEIN`, keeping end of input apart from an
+    /// empty line: its caller raises `NOTREADY` on the first and not on the
+    /// second.
     pub(crate) fn input_line(&mut self) -> Option<Vec<u8>> {
         self.input.read_line()
     }

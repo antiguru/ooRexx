@@ -1015,6 +1015,11 @@ pub(crate) const SAY: &[u8] = b"SAY";
 /// (`concurrency/Activity.cpp:3171`). Upper case for [`UNKNOWN`]'s reason.
 pub(crate) const LINEOUT: &[u8] = b"LINEOUT";
 
+/// The message a line read with no stream name sends whatever `.INPUT` holds.
+/// Measured, `PARSE PULL` sends this too rather than a `PULL` of its own.
+/// Upper case for [`UNKNOWN`]'s reason.
+pub(crate) const LINEIN: &[u8] = b"LINEIN";
+
 /// The message a finalizer delivery sends -- `GlobalNames::UNINIT`, sent by
 /// `UninitDispatcher::run` (`memory/UninitDispatcher.cpp:52`). Upper case for
 /// [`UNKNOWN`]'s reason.

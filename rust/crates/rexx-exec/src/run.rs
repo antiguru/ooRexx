@@ -8592,10 +8592,6 @@ impl Interp {
         added: bool,
     ) -> Result<ObjRef, Failure> {
         if let Some(standard) = standard_stream_name(name, input) {
-            // Survey A 5.2: route straight to the Stream objects rather than
-            // through the Monitors. Those are Task 10's, so this is loud with
-            // a Phase 7 owner until they exist -- the routing is real, the
-            // target is honestly unbuilt.
             return self.dot_variable(standard);
         }
         let cwd = self.cwd_text();

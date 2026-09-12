@@ -129,12 +129,22 @@ pub(crate) fn lines(
         None => Vec::new(),
     };
     let stream = interp.resolve_stream(&stream_name, true, true)?;
-    let argument = interp.text(if option == b'C' { b"C" } else { b"N" });
+    // **The two spellings are not symmetric**, measured against a route whose
+    // destination answers `LINES` itself: the quick option goes out as
+    // `NORMAL` and the counting one as `C`.
+    let argument = interp.text(if option == b'C' { b"C" } else { b"NORMAL" });
     let caller = interp.caller();
     let answer = interp
         .send_message(stream, b"LINES", None, &[Some(argument)], caller)?
         .ok_or_else(|| Failure::from(Raised::no_result(b"LINES")))?;
-    Ok(answer)
+    if option == b'C' {
+        return Ok(answer);
+    }
+    // The quick answer is the builtin's own, not the destination's: measured,
+    // a destination answering `7` gives `lines()` 1 and `lines(,'C')` 7.
+    let text = interp.to_text(answer).into_owned();
+    let present = text != b"0";
+    Ok(interp.text(if present { b"1" } else { b"0" }))
 }
 
 /// `STREAM(name, [operation], [command])`. The operation is read by its first

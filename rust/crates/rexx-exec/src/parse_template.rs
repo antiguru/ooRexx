@@ -543,8 +543,8 @@ impl Interp {
             // `PULL` takes the queue's head when there is one, `LINEIN` never
             // consults the queue at all -- and `input.rs` owns that rule and
             // the measurements behind it.
-            ParseSource::Pull => ("PULL", Subject::Bytes(self.pull_line())),
-            ParseSource::LineIn => ("LINEIN", Subject::Bytes(self.linein_line())),
+            ParseSource::Pull => ("PULL", Subject::Bytes(self.pull_line()?)),
+            ParseSource::LineIn => ("LINEIN", Subject::Bytes(self.linein_line()?)),
         };
         let value = match value {
             Subject::Bytes(bytes) => {
