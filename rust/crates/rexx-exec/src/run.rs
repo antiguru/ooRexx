@@ -3561,6 +3561,14 @@ impl Interp {
                 {
                     Resolved::Library(program)
                 }
+                // **A routine of the oracle's own internal packages**, which
+                // it consults here -- after the running package's routines and
+                // before the external file search. Answering 43.1 for one of
+                // these says "no such routine" for a name the oracle does
+                // have, which a program cannot tell from its own typo.
+                None if let Some(row) = crate::internal_routines::lookup(name) => {
+                    return Err(Loud::internal_routine(name, row.owner).into());
+                }
                 // **43.1, not this crate's loud gap**, and the difference is
                 // one search: the oracle looks for an external Rexx file
                 // named for the target before answering, and this crate does

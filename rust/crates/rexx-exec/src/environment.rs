@@ -174,6 +174,16 @@ static ORACLE_LOCAL: &[&str] = &[
     "TRACEOUTPUT",
 ];
 
+/// The phase owing one [`ORACLE_LOCAL`] name. `STDQUE` is a `RexxQueue` over
+/// the external-queue API the RXAPI daemon serves, so it does not travel with
+/// the streams and monitors beside it.
+fn local_owner(name: &str) -> &'static str {
+    match name {
+        "STDQUE" => "Phase 10",
+        _ => "Phase 7",
+    }
+}
+
 /// `.environment` and `.local`, the classes the other reflection names are
 /// built from, and what a name that resolves to none of them owes.
 pub(crate) struct EnvironmentModel {
@@ -388,7 +398,7 @@ impl Interp {
                 (
                     name.as_bytes().into(),
                     Unbuilt {
-                        owner: "Phase 7",
+                        owner: local_owner(name),
                         scope: EnvScope::Local,
                     },
                 )
@@ -938,14 +948,22 @@ impl Interp {
 
     /// The phase owing the entries of `object` that this crate does not
     /// build, or `None` for a collection whose entries it fills.
+    /// The owner is the **directory's**, not a representative of its entries:
+    /// the entries are owned name by name (`.STDQUE` is Phase 10's while the
+    /// streams and monitors beside it are Phase 7's), and a refusal about the
+    /// whole directory that named one entry's phase would answer differently
+    /// as entries land.
     pub(crate) fn unbuilt_collection_owner(&mut self, object: ObjRef) -> Option<&'static str> {
         let scope = self.directory_scope(object)?;
-        self.environment_model()
+        let any_unbuilt = self
+            .environment_model()
             .unbuilt
             .values()
-            .filter(|entry| entry.scope == scope)
-            .map(|entry| entry.owner)
-            .min()
+            .any(|entry| entry.scope == scope);
+        any_unbuilt.then_some(match scope {
+            EnvScope::Local => "Phase 7",
+            EnvScope::Environment => "Phase 5",
+        })
     }
 
     /// The program whose directives and installed classes a `.NAME` resolves

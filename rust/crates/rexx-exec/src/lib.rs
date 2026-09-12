@@ -269,7 +269,9 @@ impl Loud {
         }
     }
 
-    /// A call that resolved to a **builtin this crate runs nothing for**.
+    /// A call that resolved to a **builtin this crate runs nothing for**. The
+    /// owner comes from the same table the exclusion itself does, so a
+    /// delivered exclusion takes its blame with it.
     fn unresolved_call(name: &[u8]) -> Loud {
         const LIMIT: usize = 128;
         let shown = if name.len() > LIMIT {
@@ -277,8 +279,20 @@ impl Loud {
         } else {
             String::from_utf8_lossy(name).into_owned()
         };
+        let owner = rexx_inventory::builtins::owner_of(&shown);
         Loud {
-            message: owned_message(&format!("routine \"{shown}\""), Some("4c")),
+            message: owned_message(&format!("routine \"{shown}\""), owner),
+        }
+    }
+
+    /// A call that resolved to a routine one of the oracle's internal packages
+    /// exports and this crate has no body for. Distinct from
+    /// [`Loud::unresolved_call`] only in where the name and the owner come
+    /// from; the message a program sees is the same shape.
+    fn internal_routine(name: &[u8], owner: &'static str) -> Loud {
+        let shown = String::from_utf8_lossy(name).into_owned();
+        Loud {
+            message: owned_message(&format!("routine \"{shown}\""), Some(owner)),
         }
     }
 
@@ -698,6 +712,29 @@ fn form_name(kind: &ExprKind) -> String {
         ExprKind::VariableReference(_) => "a variable reference",
     };
     name.to_string()
+}
+
+/// The `REXX` and `REXXUTIL` packages' routine names and the phase owing each
+/// a body, consulted between the running package's `::ROUTINE`s and the
+/// external file search.
+pub(crate) mod internal_routines;
+
+/// Every internal-package routine name, for the test that re-derives them from
+/// the C++ tree.
+pub fn internal_routine_names() -> Vec<&'static str> {
+    internal_routines::INTERNAL_ROUTINES
+        .iter()
+        .map(|row| row.name)
+        .collect()
+}
+
+/// Every internal-package routine as `(name, package, owner)`, for the test
+/// that re-derives the two packages from the C++ tree separately.
+pub fn internal_routine_rows() -> Vec<(&'static str, &'static str, &'static str)> {
+    internal_routines::INTERNAL_ROUTINES
+        .iter()
+        .map(|row| (row.name, row.package.label(), row.owner))
+        .collect()
 }
 
 /// Appends the owner phase to a loud message, `"{name} is not implemented

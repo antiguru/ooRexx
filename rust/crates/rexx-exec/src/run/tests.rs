@@ -7142,6 +7142,71 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
     }
 }
 
+/// **A routine one of the oracle's internal packages exports refuses loudly**,
+/// naming the phase that owes it. Before Phase 7 every one of these answered
+/// 43.1 -- "no such routine" for a name the oracle does have, which a program
+/// cannot tell from its own typo. The excluded builtins take their owner from
+/// the same table, and the last case is the adjacent one: a name no package
+/// exports still raises 43.1.
+#[test]
+fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
+    let cases: &[(&[u8], &str)] = &[
+        (
+            b"say directory()\n",
+            "routine \"DIRECTORY\" is not implemented (Phase 7)",
+        ),
+        (
+            b"say filespec('N','/a/b.c')\n",
+            "routine \"FILESPEC\" is not implemented (Phase 7)",
+        ),
+        (
+            b"say SysFileExists('.')\n",
+            "routine \"SYSFILEEXISTS\" is not implemented (Phase 7)",
+        ),
+        (
+            b"say SysStemSort('a.')\n",
+            "routine \"SYSSTEMSORT\" is not implemented (Phase 10)",
+        ),
+        (
+            b"say SysWaitEventSem(1)\n",
+            "routine \"SYSWAITEVENTSEM\" is not implemented (Phase 6)",
+        ),
+        (
+            b"say linein()\n",
+            "routine \"LINEIN\" is not implemented (Phase 7)",
+        ),
+        (
+            b"say rxqueue('G')\n",
+            "routine \"RXQUEUE\" is not implemented (Phase 10)",
+        ),
+    ];
+    for (source, message) in cases {
+        let outcome = routine_program(source);
+        assert_eq!(
+            outcome.exit_code,
+            crate::NOT_IMPLEMENTED_EXIT,
+            "{message}: exit code"
+        );
+        assert_eq!(outcome.stdout, b"", "{message}: stdout");
+        assert_eq!(
+            outcome.stderr,
+            format!("rexx-exec: {message}\n").into_bytes(),
+            "{message}: stderr"
+        );
+    }
+
+    let outcome = routine_program(b"say zorkolo()\n");
+    assert_eq!(
+        outcome.exit_code, 213,
+        "a name no package exports is the oracle's own 43.1, not a refusal"
+    );
+    let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+    assert!(
+        stderr.contains("Error 43.1:") && stderr.contains("ZORKOLO"),
+        "43.1 must still name the routine: {stderr}"
+    );
+}
+
 /// **A gap the oracle diagnoses before it creates any class refuses before
 /// this crate creates one either**, so a `::CLASS` that cannot install does
 /// not answer in its place.

@@ -1449,7 +1449,7 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
     );
 
     let mut seen = HashSet::new();
-    for excluded in EXCLUDED_BUILTINS {
+    for (excluded, _owner) in EXCLUDED_BUILTINS {
         assert!(
             names.contains(excluded),
             "{excluded} is listed in phase-4-exclusions.txt but is not in \
@@ -1470,7 +1470,7 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
     // subtracts a name that was never in the set and silently returns 16.
     for partial in rexx_inventory::builtins::PARTIALLY_EXCLUDED {
         assert!(
-            EXCLUDED_BUILTINS.contains(partial),
+            EXCLUDED_BUILTINS.iter().any(|(name, _)| name == partial),
             "{partial} is a partial exclusion but is not in EXCLUDED at all"
         );
     }

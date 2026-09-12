@@ -333,6 +333,37 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
 /// split" table and its "assigned elsewhere" paragraph.
 pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
 
+/// The phases a *builtin* exclusion may name. `phase-4-exclusions.txt` gives
+/// every one of its rows to Phase 7 or Phase 10 and to nothing else -- a
+/// builtin owned by a Phase 4 sub-phase would not be excluded from Phase 4 --
+/// so the set is those two and the assertion below is worth making.
+pub(crate) const EXCLUSION_PHASES: &[&str] = &["Phase 7", "Phase 10"];
+
+/// Every excluded builtin names the phase that owes it, and that phase is one
+/// the exclusions file uses. Without this the owner is whatever the refusal's
+/// constructor happens to hardcode -- which is how every one of them said
+/// `4c` until Phase 7.
+#[test]
+fn every_excluded_builtin_names_a_phase_that_owes_it() {
+    for (name, owner) in rexx_inventory::builtins::EXCLUDED {
+        assert!(
+            EXCLUSION_PHASES.contains(owner),
+            "{name} names owner {owner:?}, which is not one of {EXCLUSION_PHASES:?}"
+        );
+        assert_eq!(
+            rexx_inventory::builtins::owner_of(name),
+            Some(*owner),
+            "{name}'s owner must be reachable through owner_of, which is what the \
+             refusal reads"
+        );
+    }
+    assert_eq!(
+        rexx_inventory::builtins::owner_of("LENGTH"),
+        None,
+        "a builtin this crate implements owes nobody anything"
+    );
+}
+
 #[test]
 fn assert_owner_strings_are_split_table_phases() {
     for (category, all) in [

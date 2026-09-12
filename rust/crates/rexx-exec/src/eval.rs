@@ -2588,10 +2588,10 @@ mod tests {
             crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
-        assert!(
-            String::from_utf8_lossy(&outcome.stderr).contains("4c"),
-            "stderr: {:?}",
-            String::from_utf8_lossy(&outcome.stderr)
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stderr),
+            "rexx-exec: routine \"CHARIN\" is not implemented (Phase 7)\n",
+            "the refusal names the phase the exclusion table gives it"
         );
     }
 
