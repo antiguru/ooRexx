@@ -38,8 +38,10 @@ mod datetime;
 /// the builtin and the method from coming to disagree.
 pub(crate) mod numeric;
 
-/// The builtins that read or move the interpreter's own platform state.
-mod platform;
+/// The builtins that read or move the interpreter's own platform state, and
+/// the bodies of the `REXX` package's three internal routines, which are the
+/// same kind of code reached through a different table.
+pub(crate) mod platform;
 mod state;
 /// Crate-visible because the builtins are not the only place this
 /// interpreter searches a haystack for a byte: a `PARSE` template's

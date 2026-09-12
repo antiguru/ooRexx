@@ -13,3 +13,7 @@
 # against the interpreter's own environment and current directory.
 lang/platform_value_environment.rex
 lang/platform_qualify_setlocal.rex
+
+# Task 3: the REXX package's own three routines, which resolve after a
+# program's ::ROUTINEs and before the external file search.
+lang/platform_internal_routines.rex

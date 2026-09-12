@@ -1065,6 +1065,30 @@ impl Raised {
         Raised::syntax(88, 901, vec![argument.as_bytes().to_vec()])
     }
 
+    /// 88.907: a native routine's argument is outside the range that routine
+    /// declares. `argument` is the name the message uses -- these routines
+    /// name their arguments rather than numbering them -- and the bounds are
+    /// the routine's own, not a property of the type. Distinct from
+    /// [`Raised::argument_out_of_range`], which is 40.903 and whose bounds are
+    /// fixed in the message text.
+    pub(crate) fn native_argument_out_of_range(
+        argument: &str,
+        minimum: i64,
+        maximum: i64,
+        found: &[u8],
+    ) -> Raised {
+        Raised::syntax(
+            88,
+            907,
+            vec![
+                argument.as_bytes().to_vec(),
+                minimum.to_string().into_bytes(),
+                maximum.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        )
+    }
+
     /// 88.909: a method argument has no string value. `position` is
     /// 1-based in the method's own argument list.
     pub(crate) fn argument_needs_a_string_value(position: usize) -> Raised {

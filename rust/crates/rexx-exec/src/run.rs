@@ -133,6 +133,11 @@ pub(crate) enum Resolved {
     /// `CALL` inside the library bootstrap -- `CoreClasses.orx:122` and
     /// `:124`.
     Library(&'static rexx_lib::Program),
+    /// A routine of the `REXX` or `REXXUTIL` package that this crate has a
+    /// body for. Like a builtin it runs no activation; unlike one it is not in
+    /// `BuiltinFunctions.cpp`'s table, which is why its argument errors are
+    /// the native-routine family.
+    Internal(&'static crate::internal_routines::InternalRoutine),
 }
 
 /// Which of the two activation-pushing outcomes a resolved call took, kept
@@ -3566,9 +3571,10 @@ impl Interp {
                 // before the external file search. Answering 43.1 for one of
                 // these says "no such routine" for a name the oracle does
                 // have, which a program cannot tell from its own typo.
-                None if let Some(row) = crate::internal_routines::lookup(name) => {
-                    return Err(Loud::internal_routine(name, row.owner).into());
-                }
+                None if let Some(row) = crate::internal_routines::lookup(name) => match row.body {
+                    Some(_) => Resolved::Internal(row),
+                    None => return Err(Loud::internal_routine(name, row.owner).into()),
+                },
                 // **43.1, not this crate's loud gap**, and the difference is
                 // one search: the oracle looks for an external Rexx file
                 // named for the target before answering, and this crate does
@@ -3673,6 +3679,26 @@ impl Interp {
                 self.invoke_builtin_call(code, target, name, args)?,
             )));
         }
+        // An internal-package routine runs no activation either, so it takes
+        // the same shortcut -- but its arguments are evaluated by the loop
+        // below rather than by the builtin path's own, which is why it is not
+        // folded into the arm above.
+        if let Resolved::Internal(row) = resolved {
+            let mut values: Vec<Option<ObjRef>> = Vec::with_capacity(args.len());
+            for arg in args {
+                match arg {
+                    None => {
+                        self.trace_argument(self.clause_state.current_value_indent, b"");
+                        values.push(None);
+                    }
+                    Some(expr) if self.leaf_argument(expr) => {
+                        values.push(Some(self.eval_leaf_argument(code, expr)?));
+                    }
+                    Some(expr) => values.push(Some(self.eval_traced_argument(code, expr)?)),
+                }
+            }
+            return Ok(Ended::Returned(Some(self.run_internal(row, &values)?)));
+        }
 
         // A fresh `Vec` and not a lent one: this path always hands the
         // arguments to the callee, which keeps them, so there is nothing to
@@ -3722,6 +3748,20 @@ impl Interp {
         outcome
     }
 
+    /// One internal-package routine over its evaluated arguments. No
+    /// activation, no `SIGL`, no depth guard -- the builtin discipline, since
+    /// the oracle runs these as native code too.
+    fn run_internal(
+        &mut self,
+        row: &'static crate::internal_routines::InternalRoutine,
+        values: &[Option<ObjRef>],
+    ) -> Result<ObjRef, Failure> {
+        let body = row
+            .body
+            .expect("resolve_call only answers Internal with a body");
+        body(self, row.name.as_bytes(), values)
+    }
+
     /// [`Interp::call_over_pushed_args`] with the run in hand.
     fn call_over_values(
         &mut self,
@@ -3733,6 +3773,9 @@ impl Interp {
         // `eval_call_resolved` takes and for the same measured reason.
         if let Resolved::Builtin(target) = resolved {
             return builtin::run(self, name, target, values);
+        }
+        if let Resolved::Internal(row) = resolved {
+            return self.run_internal(row, values);
         }
         match self.invoke_call_over(
             resolved,
@@ -3801,6 +3844,7 @@ impl Interp {
         let entered = match resolved {
             // Answered above, before the loop that just ran.
             Resolved::Builtin(_) => unreachable!("the builtin path returns before this"),
+            Resolved::Internal(_) => unreachable!("the internal path returns before this"),
             Resolved::Label(target) => Entered::Label(target),
             Resolved::Routine(installed) => Entered::Routine(installed),
             Resolved::Library(_) => unreachable!("the library path returns just above"),
@@ -4304,6 +4348,12 @@ impl Interp {
             // `call_over_values` takes, and the reason a `CALL` to a builtin
             // reaches `Ended::Returned(Some(_))` with a value to settle.
             Resolved::Builtin(target) => builtin::run(self, name, target, &values[mark..])
+                .map(|value| Ended::Returned(Some(value))),
+            // **Named rather than left to the arm below**, which has a
+            // catch-all: an internal routine sent into `invoke_call_over`
+            // would reach a `match` that has no arm for it.
+            Resolved::Internal(row) => self
+                .run_internal(row, &values[mark..])
                 .map(|value| Ended::Returned(Some(value))),
             _ => self.invoke_call_over(
                 resolved,

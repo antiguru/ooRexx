@@ -137,6 +137,156 @@ pub(crate) fn endlocal(
     Ok(interp.counted(usize::from(restored)))
 }
 
+/// `DIRECTORY([new])`: a native routine of the `REXX` package, not a builtin
+/// (`runtime/NativeFunctions.h:48`), which is why its arity errors are the
+/// 88.9xx family. With an argument it moves the interpreter's own current
+/// directory and answers the new one; a change it cannot make answers the null
+/// string and moves nothing. With none it answers where it is.
+pub(crate) fn directory(
+    interp: &mut Interp,
+    _name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    if args.len() > 1 {
+        return Err(Raised::too_many_external_arguments(1).into());
+    }
+    let Some(Some(target)) = args.first().copied() else {
+        let here = interp.cwd_text();
+        return Ok(interp.text_built(here.into_bytes()));
+    };
+    let text = interp.to_text(target).into_owned();
+    if text.is_empty() {
+        return Ok(interp.text(b""));
+    }
+    let expanded = expand_tilde(interp, &text);
+    let cwd = interp.cwd_text();
+    let candidate = crate::paths::normalize(&String::from_utf8_lossy(&expanded), &cwd);
+    if !std::fs::metadata(&candidate).is_ok_and(|meta| meta.is_dir()) {
+        return Ok(interp.text(b""));
+    }
+    // `getcwd` answers the symlink-resolved path, so the answer is what the
+    // filesystem calls the directory rather than the way it was named.
+    let resolved = std::fs::canonicalize(&candidate)
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or(candidate);
+    interp.set_cwd(std::path::PathBuf::from(&resolved));
+    Ok(interp.text_built(resolved.into_bytes()))
+}
+
+/// The `FILESPEC` options, in the order the oracle's own message lists them:
+/// `DELNP`.
+const FILESPEC_OPTIONS: &[u8] = b"DELNP";
+
+/// `FILESPEC(option, name)`: the piece of `name` that `option`'s first letter
+/// selects (`runtime/InternalPackage.cpp:87`). Purely textual -- the file need
+/// not exist, and nothing here touches the file system. On unix the drive is
+/// always the null string.
+pub(crate) fn filespec(
+    interp: &mut Interp,
+    _name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    if args.len() > 2 {
+        return Err(Raised::too_many_external_arguments(2).into());
+    }
+    let Some(Some(option)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("1").into());
+    };
+    let Some(Some(spec)) = args.get(1).copied() else {
+        return Err(Raised::missing_named_argument("2").into());
+    };
+    let option = interp.to_text(option).into_owned();
+    let letter = option.first().map(u8::to_ascii_uppercase);
+    let Some(letter) = letter.filter(|byte| FILESPEC_OPTIONS.contains(byte)) else {
+        return Err(Raised::argument_not_in_list(
+            b"FILESPEC",
+            1,
+            &String::from_utf8_lossy(FILESPEC_OPTIONS),
+            &option,
+        )
+        .into());
+    };
+    let spec = interp.to_text(spec).into_owned();
+    let cut = spec.iter().rposition(|byte| *byte == b'/');
+    let answer: Vec<u8> = match letter {
+        // Unix has no drive letter, and the oracle answers the null string.
+        b'D' => Vec::new(),
+        b'L' | b'P' => match cut {
+            None => Vec::new(),
+            Some(at) => spec[..=at].to_vec(),
+        },
+        b'N' => match cut {
+            None => spec.clone(),
+            Some(at) => spec[at + 1..].to_vec(),
+        },
+        // What follows the last dot of the *name*, wherever that dot sits:
+        // measured, `filespec('E','/a/.hidden')` is `hidden`, not the null
+        // string. `.File~extension` has the leading-dot rule this does not.
+        b'E' => {
+            let name = match cut {
+                None => &spec[..],
+                Some(at) => &spec[at + 1..],
+            };
+            match name.iter().rposition(|byte| *byte == b'.') {
+                None => Vec::new(),
+                Some(at) => name[at + 1..].to_vec(),
+            }
+        }
+        other => unreachable!("{other} is not one of the options just checked"),
+    };
+    Ok(interp.text_built(answer))
+}
+
+/// `BEEP`'s bounds (`runtime/InternalPackage.cpp:160`-`:163`).
+const MIN_FREQUENCY: i64 = 37;
+const MAX_FREQUENCY: i64 = 32767;
+const MIN_DURATION: i64 = 0;
+const MAX_DURATION: i64 = 60000;
+
+/// `BEEP(frequency, duration)`: writes one bell byte and answers the null
+/// string. The oracle sounds the speaker through `SysProcess::beep` and, on
+/// this platform, that reaches the terminal as a single `0x07` on standard
+/// output -- measured, `beep(440,10)` writes it and answers `''`.
+pub(crate) fn beep(
+    interp: &mut Interp,
+    _name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    if args.len() > 2 {
+        return Err(Raised::too_many_external_arguments(2).into());
+    }
+    // Frequency first, and both before the bell: `beep(1,1)` raises on the
+    // frequency and sounds nothing.
+    whole_argument(interp, args, 0, "frequency", MIN_FREQUENCY, MAX_FREQUENCY)?;
+    whole_argument(interp, args, 1, "duration", MIN_DURATION, MAX_DURATION)?;
+    interp.write_out(&[0x07]);
+    Ok(interp.text(b""))
+}
+
+/// One of `BEEP`'s two required whole-number arguments, with the bounds it is
+/// checked against. **What the oracle answers for a non-numeric argument was
+/// not measured**, so this reports it as outside the routine's own range
+/// rather than inventing a second message; the range error is the one shape
+/// that is measured (`beep(1,1)` → 88.907, "range 37 to 32767").
+fn whole_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    index: usize,
+    argument: &str,
+    minimum: i64,
+    maximum: i64,
+) -> Result<i64, Failure> {
+    let Some(Some(value)) = args.get(index).copied() else {
+        return Err(Raised::missing_named_argument(argument).into());
+    };
+    let text = interp.to_text(value).into_owned();
+    let number = String::from_utf8_lossy(&text).trim().parse::<i64>().ok();
+    match number.filter(|number| (minimum..=maximum).contains(number)) {
+        Some(number) => Ok(number),
+        None => Err(Raised::native_argument_out_of_range(argument, minimum, maximum, &text).into()),
+    }
+}
+
 /// `VALUE(name, [new], selector)`: the two external pools this phase answers.
 /// The empty selector names `.environment` itself; `ENVIRONMENT`, caselessly,
 /// names the process environment this interpreter holds. Any other selector is

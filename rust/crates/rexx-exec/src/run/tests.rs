@@ -7150,15 +7150,24 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
 /// exports still raises 43.1.
 #[test]
 fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
+    // The delivered side of the same boundary: a row that has a body answers,
+    // and answers through the very resolver step that refuses the rest. Without
+    // these the test could go green over a resolver that refuses everything.
+    for (source, expected) in [
+        (&b"say filespec('N','/a/b.c')\n"[..], "b.c\n"),
+        (b"say length(directory()) > 0\n", "1\n"),
+    ] {
+        let outcome = routine_program(source);
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "{}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&outcome.stdout), expected);
+    }
+
     let cases: &[(&[u8], &str)] = &[
-        (
-            b"say directory()\n",
-            "routine \"DIRECTORY\" is not implemented (Phase 7)",
-        ),
-        (
-            b"say filespec('N','/a/b.c')\n",
-            "routine \"FILESPEC\" is not implemented (Phase 7)",
-        ),
         (
             b"say SysFileExists('.')\n",
             "routine \"SYSFILEEXISTS\" is not implemented (Phase 7)",

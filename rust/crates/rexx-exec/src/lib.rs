@@ -72,7 +72,7 @@ mod eval;
 // The builtin functions: the name set (read from `rexx_inventory`, never
 // copied), the per-name arity, and the `dispatch` `Interp::invoke_call`
 // reaches for a name `resolve_call` answered `Resolved::Builtin` for.
-mod builtin;
+pub(crate) mod builtin;
 
 // The instruction loop (D16's "Control flow"): `Flow`, and `step` and its two
 // callers, together with the borrow discipline `run_activation` is written
@@ -3039,6 +3039,19 @@ impl Interp {
     /// The directory this interpreter resolves relative paths against.
     pub(crate) fn cwd_text(&self) -> String {
         self.cwd.to_string_lossy().into_owned()
+    }
+
+    /// Moves it. `DIRECTORY(new)` is the only caller: nothing else in the
+    /// interpreter changes where relative paths resolve from.
+    pub(crate) fn set_cwd(&mut self, cwd: std::path::PathBuf) {
+        self.cwd = cwd;
+    }
+
+    /// Appends bytes to what the program has written on standard output --
+    /// the same buffer `SAY` appends to, so anything written here interleaves
+    /// with it in program order.
+    pub(crate) fn write_out(&mut self, bytes: &[u8]) {
+        self.out.extend_from_slice(bytes);
     }
 
     /// `SETLOCAL`: saves the directory and the whole environment, and answers

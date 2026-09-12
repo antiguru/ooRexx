@@ -38,6 +38,15 @@ impl Package {
     }
 }
 
+/// What one internal routine runs: the same shape a builtin's body has, since
+/// both are entered with their arguments already evaluated and neither pushes
+/// an activation.
+pub(crate) type InternalBody = fn(
+    &mut crate::Interp,
+    &'static [u8],
+    &[Option<rexx_core::ObjRef>],
+) -> Result<rexx_core::ObjRef, crate::Failure>;
+
 /// One routine an internal package exports.
 pub(crate) struct InternalRoutine {
     /// The name as the C++ registers it; the lookup is caseless, so the
@@ -46,13 +55,18 @@ pub(crate) struct InternalRoutine {
     pub(crate) package: Package,
     /// The phase owing a body, for as long as there is none.
     pub(crate) owner: &'static str,
+    /// The code, once some phase has written it. A row with `None` refuses,
+    /// naming [`InternalRoutine::owner`].
+    pub(crate) body: Option<InternalBody>,
 }
 
-const fn rexx(name: &'static str, owner: &'static str) -> InternalRoutine {
+/// A `REXX`-package row this phase implements.
+const fn rexx_run(name: &'static str, body: InternalBody) -> InternalRoutine {
     InternalRoutine {
         name,
         package: Package::Rexx,
-        owner,
+        owner: "Phase 7",
+        body: Some(body),
     }
 }
 
@@ -61,14 +75,15 @@ const fn util(name: &'static str, owner: &'static str) -> InternalRoutine {
         name,
         package: Package::RexxUtil,
         owner,
+        body: None,
     }
 }
 
 /// Every name the two packages register on Linux.
 pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
-    rexx("Directory", "Phase 7"),
-    rexx("Filespec", "Phase 7"),
-    rexx("Beep", "Phase 7"),
+    rexx_run("Directory", crate::builtin::platform::directory),
+    rexx_run("Filespec", crate::builtin::platform::filespec),
+    rexx_run("Beep", crate::builtin::platform::beep),
     util("SysAddRexxMacro", "Phase 10"),
     util("SysClearRexxMacroSpace", "Phase 10"),
     util("SysCloseEventSem", "Phase 6"),
