@@ -51,6 +51,7 @@ const IMPLEMENTED: &[&str] = &[
     "stream_description",
     "stream_flush",
     "stream_init",
+    "stream_open",
     "stream_state",
     "stream_uninit",
 ];

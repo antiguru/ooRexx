@@ -9,6 +9,14 @@ A program here must produce byte-identical output on every run of the *same*
 interpreter. No `DATE()`, no `TIME()`, no process IDs, no file system state, no
 directory listings, no addresses, no iteration over an unordered collection.
 
+**Narrowed for the programs `phase-7.txt` lists, not dropped.** Each corpus
+program runs with its working directory set to one of its own, created empty
+before the oracle's run and emptied again before this crate's, so both sides
+see the same absolute path and the same state. A program there may create,
+read and delete files inside that directory. It still prints no timestamp, no
+size of a file it did not write, no directory listing it did not create, and
+no host variable's value.
+
 **The case that joins those last two, because nothing about the program says
 so.** The order `DO OVER` yields a hash collection's indexes in is the order of
 the oracle's own hash table: bucket `key->getHashValue() % bucketSize`,

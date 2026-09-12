@@ -139,6 +139,12 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
         Arity::Fixed(1),
         super::stream::init,
     ),
+    implemented(
+        "stream_open",
+        Family::Stream,
+        Arity::Fixed(1),
+        super::stream::open,
+    ),
     deferred("stream_chars", Family::Stream),
     deferred("stream_lines", Family::Stream),
     deferred("stream_position", Family::Stream),

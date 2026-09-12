@@ -29,8 +29,8 @@ mod roots;
 pub use behaviour::BehaviourTable;
 pub use body::{
     BehaviourHandle, BehaviourId, Body, BufferState, MethodId, NativeObject, NativeState,
-    NotNumeric, Object, ObjectMethod, ObjectMethods, ScopePools, StandardStream, StreamState,
-    StreamStatus, VarRef, VarRefHome,
+    NotNumeric, Object, ObjectMethod, ObjectMethods, OpenFile, OpenMode, ScopePools,
+    StandardStream, StreamState, StreamStatus, VarRef, VarRefHome,
 };
 pub use bytes::{Bytes, INLINE_BYTES};
 pub use handle::{

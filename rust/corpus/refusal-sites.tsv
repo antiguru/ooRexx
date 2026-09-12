@@ -97,7 +97,7 @@ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:421	off-send-surfac
 Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:794	off-send-surface	-	-	-
 Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:787	off-send-surface	-	-	-
 Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:645	off-send-surface	-	-	-
-Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:454	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:460	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
 Loud	delegate_variable	send	crates/rexx-exec/src/lib.rs:521	diverges	yes	a DELEGATE to the variable	::method m delegate a.b on an instance
 Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:283	off-send-surface	-	-	-
 Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:296	off-send-surface	-	-	-

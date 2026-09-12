@@ -218,10 +218,33 @@ pub enum StandardStream {
     Err,
 }
 
+/// Which way a stream was opened, from the options the open parsed.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct OpenMode {
+    pub read_only: bool,
+    pub write_only: bool,
+    pub read_write: bool,
+    pub append: bool,
+    pub nobuffer: bool,
+    pub record_based: bool,
+    /// `RECLENGTH`, or the file's own size for a `BINARY` open that gave none.
+    pub record_length: u64,
+}
+
+/// The descriptor an open stream holds, with the two logical positions one
+/// descriptor serves. Both are 1-based "next byte", as the oracle's are.
+#[derive(Debug)]
+pub struct OpenFile {
+    pub file: std::fs::File,
+    pub read_position: u64,
+    pub write_position: u64,
+    pub transient: bool,
+}
+
 /// A `Stream`'s own state (`streamLibrary/StreamNative.hpp:158`). The name is
 /// kept as the program wrote it, because `~string` answers it verbatim; the
 /// qualified path is what anything touching the file system uses.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct StreamState {
     /// The name as given, which `~qualify` resolves and `~string` does not.
     pub name: Vec<u8>,
@@ -237,6 +260,28 @@ pub struct StreamState {
     /// marker exists to answer the queries that do not open.
     pub handle: Option<Vec<u8>>,
     pub status: StreamStatus,
+    /// `None` until something opens the stream, and again after a close.
+    pub open: Option<OpenFile>,
+    pub mode: OpenMode,
+}
+
+/// A copy is an **unopened** stream carrying the same name: a descriptor
+/// cannot be cloned without either sharing a file position or a `dup(2)` that
+/// can fail where `Clone` cannot. The oracle has no answer to match --
+/// `~copy` of a stream aborts it (`corpus/oracle-crashes.txt` entry 13) --
+/// so this is a licensed divergence rather than a shape being reproduced.
+impl Clone for StreamState {
+    fn clone(&self) -> StreamState {
+        StreamState {
+            name: self.name.clone(),
+            qualified: self.qualified.clone(),
+            standard: self.standard,
+            handle: self.handle.clone(),
+            status: StreamStatus::Unknown,
+            open: None,
+            mode: OpenMode::default(),
+        }
+    }
 }
 
 impl StreamState {
@@ -248,6 +293,8 @@ impl StreamState {
             standard: None,
             handle: None,
             status: StreamStatus::Unknown,
+            open: None,
+            mode: OpenMode::default(),
         }
     }
 

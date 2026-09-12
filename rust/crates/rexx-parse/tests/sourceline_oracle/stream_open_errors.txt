@@ -1,0 +1,45 @@
+count 44
+/* Every OPEN option shape that is a bare 93, and the ones that answer ERROR:n
+   instead. An abbreviation below its minimum is ambiguous rather than unknown,
+   and both are the same 93. Nothing here writes a byte. */
+say 'open errors'
+bad = .array~of('r', 're', 'b', 'a', 'share', 'bogus', 'read write', 'read read',,
+      'append replace', 'read append', 'read replace', 'shared shared',,
+      'nobuffer nobuffer', 'both reclength 2', 'reclength 2',,
+      'both binary reclength 0', 'both binary reclength',,
+      'both binary reclength abc', 'read binary reclength 4 binary',,
+      'binary binary', 'write write', 'both both', 'reclength', 'binary reclength')
+do i = 1 to bad~items
+  say right(i, 2) '[' || bad[i] || '] [' || try('e' || i || '.txt', bad[i]) || ']'
+end
+/* A BINARY open with no RECLENGTH takes the file's own size as the record
+   length, so a file that a write mode just created -- and so is empty -- has
+   nothing to take and raises, while the same open carrying a RECLENGTH is
+   fine. */
+say 'created then binary      [' || try('b1.txt', 'write') || '] [' || try('b1.txt', 'binary') || ']'
+say 'created then binary r 4  [' || try('b2.txt', 'write') || '] [' || try('b2.txt', 'binary reclength 4') || ']'
+/* A read of a name nothing resolves to answers ERROR:2, leaves the object in
+   ERROR, and does not create the file. */
+n = .Stream~new('nosuch.txt')
+say 'read nosuch  [' || n~open('read') || ']'
+say 'state        [' || n~state || ']'
+say 'description  [' || n~description || ']'
+say 'exists after [' || n~query('exists') || ']'
+say 'size after   [' || n~query('size') || ']'
+/* A directory is rejected as if it were not there at all: ERROR:2, not the
+   EISDIR the system call would give. */
+d = .Stream~new('.')
+say 'read dir     [' || d~open('read') || ']'
+say 'state        [' || d~state || ']'
+say 'description  [' || d~description || ']'
+exit 0
+
+try: procedure
+  use arg f, o
+  signal on syntax name failed
+  s = .Stream~new(f)
+  answer = s~open(o)
+  s~close
+  return answer
+failed:
+  return 'RAISED'

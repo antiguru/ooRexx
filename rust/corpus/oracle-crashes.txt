@@ -720,3 +720,37 @@ different condition -- two NOTREADY-raising reads in one clause under
 `CALL ON NOTREADY`, which dies the same way after running the handler once. It is
 the same defect, so entry 5's rule ("never queue the same `CALL ON` condition
 twice in one clause") covers it.
+
+## 13. `~copy` of a `Stream`
+
+    say 'main'
+    s = .Stream~new('nosuch_xyz.txt')
+    c = s~copy
+    say 'done'
+
+Abort, rc 134, `double free or corruption (out)` on stderr. **The program runs to
+completion first** -- `main` and `done` both print, and the abort happens during
+interpreter termination, so a probe that reads only stdout sees a clean run.
+
+Neither an open nor an existing file is needed. Measured, all rc 134 with the same
+stderr: the program above (no such file, never opened); the same against an existing
+file; `~open('read')` before the `~copy`; and `~open('read')` before it with `s~close`
+and `c~close` after. In the read variant the two objects share one file position --
+`c~linein` answers `hello` and `s~linein` then answers empty -- which is the same
+sharing seen from the other side.
+
+Two negative controls, both rc 0: `.MutableBuffer~new('abc')~copy` answers `abc`, and
+`~copy` of an ordinary instance answers its own class. So this is not `COPY` and not
+native state in general.
+
+`RexxObject::copy` (`classes/ObjectClass.cpp:554-564`) clones the object and then
+`copyObjectVariables`, which carries `CSELF` -- the `StreamInfo *` -- into the copy;
+`stream_uninit` (`streamLibrary/StreamNative.cpp:2190-2200`) calls
+`stream_info->~StreamInfo()` explicitly and drops `CSELF`, so the second object's
+`uninit` destructs the same block again. `MutableBuffer` is unaffected because it keeps
+no `CSELF`. **Read**, not measured under a debugger.
+
+Found 2026-09-12 by Task 5 of the Phase 7 plan, while establishing whether this crate's
+`StreamState` may derive `Clone`. **No upstream ticket.** For this crate it is a
+licensed divergence: `COPY` clones the state block, so the copy is an independent,
+unopened stream and nothing aborts.

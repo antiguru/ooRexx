@@ -1,0 +1,42 @@
+/* The OPEN options that succeed, and the abbreviation each one needs. Nothing
+   here writes a byte: the write entry points are a later task's, and a witness
+   that used them would refuse here while the oracle answered. Every row opens
+   a name of its own, so no row inherits another's file. */
+say 'open modes'
+opts = .array~of('read', 'rea', 'write', 'w', 'wri', 'both', 'bo', 'append', 'ap',,
+      'replace', 'rep', 'nobuffer', 'nob', 'shared', 'sharer', 'sharew',,
+      'both binary reclength 2', 'write binary reclength 4', 'write append',,
+      'write replace', 'both append', 'both replace', 'both nobuffer',,
+      'both binary reclength 4 nobuffer')
+do i = 1 to opts~items
+  say right(i, 2) '[' || opts[i] || '] [' || try('m' || i || '.txt', opts[i]) || ']'
+end
+/* A read mode never creates, so a name only ever opened for reading is still
+   missing on the next read of it. */
+say 'read again, still missing [' || try('m1.txt', 'read') || ']'
+/* A name a write mode created reads back READY:. */
+say 'read of a created name    [' || try('m3.txt', 'read') || ']'
+/* A second open on an open stream closes and reopens. */
+s = .Stream~new('m1.txt')
+say 'first  [' || s~open('read') || ']'
+say 'second [' || s~open('read') || ']'
+say 'state  [' || s~state || ']'
+say 'close  [' || s~close || ']'
+say 'state  [' || s~state || ']'
+say 'again  [' || s~close || ']'
+/* A close of a stream that was never opened is the null string, and a flush of
+   one is READY:. */
+n = .Stream~new('m1.txt')
+say 'unopened close [' || n~close || ']'
+say 'unopened flush [' || n~flush || ']'
+exit 0
+
+try: procedure
+  use arg f, o
+  signal on syntax name failed
+  s = .Stream~new(f)
+  answer = s~open(o)
+  s~close
+  return answer
+failed:
+  return 'RAISED'

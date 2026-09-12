@@ -66,25 +66,38 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     union
 }
 
-/// Runs the executor in process, on `path`.
-fn run_rust(path: &Path) -> Outcome {
+/// The directory one corpus program runs in: its own, under the target
+/// directory, named by the program's corpus path with `/` spelled `__`. That
+/// spelling collapses the path to a single component, so no entry can name a
+/// directory outside this root.
+fn run_directory(rel_path: &str) -> PathBuf {
+    Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("corpus-run")
+        .join(rel_path.replace('/', "__"))
+}
+
+/// Empties `dir`, creating it when it is not there.
+fn empty_run_directory(dir: &Path) {
+    if dir.exists() {
+        fs::remove_dir_all(dir).unwrap_or_else(|e| panic!("cannot empty {}: {e}", dir.display()));
+    }
+    fs::create_dir_all(dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
+}
+
+/// Runs the executor in process, on `path`, from `directory`.
+fn run_rust(path: &Path, directory: &Path) -> Outcome {
     let text = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let path_str = path
         .to_str()
         .unwrap_or_else(|| panic!("corpus path {} is not valid UTF-8", path.display()));
-    // **The same working directory the oracle gets.** `Oracle::run` runs from
-    // the program's own directory; without this the crate ran from the test
-    // process's, which no corpus program could see until the interpreter grew
-    // a current directory of its own, and which any program naming a relative
-    // path now would.
-    let directory = path
-        .parent()
-        .unwrap_or_else(|| panic!("{} has no parent directory", path.display()))
-        .to_path_buf();
+    // **The same working directory the oracle gets**, which is why the caller
+    // chooses it rather than this function taking the program's own: the
+    // process's directory is shared between the interpreters this harness runs
+    // on threads, and a program naming a relative path must see one state.
     watchdog::run_bounded(
         path_str,
         text,
-        rexx_exec::Invocation::none().with_directory(directory),
+        rexx_exec::Invocation::none().with_directory(directory.to_path_buf()),
     )
 }
 
@@ -321,8 +334,11 @@ fn the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else() {
     for listed in HASH_ORDERED_STDOUT {
         let abs = fs::canonicalize(corpus_dir.join(listed))
             .unwrap_or_else(|e| panic!("cannot resolve {listed}: {e}"));
-        let rust = run_rust(&abs);
-        let cpp = oracle.run(&abs);
+        let dir = run_directory(listed);
+        empty_run_directory(&dir);
+        let cpp = oracle.run_in(&abs, &dir, &[]);
+        empty_run_directory(&dir);
+        let rust = run_rust(&abs, &dir);
         assert!(
             !cpp.stdout.is_empty(),
             "{listed}: on HASH_ORDERED_STDOUT and the oracle wrote no stdout, so \
@@ -352,8 +368,14 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
     let abs = fs::canonicalize(corpus_dir.join(rel_path))
         .unwrap_or_else(|e| panic!("cannot resolve corpus entry {rel_path}: {e}"));
 
-    let rust = run_rust(&abs);
-    let cpp = oracle.run(&abs);
+    // One directory per program, the same absolute path for both interpreters
+    // and emptied between them: a program that writes files leaves nothing in
+    // `corpus/`, and neither side ever reads what the other left behind.
+    let dir = run_directory(rel_path);
+    empty_run_directory(&dir);
+    let cpp = oracle.run_in(&abs, &dir, &[]);
+    empty_run_directory(&dir);
+    let rust = run_rust(&abs, &dir);
 
     // Checked before `descriptor_diffs_modes` calls `cpp.expect_exit_code()`
     // itself: that panic has no `rel_path` in it and fires from inside

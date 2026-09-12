@@ -378,6 +378,12 @@ Each one names what cannot be matched and why, in the shape
 
   `rust/corpus/oracle-crashes.txt` entry 10 carries both chains, the measured programs and the
   control. No differential case may run either program.
+- **`~copy` of a `Stream`.** The oracle aborts at termination, `double free or corruption (out)`
+  rc 134: `RexxObject::copy` carries `CSELF` into the copy and both objects' `uninit` destruct the
+  one `StreamInfo`. No open and no existing file are needed. This crate's state block is cloned
+  with the body, so a copy is an independent, unopened stream that answers its own name and
+  `UNKNOWN`. `rust/corpus/oracle-crashes.txt` entry 13 carries the program, the four positive
+  shapes and the two negative controls; no differential case may copy a stream.
 - **A default I/O route with nothing at the end of it.** `rust/corpus/oracle-crashes.txt` entry 11:
   the `OUTPUT` or `INPUT` entry removed from `.local` and then a name-less `LINEOUT`/`LINEIN`, and a
   traced clause while `.TRACEOUTPUT`'s destination is `.nil`, are all SIGSEGV rc 139 on the oracle.

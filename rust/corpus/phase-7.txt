@@ -20,3 +20,8 @@ lang/platform_internal_routines.rex
 
 # Task 4: everything a Stream answers before anything is opened.
 lang/stream_unopened_queries.rex
+
+# Task 5: the OPEN option table -- the modes that open, and the shapes that
+# are a bare 93 or an ERROR:n.
+lang/stream_open_modes.rex
+lang/stream_open_errors.rex
