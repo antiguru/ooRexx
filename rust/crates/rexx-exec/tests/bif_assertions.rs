@@ -39,6 +39,13 @@ const ROW_PATH: &str = "/nonexistent/bif-row.rex";
 /// the four measure independent things.
 const GATE_ENV: &str = "REXX_BIF_GATE";
 
+/// The env var that rewrites `corpus/bif-exempt.txt` from the run, the way
+/// `method-bodies.txt` and `collection-arity.tsv` are rewritten from theirs.
+/// **The diff is the review**: this writes whatever the run measured, so a row
+/// that newly started failing is absorbed as readily as one whose blocker
+/// moved, and only reading the diff tells them apart.
+const REFRESH_ENV: &str = "REXX_BIF_EXEMPT_REFRESH";
+
 /// The ooTest revision this harness's committed exempt set was measured at.
 /// `ootest/` is git-ignored and is an SVN working copy, not checked-in test
 /// data, so it can move with nothing in this repository changing; read it back
@@ -407,6 +414,29 @@ fn the_exempt_set_matches_the_current_failures() {
         }
     }
 
+    // Under [`REFRESH_ENV`], write what this run measured and stop. Both
+    // listings below are bounded at 40 rows, so a committed set larger than
+    // that could not be rebuilt by reading a failing run's output -- which is
+    // how this file came to need a writer at all.
+    if matches!(env::var(REFRESH_ENV), Ok(value) if !value.is_empty() && value != "0") {
+        let path = exempt_path();
+        let existing = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        let mut out = String::new();
+        for line in existing.lines().take_while(|line| line.starts_with('#')) {
+            out.push_str(line);
+            out.push('\n');
+        }
+        for (key, attribution) in &measured {
+            out.push_str(key);
+            out.push('\t');
+            out.push_str(attribution);
+            out.push('\n');
+        }
+        fs::write(&path, out).unwrap_or_else(|e| panic!("cannot write {}: {e}", path.display()));
+        return;
+    }
+
     // Bounded, because the set can legitimately be thousands of rows wide and a
     // failure message that long is unreadable; the count above it is the figure
     // that matters and is never truncated.
@@ -715,10 +745,13 @@ fn a_raise_row_needs_the_sub_number_too() {
 /// category that the set-equality test then happily matches against itself.
 #[test]
 fn every_exempt_attribution_is_a_known_phase_or_a_declared_outcome() {
-    const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
+    const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7", "Phase 10"];
 
     // The count is the whole point of this table, not decoration on it.
-    const DERIVED: &[(&str, usize)] = &[("MISMATCH", 0), ("RAISE-MISMATCH", 0), ("ANOMALY", 3)];
+    // `ANOMALY` moved 3 -> 0 on 2026-09-12: all three were `BEEP`, and Phase 7
+    // gave the `REXX` package's internal routines their bodies, so the rows
+    // pass and the category is empty rather than swept aside.
+    const DERIVED: &[(&str, usize)] = &[("MISMATCH", 0), ("RAISE-MISMATCH", 0), ("ANOMALY", 0)];
 
     let names: Vec<&str> = DERIVED.iter().map(|(name, _)| *name).collect();
     let mut counts = vec![0usize; DERIVED.len()];

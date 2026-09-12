@@ -819,6 +819,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5c.txt",
     "phase-5d.txt",
     "phase-5j.txt",
+    "phase-7.txt",
 ];
 
 fn corpus_dir() -> PathBuf {
@@ -1013,7 +1014,20 @@ fn keyword_cases(suite: &str) -> Vec<Case> {
 
 /// Runs one case and describes what went wrong with it, if anything.
 fn compare(case: &Case) -> Option<String> {
-    let outcome = watchdog::run_bounded(&case.path, case.text.clone(), Invocation::none());
+    // A directory of the case's own: a corpus program that writes files would
+    // otherwise write them beside this crate's sources.
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("ir-recorded-run")
+        .join(case.name.replace(['/', ':', ' '], "__"));
+    if dir.exists() {
+        fs::remove_dir_all(&dir).unwrap_or_else(|e| panic!("cannot empty {}: {e}", dir.display()));
+    }
+    fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
+    let outcome = watchdog::run_bounded(
+        &case.path,
+        case.text.clone(),
+        Invocation::none().with_directory(dir),
+    );
     if watchdog::did_not_finish(&outcome) {
         return Some(
             String::from_utf8_lossy(&outcome.stderr)

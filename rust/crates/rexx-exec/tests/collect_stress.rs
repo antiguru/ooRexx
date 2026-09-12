@@ -56,7 +56,26 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5c.txt",
     "phase-5d.txt",
     "phase-5j.txt",
+    "phase-7.txt",
 ];
+
+/// The directory one corpus program runs in: its own, under the target
+/// directory, named by the program's corpus path with `/` spelled `__`. That
+/// spelling collapses the path to a single component, so no entry can name a
+/// directory outside this root.
+fn run_directory(rel_path: &str) -> PathBuf {
+    Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("collect-stress-run")
+        .join(rel_path.replace('/', "__"))
+}
+
+/// Empties `dir`, creating it when it is not there.
+fn empty_run_directory(dir: &Path) {
+    if dir.exists() {
+        fs::remove_dir_all(dir).unwrap_or_else(|e| panic!("cannot empty {}: {e}", dir.display()));
+    }
+    fs::create_dir_all(dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
+}
 
 /// **Thirty-six programs left this set in Phase 5j, and none joined it.**
 /// A class became an ordinary arena object, so declaring one is an
@@ -187,8 +206,23 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
             .to_str()
             .unwrap_or_else(|| panic!("corpus path {} is not valid UTF-8", abs.display()));
 
-        let plain = run_program(path_str, text.clone(), rexx_exec::Invocation::none());
-        let stress = run_program_collect_every_alloc(path_str, text, rexx_exec::Invocation::none());
+        // A directory of the program's own, emptied between the two runs: a
+        // program that writes files must not have the second run read what
+        // the first left, or its own output differs for a reason that has
+        // nothing to do with collecting on every allocation.
+        let dir = run_directory(rel_path);
+        empty_run_directory(&dir);
+        let plain = run_program(
+            path_str,
+            text.clone(),
+            rexx_exec::Invocation::none().with_directory(dir.clone()),
+        );
+        empty_run_directory(&dir);
+        let stress = run_program_collect_every_alloc(
+            path_str,
+            text,
+            rexx_exec::Invocation::none().with_directory(dir.clone()),
+        );
 
         if stress.collections == 0 {
             zero_collection_programs.push(rel_path.clone());

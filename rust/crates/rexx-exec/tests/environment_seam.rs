@@ -63,21 +63,39 @@ fn directory_lookup_passes_through_exactly_one_chokepoint() {
     let admit = format!("{module}::{}(", "admit");
     let directory = format!("{module}::{}(", "directory");
 
+    // Two, not one: the read path (`directory_lookup`) and the write path
+    // (`set_directory_entry`). D45's sentence says "lookup", and a write is
+    // not one -- but a manager that can veto a read of `.local` and not a
+    // write to it would be a seam with a hole, so the second call stays and
+    // this count admits it. A third is still red.
     let admits = occurrences(&admit);
     assert_eq!(
         admits.len(),
-        1,
-        "a directory lookup must pass through exactly one chokepoint; {admit} \
-         is called at {admits:?}"
+        2,
+        "a directory read and a directory write pass through one chokepoint \
+         each, and nothing else does; {admit} is called at {admits:?}"
+    );
+    assert!(
+        admits
+            .iter()
+            .all(|site| site.contains("src/environment.rs")),
+        "every chokepoint is in the seam's own module; {admit} is called at {admits:?}"
     );
 
+    // Two for the same reason `admit` is two: the clearance a read takes is
+    // spent in the read path and the one a write takes in the write path.
     let reads = occurrences(&directory);
     assert_eq!(
         reads.len(),
-        1,
-        "a clearance must be spent in exactly one place, or counting calls to \
-         the seam stops bounding the reads that reach a directory; {directory} \
-         is called at {reads:?}"
+        2,
+        "a clearance is spent once per chokepoint and nowhere else, or counting \
+         calls to the seam stops bounding the reads that reach a directory; \
+         {directory} is called at {reads:?}"
+    );
+    assert!(
+        reads.iter().all(|site| site.contains("src/environment.rs")),
+        "every clearance is spent in the seam's own module; {directory} is \
+         called at {reads:?}"
     );
 }
 

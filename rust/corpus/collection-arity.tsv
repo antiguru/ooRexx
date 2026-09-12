@@ -257,7 +257,7 @@ Properties	putAll	agree	rc0
 Properties	remove	agree	rc0
 Properties	removeEntry	agree	rc0
 Properties	removeItem	agree	rc0
-Properties	save	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: the LIBRARY REXX entry point "stream_init" is not implemented (Phase 7)
+Properties	save	send-differs	oracle rc0 SENT; crate rc120 rexx-exec: the LIBRARY REXX entry point "stream_lineout" is not implemented (Phase 7)
 Properties	setEntry	agree	rc0
 Properties	setLogical	agree	rc0
 Properties	setMethod	agree	rc0

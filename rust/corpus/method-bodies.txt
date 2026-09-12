@@ -1376,28 +1376,28 @@ OutputStream	lineOut	instance	answers	rc 163
 OutputStream	lines	instance	answers	rc 163
 OutputStream	open	instance	answers	rc 165
 OutputStream	position	instance	answers	rc 163
-Stream	new	class	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	arrayIn	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	arrayOut	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	charIn	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	charOut	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	chars	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	close	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	command	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	description	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	flush	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	init	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	lineIn	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	lineOut	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	lines	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	makeArray	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	open	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	position	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	qualify	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	query	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	say	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	seek	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	state	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	string	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	supplier	instance	loud	the LIBRARY REXX entry point "stream_uninit"
-Stream	uninit	instance	loud	the LIBRARY REXX entry point "stream_uninit"
+Stream	new	class	answers	rc 163
+Stream	arrayIn	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	arrayOut	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	charIn	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	charOut	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	chars	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	close	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	command	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	description	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	flush	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	init	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	lineIn	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	lineOut	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	lines	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	makeArray	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	open	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	position	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	qualify	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	query	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	say	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	seek	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	state	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	string	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	supplier	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	uninit	instance	unanswered	a bare `~new` raises; the method was never sent

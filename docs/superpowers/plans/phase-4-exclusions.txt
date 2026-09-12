@@ -4001,6 +4001,14 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `localtime` does, measured across four zones including a negative one.]
 
 
+  CLOSED 2026-09-12 BY PHASE 7's TASK 3, which gave the `REXX` package's own
+  routines their bodies: Directory, Filespec and Beep all answer here now, the
+  three BEEP rows named below have left rust/corpus/bif-exempt.txt, and that
+  file's ANOMALY count is pinned at 0 rather than 3. The block is kept because
+  its enumeration and its reasoning about why no instrument could see the gap
+  are what made it findable; the measurements below are the 2026-08-07 state,
+  not today's.
+
   KNOWN GAP: THE INTERPRETER'S INTERNAL-PACKAGE ROUTINES ARE PROVIDED BY
   NOTHING HERE, AND NO PHASE 4 ROW OWNS THEM. Measured 2026-08-07, each
   from a fresh directory, both interpreters on the same source:
