@@ -53,6 +53,11 @@ pub static PROGRAMS: &[&str] = &[
     "textnum",
     "decloop",
     "decrender",
+    // Added with Phase 7 Task 11: the only axis that executes a `SAY` inside
+    // a timed loop, so that a change to how output reaches its destination is
+    // visible to the suite at all. Measured, `emptyloop` says once after its
+    // loop and `rexxcps`' in-loop says are guards a passing run never takes.
+    "sayloop",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does

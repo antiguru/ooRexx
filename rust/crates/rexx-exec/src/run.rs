@@ -2090,8 +2090,13 @@ impl Interp {
         // `lineout(,)` prints the `SAY` line and *then* fails 97.1 on the
         // builtin, because `resolveStream` has no such test and sends to the
         // `.nil` it found.
-        match self.local_route(b"OUTPUT")? {
-            Some(route) if route != ObjRef::NIL => {
+        // **The direct write when nothing has redirected `.OUTPUT`**, which is
+        // the same bytes the monitor would forward and none of the cost:
+        // measured, delivering every `SAY` is 16,360 instructions a line and
+        // puts `sayloop` at 9.63x. A match guard cannot ask, because a guard
+        // may not borrow `self` mutably.
+        match self.output_route()? {
+            Some(route) => {
                 let argument = self.text_built(line);
                 // **Rooted before the send.** The line can be long enough to
                 // take the owned-`Bytes` path, and the send allocates: without

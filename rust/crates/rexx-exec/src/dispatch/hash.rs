@@ -722,6 +722,8 @@ fn insert_in(
     index: ObjRef,
     item: Option<ObjRef>,
 ) -> Result<(), Failure> {
+    // `.local['OUTPUT'] = x` reaches here and never reaches `store_local`.
+    interp.bump_route_generation();
     // **The fullness test comes first, and it is the free chain rather than
     // the item count** (`classes/support/HashContents.hpp:297`): a table can
     // run its overflow dry while primary buckets stand empty, and upstream
@@ -767,6 +769,7 @@ fn take_in(
     half: Half,
     index: ObjRef,
 ) -> Result<Option<ObjRef>, Failure> {
+    interp.bump_route_generation();
     let Some(store) = read_store(interp, receiver, half)? else {
         return Ok(None);
     };

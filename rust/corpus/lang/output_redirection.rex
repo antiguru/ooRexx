@@ -1,0 +1,30 @@
+/* SAY sends SAY to whatever .local holds under OUTPUT. Redirecting the
+   monitor's destination is the route a program can change here, and every
+   SAY in between must reach it rather than the descriptor. */
+s = .sink~new
+zz = .output~destination(s)
+say 'one'
+say 'two'
+zz = .output~destination(.stdout)
+say 'delivered' s~count
+do ln over s~seen
+  say ln
+end
+
+::class sink
+::method init
+  expose seen count
+  seen = .array~new
+  count = 0
+::method count
+  expose count
+  return count
+::method seen
+  expose seen
+  return seen
+::method say
+  expose seen count
+  use arg v
+  count = count + 1
+  seen~append('SAY[' || v || ']')
+  return 0

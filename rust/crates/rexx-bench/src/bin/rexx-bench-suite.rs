@@ -125,6 +125,10 @@ const AXES: &[Axis] = &[
         role: Role::Loop,
     },
     Axis {
+        name: "sayloop",
+        role: Role::Loop,
+    },
+    Axis {
         name: "startup",
         role: Role::Offset,
     },

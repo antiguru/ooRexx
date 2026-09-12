@@ -526,18 +526,66 @@ impl Interp {
         self.directory_lookup(&[EnvScope::Local], name)
     }
 
-    /// Whether the trace route still ends at the `.STDERR` the bundle minted,
-    /// following each monitor's destination queue head
-    /// (`CoreClasses.orx`'s `Monitor`, whose `UNKNOWN` forwards to
-    /// `destination~peek`).
+    /// Records that a route's far end may have moved, so the next `SAY`
+    /// decides afresh.
+    pub(crate) fn bump_route_generation(&mut self) {
+        self.route_generation = self.route_generation.wrapping_add(1);
+    }
+
+    /// Where `SAY` sends, or `None` to write straight to the buffer.
     ///
-    /// A route that ends there writes the same bytes whether it is delivered
-    /// or written straight to the buffer, and the direct write is the one that
-    /// runs no Rexx: delivering re-enters the interpreter mid-clause, which
-    /// perturbs the argument stack, `PROCEDURE` permission and a `SELECT`'s
-    /// own search -- measured, all three.
-    fn trace_route_is_bootstrap(&mut self, route: ObjRef) -> bool {
-        let Some(stderr) = self.bootstrap_stderr else {
+    /// **The decision is cached, not either half of it**: deciding afresh is a
+    /// probe of `.local` and a walk of the monitors' destination queues, 764
+    /// instructions a line between them, and caching one half would leave most
+    /// of that standing.
+    pub(crate) fn output_route(&mut self) -> Result<Option<ObjRef>, Failure> {
+        if let Some((generation, cached)) = self.output_route
+            && generation == self.route_generation
+        {
+            // A writer this crate forgot to count would otherwise be a wrong
+            // answer no corpus program could see, because none of them
+            // redirect `.OUTPUT`.
+            #[cfg(debug_assertions)]
+            {
+                let fresh = self.output_route_uncached()?;
+                assert_eq!(
+                    cached, fresh,
+                    "the cached SAY route is stale, so some writer does not bump \
+                     Interp::route_generation"
+                );
+            }
+            return Ok(cached);
+        }
+        let fresh = self.output_route_uncached()?;
+        self.output_route = Some((self.route_generation, fresh));
+        Ok(fresh)
+    }
+
+    /// [`Interp::output_route`] with no cache in front of it.
+    fn output_route_uncached(&mut self) -> Result<Option<ObjRef>, Failure> {
+        match self.local_route(b"OUTPUT")? {
+            Some(route)
+                if route != ObjRef::NIL && !self.route_ends_at(route, self.bootstrap_stdout) =>
+            {
+                Ok(Some(route))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Whether `route` still ends at `terminal`, following each monitor's
+    /// destination queue head (`CoreClasses.orx`'s `Monitor`, whose `UNKNOWN`
+    /// forwards to `destination~peek`).
+    ///
+    /// A route that ends at the stream the bundle minted writes the same bytes
+    /// whether it is delivered or written straight to the buffer, and the
+    /// direct write is the one that runs no Rexx. That matters twice over.
+    /// Delivering re-enters the interpreter mid-clause, which perturbs the
+    /// argument stack, `PROCEDURE` permission and a `SELECT`'s own search --
+    /// measured, all three. And it is not cheap: measured, delivering every
+    /// `SAY` costs 16,360 instructions a line, which is `sayloop` at 9.63x.
+    pub(crate) fn route_ends_at(&mut self, route: ObjRef, terminal: Option<ObjRef>) -> bool {
+        let Some(terminal) = terminal else {
             return false;
         };
         let Some(monitor_class) = self.rexx_package_class(b"MONITOR") else {
@@ -551,7 +599,7 @@ impl Interp {
         // `STDERR`, and a program may leave it shorter or longer; the bound
         // is what keeps a cycle from spinning here.
         for _ in 0..8 {
-            if at == stderr {
+            if at == terminal {
                 return true;
             }
             let Some(queue) = self.pool_entry(at, monitor_class, b"DESTINATION") else {
@@ -595,7 +643,7 @@ impl Interp {
         let Ok(Some(route)) = self.local_route(b"TRACEOUTPUT") else {
             return;
         };
-        if route == ObjRef::NIL || self.trace_route_is_bootstrap(route) {
+        if route == ObjRef::NIL || self.route_ends_at(route, self.bootstrap_stderr) {
             return;
         }
         let Some(class) = self.rexx_package_class(b"TRACEOBJECT") else {
@@ -893,6 +941,9 @@ impl Interp {
             if name == b"STDERR".as_slice() {
                 self.bootstrap_stderr = Some(built);
             }
+            if name == b"STDOUT".as_slice() {
+                self.bootstrap_stdout = Some(built);
+            }
             self.store_local(handle, name, built);
         }
         let Some(monitor_class) = self.rexx_package_class(b"MONITOR") else {
@@ -955,6 +1006,7 @@ impl Interp {
 
     /// [`Interp::local_entry`]'s writer.
     fn store_local(&mut self, handle: ObjRef, name: &[u8], value: ObjRef) {
+        self.bump_route_generation();
         let held = self.heap.get_mut(handle).expect("a rooted directory");
         let Body::Native(native) = &mut held.body else {
             unreachable!("both directories are allocated as Body::Native")

@@ -62,3 +62,7 @@ lang/stream_write_conversion.rex
 # Task 11: every trace line reaches `.TRACEOUTPUT` as one `LINEOUT` of a
 # `TraceObject`, redirected by the monitor's own destination.
 lang/trace_redirection.rex
+
+# Task 11: SAY sends SAY to whatever `.local` holds under OUTPUT, and a
+# redirected monitor destination receives it.
+lang/output_redirection.rex

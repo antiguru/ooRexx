@@ -1839,6 +1839,19 @@ struct Interp {
     /// program has redirected: the monitor chain still ends here, and a direct
     /// write is then the same bytes a delivery would produce.
     bootstrap_stderr: Option<ObjRef>,
+    /// The `.STDOUT` the bundle minted, which is the same recognition for
+    /// `SAY`'s own route. Measured, delivering every `SAY` through the monitor
+    /// costs 16,360 instructions a line where writing costs none of it.
+    bootstrap_stdout: Option<ObjRef>,
+    /// Bumped by every write that could move a route's far end: a `.local`
+    /// entry, a directory put or removal, and an array write, which is how a
+    /// monitor's destination queue changes.
+    route_generation: u64,
+    /// `SAY`'s route as of [`Interp::route_generation`]: `None` writes
+    /// straight to the buffer. Deciding it afresh costs 764 instructions a
+    /// line -- measured, `sayloop` at 1.40x -- and both halves of that are
+    /// hash lookups, so the decision is cached rather than either half.
+    output_route: Option<(u64, Option<ObjRef>)>,
     /// The arena size at which [`Interp::alloc_with`] collects, and half of
     /// this crate's trigger policy. The other half is `Heap::will_grow`.
     collect_at: usize,
@@ -2183,6 +2196,9 @@ impl Interp {
             processing_uninits: false,
             routing_trace: false,
             bootstrap_stderr: None,
+            bootstrap_stdout: None,
+            route_generation: 0,
+            output_route: None,
             collect_at: COLLECT_FLOOR,
             depth: 0,
             max_depth: 0,
@@ -4591,9 +4607,14 @@ impl Interp {
             uninit_ready: _,
             processing_uninits: _,
             routing_trace: _,
-            // `.local` holds this stream and is a global root, so the handle
-            // here roots nothing of its own; it is only ever compared.
+            // `.local` holds these streams and is a global root, so the
+            // handles here root nothing of their own; they are only compared.
             bootstrap_stderr: _,
+            bootstrap_stdout: _,
+            route_generation: _,
+            // The route it names is `.local`'s own entry, which that global
+            // root holds; this caches the decision, not the object.
+            output_route: _,
             collect_at: _,
             depth: _,
             max_depth: _,

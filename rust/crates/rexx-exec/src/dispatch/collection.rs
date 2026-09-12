@@ -1220,6 +1220,7 @@ fn array_splice(
     at: usize,
     item: Option<ObjRef>,
 ) -> Result<(), Failure> {
+    interp.bump_route_generation();
     let receiver = store_of(interp, receiver)?;
     match item {
         Some(item) => array_splice_slot(interp, receiver, at, Some(item)),
@@ -1279,6 +1280,7 @@ fn array_splice_slot(
     at: usize,
     item: Option<ObjRef>,
 ) -> Result<(), Failure> {
+    interp.bump_route_generation();
     let receiver = store_of(interp, receiver)?;
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
@@ -1297,6 +1299,9 @@ fn write_slot(
     at: usize,
     item: Option<ObjRef>,
 ) -> Result<(), Failure> {
+    // A monitor keeps its destination in a `Queue`, so an array write is one
+    // of the ways `SAY`'s route moves.
+    interp.bump_route_generation();
     let store = store_of(interp, receiver)?;
     match interp.heap.get_mut(store).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
