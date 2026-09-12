@@ -1026,38 +1026,59 @@ pub(super) fn linein(
         let StandardStream::In = which else {
             return Ok(Some(interp.text(b"")));
         };
-        if count == 0 {
+    } else {
+        if !ensure_open(interp, receiver, false)? {
             return Ok(Some(interp.text(b"")));
         }
+        if let Some(line) = line {
+            seek_to_line(interp, receiver, line)?;
+        }
+    }
+    if count == 0 {
+        return Ok(Some(interp.text(b"")));
+    }
+    Ok(Some(match next_line(interp, receiver)? {
+        Some(text) => interp.text_built(text),
+        None => interp.text(b""),
+    }))
+}
+
+/// One line from the read position, or `None` when there is none: the reading
+/// half of `stream_linein`, shared with `stream_arrayin` so the two cannot
+/// grow separate answers at the end of input.
+///
+/// **The end of input raises here.** Whether the caller sees that as an error
+/// is [`Interp::raise_notready`]'s decision, and a `SIGNAL ON NOTREADY` makes
+/// it one -- which is how the orx `arrayIn` ends its fill and answers the
+/// array it passed in.
+fn next_line(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
+    if let Some(which) = standard_of(interp, receiver)? {
+        let StandardStream::In = which else {
+            return Ok(None);
+        };
         return match interp.input_line() {
             Some(text) => {
                 // A read that succeeds clears whatever a refused write left:
                 // measured, `.stdin~lineout` leaves `ERROR:13` and the next
                 // `.stdin~linein` reads its line and answers `READY:` again.
                 require_mut(interp, receiver)?.status = StreamStatus::Ready;
-                Ok(Some(interp.text_built(text)))
+                Ok(Some(text))
             }
             None => {
                 let state = require_mut(interp, receiver)?;
                 state.status = StreamStatus::NotReady;
                 let name = state.name.clone();
                 interp.raise_notready(&name)?;
-                Ok(Some(interp.text(b"")))
+                Ok(None)
             }
         };
     }
     if !ensure_open(interp, receiver, false)? {
-        return Ok(Some(interp.text(b"")));
-    }
-    if let Some(line) = line {
-        seek_to_line(interp, receiver, line)?;
-    }
-    if count == 0 {
-        return Ok(Some(interp.text(b"")));
+        return Ok(None);
     }
     let state = require_mut(interp, receiver)?;
     let Some(open) = state.open.as_mut() else {
-        return Ok(Some(interp.text(b"")));
+        return Ok(None);
     };
     let at = open.read_position;
     match read_line_from(&mut open.file, offset_of(at)).unwrap_or(None) {
@@ -1068,15 +1089,40 @@ pub(super) fn linein(
                 open.line_read_char = next;
             }
             open.last_op_was_read = true;
-            Ok(Some(interp.text_built(text)))
+            Ok(Some(text))
         }
         None => {
             state.status = StreamStatus::NotReady;
             let name = state.name.clone();
             interp.raise_notready(&name)?;
-            Ok(Some(interp.text(b"")))
+            Ok(None)
         }
     }
+}
+
+/// `stream_arrayin`: fills the caller's array with the lines that are left.
+///
+/// **The array is the orx `arrayIn`'s own**, built as `.array~new(self~lines)`
+/// and filled in place, and this answers nothing: the end of input raises, and
+/// that method's `SIGNAL ON NOTREADY` is what returns the array. Appending is
+/// right despite the array arriving pre-sized -- measured on both engines,
+/// `.array~new(3)` holds no items and the first append lands on slot 1.
+pub(super) fn arrayin(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(array) = args.first().copied().flatten() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    while let Some(text) = next_line(interp, receiver)? {
+        let item = interp.text_built(text);
+        // Rooted before the append, which allocates when the array grows.
+        interp.roots.push_temp(item);
+        super::collection::append_slot(interp, array, item)?;
+    }
+    Ok(None)
 }
 
 /// Moves the read position to the start of `line`, counting from the top.

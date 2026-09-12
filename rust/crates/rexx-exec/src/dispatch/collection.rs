@@ -722,7 +722,11 @@ fn native_array_append(
 
 /// `append`'s body without the message send: writes `item` past the last
 /// item, growing to fit, and answers the 1-based index it landed on.
-fn append_slot(interp: &mut Interp, receiver: ObjRef, item: ObjRef) -> Result<usize, Failure> {
+pub(super) fn append_slot(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    item: ObjRef,
+) -> Result<usize, Failure> {
     let at = last_item(interp, receiver)?;
     let length = slots_of(interp, receiver)?.len();
     if at >= length {

@@ -1,0 +1,39 @@
+count 38
+/* The array and supplier group over one file. One stream object writes and is
+   closed before another reads it: two live objects over one file is a
+   different question, and not this program's. `arrayIn` fills an array the
+   Rexx half allocated and ends on the end-of-input raise, `makeArray`
+   forwards to it, and a `StreamSupplier` walks the lines. */
+w = .Stream~new('lines.txt')
+zz = w~arrayout(.array~of('alpha','beta'))
+zz = w~say('gamma')
+zz = w~close
+
+r = .Stream~new('lines.txt')
+a = r~arrayin
+say 'arrayin' a~items
+do line over a
+  say '  [' || line || ']'
+end
+zz = r~close
+
+m = .Stream~new('lines.txt')
+mm = m~makearray
+say 'makearray' mm~items mm~class~id
+zz = m~close
+
+u = .Stream~new('lines.txt')
+sup = u~supplier
+say 'supplier' sup~class~id
+do while sup~available
+  say '  ' sup~index '[' || sup~item || ']'
+  sup~next
+end
+
+signal on syntax name caught
+zz = sup~item
+say '  past the end did not raise'
+exit 0
+caught:
+  say '  past the end raises' rc
+  exit 0

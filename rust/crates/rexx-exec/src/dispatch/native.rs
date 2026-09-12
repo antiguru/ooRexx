@@ -205,7 +205,12 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
         Arity::Fixed(2),
         super::stream::lineout,
     ),
-    deferred("stream_arrayin", Family::Stream),
+    implemented(
+        "stream_arrayin",
+        Family::Stream,
+        Arity::Fixed(1),
+        super::stream::arrayin,
+    ),
     implemented(
         "qualify",
         Family::Stream,

@@ -37,9 +37,9 @@ const BEFORE_THE_SEND: &[u8] = b"main\n";
 const IMPLEMENTED: &[&str] = &[
     "file_separator",
     "file_path_separator",
-    // Phase 7's stream skeleton: everything a stream answers without opening
-    // anything. The I/O entry points beside them are still deferred, which is
-    // what the family's own probe binds.
+    // Phase 7's stream family: the queries a stream answers without opening
+    // anything, and the reading and writing entry points beside them. What
+    // this phase still defers is what the family's own probe binds.
     "qualify",
     "query_exists",
     "query_handle",
@@ -47,6 +47,7 @@ const IMPLEMENTED: &[&str] = &[
     "query_streamtype",
     "query_time",
     "std_set",
+    "stream_arrayin",
     "stream_charin",
     "stream_charout",
     "stream_chars",

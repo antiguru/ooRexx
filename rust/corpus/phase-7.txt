@@ -70,3 +70,8 @@ lang/output_redirection.rex
 # Task 11: a read with no stream name is a message to `.INPUT` -- `LINEIN` and
 # `CHARIN` with no arguments, `LINES` with `NORMAL`, and `PULL` as a `LINEIN`.
 lang/input_redirection.rex
+
+# Task 12: the array and supplier group -- `arrayIn` fills an array the Rexx
+# half allocated and ends on the end-of-input raise, and `StreamSupplier`
+# walks the lines.
+lang/stream_array.rex
