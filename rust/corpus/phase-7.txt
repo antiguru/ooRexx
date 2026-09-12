@@ -50,3 +50,7 @@ lang/stream_table_sharing.rex
 # buffer they share with SAY, and the counters an undrained empty input answers.
 lang/std_stream_writes.rex
 lang/local_std_objects.rex
+
+# The standard streams take no part in finalization, so a finalizer still
+# reaches every route after `.local` holds them.
+lang/uninit_after_std_streams.rex

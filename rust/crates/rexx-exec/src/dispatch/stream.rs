@@ -69,6 +69,11 @@ pub(crate) fn standard_stream(
         StandardStream::Err => b"STDERR",
     };
     let object = new_instance(interp, class)?;
+    // Takes no part in finalization: it lives in `.local` for the run and
+    // wraps a descriptor this crate did not open, and the sweep would
+    // otherwise drop its state before a program's own finalizer writes
+    // through it.
+    interp.heap.clear_uninit_all(&[object]);
     let named = interp.text(name);
     interp.set_pool_variable(object, class, b"STREAM_NAME", named);
     let mut state = StreamState::new(name.to_vec(), name.to_vec());
