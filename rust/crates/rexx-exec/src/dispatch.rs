@@ -1005,6 +1005,16 @@ const MESSAGE_RESULT: &[u8] = b"RESULT";
 /// (`classes/ClassClass.cpp:1631`). Upper case for [`UNKNOWN`]'s reason.
 pub(crate) const INIT: &[u8] = b"INIT";
 
+/// The message `SAY` sends whatever `.OUTPUT` holds -- `Activity::sayOutput`
+/// (`concurrency/Activity.cpp:3214`), whose reply is dropped. Upper case for
+/// [`UNKNOWN`]'s reason.
+pub(crate) const SAY: &[u8] = b"SAY";
+
+/// The message a trace line and an error report line send whatever
+/// `.TRACEOUTPUT` holds -- `Activity::traceOutput`
+/// (`concurrency/Activity.cpp:3171`). Upper case for [`UNKNOWN`]'s reason.
+pub(crate) const LINEOUT: &[u8] = b"LINEOUT";
+
 /// The message a finalizer delivery sends -- `GlobalNames::UNINIT`, sent by
 /// `UninitDispatcher::run` (`memory/UninitDispatcher.cpp:52`). Upper case for
 /// [`UNKNOWN`]'s reason.

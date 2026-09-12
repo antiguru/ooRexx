@@ -2081,8 +2081,32 @@ impl Interp {
             None => Vec::new(),
         };
         self.trace_result(self.clause_state.current_value_indent, &line);
-        self.out.extend_from_slice(&line);
-        self.out.push(b'\n');
+        // `Activity::sayOutput` (`concurrency/Activity.cpp:3214`): `.OUTPUT`
+        // gets the line as a `SAY` message and its reply is dropped; an entry
+        // that is missing **or holds `.nil`** takes the buffer instead.
+        //
+        // The `.nil` test belongs here rather than in `resolve_stream`, and
+        // the asymmetry is measured: `.local~output = .nil` then `say` then
+        // `lineout(,)` prints the `SAY` line and *then* fails 97.1 on the
+        // builtin, because `resolveStream` has no such test and sends to the
+        // `.nil` it found.
+        match self.local_route(b"OUTPUT")? {
+            Some(route) if route != ObjRef::NIL => {
+                let argument = self.text_built(line);
+                // **Rooted before the send.** The line can be long enough to
+                // take the owned-`Bytes` path, and the send allocates: without
+                // this the collect-on-every-allocation gate fails `a live
+                // value` at `dispatch.rs:1465`. Measured, adding it takes the
+                // library suite from 788 to 790.
+                self.roots.push_temp(argument);
+                let caller = self.caller();
+                self.send_message(route, crate::dispatch::SAY, None, &[Some(argument)], caller)?;
+            }
+            _ => {
+                self.out.extend_from_slice(&line);
+                self.out.push(b'\n');
+            }
+        }
         Ok(())
     }
 
@@ -4639,7 +4663,9 @@ impl Interp {
         indent: usize,
     ) {
         if let Some((line, text)) = self.clause_site(source, instruction) {
+            let start = self.trace.len();
             crate::trace::push_clause(&mut self.trace, line, indent, &text);
+            self.route_trace_line(start);
         }
     }
 
@@ -8608,6 +8634,13 @@ impl Interp {
 /// Matched caselessly with an optional trailing colon, and an omitted or empty
 /// name is the default input or output rather than a file
 /// (`RexxActivation.cpp:1938-2041`).
+///
+/// **The monitors, not the streams behind them.** `resolveStream` answers
+/// `.INPUT`, `.OUTPUT` and `.ERROR`, so a redirected route is followed: measured
+/// with `.output~destination(.stderr)` pushed, the oracle puts `SAY`,
+/// `LINEOUT(,)` and `CHAROUT(,)` on stderr while `.stdout~lineout` stays on
+/// stdout. Note `STDERR` reaches `.ERROR` rather than an `.STDERR` monitor,
+/// which does not exist.
 fn standard_stream_name(name: &[u8], input: bool) -> Option<&'static [u8]> {
     let bare = name.strip_suffix(b":").unwrap_or(name);
     // An omitted or empty name is the default input or output, and which one
@@ -8615,16 +8648,16 @@ fn standard_stream_name(name: &[u8], input: bool) -> Option<&'static [u8]> {
     // `linein()` reads `l1` and `chars()` answers 9, while `charout( ,'W')`
     // writes `W` to stdout.
     if bare.is_empty() {
-        return Some(if input { b".STDIN" } else { b".STDOUT" });
+        return Some(if input { b".INPUT" } else { b".OUTPUT" });
     }
     if bare.eq_ignore_ascii_case(b"STDIN") {
-        return Some(b".STDIN");
+        return Some(b".INPUT");
     }
     if bare.eq_ignore_ascii_case(b"STDOUT") {
-        return Some(b".STDOUT");
+        return Some(b".OUTPUT");
     }
     if bare.eq_ignore_ascii_case(b"STDERR") {
-        return Some(b".STDERR");
+        return Some(b".ERROR");
     }
     None
 }

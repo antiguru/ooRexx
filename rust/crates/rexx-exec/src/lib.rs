@@ -1830,6 +1830,15 @@ struct Interp {
     /// Whether a `UNINIT` sweep is running -- oracle's `processingUninits`
     /// (`memory/RexxMemory.cpp:341`-`:347`, cleared at `:383`).
     processing_uninits: bool,
+    /// Whether a trace line is being delivered to `.TRACEOUTPUT`. A traced
+    /// clause inside that delivery writes to the buffer instead of routing
+    /// again: the oracle SIGSEGVs in the one shape that reaches this
+    /// (`corpus/oracle-crashes.txt` entry 14), and this crate must terminate.
+    routing_trace: bool,
+    /// The `.STDERR` the bundle minted, for recognising a trace route no
+    /// program has redirected: the monitor chain still ends here, and a direct
+    /// write is then the same bytes a delivery would produce.
+    bootstrap_stderr: Option<ObjRef>,
     /// The arena size at which [`Interp::alloc_with`] collects, and half of
     /// this crate's trigger policy. The other half is `Heap::will_grow`.
     collect_at: usize,
@@ -2172,6 +2181,8 @@ impl Interp {
             stress_collect: false,
             uninit_ready: Vec::new(),
             processing_uninits: false,
+            routing_trace: false,
+            bootstrap_stderr: None,
             collect_at: COLLECT_FLOOR,
             depth: 0,
             max_depth: 0,
@@ -4579,6 +4590,10 @@ impl Interp {
             // its finalizer clears it.
             uninit_ready: _,
             processing_uninits: _,
+            routing_trace: _,
+            // `.local` holds this stream and is a global root, so the handle
+            // here roots nothing of its own; it is only ever compared.
+            bootstrap_stderr: _,
             collect_at: _,
             depth: _,
             max_depth: _,
@@ -4998,7 +5013,7 @@ fn execute(
                 path,
                 sites: &failure_sites,
             };
-            interp.trace.extend_from_slice(&raised.report(&site));
+            interp.write_trace_report(&raised.report(&site));
             raised.exit_code()
         }
         // No report and no status here: the run may still have deferred
@@ -5040,7 +5055,7 @@ fn execute(
                     path,
                     sites: &sites,
                 };
-                interp.trace.extend_from_slice(&raised.report(&site));
+                interp.write_trace_report(&raised.report(&site));
             }
         }
     }

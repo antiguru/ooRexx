@@ -754,3 +754,50 @@ Found 2026-09-12 by Task 5 of the Phase 7 plan, while establishing whether this 
 `StreamState` may derive `Clone`. **No upstream ticket.** For this crate it is a
 licensed divergence: `COPY` clones the state block, so the copy is an independent,
 unopened stream and nothing aborts.
+
+## 14. Package-wide `::OPTIONS TRACE I` with a Rexx object as the trace destination
+
+    s = .sink~new
+    zz = .traceoutput~destination(s)
+    aa = 1 + 1
+    zz = .traceoutput~destination(.stderr)
+    zz = .stderr~lineout('total=' s~count)
+
+    ::options trace i
+    ::class sink
+    ::method init
+      expose count
+      count = 0
+    ::method count
+      expose count
+      return count
+    ::method lineout
+      expose count
+      count = count + 1
+      return 0
+
+SIGSEGV, rc 139. Measured twice, byte-identical both times: stdout empty, stderr 762
+bytes ending mid-trace at `>A>   "a SINK"`, on the `~destination(s)` clause itself.
+
+**Two separate controls, and they say different things.** The same file with the single
+`::options trace i` line removed is rc 0 -- but it prints `total= 0`, because nothing
+switches tracing on, so it proves only that the crash needs package-wide tracing. What
+shows a live Rexx destination is otherwise fine is a different program: clause-level
+`trace i` around `aa = 1 + 1`, with the same sink installed by `~destination`, is rc 0
+and delivers 7 `TraceObject`s. So the destination is not the problem; the package-wide
+setting is.
+
+Cause, **inferred from those two measurements and not established under a debugger**:
+`::OPTIONS TRACE I` traces method bodies, the sink's `LINEOUT` included, so delivering a
+trace line emits trace lines that deliver again. A clause-level `trace i` is safe because
+tracing does not propagate into a method body -- measured, `trace i` over `zz = o~m`
+shows `>M>   "M" => "4"` and never the method's own `qq = 2 + 2`.
+
+Distinct from entry 11, which is a route that is missing or `.nil`. Here the route works:
+the same object takes 7 lines without complaint when the trace setting is a clause.
+
+Found 2026-09-12 by Task 11 of the Phase 7 plan, while establishing whether this crate
+needs to suppress tracing during delivery to the trace route. **No upstream ticket.** For
+this crate it is a licensed divergence with one binding requirement: nothing here may
+answer by crashing *or by hanging*, so delivery to the trace route is guarded against
+re-entry and the run terminates.

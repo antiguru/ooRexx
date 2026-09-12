@@ -438,7 +438,9 @@ impl Interp {
         if !self.tracing_clause(is_label) {
             return;
         }
+        let start = self.trace.len();
         push_clause(&mut self.trace, line, indent, text);
+        self.route_trace_line(start);
     }
 
     /// `>>>`, an instruction's own top-level computed value -- gated on
@@ -460,7 +462,9 @@ impl Interp {
     /// pays when tracing is off, and it is one load and a branch.
     #[inline(never)]
     fn trace_result_line(&mut self, indent: usize, value: &[u8]) {
+        let start = self.trace.len();
         push_value(&mut self.trace, ">>>", indent, value);
+        self.route_trace_line(start);
     }
 
     /// `>K>`, a keyword sub-clause's own value (`DO`'s `TO`/`BY`/`FOR`/
@@ -472,6 +476,7 @@ impl Interp {
         if !self.trace_mode().results {
             return;
         }
+        let start = self.trace.len();
         push_tagged(
             &mut self.trace,
             ">K>",
@@ -481,6 +486,7 @@ impl Interp {
             " => ",
             value,
         );
+        self.route_trace_line(start);
     }
 
     /// `>L>`/`>V>`/`>O>`/`>P>` -- `eval.rs`'s own single post-order insertion
@@ -508,7 +514,9 @@ impl Interp {
     /// pays when tracing is off, and it is one load and a branch.
     #[inline(never)]
     fn trace_literal_line(&mut self, indent: usize, value: &[u8]) {
+        let start = self.trace.len();
         push_value(&mut self.trace, ">L>", indent, value);
+        self.route_trace_line(start);
     }
 
     /// One literal's own `>L>` line, from the value rather than from its text.
@@ -543,7 +551,9 @@ impl Interp {
     /// pays when tracing is off, and it is one load and a branch.
     #[inline(never)]
     fn trace_variable_line(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
+        let start = self.trace.len();
         push_tagged(&mut self.trace, ">V>", indent, false, tag, " => ", value);
+        self.route_trace_line(start);
     }
 
     /// `>E>` (`TRACE_PREFIX_DOTVARIABLE`): `.NIL`/`.TRUE`/`.FALSE`, tagged
@@ -557,7 +567,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_tagged(&mut self.trace, ">E>", indent, false, tag, " => ", value);
+        self.route_trace_line(start);
     }
 
     /// `>N>` (`TRACE_PREFIX_NAMESPACE`): a namespace-qualified class lookup's
@@ -568,7 +580,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_tagged(&mut self.trace, ">N>", indent, false, tag, " => ", value);
+        self.route_trace_line(start);
     }
 
     /// The `>O>` line one binary operator's result owes, from the value
@@ -589,7 +603,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_operator(&mut self.trace, ">O>", indent, op, value);
+        self.route_trace_line(start);
     }
 
     /// The `>P>` line one prefix operator's result owes, from the value
@@ -612,7 +628,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_operator(&mut self.trace, ">P>", indent, op, value);
+        self.route_trace_line(start);
     }
 
     /// `>=>` (`TRACE_PREFIX_ASSIGNMENT`): a variable was just written.
@@ -628,7 +646,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_tagged(&mut self.trace, ">=>", indent, false, tag, " <= ", value);
+        self.route_trace_line(start);
     }
 
     /// `>A>` (`TRACE_PREFIX_ARGUMENT`): one call argument's own evaluated
@@ -641,7 +661,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_value(&mut self.trace, ">A>", indent, value);
+        self.route_trace_line(start);
     }
 
     /// `>F>` (`TRACE_PREFIX_FUNCTION`): a **function-form** call's own
@@ -652,7 +674,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_tagged(&mut self.trace, ">F>", indent, false, name, " => ", value);
+        self.route_trace_line(start);
     }
 
     /// `>M>` (`TRACE_PREFIX_MESSAGE`): a message send's own result, tagged
@@ -662,7 +686,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_tagged(&mut self.trace, ">M>", indent, true, name, " => ", value);
+        self.route_trace_line(start);
     }
 
     /// `>R>` (`TRACE_PREFIX_ALIAS`): a `USE ARG >name` target has just been
@@ -676,6 +702,7 @@ impl Interp {
         if !self.trace_mode().results {
             return;
         }
+        let start = self.trace.len();
         push_tagged(
             &mut self.trace,
             ">R>",
@@ -685,6 +712,7 @@ impl Interp {
             " => ",
             target,
         );
+        self.route_trace_line(start);
     }
 
     /// `>.>` (`TRACE_PREFIX_DUMMY`): what a `PARSE` template's `.`
@@ -693,7 +721,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_value(&mut self.trace, ">.>", indent, value);
+        self.route_trace_line(start);
     }
 
     /// `>C>` (`TRACE_PREFIX_COMPOUND`): announces which fully-resolved
@@ -710,7 +740,9 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return;
         }
+        let start = self.trace.len();
         push_tagged(&mut self.trace, ">C>", indent, false, tag, " => ", resolved);
+        self.route_trace_line(start);
     }
 
     /// `value`'s rendered bytes, **or `None` when no intermediate-value
@@ -760,6 +792,7 @@ impl Interp {
         self.trace.extend_from_slice(package);
         self.trace.extend_from_slice(b"\".\n");
         make_displayable(&mut self.trace, line_start);
+        self.route_trace_line(line_start);
     }
 }
 

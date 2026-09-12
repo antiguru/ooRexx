@@ -58,3 +58,7 @@ lang/uninit_after_std_streams.rex
 # A stream write requires a string value: `makeString` decides what an object
 # writes, and an array writes its items joined by a newline.
 lang/stream_write_conversion.rex
+
+# Task 11: every trace line reaches `.TRACEOUTPUT` as one `LINEOUT` of a
+# `TraceObject`, redirected by the monitor's own destination.
+lang/trace_redirection.rex

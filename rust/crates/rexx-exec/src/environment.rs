@@ -507,6 +507,186 @@ impl Interp {
         Ok(None)
     }
 
+    /// What `.local` holds for one of the route names, or `None` when it holds
+    /// nothing.
+    ///
+    /// **Not [`Interp::dot_variable`]**, which is what a `.NAME` in a program
+    /// resolves through: on a miss that either raises the unbuilt-entry
+    /// refusal or answers the name *as text*, and `SAY` sent to the string
+    /// `".OUTPUT"` is a wrong answer no corpus program could catch, because
+    /// removing the entry needs `Directory~remove` and that refuses as Phase
+    /// 5. The routes need the plain question -- is there an entry -- which is
+    /// what `directory_lookup` answers, and it is reused rather than reopened
+    /// so the seam still has one read chokepoint.
+    ///
+    /// `.local` only: measured, `RexxActivation::resolveStream` and
+    /// `Activity::sayOutput` both read `getLocalEnvironment` and never
+    /// `.environment`.
+    pub(crate) fn local_route(&mut self, name: &[u8]) -> Result<Option<ObjRef>, Failure> {
+        self.directory_lookup(&[EnvScope::Local], name)
+    }
+
+    /// Whether the trace route still ends at the `.STDERR` the bundle minted,
+    /// following each monitor's destination queue head
+    /// (`CoreClasses.orx`'s `Monitor`, whose `UNKNOWN` forwards to
+    /// `destination~peek`).
+    ///
+    /// A route that ends there writes the same bytes whether it is delivered
+    /// or written straight to the buffer, and the direct write is the one that
+    /// runs no Rexx: delivering re-enters the interpreter mid-clause, which
+    /// perturbs the argument stack, `PROCEDURE` permission and a `SELECT`'s
+    /// own search -- measured, all three.
+    fn trace_route_is_bootstrap(&mut self, route: ObjRef) -> bool {
+        let Some(stderr) = self.bootstrap_stderr else {
+            return false;
+        };
+        let Some(monitor_class) = self.rexx_package_class(b"MONITOR") else {
+            return false;
+        };
+        let Some(array_class) = self.classes().lookup("Array") else {
+            return false;
+        };
+        let mut at = route;
+        // The chain the mint builds is `TRACEOUTPUT` over `ERROR` over
+        // `STDERR`, and a program may leave it shorter or longer; the bound
+        // is what keeps a cycle from spinning here.
+        for _ in 0..8 {
+            if at == stderr {
+                return true;
+            }
+            let Some(queue) = self.pool_entry(at, monitor_class, b"DESTINATION") else {
+                return false;
+            };
+            let store = match self.array_slots(queue) {
+                Some(_) => queue,
+                None => match self.pool_entry(queue, array_class, b"ITEMS") {
+                    Some(store) => store,
+                    None => return false,
+                },
+            };
+            let Some(Some(head)) = self.array_slots(store).and_then(<[_]>::first).copied() else {
+                return false;
+            };
+            at = head;
+        }
+        false
+    }
+
+    /// What `name` holds in `owner`'s pool for `scope`, or `None`.
+    fn pool_entry(&self, owner: ObjRef, scope: ObjRef, name: &[u8]) -> Option<ObjRef> {
+        match self.heap.get(owner).map(|object| &object.body) {
+            Some(Body::Instance { pools, .. }) => pools.get(scope, name),
+            _ => None,
+        }
+    }
+
+    /// One finished trace line, delivered to `.TRACEOUTPUT` as a `TraceObject`
+    /// -- `Activity::traceOutput` (`concurrency/Activity.cpp:3171`).
+    ///
+    /// `start` is where the line begins in the buffer: a `.STDERR` `CHAROUT`
+    /// leaves an unterminated fragment there, so the line cannot be found by
+    /// scanning back for a newline. A route that cannot take the line leaves
+    /// it on stdout, which is `corpus/oracle-crashes.txt` entry 11's licensed
+    /// answer for a route the oracle dies on.
+    pub(crate) fn route_trace_line(&mut self, start: usize) {
+        if self.routing_trace {
+            return;
+        }
+        let Ok(Some(route)) = self.local_route(b"TRACEOUTPUT") else {
+            return;
+        };
+        if route == ObjRef::NIL || self.trace_route_is_bootstrap(route) {
+            return;
+        }
+        let Some(class) = self.rexx_package_class(b"TRACEOBJECT") else {
+            return;
+        };
+        let mut line = self.trace.split_off(start);
+        while line.last() == Some(&b'\n') {
+            line.pop();
+        }
+        self.routing_trace = true;
+        // **The nested-send protocol, not a bare send**, and around the whole
+        // delivery because `NEW`, each `PUT` and the `LINEOUT` all run Rexx
+        // clauses. A clause boundary clears the shared argument stack, so
+        // delivering on the caller's own stack wipes the arguments an
+        // enclosing call has already pushed: measured, `zz = length('abcd')`
+        // under `trace i` refuses with `call_op_off_its_node`, where a call
+        // with no arguments is untouched.
+        let (values, mark) = self.take_value_buffer();
+        let delivered = self.deliver_trace_line(class, route, &line);
+        self.give_value_buffer(values, mark);
+        self.routing_trace = false;
+        if delivered.is_err() {
+            self.out.extend_from_slice(&line);
+            self.out.push(b'\n');
+        }
+    }
+
+    /// Each line of an error report, delivered the way a trace line is:
+    /// measured, the oracle sends one `LINEOUT` per line -- three for an
+    /// uncaught `1/0` -- and not one for the report.
+    pub(crate) fn write_trace_report(&mut self, report: &[u8]) {
+        let body = report.strip_suffix(b"\n").unwrap_or(report);
+        for line in body.split(|&byte| byte == b'\n') {
+            let start = self.trace.len();
+            self.trace.extend_from_slice(line);
+            self.trace.push(b'\n');
+            self.route_trace_line(start);
+        }
+    }
+
+    /// The send itself: a `TraceObject` carrying `line`, then `LINEOUT` to
+    /// `route`. Every entry is a `String` on the oracle, `NUMBER` included.
+    fn deliver_trace_line(
+        &mut self,
+        class: ObjRef,
+        route: ObjRef,
+        line: &[u8],
+    ) -> Result<(), Failure> {
+        let caller = self.caller();
+        let Some(object) = self.send_message(class, b"NEW", None, &[], caller)? else {
+            return Err(Failure::Raised(Box::new(crate::error::Raised::syntax(
+                97,
+                1,
+                vec![b"TraceObject".to_vec()],
+            ))));
+        };
+        self.roots.push_temp(object);
+        // A `StringTable` keeps its entries in a bucket table, not in the
+        // `Body::Native` map `.local` uses, so the put goes through the
+        // message. `t[i] = v` sends `t~"[]="(v, i)`, so the value leads.
+        for (name, value) in [
+            (b"THREAD".as_slice(), Some(b"1".as_slice())),
+            (b"INVOCATION".as_slice(), Some(b"0".as_slice())),
+            (b"INTERPRETER".as_slice(), Some(b"1".as_slice())),
+            (b"TRACELINE".as_slice(), Some(line)),
+            (b"STACKFRAME".as_slice(), None),
+        ] {
+            let held = match value {
+                Some(bytes) => {
+                    let held = self.text(bytes);
+                    self.roots.push_temp(held);
+                    held
+                }
+                None => ObjRef::NIL,
+            };
+            let index = self.text(name);
+            self.roots.push_temp(index);
+            let caller = self.caller();
+            self.send_message(object, b"PUT", None, &[Some(held), Some(index)], caller)?;
+        }
+        let caller = self.caller();
+        self.send_message(
+            route,
+            crate::dispatch::LINEOUT,
+            None,
+            &[Some(object)],
+            caller,
+        )?;
+        Ok(())
+    }
+
     /// A class the running package's own directives installed, under its
     /// uppercased name -- `PackageClass::findInstalledClass`, the first step of
     /// the order.
@@ -710,6 +890,9 @@ impl Interp {
             else {
                 return;
             };
+            if name == b"STDERR".as_slice() {
+                self.bootstrap_stderr = Some(built);
+            }
             self.store_local(handle, name, built);
         }
         let Some(monitor_class) = self.rexx_package_class(b"MONITOR") else {
