@@ -626,3 +626,97 @@ ticket.** The consequence for this crate is a licensed divergence: an `ENDLOCAL`
 past the outstanding `SETLOCAL`s answers `0` here -- the answer the
 never-created path already gives -- and no differential case may put that
 program in front of the oracle.
+
+## 11. A default I/O route with nothing at the end of it
+
+Three programs, each SIGSEGV rc 139, each measured twice with a control that
+differs by one clause and exits 0.
+
+**11a, the `OUTPUT` entry removed and a builtin that needs it:**
+
+    .local~remove('OUTPUT')
+    say 'H'
+    call lineout , 'L'
+
+`H` reaches stdout -- `SAY` survives a missing entry, which is the control:
+the same program ending at `say 'after'` prints `H` and `after` at rc 0. It is
+`LINEOUT` with the name omitted that dies.
+
+**11b, the same for input:**
+
+    .local~remove('INPUT')
+    v = linein()
+    say '<'v'>'
+
+Nothing on either descriptor.
+
+**11c, a traced clause while `.TRACEOUTPUT`'s destination cannot take one:**
+
+    .traceoutput~destination(.nil)
+    trace r
+    zz = 1
+    trace off
+    say 'after'
+
+The trace lines and the program's own output all arrive **on stdout** --
+`     3 *-* zz = 1`, `       >>>   "1"`, `     4 *-* trace off`, `after` -- and
+the process dies afterwards with an empty stderr. The control is the same two
+first clauses with no traced clause after them: rc 0. The Phase 7 monitor survey
+also measured that restoring the destination before the end does not save it.
+
+Cause, for 11a and 11b, **Read** in the survey and not measured further:
+`RexxActivation::resolveStream` (`execution/RexxActivation.cpp:1938`-`:1977`)
+answers `.INPUT` or `.OUTPUT` for an omitted stream name by asking
+`getLocalEnvironment`, which answers null once the entry is gone, and the
+builtin sends its message to that null. `SAY` survives because
+`Activity::sayOutput` (`concurrency/Activity.cpp:3214`) tests the null and falls
+back to writing the line itself. For 11c the fallback exists too --
+`Activity::traceOutput` (`:3171`) catches the failed send and writes through
+`lineOut`, which is why the lines land on stdout -- but what dies at exit was
+not established.
+
+Found 2026-09-12 by the Phase 7 survey of the monitors, and re-measured by the
+controller with the controls above. **No upstream ticket.** For this crate all
+three are licensed divergences: nothing here may answer by crashing, so a
+missing entry answers 97.1 the way a `.nil` entry already does, and a trace
+destination that cannot take a `LINEOUT` leaves the line on stdout and lets the
+program exit normally.
+
+## 12. Two stream shapes: a `HANDLE:` write, and a reader after `~uninit`
+
+**12a, writing to a `HANDLE:n` stream:**
+
+    say lineout('HANDLE:1','via handle 1')
+
+SIGSEGV, rc 139, both descriptors empty. The control is the same stream read
+rather than written: `stream('HANDLE:1','C','query streamtype')` answers
+`UNKNOWN` at rc 0, and the survey measured four more reading shapes
+(`stream('handle:1','S')`, `.Stream~new('HANDLE:1')~state`, `~string`,
+`~qualify`) answering as well. Only the write dies.
+
+**12b, any unguarded reader after `~uninit`:**
+
+    call lineout 't.txt','one'
+    s = .Stream~new('t.txt')
+    s~uninit
+    say s~state
+
+SIGSEGV, rc 139. The control is the same program without the last line: rc 0.
+`stream_uninit` destroys the `StreamInfo` and drops `CSELF`
+(`streamLibrary/StreamNative.cpp:2195`-`:2198`), and `stream_state` dereferences
+it without the `checkStreamInfo` guard its siblings use (`:3609`-`:3610`) --
+**Read**, from the Phase 7 stream survey. The guarded ones are safe and measured:
+`~lineout`, `~linein`, `~open` and `~chars` after `~uninit` raise 48.1
+`Stream not initialized`. `~description`, `~qualify` and the five `query_*`
+entries share `stream_state`'s shape and were not run.
+
+Found 2026-09-12 by the Phase 7 stream survey, re-measured by the controller with
+the controls above. **No upstream ticket.** This crate refuses `HANDLE:` loudly
+(reaching an open descriptor needs `unsafe`) and answers 48.1 from every entry
+point after `uninit`, so both are licensed divergences.
+
+**Related, not a new entry**: the survey also reproduced entry 5's shape with a
+different condition -- two NOTREADY-raising reads in one clause under
+`CALL ON NOTREADY`, which dies the same way after running the handler once. It is
+the same defect, so entry 5's rule ("never queue the same `CALL ON` condition
+twice in one clause") covers it.
