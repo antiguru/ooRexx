@@ -95,3 +95,14 @@ lang/command_environments.rex
 # directory and environment rather than in a child, the metacharacter that
 # sends one to a shell instead, and the child that inherits both shadows.
 lang/command_internal.rex
+
+# Task 15: `::OPTIONS ERROR SYNTAX` turns a command's untrapped ERROR into
+# 98.970. The escalation happens where the condition is raised, so the failure
+# retrace never runs -- which is what parts this from the row below.
+lang/command_options_error_syntax.rex
+
+# Task 15: the same for FAILURE and 98.971, whose wording differs and which
+# beats the rename an untrapped FAILURE would otherwise get. Under the default
+# `TRACE N` this program would carry a `+++ "RC(127)"` block if the escalation
+# were checked after the trace rather than before it.
+lang/command_options_failure_syntax.rex

@@ -1,0 +1,10 @@
+count 9
+/* `::OPTIONS FAILURE SYNTAX` turns a command's untrapped FAILURE into 98.971,
+   whose wording is "failed with" where 98.970's is "ended with". It also beats
+   the rename: without this option an untrapped FAILURE becomes an ERROR, and
+   with it the program ends here instead. */
+say 'before the command'
+"sh -c 'exit 127'"
+say 'never reached'
+
+::options failure syntax

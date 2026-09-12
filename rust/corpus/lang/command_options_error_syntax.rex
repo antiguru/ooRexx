@@ -1,0 +1,9 @@
+/* `::OPTIONS ERROR SYNTAX` turns a command's untrapped ERROR into 98.970,
+   which ends the program where the bare condition would have been silent.
+   The `SAY` ahead of the command is here to show what a run reaching 98.970
+   leaves on standard output. */
+say 'before the command'
+"sh -c 'exit 3'"
+say 'never reached'
+
+::options error syntax

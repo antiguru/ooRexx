@@ -481,6 +481,34 @@ impl Interp {
         };
         let outcome = self.run_command(&name, &command)?;
 
+        // **`::OPTIONS ERROR|FAILURE SYNTAX` escalates where the condition is
+        // raised, not where it is delivered**: `Activity::raiseCondition`
+        // reports the syntax error from inside the handler's own
+        // `RaiseCondition`, so `RexxActivation::command` never regains control
+        // and neither `RC`, `.RS` nor the failure retrace happens. Measured on
+        // three descriptors -- `::OPTIONS FAILURE SYNTAX` with an untrapped
+        // 127 shows the clause echo the error report writes and nothing else,
+        // where the same program without the directive shows `>>>` and
+        // `+++ "RC(127)"` first; `trace e` with `::OPTIONS ERROR SYNTAX` is
+        // the same for an `exit 3`, and its control without the directive
+        // keeps the retrace. `RC` in a `SIGNAL ON SYNTAX` handler is 98, the
+        // raise's own, rather than the command's code or a stale one.
+        //
+        // The **original** condition is what is tested here. A `FAILURE` with
+        // only `ERROR SYNTAX` set escalates at neither point: it traces, finds
+        // no trap, is renamed, and is caught by the check in
+        // `raise_command_condition` -- the C++'s own second test.
+        if let Some(condition) = outcome.status.condition()
+            && self.condition_raises_syntax(condition.as_bytes())
+        {
+            let raised = if condition == "FAILURE" {
+                Raised::failure_syntax(&command, outcome.rc)
+            } else {
+                Raised::error_syntax(&command, outcome.rc)
+            };
+            return Err(raised.into());
+        }
+
         // `RC` before anything else, which is where the C++ puts it too
         // (`RexxActivation::command`).
         let assigned = self.text(outcome.rc.to_string().as_bytes());
@@ -522,6 +550,21 @@ impl Interp {
         command: &[u8],
         rc: i32,
     ) -> Result<(), Failure> {
+        // **Ahead of the traps**, which is where `RexxActivation::command`
+        // checks it. That cannot overtake a handler: arming one clears the
+        // escalation first (`ConditionSyntax::disable_for` turns ERROR and
+        // FAILURE off for `CALL ON` as well as `SIGNAL ON`), and measured,
+        // `::OPTIONS ERROR SYNTAX` with `signal on error` armed runs the
+        // handler and exits 0. The reraise below re-enters here, which is the
+        // C++'s second check after a FAILURE becomes an ERROR.
+        if self.condition_raises_syntax(condition.as_bytes()) {
+            let raised = if condition == "FAILURE" {
+                Raised::failure_syntax(command, rc)
+            } else {
+                Raised::error_syntax(command, rc)
+            };
+            return Err(raised.into());
+        }
         let rendered = rc.to_string().into_bytes();
         match self.trap_for(condition.as_bytes()) {
             Some(trap) if trap.call => {

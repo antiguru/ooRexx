@@ -1250,6 +1250,21 @@ impl Raised {
         Raised::syntax(98, 973, vec![readable.to_vec()])
     }
 
+    /// 98.970, what `::OPTIONS ERROR SYNTAX` turns a command's `ERROR` into
+    /// (`RexxActivation::command`). The catalogue quotes `&1` itself, so
+    /// `command` is the string as the program wrote it and nothing more --
+    /// measured, `External command "sh -c 'exit 3'" ended with return code 3.`
+    /// at rc 158.
+    pub(crate) fn error_syntax(command: &[u8], rc: i32) -> Raised {
+        Raised::syntax(98, 970, vec![command.to_vec(), rc.to_string().into_bytes()])
+    }
+
+    /// 98.971, the same for `FAILURE`, whose wording is "failed with" where
+    /// [`Raised::error_syntax`]'s is "ended with".
+    pub(crate) fn failure_syntax(command: &[u8], rc: i32) -> Raised {
+        Raised::syntax(98, 971, vec![command.to_vec(), rc.to_string().into_bytes()])
+    }
+
     /// 98.974, what `::OPTIONS NOTREADY SYNTAX` turns an untrapped NOTREADY
     /// into (`Activity::raiseCondition`, `concurrency/Activity.cpp:619`).
     /// `name` is the stream's name as the program wrote it, not the qualified
