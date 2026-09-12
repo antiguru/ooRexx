@@ -719,6 +719,10 @@ fn form_name(kind: &ExprKind) -> String {
 /// external file search.
 pub(crate) mod internal_routines;
 
+/// Turning a name a program wrote into the path this interpreter opens, against
+/// the interpreter's own current directory rather than the process's.
+pub(crate) mod paths;
+
 /// Every internal-package routine name, for the test that re-derives them from
 /// the C++ tree.
 pub fn internal_routine_names() -> Vec<&'static str> {
@@ -1524,6 +1528,15 @@ struct Interp {
     text_numbers: crate::value::TextNumbers,
     /// A buffer lent out for building a builtin's result, and handed back.
     result_buffer: std::cell::Cell<Vec<u8>>,
+    /// The environment this interpreter reads and writes, initialised from the
+    /// process and never written back. `std::env::set_var` is `unsafe` in this
+    /// edition, and the test harnesses run interpreters on threads in one
+    /// process, so a write reaching the process would reach every other run.
+    env: Vec<(Vec<u8>, Vec<u8>)>,
+    /// The directory relative paths resolve against, for the same reason:
+    /// `std::env::set_current_dir` is process-wide. `DIRECTORY()` moves this
+    /// and nothing else.
+    cwd: std::path::PathBuf,
     /// The activation running right now, held in a field of its own rather
     /// than at the top of [`Interp::suspended`].
     running: Option<Box<Activation>>,
@@ -2077,6 +2090,13 @@ impl Interp {
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             text_numbers: crate::value::TextNumbers::new(),
             result_buffer: std::cell::Cell::new(Vec::new()),
+            env: {
+                use std::os::unix::ffi::OsStrExt;
+                std::env::vars_os()
+                    .map(|(name, value)| (name.as_bytes().to_vec(), value.as_bytes().to_vec()))
+                    .collect()
+            },
+            cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
             running: None,
             suspended: Vec::new(),
             spare_activations: Vec::new(),
@@ -2991,6 +3011,16 @@ impl Interp {
         found.ok_or_else(|| Raised::namespace_routine_not_found(name, namespace).into())
     }
 
+    /// One variable of the interpreter's own environment, as text. `None` for
+    /// a name it does not hold or a value that is not UTF-8 -- a path this
+    /// crate cannot spell is a path it cannot search.
+    fn shadow_var(&self, name: &[u8]) -> Option<String> {
+        self.env
+            .iter()
+            .find(|(held, _)| held == name)
+            .and_then(|(_, value)| String::from_utf8(value.clone()).ok())
+    }
+
     /// The file a `::REQUIRES` of `name` in package `id` resolves to, or
     /// `None` when no route holds one.
     fn resolve_requires(&self, id: ProgramId, name: &[u8]) -> Option<String> {
@@ -3006,13 +3036,18 @@ impl Interp {
         requires: bool,
     ) -> Option<String> {
         let name = std::str::from_utf8(name).ok()?;
+        // The interpreter's own environment and directory, never the process's
+        // (`Interp::env`, `Interp::cwd`): the harnesses run interpreters on
+        // threads, and `ootest/testOORexx.rex` sets `PATH` through `VALUE` and
+        // changes directory before calling the program it then has to find.
+        let rexx_path = self.shadow_var(b"REXX_PATH");
+        let sys_path = self.shadow_var(b"PATH");
         let entries = require::search_entries(
             program.and_then(require::program_directory),
-            std::env::var("REXX_PATH").ok().as_deref(),
-            std::env::var("PATH").ok().as_deref(),
+            rexx_path.as_deref(),
+            sys_path.as_deref(),
         );
-        let cwd = std::env::current_dir().ok()?;
-        let cwd = cwd.to_str()?;
+        let cwd = self.cwd.to_str()?;
         let extension = program.and_then(require::program_extension);
         for candidate in require::candidates(name, &entries, extension, requires) {
             let resolved = require::normalize(&candidate, cwd);
@@ -4476,6 +4511,10 @@ impl Interp {
             required_paths: _,
             required_packages: _,
             requires_installing: _,
+            // Bytes and a path, no `ObjRef` in either: the interpreter's own
+            // environment and current directory are not the collector's.
+            env: _,
+            cwd: _,
         } = self;
         // The context objects of the activations on the stack. **The one
         // object an activation owns outright**: everything else it holds is
@@ -4772,8 +4811,15 @@ fn execute(
     // doc for what reads it and for the three measured invocations that tell
     // "no argument" from "one empty argument" apart.
     interp.call_context.name = path.as_bytes().to_vec();
-    let (argument, program_input, deadline) = invocation.into_parts();
-    interp.input = Input::new(program_input);
+    let parts = invocation.into_parts();
+    let (argument, deadline) = (parts.argument, parts.deadline);
+    interp.input = Input::new(parts.input);
+    if let Some(directory) = parts.directory {
+        interp.cwd = directory;
+    }
+    if let Some(environment) = parts.environment {
+        interp.env = environment;
+    }
     // Armed here rather than in `Interp::new`, and after the parse, so that
     // what it bounds is the running of this program. `Interp::bootstrap_library`
     // below runs clauses of its own and is inside the bound, which is what a

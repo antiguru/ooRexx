@@ -47,6 +47,13 @@ pub struct Invocation {
     /// `None` for no bound at all -- which is what every shipped caller
     /// passes. See [`Invocation::with_deadline`].
     deadline: Option<Duration>,
+    /// The directory the interpreter resolves relative paths against, or
+    /// `None` to take the process's. A harness running interpreters on threads
+    /// sets it, because the process's own directory is shared.
+    directory: Option<std::path::PathBuf>,
+    /// The environment the interpreter reads and writes, or `None` to copy the
+    /// process's at start.
+    environment: Option<Vec<(Vec<u8>, Vec<u8>)>>,
 }
 
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
@@ -69,6 +76,25 @@ impl Invocation {
             argument: None,
             input: ProgramInput::Nothing,
             deadline: None,
+            directory: None,
+            environment: None,
+        }
+    }
+
+    /// The same invocation, resolving relative paths against `directory`.
+    pub fn with_directory(self, directory: std::path::PathBuf) -> Invocation {
+        Invocation {
+            directory: Some(directory),
+            ..self
+        }
+    }
+
+    /// The same invocation, reading and writing `environment` instead of a
+    /// copy of the process's.
+    pub fn with_environment(self, environment: Vec<(Vec<u8>, Vec<u8>)>) -> Invocation {
+        Invocation {
+            environment: Some(environment),
+            ..self
         }
     }
 
@@ -95,11 +121,28 @@ impl Invocation {
         }
     }
 
-    /// The argument string, if there is one, where `.input` reads from, which
-    /// engine runs the bodies, and how long the run may take.
-    pub(crate) fn into_parts(self) -> (Option<Vec<u8>>, ProgramInput, Option<Duration>) {
-        (self.argument, self.input, self.deadline)
+    /// The argument string, if there is one, where `.input` reads from, how
+    /// long the run may take, and the directory and environment it runs
+    /// against -- each `None` when the process's own is to be taken.
+    pub(crate) fn into_parts(self) -> InvocationParts {
+        InvocationParts {
+            argument: self.argument,
+            input: self.input,
+            deadline: self.deadline,
+            directory: self.directory,
+            environment: self.environment,
+        }
     }
+}
+
+/// What [`Invocation::into_parts`] hands `run_program`, as named fields rather
+/// than a tuple whose arity grows with every phase.
+pub(crate) struct InvocationParts {
+    pub(crate) argument: Option<Vec<u8>>,
+    pub(crate) input: ProgramInput,
+    pub(crate) deadline: Option<Duration>,
+    pub(crate) directory: Option<std::path::PathBuf>,
+    pub(crate) environment: Option<Vec<(Vec<u8>, Vec<u8>)>>,
 }
 
 /// The one argument string a list of command-line words becomes, or `None`
@@ -153,7 +196,7 @@ mod tests {
             (&["x ", "y"], Some(b"x  y")),
         ];
         for (words, expected) in cases {
-            let joined = join_command_line(*words).into_parts().0;
+            let joined = join_command_line(*words).into_parts().argument;
             assert_eq!(
                 joined.as_deref(),
                 *expected,
@@ -170,18 +213,18 @@ mod tests {
         assert!(
             join_command_line(Vec::<&str>::new())
                 .into_parts()
-                .0
+                .argument
                 .is_none()
         );
         assert_eq!(
-            join_command_line([""]).into_parts().0.as_deref(),
+            join_command_line([""]).into_parts().argument.as_deref(),
             Some(&b""[..])
         );
-        assert!(Invocation::none().into_parts().0.is_none());
+        assert!(Invocation::none().into_parts().argument.is_none());
         assert_eq!(
             Invocation::with_argument(Vec::new())
                 .into_parts()
-                .0
+                .argument
                 .as_deref(),
             Some(&b""[..])
         );

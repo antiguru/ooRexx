@@ -129,27 +129,7 @@ fn has_directory(name: &str) -> bool {
         || name.starts_with("../")
 }
 
-/// `path` made absolute against `cwd` and reduced to one spelling:
-/// `SysFileSystem::canonicalizeName` followed by `normalizePathName`
-/// (`platform/unix/SysFileSystem.cpp:628`, `:687`).
-pub(crate) fn normalize(path: &str, cwd: &str) -> String {
-    let absolute = if path.starts_with('/') {
-        path.to_string()
-    } else {
-        format!("{}/{path}", cwd.trim_end_matches('/'))
-    };
-    let mut parts: Vec<&str> = Vec::new();
-    for part in absolute.split('/') {
-        match part {
-            "" | "." => {}
-            ".." => {
-                parts.pop();
-            }
-            other => parts.push(other),
-        }
-    }
-    format!("/{}", parts.join("/"))
-}
+pub(crate) use crate::paths::normalize;
 
 #[cfg(test)]
 mod tests {
@@ -298,19 +278,5 @@ mod tests {
         assert_eq!(program_extension("/a.b/main"), None);
         assert_eq!(program_directory("/a/b/main.rex"), Some("/a/b/"));
         assert_eq!(program_directory("main.rex"), None);
-    }
-
-    /// `normalizePathName`'s reductions, each against the C++ loop's own
-    /// answer.
-    #[test]
-    fn normalize_makes_one_spelling_of_a_path() {
-        assert_eq!(normalize("lib.rex", "/a/b"), "/a/b/lib.rex");
-        assert_eq!(normalize("./lib.rex", "/a/b"), "/a/b/lib.rex");
-        assert_eq!(normalize("../lib.rex", "/a/b"), "/a/lib.rex");
-        assert_eq!(normalize("/a//b/./c/../d", "/x"), "/a/b/d");
-        assert_eq!(normalize("/a/b/", "/x"), "/a/b");
-        assert_eq!(normalize("/..", "/x"), "/");
-        // `..b` is a file name, not a parent reference.
-        assert_eq!(normalize("/a/..b", "/x"), "/a/..b");
     }
 }
