@@ -18,7 +18,7 @@ Phase 7 and Phase 10 delete their own exclusion rows as they deliver them. The
 deviations section shrinks only if a decision is reversed, which is a plan
 amendment too.
 
-The gate reads "70 of the 81 builtins in builtinTable[] (BuiltinFunctions.cpp
+The gate reads "77 of the 81 builtins in builtinTable[] (BuiltinFunctions.cpp
 :3042) are in scope, three of them partially, and the excluded set is exactly
 this file".
 

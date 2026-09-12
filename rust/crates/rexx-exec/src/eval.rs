@@ -2577,20 +2577,21 @@ mod tests {
 
     /// The neighbouring case the one above cannot pin on its own: a builtin
     /// Phase 4 excludes **outright** is not "resolves to nothing", and must
-    /// stay loud rather than joining it at 43.1. The oracle answers `CHARIN`,
-    /// so a condition here would let a program expecting one pass against a
-    /// gap.
+    /// stay loud rather than joining it at 43.1. The oracle answers
+    /// `RXQUEUE`, so a condition here would let a program expecting one pass
+    /// against a gap. (This read `CHARIN` until Phase 7 implemented the stream
+    /// builtins and it left the whole-exclusion set.)
     #[test]
     fn a_wholly_excluded_builtin_stays_loud_rather_than_raising_43_1() {
         let outcome = crate::run_program(
             "call-expr-excluded.rex",
-            b"say charin('nosuch.txt')\n".to_vec(),
+            b"say rxqueue('G')\n".to_vec(),
             crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
         assert_eq!(
             String::from_utf8_lossy(&outcome.stderr),
-            "rexx-exec: routine \"CHARIN\" is not implemented (Phase 7)\n",
+            "rexx-exec: routine \"RXQUEUE\" is not implemented (Phase 10)\n",
             "the refusal names the phase the exclusion table gives it"
         );
     }

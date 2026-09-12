@@ -1055,7 +1055,7 @@ mod tests {
         let mut interp = Interp::new();
         assert!(dispatch(&mut interp, b"ZORKOLO", &[]).is_none());
         assert!(
-            dispatch(&mut interp, b"CHARIN", &[]).is_none(),
+            dispatch(&mut interp, b"RXQUEUE", &[]).is_none(),
             "a whole exclusion is not a builtin name here either"
         );
     }

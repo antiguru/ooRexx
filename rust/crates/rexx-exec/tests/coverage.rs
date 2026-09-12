@@ -1463,9 +1463,10 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
     }
     assert_eq!(
         EXCLUDED_BUILTINS.len(),
-        14,
-        "11 whole exclusions plus 3 partial rows -- Phase 7 delivered QUALIFY, \
-         USERID, SETLOCAL and ENDLOCAL and deleted their rows"
+        7,
+        "4 whole exclusions plus 3 partial rows -- Phase 7 delivered QUALIFY, \
+         USERID, SETLOCAL and ENDLOCAL, and then CHARIN, CHAROUT, CHARS, \
+         LINEIN, LINEOUT, LINES and STREAM, deleting their rows each time"
     );
 
     // Every partial row must also be an excluded row, or `wholly_excluded`
@@ -1478,7 +1479,7 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
     }
     assert_eq!(
         rexx_inventory::builtins::wholly_excluded().len(),
-        11,
+        4,
         "the whole exclusions are EXCLUDED less the partial rows"
     );
 
@@ -1488,8 +1489,8 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
     // the actual table rather than to a copy-pasted figure.
     let in_scope = names.len() - rexx_inventory::builtins::wholly_excluded().len();
     assert_eq!(
-        in_scope, 70,
-        "70 of the 81 builtins are in scope, three of them partially -- see \
+        in_scope, 77,
+        "77 of the 81 builtins are in scope, three of them partially -- see \
          phase-4-exclusions.txt"
     );
     assert_eq!(

@@ -7181,10 +7181,6 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
             "routine \"SYSWAITEVENTSEM\" is not implemented (Phase 6)",
         ),
         (
-            b"say linein()\n",
-            "routine \"LINEIN\" is not implemented (Phase 7)",
-        ),
-        (
             b"say rxqueue('G')\n",
             "routine \"RXQUEUE\" is not implemented (Phase 10)",
         ),
