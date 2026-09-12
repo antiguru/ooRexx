@@ -7586,15 +7586,21 @@ fn an_environment_name_over_two_hundred_and_fifty_bytes_raises_29_1() {
     }
 }
 
-/// The command form and the `WITH` form both still fail loudly, and both
-/// name Phase 7.
+/// The `WITH` form still fails loudly and names Phase 7. The command form no
+/// longer does: `address cmd ''` and `address cmd 'text'` run the command,
+/// and `corpus/lang/command_environments.rex` is what pins them now.
+///
+/// **`address with output stem o.` is not one of these**, and used to be on
+/// this list. `WITH` is a keyword only after an environment or a `VALUE`
+/// expression (`addressNew`), so that clause names an environment called
+/// `WITH` and runs `OUTPUT STEM O.` as a command against it. Measured: the
+/// oracle answers `+++ "RC(30)"` on stderr at exit 0 and this crate is
+/// byte-identical to it, so the clause belongs to the command dispatch and
+/// not to the gap this test pins.
 #[test]
-fn the_command_and_with_forms_stay_loud_and_name_phase_7() {
+fn the_with_form_stays_loud_and_names_phase_7() {
     for source in [
-        &b"address cmd ''\n"[..],
-        &b"address cmd 'text'\n"[..],
         &b"address cmd with output stem o.\n"[..],
-        &b"address with output stem o.\n"[..],
         &b"address value 'q' with input stem i.\n"[..],
     ] {
         let mut interp = Interp::new();

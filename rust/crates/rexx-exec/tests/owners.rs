@@ -62,7 +62,7 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // ---- implemented here ----
     InstructionKind::Assignment { .. } => ("Assignment", Owner::InScope),
     InstructionKind::Label { .. } => ("Label", Owner::InScope),
-    InstructionKind::Command { .. } => ("Command", Owner::Phase("Phase 7")),
+    InstructionKind::Command { .. } => ("Command", Owner::InScope),
     InstructionKind::Do(_) => ("Do", Owner::InScope),
     InstructionKind::Loop(_) => ("Loop", Owner::InScope),
     InstructionKind::If { .. } => ("If", Owner::InScope),
@@ -160,14 +160,13 @@ split InstructionKind::Call(c) in (&**c) {
     rexx_parse::Call::Qualified { .. } => ("Call::Qualified", Owner::InScope),
 },
 // ---- `ADDRESS`, split on the same condition `instruction_owner` uses ----
-// One keyword, two jobs. `ADDRESS env`, `ADDRESS VALUE expr` and the bare
-// toggle only name an environment, which is per-activation state and needs
-// nothing outside this crate. `ADDRESS env command` issues a command to that
-// environment, and `WITH` says where a command's three streams go; both need
-// the command dispatch `InstructionKind::Command` needs, and carry that same
-// owner (D18).
-split InstructionKind::Address(a) in (a.command.is_some() || a.io.is_some()) {
-    true => ("Address::Command", Owner::Phase("Phase 7")),
+// One keyword, two jobs. Naming an environment -- `ADDRESS env`, `ADDRESS
+// VALUE expr`, the bare toggle -- is per-activation state, and so now is
+// `ADDRESS env command`, which issues one through the same dispatch
+// `InstructionKind::Command` uses. `WITH`, which says where a command's three
+// streams go, is what is left (D18).
+split InstructionKind::Address(a) in (a.io.is_some()) {
+    true => ("Address::With", Owner::Phase("Phase 7")),
     false => ("Address::Environment", Owner::InScope),
 });
 
@@ -320,10 +319,10 @@ impl Coverage {
 /// the point: relabelling a variant is a plan amendment, not a drive-by
 /// `match` edit.
 pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
-    ("InstructionKind", "Command", "Phase 7"),
     // The one arm-grained row. `ADDRESS`'s other form is in scope, and so is
     // every arm of `CALL`, so those appear in `INSTRUCTION_TAGS` and not here.
-    ("InstructionKind", "Address::Command", "Phase 7"),
+    // `Command` left this list when the command dispatch landed.
+    ("InstructionKind", "Address::With", "Phase 7"),
     ("InstructionKind", "Options", "Phase 5"),
     ("LoopKind", "With", "Phase 5"),
 ];
@@ -453,7 +452,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        41
+        42
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -481,7 +480,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("Phase 7"))
             .count(),
-        2
+        1
     );
 
     assert_eq!(EXPR_TAGS.len(), 15);

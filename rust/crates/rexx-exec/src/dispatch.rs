@@ -10252,11 +10252,7 @@ mod tests {
                 "rexx-exec: OPTIONS is not implemented (Phase 5)\n",
             ),
             (
-                ".K\n::class K\n::method makeString class\n  return 'true'\n",
-                "rexx-exec: a command is not implemented (Phase 7)\n",
-            ),
-            (
-                "address 'SYSTEM' .K\n::class K\n::method makeString class\n  return 'true'\n",
+                "address 'SYSTEM' .K with output stem o.\n::class K\n::method makeString class\n  return 'true'\n",
                 "rexx-exec: ADDRESS is not implemented (Phase 7)\n",
             ),
         ] {

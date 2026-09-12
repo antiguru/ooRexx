@@ -76,21 +76,15 @@ enum Category {
 
 /// One witness per phase-owned row of `owners.rs`'s `INSTRUCTION_TAGS`.
 const INSTRUCTION_WITNESSES: &[Witness] = &[
-    Witness {
-        tag: "Command",
-        // A clause that is only an expression, and not any other shape, is
-        // dispatched as a command through the current ADDRESS.
-        source: "'date'\n",
-        category: Category::Instruction,
-    },
     // The one arm-grained tag; see the module doc.
     // Which variants need a row here is `owners.rs`'s to say, and the
     // assertion below reads it: a variant this crate implements must not
     // carry one, because the row would assert a loud failure that does not
-    // happen.
+    // happen. `Command` had a row here until the command dispatch landed and
+    // its clause stopped refusing.
     Witness {
-        tag: "Address::Command",
-        source: "address cmd ''\n",
+        tag: "Address::With",
+        source: "address cmd 'text' with output stem o.\n",
         category: Category::Instruction,
     },
     Witness {
@@ -217,7 +211,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call and Address), no more \
          and no fewer"
     );
-    assert_eq!(expected_instructions.len(), 3);
+    assert_eq!(expected_instructions.len(), 2);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -248,7 +242,7 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        41
+        42
     );
     assert_eq!(
         EXPR_TAGS
