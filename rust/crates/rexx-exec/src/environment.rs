@@ -1058,6 +1058,15 @@ impl Interp {
             // `INTERPRET` rule the oracle's own `isInterpret` delegation
             // gives this name: the enclosing clause's line, not the
             // fragment's.
+            // Answering `None` before any command has run is what makes
+            // `.RS` render as its own name: `dot_variable`'s tail falls back
+            // to the name's text, which is `isReturnStatusSet`'s else branch
+            // (`RexxActivation::rexxVariable`). Measured -- `say .rs` ahead of
+            // every command prints `.RS`, and 1 after one that failed.
+            b"RS" => {
+                let rs = self.activation().rs?;
+                Some(self.text(rs.to_string().as_bytes()))
+            }
             b"LINE" => Some(self.counted(self.clause_state.line())),
             b"CONTEXT" => Some(self.context_object()),
             _ => None,

@@ -278,6 +278,11 @@ pub(crate) struct Activation {
     pub(crate) pc: usize,
     /// This activation's own `NUMERIC DIGITS`/`FUZZ`/`FORM`.
     pub(crate) settings: Settings,
+    /// What `.RS` answers here: 0 after a command that succeeded, 1 after one
+    /// that raised `ERROR` and -1 after one that raised `FAILURE`. `None`
+    /// until a command runs, which `.RS` answers as its own name rather than
+    /// as a number (`RexxActivation::rexxVariable`, `isReturnStatusSet`).
+    pub(crate) rs: Option<i32>,
     /// Which conditions this activation raises as SYNTAX errors --
     /// `::OPTIONS <condition> SYNTAX` on its own package, minus whatever a
     /// `SIGNAL ON`/`OFF` here has turned off since.
@@ -469,6 +474,7 @@ impl Activation {
             program_id,
             body: None,
             plan,
+            rs: None,
             extra: NameMap::default(),
             frame,
             owns_frame: true,
@@ -541,6 +547,7 @@ impl Activation {
             frame,
             owns_frame: false,
             entry: Entry::InternalCall,
+            rs: inherited.rs,
             call_type: inherited.call_type,
             method_identity: None,
             exposed: Vec::new(),
@@ -594,6 +601,10 @@ impl Activation {
             frame,
             owns_frame: true,
             entry: Entry::Routine,
+            // Not inherited: measured, a `::ROUTINE` called after a failing
+            // command answers `.RS` as its own name, where an internal label
+            // called from the same place answers 1.
+            rs: None,
             call_type,
             method_identity: None,
             exposed: Vec::new(),
@@ -640,6 +651,7 @@ impl Activation {
             frame,
             owns_frame: true,
             entry: Entry::Method,
+            rs: None,
             call_type: CallType::Method,
             method_identity: Some(identity),
             exposed: Vec::new(),
@@ -703,6 +715,7 @@ impl Activation {
             owns_frame: _,
             entry: _,
             call_type: _,
+            rs: _,
             method_identity,
             exposed,
             reply: _,
@@ -770,6 +783,8 @@ impl Activation {
 pub(crate) struct Inherited {
     pub(crate) call_type: CallType,
     pub(crate) settings: Settings,
+    /// `.RS`, which an internal call starts from its caller's copy of.
+    pub(crate) rs: Option<i32>,
     pub(crate) condition_syntax: ConditionSyntax,
     pub(crate) trace_mode: TraceMode,
     pub(crate) address: AddressState,

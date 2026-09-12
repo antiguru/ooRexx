@@ -1,0 +1,52 @@
+/* What a command's return code leaves behind: `RC`, `.RS`, and the condition
+   a non-zero code raises. Every command here is `true` or `sh -c 'exit N'`,
+   so nothing depends on which programs the host has installed and no shell
+   "not found" text can reach standard error.
+
+   The 127 commands also trace themselves on standard error under the default
+   setting, which is `TRACE N`: `defaultTraceFlags` carries `traceFailures`,
+   so a failing command echoes its clause, its string and `+++ "RC(127)"` in a
+   program that names no `TRACE` at all. */
+
+say 'rs before any command:' .rs
+'true'
+say 'success  rc=' rc 'rs=' .rs
+"sh -c 'exit 3'"
+say 'error    rc=' rc 'rs=' .rs
+"sh -c 'exit 127'"
+say 'failure  rc=' rc 'rs=' .rs
+
+/* `CALL ON` resumes, so each of these three runs the handler and then carries
+   on at the clause after the command. */
+call on error name onerror
+"sh -c 'exit 4'"
+say 'resumed  rc=' rc
+call off error
+
+/* An untrapped FAILURE is reraised as an ERROR, so an error handler alone
+   still sees the 127. */
+call on error name onerror
+"sh -c 'exit 127'"
+say 'resumed  rc=' rc
+call off error
+
+/* The reverse does not hold: an ERROR is never reraised as a FAILURE. */
+call on failure name onfailure
+"sh -c 'exit 5'"
+say 'fell through rc=' rc
+call off failure
+
+/* A command's own output goes to the same place `SAY` writes, in clause
+   order. */
+say 'a'
+'echo b'
+say 'c'
+exit 0
+
+onerror:
+say '  handler ERROR rc=' rc 'rs=' .rs
+return
+
+onfailure:
+say '  handler FAILURE rc=' rc 'rs=' .rs
+return

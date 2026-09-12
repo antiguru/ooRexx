@@ -425,12 +425,6 @@ enum Coverage {
     /// comparison is as strict as `check_witness`'s -- it is the
     /// *expectation* that cannot be committed, not the check.
     WitnessedLive(&'static str),
-    /// Not reachable from the code this crate runs yet, and the phase named
-    /// is where it becomes reachable. The string is spelled exactly as
-    /// `phase-4-exclusions.txt`'s own owner column spells it, because that
-    /// file and this table are the two places an owner is recorded and a
-    /// third spelling would hide a disagreement between them.
-    Owned(&'static str),
 }
 
 /// **Criterion 3's coverage measure** (D14 amendment 3). Without this table
@@ -438,7 +432,7 @@ enum Coverage {
 /// *how much of the trace surface that is* is measured by nothing.
 const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     ("*-*", Coverage::Witnessed),
-    ("+++", Coverage::Owned("Phase 7")),
+    ("+++", Coverage::WitnessedLive(LIVE_COMMAND_WITNESS)),
     (">>>", Coverage::Witnessed),
     (">.>", Coverage::Witnessed),
     (">V>", Coverage::Witnessed),
@@ -549,29 +543,30 @@ fn every_live_witness_emits_its_prefix_and_is_run_by_the_corpus() {
     }
 }
 
-/// The one corpus program that witnesses a prefix no committed file can
-/// hold, relative to `rust/corpus/`.
+/// A corpus program that witnesses a prefix no committed file can hold,
+/// relative to `rust/corpus/`.
 const LIVE_INVOCATION_WITNESS: &str = "lang/routine_dispatch.rex";
+
+/// `+++`'s witness. A command that fails traces itself under the default
+/// setting, so this program emits the line while naming no `TRACE` at all;
+/// the expectation is the oracle's answer for the whole program rather than
+/// a committed transcript, which is what parts this from a `Witnessed` row.
+const LIVE_COMMAND_WITNESS: &str = "lang/command_dispatch.rex";
 
 /// The coverage number itself, committed so that a change to it is a change
 /// to this file rather than a change to a printed line nobody reads. Counts
 /// `Witnessed` and `WitnessedLive` together: both are compared against the
 /// oracle byte for byte, and the split between them is about where the
 /// expectation lives, not about how strict the check is.
-const WITNESSED_PREFIX_COUNT: usize = 18;
-
-/// The rest, each with an owner. `WITNESSED_PREFIX_COUNT` plus this is
-/// asserted to be the whole table, so neither number can drift on its own.
-const OUT_OF_SCOPE_PREFIX_COUNT: usize = 1;
-
-/// The phases an owner may name. A phase that has finished cannot own a
-/// prefix -- whatever it owned is witnessed by then -- so a finished phase's
-/// name does not appear here.
-const OWNER_PHASES: &[&str] = &["Phase 7"];
+/// Asserted to be the whole table, which is what stops a row being dropped
+/// quietly. There is no second group to add to it: `+++` was the last prefix
+/// carrying an owner rather than a witness, and the command dispatch gave it
+/// one.
+const WITNESSED_PREFIX_COUNT: usize = 19;
 
 /// Criterion 3's coverage measure, asserted rather than printed.
 #[test]
-fn the_trace_surfaces_coverage_is_eighteen_of_nineteen_with_an_owner_for_the_rest() {
+fn every_trace_prefix_the_oracle_emits_has_a_witness() {
     let mut listed: Vec<&str> = PREFIX_COVERAGE.iter().map(|(prefix, _)| *prefix).collect();
     listed.sort_unstable();
     let before_dedup = listed.len();
@@ -605,13 +600,6 @@ fn the_trace_surfaces_coverage_is_eighteen_of_nineteen_with_an_owner_for_the_res
         "PREFIX_COVERAGE's `Witnessed` rows disagree with CLAIMED_PREFIXES"
     );
 
-    let owned: Vec<&str> = PREFIX_COVERAGE
-        .iter()
-        .filter_map(|(_, coverage)| match coverage {
-            Coverage::Witnessed | Coverage::WitnessedLive(_) => None,
-            Coverage::Owned(phase) => Some(*phase),
-        })
-        .collect();
     let live = PREFIX_COVERAGE
         .iter()
         .filter(|(_, coverage)| matches!(coverage, Coverage::WitnessedLive(_)))
@@ -621,16 +609,10 @@ fn the_trace_surfaces_coverage_is_eighteen_of_nineteen_with_an_owner_for_the_res
         WITNESSED_PREFIX_COUNT,
         "witnessed count, committed and live together"
     );
-    assert_eq!(owned.len(), OUT_OF_SCOPE_PREFIX_COUNT, "out-of-scope count");
     assert_eq!(
-        WITNESSED_PREFIX_COUNT + OUT_OF_SCOPE_PREFIX_COUNT,
+        WITNESSED_PREFIX_COUNT,
         PREFIX_COVERAGE.len(),
-        "the two counts no longer add up to the whole table"
+        "a row is neither `Witnessed` nor `WitnessedLive`, so the table no \
+         longer witnesses every prefix"
     );
-    for phase in &owned {
-        assert!(
-            OWNER_PHASES.contains(phase),
-            "{phase:?} is not one of the phases an owner may name"
-        );
-    }
 }

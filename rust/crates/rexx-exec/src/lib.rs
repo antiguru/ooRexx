@@ -122,6 +122,11 @@ use options::PackageOptions;
 // and the extensions appended to it.
 mod require;
 
+// Command clauses (Phase 7): the handler an `ADDRESS` environment names, the
+// child it runs, and the return code that becomes `RC`, `.RS` and a
+// condition.
+mod command;
+
 /// The exit code for a construct this crate does not implement.
 pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 
@@ -1315,15 +1320,14 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // own but which share `exec_parse`. Every source is implemented,
         // including the two that read a line (`PARSE PULL`, `PARSE LINEIN`).
         InstructionKind::Parse(_) | InstructionKind::Arg(_) | InstructionKind::Pull(_) => None,
-        // **Arm-grained, the second variant in this match that is.** The three
-        // forms that only name an environment -- `ADDRESS env`, `ADDRESS VALUE
-        // expr` and the bare toggle -- are implemented and answer `None`.
-        // `ADDRESS env command` issues a command, and a `WITH` redirection
-        // configures where a command's streams go; both need the command
-        // dispatch `InstructionKind::Command` needs, so they carry that same
-        // owner rather than one of their own (D18).
+        // **Arm-grained, the second variant in this match that is.** The forms
+        // that only name an environment -- `ADDRESS env`, `ADDRESS VALUE expr`
+        // and the bare toggle -- are implemented, and so is `ADDRESS env
+        // command`, which issues one through the same dispatch
+        // `InstructionKind::Command` uses. A `WITH` redirection, which
+        // configures where a command's three streams go, is what is left.
         InstructionKind::Address(address) => {
-            if address.command.is_some() || address.io.is_some() {
+            if address.io.is_some() {
                 Some("Phase 7")
             } else {
                 None
@@ -1357,7 +1361,7 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // through `Loud::object_position` rather than answering.
         InstructionKind::Forward(_) => None,
         InstructionKind::Options { .. } => Some("Phase 5"),
-        InstructionKind::Command { .. } => Some("Phase 7"),
+        InstructionKind::Command { .. } => None,
     }
 }
 

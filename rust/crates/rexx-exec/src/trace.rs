@@ -21,11 +21,10 @@ use rexx_core::ObjRef;
 use rexx_num::Number;
 use rexx_parse::{Operator, PrefixOp};
 
-/// The visible-output shape of the current `TRACE` setting, restricted to
-/// what pure-4a code can ever produce (D18 excludes commands, so
-/// `traceCommands`/`traceErrors`/`traceFailures` have nothing to show;
-/// interactive debug pausing does not exist on this non-interactive runtime
-/// at all).
+/// The visible-output shape of the current `TRACE` setting. Interactive
+/// debug pausing does not exist on this non-interactive runtime, so the
+/// pause flags have no field here; every other flag
+/// `TraceSetting::setTrace*` sets does.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct TraceMode {
     /// `TRACE_PREFIX_CLAUSE` (`*-*`): every stepped instruction's own clause
@@ -52,46 +51,66 @@ pub(crate) struct TraceMode {
     /// `all` already covers it, and the only mode it decides anything in is
     /// `L`.
     pub(crate) labels: bool,
+    /// `TraceSetting::tracingCommands`: a command clause echoes `*-*` and its
+    /// evaluated string as `>>>`, before the command runs. Measured under
+    /// `TRACE C`, where a command that succeeds still shows both and nothing
+    /// else in the program shows anything.
+    pub(crate) commands: bool,
+    /// `TraceSetting::tracingErrors`: a command that raised `ERROR` echoes
+    /// `*-*` and `>>>` **after** it has run, where the setting did not
+    /// already echo them.
+    pub(crate) errors: bool,
+    /// `TraceSetting::tracingFailures`, the same for `FAILURE`. Set under
+    /// `TRACE N`, which is why a failing command traces itself in a program
+    /// carrying no `TRACE` instruction at all.
+    pub(crate) failures: bool,
     /// The byte `TraceSetting::toString` (`runtime/TraceSetting.cpp:62`-`119`)
     /// renders this setting as, and so the byte `TRACE()` answers.
     pub(crate) letter: u8,
 }
 
 impl TraceMode {
-    /// `TraceSetting::setTraceOff`/`setTraceNormal`/`setTraceCommands`/
-    /// `setTraceErrors`/`setTraceFailures` -- every one of these sets a flag
-    /// this crate's own scope has nothing to show for (D18 excludes
-    /// commands; errors/failures are command-condition machinery, not built
-    /// here), so all five behave identically here.
+    /// `TraceSetting::setTraceOff`: every flag clear, and the one setting
+    /// under which a failing command shows nothing.
     pub(crate) const OFF: TraceMode = TraceMode {
         all: false,
         results: false,
         intermediates: false,
         labels: false,
+        commands: false,
+        errors: false,
+        failures: false,
         letter: b'O',
     };
     /// `TRACE N` (`setTraceNormal`), and the setting every activation starts
-    /// under. Behaves exactly as [`TraceMode::OFF`]; see that constant for
-    /// why the two are separate.
+    /// under. `defaultTraceFlags` is `traceNormal` **and `traceFailures`**
+    /// (`TraceSetting.cpp:49`), so this is not [`TraceMode::OFF`] with
+    /// another letter: a command that raises `FAILURE` traces itself here.
     pub(crate) const NORMAL: TraceMode = TraceMode {
+        failures: true,
         letter: b'N',
         ..TraceMode::OFF
     };
-    /// `TRACE C` (`setTraceCommands`). Behaves exactly as
-    /// [`TraceMode::OFF`], since D18 excludes commands.
+    /// `TRACE C` (`setTraceCommands`): the single instruction type, so a
+    /// command clause echoes and nothing else in the program does.
     const COMMANDS: TraceMode = TraceMode {
+        commands: true,
         letter: b'C',
         ..TraceMode::OFF
     };
-    /// `TRACE E` (`setTraceErrors`). Behaves exactly as [`TraceMode::OFF`]:
-    /// an `ERROR` condition is command-condition machinery.
+    /// `TRACE E` (`setTraceErrors`), which sets `traceFailures` beside
+    /// `traceErrors` -- "just errors includes failures", `TraceSetting.hpp`.
     const ERRORS: TraceMode = TraceMode {
+        errors: true,
+        failures: true,
         letter: b'E',
         ..TraceMode::OFF
     };
-    /// `TRACE F` (`setTraceFailures`). Behaves exactly as
-    /// [`TraceMode::OFF`], for [`TraceMode::ERRORS`]' reason.
+    /// `TRACE F` (`setTraceFailures`): failures and, unlike
+    /// [`TraceMode::ERRORS`], not errors. Measured -- `exit 127` traces and
+    /// `exit 3` does not.
     const FAILURES: TraceMode = TraceMode {
+        failures: true,
         letter: b'F',
         ..TraceMode::OFF
     };
@@ -105,6 +124,9 @@ impl TraceMode {
         results: false,
         intermediates: false,
         labels: true,
+        commands: false,
+        errors: false,
+        failures: false,
         letter: b'L',
     };
     /// `TRACE A` (`setTraceAll`, `traceAllFlags`): every clause echoes, but
@@ -118,6 +140,12 @@ impl TraceMode {
         results: false,
         intermediates: false,
         labels: true,
+        // `traceAllFlags` carries `traceCommands` and neither of the other
+        // two (`TraceSetting.cpp:52`), so a command's `>>>` here comes from
+        // this flag rather than from `results`.
+        commands: true,
+        errors: false,
+        failures: false,
         letter: b'A',
     };
     /// `TRACE R` (`setTraceResults`, `traceResultsFlags`).
@@ -126,6 +154,9 @@ impl TraceMode {
         results: true,
         intermediates: false,
         labels: true,
+        commands: true,
+        errors: false,
+        failures: false,
         letter: b'R',
     };
     /// `TRACE I` (`setTraceIntermediates`, `traceIntermediatesFlags`).
@@ -134,6 +165,9 @@ impl TraceMode {
         results: true,
         intermediates: true,
         labels: true,
+        commands: true,
+        errors: false,
+        failures: false,
         letter: b'I',
     };
 }
@@ -156,6 +190,11 @@ impl ChunkTrace {
     /// value echoes, as `>>>` or -- for a loop header -- as `>K>`.
     const RESULTS: u8 = 8;
 
+    /// [`TraceMode::commands`]: a command clause echoes. Part of a chunk's
+    /// identity because it decides whether the chunk carries the echo op at
+    /// all, which is the same reason [`ChunkTrace::CLAUSES`] is.
+    const COMMANDS: u8 = 16;
+
     /// What `compile` reads out of the setting in force.
     #[inline(always)]
     pub(crate) fn of(mode: TraceMode) -> ChunkTrace {
@@ -169,7 +208,8 @@ impl ChunkTrace {
             (u8::from(mode.all) * ChunkTrace::CLAUSES)
                 | (u8::from(mode.labels) * ChunkTrace::LABELS)
                 | (u8::from(mode.intermediates) * ChunkTrace::INTERMEDIATES)
-                | (u8::from(mode.results) * ChunkTrace::RESULTS),
+                | (u8::from(mode.results) * ChunkTrace::RESULTS)
+                | (u8::from(mode.commands) * ChunkTrace::COMMANDS),
         )
     }
 
@@ -192,12 +232,14 @@ impl ChunkTrace {
     /// compares its chunk against per promoted clause.
     #[inline(always)]
     pub(crate) fn clause_echoes(self) -> ChunkTrace {
-        ChunkTrace(self.0 & (ChunkTrace::CLAUSES | ChunkTrace::LABELS))
+        ChunkTrace(self.0 & (ChunkTrace::CLAUSES | ChunkTrace::LABELS | ChunkTrace::COMMANDS))
     }
 
     #[inline(always)]
-    pub(crate) fn echoes(self, is_label: bool) -> bool {
-        self.0 & ChunkTrace::CLAUSES != 0 || (self.0 & ChunkTrace::LABELS != 0 && is_label)
+    pub(crate) fn echoes(self, is_label: bool, is_command: bool) -> bool {
+        self.0 & ChunkTrace::CLAUSES != 0
+            || (self.0 & ChunkTrace::LABELS != 0 && is_label)
+            || (self.0 & ChunkTrace::COMMANDS != 0 && is_command)
     }
 }
 
@@ -221,11 +263,10 @@ pub(crate) fn mode_from_setting(bytes: &[u8]) -> Result<TraceMode, u8> {
             // round 1 measured what it actually does. It echoes every
             // executed `LABEL` clause -- see `TraceMode::labels`.
             b'L' => Ok(TraceMode::LABELS),
-            // `C`/`E`/`F`/`N`/`O`: all nine of `check_trace_setting`'s
-            // accepted letters are recognised here, not only the ones with
-            // a visible effect in this crate's scope -- `TRACE C x = 1` must
-            // not be treated as an unrecognised setting, it must be treated
-            // as "recognised, and this crate has nothing to show for it".
+            // `C`/`E`/`F`/`N`/`O`: every letter `check_trace_setting`
+            // accepts is recognised here. Each of the four besides `O` now
+            // decides whether a command clause echoes, so none of them is a
+            // setting this crate has nothing to show for.
             b'C' => Ok(TraceMode::COMMANDS),
             b'E' => Ok(TraceMode::ERRORS),
             b'F' => Ok(TraceMode::FAILURES),
@@ -404,8 +445,8 @@ impl Interp {
     /// `run.rs` call site's own guard against building a clause's text when
     /// nothing will print it.
     #[inline(always)]
-    pub(crate) fn tracing_clause(&self, is_label: bool) -> bool {
-        self.chunk_trace().echoes(is_label)
+    pub(crate) fn tracing_clause(&self, is_label: bool, is_command: bool) -> bool {
+        self.chunk_trace().echoes(is_label, is_command)
     }
 
     /// The part of the setting in force that a chunk's identity depends on
@@ -422,7 +463,7 @@ impl Interp {
     /// built so far does). A label cannot appear at any of them -- one
     /// inside a `DO` block is error 47.2 at parse time, measured.
     pub(crate) fn trace_clause(&mut self, line: usize, indent: usize, text: &[u8]) {
-        self.trace_stepped_clause(false, line, indent, text);
+        self.trace_stepped_clause(false, false, line, indent, text);
     }
 
     /// The same line for a *stepped* instruction, which is the one place a
@@ -431,11 +472,12 @@ impl Interp {
     pub(crate) fn trace_stepped_clause(
         &mut self,
         is_label: bool,
+        is_command: bool,
         line: usize,
         indent: usize,
         text: &[u8],
     ) {
-        if !self.tracing_clause(is_label) {
+        if !self.tracing_clause(is_label, is_command) {
             return;
         }
         let start = self.trace.len();
@@ -464,6 +506,49 @@ impl Interp {
     fn trace_result_line(&mut self, indent: usize, value: &[u8]) {
         let start = self.trace.len();
         push_value(&mut self.trace, ">>>", indent, value);
+        self.route_trace_line(start);
+    }
+
+    /// A command's own `>>>`, gated on [`TraceMode::commands`] rather than on
+    /// `results` -- `traceAllFlags` carries `traceCommands` and not
+    /// `traceResults`, and `TRACE A` shows a command's string all the same
+    /// (`RexxInstructionCommand::execute`). Emitted **before** the command
+    /// runs, which is observable: under `TRACE C` a command writing to its
+    /// own standard error shows this line first.
+    pub(crate) fn trace_command_value(&mut self, indent: usize, value: &[u8]) {
+        if !self.trace_mode().commands {
+            return;
+        }
+        self.trace_result_line(indent, value);
+    }
+
+    /// The `*-*` and `>>>` a failing command echoes **after** it has run,
+    /// where the setting did not already echo them. Ungated: `run_command`
+    /// has made the decision, which is not one of the clause-echo questions
+    /// [`Interp::tracing_clause`] answers.
+    pub(crate) fn trace_command_retrace(
+        &mut self,
+        line: usize,
+        indent: usize,
+        text: &[u8],
+        value: &[u8],
+    ) {
+        let start = self.trace.len();
+        push_clause(&mut self.trace, line, indent, text);
+        self.route_trace_line(start);
+        self.trace_result_line(indent, value);
+    }
+
+    /// `+++ "RC(n)"`, the return code of a command that was traced by either
+    /// route. Ungated for [`Interp::trace_command_retrace`]'s reason.
+    pub(crate) fn trace_command_rc(&mut self, indent: usize, rc: i32) {
+        let start = self.trace.len();
+        push_value(
+            &mut self.trace,
+            "+++",
+            indent,
+            format!("RC({rc})").as_bytes(),
+        );
         self.route_trace_line(start);
     }
 

@@ -1437,13 +1437,34 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
-            // `ADDRESS`, the three forms that only name an environment: the
-            // constant `ADDRESS env`, the computed `ADDRESS VALUE expr` (and
-            // its parenthesised spelling), and the bare toggle. See
-            // `exec_address`.
+            // `ADDRESS`: the forms that only name an environment -- the
+            // constant `ADDRESS env`, the computed `ADDRESS VALUE expr` and
+            // the bare toggle -- go to `exec_address`. `ADDRESS env command`
+            // runs one command against that name and writes neither half of
+            // the activation's pair, measured. `WITH`'s redirection is what
+            // is still owed.
             InstructionKind::Address(address) => {
-                if address.command.is_some() || address.io.is_some() {
+                if address.io.is_some() {
                     return Err(Loud::instruction(&instruction.kind).into());
+                }
+                if let Some(command) = &address.command {
+                    let environment = match (&address.environment, &address.dynamic) {
+                        (Some(name), _) => name.to_vec(),
+                        (None, Some(expression)) => {
+                            let value = self.eval(code, expression)?;
+                            self.roots.push_temp(value);
+                            let value = self.required_string_value(value)?;
+                            self.to_text(value).into_owned()
+                        }
+                        (None, None) => Vec::new(),
+                    };
+                    return self.exec_command(
+                        code,
+                        instruction,
+                        source,
+                        command,
+                        Some(&environment),
+                    );
                 }
                 self.exec_address(code, address)?;
                 Ok(Flow::Next)
@@ -1467,6 +1488,30 @@ impl Interp {
 
             // `FORWARD` and its options. See `exec_forward`.
             InstructionKind::Forward(forward) => self.exec_forward(code, forward),
+
+            // A command clause: the string is evaluated, handed to the
+            // `ADDRESS` environment in force, and its return code settles
+            // `RC`, `.RS` and any condition. See `command.rs`.
+            //
+            // The expression is `Option` because `opt_expr` builds it, but a
+            // clause reaching the command fallback has a term in it -- an
+            // empty one is a null clause and is dropped before this. Measured
+            // on the oracle: `;`, a blank line and `;;` each run nothing at
+            // all, and the C++'s own `execute` would fault on the null it
+            // would need. The assertion is the tripwire rather than a
+            // sentence claiming it cannot happen.
+            InstructionKind::Command { expression } => {
+                debug_assert!(
+                    expression.is_some(),
+                    "a command clause reached execution with no expression"
+                );
+                match expression {
+                    Some(expression) => {
+                        self.exec_command(code, instruction, source, expression, None)
+                    }
+                    None => Ok(Flow::Next),
+                }
+            }
 
             other => Err(Loud::instruction(other).into()),
         }
@@ -2659,7 +2704,7 @@ impl Interp {
 
     /// Assigns `value` to the variable, whole stem, or one verbatim-keyed
     /// tail that `name`'s own spelling names.
-    fn assign_by_name(&mut self, name: &[u8], value: ObjRef) {
+    pub(crate) fn assign_by_name(&mut self, name: &[u8], value: ObjRef) {
         match shape_of(name) {
             NameShape::Simple => {
                 let slot = self.slot_of(name);
@@ -3974,6 +4019,7 @@ impl Interp {
                 // `CALL`s a label reads `FUNCTION` inside that label, not
                 // `SUBROUTINE`.
                 let caller_call_type = caller.call_type;
+                let caller_rs = caller.rs;
                 let settings = caller.settings.clone();
                 let trace_mode = caller.trace_mode;
                 // Inherited with `settings` and for its reason: a `SIGNAL ON`
@@ -4016,6 +4062,7 @@ impl Interp {
                     target,
                     Inherited {
                         call_type: caller_call_type,
+                        rs: caller_rs,
                         settings,
                         condition_syntax,
                         trace_mode,
@@ -4651,10 +4698,11 @@ impl Interp {
         indent: usize,
     ) {
         let is_label = matches!(instruction.kind, InstructionKind::Label { .. });
-        if self.tracing_clause(is_label)
+        let is_command = matches!(instruction.kind, InstructionKind::Command { .. });
+        if self.tracing_clause(is_label, is_command)
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
-            self.trace_stepped_clause(is_label, line, indent, &text);
+            self.trace_stepped_clause(is_label, is_command, line, indent, &text);
         }
     }
 

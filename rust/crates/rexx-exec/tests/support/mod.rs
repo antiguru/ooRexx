@@ -40,9 +40,9 @@ pub mod oracle;
 /// time a later phase adds an emitter, which is exactly the kind of
 /// silent-drift risk this project keeps finding in its own harnesses.
 /// `tests/trace_oracle.rs`'s
-/// `the_trace_surfaces_coverage_is_thirteen_of_nineteen_with_owners_for_the_rest`
-/// asserts its own `PREFIX_COVERAGE` equals this list, so the two cannot
-/// drift and neither can be shortened quietly.
+/// `every_trace_prefix_is_witnessed_or_carries_an_owner` asserts its own
+/// `PREFIX_COVERAGE` equals this list, so the two cannot drift and neither
+/// can be shortened quietly.
 pub const TRACE_PREFIXES: &[[u8; 3]] = &[
     *b"*-*", // TRACE_PREFIX_CLAUSE
     *b"+++", // TRACE_PREFIX_ERROR

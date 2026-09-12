@@ -24,9 +24,9 @@ use crate::error::{Failure, Raised};
 /// The environment `ADDRESS()` names before any `ADDRESS` instruction has
 /// run, and after a bare `ADDRESS` swaps back to it.
 #[cfg(unix)]
-const DEFAULT_ENVIRONMENT: &[u8] = b"sh";
+pub(crate) const DEFAULT_ENVIRONMENT: &[u8] = b"sh";
 #[cfg(not(unix))]
-const DEFAULT_ENVIRONMENT: &[u8] = b"CMD";
+pub(crate) const DEFAULT_ENVIRONMENT: &[u8] = b"CMD";
 
 /// The first byte of an option argument, upcased, or `None` when the
 /// argument was not supplied at all.

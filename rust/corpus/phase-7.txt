@@ -79,3 +79,19 @@ lang/stream_array.rex
 # Task 13: `.File` -- the predicates, the listing, a timestamp round trip, and
 # the mutation answers, over a tree the program builds in its own directory.
 lang/file_queries.rex
+
+# Task 14: a command's return code -- `RC`, `.RS`, the `ERROR` and `FAILURE`
+# traps, and the reraise that lets an error handler catch an untrapped
+# failure. Its `sh -c 'exit 127'` clauses also carry the `+++ "RC(n)"` line,
+# which the default `TRACE N` emits with no `TRACE` instruction in the file.
+lang/command_dispatch.rex
+
+# Task 14: which handler an `ADDRESS` name selects, `PATH` splitting a command
+# itself, the one-off form leaving the activation's pair untouched, and an
+# environment nothing is registered for.
+lang/command_environments.rex
+
+# Task 14: `cd`, `set`, `unset` and `export` run against the interpreter's own
+# directory and environment rather than in a child, the metacharacter that
+# sends one to a shell instead, and the child that inherits both shadows.
+lang/command_internal.rex

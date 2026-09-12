@@ -110,8 +110,10 @@ whole name would overstate the gap; ignoring the split would understate it.
              builtin/state.rs, and it is in the corpus -- for the reason
              PARSE SOURCE's "LINUX COMMAND" is and PARSE VERSION's build date
              is not: it is a compile-time constant of the interpreter rather
-             than a value that moves under a rebuild. What stays Phase 7's is
-             unchanged: issuing a command to that environment.
+             than a value that moves under a rebuild. What stayed Phase 7's
+             was issuing a command to that environment, and that is DELIVERED,
+             2026-09-13: `command.rs` runs one against the handler the name
+             selects, with `corpus/lang/command_environments.rex` the witness.
 
   QUEUED     In scope against 4b's in-process queue. Cross-process sharing with
              the oracle's rxapi-backed session queue will never match, so a
@@ -159,6 +161,19 @@ measured.
 
               Four are interactive debug and one is command dispatch, both
               Phase 7's under D18 and under the TRACE ? row below.
+
+              DELIVERED, 2026-09-13: the command-dispatch producer. The row
+              stays because the four debug producers do not, and they are
+              the TRACE ? row's. `corpus/lang/command_dispatch.rex` is the
+              witness, and trace_oracle.rs's PREFIX_COVERAGE now names it
+              rather than an owner.
+
+              One thing the example above does not show, measured the same
+              day: `trace n` emits nothing for THAT program because `exit 3`
+              raises ERROR, and defaultTraceFlags carries traceFailures but
+              not traceErrors. A command raising FAILURE -- `sh -c 'exit
+              127'` -- emits the whole block under `trace n`, in a program
+              naming no TRACE at all.
 
               THE REASON IS THAT SPLIT RATHER THAN THE ABSENCE OF ANY PATH,
               and this is what the earlier "4c" answer missed.

@@ -1,0 +1,54 @@
+count 53
+/* Which handler an `ADDRESS` name selects, and how `PATH` splits a command
+   itself because it has no shell to do it. Only `echo` and `printf` are run,
+   and no shell other than `sh` is named: the rest are registered but need
+   that shell installed, which is a property of the host rather than of the
+   language. */
+
+say 'default' address()
+address sh
+say 'named  ' address()
+'echo through sh'
+say 'rc=' rc
+
+/* Three aliases for the same handler. */
+address command
+'echo through command'
+address system
+'echo through system'
+
+/* `PATH` splits on blanks and tabs, and a double-quoted run stays one
+   argument with its quotes consumed. */
+address path
+'echo one two'
+'printf %s-%s a b'
+say ''
+'printf %s|%s "a b" c'
+say ''
+
+/* An empty command under `PATH` has no name to find: 127, and a FAILURE
+   rather than an ERROR. */
+address "path" ""
+say 'empty rs=' .rs 'rc=' rc
+
+/* `ADDRESS env command` runs one command against `env` and writes neither
+   half of the activation's pair, so the name in force is unchanged and a
+   bare `ADDRESS` still toggles to the alternate the one-off never wrote. */
+address sh
+address path 'printf %s one-off'
+say ''
+say 'after  ' address()
+address
+say 'toggled' address()
+
+/* An environment nothing is registered for runs nothing at all: the command
+   is evaluated, never executed, and answers the not-registered code. */
+call on failure name onfailure
+address nosuchhandler
+'echo this is never run'
+say 'rc=' rc
+exit 0
+
+onfailure:
+say '  handler FAILURE rc=' rc
+return

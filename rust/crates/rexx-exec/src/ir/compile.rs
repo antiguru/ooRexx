@@ -1516,7 +1516,10 @@ fn push_read(
 
 /// Whether a promoted clause of `instruction` echoes under `trace`.
 fn echoes(trace: ChunkTrace, instruction: &Instruction) -> bool {
-    trace.echoes(matches!(instruction.kind, InstructionKind::Label { .. }))
+    trace.echoes(
+        matches!(instruction.kind, InstructionKind::Label { .. }),
+        matches!(instruction.kind, InstructionKind::Command { .. }),
+    )
 }
 
 /// Pushes the clause echo op, if `echo`, as the **first** op of the region
