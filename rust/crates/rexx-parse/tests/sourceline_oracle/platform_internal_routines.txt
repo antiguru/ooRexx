@@ -1,0 +1,18 @@
+count 17
+/* The three routines the REXX package exports: FILESPEC, BEEP and DIRECTORY.
+   They are native routines rather than builtins, so they resolve after a
+   program's own ::ROUTINEs and before the external file search.
+   BEEP writes one bell byte to standard output and answers the null string. */
+say filespec('N', '/a/b.c') filespec('L', '/a/b.c') filespec('E', '/a/b.c') filespec('P', '/a/b.c')
+say '[' || filespec('D', '/a/b.c') || ']'
+say '[' || filespec('N', 'plain') || ']' '[' || filespec('E', 'plain') || ']' '[' || filespec('L', 'plain') || ']'
+/* A dot opening the name is still a dot: the extension is what follows the
+   last one, wherever it sits. */
+say '[' || filespec('E', '/a/.hidden') || ']' '[' || filespec('N', '/a/.hidden') || ']'
+say '[' || filespec('e', '/a/b.c.d') || ']'
+say '[' || beep(440, 1) || ']'
+here = directory()
+say directory('/')
+say directory(here) == here
+say '[' || directory('/nonexistent_phase7_directory') || ']'
+say directory() == here

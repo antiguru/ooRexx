@@ -72,6 +72,8 @@ pub(crate) struct NativeExternal {
     /// and never for the lookup's.
     pub(crate) name: &'static str,
     pub(crate) family: Family,
+    /// The phase owing this row a body, when it is not the family's own.
+    pub(crate) owner: Option<&'static str>,
     /// **Not `pub(crate)`**: `dispatch::Interp::invoke` is the only reader,
     /// and a body is a [`NativeMethod`], which takes the seam's own
     /// `Cleared` and cannot be named outside this module's parent.
@@ -97,6 +99,7 @@ const fn implemented(
     NativeExternal {
         name,
         family,
+        owner: None,
         body: ExternalBody::Implemented { arity, run },
     }
 }
@@ -105,6 +108,20 @@ const fn deferred(name: &'static str, family: Family) -> NativeExternal {
     NativeExternal {
         name,
         family,
+        owner: None,
+        body: ExternalBody::Deferred,
+    }
+}
+
+/// A deferred entry whose owner is **not** its family's. `handle_set` is the
+/// case: reaching an already-open descriptor needs `from_raw_fd`, so it stays
+/// refused after the stream family is built, and a refusal naming Phase 7
+/// after Phase 7 closes would be a lie.
+const fn deferred_to(name: &'static str, family: Family, owner: &'static str) -> NativeExternal {
+    NativeExternal {
+        name,
+        family,
+        owner: Some(owner),
         body: ExternalBody::Deferred,
     }
 }
@@ -116,29 +133,94 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
     deferred("ticker_createTimer", Family::Timer),
     deferred("ticker_waitTimer", Family::Timer),
     deferred("ticker_stopTimer", Family::Timer),
-    deferred("stream_init", Family::Stream),
+    implemented(
+        "stream_init",
+        Family::Stream,
+        Arity::Fixed(1),
+        super::stream::init,
+    ),
     deferred("stream_chars", Family::Stream),
     deferred("stream_lines", Family::Stream),
     deferred("stream_position", Family::Stream),
-    deferred("stream_state", Family::Stream),
-    deferred("stream_description", Family::Stream),
+    implemented(
+        "stream_state",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::state,
+    ),
+    implemented(
+        "stream_description",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::description,
+    ),
     deferred("stream_query_position", Family::Stream),
     deferred("stream_charout", Family::Stream),
     deferred("stream_charin", Family::Stream),
     deferred("stream_linein", Family::Stream),
     deferred("stream_lineout", Family::Stream),
     deferred("stream_arrayin", Family::Stream),
-    deferred("qualify", Family::Stream),
-    deferred("query_exists", Family::Stream),
-    deferred("query_size", Family::Stream),
-    deferred("query_time", Family::Stream),
-    deferred("handle_set", Family::Stream),
-    deferred("std_set", Family::Stream),
-    deferred("stream_flush", Family::Stream),
-    deferred("query_handle", Family::Stream),
-    deferred("query_streamtype", Family::Stream),
-    deferred("stream_close", Family::Stream),
-    deferred("stream_uninit", Family::Stream),
+    implemented(
+        "qualify",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::qualify,
+    ),
+    implemented(
+        "query_exists",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::query_exists,
+    ),
+    implemented(
+        "query_size",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::query_size,
+    ),
+    implemented(
+        "query_time",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::query_time,
+    ),
+    deferred_to("handle_set", Family::Stream, "Phase 8"),
+    implemented(
+        "std_set",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::std_set,
+    ),
+    implemented(
+        "stream_flush",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::flush,
+    ),
+    implemented(
+        "query_handle",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::query_handle,
+    ),
+    implemented(
+        "query_streamtype",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::query_streamtype,
+    ),
+    implemented(
+        "stream_close",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::close,
+    ),
+    implemented(
+        "stream_uninit",
+        Family::Stream,
+        Arity::Fixed(0),
+        super::stream::uninit,
+    ),
     deferred("stream_open", Family::Stream),
     deferred("rexx_create_queue", Family::Queue),
     deferred("rexx_open_queue", Family::Queue),
@@ -197,7 +279,7 @@ pub(crate) fn entry_points() -> impl Iterator<Item = crate::NativeEntryPoint> {
         .map(|entry| crate::NativeEntryPoint {
             entry: entry.name,
             family: entry.family.label(),
-            owner: entry.family.owner(),
+            owner: entry.owner.unwrap_or_else(|| entry.family.owner()),
             implemented: matches!(entry.body, ExternalBody::Implemented { .. }),
         })
 }
@@ -373,7 +455,7 @@ pub(crate) fn deferred_send(entry: &NativeExternal) -> Loud {
     Loud {
         message: crate::owned_message(
             &format!("the LIBRARY REXX entry point \"{}\"", entry.name),
-            Some(entry.family.owner()),
+            Some(entry.owner.unwrap_or_else(|| entry.family.owner())),
         ),
     }
 }

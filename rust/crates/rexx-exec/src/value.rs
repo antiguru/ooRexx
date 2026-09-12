@@ -325,11 +325,19 @@ impl Interp {
             } => num_rendering(number, *created_digits, *created_form, text).len(),
             Body::Stem { name, .. } => name.len(),
             Body::Native(native) => native.rendered().len(),
-            // The contents, the arm `to_text` takes in the same position.
+            // The contents, the arm `to_text` takes in the same position, and
+            // bound once for the borrow reason recorded there.
             Body::Instance {
                 native: Some(state),
+                name,
                 ..
-            } => state.bytes.len(),
+            } => match state.buffer() {
+                Some(buffer) => buffer.bytes.len(),
+                None => match name {
+                    Some(bytes) => bytes.len(),
+                    None => unreachable!("Redirect::InstanceDefault answers an unnamed instance"),
+                },
+            },
             // Reached only with a name set, the arm `to_text` takes in the
             // same position: the redirect above answers for an instance that
             // has none.
@@ -406,7 +414,7 @@ impl Interp {
             Body::Instance {
                 native: Some(state),
                 ..
-            } => Some(state),
+            } => state.buffer(),
             _ => None,
         }
     }
@@ -419,7 +427,30 @@ impl Interp {
             Body::Instance {
                 native: Some(state),
                 ..
-            } => Some(state),
+            } => state.buffer_mut(),
+            _ => None,
+        }
+    }
+
+    /// A `Stream`'s state, borrowed, or `None` for a value that is not one.
+    pub(crate) fn stream(&self, value: ObjRef) -> Option<&rexx_core::StreamState> {
+        match &self.heap.get(value)?.body {
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => state.stream(),
+            _ => None,
+        }
+    }
+
+    /// [`Interp::stream`] for a caller that opens, reads, writes or positions
+    /// it.
+    pub(crate) fn stream_mut(&mut self, value: ObjRef) -> Option<&mut rexx_core::StreamState> {
+        match &mut self.heap.get_mut(value)?.body {
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => state.stream_mut(),
             _ => None,
         }
     }
@@ -556,10 +587,22 @@ impl Interp {
             Body::Native(native) => Cow::Borrowed(native.string_value()),
             // `MutableBuffer::stringValue` (`classes/MutableBufferClass.cpp:740`):
             // the contents, whether or not `~objectName=` has named the buffer.
+            // **One borrow of the state, not two**: a guard that asked
+            // `state.buffer().is_some()` and an arm that asked again holds two
+            // shared borrows across a `match` whose scrutinee a later arm
+            // moves, which does not compile. A stream's state is not its
+            // string value, so it takes the named-instance answer below.
             Body::Instance {
                 native: Some(state),
+                name,
                 ..
-            } => Cow::Borrowed(state.bytes.as_slice()),
+            } => match state.buffer() {
+                Some(buffer) => Cow::Borrowed(buffer.bytes.as_slice()),
+                None => match name {
+                    Some(bytes) => Cow::Borrowed(bytes),
+                    None => unreachable!("Redirect::InstanceDefault answers an unnamed instance"),
+                },
+            },
             // Reached only with a name set: the redirect above answers for
             // an instance that has none.
             Body::Instance { name, .. } => match name {
@@ -619,7 +662,7 @@ impl Interp {
             Body::Instance {
                 native: Some(state),
                 ..
-            } => Some(state.bytes.as_slice()),
+            } => state.buffer().map(|buffer| buffer.bytes.as_slice()),
             // The same cause for an instance nothing has named: `to_text`
             // derives those bytes from the class id and stores them nowhere.
             Body::Instance { name, .. } => name.as_deref(),
@@ -952,9 +995,13 @@ impl Interp {
             } => Redirect::StemDefault(*default),
             Body::Array { .. } => Redirect::Array,
             // A buffer's own body holds the text, named or not.
+            // A buffer's own body holds the text; a stream's does not -- its
+            // string value is the name a Rexx `expose`d variable keeps, so it
+            // takes the ordinary instance arms below.
             Body::Instance {
-                native: Some(_), ..
-            } => Redirect::None,
+                native: Some(state),
+                ..
+            } if state.buffer().is_some() => Redirect::None,
             Body::Instance {
                 class, name: None, ..
             } => Redirect::InstanceDefault(*class),
@@ -1321,9 +1368,9 @@ mod tests {
         for name in [None, Some(b"123".to_vec().into_boxed_slice())] {
             for native in [
                 None,
-                Some(Box::new(buffer_state(
+                Some(Box::new(rexx_core::NativeState::Buffer(buffer_state(
                     b"held for long enough to need a slot",
-                ))),
+                )))),
             ] {
                 let instance = interp.alloc_with(
                     BehaviourId::OBJECT,
@@ -1843,7 +1890,9 @@ mod tests {
                     name,
                     pools: rexx_core::ScopePools::new(),
                     own: None,
-                    native: Some(Box::new(buffer_state(b"abcdef"))),
+                    native: Some(Box::new(rexx_core::NativeState::Buffer(buffer_state(
+                        b"abcdef",
+                    )))),
                 },
             );
             assert_eq!(interp.try_text(buffer), Some(&b"abcdef"[..]));

@@ -67,6 +67,10 @@ pub(crate) mod native;
 // `ObjectModel::build` beside `NATIVE_METHODS` rather than merged into it.
 mod string;
 
+// `Stream`'s `LIBRARY REXX` entry points. A child of this module because a
+// body takes the seam's `Cleared`, which cannot be named outside it.
+mod stream;
+
 // The collection classes' primitive methods, chained the same way.
 mod collection;
 pub(crate) mod hash;
@@ -6598,11 +6602,11 @@ fn native_mutable_buffer_new(
     else {
         unreachable!("new_instance allocates a Body::Instance")
     };
-    *native = Some(Box::new(BufferState {
+    *native = Some(Box::new(rexx_core::NativeState::Buffer(BufferState {
         bytes,
         capacity,
         default_size,
-    }));
+    })));
     let caller = interp.caller();
     let kept = args.len().saturating_sub(2);
     let rest: Vec<Option<ObjRef>> = args.iter().take(kept).copied().collect();

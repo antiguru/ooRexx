@@ -97,7 +97,7 @@ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:421	off-send-surfac
 Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:794	off-send-surface	-	-	-
 Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:787	off-send-surface	-	-	-
 Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:645	off-send-surface	-	-	-
-Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:372	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:454	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
 Loud	delegate_variable	send	crates/rexx-exec/src/lib.rs:521	diverges	yes	a DELEGATE to the variable	::method m delegate a.b on an instance
 Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:283	off-send-surface	-	-	-
 Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:296	off-send-surface	-	-	-
@@ -248,7 +248,7 @@ Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:614	off-send-surface	
 Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:960	agrees	yes	93.954	.Array~new(2,3)~delete(1)
 Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:592	off-send-surface	-	-	-
 Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:623	off-send-surface	-	-	-
-Raised	syntax	body	crates/rexx-exec/src/error.rs:97	off-send-surface	-	-	-
+Raised	syntax	body+send	crates/rexx-exec/src/error.rs:97	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
 Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:754	agrees	yes	5.0	.array~new(999999999999999)
 Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:499	off-send-surface	-	-	-
 Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:268	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator

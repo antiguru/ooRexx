@@ -34,7 +34,26 @@ const BEFORE_THE_SEND: &[u8] = b"main\n";
 /// `::CONSTANT pathSeparator` send them while the package is still
 /// installing, so a bootstrap that cannot run them cannot install that
 /// file.
-const IMPLEMENTED: &[&str] = &["file_separator", "file_path_separator"];
+const IMPLEMENTED: &[&str] = &[
+    "file_separator",
+    "file_path_separator",
+    // Phase 7's stream skeleton: everything a stream answers without opening
+    // anything. The I/O entry points beside them are still deferred, which is
+    // what the family's own probe binds.
+    "qualify",
+    "query_exists",
+    "query_handle",
+    "query_size",
+    "query_streamtype",
+    "query_time",
+    "std_set",
+    "stream_close",
+    "stream_description",
+    "stream_flush",
+    "stream_init",
+    "stream_state",
+    "stream_uninit",
+];
 
 fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus")

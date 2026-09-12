@@ -111,7 +111,7 @@ pub enum Body {
         name: Option<Box<[u8]>>,
         pools: ScopePools,
         own: Option<Box<ObjectMethods>>,
-        native: Option<Box<BufferState>>,
+        native: Option<Box<NativeState>>,
     },
     /// An object the interpreter builds for itself rather than one a program
     /// constructs: `.environment`, `.local`, a package's `.methods` table and
@@ -144,6 +144,123 @@ pub enum VarRefHome {
     /// has instead of storage of its own. The object keeps it alive, so
     /// there is nothing to promote.
     Instance { owner: ObjRef, scope: ObjRef },
+}
+
+/// The native state an instance carries in its own body, for the classes whose
+/// C++ counterparts keep a `CSELF` block. It holds no [`ObjRef`], which is why
+/// [`Body::trace`]'s instance arm ignores the slot.
+#[derive(Clone, Debug)]
+pub enum NativeState {
+    /// A `MutableBuffer`'s contents.
+    Buffer(BufferState),
+    /// A `Stream`'s open file, positions and state. **Not the object's string
+    /// value**: `Stream~string` answers the name a Rexx `expose`d variable
+    /// holds, so the readers that render a buffer as its contents must answer
+    /// for [`NativeState::Buffer`] alone.
+    Stream(StreamState),
+}
+
+impl NativeState {
+    /// The buffer this state holds, or `None` for state of another kind.
+    pub fn buffer(&self) -> Option<&BufferState> {
+        match self {
+            NativeState::Buffer(state) => Some(state),
+            NativeState::Stream(_) => None,
+        }
+    }
+
+    /// [`NativeState::buffer`] for a caller that changes the contents.
+    pub fn buffer_mut(&mut self) -> Option<&mut BufferState> {
+        match self {
+            NativeState::Buffer(state) => Some(state),
+            NativeState::Stream(_) => None,
+        }
+    }
+
+    /// The stream this state holds, or `None` for state of another kind.
+    pub fn stream(&self) -> Option<&StreamState> {
+        match self {
+            NativeState::Stream(state) => Some(state),
+            NativeState::Buffer(_) => None,
+        }
+    }
+
+    /// [`NativeState::stream`] for a caller that opens, reads, writes or
+    /// positions it.
+    pub fn stream_mut(&mut self) -> Option<&mut StreamState> {
+        match self {
+            NativeState::Stream(state) => Some(state),
+            NativeState::Buffer(_) => None,
+        }
+    }
+}
+
+/// What a stream is, once `~init` has named it. The four states are the
+/// oracle's own (`streamLibrary/StreamNative.hpp`), and `Unknown` is what a
+/// stream that has never been opened -- or has been closed -- answers.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum StreamStatus {
+    /// Never opened, or closed since.
+    Unknown,
+    /// Open and usable.
+    Ready,
+    /// A read found the end of the stream.
+    NotReady,
+    /// The last operation failed, carrying the errno the oracle reports.
+    Error(i32),
+}
+
+/// Which of the three standard streams an object stands for, when it is one.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum StandardStream {
+    In,
+    Out,
+    Err,
+}
+
+/// A `Stream`'s own state (`streamLibrary/StreamNative.hpp:158`). The name is
+/// kept as the program wrote it, because `~string` answers it verbatim; the
+/// qualified path is what anything touching the file system uses.
+#[derive(Clone, Debug)]
+pub struct StreamState {
+    /// The name as given, which `~qualify` resolves and `~string` does not.
+    pub name: Vec<u8>,
+    /// The name resolved against the interpreter's current directory, filled
+    /// in when the stream is initialised so a later `DIRECTORY()` cannot move
+    /// an already-named stream.
+    pub qualified: Vec<u8>,
+    /// Set by `!std_set` for `STDIN`, `STDOUT` and `STDERR`, with or without a
+    /// trailing colon.
+    pub standard: Option<StandardStream>,
+    /// Set by `!handle_set` for a `HANDLE:` name. This crate refuses to open
+    /// one -- reaching an already-open descriptor needs `unsafe` -- so the
+    /// marker exists to answer the queries that do not open.
+    pub handle: Option<Vec<u8>>,
+    pub status: StreamStatus,
+}
+
+impl StreamState {
+    /// The state `~init` leaves behind: named, resolved, and unopened.
+    pub fn new(name: Vec<u8>, qualified: Vec<u8>) -> StreamState {
+        StreamState {
+            name,
+            qualified,
+            standard: None,
+            handle: None,
+            status: StreamStatus::Unknown,
+        }
+    }
+
+    /// `state`'s own word, which `~state` answers and `~description` opens
+    /// with (`StreamNative.cpp`'s `getState`).
+    pub fn state_word(&self) -> &'static [u8] {
+        match self.status {
+            StreamStatus::Unknown => b"UNKNOWN",
+            StreamStatus::Ready => b"READY",
+            StreamStatus::NotReady => b"NOTREADY",
+            StreamStatus::Error(_) => b"ERROR",
+        }
+    }
 }
 
 /// A `MutableBuffer`'s state: its contents, `bufferLength` and `defaultSize`
