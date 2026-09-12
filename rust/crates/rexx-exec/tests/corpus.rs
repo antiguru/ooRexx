@@ -72,7 +72,20 @@ fn run_rust(path: &Path) -> Outcome {
     let path_str = path
         .to_str()
         .unwrap_or_else(|| panic!("corpus path {} is not valid UTF-8", path.display()));
-    watchdog::run_bounded(path_str, text, rexx_exec::Invocation::none())
+    // **The same working directory the oracle gets.** `Oracle::run` runs from
+    // the program's own directory; without this the crate ran from the test
+    // process's, which no corpus program could see until the interpreter grew
+    // a current directory of its own, and which any program naming a relative
+    // path now would.
+    let directory = path
+        .parent()
+        .unwrap_or_else(|| panic!("{} has no parent directory", path.display()))
+        .to_path_buf();
+    watchdog::run_bounded(
+        path_str,
+        text,
+        rexx_exec::Invocation::none().with_directory(directory),
+    )
 }
 
 /// One corpus program that disagreed with the oracle, or one where either
@@ -523,6 +536,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5c.txt",
     "phase-5d.txt",
     "phase-5j.txt",
+    "phase-7.txt",
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.

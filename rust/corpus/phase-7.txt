@@ -1,0 +1,15 @@
+# Phase 7 corpus subset -- streams and platform. The union with the earlier
+# phase-*.txt files is what the harnesses read, not this file alone.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored.
+#
+# A program here may create, read and delete files inside its own run
+# directory, which the earlier phases' determinism rule forbade outright. It
+# prints no timestamp, no size of a file it did not write, no directory listing
+# it did not create, and no host variable's value.
+
+# Task 3: VALUE's two external pools, and QUALIFY, USERID, SETLOCAL, ENDLOCAL
+# against the interpreter's own environment and current directory.
+lang/platform_value_environment.rex
+lang/platform_qualify_setlocal.rex
