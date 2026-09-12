@@ -564,3 +564,65 @@ Found 2026-09-08 by Phase 5i Tasks 7+8, while measuring what `Package~trace`
 answers for each `::OPTIONS TRACE` letter. **No upstream ticket** -- it is not
 established that this is a defect rather than interactive debug behaving as
 documented with no console attached.
+
+## 10. `SETLOCAL` / `ENDLOCAL` -- two separate crashes
+
+**10a, an unpaired `ENDLOCAL` after any `SETLOCAL`:**
+
+    say setlocal()
+    say endlocal()
+    say endlocal()
+
+SIGSEGV, rc 139, deterministic. stdout carries `1` then `1`; the second
+`ENDLOCAL` dies before printing anything of its own, and stderr is empty.
+
+**10b, the second `ENDLOCAL` that actually restores, paired or not:**
+
+    say setlocal()
+    say endlocal()
+    say setlocal()
+    say endlocal()
+
+SIGABRT, rc 134, `free(): invalid pointer` on stderr, with `1`, `1` and `1` on
+stdout -- the fourth line never prints, so it is the *second restore* that dies
+and not an unpaired call. Measured the same way with the two `SETLOCAL`s nested
+(`setlocal, setlocal, endlocal, endlocal`), which dies at the same point.
+
+So a program reaches 10a only when its first `ENDLOCAL` too many arrives before
+its second restore does; every measured program hits one or the other.
+
+Cause, read end to end in the C++. `SETLOCAL` reaches
+`SystemInterpreter::pushEnvironment` (`platform/unix/ExternalFunctions.cpp:145`)
+and `RexxActivation::pushEnvironment` (`execution/RexxActivation.cpp:4640`),
+which creates `environmentList = new_queue()` on the first call and pushes the
+saved block. `ENDLOCAL` reaches `SystemInterpreter::popEnvironment`
+(`ExternalFunctions.cpp:167`), whose guard is `TheNilObject == Current`.
+`RexxActivation::popEnvironment` (`RexxActivation.cpp:4666`) answers
+`TheNilObject` **only when `environmentList` is still null**; once the queue
+exists it answers `environmentList->pull()`, which is `deleteItem(1)`
+(`classes/QueueClass.hpp:72`), and `ArrayClass::deleteItem`
+(`classes/ArrayClass.cpp:2577`) answers **`OREF_NULL`** for an out-of-bounds
+index -- which an empty queue's index 1 is. `OREF_NULL` is not `TheNilObject`,
+so the guard passes it through to `restoreEnvironment(Current->getData())`,
+which reads `((ENVENTRY *)current)->size` and `chdir(current)` off it
+(`ExternalFunctions.cpp:275`-`:278`). That is 10a.
+
+10b is a second defect in the same function. `restoreEnvironment`
+(`ExternalFunctions.cpp:258`-`:341`) `putenv`s pointers that live **inside the
+saved Rexx buffer** and frees whatever `environ` entry each name resolved to;
+its first run also copies the whole environment into `malloc`ed strings under
+the `putflag` guard. After one restore, `environ` points into GC-managed memory,
+and the next restore hands those pointers to `free`. Exactly one restore per
+process survives, whatever the nesting -- which is why the paired program above
+dies too.
+
+The control is what makes that reading discriminating rather than merely
+consistent: `say endlocal(); say endlocal()` with no `SETLOCAL` anywhere answers
+`0` and `0` at rc 0 (measured, same wrapper). An absent list is safe; an emptied
+one is not.
+
+Found 2026-09-12 by the Phase 7 survey of `SETLOCAL`/`ENDLOCAL`. **No upstream
+ticket.** The consequence for this crate is a licensed divergence: an `ENDLOCAL`
+past the outstanding `SETLOCAL`s answers `0` here -- the answer the
+never-created path already gives -- and no differential case may put that
+program in front of the oracle.
