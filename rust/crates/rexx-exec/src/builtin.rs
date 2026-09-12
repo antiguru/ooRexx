@@ -48,6 +48,7 @@ mod state;
 /// one-byte string pattern wants [`string::find_byte`] too, and a second
 /// copy of a scan whose correctness argument is as delicate as that one's
 /// is the wrong way to give it one.
+pub(crate) mod stream;
 pub(crate) mod string;
 pub(crate) mod word;
 
@@ -120,6 +121,55 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(0),
         run: platform::userid,
+    },
+    // **`min: 0` for the six readers, measured.** An omitted name is the
+    // default input or output rather than an error: `chars()` and `lines()`
+    // answer 1, `charout( ,'x')` writes and answers 0. Only `STREAM` enforces
+    // a minimum of its own.
+    Builtin {
+        name: b"CHARIN",
+        min: 0,
+        max: Some(3),
+        run: stream::charin,
+    },
+    Builtin {
+        name: b"CHAROUT",
+        min: 0,
+        max: Some(3),
+        run: stream::charout,
+    },
+    Builtin {
+        name: b"CHARS",
+        min: 0,
+        max: Some(1),
+        run: stream::chars,
+    },
+    Builtin {
+        name: b"LINEIN",
+        min: 0,
+        max: Some(3),
+        run: stream::linein,
+    },
+    Builtin {
+        name: b"LINEOUT",
+        min: 0,
+        max: Some(3),
+        run: stream::lineout,
+    },
+    Builtin {
+        name: b"LINES",
+        min: 0,
+        max: Some(2),
+        run: stream::lines,
+    },
+    // The arity depends on the operation, so the row is the outer bound
+    // and the body applies the rest: `S`/`D` refuse a third argument
+    // and `C` requires one.
+    Builtin {
+        name: b"STREAM",
+        min: 1,
+        max: Some(3),
+        run: stream::stream,
     },
     Builtin {
         name: b"ARG",

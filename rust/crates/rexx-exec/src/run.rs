@@ -8539,3 +8539,92 @@ fn round_via_unary_plus(number: &Number, digits: u64) -> Result<Number, ArithErr
 
 #[cfg(test)]
 mod tests;
+
+impl Interp {
+    /// `RexxActivation::resolveStream`: the object a stream builtin sends its
+    /// message to. An omitted or empty name and `STDIN`/`STDOUT`/`STDERR`
+    /// (caselessly, with or without a trailing colon) are the standard
+    /// streams; anything else is qualified and looked up in the owning
+    /// activation's table by that qualified name, and a miss builds a
+    /// `Stream` with the name **as written** -- `~string` answers what the
+    /// program passed, while the key is the resolved path, so `a.txt` and
+    /// `./a.txt` are one entry.
+    ///
+    /// `added` says whether a hit-or-miss may populate the table: every
+    /// builtin passes it except `STATE`, `DESCRIPTION` and a `STREAM` command
+    /// that is not OPEN, CLOSE or SEEK, which is why `stream(n,'S')` on an
+    /// unknown name leaves nothing behind.
+    pub(crate) fn resolve_stream(
+        &mut self,
+        name: &[u8],
+        input: bool,
+        added: bool,
+    ) -> Result<ObjRef, Failure> {
+        if let Some(standard) = standard_stream_name(name, input) {
+            // Survey A 5.2: route straight to the Stream objects rather than
+            // through the Monitors. Those are Task 10's, so this is loud with
+            // a Phase 7 owner until they exist -- the routing is real, the
+            // target is honestly unbuilt.
+            return self.dot_variable(standard);
+        }
+        let cwd = self.cwd_text();
+        let qualified = crate::paths::normalize(&String::from_utf8_lossy(name), &cwd).into_bytes();
+        if let Some(found) = self
+            .stream_table()
+            .and_then(|table| table.get(qualified.as_slice()).copied())
+        {
+            return Ok(found);
+        }
+        let Some(class) = self.rexx_package_class(b"STREAM") else {
+            return Err(Loud::environment_symbol(b".STREAM", "Phase 7").into());
+        };
+        let argument = self.text(name);
+        let caller = self.caller();
+        let built = self
+            .send_message(class, b"NEW", None, &[Some(argument)], caller)?
+            .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
+        if added && let Some(table) = self.stream_table_mut() {
+            table.insert(qualified.into_boxed_slice(), built);
+        }
+        Ok(built)
+    }
+}
+
+impl Interp {
+    /// Drops `name`'s entry from the owning activation's table, which is what
+    /// `LINEOUT(name)` with no string and a `CLOSE` command do after their
+    /// send: the stream stays closed and the next builtin to name it builds a
+    /// fresh one (`RexxActivation::removeFileName`).
+    pub(crate) fn forget_stream(&mut self, name: &[u8]) {
+        let cwd = self.cwd_text();
+        let qualified = crate::paths::normalize(&String::from_utf8_lossy(name), &cwd).into_bytes();
+        if let Some(table) = self.stream_table_mut() {
+            table.remove(qualified.as_slice());
+        }
+    }
+}
+
+/// The `.local` name a stream name spells, or `None` for an ordinary one.
+/// Matched caselessly with an optional trailing colon, and an omitted or empty
+/// name is the default input or output rather than a file
+/// (`RexxActivation.cpp:1938-2041`).
+fn standard_stream_name(name: &[u8], input: bool) -> Option<&'static [u8]> {
+    let bare = name.strip_suffix(b":").unwrap_or(name);
+    // An omitted or empty name is the default input or output, and which one
+    // depends on the caller -- measured with stdin redirected from a file,
+    // `linein()` reads `l1` and `chars()` answers 9, while `charout( ,'W')`
+    // writes `W` to stdout.
+    if bare.is_empty() {
+        return Some(if input { b".STDIN" } else { b".STDOUT" });
+    }
+    if bare.eq_ignore_ascii_case(b"STDIN") {
+        return Some(b".STDIN");
+    }
+    if bare.eq_ignore_ascii_case(b"STDOUT") {
+        return Some(b".STDOUT");
+    }
+    if bare.eq_ignore_ascii_case(b"STDERR") {
+        return Some(b".STDERR");
+    }
+    None
+}

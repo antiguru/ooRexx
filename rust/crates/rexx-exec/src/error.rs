@@ -633,6 +633,14 @@ impl Raised {
         )
     }
 
+    /// 40.27: `STREAM`'s first argument is not a usable stream name, which
+    /// measured is the empty string alone -- a blank answers `UNKNOWN` and
+    /// every other reader takes an empty name as the default input or output
+    /// rather than an error (`BuiltinFunctions.cpp:2444`).
+    pub(crate) fn invalid_stream_name(found: &[u8]) -> Raised {
+        Raised::syntax(40, 27, vec![b"STREAM".to_vec(), found.to_vec()])
+    }
+
     /// 40.19: `DATE`/`TIME`'s input-conversion argument does not parse under
     /// the input style it was given, or parses but is out of range for it
     /// (`Error_Incorrect_call_format_invalid`, `expression/

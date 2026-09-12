@@ -16,4 +16,4 @@
 #
 # An entry here is a debt, not a category: it says the differential does not
 # compare that program against the oracle.
-
+lang/stream_builtin_errors.rex	A `try:` procedure here cannot catch the 93.914 the orx `command` method raises. Measured: a RAISE from any Rexx method body escapes a trap armed in a called frame, while the same raise armed in the main activation is caught and substr('abc') and 1/0 in that same procedure are both caught. Pre-existing and not a stream defect -- the stream builtins only made it reachable, since before them the call refused before any orx body ran. Runs the moment that is fixed.

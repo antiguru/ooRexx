@@ -37,7 +37,6 @@
 #                project is organised to prevent. Committing such a row needs
 #                a `KNOWN GAP: <NAME>` row in the exclusions file naming it;
 #                the harness refuses the row without one.
-
 ABBREV	implemented
 ABS	implemented
 ADDRESS	implemented
@@ -51,9 +50,9 @@ C2X	implemented
 CENTER	implemented
 CENTRE	implemented
 CHANGESTR	implemented
-CHARIN	excluded
-CHAROUT	excluded
-CHARS	excluded
+CHARIN	implemented
+CHAROUT	implemented
+CHARS	implemented
 COMPARE	implemented
 CONDITION	implemented
 COPIES	implemented
@@ -73,9 +72,9 @@ INSERT	implemented
 LASTPOS	implemented
 LEFT	implemented
 LENGTH	implemented
-LINEIN	excluded
-LINEOUT	excluded
-LINES	excluded
+LINEIN	implemented
+LINEOUT	implemented
+LINES	implemented
 MAX	implemented
 MIN	implemented
 OVERLAY	implemented
@@ -88,7 +87,7 @@ RXQUEUE	excluded
 SIGN	implemented
 SOURCELINE	implemented
 SPACE	implemented
-STREAM	excluded
+STREAM	implemented
 STRIP	implemented
 SUBSTR	implemented
 SUBWORD	implemented

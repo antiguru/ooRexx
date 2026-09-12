@@ -138,3 +138,10 @@ QUALIFY	say qualify('/a/../b/c.txt')
 USERID	say length(userid()) > 0
 SETLOCAL	say setlocal() endlocal()
 ENDLOCAL	say endlocal()
+CHARIN	s = .Stream~new('c1.txt'); zz = s~open('write replace'); zz = s~lineout('alphabet'); zz = s~close; say charin('c1.txt',2,3)
+CHAROUT	s = .Stream~new('c2.txt'); zz = s~open('write replace'); zz = s~lineout('abcd'); zz = s~close; zz = charout('c2.txt','XY',2); zz = charout('c2.txt'); t = .Stream~new('c2.txt'); say t~linein
+CHARS	s = .Stream~new('c3.txt'); zz = s~open('write replace'); zz = s~lineout('abcd'); zz = s~close; say chars('c3.txt')
+LINEIN	s = .Stream~new('l1.txt'); zz = s~open('write replace'); zz = s~lineout('alpha'); zz = s~close; say linein('l1.txt')
+LINEOUT	s = .Stream~new('l2.txt'); zz = s~open('write replace'); zz = s~close; zz = lineout('l2.txt','beta'); zz = lineout('l2.txt'); t = .Stream~new('l2.txt'); say t~linein
+LINES	s = .Stream~new('l3.txt'); zz = s~open('write replace'); zz = s~lineout('one'); zz = s~lineout('two'); zz = s~close; say lines('l3.txt','C')
+STREAM	s = .Stream~new('s1.txt'); zz = s~open('write replace'); zz = s~lineout('one'); zz = s~close; say stream('s1.txt','C','query size')

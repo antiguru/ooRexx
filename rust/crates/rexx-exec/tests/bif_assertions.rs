@@ -225,6 +225,37 @@ fn parse_loud(stderr: &[u8]) -> (String, Option<String>) {
     (construct, owner)
 }
 
+/// A directory of this row's own for the interpreter to resolve relative
+/// paths against. **Not the test process's**: an extracted row that writes a
+/// file -- `STREAM.testGroup`'s do, now that the stream builtins run -- would
+/// otherwise drop it in the crate directory, and one that reads a relative
+/// path would resolve it against wherever the harness happened to start.
+///
+/// **Keyed by the row, not by the program.** A value row runs its expression
+/// and its expected value as two programs, and a row like `QUALIFY`'s
+/// `assertSame(directory(), qualify("."))` compares two readings of the
+/// working directory -- so the two sides have to share one. Rows still get
+/// their own, which they need because `evaluate` runs them under `par_iter`.
+/// Two assertions in one test method share a directory, as they do in the
+/// suite itself.
+fn row_directory(group: &str, method: &str) -> PathBuf {
+    let safe: String = format!("{group}.{method}")
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("bif-rows")
+        .join(safe);
+    fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
+    dir
+}
+
 fn evaluate(row: &RowKind) -> RowOutcome {
     match row {
         // **Two runs, not one program printing two lines.** A single program
@@ -237,15 +268,16 @@ fn evaluate(row: &RowKind) -> RowOutcome {
         // evaluate `==` itself: the rendering is what is under test, so the
         // executor's own comparison operator must not be the judge.
         RowKind::Value(r) => {
+            let dir = row_directory(&r.group, &r.method);
             let left = watchdog::run_bounded(
                 ROW_PATH,
                 program(r.digits, r.form, &r.prelude, &[&r.expr]),
-                rexx_exec::Invocation::none(),
+                rexx_exec::Invocation::none().with_directory(dir.clone()),
             );
             let right = watchdog::run_bounded(
                 ROW_PATH,
                 program(r.digits, r.form, &r.prelude, &[&r.expected]),
-                rexx_exec::Invocation::none(),
+                rexx_exec::Invocation::none().with_directory(dir),
             );
             classify_value(left, right)
         }
@@ -256,7 +288,8 @@ fn evaluate(row: &RowKind) -> RowOutcome {
                 watchdog::run_bounded(
                     ROW_PATH,
                     program(r.digits, r.form, &r.prelude, &operands),
-                    rexx_exec::Invocation::none(),
+                    rexx_exec::Invocation::none()
+                        .with_directory(row_directory(&r.group, &r.method)),
                 ),
             )
         }
@@ -751,7 +784,41 @@ fn every_exempt_attribution_is_a_known_phase_or_a_declared_outcome() {
     // `ANOMALY` moved 3 -> 0 on 2026-09-12: all three were `BEEP`, and Phase 7
     // gave the `REXX` package's internal routines their bodies, so the rows
     // pass and the category is empty rather than swept aside.
-    const DERIVED: &[(&str, usize)] = &[("MISMATCH", 0), ("RAISE-MISMATCH", 0), ("ANOMALY", 0)];
+    //
+    // `MISMATCH` moved 0 -> 2 on 2026-09-12, and neither remedy the panic
+    // below offers fits these two. They are `STREAM::test_relative_file_exists`
+    // and `...2`, which the stream builtins made reachable. Both assert
+    // against `.ooTest.dir`, and measured, that symbol does not resolve
+    // outside the ooTest framework -- both interpreters render it as the
+    // literal `.OOTEST.DIR`, so the expected value is a string no
+    // implementation can produce. The group's own `::method setup` supplies it
+    // along with the working directory, and this harness lifts one assertion
+    // out without it. A phase would assert that some later task makes them
+    // pass, which is false; a `KNOWN GAP` marker is read only by
+    // `builtin_status.rs`, and only for a builtin whose status row is
+    // `divergent`, which `STREAM`'s is not. So the number moves, with the
+    // reason, rather than the rows being attributed to a fiction.
+    //
+    // `MISMATCH` moved 0 -> 2 on 2026-09-12, and neither remedy the panic below
+    // offers fits these two. They are `STREAM::test_relative_file_exists` and
+    // `...2`, which the stream builtins made reachable. Both assert against
+    // `.ooTest.dir`, and measured, that symbol does not resolve outside the
+    // ooTest framework -- both interpreters render it as the literal
+    // `.OOTEST.DIR`, so the expected value is a string no implementation can
+    // produce. The group's own `::method setup` supplies it along with the
+    // working directory, and this harness lifts one assertion out without it.
+    // A phase would assert that some later task makes them pass, which is
+    // false; a `KNOWN GAP` marker is read only by `builtin_status.rs`, and
+    // only for a builtin whose status row is `divergent`, which `STREAM`'s is
+    // not. So the number moves, with the reason, rather than the rows being
+    // attributed to a fiction.
+    //
+    // `RAISE-MISMATCH` and `ANOMALY` stay 0. `CHAROUT`'s two std-stream rows
+    // briefly derived as those while an omitted name was answered with 40.3
+    // and 40.5; once it resolved to `.STDOUT` they went back to a loud
+    // refusal, so the harness attributes them to `Phase 7` again -- the phase
+    // that owes them -- rather than recording a divergence no one holds.
+    const DERIVED: &[(&str, usize)] = &[("MISMATCH", 2), ("RAISE-MISMATCH", 0), ("ANOMALY", 0)];
 
     let names: Vec<&str> = DERIVED.iter().map(|(name, _)| *name).collect();
     let mut counts = vec![0usize; DERIVED.len()];

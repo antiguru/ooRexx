@@ -46,22 +46,16 @@ directory, with the oracle under the standard ulimit.
 
   Phase 7, the stream model and the platform layer:
 
-    CHARIN      Reads characters from a stream.
-    CHAROUT     Writes characters to a stream.
-    CHARS       Reports the characters available on a stream.
-    LINEIN      Reads a line from a stream.
-    LINEOUT     Writes a line to a stream.
-    LINES       Reports the lines available on a stream.
-    STREAM      Opens, closes, queries and repositions a stream.
-
-                All seven are blocked on the same absence and there is no
-                argument about any of them: Phase 4 has no stream model, and
-                none of these means anything without one. Measured,
-                stream('nosuch.txt','C','QUERY EXISTS') returns empty.
-
                 DELIVERED by Phase 7, 2026-09-12, and their rows deleted:
-                QUALIFY, USERID, SETLOCAL and ENDLOCAL. The decision the
-                SETLOCAL row warned about was taken as the spec's D-P7-7: the
+                QUALIFY, USERID, SETLOCAL, ENDLOCAL, and then CHARIN,
+                CHAROUT, CHARS, LINEIN, LINEOUT, LINES and STREAM. Each of
+                the seven resolves its name through the running activation's
+                stream table and sends the message named after it; the table
+                is per program or method activation and is shared by
+                reference with internal calls, PROCEDURE routines, ::ROUTINEs
+                and INTERPRET, which is measured in the Phase 7 ledger.
+                The decision the SETLOCAL row warned about was taken as
+                the spec's D-P7-7: the
                 interpreter holds its own environment and current directory,
                 so restoring one needs no std::env::set_var and no lint
                 exception.

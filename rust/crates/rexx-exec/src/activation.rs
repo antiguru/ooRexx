@@ -338,6 +338,11 @@ pub(crate) struct Activation {
     /// [`call_name`]'s snapshot -- `StackFrame~arguments` and
     /// `RexxContext~args`.
     pub(crate) call_arguments: Option<Rc<[Option<ObjRef>]>>,
+    /// The streams the builtins have opened by name in this activation,
+    /// keyed by the **qualified** path, so `./a.txt` and `a.txt` are one
+    /// entry. Only a program or method activation owns one; every other
+    /// kind resolves through its nearest such ancestor.
+    pub(crate) streams: NameMap<Box<[u8]>, ObjRef>,
 }
 
 /// How control arrived at an activation.
@@ -496,6 +501,7 @@ impl Activation {
             invocation: None,
             call_name: None,
             call_arguments: None,
+            streams: NameMap::default(),
         }
     }
 
@@ -562,6 +568,7 @@ impl Activation {
             invocation: None,
             call_name: None,
             call_arguments: None,
+            streams: NameMap::default(),
         }
     }
 
@@ -609,6 +616,7 @@ impl Activation {
             invocation: None,
             call_name: None,
             call_arguments: None,
+            streams: NameMap::default(),
         }
     }
 
@@ -654,6 +662,7 @@ impl Activation {
             invocation: None,
             call_name: None,
             call_arguments: None,
+            streams: NameMap::default(),
         }
     }
 
@@ -715,8 +724,12 @@ impl Activation {
             invocation: _,
             call_name: _,
             call_arguments,
+            streams,
         } = self;
         out.extend(*context_object);
+        // The table's streams. An activation is a root, and a stream only
+        // the table holds is reachable through nothing else.
+        out.extend(streams.values().copied());
         // The convention's own values, which `Interp::park_reply` already
         // hands over from `CallContext` while the activation is off every
         // stack. Named here too because this activation now holds a
@@ -797,6 +810,38 @@ impl Interp {
             .iter()
             .map(std::ops::Deref::deref)
             .chain(self.suspended.iter().rev().map(Box::as_ref))
+    }
+
+    /// The stream table of the activation that owns one: the running frame
+    /// when it is a program or method, else the nearest such ancestor.
+    /// Internal calls, `PROCEDURE` routines, `::ROUTINE`s and `INTERPRET`
+    /// all borrow their caller's, which is measured -- a routine advances
+    /// the caller's read position where a method call does not.
+    pub(crate) fn stream_table(&self) -> Option<&NameMap<Box<[u8]>, ObjRef>> {
+        self.frames()
+            .find(|frame| matches!(frame.entry, Entry::TopLevel | Entry::Method))
+            .map(|frame| &frame.streams)
+    }
+
+    /// [`Interp::stream_table`] for a caller that inserts or removes. **By the
+    /// same predicate rather than by depth**: `frame_at_mut` counts backwards
+    /// into a vector that is oldest first, and an off-by-one there would put
+    /// one activation's streams on its caller -- a wrong table with nothing to
+    /// notice it, since both are plausible.
+    pub(crate) fn stream_table_mut(&mut self) -> Option<&mut NameMap<Box<[u8]>, ObjRef>> {
+        if self
+            .running
+            .as_deref()
+            .is_some_and(|frame| matches!(frame.entry, Entry::TopLevel | Entry::Method))
+        {
+            return self.running.as_deref_mut().map(|frame| &mut frame.streams);
+        }
+        self.suspended
+            .iter_mut()
+            .rev()
+            .map(Box::as_mut)
+            .find(|frame| matches!(frame.entry, Entry::TopLevel | Entry::Method))
+            .map(|frame| &mut frame.streams)
     }
 
     /// The activation at `depth`, counted as [`Interp::frames`] counts: `0`

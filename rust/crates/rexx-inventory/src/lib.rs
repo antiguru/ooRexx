@@ -25,13 +25,6 @@ pub mod builtins {
     /// owner rides here rather than in the refusal, so a name and the phase
     /// blamed for it cannot drift apart.
     pub const EXCLUDED: &[(&str, &str)] = &[
-        ("CHARIN", "Phase 7"),
-        ("CHAROUT", "Phase 7"),
-        ("CHARS", "Phase 7"),
-        ("LINEIN", "Phase 7"),
-        ("LINEOUT", "Phase 7"),
-        ("LINES", "Phase 7"),
-        ("STREAM", "Phase 7"),
         ("RXQUEUE", "Phase 10"),
         ("RXFUNCADD", "Phase 10"),
         ("RXFUNCDROP", "Phase 10"),

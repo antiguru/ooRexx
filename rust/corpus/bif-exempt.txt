@@ -56,52 +56,12 @@
 # the row first -- give it a phase, or record it as a KNOWN GAP -- and then
 # move the number to match, deliberately.
 #
-CHARIN::test_charin_noerr_1#1	Phase 7
-CHARIN::test_charin_noerr_2#1	Phase 7
-CHARIN::test_charin_simple#1	Phase 7
 CHAROUT::test_stdout_ret2#1	Phase 7
 CHAROUT::test_stdout_start#1	Phase 7
-CHARS::test_stdin_wrong_synatx#1	Phase 7
-LINES::test_count_negativeTest1#1	Phase 7
-LINES::test_count_negativeTest1#2	Phase 7
-LINES::test_count_negativeTest1#3	Phase 7
-LINES::test_normal_negativeTest1#1	Phase 7
-LINES::test_normal_negativeTest1#2	Phase 7
-LINES::test_normal_negativeTest1#3	Phase 7
 RXQUEUE::test_rxqueue_create_one_arg#1	Phase 10
 RXQUEUE::test_rxqueue_create_session#1	Phase 10
 RXQUEUE::test_rxqueue_get#1	Phase 10
 RXQUEUE::test_rxqueue_open#1	Phase 10
 RXQUEUE::test_rxqueue_switch#1	Phase 10
-STREAM::test_close_twice#1	Phase 7
-STREAM::test_close_twice#2	Phase 7
-STREAM::test_close_twice#3	Phase 7
-STREAM::test_close_twice#4	Phase 7
-STREAM::test_close_twice#5	Phase 7
-STREAM::test_open_isUsable#1	Phase 7
-STREAM::test_open_isUsable#2	Phase 7
-STREAM::test_open_isUsable#3	Phase 7
-STREAM::test_open_isUsable#4	Phase 7
-STREAM::test_open_isUsable#5	Phase 7
-STREAM::test_queryDir_not_exists#1	Phase 7
-STREAM::test_queryDir_not_exists#2	Phase 7
-STREAM::test_queryDir_not_exists#3	Phase 7
-STREAM::test_queryDir_not_exists#4	Phase 7
-STREAM::test_queryDir_not_exists#5	Phase 7
-STREAM::test_queryDir_not_exists#6	Phase 7
-STREAM::test_queryDir_not_exists#7	Phase 7
-STREAM::test_queryDir_not_exists#8	Phase 7
-STREAM::test_queryFile_not_exists#1	Phase 7
-STREAM::test_queryFile_not_exists#2	Phase 7
-STREAM::test_queryFile_not_exists#3	Phase 7
-STREAM::test_queryFile_not_exists#4	Phase 7
-STREAM::test_queryFile_not_exists#5	Phase 7
-STREAM::test_queryFile_not_exists#6	Phase 7
-STREAM::test_queryFile_not_exists#7	Phase 7
-STREAM::test_queryFile_not_exists#8	Phase 7
-STREAM::test_relative_file_exists#1	Phase 7
-STREAM::test_relative_file_exists2#1	Phase 7
-STREAM::test_relative_file_not_exists#1	Phase 7
-STREAM::test_relative_file_not_exists2#1	Phase 7
-STREAM::test_simple_open#1	Phase 7
-STREAM::test_simple_open#2	Phase 7
+STREAM::test_relative_file_exists#1	MISMATCH
+STREAM::test_relative_file_exists2#1	MISMATCH
