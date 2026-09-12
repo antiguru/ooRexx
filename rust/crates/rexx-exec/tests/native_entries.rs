@@ -37,6 +37,32 @@ const BEFORE_THE_SEND: &[u8] = b"main\n";
 const IMPLEMENTED: &[&str] = &[
     "file_separator",
     "file_path_separator",
+    // `.File`'s own entry points. `file_qualify` leads because `init`
+    // qualifies eagerly, so the class constructs nothing without it.
+    "file_qualify",
+    "file_can_read",
+    "file_can_write",
+    "file_case_sensitive",
+    "file_delete_directory",
+    "file_delete_file",
+    "file_exists",
+    "file_get_last_accessed",
+    "file_get_last_modified",
+    "file_isDirectory",
+    "file_isFile",
+    "file_isHidden",
+    "file_length",
+    "file_list",
+    "file_list_roots",
+    "file_make_dir",
+    "file_rename",
+    "file_search_path_impl",
+    "file_set_last_accessed",
+    "file_set_last_modified",
+    "file_set_read_only",
+    "file_set_writable",
+    "file_temporary_path",
+    "this_file_case_sensitive",
     // Phase 7's stream family: the queries a stream answers without opening
     // anything, and the reading and writing entry points beside them. What
     // this phase still defers is what the family's own probe binds.
@@ -153,6 +179,25 @@ fn invoking_an_unimplemented_entry_point_is_loud_and_names_its_phase() {
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", probe.display()));
         let entry = entry_point_named_by(&text, &probe);
         let row = row_for(&entry);
+        // **A family with nothing left deferred has nothing to demonstrate.**
+        // Its program keeps its place -- the sibling test above requires one
+        // per family -- but there is no refusal for it to pin, and holding a
+        // row back so that there would be is the hollow shell this project's
+        // rules forbid. The skip is conditioned on the registry rather than on
+        // a family's name, so a family that later regains a deferred row is
+        // exercised again instead of staying silently exempt.
+        let still_deferred = rexx_exec::native_entry_points()
+            .iter()
+            .any(|other| other.family == family.as_str() && !other.implemented);
+        if !still_deferred {
+            assert!(
+                row.implemented,
+                "{} names {entry:?}, which the registry reports as deferred \
+                 while its family has none -- so one of the two is stale",
+                probe.display()
+            );
+            continue;
+        }
         assert_eq!(
             row.family,
             family.as_str(),

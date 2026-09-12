@@ -71,6 +71,10 @@ mod string;
 // body takes the seam's `Cleared`, which cannot be named outside it.
 pub(crate) mod stream;
 
+/// `.File`'s entry points, whose Rexx half hands each one an already-qualified
+/// path.
+mod files;
+
 // The collection classes' primitive methods, chained the same way.
 mod collection;
 pub(crate) mod hash;

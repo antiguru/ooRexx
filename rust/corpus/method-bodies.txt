@@ -1014,66 +1014,66 @@ EventSemaphore	post	instance	loud	method "POST" of class "EventSemaphore"
 EventSemaphore	reset	instance	loud	method "RESET" of class "EventSemaphore"
 EventSemaphore	uninit	instance	answers	rc 165
 EventSemaphore	wait	instance	loud	method "WAIT" of class "EventSemaphore"
-File	isCaseSensitive	class	loud	the LIBRARY REXX entry point "file_case_sensitive"
-File	listRoots	class	loud	the LIBRARY REXX entry point "file_list_roots"
+File	isCaseSensitive	class	answers	rc 0
+File	listRoots	class	answers	rc 0
 File	pathSeparator	class	answers	rc 0
 File	readChars	class	answers	rc 163
 File	readLines	class	answers	rc 163
 File	searchPath	class	answers	rc 163
 File	separator	class	answers	rc 0
-File	temporaryPath	class	loud	the LIBRARY REXX entry point "file_temporary_path"
+File	temporaryPath	class	answers	rc 0
 File	writeChars	class	answers	rc 163
 File	writeLines	class	answers	rc 163
-File	absoluteFile	instance	unanswered	a bare `~new` raises; the method was never sent
-File	absolutePath	instance	unanswered	a bare `~new` raises; the method was never sent
-File	canRead	instance	unanswered	a bare `~new` raises; the method was never sent
-File	canWrite	instance	unanswered	a bare `~new` raises; the method was never sent
-File	compareTo	instance	unanswered	a bare `~new` raises; the method was never sent
-File	delete	instance	unanswered	a bare `~new` raises; the method was never sent
-File	exists	instance	unanswered	a bare `~new` raises; the method was never sent
-File	extension	instance	unanswered	a bare `~new` raises; the method was never sent
-File	hashCode	instance	unanswered	a bare `~new` raises; the method was never sent
-File	init	instance	unanswered	a bare `~new` raises; the method was never sent
-File	isCaseSensitive	instance	unanswered	a bare `~new` raises; the method was never sent
-File	isDirectory	instance	unanswered	a bare `~new` raises; the method was never sent
-File	isFile	instance	unanswered	a bare `~new` raises; the method was never sent
-File	isHidden	instance	unanswered	a bare `~new` raises; the method was never sent
-File	lastAccessed	instance	unanswered	a bare `~new` raises; the method was never sent
-File	lastModified	instance	unanswered	a bare `~new` raises; the method was never sent
-File	length	instance	unanswered	a bare `~new` raises; the method was never sent
-File	list	instance	unanswered	a bare `~new` raises; the method was never sent
-File	listFiles	instance	unanswered	a bare `~new` raises; the method was never sent
-File	makeDir	instance	unanswered	a bare `~new` raises; the method was never sent
-File	makeDirs	instance	unanswered	a bare `~new` raises; the method was never sent
-File	makeString	instance	unanswered	a bare `~new` raises; the method was never sent
-File	name	instance	unanswered	a bare `~new` raises; the method was never sent
-File	parent	instance	unanswered	a bare `~new` raises; the method was never sent
-File	parentFile	instance	unanswered	a bare `~new` raises; the method was never sent
-File	path	instance	unanswered	a bare `~new` raises; the method was never sent
-File	pathSeparator	instance	unanswered	a bare `~new` raises; the method was never sent
-File	renameTo	instance	unanswered	a bare `~new` raises; the method was never sent
-File	separator	instance	unanswered	a bare `~new` raises; the method was never sent
-File	setReadOnly	instance	unanswered	a bare `~new` raises; the method was never sent
-File	setWritable	instance	unanswered	a bare `~new` raises; the method was never sent
-File	string	instance	unanswered	a bare `~new` raises; the method was never sent
-File	=	instance	unanswered	a bare `~new` raises; the method was never sent
-File	==	instance	unanswered	a bare `~new` raises; the method was never sent
-File	<	instance	unanswered	a bare `~new` raises; the method was never sent
-File	<=	instance	unanswered	a bare `~new` raises; the method was never sent
-File	<<	instance	unanswered	a bare `~new` raises; the method was never sent
-File	<<=	instance	unanswered	a bare `~new` raises; the method was never sent
-File	<>	instance	unanswered	a bare `~new` raises; the method was never sent
-File	>	instance	unanswered	a bare `~new` raises; the method was never sent
-File	>=	instance	unanswered	a bare `~new` raises; the method was never sent
-File	><	instance	unanswered	a bare `~new` raises; the method was never sent
-File	>>	instance	unanswered	a bare `~new` raises; the method was never sent
-File	>>=	instance	unanswered	a bare `~new` raises; the method was never sent
-File	\=	instance	unanswered	a bare `~new` raises; the method was never sent
-File	\==	instance	unanswered	a bare `~new` raises; the method was never sent
-File	\<	instance	unanswered	a bare `~new` raises; the method was never sent
-File	\<<	instance	unanswered	a bare `~new` raises; the method was never sent
-File	\>	instance	unanswered	a bare `~new` raises; the method was never sent
-File	\>>	instance	unanswered	a bare `~new` raises; the method was never sent
+File	absoluteFile	instance	answers	rc 0
+File	absolutePath	instance	answers	rc 0
+File	canRead	instance	answers	rc 0
+File	canWrite	instance	answers	rc 0
+File	compareTo	instance	answers	rc 163
+File	delete	instance	answers	rc 0
+File	exists	instance	answers	rc 0
+File	extension	instance	answers	rc 0
+File	hashCode	instance	answers	rc 0
+File	init	instance	answers	rc 163
+File	isCaseSensitive	instance	answers	rc 0
+File	isDirectory	instance	answers	rc 0
+File	isFile	instance	answers	rc 0
+File	isHidden	instance	answers	rc 0
+File	lastAccessed	instance	answers	rc 0
+File	lastModified	instance	answers	rc 0
+File	length	instance	answers	rc 0
+File	list	instance	answers	rc 0
+File	listFiles	instance	answers	rc 0
+File	makeDir	instance	answers	rc 0
+File	makeDirs	instance	answers	rc 0
+File	makeString	instance	answers	rc 0
+File	name	instance	answers	rc 0
+File	parent	instance	answers	rc 0
+File	parentFile	instance	answers	rc 0
+File	path	instance	answers	rc 0
+File	pathSeparator	instance	answers	rc 0
+File	renameTo	instance	answers	rc 163
+File	separator	instance	answers	rc 0
+File	setReadOnly	instance	answers	rc 165
+File	setWritable	instance	answers	rc 165
+File	string	instance	answers	rc 0
+File	=	instance	answers	rc 163
+File	==	instance	answers	rc 163
+File	<	instance	answers	rc 163
+File	<=	instance	answers	rc 163
+File	<<	instance	answers	rc 163
+File	<<=	instance	answers	rc 163
+File	<>	instance	answers	rc 163
+File	>	instance	answers	rc 163
+File	>=	instance	answers	rc 163
+File	><	instance	answers	rc 163
+File	>>	instance	answers	rc 163
+File	>>=	instance	answers	rc 163
+File	\=	instance	answers	rc 163
+File	\==	instance	answers	rc 163
+File	\<	instance	answers	rc 163
+File	\<<	instance	answers	rc 163
+File	\>	instance	answers	rc 163
+File	\>>	instance	answers	rc 163
 MessageNotification	messageComplete	instance	answers	rc 163
 Monitor	current	instance	answers	rc 0
 Monitor	destination	instance	answers	rc 0

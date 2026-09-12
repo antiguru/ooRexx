@@ -47,7 +47,7 @@ const LEAP_DAYS: i64 = base_days(4);
 
 const SECONDS_IN_DAY: i64 = 86_400;
 const MICROSECONDS: i64 = 1_000_000;
-const MICROSECONDS_IN_DAY: i64 = SECONDS_IN_DAY * MICROSECONDS;
+pub(crate) const MICROSECONDS_IN_DAY: i64 = SECONDS_IN_DAY * MICROSECONDS;
 
 /// The largest basedate `DATE`/`TIME` accept: the days from 0001-01-01 to
 /// 9999-12-31, both dates this crate can otherwise render. Measured against
@@ -66,7 +66,7 @@ const MAX_BASE_TIME: i64 =
 /// `base_days(1969) + 1 - 1 == 719_162`, the well-known .NET epoch constant,
 /// since both systems count from the identical proleptic 0001-01-01.
 const UNIX_BASE_DATE: i64 = 719_162;
-const UNIX_BASE_TIME: i64 = UNIX_BASE_DATE * MICROSECONDS_IN_DAY;
+pub(crate) const UNIX_BASE_TIME: i64 = UNIX_BASE_DATE * MICROSECONDS_IN_DAY;
 
 const MONTH_NAMES: [&[u8]; 12] = [
     b"January",
@@ -789,7 +789,10 @@ fn now_base_time(interp: &mut Interp) -> i64 {
 
 /// Microseconds the host's local zone is ahead of UTC at `utc_micros`,
 /// which is [`UNIX_BASE_TIME`]-based like every other reading here.
-fn local_offset_micros(utc_micros: i64) -> i64 {
+///
+/// `.File`'s timestamps read through this too: a file's stamp is encoded at
+/// the offset in force **at that stamp**, not at the offset in force now.
+pub(crate) fn local_offset_micros(utc_micros: i64) -> i64 {
     let unix_micros = utc_micros - UNIX_BASE_TIME;
     let secs = unix_micros.div_euclid(MICROSECONDS);
     let nanos = (unix_micros.rem_euclid(MICROSECONDS) * 1_000) as u32;

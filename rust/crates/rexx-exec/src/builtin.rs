@@ -31,7 +31,7 @@ pub(crate) mod convert;
 /// -- and the thirteen letters are what the two forms must not come to
 /// disagree about. The refusal is not shared: only the letter test is.
 pub(crate) mod datatype;
-mod datetime;
+pub(crate) mod datetime;
 /// Crate-visible because `String~sign` is the same computation `SIGN` is --
 /// `RexxString::sign` is `ArithmeticMethod(Sign(), "SIGN")`
 /// (`classes/StringClass.cpp:1084`) -- and [`numeric::sign_of`] is what keeps

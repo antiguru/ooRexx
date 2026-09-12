@@ -378,6 +378,22 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     // this crate both refuse at `93.967`. That leaves all ten instance rows
     // `unanswered`: the method was never sent, on either side.
     ("StackFrame", ".context~stackFrames[1]"),
+    // **Phase 7 Task 13.** `class-set.txt` gives `File` the construction
+    // `.File~new('.')`, which is the documented example and the right thing in
+    // that column. It cannot be the probe's receiver: this sweep stages one
+    // directory per row so that an oracle run's own working directory holds
+    // exactly its program, so the two sides run from different directories and
+    // every method deriving from `.` -- `absolutePath`, `parent`, `parentFile`,
+    // `absoluteFile`, `makeString`, `hashCode`, `list`, `listFiles` -- answers
+    // a different path on each. Measured: eleven rows diverge on stdout with
+    // `.`, and none with an absolute receiver.
+    //
+    // `/` rather than `/tmp`: both are stable across the two runs, and the
+    // root also reaches the branches a busy directory does not -- `parent` and
+    // `parentFile` answer `.nil`, `name` and `extension` answer empty -- while
+    // its own contents do not move between the two runs the way a temporary
+    // directory's can.
+    ("File", ".File~new('/')"),
 ];
 
 /// The expression a row's send is made to, or `None` for the class arm, which

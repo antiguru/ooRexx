@@ -50,6 +50,12 @@ rexx-lib = { path = "../rexx-lib" }
 # helper -- and chrono's own unix path carries no `unsafe` and no libc call:
 # it parses TZif out of `/etc/localtime` itself.
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+# `.File`'s two system calls that `std` does not expose: `access(2)`, which
+# answers for the caller's own credentials where a mode bit does not, and
+# setting a timestamp while preserving the other one. `fs` is a leaf feature
+# here -- it gates the module and pulls no further crate.
+rustix = { version = "1.1.4", features = ["fs"] }
+filetime = "0.2.29"
 
 [dev-dependencies]
 # Case tables as data files rather than `const` arrays in Rust sources, for

@@ -75,3 +75,7 @@ lang/input_redirection.rex
 # half allocated and ends on the end-of-input raise, and `StreamSupplier`
 # walks the lines.
 lang/stream_array.rex
+
+# Task 13: `.File` -- the predicates, the listing, a timestamp round trip, and
+# the mutation answers, over a tree the program builds in its own directory.
+lang/file_queries.rex
