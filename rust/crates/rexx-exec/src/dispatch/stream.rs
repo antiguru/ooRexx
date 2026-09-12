@@ -267,13 +267,22 @@ pub(super) fn query_time(
 }
 
 /// `query_streamtype`: `UNKNOWN` until something opens the stream, which is
-/// what tells a persistent stream from a transient one.
+/// what tells a persistent stream from a transient one. A standard stream
+/// answers from its descriptor instead, which it has without being opened.
 pub(super) fn query_streamtype(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    if let Some(which) = standard_of(interp, receiver)? {
+        let answer: &[u8] = if standard_is_transient(interp, which) {
+            b"TRANSIENT"
+        } else {
+            b"PERSISTENT"
+        };
+        return Ok(Some(interp.text(answer)));
+    }
     let answer: &[u8] = match require(interp, receiver)?.open.as_ref() {
         None => b"UNKNOWN",
         Some(open) if open.transient => b"TRANSIENT",
@@ -282,15 +291,22 @@ pub(super) fn query_streamtype(
     Ok(Some(interp.text(answer)))
 }
 
-/// `query_handle`: the null string until the stream is open.
+/// `query_handle`: the descriptor a standard stream stands for, and the null
+/// string for every other stream. Measured, the three answer `0`, `1` and `2`
+/// whatever the descriptors are redirected to.
 pub(super) fn query_handle(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    require(interp, receiver)?;
-    Ok(Some(interp.text(b"")))
+    let answer: &[u8] = match standard_of(interp, receiver)? {
+        Some(StandardStream::In) => b"0",
+        Some(StandardStream::Out) => b"1",
+        Some(StandardStream::Err) => b"2",
+        None => b"",
+    };
+    Ok(Some(interp.text(answer)))
 }
 
 /// The errno a failed open reports when there is nothing to open. A directory
@@ -1775,6 +1791,13 @@ pub(super) fn query_position(
 
 /// `stream_close`: `READY:` for a stream that was open, and the null string
 /// for one that never was. Either way the state goes back to `UNKNOWN`.
+///
+/// A standard stream has no [`rexx_core::OpenFile`] to take, so it answers
+/// from its state instead. Measured, and the three rows agree on one rule --
+/// anything but `UNKNOWN` closes as `READY:`: the first close answers
+/// `READY:` and the second the null string, a write after a close makes the
+/// next close `READY:` again, and an exhausted `.STDIN` sitting at `NOTREADY`
+/// also closes as `READY:`.
 pub(super) fn close(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1782,7 +1805,11 @@ pub(super) fn close(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let state = require_mut(interp, receiver)?;
-    let was_open = state.open.take().is_some();
+    let was_open = if state.standard.is_some() {
+        state.status != StreamStatus::Unknown
+    } else {
+        state.open.take().is_some()
+    };
     state.status = StreamStatus::Unknown;
     let answer: &[u8] = if was_open { b"READY:" } else { b"" };
     Ok(Some(interp.text(answer)))

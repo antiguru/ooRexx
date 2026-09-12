@@ -1868,6 +1868,10 @@ struct Interp {
     /// positioning a standard stream is 93.958. Taken from the `Invocation`,
     /// never from this process: see `Invocation::standard_transient`.
     standard_transient: [bool; 3],
+    /// The command-line words `.SYSCARGS` answers, before they become the one
+    /// `Array` `.local` holds -- see `Invocation::words` for why the joined
+    /// argument string cannot supply them.
+    command_words: Vec<Vec<u8>>,
     /// `RANDOM`'s generator state: the seed the next call will scramble, or
     /// `None` before any call has drawn one.
     random_seed: Option<u64>,
@@ -2187,6 +2191,7 @@ impl Interp {
             // `execute` replaces this, and only from an `Invocation` whose
             // caller owns real descriptors.
             standard_transient: [true; 3],
+            command_words: Vec::new(),
             random_seed: None,
             elapsed_anchor: None,
             pending_elapsed_reset: false,
@@ -4602,9 +4607,11 @@ impl Interp {
             env: _,
             cwd: _,
             locals: _,
-            // Three flags describing the embedding's descriptors: no `ObjRef`,
-            // so nothing here is reachable from the collector.
+            // Three flags describing the embedding's descriptors, and the
+            // command-line words as bytes: no `ObjRef` in either, so nothing
+            // here is reachable from the collector.
             standard_transient: _,
+            command_words: _,
         } = self;
         // The context objects of the activations on the stack. **The one
         // object an activation owns outright**: everything else it holds is
@@ -4905,6 +4912,7 @@ fn execute(
     let (argument, deadline) = (parts.argument, parts.deadline);
     interp.input = Input::new(parts.input);
     interp.standard_transient = parts.standard_transient;
+    interp.command_words = parts.words;
     if let Some(directory) = parts.directory {
         interp.cwd = directory;
     }

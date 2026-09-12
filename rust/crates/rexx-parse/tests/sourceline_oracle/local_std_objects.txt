@@ -1,0 +1,55 @@
+count 54
+/* What `.local` holds: the three standard streams, the five monitors stacked
+   over them, and the command-line words. Identities are asserted with `==`
+   between instances, which works; two arrays cannot be compared that way and
+   `.local`'s own ALLINDEXES, HASENTRY, ENTRY and ITEMS all refuse, so the
+   directory is examined through the objects it holds rather than directly.
+
+   The harness runs every program with no command-line words, so `.SYSCARGS`
+   here is the empty case: an Array of no items whose `~dimension` is 0, which
+   is `.array~new`'s shape and not `.array~of()`'s. */
+say 'local objects'
+say 'local name  [' || .local~objectname || ']'
+/* Each monitor is a Monitor, and its object name is the one LocalServer gives
+   it -- not a default rendering. */
+say 'in  class   [' || .input~class~id || ']'
+say 'in  name    [' || .input~objectname || ']'
+say 'out class   [' || .output~class~id || ']'
+say 'out name    [' || .output~objectname || ']'
+say 'err class   [' || .error~class~id || ']'
+say 'err name    [' || .error~objectname || ']'
+say 'dbg class   [' || .debuginput~class~id || ']'
+say 'dbg name    [' || .debuginput~objectname || ']'
+say 'trc class   [' || .traceoutput~class~id || ']'
+say 'trc name    [' || .traceoutput~objectname || ']'
+/* A monitor renders as its object name, where a stream renders as its own
+   name. */
+say 'out string  [' || .output~string || ']'
+say 'stdout str  [' || .stdout~string || ']'
+/* The stack: each monitor's current destination is the object below it, and
+   the two chained ones sit over a monitor rather than over a stream. */
+say 'in  over    [' || (.input~current == .stdin) || ']'
+say 'out over    [' || (.output~current == .stdout) || ']'
+say 'err over    [' || (.error~current == .stderr) || ']'
+say 'dbg over    [' || (.debuginput~current == .input) || ']'
+say 'trc over    [' || (.traceoutput~current == .error) || ']'
+/* Asking twice answers the same object, for a stream and for a monitor
+   alike -- they are built once and held, not rebuilt per lookup. */
+say 'stdout same [' || (.stdout == .stdout) || ']'
+say 'output same [' || (.output == .output) || ']'
+/* A monitor is not its destination, and the two output monitors are not each
+   other. */
+say 'out vs std  [' || (.output == .stdout) || ']'
+say 'out vs err  [' || (.output == .error) || ']'
+/* The command-line words. Identity is shown by mutation rather than by `==`:
+   an append through one ask is visible through the next. */
+say 'args class  [' || .syscargs~class~id || ']'
+say 'args items  [' || .syscargs~items || ']'
+say 'args dim    [' || .syscargs~dimension || ']'
+.syscargs~append('appended')
+say 'after app   [' || .syscargs~items || ']'
+say 'last word   [' || .syscargs[.syscargs~items] || ']'
+/* Appending to the words leaves the joined argument string alone: the two are
+   derived from the same command line and share nothing afterwards. */
+say 'argument    [' || arg(1) || ']'
+exit 0

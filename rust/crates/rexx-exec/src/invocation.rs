@@ -67,6 +67,14 @@ pub struct Invocation {
     /// differently under a binary, a test harness and a library embedding.
     /// Defaults to all transient, which is what a terminal is.
     standard_transient: [bool; 3],
+    /// The command-line words as separate strings, which `.SYSCARGS` answers.
+    ///
+    /// **Kept beside `argument` rather than derived from it**, because the
+    /// join is not invertible: measured, `1 "2 3" 4` gives one argument string
+    /// `1 2 3 4` and a `.SYSCARGS` of `1`, `2 3`, `4`, and nothing in the
+    /// string says where the second word ended. The two are independent
+    /// afterwards -- appending to `.SYSCARGS` leaves `ARG(1)` unchanged.
+    words: Vec<Vec<u8>>,
 }
 
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
@@ -92,6 +100,7 @@ impl Invocation {
             directory: None,
             environment: None,
             standard_transient: [true; 3],
+            words: Vec::new(),
         }
     }
 
@@ -156,6 +165,7 @@ impl Invocation {
             directory: self.directory,
             environment: self.environment,
             standard_transient: self.standard_transient,
+            words: self.words,
         }
     }
 }
@@ -169,6 +179,7 @@ pub(crate) struct InvocationParts {
     pub(crate) directory: Option<std::path::PathBuf>,
     pub(crate) environment: Option<Vec<(Vec<u8>, Vec<u8>)>>,
     pub(crate) standard_transient: [bool; 3],
+    pub(crate) words: Vec<Vec<u8>>,
 }
 
 /// The one argument string a list of command-line words becomes, or `None`
@@ -179,7 +190,9 @@ where
     W: AsRef<[u8]>,
 {
     let mut joined: Option<Vec<u8>> = None;
+    let mut kept: Vec<Vec<u8>> = Vec::new();
     for word in words {
+        kept.push(word.as_ref().to_vec());
         let buffer = joined.get_or_insert_with(Vec::new);
         // The blank goes in only when something is already accumulated, which
         // is what makes a leading empty word contribute neither text nor
@@ -193,6 +206,7 @@ where
     }
     Invocation {
         argument: joined,
+        words: kept,
         ..Invocation::none()
     }
 }

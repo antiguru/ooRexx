@@ -639,31 +639,144 @@ impl Interp {
         if scope != EnvScope::Local {
             return None;
         }
-        let which = match name {
-            b"STDIN" => rexx_core::StandardStream::In,
-            b"STDOUT" => rexx_core::StandardStream::Out,
-            b"STDERR" => rexx_core::StandardStream::Err,
-            _ => return None,
+        if !matches!(
+            name,
+            b"STDIN"
+                | b"STDOUT"
+                | b"STDERR"
+                | b"INPUT"
+                | b"OUTPUT"
+                | b"ERROR"
+                | b"DEBUGINPUT"
+                | b"TRACEOUTPUT"
+                | b"SYSCARGS"
+        ) {
+            return None;
+        }
+        self.mint_local_bundle(handle);
+        self.local_entry(handle, name)
+    }
+
+    /// The `.local` entries this crate builds late: the command-line words,
+    /// then the streams and monitors in the order `LocalServer~initInstance`
+    /// builds those, each stored as it is built.
+    ///
+    /// **Together rather than one on demand**, because the monitors stack:
+    /// `.DEBUGINPUT` wraps `.INPUT` and `.TRACEOUTPUT` wraps `.ERROR`, so
+    /// building one alone would either mint its target twice or leave the
+    /// identity `.debuginput~current == .input` false. Storing each as it is
+    /// built also keeps it rooted through the directory across the sends that
+    /// follow.
+    ///
+    /// **Through the package publics, not the class registry.** A `::CLASS`
+    /// directive calls `define_unregistered_class`, which by its own contract
+    /// records the class "without registering the name", so
+    /// `classes().lookup("Stream")` never finds one the embedded
+    /// `StreamClasses.orx` declared. `rexx_package_class` is the search
+    /// `.Stream` itself resolves through.
+    ///
+    /// **No panic on a miss, at any step.** Before the library installs there
+    /// is nothing to build, and the ordinary refusal is the right answer for
+    /// one name -- an `expect` here would be every program. A send that fails
+    /// leaves what is already stored and stops, which is why the guard below
+    /// keys on the entry built *first*: a re-entrant lookup during a send
+    /// finds the bundle already under construction and takes what is there.
+    fn mint_local_bundle(&mut self, handle: ObjRef) {
+        if self.local_entry(handle, b"SYSCARGS").is_some() {
+            return;
+        }
+        // First, and before any class is looked up: it depends on none, and a
+        // bundle that stops early over a missing class must still leave it
+        // behind. **`Body::array`, not `.Array~of`'s shape** -- measured, a
+        // `.SYSCARGS` built from no words answers `~dimension` `0` as
+        // `.array~new` does, where `.array~of()` answers `1`.
+        let mut slots: Vec<Option<ObjRef>> = Vec::with_capacity(self.command_words.len());
+        for at in 0..self.command_words.len() {
+            let word = std::mem::take(&mut self.command_words[at]);
+            slots.push(Some(self.text(&word)));
+            self.command_words[at] = word;
+        }
+        let arguments = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+        self.store_local(handle, b"SYSCARGS", arguments);
+        let Some(stream_class) = self.rexx_package_class(b"STREAM") else {
+            return;
         };
-        // **Through the package publics, not the class registry.** A `::CLASS`
-        // directive calls `define_unregistered_class`, which by its own
-        // contract records the class "without registering the name", so
-        // `classes().lookup("Stream")` never finds one the embedded
-        // `StreamClasses.orx` declared. `rexx_package_class` is the search
-        // `.Stream` itself resolves through, and the route Task 9's
-        // `resolve_stream` already uses.
-        //
-        // **No panic on a miss.** Before `StreamClasses.orx` installs there is
-        // nothing to build, and the ordinary refusal is the right answer for
-        // one name -- an `expect` here would be every program.
-        let class = self.rexx_package_class(b"STREAM")?;
-        let built = crate::dispatch::stream::standard_stream(self, class, which).ok()?;
+        for (name, which) in [
+            (b"STDIN".as_slice(), rexx_core::StandardStream::In),
+            (b"STDOUT".as_slice(), rexx_core::StandardStream::Out),
+            (b"STDERR".as_slice(), rexx_core::StandardStream::Err),
+        ] {
+            let Ok(built) = crate::dispatch::stream::standard_stream(self, stream_class, which)
+            else {
+                return;
+            };
+            self.store_local(handle, name, built);
+        }
+        let Some(monitor_class) = self.rexx_package_class(b"MONITOR") else {
+            return;
+        };
+        for (name, over, rendered) in [
+            (
+                b"INPUT".as_slice(),
+                b"STDIN".as_slice(),
+                "The INPUT monitor",
+            ),
+            (
+                b"DEBUGINPUT".as_slice(),
+                b"INPUT".as_slice(),
+                "The DEBUG INPUT monitor",
+            ),
+            (
+                b"OUTPUT".as_slice(),
+                b"STDOUT".as_slice(),
+                "The OUTPUT monitor",
+            ),
+            (
+                b"ERROR".as_slice(),
+                b"STDERR".as_slice(),
+                "The ERROR monitor",
+            ),
+            (
+                b"TRACEOUTPUT".as_slice(),
+                b"ERROR".as_slice(),
+                "The TRACE OUTPUT monitor",
+            ),
+        ] {
+            let Some(target) = self.local_entry(handle, over) else {
+                return;
+            };
+            let caller = self.caller();
+            let Ok(Some(built)) =
+                self.send_message(monitor_class, b"NEW", None, &[Some(target)], caller)
+            else {
+                return;
+            };
+            if let Some(object) = self.heap.get_mut(built)
+                && let Body::Instance { name: held, .. } = &mut object.body
+            {
+                *held = Some(rendered.as_bytes().into());
+            }
+            self.store_local(handle, name, built);
+        }
+    }
+
+    /// One entry of the directory `handle` holds, spending no clearance: the
+    /// caller is already inside the seam call that answered `handle`.
+    fn local_entry(&self, handle: ObjRef, name: &[u8]) -> Option<ObjRef> {
+        let object = self.heap.get(handle).expect("a rooted directory");
+        let Body::Native(native) = &object.body else {
+            unreachable!("both directories are allocated as Body::Native")
+        };
+        native.entry(name)
+    }
+
+    /// [`Interp::local_entry`]'s writer.
+    fn store_local(&mut self, handle: ObjRef, name: &[u8], value: ObjRef) {
         let held = self.heap.get_mut(handle).expect("a rooted directory");
         let Body::Native(native) = &mut held.body else {
             unreachable!("both directories are allocated as Body::Native")
         };
-        native.set_entry(name, built);
-        Some(built)
+        native.set_entry(name, value);
     }
 
     /// Writes `name` into `scope`'s directory, through the same seam a read

@@ -49,3 +49,4 @@ lang/stream_table_sharing.rex
 # Task 10: the three standard streams as objects -- their names and state, the
 # buffer they share with SAY, and the counters an undrained empty input answers.
 lang/std_stream_writes.rex
+lang/local_std_objects.rex
