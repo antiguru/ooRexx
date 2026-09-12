@@ -231,13 +231,28 @@ pub struct OpenMode {
     pub record_length: u64,
 }
 
-/// The descriptor an open stream holds, with the two logical positions one
-/// descriptor serves. Both are 1-based "next byte", as the oracle's are.
+/// The descriptor an open stream holds, with the logical positions one
+/// descriptor serves. The character positions are 1-based "next byte", as the
+/// oracle's are.
 #[derive(Debug)]
 pub struct OpenFile {
     pub file: std::fs::File,
     pub read_position: u64,
     pub write_position: u64,
+    /// The line a `LINEIN` would read next, or `0` for "not tracked" -- which
+    /// is what a `CHARIN` leaves behind (`resetLinePositions`).
+    pub line_read: u64,
+    pub line_write: u64,
+    /// The character position the tracked read line starts at, `0` when the
+    /// line position is not tracked.
+    pub line_read_char: u64,
+    pub line_write_char: u64,
+    /// The cached total line count, `0` for "not counted". **Stored with the
+    /// oracle's own arithmetic** -- `count + line_read - 1`, so a `CHARIN`
+    /// that zeroed `line_read` leaves it one short and the next `LINES('C')`
+    /// answers one less than the first. Recomputing instead diverges.
+    pub line_size: u64,
+    pub last_op_was_read: bool,
     pub transient: bool,
 }
 

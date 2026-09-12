@@ -25,3 +25,9 @@ lang/stream_unopened_queries.rex
 # are a bare 93 or an ERROR:n.
 lang/stream_open_modes.rex
 lang/stream_open_errors.rex
+
+# Task 6: reading and writing characters and lines, where a line ends, where a
+# write lands, and the line count the oracle caches.
+lang/stream_chars_lines.rex
+lang/stream_line_ends.rex
+lang/stream_write_positions.rex

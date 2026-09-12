@@ -1,0 +1,37 @@
+/* Where a write lands. A CHAROUT past the end is accepted and the system
+   zero-fills the hole; LINEOUT writes exactly one newline; and the forms with
+   neither a string nor a position close the stream instead of writing. */
+say 'write positions'
+w = .Stream~new('w.txt')
+say 'charout' w~charout('abcdef')
+say 'charout at 3' w~charout('ZZ', 3)
+say 'charout past the end' w~charout('Q', 20)
+say 'size' w~query('size')
+say 'close [' || w~close || ']'
+r = .Stream~new('w.txt')
+say 'bytes [' || c2x(r~charin(1, 20)) || ']'
+say 'close [' || r~close || ']'
+/* An empty LINEOUT still writes its newline; an empty CHAROUT writes nothing
+   and leaves the file it created empty. */
+e = .Stream~new('e.txt')
+say 'lineout empty' e~lineout('')
+say 'close [' || e~close || ']'
+say 'e size' .Stream~new('e.txt')~query('size')
+f = .Stream~new('f.txt')
+say 'charout empty' f~charout('')
+say 'close [' || f~close || ']'
+say 'f size' .Stream~new('f.txt')~query('size')
+/* A LINEOUT with neither argument closes the stream. */
+g = .Stream~new('g.txt')
+say 'lineout one' g~lineout('one')
+say 'state [' || g~state || ']'
+say 'lineout with nothing' g~lineout
+say 'state [' || g~state || ']'
+say 'g size' .Stream~new('g.txt')~query('size')
+/* A second LINEOUT after the close reopens and appends. */
+say 'lineout two' g~lineout('two')
+say 'state [' || g~state || ']'
+say 'close [' || g~close || ']'
+h = .Stream~new('g.txt')
+say 'g bytes [' || c2x(h~charin(1, 20)) || ']'
+say 'close [' || h~close || ']'

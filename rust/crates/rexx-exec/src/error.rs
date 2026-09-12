@@ -1089,6 +1089,27 @@ impl Raised {
         )
     }
 
+    /// [`Raised::native_argument_out_of_range`] for a bound no `i64` holds: a
+    /// `size_t` parameter's maximum is 18446744073709551615, which the message
+    /// prints verbatim.
+    pub(crate) fn native_argument_out_of_range_unsigned(
+        argument: &str,
+        minimum: u64,
+        maximum: u64,
+        found: &[u8],
+    ) -> Raised {
+        Raised::syntax(
+            88,
+            907,
+            vec![
+                argument.as_bytes().to_vec(),
+                minimum.to_string().into_bytes(),
+                maximum.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        )
+    }
+
     /// 88.909: a method argument has no string value. `position` is
     /// 1-based in the method's own argument list.
     pub(crate) fn argument_needs_a_string_value(position: usize) -> Raised {

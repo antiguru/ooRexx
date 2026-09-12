@@ -125,6 +125,10 @@ pub(super) fn description(
     out.push(b':');
     match state.status {
         StreamStatus::NotReady => out.extend_from_slice(b"EOF"),
+        // A zero errno carries no text: the oracle appends `strerror` only
+        // when it has an errno to render, so a `CHARIN` past the end is a
+        // bare `ERROR:0`.
+        StreamStatus::Error(0) => out.extend_from_slice(b"0"),
         StreamStatus::Error(errno) => {
             out.extend_from_slice(errno.to_string().as_bytes());
             let text = std::io::Error::from_raw_os_error(errno).to_string();
@@ -558,11 +562,513 @@ pub(super) fn open(
         file: opened,
         read_position: 1,
         write_position,
+        line_read: 1,
+        line_write: 1,
+        line_read_char: 1,
+        line_write_char: 1,
+        line_size: 0,
+        last_op_was_read: true,
         transient: false,
     });
     state.status = StreamStatus::Ready;
     Ok(Some(interp.text(b"READY:")))
 }
+
+/// How much of a file one read asks the system for.
+const CHUNK: usize = 4096;
+
+/// The byte a file may end with that a `LINEOUT` overwrites rather than
+/// appends after (`StreamNative.cpp:2520`, a Windows convention the unix
+/// build applies too).
+const CTRL_Z: u8 = 0x1A;
+
+/// Bytes from `position` (1-based), stopping at the end of the file.
+fn read_from(file: &mut std::fs::File, position: u64, len: usize) -> std::io::Result<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    file.seek(SeekFrom::Start(position.saturating_sub(1)))?;
+    let mut out = vec![0u8; len];
+    let mut filled = 0;
+    while filled < len {
+        match file.read(&mut out[filled..])? {
+            0 => break,
+            got => filled += got,
+        }
+    }
+    out.truncate(filled);
+    Ok(out)
+}
+
+/// One line from `position`, and the position after it. The line drops its
+/// terminating `\n` and the `\r` immediately before that -- a bare `\r` is
+/// data (`SysFile::gets`) -- and a final unterminated line is still a line.
+/// `None` at the end of the file.
+fn read_line_from(
+    file: &mut std::fs::File,
+    position: u64,
+) -> std::io::Result<Option<(Vec<u8>, u64)>> {
+    let mut line = Vec::new();
+    let mut at = position;
+    loop {
+        let chunk = read_from(file, at, CHUNK)?;
+        if chunk.is_empty() {
+            return Ok(if line.is_empty() {
+                None
+            } else {
+                Some((line, at))
+            });
+        }
+        match chunk.iter().position(|byte| *byte == b'\n') {
+            Some(end) => {
+                line.extend_from_slice(&chunk[..end]);
+                if line.last() == Some(&b'\r') {
+                    line.pop();
+                }
+                return Ok(Some((line, at + end as u64 + 1)));
+            }
+            None => {
+                line.extend_from_slice(&chunk);
+                at += chunk.len() as u64;
+            }
+        }
+    }
+}
+
+/// The lines from `position` to the end, counted the way `SysFile::countLines`
+/// counts them: an unterminated final line counts.
+fn count_lines_from(file: &mut std::fs::File, position: u64) -> std::io::Result<u64> {
+    let mut count = 0;
+    let mut at = position;
+    loop {
+        let chunk = read_from(file, at, CHUNK)?;
+        if chunk.is_empty() {
+            return Ok(count);
+        }
+        count += chunk.iter().filter(|byte| **byte == b'\n').count() as u64;
+        at += chunk.len() as u64;
+        if chunk.len() < CHUNK {
+            // A tail with no newline after the last one is a line of its own.
+            if chunk.last() != Some(&b'\n') {
+                count += 1;
+            }
+            return Ok(count);
+        }
+    }
+}
+
+/// The file's size, or 0 when it cannot be stat'd.
+fn size_of(file: &std::fs::File) -> u64 {
+    file.metadata().map_or(0, |meta| meta.len())
+}
+
+/// Opens the stream if nothing has, the way an implicit open does: read-write
+/// first, then write-only or read-only depending on what the caller wants
+/// (`StreamInfo::implicitOpen`). A read never creates the file.
+fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result<bool, Failure> {
+    if require(interp, receiver)?.open.is_some() {
+        return Ok(true);
+    }
+    let path = String::from_utf8_lossy(&require(interp, receiver)?.qualified).into_owned();
+    let mut opening = std::fs::OpenOptions::new();
+    opening.read(true).write(true);
+    if for_write {
+        opening.create(true);
+    }
+    let (opened, mode) = match opening.open(&path) {
+        Ok(file) => (
+            file,
+            rexx_core::OpenMode {
+                read_write: true,
+                ..rexx_core::OpenMode::default()
+            },
+        ),
+        Err(_) if for_write => match std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&path)
+        {
+            Ok(file) => (
+                file,
+                rexx_core::OpenMode {
+                    write_only: true,
+                    ..rexx_core::OpenMode::default()
+                },
+            ),
+            Err(error) => return fail_open(interp, receiver, &error),
+        },
+        Err(_) => match std::fs::OpenOptions::new().read(true).open(&path) {
+            Ok(file) => (
+                file,
+                rexx_core::OpenMode {
+                    read_only: true,
+                    ..rexx_core::OpenMode::default()
+                },
+            ),
+            Err(error) => return fail_open(interp, receiver, &error),
+        },
+    };
+    let size = size_of(&opened);
+    let state = require_mut(interp, receiver)?;
+    state.mode = mode;
+    state.status = StreamStatus::Ready;
+    state.open = Some(rexx_core::OpenFile {
+        file: opened,
+        read_position: 1,
+        write_position: if for_write { size + 1 } else { 1 },
+        line_read: 1,
+        line_write: 1,
+        line_read_char: 1,
+        line_write_char: 1,
+        line_size: 0,
+        last_op_was_read: !for_write,
+        transient: false,
+    });
+    Ok(true)
+}
+
+/// Records an implicit open's failure on the state and answers "not open".
+fn fail_open(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    error: &std::io::Error,
+) -> Result<bool, Failure> {
+    let errno = error.raw_os_error().unwrap_or(ENOENT);
+    let state = require_mut(interp, receiver)?;
+    state.status = StreamStatus::Error(errno);
+    Ok(false)
+}
+
+/// Everything a `charin`/`charout` invalidates: the line positions and the
+/// cached count (`StreamInfo::resetLinePositions`).
+fn reset_line_positions(open: &mut rexx_core::OpenFile) {
+    open.line_read = 0;
+    open.line_read_char = 0;
+    open.line_size = 0;
+}
+
+/// `stream_charin`: `length` characters from `start`, or from the read
+/// position. A short read is the end of the file and leaves `ERROR:0`, which
+/// is what parts it from `LINEIN`'s `NOTREADY:EOF`.
+pub(super) fn charin(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let start = optional_position(interp, args.first().copied().flatten(), 1)?;
+    let length = match args.get(1).copied().flatten() {
+        Some(value) => whole_number(interp, value, 2)?,
+        None => 1,
+    };
+    if !ensure_open(interp, receiver, false)? {
+        return Ok(Some(interp.text(b"")));
+    }
+    let state = require_mut(interp, receiver)?;
+    let Some(open) = state.open.as_mut() else {
+        return Ok(Some(interp.text(b"")));
+    };
+    if let Some(start) = start {
+        open.read_position = start;
+    }
+    let at = open.read_position;
+    let wanted = usize::try_from(length).unwrap_or(usize::MAX);
+    if wanted == 0 {
+        return Ok(Some(interp.text(b"")));
+    }
+    let read = read_from(&mut open.file, at, wanted).unwrap_or_default();
+    open.read_position = at + read.len() as u64;
+    open.last_op_was_read = true;
+    reset_line_positions(open);
+    let short = read.len() < wanted;
+    if short {
+        state.status = StreamStatus::Error(0);
+    }
+    Ok(Some(interp.text_built(read)))
+}
+
+/// `stream_linein`: one line from `line`, or from the read position. At the
+/// end of the file the answer is the null string and the state is
+/// `NOTREADY:EOF`.
+pub(super) fn linein(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let line = optional_position(interp, args.first().copied().flatten(), 1)?;
+    let count = match args.get(1).copied().flatten() {
+        Some(value) => whole_number(interp, value, 2)?,
+        None => 1,
+    };
+    if !matches!(count, 0 | 1) {
+        return Err(Raised::syntax(93, 0, Vec::new()).into());
+    }
+    if !ensure_open(interp, receiver, false)? {
+        return Ok(Some(interp.text(b"")));
+    }
+    if let Some(line) = line {
+        seek_to_line(interp, receiver, line)?;
+    }
+    if count == 0 {
+        return Ok(Some(interp.text(b"")));
+    }
+    let state = require_mut(interp, receiver)?;
+    let Some(open) = state.open.as_mut() else {
+        return Ok(Some(interp.text(b"")));
+    };
+    let at = open.read_position;
+    match read_line_from(&mut open.file, at).unwrap_or(None) {
+        Some((text, next)) => {
+            open.read_position = next;
+            if open.line_read != 0 {
+                open.line_read += 1;
+                open.line_read_char = next;
+            }
+            open.last_op_was_read = true;
+            Ok(Some(interp.text_built(text)))
+        }
+        None => {
+            state.status = StreamStatus::NotReady;
+            Ok(Some(interp.text(b"")))
+        }
+    }
+}
+
+/// Moves the read position to the start of `line`, counting from the top.
+fn seek_to_line(interp: &mut Interp, receiver: ObjRef, line: u64) -> Result<(), Failure> {
+    let state = require_mut(interp, receiver)?;
+    let Some(open) = state.open.as_mut() else {
+        return Ok(());
+    };
+    let mut at = 1;
+    for _ in 1..line.max(1) {
+        match read_line_from(&mut open.file, at).unwrap_or(None) {
+            Some((_, next)) => at = next,
+            None => break,
+        }
+    }
+    open.read_position = at;
+    open.line_read = line.max(1);
+    open.line_read_char = at;
+    Ok(())
+}
+
+/// `stream_charout`: writes `data` at `start` or the write position and
+/// answers the count it could not write, which is `0` for every write that
+/// completes. With neither argument it closes the stream.
+pub(super) fn charout(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let data = match args.first().copied().flatten() {
+        Some(value) => Some(interp.to_text(value).into_owned()),
+        None => None,
+    };
+    let start = optional_position(interp, args.get(1).copied().flatten(), 2)?;
+    if data.is_none() && start.is_none() {
+        return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));
+    }
+    if !ensure_open(interp, receiver, true)? {
+        let residual = data.as_ref().map_or(0, Vec::len);
+        return Ok(Some(interp.text_built(residual.to_string().into_bytes())));
+    }
+    let state = require_mut(interp, receiver)?;
+    let Some(open) = state.open.as_mut() else {
+        return Ok(Some(interp.text(b"0")));
+    };
+    if let Some(start) = start {
+        open.write_position = start;
+    }
+    let Some(data) = data else {
+        return Ok(Some(interp.text(b"0")));
+    };
+    let at = open.write_position;
+    match write_at(&mut open.file, at, &data) {
+        Ok(()) => {
+            open.write_position = at + data.len() as u64;
+            open.last_op_was_read = false;
+            reset_line_positions(open);
+            Ok(Some(interp.text(b"0")))
+        }
+        Err(error) => {
+            let errno = error.raw_os_error().unwrap_or(0);
+            state.status = StreamStatus::Error(errno);
+            Ok(Some(interp.text_built(data.len().to_string().into_bytes())))
+        }
+    }
+}
+
+/// `stream_lineout`: writes `data` and a newline, answering `0` on success and
+/// `1` on failure. With neither argument it closes the stream.
+pub(super) fn lineout(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let data = match args.first().copied().flatten() {
+        Some(value) => Some(interp.to_text(value).into_owned()),
+        None => None,
+    };
+    let line = optional_position(interp, args.get(1).copied().flatten(), 2)?;
+    if data.is_none() && line.is_none() {
+        return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));
+    }
+    if !ensure_open(interp, receiver, true)? {
+        return Ok(Some(interp.text(b"1")));
+    }
+    if require(interp, receiver)?.mode.read_only {
+        let state = require_mut(interp, receiver)?;
+        state.status = StreamStatus::Error(EACCES);
+        return Ok(Some(interp.text(b"1")));
+    }
+    let state = require_mut(interp, receiver)?;
+    let Some(open) = state.open.as_mut() else {
+        return Ok(Some(interp.text(b"1")));
+    };
+    if let Some(line) = line {
+        open.write_position = line;
+    }
+    let Some(data) = data else {
+        return Ok(Some(interp.text(b"0")));
+    };
+    // A file whose last byte is ctrl-Z has it overwritten rather than kept.
+    let size = size_of(&open.file);
+    let mut at = open.write_position;
+    if at == size + 1 && size > 0 {
+        let tail = read_from(&mut open.file, size, 1).unwrap_or_default();
+        if tail.first() == Some(&CTRL_Z) {
+            at = size;
+        }
+    }
+    let mut bytes = data;
+    bytes.push(b'\n');
+    match write_at(&mut open.file, at, &bytes) {
+        Ok(()) => {
+            let appended = at == size + 1 || at == size;
+            open.write_position = at + bytes.len() as u64;
+            open.last_op_was_read = false;
+            if appended && open.line_size != 0 {
+                open.line_size += 1;
+            } else if !appended {
+                open.line_size = 0;
+            }
+            Ok(Some(interp.text(b"0")))
+        }
+        Err(error) => {
+            let errno = error.raw_os_error().unwrap_or(0);
+            state.status = StreamStatus::Error(errno);
+            Ok(Some(interp.text(b"1")))
+        }
+    }
+}
+
+/// Writes `bytes` at `position` (1-based).
+fn write_at(file: &mut std::fs::File, position: u64, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::{Seek, SeekFrom, Write};
+    file.seek(SeekFrom::Start(position.saturating_sub(1)))?;
+    file.write_all(bytes)
+}
+
+/// `stream_chars`: the characters left from the read position, which is the
+/// size less what has been read, floored at zero.
+pub(super) fn chars(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if !ensure_open(interp, receiver, false)? {
+        return Ok(Some(interp.text(b"0")));
+    }
+    let state = require_mut(interp, receiver)?;
+    let Some(open) = state.open.as_mut() else {
+        return Ok(Some(interp.text(b"0")));
+    };
+    let left = size_of(&open.file).saturating_sub(open.read_position.saturating_sub(1));
+    Ok(Some(interp.text_built(left.to_string().into_bytes())))
+}
+
+/// `stream_lines`: `Count` -- the method's default -- answers the lines left,
+/// `Normal` answers 1 or 0. **The count carries the oracle's cache and its
+/// off-by-one**: after a `CHARIN` has zeroed the line position, the cache is
+/// stored one short and the next `Count` answers one less than this one.
+pub(super) fn lines(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let quick = match args.first().copied().flatten() {
+        Some(value) => interp
+            .to_text(value)
+            .first()
+            .is_some_and(|byte| byte.eq_ignore_ascii_case(&b'N')),
+        None => false,
+    };
+    if !ensure_open(interp, receiver, false)? {
+        return Ok(Some(interp.text(b"0")));
+    }
+    let state = require_mut(interp, receiver)?;
+    let Some(open) = state.open.as_mut() else {
+        return Ok(Some(interp.text(b"0")));
+    };
+    let size = size_of(&open.file);
+    if open.read_position > size {
+        return Ok(Some(interp.text(b"0")));
+    }
+    if quick {
+        return Ok(Some(interp.text(b"1")));
+    }
+    let answer = if open.line_size > 0 && open.line_read > 0 {
+        open.line_size - open.line_read + 1
+    } else if open.line_size > 0 {
+        // `countStreamLines`' own early return, which is what answers one
+        // short after a `CHARIN` stored the cache with a zero line position.
+        open.line_size
+    } else {
+        let count = count_lines_from(&mut open.file, open.read_position).unwrap_or(0);
+        open.line_size = (count + open.line_read).saturating_sub(1);
+        count
+    };
+    Ok(Some(interp.text_built(answer.to_string().into_bytes())))
+}
+
+/// An optional 1-based position argument: absent, or a positive whole number.
+fn optional_position(
+    interp: &mut Interp,
+    value: Option<ObjRef>,
+    which: usize,
+) -> Result<Option<u64>, Failure> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let text = interp.to_text(value).into_owned();
+    match to_number(&text).filter(|number| *number != 0) {
+        Some(number) => Ok(Some(number)),
+        None => Err(Raised::method_argument_not_positive(which, &text).into()),
+    }
+}
+
+/// A whole-number argument that may be zero.
+fn whole_number(interp: &mut Interp, value: ObjRef, which: usize) -> Result<u64, Failure> {
+    let text = interp.to_text(value).into_owned();
+    match to_number(&text) {
+        Some(number) => Ok(number),
+        None => Err(Raised::native_argument_out_of_range_unsigned(
+            &format!("{which}"),
+            0,
+            u64::MAX,
+            &text,
+        )
+        .into()),
+    }
+}
+
+/// The errno a write to a read-only stream reports, which the stream layer
+/// chooses rather than the system call reporting it.
+const EACCES: i32 = 13;
 
 /// `stream_close`: `READY:` for a stream that was open, and the null string
 /// for one that never was. Either way the state goes back to `UNKNOWN`.
