@@ -557,7 +557,7 @@ pub(super) fn open(
     }
     // A persistent writeable stream writes at the end; a read-only one has no
     // write position at all, which is the `0` `QUERY POSITION WRITE` answers.
-    let write_position = if parsed.read_only { 0 } else { size + 1 };
+    let write_position: i64 = if parsed.read_only { 0 } else { size as i64 + 1 };
 
     let state = require_mut(interp, receiver)?;
     state.mode = rexx_core::OpenMode {
@@ -593,6 +593,21 @@ const CHUNK: usize = 4096;
 /// build applies too).
 const CTRL_Z: u8 = 0x1A;
 
+/// A validated positive argument as a character position. The validator
+/// answers `u64` because it rejects zero and everything below it; the
+/// positions it feeds are signed because a later seek can drive them
+/// negative.
+fn as_position(value: u64) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
+}
+
+/// A logical character position as a file offset. A position below 1 is not
+/// a legal offset -- a `SEEK` can drive one negative and the oracle's `lseek`
+/// fails there -- so it clamps, and the read or write then finds nothing.
+fn offset_of(position: i64) -> u64 {
+    u64::try_from(position).unwrap_or(0)
+}
+
 /// Bytes from `position` (1-based), stopping at the end of the file.
 fn read_from(file: &mut std::fs::File, position: u64, len: usize) -> std::io::Result<Vec<u8>> {
     use std::io::{Read, Seek, SeekFrom};
@@ -616,7 +631,7 @@ fn read_from(file: &mut std::fs::File, position: u64, len: usize) -> std::io::Re
 fn read_line_from(
     file: &mut std::fs::File,
     position: u64,
-) -> std::io::Result<Option<(Vec<u8>, u64)>> {
+) -> std::io::Result<Option<(Vec<u8>, i64)>> {
     let mut line = Vec::new();
     let mut at = position;
     loop {
@@ -625,7 +640,7 @@ fn read_line_from(
             return Ok(if line.is_empty() {
                 None
             } else {
-                Some((line, at))
+                Some((line, at as i64))
             });
         }
         match chunk.iter().position(|byte| *byte == b'\n') {
@@ -634,7 +649,7 @@ fn read_line_from(
                 if line.last() == Some(&b'\r') {
                     line.pop();
                 }
-                return Ok(Some((line, at + end as u64 + 1)));
+                return Ok(Some((line, (at + end as u64 + 1) as i64)));
             }
             None => {
                 line.extend_from_slice(&chunk);
@@ -738,7 +753,7 @@ fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result
     state.open = Some(rexx_core::OpenFile {
         file: opened,
         read_position: 1,
-        write_position: if for_write { size + 1 } else { 1 },
+        write_position: if for_write { size as i64 + 1 } else { 1 },
         line_read: 1,
         line_write: 1,
         line_read_char: 1,
@@ -797,15 +812,15 @@ pub(super) fn charin(
         return Ok(Some(interp.text(b"")));
     };
     if let Some(start) = start {
-        open.read_position = start;
+        open.read_position = as_position(start);
     }
     let at = open.read_position;
     let wanted = usize::try_from(length).unwrap_or(usize::MAX);
     if wanted == 0 {
         return Ok(Some(interp.text(b"")));
     }
-    let read = read_from(&mut open.file, at, wanted).unwrap_or_default();
-    open.read_position = at + read.len() as u64;
+    let read = read_from(&mut open.file, offset_of(at), wanted).unwrap_or_default();
+    open.read_position = at + read.len() as i64;
     open.last_op_was_read = true;
     reset_line_positions(open);
     let short = read.len() < wanted;
@@ -852,7 +867,7 @@ pub(super) fn linein(
         return Ok(Some(interp.text(b"")));
     };
     let at = open.read_position;
-    match read_line_from(&mut open.file, at).unwrap_or(None) {
+    match read_line_from(&mut open.file, offset_of(at)).unwrap_or(None) {
         Some((text, next)) => {
             open.read_position = next;
             if open.line_read != 0 {
@@ -877,9 +892,9 @@ fn seek_to_line(interp: &mut Interp, receiver: ObjRef, line: u64) -> Result<(), 
     let Some(open) = state.open.as_mut() else {
         return Ok(());
     };
-    let mut at = 1;
+    let mut at: i64 = 1;
     for _ in 1..line.max(1) {
-        match read_line_from(&mut open.file, at).unwrap_or(None) {
+        match read_line_from(&mut open.file, offset_of(at)).unwrap_or(None) {
             Some((_, next)) => at = next,
             None => break,
         }
@@ -917,15 +932,15 @@ pub(super) fn charout(
         return Ok(Some(interp.text(b"0")));
     };
     if let Some(start) = start {
-        open.write_position = start;
+        open.write_position = as_position(start);
     }
     let Some(data) = data else {
         return Ok(Some(interp.text(b"0")));
     };
     let at = open.write_position;
-    match write_at(&mut open.file, at, &data) {
+    match write_at(&mut open.file, offset_of(at), &data) {
         Ok(()) => {
-            open.write_position = at + data.len() as u64;
+            open.write_position = at + data.len() as i64;
             open.last_op_was_read = false;
             reset_line_positions(open);
             Ok(Some(interp.text(b"0")))
@@ -972,27 +987,32 @@ pub(super) fn lineout(
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"1")));
     };
+    // **A line number written as a character position**, which is what the
+    // oracle's `setLineWritePosition` converts instead: measured,
+    // `lineout('TWO',2)` on a three-line file leaves the write position at 19.
+    // Unwitnessed today and left as it stands; the line-positioning task owns
+    // the conversion.
     if let Some(line) = line {
-        open.write_position = line;
+        open.write_position = as_position(line);
     }
     let Some(data) = data else {
         return Ok(Some(interp.text(b"0")));
     };
     // A file whose last byte is ctrl-Z has it overwritten rather than kept.
-    let size = size_of(&open.file);
+    let size = size_of(&open.file) as i64;
     let mut at = open.write_position;
     if at == size + 1 && size > 0 {
-        let tail = read_from(&mut open.file, size, 1).unwrap_or_default();
+        let tail = read_from(&mut open.file, offset_of(size), 1).unwrap_or_default();
         if tail.first() == Some(&CTRL_Z) {
             at = size;
         }
     }
     let mut bytes = data;
     bytes.push(b'\n');
-    match write_at(&mut open.file, at, &bytes) {
+    match write_at(&mut open.file, offset_of(at), &bytes) {
         Ok(()) => {
             let appended = at == size + 1 || at == size;
-            open.write_position = at + bytes.len() as u64;
+            open.write_position = at + bytes.len() as i64;
             open.last_op_was_read = false;
             if appended && open.line_size != 0 {
                 open.line_size += 1;
@@ -1033,7 +1053,7 @@ pub(super) fn chars(
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
-    let left = size_of(&open.file).saturating_sub(open.read_position.saturating_sub(1));
+    let left = (size_of(&open.file) as i64 - (open.read_position - 1)).max(0);
     Ok(Some(interp.text_built(left.to_string().into_bytes())))
 }
 
@@ -1061,7 +1081,7 @@ pub(super) fn lines(
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
-    let size = size_of(&open.file);
+    let size = size_of(&open.file) as i64;
     if open.read_position > size {
         return Ok(Some(interp.text(b"0")));
     }
@@ -1075,7 +1095,7 @@ pub(super) fn lines(
         // short after a `CHARIN` stored the cache with a zero line position.
         open.line_size
     } else {
-        let count = count_lines_from(&mut open.file, open.read_position).unwrap_or(0);
+        let count = count_lines_from(&mut open.file, offset_of(open.read_position)).unwrap_or(0);
         open.line_size = (count + open.line_read).saturating_sub(1);
         count
     };

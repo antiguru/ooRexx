@@ -237,16 +237,21 @@ pub struct OpenMode {
 #[derive(Debug)]
 pub struct OpenFile {
     pub file: std::fs::File,
-    pub read_position: u64,
-    pub write_position: u64,
+    /// **Signed, and that is the oracle's own arithmetic rather than a
+    /// convenience.** `SEEK` range-checks nothing: `<99` on a 29-byte file
+    /// answers `-69` and leaves the stream `READY`, because `setPosition`
+    /// seeks to `size - offset` and adds one to the result.
+    pub read_position: i64,
+    pub write_position: i64,
     /// The line a `LINEIN` would read next, or `0` for "not tracked" -- which
     /// is what a `CHARIN` leaves behind (`resetLinePositions`).
     pub line_read: u64,
     pub line_write: u64,
     /// The character position the tracked read line starts at, `0` when the
-    /// line position is not tracked.
-    pub line_read_char: u64,
-    pub line_write_char: u64,
+    /// line position is not tracked. Signed for the same reason the two
+    /// positions above are: a seek writes a character position here.
+    pub line_read_char: i64,
+    pub line_write_char: i64,
     /// The cached total line count, `0` for "not counted". **Stored with the
     /// oracle's own arithmetic** -- `count + line_read - 1`, so a `CHARIN`
     /// that zeroed `line_read` leaves it one short and the next `LINES('C')`
