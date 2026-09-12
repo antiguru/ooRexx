@@ -109,13 +109,13 @@ X2B	implemented
 X2C	implemented
 X2D	implemented
 XRANGE	implemented
-USERID	excluded
+USERID	implemented
 LOWER	implemented
 UPPER	implemented
 RXFUNCADD	excluded
 RXFUNCDROP	excluded
 RXFUNCQUERY	excluded
-ENDLOCAL	excluded
-SETLOCAL	excluded
-QUALIFY	excluded
+ENDLOCAL	implemented
+SETLOCAL	implemented
+QUALIFY	implemented
 GC	implemented

@@ -134,3 +134,7 @@ XRANGE	say xrange('a','e')
 LOWER	say lower('ABCdef')
 UPPER	say upper('abcDEF')
 GC	say gc() gc('Force')
+QUALIFY	say qualify('/a/../b/c.txt')
+USERID	say length(userid()) > 0
+SETLOCAL	say setlocal() endlocal()
+ENDLOCAL	say endlocal()

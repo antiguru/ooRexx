@@ -37,6 +37,9 @@ mod datetime;
 /// (`classes/StringClass.cpp:1084`) -- and [`numeric::sign_of`] is what keeps
 /// the builtin and the method from coming to disagree.
 pub(crate) mod numeric;
+
+/// The builtins that read or move the interpreter's own platform state.
+mod platform;
 mod state;
 /// Crate-visible because the builtins are not the only place this
 /// interpreter searches a haystack for a byte: a `PARSE` template's
@@ -89,6 +92,32 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(0),
         run: state::address,
+    },
+    Builtin {
+        // Measured: `endlocal()` with nothing outstanding answers 0, and
+        // `endlocal(1)` is 40.4 naming a maximum of 0.
+        name: b"ENDLOCAL",
+        min: 0,
+        max: Some(0),
+        run: platform::endlocal,
+    },
+    Builtin {
+        name: b"QUALIFY",
+        min: 1,
+        max: Some(1),
+        run: platform::qualify,
+    },
+    Builtin {
+        name: b"SETLOCAL",
+        min: 0,
+        max: Some(0),
+        run: platform::setlocal,
+    },
+    Builtin {
+        name: b"USERID",
+        min: 0,
+        max: Some(0),
+        run: platform::userid,
     },
     Builtin {
         name: b"ARG",

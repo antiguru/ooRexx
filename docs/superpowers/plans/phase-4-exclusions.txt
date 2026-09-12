@@ -18,7 +18,7 @@ Phase 7 and Phase 10 delete their own exclusion rows as they deliver them. The
 deviations section shrinks only if a decision is reversed, which is a plan
 amendment too.
 
-The gate reads "66 of the 81 builtins in builtinTable[] (BuiltinFunctions.cpp
+The gate reads "70 of the 81 builtins in builtinTable[] (BuiltinFunctions.cpp
 :3042) are in scope, three of them partially, and the excluded set is exactly
 this file".
 
@@ -59,36 +59,12 @@ directory, with the oracle under the standard ulimit.
                 none of these means anything without one. Measured,
                 stream('nosuch.txt','C','QUERY EXISTS') returns empty.
 
-    QUALIFY     Resolves a name against the current directory. NOT ACTUALLY
-                BLOCKED, and this row exists to say so: measured,
-                qualify('foo.txt') returns an absolute path for a file that
-                does not exist, so it is pure path manipulation and
-                std::path with std::env::current_dir covers it. It is
-                excluded because it is unscheduled, not because it cannot be
-                written. D4 weighed moving it into 4c (which would read 67 of
-                81) and chose not to; what would force the move is an L1
-                base/bif group 4c must pass turning out to need it.
-
-    USERID      Returns the invoking user's name; measured, "moritz" here.
-                Blocked, but weakly: Rust's std has no username API, so a
-                faithful answer needs getpwuid through libc -- which is
-                unsafe, and this workspace sets unsafe_code = "forbid" -- or
-                an external crate. Its value is also host-dependent, so a
-                differential run of it is single-machine, the same caveat the
-                QUEUED row below carries.
-
-    SETLOCAL    Saves the process environment; ENDLOCAL restores the most
-    ENDLOCAL    recently saved one. Measured, `s = setlocal(); say s
-                endlocal()` prints "1 1" -- and an unpaired `say endlocal()`
-                prints 0, so the pair, not the call, is what returns 1.
-                Blocked, and harder than "the platform layer" implies:
-                restoring an environment means std::env::set_var, which is
-                unsafe in edition 2024. Verified by compiling it under this
-                toolchain (rustc 1.97.1): error[E0133], "call to unsafe
-                function `set_var` is unsafe and requires unsafe block".
-                Against unsafe_code = "forbid", Phase 7 needs either a shadow
-                environment or a lint exception, and that is a decision, not
-                a task. Written down here so Phase 7 does not meet it cold.
+                DELIVERED by Phase 7, 2026-09-12, and their rows deleted:
+                QUALIFY, USERID, SETLOCAL and ENDLOCAL. The decision the
+                SETLOCAL row warned about was taken as the spec's D-P7-7: the
+                interpreter holds its own environment and current directory,
+                so restoring one needs no std::env::set_var and no lint
+                exception.
 
   Phase 10, the RXAPI daemon:
 
@@ -103,7 +79,7 @@ directory, with the oracle under the standard ulimit.
                 also why the QUEUED row's single-program caveat below is real
                 rather than theoretical.
 
-Fifteen names. 81 - 15 = 66 in scope.
+Eleven names. 81 - 11 = 70 in scope, after Phase 7 delivered four of them.
 
 
 EXCLUSIONS -- partial

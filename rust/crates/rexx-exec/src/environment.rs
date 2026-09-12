@@ -620,6 +620,28 @@ impl Interp {
         native.entry(name)
     }
 
+    /// Writes `name` into `scope`'s directory, through the same seam a read
+    /// passes. `VALUE(name, new, '')` is the only caller: the empty selector
+    /// names `.environment` itself (`expression/BuiltinFunctions.cpp:1848`).
+    pub(crate) fn set_directory_entry(
+        &mut self,
+        scope: EnvScope,
+        name: &[u8],
+        value: ObjRef,
+    ) -> Result<(), Failure> {
+        let admitted = env_seam::admit(self, scope, name)?;
+        let handle = {
+            let model = self.environment_model();
+            env_seam::directory(&model.directories, admitted, scope)
+        };
+        let object = self.heap.get_mut(handle).expect("a rooted directory");
+        let Body::Native(native) = &mut object.body else {
+            unreachable!("both directories are allocated as Body::Native")
+        };
+        native.set_entry(name, value);
+        Ok(())
+    }
+
     /// `RexxActivation::rexxVariable` (`execution/RexxActivation.cpp:2842`):
     /// the names the interpreter answers out of the running activation rather
     /// than out of a directory.

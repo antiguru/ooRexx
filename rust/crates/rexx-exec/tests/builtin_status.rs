@@ -157,7 +157,20 @@ fn measure(oracle: &Oracle, run_root: &Path, name: &str, program: &str) -> Measu
         .unwrap_or_else(|| panic!("probe path {} is not valid UTF-8", abs.display()));
 
     let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
-    let rust = rexx_exec::run_program(path_str, text, rexx_exec::Invocation::none());
+    // **The same working directory the oracle gets.** `Oracle::run` runs from
+    // the program's own directory; the crate used to run from the test
+    // process's, which no probe could see until the interpreter grew a current
+    // directory of its own. A `QUALIFY` or `DIRECTORY` probe would otherwise
+    // read as divergent for a reason that is not the builtin.
+    let directory = abs
+        .parent()
+        .unwrap_or_else(|| panic!("{} has no parent directory", abs.display()))
+        .to_path_buf();
+    let rust = rexx_exec::run_program(
+        path_str,
+        text,
+        rexx_exec::Invocation::none().with_directory(directory),
+    );
     let cpp = oracle.run(&abs);
 
     // Checked here rather than left to `descriptor_diffs`'s own
@@ -409,11 +422,11 @@ fn the_status_file_matches_a_live_differential_run() {
         rexx_inventory::builtins::wholly_excluded().len(),
         "the excluded rows are exactly the names excluded outright"
     );
-    assert_eq!(excluded, 15, "phase-4-exclusions.txt's whole exclusions");
+    assert_eq!(excluded, 11, "phase-4-exclusions.txt's whole exclusions");
     assert_eq!(
         run.derived.len() - excluded,
-        66,
-        "66 of the 81 builtins are in scope, three of them partially"
+        70,
+        "70 of the 81 builtins are in scope, three of them partially"
     );
 
     // The assertion a classifier that consults only name tables cannot pass.
@@ -427,7 +440,7 @@ fn the_status_file_matches_a_live_differential_run() {
         run.in_scope.len()
     );
     assert_eq!(
-        run.oracle_invocations, 66,
+        run.oracle_invocations, 70,
         "one oracle run per in-scope name"
     );
 

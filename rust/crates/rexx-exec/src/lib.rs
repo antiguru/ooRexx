@@ -537,15 +537,6 @@ impl Loud {
         }
     }
 
-    /// `VALUE`'s three-argument form: a *present* third argument selects an
-    /// external pool rather than this crate's own local variables
-    /// (`expression/BuiltinFunctions.cpp:1848`-`1913`).
-    fn value_selector() -> Loud {
-        Loud {
-            message: "VALUE's external-selector form is not implemented".to_string(),
-        }
-    }
-
     /// A `PARSE` template trigger that needs an operand and has none.
     fn parse_trigger_operand() -> Loud {
         Loud {
@@ -1537,6 +1528,12 @@ struct Interp {
     /// `std::env::set_current_dir` is process-wide. `DIRECTORY()` moves this
     /// and nothing else.
     cwd: std::path::PathBuf,
+    /// What each outstanding `SETLOCAL` saved, innermost last: the directory
+    /// and the whole environment, which `ENDLOCAL` puts back. The oracle keeps
+    /// this on the top-level activation and an internal routine's `SETLOCAL`
+    /// therefore outlives its return (`platform/unix/ExternalFunctions.cpp`,
+    /// and `funct.xml` says otherwise -- measured, the file is wrong).
+    locals: Vec<(std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>)>,
     /// The activation running right now, held in a field of its own rather
     /// than at the top of [`Interp::suspended`].
     running: Option<Box<Activation>>,
@@ -2097,6 +2094,7 @@ impl Interp {
                     .collect()
             },
             cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
+            locals: Vec::new(),
             running: None,
             suspended: Vec::new(),
             spare_activations: Vec::new(),
@@ -3009,6 +3007,64 @@ impl Interp {
                 .copied(),
         };
         found.ok_or_else(|| Raised::namespace_routine_not_found(name, namespace).into())
+    }
+
+    /// The value of one environment variable, or `None` for a name the
+    /// interpreter's environment does not hold.
+    pub(crate) fn env_get(&self, name: &[u8]) -> Option<&[u8]> {
+        self.env
+            .iter()
+            .find(|(held, _)| held == name)
+            .map(|(_, value)| value.as_slice())
+    }
+
+    /// Sets, replaces or (with `None`) removes one environment variable.
+    /// `setenv` declines a name that is empty or holds `=` and stores nothing,
+    /// which the oracle passes through as a silent no-op -- measured.
+    pub(crate) fn env_set(&mut self, name: &[u8], value: Option<Vec<u8>>) {
+        if name.is_empty() || name.contains(&b'=') {
+            return;
+        }
+        let at = self.env.iter().position(|(held, _)| held == name);
+        match (at, value) {
+            (Some(at), None) => {
+                self.env.remove(at);
+            }
+            (Some(at), Some(value)) => self.env[at].1 = value,
+            (None, Some(value)) => self.env.push((name.to_vec(), value)),
+            (None, None) => {}
+        }
+    }
+
+    /// The directory this interpreter resolves relative paths against.
+    pub(crate) fn cwd_text(&self) -> String {
+        self.cwd.to_string_lossy().into_owned()
+    }
+
+    /// `SETLOCAL`: saves the directory and the whole environment, and answers
+    /// whether it saved one.
+    pub(crate) fn push_local_environment(&mut self) -> bool {
+        self.locals.push((self.cwd.clone(), self.env.clone()));
+        true
+    }
+
+    /// `ENDLOCAL`: restores the innermost saved pair, answering whether there
+    /// was one. **A restore puts back the names it saved and removes nothing
+    /// added since** -- measured on the oracle, and `restoreEnvironment` only
+    /// re-`putenv`s what it holds.
+    pub(crate) fn pop_local_environment(&mut self) -> bool {
+        let Some((cwd, saved)) = self.locals.pop() else {
+            return false;
+        };
+        self.cwd = cwd;
+        for (name, value) in saved {
+            let at = self.env.iter().position(|(held, _)| *held == name);
+            match at {
+                Some(at) => self.env[at].1 = value,
+                None => self.env.push((name, value)),
+            }
+        }
+        true
     }
 
     /// One variable of the interpreter's own environment, as text. `None` for
@@ -4511,10 +4567,12 @@ impl Interp {
             required_paths: _,
             required_packages: _,
             requires_installing: _,
-            // Bytes and a path, no `ObjRef` in either: the interpreter's own
-            // environment and current directory are not the collector's.
+            // Bytes and paths, no `ObjRef` in any of them: the interpreter's
+            // own environment, current directory and `SETLOCAL` snapshots are
+            // not the collector's.
             env: _,
             cwd: _,
+            locals: _,
         } = self;
         // The context objects of the activations on the stack. **The one
         // object an activation owns outright**: everything else it holds is

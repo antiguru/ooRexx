@@ -17,7 +17,7 @@ use rexx_num::Number;
 
 use super::{Args, arg, optional_string, required_string};
 use crate::error::{Failure, Raised};
-use crate::{Interp, Loud, Novalue};
+use crate::{Interp, Novalue};
 
 /// What `LanguageParser::scanSymbol` classifies a piece of text as.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -361,8 +361,9 @@ fn literal_value(interp: &mut Interp, upper: &[u8]) -> Result<ObjRef, Failure> {
 /// `VALUE(name)` / `VALUE(name, newvalue)`: reads (and optionally writes)
 /// the variable, stem or compound `name` names.
 pub(crate) fn value(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
-    if arg(args, 3).is_some() {
-        return Err(Loud::value_selector().into());
+    if let Some(selector) = arg(args, 3) {
+        let selector = interp.to_text(selector).into_owned();
+        return super::platform::value_selector(interp, args, &selector);
     }
     let text = required_string(interp, args, 1);
     let upper = text.to_ascii_uppercase();
@@ -776,29 +777,22 @@ mod tests {
         );
     }
 
-    /// `VALUE`'s phase split (brief Step 0(a)): the discriminator is the
-    /// third argument's *presence*, and an empty third argument is still
-    /// present. On the oracle, `value('myvar',,'')` answers `.MYVAR` (a
-    /// pool lookup, not the local `NEWVAL` a crate ignoring the third
-    /// argument would answer); this crate declares the whole
-    /// external-selector path a gap rather than risk answering the
-    /// *local* value silently wrong, so both an empty and a named selector
-    /// take the identical loud path -- the pair below is what tells "the
-    /// third argument's presence is checked" apart from "the third
-    /// argument's emptiness is checked and never reached here".
+    /// `VALUE`'s selector is decided by the third argument's *presence*, and
+    /// an empty third argument is still present: `value('myvar',,'')` is a
+    /// lookup in `.environment`, answering `.MYVAR` for a name it does not
+    /// hold, and never the local variable a crate ignoring the third argument
+    /// would answer. A named selector this platform does not have is 40.914.
+    /// The pair is what tells "presence is checked" apart from "emptiness is
+    /// checked", and the third case is the adjacent success.
     #[test]
     fn values_third_argument_is_decided_by_presence_not_content() {
-        for source in [
-            &b"say value('myvar',,'')\n"[..],
-            b"say value('zz',,'NOSUCHPOOL')\n",
-        ] {
-            let (code, stderr) = failure(source);
-            assert_eq!(code, crate::NOT_IMPLEMENTED_EXIT, "{stderr}");
-            assert!(
-                stderr.contains("VALUE's external-selector form is not implemented"),
-                "{stderr}"
-            );
-        }
+        assert_eq!(
+            output(b"myvar = 'ORIGINAL'\nsay value('myvar',,'')\n"),
+            ".MYVAR\n"
+        );
+        let (code, stderr) = failure(b"say value('zz',,'NOSUCHPOOL')\n");
+        assert_eq!(code, 216, "{stderr}");
+        assert!(stderr.contains("40.914"), "{stderr}");
         // The adjacent success: an *omitted* third argument -- even with an
         // interior omission at the second position -- stays on 4c's own
         // local-pool path and never reaches the loud one.
