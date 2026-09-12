@@ -237,8 +237,12 @@ pub(super) fn query_streamtype(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    require(interp, receiver)?;
-    Ok(Some(interp.text(b"UNKNOWN")))
+    let answer: &[u8] = match require(interp, receiver)?.open.as_ref() {
+        None => b"UNKNOWN",
+        Some(open) if open.transient => b"TRANSIENT",
+        Some(_) => b"PERSISTENT",
+    };
+    Ok(Some(interp.text(answer)))
 }
 
 /// `query_handle`: the null string until the stream is open.
@@ -542,6 +546,7 @@ pub(super) fn open(
         ));
     }
     let size = metadata.map_or(0, |meta| meta.len());
+    let transient = is_transient(&opened);
     // `checkStreamType`: a BINARY open with no RECLENGTH takes the file's own
     // size as the record, and a size of zero is the bare 93.
     if parsed.record_based && parsed.record_length == 0 {
@@ -574,7 +579,7 @@ pub(super) fn open(
         line_write_char: 1,
         line_size: 0,
         last_op_was_read: true,
-        transient: false,
+        transient,
     });
     state.status = StreamStatus::Ready;
     Ok(Some(interp.text(b"READY:")))
@@ -661,6 +666,15 @@ fn count_lines_from(file: &mut std::fs::File, position: u64) -> std::io::Result<
     }
 }
 
+/// Whether an open descriptor is a transient stream: a character device
+/// or a FIFO, which is what `QUERY STREAMTYPE` answers `TRANSIENT` for
+/// (`SysFile::getStreamTypeInfo`). A regular file is persistent.
+fn is_transient(file: &std::fs::File) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    file.metadata()
+        .is_ok_and(|meta| meta.file_type().is_char_device() || meta.file_type().is_fifo())
+}
+
 /// The file's size, or 0 when it cannot be stat'd.
 fn size_of(file: &std::fs::File) -> u64 {
     file.metadata().map_or(0, |meta| meta.len())
@@ -675,7 +689,11 @@ fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result
     }
     let path = String::from_utf8_lossy(&require(interp, receiver)?.qualified).into_owned();
     let mut opening = std::fs::OpenOptions::new();
-    opening.read(true).write(true);
+    // **Never truncates.** An implicit open creates a missing file but keeps
+    // what an existing one holds -- `implicitOpen` uses `RDWR_CREAT` with no
+    // `O_TRUNC` -- which is what lets a `lineout` to an existing file append
+    // at the end instead of emptying it.
+    opening.read(true).write(true).truncate(false);
     if for_write {
         opening.create(true);
     }
@@ -687,11 +705,11 @@ fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result
                 ..rexx_core::OpenMode::default()
             },
         ),
-        Err(_) if for_write => match std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(&path)
-        {
+        // `O_WRONLY` alone, as `implicitOpen`'s own fallback is: it creates
+        // nothing, because the read-write attempt above already carried
+        // `O_CREAT` for a write, so reaching here means the open failed for
+        // some reason other than the file being absent.
+        Err(_) if for_write => match std::fs::OpenOptions::new().write(true).open(&path) {
             Ok(file) => (
                 file,
                 rexx_core::OpenMode {
@@ -713,6 +731,7 @@ fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result
         },
     };
     let size = size_of(&opened);
+    let transient = is_transient(&opened);
     let state = require_mut(interp, receiver)?;
     state.mode = mode;
     state.status = StreamStatus::Ready;
@@ -726,7 +745,7 @@ fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result
         line_write_char: 1,
         line_size: 0,
         last_op_was_read: !for_write,
-        transient: false,
+        transient,
     });
     Ok(true)
 }
@@ -880,10 +899,11 @@ pub(super) fn charout(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let data = match args.first().copied().flatten() {
-        Some(value) => Some(interp.to_text(value).into_owned()),
-        None => None,
-    };
+    let data = args
+        .first()
+        .copied()
+        .flatten()
+        .map(|value| interp.to_text(value).into_owned());
     let start = optional_position(interp, args.get(1).copied().flatten(), 2)?;
     if data.is_none() && start.is_none() {
         return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));
@@ -929,10 +949,11 @@ pub(super) fn lineout(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let data = match args.first().copied().flatten() {
-        Some(value) => Some(interp.to_text(value).into_owned()),
-        None => None,
-    };
+    let data = args
+        .first()
+        .copied()
+        .flatten()
+        .map(|value| interp.to_text(value).into_owned());
     let line = optional_position(interp, args.get(1).copied().flatten(), 2)?;
     if data.is_none() && line.is_none() {
         return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));

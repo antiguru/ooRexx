@@ -36,3 +36,6 @@ lang/stream_write_positions.rex
 # the two delivery shapes.
 lang/stream_notready_signal.rex
 lang/stream_notready_trap.rex
+
+# Task 8: QUERY STREAMTYPE answers from the open descriptor, not the name.
+lang/stream_streamtype.rex
