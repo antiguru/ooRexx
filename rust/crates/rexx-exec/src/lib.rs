@@ -1695,6 +1695,11 @@ struct Interp {
     /// -- `PackageClass`'s `loadedPackages`, which `~importedPackages`
     /// answers a copy of.
     package_imports: HashMap<ProgramId, Vec<Package>>,
+    /// The package that built each program, for one an executable created
+    /// rather than one loaded in its own right: `newFile`'s and
+    /// `Package~new`'s parent context. A routine lookup that misses a
+    /// program's own table and its imports walks this.
+    package_parents: HashMap<ProgramId, Package>,
     /// The value each `::CONSTANT` accessor answers, keyed by the directive
     /// that declared it.
     constant_values: HashMap<(ProgramId, usize), ObjRef>,
@@ -2191,6 +2196,7 @@ impl Interp {
             package_tables: HashMap::new(),
             routine_objects: HashMap::new(),
             package_imports: HashMap::new(),
+            package_parents: HashMap::new(),
             constant_values: HashMap::new(),
             annotations: HashMap::new(),
             compiled_methods: 0,
@@ -4151,6 +4157,17 @@ impl Interp {
         let id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&program));
         self.required_paths.insert(id, path.into());
+        // **Recorded before the directives install, not after.** Installing
+        // runs a `::REQUIRES` prologue, and code running there resolves
+        // routines -- which must already reach the package that built this
+        // executable. `load_requires` caches ahead of its own prologue for
+        // the same reason.
+        if let Some(parent) = self
+            .running_activation()
+            .map(|activation| activation.program_id)
+        {
+            self.package_parents.insert(id, Package::Program(parent));
+        }
         self.install_directives(id, &program)?;
         let class = if routine {
             self.routine_class()
@@ -4699,6 +4716,8 @@ impl Interp {
             // Rooted by the `.ROUTINES` table each entry is also in.
             routine_objects: _,
             package_imports: _,
+            // Program identities and nothing else.
+            package_parents: _,
             // `RootSet::add_global`, under `constant_root_key`.
             constant_values: _,
             // A lookup index. A class-owned site's table is held by that

@@ -3791,21 +3791,41 @@ impl Interp {
     }
 
     /// The `::ROUTINE` `name` reaches from the running package: one the
-    /// package declared itself, then one a `::REQUIRES` imported.
+    /// package declared itself, then one a `::REQUIRES` imported, then the
+    /// same pair in whichever package built this one.
+    ///
+    /// **The parent step is what a `newFile` executable resolves through**,
+    /// and only that route has one: a file reached by a *call* records no
+    /// parent, so it still sees its own package alone -- measured, the same
+    /// body finds the caller's `::ROUTINE` through `Routine~newFile` and
+    /// raises 43.1 through `call`.
     fn installed_routine(&self, name: &[u8]) -> Option<InstalledRoutine> {
-        let program = self.running_activation()?.program_id;
+        let mut program = self.running_activation()?.program_id;
         let upper = name.to_ascii_uppercase();
-        if let Some(found) = self
-            .routines
-            .get(&program)
-            .and_then(|table| table.get(&upper[..]))
-        {
-            return Some(*found);
+        // Bounded rather than argued safe: a parent is always a program that
+        // already existed when its child was built, so the chain cannot close
+        // -- and the bound costs less than that sentence.
+        for _ in 0..=self.programs.len() {
+            if let Some(found) = self
+                .routines
+                .get(&program)
+                .and_then(|table| table.get(&upper[..]))
+            {
+                return Some(*found);
+            }
+            if let Some(found) = self
+                .merged_public_routines
+                .get(&program)
+                .and_then(|table| table.get(&upper[..]))
+            {
+                return Some(*found);
+            }
+            match self.package_parents.get(&program) {
+                Some(crate::plan::Package::Program(parent)) => program = *parent,
+                _ => return None,
+            }
         }
-        self.merged_public_routines
-            .get(&program)
-            .and_then(|table| table.get(&upper[..]))
-            .copied()
+        None
     }
 
     /// Takes the shared value buffer **with the caller's run intact**, and the
