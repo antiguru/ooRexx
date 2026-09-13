@@ -31,6 +31,11 @@ rexx-inventory = { path = "../rexx-inventory" }
 # of the same thing.
 rexx-classes = { path = "../rexx-classes" }
 
+# The native API's local-reference table: the `ObjRef` behind a handle an
+# extension holds, which `Interp` owns one of per native activation and roots
+# for as long as that activation is on its stack (D5, Phase 8 Task 4).
+rexx-api = { path = "../rexx-api" }
+
 # The interpreter's own `.orx` library sources, embedded with a sha256 pin.
 # `Interp::bootstrap_library` runs them at interpreter start;
 # `tests/bootstrap_install_oracle.rs` reads the same bytes to compose its own

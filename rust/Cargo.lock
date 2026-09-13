@@ -512,6 +512,7 @@ name = "rexx-api"
 version = "0.1.0"
 dependencies = [
  "libloading",
+ "rexx-core",
 ]
 
 [[package]]
@@ -545,6 +546,7 @@ dependencies = [
  "chrono",
  "datadriven",
  "rayon",
+ "rexx-api",
  "rexx-classes",
  "rexx-core",
  "rexx-extract",

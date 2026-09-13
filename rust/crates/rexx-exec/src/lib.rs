@@ -1743,6 +1743,12 @@ struct Interp {
     /// to, keyed by the identity [`Interp::install_one_method`] minted for
     /// its dictionary key.
     native_externals: HashMap<MethodId, &'static dispatch::native::NativeExternal>,
+    /// The local-reference tables of the native activations on the stack,
+    /// innermost last: the objects an extension's handles name (D5). Rooted
+    /// by [`Interp::object_roots`] for exactly as long as the activation that
+    /// owns one is on this stack, so a handle that outlives its activation
+    /// resolves to nothing.
+    native_handles: Vec<rexx_api::handles::Table>,
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
@@ -2205,6 +2211,7 @@ impl Interp {
             message_outcomes: HashMap::new(),
             generated_methods: HashMap::new(),
             native_externals: HashMap::new(),
+            native_handles: Vec::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
@@ -4853,6 +4860,7 @@ impl Interp {
             message_outcomes: _,
             generated_methods: _,
             native_externals: _,
+            native_handles,
             special_methods: _,
             out: _,
             trace: _,
@@ -4929,6 +4937,11 @@ impl Interp {
         // The raise's own `ADDITIONAL`, alive between the raise and the
         // condition object that will hold it.
         out.extend(*pending_additional);
+        // Everything a native call has been handed. Held here rather than by
+        // the collector's other routes because an extension's handle is the
+        // only reference to it: nothing on the Rexx side names an object a
+        // native method allocated and has not returned yet.
+        out.extend(native_handles.iter().flat_map(|table| table.roots()));
         // A manager is an ordinary program object held by nothing else: the
         // package that carries it is a plan, not an object with a slot.
         out.extend(security_managers.values().copied());
@@ -6308,6 +6321,37 @@ say 1
             non_public > 0,
             "no class without PUBLIC was seen, so the half the corpus cannot \
              reach is not what this test read"
+        );
+    }
+
+    /// A native activation's local references are roots while its table is on
+    /// [`Interp::native_handles`] and nothing once it is popped, which is what
+    /// makes a handle outliving its activation a lookup miss (D5).
+    #[test]
+    fn a_native_activations_local_references_are_roots_only_while_it_lives() {
+        let mut interp = Interp::new();
+        let object = interp.heap.alloc(rexx_core::Body::Array {
+            slots: Vec::new(),
+            dimensions: None,
+        });
+
+        let mut table = rexx_api::handles::Table::new();
+        let handle = table.register(object);
+        interp.native_handles.push(table);
+        interp.collect_now();
+        assert!(
+            interp.heap.get(object).is_some(),
+            "a live native activation's local reference was collected"
+        );
+        assert_eq!(interp.native_handles[0].resolve(handle), Some(object));
+
+        interp.native_handles.pop();
+        interp.collect_now();
+        assert!(
+            interp.heap.get(object).is_none(),
+            "the table was popped and nothing else held the object, so a \
+             collection that leaves it alive means these are rooted by \
+             something other than the destructure this test is about"
         );
     }
 }

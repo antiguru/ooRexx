@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+# `ObjRef` and its generation field, which is what `handles.rs` turns into an
+# opaque `RexxObjectPtr` and back (D5).
+rexx-core = { path = "../rexx-core" }
+
 # `dlopen`/`dlsym` provider for `load.rs`; `rustix` does not wrap either (D-U1,
 # 2026-09-14).
 libloading = "0.8.9"
