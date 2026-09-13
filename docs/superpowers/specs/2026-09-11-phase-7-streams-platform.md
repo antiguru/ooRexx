@@ -123,7 +123,8 @@ qualifies eagerly, so every instance method is unreachable until that one lands.
 - **`canRead`/`canWrite` are `access(2)`**, not mode bits, and additionally require existence.
 - **Timestamps** are `.DateTime` basetime values: getters from `std::fs::Metadata` re-encoded the
   way `utcToLocal` (`SysFileSystem.cpp:942`) does, `.nil` on a missing file; setters through
-  `filetime`, preserving the other stamp. `length` on a missing file is `0`, not `.nil`.
+  `utimensat` with `UTIME_OMIT`, preserving the other stamp. `length` on a missing file
+  is `0`, not `.nil`.
 - **`isHidden`** is `exists && qualified path contains "/."` -- an ancestor's dot hides a
   descendant.
 - **`renameTo` refuses a same-path and an existing target before calling `rename(2)`**, and
@@ -357,7 +358,7 @@ Two new direct dependencies, both already in the offline registry, both a safe A
 | crate | why | used by |
 |---|---|---|
 | `rustix` | `access(2)` -- which mode bits cannot answer -- and `uname(2)` | `canRead`, `canWrite`, `deleteFile` and `SysFileDelete`'s pre-check, `SysVersion`, `SysLinVer` |
-| `filetime` | setting atime and mtime, which `std` cannot | `lastModified=`, `lastAccessed=` |
+| (`rustix`) | setting atime and mtime, which `std` cannot without a writable handle | `lastModified=`, `lastAccessed=` |
 
 `chrono` already covers the local-time re-encoding for file timestamps and `QUERY DATETIME`. `nix`
 is rejected because `rustix` answers both of the calls it was wanted for; `whoami` and `glob` are

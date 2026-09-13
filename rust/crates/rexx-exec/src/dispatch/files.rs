@@ -265,6 +265,60 @@ fn base_time_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<i6
     Ok(String::from_utf8_lossy(&text).trim().parse().unwrap_or(0))
 }
 
+/// Which of a file's two stamps a write is setting.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stamp {
+    Modified,
+    Accessed,
+}
+
+/// Sets one stamp and leaves the other alone, through `utimensat` with
+/// `UTIME_OMIT`.
+///
+/// **The file is not opened.** A read-only file's stamp is still the owner's
+/// to set -- measured, the oracle answers `1` for one -- which an
+/// implementation going through an open writable handle could not do.
+fn set_one_stamp(path: &str, when: i64, which: Stamp) -> bool {
+    let target = system_time_of(when);
+    let spec = match target.duration_since(std::time::UNIX_EPOCH) {
+        Ok(since) => rustix::fs::Timespec {
+            tv_sec: since.as_secs() as i64,
+            tv_nsec: i64::from(since.subsec_nanos()),
+        },
+        // Before the epoch: one second earlier plus the remainder forward,
+        // because `tv_nsec` is never negative.
+        Err(before) => {
+            let gap = before.duration();
+            let (seconds, nanos) = match gap.subsec_nanos() {
+                0 => (-(gap.as_secs() as i64), 0),
+                nanos => (
+                    -(gap.as_secs() as i64) - 1,
+                    1_000_000_000 - i64::from(nanos),
+                ),
+            };
+            rustix::fs::Timespec {
+                tv_sec: seconds,
+                tv_nsec: nanos,
+            }
+        }
+    };
+    let omit = rustix::fs::Timespec {
+        tv_sec: 0,
+        tv_nsec: rustix::fs::UTIME_OMIT,
+    };
+    let times = match which {
+        Stamp::Modified => rustix::fs::Timestamps {
+            last_access: omit,
+            last_modification: spec,
+        },
+        Stamp::Accessed => rustix::fs::Timestamps {
+            last_access: spec,
+            last_modification: omit,
+        },
+    };
+    rustix::fs::utimensat(rustix::fs::CWD, path, &times, rustix::fs::AtFlags::empty()).is_ok()
+}
+
 /// `file_set_last_modified`: the modification stamp, leaving the access stamp
 /// alone -- measured, the oracle keeps the other one in both directions, which
 /// is why this is `set_file_mtime` and not `set_file_times`.
@@ -276,8 +330,7 @@ pub(super) fn set_last_modified(
 ) -> Result<Option<ObjRef>, Failure> {
     let path = path_argument(interp, args)?;
     let when = base_time_argument(interp, args)?;
-    let stamp = filetime::FileTime::from_system_time(system_time_of(when));
-    let done = filetime::set_file_mtime(&path, stamp).is_ok();
+    let done = set_one_stamp(&path, when, Stamp::Modified);
     flag(interp, done)
 }
 
@@ -291,8 +344,7 @@ pub(super) fn set_last_accessed(
 ) -> Result<Option<ObjRef>, Failure> {
     let path = path_argument(interp, args)?;
     let when = base_time_argument(interp, args)?;
-    let stamp = filetime::FileTime::from_system_time(system_time_of(when));
-    let done = filetime::set_file_atime(&path, stamp).is_ok();
+    let done = set_one_stamp(&path, when, Stamp::Accessed);
     flag(interp, done)
 }
 
