@@ -19,9 +19,10 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::ExitStatusExt;
 use std::process::Stdio;
 
-use rexx_parse::{Expr, Instruction, ProgramSource};
+use rexx_parse::{AddressIo, Expr, Instruction, ProgramSource};
 
 use crate::error::{Failure, Raised};
+use crate::redirect::IoContext;
 use crate::run::Flow;
 use crate::{Code, Interp};
 
@@ -354,14 +355,31 @@ fn exit_code(status: std::process::ExitStatus) -> i32 {
     }
 }
 
-/// Runs `command` in a child and appends what it wrote to this interpreter's
-/// own sinks.
+/// What one child left behind: its return code and each stream it wrote.
+struct Spawned {
+    rc: i32,
+    out: Vec<u8>,
+    err: Vec<u8>,
+}
+
+/// Runs `command` in a child and collects what it wrote.
 ///
 /// **Both pipes are drained concurrently**: a child filling one while this
 /// thread reads only the other deadlocks once a pipe buffer fills. Standard
-/// input is inherited, because the oracle spawns with no file actions until
-/// an `ADDRESS ... WITH` asks for them.
-fn spawn(interp: &mut Interp, handler: &Handler, command: &[u8]) -> CommandOutcome {
+/// input is inherited unless `io` supplies one, which is the oracle's own
+/// rule -- it spawns with no file actions until an `ADDRESS ... WITH` asks
+/// for them.
+fn spawn(
+    interp: &Interp,
+    handler: &Handler,
+    command: &[u8],
+    io: Option<&IoContext>,
+) -> Result<Spawned, Failure> {
+    let nothing = |rc| Spawned {
+        rc,
+        out: Vec::new(),
+        err: Vec::new(),
+    };
     let mut builder = match handler {
         Handler::Shell(shell) => {
             let mut builder = std::process::Command::new(format!("{SHELL_DIRECTORY}/{shell}"));
@@ -370,10 +388,10 @@ fn spawn(interp: &mut Interp, handler: &Handler, command: &[u8]) -> CommandOutco
         }
         Handler::Path => {
             let Some(args) = scan_command(command) else {
-                return CommandOutcome::of(UNKNOWN_COMMAND);
+                return Ok(nothing(UNKNOWN_COMMAND));
             };
             let Some((program, rest)) = args.split_first() else {
-                return CommandOutcome::of(UNKNOWN_COMMAND);
+                return Ok(nothing(UNKNOWN_COMMAND));
             };
             let mut builder = std::process::Command::new(OsStr::from_bytes(program));
             for argument in rest {
@@ -387,34 +405,81 @@ fn spawn(interp: &mut Interp, handler: &Handler, command: &[u8]) -> CommandOutco
         builder.env(OsStr::from_bytes(name), OsStr::from_bytes(value));
     }
     builder.current_dir(interp.cwd_text());
-    builder.stdout(Stdio::piped());
-    builder.stderr(Stdio::piped());
-    let Ok(mut running) = builder.spawn() else {
-        return CommandOutcome::of(UNKNOWN_COMMAND);
+    let input = io.and_then(|context| context.input.as_deref());
+    if input.is_some() {
+        builder.stdin(Stdio::piped());
+    }
+    // **Output and error on one target share one pipe**, which is the
+    // `adddup2` of the child's standard error onto its standard output the
+    // unix handler performs before the spawn. Two pipes read separately
+    // could not put the two streams back in the order the child wrote them.
+    let merged = match io.is_some_and(IoContext::shares_one_target) {
+        true => Some(std::io::pipe().map_err(|error| pipe_failed(&error))?),
+        false => None,
     };
-    let mut out = Vec::new();
+    match &merged {
+        Some((_, writer)) => {
+            let out = writer.try_clone().map_err(|error| pipe_failed(&error))?;
+            let err = writer.try_clone().map_err(|error| pipe_failed(&error))?;
+            builder.stdout(Stdio::from(out));
+            builder.stderr(Stdio::from(err));
+        }
+        None => {
+            builder.stdout(Stdio::piped());
+            builder.stderr(Stdio::piped());
+        }
+    }
+    let Ok(mut running) = builder.spawn() else {
+        return Ok(nothing(UNKNOWN_COMMAND));
+    };
+    // **Every writing half of a merged pipe closes here**, and there are
+    // three: the one this scope holds and the two the builder still owns,
+    // which the spawn duplicated rather than consumed. The read below waits
+    // for end-of-file, and any one of them left open never gives it.
+    drop(builder);
+    let merged = merged.map(|(reader, _writer)| reader);
+    let stdin = running.stdin.take();
     let stdout = running.stdout.take();
     let stderr = running.stderr.take();
+    let mut out = Vec::new();
     let err = std::thread::scope(|scope| {
-        let reader = scope.spawn(|| {
+        if let (Some(mut stdin), Some(bytes)) = (stdin, input) {
+            // A write error is dropped: a child exiting before it reads its
+            // input gives `EPIPE`, which the oracle's own writer ignores.
+            scope.spawn(move || {
+                use std::io::Write;
+                let _ = stdin.write_all(bytes);
+            });
+        }
+        let collector = scope.spawn(|| {
             let mut bytes = Vec::new();
             if let Some(mut stderr) = stderr {
                 let _ = stderr.read_to_end(&mut bytes);
             }
             bytes
         });
-        if let Some(mut stdout) = stdout {
-            let _ = stdout.read_to_end(&mut out);
+        match merged {
+            Some(mut merged) => {
+                let _ = merged.read_to_end(&mut out);
+            }
+            None => {
+                if let Some(mut stdout) = stdout {
+                    let _ = stdout.read_to_end(&mut out);
+                }
+            }
         }
-        reader.join().unwrap_or_default()
+        collector.join().unwrap_or_default()
     });
     let rc = match running.wait() {
         Ok(status) => exit_code(status),
         Err(_) => UNKNOWN_COMMAND,
     };
-    interp.write_out(&out);
-    interp.write_err(&err);
-    CommandOutcome::of(rc)
+    Ok(Spawned { rc, out, err })
+}
+
+/// 98.923, worded from the system's own description of the failure.
+fn pipe_failed(error: &std::io::Error) -> Failure {
+    Raised::redirection_failed(&error.to_string()).into()
 }
 
 impl Interp {
@@ -428,6 +493,7 @@ impl Interp {
         &mut self,
         environment: &[u8],
         command: &[u8],
+        io: Option<&IoContext>,
     ) -> Result<CommandOutcome, Failure> {
         let Some(handler) = handler_for(environment) else {
             return Ok(CommandOutcome {
@@ -437,12 +503,31 @@ impl Interp {
         };
         // `PATH` names no shell, so a `cd` under it is a program to find
         // rather than a directory to move to.
-        if matches!(handler, Handler::Shell(_))
+        //
+        // **A redirected command never takes this path either.**
+        // `handleCommandInternally` sits in the branch `ioCommandHandler`
+        // reaches only when nothing is redirected, so a `cd` issued under an
+        // `ADDRESS ... WITH` is a child like any other command and moves no
+        // directory of this interpreter's.
+        if io.is_none()
+            && matches!(handler, Handler::Shell(_))
             && let Some(outcome) = run_internally(self, command)
         {
             return Ok(outcome);
         }
-        Ok(spawn(self, &handler, command))
+        let spawned = spawn(self, &handler, command, io)?;
+        if let Some(context) = io {
+            context.finish(self, &spawned.out, &spawned.err)?;
+        }
+        // Whichever half was not redirected still reaches this interpreter's
+        // own sinks.
+        if io.is_none_or(|context| !context.redirects_output()) {
+            self.write_out(&spawned.out);
+        }
+        if io.is_none_or(|context| !context.redirects_error()) {
+            self.write_err(&spawned.err);
+        }
+        Ok(CommandOutcome::of(spawned.rc))
     }
 
     /// One command clause: evaluates the string, echoes what the setting
@@ -452,6 +537,9 @@ impl Interp {
     /// command` leaves the activation's own pair untouched -- measured,
     /// `ADDRESS()` is unchanged afterwards and a later bare `ADDRESS`
     /// toggles to the alternate the one-off never wrote.
+    ///
+    /// `io` is the `WITH` configuration the issuing `ADDRESS` instruction
+    /// carried, which merges with whatever the environment name has stored.
     pub(crate) fn exec_command(
         &mut self,
         code: &Code<'_>,
@@ -459,6 +547,7 @@ impl Interp {
         source: Option<&ProgramSource>,
         expression: &Expr,
         environment: Option<&[u8]>,
+        io: Option<&AddressIo>,
     ) -> Result<Flow, Failure> {
         let indent = self.clause_state.current_value_indent;
         let value = self.eval(code, expression)?;
@@ -479,7 +568,19 @@ impl Interp {
                 .unwrap_or(crate::builtin::state::DEFAULT_ENVIRONMENT)
                 .to_vec(),
         };
-        let outcome = self.run_command(&name, &command)?;
+        // **The redirections are evaluated here**, after the command string
+        // and its `>>>` -- measured under `trace i`, a one-off carrying both
+        // shows `>L>` and `>>>` for the command and only then each target's
+        // own echo and `>K>` line. The frame holds every object they resolve
+        // to for as long as the command runs and the lines are written back.
+        let frame = self.roots.push_frame();
+        let context = self.io_context(code, &name, io);
+        let outcome = match context {
+            Ok(context) => self.run_command(&name, &command, context.as_ref()),
+            Err(failure) => Err(failure),
+        };
+        self.roots.pop_frame(frame);
+        let outcome = outcome?;
 
         // **`::OPTIONS ERROR|FAILURE SYNTAX` escalates where the condition is
         // raised, not where it is delivered**: `Activity::raiseCondition`

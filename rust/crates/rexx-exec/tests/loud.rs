@@ -83,8 +83,8 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     // happen. `Command` had a row here until the command dispatch landed and
     // its clause stopped refusing.
     Witness {
-        tag: "Address::With",
-        source: "address cmd 'text' with output stem o.\n",
+        tag: "Address::WithStream",
+        source: "address cmd 'text' with output stream 'out.txt'\n",
         category: Category::Instruction,
     },
     Witness {
@@ -242,7 +242,7 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        42
+        43
     );
     assert_eq!(
         EXPR_TAGS

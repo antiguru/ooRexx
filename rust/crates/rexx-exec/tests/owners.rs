@@ -163,12 +163,39 @@ split InstructionKind::Call(c) in (&**c) {
 // One keyword, two jobs. Naming an environment -- `ADDRESS env`, `ADDRESS
 // VALUE expr`, the bare toggle -- is per-activation state, and so now is
 // `ADDRESS env command`, which issues one through the same dispatch
-// `InstructionKind::Command` uses. `WITH`, which says where a command's three
-// streams go, is what is left (D18).
-split InstructionKind::Address(a) in (a.io.is_some()) {
-    true => ("Address::With", Owner::Phase("Phase 7")),
-    false => ("Address::Environment", Owner::InScope),
+// `InstructionKind::Command` uses. `WITH` says where a command's three
+// streams go, and the kind of target parts it: a stem, a `USING` object and
+// `NORMAL` are dispatched here, and a `STREAM` one is what is left (D18).
+split InstructionKind::Address(a) in (address_shape(a)) {
+    AddressShape::Plain => ("Address::Environment", Owner::InScope),
+    AddressShape::With => ("Address::With", Owner::InScope),
+    AddressShape::WithStream => ("Address::WithStream", Owner::Phase("Phase 7")),
 });
+
+/// Which of the three rows an `ADDRESS` instruction is owed by.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum AddressShape {
+    Plain,
+    With,
+    WithStream,
+}
+
+/// [`AddressShape`] for one instruction. A `STREAM` on **any** of the three
+/// redirections makes the whole instruction the owed one, because that is the
+/// redirection the run would refuse on.
+pub(crate) fn address_shape(address: &rexx_parse::Address) -> AddressShape {
+    let Some(io) = &address.io else {
+        return AddressShape::Plain;
+    };
+    let streams = [&io.input, &io.output, &io.error];
+    match streams
+        .iter()
+        .any(|target| matches!(target, rexx_parse::Redirection::Stream(_)))
+    {
+        true => AddressShape::WithStream,
+        false => AddressShape::With,
+    }
+}
 
 tags!(expr_tag, EXPR_TAGS, ExprKind, {
     // ---- implemented here ----
@@ -322,7 +349,7 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     // The one arm-grained row. `ADDRESS`'s other form is in scope, and so is
     // every arm of `CALL`, so those appear in `INSTRUCTION_TAGS` and not here.
     // `Command` left this list when the command dispatch landed.
-    ("InstructionKind", "Address::With", "Phase 7"),
+    ("InstructionKind", "Address::WithStream", "Phase 7"),
     ("InstructionKind", "Options", "Phase 5"),
     ("LoopKind", "With", "Phase 5"),
 ];
@@ -446,13 +473,13 @@ fn variant_counts_match_the_audited_split() {
     // variant across the line edits both the column it left and the column
     // it joined, and this test is what makes that a pair rather than a
     // choice.
-    assert_eq!(INSTRUCTION_TAGS.len(), 44);
+    assert_eq!(INSTRUCTION_TAGS.len(), 45);
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        42
+        43
     );
     assert_eq!(
         INSTRUCTION_TAGS

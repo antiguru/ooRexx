@@ -1444,9 +1444,6 @@ impl Interp {
             // the activation's pair, measured. `WITH`'s redirection is what
             // is still owed.
             InstructionKind::Address(address) => {
-                if address.io.is_some() {
-                    return Err(Loud::instruction(&instruction.kind).into());
-                }
                 if let Some(command) = &address.command {
                     let environment = match (&address.environment, &address.dynamic) {
                         (Some(name), _) => name.to_vec(),
@@ -1458,12 +1455,18 @@ impl Interp {
                         }
                         (None, None) => Vec::new(),
                     };
+                    // **The configuration is this command's alone.** The
+                    // arm that carries a command never calls `setAddress`,
+                    // so it stores nothing under the name -- measured, a
+                    // later command in the same program is not redirected
+                    // and the stem it filled keeps its one line.
                     return self.exec_command(
                         code,
                         instruction,
                         source,
                         command,
                         Some(&environment),
+                        address.io.as_deref(),
                     );
                 }
                 self.exec_address(code, address)?;
@@ -1507,7 +1510,7 @@ impl Interp {
                 );
                 match expression {
                     Some(expression) => {
-                        self.exec_command(code, instruction, source, expression, None)
+                        self.exec_command(code, instruction, source, expression, None, None)
                     }
                     None => Ok(Flow::Next),
                 }
@@ -4111,6 +4114,7 @@ impl Interp {
                 // *caller's* alternate. `Activation::address`' own doc
                 // comment has the transcript.
                 let address = caller.address.clone();
+                let caller_io_configs = caller.io_configs.clone();
                 // Same one-way rule again: an internal call sees the caller's
                 // `CONDITION()` answers and a reset inside the callee dies
                 // with it. `TrappedCondition`'s own doc comment has the
@@ -4131,6 +4135,10 @@ impl Interp {
                         condition_syntax,
                         trace_mode,
                         address,
+                        // The refcount, not the table: a write in the callee
+                        // clones first, which is how the oracle keeps the
+                        // inheritance one-way (`checkIOConfigTable`).
+                        io_configs: caller_io_configs,
                         traps,
                         condition,
                     },
@@ -7622,6 +7630,7 @@ impl Interp {
                     .into());
                 }
                 self.activation_mut().address.set_bytes(environment);
+                self.store_io_config(environment, address);
             }
             (None, Some(expression)) => {
                 let value = self.eval(code, expression)?;
@@ -7645,6 +7654,7 @@ impl Interp {
                     return Err(raised.into());
                 }
                 self.activation_mut().address.set_bytes(&text);
+                self.store_io_config(&text, address);
                 self.give_result_buffer(text);
             }
         }

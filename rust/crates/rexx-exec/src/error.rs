@@ -659,6 +659,35 @@ impl Raised {
     /// measured is the empty string alone -- a blank answers `UNKNOWN` and
     /// every other reader takes an empty name as the default input or output
     /// rather than an error (`BuiltinFunctions.cpp:2444`).
+    /// 98.923: a pipe this crate could not create or drive. The substitution
+    /// is the system's own description of the failure.
+    pub(crate) fn redirection_failed(error: &str) -> Raised {
+        Raised::syntax(98, 923, vec![error.as_bytes().to_vec()])
+    }
+
+    /// 98.998: an `ADDRESS ... WITH INPUT STEM` whose stem carries no size
+    /// count of its own in element 0.
+    pub(crate) fn stem_without_a_size(stem: &[u8]) -> Raised {
+        Raised::syntax(98, 998, vec![stem.to_vec()])
+    }
+
+    /// 26.904: the same element 0, present and not a whole number.
+    pub(crate) fn stem_size_not_whole(stem: &[u8], found: &[u8]) -> Raised {
+        Raised::syntax(26, 904, vec![stem.to_vec(), found.to_vec()])
+    }
+
+    /// 98.924: an `ADDRESS ... WITH INPUT USING` object that is neither a
+    /// string, a stem, a stream nor anything answering an array.
+    pub(crate) fn address_input_source(object: &[u8]) -> Raised {
+        Raised::syntax(98, 924, vec![object.to_vec()])
+    }
+
+    /// 98.996: the same for an `OUTPUT` or `ERROR` target, which the one
+    /// message covers both of.
+    pub(crate) fn address_output_target(object: &[u8]) -> Raised {
+        Raised::syntax(98, 996, vec![object.to_vec()])
+    }
+
     pub(crate) fn invalid_stream_name(found: &[u8]) -> Raised {
         Raised::syntax(40, 27, vec![b"STREAM".to_vec(), found.to_vec()])
     }

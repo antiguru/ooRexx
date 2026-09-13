@@ -63,16 +63,6 @@
 #       phase from. A row carrying it needs its cause written into this
 #       header; the first bullet above carries all three.
 #
-#   Phase 7  The `ADDRESS` bodies carrying a `WITH` redirection, which says
-#       where a command's three streams go. Naming an environment runs, and
-#       so now does issuing a command to one; the redirection is what is
-#       still owed. `test_environment_path_null` was here too while the
-#       command dispatch was missing -- `address "path" ""` is a plain
-#       command, not a `WITH` form -- and passes now that the dispatch
-#       exists.
-#
-ADDRESS::test_environment_value_with	Phase 7
-ADDRESS::test_environment_expression_with	Phase 7
 CALL::test_literal	RAISED
 CALL::test_expression	RAISED
 CALL::test_on_name	RAISED

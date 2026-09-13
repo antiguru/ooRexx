@@ -131,6 +131,10 @@ mod command;
 // raise builds, whose indexes depend on the condition's own kind.
 mod condition;
 
+/// `ADDRESS ... WITH`: the permanent per-environment configuration, and the
+/// per-command context that says where one command's three streams go.
+mod redirect;
+
 /// The exit code for a construct this crate does not implement.
 pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 
@@ -310,6 +314,17 @@ impl Loud {
     fn receiver_class(kind: &str) -> Loud {
         Loud {
             message: owned_message(&format!("a message send to {kind}"), Some("Phase 5")),
+        }
+    }
+
+    /// An `ADDRESS ... WITH` redirection whose target this crate accepts in
+    /// the grammar and does not yet build.
+    fn redirection(what: &str) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!("an ADDRESS WITH {what} redirection"),
+                Some("Phase 7"),
+            ),
         }
     }
 

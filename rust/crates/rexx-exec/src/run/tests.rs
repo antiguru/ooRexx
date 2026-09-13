@@ -7586,22 +7586,26 @@ fn an_environment_name_over_two_hundred_and_fifty_bytes_raises_29_1() {
     }
 }
 
-/// The `WITH` form still fails loudly and names Phase 7. The command form no
-/// longer does: `address cmd ''` and `address cmd 'text'` run the command,
-/// and `corpus/lang/command_environments.rex` is what pins them now.
+/// A `STREAM` redirection fails loudly and names Phase 7. The rest of `WITH`
+/// does not: a stem, a `USING` object and `NORMAL` are dispatched, and
+/// `corpus/lang/address_with_stem.rex` and `address_with_using.rex` pin them.
 ///
-/// **`address with output stem o.` is not one of these**, and used to be on
-/// this list. `WITH` is a keyword only after an environment or a `VALUE`
-/// expression (`addressNew`), so that clause names an environment called
-/// `WITH` and runs `OUTPUT STEM O.` as a command against it. Measured: the
-/// oracle answers `+++ "RC(30)"` on stderr at exit 0 and this crate is
-/// byte-identical to it, so the clause belongs to the command dispatch and
-/// not to the gap this test pins.
+/// **Both sources carry a command, and they have to.** A redirection's target
+/// is evaluated where the command is issued, so an `ADDRESS env WITH ...` on
+/// its own only stores the configuration and refuses nothing -- the second
+/// source is that form followed by the command that trips it.
+///
+/// **`address with output stem o.` is not one of these.** `WITH` is a keyword
+/// only after an environment or a `VALUE` expression (`addressNew`), so that
+/// clause names an environment called `WITH` and runs `OUTPUT STEM O.` as a
+/// command against it. Measured: the oracle answers `+++ "RC(30)"` on stderr
+/// at exit 0 and this crate is byte-identical to it, so the clause belongs to
+/// the command dispatch and not to the gap this test pins.
 #[test]
-fn the_with_form_stays_loud_and_names_phase_7() {
+fn a_stream_redirection_stays_loud_and_names_phase_7() {
     for source in [
-        &b"address cmd with output stem o.\n"[..],
-        &b"address value 'q' with input stem i.\n"[..],
+        &b"address cmd 'text' with output stream 'out.txt'\n"[..],
+        &b"address cmd with input stream 'in.txt'\n'text'\n"[..],
     ] {
         let mut interp = Interp::new();
         let failure = run_source(&mut interp, source).unwrap_err();
@@ -7613,7 +7617,7 @@ fn the_with_form_stays_loud_and_names_phase_7() {
         };
         assert_eq!(
             loud.message,
-            "ADDRESS is not implemented (Phase 7)",
+            "an ADDRESS WITH STREAM redirection is not implemented (Phase 7)",
             "{}",
             String::from_utf8_lossy(source)
         );

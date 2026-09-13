@@ -2004,7 +2004,7 @@ impl Interp {
 
     /// `RexxObject::classObject()`, the class an arbitrary value is an
     /// instance of, or `None` for a value this phase builds no class for.
-    fn class_of_value(&mut self, value: ObjRef) -> Option<ObjRef> {
+    pub(crate) fn class_of_value(&mut self, value: ObjRef) -> Option<ObjRef> {
         match self.receiver_behaviour(value).ok()? {
             Behaviour::Instance { owner, .. } => Some(owner),
             Behaviour::ClassSide(class) => Some(self.classes().class_of(class)),
@@ -10252,8 +10252,8 @@ mod tests {
                 "rexx-exec: OPTIONS is not implemented (Phase 5)\n",
             ),
             (
-                "address 'SYSTEM' .K with output stem o.\n::class K\n::method makeString class\n  return 'true'\n",
-                "rexx-exec: ADDRESS is not implemented (Phase 7)\n",
+                "address 'SYSTEM' .K with output stream 'f.txt'\n::class K\n::method makeString class\n  return 'true'\n",
+                "rexx-exec: an ADDRESS WITH STREAM redirection is not implemented (Phase 7)\n",
             ),
         ] {
             assert_eq!(

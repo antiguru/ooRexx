@@ -106,6 +106,10 @@ pub(crate) struct AddressState {
     pub(crate) alternate: Option<Rc<[u8]>>,
 }
 
+/// The `ADDRESS ... WITH` table an activation carries, keyed by the upcased
+/// environment name (`settings.ioConfigs`, a `StringTable`).
+pub(crate) type IoConfigs = NameMap<Box<[u8]>, Rc<rexx_parse::AddressIo>>;
+
 impl AddressState {
     /// `ADDRESS env` / `ADDRESS VALUE expr`: the new target becomes current and
     /// the old current becomes the alternate.
@@ -311,6 +315,17 @@ pub(crate) struct Activation {
     /// main   address              ->   sh      the caller's own alternate
     /// ```
     pub(crate) address: AddressState,
+    /// The `ADDRESS ... WITH` configurations in force here, keyed by the
+    /// **upcased** environment name -- measured, `address sh with output stem
+    /// o.` still redirects after a later `address SH`. `None` is the table
+    /// the oracle has not created yet (`settings.ioConfigs == OREF_NULL`),
+    /// which is every program that never writes one.
+    ///
+    /// Behind an `Rc` so an internal call inherits it by refcount and a write
+    /// in the callee clones first: that is `checkIOConfigTable`'s own lazy
+    /// copy (`RexxActivation.cpp:1651`), and it is what makes the
+    /// inheritance one-way.
+    pub(crate) io_configs: Option<Rc<IoConfigs>>,
     /// The condition traps enabled in this activation, keyed by the exact
     /// condition name a raise carries (`Raised::condition`) -- `SYNTAX`,
     /// `NOVALUE`, `USER FOO`, ...
@@ -510,6 +525,7 @@ impl Activation {
             // `N`.
             trace_mode: TraceMode::NORMAL,
             address: AddressState::default(),
+            io_configs: None,
             traps: TrapMap::default(),
             condition: None,
             cached_clock: None,
@@ -573,6 +589,7 @@ impl Activation {
             condition_syntax: inherited.condition_syntax,
             trace_mode: inherited.trace_mode,
             address: inherited.address,
+            io_configs: inherited.io_configs,
             traps: inherited.traps,
             condition: inherited.condition,
             // Not inherited, matching every other field this constructor
@@ -630,6 +647,7 @@ impl Activation {
             condition_syntax: ConditionSyntax::default(),
             trace_mode: TraceMode::NORMAL,
             address: AddressState::default(),
+            io_configs: None,
             traps: TrapMap::default(),
             condition: None,
             cached_clock: None,
@@ -677,6 +695,7 @@ impl Activation {
             condition_syntax: ConditionSyntax::default(),
             trace_mode: TraceMode::NORMAL,
             address: AddressState::default(),
+            io_configs: None,
             traps: TrapMap::default(),
             condition: None,
             cached_clock: None,
@@ -740,6 +759,10 @@ impl Activation {
             condition_syntax: _,
             trace_mode: _,
             address: _,
+            // Parse data behind an `Rc`: an `AddressIo` holds expressions and
+            // symbol ids, never an `ObjRef`. What a redirection *evaluates*
+            // to is a temp of the command that built it.
+            io_configs: _,
             traps: _,
             condition,
             cached_clock: _,
@@ -814,6 +837,7 @@ pub(crate) struct Inherited {
     pub(crate) condition_syntax: ConditionSyntax,
     pub(crate) trace_mode: TraceMode,
     pub(crate) address: AddressState,
+    pub(crate) io_configs: Option<Rc<IoConfigs>>,
     pub(crate) traps: TrapMap,
     pub(crate) condition: Option<TrappedCondition>,
 }

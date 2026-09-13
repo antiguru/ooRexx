@@ -1,0 +1,82 @@
+count 81
+/* `ADDRESS ... WITH USING`, and how a permanent configuration merges with the
+   one an instruction carries.
+
+   The merge is per stream: a stream the instruction does not mention keeps the
+   permanent target, `NORMAL` resets one to the default, and a configuration on
+   an instruction that also carries a command is that command's alone.
+
+   `USING` lets the object decide. A string is one line, an array contributes
+   its items and skips its holes, any other collection is asked for an array,
+   and an ordered collection used as a target is emptied and appended to. */
+
+address sh with output stem o.
+
+address sh 'echo once' with output stem q.
+say 'one-off   ' q.0 q.1
+'echo after'
+say 'permanent ' o.0 o.1
+
+address sh 'sh -c "echo o1; echo e1 1>&2"' with error stem e.
+say 'merged    ' o.0 o.1 e.0 e.1
+
+address sh 'echo plain' with output normal
+say 'normal    ' o.0 o.1
+
+address sh 'sh -c "echo w1; echo w2 1>&2; echo w3"' with output stem s. error stem s.
+say 'one target' s.0 s.1 s.2 s.3
+
+address sh 'cat' with input using 'single' output stem got.
+say 'string    ' got.0 got.1
+
+feed = .array~new(3)
+feed[1] = 'i1'
+feed[3] = 'i3'
+address sh 'cat' with input using (feed) output stem got2.
+say 'array     ' got2.0 got2.1 got2.2
+
+address sh 'cat' with input using (.list~of('l1','l2')) output stem got3.
+say 'list      ' got3.0 got3.1 got3.2
+
+address sh 'cat' with input using 42 output stem got4.
+say 'number    ' got4.0 got4.1
+
+target = .array~of('gone1','gone2','gone3')
+address sh 'printf "n1\nn2\n"' with output using (target)
+say 'array out ' target~items target[1] target[2]
+
+held = .list~of('old')
+address sh 'echo listed' with output using (held)
+say 'list out  ' held~items
+do line over held
+  say '  [' || line || ']'
+end
+
+/* The four errors a redirection raises, each re-arming the trap so one
+   program shows them all. */
+signal on syntax name badoutput
+address sh 'cat' with output using 42
+say 'not reached'
+
+badoutput:
+say 'output    ' rc
+signal on syntax name badinput
+address sh 'cat' with input using .nil
+say 'not reached'
+
+badinput:
+say 'input     ' rc
+signal on syntax name nocount
+drop m.
+address sh 'cat' with input stem m.
+say 'not reached'
+
+nocount:
+say 'no count  ' rc
+signal on syntax name badcount
+n.0 = 'abc'
+address sh 'cat' with input stem n.
+say 'not reached'
+
+badcount:
+say 'bad count ' rc

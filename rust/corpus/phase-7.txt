@@ -113,6 +113,17 @@ lang/command_options_failure_syntax.rex
 # resume so one file shows two kinds.
 lang/condition_object.rex
 
+# Task 16: `ADDRESS ... WITH` and a stem. Where the output lands, what
+# `REPLACE` keeps and `APPEND` continues from, where the captured bytes are cut
+# into lines, and what a stem feeds a command's standard input.
+lang/address_with_stem.rex
+
+# Task 16: `USING`, whose object decides what it means, and the merge between
+# the configuration stored under an environment name and the one an
+# instruction carries -- per stream, with `NORMAL` resetting one. Ends with
+# the four errors a redirection raises, each re-arming the trap.
+lang/address_with_using.rex
+
 # Task 15: a `SYNTAX` condition's own five extra indexes -- `CODE`,
 # `ERRORTEXT`, `MESSAGE`, `ADDITIONAL` and `RC` -- in a file of its own,
 # because `CALL ON SYNTAX` is a 25.1 translation error and the kind cannot be

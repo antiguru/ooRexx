@@ -1,0 +1,54 @@
+/* `ADDRESS ... WITH` and a stem: where a command's output lands, and what a
+   stem feeds it.
+
+   `REPLACE` -- which is what no option at all means -- drops the tails and
+   keeps the stem's own default, so a tail the command never wrote reads that
+   default again. `APPEND` starts at `stem.0 + 1`, and a stem carrying no size
+   count of its own is a `REPLACE` however it was asked for.
+
+   The configuration is permanent: it is stored under the environment name and
+   every later command issued there is redirected by it. */
+
+o. = 'dflt'
+o.7 = 'keep'
+address sh with output stem o.
+
+'printf "a\nb\nc\n"'
+say 'three     ' o.0 o.1 o.2 o.3
+say 'default   ' o.7 o.9
+
+'true'
+say 'empty     ' o.0
+
+'echo one'
+'echo two'
+say 'replaced  ' o.0 o.1
+
+address sh with output append stem o.
+'echo three'
+say 'appended  ' o.0 o.1 o.2
+
+drop p.
+address sh with output append stem p.
+'echo solo'
+say 'no count  ' p.0 p.1
+
+/* Where a line ends: `CR LF` is one terminator, a trailing partial line is a
+   line of its own, and a NUL is data inside one. */
+address sh with output stem r.
+'printf "p\r\nq\r\n"'
+say 'crlf      ' r.0 length(r.1) length(r.2)
+'printf "s\nt"'
+say 'partial   ' r.0 r.1 r.2
+'printf "u\0v\n"'
+say 'nul       ' r.0 length(r.1) c2x(r.1)
+
+/* A stem as input: `stem.1` through `stem.<stem.0>`, where a tail with no
+   value of its own contributes the stem's default -- here its derived name,
+   the stem never having been given one. */
+in.0 = 3
+in.1 = 'one'
+in.3 = 'three'
+address sh with input stem in. output stem got.
+'cat'
+say 'fed       ' got.0 got.1 got.2 got.3
