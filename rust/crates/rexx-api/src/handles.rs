@@ -75,7 +75,7 @@ impl Table {
 /// tag reserves the low two bits, and the only tag that sets both leaves the
 /// three above the length clear.
 fn address_of(object: ObjRef) -> usize {
-    // `NULLOBJECT` is the null pointer (`api/rexx.h:157`), so the `ObjRef`
+    // `NULLOBJECT` is the null pointer (`api/rexx.h:155`), so the `ObjRef`
     // whose bits are zero -- heap slot zero at generation zero, the first
     // object a fresh heap allocates -- must not encode to it.
     let biased = object.bits().wrapping_add(1);
