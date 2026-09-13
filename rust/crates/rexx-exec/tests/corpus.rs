@@ -84,8 +84,9 @@ fn empty_run_directory(dir: &Path) {
     fs::create_dir_all(dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
 }
 
-/// Runs the executor in process, on `path`, from `directory`.
-fn run_rust(path: &Path, directory: &Path) -> Outcome {
+/// Runs the executor in process, on `path`, from `directory`, with
+/// `overrides` laid over the process's own environment.
+fn run_rust(path: &Path, directory: &Path, overrides: &[(String, String)]) -> Outcome {
     let text = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let path_str = path
         .to_str()
@@ -94,11 +95,129 @@ fn run_rust(path: &Path, directory: &Path) -> Outcome {
     // chooses it rather than this function taking the program's own: the
     // process's directory is shared between the interpreters this harness runs
     // on threads, and a program naming a relative path must see one state.
-    watchdog::run_bounded(
-        path_str,
-        text,
-        rexx_exec::Invocation::none().with_directory(directory.to_path_buf()),
-    )
+    let mut invocation = rexx_exec::Invocation::none().with_directory(directory.to_path_buf());
+    if !overrides.is_empty() {
+        // Laid over the inherited environment rather than replacing it,
+        // because `Oracle::run_in` sets its overrides on a spawned process
+        // that inherits everything else, and the two sides have to read the
+        // same environment.
+        let mut environment: Vec<(Vec<u8>, Vec<u8>)> = env::vars()
+            .filter(|(name, _)| !overrides.iter().any(|(over, _)| over == name))
+            .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
+            .collect();
+        environment.extend(
+            overrides
+                .iter()
+                .map(|(name, value)| (name.clone().into_bytes(), value.clone().into_bytes())),
+        );
+        invocation = invocation.with_environment(environment);
+    }
+    watchdog::run_bounded(path_str, text, invocation)
+}
+
+/// The fixture directory and environment one corpus program runs with, taken
+/// from `<name>.d/` and `<name>.env` beside it.
+#[derive(Default)]
+struct Sidecar {
+    /// Copied into the run directory before each side runs.
+    fixtures: Option<PathBuf>,
+    /// `NAME=VALUE` overrides, `{run}` in a value spelled as the run
+    /// directory's absolute path.
+    environment: Vec<(String, String)>,
+    /// A subdirectory of the run directory to run from, from `CWD=`.
+    cwd: Option<String>,
+}
+
+impl Sidecar {
+    /// Whether anything beside the program asked for one.
+    fn present(&self) -> bool {
+        self.fixtures.is_some() || !self.environment.is_empty() || self.cwd.is_some()
+    }
+}
+
+/// `<name>.d/` and `<name>.env` for one corpus entry.
+fn sidecar_for(corpus_dir: &Path, rel_path: &str) -> Sidecar {
+    let stem = rel_path
+        .strip_suffix(".rex")
+        .unwrap_or_else(|| panic!("corpus entry {rel_path} does not end in .rex"));
+    let fixtures = corpus_dir.join(format!("{stem}.d"));
+    let mut sidecar = Sidecar {
+        fixtures: fixtures.is_dir().then_some(fixtures),
+        ..Sidecar::default()
+    };
+    let env_path = corpus_dir.join(format!("{stem}.env"));
+    let Ok(text) = fs::read_to_string(&env_path) else {
+        return sidecar;
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (name, value) = line
+            .split_once('=')
+            .unwrap_or_else(|| panic!("{}: {line:?} is not a `NAME=VALUE`", env_path.display()));
+        if name == "CWD" {
+            sidecar.cwd = Some(value.to_string());
+        } else {
+            sidecar
+                .environment
+                .push((name.to_string(), value.to_string()));
+        }
+    }
+    sidecar
+}
+
+/// Copies `from`'s tree into `to`, which must exist.
+fn copy_tree(from: &Path, to: &Path) {
+    for entry in
+        fs::read_dir(from).unwrap_or_else(|e| panic!("cannot read {}: {e}", from.display()))
+    {
+        let entry =
+            entry.unwrap_or_else(|e| panic!("cannot read an entry of {}: {e}", from.display()));
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            fs::create_dir_all(&target)
+                .unwrap_or_else(|e| panic!("cannot create {}: {e}", target.display()));
+            copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), &target).unwrap_or_else(|e| {
+                panic!(
+                    "cannot copy {} to {}: {e}",
+                    entry.path().display(),
+                    target.display()
+                )
+            });
+        }
+    }
+}
+
+/// Empties the run directory and lays the sidecar's fixtures back into it,
+/// answering the directory the program is to run from.
+fn prepare_run_directory(dir: &Path, sidecar: &Sidecar) -> PathBuf {
+    empty_run_directory(dir);
+    if let Some(fixtures) = &sidecar.fixtures {
+        copy_tree(fixtures, dir);
+    }
+    match &sidecar.cwd {
+        None => dir.to_path_buf(),
+        Some(relative) => {
+            let cwd = dir.join(relative);
+            fs::create_dir_all(&cwd)
+                .unwrap_or_else(|e| panic!("cannot create {}: {e}", cwd.display()));
+            cwd
+        }
+    }
+}
+
+/// The sidecar's overrides with `{run}` resolved against the run directory.
+fn resolved_environment(sidecar: &Sidecar, dir: &Path) -> Vec<(String, String)> {
+    let run = dir.to_string_lossy().into_owned();
+    sidecar
+        .environment
+        .iter()
+        .map(|(name, value)| (name.clone(), value.replace("{run}", &run)))
+        .collect()
 }
 
 /// One corpus program that disagreed with the oracle, or one where either
@@ -338,7 +457,7 @@ fn the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else() {
         empty_run_directory(&dir);
         let cpp = oracle.run_in(&abs, &dir, &[]);
         empty_run_directory(&dir);
-        let rust = run_rust(&abs, &dir);
+        let rust = run_rust(&abs, &dir, &[]);
         assert!(
             !cpp.stdout.is_empty(),
             "{listed}: on HASH_ORDERED_STDOUT and the oracle wrote no stdout, so \
@@ -372,10 +491,16 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
     // and emptied between them: a program that writes files leaves nothing in
     // `corpus/`, and neither side ever reads what the other left behind.
     let dir = run_directory(rel_path);
-    empty_run_directory(&dir);
-    let cpp = oracle.run_in(&abs, &dir, &[]);
-    empty_run_directory(&dir);
-    let rust = run_rust(&abs, &dir);
+    let sidecar = sidecar_for(corpus_dir, rel_path);
+    let overrides = resolved_environment(&sidecar, &dir);
+    let borrowed: Vec<(&str, &str)> = overrides
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.as_str()))
+        .collect();
+    let cwd = prepare_run_directory(&dir, &sidecar);
+    let cpp = oracle.run_in(&abs, &cwd, &borrowed);
+    let cwd = prepare_run_directory(&dir, &sidecar);
+    let rust = run_rust(&abs, &cwd, &overrides);
 
     // Checked before `descriptor_diffs_modes` calls `cpp.expect_exit_code()`
     // itself: that panic has no `rel_path` in it and fires from inside
@@ -614,6 +739,101 @@ fn read_unfiled(corpus_dir: &Path) -> Vec<(String, String)> {
                 path.display()
             );
             (entry.to_string(), reason.to_string())
+        })
+        .collect()
+}
+
+/// Every `<name>.env` and `<name>.d/` beside a corpus program names a program
+/// a phase subset file runs, so a sidecar cannot sit unread.
+#[test]
+fn every_sidecar_names_a_program_the_subset_runs() {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let dir = corpus_dir.join(LANG_SUBDIR);
+    let stems = sidecar_stems(&corpus_dir);
+    assert!(
+        !stems.is_empty(),
+        "{} holds no sidecar, so this test checked nothing",
+        dir.display()
+    );
+
+    let paths: Vec<PathBuf> = SUBSET_FILES
+        .iter()
+        .map(|name| corpus_dir.join(name))
+        .collect();
+    let filed: BTreeSet<String> =
+        read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>())
+            .into_iter()
+            .collect();
+
+    for stem in &stems {
+        let program = format!("{LANG_SUBDIR}/{stem}.rex");
+        assert!(
+            filed.contains(&program),
+            "{stem} has a sidecar and no phase subset file names {program}, so nothing reads it"
+        );
+        assert!(
+            sidecar_for(&corpus_dir, &program).present(),
+            "{program}'s sidecar parsed to nothing, so the run would not differ from one without it"
+        );
+    }
+}
+
+/// Each sidecar's own control: the program answers differently without it.
+///
+/// The differential compares the two interpreters, so a sidecar that never
+/// arrives leaves them agreeing on the same failure and the witness stays
+/// green over nothing. Measured: deleting either half of this one left the
+/// gate at 507 of 507.
+#[test]
+fn a_sidecar_changes_what_the_oracle_answers() {
+    let oracle = support::oracle::locate();
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let stems = sidecar_stems(&corpus_dir);
+    assert!(
+        !stems.is_empty(),
+        "no sidecar on disk, so this control iterates over nothing"
+    );
+    for stem in &stems {
+        let rel_path = format!("{LANG_SUBDIR}/{stem}.rex");
+        let abs = fs::canonicalize(corpus_dir.join(&rel_path))
+            .unwrap_or_else(|e| panic!("cannot resolve {rel_path}: {e}"));
+        // Its own directory, so this never races the differential's.
+        let dir = run_directory(&format!("{rel_path}#sidecar-control"));
+
+        let sidecar = sidecar_for(&corpus_dir, &rel_path);
+        let overrides = resolved_environment(&sidecar, &dir);
+        let borrowed: Vec<(&str, &str)> = overrides
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect();
+        let cwd = prepare_run_directory(&dir, &sidecar);
+        let with = oracle.run_in(&abs, &cwd, &borrowed);
+
+        let bare = Sidecar::default();
+        let cwd = prepare_run_directory(&dir, &bare);
+        let without = oracle.run_in(&abs, &cwd, &[]);
+        empty_run_directory(&dir);
+
+        assert!(
+            with.stdout != without.stdout || with.termination != without.termination,
+            "{rel_path}: the oracle answers the same with the sidecar and without it, so \
+             neither the fixtures nor the environment is load-bearing and the witness would \
+             stay green if they were deleted"
+        );
+    }
+}
+
+/// The stem of every `<name>.env` or `<name>.d/` beside a corpus program.
+fn sidecar_stems(corpus_dir: &Path) -> BTreeSet<String> {
+    let dir = corpus_dir.join(LANG_SUBDIR);
+    fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()))
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            name.strip_suffix(".env")
+                .or_else(|| name.strip_suffix(".d"))
+                .map(str::to_string)
         })
         .collect()
 }

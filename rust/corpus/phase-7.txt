@@ -141,3 +141,10 @@ lang/condition_object_syntax.rex
 # different errors, their defaults are opposite, and `Package~new`'s own
 # fourth argument is refused by `Object~init` after the package is built.
 lang/executable_context.rex
+
+# Task 17: where an external routine call looks. The sidecar gives this one a
+# fixture tree, a working directory that is not the program's own, and the two
+# search variables, so the order is a measurement rather than the ambient
+# machine's. `phase-4c.txt`'s rule against depending on external resolution is
+# lifted for this file's programs by that sidecar.
+lang/external_search_order.rex
