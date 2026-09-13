@@ -102,6 +102,7 @@ Blocks are numbered in the order they were raised and ordered below by topic, so
 | **D3** | Concurrency model | Phase 6 | recommendation set; constrains Phase 1 |
 | **D4** | Numeric core | Phase 2 | settled — port `NumberString` |
 | **D5** | Native API surface | Phase 8 | settled by the user — source-compatible |
+| **D-U1** | The `unsafe` grant and `dlopen`'s provider | Phase 8 | **closed** — two modules in `rexx-api`, `libloading` (2026-09-14) |
 | **D6** | Platform layer | Phase 7 | settled — `std` → `rustix` → `libc` |
 | **D13** | AST ownership | Phase 3 | **closed** — plain owned Rust data (2026-07-27) |
 | **D14** | String representation | Phase 4, constrains Phase 3 | **closed** — byte strings, UTF-8 arrives as operations (2026-07-28) |
@@ -214,6 +215,38 @@ Rexx numbers are strings; arithmetic is arbitrary-precision decimal under `NUMER
 **That claim depends on the generation field in `ObjRef` (Task 1.1), and is false without it.** Slots are recycled through a free list, so a bare slot index held across a collection would silently name whatever is allocated into that slot next — memory-safe, but returning the wrong object, which is the same defect class in different clothing and landing at precisely the boundary this decision advertises as the win. The generation is what converts "stale" into "miss". Do not treat it as an optimisation to add later.
 
 **Evidence that settles this.** Phase 8 exit: `testbinaries/` build against the frozen headers with no source edits, and the ooTest native-API groups pass.
+
+### D-U1 — The `unsafe` grant and `dlopen`'s provider
+
+**Blocks:** Phase 8. Opened and closed 2026-09-14, before any `extern "C"` entry point was written,
+which is what `:2555` requires of this phase.
+
+**Question.** The workspace lint is `unsafe_code = "deny"` and the record of every granted site is
+the set of `#[allow(unsafe_code)]` attributes in the tree, asserted by
+`crates/rexx-core/tests/unsafe_sites.rs`. Before this decision that set named one file. Phase 8
+cannot be written without `unsafe`: it dereferences caller-supplied pointers in the entry points it
+exports, it calls through function pointers into a library it loaded, and it calls `dlopen` and
+`dlsym`. Separately, `rustix` does not wrap `dlopen`, so the loader needs a provider.
+
+**Decision (Moritz, 2026-09-14): two granted modules, and `libloading`.**
+
+The grant is `#[allow(unsafe_code)]` on `rexx-api/src/ffi.rs` and on `rexx-api/src/load.rs`, and
+nowhere else. `ffi.rs` carries the inbound boundary: converting a caller-supplied pointer into a
+validated handle, and nothing past that conversion. `load.rs` carries the outbound one: opening a
+library, resolving a symbol, and calling through it. They are separate because they fail
+differently -- an inbound defect is a bad pointer from someone else's code, an outbound one is our
+own call built wrong -- and reviewing them as one module hides which of the two a site belongs to.
+Everything past either boundary is safe Rust operating on `ObjRef`.
+
+`libloading` joins the dependency set for the loader. It is not a safety win by itself, since
+`Library::new` and `Library::get` are both `unsafe`, but it owns the handle's lifetime and its
+error reporting, which are the two parts of a raw `dlopen` that are easy to get quietly wrong.
+Version 0.8.9 is in the offline cache. Phase 7's "no new dependency beyond `rustix`" constraint was
+that phase's own and does not carry forward.
+
+**What the grant does not license.** A third module, and a site that reaches past the boundary. Any
+`unsafe` outside those two files is a new decision, and `unsafe_sites.rs` is what makes that a
+failing test rather than a matter of noticing.
 
 ### D6 — Platform layer
 

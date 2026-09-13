@@ -115,24 +115,25 @@ with `grep -rn 'Phase 8' crates/*/src`:
 of 12,059 L1 cases. They are the immediate observable payoff of section 2's slice, and they are
 extracted programs rather than the framework, so they can be run before L2 is reached.
 
-## 7. Open decisions for the spec
+## 7. The three decisions, and how they were settled
 
-**D-U1: the unsafe grant.** This phase cannot be written without `unsafe`. Three separate needs:
-dereferencing caller-supplied pointers in the exported `extern "C"` entry points, calling through a
-function pointer into a loaded library, and `dlopen`/`dlsym` themselves. The workspace lint is
-`deny`, the record of every grant is the set of `#[allow(unsafe_code)]` attributes, and
-`crates/rexx-core/tests/unsafe_sites.rs` fails when that set changes. Today it names exactly one
-file, `crates/rexx-core/src/lib.rs`, with the only `unsafe` blocks in
-`crates/rexx-core/src/bytes.rs`. **This is Moritz's decision per site and it is not taken.**
+**D-U1: the unsafe grant, and `dlopen`'s provider. Closed by Moritz 2026-09-14**, before any
+`extern "C"` entry point was written, which is what the roadmap's `:2555` requires. The block is in
+Section 1 of `2026-07-27-rust-rewrite.md`. Two modules are granted `#[allow(unsafe_code)]` --
+`rexx-api/src/ffi.rs` for the inbound boundary and `rexx-api/src/load.rs` for the outbound one --
+and `libloading` 0.8.9 joins the dependency set for the loader. Phase 7's "no new dependency beyond
+`rustix`" constraint was that phase's own and does not carry forward.
 
-**D-U2: `dlopen`'s provider.** `rustix` does not wrap `dlopen`, so this is `libloading` (a new
-dependency, with a safe-ish `Library` type whose `get` is still unsafe) or a direct `libc` call.
-Phase 7's constraint of no new dependency beyond `rustix` was Phase 7's own; this phase has to
-restate it or relax it deliberately.
-
-**D-U3: ordering.** Section 2 says the L2 slice is small and section 3 says the gate's other clause
-is not. Whether the phase runs L2-first or surface-first changes when every later phase gets its
-real instrument.
+**D-U3: ordering. Ruled here: L2 first.** Section 2 measures the L2 slice at seven context
+functions, five value types and the load path; section 3's clause is the whole 218-pointer surface
+and eight test groups. Every phase after this one is gated on an instrument that L2 unlocks --
+Phase 6's own exit criterion reads "ooTest concurrency groups pass" and cannot be demonstrated
+until the framework loads -- so the slice that reaches L2 is worth more per hour than any other
+part of this phase, and it is also the part that tells us earliest whether the design of the
+boundary is right. **The cost if this ruling is wrong** is that the L2 slice's shape has to be
+generalised when the remaining 211 pointers arrive, which is rework confined to one crate. The
+alternative failure -- building the full surface first and discovering at the end that the
+framework needs something the design cannot express -- is not confined to anything.
 
 ## What this survey did not do
 
