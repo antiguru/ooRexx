@@ -11,9 +11,8 @@
 
 //! The loader, run against the oracle's own compiled extension.
 
-use rexx_api::load::{
-    self, CURRENT_INTERPRETER_VERSION, Failure, RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry,
-};
+use rexx_api::layout::{RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry};
+use rexx_api::load::{self, CURRENT_INTERPRETER_VERSION, Failure};
 use std::ffi::c_int;
 use std::path::{Path, PathBuf};
 

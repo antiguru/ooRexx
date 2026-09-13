@@ -14,6 +14,7 @@
 
 //! The outbound FFI boundary: loading a library and resolving symbols.
 
+use crate::layout::{RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry};
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::Path;
 
@@ -53,51 +54,6 @@ impl Failure {
             Failure::LibraryVersion(_) => (98, 982),
         }
     }
-}
-
-/// `RexxPackageLoader` and `RexxPackageUnloader` (`api/oorexxapi.h:259-260`).
-///
-/// The argument is the thread context Task 3 defines; nothing here calls
-/// either hook.
-pub type PackageHook = unsafe extern "C" fn(*mut c_void);
-
-/// `RexxRoutineEntry` (`api/oorexxapi.h:190-198`).
-#[repr(C)]
-#[derive(Debug)]
-pub struct RexxRoutineEntry {
-    pub style: c_int,
-    pub reserved1: c_int,
-    pub name: *const c_char,
-    pub entry_point: *mut c_void,
-    pub reserved2: c_int,
-    pub reserved3: c_int,
-}
-
-/// `RexxMethodEntry` (`api/oorexxapi.h:211-219`).
-#[repr(C)]
-#[derive(Debug)]
-pub struct RexxMethodEntry {
-    pub style: c_int,
-    pub reserved1: c_int,
-    pub name: *const c_char,
-    pub entry_point: *mut c_void,
-    pub reserved2: c_int,
-    pub reserved3: c_int,
-}
-
-/// `RexxPackageEntry` (`api/oorexxapi.h:262-273`).
-#[repr(C)]
-#[derive(Debug)]
-pub struct RexxPackageEntry {
-    pub size: c_int,
-    pub api_version: c_int,
-    pub required_version: c_int,
-    pub package_name: *const c_char,
-    pub package_version: *const c_char,
-    pub loader: Option<PackageHook>,
-    pub unloader: Option<PackageHook>,
-    pub routines: *mut RexxRoutineEntry,
-    pub methods: *mut RexxMethodEntry,
 }
 
 /// One row of an extension's method table, copied out of the library.
