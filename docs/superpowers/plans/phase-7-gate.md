@@ -1,15 +1,16 @@
 # Phase 7 gate — streams and platform
 
-**Assessed 2026-09-13.** The commit and the four gate readings are in section 8, which was written
-from the run rather than before it.
+**Assessed 2026-09-13.** The commit and the gate readings are in section 8, which was written from
+the run rather than before it.
 
 The plan's row for this phase reads:
 
 > `StreamClasses.orx` runs; stream model, `ADDRESS`, file system green **on the host**; the `Sys*`
 > subset ooTest needs (D11) works. The other four platforms are Phase 11's, per D-P1.
 
-with **L2** as the ladder rung. Section 7 is about that rung, and it is the one criterion this
-phase does not meet.
+with **L2** in the plan table's `Rung` column. **The exit gate is the sentence, and it is met**;
+section 7 is about the rung, which is not, and which Phase 5 also carried while closing without
+ooTest running -- the column is ordinal rather than a second gate.
 
 ## 1. The criteria, and what instrument reads each
 
@@ -33,8 +34,8 @@ current directory, with no process-global write anywhere), external routine reso
 them, interactive `TRACE ?` with its pause and prompt, `RXTRACE=ON`, and the security manager's six
 checkpoints.
 
-Three things arrived at the close-out rather than in a task of their own, each because a criterion
-was checked rather than assumed:
+What arrived at the close-out rather than in a task of its own, each because a criterion was
+checked rather than assumed:
 
 * **`.local`'s entries were readable as `.NAME` and not as entries.** `.output` answered a monitor
   where `.local['OUTPUT']` refused, because the bundle is minted on first demand and only one of
@@ -99,10 +100,10 @@ left behind went to the phase that actually owes each:
 * **Phase 5** -- the two `.STREAM` fallbacks, which can only fire before the library bootstrap has
   installed `StreamClasses.orx`.
 
-## 7. L2 is not met, and the blocker is Phase 8's
+## 7. The L2 rung is not reached, and the blocker is Phase 8's
 
-The ladder's L2 is *"`ooTest.frm` loads and a single test group executes"*. It does not, and the
-chain was walked rather than guessed:
+The ladder's L2 is *"`ooTest.frm` loads and a single test group executes"*. It does not load, and
+the chain was walked rather than guessed:
 
 1. `ootest/testOORexx.rex` stopped at `.ENDOFLINE`, which the framework's own prologue reads
    (`OOREXXUNIT.CLS:77`). No test group ran. That entry was the last unbuilt name in
@@ -112,14 +113,50 @@ chain was walked rather than guessed:
    suite, so this crate -- which is installed nowhere -- has to be pointed at a copy.
 3. Pointed at one, it stops at `::METHOD INIT EXTERNAL "LIBRARY rxregexp RegExp_Init"`.
 
-**That is a shared library, and loading one is Phase 8's.** So L2 cannot be reached from inside
-Phase 7 by any amount of work on streams or the platform layer, and the plan's row asks for
-something this phase cannot deliver. The reading offered here is that the row is wrong rather than
-the work: every criterion in section 1 that is Phase 7's own is met, and L2 moves to Phase 8.
+**That is a shared library, and loading one is Phase 8's.** So the rung cannot be reached from
+inside Phase 7 by any amount of work on streams or the platform layer. Nothing here is a Phase 7
+gap: what stands between the framework and its first test group is `dlopen`, and the `Rung` column
+put L2 against this phase before that was known. The step it names should sit against Phase 8,
+whose entry already lists 7.
+
+Two smaller facts from the same walk, both worth having written down. `.ENDOFLINE` was the last
+unbuilt name in `.environment`, so that directory is now complete. And `rxregexp.cls` ships with
+the interpreter rather than with the suite -- Phase 5's row already records it as off this build's
+search path -- so a crate that is installed nowhere has to be pointed at a copy before the question
+of `dlopen` even arises.
 
 ## 8. The gate readings
 
-Recorded from the run, unpiped, at the commit named. Both failing sets were enumerated rather than
+Recorded from the run, unpiped, at `73aed8f25`. Both failing sets were enumerated rather than
 counted, and every member is a pre-existing failure carried from before this phase.
 
-<!-- filled in from the closing gate run; see the ledger for the per-commit history -->
+| gate | command | exit | figures |
+|---|---|---|---|
+| G1 | `cargo fmt --all --check` | 0 | |
+| G2 | `cargo clippy -j 4 --workspace --all-targets -- -D warnings` | 0 | |
+| G3 | `cargo test -j 4 --release --workspace --no-fail-fast -- --test-threads=8` | 101 | 2348 passed / 6 failed |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --workspace --no-fail-fast -- --test-threads=8` | 101 | 2347 / 8 |
+| G5 | `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` | 0 | **516 of 516** |
+
+The corpus differential is 516 of 516 in both G4 and G5. `base/keyword` is 892 of 896 bodies, with
+`corpus/keyword-exempt.txt` holding the four and policing the set in both directions; `base/bif` is
+4992 of 4999 value rows and 186 of 186 raise rows.
+
+**G3's failing set**, every member of it older than this phase:
+`a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop`,
+`the_l0_subset_passes_again_under_collect_on_every_allocation`,
+`the_table_holds_every_constructor_the_source_defines`, and the three `ir::drive` counter tests
+(`a_call_site_resolves_once_and_answers_from_what_it_kept`,
+`a_long_constant_is_built_once_however_many_passes_read_it`,
+`the_ir_engine_steps_an_ifs_chosen_branch_from_the_chunk`). **G4's** is that set plus the two
+gate-only tables, `concept_and_class_gate_table` and `directive_option_gate_table`.
+
+One member left the set during this phase rather than joining it:
+`dispatch::native::tests::every_family_still_defers_something` asserted that every entry-point
+family still owes something, which stopped being true when `file` was finished. It now reads
+"every deferred entry point names an **open** phase", which is the property that was wanted.
+
+**`corpus/refusal-sites.tsv`'s wholesale re-derivation is still owed**, and
+`the_table_holds_every_constructor_the_source_defines` is the assertion that says so on every run.
+Its rows' line numbers drift as the crate moves; the constructor set itself is checked in both
+directions, and this phase kept it current by hand.

@@ -4610,3 +4610,14 @@ never prints; the banner was owed by the IR's clause echo as well as the stepped
 library bootstrap runs through the same entry point and traced itself at the user. The remainder --
 a called external program does not print `>I>`/`<I<` -- is measured and recorded in the exclusions
 file's TRACE ? row.
+
+| closing gate, `73aed8f25` | exit | figures |
+|---|---|---|
+| G1 / G2 | 0 / 0 | |
+| G3 | 101 | 2348 passed / 6 failed |
+| G4 | 101 | 2347 / 8, **516 of 516** |
+| G5 | 0 | **516 of 516** |
+
+Both sets enumerated; every member pre-existing, and one member left the set --
+`every_family_still_defers_something`, whose premise Phase 7 retired by finishing the `file`
+family. `base/keyword` 892 of 896, `base/bif` 4992 of 4999 value rows and 186 of 186 raise rows.
