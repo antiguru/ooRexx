@@ -331,10 +331,10 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
 pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
 
 /// The phases a *builtin* exclusion may name. `phase-4-exclusions.txt` gives
-/// every one of its rows to Phase 7 or Phase 10 and to nothing else -- a
-/// builtin owned by a Phase 4 sub-phase would not be excluded from Phase 4 --
-/// so the set is those two and the assertion below is worth making.
-pub(crate) const EXCLUSION_PHASES: &[&str] = &["Phase 7", "Phase 10"];
+/// its remaining rows to Phase 10 and to nothing else -- a builtin owned by a
+/// Phase 4 sub-phase would not be excluded from Phase 4, and Phase 7, which
+/// held the rest, has closed and delivered them.
+pub(crate) const EXCLUSION_PHASES: &[&str] = &["Phase 10"];
 
 /// Every excluded builtin names the phase that owes it, and that phase is one
 /// the exclusions file uses. Without this the owner is whatever the refusal's

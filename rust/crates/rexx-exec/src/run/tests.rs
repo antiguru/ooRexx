@@ -7018,7 +7018,7 @@ fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
     let cases: &[(&[u8], &str)] = &[
         (
             b".K~defineMethods(.local)\n::class K\n",
-            "a directory whose entries this crate does not fill is not implemented (Phase 7)",
+            "a directory whose entries this crate does not fill is not implemented (Phase 10)",
         ),
         (
             b".K~defineMethods(.environment)\n::class K\n",
@@ -7092,23 +7092,23 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
     let cases: &[(&[u8], &str)] = &[
         (
             b"say 'main ran'\n::requires zzznolib library\n",
-            "::REQUIRES LIBRARY is not implemented (Phase 7)",
+            "::REQUIRES LIBRARY is not implemented (Phase 8)",
         ),
         (
             b"say 'main ran'\n::routine z external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::ROUTINE EXTERNAL is not implemented (Phase 7)",
+            "::ROUTINE EXTERNAL is not implemented (Phase 8)",
         ),
         (
             b"say 'main ran'\n::class foo\n::method m external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 7)",
+            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
         ),
         (
             b"say 'main ran'\n::class foo\n::attribute a external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::ATTRIBUTE EXTERNAL naming a library other than REXX is not implemented (Phase 7)",
+            "::ATTRIBUTE EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
         ),
         (
             b"say 'main ran'\n::class foo\n::method m attribute external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 7)",
+            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
         ),
         // **The row that says which `EXTERNAL` form is still refused for the
         // library this crate binds**, naming `REXX` and an entry point that
@@ -7121,7 +7121,7 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
         // same library and the same entry points answer.
         (
             b"say 'main ran'\n::routine r external \"LIBRARY REXX file_separator\"\n",
-            "::ROUTINE EXTERNAL is not implemented (Phase 7)",
+            "::ROUTINE EXTERNAL is not implemented (Phase 8)",
         ),
     ];
     for (source, message) in cases {
@@ -7228,15 +7228,15 @@ fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() 
     let refusing: &[(&str, &str)] = &[
         (
             "::routine zz external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::ROUTINE EXTERNAL is not implemented (Phase 7)",
+            "::ROUTINE EXTERNAL is not implemented (Phase 8)",
         ),
         (
             "::class kk\n::method mm external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 7)",
+            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
         ),
         (
             "::class kk\n::attribute aa external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::ATTRIBUTE EXTERNAL naming a library other than REXX is not implemented (Phase 7)",
+            "::ATTRIBUTE EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
         ),
     ];
     for (gap, message) in refusing {
@@ -7379,7 +7379,7 @@ fn a_directive_owing_both_a_translation_error_and_a_gap_answers_the_translation_
     assert_eq!(outcome.stdout, b"", "stdout");
     assert_eq!(
         outcome.stderr,
-        b"rexx-exec: ::ROUTINE EXTERNAL is not implemented (Phase 7)\n".to_vec(),
+        b"rexx-exec: ::ROUTINE EXTERNAL is not implemented (Phase 8)\n".to_vec(),
         "stderr"
     );
 }

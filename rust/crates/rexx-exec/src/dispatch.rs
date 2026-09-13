@@ -2156,7 +2156,9 @@ impl Interp {
             // invocation; 0 expected.` at rc 168, under a `Compiled method
             // "SEP" with scope "K".` line.
             Invocable::External(entry) => match &entry.body {
-                native::ExternalBody::Deferred => Err(native::deferred_send(entry).into()),
+                native::ExternalBody::Deferred { owner } => {
+                    Err(native::deferred_send(entry, owner).into())
+                }
                 native::ExternalBody::Implemented { arity, run } => {
                     let outcome = match arity {
                         Arity::Fixed(arity) if args.len() > *arity => {
@@ -10233,27 +10235,27 @@ mod tests {
     /// the oracle answers `.nil` for a `.local` name asked of `.environment`.
     #[test]
     fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
-        for (source, owner) in [
-            ("say .environment['ENDOFLINE']\n", "Phase 5"),
-            ("say .local['STDOUT']\n", "Phase 7"),
-        ] {
-            let (code, stdout, stderr) = run_source(source);
-            assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
-            assert!(
-                stderr.starts_with("rexx-exec: directory entry ")
-                    && stderr.ends_with(&format!("is not implemented ({owner})\n")),
-                "{source:?} refused with {stderr:?}"
-            );
-        }
+        // **`.environment` has none left**, which is why `.local`'s is the
+        // only one asked about: `.ENDOFLINE` was the last unbuilt name there
+        // and the ooTest framework's prologue reads it.
+        let (source, owner) = ("say .local['STDQUE']\n", "Phase 10");
+        let (code, stdout, stderr) = run_source(source);
+        assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
+        assert!(
+            stderr.starts_with("rexx-exec: directory entry ")
+                && stderr.ends_with(&format!("is not implemented ({owner})\n")),
+            "{source:?} refused with {stderr:?}"
+        );
         assert_eq!(
             run_source(
                 "say .environment['STDOUT']\n\
                  say .local['ALARM']\n\
-                 say .environment['ARRAY']~id\n"
+                 say .environment['ARRAY']~id\n\
+                 say c2x(.environment['ENDOFLINE'])\n"
             ),
             (
                 0,
-                "The NIL object\nThe NIL object\nArray\n".to_string(),
+                "The NIL object\nThe NIL object\nArray\n0A\n".to_string(),
                 String::new()
             )
         );

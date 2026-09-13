@@ -217,14 +217,22 @@ static ORACLE_LOCAL: &[&str] = &[
     "TRACEOUTPUT",
 ];
 
-/// The phase owing one [`ORACLE_LOCAL`] name. `STDQUE` is a `RexxQueue` over
-/// the external-queue API the RXAPI daemon serves, so it does not travel with
-/// the streams and monitors beside it.
-fn local_owner(name: &str) -> &'static str {
-    match name {
-        "STDQUE" => "Phase 10",
-        _ => "Phase 7",
-    }
+/// Whether `.local` builds this name on demand: every [`ORACLE_LOCAL`] name
+/// but `STDQUE`, which is a `RexxQueue` over the external-queue API the RXAPI
+/// daemon serves.
+fn minted_local_name(name: &[u8]) -> bool {
+    matches!(
+        name,
+        b"STDIN"
+            | b"STDOUT"
+            | b"STDERR"
+            | b"INPUT"
+            | b"OUTPUT"
+            | b"ERROR"
+            | b"DEBUGINPUT"
+            | b"TRACEOUTPUT"
+            | b"SYSCARGS"
+    )
 }
 
 /// `.environment` and `.local`, the classes the other reflection names are
@@ -392,13 +400,19 @@ impl Interp {
             BehaviourId::OBJECT,
             Body::Native(Box::new(NativeObject::new(rexx_info_class, b"a RexxInfo"))),
         );
-        let extras: [(&[u8], ObjRef); 6] = [
+        // `.ENDOFLINE` is the platform's line terminator as a String --
+        // measured, `c2x(.endOfLine)` is `0A` here and its length is 1. The
+        // ooTest framework's own prologue reads it (`OOREXXUNIT.CLS:77`),
+        // which is where the suite stopped while this entry was unbuilt.
+        let end_of_line = self.text(crate::parse_template::LINE_END);
+        let extras: [(&[u8], ObjRef); 7] = [
             (b"ENVIRONMENT", environment),
             (b"LOCAL", local),
             (b"NIL", ObjRef::NIL),
             (b"TRUE", true_value),
             (b"FALSE", false_value),
             (b"REXXINFO", rexx_info),
+            (b"ENDOFLINE", end_of_line),
         ];
 
         let object = self
@@ -422,9 +436,10 @@ impl Interp {
             .collect();
         // The environment's own unanswered names are Phase 5's: what puts them
         // there is `Setup.cpp` plus the shipped `.orx` files installing, and
-        // installing those files is this phase's exit. `.local`'s are Phase
-        // 7's: every one of them is a stream, the external queue or the
-        // command line, none of which this interpreter has.
+        // installing those files is this phase's exit. `.local`'s streams,
+        // monitors and command line are minted on demand, so the only name
+        // this map answers for there is the external queue's -- and the
+        // minted ones, for the interpreter that has not bootstrapped.
         let unbuilt: HashMap<Box<[u8]>, Unbuilt> = ORACLE_ENVIRONMENT
             .iter()
             .filter(|name| !answered.contains(*name))
@@ -441,7 +456,16 @@ impl Interp {
                 (
                     name.as_bytes().into(),
                     Unbuilt {
-                        owner: local_owner(name),
+                        // A minted name is built on demand and never reaches
+                        // this map -- except before the library has installed,
+                        // where there is no `Stream` or `Monitor` class to
+                        // build one from and the honest owner is the bootstrap
+                        // that installs them.
+                        owner: if minted_local_name(name.as_bytes()) {
+                            "Phase 5"
+                        } else {
+                            "Phase 10"
+                        },
                         scope: EnvScope::Local,
                     },
                 )
@@ -915,25 +939,21 @@ impl Interp {
         if let Some(found) = native.entry(name) {
             return Some(found);
         }
-        if scope != EnvScope::Local {
-            return None;
-        }
-        if !matches!(
-            name,
-            b"STDIN"
-                | b"STDOUT"
-                | b"STDERR"
-                | b"INPUT"
-                | b"OUTPUT"
-                | b"ERROR"
-                | b"DEBUGINPUT"
-                | b"TRACEOUTPUT"
-                | b"SYSCARGS"
-        ) {
+        if scope != EnvScope::Local || !minted_local_name(name) {
             return None;
         }
         self.mint_local_bundle(handle);
         self.local_entry(handle, name)
+    }
+
+    /// Whether `.local` builds this name on demand rather than holding it
+    /// from the start -- [`Interp::mint_local_bundle`]'s own set.
+    fn minted_local(&mut self, receiver: ObjRef, index: &[u8]) -> Option<ObjRef> {
+        if !minted_local_name(index) {
+            return None;
+        }
+        self.mint_local_bundle(receiver);
+        self.local_entry(receiver, index)
     }
 
     /// The `.local` entries this crate builds late: the command-line words,
@@ -1329,8 +1349,19 @@ impl Interp {
         // The unbuilt refusal is a directory's alone: `directory_scope`
         // answers `None` for a package table, whose entries this crate builds
         // in full.
-        if let Some(scope) = self.directory_scope(receiver)
-            && let Some(unbuilt) = self.environment_model().unbuilt.get(index).copied()
+        let Some(scope) = self.directory_scope(receiver) else {
+            return Ok(ObjRef::NIL);
+        };
+        // **Reading an entry by index is a demand for it.** `.local`'s
+        // streams and monitors are minted on the first `.NAME` that wants
+        // one, and without this the same name answers a monitor as `.output`
+        // and nothing as `.local['OUTPUT']`.
+        if scope == EnvScope::Local
+            && let Some(found) = self.minted_local(receiver, index)
+        {
+            return Ok(found);
+        }
+        if let Some(unbuilt) = self.environment_model().unbuilt.get(index).copied()
             && unbuilt.scope == scope
         {
             return Err(Loud::environment_entry(index, unbuilt.owner).into());
@@ -1431,10 +1462,9 @@ impl Interp {
     /// The phase owing the entries of `object` that this crate does not
     /// build, or `None` for a collection whose entries it fills.
     /// The owner is the **directory's**, not a representative of its entries:
-    /// the entries are owned name by name (`.STDQUE` is Phase 10's while the
-    /// streams and monitors beside it are Phase 7's), and a refusal about the
-    /// whole directory that named one entry's phase would answer differently
-    /// as entries land.
+    /// the entries are owned name by name, and a refusal about the whole
+    /// directory that named one entry's phase would answer differently as
+    /// entries land.
     pub(crate) fn unbuilt_collection_owner(&mut self, object: ObjRef) -> Option<&'static str> {
         let scope = self.directory_scope(object)?;
         let any_unbuilt = self
@@ -1443,7 +1473,7 @@ impl Interp {
             .values()
             .any(|entry| entry.scope == scope);
         any_unbuilt.then_some(match scope {
-            EnvScope::Local => "Phase 7",
+            EnvScope::Local => "Phase 10",
             EnvScope::Environment => "Phase 5",
         })
     }

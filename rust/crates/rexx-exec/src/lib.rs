@@ -122,12 +122,12 @@ use options::PackageOptions;
 // and the extensions appended to it.
 mod require;
 
-// Command clauses (Phase 7): the handler an `ADDRESS` environment names, the
+// Command clauses: the handler an `ADDRESS` environment names, the
 // child it runs, and the return code that becomes `RC`, `.RS` and a
 // condition.
 mod command;
 
-// The condition object `CONDITION('O')` answers (Phase 7): the Directory a
+// The condition object `CONDITION('O')` answers: the Directory a
 // raise builds, whose indexes depend on the condition's own kind.
 mod condition;
 
@@ -414,11 +414,11 @@ impl Loud {
         }
     }
 
-    /// `loadExternalMethod` and `loadExternalRoutine` for an entry point this
-    /// phase cannot resolve.
+    /// `loadExternalMethod` and `loadExternalRoutine` for an entry point in
+    /// a shared library, which is Phase 8's `dlopen`.
     fn external_entry_point(what: &'static str) -> Loud {
         Loud {
-            message: owned_message(what, Some("Phase 7")),
+            message: owned_message(what, Some("Phase 8")),
         }
     }
 
@@ -427,7 +427,7 @@ impl Loud {
     /// one.
     fn package_option_write() -> Loud {
         Loud {
-            message: owned_message("a package settings write", Some("D12, Phase 7")),
+            message: owned_message("a package settings write", Some("Phase 10")),
         }
     }
 
@@ -729,8 +729,9 @@ pub fn internal_routine_names() -> Vec<&'static str> {
 }
 
 /// Every internal-package routine as `(name, package, owner)`, for the test
-/// that re-derives the two packages from the C++ tree separately.
-pub fn internal_routine_rows() -> Vec<(&'static str, &'static str, &'static str)> {
+/// that re-derives the two packages from the C++ tree separately. The owner
+/// is `None` for a row this crate runs.
+pub fn internal_routine_rows() -> Vec<(&'static str, &'static str, Option<&'static str>)> {
     internal_routines::INTERNAL_ROUTINES
         .iter()
         .map(|row| (row.name, row.package.label(), row.owner))
@@ -781,7 +782,7 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         // 166, naming a method as a routine it cannot find; `"LIBRARY REXX
         // Filespec"` is rc 0 and the routine runs.
         DirectiveKind::Routine(routine) if routine.external.is_some() => {
-            gap("::ROUTINE EXTERNAL", "Phase 7")
+            gap("::ROUTINE EXTERNAL", "Phase 8")
         }
         // **The `EXTERNAL` forms this phase binds are the ones whose library
         // is `REXX`**, and `dispatch::native::method_external` and its
@@ -797,26 +798,26 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
                 dispatch::native::MethodExternal::LibraryRexx(_)
                 | dispatch::native::MethodExternal::Attribute(_),
             ) => None,
-            // Loads a shared library, which is Phase 7's, exactly as
+            // Loads a shared library, which is Phase 8's, exactly as
             // `::ROUTINE EXTERNAL` above does.
             Some(dispatch::native::MethodExternal::OtherLibrary) => gap(
                 "::METHOD EXTERNAL naming a library other than REXX",
-                "Phase 7",
+                "Phase 8",
             ),
         },
         DirectiveKind::Attribute(attribute) => {
             match dispatch::native::attribute_external(attribute) {
                 Some(dispatch::native::MethodExternal::OtherLibrary) => gap(
                     "::ATTRIBUTE EXTERNAL naming a library other than REXX",
-                    "Phase 7",
+                    "Phase 8",
                 ),
                 _ => None,
             }
         }
         // Loads a shared library rather than a package file, which is Phase
-        // 7's exactly as `::ROUTINE EXTERNAL` above is.
+        // 8's exactly as `::ROUTINE EXTERNAL` above is.
         DirectiveKind::Requires(requires) if requires.library => {
-            gap("::REQUIRES LIBRARY", "Phase 7")
+            gap("::REQUIRES LIBRARY", "Phase 8")
         }
         // `::OPTIONS` installs (`Interp::install_directives`' own walk): it
         // resolves no name, runs no code, and every setting it writes is one
@@ -1285,9 +1286,8 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // string nothing reads is exactly how the third copy of this data
         // drifts. A named call that resolves to no internal label, no builtin
         // and no `::ROUTINE` raises the oracle's own 43.1 rather than failing
-        // loudly; the one step behind those three that this crate skips is
-        // the external file search, which is Phase 7's. So there is no
-        // residual claim on the `CALL` keyword here at all.
+        // loudly, and the external file search behind those three runs. So
+        // there is no residual claim on the `CALL` keyword here at all.
         InstructionKind::Call(_) => None,
         // `Use` is `None` even
         // though `USE LOCAL` can only ever fail here: it fails with the
@@ -1320,19 +1320,10 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // own but which share `exec_parse`. Every source is implemented,
         // including the two that read a line (`PARSE PULL`, `PARSE LINEIN`).
         InstructionKind::Parse(_) | InstructionKind::Arg(_) | InstructionKind::Pull(_) => None,
-        // **Arm-grained, the second variant in this match that is.** The forms
-        // that only name an environment -- `ADDRESS env`, `ADDRESS VALUE expr`
-        // and the bare toggle -- are implemented, and so is `ADDRESS env
-        // command`, which issues one through the same dispatch
-        // `InstructionKind::Command` uses. A `WITH` redirection, which
-        // configures where a command's three streams go, is what is left.
-        InstructionKind::Address(address) => {
-            if address.io.is_some() {
-                Some("Phase 7")
-            } else {
-                None
-            }
-        }
+        // Every form is implemented, the `WITH` redirection included: the
+        // one shape with no code here is a `RexxQueue` target, which fails
+        // loudly through `Loud::redirection` rather than through this table.
+        InstructionKind::Address(_) => None,
         // A message send as a whole clause: `exec_message` (`run.rs`)
         // evaluates it and settles `RESULT`. `None` in the same sense
         // `DotVariable` is `None` below -- the variant is implemented, and
@@ -1386,8 +1377,7 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         // name that resolves to no internal label (or a `CallTarget::
         // Literal`, which never searches labels at all), no builtin and no
         // `::ROUTINE` raises the oracle's own 43.1 -- exactly the same shape
-        // `InstructionKind::Call`'s own comment above describes for `CALL`,
-        // with the external file search behind those three being Phase 7's.
+        // `InstructionKind::Call`'s own comment above describes for `CALL`.
         // `>name`/`<name` answers a `VariableReference`, which `eval.rs`'s
         // own arm builds and `run.rs`'s `Interp::variable_reference` binds to
         // the variable.
@@ -2536,7 +2526,27 @@ impl Interp {
         // `::options digits 12 numeric inherit` alone in a file reports 12.
         // A file reached by a call has one, and passes it.
         self.start_from_package(&mut main, caller_settings.as_ref());
+        // `SysInterpreterInstance::setupProgram`
+        // (`platform/unix/SysInterpreterInstance.cpp:105`-`:112`), which runs
+        // for every top-level program activation and not only the first --
+        // measured, a called external program and a `::REQUIRES` prologue
+        // each trace and prompt under `RXTRACE=ON` too. **Not the library
+        // bootstrap**, whose programs are this crate's stand-in for
+        // `Setup.cpp` and have no activation on the oracle to trace.
+        let external_trace = !self.library_bootstrap && self.external_trace_enabled();
         self.push_activation(main);
+        // Through the same route a `TRACE` instruction takes, because
+        // `enableExternalTrace` is `setTrace` and that calls `traceEntry()`:
+        // a called program announces itself with `>I>` where the top-level
+        // one, which has nothing to announce, prints the debug banner
+        // instead.
+        if external_trace {
+            self.set_trace_mode(crate::trace::TraceMode {
+                debug: true,
+                ..crate::trace::TraceMode::RESULTS
+            });
+            self.trace_invocation_entry();
+        }
 
         // `Returned` and `Exited` are the same thing at the top: measured,
         // `return 5` in a main body with no active call exits 5, exactly like
@@ -3324,6 +3334,21 @@ impl Interp {
             }
         }
         true
+    }
+
+    /// `RXTRACE=ON` in the interpreter's own environment, which starts every
+    /// top-level program under `TRACE ?R` -- `setExternalTrace` is
+    /// `setTraceResults` plus the debug flag
+    /// (`execution/TraceSetting.hpp`'s own definition).
+    ///
+    /// Caseless, and only that word: `SysInterpreterInstance::initialize`
+    /// compares against `ON` with `strCaselessCompare`, so any other value
+    /// leaves tracing alone.
+    fn external_trace_enabled(&self) -> bool {
+        self.env
+            .iter()
+            .find(|(name, _)| name == b"RXTRACE")
+            .is_some_and(|(_, value)| value.eq_ignore_ascii_case(b"ON"))
     }
 
     /// One variable of the interpreter's own environment, as text. `None` for
@@ -5107,9 +5132,9 @@ pub struct NativeEntryPoint {
     /// The family it belongs to, lower case: the interpreter subsystem whose
     /// C++ translation unit defines it.
     pub family: &'static str,
-    /// The phase that owes the family a body, spelled as every other owner
-    /// string in this crate is.
-    pub owner: &'static str,
+    /// The phase that owes this entry point a body, or `None` for one this
+    /// crate runs. Spelled as every other owner string in this crate is.
+    pub owner: Option<&'static str>,
     /// Whether this phase runs the entry point rather than refusing a send to
     /// it. A bind succeeds either way -- what it decides is whether the
     /// declaring *file* installs.

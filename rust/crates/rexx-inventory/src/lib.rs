@@ -30,11 +30,9 @@ pub mod builtins {
         ("RXFUNCDROP", "Phase 10"),
         ("RXFUNCQUERY", "Phase 10"),
         // Partial: in scope in one form, excluded in another. The owner is
-        // the excluded form's -- `VALUE`'s external selector and `ADDRESS`'s
-        // command issuing are Phase 7's, and `QUEUED`'s cross-process half is
-        // the RXAPI daemon's.
-        ("VALUE", "Phase 7"),
-        ("ADDRESS", "Phase 7"),
+        // the excluded form's -- `QUEUED`'s cross-process half is the RXAPI
+        // daemon's. `VALUE`'s external selector and `ADDRESS`'s command
+        // issuing were here too and are gone: both forms run now.
         ("QUEUED", "Phase 10"),
     ];
 
@@ -57,7 +55,7 @@ pub mod builtins {
     /// literal `3` at the two places that subtract it, because "in
     /// `EXCLUDED`" and "excluded outright" are different sets and the
     /// difference is exactly these names.
-    pub const PARTIALLY_EXCLUDED: &[&str] = &["VALUE", "ADDRESS", "QUEUED"];
+    pub const PARTIALLY_EXCLUDED: &[&str] = &["QUEUED"];
 
     /// The builtins excluded outright: [`EXCLUDED`] less
     /// [`PARTIALLY_EXCLUDED`], in `EXCLUDED` order.

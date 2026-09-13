@@ -394,6 +394,23 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     // its own contents do not move between the two runs the way a temporary
     // directory's can.
     ("File", ".File~new('/')"),
+    // **Phase 7 Task 22.** Neither class has a construction expression in
+    // `class-set.txt`, and a bare `~new` raises on both sides -- `.Stream`
+    // needs a name -- which left every instance row of both recording that
+    // the method was never sent. `/dev/null` is the receiver for the same
+    // reason `/` is `File`'s: it is absolute, so the two sides answer the
+    // same qualified name from their own directories, and it exists and
+    // does not move. It is writable, which the rows that write need, and
+    // reading it is always at end of file.
+    ("Stream", ".Stream~new('/dev/null')"),
+    // **A persistent file, where `Stream`'s own receiver is `/dev/null`.**
+    // Positioning a transient stream is 93.958, and `StreamSupplier~init`
+    // reads line 1, so a supplier over `/dev/null` raises before it exists --
+    // identically on both sides, which this table would have recorded as
+    // `answers` while measuring nothing about any of the methods.
+    // `/etc/hostname` is absolute, readable, unwritten by every row here, and
+    // the same file for both sides.
+    ("StreamSupplier", ".Stream~new('/etc/hostname')~supplier"),
 ];
 
 /// The expression a row's send is made to, or `None` for the class arm, which

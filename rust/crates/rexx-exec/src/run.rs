@@ -3758,8 +3758,8 @@ impl Interp {
             }
             None => match self.installed_routine(name) {
                 Some(installed) => Resolved::Routine(installed),
-                // **Ahead of the external file search, which is Phase 7's,
-                // and behind everything above it.** `Setup.cpp` resolves
+                // **Ahead of the external file search and behind
+                // everything above it.** `Setup.cpp` resolves
                 // `CoreClasses.orx`'s two `CALL`s against the interpreter's
                 // own directory, which is neither a label, a builtin nor a
                 // `::ROUTINE`; this crate embeds those files instead. Gated
@@ -3777,7 +3777,12 @@ impl Interp {
                 // have, which a program cannot tell from its own typo.
                 None if let Some(row) = crate::internal_routines::lookup(name) => match row.body {
                     Some(_) => Resolved::Internal(row),
-                    None => return Err(Loud::internal_routine(name, row.owner).into()),
+                    None => {
+                        let owner = row
+                            .owner
+                            .expect("a row with no body names the phase that owes it");
+                        return Err(Loud::internal_routine(name, owner).into());
+                    }
                 },
                 // **The external file search, which the oracle performs
                 // before answering 43.1.** Only whether it resolves is
@@ -4895,6 +4900,12 @@ impl Interp {
         instruction: &Instruction,
         indent: usize,
     ) {
+        // The banner the stepped path owes too, and this path owes it for the
+        // same reason: it is the first traced clause of the activation that
+        // carries it. Reached when the setting was already `?R` at compile
+        // time -- `RXTRACE=ON` is the case, where a `TRACE ?R` instruction
+        // leaves the chunk stale and takes the stepped path instead.
+        self.trace_debug_source();
         if let Some((line, text)) = self.clause_site(source, instruction) {
             let start = self.trace.len();
             crate::trace::push_clause(&mut self.trace, line, indent, &text);
@@ -7836,7 +7847,7 @@ impl Interp {
     /// What the running activation announces itself as, or `None` when it
     /// announces nothing at all -- which is the `isMethodOrRoutine()` half of
     /// the gate, expressed as the lookup that would supply the substitutions.
-    fn invocation_subject(&self) -> Option<Announced> {
+    pub(crate) fn invocation_subject(&self) -> Option<Announced> {
         if let Some(identity) = &self.activation().method_identity {
             return Some(Announced::Method {
                 name: identity.name.to_vec(),
@@ -8986,7 +8997,9 @@ impl Interp {
             return Ok(replacement);
         }
         let Some(class) = self.rexx_package_class(b"STREAM") else {
-            return Err(Loud::environment_symbol(b".STREAM", "Phase 7").into());
+            // Only before `StreamClasses.orx` has installed, which is the
+            // library bootstrap's own step.
+            return Err(Loud::environment_symbol(b".STREAM", "Phase 5").into());
         };
         let argument = self.text(name);
         let caller = self.caller();

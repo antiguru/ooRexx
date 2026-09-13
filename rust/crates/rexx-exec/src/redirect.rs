@@ -611,7 +611,9 @@ impl Interp {
         reading: bool,
     ) -> Result<ObjRef, Failure> {
         let Some(class) = self.rexx_package_class(b"STREAM") else {
-            return Err(Loud::environment_symbol(b".STREAM", "Phase 7").into());
+            // Only before `StreamClasses.orx` has installed, which is the
+            // library bootstrap's own step.
+            return Err(Loud::environment_symbol(b".STREAM", "Phase 5").into());
         };
         let argument = self.text(qualified);
         self.roots.push_temp(argument);

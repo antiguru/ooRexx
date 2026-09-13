@@ -980,6 +980,9 @@ pub(super) fn charin(
         return Ok(Some(interp.text(b"")));
     };
     if let Some(start) = start {
+        if open.transient {
+            return Err(Raised::transient_positioning().into());
+        }
         open.read_position = as_position(start);
     }
     let at = open.read_position;
@@ -1131,6 +1134,13 @@ fn seek_to_line(interp: &mut Interp, receiver: ObjRef, line: u64) -> Result<(), 
     let Some(open) = state.open.as_mut() else {
         return Ok(());
     };
+    // The same rule `SEEK` follows, reached by naming a line instead:
+    // measured, `.Stream~new('/dev/null')~supplier` raises this, because
+    // `StreamSupplier~init` reads line 1 of a stream it has decided is not
+    // transient before opening it.
+    if open.transient {
+        return Err(Raised::transient_positioning().into());
+    }
     let mut at: i64 = 1;
     for _ in 1..line.max(1) {
         match read_line_from(&mut open.file, offset_of(at)).unwrap_or(None) {
@@ -1524,10 +1534,17 @@ pub(super) fn position(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let options = match args.first().copied().flatten() {
-        Some(value) => interp.to_text(value).into_owned(),
-        None => Vec::new(),
+    // **The options string is required, and the check is the native
+    // boundary's rather than this body's.** `RexxMethod2(int64_t,
+    // stream_position, CSELF, streamPtr, CSTRING, options)` declares it
+    // without `OPTIONAL_`, so omitting it is 88.901 against the package
+    // rather than any answer of the stream's -- measured, `s~position` with
+    // no argument reports `Error 88 running REXX` and names argument 1,
+    // where `s~seek('write')` reaches the 93.903 below.
+    let Some(value) = args.first().copied().flatten() else {
+        return Err(Raised::missing_internal_argument("1").into());
     };
+    let options = interp.to_text(value).into_owned();
     let Ok(mut parsed) = parse_positioning(&options) else {
         return Err(Raised::syntax(93, 0, Vec::new()).into());
     };

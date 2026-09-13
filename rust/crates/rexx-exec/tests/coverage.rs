@@ -1463,10 +1463,11 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
     }
     assert_eq!(
         EXCLUDED_BUILTINS.len(),
-        7,
-        "4 whole exclusions plus 3 partial rows -- Phase 7 delivered QUALIFY, \
-         USERID, SETLOCAL and ENDLOCAL, and then CHARIN, CHAROUT, CHARS, \
-         LINEIN, LINEOUT, LINES and STREAM, deleting their rows each time"
+        5,
+        "the whole exclusions plus the partial rows -- Phase 7 deleted a row \
+         for each name it delivered, ending with VALUE's external selector \
+         and ADDRESS's command issuing, which leaves QUEUED the only partial \
+         row"
     );
 
     // Every partial row must also be an excluded row, or `wholly_excluded`
@@ -1482,6 +1483,12 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
         4,
         "the whole exclusions are EXCLUDED less the partial rows"
     );
+    assert_eq!(
+        rexx_inventory::builtins::PARTIALLY_EXCLUDED.len(),
+        1,
+        "QUEUED's cross-process half is the only builtin left that is in \
+         scope in one form and out of it in another"
+    );
 
     // Derived, not asserted: this is the number phase-4-exclusions.txt's own
     // header reads out ("66 of the 81 builtins ... are in scope, three of
@@ -1490,7 +1497,7 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
     let in_scope = names.len() - rexx_inventory::builtins::wholly_excluded().len();
     assert_eq!(
         in_scope, 77,
-        "77 of the 81 builtins are in scope, three of them partially -- see \
+        "77 of the 81 builtins are in scope, one of them partially -- see \
          phase-4-exclusions.txt"
     );
     assert_eq!(

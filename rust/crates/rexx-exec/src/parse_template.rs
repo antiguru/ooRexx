@@ -24,6 +24,11 @@ use rexx_parse::{ExprKind, Parse, ParseSource, ParseTrigger, TriggerKind};
 /// The platform name `PARSE SOURCE`'s first word carries.
 pub(crate) const PLATFORM: &[u8] = b"LINUX";
 
+/// The line terminator `.ENDOFLINE` answers -- measured, `c2x(.endOfLine)`
+/// is `0A` here. A host whose terminator is not this one is Phase 11's, and
+/// this constant is one of the sites that phase's seam has to reach.
+pub(crate) const LINE_END: &[u8] = b"\n";
+
 /// `PARSE VERSION`'s string.
 pub(crate) const VERSION: &[u8] = b"REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026";
 

@@ -1232,15 +1232,15 @@ StackFrame	string	instance	answers	rc 0
 StackFrame	target	instance	answers	rc 0
 StackFrame	traceLine	instance	answers	rc 0
 StackFrame	type	instance	answers	rc 0
-StreamSupplier	available	instance	unanswered	a bare `~new` raises; the method was never sent
-StreamSupplier	index	instance	unanswered	a bare `~new` raises; the method was never sent
-StreamSupplier	init	instance	unanswered	a bare `~new` raises; the method was never sent
-StreamSupplier	item	instance	unanswered	a bare `~new` raises; the method was never sent
-StreamSupplier	next	instance	unanswered	a bare `~new` raises; the method was never sent
+StreamSupplier	available	instance	answers	rc 0
+StreamSupplier	index	instance	answers	rc 0
+StreamSupplier	init	instance	answers	rc 159
+StreamSupplier	item	instance	answers	rc 0
+StreamSupplier	next	instance	answers	rc 165
 StreamSupplier	new	class	answers	rc 159
-StreamSupplier	allIndexes	instance	unanswered	a bare `~new` raises; the method was never sent
-StreamSupplier	allItems	instance	unanswered	a bare `~new` raises; the method was never sent
-StreamSupplier	supplier	instance	unanswered	a bare `~new` raises; the method was never sent
+StreamSupplier	allIndexes	instance	answers	rc 0
+StreamSupplier	allItems	instance	answers	rc 0
+StreamSupplier	supplier	instance	answers	rc 0
 Supplier	new	class	answers	rc 163
 Supplier	allIndexes	instance	answers	rc 0
 Supplier	allItems	instance	answers	rc 0
@@ -1377,27 +1377,27 @@ OutputStream	lines	instance	answers	rc 163
 OutputStream	open	instance	answers	rc 165
 OutputStream	position	instance	answers	rc 163
 Stream	new	class	answers	rc 163
-Stream	arrayIn	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	arrayOut	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	charIn	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	charOut	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	chars	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	close	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	command	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	description	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	flush	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	init	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	lineIn	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	lineOut	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	lines	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	makeArray	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	open	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	position	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	qualify	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	query	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	say	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	seek	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	state	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	string	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	supplier	instance	unanswered	a bare `~new` raises; the method was never sent
-Stream	uninit	instance	unanswered	a bare `~new` raises; the method was never sent
+Stream	arrayIn	instance	answers	rc 0
+Stream	arrayOut	instance	answers	rc 163
+Stream	charIn	instance	answers	rc 0
+Stream	charOut	instance	answers	rc 0
+Stream	chars	instance	answers	rc 0
+Stream	close	instance	answers	rc 0
+Stream	command	instance	answers	rc 163
+Stream	description	instance	answers	rc 0
+Stream	flush	instance	answers	rc 0
+Stream	init	instance	answers	rc 163
+Stream	lineIn	instance	answers	rc 0
+Stream	lineOut	instance	answers	rc 0
+Stream	lines	instance	answers	rc 0
+Stream	makeArray	instance	answers	rc 0
+Stream	open	instance	answers	rc 0
+Stream	position	instance	answers	rc 168
+Stream	qualify	instance	answers	rc 0
+Stream	query	instance	answers	rc 163
+Stream	say	instance	answers	rc 0
+Stream	seek	instance	answers	rc 168
+Stream	state	instance	answers	rc 0
+Stream	string	instance	answers	rc 0
+Stream	supplier	instance	answers	rc 163
+Stream	uninit	instance	answers	rc 165

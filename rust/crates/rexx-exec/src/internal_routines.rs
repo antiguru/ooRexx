@@ -53,29 +53,31 @@ pub(crate) struct InternalRoutine {
     /// spelling is for a reader.
     pub(crate) name: &'static str,
     pub(crate) package: Package,
-    /// The phase owing a body, for as long as there is none.
-    pub(crate) owner: &'static str,
+    /// The phase owing a body, or `None` for a row this crate runs. **Not a
+    /// field beside `body`**: a row has one or the other, and an owner on a
+    /// row that runs is a phase name nothing can print.
+    pub(crate) owner: Option<&'static str>,
     /// The code, once some phase has written it. A row with `None` refuses,
     /// naming [`InternalRoutine::owner`].
     pub(crate) body: Option<InternalBody>,
 }
 
-/// A `REXX`-package row this phase implements.
+/// A `REXX`-package row this crate runs.
 const fn rexx_run(name: &'static str, body: InternalBody) -> InternalRoutine {
     InternalRoutine {
         name,
         package: Package::Rexx,
-        owner: "Phase 7",
+        owner: None,
         body: Some(body),
     }
 }
 
-/// A `REXXUTIL` row this phase implements.
+/// A `REXXUTIL` row this crate runs.
 const fn util_run(name: &'static str, body: InternalBody) -> InternalRoutine {
     InternalRoutine {
         name,
         package: Package::RexxUtil,
-        owner: "Phase 7",
+        owner: None,
         body: Some(body),
     }
 }
@@ -84,7 +86,7 @@ const fn util(name: &'static str, owner: &'static str) -> InternalRoutine {
     InternalRoutine {
         name,
         package: Package::RexxUtil,
-        owner,
+        owner: Some(owner),
         body: None,
     }
 }

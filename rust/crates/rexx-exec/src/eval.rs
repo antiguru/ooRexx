@@ -2579,8 +2579,7 @@ mod tests {
     /// Phase 4 excludes **outright** is not "resolves to nothing", and must
     /// stay loud rather than joining it at 43.1. The oracle answers
     /// `RXQUEUE`, so a condition here would let a program expecting one pass
-    /// against a gap. (This read `CHARIN` until Phase 7 implemented the stream
-    /// builtins and it left the whole-exclusion set.)
+    /// against a gap.
     #[test]
     fn a_wholly_excluded_builtin_stays_loud_rather_than_raising_43_1() {
         let outcome = crate::run_program(

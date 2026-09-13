@@ -99,15 +99,23 @@ fn the_table_names_exactly_what_the_two_internal_packages_register() {
     }
 }
 
+/// A row this crate does not run names a phase that owes it, and the phase is
+/// one that is still open: a refusal naming a closed phase is a lie a program
+/// can read.
 #[test]
-fn every_row_names_a_phase_that_owes_it() {
-    // The three the table uses, and no more: a fourth would be a phase nobody
-    // has assigned this work to.
-    const PHASES: &[&str] = &["Phase 6", "Phase 7", "Phase 10"];
+fn every_unimplemented_row_names_an_open_phase_that_owes_it() {
+    const PHASES: &[&str] = &["Phase 6", "Phase 10"];
+    let mut owed = 0usize;
     for (name, _package, owner) in rexx_exec::internal_routine_rows() {
+        let Some(owner) = owner else { continue };
+        owed += 1;
         assert!(
             PHASES.contains(&owner),
             "{name} names owner {owner:?}, which is not one of {PHASES:?}"
         );
     }
+    assert!(
+        owed > 0,
+        "no row names an owner at all, so this test is passing over an empty set"
+    );
 }

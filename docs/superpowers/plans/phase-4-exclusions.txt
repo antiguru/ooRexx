@@ -18,8 +18,18 @@ Phase 7 and Phase 10 delete their own exclusion rows as they deliver them. The
 deviations section shrinks only if a decision is reversed, which is a plan
 amendment too.
 
+**PHASE 7 HAS CLOSED AND OWES THIS FILE NOTHING, 2026-09-13.** Every row that
+named it has a DELIVERED note or is gone, and the rows are kept for the
+arguments in them rather than as open work. Two things it did not deliver are
+written where they belong rather than dropped: the `>I>` pair an external
+program called under `RXTRACE=ON` does not print, in the TRACE ? row, and the
+refusals it left behind, which were re-homed to Phase 8 (shared libraries) and
+Phase 10 (the queues and the rest of RexxUtil) at the same time.
+`crates/rexx-exec/tests/closed_phases.rs` asserts that no refusal in the crate
+names Phase 7, so this paragraph is checkable rather than a claim.
+
 The gate reads "77 of the 81 builtins in builtinTable[] (BuiltinFunctions.cpp
-:3042) are in scope, three of them partially, and the excluded set is exactly
+:3042) are in scope, one of them partially, and the excluded set is exactly
 this file".
 
 
@@ -44,7 +54,7 @@ for three of these rows what it is walking into is a decision rather than a
 task. Every measurement below was taken on this host from a fresh empty
 directory, with the oracle under the standard ulimit.
 
-  Phase 7, the stream model and the platform layer:
+  Phase 7, the stream model and the platform layer: NOTHING IS LEFT.
 
                 DELIVERED by Phase 7, 2026-09-12, and their rows deleted:
                 QUALIFY, USERID, SETLOCAL, ENDLOCAL, and then CHARIN,
@@ -73,18 +83,28 @@ directory, with the oracle under the standard ulimit.
                 also why the QUEUED row's single-program caveat below is real
                 rather than theoretical.
 
-Eleven names. 81 - 11 = 70 in scope, after Phase 7 delivered four of them.
+The names left are the RXAPI daemon's. How many of the 81 are in scope is
+derived rather than written here: `coverage.rs` computes it from
+`rexx_inventory::builtins`, which is the table this section describes, and
+asserts it.
 
 
 EXCLUSIONS -- partial
 ---------------------
 
-Three builtins are in scope in one form and excluded in another. Excluding the
+A builtin can be in scope in one form and excluded in another. Excluding the
 whole name would overstate the gap; ignoring the split would understate it.
+QUEUED is the only such name left -- VALUE's and ADDRESS()'s rows below record
+what they were and are kept for their arguments, not as open work.
 
   VALUE      The variable-access form is 4c's. The external-selector form,
-             which reads a pool such as ENVIRONMENT, is Phase 7's: it needs
+             which reads a pool such as ENVIRONMENT, was Phase 7's: it needs
              process environment access, which is the platform layer.
+             DELIVERED, 2026-09-13, and the row is gone from `EXCLUDED`:
+             the interpreter holds its own environment, `VALUE(n, v,
+             'ENVIRONMENT')` reads and writes it, and an unknown selector is
+             40.914 exactly as the oracle answers it -- measured on three
+             descriptors, `SYSTEM` among the selectors probed.
 
   ADDRESS()  Reporting an environment set by an ADDRESS instruction is 4c's,
              and so, SINCE 4c TASK 10, is the platform-supplied default this
@@ -162,11 +182,13 @@ measured.
               Four are interactive debug and one is command dispatch, both
               Phase 7's under D18 and under the TRACE ? row below.
 
-              DELIVERED, 2026-09-13: the command-dispatch producer. The row
-              stays because the four debug producers do not, and they are
-              the TRACE ? row's. `corpus/lang/command_dispatch.rex` is the
-              witness, and trace_oracle.rs's PREFIX_COVERAGE now names it
-              rather than an owner.
+              DELIVERED, 2026-09-13: the command-dispatch producer, and then
+              the four debug producers with the TRACE ? row below. The row
+              stays for its argument rather than as open work.
+              `corpus/lang/command_dispatch.rex` and
+              `corpus/lang/trace_debug.rex` are the witnesses, and
+              trace_oracle.rs's PREFIX_COVERAGE names them rather than an
+              owner.
 
               One thing the example above does not show, measured the same
               day: `trace n` emits nothing for THAT program because `exit 3`
@@ -362,6 +384,13 @@ EXCLUSIONS -- external routine resolution, Phase 7
   object -- the same subsystem the seven stream builtins above are blocked
   on.
 
+  DELIVERED, 2026-09-12. `Interp::resolve_search` walks the four routes and
+  `corpus/lang/external_search_order.rex` reads the order off the answers
+  rather than asserting it, with a `.d/` fixture tree and a `.env` sidecar
+  holding the paths. The corpus rule below still stands, and for the same
+  reason: a program that depends on a file it did not stage is a probe
+  error, not a feature.
+
   A CORPUS RULE FOLLOWS FROM IT, and rust/corpus/phase-4c.txt carries it: no
   corpus program may depend on external routine resolution. This is the
   easiest probe error in the phase rather than a theoretical one -- the
@@ -399,8 +428,9 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     a loose ::method with no ::class
 
   REFUSED BY THE ORACLE BEFORE main, stdout EMPTY in every case -- and
-  refused here, loudly, naming Phase 5 (or Phase 7 for the EXTERNAL forms,
-  which need a library loaded):
+  refused here, loudly, naming Phase 5 (or Phase 8 for the EXTERNAL forms,
+  which need a library loaded; that was Phase 7's until its close-out re-homed
+  every refusal it left behind):
 
     ::class foo subclass ns:other                         98.987 rc 158
     ::class foo mixinclass ns:other                       98.987 rc 158
@@ -488,7 +518,7 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   rexxutil SysFileTree'` is 90.998 rc 166, the entry-point error, where the
   same line spelled `LIBRARY REXXUTIL` is 98.903 rc 158 -- so `librexxutil`
   opens and the library name reaches `dlopen` in the case it was written in.
-  OWNER: Phase 5 for the rest of ::REQUIRES, and Phase 7 for EXTERNAL. The
+  OWNER: Phase 5 for the rest of ::REQUIRES, and Phase 8 for EXTERNAL. The
   ::ANNOTATE shapes this paragraph used to carry are in CLOSED DEFECTS.
 
   CLOSED BY R33, AND IT WAS RECORDED HERE FIRST AS UNFIXED. The oracle walks
@@ -629,7 +659,8 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::REQUIRES IS REFUSED EVEN WHEN THE FILE IS PRESENT. CLOSED BY PHASE 5d
     TASK 4, which built the four-route search, the install and the prologue,
     and by TASK 5, which built NAMESPACE; only the LIBRARY subkeyword still
-    refuses, and it is Phase 7's. The entry stands
+    refuses, and it is Phase 8's -- it opens a shared library. The entry
+    stands
     as written below because the reasoning is what made it an over-refusal
     rather than an omission. This one
     contradicts a measurement the task brief recorded as a requirement, and
@@ -1398,6 +1429,9 @@ Criterion 5 requires every out-of-scope `ExprKind` variant to name an owning
 phase, and that owner has to be one of the phases the split table names --
 "4b", "4c", "Phase 5" or "Phase 7", spelled exactly as the table spells them,
 because `coverage.rs` and `loud.rs` assert the set and compare the strings.
+The set is the design document's and stays as that document wrote it; what is
+in force is narrower, and `owners.rs` asserts it directly -- no instruction
+tag names Phase 7 now, and no builtin exclusion may.
 
 Six variants stood here at the 4a gate. The design spec assigns only one of
 them outright: `Message` is Phase 5's (the "assigned elsewhere" paragraph
@@ -1977,6 +2011,25 @@ above.
   every PULL program, so there is no cheap partial delivery for 4c to make;
   failing loudly on `?` remains the alternative the spec already sanctioned,
   and it is the honest one until Phase 7 has a console to read.
+
+  DELIVERED, 2026-09-13, in both halves this row names. The pause reads a
+  line and runs it, `corpus/lang/trace_debug.rex` and
+  `trace_debug_skip.rex` carry the transcripts with a `.stdin` sidecar, and
+  `RXTRACE=ON` reaches the same setting from the environment --
+  `corpus/lang/external_trace.rex` with an `.env` sidecar, where `TRACE()`
+  answers `?R` on the first clause of a program that says nothing about
+  tracing. The setting also stopped being dropped: `TRACE OFF` refuses the
+  debug flag from either side, which is what `base/keyword`'s
+  `TRACE::test_trace_?o` asserts.
+
+  ONE SHAPE IS NOT DELIVERED, and it is measured rather than assumed: an
+  external program *called* under `RXTRACE=ON` traces its own clauses and
+  prompts, exactly as the oracle does, but does not announce itself with the
+  `>I>` and `<I<` pair the oracle prints for it. `setupProgram` runs per
+  top-level program activation on both sides; what differs is that this
+  crate's `invocation_subject` answers only for a `::ROUTINE` or a method, so
+  a called program has no subject to announce. Every other line of that
+  transcript matches.
 
   This is also why the `+++` prefix's row above assigns that prefix to
   Phase 7: four of its five producers are this same interactive-debug
@@ -3601,7 +3654,7 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
                                       rc 120 inside a ::METHOD body that does
                                       now run)
     CommandIOConfiguration.cpp:367    ADDRESS ... WITH INPUT USING (expr) --
-                                      loud, Phase 7
+                                      delivered by Phase 7
     ObjectClass.cpp:2136              ~sendWith / ~startWith's message NAME
                                       (decodeMessageName), not its arguments;
                                       the arguments go through arrayArgument
@@ -3902,7 +3955,9 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
         `setEnvironmentVariable`).
     (c) anything else tries a platform-defined selector
         (`SystemInterpreter::valueFunction`) and then the registered value
-        exit, and only THIS branch is unambiguously Phase 7's.
+        exit, and only THIS branch was unambiguously Phase 7's. Delivered as
+        the refusal the oracle itself gives: measured, `VALUE(n, v,
+        'SYSTEM')` is 40.914 on both sides.
 
   `Loud::value_selector` fires on the third argument's mere presence and
   says nothing about which of the three a given selector would have
@@ -4057,12 +4112,10 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   neither name reaches an exempt file. A reader must not take "only BEEP is
   listed" as "only BEEP is missing".
 
-  NO OWNER. This is not a builtin gap, so Phase 7's file-and-stream rows do
-  not cover it; it is not dispatch, so Phase 5's do not either. Whoever picks
-  up the internal package picks up all three at once, since one resolution
-  step serves them: a name the builtin table does not hold and ::ROUTINE
-  resolution does not find must consult the package's routines before
-  raising 43.1.
+  NO OWNER when this was written. DELIVERED by Phase 7, 2026-09-12: the
+  internal-routine table sits between the builtin step and the external file
+  search, exactly as this row said one resolution step would have to, and it
+  serves all three names at once along with the REXXUTIL subset.
 
 
   A COMPOUND OR STEM VARIABLE AS A DO CONTROL VARIABLE WAS NEVER BOUND

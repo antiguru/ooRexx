@@ -43,15 +43,6 @@ pub(crate) enum Family {
 }
 
 impl Family {
-    /// The phase that owes this family a body, spelled the way every other
-    /// owner string in this crate is.
-    pub(crate) fn owner(self) -> &'static str {
-        match self {
-            Family::Timer => "Phase 6",
-            Family::Stream | Family::Queue | Family::File => "Phase 7",
-        }
-    }
-
     /// The family's short name, used to name its corpus program and to report
     /// it. Lower case, because it names a group of entry points and not a
     /// class.
@@ -72,8 +63,6 @@ pub(crate) struct NativeExternal {
     /// and never for the lookup's.
     pub(crate) name: &'static str,
     pub(crate) family: Family,
-    /// The phase owing this row a body, when it is not the family's own.
-    pub(crate) owner: Option<&'static str>,
     /// **Not `pub(crate)`**: `dispatch::Interp::invoke` is the only reader,
     /// and a body is a [`NativeMethod`], which takes the seam's own
     /// `Cleared` and cannot be named outside this module's parent.
@@ -85,9 +74,9 @@ pub(in crate::dispatch) enum ExternalBody {
     /// A body this phase runs, with the parameter count the C++ entry
     /// declares.
     Implemented { arity: Arity, run: NativeMethod },
-    /// A body [`Family::owner`]'s phase owes. The bind still succeeds; the
-    /// send is loud.
-    Deferred,
+    /// A body some later phase owes, named here. The bind still succeeds;
+    /// the send is loud.
+    Deferred { owner: &'static str },
 }
 
 const fn implemented(
@@ -99,40 +88,30 @@ const fn implemented(
     NativeExternal {
         name,
         family,
-        owner: None,
         body: ExternalBody::Implemented { arity, run },
     }
 }
 
-const fn deferred(name: &'static str, family: Family) -> NativeExternal {
+/// A deferred entry, which names the phase that owes it a body.
+///
+/// **Named per row rather than per family**, because the two came apart:
+/// `handle_set` needs `from_raw_fd` and so stays refused after the stream
+/// family is built, and a refusal naming a closed phase would be a lie.
+const fn deferred(name: &'static str, family: Family, owner: &'static str) -> NativeExternal {
     NativeExternal {
         name,
         family,
-        owner: None,
-        body: ExternalBody::Deferred,
-    }
-}
-
-/// A deferred entry whose owner is **not** its family's. `handle_set` is the
-/// case: reaching an already-open descriptor needs `from_raw_fd`, so it stays
-/// refused after the stream family is built, and a refusal naming Phase 7
-/// after Phase 7 closes would be a lie.
-const fn deferred_to(name: &'static str, family: Family, owner: &'static str) -> NativeExternal {
-    NativeExternal {
-        name,
-        family,
-        owner: Some(owner),
-        body: ExternalBody::Deferred,
+        body: ExternalBody::Deferred { owner },
     }
 }
 
 /// The `REXX` package's exported method table.
 static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
-    deferred("alarm_startTimer", Family::Timer),
-    deferred("alarm_stopTimer", Family::Timer),
-    deferred("ticker_createTimer", Family::Timer),
-    deferred("ticker_waitTimer", Family::Timer),
-    deferred("ticker_stopTimer", Family::Timer),
+    deferred("alarm_startTimer", Family::Timer, "Phase 6"),
+    deferred("alarm_stopTimer", Family::Timer, "Phase 6"),
+    deferred("ticker_createTimer", Family::Timer, "Phase 6"),
+    deferred("ticker_waitTimer", Family::Timer, "Phase 6"),
+    deferred("ticker_stopTimer", Family::Timer, "Phase 6"),
     implemented(
         "stream_init",
         Family::Stream,
@@ -235,7 +214,7 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
         Arity::Fixed(0),
         super::stream::query_time,
     ),
-    deferred_to("handle_set", Family::Stream, "Phase 8"),
+    deferred("handle_set", Family::Stream, "Phase 8"),
     implemented(
         "std_set",
         Family::Stream,
@@ -272,16 +251,16 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
         Arity::Fixed(0),
         super::stream::uninit,
     ),
-    deferred("rexx_create_queue", Family::Queue),
-    deferred("rexx_open_queue", Family::Queue),
-    deferred("rexx_queue_exists", Family::Queue),
-    deferred("rexx_delete_queue", Family::Queue),
-    deferred("rexx_query_queue", Family::Queue),
-    deferred("rexx_push_queue", Family::Queue),
-    deferred("rexx_queue_queue", Family::Queue),
-    deferred("rexx_pull_queue", Family::Queue),
-    deferred("rexx_linein_queue", Family::Queue),
-    deferred("rexx_clear_queue", Family::Queue),
+    deferred("rexx_create_queue", Family::Queue, "Phase 10"),
+    deferred("rexx_open_queue", Family::Queue, "Phase 10"),
+    deferred("rexx_queue_exists", Family::Queue, "Phase 10"),
+    deferred("rexx_delete_queue", Family::Queue, "Phase 10"),
+    deferred("rexx_query_queue", Family::Queue, "Phase 10"),
+    deferred("rexx_push_queue", Family::Queue, "Phase 10"),
+    deferred("rexx_queue_queue", Family::Queue, "Phase 10"),
+    deferred("rexx_pull_queue", Family::Queue, "Phase 10"),
+    deferred("rexx_linein_queue", Family::Queue, "Phase 10"),
+    deferred("rexx_clear_queue", Family::Queue, "Phase 10"),
     implemented(
         "file_separator",
         Family::File,
@@ -449,7 +428,10 @@ pub(crate) fn entry_points() -> impl Iterator<Item = crate::NativeEntryPoint> {
         .map(|entry| crate::NativeEntryPoint {
             entry: entry.name,
             family: entry.family.label(),
-            owner: entry.owner.unwrap_or_else(|| entry.family.owner()),
+            owner: match entry.body {
+                ExternalBody::Deferred { owner } => Some(owner),
+                ExternalBody::Implemented { .. } => None,
+            },
             implemented: matches!(entry.body, ExternalBody::Implemented { .. }),
         })
 }
@@ -621,11 +603,11 @@ pub(crate) fn unresolved_entry(external: Option<&MethodExternal>) -> Option<&[u8
 }
 
 /// The refusal a send to an entry point this phase does not implement gets.
-pub(crate) fn deferred_send(entry: &NativeExternal) -> Loud {
+pub(crate) fn deferred_send(entry: &NativeExternal, owner: &'static str) -> Loud {
     Loud {
         message: crate::owned_message(
             &format!("the LIBRARY REXX entry point \"{}\"", entry.name),
-            Some(entry.owner.unwrap_or_else(|| entry.family.owner())),
+            Some(owner),
         ),
     }
 }
@@ -766,17 +748,28 @@ mod tests {
     /// Every family has at least one entry point this phase defers, so a
     /// program pinning that family's refusal can be written at all.
     #[test]
-    fn every_family_still_defers_something() {
-        for family in LIBRARY_REXX_METHODS.iter().map(|entry| entry.family) {
+    fn every_deferred_entry_point_names_an_open_phase() {
+        // The phases that still owe entry points, and no more: a fourth
+        // spelling is either a typo or work nobody has been assigned, and a
+        // phase that has closed cannot owe anything -- a refusal naming one
+        // is a lie a program can read.
+        const OPEN: &[&str] = &["Phase 6", "Phase 8", "Phase 10"];
+        let mut deferred = 0usize;
+        for entry in LIBRARY_REXX_METHODS {
+            let ExternalBody::Deferred { owner } = entry.body else {
+                continue;
+            };
+            deferred += 1;
             assert!(
-                LIBRARY_REXX_METHODS.iter().any(|entry| {
-                    entry.family == family && matches!(entry.body, ExternalBody::Deferred)
-                }),
-                "the {} family implements every entry point it holds, so no program \
-                 can pin its refusal",
-                family.label()
+                OPEN.contains(&owner),
+                "{} defers to {owner:?}, which is not one of {OPEN:?}",
+                entry.name
             );
         }
+        assert!(
+            deferred > 0,
+            "the registry defers nothing at all, so this test is passing over an empty set"
+        );
     }
 
     /// The lookup is caseless and the spelling the table carries is not what

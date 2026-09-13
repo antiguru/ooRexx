@@ -218,7 +218,9 @@ fn invoking_an_unimplemented_entry_point_is_loud_and_names_its_phase() {
         let outcome = run_gate_probe(&abs);
         let expected = format!(
             "rexx-exec: the LIBRARY REXX entry point \"{}\" is not implemented ({})\n",
-            row.entry, row.owner
+            row.entry,
+            row.owner
+                .expect("a deferred row names the phase that owes it")
         );
         assert_eq!(
             wrapped_exit_code(outcome.exit_code),

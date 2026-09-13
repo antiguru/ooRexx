@@ -155,8 +155,10 @@ impl TraceMode {
         letter: b'A',
         debug: false,
     };
-    /// `TRACE R` (`setTraceResults`, `traceResultsFlags`).
-    const RESULTS: TraceMode = TraceMode {
+    /// `TRACE R` (`setTraceResults`, `traceResultsFlags`). Also the half of
+    /// `setExternalTrace` that is not the debug flag, which is what
+    /// `RXTRACE=ON` starts a program under.
+    pub(crate) const RESULTS: TraceMode = TraceMode {
         all: true,
         results: true,
         intermediates: false,
@@ -605,6 +607,14 @@ impl Interp {
     /// quotes -- measured, `       +++ "LINUX COMMAND /abs/t.rex"`.
     pub(crate) fn trace_debug_source(&mut self) {
         if !self.traced_mode().debug || self.activation().debug.source_traced {
+            return;
+        }
+        // **The outermost activation's, and no other's.**
+        // `traceSourceString`'s caller is guarded by `isTopLevelCall()`, and
+        // a called program under `RXTRACE=ON` announces itself instead --
+        // measured, the oracle gives it `>I>` and `<I<` and no banner.
+        if self.activation_depth() > 1 {
+            self.activation_mut().debug.source_traced = true;
             return;
         }
         self.activation_mut().debug.source_traced = true;

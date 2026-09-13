@@ -1,0 +1,13 @@
+count 12
+/* `RXTRACE=ON` in the environment starts the program under `TRACE ?R`.
+
+   Nothing in the program says so: the setting arrives from outside, which is
+   why `TRACE()` answering `?R` on the first clause is the whole point. The
+   banner, the clause echoes and the prompt are interactive debug's, and the
+   `.stdin` sidecar is what the pauses read: one line per traced clause, and
+   the prompt itself is printed only at the first of them. */
+
+say 'first' trace()
+zz = 1 + 1
+say 'second' zz
+say 'after' trace()

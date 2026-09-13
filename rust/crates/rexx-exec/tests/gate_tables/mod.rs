@@ -183,10 +183,8 @@ pub const PHASE_GATE_ENV: &str = "REXX_PHASE_GATE";
 
 /// The phases whose rows stay gated for the rest of the project, without
 /// anyone having to set [`PHASE_GATE_ENV`].
-/// `7` is here while the phase is still landing tasks, which the sentence
-/// above does not otherwise describe: its corpus subset is committed and its
-/// programs agree, so a verdict of its own moving is a regression rather than
-/// progress, and every task that implements one refreshes the table.
+/// `7` closed on 2026-09-13, so its rows are gated for the same reason every
+/// other closed phase's are: a verdict of its own moving is a regression.
 pub const CLOSED_PHASES: &[&str] = &[
     "5a", "5b", "5c", "5d", "5e", "5f", "5g", "5h", "5i", "5j", "7",
 ];

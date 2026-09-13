@@ -179,3 +179,14 @@ lang/security_manager_result.rex
 # same site raises on the first pass and finds a file written between them on
 # the second.
 lang/call_miss_not_cached.rex
+
+# Task 22: `.local`'s entries read as entries rather than as dot-variables.
+# The bundle is minted on the first demand for one of its names, and reading
+# by index is a demand -- without which `.output` answers a monitor and
+# `.local['OUTPUT']` answers nothing.
+lang/local_entries.rex
+
+# Task 22: `RXTRACE=ON` starts the program under `TRACE ?R` with nothing in
+# the program saying so. The `.env` sidecar sets it and the `.stdin` one
+# answers the pauses.
+lang/external_trace.rex
