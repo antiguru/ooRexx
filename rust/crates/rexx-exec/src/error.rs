@@ -1197,6 +1197,13 @@ impl Raised {
     /// the routine's own, not a property of the type. Distinct from
     /// [`Raised::argument_out_of_range`], which is 40.903 and whose bounds are
     /// fixed in the message text.
+    /// 88.902: a native routine's argument is not a number. `argument` is
+    /// the name the message uses, as these routines name rather than number
+    /// theirs.
+    pub(crate) fn native_argument_not_a_number(argument: &str, found: &[u8]) -> Raised {
+        Raised::syntax(88, 902, vec![argument.as_bytes().to_vec(), found.to_vec()])
+    }
+
     pub(crate) fn native_argument_out_of_range(
         argument: &str,
         minimum: i64,

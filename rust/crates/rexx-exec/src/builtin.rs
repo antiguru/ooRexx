@@ -42,6 +42,7 @@ pub(crate) mod numeric;
 /// the bodies of the `REXX` package's three internal routines, which are the
 /// same kind of code reached through a different table.
 pub(crate) mod platform;
+pub(crate) mod rexxutil;
 pub(crate) mod state;
 /// Crate-visible because the builtins are not the only place this
 /// interpreter searches a haystack for a byte: a `PARSE` template's

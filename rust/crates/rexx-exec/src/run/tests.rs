@@ -7143,11 +7143,12 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
 }
 
 /// **A routine one of the oracle's internal packages exports refuses loudly**,
-/// naming the phase that owes it. Before Phase 7 every one of these answered
-/// 43.1 -- "no such routine" for a name the oracle does have, which a program
-/// cannot tell from its own typo. The excluded builtins take their owner from
-/// the same table, and the last case is the adjacent one: a name no package
-/// exports still raises 43.1.
+/// naming the phase that owes it, where a routine some phase has written
+/// answers. Either way the name is the oracle's own, and answering 43.1 for
+/// it -- "no such routine", which a program cannot tell from its own typo --
+/// is what this boundary exists to prevent. The excluded builtins take their
+/// owner from the same table, and the last case is the adjacent one: a name
+/// no package exports still raises 43.1.
 #[test]
 fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
     // The delivered side of the same boundary: a row that has a body answers,
@@ -7156,6 +7157,8 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
     for (source, expected) in [
         (&b"say filespec('N','/a/b.c')\n"[..], "b.c\n"),
         (b"say length(directory()) > 0\n", "1\n"),
+        (b"say SysFileExists('.')\n", "1\n"),
+        (b"say words(SysVersion()) > 0\n", "1\n"),
     ] {
         let outcome = routine_program(source);
         assert_eq!(
@@ -7168,10 +7171,6 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
     }
 
     let cases: &[(&[u8], &str)] = &[
-        (
-            b"say SysFileExists('.')\n",
-            "routine \"SYSFILEEXISTS\" is not implemented (Phase 7)",
-        ),
         (
             b"say SysStemSort('a.')\n",
             "routine \"SYSSTEMSORT\" is not implemented (Phase 10)",

@@ -54,7 +54,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 # answers for the caller's own credentials where a mode bit does not, and
 # setting a timestamp while preserving the other one. `fs` is a leaf feature
 # here -- it gates the module and pulls no further crate.
-rustix = { version = "1.1.4", features = ["fs"] }
+rustix = { version = "1.1.4", features = ["fs", "system"] }
 filetime = "0.2.29"
 
 [dev-dependencies]

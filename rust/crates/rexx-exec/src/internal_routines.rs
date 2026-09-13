@@ -70,6 +70,16 @@ const fn rexx_run(name: &'static str, body: InternalBody) -> InternalRoutine {
     }
 }
 
+/// A `REXXUTIL` row this phase implements.
+const fn util_run(name: &'static str, body: InternalBody) -> InternalRoutine {
+    InternalRoutine {
+        name,
+        package: Package::RexxUtil,
+        owner: "Phase 7",
+        body: Some(body),
+    }
+}
+
 const fn util(name: &'static str, owner: &'static str) -> InternalRoutine {
     InternalRoutine {
         name,
@@ -96,11 +106,11 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
     util("SysDropRexxMacro", "Phase 10"),
     util("SysDumpVariables", "Phase 10"),
     util("SysFileCopy", "Phase 10"),
-    util("SysFileDelete", "Phase 7"),
-    util("SysFileExists", "Phase 7"),
+    util_run("SysFileDelete", crate::builtin::rexxutil::file_delete),
+    util_run("SysFileExists", crate::builtin::rexxutil::file_exists),
     util("SysFileMove", "Phase 10"),
     util("SysFileSearch", "Phase 10"),
-    util("SysFileTree", "Phase 7"),
+    util_run("SysFileTree", crate::builtin::rexxutil::file_tree),
     util("SysFork", "Phase 10"),
     util("SysFormatMessage", "Phase 10"),
     util("SysGetErrorText", "Phase 10"),
@@ -108,13 +118,13 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
     util("SysGetKey", "Phase 10"),
     util("SysGetMessage", "Phase 10"),
     util("SysGetMessageX", "Phase 10"),
-    util("SysIsFile", "Phase 7"),
+    util_run("SysIsFile", crate::builtin::rexxutil::is_file),
     util("SysIsFileDirectory", "Phase 10"),
     util("SysIsFileLink", "Phase 10"),
-    util("SysLinVer", "Phase 7"),
+    util_run("SysLinVer", crate::builtin::rexxutil::version),
     util("SysLoadFuncs", "Phase 10"),
     util("SysLoadRexxMacroSpace", "Phase 10"),
-    util("SysMkDir", "Phase 7"),
+    util_run("SysMkDir", crate::builtin::rexxutil::mk_dir),
     util("SysOpenEventSem", "Phase 6"),
     util("SysOpenMutexSem", "Phase 6"),
     util("SysPostEventSem", "Phase 6"),
@@ -124,19 +134,19 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
     util("SysReorderRexxMacro", "Phase 10"),
     util("SysRequestMutexSem", "Phase 6"),
     util("SysResetEventSem", "Phase 6"),
-    util("SysRmDir", "Phase 7"),
+    util_run("SysRmDir", crate::builtin::rexxutil::rm_dir),
     util("SysSaveRexxMacroSpace", "Phase 10"),
     util("SysSearchPath", "Phase 10"),
     util("SysSetFileDateTime", "Phase 10"),
     util("SysSetPriority", "Phase 10"),
-    util("SysSleep", "Phase 7"),
+    util_run("SysSleep", crate::builtin::rexxutil::sleep),
     util("SysStemCopy", "Phase 10"),
     util("SysStemDelete", "Phase 10"),
     util("SysStemInsert", "Phase 10"),
     util("SysStemSort", "Phase 10"),
     util("SysTempFileName", "Phase 10"),
     util("SysUtilVersion", "Phase 10"),
-    util("SysVersion", "Phase 7"),
+    util_run("SysVersion", crate::builtin::rexxutil::version),
     util("SysWait", "Phase 10"),
     util("SysWaitEventSem", "Phase 6"),
 ];

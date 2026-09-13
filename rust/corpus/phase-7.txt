@@ -153,3 +153,9 @@ lang/external_search_order.rex
 # its own upcased line, the package named in place of the program, and no
 # line number on the major line.
 lang/internal_routine_frame.rex
+
+# Task 18: the REXXUTIL file-system routines. The three deletions answer by
+# three different rules, and `SysFileTree`'s spec globs its last component
+# only. Names are cut to their last component and sorted, because the answers
+# are fully qualified and a directory is not read in sorted order.
+lang/sys_file_functions.rex

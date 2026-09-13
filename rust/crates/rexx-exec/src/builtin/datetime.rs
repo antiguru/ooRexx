@@ -792,6 +792,32 @@ fn now_base_time(interp: &mut Interp) -> i64 {
 ///
 /// `.File`'s timestamps read through this too: a file's stamp is encoded at
 /// the offset in force **at that stamp**, not at the offset in force now.
+/// The civil fields one base time names, for a caller outside this module
+/// that renders a layout of its own.
+pub(crate) struct Calendar {
+    pub(crate) year: i64,
+    pub(crate) month: i64,
+    pub(crate) day: i64,
+    pub(crate) hours: i64,
+    pub(crate) minutes: i64,
+    pub(crate) seconds: i64,
+}
+
+/// [`Calendar`] for `base_time`, which is a local reading in the caller's
+/// hands already.
+pub(crate) fn calendar_of(base_time: i64) -> Calendar {
+    let mut stamp = Timestamp::clear();
+    stamp.set_base_time(base_time);
+    Calendar {
+        year: stamp.year,
+        month: stamp.month,
+        day: stamp.day,
+        hours: stamp.hours,
+        minutes: stamp.minutes,
+        seconds: stamp.seconds,
+    }
+}
+
 pub(crate) fn local_offset_micros(utc_micros: i64) -> i64 {
     let unix_micros = utc_micros - UNIX_BASE_TIME;
     let secs = unix_micros.div_euclid(MICROSECONDS);
