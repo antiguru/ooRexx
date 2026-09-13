@@ -76,6 +76,14 @@ greater than the interpreter's, the load raises `Error_Execution_library_version
 hook runs (`:237-247`). A method name that the package does not export gives
 `Error_Execution_library_method` = **98.978**, a routine name **98.979**.
 
+**The test target is the oracle's own compiled extension, not a rebuild of it.** Measured
+2026-09-14 and recorded as an amendment to D5: `build/lib/librxregexp.so` imports no symbol whose
+name contains `rexx` and its `NEEDED` list is `libstdc++.so.6`, `libgcc_s.so.1`, `libc.so.6`. An
+extension links nothing from the interpreter, so a prebuilt one runs against this crate as soon as
+the `#[repr(C)]` tables match the frozen headers. Loading that exact file removes the question of
+whether the two sides compiled against the same header, which a rebuild would leave open. The
+embedding half of the API stays source-compatible and is Phase 9's, per the same amendment.
+
 **`libloading` owns the handle**, per D-U1. The two-attempt search and the `lib`/`.so` decoration
 are ours to reproduce, because they are observable: a program that names a library which exists in
 neither place has to produce the oracle's failure, not a different one.
@@ -182,7 +190,7 @@ grant.
 
 | criterion | instrument |
 |---|---|
-| a library loads and its package entry is read | a corpus witness using `::REQUIRES LIBRARY rxregexp` |
+| a library loads and its package entry is read | a corpus witness using `::REQUIRES LIBRARY rxregexp`, against the oracle's own `build/lib/librxregexp.so` |
 | the two-call protocol is honoured | a unit test asserting the signature call sees no arguments |
 | the conversion table is right for the five L2 types | the 20 `rxregexp` L1 cases, differential |
 | `CSELF` survives a collection | a witness that collects between two method calls on one object |

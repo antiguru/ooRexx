@@ -216,6 +216,26 @@ Rexx numbers are strings; arithmetic is arbitrary-precision decimal under `NUMER
 
 **Evidence that settles this.** Phase 8 exit: `testbinaries/` build against the frozen headers with no source edits, and the ooTest native-API groups pass.
 
+**Amendment, 2026-09-14: the extension half comes out binary-compatible whether or not it is
+promised, and that is an instrument rather than a widening of the promise.** Measured on the
+oracle's own build: `build/lib/librxregexp.so` has `NEEDED` entries for `libstdc++.so.6`,
+`libgcc_s.so.1` and `libc.so.6` and imports **zero** symbols whose name contains `rexx`
+(`nm -D --undefined-only | grep -ci rexx` answers 0). The same holds for `liborxmethod.so`. An
+extension links nothing from the interpreter; everything crosses through the function-pointer
+tables handed in at call time, so a prebuilt extension `.so` loads and runs against this crate as
+soon as the `#[repr(C)]` tables match the frozen headers field for field -- which D5 already
+requires. **Phase 8 therefore tests against the oracle's already-compiled
+`build/lib/librxregexp.so` rather than a rebuild of it**, which removes the question of whether the
+two sides saw the same header.
+
+*The embedding half is not amended and stays source-compatible.* `build/bin/rexx` has `NEEDED
+librexx.so.4` and `librexxapi.so.4`, so letting a prebuilt embedder run unrecompiled would mean
+shipping a library under that SONAME exporting the same symbols with the same signatures -- 386
+unmangled exports today, of which the documented API is `rexx.h`'s 37 and the remainder are
+internals the linker happens to expose. That is a promise about a library whose internals are
+nothing alike, and its gate would be running C++-built binaries against the Rust interpreter, which
+is Phase 9 scope. Phase 9 decides the SONAME question when it ships `rexx`.
+
 ### D-U1 — The `unsafe` grant and `dlopen`'s provider
 
 **Blocks:** Phase 8. Opened and closed 2026-09-14, before any `extern "C"` entry point was written,
