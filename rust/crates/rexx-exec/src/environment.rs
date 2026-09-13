@@ -1983,6 +1983,16 @@ impl Interp {
             .find(|(_, object)| **object == package)
             .map(|(which, _)| *which)
     }
+
+    /// Which package a `Method` or `Routine` object belongs to, or `None` for
+    /// an object this crate did not build.
+    pub(crate) fn executable_package(&self, object: ObjRef) -> Option<Package> {
+        Some(match self.executable_sources.get(&object)?.source {
+            crate::ExecutableSource::Directive { program, .. }
+            | crate::ExecutableSource::Main { program } => Package::Program(program),
+            crate::ExecutableSource::Native => Package::Rexx,
+        })
+    }
 }
 
 /// The [`rexx_core::RootSet::add_global`] key one package object is held

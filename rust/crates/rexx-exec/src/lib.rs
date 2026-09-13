@@ -410,14 +410,6 @@ impl Loud {
         }
     }
 
-    /// A method compiled from source text, in one of the shapes or places
-    /// [`compile_method_source`] does not take.
-    fn executable_context() -> Loud {
-        Loud {
-            message: owned_message("a newFile package context", Some("Phase 7")),
-        }
-    }
-
     /// `loadExternalMethod` and `loadExternalRoutine` for an entry point this
     /// phase cannot resolve.
     fn external_entry_point(what: &'static str) -> Loud {
@@ -3336,10 +3328,15 @@ impl Interp {
 
     /// `PackageClass::newRexx`'s in-memory form: a package compiled from
     /// source lines, its directives installed and its prologue run.
+    ///
+    /// `parent` is the package its names resolve through after its own, and
+    /// `None` leaves it none at all -- measured, a source package built with
+    /// no context raises 43.1 for a routine its caller defines.
     pub(crate) fn package_from_source(
         &mut self,
         name: &[u8],
         lines: &[Vec<u8>],
+        parent: Option<Package>,
     ) -> Result<ProgramId, Failure> {
         let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
         let parsed = rexx_parse::parse_lines(&borrowed).map_err(|error| {
@@ -3352,6 +3349,12 @@ impl Interp {
         let id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&parsed));
         self.compiled_method_names.insert(id, name.into());
+        // Recorded ahead of the prologue for the reason
+        // `new_file_executable` records its own parent early: the prologue
+        // resolves routines, and must already reach the context.
+        if let Some(parent) = parent {
+            self.package_parents.insert(id, parent);
+        }
         self.run_loaded(parsed, id, CallType::Requires, None, None)?;
         Ok(id)
     }
@@ -4099,13 +4102,24 @@ impl Interp {
     /// `MethodClass::newFileRexx` and `RoutineClass::newFileRexx`
     /// (`classes/MethodClass.cpp:521`, `classes/RoutineClass.cpp:341`): the
     /// executable a file's own text becomes.
+    ///
+    /// `parent` is the package the loaded file resolves names through, and
+    /// `None` is the caller's own.
     pub(crate) fn new_file_executable(
         &mut self,
         name: &[u8],
         routine: bool,
+        parent: Option<Package>,
     ) -> Result<ObjRef, Failure> {
         let path = String::from_utf8_lossy(name).into_owned();
-        let Ok(text) = std::fs::read(&path) else {
+        // **Read through the interpreter's own directory, recorded under the
+        // name as given.** `Invocation::with_directory` is what a caller
+        // running several interpreters on threads sets, so a relative name
+        // must resolve there rather than against the process; but the package
+        // keeps the spelling it was asked for -- measured, `~package~name`
+        // for `newFile('rel.rex')` answers `rel.rex`.
+        let resolved = crate::paths::normalize(&path, &self.cwd_text());
+        let Ok(text) = std::fs::read(&resolved) else {
             return Err(Raised::executable_file_unreadable(name).into());
         };
         let parsed = match rexx_parse::parse_program(text) {
@@ -4162,11 +4176,12 @@ impl Interp {
         // routines -- which must already reach the package that built this
         // executable. `load_requires` caches ahead of its own prologue for
         // the same reason.
-        if let Some(parent) = self
-            .running_activation()
-            .map(|activation| activation.program_id)
-        {
-            self.package_parents.insert(id, Package::Program(parent));
+        let parent = parent.or_else(|| {
+            self.running_activation()
+                .map(|activation| Package::Program(activation.program_id))
+        });
+        if let Some(parent) = parent {
+            self.package_parents.insert(id, parent);
         }
         self.install_directives(id, &program)?;
         let class = if routine {

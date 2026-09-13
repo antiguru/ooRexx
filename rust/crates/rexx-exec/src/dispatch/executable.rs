@@ -14,7 +14,6 @@
 //! by `memory/Setup.cpp:1089`-`:1113` and `:1128`-`:1143`.
 
 use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, ObjRef, Raised, array_of_texts};
-use crate::plan::Package;
 use crate::{ExecutableSource, ProgramId};
 use rexx_parse::{Access, DirectiveKind, GuardOption, Program, Protection};
 
@@ -344,11 +343,8 @@ fn package(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let package = match source_of(interp, receiver)? {
-        ExecutableSource::Directive { program, .. } | ExecutableSource::Main { program } => {
-            Package::Program(program)
-        }
-        ExecutableSource::Native => Package::Rexx,
+    let Some(package) = interp.executable_package(receiver) else {
+        return Err(Loud::receiver_class("an executable this crate did not build").into());
     };
     Ok(Some(interp.package_object(package)))
 }

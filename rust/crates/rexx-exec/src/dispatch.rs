@@ -8215,11 +8215,49 @@ fn native_new_file(
     if !routine && class != interp.method_class() {
         return Err(unbuilt_new(interp, class));
     }
-    if args.get(1).copied().flatten().is_some() {
-        return Err(Loud::executable_context().into());
-    }
+    let parent = match args.get(1).copied().flatten() {
+        Some(context) => new_file_context(interp, context)?,
+        None => None,
+    };
     let name = interp.to_text(name).to_vec();
-    interp.new_file_executable(&name, routine).map(Some)
+    interp.new_file_executable(&name, routine, parent).map(Some)
+}
+
+/// `newFile`'s context argument, resolved to the package the loaded file
+/// resolves names against. `None` is the caller's own package, which is what
+/// an absent argument and `"PROGRAMSCOPE"` both mean -- measured, the two
+/// answer the caller's `::ROUTINE` alike at rc 0.
+fn new_file_context(interp: &mut Interp, context: ObjRef) -> Result<Option<Package>, Failure> {
+    let class = interp.class_of_value(context);
+    let resolved = if class == Some(interp.package_class()) {
+        interp.which_package(context)
+    } else if class == Some(interp.routine_class()) || class == Some(interp.method_class()) {
+        interp.executable_package(context)
+    } else if class == Some(interp.string_class())
+        && interp
+            .to_text(context)
+            .eq_ignore_ascii_case(b"PROGRAMSCOPE")
+    {
+        return Ok(None);
+    } else {
+        None
+    };
+    match resolved {
+        Some(package) => Ok(Some(package)),
+        // The found value is its string *conversion*, not its string value:
+        // measured, `.array~of(1)` reports `found "1"` where `.NIL` reports
+        // `found "The NIL object"`.
+        None => {
+            let found = interp.to_text(context).to_vec();
+            Err(Raised::argument_not_in_list(
+                b"NEWFILE",
+                2,
+                "\"PROGRAMSCOPE\", Method, Routine, or Package object",
+                &found,
+            )
+            .into())
+        }
+    }
 }
 
 /// `MethodClass::loadExternalMethod(name, descriptor)` and

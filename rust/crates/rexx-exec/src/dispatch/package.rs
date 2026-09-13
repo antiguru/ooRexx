@@ -906,7 +906,7 @@ fn load_package(
     let loaded = match args.get(1).copied().flatten() {
         Some(source) => {
             let lines = super::method_source_lines(interp, source, "source")?;
-            interp.package_from_source(&name, &lines)?
+            interp.package_from_source(&name, &lines, None)?
         }
         None => interp.load_package(program, &name)?,
     };
@@ -929,25 +929,24 @@ fn package_new(
     };
     let name = required_string_named_argument(interp, name, "name")?;
     let name = interp.to_text(name).to_vec();
-    if let Some(context) = args.get(2).copied().flatten() {
-        // A third argument that is none of the three the oracle accepts is
-        // its own 93.953, before anything is compiled: measured at rc 163,
-        // `.Package~new('X', 'Y', 'Z')`.
-        let class = interp.class_of_value(context);
-        if class != Some(interp.package_class())
-            && class != Some(interp.routine_class())
-            && class != Some(interp.method_class())
-        {
-            return Err(
-                Raised::argument_not_convertible(3, "Method, Routine, or Package object").into(),
-            );
-        }
-        return Err(Loud::executable_context().into());
-    }
-    if args.len() > 3 {
-        return Err(Loud::executable_context().into());
-    }
-    let program = match args.get(1).copied().flatten() {
+    // **Only the source form takes a context, and the file form does not
+    // merely ignore one -- it never consumes the argument at all.** Measured
+    // at rc 163 and independent of call order, `.Package~new('ok.rex', ,
+    // anything)` reports `93.902 ... 0 expected.` once the load itself
+    // raises nothing, whether that third argument is a Package object, a
+    // string or `.NIL`: it is left for `INIT`, which is also why the file
+    // form never answers 93.953.
+    let source = args.get(1).copied().flatten();
+    let consumed = if source.is_some() { 3 } else { 2 };
+    let context = match (source, args.get(2).copied().flatten()) {
+        // Validated ahead of both the compile and the argument count:
+        // measured, a source whose prologue would print reports the 93.953
+        // with nothing printed, and `.Package~new('c3', a, .NIL, 'X')` is the
+        // 93.953 rather than the 93.902 a fourth argument earns alone.
+        (Some(_), Some(context)) => Some(package_context(interp, context)?),
+        _ => None,
+    };
+    let program = match source {
         // **The global context, not the caller's directory.** Measured: with
         // the current directory elsewhere, `.Package~new('pk.rex')` is 43.901
         // even though `pk.rex` sits beside the program that asks -- where a
@@ -955,10 +954,42 @@ fn package_new(
         None => interp.load_package_global(&name)?,
         Some(source) => {
             let lines = super::method_source_lines(interp, source, "source")?;
-            interp.package_from_source(&name, &lines)?
+            interp.package_from_source(&name, &lines, context)?
         }
     };
-    Ok(Some(interp.package_object(Package::Program(program))))
+    let object = interp.package_object(Package::Program(program));
+    // **`INIT` is sent after the package is built, and an argument too many
+    // is what it refuses.** Measured, `.Package~new('c3', a, ctx, 'X')` prints
+    // the prologue's own line before reporting `93.902 ... 0 expected.` at
+    // rc 163, under a `Compiled method "INIT" with scope "Object".` frame:
+    // `Object~init` raises it, so neither the count nor the frame is this
+    // function's to produce.
+    let caller = interp.caller();
+    let extra: Vec<Option<ObjRef>> = args.iter().skip(consumed).copied().collect();
+    interp.send_message(object, super::INIT, None, &extra, caller)?;
+    Ok(Some(object))
+}
+
+/// `PackageClass::newRexx`'s context argument, resolved to the package the
+/// compiled source resolves names through. A value that is none of the three
+/// accepted classes is 93.953 before anything is compiled -- measured at
+/// rc 163, `.Package~new('X', 'Y', 'Z')`, and `"PROGRAMSCOPE"`, which
+/// `newFile` takes, is refused here alike.
+fn package_context(interp: &mut Interp, context: ObjRef) -> Result<Package, Failure> {
+    let class = interp.class_of_value(context);
+    let resolved = if class == Some(interp.package_class()) {
+        interp.which_package(context)
+    } else if class == Some(interp.routine_class()) || class == Some(interp.method_class()) {
+        interp.executable_package(context)
+    } else {
+        None
+    };
+    resolved.ok_or_else(|| {
+        Failure::from(Raised::argument_not_convertible(
+            3,
+            "Method, Routine, or Package object",
+        ))
+    })
 }
 
 /// Every (key, value) of one of `Interp`'s per-program tables, owned.

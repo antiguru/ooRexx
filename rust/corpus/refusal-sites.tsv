@@ -107,7 +107,6 @@ Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:368	recorded	
 Loud	environment_entry	body	crates/rexx-exec/src/lib.rs:340	off-send-surface	-	-	-
 Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1434	off-send-surface	-	-	-
 Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:331	off-send-surface	-	-	-
-Loud	executable_context	send	crates/rexx-exec/src/lib.rs:392	recorded	yes	a newFile package context	say .Method~newFile('body.rex', .context~package)~class~id -- the oracle answers a Method at rc 0; the argument is the package context the loaded file resolves names against
 Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:435	off-send-surface	-	-	-
 Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1417	off-send-surface	-	-	-
 Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1381	off-send-surface	-	-	-
