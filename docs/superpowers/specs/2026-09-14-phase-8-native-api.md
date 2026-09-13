@@ -176,6 +176,26 @@ the sub-number and the message text as the oracle produces them, on the descript
 The three loading failures in section 3 are the other error surface, and they are what a program
 sees when a `::REQUIRES LIBRARY` names something that is not there.
 
+**Nothing unwinds across the boundary, measured 2026-09-14.** Each of `RaiseException0`, `1` and
+`2` wraps `reportException` in a `try` and catches `NativeActivation *` **inside the stub**
+(`interpreter/api/ThreadContextStubs.cpp:1863-1885`), returning normally to the extension. The
+condition is stashed on the activation and raised after the native call returns, by
+`NativeActivation::checkConditions` (`NativeActivation.cpp:1787-1807`). The extension's own code
+agrees: `RegExp_Parse` raises for an unrecognised match type and then falls straight through to
+`pAutomaton->parse(...)`.
+
+Two consequences bind the rest of this phase. The exported entry points are `extern "C"` and stay
+that way -- `extern "C-unwind"` would make a Rust panic crossing into extension frames
+well-defined, where an abort is the behaviour a bug on our side should have. And a native method
+that raises still runs to completion and still returns a value, so the two-call protocol in
+section 4 must deliver `arguments[0]` even for a call that raised.
+
+**The `__cplusplus` branch of the header binds.** Under `#ifndef __cplusplus` a context is
+typedefed to a pointer (`oorexxapi.h:135-174`), which would make `RexxThreadContext *` a pointer to
+a pointer. Nothing in this tree compiles that way: no `.c` file includes `oorexxapi.h`, and
+`testbinaries/orxclassic1.c`, the only C translation unit among the test binaries, includes
+`rexx.h`, which does not include it either.
+
 ## 8. The crate
 
 `rexx-api/`, which the roadmap's Section 3 tree already reserves. Two modules carry
@@ -225,6 +245,11 @@ carried as a silent gap. A `testbinaries/` build that succeeds says the headers 
 that the entry points behind them work.
 
 ## 10. What this spec does not settle
+
+Two questions that were on this list have been answered by measurement and moved into section 7:
+whether anything unwinds across the boundary, and which branch of the header binds. Both were
+raised by an implementer rather than found here, which is the argument for tasks reporting what
+their brief did not answer.
 
 The threading model of `AttachThread` and `DetachThread`, which is Phase 6's ground and is why the
 instance interface's seven pointers are not in the L2 slice. The exit interface, whose consumers are
