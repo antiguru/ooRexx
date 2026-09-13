@@ -28,9 +28,14 @@ struct Case {
     source: &'static str,
 }
 
-/// The cases whose three descriptors must **not** agree, each because this
-/// crate refuses an answer it cannot build (`Loud::builtin_option_object`).
-const DECLARED_GAPS: &[&str] = &["condition_additional", "condition_object"];
+/// The cases whose three descriptors must **not** agree. Empty since the
+/// condition object landed: `condition_object` and `condition_additional`
+/// were the last two, both refusing through `Loud::builtin_option_object`
+/// because this crate built no Directory to answer with. The list stays --
+/// [`every_state_builtin_case_matches_the_oracle_except_the_declared_gaps`]
+/// polices it in both directions, so a case that starts differing is as red
+/// as a declared gap that starts agreeing.
+const DECLARED_GAPS: &[&str] = &[];
 
 const CASES: &[Case] = &[
     // ---- ADDRESS: the default, the forms, byte transparency ----
