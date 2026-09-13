@@ -32,7 +32,7 @@ fn rxregexp() -> PathBuf {
 }
 
 fn open_rxregexp() -> load::Library {
-    load::open_path(&rxregexp())
+    load::open_path(&rxregexp(), "rxregexp")
         .expect("the extension asks for 4.0.0, which is below this interpreter")
         .expect("the extension publishes RexxGetPackage")
 }
@@ -70,8 +70,8 @@ fn the_method_table_is_what_the_extension_declares() {
     );
     for row in library.methods() {
         assert!(
-            !row.entry_point.is_null(),
-            "{:?} resolved to a null entry point",
+            row.has_entry_point(),
+            "{:?} carries no entry point",
             String::from_utf8_lossy(&row.name)
         );
     }
@@ -92,7 +92,7 @@ fn a_method_is_found_without_regard_to_case() {
         .expect("the table carries RegExp_Parse");
     assert_eq!(found.name, b"RegExp_Parse".to_vec());
     assert_eq!(found.style, METHOD_TYPED_STYLE);
-    assert!(!found.entry_point.is_null());
+    assert!(found.has_entry_point());
     assert_eq!(library.method(b"RegExp_Zork"), None);
 }
 
@@ -108,7 +108,7 @@ fn a_library_without_the_exporter_is_not_an_error() {
     // `RexxGetPackage`" from "did not load": both answer `Ok(None)`.
     let libc = Path::new("libc.so.6");
     assert!(load::loads(libc), "libc.so.6 did not load");
-    let answer = load::open_path(libc).expect("a library with no exporter is not an error");
+    let answer = load::open_path(libc, "c").expect("a library with no exporter is not an error");
     assert!(answer.is_none());
 }
 

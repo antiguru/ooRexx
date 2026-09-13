@@ -101,25 +101,54 @@ pub struct RexxPackageEntry {
 }
 
 /// One row of an extension's method table, copied out of the library.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Neither `Clone` nor holder of a public address: both would hand safe code
+/// something that outlives the mapping the address points into. A raw pointer
+/// is `Copy` and carries no lifetime, so a borrowed row is not on its own
+/// enough, and the field is private for that reason.
+///
+/// ```compile_fail
+/// # use rexx_api::load;
+/// let row = load::open_path(std::path::Path::new("librxregexp.so"), "rxregexp")
+///     .unwrap()
+///     .unwrap();
+/// let address = row.method(b"RegExp_Parse").unwrap().entry_point;
+/// ```
+#[derive(Debug, PartialEq, Eq)]
 pub struct NativeMethodEntry {
     /// `METHOD_TYPED_STYLE` (`api/oorexxapi.h:221`); never zero, which is the
     /// terminator.
     pub style: c_int,
     pub name: Vec<u8>,
-    /// Valid only while the [`Library`] this row came from is alive.
-    pub entry_point: *mut c_void,
+    entry_point: *mut c_void,
+}
+
+impl NativeMethodEntry {
+    /// Whether the row carries an address.
+    #[must_use]
+    pub fn has_entry_point(&self) -> bool {
+        !self.entry_point.is_null()
+    }
 }
 
 /// One row of an extension's routine table, copied out of the library.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Shaped as [`NativeMethodEntry`] and for the same reason.
+#[derive(Debug, PartialEq, Eq)]
 pub struct NativeRoutineEntry {
     /// `ROUTINE_TYPED_STYLE` or `ROUTINE_CLASSIC_STYLE`
     /// (`api/oorexxapi.h:200-201`); never zero, which is the terminator.
     pub style: c_int,
     pub name: Vec<u8>,
-    /// Valid only while the [`Library`] this row came from is alive.
-    pub entry_point: *mut c_void,
+    entry_point: *mut c_void,
+}
+
+impl NativeRoutineEntry {
+    /// Whether the row carries an address.
+    #[must_use]
+    pub fn has_entry_point(&self) -> bool {
+        !self.entry_point.is_null()
+    }
 }
 
 /// An opened shared library together with the package entry it published.
@@ -129,9 +158,9 @@ pub struct Library {
     version: Option<Vec<u8>>,
     methods: Vec<NativeMethodEntry>,
     routines: Vec<NativeRoutineEntry>,
-    /// Last field, so it is dropped last: every `entry_point` above points
-    /// into this mapping and dies with it. Held for that alone, which is a
-    /// use `dead_code` does not count.
+    /// The mapping every `entry_point` above addresses. No safe code outside
+    /// this module can copy an address out of a row, which is what keeps one
+    /// from outliving this field.
     #[expect(dead_code)]
     handle: libloading::Library,
 }
@@ -166,13 +195,32 @@ impl Library {
     /// `LibraryPackage::locateMethodEntry` matches it
     /// (`interpreter/package/LibraryPackage.cpp:320-325`).
     ///
-    /// The row's `entry_point` is valid only while `self` is alive.
+    /// The row is borrowed from `self`, which is what stops it outliving the
+    /// mapping its address points into.
+    ///
+    /// ```no_run
+    /// # use rexx_api::load;
+    /// let library = load::open_path(std::path::Path::new("librxregexp.so"), "rxregexp")
+    ///     .unwrap()
+    ///     .unwrap();
+    /// let row = library.method(b"RegExp_Parse").unwrap();
+    /// assert!(row.has_entry_point());
+    /// ```
+    ///
+    /// ```compile_fail
+    /// # use rexx_api::load;
+    /// let row = load::open_path(std::path::Path::new("librxregexp.so"), "rxregexp")
+    ///     .unwrap()
+    ///     .unwrap()
+    ///     .method(b"RegExp_Parse")
+    ///     .unwrap();
+    /// assert!(row.has_entry_point());
+    /// ```
     #[must_use]
-    pub fn method(&self, name: &[u8]) -> Option<NativeMethodEntry> {
+    pub fn method(&self, name: &[u8]) -> Option<&NativeMethodEntry> {
         self.methods
             .iter()
             .find(|row| row.name.eq_ignore_ascii_case(name))
-            .cloned()
     }
 }
 
@@ -202,17 +250,17 @@ pub fn open(name: &str) -> Result<Option<Library>, Failure> {
 
 /// Open the library file at `path`, skipping the name search.
 ///
-/// Answers and errors as [`open`] does, and the error names `path` where
-/// [`open`] names the library.
+/// Answers as [`open`] does. `name` is what a raised [`Failure`] interpolates,
+/// which for a `::REQUIRES` is the spelling in the source rather than `path`.
 ///
 /// # Errors
 /// [`Failure::LibraryVersion`] where the package entry asks for a newer
 /// interpreter than this one.
-pub fn open_path(path: &Path) -> Result<Option<Library>, Failure> {
+pub fn open_path(path: &Path, name: &str) -> Result<Option<Library>, Failure> {
     let Some(handle) = dlopen(path) else {
         return Ok(None);
     };
-    package_of(handle, &path.display().to_string())
+    package_of(handle, name)
 }
 
 /// Whether the library at `path` loads at all, which is what separates
