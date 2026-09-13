@@ -222,7 +222,7 @@ fn the_populated_tables_carry_the_interface_version() {
         rexx_api::layout::THREAD_INTERFACE_VERSION
     );
     assert_eq!(
-        MethodContextInterface::REFUSING.interfaceVersion,
+        rexx_api::layout::METHOD_CONTEXT_INTERFACE.interfaceVersion,
         rexx_api::layout::METHOD_INTERFACE_VERSION
     );
 }

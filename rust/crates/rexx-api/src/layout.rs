@@ -9,8 +9,10 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-// Names here are the frozen header's spellings (D5), so that the file diffs
-// against `api/oorexxapi.h` member for member.
+// The `allow` is for the frozen header's own spellings (D5): the interface
+// tables, the context structs, `RexxCondition` and `ValueDescriptor` carry the
+// member names `api/oorexxapi.h` gives them. The entry structs moved here from
+// `load.rs` and keep the Rust spellings they arrived with.
 #![allow(non_camel_case_types, non_snake_case)]
 
 //! The `#[repr(C)]` surface an extension sees, and the tables it calls
@@ -716,6 +718,15 @@ interface! {
         IsRedirectionRequested: { call(*mut RexxIORedirectorContext_) -> logical_t },
     }
 }
+
+/// The method-context table an extension calls through, at one address.
+pub static METHOD_CONTEXT_INTERFACE: MethodContextInterface = MethodContextInterface::REFUSING;
+
+// The thread table has no `static` beside it: its object members are raw
+// pointers, so the type is not `Sync`, and the C++ fills them once the constant
+// objects exist (`interpreter/concurrency/Activity.cpp:1844-1849`). Whatever
+// hands out a thread context owns the table, which is also what keeps this
+// phase from mutating a global.
 
 /// The instance interface, which the L2 slice does not reach: what a
 /// `RexxMethodContext` addresses is the thread and method-context tables.
