@@ -124,6 +124,12 @@ lang/address_with_stem.rex
 # the four errors a redirection raises, each re-arming the trap.
 lang/address_with_using.rex
 
+# Task 16: `STREAM` on both sides, and the stream objects `USING` drives. A
+# named stream is opened and closed by the redirection where an object handed
+# over is left open; the same file may be both sides; and two names for one
+# file are one target, so the two output streams interleave into it.
+lang/address_with_stream.rex
+
 # Task 15: a `SYNTAX` condition's own five extra indexes -- `CODE`,
 # `ERRORTEXT`, `MESSAGE`, `ADDITIONAL` and `RC` -- in a file of its own,
 # because `CALL ON SYNTAX` is a 25.1 translation error and the kind cannot be

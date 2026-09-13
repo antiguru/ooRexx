@@ -10252,8 +10252,8 @@ mod tests {
                 "rexx-exec: OPTIONS is not implemented (Phase 5)\n",
             ),
             (
-                "address 'SYSTEM' .K with output stream 'f.txt'\n::class K\n::method makeString class\n  return 'true'\n",
-                "rexx-exec: an ADDRESS WITH STREAM redirection is not implemented (Phase 7)\n",
+                "address 'SYSTEM' .K with output using (.rexxqueue~new)\n::class K\n::method makeString class\n  return 'true'\n",
+                "rexx-exec: an ADDRESS WITH RexxQueue redirection is not implemented (Phase 10)\n",
             ),
         ] {
             assert_eq!(

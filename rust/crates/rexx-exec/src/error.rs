@@ -659,6 +659,29 @@ impl Raised {
     /// measured is the empty string alone -- a blank answers `UNKNOWN` and
     /// every other reader takes an empty name as the default input or output
     /// rather than an error (`BuiltinFunctions.cpp:2444`).
+    /// 98.999: a `STREAM` input redirection whose file would not open. The
+    /// substitutions are the qualified name and the `ERROR:n` the open
+    /// answered.
+    pub(crate) fn stream_not_readable(file: &[u8], answered: &[u8]) -> Raised {
+        Raised::syntax(98, 999, vec![file.to_vec(), answered.to_vec()])
+    }
+
+    /// 98.920: the same for an output or error redirection.
+    pub(crate) fn stream_not_writeable(file: &[u8], answered: &[u8]) -> Raised {
+        Raised::syntax(98, 920, vec![file.to_vec(), answered.to_vec()])
+    }
+
+    /// 98.997: `REPLACE` or `APPEND` given with a `USING` target that is a
+    /// stream object rather than a name, where neither option means anything.
+    pub(crate) fn stream_target_option() -> Raised {
+        Raised::syntax(98, 997, Vec::new())
+    }
+
+    /// 98.922: the same for a `RexxQueue` target.
+    pub(crate) fn queue_target_option() -> Raised {
+        Raised::syntax(98, 922, Vec::new())
+    }
+
     /// 98.923: a pipe this crate could not create or drive. The substitution
     /// is the system's own description of the failure.
     pub(crate) fn redirection_failed(error: &str) -> Raised {

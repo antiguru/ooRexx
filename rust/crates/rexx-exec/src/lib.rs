@@ -318,13 +318,12 @@ impl Loud {
     }
 
     /// An `ADDRESS ... WITH` redirection whose target this crate accepts in
-    /// the grammar and does not yet build.
-    fn redirection(what: &str) -> Loud {
+    /// the grammar and does not yet build. `owner` is the phase that owes it,
+    /// which is not always this one: a `RexxQueue` target waits on the queues
+    /// themselves.
+    fn redirection(what: &str, owner: &'static str) -> Loud {
         Loud {
-            message: owned_message(
-                &format!("an ADDRESS WITH {what} redirection"),
-                Some("Phase 7"),
-            ),
+            message: owned_message(&format!("an ADDRESS WITH {what} redirection"), Some(owner)),
         }
     }
 

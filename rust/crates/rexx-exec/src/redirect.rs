@@ -22,7 +22,7 @@
 use std::rc::Rc;
 
 use rexx_core::{Body, Decoded, ObjRef};
-use rexx_parse::{AddressIo, OutputOption, Redirection, SymbolId};
+use rexx_parse::{AddressIo, Expr, OutputOption, Redirection, SymbolId};
 
 use crate::activation::IoConfigs;
 use crate::error::{Failure, Raised};
@@ -67,12 +67,59 @@ enum Target {
     /// An `OrderedCollection`: `EMPTY`, then one `APPEND` per line, so the
     /// class's own methods decide what that means.
     Collection { object: ObjRef, append: bool },
+    /// An open stream, one `LINEOUT` per line.
+    ///
+    /// `qualified` is `Some` for a `STREAM name` target, which this opened and
+    /// therefore closes, and `None` for a `USING` stream object, which the
+    /// program owns and which stays open -- measured, such an object's
+    /// `~state` is still `READY` after the command while its bytes are on
+    /// disk.
+    Stream {
+        object: ObjRef,
+        qualified: Option<Vec<u8>>,
+    },
 }
 
 impl Target {
     fn object(&self) -> ObjRef {
         match self {
-            Target::Stem { object, .. } | Target::Collection { object, .. } => *object,
+            Target::Stem { object, .. }
+            | Target::Collection { object, .. }
+            | Target::Stream { object, .. } => *object,
+        }
+    }
+
+    /// Whether two targets are one destination.
+    ///
+    /// **Two named streams compare on the qualified name, not on identity**,
+    /// which is `StreamOutputTarget::isSameTarget`'s own override -- measured,
+    /// `g.txt` with `g.txt` and `h.txt` with `./h.txt` each collapse to a
+    /// single file the two streams interleave into.
+    fn same_target(&self, other: &Target) -> bool {
+        match (self, other) {
+            (
+                Target::Stream {
+                    qualified: Some(one),
+                    ..
+                },
+                Target::Stream {
+                    qualified: Some(two),
+                    ..
+                },
+            ) => one == two,
+            (
+                Target::Stream {
+                    qualified: Some(_), ..
+                },
+                _,
+            )
+            | (
+                _,
+                Target::Stream {
+                    qualified: Some(_), ..
+                },
+            ) => false,
+            _ => self.object() == other.object(),
         }
     }
 }
@@ -92,7 +139,7 @@ impl IoContext {
     /// both streams on one stem fills it with `out1`, `err1`, `out2`.
     pub(crate) fn shares_one_target(&self) -> bool {
         match (&self.output, &self.error) {
-            (Some(output), Some(error)) => output.object() == error.object(),
+            (Some(output), Some(error)) => output.same_target(error),
             _ => false,
         }
     }
@@ -288,7 +335,14 @@ impl Interp {
                 self.trace_redirect_target(Stream::Input, object);
                 self.using_input_lines(object)?
             }
-            Redirection::Stream(_) => return Err(Loud::redirection("STREAM").into()),
+            Redirection::Stream(expression) => {
+                let name = self.redirect_stream_name(code, expression, Stream::Input)?;
+                let stream = self.open_named_stream(&name, b"READ", true)?;
+                let lines = self.read_stream_lines(stream)?;
+                let caller = self.caller();
+                self.send_message(stream, b"CLOSE", None, &[], caller)?;
+                lines
+            }
         };
         let mut buffer = Vec::new();
         for line in lines {
@@ -332,8 +386,18 @@ impl Interp {
         if self.is_stem_object(object) {
             return self.stem_input_lines(object);
         }
-        if self.is_stream_like(object)? {
-            return Err(Loud::redirection("stream object").into());
+        if self.is_rexx_queue(object) {
+            return Err(Loud::redirection("RexxQueue", "Phase 10").into());
+        }
+        if self.is_stream_object(object) {
+            return self.read_stream_lines(object);
+        }
+        if let Some(path) = self.file_object_path(object)? {
+            let stream = self.open_named_stream(&path, b"READ", true)?;
+            let lines = self.read_stream_lines(stream)?;
+            let caller = self.caller();
+            self.send_message(stream, b"CLOSE", None, &[], caller)?;
+            return Ok(lines);
         }
         let array = match self.array_slots_of(object) {
             Some(_) => object,
@@ -381,21 +445,64 @@ impl Interp {
                 let object = self.eval(code, expression)?;
                 self.roots.push_temp(object);
                 self.trace_redirect_target(stream, object);
-                self.using_output_target(object, append)
+                self.using_output_target(object, option)
             }
-            Redirection::Stream(_) => Err(Loud::redirection("STREAM").into()),
+            Redirection::Stream(expression) => {
+                let name = self.redirect_stream_name(code, expression, stream)?;
+                let mode: &[u8] = match append {
+                    true => b"WRITE APPEND",
+                    false => b"WRITE REPLACE",
+                };
+                let object = self.open_named_stream(&name, mode, false)?;
+                Ok(Target::Stream {
+                    object,
+                    qualified: Some(name),
+                })
+            }
         }
     }
 
     /// `WITH OUTPUT USING expr`, in `createOutputTarget`'s own order: a stem,
     /// then a stream-shaped object, then an `OrderedCollection`, and 98.996
     /// for anything else.
-    fn using_output_target(&mut self, object: ObjRef, append: bool) -> Result<Target, Failure> {
+    fn using_output_target(
+        &mut self,
+        object: ObjRef,
+        option: OutputOption,
+    ) -> Result<Target, Failure> {
+        let append = option == OutputOption::Append;
+        // **Whether an option was written matters here, not just which one.**
+        // Neither `REPLACE` nor `APPEND` means anything to an object that is
+        // not a file, and the oracle refuses both rather than ignoring them.
+        let optioned = option != OutputOption::Default;
         if self.is_stem_object(object) {
             return Ok(Target::Stem { object, append });
         }
-        if self.is_stream_like(object)? {
-            return Err(Loud::redirection("stream object").into());
+        if self.is_rexx_queue(object) {
+            if optioned {
+                return Err(Raised::queue_target_option().into());
+            }
+            return Err(Loud::redirection("RexxQueue", "Phase 10").into());
+        }
+        if self.is_stream_object(object) {
+            if optioned {
+                return Err(Raised::stream_target_option().into());
+            }
+            return Ok(Target::Stream {
+                object,
+                qualified: None,
+            });
+        }
+        if let Some(path) = self.file_object_path(object)? {
+            let mode: &[u8] = match append {
+                true => b"WRITE APPEND",
+                false => b"WRITE REPLACE",
+            };
+            let opened = self.open_named_stream(&path, mode, false)?;
+            return Ok(Target::Stream {
+                object: opened,
+                qualified: Some(path),
+            });
         }
         if self.is_ordered_collection(object) {
             return Ok(Target::Collection { object, append });
@@ -438,6 +545,122 @@ impl Interp {
             Target::Collection { object, append } => {
                 self.write_collection_target(object, append, lines)
             }
+            Target::Stream { object, .. } => {
+                let close = matches!(
+                    target,
+                    Target::Stream {
+                        qualified: Some(_),
+                        ..
+                    }
+                );
+                self.write_stream_target(object, close, lines)
+            }
+        }
+    }
+
+    /// `StreamOutputTarget`: one `LINEOUT` per line, then a `CLOSE` for a
+    /// target this redirection opened. A `USING` stream object is left open,
+    /// because the program owns it.
+    fn write_stream_target(
+        &mut self,
+        object: ObjRef,
+        close: bool,
+        lines: &[Vec<u8>],
+    ) -> Result<(), Failure> {
+        for line in lines {
+            let value = self.text(line);
+            self.roots.push_temp(value);
+            let caller = self.caller();
+            self.send_message(object, b"LINEOUT", None, &[Some(value)], caller)?;
+        }
+        if close {
+            let caller = self.caller();
+            self.send_message(object, b"CLOSE", None, &[], caller)?;
+        }
+        Ok(())
+    }
+
+    /// The qualified name a `STREAM expr` redirection resolves to, echoed as
+    /// the keyword result every other target is.
+    fn redirect_stream_name(
+        &mut self,
+        code: &Code<'_>,
+        expression: &Expr,
+        stream: Stream,
+    ) -> Result<Vec<u8>, Failure> {
+        let value = self.eval(code, expression)?;
+        self.roots.push_temp(value);
+        self.trace_redirect_target(stream, value);
+        let value = self.required_string_value(value)?;
+        let name = self.to_text(value).into_owned();
+        let cwd = self.cwd_text();
+        Ok(crate::paths::normalize(&String::from_utf8_lossy(&name), &cwd).into_bytes())
+    }
+
+    /// A `.Stream` opened for one redirection.
+    ///
+    /// **The open happens before the command runs**, and its failure is
+    /// 98.999 for reading or 98.920 for writing, each carrying the qualified
+    /// name and the `ERROR:n` the open answered. Measured: a command whose
+    /// output stream cannot be opened never spawns, and a file it would have
+    /// written is absent afterwards.
+    fn open_named_stream(
+        &mut self,
+        qualified: &[u8],
+        mode: &[u8],
+        reading: bool,
+    ) -> Result<ObjRef, Failure> {
+        let Some(class) = self.rexx_package_class(b"STREAM") else {
+            return Err(Loud::environment_symbol(b".STREAM", "Phase 7").into());
+        };
+        let argument = self.text(qualified);
+        self.roots.push_temp(argument);
+        let caller = self.caller();
+        let object = self
+            .send_message(class, b"NEW", None, &[Some(argument)], caller)?
+            .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
+        self.roots.push_temp(object);
+        let option = self.text(mode);
+        self.roots.push_temp(option);
+        let caller = self.caller();
+        let answer = self
+            .send_message(object, b"OPEN", None, &[Some(option)], caller)?
+            .unwrap_or(ObjRef::NIL);
+        let answered = self.string_value_text(answer);
+        if answered != b"READY:" {
+            let raised = match reading {
+                true => Raised::stream_not_readable(qualified, &answered),
+                false => Raised::stream_not_writeable(qualified, &answered),
+            };
+            return Err(raised.into());
+        }
+        Ok(object)
+    }
+
+    /// Every line a stream still holds, read as `StreamObjectInputSource`
+    /// reads: `LINEIN` until the stream reports `NOTREADY`.
+    ///
+    /// **The state decides, not the answer.** A blank line answers `''` and so
+    /// does the read past the end -- measured over a file of `l1`, `l2`, an
+    /// empty line and `l4`, four reads answer with `state` `READY` throughout
+    /// and only the fifth is `NOTREADY`, so stopping on an empty answer would
+    /// swallow every line after a blank one.
+    fn read_stream_lines(&mut self, stream: ObjRef) -> Result<Vec<Vec<u8>>, Failure> {
+        let mut lines = Vec::new();
+        loop {
+            let caller = self.caller();
+            let value = self
+                .send_message(stream, b"LINEIN", None, &[], caller)?
+                .unwrap_or(ObjRef::NIL);
+            self.roots.push_temp(value);
+            let caller = self.caller();
+            let state = self
+                .send_message(stream, b"STATE", None, &[], caller)?
+                .unwrap_or(ObjRef::NIL);
+            if self.string_value_text(state) == b"NOTREADY" {
+                return Ok(lines);
+            }
+            lines.push(self.string_value_text(value));
         }
     }
 
@@ -616,24 +839,33 @@ impl Interp {
             )
     }
 
-    /// Whether `value` is one of the objects a redirection treats as a
-    /// stream: an `InputStream`/`OutputStream`, a `Monitor`, a `File` or a
-    /// `RexxQueue`. Each is a redirection this crate does not build yet, and
-    /// they are told apart from an ordinary object so that the refusal names
-    /// what was asked for rather than reporting it as an invalid target.
-    fn is_stream_like(&mut self, value: ObjRef) -> Result<bool, Failure> {
-        for class in [
-            &b"INPUTSTREAM"[..],
-            b"OUTPUTSTREAM",
-            b"MONITOR",
-            b"FILE",
-            b"REXXQUEUE",
-        ] {
-            if self.is_instance_of_rexx_class(value, class) {
-                return Ok(true);
-            }
+    /// Whether `value` is a `RexxQueue`, which a redirection accepts and this
+    /// crate has no queues to give it -- Phase 10's.
+    fn is_rexx_queue(&mut self, value: ObjRef) -> bool {
+        self.is_instance_of_rexx_class(value, b"REXXQUEUE")
+    }
+
+    /// Whether `value` is an object a redirection drives with `LINEIN` and
+    /// `LINEOUT`. A `Monitor` counts, which is the oracle's own rule: it
+    /// treats one as a stream on both sides.
+    fn is_stream_object(&mut self, value: ObjRef) -> bool {
+        self.is_instance_of_rexx_class(value, b"INPUTSTREAM")
+            || self.is_instance_of_rexx_class(value, b"OUTPUTSTREAM")
+            || self.is_instance_of_rexx_class(value, b"MONITOR")
+    }
+
+    /// A `.File`'s absolute path, or `None` for anything that is not one. A
+    /// `File` redirection is a stream named by that path, not an object driven
+    /// directly.
+    fn file_object_path(&mut self, value: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
+        if !self.is_instance_of_rexx_class(value, b"FILE") {
+            return Ok(None);
         }
-        Ok(false)
+        let caller = self.caller();
+        let answer = self
+            .send_message(value, b"ABSOLUTEPATH", None, &[], caller)?
+            .unwrap_or(ObjRef::NIL);
+        Ok(Some(self.string_value_text(answer)))
     }
 
     /// Whether `value` is an `OrderedCollection`.

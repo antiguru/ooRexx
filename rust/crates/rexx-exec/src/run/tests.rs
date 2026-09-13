@@ -7586,42 +7586,20 @@ fn an_environment_name_over_two_hundred_and_fifty_bytes_raises_29_1() {
     }
 }
 
-/// A `STREAM` redirection fails loudly and names Phase 7. The rest of `WITH`
-/// does not: a stem, a `USING` object and `NORMAL` are dispatched, and
-/// `corpus/lang/address_with_stem.rex` and `address_with_using.rex` pin them.
+/// `address with output stem o.` is **not** a `WITH` form. `WITH` is a
+/// keyword only after an environment or a `VALUE` expression (`addressNew`),
+/// so that clause names an environment called `WITH` and runs `OUTPUT STEM
+/// O.` as a command against it -- measured, the oracle answers `>>> "OUTPUT
+/// STEM O."` and `+++ "RC(30)"` on stderr at exit 0.
 ///
-/// **Both sources carry a command, and they have to.** A redirection's target
-/// is evaluated where the command is issued, so an `ADDRESS env WITH ...` on
-/// its own only stores the configuration and refuses nothing -- the second
-/// source is that form followed by the command that trips it.
-///
-/// **`address with output stem o.` is not one of these.** `WITH` is a keyword
-/// only after an environment or a `VALUE` expression (`addressNew`), so that
-/// clause names an environment called `WITH` and runs `OUTPUT STEM O.` as a
-/// command against it. Measured: the oracle answers `+++ "RC(30)"` on stderr
-/// at exit 0 and this crate is byte-identical to it, so the clause belongs to
-/// the command dispatch and not to the gap this test pins.
+/// **`RC` is what parts the two readings.** A command reached an environment
+/// nothing is registered for, so it is 30; a `WITH` form would have issued no
+/// command at all and left `rc` deriving its own name.
 #[test]
-fn a_stream_redirection_stays_loud_and_names_phase_7() {
-    for source in [
-        &b"address cmd 'text' with output stream 'out.txt'\n"[..],
-        &b"address cmd with input stream 'in.txt'\n'text'\n"[..],
-    ] {
-        let mut interp = Interp::new();
-        let failure = run_source(&mut interp, source).unwrap_err();
-        let Failure::Loud(loud) = failure else {
-            panic!(
-                "expected Loud for {:?}, got {failure:?}",
-                String::from_utf8_lossy(source)
-            );
-        };
-        assert_eq!(
-            loud.message,
-            "an ADDRESS WITH STREAM redirection is not implemented (Phase 7)",
-            "{}",
-            String::from_utf8_lossy(source)
-        );
-    }
+fn with_after_no_environment_names_an_environment_called_with() {
+    let mut interp = Interp::new();
+    let printed = say_output(&mut interp, b"address with output stem o.\nsay rc\n");
+    assert_eq!(String::from_utf8_lossy(&printed), "30\n");
 }
 
 /// [`Interp::chunk_node_at`]'s steps land on the node the path names, and
