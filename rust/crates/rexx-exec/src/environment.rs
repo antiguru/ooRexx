@@ -1951,13 +1951,27 @@ impl Interp {
     /// The file `name` resolves to from `package`'s own directory --
     /// `PackageClass::resolveProgramName`, which `~findProgram` and
     /// `~loadPackage` each reach with their own resolve type.
+    /// **A package compiled from source text has no directory**, and searches
+    /// the global context instead of borrowing one. `package_path` answers the
+    /// running program's own path for a package with no file, which is right
+    /// for `PARSE SOURCE` and a traceback and wrong here: measured with the
+    /// same file name in both places, the oracle resolves an in-memory
+    /// package's `findProgram` against the **current** directory where this
+    /// crate resolved it against the directory of the program that built it.
+    ///
+    /// `compiled_method_names` is the test because it holds exactly the
+    /// programs built from source -- an in-memory package, a `Method` and a
+    /// `Routine` compiled from text -- while `new_file_executable`, which does
+    /// come from a file, records a path instead.
     pub(crate) fn resolve_program_name(
         &self,
         package: Option<ProgramId>,
         name: &[u8],
         requires: bool,
     ) -> Option<String> {
-        let program = package.map(|program| self.package_path(program));
+        let program = package
+            .filter(|program| !self.compiled_method_names.contains_key(program))
+            .map(|program| self.package_path(program));
         self.resolve_search(program, name, requires)
     }
 
