@@ -138,6 +138,19 @@ pub(crate) enum Resolved {
     /// `BuiltinFunctions.cpp`'s table, which is why its argument errors are
     /// the native-routine family.
     Internal(&'static crate::internal_routines::InternalRoutine),
+    /// An external Rexx file the search found for this name, entered the way
+    /// [`Resolved::Library`] is: a whole program with its own directives and
+    /// its own `ProgramId`.
+    ///
+    /// **It carries no path**, and the consumer searches again to recover it.
+    /// A `Resolved` is cached per call site in a `Cell`, so it has to be
+    /// `Copy`, and the resolver is `&self` and can neither intern a path nor
+    /// hand out an index. The second search is stats only, against a call that
+    /// re-reads and re-parses the file anyway. Caching the decision stays
+    /// right either way: a file that disappears fails at the consumer's own
+    /// search rather than being served from a stale hit, and a miss is never
+    /// cached because the resolver answers `Err` for one.
+    External,
 }
 
 /// Which of the two activation-pushing outcomes a resolved call took, kept
@@ -3761,16 +3774,16 @@ impl Interp {
                     Some(_) => Resolved::Internal(row),
                     None => return Err(Loud::internal_routine(name, row.owner).into()),
                 },
-                // **43.1, not this crate's loud gap**, and the difference is
-                // one search: the oracle looks for an external Rexx file
-                // named for the target before answering, and this crate does
-                // not (Phase 7, `phase-4-exclusions.txt`). Measured in a
-                // clean directory with nothing of that name beside the
-                // program, the oracle's own answer is exactly this condition
-                // -- `call zorkolo` gives 43.1 rc 213 `Could not find routine
-                // "ZORKOLO".` -- so answering it here is right for every
-                // program with no such file and wrong only for one that has
-                // one, where the oracle runs the file at rc 0.
+                // **The external file search, which the oracle performs
+                // before answering 43.1.** Only whether it resolves is
+                // decided here; the path is searched for again where the
+                // file is entered, because a `Resolved` is `Copy` and this
+                // resolver is `&self`.
+                None if self.external_program(name).is_some() => Resolved::External,
+                // 43.1, once the search above has found nothing. Measured in
+                // a clean directory with nothing of that name beside the
+                // program: `call zorkolo` gives 43.1 rc 213 `Could not find
+                // routine "ZORKOLO".`
                 None => return Err(Raised::routine_not_found(name).into()),
             },
         };
@@ -4026,6 +4039,14 @@ impl Interp {
                 .enter_library_program(program, Some(arguments))
                 .map(Ended::Returned);
         }
+        // **And the external file ends here for the same reason**, which is
+        // the whole of why it is not an `Entered`: a file the search found is
+        // a program, entered the way the command line's is.
+        if let Resolved::External = resolved {
+            return self
+                .enter_external_program(name, arguments, call_type)
+                .map(Ended::Returned);
+        }
 
         let entered = match resolved {
             // Answered above, before the loop that just ran.
@@ -4034,6 +4055,7 @@ impl Interp {
             Resolved::Label(target) => Entered::Label(target),
             Resolved::Routine(installed) => Entered::Routine(installed),
             Resolved::Library(_) => unreachable!("the library path returns just above"),
+            Resolved::External => unreachable!("the external path returns just above"),
         };
 
         // The caller's own program and body selector, which a label callee

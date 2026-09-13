@@ -451,9 +451,13 @@ impl Raised {
         Raised::syntax(43, 901, vec![name.to_vec()])
     }
 
-    /// 3.1: `Method~newFile` or `Routine~newFile` naming a file that cannot
-    /// be read. One substitution, **the name as the program wrote it** rather
-    /// than anything resolved from it.
+    /// 3.1: a file that resolved and then could not be read --
+    /// `Method~newFile` and `Routine~newFile` naming one, and an external
+    /// call whose target the search found.
+    ///
+    /// One substitution, and **which name it is depends on the caller**: the
+    /// `newFile` forms pass the name as the program wrote it, where the call
+    /// route passes the resolved absolute path, measured on a mode-000 file.
     pub(crate) fn executable_file_unreadable(name: &[u8]) -> Raised {
         Raised::syntax(3, 1, vec![name.to_vec()])
     }

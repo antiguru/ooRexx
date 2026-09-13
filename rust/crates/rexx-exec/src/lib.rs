@@ -2284,7 +2284,7 @@ impl Interp {
         let program = Rc::new(program);
         let program_id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&program));
-        self.run_loaded(program, program_id, CallType::Command)
+        self.run_loaded(program, program_id, CallType::Command, None, None)
     }
 
     /// Runs the interpreter's own Rexx-written library -- `Setup.cpp:1786`'s
@@ -2319,6 +2319,70 @@ impl Interp {
         #[cfg(test)]
         ir::drive::resume_counters();
         outcome.map(|_| ())
+    }
+
+    /// The file the external search resolves `name` to, or `None` when no
+    /// route holds one. `&self`, which is what lets the call resolver use it.
+    pub(crate) fn external_program(&self, name: &[u8]) -> Option<String> {
+        let program = self.running_activation()?.program_id;
+        self.resolve_search(Some(self.package_path(program)), name, false)
+    }
+
+    /// One external Rexx file, entered by a call: read, parsed, registered and
+    /// run, with `arguments` as its calling convention.
+    ///
+    /// **Registered afresh every time, and never in the requires cache.**
+    /// Measured: a file rewritten between two calls runs both versions, so
+    /// nothing here may serve the first parse to the second call, and a later
+    /// `::REQUIRES` of the same file must still run its prologue.
+    fn enter_external_program(
+        &mut self,
+        name: &[u8],
+        arguments: Vec<Option<ObjRef>>,
+        call_type: CallType,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let Some(resolved) = self.external_program(name) else {
+            return Err(Raised::routine_not_found(name).into());
+        };
+        // Resolved and then unreadable is 3.1 naming the file, not the 43.1
+        // of a name that resolved to nothing -- measured on a mode-000 file.
+        let Ok(text) = std::fs::read(&resolved) else {
+            return Err(Raised::executable_file_unreadable(resolved.as_bytes()).into());
+        };
+        let parsed = match parse_program(text) {
+            Ok(parsed) => Rc::new(parsed),
+            Err(error) => {
+                return Err(Loud::required_source(&resolved, &format!("{error}")).into());
+            }
+        };
+        let caller = self
+            .running_activation()
+            .map(|activation| activation.program_id);
+        let program_id = ProgramId(self.programs.len());
+        self.programs.push(Rc::clone(&parsed));
+        // Its own path, so the callee's `PARSE SOURCE`, `~package~name` and
+        // traceback name the file rather than the program that called it.
+        self.required_paths
+            .insert(program_id, resolved.as_str().into());
+        let address = self.activation().address.clone();
+        let settings = self.activation().settings.clone();
+        let saved = std::mem::replace(
+            &mut self.call_context,
+            CallContext {
+                name: name.to_vec(),
+                arguments: Rc::from(arguments),
+                receiver: None,
+            },
+        );
+        let outcome = self.run_loaded(parsed, program_id, call_type, Some(address), Some(settings));
+        self.call_context = saved;
+        let value = outcome?;
+        // What the callee made public becomes the caller's, and transitively
+        // what the callee itself required.
+        if let Some(caller) = caller {
+            self.merge_required(caller, program_id);
+        }
+        Ok(value)
     }
 
     /// Parses one embedded library program, registers it, and runs its body
@@ -2360,7 +2424,7 @@ impl Interp {
                 receiver: None,
             },
         );
-        let outcome = self.run_loaded(parsed, program_id, CallType::Command);
+        let outcome = self.run_loaded(parsed, program_id, CallType::Command, None, None);
         self.call_context = saved;
         outcome
     }
@@ -2404,11 +2468,19 @@ impl Interp {
 
     /// Installs `program`'s directives and runs its main body, for a program
     /// already registered under `program_id`.
+    ///
+    /// `address` is the environment pair the body starts with, `None` for one
+    /// that starts at the platform default: a file reached by a **call**
+    /// inherits its caller's, and measured, nothing else does.
+    /// `caller_settings` is what `::OPTIONS NUMERIC INHERIT` inherits from,
+    /// `None` where there is no call site above the body.
     fn run_loaded(
         &mut self,
         program: Rc<Program>,
         program_id: ProgramId,
         call_type: CallType,
+        address: Option<crate::activation::AddressState>,
+        caller_settings: Option<Settings>,
     ) -> Result<Option<ObjRef>, Failure> {
         // **Before the first clause, and its failures print nothing on
         // stdout.** That is the oracle's own shape rather than a choice
@@ -2454,10 +2526,14 @@ impl Interp {
         let id = self.next_activation_id();
         let mut main = Activation::new(id, Rc::clone(&program), program_id, plan, frame);
         main.call_type = call_type;
-        // No call site above a main body, so `::OPTIONS NUMERIC INHERIT` has
+        if let Some(address) = address {
+            main.address = address;
+        }
+        // With no call site above a main body, `::OPTIONS NUMERIC INHERIT` has
         // nothing to inherit and the package's own settings stand -- measured,
         // `::options digits 12 numeric inherit` alone in a file reports 12.
-        self.start_from_package(&mut main, None);
+        // A file reached by a call has one, and passes it.
+        self.start_from_package(&mut main, caller_settings.as_ref());
         self.push_activation(main);
 
         // `Returned` and `Exited` are the same thing at the top: measured,
@@ -2944,7 +3020,7 @@ impl Interp {
         self.required_packages.insert(name.into(), required);
         self.required_packages
             .insert(resolved.as_bytes().into(), required);
-        self.run_loaded(parsed, required, CallType::Requires)?;
+        self.run_loaded(parsed, required, CallType::Requires, None, None)?;
         Ok(required)
     }
 
@@ -3254,7 +3330,7 @@ impl Interp {
         let id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&parsed));
         self.compiled_method_names.insert(id, name.into());
-        self.run_loaded(parsed, id, CallType::Requires)?;
+        self.run_loaded(parsed, id, CallType::Requires, None, None)?;
         Ok(id)
     }
 
