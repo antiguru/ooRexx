@@ -12,8 +12,8 @@ headers; native-API ooTest groups pass. **L2 arrives here**."*
 The scoping survey ruled the order: **the L2 slice first**, then the rest of the surface. The slice
 is what `extensions/rxregexp` needs -- library loading, the package entry, the method-entry table,
 the two-call stub protocol, the `ValueDescriptor` conversions for five value types, and seven
-context functions. The rest is the other 211 function pointers, `testbinaries/`, and the eight
-ooTest API groups.
+context functions. The rest is the 211 function pointers the slice does not fill, `testbinaries/`,
+and the eight ooTest API groups.
 
 **Out of scope, and owned elsewhere.** The queue entry points and RXAPI are Phase 10's, per D7 and
 the Phase 7 close-out. `rexx`, `rexxc`, `rxqueue` and `rxsubcom` are Phase 9's, and with them the

@@ -23,6 +23,15 @@ that Rust has to populate. Counted with `grep -cE '\(RexxEntry \*'` over each st
 | `ExitContextInterface` | `:749` | 11 |
 | `IORedirectorInterface` | `:769` | 11 |
 
+The table is closed and was checked for that: `grep -cE '\(RexxEntry \* ?[A-Za-z_][A-Za-z0-9_]*\)'`
+finds 220 declarations in the whole header, and the two that are not members of those six structs
+are the `RexxPackageLoader` and `RexxPackageUnloader` typedefs at `:259-260`. **The count is of
+header declarations and of nothing else** -- in particular it is not a count of exported symbols,
+which is a different and much larger set that no extension imports (see the D5 amendment). An
+earlier pass of this survey used `[A-Za-z_]+` for the pointer's name, which excludes digits and
+silently dropped `SendMessage0`, `Int64ToObject`, `RaiseException0` and their neighbours; the
+pattern above is the corrected one.
+
 Beside them, `api/rexx.h` declares 37 `RexxReturnCode REXXENTRY` functions -- the classic flat API,
 counted with `grep -c 'RexxReturnCode REXXENTRY' api/rexx.h`. Many of those are the queue, macro
 space and subcom registries, which the plan already assigns to Phase 10 and Phase 9 respectively.
@@ -36,18 +45,23 @@ Phase 7's close measured that `ooTest.frm` stops at `::METHOD INIT EXTERNAL "LIB
 RegExp_Init"`. The natural reading is that L2 waits on the native API; the measurement says it
 waits on a specific and small part of it.
 
-`extensions/rxregexp/rxregexp.cpp` makes exactly seven distinct context calls, counted with
-`grep -oE 'context->[A-Za-z_]+' | sort | uniq -c`:
+`extensions/rxregexp/rxregexp.cpp` makes seven distinct context calls, counted with
+`grep -oE 'context->[A-Za-z_0-9]+' | sort | uniq -c`. **The name an extension writes is not always
+the name of a function pointer**, because the headers put C++ inline conveniences on the context
+structs that forward to a differently named pointer, so the table below carries both. Reading only
+the left column names two entries that do not exist.
 
-| call | uses |
-|---|---|
-| `SetObjectVariable` | 4 |
-| `WholeNumber` | 3 |
-| `StringData` | 3 |
-| `RaiseException` | 3 |
-| `StringLength` | 2 |
-| `NewPointer` | 1 |
-| `DropObjectVariable` | 1 |
+| written in the extension | uses | the function pointer it reaches | table |
+|---|---|---|---|
+| `SetObjectVariable` | 4 | `SetObjectVariable` (`:693`) | method context |
+| `WholeNumber` | 3 | **`WholeNumberToObject`** (`:548`), via the inline at `:1041` | thread |
+| `StringData` | 3 | `StringData` (`:577`) | thread |
+| `RaiseException0` | 3 | `RaiseException0` (`:635`) | thread |
+| `StringLength` | 2 | `StringLength` (`:576`) | thread |
+| `NewPointer` | 1 | `NewPointer` (`:615`) | thread |
+| `DropObjectVariable` | 1 | `DropObjectVariable` (`:695`) | method context |
+
+It is `RaiseException0` and not the general `RaiseException`, which takes an argument array.
 
 Its five methods declare five value types between them -- `int` as every return type, then
 `CSTRING`, `OPTIONAL_CSTRING`, `CSELF` and `RexxStringObject`.
@@ -67,8 +81,14 @@ and `rxregexp`'s entry names a version floor (`REXX_INTERPRETER_4_0_0`), a metho
 load/unload hooks.
 
 **The L2 slice is therefore: `dlopen` and symbol lookup, the package entry, the method-entry table,
-the two-call stub protocol, the `ValueDescriptor` conversions for five types, and seven context
-functions.** Not 218.
+the two-call stub protocol, the `ValueDescriptor` conversions for five types, and seven function
+pointers.** Not 218. The seven are `WholeNumberToObject`, `StringData`, `StringLength`,
+`NewPointer` and `RaiseException0` in the thread table, and `SetObjectVariable` and
+`DropObjectVariable` in the method-context table.
+
+Note what the subtraction does and does not say. 218 minus those seven leaves 211 function pointers
+the slice does not fill, but three of the six things in the sentence above are not function
+pointers at all, so "211 remain" is not the same claim as "the slice is nearly done".
 
 ## 3. The gate's other clause is `testbinaries/` and eight ooTest groups
 
