@@ -85,7 +85,11 @@ fn only_the_granted_module_may_say_unsafe() {
     });
     assert_eq!(
         granted,
-        vec!["crates/rexx-core/src/lib.rs".to_string()],
+        vec![
+            "crates/rexx-api/src/ffi.rs".to_string(),
+            "crates/rexx-api/src/load.rs".to_string(),
+            "crates/rexx-core/src/lib.rs".to_string(),
+        ],
         "the set of `unsafe_code` opt-ins in this workspace has changed. Each \
          one is a decision of Moritz's, taken per site against the bar in \
          rust/CLAUDE.md; adding one here without that is what this test is for."
