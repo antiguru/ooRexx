@@ -12,4 +12,4 @@
 //! The C ABI boundary: inbound entry points and outbound library loading.
 
 mod ffi;
-mod load;
+pub mod load;
