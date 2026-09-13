@@ -197,7 +197,6 @@ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:144
 Loud	object_position	body	crates/rexx-exec/src/lib.rs:323	off-send-surface	-	-	-
 Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:573	off-send-surface	-	-	-
 Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:310	off-send-surface	-	-	-
-Loud	package_from_source	send	crates/rexx-exec/src/lib.rs:423	recorded	yes	a loadPackage source array	say .context~package~loadPackage('x.rex', .array~of('return 1'))~class~id -- the one-argument form is implemented and answers, so the witness has to pass the array
 Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:415	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
 Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1211	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
 Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:541	off-send-surface	-	-	-
