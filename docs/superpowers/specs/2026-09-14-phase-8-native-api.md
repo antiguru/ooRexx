@@ -73,8 +73,15 @@ The symbol an extension publishes is `RexxGetPackage`, returning `RexxPackageEnt
 (`interpreter/package/LibraryPackage.cpp:211`). If the entry's `requiredVersion` is non-zero and
 greater than the interpreter's, the load raises `Error_Execution_library_version` = **98.982**
 (`LibraryPackage.cpp:232-235`). Routines are registered from the table, then the optional `loader`
-hook runs (`:237-247`). A method name that the package does not export gives
-`Error_Execution_library_method` = **98.978**, a routine name **98.979**.
+hook runs (`:237-247`).
+
+**Corrected 2026-09-14 by measurement**, because reading the error table produced the wrong
+numbers for the path a program actually takes. A `::REQUIRES ... LIBRARY` naming a library that is
+not there is **98.903** (`Error_Execution_library`, `PackageManager.cpp:214`), not 98.982, and it
+fires before the program's first clause. A `::METHOD ... EXTERNAL` naming an entry the library does
+not export is **90.998** and a `::ROUTINE` one is **90.999**, both at directive-install time.
+`Error_Execution_library_method` = 98.978 belongs to `loadExternalMethod` and `Package~loadLibrary`
+(`PackageManager.cpp:947`, `:968`). The transcripts are in this plan's SDD ledger.
 
 **The test target is the oracle's own compiled extension, not a rebuild of it.** Measured
 2026-09-14 and recorded as an amendment to D5: `build/lib/librxregexp.so` imports no symbol whose
@@ -195,7 +202,7 @@ grant.
 | the conversion table is right for the five L2 types | the 20 `rxregexp` L1 cases, differential |
 | `CSELF` survives a collection | a witness that collects between two method calls on one object |
 | a stale handle misses rather than lies | a unit test in `rexx-api` holding a handle past its activation |
-| the three load failures | corpus witnesses for 98.978, 98.979 and 98.982 |
+| the load failures | corpus witnesses for 98.903, 90.998, 90.999 and 98.978 |
 | **L2** | `ooTest.frm` loads and one test group executes |
 | `testbinaries/` compile unchanged | a build of `testbinaries/` against the frozen headers |
 | the six API groups that are not embedding | the ooTest run |
