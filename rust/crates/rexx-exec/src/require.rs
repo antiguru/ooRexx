@@ -59,8 +59,11 @@ pub(crate) fn candidates(
     entries: &[String],
     parent_extension: Option<&str>,
     requires: bool,
-) -> Vec<String> {
-    let lower = name.to_lowercase();
+) -> Vec<Vec<String>> {
+    // **ASCII, because `strlower` is.** A name with a non-ASCII letter lowers
+    // to itself here and takes one pass, where Unicode lowercasing would
+    // invent a second spelling the oracle never tries.
+    let lower = name.to_ascii_lowercase();
     // `primitiveSearchName`'s own `iterations`: the second pass exists only
     // where lowercasing changes the name.
     let spellings: &[&str] = if lower == name {
@@ -81,7 +84,7 @@ pub(crate) fn candidates(
         extensions.push(None);
     }
 
-    let mut out: Vec<String> = Vec::new();
+    let mut out: Vec<Vec<String>> = Vec::new();
     for extension in extensions {
         for spelling in spellings {
             let candidate = format!("{spelling}{}", extension.unwrap_or(""));
@@ -89,15 +92,54 @@ pub(crate) fn candidates(
             // searched at all -- `SysFileSystem::primitiveSearchName`'s own
             // branch, and `searchPath` repeats the test for the same reason.
             if has_directory(&candidate) {
-                out.push(candidate);
+                out.push(vec![candidate]);
                 continue;
             }
-            for entry in entries {
-                out.push(format!("{}/{candidate}", entry.trim_end_matches('/')));
-            }
+            out.push(
+                entries
+                    .iter()
+                    .map(|entry| format!("{}/{candidate}", entry.trim_end_matches('/')))
+                    .collect(),
+            );
         }
     }
     out
+}
+
+/// What one candidate path's `stat` found.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum Found {
+    /// A regular file. The search ends here.
+    Regular,
+    /// Something else that exists -- a directory, a device, a socket.
+    Other,
+    /// Nothing at that path.
+    Missing,
+}
+
+/// The first regular file among `groups`, in order, or `None` when no group
+/// holds one.
+///
+/// **A group is abandoned whole the moment one of its paths exists and is not
+/// a regular file.** `searchPath` returns false there rather than trying its
+/// remaining entries, so a directory named like the target hides a real file
+/// further along the path -- measured, a `main/zdir.rex` directory makes a
+/// call find nothing even though `cwd/zdir.rex` is a file. The next
+/// spelling-and-extension group still runs.
+pub(crate) fn first_regular(
+    groups: &[Vec<String>],
+    mut probe: impl FnMut(&str) -> Found,
+) -> Option<String> {
+    for group in groups {
+        for candidate in group {
+            match probe(candidate) {
+                Found::Regular => return Some(candidate.clone()),
+                Found::Other => break,
+                Found::Missing => {}
+            }
+        }
+    }
+    None
 }
 
 /// The directory `path` names, trailing separator included, or `None` for a
@@ -110,7 +152,11 @@ pub(crate) fn program_directory(path: &str) -> Option<&str> {
 /// whose last component carries none -- `SysFileSystem::extractExtension`.
 pub(crate) fn program_extension(path: &str) -> Option<&str> {
     let last = path.rfind('/').map_or(path, |at| &path[at + 1..]);
-    last.rfind('.').map(|at| &last[at..])
+    // **The first byte of the component is never examined.**
+    // `SysFileSystem::hasExtension` scans backwards while `name < endPtr`, so
+    // a name that is nothing but a dotted suffix has no extension: `.hid` is
+    // extensionless where `a.b` is qualified.
+    last.rfind('.').filter(|at| *at > 0).map(|at| &last[at..])
 }
 
 /// Whether `name`'s last component carries an extension --
@@ -142,16 +188,19 @@ mod tests {
     fn the_four_routes_are_searched_in_the_oracles_order() {
         let entries = search_entries(Some("/prog/"), Some("/rp1:/rp2"), Some("/pp"));
         assert_eq!(entries, vec!["/prog/", ".", "/rp1", "/rp2", "/pp"]);
+        // One group: the name carries its own extension, so there is a single
+        // spelling and a single extension, and the five entries are the paths
+        // that one group tries in turn.
         let tried = candidates("lib.rex", &entries, Some(".rex"), true);
         assert_eq!(
             tried,
-            vec![
+            vec![vec![
                 "/prog/lib.rex",
                 "./lib.rex",
                 "/rp1/lib.rex",
                 "/rp2/lib.rex",
                 "/pp/lib.rex",
-            ]
+            ]]
         );
     }
 
@@ -180,16 +229,11 @@ mod tests {
         assert_eq!(
             candidates("lib", &entries, Some(".rex"), true),
             vec![
-                "/prog/lib.cls",
-                "./lib.cls",
-                "/prog/lib.rex",
-                "./lib.rex",
-                "/prog/lib.REX",
-                "./lib.REX",
-                "/prog/lib.rex",
-                "./lib.rex",
-                "/prog/lib",
-                "./lib",
+                vec!["/prog/lib.cls", "./lib.cls"],
+                vec!["/prog/lib.rex", "./lib.rex"],
+                vec!["/prog/lib.REX", "./lib.REX"],
+                vec!["/prog/lib.rex", "./lib.rex"],
+                vec!["/prog/lib", "./lib"],
             ]
         );
         // A requiring program with no extension of its own drops that step
@@ -197,10 +241,10 @@ mod tests {
         assert_eq!(
             candidates("lib", &["/prog/".to_string()], None, true),
             vec![
-                "/prog/lib.cls",
-                "/prog/lib.REX",
-                "/prog/lib.rex",
-                "/prog/lib",
+                vec!["/prog/lib.cls"],
+                vec!["/prog/lib.REX"],
+                vec!["/prog/lib.rex"],
+                vec!["/prog/lib"],
             ]
         );
     }
@@ -210,7 +254,11 @@ mod tests {
     fn the_default_resolve_does_not_try_the_requires_extension() {
         assert_eq!(
             candidates("lib", &["/prog/".to_string()], None, false),
-            vec!["/prog/lib.REX", "/prog/lib.rex", "/prog/lib"]
+            vec![
+                vec!["/prog/lib.REX"],
+                vec!["/prog/lib.rex"],
+                vec!["/prog/lib"],
+            ]
         );
     }
 
@@ -219,7 +267,7 @@ mod tests {
     fn a_name_with_an_extension_is_searched_once() {
         assert_eq!(
             candidates("lib.rex", &["/prog/".to_string()], Some(".rex"), true),
-            vec!["/prog/lib.rex"]
+            vec![vec!["/prog/lib.rex"]]
         );
     }
 
@@ -229,19 +277,45 @@ mod tests {
     fn each_extension_is_tried_in_the_written_case_and_then_in_lower_case() {
         assert_eq!(
             candidates("LIB.REX", &["/prog/".to_string()], None, true),
-            vec!["/prog/LIB.REX", "/prog/lib.rex"]
+            vec![vec!["/prog/LIB.REX"], vec!["/prog/lib.rex"]]
         );
         assert_eq!(
             candidates("LIB", &["/prog/".to_string()], None, true),
             vec![
-                "/prog/LIB.cls",
-                "/prog/lib.cls",
-                "/prog/LIB.REX",
-                "/prog/lib.REX",
-                "/prog/LIB.rex",
-                "/prog/lib.rex",
-                "/prog/LIB",
-                "/prog/lib",
+                vec!["/prog/LIB.cls"],
+                vec!["/prog/lib.cls"],
+                vec!["/prog/LIB.REX"],
+                vec!["/prog/lib.REX"],
+                vec!["/prog/LIB.rex"],
+                vec!["/prog/lib.rex"],
+                vec!["/prog/LIB"],
+                vec!["/prog/lib"],
+            ]
+        );
+    }
+
+    /// The second spelling is the ASCII lowering, so a name whose only
+    /// upper-case letter is outside ASCII lowers to itself and takes one pass.
+    /// Unicode lowercasing would add a spelling `strlower` never produces.
+    #[test]
+    fn the_lower_case_pass_is_ascii_only() {
+        assert_eq!(
+            candidates("LIB\u{00c9}", &["/prog/".to_string()], None, false),
+            vec![
+                vec!["/prog/LIB\u{00c9}.REX"],
+                vec!["/prog/lib\u{00c9}.REX"],
+                vec!["/prog/LIB\u{00c9}.rex"],
+                vec!["/prog/lib\u{00c9}.rex"],
+                vec!["/prog/LIB\u{00c9}"],
+                vec!["/prog/lib\u{00c9}"],
+            ]
+        );
+        assert_eq!(
+            candidates("\u{00c9}", &["/prog/".to_string()], None, false),
+            vec![
+                vec!["/prog/\u{00c9}.REX"],
+                vec!["/prog/\u{00c9}.rex"],
+                vec!["/prog/\u{00c9}"],
             ]
         );
     }
@@ -254,16 +328,47 @@ mod tests {
         let entries = search_entries(Some("/prog/"), None, None);
         assert_eq!(
             candidates("./sub/lib.rex", &entries, None, true),
-            vec!["./sub/lib.rex"]
+            vec![vec!["./sub/lib.rex"]]
         );
         assert_eq!(
             candidates("/abs/lib.rex", &entries, None, true),
-            vec!["/abs/lib.rex"]
+            vec![vec!["/abs/lib.rex"]]
         );
         assert_eq!(
             candidates("sub/lib.rex", &entries, None, true),
-            vec!["/prog/sub/lib.rex", "./sub/lib.rex"]
+            vec![vec!["/prog/sub/lib.rex", "./sub/lib.rex"]]
         );
+    }
+
+    /// A path that exists and is not a regular file abandons the rest of its
+    /// own spelling and extension, and only that group.
+    #[test]
+    fn a_non_regular_hit_abandons_the_rest_of_its_group() {
+        let groups = vec![
+            vec!["/main/zdir.rex".to_string(), "/cwd/zdir.rex".to_string()],
+            vec!["/main/zdir".to_string(), "/cwd/zdir".to_string()],
+        ];
+        // `/main/zdir.rex` is a directory, so the file at `/cwd/zdir.rex` is
+        // never reached -- but the extensionless group still runs.
+        assert_eq!(
+            first_regular(&groups, |path| match path {
+                "/main/zdir.rex" => Found::Other,
+                "/cwd/zdir.rex" | "/cwd/zdir" => Found::Regular,
+                _ => Found::Missing,
+            })
+            .as_deref(),
+            Some("/cwd/zdir")
+        );
+        // The control: with nothing in the way, the same file wins.
+        assert_eq!(
+            first_regular(&groups, |path| match path {
+                "/cwd/zdir.rex" | "/cwd/zdir" => Found::Regular,
+                _ => Found::Missing,
+            })
+            .as_deref(),
+            Some("/cwd/zdir.rex")
+        );
+        assert_eq!(first_regular(&groups, |_| Found::Missing), None);
     }
 
     /// `sub/lib` has no extension, because the scan backwards for a dot stops
@@ -278,5 +383,20 @@ mod tests {
         assert_eq!(program_extension("/a.b/main"), None);
         assert_eq!(program_directory("/a/b/main.rex"), Some("/a/b/"));
         assert_eq!(program_directory("main.rex"), None);
+    }
+
+    /// A leading dot is not an extension: the backwards scan never reaches
+    /// the component's first byte, so a dotfile is extensionless and takes
+    /// the whole extension list, where `a.b` is qualified and takes none.
+    #[test]
+    fn a_leading_dot_is_not_an_extension() {
+        assert!(!has_extension(".hid"));
+        assert!(!has_extension("/a/b/.hid"));
+        assert!(!has_extension("./.hid"));
+        assert_eq!(program_extension(".hid"), None);
+        assert_eq!(program_extension("/a/b/.hid"), None);
+        assert!(has_extension("a.b"));
+        assert_eq!(program_extension("a.b"), Some(".b"));
+        assert_eq!(program_extension(".hid.rex"), Some(".rex"));
     }
 }

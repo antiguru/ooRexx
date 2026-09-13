@@ -3210,13 +3210,19 @@ impl Interp {
         );
         let cwd = self.cwd.to_str()?;
         let extension = program.and_then(require::program_extension);
-        for candidate in require::candidates(name, &entries, extension, requires) {
-            let resolved = require::normalize(&candidate, cwd);
-            if std::fs::metadata(&resolved).is_ok_and(|meta| meta.is_file()) {
-                return Some(resolved);
+        let groups = require::candidates(name, &entries, extension, requires);
+        // A path that exists and is not a regular file abandons the rest of
+        // its spelling and extension rather than the search -- see
+        // [`require::first_regular`], which is where that rule lives so it can
+        // be tested without a file system.
+        let hit = require::first_regular(&groups, |candidate| {
+            match std::fs::metadata(require::normalize(candidate, cwd)) {
+                Ok(meta) if meta.is_file() => require::Found::Regular,
+                Ok(_) => require::Found::Other,
+                Err(_) => require::Found::Missing,
             }
-        }
-        None
+        })?;
+        Some(require::normalize(&hit, cwd))
     }
 
     /// `PackageClass::loadPackageRexx`'s load: the same
