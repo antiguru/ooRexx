@@ -165,7 +165,9 @@ fn the_seam_module_holds_only_the_items_it_is_designed_around() {
         ("macro_rules!", 0),
         ("trait ", 0),
         ("union ", 0),
-        ("enum ", 0),
+        // `Access`, which says whether the manager sees a read, and
+        // `Admission`, which is what the seam answers.
+        ("enum ", 2),
     ] {
         assert_eq!(
             code.matches(keyword).count(),

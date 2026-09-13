@@ -166,3 +166,16 @@ lang/sys_file_functions.rex
 # Both carry a `.stdin` sidecar, which is what the pause reads.
 lang/trace_debug.rex
 lang/trace_debug_skip.rex
+
+# Task 20: the security manager. Every checkpoint it has, each asked of a
+# manager that declines and then of one that answers, and the qualified names
+# cut to their last component because the qualified form is the run
+# directory's.
+lang/security_manager.rex
+lang/security_manager_result.rex
+
+# Task 20, the control for D-S1: an unresolvable name is a `Resolved` rather
+# than a raise from the resolver, so the call-site table must not keep it. The
+# same site raises on the first pass and finds a file written between them on
+# the second.
+lang/call_miss_not_cached.rex

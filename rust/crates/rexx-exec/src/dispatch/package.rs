@@ -394,10 +394,8 @@ fn set_security_manager(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    writable_package_of(interp, receiver)?;
-    if args.first().copied().flatten().is_some() {
-        return Err(Loud::security_manager().into());
-    }
+    let program = writable_package_of(interp, receiver)?;
+    interp.install_security_manager(program, args.first().copied().flatten());
     Ok(Some(interp.counted(1)))
 }
 

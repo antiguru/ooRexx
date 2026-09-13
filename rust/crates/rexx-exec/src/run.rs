@@ -148,8 +148,14 @@ pub(crate) enum Resolved {
     /// re-reads and re-parses the file anyway. Caching the decision stays
     /// right either way: a file that disappears fails at the consumer's own
     /// search rather than being served from a stale hit, and a miss is never
-    /// cached because the resolver answers `Err` for one.
+    /// cached because the call-site table drops [`Resolved::Unresolved`].
     External,
+    /// Nothing answers this name. **Not an error here**: the security
+    /// manager's `CALL` checkpoint runs before 43.1 is reported
+    /// (`RexxActivation::externalCall`, `execution/RexxActivation.cpp:3077`
+    /// against `:3102`), and it needs the arguments, which are evaluated
+    /// after resolution. The raise happens where the checkpoint declines.
+    Unresolved,
 }
 
 /// Which of the two activation-pushing outcomes a resolved call took, kept
@@ -3779,11 +3785,12 @@ impl Interp {
                 // file is entered, because a `Resolved` is `Copy` and this
                 // resolver is `&self`.
                 None if self.external_program(name).is_some() => Resolved::External,
-                // 43.1, once the search above has found nothing. Measured in
-                // a clean directory with nothing of that name beside the
+                // 43.1, once the search above has found nothing, and
+                // raised by the consumer rather than here. Measured in a
+                // clean directory with nothing of that name beside the
                 // program: `call zorkolo` gives 43.1 rc 213 `Could not find
                 // routine "ZORKOLO".`
-                None => return Err(Raised::routine_not_found(name).into()),
+                None => Resolved::Unresolved,
             },
         };
         Ok(resolved)
@@ -3915,6 +3922,9 @@ impl Interp {
                     Some(expr) => values.push(Some(self.eval_traced_argument(code, expr)?)),
                 }
             }
+            if let Some(handled) = self.call_checkpoint(name, &values)? {
+                return Ok(Ended::Returned(handled));
+            }
             return Ok(Ended::Returned(Some(self.run_internal(row, &values)?)));
         }
 
@@ -3966,6 +3976,35 @@ impl Interp {
         outcome
     }
 
+    /// The security manager's `CALL` checkpoint
+    /// (`execution/SecurityManager.cpp:203`-`:225`), asked for every name
+    /// that gets past the running package's own `::ROUTINE`s -- including
+    /// one nothing answers, which is why it runs before 43.1.
+    ///
+    /// `Some(result)` where the manager handled the call, nothing then
+    /// running; `None` where it declined or none is installed.
+    fn call_checkpoint(
+        &mut self,
+        name: &[u8],
+        values: &[Option<ObjRef>],
+    ) -> Result<Option<Option<ObjRef>>, Failure> {
+        if self.effective_security_manager().is_none() {
+            return Ok(None);
+        }
+        let called = self.text(name);
+        self.roots.push_temp(called);
+        let arguments = self.security_arguments_array(values);
+        let entries = [
+            (crate::security::key::NAME, called),
+            (crate::security::key::ARGUMENTS, arguments),
+        ];
+        let Some(info) = self.security_check(crate::security::message::CALL, &entries)? else {
+            return Ok(None);
+        };
+        let result = self.security_entry(info, crate::security::key::RESULT)?;
+        Ok(Some(result))
+    }
+
     /// One internal-package routine over its evaluated arguments. No
     /// activation, no `SIGL`, no depth guard -- the builtin discipline, since
     /// the oracle runs these as native code too.
@@ -4001,6 +4040,9 @@ impl Interp {
             return builtin::run(self, name, target, values);
         }
         if let Resolved::Internal(row) = resolved {
+            if let Some(handled) = self.call_checkpoint(name, values)? {
+                return handled.ok_or_else(|| Raised::no_data_returned(name).into());
+            }
             return self.run_internal(row, values);
         }
         match self.invoke_call_over(
@@ -4061,6 +4103,18 @@ impl Interp {
         // decisions that enum exists to carry -- `SIGL`, the callee's pool,
         // the indent, the calling convention's receiver -- is a question
         // about it.
+        // **Every arm below the running package's own `::ROUTINE`s passes
+        // the manager first**, an unresolvable name included.
+        if matches!(
+            resolved,
+            Resolved::Library(_) | Resolved::External | Resolved::Unresolved
+        ) && let Some(handled) = self.call_checkpoint(name, &arguments)?
+        {
+            return Ok(Ended::Returned(handled));
+        }
+        if let Resolved::Unresolved = resolved {
+            return Err(Raised::routine_not_found(name).into());
+        }
         if let Resolved::Library(program) = resolved {
             return self
                 .enter_library_program(program, Some(arguments))
@@ -4083,6 +4137,7 @@ impl Interp {
             Resolved::Routine(installed) => Entered::Routine(installed),
             Resolved::Library(_) => unreachable!("the library path returns just above"),
             Resolved::External => unreachable!("the external path returns just above"),
+            Resolved::Unresolved => unreachable!("an unresolved name raises just above"),
         };
 
         // The caller's own program and body selector, which a label callee
@@ -4594,9 +4649,13 @@ impl Interp {
             // **Named rather than left to the arm below**, which has a
             // catch-all: an internal routine sent into `invoke_call_over`
             // would reach a `match` that has no arm for it.
-            Resolved::Internal(row) => self
-                .run_internal(row, &values[mark..])
-                .map(|value| Ended::Returned(Some(value))),
+            Resolved::Internal(row) => match self.call_checkpoint(name, &values[mark..]) {
+                Ok(Some(handled)) => Ok(Ended::Returned(handled)),
+                Ok(None) => self
+                    .run_internal(row, &values[mark..])
+                    .map(|value| Ended::Returned(Some(value))),
+                Err(failure) => Err(failure),
+            },
             _ => self.invoke_call_over(
                 resolved,
                 name,
@@ -8917,6 +8976,15 @@ impl Interp {
         {
             return Ok(found);
         }
+        // **The manager sees the qualified name, and only a table miss.**
+        // `.Stream~new` reaches none of this, so a program that builds its
+        // own stream object is never checked.
+        if let Some(replacement) = self.check_stream_access(&qualified)? {
+            if let Some(table) = self.stream_table_mut() {
+                table.insert(qualified.into_boxed_slice(), replacement);
+            }
+            return Ok(replacement);
+        }
         let Some(class) = self.rexx_package_class(b"STREAM") else {
             return Err(Loud::environment_symbol(b".STREAM", "Phase 7").into());
         };
@@ -8933,6 +9001,25 @@ impl Interp {
 }
 
 impl Interp {
+    /// The security manager's `STREAM` checkpoint
+    /// (`execution/SecurityManager.cpp:290`-`:308`): the object to use in
+    /// place of a new `Stream`, or `None` where the manager declined or none
+    /// is installed.
+    ///
+    /// **The manager's entry is `STREAM`, not `RESULT`.**
+    fn check_stream_access(&mut self, qualified: &[u8]) -> Result<Option<ObjRef>, Failure> {
+        if self.effective_security_manager().is_none() {
+            return Ok(None);
+        }
+        let name = self.text(qualified);
+        self.roots.push_temp(name);
+        let entries = [(crate::security::key::NAME, name)];
+        let Some(info) = self.security_check(crate::security::message::STREAM, &entries)? else {
+            return Ok(None);
+        };
+        self.security_entry(info, crate::security::key::STREAM)
+    }
+
     /// Drops `name`'s entry from the owning activation's table, which is what
     /// `LINEOUT(name)` with no string and a `CLOSE` command do after their
     /// send: the stream stays closed and the next builtin to name it builds a

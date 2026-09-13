@@ -686,14 +686,13 @@ impl Interp {
 
     /// `+++ "RC(n)"`, the return code of a command that was traced by either
     /// route. Ungated for [`Interp::trace_command_retrace`]'s reason.
-    pub(crate) fn trace_command_rc(&mut self, indent: usize, rc: i32) {
+    pub(crate) fn trace_command_rc(&mut self, indent: usize, rc: &[u8]) {
         let start = self.trace.len();
-        push_value(
-            &mut self.trace,
-            "+++",
-            indent,
-            format!("RC({rc})").as_bytes(),
-        );
+        let mut rendered = Vec::with_capacity(rc.len() + 4);
+        rendered.extend_from_slice(b"RC(");
+        rendered.extend_from_slice(rc);
+        rendered.push(b')');
+        push_value(&mut self.trace, "+++", indent, &rendered);
         self.route_trace_line(start);
     }
 

@@ -135,6 +135,10 @@ mod condition;
 /// per-command context that says where one command's three streams go.
 mod redirect;
 
+// The security manager (D12): the manager a package carries, and the one
+// send each checkpoint makes to it.
+mod security;
+
 /// The exit code for a construct this crate does not implement.
 pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 
@@ -415,12 +419,6 @@ impl Loud {
     fn external_entry_point(what: &'static str) -> Loud {
         Loud {
             message: owned_message(what, Some("Phase 7")),
-        }
-    }
-
-    fn security_manager() -> Loud {
-        Loud {
-            message: owned_message("a security manager", Some("D12, Phase 7")),
         }
     }
 
@@ -1588,6 +1586,9 @@ struct Interp {
     /// entered by `Interp::install_directives` and read by every activation
     /// of that program's code.
     package_options: HashMap<ProgramId, PackageOptions>,
+    /// The security manager each package carries, written by all three
+    /// `setSecurityManager` setters and read by every checkpoint.
+    security_managers: HashMap<ProgramId, ObjRef>,
     /// **`NameHasher` and not `RandomState`**, for the reason that alias's own
     /// doc gives and with the same shape of key behind it: a `BodyKey` is a
     /// pair of small integers this interpreter mints itself, so the
@@ -2167,6 +2168,7 @@ impl Interp {
             spare_activations: Vec::new(),
             programs: Vec::new(),
             package_options: HashMap::new(),
+            security_managers: HashMap::new(),
             plans: NameMap::default(),
             deadline: None,
             clause_countdown: crate::clause::Deadline::NO_DEADLINE_SPACING,
@@ -2990,6 +2992,15 @@ impl Interp {
         from: Option<ProgramId>,
         name: &[u8],
     ) -> Result<ProgramId, Failure> {
+        // **The manager sees the short name before the cache**, and the
+        // resolved one after the search: `PackageManager::loadRequires`
+        // (`package/PackageManager.cpp:718`-`:766`) checks each in turn, so a
+        // manager that renames or forbids a package is asked twice.
+        let mut inherited = None;
+        let Some(name) = self.check_requires_access(name, &mut inherited)? else {
+            return Err(Raised::requires_file_not_found(name).into());
+        };
+        let name = &name[..];
         if let Some(&loaded) = self.required_packages.get(name) {
             self.check_not_installing(loaded)?;
             return Ok(loaded);
@@ -2997,6 +3008,17 @@ impl Interp {
         let resolved = match from {
             Some(id) => self.resolve_requires(id, name),
             None => self.resolve_search(None, name, true),
+        };
+        let resolved = match resolved {
+            Some(resolved) => {
+                let Some(checked) =
+                    self.check_requires_access(resolved.as_bytes(), &mut inherited)?
+                else {
+                    return Err(Raised::requires_file_not_found(name).into());
+                };
+                Some(String::from_utf8_lossy(&checked).into_owned())
+            }
+            None => None,
         };
         if let Some(resolved) = &resolved
             && let Some(&loaded) = self.required_packages.get(resolved.as_bytes())
@@ -3025,6 +3047,11 @@ impl Interp {
         self.programs.push(Rc::clone(&parsed));
         self.required_paths
             .insert(required, resolved.as_str().into());
+        // Installed before the prologue runs, which is where
+        // `getRequiresFile` puts it (`package/PackageManager.cpp:830`-`:833`).
+        if let Some(manager) = inherited {
+            self.install_security_manager(required, Some(manager));
+        }
         // **Cached before the prologue runs, not after**, which is
         // `addRequiresFile` standing ahead of `runProlog` at
         // `InterpreterInstance.cpp:1060`: a name reached again from inside
@@ -3035,6 +3062,39 @@ impl Interp {
             .insert(resolved.as_bytes().into(), required);
         self.run_loaded(parsed, required, CallType::Requires, None, None)?;
         Ok(required)
+    }
+
+    /// The security manager's `REQUIRES` checkpoint
+    /// (`execution/SecurityManager.cpp:318`-`:346`).
+    ///
+    /// Answers the name to load under -- the manager's own replacement where
+    /// it made one -- or `None` where it removed the entry, which forbids the
+    /// load. `inherited` collects the `SECURITYMANAGER` the new package is to
+    /// carry, across both of a load's two checks.
+    fn check_requires_access(
+        &mut self,
+        name: &[u8],
+        inherited: &mut Option<ObjRef>,
+    ) -> Result<Option<Vec<u8>>, Failure> {
+        if self.effective_security_manager().is_none() {
+            return Ok(Some(name.to_vec()));
+        }
+        let requested = self.text(name);
+        self.roots.push_temp(requested);
+        let entries = [(crate::security::key::NAME, requested)];
+        let Some(info) = self.security_check(crate::security::message::REQUIRES, &entries)? else {
+            return Ok(Some(name.to_vec()));
+        };
+        if let Some(manager) = self.security_entry(info, crate::security::key::SECURITYMANAGER)? {
+            self.roots.push_temp(manager);
+            *inherited = Some(manager);
+        }
+        let Some(replaced) = self.security_entry(info, crate::security::key::NAME)? else {
+            return Ok(None);
+        };
+        self.roots.push_temp(replaced);
+        let text = self.required_string_value(replaced)?;
+        Ok(Some(self.to_text(text).into_owned()))
     }
 
     /// 98.952 when `loaded`'s own `::REQUIRES` directives are still
@@ -4692,6 +4752,7 @@ impl Interp {
             next_invocation: _,
             programs: _,
             package_options: _,
+            security_managers,
             plans: _,
             deadline: _,
             clause_countdown: _,
@@ -4835,6 +4896,9 @@ impl Interp {
         // The raise's own `ADDITIONAL`, alive between the raise and the
         // condition object that will hold it.
         out.extend(*pending_additional);
+        // A manager is an ordinary program object held by nothing else: the
+        // package that carries it is a plan, not an object with a slot.
+        out.extend(security_managers.values().copied());
         // Each queued trap's condition object. Destructured rather than
         // reached by field: the match above guards `Interp`'s own fields, and
         // an `ObjRef` added inside this `VecDeque` would otherwise arrive

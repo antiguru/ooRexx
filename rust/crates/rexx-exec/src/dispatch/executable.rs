@@ -303,10 +303,21 @@ fn set_security_manager(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let source = source_of(interp, receiver)?;
-    if args.first().copied().flatten().is_some() {
-        return Err(Loud::security_manager().into());
-    }
     let rexx_code = is_rexx_code(interp, source);
+    // **The manager lands on the package, not on the executable.** Both
+    // setters are `code->setSecurityManager`, and `RexxCode`'s override
+    // writes `package->setSecurityManager`, so a manager set through one
+    // method of a package is in force for every activation of that package's
+    // code.
+    if rexx_code {
+        let program = match source {
+            ExecutableSource::Directive { program, .. } | ExecutableSource::Main { program } => {
+                program
+            }
+            ExecutableSource::Native => unreachable!("native code is not Rexx code"),
+        };
+        interp.install_security_manager(program, args.first().copied().flatten());
+    }
     Ok(Some(interp.counted(usize::from(rexx_code))))
 }
 

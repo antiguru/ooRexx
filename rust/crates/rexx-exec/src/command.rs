@@ -21,10 +21,21 @@ use std::process::Stdio;
 
 use rexx_parse::{AddressIo, Expr, Instruction, ProgramSource};
 
+use rexx_core::ObjRef;
+
 use crate::error::{Failure, Raised};
 use crate::redirect::IoContext;
 use crate::run::Flow;
+use crate::security::{key, message};
 use crate::{Code, Interp};
+
+/// A return code's whole-number value under the default precision, or `None`
+/// where it has none -- `RexxObject::numberValue(wholenumber_t &)`, which is
+/// what the `+++ "RC(n)"` line is gated on.
+fn whole_value(text: &[u8]) -> Option<i32> {
+    let number = rexx_num::Number::parse(std::str::from_utf8(text).ok()?)?;
+    i32::try_from(number.whole_value(9)?).ok()
+}
 
 /// `SYSSHELLPATH` for every unix but AIX
 /// (`interpreter/platform/unix/PlatformDefinitions.h:66`-`:70`).
@@ -75,9 +86,22 @@ impl ReturnStatus {
 
 /// What running one command left behind.
 pub(crate) struct CommandOutcome {
-    /// The return code `RC` is assigned from.
+    /// The return code's whole-number value, or `0` for one that is not a
+    /// whole number: what the `+++ "RC(n)"` line is gated on and what a
+    /// condition carries.
     pub(crate) rc: i32,
     pub(crate) status: ReturnStatus,
+    /// A security manager's own `RC` entry, which is assigned to `RC`
+    /// verbatim and rendered by the trace line. `None` for a command that
+    /// actually ran, whose code is [`CommandOutcome::rc`].
+    pub(crate) supplied: Option<Supplied>,
+}
+
+/// The `RC` a security manager set, as both halves are needed: the object
+/// the variable is assigned, and the text the `+++ "RC(n)"` line renders.
+pub(crate) struct Supplied {
+    pub(crate) object: ObjRef,
+    pub(crate) text: Vec<u8>,
 }
 
 impl CommandOutcome {
@@ -89,7 +113,11 @@ impl CommandOutcome {
             UNKNOWN_COMMAND => ReturnStatus::Failure,
             _ => ReturnStatus::Error,
         };
-        CommandOutcome { rc, status }
+        CommandOutcome {
+            rc,
+            status,
+            supplied: None,
+        }
     }
 }
 
@@ -499,6 +527,7 @@ impl Interp {
             return Ok(CommandOutcome {
                 rc: NOT_REGISTERED,
                 status: ReturnStatus::Failure,
+                supplied: None,
             });
         };
         // `PATH` names no shell, so a `cd` under it is a program to find
@@ -528,6 +557,63 @@ impl Interp {
             self.write_err(&spawned.err);
         }
         Ok(CommandOutcome::of(spawned.rc))
+    }
+
+    /// The security manager's `COMMAND` checkpoint, and then the command
+    /// itself where the manager did not take it.
+    ///
+    /// `Activity::callCommandExit` (`concurrency/Activity.cpp:2782`-`2792`)
+    /// runs **before the handler is resolved**, so an environment nothing
+    /// answers still reaches the manager.
+    fn checked_command(
+        &mut self,
+        environment: &[u8],
+        command: &[u8],
+        io: Option<&IoContext>,
+    ) -> Result<CommandOutcome, Failure> {
+        if self.effective_security_manager().is_none() {
+            return self.run_command(environment, command, io);
+        }
+        let address = self.text(environment);
+        self.roots.push_temp(address);
+        let issued = self.text(command);
+        self.roots.push_temp(issued);
+        let entries = [(key::COMMAND, issued), (key::ADDRESS, address)];
+        let Some(info) = self.security_check(message::COMMAND, &entries)? else {
+            return self.run_command(environment, command, io);
+        };
+        self.command_from_manager(info)
+    }
+
+    /// What `SecurityManager::checkCommand` (`execution/SecurityManager.cpp:
+    /// 244`-`281`) reads back out of the info directory once the manager has
+    /// handled a command: the return code, and which condition to raise.
+    fn command_from_manager(&mut self, info: ObjRef) -> Result<CommandOutcome, Failure> {
+        let status = if self.security_entry(info, key::FAILURE)?.is_some() {
+            ReturnStatus::Failure
+        } else if self.security_entry(info, key::ERROR)?.is_some() {
+            ReturnStatus::Error
+        } else {
+            ReturnStatus::Normal
+        };
+        // No `RC` entry is `IntegerZero`, and the object is left behind so
+        // that the ordinary rendering answers for it.
+        let Some(object) = self.security_entry(info, key::RC)? else {
+            return Ok(CommandOutcome {
+                rc: 0,
+                status,
+                supplied: None,
+            });
+        };
+        self.roots.push_temp(object);
+        let text = self.required_string_value(object)?;
+        let text = self.to_text(text).into_owned();
+        let rc = whole_value(&text).unwrap_or(0);
+        Ok(CommandOutcome {
+            rc,
+            status,
+            supplied: Some(Supplied { object, text }),
+        })
     }
 
     /// One command clause: evaluates the string, echoes what the setting
@@ -576,11 +662,16 @@ impl Interp {
         let frame = self.roots.push_frame();
         let context = self.io_context(code, &name, io);
         let outcome = match context {
-            Ok(context) => self.run_command(&name, &command, context.as_ref()),
+            Ok(context) => self.checked_command(&name, &command, context.as_ref()),
             Err(failure) => Err(failure),
         };
         self.roots.pop_frame(frame);
         let outcome = outcome?;
+        if let Some(supplied) = &outcome.supplied {
+            // The frame that held it is gone and `RC` is assigned below,
+            // after allocations of this clause's own.
+            self.roots.push_temp(supplied.object);
+        }
 
         // **`::OPTIONS ERROR|FAILURE SYNTAX` escalates where the condition is
         // raised, not where it is delivered**: `Activity::raiseCondition`
@@ -612,7 +703,15 @@ impl Interp {
 
         // `RC` before anything else, which is where the C++ puts it too
         // (`RexxActivation::command`).
-        let assigned = self.text(outcome.rc.to_string().as_bytes());
+        //
+        // **A manager's own `RC` is assigned as the object it set**, not as
+        // a rendering of it: measured, `info~rc = 'abc'` leaves `RC` reading
+        // `abc` with no `+++` line, because `numberValue` fails and the line
+        // is gated on it.
+        let assigned = match &outcome.supplied {
+            Some(supplied) => supplied.object,
+            None => self.text(outcome.rc.to_string().as_bytes()),
+        };
         self.assign_by_name(b"RC", assigned);
 
         let mode = self.trace_mode();
@@ -629,7 +728,16 @@ impl Interp {
             self.trace_command_retrace(line, indent, &text, &command);
         }
         if (echoed || retrace) && outcome.rc != 0 {
-            self.trace_command_rc(indent, outcome.rc);
+            match &outcome.supplied {
+                Some(supplied) => {
+                    let text = supplied.text.clone();
+                    self.trace_command_rc(indent, &text);
+                }
+                None => {
+                    let text = outcome.rc.to_string().into_bytes();
+                    self.trace_command_rc(indent, &text);
+                }
+            }
         }
         self.activation_mut().rs = Some(outcome.status.code());
 

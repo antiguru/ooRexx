@@ -278,10 +278,11 @@ fn seam_module_body() -> String {
     );
 }
 
-/// **The producer bound: the seam module holds one struct and one function,
-/// and no other item at all.**
+/// **The producer bound: the seam module holds the token, the answer it
+/// rides in, and the one function that makes both, and no other item at
+/// all.**
 #[test]
-fn the_seam_module_holds_one_struct_and_one_function() {
+fn the_seam_module_holds_one_struct_one_enum_and_one_function() {
     let body = seam_module_body();
     // Comments and doc comments are stripped first, so a keyword inside the
     // module's own prose is not counted as an item.
@@ -301,7 +302,9 @@ fn the_seam_module_holds_one_struct_and_one_function() {
         ("macro_rules!", 0),
         ("trait ", 0),
         ("union ", 0),
-        ("enum ", 0),
+        // `Clearance`, which is what the seam answers: the token, or the
+        // security manager's own result in place of the invocation.
+        ("enum ", 1),
     ] {
         assert_eq!(
             code.matches(keyword).count(),

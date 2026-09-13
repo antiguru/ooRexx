@@ -95,7 +95,7 @@ Method	scope	instance	agree	rc0
 Method	setGuarded	instance	no-value	rc0, the send returned no result to compare
 Method	setPrivate	instance	no-value	rc0, the send returned no result to compare
 Method	setProtected	instance	no-value	rc0, the send returned no result to compare
-Method	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: a security manager is not implemented (D12, Phase 7)
+Method	setSecurityManager	instance	agree	rc0
 Method	setUnguarded	instance	no-value	rc0, the send returned no result to compare
 Method	source	instance	agree	rc0
 Object	(abuttal)	instance	exempt	the book's displayed name is not a message name -- measured, o~'(abuttal)'('x') raises 97.1 while o~''('x') answers
@@ -165,7 +165,7 @@ Package	publicRoutines	instance	agree	rc0
 Package	resource	instance	agree	rc0
 Package	resources	instance	agree	rc0
 Package	routines	instance	agree	rc0
-Package	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: a security manager is not implemented (D12, Phase 7)
+Package	setSecurityManager	instance	agree	rc0
 Package	source	instance	agree	rc0
 Package	sourceLine	instance	agree	rc0
 Package	sourceSize	instance	agree	rc0
@@ -223,7 +223,7 @@ Routine	loadExternalRoutine	class	send-differs	oracle rc0 VALUE a Routine; crate
 Routine	new	class	agree	rc0
 Routine	newFile	class	agree	rc0
 Routine	package	instance	agree	rc0
-Routine	setSecurityManager	instance	send-differs	oracle rc0 VALUE 1; crate rc120 rexx-exec: a security manager is not implemented (D12, Phase 7)
+Routine	setSecurityManager	instance	agree	rc0
 Routine	source	instance	agree	rc0
 StackFrame	arguments	instance	agree	rc0
 StackFrame	context	instance	agree	rc0

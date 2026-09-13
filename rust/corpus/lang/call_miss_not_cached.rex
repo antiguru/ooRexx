@@ -1,0 +1,21 @@
+/* A name nothing answers is not a decision to keep.
+
+   One call site runs twice. On the first pass no file of that name exists and
+   the call raises 43.1; between the passes the program writes one, and the
+   second pass has to find it. A resolver that remembered the miss would raise
+   twice, and one that never resolves would raise neither. */
+
+do pass = 1 to 2
+  say pass attempt(pass)
+end
+
+exit 0
+
+attempt: procedure
+  use arg pass
+  signal on syntax name missing
+  return zappear()
+missing:
+  call lineout 'zappear.rex', 'return "found on pass" pass'
+  call lineout 'zappear.rex'
+  return 'raised' condition('O')['CODE']

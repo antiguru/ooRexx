@@ -212,6 +212,13 @@ impl Raised {
         Raised::syntax(34, 901, vec![found.to_vec()])
     }
 
+    /// 34.903: a security manager answered a checkpoint with something other
+    /// than `0` or `1` (`SecurityManager::callSecurityManager`, whose
+    /// `truthValue` names `Error_Logical_value_authorization`).
+    pub(crate) fn authorization_not_logical(found: &[u8]) -> Raised {
+        Raised::syntax(34, 903, vec![found.to_vec()])
+    }
+
     /// 11.1: "Insufficient control stack space" -- D19's evaluation-depth
     /// limit (`eval.rs`'s own `MAX_EVAL_DEPTH`). No substitution: measured
     /// against the oracle's own parse-side 11.1 (nested parens/calls,

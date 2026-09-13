@@ -30,6 +30,7 @@ pub(crate) enum EnvScope {
 /// The directory-lookup security seam.
 mod env_seam {
     use super::{EnvScope, Failure, Interp, ObjRef};
+    use crate::security::{key, message};
 
     /// `.environment` and `.local`, readable only with an [`Admitted`].
     pub(super) struct Directories {
@@ -40,21 +41,63 @@ mod env_seam {
     /// Evidence that a directory lookup passed the security seam.
     pub(super) struct Admitted(());
 
+    /// Why a directory is being read, which decides whether the security
+    /// manager sees the read at all. **Deliberately not `Copy`**, for the
+    /// reason the clearance beside it is not: one trip through the seam
+    /// carries one reason.
+    pub(super) enum Access {
+        /// `PackageClass::findClass` (`classes/PackageClass.cpp:1134`-`1158`),
+        /// whose two manager checks bracket the `.local` read.
+        Resolve,
+        /// Every other read. `ActivityManager::getLocalEnvironment` and
+        /// `ClassDirective`'s own search reach the directories directly, so
+        /// a manager never sees an output route or a directive's target.
+        Direct,
+    }
+
+    /// What the seam decided about one lookup.
+    pub(super) enum Admission {
+        /// The manager answered the name itself, and the directory is not
+        /// read at all.
+        Replaced(ObjRef),
+        /// Read the directory.
+        Permitted(Admitted),
+    }
+
     /// Records the directory handles at bootstrap.
     pub(super) fn hold(environment: ObjRef, local: ObjRef) -> Directories {
         Directories { environment, local }
     }
 
     /// **The directory chokepoint (D45, site two).** Every read of `.local`
-    /// and of `.environment` passes here, and a manager installed in a later
-    /// phase gets its hook in this function's body.
+    /// and of `.environment` passes here, and an [`Access::Resolve`] read is
+    /// the one the security manager's `LOCAL` and `ENVIRONMENT` checkpoints
+    /// see.
     pub(super) fn admit(
         interp: &mut Interp,
         scope: EnvScope,
         name: &[u8],
-    ) -> Result<Admitted, Failure> {
-        let _ = (interp, scope, name);
-        Ok(Admitted(()))
+        access: &Access,
+    ) -> Result<Admission, Failure> {
+        if matches!(access, Access::Direct) || interp.effective_security_manager().is_none() {
+            return Ok(Admission::Permitted(Admitted(())));
+        }
+        let checkpoint = match scope {
+            EnvScope::Local => message::LOCAL,
+            EnvScope::Environment => message::ENVIRONMENT,
+        };
+        let index = interp.text(name);
+        interp.roots.push_temp(index);
+        let Some(info) = interp.security_check(checkpoint, &[(key::NAME, index)])? else {
+            return Ok(Admission::Permitted(Admitted(())));
+        };
+        // A manager that handles the name and sets no `RESULT` has hidden it:
+        // `checkLocalAccess` answers `OREF_NULL` for that, which its caller
+        // reads as a miss.
+        match interp.security_entry(info, key::RESULT)? {
+            Some(value) => Ok(Admission::Replaced(value)),
+            None => Ok(Admission::Permitted(Admitted(()))),
+        }
     }
 
     /// Which of the two `handle` is, or `None` for any other object.
@@ -435,9 +478,11 @@ impl Interp {
             return Ok(found);
         }
 
-        if let Some(found) =
-            self.directory_lookup(&[EnvScope::Local, EnvScope::Environment], bare)?
-        {
+        if let Some(found) = self.directory_lookup(
+            &[EnvScope::Local, EnvScope::Environment],
+            bare,
+            &env_seam::Access::Resolve,
+        )? {
             return Ok(found);
         }
 
@@ -478,7 +523,8 @@ impl Interp {
         // `.environment` alone, not `.NAME`'s pair: `ClassDirective`'s own
         // search is the package's classes and then the environment
         // directory, and `.local` is not in it.
-        if let Ok(Some(found)) = self.directory_lookup(&[EnvScope::Environment], upper)
+        if let Ok(Some(found)) =
+            self.directory_lookup(&[EnvScope::Environment], upper, &env_seam::Access::Direct)
             && self.heap.is_class(found)
         {
             return Some(found);
@@ -497,11 +543,16 @@ impl Interp {
         &mut self,
         scopes: &[EnvScope],
         bare: &[u8],
+        access: &env_seam::Access,
     ) -> Result<Option<ObjRef>, Failure> {
         for &scope in scopes {
-            let admitted = env_seam::admit(self, scope, bare)?;
-            if let Some(found) = self.directory_entry(admitted, scope, bare) {
-                return Ok(Some(found));
+            match env_seam::admit(self, scope, bare, access)? {
+                env_seam::Admission::Replaced(value) => return Ok(Some(value)),
+                env_seam::Admission::Permitted(admitted) => {
+                    if let Some(found) = self.directory_entry(admitted, scope, bare) {
+                        return Ok(Some(found));
+                    }
+                }
             }
         }
         Ok(None)
@@ -523,7 +574,7 @@ impl Interp {
     /// `Activity::sayOutput` both read `getLocalEnvironment` and never
     /// `.environment`.
     pub(crate) fn local_route(&mut self, name: &[u8]) -> Result<Option<ObjRef>, Failure> {
-        self.directory_lookup(&[EnvScope::Local], name)
+        self.directory_lookup(&[EnvScope::Local], name, &env_seam::Access::Direct)
     }
 
     /// Records that a route's far end may have moved, so the next `SAY`
@@ -1023,7 +1074,13 @@ impl Interp {
         name: &[u8],
         value: ObjRef,
     ) -> Result<(), Failure> {
-        let admitted = env_seam::admit(self, scope, name)?;
+        // A write the manager never sees: `VALUE(name, new, 'ENVIRONMENT')`
+        // puts into the directory directly (`expression/BuiltinFunctions.cpp:
+        // 1848`).
+        let admitted = match env_seam::admit(self, scope, name, &env_seam::Access::Direct)? {
+            env_seam::Admission::Permitted(admitted) => admitted,
+            env_seam::Admission::Replaced(_) => unreachable!("a direct access is never replaced"),
+        };
         let handle = {
             let model = self.environment_model();
             env_seam::directory(&model.directories, admitted, scope)
@@ -1854,9 +1911,11 @@ impl Interp {
         if let Some(found) = self.native_map_entry(local, upper) {
             return found;
         }
-        if let Ok(Some(found)) =
-            self.directory_lookup(&[EnvScope::Local, EnvScope::Environment], upper)
-        {
+        if let Ok(Some(found)) = self.directory_lookup(
+            &[EnvScope::Local, EnvScope::Environment],
+            upper,
+            &env_seam::Access::Resolve,
+        ) {
             return found;
         }
         ObjRef::NIL

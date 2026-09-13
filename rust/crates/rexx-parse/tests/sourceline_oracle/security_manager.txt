@@ -1,0 +1,63 @@
+count 62
+/* Every checkpoint the security manager has, and what a manager that
+   declines answers against one that handles.
+
+   The agent runs from a Routine so that the manager is installed before it
+   starts: a `::REQUIRES` of this program's own would have run first. The
+   audit manager returns 0 from `unknown`, so each event is reported and then
+   happens anyway; the replacing manager answers each one itself. Names that
+   are qualified -- the stream's and the resolved requires' -- are cut to
+   their last component, because the qualified form is the run directory's. */
+
+agent = .Routine~newFile('agent.rex')
+say 'declined' agent~setSecurityManager(.Audit~new)
+agent~call
+
+say '---'
+
+replaced = .Routine~newFile('agent.rex')
+say 'handled ' replaced~setSecurityManager(.Replace~new)
+replaced~call
+
+exit 0
+
+::class Audit
+::method unknown
+  use arg name, args
+  info = args[1]
+  line = 'event' name
+  do key over .array~of('NAME', 'ADDRESS', 'COMMAND', 'ARGUMENTS', 'OBJECT')
+    value = info[key]
+    if value == .nil then iterate
+    line = line key '=' self~tail(value)
+  end
+  say line
+  return 0
+::method tail
+  use arg value
+  text = value~string
+  at = lastpos('/', text)
+  if at = 0 then return text
+  return substr(text, at + 1)
+
+::class Replace
+::method call
+  use arg info
+  info~result = 'call-result'
+  return 1
+::method local
+  use arg info
+  info~result = 'local-result'
+  return 1
+::method method
+  use arg info
+  info~result = 'method-result'
+  return 1
+::method command
+  use arg info
+  info~rc = 42
+  info~error = .true
+  return 1
+::method unknown
+  use arg name, args
+  return 0

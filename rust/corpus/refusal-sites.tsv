@@ -240,7 +240,6 @@ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:415	agrees	yes	9
 Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:230	off-send-surface	-	-	-
 Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1040	agrees	yes	88.914	o~m:v with v holding 5
 Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1046	agrees	yes	93.957	o~m:.Array
-Loud	security_manager	send	crates/rexx-exec/src/lib.rs:406	recorded	yes	a security manager	say .K~method('MM')~setSecurityManager(.Object~new) -- the no-argument form is implemented and answers, so the witness has to pass one
 Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:597	off-send-surface	-	-	-
 Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:665	off-send-surface	-	-	-
 Loud	setup_method	send	crates/rexx-exec/src/lib.rs:475	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)

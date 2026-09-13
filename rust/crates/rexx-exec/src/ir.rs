@@ -498,7 +498,15 @@ impl Calls {
     }
 
     /// Records what site `at` resolved to.
+    ///
+    /// **A miss is never kept.** `Resolved::Unresolved` is the answer for a
+    /// name nothing has yet, and a file the search would find next time must
+    /// not be masked by this table -- the same reason a raising resolution
+    /// was never cached.
     fn remember(&self, at: u16, resolved: Resolved) {
+        if matches!(resolved, Resolved::Unresolved) {
+            return;
+        }
         if let Some(slot) = self.slots.get(at as usize) {
             slot.set(resolved);
         }

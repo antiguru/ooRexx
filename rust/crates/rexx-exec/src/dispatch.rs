@@ -36,21 +36,33 @@ mod seam {
     /// Evidence that a message send passed the dispatch security seam.
     pub(super) struct Cleared(());
 
+    /// What the seam decided about one send.
+    pub(super) enum Clearance {
+        /// Run the method.
+        Cleared(Cleared),
+        /// The security manager answered the send itself, and the method
+        /// never runs (`RexxObject::processProtectedMethod`,
+        /// `classes/ObjectClass.cpp:976`-`:988`).
+        Answered(Option<ObjRef>),
+    }
+
     /// **The dispatch chokepoint (D45, site one).** Every method invocation
-    /// passes here, whatever kind [`super::Invocable`] finds it to be, and a
-    /// manager installed in a later phase gets its hook in this function's
-    /// body.
+    /// passes here, whatever kind [`super::Invocable`] finds it to be, and
+    /// the security manager's `METHOD` checkpoint is asked here for a method
+    /// the send has found to be `PROTECTED`.
     pub(super) fn clear(
         interp: &mut Interp,
         receiver: ObjRef,
         name: &[u8],
         args: &[Option<ObjRef>],
         method: MethodId,
-    ) -> Result<Cleared, Failure> {
-        if interp.method_is_protected(method) {
-            interp.check_protected_method(receiver, name, args)?;
+    ) -> Result<Clearance, Failure> {
+        if interp.method_is_protected(method)
+            && let Some(result) = interp.check_protected_method(receiver, name, args)?
+        {
+            return Ok(Clearance::Answered(result));
         }
-        Ok(Cleared(()))
+        Ok(Clearance::Cleared(Cleared(())))
     }
 }
 
@@ -1946,16 +1958,35 @@ impl Interp {
             .is_some_and(|scope| scope.protected)
     }
 
-    /// The security manager's `checkProtectedMethod`, asked for a method the
+    /// The security manager's `checkProtectedMethod`
+    /// (`execution/SecurityManager.cpp:172`-`:194`), asked for a method the
     /// send has found to be `PROTECTED`.
+    ///
+    /// `Some(result)` where the manager handled the send, the method then
+    /// never running; `None` where it did not, or where no manager is
+    /// installed.
     fn check_protected_method(
         &mut self,
         receiver: ObjRef,
         name: &[u8],
         args: &[Option<ObjRef>],
-    ) -> Result<(), Failure> {
-        let _ = (self, receiver, name, args);
-        Ok(())
+    ) -> Result<Option<Option<ObjRef>>, Failure> {
+        if self.effective_security_manager().is_none() {
+            return Ok(None);
+        }
+        let message = self.text(name);
+        self.roots.push_temp(message);
+        let arguments = self.security_arguments_array(args);
+        let entries = [
+            (crate::security::key::OBJECT, receiver),
+            (crate::security::key::NAME, message),
+            (crate::security::key::ARGUMENTS, arguments),
+        ];
+        let Some(info) = self.security_check(crate::security::message::METHOD, &entries)? else {
+            return Ok(None);
+        };
+        let result = self.security_entry(info, crate::security::key::RESULT)?;
+        Ok(Some(result))
     }
 
     /// `RexxObject::checkPrivate` (`classes/ObjectClass.cpp:608`-`:646`).
@@ -2077,7 +2108,10 @@ impl Interp {
         args: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
         let invocable = self.invocable(resolution, name)?;
-        let cleared = seam::clear(self, receiver, name, args, resolution.method)?;
+        let cleared = match seam::clear(self, receiver, name, args, resolution.method)? {
+            seam::Clearance::Cleared(cleared) => cleared,
+            seam::Clearance::Answered(result) => return Ok(result),
+        };
         match invocable {
             Invocable::Native(entry) => {
                 let outcome = match entry.arity {
