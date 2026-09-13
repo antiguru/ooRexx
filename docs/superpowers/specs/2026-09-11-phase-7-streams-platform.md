@@ -70,7 +70,7 @@ changes directory with `DIRECTORY()`, and calls `'worker.rex'(arguments)` by fil
 | the timer natives behind `.Alarm` and `.Ticker` | Phase 6 | already so (`dispatch/native.rs` `Family::Timer`) |
 | the RexxUtil remainder | Phase 10 | D11 — and it must refuse **loudly**, which it does not today (§U) |
 | `RXFUNCADD` `RXFUNCDROP` `RXFUNCQUERY` `RXQUEUE` | Phase 10 | `phase-4-exclusions.txt` |
-| platforms other than Linux | assessed as CANNOT ASSESS | no other platform is available to this crate's gates |
+| platforms other than Linux | Phase 11 (D-P1) | no other platform is available to this crate's gates, so this phase assesses them CANNOT ASSESS and Phase 11 owns them once a second host exists |
 
 ## 2. Rulings on the 2026-09-04 open decisions
 
