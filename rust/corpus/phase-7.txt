@@ -106,3 +106,15 @@ lang/command_options_error_syntax.rex
 # `TRACE N` this program would carry a `+++ "RC(127)"` block if the escalation
 # were checked after the trace rather than before it.
 lang/command_options_failure_syntax.rex
+
+# Task 15: the condition object `CONDITION('O')` answers. Which indexes it
+# carries depends on the condition, so this covers a command's (with `RESULT`)
+# and a raised `USER`'s (with `ADDITIONAL`), both through `CALL ON` traps that
+# resume so one file shows two kinds.
+lang/condition_object.rex
+
+# Task 15: a `SYNTAX` condition's own five extra indexes -- `CODE`,
+# `ERRORTEXT`, `MESSAGE`, `ADDITIONAL` and `RC` -- in a file of its own,
+# because `CALL ON SYNTAX` is a 25.1 translation error and the kind cannot be
+# trapped resumably.
+lang/condition_object_syntax.rex

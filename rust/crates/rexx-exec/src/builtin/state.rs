@@ -312,8 +312,21 @@ pub(crate) fn condition(
     // share one.
     let active: Option<TrappedCondition> = interp.activation().condition.clone();
     match (style, &active) {
-        (b'A', _) => Err(Loud::builtin_option_object("CONDITION", b'A', "an Array or .NIL").into()),
-        (b'O', _) => Err(Loud::builtin_option_object("CONDITION", b'O', "a Directory").into()),
+        // `.NIL` with nothing active, and not the null string the letters
+        // below answer -- measured, `say condition('O')` and `condition('A')`
+        // in a program that has trapped nothing both print `The NIL object`
+        // where `condition('C')` prints nothing at all.
+        (b'A', active) => {
+            let additional = active
+                .as_ref()
+                .and_then(|condition| condition.object)
+                .and_then(|object| interp.condition_entry(object, b"ADDITIONAL"));
+            Ok(additional.unwrap_or(ObjRef::NIL))
+        }
+        (b'O', active) => Ok(active
+            .as_ref()
+            .and_then(|condition| condition.object)
+            .unwrap_or(ObjRef::NIL)),
         (b'R', _) => {
             interp.activation_mut().condition = None;
             Ok(interp.text(b""))
@@ -917,38 +930,27 @@ mod tests {
         }
     }
 
-    /// The options whose answer is an object this crate cannot make fail
-    /// loudly rather than returning a plausible string.
+    /// The two options whose answer is an object answer one. With nothing
+    /// trapped both are `.NIL` -- **not** the null string the letter options
+    /// beside them give, measured -- and inside a handler `O` is the
+    /// condition's directory and `A` its `ADDITIONAL`.
     #[test]
-    fn the_object_valued_options_are_loud() {
-        for (source, message) in [
-            (
-                b"say condition('A')\n".as_slice(),
-                "CONDITION option \"A\" answers an Array or .NIL, which is not implemented",
-            ),
-            (
-                b"say condition('O')\n".as_slice(),
-                "CONDITION option \"O\" answers a Directory, which is not implemented",
-            ),
-        ] {
-            let (code, stderr) = failure(source);
-            assert_eq!(code, crate::NOT_IMPLEMENTED_EXIT, "{stderr}");
-            assert!(stderr.contains(message), "{stderr}");
-        }
+    fn the_object_valued_options_answer_their_objects() {
+        assert_eq!(output(b"say condition('A')\n"), "The NIL object\n");
+        assert_eq!(output(b"say condition('O')\n"), "The NIL object\n");
+        let trapped = b"signal on syntax name h\nsay 1/0\nexit\nh:\nsay condition('O')~class~id condition('A')~class~id\n";
+        assert_eq!(output(trapped.as_slice()), "Directory Array\n");
     }
 
-    /// `CONDITION('D')` refuses only the pair it cannot answer. The three
-    /// neighbouring cases -- no condition, an interpreter-raised `SYNTAX`,
-    /// and a `RAISE` with no `DESCRIPTION` -- all answer the null string and
-    /// are asserted elsewhere in this module; this one is `NOVALUE`.
+    /// `CONDITION('D')` for a `NOVALUE` is the variable's own derived name.
+    /// It refused until the condition object needed it, and `novalue_raised`
+    /// had the name in hand the whole time -- it builds exactly this for its
+    /// `::OPTIONS NOVALUE SYNTAX` branch.
     #[test]
-    fn only_novalues_description_is_loud() {
-        let (code, stderr) =
-            failure(b"signal on novalue name h\nsay zunsetvar\nexit\nh:\nsay condition('D')\n");
-        assert_eq!(code, crate::NOT_IMPLEMENTED_EXIT, "{stderr}");
-        assert!(
-            stderr.contains("CONDITION option \"D\" answers the NOVALUE variable's name"),
-            "{stderr}"
+    fn novalues_description_is_the_variables_own_name() {
+        assert_eq!(
+            output(b"signal on novalue name h\nsay zunsetvar\nexit\nh:\nsay condition('D')\n"),
+            "ZUNSETVAR\n"
         );
         // The adjacent success: the same option, the same handler shape, a
         // condition whose description this crate does carry.

@@ -81,6 +81,22 @@ pub(crate) struct Raised {
     /// `RAISE ... DESCRIPTION expr`'s rendered value, which a trapping
     /// handler reads back through `CONDITION('D')`.
     pub(crate) description: Option<Vec<u8>>,
+    /// Whether the condition object carries a `RESULT` entry, which **only a
+    /// command's condition does** -- measured, a failing command's directory
+    /// carries `RESULT` beside `RC` while `raise error 5` carries `RC` alone,
+    /// though both set `rc`. A flag and not a second value because the two
+    /// are always the same bytes: `RC` 3 with `RESULT` 3, `RC` 127 with
+    /// `RESULT` 127. Storing it twice also grew `Raised` past the width
+    /// `clippy::result_large_err` allows.
+    pub(crate) result_is_rc: bool,
+    /// The line the raise happened on, captured **at the raise** because the
+    /// activation it belongs to may be gone by the time a trap takes it: a
+    /// `RAISE ... RETURN` inside a routine unwinds before a `SIGNAL ON`
+    /// handler runs, and the innermost frame left on the stack is then the
+    /// caller's. Measured, the oracle answers 4 there where the caller's own
+    /// clause is 2. `0` means "not captured", and the condition object falls
+    /// back to the innermost frame's own line.
+    pub(crate) position: u32,
     pub(crate) delivery: Delivery,
 }
 
@@ -102,6 +118,8 @@ impl Raised {
             additional,
             rc: Some(number.to_string().into_bytes()),
             description: None,
+            result_is_rc: false,
+            position: 0,
             delivery: Delivery::default(),
         }
     }
@@ -115,6 +133,8 @@ impl Raised {
             additional: Vec::new(),
             rc: None,
             description: None,
+            result_is_rc: false,
+            position: 0,
             delivery: Delivery::default(),
         }
     }
@@ -139,6 +159,8 @@ impl Raised {
             // condition.", so the condition's own name is the substitution
             // -- measured, the oracle prints `HALT`, and a version with no
             // substitution prints the literal `&1`.
+            result_is_rc: false,
+            position: 0,
             additional: vec![b"HALT".to_vec()],
             // `None` rather than `4`: `RC` is measured to carry the major
             // only for `SYNTAX` (42 for `say 1/0`, 40 for `raise syntax
@@ -1760,7 +1782,7 @@ impl Raised {
     }
 
     /// One catalogue entry with this error's substitutions applied.
-    fn message(&self, major: u16, sub: u16) -> Vec<u8> {
+    pub(crate) fn message(&self, major: u16, sub: u16) -> Vec<u8> {
         match rexx_inventory::errors::lookup(major, sub) {
             Some(entry) => substitute(entry.text, &self.additional),
             None => format!("<no message {major}.{sub} in the catalogue>").into_bytes(),

@@ -72,6 +72,18 @@ pub(crate) struct TrappedCondition {
     /// the raise carried none. See [`Raised::description`] for the one
     /// condition whose description this cannot supply.
     pub(crate) description: Option<Vec<u8>>,
+    /// `CONDITION('O')`: the condition object, built when the condition is
+    /// trapped rather than when it is asked for. **Eagerly, and that is the
+    /// observable rather than a preference:** its `STACKFRAMES` is the stack
+    /// as it stood at the raise, and a `CALL ON` handler runs in a frame that
+    /// did not exist then, so building it on the ask would report a stack
+    /// that never was.
+    ///
+    /// An `ObjRef` here is reachable only through this struct, so
+    /// [`Activation::object_roots`] names it -- the exhaustive destructure
+    /// there guards `Activation`'s own fields and would not have caught a new
+    /// one inside this type.
+    pub(crate) object: Option<ObjRef>,
 }
 
 /// A unique identity for one activation, minted when it is pushed and never
@@ -729,7 +741,7 @@ impl Activation {
             trace_mode: _,
             address: _,
             traps: _,
-            condition: _,
+            condition,
             cached_clock: _,
             clock_stale: _,
             context_object,
@@ -740,6 +752,20 @@ impl Activation {
             streams,
         } = self;
         out.extend(*context_object);
+        // The trapped condition's own object, destructured rather than
+        // reached through a field: the exhaustive match above guards this
+        // struct's fields, and an `ObjRef` added to `TrappedCondition` would
+        // otherwise arrive unrooted with nothing to say so.
+        if let Some(TrappedCondition {
+            name: _,
+            code_sub: _,
+            call: _,
+            description: _,
+            object,
+        }) = condition
+        {
+            out.extend(*object);
+        }
         // The table's streams. An activation is a root, and a stream only
         // the table holds is reachable through nothing else.
         out.extend(streams.values().copied());

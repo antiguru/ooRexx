@@ -2830,12 +2830,20 @@ impl Interp {
     /// **The caller answers normally after `Ok`**: a raise never changes what
     /// the failing call returns -- the residual, `1`, or the null string.
     pub(crate) fn raise_notready(&mut self, name: &[u8]) -> Result<(), Failure> {
+        // One `Raised` for both branches, so the queued form can build its
+        // condition object here rather than at delivery.
+        let raised = Raised {
+            description: Some(name.to_vec()),
+            ..Raised::condition(Cow::Borrowed("NOTREADY"))
+        };
         match self.trap_for(b"NOTREADY") {
             Some(trap) if trap.call => {
+                let object = self.build_condition_object(&raised, true)?;
                 self.pending_traps.push_back(PendingTrap {
                     condition: b"NOTREADY".as_slice().into(),
                     rc: None,
                     description: Some(name.to_vec()),
+                    object: Some(object),
                     // The **running** activation, not its caller: a native
                     // method raises inside the clause that sent to it, and
                     // that clause is still running. The routine-return path
@@ -2885,7 +2893,15 @@ impl Interp {
             }
             return Ok(());
         }
-        Err(Raised::condition(Cow::Borrowed("NOVALUE")).into())
+        // The variable's own derived name, which `CONDITION('D')` and the
+        // condition object's `DESCRIPTION` both report -- measured, the
+        // oracle answers `ZZUNDEF` for `say zzundef` under `SIGNAL ON
+        // NOVALUE`. `derived_name_text` is the same value the
+        // `::OPTIONS NOVALUE SYNTAX` branch above already builds; leaving it
+        // off here is what made both answer empty.
+        let mut raised = Raised::condition(Cow::Borrowed("NOVALUE"));
+        raised.description = Some(self.derived_name_text(read));
+        Err(raised.into())
     }
 
     /// The bytes of the derived name an uninitialised read answered.
@@ -3040,6 +3056,10 @@ impl Interp {
         // two have different lifetimes: this one dies with the activation
         // (`TrappedCondition`), while `active_condition` is the interpreter's
         // one slot for `RAISE PROPAGATE`.
+        // Built here, on the raising clause, because everything in it is a
+        // raise-time fact: `POSITION` is this clause's own line and
+        // `STACKFRAMES` the stack as it stands now.
+        let object = self.build_condition_object(&raised, false)?;
         self.activation_mut().condition = Some(TrappedCondition {
             name: raised.condition.as_bytes().into(),
             // Only a `SYNTAX` condition has a `CODE` item at all
@@ -3050,6 +3070,7 @@ impl Interp {
             code_sub: (raised.condition == "SYNTAX").then_some(raised.sub),
             call: false,
             description: raised.description.clone(),
+            object: Some(object),
         });
         // What a later `RAISE PROPAGATE` re-raises. See `exec_raise_
         // propagate` for what is and is not measured about it.
@@ -3189,6 +3210,12 @@ impl Interp {
             code_sub: None,
             call: true,
             description: pending.description.clone(),
+            // Carried from the queue rather than built here. By delivery the
+            // raising clause has finished and its routine may have returned,
+            // so `POSITION` and `STACKFRAMES` no longer exist to be read --
+            // measured, `POSITION` is 7 for a command inside a routine, not
+            // the caller's own `call` line.
+            object: pending.object,
         });
         let queued_before = self.pending_traps.len();
         // `CallType::Subroutine` because a `CALL ON` handler is a `CALL`, and
@@ -3344,12 +3371,19 @@ impl Interp {
             // (.environment)` substitutes `INPUTOUTPUTSTREAM` -- the first
             // entry of the array the directory converts to -- and `raise user
             // zork additional (.array)` under a trap is rc 0 on both sides.
+            // **The array is split for every condition, but only `SYNTAX`
+            // refuses a value that is not one.** The C++ calls `requestArray`
+            // inside its `SYNTAX` branch alone, and that governs the
+            // *substitution list* a catalogue message renders from -- which
+            // only a `SYNTAX` condition has. The condition object's
+            // `ADDITIONAL` carries the raise's own array whatever the
+            // condition is: measured, `raise user mycond additional
+            // (.array~of('x','y'))` gives a directory holding two items, and
+            // pushing the rendered whole value gave one holding `x\ny`.
+            // `Raised::message` is the only other reader and runs for a
+            // catalogue entry alone, so nothing else sees the split.
             let converted = raise.condition.eq_ignore_ascii_case(b"SYNTAX");
-            let slots = if converted {
-                self.array_slots_of(value)
-            } else {
-                None
-            };
+            let slots = self.array_slots_of(value);
             if converted
                 && slots.is_none()
                 && let Some(kind) = self.operator_operand_gap(value)
@@ -3361,6 +3395,11 @@ impl Interp {
             // (1,2)`: `>K>   "ADDITIONAL" => "an Array"`.
             let traced = self.string_value_text(value);
             self.trace_keyword(indent, "ADDITIONAL", &traced);
+            // The object itself, for the condition object to carry. The
+            // substitution list below is a different thing: it is what a
+            // catalogue message renders from, and only a `SYNTAX` condition
+            // has one.
+            self.pending_additional = Some(value);
             match slots {
                 Some(slots) => {
                     for slot in slots {
@@ -3460,6 +3499,7 @@ impl Interp {
             // well-formed tail-less `RAISE SYNTAX` reports its own number
             // there. The substituted condition is still a `SYNTAX` condition
             // and travels like one.
+            raised.position = u32::try_from(self.clause_state.line()).unwrap_or(0);
             raised.delivery.search = if returns { Search::Here } else { Search::Top };
             return Err(raised.into());
         }
@@ -3494,10 +3534,24 @@ impl Interp {
             // caller's current clause to finish -- `deliver_pending_traps`
             // has the two transcripts that pin the wait.
             Some(trap) if trap.call => {
+                // Built before the raising activation is popped, which is
+                // what `STACKFRAMES` and `POSITION` describe. The trap is
+                // queued against the caller, but the object is the raise's.
+                let queued = Raised {
+                    rc: rc.clone(),
+                    description: description.clone(),
+                    // `RAISE ... ADDITIONAL`'s own list, which the condition
+                    // object reports and which this arm used to drop.
+                    additional: additional.clone(),
+                    position: u32::try_from(self.clause_state.line()).unwrap_or(0),
+                    ..Raised::condition(Cow::Owned(String::from_utf8_lossy(&name).into_owned()))
+                };
+                let object = self.build_condition_object(&queued, true)?;
                 self.pending_traps.push_back(PendingTrap {
                     condition: name,
                     rc,
                     description: description.clone(),
+                    object: Some(object),
                     // The caller's own identity -- this activation is about
                     // to be popped, and `caller_trap_for` above just read
                     // that same activation's table. See the field's own doc
@@ -3528,6 +3582,16 @@ impl Interp {
                 let mut raised = Raised::condition(condition_name(&name));
                 raised.rc = rc;
                 raised.description = description;
+                // Captured here, where the raising activation is still
+                // current: it is popped by the `Flow::Return` this branch
+                // does not take, and a `SIGNAL ON` handler sees the caller's
+                // frame rather than this one.
+                raised.position = u32::try_from(self.clause_state.line()).unwrap_or(0);
+                // The raise's own `ADDITIONAL`, which the condition object
+                // reports. Measured: `raise user mycond additional (an
+                // array)` gives a directory carrying `ADDITIONAL`, and this
+                // arm built the condition without it.
+                raised.additional = additional;
                 raised.delivery.search = Search::Caller;
                 Err(raised.into())
             }

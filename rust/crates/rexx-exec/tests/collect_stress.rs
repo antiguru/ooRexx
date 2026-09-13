@@ -634,3 +634,52 @@ fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
         "the stress mode did not collect, so this proves nothing"
     );
 }
+
+/// A trapped condition's own object survives collect-on-every-allocation.
+///
+/// **Two root paths the exhaustive destructures do not reach**: the object
+/// hangs off `TrappedCondition`, which `Activation::object_roots` reached
+/// through a `condition: _` wildcard until this landed, and off a queued
+/// `PendingTrap` inside a `VecDeque` that `Interp::object_roots` wildcarded
+/// the same way. A field added inside either is invisible to `E0027`, so
+/// nothing but a collecting run says whether they were named correctly.
+/// The handler allocates before it reads, so a collect falls between the
+/// object's creation and the read.
+#[test]
+fn a_trapped_conditions_object_survives_collect_on_every_allocation() {
+    for (label, program) in [
+        (
+            "signal on",
+            "signal on error name h\n\"sh -c 'exit 3'\"\nexit\nh:\n  o = condition('O')\n  \
+             do i = 1 to 20\n    zj = 'filler' i\n  end\n  \
+             say o~at('CONDITION') o~at('RC') o~at('STACKFRAMES')~items\n",
+        ),
+        (
+            "call on",
+            "call on error name h\n\"sh -c 'exit 3'\"\ncall off error\nexit\nh:\n  \
+             o = condition('O')\n  do i = 1 to 20\n    zj = 'filler' i\n  end\n  \
+             say o~at('CONDITION') o~at('RC') o~at('STACKFRAMES')~items\n  return\n",
+        ),
+    ] {
+        let stress = run_program_collect_every_alloc(
+            "<condition-object-rooting>",
+            program.as_bytes().to_vec(),
+            rexx_exec::Invocation::none(),
+        );
+        assert_eq!(
+            stress.exit_code,
+            0,
+            "{label}: {}",
+            String::from_utf8_lossy(&stress.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&stress.stdout),
+            "ERROR 3 1\n",
+            "{label}: the condition object did not survive the collector"
+        );
+        assert!(
+            stress.collections > 0,
+            "{label}: the stress mode did not collect, so this proves nothing"
+        );
+    }
+}

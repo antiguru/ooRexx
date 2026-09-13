@@ -443,7 +443,7 @@ fn context_stack_frames(
 
 /// One `StackFrame` for the activation at `depth` --
 /// `RexxActivation::createStackFrame` (`RexxActivation.cpp:5006`).
-fn build_frame(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
+pub(crate) fn build_frame(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
     let invocation = interp.invocation_of(depth);
     // Created here when the activation never asked for one, which is what
     // `createStackFrame`'s own `getContextObject()` does -- see

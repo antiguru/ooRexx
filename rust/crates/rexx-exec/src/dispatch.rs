@@ -89,7 +89,7 @@ pub(crate) mod executable;
 mod introspection;
 
 // `RexxContext`'s and `StackFrame`'s readers, chained the same way.
-mod context;
+pub(crate) mod context;
 
 // `Package`'s readers and its four writes, chained the same way.
 mod package;

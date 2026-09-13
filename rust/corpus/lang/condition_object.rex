@@ -1,0 +1,60 @@
+/* `CONDITION('O')`'s directory. Which indexes it carries depends on the
+   condition: the nine below are always there, `RC` joins them wherever the
+   raise sets one, `RESULT` only on a command's, and `ADDITIONAL` where the
+   raise carried one. Both traps are `CALL ON` so the program resumes and one
+   file can show two kinds.
+
+   The keys are read by name rather than through `~allindexes`, which this
+   crate does not implement for a `Directory` yet -- so the absences below are
+   asserted one at a time instead. Nothing prints `PROGRAM`, whose value is
+   the harness's own path. */
+
+call on error name onerror
+"sh -c 'exit 3'"
+call off error
+
+call on user mycond name onuser
+call raiser
+call off user mycond
+exit
+
+raiser: raise user mycond description 'a description' additional (.array~of('x','y')) return
+
+onerror:
+  say 'a command condition'
+  call report
+  return
+
+onuser:
+  say 'a raised USER condition'
+  call report
+  return
+
+report:
+  o = condition('O')
+  say '  class      ' o~class~id
+  say '  condition  ' o~at('CONDITION')
+  say '  description' o~at('DESCRIPTION')
+  say '  instruction' o~at('INSTRUCTION')
+  say '  position   ' o~at('POSITION')
+  say '  propagated ' o~at('PROPAGATED')
+  say '  rc         ' o~at('RC')
+  say '  result     ' o~at('RESULT')
+  say '  package    ' (o~at('PACKAGE') \== .nil)
+  say '  code absent' (o~at('CODE') == .nil)
+  say '  frames     ' o~at('STACKFRAMES')~items o~at('TRACEBACK')~items
+  do f over o~at('STACKFRAMES')
+    say '    frame' f~class~id 'line' f~line
+  end
+  do t over o~at('TRACEBACK')
+    say '    traceline' t~class~id
+  end
+  a = o~at('ADDITIONAL')
+  if a == .nil then say '  additional  absent'
+  else do
+    say '  additional ' a~items
+    do v over a
+      say '    [' || v || ']'
+    end
+  end
+  return

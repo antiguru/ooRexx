@@ -127,6 +127,10 @@ mod require;
 // condition.
 mod command;
 
+// The condition object `CONDITION('O')` answers (Phase 7): the Directory a
+// raise builds, whose indexes depend on the condition's own kind.
+mod condition;
+
 /// The exit code for a construct this crate does not implement.
 pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 
@@ -1492,6 +1496,17 @@ struct PendingTrap {
     /// `rc` is: the raising clause's temps frame is long gone by the time
     /// the handler reads it back through `CONDITION('D')`.
     description: Option<Vec<u8>>,
+    /// `CONDITION('O')`'s directory, built when this was **queued** rather
+    /// than when the handler runs. Everything in it is a raise-time fact that
+    /// delivery cannot recover: `POSITION` is the raising clause's own line
+    /// (measured 7 for a command inside a routine, not the caller's `call`
+    /// line), `STACKFRAMES` is the stack as it stood then, and `RESULT` is
+    /// carried by a command's condition and by no other.
+    ///
+    /// An `ObjRef` reachable only through this queue, so
+    /// [`Interp::object_roots`] names it: that destructure guards `Interp`'s
+    /// own fields and would not have caught one added inside a `VecDeque`.
+    object: Option<ObjRef>,
     /// The activation this may be delivered to: the raising activation's
     /// **caller**, which is the one whose trap table matched.
     activation: ActivationId,
@@ -1776,6 +1791,16 @@ struct Interp {
     /// The condition whose handler is running, for `RAISE PROPAGATE` to
     /// re-raise.
     active_condition: Option<ActiveCondition>,
+    /// The object a `RAISE ... ADDITIONAL` named, held from the raise until
+    /// the condition object is built. **The raise's own value and not a
+    /// rebuild of it**: measured, `additional 'JUSTONE'` puts a `String` in
+    /// the directory and `additional (.array~new)` an empty `Array`, where
+    /// reconstructing from the substitution list gives a one-item `Array` and
+    /// nothing at all. It lives on `Interp` rather than on `Raised` because a
+    /// `Raised` travels inside a `Failure` on the Rust stack, where no
+    /// destructure can root it, and this field is covered by the exhaustive
+    /// match in `object_roots`.
+    pending_additional: Option<ObjRef>,
     /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
     /// `case` text, or `None` inside a plain `SELECT` (or before any
     /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
@@ -2186,6 +2211,7 @@ impl Interp {
             frames: Vec::new(),
             pending_traps: VecDeque::new(),
             active_condition: None,
+            pending_additional: None,
             next_activation_id: 0,
             next_invocation: 0,
             current_case_text: None,
@@ -4596,8 +4622,9 @@ impl Interp {
             frames: _,
             // Overwritten at reuse, as `spare_activations` is.
             flat_spares: _,
-            pending_traps: _,
+            pending_traps,
             active_condition: _,
+            pending_additional,
             current_case_text: _,
             indent_offset: _,
             activation_indent: _,
@@ -4653,6 +4680,25 @@ impl Interp {
             standard_transient: _,
             command_words: _,
         } = self;
+        // The raise's own `ADDITIONAL`, alive between the raise and the
+        // condition object that will hold it.
+        out.extend(*pending_additional);
+        // Each queued trap's condition object. Destructured rather than
+        // reached by field: the match above guards `Interp`'s own fields, and
+        // an `ObjRef` added inside this `VecDeque` would otherwise arrive
+        // unrooted with nothing to say so.
+        for PendingTrap {
+            condition: _,
+            rc: _,
+            description: _,
+            object,
+            activation: _,
+            queued_during_delivery: _,
+            fragment_depth: _,
+        } in pending_traps
+        {
+            out.extend(*object);
+        }
         // The context objects of the activations on the stack. **The one
         // object an activation owns outright**: everything else it holds is
         // rooted by its slot frame, by `Interp::class_variables`, or -- a

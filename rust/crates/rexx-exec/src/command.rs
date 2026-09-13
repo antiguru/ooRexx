@@ -566,24 +566,34 @@ impl Interp {
             return Err(raised.into());
         }
         let rendered = rc.to_string().into_bytes();
+        // One `Raised` for both branches. `result` beside `rc` is what parts
+        // a command's condition from every other: measured, its directory
+        // carries `RESULT` under `SIGNAL ON` and under `CALL ON` alike, where
+        // `raise error 5` carries `RC` alone.
+        let raised = Raised {
+            rc: Some(rendered),
+            result_is_rc: true,
+            description: Some(command.to_vec()),
+            ..Raised::condition(std::borrow::Cow::Borrowed(condition))
+        };
         match self.trap_for(condition.as_bytes()) {
             Some(trap) if trap.call => {
+                // Built now, not at delivery: by then this clause has
+                // finished and `POSITION` and `STACKFRAMES` no longer exist
+                // to be read.
+                let object = self.build_condition_object(&raised, true)?;
                 self.pending_traps.push_back(crate::PendingTrap {
                     condition: condition.as_bytes().into(),
-                    rc: Some(rendered),
+                    rc: raised.rc.clone(),
                     description: Some(command.to_vec()),
+                    object: Some(object),
                     activation: self.activation().id,
                     queued_during_delivery: false,
                     fragment_depth: self.fragment_depth,
                 });
                 Ok(())
             }
-            Some(_) => Err(Raised {
-                rc: Some(rendered),
-                description: Some(command.to_vec()),
-                ..Raised::condition(std::borrow::Cow::Borrowed(condition))
-            }
-            .into()),
+            Some(_) => Err(raised.into()),
             None if condition == "FAILURE" => self.raise_command_condition("ERROR", command, rc),
             None => Ok(()),
         }
