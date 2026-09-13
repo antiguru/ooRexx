@@ -67,6 +67,10 @@ pub struct Invocation {
     /// differently under a binary, a test harness and a library embedding.
     /// Defaults to all transient, which is what a terminal is.
     standard_transient: [bool; 3],
+    /// Where the buffered output goes when the program is about to block on a
+    /// live standard input, or `None` for a caller that reads the whole of it
+    /// out of [`Outcome`](crate::Outcome) at the end.
+    sinks: Option<Sinks>,
     /// The command-line words as separate strings, which `.SYSCARGS` answers.
     ///
     /// **Kept beside `argument` rather than derived from it**, because the
@@ -75,6 +79,28 @@ pub struct Invocation {
     /// string says where the second word ended. The two are independent
     /// afterwards -- appending to `.SYSCARGS` leaves `ARG(1)` unchanged.
     words: Vec<Vec<u8>>,
+}
+
+/// What an embedding that owns real descriptors hands the interpreter so that
+/// a prompt is visible before the read that waits for its answer.
+///
+/// **The interpreter never writes to a descriptor**: it appends to two
+/// buffers, and without sinks nothing is written until the caller drains
+/// [`Outcome`](crate::Outcome). That is invisible to a program whose output is
+/// compared at the end and wrong for one that asks a question -- an
+/// interactive `TRACE` pause prints its prompt and then reads, and a buffered
+/// prompt arrives after the answer it asked for. A caller that installs these
+/// gets each buffer handed over just before such a read, and the rest at the
+/// end as before.
+pub struct Sinks {
+    /// Takes what `SAY` and `.STDOUT` have written since the last handover.
+    ///
+    /// **`Send`, because the interpreter runs on a thread of its own**
+    /// (`on_interpreter_thread`), which is where the sized stack it needs
+    /// comes from.
+    pub stdout: Box<dyn FnMut(&[u8]) + Send>,
+    /// The same for the trace sink, which is `.STDERR`'s descriptor too.
+    pub stderr: Box<dyn FnMut(&[u8]) + Send>,
 }
 
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
@@ -100,6 +126,7 @@ impl Invocation {
             directory: None,
             environment: None,
             standard_transient: [true; 3],
+            sinks: None,
             words: Vec::new(),
         }
     }
@@ -145,6 +172,15 @@ impl Invocation {
         Invocation { input, ..self }
     }
 
+    /// The same invocation, handing the buffered output to `sinks` before a
+    /// read that would wait on a live standard input.
+    pub fn with_sinks(self, sinks: Sinks) -> Invocation {
+        Invocation {
+            sinks: Some(sinks),
+            ..self
+        }
+    }
+
     /// The same invocation, abandoned if the run is still executing clauses
     /// `deadline` after it starts.
     pub fn with_deadline(self, deadline: Duration) -> Invocation {
@@ -165,6 +201,7 @@ impl Invocation {
             directory: self.directory,
             environment: self.environment,
             standard_transient: self.standard_transient,
+            sinks: self.sinks,
             words: self.words,
         }
     }
@@ -179,6 +216,7 @@ pub(crate) struct InvocationParts {
     pub(crate) directory: Option<std::path::PathBuf>,
     pub(crate) environment: Option<Vec<(Vec<u8>, Vec<u8>)>>,
     pub(crate) standard_transient: [bool; 3],
+    pub(crate) sinks: Option<Sinks>,
     pub(crate) words: Vec<Vec<u8>>,
 }
 

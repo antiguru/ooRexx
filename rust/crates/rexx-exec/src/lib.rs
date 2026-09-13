@@ -41,7 +41,7 @@ use queue::Queue;
 // it can carry, how a list of words becomes that string, and where `.input`
 // reads from.
 mod invocation;
-pub use invocation::{Invocation, ProgramInput, join_command_line};
+pub use invocation::{Invocation, ProgramInput, Sinks, join_command_line};
 
 // `.input`: one line position, shared by every construct that reads a line,
 // and the queue-first rule `PULL` follows on top of it.
@@ -1927,6 +1927,10 @@ struct Interp {
     /// positioning a standard stream is 93.958. Taken from the `Invocation`,
     /// never from this process: see `Invocation::standard_transient`.
     standard_transient: [bool; 3],
+    /// Where the two output buffers go before a read that would wait on a
+    /// live standard input, or `None` for an embedding that reads them out of
+    /// the `Outcome` at the end. See [`crate::Sinks`].
+    sinks: Option<crate::invocation::Sinks>,
     /// The command-line words `.SYSCARGS` answers, before they become the one
     /// `Array` `.local` holds -- see `Invocation::words` for why the joined
     /// argument string cannot supply them.
@@ -2259,6 +2263,7 @@ impl Interp {
             // `execute` replaces this, and only from an `Invocation` whose
             // caller owns real descriptors.
             standard_transient: [true; 3],
+            sinks: None,
             command_words: Vec::new(),
             random_seed: None,
             elapsed_anchor: None,
@@ -4887,6 +4892,9 @@ impl Interp {
             env: _,
             cwd: _,
             locals: _,
+            // The embedding's own writers, which take bytes and hold nothing
+            // of this interpreter's.
+            sinks: _,
             // Three flags describing the embedding's descriptors, and the
             // command-line words as bytes: no `ObjRef` in either, so nothing
             // here is reachable from the collector.
@@ -5214,6 +5222,7 @@ fn execute(
     let (argument, deadline) = (parts.argument, parts.deadline);
     interp.input = Input::new(parts.input);
     interp.standard_transient = parts.standard_transient;
+    interp.sinks = parts.sinks;
     interp.command_words = parts.words;
     if let Some(directory) = parts.directory {
         interp.cwd = directory;

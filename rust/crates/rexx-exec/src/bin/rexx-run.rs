@@ -39,7 +39,22 @@ fn main() -> ExitCode {
             use std::os::unix::fs::FileTypeExt;
             std::fs::metadata(format!("/proc/self/fd/{fd}"))
                 .is_ok_and(|meta| meta.file_type().is_char_device() || meta.file_type().is_fifo())
-        }));
+        }))
+        // The other half of owning real descriptors: a program that asks a
+        // question and then reads standard input needs the question to have
+        // been written, and the interpreter only appends to a buffer. An
+        // interactive `TRACE` pause is the case -- its prompt and the read
+        // that waits for the answer are the same clause.
+        .with_sinks(rexx_exec::Sinks {
+            stdout: Box::new(|bytes| {
+                let _ = std::io::stdout().write_all(bytes);
+                let _ = std::io::stdout().flush();
+            }),
+            stderr: Box::new(|bytes| {
+                let _ = std::io::stderr().write_all(bytes);
+                let _ = std::io::stderr().flush();
+            }),
+        });
 
     let text = match std::fs::read(&path) {
         Ok(text) => text,
@@ -59,9 +74,10 @@ fn main() -> ExitCode {
     let reported = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone().into());
     let outcome = rexx_exec::run_program(&reported.to_string_lossy(), text, invocation);
 
-    // Written in the order the program produced them relative to each other,
-    // which is no order at all: they are separate descriptors, and D17 records
-    // that their interleaving is not observable.
+    // Whatever the sinks above did not already take: written in the order the
+    // program produced them relative to each other, which is no order at all
+    // -- they are separate descriptors, and D17 records that their
+    // interleaving is not observable.
     let _ = std::io::stdout().write_all(&outcome.stdout);
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().write_all(&outcome.stderr);

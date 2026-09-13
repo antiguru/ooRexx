@@ -62,6 +62,12 @@ enum Source {
 }
 
 impl Input {
+    /// Whether a read here can wait on something outside this process, which
+    /// is what makes handing the buffered output over first worth doing.
+    fn is_live(&self) -> bool {
+        matches!(self.source, Source::Stdin(_))
+    }
+
     pub(crate) fn new(input: ProgramInput) -> Input {
         Input {
             source: match input {
@@ -218,6 +224,7 @@ impl Interp {
     pub(crate) fn linein_line(&mut self) -> Result<Vec<u8>, Failure> {
         let route = self.local_route(b"INPUT")?;
         let Some(route) = route.filter(|route| *route != ObjRef::NIL) else {
+            self.hand_over_before_read();
             return Ok(self.input.read_line().unwrap_or_default());
         };
         let caller = self.caller();
@@ -232,12 +239,42 @@ impl Interp {
     /// empty line: its caller raises `NOTREADY` on the first and not on the
     /// second.
     pub(crate) fn input_line(&mut self) -> Option<Vec<u8>> {
+        self.hand_over_before_read();
         self.input.read_line()
     }
 
     /// Up to `wanted` bytes of `.input`, for `.STDIN~CHARIN`.
     pub(crate) fn input_bytes(&mut self, wanted: usize) -> Vec<u8> {
+        self.hand_over_before_read();
         self.input.read_bytes(wanted)
+    }
+
+    /// Hands the two output buffers to the embedding's [`crate::Sinks`],
+    /// which is what puts a prompt in front of the reader before the read
+    /// that waits for their answer.
+    ///
+    /// Does nothing for an embedding that installed none, and nothing for a
+    /// source that cannot wait -- so no differential run's output moves.
+    fn hand_over_before_read(&mut self) {
+        if self.sinks.is_none() || !self.input.is_live() {
+            return;
+        }
+        let mut out = std::mem::take(&mut self.out);
+        let mut err = std::mem::take(&mut self.trace);
+        let mut sinks = self.sinks.take().expect("a sink set that is present");
+        if !out.is_empty() {
+            (sinks.stdout)(&out);
+        }
+        if !err.is_empty() {
+            (sinks.stderr)(&err);
+        }
+        self.sinks = Some(sinks);
+        // The buffers themselves go back, emptied: their capacity is worth
+        // keeping and everything in them has been handed over.
+        out.clear();
+        err.clear();
+        self.out = out;
+        self.trace = err;
     }
 
     /// What `.STDIN~CHARS` answers: the bytes left, or `None` when the source
