@@ -898,10 +898,18 @@ fn load_package(
     // REXX package refuses even the form this crate declines: measured at
     // rc 158, `.Class~package~loadPackage('X', 'Y')` is 98.984.
     let program = writable_package_of(interp, receiver)?;
-    if args.get(1).copied().flatten().is_some() {
-        return Err(Loud::package_from_source().into());
-    }
-    let loaded = interp.load_package(program, &name)?;
+    // **The source form loads a package that is not a file**, under a name
+    // that names nothing on disk. It runs the prologue and merges exactly as
+    // the file form does -- measured, `loadPackage('nm', .array~of(...))` with
+    // a `::routine lpf public` prints the prologue's line, answers `nm` for
+    // `~name`, and leaves `lpf` callable in the caller.
+    let loaded = match args.get(1).copied().flatten() {
+        Some(source) => {
+            let lines = super::method_source_lines(interp, source, "source")?;
+            interp.package_from_source(&name, &lines)?
+        }
+        None => interp.load_package(program, &name)?,
+    };
     if interp.add_imported_package(program, Package::Program(loaded)) {
         interp.merge_required(program, loaded);
     }
@@ -940,10 +948,11 @@ fn package_new(
         return Err(Loud::executable_context().into());
     }
     let program = match args.get(1).copied().flatten() {
-        None => {
-            let from = interp.running_program().unwrap_or(ProgramId(0));
-            interp.load_package(from, &name)?
-        }
+        // **The global context, not the caller's directory.** Measured: with
+        // the current directory elsewhere, `.Package~new('pk.rex')` is 43.901
+        // even though `pk.rex` sits beside the program that asks -- where a
+        // `::REQUIRES` of the same name finds it.
+        None => interp.load_package_global(&name)?,
         Some(source) => {
             let lines = super::method_source_lines(interp, source, "source")?;
             interp.package_from_source(&name, &lines)?

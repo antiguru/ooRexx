@@ -441,14 +441,6 @@ impl Loud {
         }
     }
 
-    /// `Package~loadPackage(name, source)`, whose second argument builds a
-    /// package out of source lines under a name that is not a file.
-    fn package_from_source() -> Loud {
-        Loud {
-            message: owned_message("a loadPackage source array", Some("Phase 7")),
-        }
-    }
-
     fn method_from_source(what: &str) -> Loud {
         Loud {
             message: owned_message(what, Some("Phase 5")),
@@ -2948,7 +2940,7 @@ impl Interp {
             let DirectiveKind::Requires(requires) = &directive.kind else {
                 continue;
             };
-            match self.load_requires(id, &requires.name) {
+            match self.load_requires(Some(id), &requires.name) {
                 Ok(required) => {
                     self.add_imported_package(id, Package::Program(required));
                     self.merge_required(id, required);
@@ -2979,12 +2971,30 @@ impl Interp {
 
     /// The package `name` names, loaded and its prologue run if this is the
     /// first `::REQUIRES` to reach it.
-    fn load_requires(&mut self, id: ProgramId, name: &[u8]) -> Result<ProgramId, Failure> {
+    ///
+    /// `from` is the package whose directory and extension the search starts
+    /// with, and `None` searches the **global** context instead -- no parent
+    /// directory, no parent extension. That is what `Package~new(name)` uses:
+    /// measured, it does not look beside its caller, so a file the caller sits
+    /// next to is 43.901 there where a `::REQUIRES` of the same name finds it.
+    ///
+    /// The cache is consulted either way and keyed by the name as written, so
+    /// a global lookup still hits what a `::REQUIRES` loaded earlier --
+    /// measured, `Package~new` after a `loadPackage` of the same short name
+    /// answers the package already loaded.
+    fn load_requires(
+        &mut self,
+        from: Option<ProgramId>,
+        name: &[u8],
+    ) -> Result<ProgramId, Failure> {
         if let Some(&loaded) = self.required_packages.get(name) {
             self.check_not_installing(loaded)?;
             return Ok(loaded);
         }
-        let resolved = self.resolve_requires(id, name);
+        let resolved = match from {
+            Some(id) => self.resolve_requires(id, name),
+            None => self.resolve_search(None, name, true),
+        };
         if let Some(resolved) = &resolved
             && let Some(&loaded) = self.required_packages.get(resolved.as_bytes())
         {
@@ -3309,7 +3319,13 @@ impl Interp {
         program: ProgramId,
         name: &[u8],
     ) -> Result<ProgramId, Failure> {
-        self.load_requires(program, name)
+        self.load_requires(Some(program), name)
+    }
+
+    /// `PackageClass::newRexx`'s load: the same file load, searched from the
+    /// **global** context rather than from any package's directory.
+    pub(crate) fn load_package_global(&mut self, name: &[u8]) -> Result<ProgramId, Failure> {
+        self.load_requires(None, name)
     }
 
     /// `PackageClass::newRexx`'s in-memory form: a package compiled from
