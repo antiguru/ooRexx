@@ -47,6 +47,12 @@ pub(crate) struct Delivery {
     /// Render the major line as `Error 88 running <path>:  ...`: the program
     /// name, and no ` line <n>` after it.
     pub(crate) lineless: bool,
+    /// Name `REXX` in place of the program's path. An internal package's
+    /// routine reports that for an argument error, whichever of the two
+    /// packages registers it -- measured, `filespec('D')` and
+    /// `SysFileExists()` both report `Error 88 running REXX:`, where a
+    /// routine's own body raising 88.902 names the program and its line.
+    pub(crate) internal_package: bool,
 }
 
 /// One value a catalogue message interpolates: **bytes, not text**.
@@ -290,6 +296,23 @@ impl Raised {
     pub(crate) fn too_many_external_arguments(arity: usize) -> Raised {
         let mut raised = Raised::syntax(88, 922, vec![arity.to_string().into_bytes()]);
         raised.delivery.lineless = true;
+        raised
+    }
+
+    /// [`Raised::too_many_external_arguments`] for a routine of an internal
+    /// package, which names the package rather than the program.
+    pub(crate) fn too_many_internal_arguments(arity: usize) -> Raised {
+        let mut raised = Raised::too_many_external_arguments(arity);
+        raised.delivery.internal_package = true;
+        raised
+    }
+
+    /// 88.901 for a routine of an internal package: the package is named and
+    /// no line is given, unlike the method form.
+    pub(crate) fn missing_internal_argument(argument: &str) -> Raised {
+        let mut raised = Raised::missing_named_argument(argument);
+        raised.delivery.lineless = true;
+        raised.delivery.internal_package = true;
         raised
     }
 
@@ -1388,6 +1411,15 @@ impl Raised {
 
     /// The traceback line a native (C++-implemented, here Rust-implemented)
     /// method activation contributes, rendered whole.
+    /// 101.21: the traceback line a failing routine of an internal package
+    /// contributes, `*-*` marker and leading blanks included.
+    pub(crate) fn compiled_routine_line(name: &[u8]) -> Vec<u8> {
+        match rexx_inventory::errors::lookup(101, 21) {
+            Some(entry) => substitute(entry.text, &[name.to_vec()]),
+            None => b"<no message 101.21 in the catalogue>".to_vec(),
+        }
+    }
+
     pub(crate) fn compiled_method_line(name: &[u8], scope: &str) -> Vec<u8> {
         let substitutions = vec![name.to_vec(), scope.as_bytes().to_vec()];
         match rexx_inventory::errors::lookup(101, 20) {
@@ -1792,9 +1824,13 @@ impl Raised {
         // neither, for the reason its own doc gives.
         let innermost = site.sites.iter().find(|entry| entry.line().is_some());
         let line = innermost.and_then(FailureSite::line).unwrap_or(0);
-        let named = match innermost.and_then(FailureSite::reported_name) {
-            Some(package) => String::from_utf8_lossy(package).into_owned(),
-            None => site.path.to_string(),
+        let named = if self.delivery.internal_package {
+            "REXX".to_string()
+        } else {
+            match innermost.and_then(FailureSite::reported_name) {
+                Some(package) => String::from_utf8_lossy(package).into_owned(),
+                None => site.path.to_string(),
+            }
         };
         let site = &ClauseSite {
             path: &named,

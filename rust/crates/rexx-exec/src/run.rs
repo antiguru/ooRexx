@@ -3978,7 +3978,15 @@ impl Interp {
         let body = row
             .body
             .expect("resolve_call only answers Internal with a body");
-        body(self, row.name.as_bytes(), values)
+        let outcome = body(self, row.name.as_bytes(), values);
+        if outcome.is_err() {
+            // The oracle reports one of these under its own routine line,
+            // whether the argument marshalling or the body raised -- measured,
+            // `filespec('D')` and `SysSleep('abc')` both carry it.
+            let upper = row.name.to_ascii_uppercase();
+            self.blame_internal_routine(upper.as_bytes());
+        }
+        outcome
     }
 
     /// [`Interp::call_over_pushed_args`] with the run in hand.

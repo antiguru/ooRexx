@@ -148,7 +148,7 @@ pub(crate) fn directory(
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
     if args.len() > 1 {
-        return Err(Raised::too_many_external_arguments(1).into());
+        return Err(Raised::too_many_internal_arguments(1).into());
     }
     let Some(Some(target)) = args.first().copied() else {
         let here = interp.cwd_text();
@@ -187,13 +187,13 @@ pub(crate) fn filespec(
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
     if args.len() > 2 {
-        return Err(Raised::too_many_external_arguments(2).into());
+        return Err(Raised::too_many_internal_arguments(2).into());
     }
     let Some(Some(option)) = args.first().copied() else {
-        return Err(Raised::missing_named_argument("1").into());
+        return Err(Raised::missing_internal_argument("1").into());
     };
     let Some(Some(spec)) = args.get(1).copied() else {
-        return Err(Raised::missing_named_argument("2").into());
+        return Err(Raised::missing_internal_argument("2").into());
     };
     let option = interp.to_text(option).into_owned();
     let letter = option.first().map(u8::to_ascii_uppercase);
@@ -253,7 +253,7 @@ pub(crate) fn beep(
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
     if args.len() > 2 {
-        return Err(Raised::too_many_external_arguments(2).into());
+        return Err(Raised::too_many_internal_arguments(2).into());
     }
     // Frequency first, and both before the bell: `beep(1,1)` raises on the
     // frequency and sounds nothing.
@@ -277,7 +277,7 @@ fn whole_argument(
     maximum: i64,
 ) -> Result<i64, Failure> {
     let Some(Some(value)) = args.get(index).copied() else {
-        return Err(Raised::missing_named_argument(argument).into());
+        return Err(Raised::missing_internal_argument(argument).into());
     };
     let text = interp.to_text(value).into_owned();
     let number = String::from_utf8_lossy(&text).trim().parse::<i64>().ok();

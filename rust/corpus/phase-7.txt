@@ -148,3 +148,8 @@ lang/executable_context.rex
 # machine's. `phase-4c.txt`'s rule against depending on external resolution is
 # lifted for this file's programs by that sidecar.
 lang/external_search_order.rex
+
+# Task 18: what an internal package's routine contributes to a traceback --
+# its own upcased line, the package named in place of the program, and no
+# line number on the major line.
+lang/internal_routine_frame.rex

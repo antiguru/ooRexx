@@ -2898,6 +2898,18 @@ impl Interp {
         self.failure_site = Some(FailureSite::Rendered(line));
         self.seal_site_level();
     }
+
+    /// The same for a routine of an internal package, whose traceback line
+    /// names the routine alone and upcased -- measured, `filespec('D')` is
+    /// reported for `Filespec` as `"FILESPEC"`.
+    pub(crate) fn blame_internal_routine(&mut self, name: &[u8]) {
+        if self.failure_site.is_some() {
+            return;
+        }
+        let line = Raised::compiled_routine_line(name);
+        self.failure_site = Some(FailureSite::Rendered(line));
+        self.seal_site_level();
+    }
 }
 
 /// What the protocol's conversion limbs answered, before anything is built.
