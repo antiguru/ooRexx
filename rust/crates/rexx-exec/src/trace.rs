@@ -179,6 +179,12 @@ impl TraceMode {
         letter: b'I',
         debug: false,
     };
+
+    /// `TraceSetting::isTraceOff`, the one setting that refuses the debug
+    /// flag. The letter is the flag: `setTraceOff` clears every other one.
+    pub(crate) fn is_off(self) -> bool {
+        self.letter == b'O'
+    }
 }
 
 /// Everything `crate::ir::compile` is allowed to read out of a [`TraceMode`],
@@ -288,15 +294,22 @@ pub(crate) fn parse_trace_request(bytes: &[u8]) -> Result<TraceRequest, u8> {
 /// `?`s toggles it and keeps the letter.** Measured: `trace ?r` traces
 /// results *and* pauses, `trace ?` from a pause ends debug and leaves `R` in
 /// force, and a bare `trace` ends debug and sets Normal.
+///
+/// `OFF` is the exception in both halves: `parseTraceSetting`
+/// (`TraceSetting.cpp:225`-`238`) skips `setDebug` when the letter is `O`,
+/// and `RexxActivation::setTrace` (`RexxActivation.cpp:1010`-`1017`) applies
+/// a bare toggle only while the setting in force is not `OFF`. So no
+/// spelling of `TRACE` reaches interactive debug from `OFF`, which is what
+/// `base/keyword`'s `TRACE::test_trace_?o` asserts.
 pub(crate) fn applied(current: TraceMode, request: &TraceRequest) -> TraceMode {
     match (request.setting, request.toggles) {
         (Some(mode), toggles) => TraceMode {
-            debug: toggles % 2 == 1,
+            debug: toggles % 2 == 1 && !mode.is_off(),
             ..mode
         },
         (None, 0) => TraceMode::NORMAL,
         (None, toggles) => TraceMode {
-            debug: if toggles % 2 == 1 {
+            debug: if toggles % 2 == 1 && !current.is_off() {
                 !current.debug
             } else {
                 current.debug
@@ -322,7 +335,15 @@ pub(crate) fn mode_from_setting(bytes: &[u8]) -> Result<TraceMode, u8> {
         if byte == b'?' {
             continue;
         }
-        return answer(mode_of_letter(byte)?);
+        let mode = mode_of_letter(byte)?;
+        // `setTraceOff` is unconditional, so `::options trace ?o` is `OFF`
+        // and not a paused `OFF`, exactly as the instruction is. The
+        // all-`?` fallback below is not covered by this: what it stands in
+        // for is `setDebugToggle`, not `setTraceOff`.
+        if mode.is_off() {
+            return Ok(mode);
+        }
+        return answer(mode);
     }
     if bytes.is_empty() {
         return answer(TraceMode::NORMAL);
@@ -1052,6 +1073,37 @@ mod tests {
         out.clear();
         push_value(&mut out, ">>>", 0, b"\xff\x09\x0d\x80");
         assert_eq!(out, b"       >>>   \"\xff\x09\x0d\x80\"\n");
+    }
+
+    /// No spelling of `TRACE` reaches interactive debug while the setting
+    /// in force is `OFF`, and none leaves it there when `OFF` is what it
+    /// asks for. The `?R` rows are the positive control: without them the
+    /// guard could be "never debug" and every `OFF` row would still pass.
+    #[test]
+    fn off_refuses_the_debug_flag_from_either_side() {
+        let request = |bytes: &[u8]| parse_trace_request(bytes).expect("a recognised letter");
+        let debug_of = |current: TraceMode, bytes: &[u8]| {
+            let merged = applied(current, &request(bytes));
+            (merged.letter, merged.debug)
+        };
+        let paused = TraceMode {
+            debug: true,
+            ..TraceMode::RESULTS
+        };
+
+        // A bare toggle from OFF, which `setTrace` skips entirely.
+        assert_eq!(debug_of(TraceMode::OFF, b"?"), (b'O', false));
+        // A letter that names OFF, which `parseTraceSetting` refuses the
+        // flag to whatever was in force before it.
+        assert_eq!(debug_of(TraceMode::OFF, b"?o"), (b'O', false));
+        assert_eq!(debug_of(TraceMode::OFF, b"?off"), (b'O', false));
+        assert_eq!(debug_of(paused, b"?o"), (b'O', false));
+        assert_eq!(debug_of(paused, b"o"), (b'O', false));
+
+        // The same two shapes against a setting that is not OFF.
+        assert_eq!(debug_of(TraceMode::RESULTS, b"?"), (b'R', true));
+        assert_eq!(debug_of(TraceMode::OFF, b"?r"), (b'R', true));
+        assert_eq!(debug_of(paused, b"?"), (b'R', false));
     }
 
     /// `mode_from_setting`'s own nine-letter table plus the two silent
