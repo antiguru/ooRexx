@@ -152,7 +152,8 @@ fn say_output(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
 fn run_source_traced(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Failure> {
     let program = parse_program(source.to_vec()).expect("test program parses");
     let program = activate(interp, program);
-    interp.set_trace_mode(mode_from_setting(b"r").expect("R is a valid TRACE setting"));
+    interp
+        .set_trace_mode(crate::trace::mode_from_setting(b"r").expect("R is a valid TRACE setting"));
     run_activated(interp, &program)
 }
 
@@ -1783,7 +1784,7 @@ fn a_compound_control_variable_traces_its_own_c_line() {
     let program =
         parse_program(b"j = 1\ndo cv.j = 1 to 2\nnop\nend".to_vec()).expect("test program parses");
     let program = activate(&mut interp, program);
-    interp.set_trace_mode(mode_from_setting(b"i").expect("I is a valid setting"));
+    interp.set_trace_mode(crate::trace::mode_from_setting(b"i").expect("I is a valid setting"));
     run_activated(&mut interp, &program).expect("test program runs");
     let trace = String::from_utf8_lossy(&interp.trace);
     assert!(
@@ -6653,11 +6654,11 @@ fn nothing_is_rendered_for_a_trace_line_that_will_not_print() {
     // The neighbouring settings, because "always None" would pass the
     // three lines above. `R` traces results and not intermediates, which
     // is the one mode in which the two functions disagree.
-    interp.set_trace_mode(mode_from_setting(b"r").expect("R is a valid setting"));
+    interp.set_trace_mode(crate::trace::mode_from_setting(b"r").expect("R is a valid setting"));
     assert!(interp.intermediate_text(value).is_none());
     assert_eq!(interp.result_text(value).as_deref(), Some(&b"whatever"[..]));
 
-    interp.set_trace_mode(mode_from_setting(b"i").expect("I is a valid setting"));
+    interp.set_trace_mode(crate::trace::mode_from_setting(b"i").expect("I is a valid setting"));
     assert_eq!(
         interp.intermediate_text(value).as_deref(),
         Some(&b"whatever"[..])

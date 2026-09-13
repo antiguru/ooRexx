@@ -1845,6 +1845,10 @@ struct Interp {
     /// How many `INTERPRET` fragments are running, counted from zero outside
     /// any of them.
     fragment_depth: usize,
+    /// Whether a line typed at an interactive-debug pause is running.
+    /// `RexxActivation::noTracing` includes this, so a pause's own fragment
+    /// traces nothing and pauses nowhere.
+    pub(crate) debug_pause: bool,
     /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
     /// criterion 4): when true, [`Interp::alloc_with`] calls `Heap::collect`
     /// after every allocation instead of never. Off by default, and the off
@@ -2225,6 +2229,7 @@ impl Interp {
             failure_sites: Vec::new(),
             clause_line_override: None,
             fragment_depth: 0,
+            debug_pause: false,
             stress_collect: false,
             uninit_ready: Vec::new(),
             processing_uninits: false,
@@ -4778,6 +4783,7 @@ impl Interp {
             failure_sites: _,
             clause_line_override: _,
             fragment_depth: _,
+            debug_pause: _,
             stress_collect: _,
             // The collector's own resurrection flag holds each object until
             // its finalizer clears it.

@@ -537,6 +537,9 @@ impl Interp {
                 Op::Clause { index, end } => {
                     #[cfg(test)]
                     count_clause_op_entry();
+                    // Where this region starts, which is where `=` at an
+                    // interactive-debug pause sends the counter back to.
+                    let clause_pc = pc;
                     let index = *index as usize;
                     let end = *end;
                     // **The instruction this whole region names**, fetched once
@@ -563,7 +566,14 @@ impl Interp {
                     // **Whether the setting in force is still the one this
                     // chunk's trace ops were emitted for**, and the whole of
                     // what makes a compiled-in emission decision safe.
-                    let stale = chunk.trace().clause_echoes() != self.chunk_trace().clause_echoes();
+                    // **One read of the setting answers both questions.**
+                    // Asking `self` again after the clause for the debug flag
+                    // cost `bench-programs/emptyloop.rex` 1.52% and
+                    // `dispatch.rex` 1.14% in `instructions:u`, measured.
+                    let sink = self.traced_mode();
+                    let stale = chunk.trace().clause_echoes()
+                        != crate::trace::ChunkTrace::of(sink).clause_echoes();
+                    let debugging = sink.debug;
                     // **`stale` moves the clause echo from the stream back to
                     // the run-time gate, in both directions at once.** The
                     // region's own [`Op::TraceClause`] is skipped and
@@ -1922,6 +1932,16 @@ impl Interp {
                         // boundary.
                         if self.pending_traps.is_empty() {
                             self.finish_plain_clause(entry);
+                            // **Asked of the setting and not of `stale`.**
+                            // Staleness heals -- the chunk is recompiled under
+                            // the setting now in force -- so a skip count set
+                            // at a pause would stop running down after the
+                            // first clause. Measured: `trace -2` then suppressed
+                            // every later clause instead of two.
+                            if debugging && self.debug_pause_after_clause()? {
+                                pc = clause_pc;
+                                continue 'ops;
+                            }
                             pc = next;
                             continue 'ops;
                         }

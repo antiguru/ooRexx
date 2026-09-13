@@ -22,8 +22,7 @@ use crate::eval::logical_value;
 use crate::ir::{BodyEngine, NodePath};
 use crate::plan::BodyKey;
 use crate::trace::{
-    Announced, is_whole_number, mode_from_setting, raised_invalid_trace_letter,
-    raised_numeric_trace_interactive_only,
+    Announced, is_whole_number, raised_invalid_trace_letter, raised_numeric_trace_interactive_only,
 };
 use crate::value::{exact_small_int, within_digits};
 use crate::{
@@ -7508,6 +7507,145 @@ impl Interp {
         }
     }
 
+    /// `doDebugPause` (`RexxActivation.cpp:4199`-`4283`), after a clause the
+    /// setting in force traced. Answers whether the clause is to run again,
+    /// which is what `=` asks for.
+    ///
+    /// The prompt is printed once per activation, and a line that is neither
+    /// empty nor `=` runs as an `INTERPRET` fragment; the pause ends when the
+    /// fragment ended debug or changed a setting from inside it.
+    pub(crate) fn debug_pause_after_clause(&mut self) -> Result<bool, Failure> {
+        if self.debug_pause {
+            return Ok(false);
+        }
+        if self.activation().debug.bypass {
+            self.activation_mut().debug.bypass = false;
+            return Ok(false);
+        }
+        let skip = self.activation().debug.skip;
+        if skip > 0 {
+            let left = skip - 1;
+            self.activation_mut().debug.skip = left;
+            if left == 0
+                && let Some(saved) = self.activation_mut().debug.saved.take()
+            {
+                self.set_trace_mode(saved);
+            }
+            return Ok(false);
+        }
+        if !self.activation().debug.prompt_issued {
+            self.activation_mut().debug.prompt_issued = true;
+            let line = crate::error::Raised::debug_prompt_line();
+            let start = self.trace.len();
+            self.trace.extend_from_slice(&line);
+            self.trace.push(b'\n');
+            self.route_trace_line(start);
+        }
+        loop {
+            let Some(line) = self.input_line() else {
+                return Ok(false);
+            };
+            if line.is_empty() {
+                return Ok(false);
+            }
+            if line == b"=" {
+                return Ok(true);
+            }
+            self.run_debug_fragment(line)?;
+            if self.activation().debug.bypass {
+                self.activation_mut().debug.bypass = false;
+                return Ok(false);
+            }
+            if !self.trace_mode().debug {
+                return Ok(false);
+            }
+        }
+    }
+
+    /// One line typed at a pause, run as an `INTERPRET` fragment that traces
+    /// nothing. A SYNTAX condition inside it is reported under the two
+    /// `+++ Interactive trace.` lines and swallowed, and the pause goes on --
+    /// measured, `zz = 1/0` at a pause reports 42.3 and the next line still
+    /// runs.
+    fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
+        let saved_pause = std::mem::replace(&mut self.debug_pause, true);
+        self.fragment_depth += 1;
+        let saved_entry = self.enter_fragment(self.clause_line_override.is_some());
+        let outcome = self.run_fragment(text);
+        let depth = self.fragment_depth;
+        self.pending_traps
+            .retain(|pending| pending.fragment_depth != depth);
+        self.fragment_depth -= 1;
+        self.leave_fragment(saved_entry);
+        self.debug_pause = saved_pause;
+        match outcome {
+            Ok(_) => Ok(()),
+            Err(Failure::Raised(raised)) => {
+                self.report_debug_error(&raised);
+                Ok(())
+            }
+            Err(other) => Err(other),
+        }
+    }
+
+    /// The two lines a failing pause line prints: the major and the sub, each
+    /// behind `+++ Interactive trace.  Error`.
+    fn report_debug_error(&mut self, raised: &crate::error::Raised) {
+        for line in raised.debug_error_lines() {
+            let start = self.trace.len();
+            self.trace.extend_from_slice(&line);
+            self.trace.push(b'\n');
+            self.route_trace_line(start);
+        }
+    }
+
+    /// `debugSkip`: how many further pauses to skip, from a numeric `TRACE`
+    /// typed at one. A negative count also suppresses the echo -- measured,
+    /// `trace 2` traces the two clauses it skips the pause for and
+    /// `trace -2` traces neither.
+    fn set_debug_skip(&mut self, count: i64) -> Result<(), Failure> {
+        if !self.debug_pause {
+            return Err(raised_numeric_trace_interactive_only().into());
+        }
+        self.activation_mut().debug.skip = count.abs();
+        if count < 0 {
+            // **Through `set_trace_mode`, which keeps the cache
+            // `Interp::trace_mode` reads.** Writing the activation's field
+            // directly left the cache holding the un-suppressed setting, and
+            // only the accessor's own `debug_assert` would have said so.
+            let current = self.trace_mode();
+            self.activation_mut().debug.saved = Some(current);
+            self.set_trace_mode(crate::trace::TraceMode {
+                debug: true,
+                letter: current.letter,
+                ..crate::trace::TraceMode::OFF
+            });
+        }
+        // The setting changed from inside the pause, so the pause ends
+        // without reading another line.
+        self.activation_mut().debug.bypass = true;
+        Ok(())
+    }
+
+    /// One parsed `TRACE` setting, merged with the setting in force.
+    ///
+    /// **A `TRACE` instruction is ignored while interactive debug is on**,
+    /// and traced like any other clause: measured, a program that reaches
+    /// `trace ?` and then `trace off` under `?R` still answers `?R` from
+    /// `TRACE()` and keeps tracing. The builtin has no such guard, which is
+    /// why it lives here rather than in `set_trace_mode`.
+    fn apply_trace_request(&mut self, request: &crate::trace::TraceRequest) {
+        // **`inDebug()` is `isDebug() && !debugPause`**, so the same
+        // instruction the program cannot use is what a line typed at the
+        // pause uses to end debug -- measured, `trace off` at a prompt ends
+        // the session and the pause with it.
+        if self.trace_mode().debug && !self.debug_pause {
+            return;
+        }
+        let merged = crate::trace::applied(self.trace_mode(), request);
+        self.set_trace_mode(merged);
+    }
+
     /// `NUMERIC DIGITS`/`FUZZ`/`FORM`, in every spelling the parser produces
     /// (`NumericSetting`, `rexx-parse`'s own `instruction.rs::numeric`).
     fn exec_trace(&mut self, code: &Code<'_>, setting: &Trace) -> Result<(), Failure> {
@@ -7519,17 +7657,15 @@ impl Interp {
                 self.set_trace_mode(crate::trace::TraceMode::NORMAL);
             }
             Trace::Setting(bytes) => {
-                self.set_trace_mode(
-                    mode_from_setting(bytes)
-                        .expect("rexx-parse's check_trace_setting already validated this byte"),
-                );
+                let request = crate::trace::parse_trace_request(bytes)
+                    .expect("rexx-parse's check_trace_setting already validated this byte");
+                self.apply_trace_request(&request);
             }
-            // 24.901, unconditional -- measured, `trace 0` raises it
-            // exactly like `trace 5` (this task's report), because this
-            // runtime has no interactive debugging for a nonzero skip
-            // count to be valid *from* either way.
-            Trace::Skip(_) => {
-                return Err(raised_numeric_trace_interactive_only().into());
+            // `debugSkip` (`RexxActivation.cpp:932`-`945`): valid only from
+            // a pause, and 24.901 anywhere else -- measured, `trace 0` in a
+            // program raises it exactly like `trace 5`.
+            Trace::Skip(count) => {
+                self.set_debug_skip(*count)?;
             }
             // `TRACE VALUE expr`: computed at run time, then classified
             // exactly like a literal `TRACE` setting would have been --
@@ -7550,9 +7686,16 @@ impl Interp {
                 let value = self.required_string_value(value)?;
                 let text = self.to_text(value).to_vec();
                 if is_whole_number(&text) {
-                    return Err(raised_numeric_trace_interactive_only().into());
+                    let count = String::from_utf8_lossy(&text)
+                        .trim()
+                        .parse::<i64>()
+                        .unwrap_or(0);
+                    self.set_debug_skip(count)?;
+                    return Ok(());
                 }
-                self.set_trace_mode(mode_from_setting(&text).map_err(raised_invalid_trace_letter)?);
+                let request = crate::trace::parse_trace_request(&text)
+                    .map_err(raised_invalid_trace_letter)?;
+                self.apply_trace_request(&request);
             }
         }
         // `RexxActivation::setTrace` calls `traceEntry()` right after

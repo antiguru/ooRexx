@@ -21,10 +21,11 @@ use rexx_core::ObjRef;
 use rexx_num::Number;
 use rexx_parse::{Operator, PrefixOp};
 
-/// The visible-output shape of the current `TRACE` setting. Interactive
-/// debug pausing does not exist on this non-interactive runtime, so the
-/// pause flags have no field here; every other flag
-/// `TraceSetting::setTrace*` sets does.
+/// The visible-output shape of the current `TRACE` setting, and whether
+/// interactive debug is on. The separate `pauseInstructions`/`pauseLabels`/
+/// `pauseCommands` flags have no field: a pause follows every clause the
+/// letter in force traced, so [`TraceMode::debug`] and the letter decide it
+/// together.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct TraceMode {
     /// `TRACE_PREFIX_CLAUSE` (`*-*`): every stepped instruction's own clause
@@ -67,6 +68,9 @@ pub(crate) struct TraceMode {
     /// The byte `TraceSetting::toString` (`runtime/TraceSetting.cpp:62`-`119`)
     /// renders this setting as, and so the byte `TRACE()` answers.
     pub(crate) letter: u8,
+    /// `TraceSetting::traceDebug`, the `?` prefix: every traced clause is
+    /// followed by a pause. `TRACE()` answers it as a `?` before the letter.
+    pub(crate) debug: bool,
 }
 
 impl TraceMode {
@@ -81,6 +85,7 @@ impl TraceMode {
         errors: false,
         failures: false,
         letter: b'O',
+        debug: false,
     };
     /// `TRACE N` (`setTraceNormal`), and the setting every activation starts
     /// under. `defaultTraceFlags` is `traceNormal` **and `traceFailures`**
@@ -128,6 +133,7 @@ impl TraceMode {
         errors: false,
         failures: false,
         letter: b'L',
+        debug: false,
     };
     /// `TRACE A` (`setTraceAll`, `traceAllFlags`): every clause echoes, but
     /// `traceAllFlags` deliberately omits `traceResults` -- measured
@@ -147,6 +153,7 @@ impl TraceMode {
         errors: false,
         failures: false,
         letter: b'A',
+        debug: false,
     };
     /// `TRACE R` (`setTraceResults`, `traceResultsFlags`).
     const RESULTS: TraceMode = TraceMode {
@@ -158,6 +165,7 @@ impl TraceMode {
         errors: false,
         failures: false,
         letter: b'R',
+        debug: false,
     };
     /// `TRACE I` (`setTraceIntermediates`, `traceIntermediatesFlags`).
     const INTERMEDIATES: TraceMode = TraceMode {
@@ -169,6 +177,7 @@ impl TraceMode {
         errors: false,
         failures: false,
         letter: b'I',
+        debug: false,
     };
 }
 
@@ -195,6 +204,13 @@ impl ChunkTrace {
     /// all, which is the same reason [`ChunkTrace::CLAUSES`] is.
     const COMMANDS: u8 = 16;
 
+    /// [`TraceMode::debug`]: every traced clause is followed by a pause.
+    /// Part of a chunk's identity so that entering debug makes every chunk
+    /// stale, which routes the clause echo back through the run-time gate --
+    /// the pause rides that decision instead of costing the compiled path a
+    /// branch of its own.
+    const DEBUG: u8 = 32;
+
     /// What `compile` reads out of the setting in force.
     #[inline(always)]
     pub(crate) fn of(mode: TraceMode) -> ChunkTrace {
@@ -206,6 +222,7 @@ impl ChunkTrace {
         // costs neither.
         ChunkTrace(
             (u8::from(mode.all) * ChunkTrace::CLAUSES)
+                | (u8::from(mode.debug) * ChunkTrace::DEBUG)
                 | (u8::from(mode.labels) * ChunkTrace::LABELS)
                 | (u8::from(mode.intermediates) * ChunkTrace::INTERMEDIATES)
                 | (u8::from(mode.results) * ChunkTrace::RESULTS)
@@ -244,41 +261,97 @@ impl ChunkTrace {
 }
 
 /// Classifies a `TRACE` option string exactly like
-/// `TraceSetting::parseTraceSetting` (`TraceSetting.cpp:135`-`210`): skip any
-/// number of leading `?`s (a debug-pause toggle this non-interactive runtime
-/// has nothing to toggle, so simply skipped rather than tracked), and the
-/// first *other* byte decides, case-insensitively; everything after that one
-/// byte is ignored. An empty string, or one made only of `?`s, is
-/// `setTraceNormal`'s silent answer.
+/// What one `TRACE` setting asks for: `TraceSetting::parseTraceSetting`
+/// (`TraceSetting.cpp:135`-`210`) reads any number of `?`s and then one
+/// letter, case-insensitively, ignoring everything after it.
+pub(crate) struct TraceRequest {
+    /// The letter's own mode, or `None` for a setting that named no letter.
+    pub(crate) setting: Option<TraceMode>,
+    /// How many `?`s it carried. An even number asks for no change.
+    pub(crate) toggles: usize,
+}
+
+/// [`TraceRequest`] for one setting, or the byte that is not a letter.
+pub(crate) fn parse_trace_request(bytes: &[u8]) -> Result<TraceRequest, u8> {
+    let toggles = bytes.iter().filter(|byte| **byte == b'?').count();
+    let letter = bytes.iter().find(|byte| **byte != b'?');
+    let setting = match letter {
+        None => None,
+        Some(byte) => Some(mode_of_letter(*byte)?),
+    };
+    Ok(TraceRequest { setting, toggles })
+}
+
+/// The setting in force after `request` is applied to `current`.
+///
+/// **A setting naming a letter replaces the debug flag; one made only of
+/// `?`s toggles it and keeps the letter.** Measured: `trace ?r` traces
+/// results *and* pauses, `trace ?` from a pause ends debug and leaves `R` in
+/// force, and a bare `trace` ends debug and sets Normal.
+pub(crate) fn applied(current: TraceMode, request: &TraceRequest) -> TraceMode {
+    match (request.setting, request.toggles) {
+        (Some(mode), toggles) => TraceMode {
+            debug: toggles % 2 == 1,
+            ..mode
+        },
+        (None, 0) => TraceMode::NORMAL,
+        (None, toggles) => TraceMode {
+            debug: if toggles % 2 == 1 {
+                !current.debug
+            } else {
+                current.debug
+            },
+            ..current
+        },
+    }
+}
+
+/// `parseTraceSetting`'s answer for a caller with no setting in force to
+/// merge against: the letter alone, with `?` recorded as the debug flag. An
+/// empty string is `setTraceNormal`'s silent answer, and one made only of
+/// `?`s keeps the older reading of `OFF` for the letter.
 pub(crate) fn mode_from_setting(bytes: &[u8]) -> Result<TraceMode, u8> {
+    let toggles = bytes.iter().filter(|byte| **byte == b'?').count();
+    let answer = |mode: TraceMode| {
+        Ok(TraceMode {
+            debug: toggles % 2 == 1,
+            ..mode
+        })
+    };
     for &byte in bytes {
         if byte == b'?' {
             continue;
         }
-        return match byte.to_ascii_uppercase() {
-            b'A' => Ok(TraceMode::ALL),
-            b'R' => Ok(TraceMode::RESULTS),
-            b'I' => Ok(TraceMode::INTERMEDIATES),
-            // `L` was in the silent group below until 4b Task 9's review
-            // round 1 measured what it actually does. It echoes every
-            // executed `LABEL` clause -- see `TraceMode::labels`.
-            b'L' => Ok(TraceMode::LABELS),
-            // `C`/`E`/`F`/`N`/`O`: every letter `check_trace_setting`
-            // accepts is recognised here. Each of the four besides `O` now
-            // decides whether a command clause echoes, so none of them is a
-            // setting this crate has nothing to show for.
-            b'C' => Ok(TraceMode::COMMANDS),
-            b'E' => Ok(TraceMode::ERRORS),
-            b'F' => Ok(TraceMode::FAILURES),
-            b'N' => Ok(TraceMode::NORMAL),
-            b'O' => Ok(TraceMode::OFF),
-            _ => Err(byte),
-        };
+        return answer(mode_of_letter(byte)?);
     }
     if bytes.is_empty() {
-        return Ok(TraceMode::NORMAL);
+        return answer(TraceMode::NORMAL);
     }
-    Ok(TraceMode::OFF)
+    answer(TraceMode::OFF)
+}
+
+/// The mode one `TRACE` letter names, case-insensitively, or the byte itself
+/// when it names none.
+fn mode_of_letter(byte: u8) -> Result<TraceMode, u8> {
+    match byte.to_ascii_uppercase() {
+        b'A' => Ok(TraceMode::ALL),
+        b'R' => Ok(TraceMode::RESULTS),
+        b'I' => Ok(TraceMode::INTERMEDIATES),
+        // `L` was in the silent group below until 4b Task 9's review round 1
+        // measured what it actually does. It echoes every executed `LABEL`
+        // clause -- see `TraceMode::labels`.
+        b'L' => Ok(TraceMode::LABELS),
+        // `C`/`E`/`F`/`N`/`O`: every letter `check_trace_setting` accepts is
+        // recognised here. Each of the four besides `O` decides whether a
+        // command clause echoes, so none of them is a setting this crate has
+        // nothing to show for.
+        b'C' => Ok(TraceMode::COMMANDS),
+        b'E' => Ok(TraceMode::ERRORS),
+        b'F' => Ok(TraceMode::FAILURES),
+        b'N' => Ok(TraceMode::NORMAL),
+        b'O' => Ok(TraceMode::OFF),
+        _ => Err(byte),
+    }
 }
 
 /// The same precision `rexx-parse`'s own `TRACE_DIGITS` uses for the
@@ -453,7 +526,24 @@ impl Interp {
     /// ([`ChunkTrace`]).
     #[inline(always)]
     pub(crate) fn chunk_trace(&self) -> ChunkTrace {
-        ChunkTrace::of(self.trace_mode())
+        ChunkTrace::of(self.traced_mode())
+    }
+
+    /// The setting the trace sink obeys, which is [`TraceMode::OFF`] while a
+    /// line typed at an interactive-debug pause runs.
+    ///
+    /// **`RexxActivation::noTracing` includes `debugPause`**, and answering
+    /// an off setting here reaches every gate at once: nothing echoes, a
+    /// chunk compiled during the pause carries no trace op, and one compiled
+    /// earlier is stale and falls back to the run-time gate. The program's
+    /// own setting -- what `TRACE()` answers and what a `TRACE` instruction
+    /// merges into -- is [`Interp::trace_mode`] and is untouched.
+    #[inline(always)]
+    pub(crate) fn traced_mode(&self) -> TraceMode {
+        if self.debug_pause {
+            return TraceMode::OFF;
+        }
+        self.trace_mode()
     }
 
     /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:
@@ -480,9 +570,43 @@ impl Interp {
         if !self.tracing_clause(is_label, is_command) {
             return;
         }
+        self.trace_debug_source();
         let start = self.trace.len();
         push_clause(&mut self.trace, line, indent, text);
         self.route_trace_line(start);
+    }
+
+    /// `traceSourceString` (`RexxActivation.cpp:4007`-`4029`): the banner
+    /// interactive debug prints once per activation, ahead of the first
+    /// clause it traces.
+    ///
+    /// Seven blanks, `+++`, a blank and the `PARSE SOURCE` string in double
+    /// quotes -- measured, `       +++ "LINUX COMMAND /abs/t.rex"`.
+    pub(crate) fn trace_debug_source(&mut self) {
+        if !self.traced_mode().debug || self.activation().debug.source_traced {
+            return;
+        }
+        self.activation_mut().debug.source_traced = true;
+        let source = self.debug_source_string();
+        let start = self.trace.len();
+        self.trace.extend(std::iter::repeat_n(b' ', 7));
+        self.trace.extend_from_slice(b"+++ \"");
+        self.trace.extend_from_slice(&source);
+        self.trace.extend_from_slice(b"\"\n");
+        make_displayable(&mut self.trace, start);
+        self.route_trace_line(start);
+    }
+
+    /// The `PARSE SOURCE` string this activation would answer, which is what
+    /// the banner names.
+    fn debug_source_string(&self) -> Vec<u8> {
+        let mut source = crate::parse_template::PLATFORM.to_vec();
+        source.push(b' ');
+        source.extend_from_slice(self.activation().call_type.token());
+        source.push(b' ');
+        let program = self.activation().program_id;
+        source.extend_from_slice(self.program_display_name(program));
+        source
     }
 
     /// `>>>`, an instruction's own top-level computed value -- gated on
@@ -494,7 +618,7 @@ impl Interp {
     /// indent as the `say` clause itself, never one level further in).
     #[inline(always)]
     pub(crate) fn trace_result(&mut self, indent: usize, value: &[u8]) {
-        if !self.trace_mode().results {
+        if !self.traced_mode().results {
             return;
         }
         self.trace_result_line(indent, value);
@@ -516,7 +640,7 @@ impl Interp {
     /// runs, which is observable: under `TRACE C` a command writing to its
     /// own standard error shows this line first.
     pub(crate) fn trace_command_value(&mut self, indent: usize, value: &[u8]) {
-        if !self.trace_mode().commands {
+        if !self.traced_mode().commands {
             return;
         }
         self.trace_result_line(indent, value);
@@ -558,7 +682,7 @@ impl Interp {
     /// `trace r` alone already shows `>K>   "TO" => "2"` with no other
     /// intermediate line anywhere in the same transcript.
     pub(crate) fn trace_keyword(&mut self, indent: usize, keyword: &str, value: &[u8]) {
-        if !self.trace_mode().results {
+        if !self.traced_mode().results {
             return;
         }
         let start = self.trace.len();
@@ -577,7 +701,7 @@ impl Interp {
     /// `>L>`/`>V>`/`>O>`/`>P>` -- `eval.rs`'s own single post-order insertion
     /// point, gated on `trace_mode.intermediates` (`TRACE I` only).
     pub(crate) fn tracing_intermediates(&self) -> bool {
-        self.trace_mode().intermediates
+        self.traced_mode().intermediates
     }
 
     /// `>L>` (`TRACE_PREFIX_LITERAL`): a literal's own value, untagged.
@@ -589,7 +713,7 @@ impl Interp {
     /// own measured shape rather than a second transcript.
     #[inline(always)]
     pub(crate) fn trace_literal(&mut self, indent: usize, value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         self.trace_literal_line(indent, value);
@@ -626,7 +750,7 @@ impl Interp {
     /// (`traceVariable`/`RexxActivation.hpp:341`-`342`, `quoteTag = false`).
     #[inline(always)]
     pub(crate) fn trace_variable(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         self.trace_variable_line(indent, tag, value);
@@ -649,7 +773,7 @@ impl Interp {
     /// on pure 4a code (`ExprKind::DotVariable`'s three admissible names are
     /// 4a's own, D15).
     pub(crate) fn trace_dotvar(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -662,7 +786,7 @@ impl Interp {
     /// `traceClassResolution` builds the tag as `n->concatWith(c, ':')` and
     /// passes `quoteTag` false (`RexxActivation.hpp:358`).
     pub(crate) fn trace_namespace(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -685,7 +809,7 @@ impl Interp {
     /// tagged with the operator's own spelling, quoted
     /// (`traceOperatorValue` always quotes its tag, unlike `>V>`/`>=>`).
     pub(crate) fn trace_operator(&mut self, indent: usize, op: &[u8], value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -710,7 +834,7 @@ impl Interp {
     /// `traceOperatorValue` `traceOperator` does, differing only in which
     /// `TracePrefix` it passes).
     pub(crate) fn trace_prefix_op(&mut self, indent: usize, op: &[u8], value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -728,7 +852,7 @@ impl Interp {
     /// `trace r` alone shows `>>>` for an assignment's own value but never
     /// `>=>` (this task's report, `trace_results.rex`'s own transcript).
     pub(crate) fn trace_assignment(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -743,7 +867,7 @@ impl Interp {
     /// after each `evaluate`, and `traceArgument(NULLSTRING)` -- an empty
     /// value line, not a skipped one -- for an omitted position).
     pub(crate) fn trace_argument(&mut self, indent: usize, value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -756,7 +880,7 @@ impl Interp {
     /// (`traceFunction`/`RexxActivation.hpp:347`-`348`, `quoteTag = false`,
     /// like `>V>` and unlike `>K>`).
     pub(crate) fn trace_function(&mut self, indent: usize, name: &[u8], value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -768,7 +892,7 @@ impl Interp {
     /// with the message name, **quoted** (`traceMessage`,
     /// `RexxActivation.hpp:349`, `quoteTag = true`, unlike `>F>`).
     pub(crate) fn trace_message(&mut self, indent: usize, name: &[u8], value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -784,7 +908,7 @@ impl Interp {
     /// into `use arg >q` traces `>R>     "ORIG" => "Q"` -- names on both
     /// sides, no value anywhere on the line.
     pub(crate) fn trace_alias(&mut self, indent: usize, reference: &[u8], target: &[u8]) {
-        if !self.trace_mode().results {
+        if !self.traced_mode().results {
             return;
         }
         let start = self.trace.len();
@@ -803,7 +927,7 @@ impl Interp {
     /// `>.>` (`TRACE_PREFIX_DUMMY`): what a `PARSE` template's `.`
     /// placeholder just consumed, untagged, with no assignment behind it.
     pub(crate) fn trace_dummy(&mut self, indent: usize, value: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -822,7 +946,7 @@ impl Interp {
     /// tail actually resolves to a stored value). Gated on `intermediates`
     /// like every other value-prefix line.
     pub(crate) fn trace_compound_name(&mut self, indent: usize, tag: &[u8], resolved: &[u8]) {
-        if !self.trace_mode().intermediates {
+        if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
@@ -939,10 +1063,22 @@ mod tests {
         // debug toggle this crate answers `OFF` for -- `mode_from_setting`'s
         // own doc has the measurement and the owner for each.
         assert_eq!(mode_from_setting(b""), Ok(TraceMode::NORMAL));
-        assert_eq!(mode_from_setting(b"?"), Ok(TraceMode::OFF));
+        assert_eq!(
+            mode_from_setting(b"?"),
+            Ok(TraceMode {
+                debug: true,
+                ..TraceMode::OFF
+            })
+        );
         assert_eq!(mode_from_setting(b"??"), Ok(TraceMode::OFF));
         assert_eq!(mode_from_setting(b"a"), Ok(TraceMode::ALL));
-        assert_eq!(mode_from_setting(b"?R"), Ok(TraceMode::RESULTS));
+        assert_eq!(
+            mode_from_setting(b"?R"),
+            Ok(TraceMode {
+                debug: true,
+                ..TraceMode::RESULTS
+            })
+        );
         assert_eq!(mode_from_setting(b"i"), Ok(TraceMode::INTERMEDIATES));
         assert_eq!(mode_from_setting(b"results"), Ok(TraceMode::RESULTS));
         // `L` left this group at review round 1 (F8): it is the one letter
@@ -950,7 +1086,13 @@ mod tests {
         // red when it moved. Both spellings, since `TRACE VALUE 'l'` reaches
         // the same classifier as `TRACE ?L` does.
         assert_eq!(mode_from_setting(b"L"), Ok(TraceMode::LABELS));
-        assert_eq!(mode_from_setting(b"?l"), Ok(TraceMode::LABELS));
+        assert_eq!(
+            mode_from_setting(b"?l"),
+            Ok(TraceMode {
+                debug: true,
+                ..TraceMode::LABELS
+            })
+        );
         assert_eq!(
             (TraceMode::LABELS.labels, TraceMode::LABELS.all),
             (true, false),

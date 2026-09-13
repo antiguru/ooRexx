@@ -186,13 +186,22 @@ pub(crate) fn sourceline(
 /// say trace('5')    24.1    TRACE request letter must be one of "ACEFILNOR"; found "5".
 /// ```
 pub(crate) fn trace(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
-    let previous = interp.trace_mode().letter;
+    let before = interp.trace_mode();
+    // **The builtin has no debug guard where the instruction does.**
+    // Measured, `call trace 'O'` from a program under `?R` ends debug and
+    // stops the tracing that a `trace off` *instruction* there would not.
     if let Some(text) = optional_string(interp, args, 1) {
-        let mode = crate::trace::mode_from_setting(&text)
+        let request = crate::trace::parse_trace_request(&text)
             .map_err(crate::trace::raised_invalid_trace_letter)?;
-        interp.set_trace_mode(mode);
+        let merged = crate::trace::applied(before, &request);
+        interp.set_trace_mode(merged);
     }
-    Ok(interp.text(&[previous]))
+    let mut answer = Vec::with_capacity(2);
+    if before.debug {
+        answer.push(b'?');
+    }
+    answer.push(before.letter);
+    Ok(interp.text_built(answer))
 }
 
 /// `ARG()`, `ARG(n)` and `ARG(n, option)`: the current routine's own

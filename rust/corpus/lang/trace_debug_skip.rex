@@ -1,0 +1,13 @@
+/* A numeric `TRACE` typed at an interactive-debug pause.
+
+   It is the one place a numeric setting is accepted: the same instruction in
+   a program is 24.901. A negative count stops the echo for the clauses it
+   covers where a positive one only stops their pauses, and neither changes
+   what `TRACE()` answers -- the letter in force is still the letter. */
+
+trace ?r
+a1 = 1
+a2 = 2
+a3 = 3
+a4 = 4
+say 'end' trace()

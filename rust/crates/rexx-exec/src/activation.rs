@@ -106,6 +106,26 @@ pub(crate) struct AddressState {
     pub(crate) alternate: Option<Rc<[u8]>>,
 }
 
+/// What one activation remembers about an interactive-debug session.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct DebugState {
+    /// `wasSourceTraced`: the banner is printed once per activation.
+    pub(crate) source_traced: bool,
+    /// `wasDebugPromptIssued`: so is the prompt.
+    pub(crate) prompt_issued: bool,
+    /// `settings.traceSkip`: how many further pauses to skip, from a numeric
+    /// `TRACE` given at a pause.
+    pub(crate) skip: i64,
+    /// `isDebugBypassed`: a setting changed from inside a pause ends that
+    /// pause without reading another line.
+    pub(crate) bypass: bool,
+    /// The setting a negative skip count is suppressing, put back when the
+    /// count runs out. Suppression replaces the setting outright rather than
+    /// riding a flag the sink would have to test: measured, testing one cost
+    /// `bench-programs/varlookup.rex` 4.4% in `instructions:u`.
+    pub(crate) saved: Option<TraceMode>,
+}
+
 /// The `ADDRESS ... WITH` table an activation carries, keyed by the upcased
 /// environment name (`settings.ioConfigs`, a `StringTable`).
 pub(crate) type IoConfigs = NameMap<Box<[u8]>, Rc<rexx_parse::AddressIo>>;
@@ -305,6 +325,10 @@ pub(crate) struct Activation {
     pub(crate) condition_syntax: ConditionSyntax,
     /// This activation's own `TRACE` setting (D17).
     pub(crate) trace_mode: TraceMode,
+    /// The interactive-debug bookkeeping this activation owns, which is why
+    /// debug is scoped to a call: measured, a `trace ?r` inside an internal
+    /// routine leaves the caller at `N`.
+    pub(crate) debug: DebugState,
     /// This activation's own `ADDRESS` environment pair.
     /// ```text
     /// main   address()  ->  OUTER
@@ -524,6 +548,7 @@ impl Activation {
             // first clause of a program with no `TRACE` instruction prints
             // `N`.
             trace_mode: TraceMode::NORMAL,
+            debug: DebugState::default(),
             address: AddressState::default(),
             io_configs: None,
             traps: TrapMap::default(),
@@ -588,6 +613,7 @@ impl Activation {
             settings: inherited.settings,
             condition_syntax: inherited.condition_syntax,
             trace_mode: inherited.trace_mode,
+            debug: DebugState::default(),
             address: inherited.address,
             io_configs: inherited.io_configs,
             traps: inherited.traps,
@@ -646,6 +672,7 @@ impl Activation {
             settings: Settings::default(),
             condition_syntax: ConditionSyntax::default(),
             trace_mode: TraceMode::NORMAL,
+            debug: DebugState::default(),
             address: AddressState::default(),
             io_configs: None,
             traps: TrapMap::default(),
@@ -694,6 +721,7 @@ impl Activation {
             settings: Settings::default(),
             condition_syntax: ConditionSyntax::default(),
             trace_mode: TraceMode::NORMAL,
+            debug: DebugState::default(),
             address: AddressState::default(),
             io_configs: None,
             traps: TrapMap::default(),
@@ -763,6 +791,8 @@ impl Activation {
             // symbol ids, never an `ObjRef`. What a redirection *evaluates*
             // to is a temp of the command that built it.
             io_configs: _,
+            // Plain bookkeeping: counters and flags, no `ObjRef` among them.
+            debug: _,
             traps: _,
             condition,
             cached_clock: _,

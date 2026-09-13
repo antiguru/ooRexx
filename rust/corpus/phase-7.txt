@@ -159,3 +159,10 @@ lang/internal_routine_frame.rex
 # only. Names are cut to their last component and sorted, because the answers
 # are fully qualified and a directory is not read in sorted order.
 lang/sys_file_functions.rex
+
+# Task 19: interactive debug. The banner and the prompt, an empty line, `=`
+# and a fragment; and the numeric setting that only a pause accepts, whose
+# negative form stops the echo where its positive form stops only the pause.
+# Both carry a `.stdin` sidecar, which is what the pause reads.
+lang/trace_debug.rex
+lang/trace_debug_skip.rex

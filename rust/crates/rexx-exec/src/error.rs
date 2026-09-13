@@ -1418,6 +1418,15 @@ impl Raised {
 
     /// The traceback line a native (C++-implemented, here Rust-implemented)
     /// method activation contributes, rendered whole.
+    /// 101.5: the line an interactive-debug pause prints before it reads,
+    /// once per activation and unindented.
+    pub(crate) fn debug_prompt_line() -> Vec<u8> {
+        match rexx_inventory::errors::lookup(101, 5) {
+            Some(entry) => substitute(entry.text, &[]),
+            None => b"<no message 101.5 in the catalogue>".to_vec(),
+        }
+    }
+
     /// 101.21: the traceback line a failing routine of an internal package
     /// contributes, `*-*` marker and leading blanks included.
     pub(crate) fn compiled_routine_line(name: &[u8]) -> Vec<u8> {
@@ -1782,6 +1791,29 @@ impl Raised {
     /// `256 - major`, the whole rule.
     pub(crate) fn exit_code(&self) -> i32 {
         256 - i32::from(self.number)
+    }
+
+    /// The lines a pause prints for a condition its own typed line raised:
+    /// `+++ Interactive trace.  Error` and then the same major and sub text
+    /// the report would carry. Measured, `+++ Interactive trace.  Error 42:
+    /// Arithmetic overflow/underflow.` and its `42.3` companion.
+    pub(crate) fn debug_error_lines(&self) -> Vec<Vec<u8>> {
+        let prefix = match rexx_inventory::errors::lookup(101, 4) {
+            Some(entry) => substitute(entry.text, &[]),
+            None => b"+++ Interactive trace.  Error".to_vec(),
+        };
+        let mut lines = Vec::new();
+        let mut major = prefix.clone();
+        major.extend_from_slice(format!(" {}:   ", self.number).as_bytes());
+        major.extend_from_slice(&self.message(self.number, 0));
+        lines.push(major);
+        if self.sub != 0 {
+            let mut sub = prefix;
+            sub.extend_from_slice(format!(" {}.{}:  ", self.number, self.sub).as_bytes());
+            sub.extend_from_slice(&self.message(self.number, self.sub));
+            lines.push(sub);
+        }
+        lines
     }
 
     /// The exact bytes the oracle writes to stderr for this condition.

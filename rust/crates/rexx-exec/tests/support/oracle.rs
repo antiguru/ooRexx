@@ -240,18 +240,38 @@ impl Oracle {
     /// environment entries, for a caller asking a question about how the
     /// interpreter finds a *second* file.
     pub fn run_in(&self, path: &Path, cwd: &Path, environment: &[(&str, &str)]) -> CppOutcome {
+        self.run_in_with(path, cwd, environment, None)
+    }
+
+    /// [`Oracle::run_in`] with standard input as well, for a program whose
+    /// answer depends on what it reads.
+    pub fn run_in_with(
+        &self,
+        path: &Path,
+        cwd: &Path,
+        environment: &[(&str, &str)],
+        stdin: Option<&[u8]>,
+    ) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
         let mut command = self.wrapped(path, &[]);
         command.current_dir(cwd);
         for (name, value) in environment {
             command.env(name, value);
         }
-        let child = command
-            .stdin(Stdio::null())
+        let mut child = command
+            .stdin(match stdin {
+                None => Stdio::null(),
+                Some(_) => Stdio::piped(),
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
+        if let Some(bytes) = stdin {
+            use std::io::Write as _;
+            let mut pipe = child.stdin.take().expect("stdin was piped");
+            let _ = pipe.write_all(bytes);
+        }
         let (stdout, stderr, termination) = wait_with_deadline(child, path);
         CppOutcome {
             stdout,

@@ -86,7 +86,12 @@ fn empty_run_directory(dir: &Path) {
 
 /// Runs the executor in process, on `path`, from `directory`, with
 /// `overrides` laid over the process's own environment.
-fn run_rust(path: &Path, directory: &Path, overrides: &[(String, String)]) -> Outcome {
+fn run_rust(
+    path: &Path,
+    directory: &Path,
+    overrides: &[(String, String)],
+    stdin: Option<&[u8]>,
+) -> Outcome {
     let text = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let path_str = path
         .to_str()
@@ -96,6 +101,9 @@ fn run_rust(path: &Path, directory: &Path, overrides: &[(String, String)]) -> Ou
     // process's directory is shared between the interpreters this harness runs
     // on threads, and a program naming a relative path must see one state.
     let mut invocation = rexx_exec::Invocation::none().with_directory(directory.to_path_buf());
+    if let Some(bytes) = stdin {
+        invocation = invocation.with_input(rexx_exec::ProgramInput::Bytes(bytes.to_vec()));
+    }
     if !overrides.is_empty() {
         // Laid over the inherited environment rather than replacing it,
         // because `Oracle::run_in` sets its overrides on a spawned process
@@ -126,12 +134,17 @@ struct Sidecar {
     environment: Vec<(String, String)>,
     /// A subdirectory of the run directory to run from, from `CWD=`.
     cwd: Option<String>,
+    /// `<name>.stdin`, handed to both sides as standard input.
+    stdin: Option<Vec<u8>>,
 }
 
 impl Sidecar {
     /// Whether anything beside the program asked for one.
     fn present(&self) -> bool {
-        self.fixtures.is_some() || !self.environment.is_empty() || self.cwd.is_some()
+        self.fixtures.is_some()
+            || !self.environment.is_empty()
+            || self.cwd.is_some()
+            || self.stdin.is_some()
     }
 }
 
@@ -145,6 +158,7 @@ fn sidecar_for(corpus_dir: &Path, rel_path: &str) -> Sidecar {
         fixtures: fixtures.is_dir().then_some(fixtures),
         ..Sidecar::default()
     };
+    sidecar.stdin = fs::read(corpus_dir.join(format!("{stem}.stdin"))).ok();
     let env_path = corpus_dir.join(format!("{stem}.env"));
     let Ok(text) = fs::read_to_string(&env_path) else {
         return sidecar;
@@ -457,7 +471,7 @@ fn the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else() {
         empty_run_directory(&dir);
         let cpp = oracle.run_in(&abs, &dir, &[]);
         empty_run_directory(&dir);
-        let rust = run_rust(&abs, &dir, &[]);
+        let rust = run_rust(&abs, &dir, &[], None);
         assert!(
             !cpp.stdout.is_empty(),
             "{listed}: on HASH_ORDERED_STDOUT and the oracle wrote no stdout, so \
@@ -497,10 +511,11 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
         .iter()
         .map(|(name, value)| (name.as_str(), value.as_str()))
         .collect();
+    let stdin = sidecar.stdin.as_deref();
     let cwd = prepare_run_directory(&dir, &sidecar);
-    let cpp = oracle.run_in(&abs, &cwd, &borrowed);
+    let cpp = oracle.run_in_with(&abs, &cwd, &borrowed, stdin);
     let cwd = prepare_run_directory(&dir, &sidecar);
-    let rust = run_rust(&abs, &cwd, &overrides);
+    let rust = run_rust(&abs, &cwd, &overrides, stdin);
 
     // Checked before `descriptor_diffs_modes` calls `cpp.expect_exit_code()`
     // itself: that panic has no `rel_path` in it and fires from inside
@@ -782,8 +797,15 @@ fn every_sidecar_names_a_program_the_subset_runs() {
 ///
 /// The differential compares the two interpreters, so a sidecar that never
 /// arrives leaves them agreeing on the same failure and the witness stays
-/// green over nothing. Measured: deleting either half of this one left the
-/// gate at 507 of 507.
+/// green over nothing. Measured: deleting either half of one left the gate at
+/// 507 of 507, and this control red.
+///
+/// **What it does not cover.** The set it walks is the sidecars on disk, so
+/// deleting a program's only sidecar takes that program out of the set rather
+/// than reddening this: what is checked is that a sidecar which exists is
+/// load-bearing, not that a program which needs one still has it. Measured --
+/// removing `trace_debug_skip.stdin`, the only sidecar of its program, leaves
+/// this green.
 #[test]
 fn a_sidecar_changes_what_the_oracle_answers() {
     let oracle = support::oracle::locate();
@@ -807,15 +829,20 @@ fn a_sidecar_changes_what_the_oracle_answers() {
             .map(|(name, value)| (name.as_str(), value.as_str()))
             .collect();
         let cwd = prepare_run_directory(&dir, &sidecar);
-        let with = oracle.run_in(&abs, &cwd, &borrowed);
+        let with = oracle.run_in_with(&abs, &cwd, &borrowed, sidecar.stdin.as_deref());
 
         let bare = Sidecar::default();
         let cwd = prepare_run_directory(&dir, &bare);
         let without = oracle.run_in(&abs, &cwd, &[]);
         empty_run_directory(&dir);
 
+        // **All three descriptors.** A sidecar whose whole effect is on
+        // stderr -- an interactive-debug transcript, say -- reads as inert
+        // against stdout alone, which this control was measured doing.
         assert!(
-            with.stdout != without.stdout || with.termination != without.termination,
+            with.stdout != without.stdout
+                || with.stderr != without.stderr
+                || with.termination != without.termination,
             "{rel_path}: the oracle answers the same with the sidecar and without it, so \
              neither the fixtures nor the environment is load-bearing and the witness would \
              stay green if they were deleted"
@@ -833,6 +860,7 @@ fn sidecar_stems(corpus_dir: &Path) -> BTreeSet<String> {
             let name = entry.file_name().into_string().ok()?;
             name.strip_suffix(".env")
                 .or_else(|| name.strip_suffix(".d"))
+                .or_else(|| name.strip_suffix(".stdin"))
                 .map(str::to_string)
         })
         .collect()
