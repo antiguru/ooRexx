@@ -4621,3 +4621,11 @@ file's TRACE ? row.
 Both sets enumerated; every member pre-existing, and one member left the set --
 `every_family_still_defers_something`, whose premise Phase 7 retired by finishing the `file`
 family. `base/keyword` 892 of 896, `base/bif` 4992 of 4999 value rows and 186 of 186 raise rows.
+
+**Two gaps written into `phase-4-exclusions.txt`'s KNOWN GAPS at the close, after the question
+"what is deferred?" was asked and the answer was checked rather than recited.** Task 17 Step 3 --
+a callee that does not parse -- had been deferred in a session message and nowhere else: the ledger
+runs Step 1, Step 2, Step 4. Measured, the crate refuses loudly at rc 120 naming **Phase 5** where
+the oracle gives the callee's own 27.901 at rc 229, and the phase it names is why
+`closed_phases.rs` did not catch it. The second is the native required-argument family, of which
+`stream_position` was the one reachable case and is fixed.

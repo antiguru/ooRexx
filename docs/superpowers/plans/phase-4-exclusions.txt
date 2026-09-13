@@ -1531,6 +1531,51 @@ showing the divergence is gone. Deleting a row because it is inconvenient is
 the failure the set assertion exists to prevent, and it applies here as much as
 above.
 
+  A CALLEE THAT DOES NOT PARSE IS A LOUD REFUSAL HERE AND THE CALLEE'S OWN
+  ERROR ON THE ORACLE. Phase 7 Task 17 Step 3 was designed and not written, and
+  until now that was recorded only in a session message -- the failure mode
+  this file exists to stop. Measured 2026-09-13, `call zbad` where `zbad.rex`
+  holds `say 'x'` then `do forever then`:
+
+    oracle  rc 229       2 *-* do forever then
+                         2 *-* call zbad
+                       Error 27 running <dir>/zbad.rex line 2:  Invalid DO or
+                       LOOP syntax.
+                       Error 27.901:  Incorrect data following FOREVER keyword
+                       on the loop; found "THEN".
+
+    crate   rc 120     rexx-exec: <dir>/zbad.rex does not parse here: 27.901:
+                       Invalid DO or LOOP syntax. is not implemented (Phase 5)
+
+  NOTE THE OWNER IT NAMES. The refusal says Phase 5, so
+  `crates/rexx-exec/tests/closed_phases.rs` -- which covers Phase 7 -- does not
+  see it, and neither did Phase 7's close.
+
+  The plan's Task 17 Step 3 splits it in two and both halves are still open.
+  3a is the substitution: `impl From<&ParseError> for Raised` passes an empty
+  list, so a message with a placeholder renders it literally --
+  `interpret "do forever then"` prints `found "&1"`. Closing it means
+  `rexx-parse` carrying the offending token, which the plan sizes at at least
+  56 `(code, sub)` pairs over at least 121 pairs and up to ~230 call sites, and
+  the compiler will not find them: a field defaulting to empty leaves every
+  raiser compiling and silently unsubstituted. 3b is the attribution: the
+  callee's path and line on the major line and its clause above the caller's.
+  A top-level parse failure is the same machinery with a wider gap and is
+  driven through `rexxc` by `corpus/errors/parse-errors.tsv` instead.
+
+  NO NATIVE ENTRY POINT CHECKS ITS REQUIRED ARGUMENT COUNT AT THE BOUNDARY.
+  Each body decides for itself, so an omitted required argument answers
+  whatever that body happens to raise. Measured 2026-09-13 on the one case a
+  program can reach: `RexxMethod2(int64_t, stream_position, CSELF, streamPtr,
+  CSTRING, options)` declares its options string without `OPTIONAL_`, so
+  `s~position` with no argument is `Error 88 running REXX` / `88.901 Missing
+  argument; argument 1 is required.` at rc 168. That one is fixed. The
+  family is not: which parameters are required is in the C++ `RexxMethodN`
+  declarations and nothing in this crate derives it, so a second reachable
+  site would answer wrongly the same way. Reachable means an entry point bound
+  directly to a user-callable method -- `::METHOD seek EXTERNAL` is why
+  `stream_position` was one.
+
   Prefix operator chains ("- - - -1") recurse in message_subterm, which the
   shared expression-depth budget does not guard. They abort natively between
   1,150 and 1,200 levels on a default 2 MiB thread. The oracle's cliff for this

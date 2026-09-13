@@ -125,6 +125,20 @@ the interpreter rather than with the suite -- Phase 5's row already records it a
 search path -- so a crate that is installed nowhere has to be pointed at a copy before the question
 of `dlopen` even arises.
 
+## 7a. What this phase leaves open, beyond the rung
+
+Both are in `phase-4-exclusions.txt`'s KNOWN GAPS section with their transcripts, and both were
+recorded there at the close rather than during the work -- the first because it had been left in a
+session message, which is the failure this file exists to prevent.
+
+* **Task 17 Step 3 was designed and not written.** A callee that does not parse is a loud refusal
+  here and the callee's own error on the oracle, rc 120 against 229. **The refusal names Phase 5**,
+  so `closed_phases.rs` does not see it. Its two halves -- the substitution `rexx-parse` cannot yet
+  supply, and the callee's own attribution -- are sized in the plan's own Step 3 text.
+* **No native entry point checks its required argument count at the boundary.** `stream_position`
+  was the one case a program can reach and is fixed; which parameters are required lives in the
+  C++ `RexxMethodN` declarations and nothing here derives it.
+
 ## 8. The gate readings
 
 Recorded from the run, unpiped, at `73aed8f25`. Both failing sets were enumerated rather than
