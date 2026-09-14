@@ -318,6 +318,53 @@ mod tests {
         ));
     }
 
+    /// **The end-to-end witness answers the same under a collection at every
+    /// allocation as it does under none.** The stress harness cannot say this:
+    /// `collect_stress` reads `phase-8.txt` last and aborts on a pre-existing
+    /// panic before it gets there.
+    ///
+    /// **What it does not say**, measured: with `Interp::object_roots`
+    /// dropping `native_handles` entirely this still passes, because the
+    /// receiver is rooted by the send's own temps and `Host::new_pointer`
+    /// pushes what it mints as a temp before handing it back. Whether the
+    /// frame's own rooting is live is
+    /// `a_native_activations_local_references_are_roots_only_while_it_lives`,
+    /// which does fail under that edit.
+    #[test]
+    fn a_library_call_answers_the_same_under_a_collection_at_every_allocation() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../corpus/lang/library_method_external.rex");
+        let text = std::fs::read(&path).expect("the corpus witness is readable");
+        let invocation = || {
+            crate::Invocation::none().with_environment(vec![(
+                b"LD_LIBRARY_PATH".to_vec(),
+                oracle_library_directory()
+                    .into_os_string()
+                    .into_encoded_bytes(),
+            )])
+        };
+        let name = path.to_string_lossy().into_owned();
+
+        let plain = crate::run_program(&name, text.clone(), invocation());
+        // The value the comparison rests on, so that two identical failures
+        // cannot pass for agreement.
+        assert_eq!(
+            plain.exit_code,
+            0,
+            "{}",
+            String::from_utf8_lossy(&plain.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&plain.stdout),
+            "parse 0\npos 3\nmatch 1\nlastpos 3\nreparse 0\nmatch 1\nminimal 0\nfind 3\nfindpos 5\n"
+        );
+
+        let swept = crate::run_program_collect_every_alloc(&name, text, invocation());
+        assert_eq!(swept.exit_code, plain.exit_code);
+        assert_eq!(swept.stdout, plain.stdout);
+        assert_eq!(swept.stderr, plain.stderr);
+    }
+
     /// The spellings `getVariableRetriever` answers nothing for, beside
     /// `CSELF` and `!POS`, which `rxregexp` really writes.
     #[test]
