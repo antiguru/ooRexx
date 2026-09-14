@@ -18,11 +18,11 @@ use std::path::PathBuf;
 use rexx_api::handles::Table;
 use rexx_api::layout::POINTER;
 use rexx_api::values::{
-    ARGUMENT_EXISTS, CStringPool, Conversion, Direction, Failure, Host, OPTIONAL_ARGUMENT, Repr,
-    SPECIAL_ARGUMENT, Value, code, consumes_argument, descriptor, from_native, repr, rows,
-    to_native,
+    ARGUMENT_EXISTS, CStringPool, Constants, Conversion, Direction, Failure, Host,
+    OPTIONAL_ARGUMENT, Repr, SPECIAL_ARGUMENT, Value, code, consumes_argument, descriptor,
+    from_native, repr, rows, to_native,
 };
-use rexx_core::{Body, Bytes, Heap, ObjRef, RootSet};
+use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef, RootSet};
 
 /// Stands in for the interpreter the table calls back into.
 ///
@@ -34,6 +34,7 @@ struct Interpreter {
     method: bool,
     cself: Option<POINTER>,
     speechless: Vec<ObjRef>,
+    variables: Vec<(Vec<u8>, ObjRef)>,
 }
 
 impl Interpreter {
@@ -43,6 +44,7 @@ impl Interpreter {
             method: true,
             cself: None,
             speechless: Vec::new(),
+            variables: Vec::new(),
         }
     }
 
@@ -85,6 +87,39 @@ impl Host for Interpreter {
 
     fn cself(&mut self) -> Option<POINTER> {
         self.cself
+    }
+
+    fn constants(&mut self) -> Constants<ObjRef> {
+        Constants {
+            nil: ObjRef::NIL,
+            true_object: ObjRef::small_int(1).expect("one is a small integer"),
+            false_object: ObjRef::small_int(0).expect("zero is a small integer"),
+            null_string: self.text(b""),
+        }
+    }
+
+    fn set_object_variable(&mut self, name: &[u8], value: Option<ObjRef>) {
+        let name = name.to_ascii_uppercase();
+        self.variables.retain(|(bound, _)| *bound != name);
+        if let Some(value) = value {
+            self.variables.push((name, value));
+        }
+    }
+
+    fn drop_object_variable(&mut self, name: &[u8]) {
+        self.set_object_variable(name, None);
+    }
+
+    fn whole_number(&mut self, value: isize) -> ObjRef {
+        match i64::try_from(value).ok().and_then(ObjRef::small_int) {
+            Some(object) => object,
+            None => self.text(value.to_string().as_bytes()),
+        }
+    }
+
+    fn new_pointer(&mut self, value: POINTER) -> ObjRef {
+        let body = Body::pointer(ObjRef::NIL, BehaviourHandle::new(0), value);
+        self.heap.alloc(body)
     }
 }
 
@@ -289,10 +324,10 @@ fn the_special_rows_are_the_ones_that_consume_no_argument() {
     assert_eq!(consumes_argument(9999), None);
 }
 
-/// Which rows this task filled, as a set rather than one name at a time. A
+/// Which rows have a conversion, as a set rather than one name at a time. A
 /// row that stops converting, or one that starts, changes this list.
 #[test]
-fn exactly_the_rows_this_task_filled_convert() {
+fn exactly_the_filled_rows_convert() {
     let mut host = Interpreter::new();
     let subject = host.text(b"a string long enough to reach the heap");
     let mut locals = Table::new();
@@ -324,7 +359,10 @@ fn exactly_the_rows_this_task_filled_convert() {
         inbound,
         vec![code::CSELF, code::CSTRING, code::REXX_STRING_OBJECT]
     );
-    assert_eq!(outbound, vec![code::INT, code::REXX_STRING_OBJECT]);
+    assert_eq!(
+        outbound,
+        vec![code::INT, code::POINTER, code::REXX_STRING_OBJECT]
+    );
 }
 
 /// The refusal a row this phase has not written gives, and the phase it names.

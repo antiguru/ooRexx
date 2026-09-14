@@ -24,10 +24,10 @@ use rexx_api::layout::{
 };
 use rexx_api::load::{self, NativeMethodEntry};
 use rexx_api::values::{
-    CStringPool, Conversion, Converted, Failure, Host, OPTIONAL_ARGUMENT, Repr, Value, code,
-    descriptor, repr, rows,
+    Activation, CStringPool, Constants, Conversion, Converted, Failure, Host, OPTIONAL_ARGUMENT,
+    Repr, Value, code, descriptor, repr, rows,
 };
-use rexx_core::{Body, Bytes, Heap, ObjRef};
+use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef};
 
 /// `Rexx_Error_Invalid_template` (`api/oorexxerrors.h:362`), which
 /// `RegExp_Init` raises for an expression it cannot parse
@@ -141,6 +141,7 @@ fn with_context<R>(body: impl FnOnce(&mut RexxMethodContext_) -> R) -> R {
 struct Interpreter {
     heap: Heap,
     cself: Option<POINTER>,
+    variables: Vec<(Vec<u8>, ObjRef)>,
 }
 
 impl Interpreter {
@@ -148,6 +149,7 @@ impl Interpreter {
         Interpreter {
             heap: Heap::new(),
             cself: None,
+            variables: Vec::new(),
         }
     }
 
@@ -178,6 +180,39 @@ impl Host for Interpreter {
     fn cself(&mut self) -> Option<POINTER> {
         self.cself
     }
+
+    fn constants(&mut self) -> Constants<ObjRef> {
+        Constants {
+            nil: ObjRef::NIL,
+            true_object: ObjRef::small_int(1).expect("one is a small integer"),
+            false_object: ObjRef::small_int(0).expect("zero is a small integer"),
+            null_string: self.text(b""),
+        }
+    }
+
+    fn set_object_variable(&mut self, name: &[u8], value: Option<ObjRef>) {
+        let name = name.to_ascii_uppercase();
+        self.variables.retain(|(bound, _)| *bound != name);
+        if let Some(value) = value {
+            self.variables.push((name, value));
+        }
+    }
+
+    fn drop_object_variable(&mut self, name: &[u8]) {
+        self.set_object_variable(name, None);
+    }
+
+    fn whole_number(&mut self, value: isize) -> ObjRef {
+        match i64::try_from(value).ok().and_then(ObjRef::small_int) {
+            Some(object) => object,
+            None => self.text(value.to_string().as_bytes()),
+        }
+    }
+
+    fn new_pointer(&mut self, value: POINTER) -> ObjRef {
+        let body = Body::pointer(ObjRef::NIL, BehaviourHandle::new(0), value);
+        self.heap.alloc(body)
+    }
 }
 
 /// One activation's conversion state.
@@ -206,12 +241,12 @@ impl Session {
         context: &mut RexxMethodContext_,
         arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
-        let mut cx = Conversion {
+        let activation = Activation::new(Conversion {
             host: &mut self.interpreter,
             locals: &mut self.locals,
             strings: &mut self.strings,
-        };
-        invoke::method(entry, context, &mut cx, arguments)
+        });
+        invoke::method(entry, context, &activation, arguments)
     }
 }
 

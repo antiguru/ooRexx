@@ -158,6 +158,11 @@ pub enum NativeState {
     /// holds, so the readers that render a buffer as its contents must answer
     /// for [`NativeState::Buffer`] alone.
     Stream(StreamState),
+    /// A `.Pointer`'s address, the `pointerData` of `PointerClass`
+    /// (`interpreter/classes/PointerClass.hpp:59`). Its string value is the
+    /// address rendered, so it answers for the reader
+    /// [`NativeState::Buffer`] answers for.
+    Pointer(*mut std::ffi::c_void),
 }
 
 impl NativeState {
@@ -165,7 +170,7 @@ impl NativeState {
     pub fn buffer(&self) -> Option<&BufferState> {
         match self {
             NativeState::Buffer(state) => Some(state),
-            NativeState::Stream(_) => None,
+            NativeState::Stream(_) | NativeState::Pointer(_) => None,
         }
     }
 
@@ -173,7 +178,7 @@ impl NativeState {
     pub fn buffer_mut(&mut self) -> Option<&mut BufferState> {
         match self {
             NativeState::Buffer(state) => Some(state),
-            NativeState::Stream(_) => None,
+            NativeState::Stream(_) | NativeState::Pointer(_) => None,
         }
     }
 
@@ -181,7 +186,7 @@ impl NativeState {
     pub fn stream(&self) -> Option<&StreamState> {
         match self {
             NativeState::Stream(state) => Some(state),
-            NativeState::Buffer(_) => None,
+            NativeState::Buffer(_) | NativeState::Pointer(_) => None,
         }
     }
 
@@ -190,9 +195,30 @@ impl NativeState {
     pub fn stream_mut(&mut self) -> Option<&mut StreamState> {
         match self {
             NativeState::Stream(state) => Some(state),
-            NativeState::Buffer(_) => None,
+            NativeState::Buffer(_) | NativeState::Pointer(_) => None,
         }
     }
+
+    /// The address this state holds, or `None` for state of another kind.
+    ///
+    /// A null address is a `.Pointer` that answers `1` to `~isNull`, not the
+    /// absence of one, so the two `None`s never mean the same thing.
+    pub fn pointer(&self) -> Option<*mut std::ffi::c_void> {
+        match self {
+            NativeState::Pointer(address) => Some(*address),
+            NativeState::Buffer(_) | NativeState::Stream(_) => None,
+        }
+    }
+}
+
+/// `Numerics::pointerToString` (`interpreter/runtime/Numerics.cpp:882`): the
+/// string value of a `.Pointer`, which is `0x0` for a null address and the
+/// platform's `%p` rendering otherwise.
+pub fn pointer_to_string(address: *mut std::ffi::c_void) -> Vec<u8> {
+    if address.is_null() {
+        return b"0x0".to_vec();
+    }
+    format!("{address:p}").into_bytes()
 }
 
 /// What a stream is, once `~init` has named it. The four states are the
@@ -677,6 +703,25 @@ impl Body {
         Body::Array {
             slots,
             dimensions: None,
+        }
+    }
+
+    /// A `.Pointer` over `address`, an instance of `class` with no variables
+    /// and no methods of its own (`PointerClass::operator new`,
+    /// `interpreter/classes/PointerClass.cpp:118`, which marks the object as
+    /// having no references).
+    pub fn pointer(
+        class: ObjRef,
+        behaviour: BehaviourHandle,
+        address: *mut std::ffi::c_void,
+    ) -> Body {
+        Body::Instance {
+            class,
+            behaviour,
+            name: None,
+            pools: ScopePools::new(),
+            own: None,
+            native: Some(Box::new(NativeState::Pointer(address))),
         }
     }
 

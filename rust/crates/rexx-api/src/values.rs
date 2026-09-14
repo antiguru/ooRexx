@@ -16,6 +16,7 @@
 //! for the way back.
 
 use std::borrow::Cow;
+use std::cell::{Cell, RefCell, RefMut};
 use std::ffi::{c_char, c_int};
 
 use rexx_core::ObjRef;
@@ -263,7 +264,9 @@ pub fn descriptor(declared: u16, converted: Converted) -> ValueDescriptor {
 /// is the end of the call.
 #[derive(Default)]
 pub struct CStringPool {
-    entries: Vec<Box<[u8]>>,
+    /// Each copy with the object it was made for, `None` for a copy
+    /// [`CStringPool::intern`] made, which is keyed by nothing.
+    entries: Vec<(Option<ObjRef>, Box<[u8]>)>,
 }
 
 impl CStringPool {
@@ -276,13 +279,40 @@ impl CStringPool {
     ///
     /// Bytes are copied verbatim, so an embedded zero truncates the string an
     /// extension reads, which is what pointing into the oracle's string data
-    /// does too.
+    /// does too. Each call answers a fresh copy at its own address.
     pub fn intern(&mut self, bytes: &[u8]) -> CSTRING {
+        self.push(None, bytes)
+    }
+
+    /// [`CStringPool::intern`] keyed on the object the bytes came from, so
+    /// that asking twice answers one address.
+    ///
+    /// `StringData` (`interpreter/api/ThreadContextStubs.cpp:1068`) hands out
+    /// an interior pointer to a non-moving object, so the oracle answers the
+    /// same address for the same object however often it is asked. `object`
+    /// is what makes that hold here; the bytes are read again only when the
+    /// pool has no copy for it yet.
+    pub fn intern_for(&mut self, object: ObjRef, bytes: &[u8]) -> CSTRING {
+        if let Some(found) = self.pointer_for(object) {
+            return found;
+        }
+        self.push(Some(object), bytes)
+    }
+
+    /// The address this pool already answers for `object`, or `None`.
+    fn pointer_for(&self, object: ObjRef) -> Option<CSTRING> {
+        self.entries
+            .iter()
+            .find(|(key, _)| *key == Some(object))
+            .map(|(_, entry)| entry.as_ptr().cast::<c_char>())
+    }
+
+    fn push(&mut self, key: Option<ObjRef>, bytes: &[u8]) -> CSTRING {
         let mut owned = Vec::with_capacity(bytes.len() + 1);
         owned.extend_from_slice(bytes);
         owned.push(0);
-        self.entries.push(owned.into_boxed_slice());
-        let entry = self.entries.last().expect("just pushed");
+        self.entries.push((key, owned.into_boxed_slice()));
+        let (_, entry) = self.entries.last().expect("just pushed");
         entry.as_ptr().cast::<c_char>()
     }
 
@@ -291,8 +321,8 @@ impl CStringPool {
     pub fn bytes_at(&self, pointer: CSTRING) -> Option<&[u8]> {
         self.entries
             .iter()
-            .find(|entry| entry.as_ptr().cast::<c_char>() == pointer)
-            .map(|entry| &entry[..entry.len() - 1])
+            .find(|(_, entry)| entry.as_ptr().cast::<c_char>() == pointer)
+            .map(|(_, entry)| &entry[..entry.len() - 1])
     }
 
     /// Drops every copy, which is what the end of a call does.
@@ -331,6 +361,44 @@ pub trait Host {
     /// the guard lock through `methodVariables` and unwraps the `.Pointer`
     /// the variable holds.
     fn cself(&mut self) -> Option<POINTER>;
+
+    /// The constant objects `Activity::initializeThreadContext`
+    /// (`interpreter/concurrency/Activity.cpp:1841-1849`) patches into the
+    /// thread table once they exist.
+    fn constants(&mut self) -> Constants<ObjRef>;
+
+    /// Binds `name` in the running method's own scope pool, or returns it to
+    /// the uninitialised state for a `value` of `None`.
+    ///
+    /// `name` is the extension's own spelling: `getVariableRetriever`
+    /// (`interpreter/execution/VariableDictionary.cpp:738`) upper-cases it
+    /// and refuses one that is not a variable name, and both belong to the
+    /// interpreter rather than to the boundary. The scope is the method's,
+    /// not the receiver's class (`NativeActivation.cpp:1878`) -- measured
+    /// 2026-09-14 against the oracle, a subclass method's `expose CSELF`
+    /// reads an unset variable where the defining class's reads the pointer.
+    fn set_object_variable(&mut self, name: &[u8], value: Option<ObjRef>);
+
+    /// [`Host::set_object_variable`]'s scope and name rules, applied to
+    /// `NativeActivation::dropObjectVariable` (`:3071`).
+    fn drop_object_variable(&mut self, name: &[u8]);
+
+    /// `Numerics::wholenumberToObject` (`interpreter/runtime/Numerics.cpp:855`).
+    fn whole_number(&mut self, value: isize) -> ObjRef;
+
+    /// A `.Pointer` wrapping `value`, which is `new_pointer`
+    /// (`interpreter/classes/PointerClass.hpp:114`).
+    fn new_pointer(&mut self, value: POINTER) -> ObjRef;
+}
+
+/// The four objects the thread table carries as data rather than as
+/// functions, over whatever names them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Constants<T> {
+    pub nil: T,
+    pub true_object: T,
+    pub false_object: T,
+    pub null_string: T,
 }
 
 /// What one native call's conversions read and write.
@@ -338,6 +406,124 @@ pub struct Conversion<'a> {
     pub host: &'a mut dyn Host,
     pub locals: &'a mut Table,
     pub strings: &'a mut CStringPool,
+}
+
+/// One native call's whole interpreter-facing state: what the conversions
+/// read and write, and the condition an extension raised into it.
+///
+/// Held by shared reference so that the context an extension is given and the
+/// protocol driving that call reach the same state without either holding a
+/// unique borrow across the other. Every entry takes the cell for the length
+/// of one operation, so an extension calling back while a conversion is in
+/// flight is a panic and not a silent aliasing.
+pub struct Activation<'a> {
+    conversion: RefCell<Conversion<'a>>,
+    pending: Cell<Option<usize>>,
+}
+
+impl<'a> Activation<'a> {
+    pub fn new(conversion: Conversion<'a>) -> Activation<'a> {
+        Activation {
+            conversion: RefCell::new(conversion),
+            pending: Cell::new(None),
+        }
+    }
+
+    /// The conversion state, for the length of one operation.
+    ///
+    /// # Panics
+    /// If the caller already holds it, which is an extension entering the
+    /// interpreter while the interpreter is inside a conversion.
+    pub fn conversion(&self) -> RefMut<'_, Conversion<'a>> {
+        self.conversion.borrow_mut()
+    }
+
+    /// `RaiseException0` (`interpreter/api/ThreadContextStubs.cpp:1863`):
+    /// records the condition and returns, leaving the extension to run on.
+    /// A second raise overwrites the first, as `setConditionInfo`
+    /// (`interpreter/execution/NativeActivation.cpp:2678`) does.
+    pub fn raise(&self, number: usize) {
+        self.pending.set(Some(number));
+    }
+
+    /// The condition the call has to raise once it returns
+    /// (`NativeActivation::checkConditions`, `:1787`), or `None`.
+    pub fn pending(&self) -> Option<usize> {
+        self.pending.get()
+    }
+
+    /// Forgets a recorded condition, which is what raising it does.
+    pub fn clear_pending(&self) {
+        self.pending.set(None);
+    }
+
+    /// `SetObjectVariable`: `value` is the handle the extension passed, and a
+    /// handle this activation does not hold -- a null one included -- is the
+    /// `OREF_NULL` the oracle would store (D5).
+    pub fn set_object_variable(&self, name: &[u8], value: RexxObjectPtr) {
+        let mut cx = self.conversion();
+        let object = cx.locals.resolve(value);
+        cx.host.set_object_variable(name, object);
+    }
+
+    /// `DropObjectVariable`.
+    pub fn drop_object_variable(&self, name: &[u8]) {
+        let mut cx = self.conversion();
+        cx.host.drop_object_variable(name);
+    }
+
+    /// `WholeNumberToObject`, registered as a local reference the way
+    /// `ApiContext::ret` registers one.
+    pub fn whole_number(&self, value: isize) -> RexxObjectPtr {
+        let mut cx = self.conversion();
+        let object = cx.host.whole_number(value);
+        cx.locals.register(object)
+    }
+
+    /// `NewPointer`, registered as [`Activation::whole_number`]'s answer is.
+    pub fn new_pointer(&self, value: POINTER) -> RexxObjectPtr {
+        let mut cx = self.conversion();
+        let object = cx.host.new_pointer(value);
+        cx.locals.register(object)
+    }
+
+    /// `StringData`: one address per object for as long as the call lasts, or
+    /// a null pointer for a handle this activation does not hold or an object
+    /// with no bytes, which is the `NULL` the stub answers on an exception.
+    pub fn string_data(&self, handle: RexxObjectPtr) -> CSTRING {
+        let mut cx = self.conversion();
+        let Some(object) = cx.locals.resolve(handle) else {
+            return std::ptr::null();
+        };
+        let Some(bytes) = cx.host.string_bytes(object) else {
+            return std::ptr::null();
+        };
+        let bytes = bytes.into_owned();
+        cx.strings.intern_for(object, &bytes)
+    }
+
+    /// `StringLength`, or zero where [`Activation::string_data`] answers a
+    /// null pointer.
+    pub fn string_length(&self, handle: RexxObjectPtr) -> usize {
+        let cx = self.conversion();
+        let Some(object) = cx.locals.resolve(handle) else {
+            return 0;
+        };
+        cx.host.string_bytes(object).map_or(0, |bytes| bytes.len())
+    }
+
+    /// The four data members of the thread table, each registered as a local
+    /// reference so that the handle names a rooted object.
+    pub fn constants(&self) -> Constants<RexxObjectPtr> {
+        let mut cx = self.conversion();
+        let objects = cx.host.constants();
+        Constants {
+            nil: cx.locals.register(objects.nil),
+            true_object: cx.locals.register(objects.true_object),
+            false_object: cx.locals.register(objects.false_object),
+            null_string: cx.locals.register(objects.null_string),
+        }
+    }
 }
 
 /// Which member of a `ValueDescriptor`'s union a code's value occupies
@@ -504,13 +690,15 @@ static TABLE: &[Row] = &[
         to_native: Some(cstring_to_native),
         from_native: None,
     },
-    stub(
-        code::POINTER,
-        "POINTER",
-        Source::Argument,
-        Absent::Zero,
-        Repr::Pointer,
-    ),
+    Row {
+        code: code::POINTER,
+        name: "POINTER",
+        source: Source::Argument,
+        absent: Absent::Zero,
+        repr: Repr::Pointer,
+        to_native: None,
+        from_native: Some(pointer_from_native),
+    },
     Row {
         code: code::REXX_STRING_OBJECT,
         name: "RexxStringObject",
@@ -844,6 +1032,16 @@ fn object_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<Ob
         .resolve(handle)
         .map(Some)
         .ok_or(Failure::StaleHandle)
+}
+
+/// `valueToObject` for `REXX_VALUE_POINTER` (`NativeActivation.cpp:840`),
+/// which wraps the address in a `.Pointer` and does not register it: the
+/// answer is the call's result, which the caller roots.
+fn pointer_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Pointer(address) = value else {
+        return Err(Failure::Signature);
+    };
+    Ok(Some(cx.host.new_pointer(address)))
 }
 
 /// `valueToObject` for `REXX_VALUE_int` (`NativeActivation.cpp:733`).

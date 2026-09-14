@@ -14,8 +14,15 @@
 
 //! The inbound FFI boundary: caller-supplied pointers into validated handles.
 
-use crate::layout::{Owned, ValueDescriptor};
-use crate::values::{Repr, Value};
+use std::ffi::CStr;
+use std::marker::PhantomData;
+
+use crate::layout::{
+    CSTRING, MethodContextInterface, Owned, POINTER, RexxMethodContext_, RexxObjectPtr,
+    RexxPointerObject, RexxStringObject, RexxThreadContext_, RexxThreadInterface, ValueDescriptor,
+    wholenumber_t,
+};
+use crate::values::{Activation, Repr, Value};
 
 /// The state that owns the context `context` addresses.
 ///
@@ -69,6 +76,175 @@ pub fn value_of(descriptor: &ValueDescriptor, repr: Repr) -> Value {
             Repr::Float => Value::Float(descriptor.value.value_float),
         }
     }
+}
+
+/// The method-context table an extension is handed
+/// (`Activity::methodContextFunctions`,
+/// `interpreter/api/MethodContextStubs.cpp:374`).
+///
+/// A plain initializer nothing patches, so it lives at one address for the
+/// process; the members this phase has not written still refuse loudly.
+pub static METHOD_CONTEXT: MethodContextInterface = {
+    let mut table = MethodContextInterface::REFUSING;
+    table.SetObjectVariable = set_object_variable;
+    table.DropObjectVariable = drop_object_variable;
+    table
+};
+
+/// The contexts one native call hands an extension, wired to the state behind
+/// them.
+///
+/// The thread table is owned here and not shared, because its four object
+/// members are handles this activation minted
+/// (`interpreter/concurrency/Activity.cpp:1841-1849`).
+pub struct Contexts<'a, 'h> {
+    thread: Owned<RexxThreadContext_, Activation<'h>>,
+    method: Owned<RexxMethodContext_, Activation<'h>>,
+    table: RexxThreadInterface,
+    /// Ties this wrapper to the activation its tables address, so that no
+    /// context it hands out can outlive the state behind it.
+    activation: PhantomData<&'a Activation<'h>>,
+}
+
+impl<'a, 'h> Contexts<'a, 'h> {
+    /// The contexts for a call whose state is `activation`.
+    pub fn new(activation: &'a Activation<'h>) -> Contexts<'a, 'h> {
+        let owner = std::ptr::from_ref(activation).cast_mut();
+        let constants = activation.constants();
+        let mut table = RexxThreadInterface::REFUSING;
+        table.WholeNumberToObject = whole_number_to_object;
+        table.StringData = string_data;
+        table.StringLength = string_length;
+        table.NewPointer = new_pointer;
+        table.RaiseException0 = raise_exception0;
+        table.RexxNil = constants.nil;
+        table.RexxTrue = constants.true_object;
+        table.RexxFalse = constants.false_object;
+        table.RexxNullString = constants.null_string.cast();
+        Contexts {
+            thread: Owned {
+                context: RexxThreadContext_ {
+                    instance: std::ptr::null_mut(),
+                    functions: std::ptr::null_mut(),
+                },
+                owner,
+            },
+            method: Owned {
+                context: RexxMethodContext_ {
+                    threadContext: std::ptr::null_mut(),
+                    functions: std::ptr::null_mut(),
+                    arguments: std::ptr::null_mut(),
+                },
+                owner,
+            },
+            table,
+            activation: PhantomData,
+        }
+    }
+
+    /// The method context, addressing this wrapper's own thread context and
+    /// tables.
+    ///
+    /// The links are written here rather than at construction because each
+    /// one is the address of a field of `self`, which moving `self` changes.
+    pub fn method(&mut self) -> &mut RexxMethodContext_ {
+        self.thread.context.functions = &raw mut self.table;
+        self.method.context.threadContext = (&raw mut self.thread).cast::<RexxThreadContext_>();
+        self.method.context.functions = std::ptr::from_ref(&METHOD_CONTEXT).cast_mut();
+        &mut self.method.context
+    }
+
+    /// The handles the thread table's four data members carry.
+    pub fn constants(&self) -> crate::values::Constants<RexxObjectPtr> {
+        crate::values::Constants {
+            nil: self.table.RexxNil,
+            true_object: self.table.RexxTrue,
+            false_object: self.table.RexxFalse,
+            null_string: self.table.RexxNullString.cast(),
+        }
+    }
+}
+
+/// The activation `context` addresses.
+///
+/// # Safety
+/// `context` is a context handed out by a [`Contexts`] that is still alive,
+/// and no caller holds its conversion state for the duration of the call this
+/// reference is used in.
+unsafe fn activation_of<'a, C>(context: *mut C) -> &'a Activation<'a> {
+    // SAFETY: the caller guarantees `context` came from a live `Contexts`,
+    // which builds both of its wrappers with `owner` pointing at the
+    // `&'a Activation` it was given. That reference is shared, so forming
+    // another one here aliases nothing: every write past it goes through the
+    // activation's own cells.
+    unsafe { &*owner_of::<C, Activation<'a>>(context) }
+}
+
+/// The bytes of a name an extension passed, or `None` for a null pointer.
+///
+/// # Safety
+/// A non-null `name` is a NUL-terminated string that outlives the call.
+unsafe fn name_of<'a>(name: CSTRING) -> Option<&'a [u8]> {
+    if name.is_null() {
+        return None;
+    }
+    // SAFETY: the caller guarantees a non-null `name` is a live
+    // NUL-terminated string; the extension's own literal is one
+    // (`extensions/rxregexp/rxregexp.cpp:88`).
+    Some(unsafe { CStr::from_ptr(name) }.to_bytes())
+}
+
+extern "C" fn set_object_variable(
+    context: *mut RexxMethodContext_,
+    name: CSTRING,
+    value: RexxObjectPtr,
+) {
+    // SAFETY: this is reached only through `METHOD_CONTEXT`, which only a
+    // `Contexts` publishes, and only for the length of the call it made; the
+    // name is the extension's own string.
+    let (activation, Some(name)) = (unsafe { activation_of(context) }, unsafe { name_of(name) })
+    else {
+        return;
+    };
+    activation.set_object_variable(name, value);
+}
+
+extern "C" fn drop_object_variable(context: *mut RexxMethodContext_, name: CSTRING) {
+    // SAFETY: as `set_object_variable`.
+    let (activation, Some(name)) = (unsafe { activation_of(context) }, unsafe { name_of(name) })
+    else {
+        return;
+    };
+    activation.drop_object_variable(name);
+}
+
+extern "C" fn whole_number_to_object(
+    context: *mut RexxThreadContext_,
+    value: wholenumber_t,
+) -> RexxObjectPtr {
+    // SAFETY: this is reached only through the thread table a `Contexts`
+    // owns, and only for the length of the call it made.
+    unsafe { activation_of(context) }.whole_number(value)
+}
+
+extern "C" fn string_data(context: *mut RexxThreadContext_, string: RexxStringObject) -> CSTRING {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { activation_of(context) }.string_data(string.cast())
+}
+
+extern "C" fn string_length(context: *mut RexxThreadContext_, string: RexxStringObject) -> usize {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { activation_of(context) }.string_length(string.cast())
+}
+
+extern "C" fn new_pointer(context: *mut RexxThreadContext_, value: POINTER) -> RexxPointerObject {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { activation_of(context) }.new_pointer(value).cast()
+}
+
+extern "C" fn raise_exception0(context: *mut RexxThreadContext_, number: usize) {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { activation_of(context) }.raise(number);
 }
 
 /// What a stub read through the context, which is the channel

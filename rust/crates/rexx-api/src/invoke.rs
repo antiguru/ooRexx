@@ -20,7 +20,7 @@ use rexx_core::ObjRef;
 use crate::ffi;
 use crate::layout::{RexxMethodContext_, ValueDescriptor};
 use crate::load::NativeMethodEntry;
-use crate::values::{self, ARGUMENT_TERMINATOR, Conversion, Converted, Failure, Value};
+use crate::values::{self, ARGUMENT_TERMINATOR, Activation, Converted, Failure, Value};
 
 /// `NativeActivation::MaxNativeArguments`
 /// (`interpreter/execution/NativeActivation.hpp:209`), the length of the
@@ -36,17 +36,23 @@ pub const MAX_NATIVE_ARGUMENTS: usize = 16;
 ///
 /// The result is read whatever the call did with it: an extension that raises
 /// a condition returns normally and still writes element zero
-/// (`interpreter/api/ThreadContextStubs.cpp:1863-1885`).
+/// (`interpreter/api/ThreadContextStubs.cpp:1863-1885`). A condition it
+/// raised is left on `cx` for the caller to raise once the call has returned,
+/// which is where `NativeActivation::checkConditions`
+/// (`interpreter/execution/NativeActivation.cpp:1787`) raises it.
 ///
 /// # Errors
 /// Whatever converting an argument or the result refuses;
 /// [`Failure::Signature`] for a signature the descriptor array cannot hold or
 /// a code the table does not know; [`Failure::TooManyArguments`] for
 /// arguments the signature does not consume.
+///
+/// # Panics
+/// If the caller holds `cx`'s conversion state across this call.
 pub fn method(
     entry: &NativeMethodEntry,
     context: &mut RexxMethodContext_,
-    cx: &mut Conversion<'_>,
+    cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let signature = signature(entry, context)?;
@@ -72,7 +78,10 @@ pub fn method(
         } else {
             None
         };
-        let converted = values::to_native(cx, declared, argument, input + 1)?;
+        // **The conversion state is taken for one argument and given back**,
+        // never held across `entry.call` below: the context that call hands
+        // the extension reaches this same state.
+        let converted = values::to_native(&mut cx.conversion(), declared, argument, input + 1)?;
         descriptors[output] = values::descriptor(declared, converted);
         if consumes {
             input += 1;
@@ -88,7 +97,11 @@ pub fn method(
         return Ok(None);
     }
     let repr = values::repr(returns).ok_or(Failure::Signature)?;
-    values::from_native(cx, returns, ffi::value_of(&descriptors[0], repr))
+    values::from_native(
+        &mut cx.conversion(),
+        returns,
+        ffi::value_of(&descriptors[0], repr),
+    )
 }
 
 /// The types `entry` declares: its return type, then its parameters.
@@ -129,7 +142,7 @@ mod tests {
     use std::borrow::Cow;
     use std::cell::RefCell;
 
-    use rexx_core::{Body, Bytes, Heap, ObjRef};
+    use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef};
 
     use super::{MAX_NATIVE_ARGUMENTS, method};
     use crate::ffi::{Seen, forget_seen, reading_stub, seen};
@@ -140,8 +153,8 @@ mod tests {
     };
     use crate::load::{NativeMethodEntry, stub_entry};
     use crate::values::{
-        ARGUMENT_EXISTS, ARGUMENT_TERMINATOR, CStringPool, Conversion, Failure, Host,
-        OPTIONAL_ARGUMENT, code,
+        ARGUMENT_EXISTS, ARGUMENT_TERMINATOR, Activation, CStringPool, Constants, Conversion,
+        Failure, Host, OPTIONAL_ARGUMENT, code,
     };
 
     /// What the stub and the interpreter each did, in the order they did it.
@@ -247,6 +260,7 @@ mod tests {
     struct Interpreter {
         heap: Heap,
         asked: usize,
+        variables: Vec<(Vec<u8>, ObjRef)>,
     }
 
     impl Interpreter {
@@ -254,6 +268,7 @@ mod tests {
             Interpreter {
                 heap: Heap::new(),
                 asked: 0,
+                variables: Vec::new(),
             }
         }
 
@@ -285,6 +300,61 @@ mod tests {
 
         fn cself(&mut self) -> Option<POINTER> {
             None
+        }
+
+        fn constants(&mut self) -> Constants<ObjRef> {
+            constants_of(self)
+        }
+
+        fn set_object_variable(&mut self, name: &[u8], value: Option<ObjRef>) {
+            set_variable(&mut self.variables, name, value);
+        }
+
+        fn drop_object_variable(&mut self, name: &[u8]) {
+            set_variable(&mut self.variables, name, None);
+        }
+
+        fn whole_number(&mut self, value: isize) -> ObjRef {
+            whole_number_object(&mut self.heap, value)
+        }
+
+        fn new_pointer(&mut self, value: POINTER) -> ObjRef {
+            let body = Body::pointer(ObjRef::NIL, BehaviourHandle::new(0), value);
+            self.heap.alloc(body)
+        }
+    }
+
+    /// The four constants a stand-in interpreter answers with: `.nil`, the
+    /// two boolean values as the small integers the oracle's `RexxInteger`
+    /// ones render as, and an empty string object.
+    fn constants_of(interpreter: &mut Interpreter) -> Constants<ObjRef> {
+        Constants {
+            nil: ObjRef::NIL,
+            true_object: ObjRef::small_int(1).expect("one is a small integer"),
+            false_object: ObjRef::small_int(0).expect("zero is a small integer"),
+            null_string: interpreter.text(b""),
+        }
+    }
+
+    /// Binds `name`, upper-cased as `getVariableRetriever` upper-cases it, or
+    /// returns it to the uninitialised state for a `value` of `None`.
+    fn set_variable(variables: &mut Vec<(Vec<u8>, ObjRef)>, name: &[u8], value: Option<ObjRef>) {
+        let name = name.to_ascii_uppercase();
+        variables.retain(|(bound, _)| *bound != name);
+        if let Some(value) = value {
+            variables.push((name, value));
+        }
+    }
+
+    /// `Numerics::wholenumberToObject`: a small integer where the value fits
+    /// the tag, and its digits otherwise.
+    fn whole_number_object(heap: &mut Heap, value: isize) -> ObjRef {
+        match i64::try_from(value).ok().and_then(ObjRef::small_int) {
+            Some(object) => object,
+            None => heap.alloc(Body::Text {
+                bytes: Bytes::from_slice(value.to_string().as_bytes()),
+                num: None,
+            }),
         }
     }
 
@@ -327,12 +397,12 @@ mod tests {
         let mut strings = CStringPool::new();
         let mut context = method_context(&METHOD_CONTEXT_INTERFACE);
         let outcome = {
-            let mut cx = Conversion {
+            let activation = Activation::new(Conversion {
                 host: &mut interpreter,
                 locals: &mut locals,
                 strings: &mut strings,
-            };
-            method(entry, &mut context, &mut cx, &supplied)
+            });
+            method(entry, &mut context, &activation, &supplied)
         };
         Run {
             outcome,
