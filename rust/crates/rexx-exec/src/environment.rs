@@ -1182,7 +1182,11 @@ impl Interp {
             return Some(found);
         }
         let source = std::rc::Rc::clone(self.programs.get(program.0)?);
-        let entries = package_table_entries(program, &source, kind);
+        let entries = if self.untranslated.contains(&program) {
+            Vec::new()
+        } else {
+            package_table_entries(program, &source, kind)
+        };
         if entries.is_empty() && !force {
             return None;
         }

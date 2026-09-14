@@ -374,7 +374,8 @@ fn source_lines(interp: &Interp, program: Option<ProgramId>) -> Vec<Vec<u8>> {
 }
 
 /// `PackageClass::getMainRexx`: the `Routine` a package's leading code
-/// section became, and `.nil` for a package that has none.
+/// section became, and `.nil` for the REXX package and for a package whose
+/// translation raised.
 fn prolog(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -384,6 +385,9 @@ fn prolog(
     let Some(program) = package_of(interp, receiver)? else {
         return Ok(Some(ObjRef::NIL));
     };
+    if interp.untranslated.contains(&program) {
+        return Ok(Some(ObjRef::NIL));
+    }
     Ok(Some(interp.program_routine_object(program)))
 }
 

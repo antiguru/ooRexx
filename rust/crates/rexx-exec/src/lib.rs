@@ -2019,9 +2019,11 @@ struct Interp {
     /// The package each `::REQUIRES` name has already loaded, keyed both by
     /// the name as written and by the file it resolved to.
     required_packages: HashMap<Box<[u8]>, ProgramId>,
-    /// The programs whose directives got through the first walk of
-    /// [`Interp::install_directives`], which is this crate's translation.
-    translated: std::collections::HashSet<ProgramId>,
+    /// The programs whose first walk of [`Interp::install_directives`], which is
+    /// this crate's translation, started and did not finish. The oracle gives
+    /// the package of a translation that raised no routine, method or resource
+    /// table (`parser/LanguageParser.cpp:1893-1908`) and no prolog (`:656-665`).
+    untranslated: std::collections::HashSet<ProgramId>,
     /// The resolved paths whose `::REQUIRES` directives are still installing
     /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
     requires_installing: Vec<Box<str>>,
@@ -2087,9 +2089,10 @@ pub(crate) enum ExecutableSource {
 ///
 /// A method's is cached per spelling asked for
 /// (`LibraryPackage::resolveMethod`, `package/LibraryPackage.cpp:374-400`); a
-/// routine's is built once per routine table entry when the library loads
-/// and found without regard to case (`LibraryPackage::loadRoutines` and
-/// `::resolveRoutine`, `:270-299`, `:410-435`).
+/// routine's is built once per routine table entry when the library loads,
+/// and found by its exact spelling or else by the first entry matching
+/// without regard to case (`LibraryPackage::loadRoutines` and
+/// `::resolveRoutine`, `:270-299`, `:410-435`), as `Library::routine` finds it.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct LibraryCodeKey {
     /// The library name byte for byte, as [`Interp::libraries`] keys it.
@@ -2427,7 +2430,7 @@ impl Interp {
             program_path: String::new(),
             required_paths: HashMap::new(),
             required_packages: HashMap::new(),
-            translated: std::collections::HashSet::new(),
+            untranslated: std::collections::HashSet::new(),
             requires_installing: Vec::new(),
             trace_cache: crate::trace::TraceMode::OFF,
         }
@@ -2790,6 +2793,14 @@ impl Interp {
         // object does not exist yet: a `::CLASS` has no class object until
         // the install pass creates one.
         let mut staged: BTreeMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>> = BTreeMap::new();
+        // The package's routine records, handed over where this walk finishes
+        // as `resolveDependencies` hands its tables to the package
+        // (`parser/LanguageParser.cpp:1893-1900`), so a translation that raises
+        // leaves none.
+        let mut routines: HashMap<Box<[u8]>, InstalledRoutine> = HashMap::new();
+        let mut public_routines: HashMap<Box<[u8]>, InstalledRoutine> = HashMap::new();
+        let mut routine_codes: Vec<(InstalledRoutine, usize)> = Vec::new();
+        self.untranslated.insert(id);
         for (index, directive) in program.directives.iter().enumerate() {
             // **A synthetic directive installs nothing**, which is what lets
             // `Interp::new_file_executable` file a loaded file's main section
@@ -2845,18 +2856,9 @@ impl Interp {
                         directive: index,
                     };
                     if routine.access == Access::Public {
-                        self.package_public_routines
-                            .entry(id)
-                            .or_default()
-                            .insert(name.clone(), installed);
+                        public_routines.insert(name.clone(), installed);
                     }
-                    if self
-                        .routines
-                        .entry(id)
-                        .or_default()
-                        .insert(name, installed)
-                        .is_some()
-                    {
+                    if routines.insert(name, installed).is_some() {
                         // A *translation* error on the oracle, not an install
                         // one: measured, two `::routine zork` directives give
                         // `Error 99.903: Duplicate ::ROUTINE directive
@@ -2988,17 +2990,25 @@ impl Interp {
                 let row = self.library_code(key);
                 self.library_codes[row].get_or_insert(id);
                 if routine {
-                    self.library_routine_codes.insert(
-                        InstalledRoutine {
-                            program: id,
-                            directive: index,
-                        },
-                        row,
-                    );
+                    let installed = InstalledRoutine {
+                        program: id,
+                        directive: index,
+                    };
+                    routine_codes.push((installed, row));
                 }
             }
         }
-        self.translated.insert(id);
+        if !routines.is_empty() {
+            self.routines.entry(id).or_default().extend(routines);
+        }
+        if !public_routines.is_empty() {
+            self.package_public_routines
+                .entry(id)
+                .or_default()
+                .extend(public_routines);
+        }
+        self.library_routine_codes.extend(routine_codes);
+        self.untranslated.remove(&id);
 
         // **A second pass, because the oracle's own translation-time
         // refusals above happen before every install-time one below**
@@ -3298,7 +3308,7 @@ impl Interp {
             // (`package/PackageManager.cpp:828-836`), so a later ask for one
             // whose translation raised translates it again; a package that
             // failed to install or in its prologue stays cached.
-            if !self.translated.contains(&required) {
+            if self.untranslated.contains(&required) {
                 self.required_packages.remove(name);
                 self.required_packages.remove(resolved.as_bytes());
             }
@@ -5380,7 +5390,7 @@ impl Interp {
             program_path: _,
             required_paths: _,
             required_packages: _,
-            translated: _,
+            untranslated: _,
             requires_installing: _,
             // Bytes and paths, no `ObjRef` in any of them: the interpreter's
             // own environment, current directory and `SETLOCAL` snapshots are
