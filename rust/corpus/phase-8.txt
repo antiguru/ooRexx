@@ -46,3 +46,7 @@ lang/library_uninit_twice.rex
 lang/library_method_package_blame.rex
 lang/library_method_program_blame.rex
 lang/external_method_package_blame.rex
+
+# Final-review fixes: a string parameter's conversion is REQUEST('STRING')
+# alone, and a raise inside the argument's MAKESTRING is that raise.
+lang/library_string_argument.rex

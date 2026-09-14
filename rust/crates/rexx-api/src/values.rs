@@ -122,6 +122,20 @@ pub enum Failure {
     TooManyArguments { expected: usize },
     /// A handle the calling activation no longer holds (D5).
     StaleHandle,
+    /// The interpreter raised a condition while serving the conversion, and
+    /// holds it for the caller to raise in its place.
+    Raised,
+}
+
+/// A condition the host raised while serving a conversion, which the host
+/// holds rather than the boundary.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Raised;
+
+impl From<Raised> for Failure {
+    fn from(_: Raised) -> Failure {
+        Failure::Raised
+    }
 }
 
 impl Failure {
@@ -139,7 +153,7 @@ impl Failure {
             // Measured 2026-09-14 against the oracle: a third argument to
             // `RegularExpression~new` answers "Error 88.922".
             Failure::TooManyArguments { .. } => Some(88922),
-            Failure::Unfilled { .. } | Failure::StaleHandle => None,
+            Failure::Unfilled { .. } | Failure::StaleHandle | Failure::Raised => None,
         }
     }
 }
@@ -166,6 +180,7 @@ impl std::fmt::Display for Failure {
                 "Phase 8 owes the {direction:?} conversion for REXX_VALUE_{name} ({code})"
             ),
             Failure::StaleHandle => write!(f, "the handle is no longer held by this activation"),
+            Failure::Raised => write!(f, "the interpreter raised a condition while converting"),
         }
     }
 }
@@ -349,7 +364,10 @@ pub trait Host {
     /// (`interpreter/classes/ObjectClass.cpp:1341`) is the reference, so a
     /// non-primitive receiver is sent `REQUEST("STRING")` and answering
     /// `.nil` is the `None` here.
-    fn string_value(&mut self, object: ObjRef) -> Option<ObjRef>;
+    ///
+    /// # Errors
+    /// [`Raised`] where that send raised a condition, which the host keeps.
+    fn string_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Raised>;
 
     /// The bytes of a string object, or `None` if `object` is not one. The
     /// return is owned rather than borrowed for a string the handle itself
@@ -1006,7 +1024,7 @@ fn cstring_to_native(
 ) -> Result<Value, Failure> {
     let string = cx
         .host
-        .string_value(argument)
+        .string_value(argument)?
         .ok_or(Failure::NoStringValue { position })?;
     let bytes = cx
         .host
@@ -1023,7 +1041,7 @@ fn string_object_to_native(
 ) -> Result<Value, Failure> {
     let string = cx
         .host
-        .string_value(argument)
+        .string_value(argument)?
         .ok_or(Failure::NoStringValue { position })?;
     // The C++ registers a local reference only for a string the conversion
     // had to create. Minting a handle is registering it, so here every one is

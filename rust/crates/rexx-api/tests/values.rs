@@ -19,7 +19,7 @@ use rexx_api::handles::Table;
 use rexx_api::layout::POINTER;
 use rexx_api::values::{
     ARGUMENT_EXISTS, CStringPool, Constants, Conversion, Direction, Failure, Host,
-    OPTIONAL_ARGUMENT, Repr, SPECIAL_ARGUMENT, Value, code, consumes_argument, descriptor,
+    OPTIONAL_ARGUMENT, Raised, Repr, SPECIAL_ARGUMENT, Value, code, consumes_argument, descriptor,
     from_native, repr, rows, to_native,
 };
 use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef, RootSet};
@@ -34,6 +34,8 @@ struct Interpreter {
     method: bool,
     cself: Option<POINTER>,
     speechless: Vec<ObjRef>,
+    /// Objects whose conversion raises a condition.
+    raising: Vec<ObjRef>,
     variables: Vec<(Vec<u8>, ObjRef)>,
     locals: Table,
 }
@@ -45,6 +47,7 @@ impl Interpreter {
             method: true,
             cself: None,
             speechless: Vec::new(),
+            raising: Vec::new(),
             variables: Vec::new(),
             locals: Table::new(),
         }
@@ -63,18 +66,21 @@ impl Host for Interpreter {
         self.method
     }
 
-    fn string_value(&mut self, object: ObjRef) -> Option<ObjRef> {
-        if self.speechless.contains(&object) {
-            return None;
+    fn string_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Raised> {
+        if self.raising.contains(&object) {
+            return Err(Raised);
         }
-        match object.decode() {
+        if self.speechless.contains(&object) {
+            return Ok(None);
+        }
+        Ok(match object.decode() {
             rexx_core::Decoded::SmallInt(number) => Some(self.text(number.to_string().as_bytes())),
             rexx_core::Decoded::Text(_) => Some(object),
-            _ => match self.heap.get(object)?.body {
-                Body::Text { .. } => Some(object),
+            _ => match self.heap.get(object).map(|found| &found.body) {
+                Some(Body::Text { .. }) => Some(object),
                 _ => None,
             },
-        }
+        })
     }
 
     fn string_bytes(&self, object: ObjRef) -> Option<Cow<'_, [u8]>> {
@@ -552,6 +558,27 @@ fn a_required_cstring_with_no_string_value_is_88_909() {
         .expect_err("an object with no string value cannot convert");
     assert_eq!(refusal, Failure::NoStringValue { position: 2 });
     assert_eq!(refusal.error_number(true), Some(88909));
+}
+
+/// A condition raised while an argument converts is the host's to raise, not
+/// 88.909: measured, oracle, a `MAKESTRING` doing `raise syntax 40.1` for a
+/// `CSTRING` or a `RexxStringObject` parameter is `Error 40.1` at rc 216.
+#[test]
+fn a_raise_inside_the_string_conversion_is_not_a_missing_string_value() {
+    for declared in [code::CSTRING, code::REXX_STRING_OBJECT] {
+        let mut host = Interpreter::new();
+        let subject = host.text(b"a string long enough to reach the heap");
+        host.raising.push(subject);
+        let mut strings = CStringPool::new();
+        let mut cx = Conversion {
+            host: &mut host,
+            strings: &mut strings,
+        };
+        let refusal = to_native(&mut cx, declared, Some(subject), 1)
+            .expect_err("a conversion that raised cannot answer a value");
+        assert_eq!(refusal, Failure::Raised, "code {declared}");
+        assert_eq!(refusal.error_number(true), None);
+    }
 }
 
 /// The direction the surface half still owes for this row.

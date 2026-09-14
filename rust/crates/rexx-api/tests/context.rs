@@ -20,7 +20,7 @@ use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::POINTER;
 use rexx_api::load::{self, NativeMethodEntry};
-use rexx_api::values::{Activation, CStringPool, Constants, Conversion, Failure, Host};
+use rexx_api::values::{Activation, CStringPool, Constants, Conversion, Failure, Host, Raised};
 use rexx_core::{BehaviourHandle, BehaviourId, Body, Bytes, Heap, ObjRef, RootSet, ScopePools};
 
 /// `Rexx_Error_Invalid_template` (`api/oorexxerrors.h:362`).
@@ -153,8 +153,8 @@ impl Host for Interpreter {
         true
     }
 
-    fn string_value(&mut self, object: ObjRef) -> Option<ObjRef> {
-        Some(object)
+    fn string_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Raised> {
+        Ok(Some(object))
     }
 
     fn string_bytes(&self, object: ObjRef) -> Option<Cow<'_, [u8]>> {

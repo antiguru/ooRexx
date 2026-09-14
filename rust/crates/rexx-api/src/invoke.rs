@@ -154,7 +154,7 @@ mod tests {
     use crate::load::{NativeMethodEntry, stub_entry};
     use crate::values::{
         ARGUMENT_EXISTS, ARGUMENT_TERMINATOR, Activation, CStringPool, Constants, Conversion,
-        Failure, Host, OPTIONAL_ARGUMENT, code,
+        Failure, Host, OPTIONAL_ARGUMENT, Raised, code,
     };
 
     /// What the stub and the interpreter each did, in the order they did it.
@@ -287,10 +287,10 @@ mod tests {
             true
         }
 
-        fn string_value(&mut self, object: ObjRef) -> Option<ObjRef> {
+        fn string_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Raised> {
             self.asked += 1;
             record(Event::Asked(self.asked));
-            Some(object)
+            Ok(Some(object))
         }
 
         fn string_bytes(&self, object: ObjRef) -> Option<Cow<'_, [u8]>> {

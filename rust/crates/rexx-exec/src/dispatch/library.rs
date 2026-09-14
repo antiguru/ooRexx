@@ -24,7 +24,9 @@ use rexx_api::ffi::Contexts;
 use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::POINTER;
-use rexx_api::values::{Activation, CStringPool, Constants, Conversion, Failure as Refused, Host};
+use rexx_api::values::{
+    Activation, CStringPool, Constants, Conversion, Failure as Refused, Host, Raised as Condition,
+};
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 
 use super::Resolution;
@@ -82,6 +84,7 @@ impl Interp {
             owner,
             scope: resolution.scope,
             locals: Table::new(),
+            raised: None,
         });
         let mut strings = CStringPool::new();
         let (answered, pending) = {
@@ -93,7 +96,10 @@ impl Interp {
             let answered = invoke::method(entry, contexts.method(), &activation, args);
             (answered, activation.pending())
         };
-        self.native_handles.pop();
+        let frame = self
+            .native_handles
+            .pop()
+            .expect("the frame pushed above is still the innermost");
 
         // The condition first, because the oracle raises it in the caller's
         // frame once the call has returned (`NativeActivation::checkConditions`,
@@ -104,7 +110,12 @@ impl Interp {
         if let Some(number) = pending {
             return Err(condition_of(number));
         }
-        answered.map_err(refusal)
+        match answered {
+            Err(Refused::Raised) => Err(frame
+                .raised
+                .expect("a host answering Raised holds the condition it raised")),
+            answered => answered.map_err(refusal),
+        }
     }
 }
 
@@ -127,7 +138,7 @@ fn refusal(refused: Refused) -> Failure {
             Raised::too_many_external_arguments(expected).into()
         }
         Refused::Signature => Raised::incorrect_method_signature().into(),
-        Refused::Unfilled { .. } | Refused::StaleHandle => Loud {
+        Refused::Unfilled { .. } | Refused::StaleHandle | Refused::Raised => Loud {
             message: crate::owned_message(&format!("{refused}"), Some("Phase 8")),
         }
         .into(),
@@ -139,12 +150,22 @@ impl Host for Interp {
         true
     }
 
-    fn string_value(&mut self, object: ObjRef) -> Option<ObjRef> {
-        // A `makeString` that raises answers `None` here, which is the
-        // conversion's own 88.909 rather than the condition it raised. The
-        // trait has no channel for the second, and nothing in reach produces
-        // one: see the task 8 report.
-        self.required_string_value(object).ok()
+    fn string_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {
+        match self.blamed_string_conversion(object) {
+            Ok(converted) => {
+                if let Some(text) = converted {
+                    self.roots.push_temp(text);
+                }
+                Ok(converted)
+            }
+            Err(failure) => {
+                self.native_handles
+                    .last_mut()
+                    .expect("a native activation is running")
+                    .raised = Some(failure);
+                Err(Condition)
+            }
+        }
     }
 
     fn string_bytes(&self, object: ObjRef) -> Option<Cow<'_, [u8]>> {

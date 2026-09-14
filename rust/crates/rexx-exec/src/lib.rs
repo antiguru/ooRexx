@@ -2129,6 +2129,10 @@ struct NativeFrame {
     /// (`execution/NativeActivation.cpp:1878`).
     scope: ObjRef,
     locals: rexx_api::handles::Table,
+    /// The condition an argument's string conversion raised, held for the
+    /// call to raise once the boundary has answered
+    /// [`rexx_api::values::Failure::Raised`].
+    raised: Option<Failure>,
 }
 
 /// What one just-installed dictionary key resolves to, handed to
@@ -6616,6 +6620,7 @@ say 1
             owner: rexx_core::ObjRef::NIL,
             scope: rexx_core::ObjRef::NIL,
             locals: rexx_api::handles::Table::new(),
+            raised: None,
         };
         let handle = frame.locals.register(object);
         interp.native_handles.push(frame);

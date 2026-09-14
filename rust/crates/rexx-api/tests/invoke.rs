@@ -25,7 +25,7 @@ use rexx_api::layout::{
 use rexx_api::load::{self, NativeMethodEntry};
 use rexx_api::values::{
     Activation, CStringPool, Constants, Conversion, Converted, Failure, Host, OPTIONAL_ARGUMENT,
-    Repr, Value, code, descriptor, repr, rows,
+    Raised, Repr, Value, code, descriptor, repr, rows,
 };
 use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef};
 
@@ -168,8 +168,8 @@ impl Host for Interpreter {
         true
     }
 
-    fn string_value(&mut self, object: ObjRef) -> Option<ObjRef> {
-        Some(object)
+    fn string_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Raised> {
+        Ok(Some(object))
     }
 
     fn string_bytes(&self, object: ObjRef) -> Option<Cow<'_, [u8]>> {
