@@ -7414,7 +7414,7 @@ fn a_routine_a_required_library_exports_refuses_rather_than_answering_43_1() {
         String::from_utf8_lossy(&outcome.stderr),
         concat!(
             "rexx-exec: a call to \"RXCALCPI\", which the library \"rxmath\" ",
-            "exports is not implemented (Phase 8)\n"
+            "exports, is not implemented (Phase 8)\n"
         )
     );
 

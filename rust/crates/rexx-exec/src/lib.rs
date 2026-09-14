@@ -567,7 +567,7 @@ impl Loud {
         Loud {
             message: owned_message(
                 &format!(
-                    "a call to \"{}\", which the library \"{}\" exports",
+                    "a call to \"{}\", which the library \"{}\" exports,",
                     String::from_utf8_lossy(name),
                     String::from_utf8_lossy(library)
                 ),
@@ -2094,8 +2094,9 @@ enum GeneratedKind {
 pub(crate) enum LibraryLoad {
     Loaded(Rc<rexx_api::load::Library>),
     /// No shared object of that name loaded, or one loaded and published no
-    /// package entry. `LibraryPackage::load` answers false for both and its
-    /// callers cannot tell them apart (`package/LibraryPackage.cpp:204`, `:216`).
+    /// package entry. `LibraryPackage::load` (`package/LibraryPackage.cpp:147`)
+    /// answers false for both, because `getPackageTable` returns null for each
+    /// (`:204`, `:216`), and its callers cannot tell them apart.
     Missing,
     /// The package entry asks for a newer interpreter than this one.
     Version,
