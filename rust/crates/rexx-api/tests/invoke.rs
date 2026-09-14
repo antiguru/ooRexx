@@ -15,12 +15,10 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 
+use rexx_api::ffi::Contexts;
 use rexx_api::handles::Table;
 use rexx_api::invoke;
-use rexx_api::layout::{
-    CSTRING, MethodContextInterface, POINTER, RexxMethodContext_, RexxObjectPtr, RexxPointerObject,
-    RexxThreadContext_, RexxThreadInterface, wholenumber_t,
-};
+use rexx_api::layout::{POINTER, wholenumber_t};
 use rexx_api::load::{self, NativeMethodEntry};
 use rexx_api::values::{
     Activation, CStringPool, Constants, Conversion, Failure, Host, OPTIONAL_ARGUMENT, Raised, code,
@@ -59,7 +57,7 @@ fn rxregexp() -> load::Library {
 thread_local! {
     /// The pointers handed to `NewPointer`, in order.
     static POINTERS: RefCell<Vec<POINTER>> = const { RefCell::new(Vec::new()) };
-    /// The error numbers handed to `RaiseException0`, in order.
+    /// The condition each call left pending, in order.
     static RAISED: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
     /// The numbers handed to `WholeNumberToObject`, in order.
     static NUMBERS: RefCell<Vec<wholenumber_t>> = const { RefCell::new(Vec::new()) };
@@ -73,63 +71,6 @@ fn forget_callbacks() {
     NUMBERS.with(|seen| seen.borrow_mut().clear());
     VARIABLES_SET.set(0);
     VARIABLES_DROPPED.set(0);
-}
-
-/// An object handle the extension only ever hands back to us.
-fn opaque<T>() -> *mut T {
-    std::ptr::dangling_mut()
-}
-
-extern "C" fn new_pointer(_context: *mut RexxThreadContext_, value: POINTER) -> RexxPointerObject {
-    POINTERS.with(|seen| seen.borrow_mut().push(value));
-    opaque()
-}
-
-extern "C" fn whole_number_to_object(
-    _context: *mut RexxThreadContext_,
-    value: wholenumber_t,
-) -> RexxObjectPtr {
-    NUMBERS.with(|seen| seen.borrow_mut().push(value));
-    opaque()
-}
-
-extern "C" fn raise_exception0(_context: *mut RexxThreadContext_, number: usize) {
-    RAISED.with(|seen| seen.borrow_mut().push(number));
-}
-
-extern "C" fn set_object_variable(
-    _context: *mut RexxMethodContext_,
-    _name: CSTRING,
-    _value: RexxObjectPtr,
-) {
-    VARIABLES_SET.set(VARIABLES_SET.get() + 1);
-}
-
-extern "C" fn drop_object_variable(_context: *mut RexxMethodContext_, _name: CSTRING) {
-    VARIABLES_DROPPED.set(VARIABLES_DROPPED.get() + 1);
-}
-
-/// Run `body` with a method context whose tables answer the members
-/// `rxregexp` calls and refuse the rest.
-fn with_context<R>(body: impl FnOnce(&mut RexxMethodContext_) -> R) -> R {
-    forget_callbacks();
-    let mut thread_table = RexxThreadInterface::REFUSING;
-    thread_table.NewPointer = new_pointer;
-    thread_table.WholeNumberToObject = whole_number_to_object;
-    thread_table.RaiseException0 = raise_exception0;
-    let mut thread = RexxThreadContext_ {
-        instance: std::ptr::null_mut(),
-        functions: &raw mut thread_table,
-    };
-    let mut method_table = MethodContextInterface::REFUSING;
-    method_table.SetObjectVariable = set_object_variable;
-    method_table.DropObjectVariable = drop_object_variable;
-    let mut context = RexxMethodContext_ {
-        threadContext: &raw mut thread,
-        functions: &raw mut method_table,
-        arguments: std::ptr::null_mut(),
-    };
-    body(&mut context)
 }
 
 // --------------------------------------------------- the interpreter's side
@@ -191,6 +132,7 @@ impl Host for Interpreter {
     }
 
     fn set_object_variable(&mut self, name: &[u8], value: Option<ObjRef>) {
+        VARIABLES_SET.set(VARIABLES_SET.get() + 1);
         let name = name.to_ascii_uppercase();
         self.variables.retain(|(bound, _)| *bound != name);
         if let Some(value) = value {
@@ -199,10 +141,13 @@ impl Host for Interpreter {
     }
 
     fn drop_object_variable(&mut self, name: &[u8]) {
-        self.set_object_variable(name, None);
+        VARIABLES_DROPPED.set(VARIABLES_DROPPED.get() + 1);
+        let name = name.to_ascii_uppercase();
+        self.variables.retain(|(bound, _)| *bound != name);
     }
 
     fn whole_number(&mut self, value: isize) -> ObjRef {
+        NUMBERS.with(|seen| seen.borrow_mut().push(value as wholenumber_t));
         match i64::try_from(value).ok().and_then(ObjRef::small_int) {
             Some(object) => object,
             None => self.text(value.to_string().as_bytes()),
@@ -210,6 +155,7 @@ impl Host for Interpreter {
     }
 
     fn new_pointer(&mut self, value: POINTER) -> ObjRef {
+        POINTERS.with(|seen| seen.borrow_mut().push(value));
         let body = Body::pointer(ObjRef::NIL, BehaviourHandle::new(0), value);
         self.heap.alloc(body)
     }
@@ -219,7 +165,8 @@ impl Host for Interpreter {
     }
 }
 
-/// One activation's conversion state.
+/// One interpreter's conversion state, which each call runs through the
+/// contexts a `Contexts` hands out.
 struct Session {
     interpreter: Interpreter,
     strings: CStringPool,
@@ -227,6 +174,7 @@ struct Session {
 
 impl Session {
     fn new() -> Session {
+        forget_callbacks();
         Session {
             interpreter: Interpreter::new(),
             strings: CStringPool::new(),
@@ -237,17 +185,31 @@ impl Session {
         Some(self.interpreter.text(bytes))
     }
 
+    /// Runs `entry`, recording the condition it left pending.
     fn call(
         &mut self,
         entry: &NativeMethodEntry,
-        context: &mut RexxMethodContext_,
         arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
         let activation = Activation::new(Conversion {
             host: &mut self.interpreter,
             strings: &mut self.strings,
         });
-        invoke::method(entry, context, &activation, arguments)
+        let mut contexts = Contexts::new(&activation);
+        let outcome = invoke::method(entry, &contexts.method(), &activation, arguments);
+        if let Some(number) = activation.pending() {
+            RAISED.with(|seen| seen.borrow_mut().push(number));
+        }
+        outcome
+    }
+
+    fn signature(&mut self, entry: &NativeMethodEntry) -> Result<Vec<u16>, Failure> {
+        let activation = Activation::new(Conversion {
+            host: &mut self.interpreter,
+            strings: &mut self.strings,
+        });
+        let mut contexts = Contexts::new(&activation);
+        invoke::signature(entry, &contexts.method())
     }
 }
 
@@ -275,25 +237,24 @@ fn the_extension_publishes_the_signatures_its_source_declares() {
     let library = rxregexp();
     let init = library.method(b"RegExp_Init").expect("RegExp_Init");
     let parse = library.method(b"RegExp_Parse").expect("RegExp_Parse");
-    with_context(|context| {
-        assert_eq!(
-            invoke::signature(init, context),
-            Ok(vec![
-                code::INT,
-                OPTIONAL_ARGUMENT | code::CSTRING,
-                OPTIONAL_ARGUMENT | code::CSTRING,
-            ])
-        );
-        assert_eq!(
-            invoke::signature(parse, context),
-            Ok(vec![
-                code::INT,
-                code::CSELF,
-                code::CSTRING,
-                OPTIONAL_ARGUMENT | code::CSTRING,
-            ])
-        );
-    });
+    let mut session = Session::new();
+    assert_eq!(
+        session.signature(init),
+        Ok(vec![
+            code::INT,
+            OPTIONAL_ARGUMENT | code::CSTRING,
+            OPTIONAL_ARGUMENT | code::CSTRING,
+        ])
+    );
+    assert_eq!(
+        session.signature(parse),
+        Ok(vec![
+            code::INT,
+            code::CSELF,
+            code::CSTRING,
+            OPTIONAL_ARGUMENT | code::CSTRING,
+        ])
+    );
 }
 
 #[test]
@@ -303,18 +264,16 @@ fn regexp_init_with_no_arguments_answers_zero_and_allocates_an_automaton() {
     let uninit = library.method(b"RegExp_Uninit").expect("RegExp_Uninit");
     let mut session = Session::new();
 
-    with_context(|context| {
-        assert_eq!(session.call(init, context, &[]), returned(0));
-        let automaton = allocated();
-        assert!(!automaton.is_null(), "the extension allocated nothing");
-        assert_eq!(VARIABLES_SET.get(), 1, "CSELF was not stored");
-        assert!(RAISED.with(|seen| seen.borrow().is_empty()));
+    assert_eq!(session.call(init, &[]), returned(0));
+    let automaton = allocated();
+    assert!(!automaton.is_null(), "the extension allocated nothing");
+    assert_eq!(VARIABLES_SET.get(), 1, "CSELF was not stored");
+    assert!(RAISED.with(|seen| seen.borrow().is_empty()));
 
-        // Hand the pointer back as `CSELF` so that the automaton is freed.
-        session.interpreter.cself = Some(automaton);
-        assert_eq!(session.call(uninit, context, &[]), returned(0));
-        assert_eq!(VARIABLES_DROPPED.get(), 1);
-    });
+    // Hand the pointer back as `CSELF` so that the automaton is freed.
+    session.interpreter.cself = Some(automaton);
+    assert_eq!(session.call(uninit, &[]), returned(0));
+    assert_eq!(VARIABLES_DROPPED.get(), 1);
 }
 
 #[test]
@@ -325,15 +284,13 @@ fn regexp_init_with_one_argument_parses_it() {
     let mut session = Session::new();
     let expression = session.text(b"a*b");
 
-    with_context(|context| {
-        assert_eq!(session.call(init, context, &[expression]), returned(0));
-        assert!(
-            RAISED.with(|seen| seen.borrow().is_empty()),
-            "`a*b` parses, so nothing is raised"
-        );
-        session.interpreter.cself = Some(allocated());
-        assert_eq!(session.call(uninit, context, &[]), returned(0));
-    });
+    assert_eq!(session.call(init, &[expression]), returned(0));
+    assert!(
+        RAISED.with(|seen| seen.borrow().is_empty()),
+        "`a*b` parses, so nothing is raised"
+    );
+    session.interpreter.cself = Some(allocated());
+    assert_eq!(session.call(uninit, &[]), returned(0));
 }
 
 /// A native method that raises runs to completion: the work after the raise
@@ -349,16 +306,14 @@ fn an_extension_that_raises_still_finishes() {
     let mut session = Session::new();
     let expression = session.text(b"[");
 
-    with_context(|context| {
-        assert_eq!(session.call(init, context, &[expression]), returned(0));
-        assert_eq!(
-            RAISED.with(|seen| seen.borrow().clone()),
-            vec![INVALID_TEMPLATE]
-        );
-        assert_eq!(VARIABLES_SET.get(), 1, "the work after the raise still ran");
-        session.interpreter.cself = Some(allocated());
-        assert_eq!(session.call(uninit, context, &[]), returned(0));
-    });
+    assert_eq!(session.call(init, &[expression]), returned(0));
+    assert_eq!(
+        RAISED.with(|seen| seen.borrow().clone()),
+        vec![INVALID_TEMPLATE]
+    );
+    assert_eq!(VARIABLES_SET.get(), 1, "the work after the raise still ran");
+    session.interpreter.cself = Some(allocated());
+    assert_eq!(session.call(uninit, &[]), returned(0));
 }
 
 /// A call that raised still writes element zero, and the value is read back
@@ -375,18 +330,16 @@ fn a_call_that_raised_still_returns_what_it_wrote() {
     let bad = session.text(b"[");
     let bogus = session.text(b"BOGUS");
 
-    with_context(|context| {
-        assert_eq!(session.call(init, context, &[]), returned(0));
-        session.interpreter.cself = Some(allocated());
+    assert_eq!(session.call(init, &[]), returned(0));
+    session.interpreter.cself = Some(allocated());
 
-        assert_eq!(session.call(parse, context, &[bad, bogus]), returned(3));
-        assert_eq!(
-            RAISED.with(|seen| seen.borrow().clone()),
-            vec![INCORRECT_METHOD]
-        );
+    assert_eq!(session.call(parse, &[bad, bogus]), returned(3));
+    assert_eq!(
+        RAISED.with(|seen| seen.borrow().clone()),
+        vec![INCORRECT_METHOD]
+    );
 
-        assert_eq!(session.call(uninit, context, &[]), returned(0));
-    });
+    assert_eq!(session.call(uninit, &[]), returned(0));
 }
 
 /// The whole chain: a `CSELF` the first call produced, a required `CSTRING`,
@@ -403,24 +356,22 @@ fn a_second_method_reads_the_cself_the_first_produced() {
     let bad = session.text(b"[");
     let minimal = session.text(b"MINIMAL");
 
-    with_context(|context| {
-        assert_eq!(session.call(init, context, &[]), returned(0));
-        session.interpreter.cself = Some(allocated());
+    assert_eq!(session.call(init, &[]), returned(0));
+    session.interpreter.cself = Some(allocated());
 
-        assert_eq!(session.call(parse, context, &[good]), returned(0));
-        assert_eq!(
-            session.call(parse, context, &[bad, minimal]),
-            returned(3),
-            "the oracle answers 3 for this template"
-        );
-        assert_eq!(
-            NUMBERS.with(|seen| seen.borrow().len()),
-            2,
-            "each parse stores !POS"
-        );
+    assert_eq!(session.call(parse, &[good]), returned(0));
+    assert_eq!(
+        session.call(parse, &[bad, minimal]),
+        returned(3),
+        "the oracle answers 3 for this template"
+    );
+    assert_eq!(
+        NUMBERS.with(|seen| seen.borrow().len()),
+        2,
+        "each parse stores !POS"
+    );
 
-        assert_eq!(session.call(uninit, context, &[]), returned(0));
-    });
+    assert_eq!(session.call(uninit, &[]), returned(0));
 }
 
 /// A required argument nobody supplied is refused before the extension is
@@ -433,25 +384,23 @@ fn a_missing_required_argument_stops_the_call() {
     let uninit = library.method(b"RegExp_Uninit").expect("RegExp_Uninit");
     let mut session = Session::new();
 
-    with_context(|context| {
-        assert_eq!(session.call(init, context, &[]), returned(0));
-        session.interpreter.cself = Some(allocated());
+    assert_eq!(session.call(init, &[]), returned(0));
+    session.interpreter.cself = Some(allocated());
 
-        let outcome = session.call(parse, context, &[]);
-        assert_eq!(outcome, Err(Failure::MissingArgument { position: 1 }));
-        assert_eq!(
-            outcome.unwrap_err().error_number(true),
-            Some(88901),
-            "measured against the oracle for `~parse()`"
-        );
-        assert_eq!(
-            NUMBERS.with(|seen| seen.borrow().len()),
-            0,
-            "`RegExp_Parse` stores !POS, so nothing of it ran"
-        );
+    let outcome = session.call(parse, &[]);
+    assert_eq!(outcome, Err(Failure::MissingArgument { position: 1 }));
+    assert_eq!(
+        outcome.unwrap_err().error_number(true),
+        Some(88901),
+        "measured against the oracle for `~parse()`"
+    );
+    assert_eq!(
+        NUMBERS.with(|seen| seen.borrow().len()),
+        0,
+        "`RegExp_Parse` stores !POS, so nothing of it ran"
+    );
 
-        assert_eq!(session.call(uninit, context, &[]), returned(0));
-    });
+    assert_eq!(session.call(uninit, &[]), returned(0));
 }
 
 /// An argument the signature does not consume is 88.922, measured against the
@@ -465,16 +414,14 @@ fn an_argument_the_signature_does_not_consume_is_refused() {
     let matchtype = session.text(b"MAXIMAL");
     let extra = session.text(b"extra");
 
-    with_context(|context| {
-        let outcome = session.call(init, context, &[expression, matchtype, extra]);
-        assert_eq!(outcome, Err(Failure::TooManyArguments { expected: 2 }));
-        assert_eq!(outcome.unwrap_err().error_number(true), Some(88922));
-        assert_eq!(
-            VARIABLES_SET.get(),
-            0,
-            "the extension must not have run at all"
-        );
-    });
+    let outcome = session.call(init, &[expression, matchtype, extra]);
+    assert_eq!(outcome, Err(Failure::TooManyArguments { expected: 2 }));
+    assert_eq!(outcome.unwrap_err().error_number(true), Some(88922));
+    assert_eq!(
+        VARIABLES_SET.get(),
+        0,
+        "the extension must not have run at all"
+    );
 }
 
 /// The descriptor array is what bounds a signature, and this is the length

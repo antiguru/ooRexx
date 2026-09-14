@@ -93,7 +93,7 @@ impl Interp {
                 strings: &mut strings,
             });
             let mut contexts = Contexts::new(&activation);
-            let answered = invoke::method(entry, contexts.method(), &activation, args);
+            let answered = invoke::method(entry, &contexts.method(), &activation, args);
             (answered, activation.pending())
         };
         let frame = self

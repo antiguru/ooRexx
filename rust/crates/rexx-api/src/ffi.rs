@@ -31,16 +31,18 @@ use crate::values::{Activation, Repr, Value};
 /// (`interpreter/concurrency/Activity.hpp:503`).
 ///
 /// # Safety
-/// `context` came from [`Owned::<C, T>::context`] on a wrapper that is still
-/// alive, with the same `C` and `T`. Nothing about the pointer witnesses
-/// that: an extension holds it as an opaque address and can hand back any
-/// value at all, so the guarantee is the interpreter's, which mints every
-/// context it hands out and never hands out one it did not build.
+/// `context` is a pointer to a live `Owned<C, T>` cast to its `context`
+/// field, derived from the whole wrapper rather than from that field, so that
+/// its provenance covers `owner`. Nothing about the pointer witnesses that:
+/// an extension holds it as an opaque address and can hand back any value at
+/// all, so the guarantee is the interpreter's, which mints every context it
+/// hands out ([`Contexts::method`]) and never hands out one it did not build.
 pub unsafe fn owner_of<C, T>(context: *mut C) -> *mut T {
     let owned = context.cast::<Owned<C, T>>();
-    // SAFETY: the caller guarantees `owned` addresses a live `Owned<C, T>`,
-    // whose `context` is first by value, so the cast is the identity on the
-    // address and `owner` is in bounds.
+    // SAFETY: the caller guarantees `owned` was derived from a live
+    // `Owned<C, T>` as a whole, so its provenance covers the `owner` field,
+    // and `context` is first by value, so the cast is the identity on the
+    // address.
     unsafe { (*owned).owner }
 }
 
@@ -104,6 +106,31 @@ pub static METHOD_CONTEXT: MethodContextInterface = {
     table
 };
 
+/// The method context a stub is handed: a pointer to the public struct at the
+/// head of an `Owned` wrapper, derived from the whole wrapper, and borrowed
+/// from that wrapper for as long as it is used.
+pub struct MethodContext<'a> {
+    pointer: *mut RexxMethodContext_,
+    wrapper: PhantomData<&'a mut RexxMethodContext_>,
+}
+
+impl MethodContext<'_> {
+    /// The address the stub is handed.
+    pub(crate) fn as_ptr(&self) -> *mut RexxMethodContext_ {
+        self.pointer
+    }
+
+    /// A context over a struct no `Contexts` built, for a test whose tables
+    /// never recover an owner.
+    #[cfg(test)]
+    pub(crate) fn bare(context: &mut RexxMethodContext_) -> MethodContext<'_> {
+        MethodContext {
+            pointer: &raw mut *context,
+            wrapper: PhantomData,
+        }
+    }
+}
+
 /// The contexts one native call hands an extension, wired to the state behind
 /// them.
 ///
@@ -160,11 +187,16 @@ impl<'a, 'h> Contexts<'a, 'h> {
     ///
     /// The links are written here rather than at construction because each
     /// one is the address of a field of `self`, which moving `self` changes.
-    pub fn method(&mut self) -> &mut RexxMethodContext_ {
+    /// Both context pointers are taken from their whole wrappers, which is
+    /// what lets [`owner_of`] read the `owner` beside the public struct.
+    pub fn method(&mut self) -> MethodContext<'_> {
         self.thread.context.functions = &raw mut self.table;
         self.method.context.threadContext = (&raw mut self.thread).cast::<RexxThreadContext_>();
         self.method.context.functions = std::ptr::from_ref(&METHOD_CONTEXT).cast_mut();
-        &mut self.method.context
+        MethodContext {
+            pointer: (&raw mut self.method).cast::<RexxMethodContext_>(),
+            wrapper: PhantomData,
+        }
     }
 
     /// The handles the thread table's data members carry.
@@ -314,7 +346,7 @@ pub(crate) extern "C" fn reading_stub(
         return READING_TYPES.as_ptr().cast_mut();
     }
     // SAFETY: `context` is the one `invoke::method` handed this stub, which
-    // holds it as a `&mut RexxMethodContext_` across the call, so the field
+    // holds the `MethodContext` it came from across the call, so the field
     // read is in bounds.
     let published = unsafe { (*context).arguments };
     let same_array = published == arguments;
@@ -328,6 +360,30 @@ pub(crate) extern "C" fn reading_stub(
         0
     };
     SEEN.set(Seen { same_array, flags });
+    std::ptr::null_mut()
+}
+
+/// The signature [`dropping_stub`] publishes: an `int` result and nothing
+/// else.
+#[cfg(test)]
+static DROPPING_TYPES: [u16; 2] = [crate::values::code::INT, crate::values::ARGUMENT_TERMINATOR];
+
+/// A method stub that drops `CSELF` through the context it was handed, which
+/// is the call that recovers the activation with [`owner_of`].
+#[cfg(test)]
+pub(crate) extern "C" fn dropping_stub(
+    context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return DROPPING_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: `context` is the one `invoke::method` handed this stub, whose
+    // `functions` a `Contexts` wrote, so the table read is in bounds.
+    let functions = unsafe { (*context).functions };
+    // SAFETY: as above, the table is `METHOD_CONTEXT`.
+    let drop_variable = unsafe { (*functions).DropObjectVariable };
+    drop_variable(context, c"CSELF".as_ptr());
     std::ptr::null_mut()
 }
 
@@ -410,10 +466,10 @@ mod tests {
             },
             owner: &raw mut owner,
         };
-        let handed_out = &raw mut wrapper.context;
-        // SAFETY: `handed_out` is the `context` field of a live
-        // `Owned<RexxMethodContext_, Activation>`, which is exactly what
-        // `owner_of` asks of its caller.
+        let handed_out = (&raw mut wrapper).cast::<RexxMethodContext_>();
+        // SAFETY: `handed_out` is a live `Owned<RexxMethodContext_, Activation>`
+        // taken as a whole and cast to its `context` field, which is exactly
+        // what `owner_of` asks of its caller.
         let recovered: *mut Activation = unsafe { owner_of(handed_out) };
         assert_eq!(recovered, &raw mut owner);
         // SAFETY: `recovered` is `&raw mut owner`, and `owner` outlives it.

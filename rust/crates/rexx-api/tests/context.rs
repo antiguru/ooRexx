@@ -243,7 +243,7 @@ impl Session {
             strings: &mut self.strings,
         });
         let mut contexts = Contexts::new(&activation);
-        let outcome = invoke::method(entry, contexts.method(), &activation, arguments);
+        let outcome = invoke::method(entry, &contexts.method(), &activation, arguments);
         (outcome, activation.pending())
     }
 

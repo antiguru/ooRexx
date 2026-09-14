@@ -17,7 +17,8 @@
 
 use rexx_core::ObjRef;
 
-use crate::layout::{RexxMethodContext_, ValueDescriptor};
+use crate::ffi::MethodContext;
+use crate::layout::ValueDescriptor;
 use crate::load::NativeMethodEntry;
 use crate::values::{self, ARGUMENT_TERMINATOR, Activation, Converted, Failure, Value};
 
@@ -51,7 +52,7 @@ pub const MAX_NATIVE_ARGUMENTS: usize = 16;
 /// If the caller holds `cx`'s conversion state across this call.
 pub fn method(
     entry: &NativeMethodEntry,
-    context: &mut RexxMethodContext_,
+    context: &MethodContext<'_>,
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
@@ -111,7 +112,7 @@ pub fn method(
 /// than [`MAX_NATIVE_ARGUMENTS`] leaves room for.
 pub fn signature(
     entry: &NativeMethodEntry,
-    context: &mut RexxMethodContext_,
+    context: &MethodContext<'_>,
 ) -> Result<Vec<u16>, Failure> {
     // The words are the return type, the parameters the array has room for,
     // and the terminator, so a signature that fits is one word longer than
@@ -142,7 +143,7 @@ mod tests {
     use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef};
 
     use super::{MAX_NATIVE_ARGUMENTS, method};
-    use crate::ffi::{Seen, forget_seen, reading_stub, seen};
+    use crate::ffi::{MethodContext, Seen, forget_seen, reading_stub, seen};
     use crate::handles::Table;
     use crate::layout::{
         METHOD_CONTEXT_INTERFACE, MethodContextInterface, POINTER, RexxMethodContext_,
@@ -403,7 +404,12 @@ mod tests {
                 host: &mut interpreter,
                 strings: &mut strings,
             });
-            method(entry, &mut context, &activation, &supplied)
+            method(
+                entry,
+                &MethodContext::bare(&mut context),
+                &activation,
+                &supplied,
+            )
         };
         Run {
             outcome,
@@ -449,7 +455,7 @@ mod tests {
         let entry = stub_entry(b"probe", probe);
         let mut context = method_context(&METHOD_CONTEXT_INTERFACE);
         let before = context.arguments;
-        let types = super::signature(&entry, &mut context);
+        let types = super::signature(&entry, &MethodContext::bare(&mut context));
         assert_eq!(types, Ok(vec![code::INT, code::CSTRING]));
         assert_eq!(events(), vec![Event::Entered { array: false }]);
         assert_eq!(
@@ -486,6 +492,31 @@ mod tests {
             run.left_on_context.is_null(),
             "the context was built holding a dangling array, so a null here \
              is this call's doing"
+        );
+    }
+
+    /// A stub reaches the activation that called it through the method
+    /// context a `Contexts` hands out, which is where `ffi::owner_of` reads
+    /// the owner back past the public struct.
+    #[test]
+    fn a_stub_reaches_its_activation_through_the_context_it_was_handed() {
+        let entry = stub_entry(b"dropping", crate::ffi::dropping_stub);
+        let mut interpreter = Interpreter::new();
+        let held = interpreter.text(b"a pointer's stand-in");
+        interpreter.variables.push((b"CSELF".to_vec(), held));
+        let mut strings = CStringPool::new();
+        let outcome = {
+            let activation = Activation::new(Conversion {
+                host: &mut interpreter,
+                strings: &mut strings,
+            });
+            let mut contexts = crate::ffi::Contexts::new(&activation);
+            method(&entry, &contexts.method(), &activation, &[])
+        };
+        assert_eq!(outcome, Ok(Some(ObjRef::small_int(0).expect("zero"))));
+        assert!(
+            interpreter.variables.is_empty(),
+            "the drop did not reach the activation's host"
         );
     }
 

@@ -14,6 +14,7 @@
 
 //! The outbound FFI boundary: loading a library and resolving symbols.
 
+use crate::ffi::MethodContext;
 use crate::invoke::MAX_NATIVE_ARGUMENTS;
 use crate::layout::{
     RexxMethodContext_, RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry, ValueDescriptor,
@@ -115,11 +116,7 @@ impl NativeMethodEntry {
     ///
     /// At most `limit - 1` words are answered, which is what bounds the
     /// descriptor array the caller fills from them.
-    pub(crate) fn signature(
-        &self,
-        context: &mut RexxMethodContext_,
-        limit: usize,
-    ) -> Option<Vec<u16>> {
+    pub(crate) fn signature(&self, context: &MethodContext<'_>, limit: usize) -> Option<Vec<u16>> {
         let stub = self.stub()?;
         // SAFETY: `stub` is the address the extension's own method table gave
         // for this row, so the code it names is the generated stub and stays
@@ -127,7 +124,7 @@ impl NativeMethodEntry {
         // `arguments` is the signature request, which returns the static
         // array without running any of the extension's own code
         // (`api/oorexxapi.h:4342-4350`).
-        let types = unsafe { stub(&raw mut *context, std::ptr::null_mut()) };
+        let types = unsafe { stub(context.as_ptr(), std::ptr::null_mut()) };
         if types.is_null() {
             return None;
         }
@@ -156,7 +153,7 @@ impl NativeMethodEntry {
     /// afterwards, because it does not outlive this function.
     pub(crate) fn call(
         &self,
-        context: &mut RexxMethodContext_,
+        context: &MethodContext<'_>,
         arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
         result: Option<Repr>,
     ) -> Option<Value> {
@@ -167,13 +164,18 @@ impl NativeMethodEntry {
             // `argumentExists` reads the array through the context rather
             // than through the parameter (`api/oorexxapi.h:4276`), which is
             // why the oracle publishes it (`NativeActivation.cpp:1291`).
-            context.arguments = array;
+            let pointer = context.as_ptr();
+            // SAFETY: `context` holds the only borrow of a live
+            // `RexxMethodContext_` for its lifetime, and it is neither `Clone`
+            // nor `Sync`, so nothing else writes the struct during this call.
+            unsafe { (*pointer).arguments = array };
             // SAFETY: `stub` names the generated stub, as above. `array` is
             // the caller's live array, which nothing else touches for the
             // duration of the call, and the stub reads and writes only the
             // elements its own signature declares.
-            unsafe { stub(&raw mut *context, array) };
-            context.arguments = std::ptr::null_mut();
+            unsafe { stub(pointer, array) };
+            // SAFETY: as the write above.
+            unsafe { (*pointer).arguments = std::ptr::null_mut() };
         }
         // SAFETY: element zero's word was written in full above, and a stub
         // writing a member into it leaves every byte initialised.
