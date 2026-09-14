@@ -132,6 +132,7 @@ mod tests {
     use rexx_core::{Body, Bytes, Heap, ObjRef};
 
     use super::{MAX_NATIVE_ARGUMENTS, method};
+    use crate::ffi::{Seen, forget_seen, reading_stub, seen};
     use crate::handles::Table;
     use crate::layout::{
         METHOD_CONTEXT_INTERFACE, MethodContextInterface, POINTER, RexxMethodContext_,
@@ -139,7 +140,8 @@ mod tests {
     };
     use crate::load::{NativeMethodEntry, stub_entry};
     use crate::values::{
-        ARGUMENT_TERMINATOR, CStringPool, Conversion, Failure, Host, OPTIONAL_ARGUMENT, code,
+        ARGUMENT_EXISTS, ARGUMENT_TERMINATOR, CStringPool, Conversion, Failure, Host,
+        OPTIONAL_ARGUMENT, code,
     };
 
     /// What the stub and the interpreter each did, in the order they did it.
@@ -316,6 +318,7 @@ mod tests {
     /// Run `entry` against `arguments` freshly made strings.
     fn run(entry: &NativeMethodEntry, arguments: usize) -> Run {
         forget_events();
+        forget_seen();
         let mut interpreter = Interpreter::new();
         let supplied: Vec<Option<ObjRef>> = (0..arguments)
             .map(|at| Some(interpreter.text(format!("argument {at}").as_bytes())))
@@ -339,10 +342,12 @@ mod tests {
         }
     }
 
-    /// **The signature call observes nothing.** It is handed no descriptor
-    /// array, and it happens before the table has asked the interpreter to
-    /// convert anything, so there is no argument for an extension to read
-    /// even through the context (`api/oorexxapi.h:4276`).
+    /// **No argument exists when the signature is asked for.** The stub is
+    /// handed no descriptor array, and the table has not yet been asked to
+    /// convert anything, so there is nothing for the array channel to carry.
+    /// `GetArgument` is a channel of its own and reaches the activation's own
+    /// list, which this says nothing about; the oracle builds its context
+    /// before the signature call too (`NativeActivation.cpp:1289-1291`).
     #[test]
     fn the_signature_call_runs_before_any_argument_is_touched() {
         let entry = stub_entry(b"probe", probe);
@@ -364,8 +369,8 @@ mod tests {
         );
     }
 
-    /// The signature call publishes nothing on the context, so an extension
-    /// reading the array through it (`api/oorexxapi.h:4276`) sees whatever
+    /// The signature call leaves the array channel alone, so an extension
+    /// reading it through the context (`api/oorexxapi.h:4276`) sees whatever
     /// was there before rather than an argument of this call.
     #[test]
     fn the_signature_call_publishes_no_array() {
@@ -379,6 +384,24 @@ mod tests {
         assert_eq!(
             context.arguments, before,
             "the context was built holding an array, and this call left it alone"
+        );
+    }
+
+    /// The call publishes its array on the context, which is where
+    /// `argumentExists` reads it (`api/oorexxapi.h:4276`), and what it
+    /// publishes is the array the stub was handed with the argument's flags
+    /// in it.
+    #[test]
+    fn the_call_publishes_its_array_on_the_context() {
+        let entry = stub_entry(b"reading", reading_stub);
+        let run = run(&entry, 1);
+        assert!(run.outcome.is_ok(), "{:?}", run.outcome);
+        assert_eq!(
+            seen(),
+            Seen {
+                same_array: true,
+                flags: ARGUMENT_EXISTS,
+            }
         );
     }
 

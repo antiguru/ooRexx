@@ -71,6 +71,77 @@ pub fn value_of(descriptor: &ValueDescriptor, repr: Repr) -> Value {
     }
 }
 
+/// What a stub read through the context, which is the channel
+/// `argumentExists` uses (`api/oorexxapi.h:4276`).
+#[cfg(test)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct Seen {
+    /// Whether the context published the array the stub was handed.
+    pub same_array: bool,
+    /// The `flags` word of the argument at index one, read through the
+    /// published array; zero where the context published another array.
+    pub flags: u16,
+}
+
+#[cfg(test)]
+const SAW_NOTHING: Seen = Seen {
+    same_array: false,
+    flags: 0,
+};
+
+#[cfg(test)]
+thread_local! {
+    static SEEN: std::cell::Cell<Seen> = const { std::cell::Cell::new(SAW_NOTHING) };
+}
+
+/// What [`reading_stub`] read on its most recent call.
+#[cfg(test)]
+pub(crate) fn seen() -> Seen {
+    SEEN.get()
+}
+
+#[cfg(test)]
+pub(crate) fn forget_seen() {
+    SEEN.set(SAW_NOTHING);
+}
+
+/// The signature [`reading_stub`] publishes: an `int` result and one
+/// `CSTRING` parameter.
+#[cfg(test)]
+static READING_TYPES: [u16; 3] = [
+    crate::values::code::INT,
+    crate::values::code::CSTRING,
+    crate::values::ARGUMENT_TERMINATOR,
+];
+
+/// A method stub that reads its argument through the context rather than
+/// through the parameter, as an extension using `argumentExists` does.
+#[cfg(test)]
+pub(crate) extern "C" fn reading_stub(
+    context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return READING_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: `context` is the one `invoke::method` handed this stub, which
+    // holds it as a `&mut RexxMethodContext_` across the call, so the field
+    // read is in bounds.
+    let published = unsafe { (*context).arguments };
+    let same_array = published == arguments;
+    let flags = if same_array {
+        // SAFETY: the published array is the one this stub was handed, which
+        // is `invoke::method`'s own array of `MAX_NATIVE_ARGUMENTS`
+        // descriptors, so the element after the return value is inside it.
+        // Where the two differ nothing is read.
+        unsafe { (*published.add(1)).flags }
+    } else {
+        0
+    };
+    SEEN.set(Seen { same_array, flags });
+    std::ptr::null_mut()
+}
+
 #[cfg(test)]
 mod tests {
     use super::owner_of;

@@ -34,6 +34,11 @@ use rexx_core::{Body, Bytes, Heap, ObjRef};
 /// (`extensions/rxregexp/rxregexp.cpp:83`).
 const INVALID_TEMPLATE: usize = 38000;
 
+/// `Rexx_Error_Incorrect_method` (`api/oorexxerrors.h:518`), which
+/// `RegExp_Parse` raises for a match type it does not know
+/// (`extensions/rxregexp/rxregexp.cpp:130`).
+const INCORRECT_METHOD: usize = 93000;
+
 /// The repository root, which is three directories above this crate.
 fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -295,11 +300,13 @@ fn regexp_init_with_one_argument_parses_it() {
     });
 }
 
-/// A native method that raises runs to completion and still returns a value,
-/// so element zero is converted for a call that raised
-/// (`interpreter/api/ThreadContextStubs.cpp:1863-1885`).
+/// A native method that raises runs to completion: the work after the raise
+/// still happens (`interpreter/api/ThreadContextStubs.cpp:1863-1885`).
+///
+/// `RegExp_Init` answers zero on every path, so this says nothing about
+/// element zero; `a_call_that_raised_still_returns_what_it_wrote` does.
 #[test]
-fn an_extension_that_raises_still_finishes_and_still_returns() {
+fn an_extension_that_raises_still_finishes() {
     let library = rxregexp();
     let init = library.method(b"RegExp_Init").expect("RegExp_Init");
     let uninit = library.method(b"RegExp_Uninit").expect("RegExp_Uninit");
@@ -314,6 +321,34 @@ fn an_extension_that_raises_still_finishes_and_still_returns() {
         );
         assert_eq!(VARIABLES_SET.get(), 1, "the work after the raise still ran");
         session.interpreter.cself = Some(allocated());
+        assert_eq!(session.call(uninit, context, &[]), returned(0));
+    });
+}
+
+/// A call that raised still writes element zero, and the value is read back
+/// whatever the raise did. `RegExp_Parse` raises for an unknown match type
+/// (`extensions/rxregexp/rxregexp.cpp:130`) and then returns what the parse
+/// answered (`:135`), which is not the zero the descriptor started at.
+#[test]
+fn a_call_that_raised_still_returns_what_it_wrote() {
+    let library = rxregexp();
+    let init = library.method(b"RegExp_Init").expect("RegExp_Init");
+    let parse = library.method(b"RegExp_Parse").expect("RegExp_Parse");
+    let uninit = library.method(b"RegExp_Uninit").expect("RegExp_Uninit");
+    let mut session = Session::new();
+    let bad = session.text(b"[");
+    let bogus = session.text(b"BOGUS");
+
+    with_context(|context| {
+        assert_eq!(session.call(init, context, &[]), returned(0));
+        session.interpreter.cself = Some(allocated());
+
+        assert_eq!(session.call(parse, context, &[bad, bogus]), returned(3));
+        assert_eq!(
+            RAISED.with(|seen| seen.borrow().clone()),
+            vec![INCORRECT_METHOD]
+        );
+
         assert_eq!(session.call(uninit, context, &[]), returned(0));
     });
 }
