@@ -1,0 +1,635 @@
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+/*                                                                            */
+/* This program and the accompanying materials are made available under       */
+/* the terms of the Common Public License v1.0 which accompanies this         */
+/* distribution. A copy is also available at the following address:           */
+/* https://www.oorexx.org/license.html                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+//! The conversion table an extension's declared signature drives.
+//!
+//! `NativeActivation::processArguments` (`interpreter/execution/NativeActivation.cpp:219`)
+//! is the reference for the Rexx-to-C direction and `valueToObject` (`:718`)
+//! for the way back.
+
+use std::borrow::Cow;
+use std::ffi::{c_char, c_int};
+
+use rexx_core::ObjRef;
+
+use crate::handles::Table;
+use crate::layout::{CSTRING, POINTER, RexxObjectPtr, ValueDescriptor, ValueUnion};
+
+/// `REXX_ARGUMENT_TERMINATOR` (`api/oorexxapi.h:54`).
+pub const ARGUMENT_TERMINATOR: u16 = 0;
+
+/// `REXX_OPTIONAL_ARGUMENT` (`api/oorexxapi.h:100`).
+pub const OPTIONAL_ARGUMENT: u16 = 0x8000;
+
+/// `ARGUMENT_EXISTS` (`api/oorexxapi.h:278`).
+pub const ARGUMENT_EXISTS: u16 = 0x01;
+
+/// `SPECIAL_ARGUMENT` (`api/oorexxapi.h:280`).
+pub const SPECIAL_ARGUMENT: u16 = 0x02;
+
+/// `ARGUMENT_TYPE` (`api/oorexxapi.h:4272`): a signature word without its
+/// optional bit.
+pub const fn argument_type(declared: u16) -> u16 {
+    declared & !OPTIONAL_ARGUMENT
+}
+
+/// `IS_OPTIONAL_ARGUMENT` (`api/oorexxapi.h:4273`).
+pub const fn is_optional(declared: u16) -> bool {
+    declared & OPTIONAL_ARGUMENT != 0
+}
+
+/// The `REXX_VALUE_*` codes (`api/oorexxapi.h:55-98`).
+///
+/// A `REXX_VALUE_OPTIONAL_*` name in the header is one of these with
+/// [`OPTIONAL_ARGUMENT`] set, not a code of its own, so the table is keyed on
+/// these alone.
+pub mod code {
+    pub const ARGLIST: u16 = 2;
+    pub const NAME: u16 = 3;
+    pub const SCOPE: u16 = 4;
+    pub const CSELF: u16 = 5;
+    pub const OSELF: u16 = 6;
+    pub const SUPER: u16 = 7;
+    pub const REXX_OBJECT_PTR: u16 = 11;
+    pub const INT: u16 = 12;
+    pub const WHOLENUMBER_T: u16 = 13;
+    pub const DOUBLE: u16 = 14;
+    pub const CSTRING: u16 = 15;
+    pub const POINTER: u16 = 16;
+    pub const REXX_STRING_OBJECT: u16 = 17;
+    pub const STRINGSIZE_T: u16 = 18;
+    pub const FLOAT: u16 = 19;
+    pub const INT8_T: u16 = 20;
+    pub const INT16_T: u16 = 21;
+    pub const INT32_T: u16 = 22;
+    pub const INT64_T: u16 = 23;
+    pub const UINT8_T: u16 = 24;
+    pub const UINT16_T: u16 = 25;
+    pub const UINT32_T: u16 = 26;
+    pub const UINT64_T: u16 = 27;
+    pub const INTPTR_T: u16 = 28;
+    pub const UINTPTR_T: u16 = 29;
+    pub const LOGICAL_T: u16 = 30;
+    pub const REXX_ARRAY_OBJECT: u16 = 31;
+    pub const REXX_STEM_OBJECT: u16 = 32;
+    pub const SIZE_T: u16 = 33;
+    pub const SSIZE_T: u16 = 34;
+    pub const POINTERSTRING: u16 = 35;
+    pub const REXX_CLASS_OBJECT: u16 = 36;
+    pub const REXX_MUTABLE_BUFFER_OBJECT: u16 = 37;
+    pub const POSITIVE_WHOLENUMBER_T: u16 = 38;
+    pub const NONNEGATIVE_WHOLENUMBER_T: u16 = 39;
+    pub const REXX_VARIABLE_REFERENCE_OBJECT: u16 = 40;
+}
+
+/// Which way a conversion runs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Direction {
+    /// A Rexx object into the C value the signature declares.
+    ToNative,
+    /// A value the extension wrote back into a Rexx object.
+    FromNative,
+}
+
+/// A conversion that could not be made.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Failure {
+    /// A required argument was not supplied.
+    MissingArgument { position: usize },
+    /// The argument has no string value.
+    NoStringValue { position: usize },
+    /// The signature itself cannot be honoured: a code the table does not
+    /// know, a `Value` that does not match the declared code, or a special
+    /// argument asked for outside a method.
+    Signature,
+    /// A row whose conversion this phase has not written.
+    Unfilled {
+        code: u16,
+        name: &'static str,
+        direction: Direction,
+    },
+    /// A handle the calling activation no longer holds (D5).
+    StaleHandle,
+}
+
+impl Failure {
+    /// The error the oracle raises, or `None` where the refusal is this
+    /// implementation's gap rather than a condition a program can see.
+    pub fn error_number(&self, method: bool) -> Option<u32> {
+        match self {
+            // Measured 2026-09-14 against the oracle: a required CSTRING left
+            // off `RegularExpression~parse` answers "Error 88.901".
+            Failure::MissingArgument { .. } => Some(88901),
+            // Measured the same way, passing an instance of a class with no
+            // string value: "Error 88.909".
+            Failure::NoStringValue { .. } => Some(88909),
+            Failure::Signature => Some(if method { 93968 } else { 40918 }),
+            Failure::Unfilled { .. } | Failure::StaleHandle => None,
+        }
+    }
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Failure::MissingArgument { position } => {
+                write!(f, "argument {position} is required")
+            }
+            Failure::NoStringValue { position } => {
+                write!(f, "argument {position} must have a string value")
+            }
+            Failure::Signature => write!(f, "incorrect signature"),
+            Failure::Unfilled {
+                code,
+                name,
+                direction,
+            } => write!(
+                f,
+                "Phase 8 owes the {direction:?} conversion for REXX_VALUE_{name} ({code})"
+            ),
+            Failure::StaleHandle => write!(f, "the handle is no longer held by this activation"),
+        }
+    }
+}
+
+/// One member of a `ValueDescriptor`'s union, chosen by the declared code.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Value {
+    /// An optional argument nobody supplied.
+    Omitted,
+    Int(c_int),
+    /// A pointer into the call's [`CStringPool`].
+    CString(CSTRING),
+    Pointer(POINTER),
+    Object(RexxObjectPtr),
+}
+
+impl Value {
+    /// The union with this value's member written.
+    ///
+    /// An omitted argument is a zero word: the C++ writes `value_int64_t = 0`
+    /// for the integer and pointer types and `0.0` for `double` and `float`,
+    /// which are the same bytes.
+    fn as_union(self) -> ValueUnion {
+        match self {
+            Value::Omitted => ValueUnion { value_int64_t: 0 },
+            Value::Int(v) => ValueUnion { value_int: v },
+            Value::CString(p) => ValueUnion { value_CSTRING: p },
+            Value::Pointer(p) => ValueUnion { value_POINTER: p },
+            Value::Object(h) => ValueUnion {
+                value_RexxObjectPtr: h,
+            },
+        }
+    }
+}
+
+/// A converted argument and the `flags` its descriptor carries.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Converted {
+    pub value: Value,
+    pub flags: u16,
+}
+
+/// The `ValueDescriptor` a converted argument fills in.
+pub fn descriptor(code: u16, converted: Converted) -> ValueDescriptor {
+    ValueDescriptor {
+        value: converted.value.as_union(),
+        r#type: code,
+        flags: converted.flags,
+    }
+}
+
+/// The terminated copies a call's `CSTRING` conversions point at.
+///
+/// A `CSTRING`'s lifetime is the call, and the oracle achieves that by rooting
+/// the string object and pointing into it. That is not open to us: a Rexx
+/// string carries no terminator, and the arena moves nothing but reallocates
+/// the slot vector, so no address inside the heap survives an allocation. The
+/// pool owns its copies instead, so a collection cannot free them, and each
+/// one is a separate boxed slice, so growing the pool does not move a pointer
+/// already handed out. Dropping the pool is what ends the lifetime, and that
+/// is the end of the call.
+#[derive(Default)]
+pub struct CStringPool {
+    entries: Vec<Box<[u8]>>,
+}
+
+impl CStringPool {
+    pub fn new() -> CStringPool {
+        CStringPool::default()
+    }
+
+    /// A pointer to a terminated copy of `bytes`, valid until
+    /// [`CStringPool::clear`] or the pool is dropped.
+    ///
+    /// Bytes are copied verbatim, so an embedded zero truncates the string an
+    /// extension reads, which is what pointing into the oracle's string data
+    /// does too.
+    pub fn intern(&mut self, bytes: &[u8]) -> CSTRING {
+        let mut owned = Vec::with_capacity(bytes.len() + 1);
+        owned.extend_from_slice(bytes);
+        owned.push(0);
+        self.entries.push(owned.into_boxed_slice());
+        let entry = self.entries.last().expect("just pushed");
+        entry.as_ptr().cast::<c_char>()
+    }
+
+    /// The bytes behind a pointer this pool minted, without the terminator,
+    /// or `None` for a pointer it did not mint or has since dropped.
+    pub fn bytes_at(&self, pointer: CSTRING) -> Option<&[u8]> {
+        self.entries
+            .iter()
+            .find(|entry| entry.as_ptr().cast::<c_char>() == pointer)
+            .map(|entry| &entry[..entry.len() - 1])
+    }
+
+    /// Drops every copy, which is what the end of a call does.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// What the table needs from the interpreter beyond the objects themselves.
+pub trait Host {
+    /// Whether this is a method invocation rather than a call.
+    fn is_method(&self) -> bool;
+
+    /// `object` forced to a string object, or `None` if it has no string
+    /// value. `RexxInternalObject::requiredString`
+    /// (`interpreter/classes/ObjectClass.cpp:1341`) is the reference, so a
+    /// non-primitive receiver is sent `REQUEST("STRING")` and answering
+    /// `.nil` is the `None` here.
+    fn string_value(&mut self, object: ObjRef) -> Option<ObjRef>;
+
+    /// The bytes of a string object, or `None` if `object` is not one. The
+    /// return is owned rather than borrowed for a string the handle itself
+    /// carries, which has no heap object to borrow from.
+    fn string_bytes(&self, object: ObjRef) -> Option<Cow<'_, [u8]>>;
+
+    /// The `CSELF` object variable's pointer, `None` when the receiver has
+    /// none. `NativeActivation::cself` (`:2091`) is the reference: it takes
+    /// the guard lock through `methodVariables` and unwraps the `.Pointer`
+    /// the variable holds.
+    fn cself(&mut self) -> Option<POINTER>;
+}
+
+/// What one native call's conversions read and write.
+pub struct Conversion<'a> {
+    pub host: &'a mut dyn Host,
+    pub locals: &'a mut Table,
+    pub strings: &'a mut CStringPool,
+}
+
+/// Whether a row takes its value from the argument list or from the context.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Source {
+    /// The row consumes one argument and its descriptor carries
+    /// [`ARGUMENT_EXISTS`].
+    Argument,
+    /// The row consumes no argument and its descriptor carries
+    /// [`SPECIAL_ARGUMENT`] as well.
+    Special,
+}
+
+/// What an optional argument nobody supplied writes
+/// (`NativeActivation.cpp:615`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Absent {
+    Zero,
+    Signature,
+}
+
+type ToNative = fn(&mut Conversion<'_>, ObjRef, usize) -> Result<Value, Failure>;
+type FromNative = fn(&mut Conversion<'_>, Value) -> Result<Option<ObjRef>, Failure>;
+
+/// One `REXX_VALUE_*` code's conversion.
+struct Row {
+    code: u16,
+    /// The header's spelling after `REXX_VALUE_`, which is what
+    /// [`Failure::Unfilled`] and the coverage test name.
+    name: &'static str,
+    source: Source,
+    absent: Absent,
+    to_native: Option<ToNative>,
+    from_native: Option<FromNative>,
+}
+
+/// A row whose conversions are not written yet.
+const fn stub(code: u16, name: &'static str, source: Source, absent: Absent) -> Row {
+    Row {
+        code,
+        name,
+        source,
+        absent,
+        to_native: None,
+        from_native: None,
+    }
+}
+
+static TABLE: &[Row] = &[
+    stub(code::ARGLIST, "ARGLIST", Source::Special, Absent::Signature),
+    stub(code::NAME, "NAME", Source::Special, Absent::Signature),
+    stub(code::SCOPE, "SCOPE", Source::Special, Absent::Signature),
+    Row {
+        code: code::CSELF,
+        name: "CSELF",
+        source: Source::Special,
+        absent: Absent::Signature,
+        to_native: Some(cself_to_native),
+        from_native: None,
+    },
+    stub(code::OSELF, "OSELF", Source::Special, Absent::Signature),
+    stub(code::SUPER, "SUPER", Source::Special, Absent::Signature),
+    stub(
+        code::REXX_OBJECT_PTR,
+        "RexxObjectPtr",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    Row {
+        code: code::INT,
+        name: "int",
+        source: Source::Argument,
+        absent: Absent::Zero,
+        to_native: None,
+        from_native: Some(int_from_native),
+    },
+    stub(
+        code::WHOLENUMBER_T,
+        "wholenumber_t",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    stub(code::DOUBLE, "double", Source::Argument, Absent::Zero),
+    Row {
+        code: code::CSTRING,
+        name: "CSTRING",
+        source: Source::Argument,
+        absent: Absent::Zero,
+        to_native: Some(cstring_to_native),
+        from_native: None,
+    },
+    stub(code::POINTER, "POINTER", Source::Argument, Absent::Zero),
+    Row {
+        code: code::REXX_STRING_OBJECT,
+        name: "RexxStringObject",
+        source: Source::Argument,
+        absent: Absent::Zero,
+        to_native: Some(string_object_to_native),
+        from_native: Some(object_from_native),
+    },
+    stub(
+        code::STRINGSIZE_T,
+        "stringsize_t",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    stub(code::FLOAT, "float", Source::Argument, Absent::Zero),
+    stub(code::INT8_T, "int8_t", Source::Argument, Absent::Zero),
+    stub(code::INT16_T, "int16_t", Source::Argument, Absent::Zero),
+    stub(code::INT32_T, "int32_t", Source::Argument, Absent::Zero),
+    stub(code::INT64_T, "int64_t", Source::Argument, Absent::Zero),
+    stub(code::UINT8_T, "uint8_t", Source::Argument, Absent::Zero),
+    stub(code::UINT16_T, "uint16_t", Source::Argument, Absent::Zero),
+    stub(code::UINT32_T, "uint32_t", Source::Argument, Absent::Zero),
+    stub(code::UINT64_T, "uint64_t", Source::Argument, Absent::Zero),
+    stub(code::INTPTR_T, "intptr_t", Source::Argument, Absent::Zero),
+    stub(code::UINTPTR_T, "uintptr_t", Source::Argument, Absent::Zero),
+    stub(code::LOGICAL_T, "logical_t", Source::Argument, Absent::Zero),
+    stub(
+        code::REXX_ARRAY_OBJECT,
+        "RexxArrayObject",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    stub(
+        code::REXX_STEM_OBJECT,
+        "RexxStemObject",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    stub(code::SIZE_T, "size_t", Source::Argument, Absent::Zero),
+    stub(code::SSIZE_T, "ssize_t", Source::Argument, Absent::Zero),
+    stub(
+        code::POINTERSTRING,
+        "POINTERSTRING",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    stub(
+        code::REXX_CLASS_OBJECT,
+        "RexxClassObject",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    stub(
+        code::REXX_MUTABLE_BUFFER_OBJECT,
+        "RexxMutableBufferObject",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    stub(
+        code::POSITIVE_WHOLENUMBER_T,
+        "positive_wholenumber_t",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    stub(
+        code::NONNEGATIVE_WHOLENUMBER_T,
+        "nonnegative_wholenumber_t",
+        Source::Argument,
+        Absent::Zero,
+    ),
+    // The header marks this one as never optional (`api/oorexxapi.h:98`) and
+    // the C++ leaves it out of the absent switch, so an omitted one is a
+    // signature error rather than a zero.
+    stub(
+        code::REXX_VARIABLE_REFERENCE_OBJECT,
+        "RexxVariableReferenceObject",
+        Source::Argument,
+        Absent::Signature,
+    ),
+];
+
+/// Every code the table has a row for, with the header's spelling of its
+/// name.
+pub fn rows() -> impl Iterator<Item = (u16, &'static str)> {
+    TABLE.iter().map(|row| (row.code, row.name))
+}
+
+/// The row for `code`, or `None` for a code the header does not define.
+fn row(code: u16) -> Option<&'static Row> {
+    TABLE.iter().find(|row| row.code == code)
+}
+
+/// Whether the code in `declared` takes its value from the argument list.
+///
+/// Returns `None` for a code the table does not know.
+pub fn consumes_argument(declared: u16) -> Option<bool> {
+    row(argument_type(declared)).map(|row| row.source == Source::Argument)
+}
+
+/// `argument` converted into the C value `declared` asks for.
+///
+/// `argument` is the Rexx object at this position, or `None` when the caller
+/// supplied nothing there; a [`Source::Special`] row ignores it either way.
+/// `position` is one-based, as the oracle's error inserts are.
+pub fn to_native(
+    cx: &mut Conversion<'_>,
+    declared: u16,
+    argument: Option<ObjRef>,
+    position: usize,
+) -> Result<Converted, Failure> {
+    let code = argument_type(declared);
+    let Some(row) = row(code) else {
+        return Err(Failure::Signature);
+    };
+    // The absent cases are settled before the per-type conversion, as they
+    // are in the C++: a missing required argument and an omitted optional one
+    // are both answered without entering the type switch.
+    let object = match row.source {
+        Source::Special => ObjRef::NIL,
+        Source::Argument => match argument {
+            Some(object) => object,
+            None if !is_optional(declared) => {
+                return Err(Failure::MissingArgument { position });
+            }
+            None => {
+                return match row.absent {
+                    Absent::Zero => Ok(Converted {
+                        value: Value::Omitted,
+                        flags: 0,
+                    }),
+                    Absent::Signature => Err(Failure::Signature),
+                };
+            }
+        },
+    };
+    let convert = row.to_native.ok_or(Failure::Unfilled {
+        code,
+        name: row.name,
+        direction: Direction::ToNative,
+    })?;
+    let flags = match row.source {
+        Source::Special => ARGUMENT_EXISTS | SPECIAL_ARGUMENT,
+        Source::Argument => ARGUMENT_EXISTS,
+    };
+    Ok(Converted {
+        value: convert(cx, object, position)?,
+        flags,
+    })
+}
+
+/// The Rexx object `value` describes under `declared`, or `None` where the
+/// oracle answers `OREF_NULL`.
+pub fn from_native(
+    cx: &mut Conversion<'_>,
+    declared: u16,
+    value: Value,
+) -> Result<Option<ObjRef>, Failure> {
+    let code = argument_type(declared);
+    // `valueToObject` treats a zero type as an omitted value rather than a bad
+    // one, which is what makes a partly filled argument list convertible.
+    if code == ARGUMENT_TERMINATOR {
+        return Ok(None);
+    }
+    let Some(row) = row(code) else {
+        return Err(Failure::Signature);
+    };
+    let convert = row.from_native.ok_or(Failure::Unfilled {
+        code,
+        name: row.name,
+        direction: Direction::FromNative,
+    })?;
+    convert(cx, value)
+}
+
+/// `REXX_VALUE_CSELF` (`NativeActivation.cpp:294`).
+fn cself_to_native(
+    cx: &mut Conversion<'_>,
+    _argument: ObjRef,
+    _position: usize,
+) -> Result<Value, Failure> {
+    if !cx.host.is_method() {
+        return Err(Failure::Signature);
+    }
+    Ok(Value::Pointer(
+        cx.host.cself().unwrap_or(std::ptr::null_mut()),
+    ))
+}
+
+/// `REXX_VALUE_CSTRING` (`NativeActivation.cpp:467`).
+fn cstring_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    let string = cx
+        .host
+        .string_value(argument)
+        .ok_or(Failure::NoStringValue { position })?;
+    let bytes = cx
+        .host
+        .string_bytes(string)
+        .ok_or(Failure::NoStringValue { position })?;
+    Ok(Value::CString(cx.strings.intern(&bytes)))
+}
+
+/// `REXX_VALUE_RexxStringObject` (`NativeActivation.cpp:473`).
+fn string_object_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    let string = cx
+        .host
+        .string_value(argument)
+        .ok_or(Failure::NoStringValue { position })?;
+    // The C++ registers a local reference only for a string the conversion
+    // had to create. Minting a handle is registering it, so here every one is
+    // rooted and the "was it created" question does not arise.
+    Ok(Value::Object(cx.locals.register(string)))
+}
+
+/// `valueToObject` for the object codes (`NativeActivation.cpp:723`).
+fn object_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Object(handle) = value else {
+        return Err(Failure::Signature);
+    };
+    if handle.is_null() {
+        return Ok(None);
+    }
+    cx.locals
+        .resolve(handle)
+        .map(Some)
+        .ok_or(Failure::StaleHandle)
+}
+
+/// `valueToObject` for `REXX_VALUE_int` (`NativeActivation.cpp:733`).
+///
+/// # Panics
+/// Never for a `c_int`, whose whole range is a small integer.
+fn int_from_native(_cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Int(number) = value else {
+        return Err(Failure::Signature);
+    };
+    Ok(Some(
+        ObjRef::small_int(i64::from(number)).expect("a c_int is a small integer"),
+    ))
+}
