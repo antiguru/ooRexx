@@ -2785,7 +2785,6 @@ impl Interp {
         // object does not exist yet: a `::CLASS` has no class object until
         // the install pass creates one.
         let mut staged: BTreeMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>> = BTreeMap::new();
-        let mut bound: Vec<(usize, LibraryCodeKey)> = Vec::new();
         for (index, directive) in program.directives.iter().enumerate() {
             // **A synthetic directive installs nothing**, which is what lets
             // `Interp::new_file_executable` file a loaded file's main section
@@ -2974,25 +2973,24 @@ impl Interp {
             // The same walk and the same position for a library-backed
             // `EXTERNAL`: measured, oracle, a file opening `say "prolog ran"`
             // and carrying `::method x external "LIBRARY zorkolib z"` is
-            // 98.903 rc 158 with stdout empty.
+            // 98.903 rc 158 with stdout empty. Each procedure's shared code is
+            // bound to this package as its directive resolves, where nothing
+            // bound it first, so a later directive's refusal leaves the
+            // binding in place (`createNativeMethod`,
+            // `parser/DirectiveParser.cpp:1381-1388`).
             for key in self.resolve_directive_library(id, program, directive)? {
-                bound.push((index, key));
-            }
-        }
-        // A package whose directives all resolved binds each procedure's
-        // shared code to itself, where nothing bound it first.
-        for (index, key) in bound {
-            let routine = key.routine;
-            let row = self.library_code(key);
-            self.library_codes[row].get_or_insert(id);
-            if routine {
-                self.library_routine_codes.insert(
-                    InstalledRoutine {
-                        program: id,
-                        directive: index,
-                    },
-                    row,
-                );
+                let routine = key.routine;
+                let row = self.library_code(key);
+                self.library_codes[row].get_or_insert(id);
+                if routine {
+                    self.library_routine_codes.insert(
+                        InstalledRoutine {
+                            program: id,
+                            directive: index,
+                        },
+                        row,
+                    );
+                }
             }
         }
 

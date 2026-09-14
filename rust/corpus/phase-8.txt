@@ -74,3 +74,7 @@ lang/library_search_path_fixed.rex
 # Residual fixes: a library routine is one object per routine table entry,
 # whichever spelling asks for it and however many directives bind it.
 lang/library_routine_package.rex
+
+# Residual fixes: a directive binds a library procedure while its package is
+# translated, so a later directive's refusal does not undo it.
+lang/library_bound_before_refusal.rex
