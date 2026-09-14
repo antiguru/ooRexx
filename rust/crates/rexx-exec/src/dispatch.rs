@@ -739,6 +739,14 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(1),
         native_unset_method,
     ),
+    // `memory/Setup.cpp:1645`-`:1649`. `=` and `==` are the same function
+    // under two names, as are the two negations, and a second row rather than
+    // a second implementation for the reason `Object`'s pairs give.
+    ("Pointer", "=", Arity::Fixed(1), native_pointer_equal),
+    ("Pointer", "==", Arity::Fixed(1), native_pointer_equal),
+    ("Pointer", "\\=", Arity::Fixed(1), native_pointer_not_equal),
+    ("Pointer", "\\==", Arity::Fixed(1), native_pointer_not_equal),
+    ("Pointer", "ISNULL", Arity::Fixed(0), native_pointer_is_null),
     (
         "Package",
         "ADDCLASS",
@@ -5497,6 +5505,13 @@ fn native_string(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    // `PointerClass::stringValue` (`classes/PointerClass.cpp:152`) overrides
+    // the send below: measured, oracle rc 0, `p~objectName = 'zzz'` leaves
+    // `p~string` answering the address.
+    if pointer_address(interp, receiver).is_some() {
+        let text = interp.string_value_text(receiver);
+        return Ok(Some(interp.text_built(text)));
+    }
     // **Sent rather than shortcut for an instance**, whose `OBJECTNAME` a
     // program can replace: measured, oracle rc 0, `::METHOD defaultName`
     // returning `overridden` makes `o~string` answer `overridden`.
@@ -8468,6 +8483,67 @@ fn native_unsupported_new(
     Err(Raised::unsupported_new_method(&id).into())
 }
 
+/// The address a `.Pointer` holds, or `None` for anything else.
+pub(crate) fn pointer_address(interp: &Interp, value: ObjRef) -> Option<*mut std::ffi::c_void> {
+    match &interp.heap.get(value)?.body {
+        Body::Instance {
+            native: Some(state),
+            ..
+        } => state.pointer(),
+        _ => None,
+    }
+}
+
+/// `PointerClass::equal` and `PointerClass::notEqual`
+/// (`classes/PointerClass.cpp:73`, `:94`): anything that is not a `.Pointer`
+/// compares unequal, and two `.Pointer`s compare on their addresses.
+fn pointers_are_equal(
+    interp: &Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<bool, Failure> {
+    let other = args
+        .first()
+        .copied()
+        .flatten()
+        .ok_or_else(|| Failure::from(Raised::missing_method_argument(1)))?;
+    let Some(other) = pointer_address(interp, other) else {
+        return Ok(false);
+    };
+    Ok(pointer_address(interp, receiver) == Some(other))
+}
+
+fn native_pointer_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let equal = pointers_are_equal(interp, receiver, args)?;
+    Ok(Some(interp.counted(usize::from(equal))))
+}
+
+fn native_pointer_not_equal(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let equal = pointers_are_equal(interp, receiver, args)?;
+    Ok(Some(interp.counted(usize::from(!equal))))
+}
+
+/// `PointerClass::isNull` (`classes/PointerClass.cpp:163`).
+fn native_pointer_is_null(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let null = pointer_address(interp, receiver).is_none_or(|address| address.is_null());
+    Ok(Some(interp.counted(usize::from(null))))
+}
+
 /// The entry `WeakReference`'s scope pool binds the referent cell to, in the
 /// position [`COLLECTION_STORES`]' entries are in.
 const WEAK_REFERENT: &[u8] = b"REFERENT";
@@ -8944,6 +9020,120 @@ mod tests {
             Some(interp.counted(0)),
             "a class object was asked about its instances' behaviour instead of its own"
         );
+    }
+
+    /// A `.Pointer` over `address`, minted the way the API's `NewPointer`
+    /// does: nothing in a Rexx program can build one, which is why this
+    /// stands where a source program would.
+    fn pointer(interp: &mut Interp, address: usize) -> ObjRef {
+        let class = interp
+            .classes()
+            .lookup("Pointer")
+            .expect("Pointer is a native class");
+        let behaviour = interp.classes().instance_behaviour_handle(class);
+        let body = Body::pointer(class, behaviour, std::ptr::without_provenance_mut(address));
+        let object = interp.alloc_with(rexx_core::BehaviourId::OBJECT, body);
+        interp.roots.push_temp(object);
+        object
+    }
+
+    /// A `.Pointer` answers its address, its class and its own name, all
+    /// measured 2026-09-14 against the oracle through a `CSELF` an
+    /// `expose`-ing method handed back.
+    #[test]
+    fn a_pointer_renders_as_its_address_and_names_its_class() {
+        let mut interp = Interp::new();
+        let object = pointer(&mut interp, 0x55f0_6283_2410);
+        assert_eq!(interp.to_text(object).into_owned(), b"0x55f062832410");
+        assert_eq!(interp.text_len(object), 14);
+
+        let class = interp
+            .send_message(object, b"CLASS", None, &[], no_caller())
+            .expect("a Pointer answers CLASS")
+            .expect("a class");
+        let id = interp
+            .send_message(class, b"ID", None, &[], no_caller())
+            .expect("a class answers ID")
+            .expect("an id");
+        assert_eq!(interp.to_text(id).into_owned(), b"Pointer");
+        let named = interp
+            .send_message(object, b"OBJECTNAME", None, &[], no_caller())
+            .expect("a Pointer answers OBJECTNAME")
+            .expect("a name");
+        assert_eq!(interp.to_text(named).into_owned(), b"a Pointer");
+        let rendered = interp
+            .send_message(object, b"STRING", None, &[], no_caller())
+            .expect("a Pointer answers STRING")
+            .expect("a string");
+        assert_eq!(interp.to_text(rendered).into_owned(), b"0x55f062832410");
+
+        // `~objectName=` renames the object without touching its string
+        // value, which is the arm a buffer is in too.
+        let renamed = interp.text(b"a name of its own");
+        interp
+            .send_message(object, b"OBJECTNAME=", None, &[Some(renamed)], no_caller())
+            .expect("a Pointer answers OBJECTNAME=");
+        assert_eq!(interp.to_text(object).into_owned(), b"0x55f062832410");
+    }
+
+    /// A null address renders as `0x0` and answers `~isNull`, where any other
+    /// address does not (`interpreter/runtime/Numerics.cpp:882`,
+    /// `classes/PointerClass.cpp:163`).
+    #[test]
+    fn a_null_pointer_renders_as_zero_and_answers_is_null() {
+        let mut interp = Interp::new();
+        let null = pointer(&mut interp, 0);
+        let held = pointer(&mut interp, 0x1234);
+        assert_eq!(interp.to_text(null).into_owned(), b"0x0");
+        for (object, expected) in [(null, 1usize), (held, 0)] {
+            let answer = interp
+                .send_message(object, b"ISNULL", None, &[], no_caller())
+                .expect("a Pointer answers ISNULL");
+            assert_eq!(answer, Some(interp.counted(expected)));
+        }
+    }
+
+    /// The four comparisons: two `.Pointer`s compare on their addresses and
+    /// anything else compares unequal, whichever spelling is sent.
+    #[test]
+    fn a_pointer_compares_on_its_address_and_nothing_else() {
+        let mut interp = Interp::new();
+        let object = pointer(&mut interp, 0x1234);
+        let same = pointer(&mut interp, 0x1234);
+        let other = pointer(&mut interp, 0x5678);
+        let string = interp.text(b"abc");
+        let yes = interp.counted(1);
+        let no = interp.counted(0);
+
+        for name in [b"=".as_slice(), b"=="] {
+            for (against, expected) in [(object, yes), (same, yes), (other, no), (string, no)] {
+                let answer = interp
+                    .send_message(object, name, None, &[Some(against)], no_caller())
+                    .expect("a Pointer answers its comparisons");
+                assert_eq!(answer, Some(expected), "{}", String::from_utf8_lossy(name));
+            }
+        }
+        for name in [b"\\=".as_slice(), b"\\=="] {
+            for (against, expected) in [(object, no), (same, no), (other, yes), (string, yes)] {
+                let answer = interp
+                    .send_message(object, name, None, &[Some(against)], no_caller())
+                    .expect("a Pointer answers its comparisons");
+                assert_eq!(answer, Some(expected), "{}", String::from_utf8_lossy(name));
+            }
+        }
+    }
+
+    /// A comparison with no argument is 93.903, measured against the oracle
+    /// as `p~'=='()`.
+    #[test]
+    fn a_pointer_comparison_needs_its_argument() {
+        let mut interp = Interp::new();
+        let object = pointer(&mut interp, 0x1234);
+        let outcome = interp.send_message(object, b"==", None, &[], no_caller());
+        let Err(Failure::Raised(raised)) = outcome else {
+            panic!("a comparison with no argument answered instead of raising");
+        };
+        assert_eq!((raised.number, raised.sub), (93, 903));
     }
 
     /// Runs `source` and hands back `(exit code, stdout, stderr)`.

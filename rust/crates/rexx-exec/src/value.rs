@@ -331,9 +331,10 @@ impl Interp {
                 native: Some(state),
                 name,
                 ..
-            } => match state.buffer() {
-                Some(buffer) => buffer.bytes.len(),
-                None => match name {
+            } => match (state.buffer(), state.pointer()) {
+                (Some(buffer), _) => buffer.bytes.len(),
+                (_, Some(address)) => rexx_core::pointer_to_string(address).len(),
+                _ => match name {
                     Some(bytes) => bytes.len(),
                     None => unreachable!("Redirect::InstanceDefault answers an unnamed instance"),
                 },
@@ -596,9 +597,13 @@ impl Interp {
                 native: Some(state),
                 name,
                 ..
-            } => match state.buffer() {
-                Some(buffer) => Cow::Borrowed(buffer.bytes.as_slice()),
-                None => match name {
+            } => match (state.buffer(), state.pointer()) {
+                (Some(buffer), _) => Cow::Borrowed(buffer.bytes.as_slice()),
+                // `PointerClass::stringValue`
+                // (`classes/PointerClass.cpp:152`), held nowhere, which is
+                // why `try_text` answers `None` for one.
+                (_, Some(address)) => Cow::Owned(rexx_core::pointer_to_string(address)),
+                _ => match name {
                     Some(bytes) => Cow::Borrowed(bytes),
                     None => unreachable!("Redirect::InstanceDefault answers an unnamed instance"),
                 },
@@ -1001,7 +1006,7 @@ impl Interp {
             Body::Instance {
                 native: Some(state),
                 ..
-            } if state.buffer().is_some() => Redirect::None,
+            } if state.buffer().is_some() || state.pointer().is_some() => Redirect::None,
             Body::Instance {
                 class, name: None, ..
             } => Redirect::InstanceDefault(*class),
@@ -1359,7 +1364,8 @@ mod tests {
         // the unnamed one: the named one reaches the body match, which is the
         // half of the mirror a redirect arm cannot stand in for. A buffer in
         // each shape, because it takes neither: its own arm answers the
-        // contents whether or not the instance is named.
+        // contents whether or not the instance is named, and a `.Pointer` is
+        // in that same position with a rendering nothing stores.
         let class = interp
             .classes()
             .lookup("Object")
@@ -1371,6 +1377,12 @@ mod tests {
                 Some(Box::new(rexx_core::NativeState::Buffer(buffer_state(
                     b"held for long enough to need a slot",
                 )))),
+                Some(Box::new(rexx_core::NativeState::Pointer(
+                    std::ptr::null_mut(),
+                ))),
+                Some(Box::new(rexx_core::NativeState::Pointer(
+                    std::ptr::without_provenance_mut(0x7f01_2345_6789),
+                ))),
             ] {
                 let instance = interp.alloc_with(
                     BehaviourId::OBJECT,
