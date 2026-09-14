@@ -739,9 +739,9 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(1),
         native_unset_method,
     ),
-    // `memory/Setup.cpp:1645`-`:1649`. `=` and `==` are the same function
-    // under two names, as are the two negations, and a second row rather than
-    // a second implementation for the reason `Object`'s pairs give.
+    // `memory/Setup.cpp:1645`-`:1649`. `=` and `==` name one function and
+    // `\\=` and `\\==` name the other, each a row rather than a second
+    // implementation for the reason `Object`'s pairs give.
     ("Pointer", "=", Arity::Fixed(1), native_pointer_equal),
     ("Pointer", "==", Arity::Fixed(1), native_pointer_equal),
     ("Pointer", "\\=", Arity::Fixed(1), native_pointer_not_equal),
@@ -8495,7 +8495,7 @@ pub(crate) fn pointer_address(interp: &Interp, value: ObjRef) -> Option<*mut std
 }
 
 /// `PointerClass::equal` and `PointerClass::notEqual`
-/// (`classes/PointerClass.cpp:73`, `:94`): anything that is not a `.Pointer`
+/// (`classes/PointerClass.cpp:71`, `:91`): anything that is not a `.Pointer`
 /// compares unequal, and two `.Pointer`s compare on their addresses.
 fn pointers_are_equal(
     interp: &Interp,
@@ -9093,8 +9093,8 @@ mod tests {
         }
     }
 
-    /// The four comparisons: two `.Pointer`s compare on their addresses and
-    /// anything else compares unequal, whichever spelling is sent.
+    /// Every comparison spelling: two `.Pointer`s compare on their addresses
+    /// and anything else compares unequal.
     #[test]
     fn a_pointer_compares_on_its_address_and_nothing_else() {
         let mut interp = Interp::new();

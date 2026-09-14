@@ -363,7 +363,7 @@ pub trait Host {
     fn cself(&mut self) -> Option<POINTER>;
 
     /// The constant objects `Activity::initializeThreadContext`
-    /// (`interpreter/concurrency/Activity.cpp:1841-1849`) patches into the
+    /// (`interpreter/concurrency/Activity.cpp:1846-1849`) patches into the
     /// thread table once they exist.
     fn constants(&mut self) -> Constants<ObjRef>;
 
@@ -383,16 +383,16 @@ pub trait Host {
     /// `NativeActivation::dropObjectVariable` (`:3071`).
     fn drop_object_variable(&mut self, name: &[u8]);
 
-    /// `Numerics::wholenumberToObject` (`interpreter/runtime/Numerics.cpp:855`).
+    /// `Numerics::wholenumberToObject` (`interpreter/runtime/Numerics.cpp:184`).
     fn whole_number(&mut self, value: isize) -> ObjRef;
 
     /// A `.Pointer` wrapping `value`, which is `new_pointer`
-    /// (`interpreter/classes/PointerClass.hpp:114`).
+    /// (`interpreter/classes/PointerClass.hpp:81`).
     fn new_pointer(&mut self, value: POINTER) -> ObjRef;
 }
 
-/// The four objects the thread table carries as data rather than as
-/// functions, over whatever names them.
+/// The objects the thread table carries as data rather than as functions,
+/// over whatever names them.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Constants<T> {
     pub nil: T,
@@ -512,8 +512,8 @@ impl<'a> Activation<'a> {
         cx.host.string_bytes(object).map_or(0, |bytes| bytes.len())
     }
 
-    /// The four data members of the thread table, each registered as a local
-    /// reference so that the handle names a rooted object.
+    /// The thread table's data members, each registered as a local reference
+    /// so that the handle names a rooted object.
     pub fn constants(&self) -> Constants<RexxObjectPtr> {
         let mut cx = self.conversion();
         let objects = cx.host.constants();
@@ -1034,7 +1034,7 @@ fn object_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<Ob
         .ok_or(Failure::StaleHandle)
 }
 
-/// `valueToObject` for `REXX_VALUE_POINTER` (`NativeActivation.cpp:840`),
+/// `valueToObject` for `REXX_VALUE_POINTER` (`NativeActivation.cpp:839`),
 /// which wraps the address in a `.Pointer` and does not register it: the
 /// answer is the call's result, which the caller roots.
 fn pointer_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {

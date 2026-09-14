@@ -71,10 +71,6 @@ struct Interpreter {
     on_whole_number: OnWholeNumber,
     /// How many collections [`OnWholeNumber::Collect`] ran.
     collections: usize,
-    /// What a collection inside a call roots besides the receiver, named by
-    /// the test rather than read off the local-reference table: a host
-    /// callback runs with that table borrowed and cannot reach it.
-    roots_during_call: Vec<ObjRef>,
 }
 
 impl Interpreter {
@@ -109,7 +105,6 @@ impl Interpreter {
             null_string,
             on_whole_number: OnWholeNumber::Nothing,
             collections: 0,
-            roots_during_call: Vec::new(),
         }
     }
 
@@ -198,9 +193,6 @@ impl Host for Interpreter {
         if matches!(self.on_whole_number, OnWholeNumber::Collect) {
             let mut roots = RootSet::new();
             roots.add_global(".RECEIVER", self.receiver);
-            for (index, object) in self.roots_during_call.iter().enumerate() {
-                roots.add_global(&format!(".HANDLE{index}"), *object);
-            }
             self.heap.collect(&roots);
             self.collections += 1;
         }
@@ -457,8 +449,8 @@ fn raise_exception0_records_the_condition_and_the_call_finishes() {
     session.ran(uninit, &[]);
 }
 
-/// The four members that are data rather than functions carry handles for the
-/// objects the interpreter names (`Activity.cpp:1841-1849`).
+/// The members that are data rather than functions carry handles for the
+/// objects the interpreter names (`Activity.cpp:1846-1849`).
 #[test]
 fn the_thread_table_carries_the_four_constant_objects() {
     let mut session = Session::new();
@@ -550,15 +542,15 @@ fn the_cself_object_is_swept_when_the_receiver_is_not_a_root() {
     assert!(!address.is_null());
 }
 
-/// A collection running inside the call, while the extension is holding a
-/// `StringData` pointer, leaves the call able to finish and leaves the
-/// receiver's `CSELF` where it was.
+/// A collection running inside the call leaves the call able to finish and
+/// leaves the receiver's `CSELF` where it was, which is the pool holding it.
 ///
-/// The roots are named by the test: a host callback runs with the
-/// local-reference table borrowed and cannot read it, which is the open point
-/// this task's report records for the phase that drives a real collection.
+/// It says nothing about the `StringData` pointer the extension is holding at
+/// that moment: the copy behind one is outside the heap, so no collection can
+/// reach it, and `the_object_keyed_copy_outlives_the_object_it_came_from` is
+/// what witnesses that.
 #[test]
-fn a_collection_inside_the_call_leaves_it_able_to_finish() {
+fn a_collection_inside_the_call_leaves_the_cself_intact() {
     let library = rxregexp();
     let init = library.method(b"RegExp_Init").expect("RegExp_Init");
     let matches = library.method(b"RegExp_Match").expect("RegExp_Match");
@@ -570,7 +562,6 @@ fn a_collection_inside_the_call_leaves_it_able_to_finish() {
     session.ran(init, &[template]);
     let before = session.interpreter.cself().expect("CSELF after INIT");
     let garbage = session.interpreter.text(b"garbage nothing holds");
-    session.interpreter.roots_during_call = subject.into_iter().collect();
     session.interpreter.on_whole_number = OnWholeNumber::Collect;
 
     assert_eq!(session.ran(matches, &[subject]), returned(1));

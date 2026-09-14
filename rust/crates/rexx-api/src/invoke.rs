@@ -324,8 +324,8 @@ mod tests {
         }
     }
 
-    /// The four constants a stand-in interpreter answers with: `.nil`, the
-    /// two boolean values as the small integers the oracle's `RexxInteger`
+    /// What a stand-in interpreter answers for the constant objects: `.nil`,
+    /// the boolean values as the small integers the oracle's `RexxInteger`
     /// ones render as, and an empty string object.
     fn constants_of(interpreter: &mut Interpreter) -> Constants<ObjRef> {
         Constants {

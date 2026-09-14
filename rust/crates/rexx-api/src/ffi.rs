@@ -94,9 +94,9 @@ pub static METHOD_CONTEXT: MethodContextInterface = {
 /// The contexts one native call hands an extension, wired to the state behind
 /// them.
 ///
-/// The thread table is owned here and not shared, because its four object
-/// members are handles this activation minted
-/// (`interpreter/concurrency/Activity.cpp:1841-1849`).
+/// The thread table is owned here and not shared, because its object members
+/// are handles this activation minted
+/// (`interpreter/concurrency/Activity.cpp:1846-1849`).
 pub struct Contexts<'a, 'h> {
     thread: Owned<RexxThreadContext_, Activation<'h>>,
     method: Owned<RexxMethodContext_, Activation<'h>>,
@@ -154,7 +154,7 @@ impl<'a, 'h> Contexts<'a, 'h> {
         &mut self.method.context
     }
 
-    /// The handles the thread table's four data members carry.
+    /// The handles the thread table's data members carry.
     pub fn constants(&self) -> crate::values::Constants<RexxObjectPtr> {
         crate::values::Constants {
             nil: self.table.RexxNil,

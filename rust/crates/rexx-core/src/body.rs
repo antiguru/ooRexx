@@ -159,7 +159,7 @@ pub enum NativeState {
     /// for [`NativeState::Buffer`] alone.
     Stream(StreamState),
     /// A `.Pointer`'s address, the `pointerData` of `PointerClass`
-    /// (`interpreter/classes/PointerClass.hpp:59`). Its string value is the
+    /// (`interpreter/classes/PointerClass.hpp:77`). Its string value is the
     /// address rendered, so it answers for the reader
     /// [`NativeState::Buffer`] answers for.
     Pointer(*mut std::ffi::c_void),
@@ -708,7 +708,7 @@ impl Body {
 
     /// A `.Pointer` over `address`, an instance of `class` with no variables
     /// and no methods of its own (`PointerClass::operator new`,
-    /// `interpreter/classes/PointerClass.cpp:118`, which marks the object as
+    /// `interpreter/classes/PointerClass.cpp:122`, which marks the object as
     /// having no references).
     pub fn pointer(
         class: ObjRef,
