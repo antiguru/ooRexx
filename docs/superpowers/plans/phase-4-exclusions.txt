@@ -4530,3 +4530,50 @@ SO THE GAP IS LATENT RATHER THAN ACTUAL, and the work item is the same one
 ir_dual_oracle.rs closed for the other corpus: a gated test that re-derives
 these rows against a live rexxc, so the next version change is loud instead
 of silent. Nobody owns it. It is not Phase 5 work.
+
+--------------------------------------------------------------------------
+PHASE 8 LEAVES THESE, RECORDED AT ITS L2 SLICE CLOSE (2026-09-14)
+
+L2 IS NOT REACHED AND ITS BLOCKER HAS NO OWNER. The framework now loads a
+shared library, so it gets past .ENDOFLINE, past rxregexp.cls and past
+::METHOD INIT EXTERNAL "LIBRARY rxregexp RegExp_Init", and stops at
+ooTest.frm:49, .local~hasEntry(...). Located by running a traced copy, not
+inferred. It is not one method: hasIndex, entry, hasEntry, setEntry, items,
+index, remove, supplier and allIndexes all refuse on .local and
+.environment, and only at and put answer. Every refusal names Phase 5,
+which closed on 2026-09-09. On the oracle the same command runs the group,
+33 tests and 11741 assertions, rc 0; ours is rc 120 with one refusal line,
+so the gap is a refusal and not a wrong answer. Decision D-L2 in the
+roadmap records that the Rung column cannot be re-homed until a phase takes
+those methods. See docs/superpowers/plans/phase-8-l2.md.
+
+THE ROUTINE HALF OF THE NATIVE CALLING PROTOCOL IS UNBUILT. ::ROUTINE
+EXTERNAL and a ::REQUIRES ... LIBRARY's routines install and then refuse
+loudly at the call, naming Phase 8. rxregexp exports no routines --
+verified at the binary, rxregexp_package_entry+0x30 is zero with no
+relocation while +0x38 relocates to rxregexp_methods -- so L2 is not
+blocked by it. The surface half owes it. Worth knowing how it was found:
+wiring ::REQUIRES LIBRARY first turned that loud refusal into 43.1, a
+silent wrong answer, which 3245708c0 closes.
+
+THREE TRACE AND BLAME DIVERGENCES, ALL PREDATING PHASE 8, WITH TRANSCRIPTS
+IN phase-8-l2.md SECTION 5. >I>/<I< names the running program instead of
+the required package; the required package's own prologue >I>/<I< pair is
+not emitted at all; and a directive-time error in a required package names
+the program. The first two are silent wrong answers with nothing in the
+tree recording them until now. The third reproduces on
+::class A subclass NoSuchClassHere, so it belongs to no phase in
+particular.
+
+THE TWENTY rxregexp L1 CASES EXECUTE NOTHING AS WRITTEN. rexx-extract emits
+::ROUTINE MAIN with no main section and bodies that send to an unbound
+SELF, measured over the whole set. Phase 8 drove them through a scratchpad
+transform rather than editing corpus-l1/, found five failures and one real
+defect, and fixed it; the DIVERGE set is now empty. The extractor's own
+output shape is the gap, and nobody owns it.
+
+A HAZARD FOR ANYONE RUNNING THE SUITE. testOORexx.rex with no arguments
+runs everything and writes fixture files into ootest/. An oracle run of
+that form left svn-untracked artefacts there. svn status shows no modified
+versioned file and ootest/ is gitignored, so nothing reached git. Use the
+single-group form.
