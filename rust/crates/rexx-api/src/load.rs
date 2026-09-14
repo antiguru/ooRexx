@@ -57,6 +57,16 @@ pub enum Failure {
     LibraryVersion(String),
 }
 
+/// A library whose package entry [`check_version`] refused, with the library as
+/// `LibraryPackage::loadPackage` leaves it once the check has raised: loaded,
+/// its method table resolving, and its routine table never read, because
+/// `loadRoutines` follows the check (`interpreter/package/LibraryPackage.cpp:232-237`).
+#[derive(Debug)]
+pub struct Refused {
+    pub failure: Failure,
+    pub library: Box<Library>,
+}
+
 impl Failure {
     /// The major and minor error numbers this failure reports.
     #[must_use]
@@ -308,9 +318,9 @@ impl Library {
 /// (`interpreter/package/LibraryPackage.cpp:199-204`, `:211-215`).
 ///
 /// # Errors
-/// [`Failure::LibraryVersion`] where the package entry asks for a newer
-/// interpreter than this one.
-pub fn open(name: &str, search: &[PathBuf]) -> Result<Option<Library>, Failure> {
+/// [`Refused`] where the package entry asks for a newer interpreter than this
+/// one.
+pub fn open(name: &str, search: &[PathBuf]) -> Result<Option<Library>, Refused> {
     if name.len() > MAX_LIBRARY_NAME_LENGTH {
         return Ok(None);
     }
@@ -332,9 +342,9 @@ pub fn open(name: &str, search: &[PathBuf]) -> Result<Option<Library>, Failure> 
 /// which for a `::REQUIRES` is the spelling in the source rather than `path`.
 ///
 /// # Errors
-/// [`Failure::LibraryVersion`] where the package entry asks for a newer
-/// interpreter than this one.
-pub fn open_path(path: &Path, name: &str) -> Result<Option<Library>, Failure> {
+/// [`Refused`] where the package entry asks for a newer interpreter than this
+/// one.
+pub fn open_path(path: &Path, name: &str) -> Result<Option<Library>, Refused> {
     let Some(handle) = dlopen(path) else {
         return Ok(None);
     };
@@ -377,7 +387,7 @@ fn dlopen(path: &Path) -> Option<libloading::Library> {
     unsafe { libloading::Library::new(path) }.ok()
 }
 
-fn package_of(handle: libloading::Library, name: &str) -> Result<Option<Library>, Failure> {
+fn package_of(handle: libloading::Library, name: &str) -> Result<Option<Library>, Refused> {
     type GetPackage = unsafe extern "C" fn() -> *mut RexxPackageEntry;
 
     let get_package = {
@@ -412,28 +422,38 @@ fn package_of(handle: libloading::Library, name: &str) -> Result<Option<Library>
     // long as the mapping `handle` holds. Its layout is the frozen header's.
     let entry = unsafe { &*entry };
 
-    check_version(entry, name)?;
+    let refused = check_version(entry, name).err();
 
     // SAFETY: `entry` is the library's own package entry, so each table
     // pointer is null or the array the extension declared, terminated by a
     // zero-`style` row, and every string in it is a literal in the same
     // mapping. All of it outlives `handle`.
-    let (name, version, methods, routines) = unsafe {
+    let (package_name, version, methods) = unsafe {
         (
             c_bytes(entry.package_name),
             c_bytes(entry.package_version),
             method_table(entry.methods),
-            routine_table(entry.routines),
         )
     };
-
-    Ok(Some(Library {
-        name,
+    let routines = match refused {
+        Some(_) => Vec::new(),
+        // SAFETY: as above.
+        None => unsafe { routine_table(entry.routines) },
+    };
+    let library = Library {
+        name: package_name,
         version,
         methods,
         routines,
         handle,
-    }))
+    };
+    match refused {
+        Some(failure) => Err(Refused {
+            failure,
+            library: Box::new(library),
+        }),
+        None => Ok(Some(library)),
+    }
 }
 
 /// The bytes a C string holds, or `None` where `ptr` is null.

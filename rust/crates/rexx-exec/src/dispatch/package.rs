@@ -420,7 +420,14 @@ fn load_library(
     let name = required_string_named_argument(interp, name, "name")?;
     let name = interp.to_text(name).into_owned();
     writable_package_of(interp, receiver)?;
-    let loaded = matches!(interp.resolve_library(&name), crate::LibraryLoad::Loaded(_));
+    // A version refusal raises here as it does at a directive: measured,
+    // oracle rc 158, `loadLibrary` of a package entry asking for a newer
+    // interpreter is 98.982 on the first ask and answers `1` on the next.
+    let loaded = match interp.resolve_library(&name) {
+        crate::LibraryLoad::Loaded(_) => true,
+        crate::LibraryLoad::Missing => false,
+        crate::LibraryLoad::Version => return Err(Raised::library_version(&name).into()),
+    };
     Ok(Some(interp.counted(usize::from(loaded))))
 }
 

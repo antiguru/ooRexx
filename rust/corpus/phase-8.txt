@@ -63,3 +63,6 @@ lang/library_required_attribute_entry_missing.rex
 # Final-review fixes: what ~package answers for a library-backed EXTERNAL and
 # for a loadExternal* answer, which shares the library's code object.
 lang/library_method_package.rex
+
+# Final-review fixes: a library name that loaded nothing is asked again.
+lang/library_load_retried.rex

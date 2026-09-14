@@ -1,0 +1,6 @@
+count 5
+/* A library name that loaded nothing is not held: the next ask looks again,
+   and finds the copy made between the two. */
+say 'first' .context~package~loadLibrary('yyregexp')
+address system 'cp' value('RETRY_FROM', , 'ENVIRONMENT') value('RETRY_TO', , 'ENVIRONMENT')
+say 'second' .context~package~loadLibrary('yyregexp')

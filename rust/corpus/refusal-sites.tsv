@@ -162,7 +162,7 @@ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:942	off-s
 Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:311	off-send-surface	-	-	-
 Loud	library_routine_call	body	crates/rexx-exec/src/lib.rs:563	off-send-surface	-	-	-
 Loud	library_source	body	crates/rexx-exec/src/lib.rs:464	off-send-surface	-	-	-
-Raised	library_version	body	crates/rexx-exec/src/error.rs:317	off-send-surface	-	-	-
+Raised	library_version	body+send	crates/rexx-exec/src/error.rs:317	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
 Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:244	off-send-surface	-	-	-
 Loud	loop_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:642	off-send-surface	-	-	-
 Raised	lostdigits	body	crates/rexx-exec/src/error.rs:470	off-send-surface	-	-	-

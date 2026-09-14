@@ -8401,7 +8401,12 @@ fn native_load_external(
                     loaded.method(&entry).is_some()
                 }
             }
-            crate::LibraryLoad::Missing | crate::LibraryLoad::Version => false,
+            crate::LibraryLoad::Missing => false,
+            // Measured, oracle rc 158: 98.982 on the first ask, as
+            // `Package~loadLibrary` raises it.
+            crate::LibraryLoad::Version => {
+                return Err(Raised::library_version(&library).into());
+            }
         }
     };
     if !found {

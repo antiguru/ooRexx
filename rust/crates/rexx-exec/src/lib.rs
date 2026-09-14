@@ -1753,10 +1753,12 @@ struct Interp {
     /// [`Interp::object_roots`] for exactly as long as the frame is on this
     /// stack, so a handle that outlives its activation resolves to nothing.
     native_handles: Vec<NativeFrame>,
-    /// Every native library a name has been resolved to, by the name it was
-    /// resolved under -- `PackageManager::packages`
-    /// (`interpreter/package/PackageManager.cpp:233`). A miss is held as well
-    /// as a hit, so a name that failed once fails the same way every time.
+    /// Every native library a name has loaded, by the name it was resolved
+    /// under -- `PackageManager::packages`
+    /// (`interpreter/package/PackageManager.cpp:229-248`). A miss is not held,
+    /// because the oracle removes the package on a failed load and asks again;
+    /// a library whose version check refused is, because that check raises
+    /// between the `put` and the `remove`.
     libraries: Libraries,
     /// Which library procedure each `::METHOD`/`::ATTRIBUTE ... EXTERNAL
     /// "LIBRARY <name>"` bound to, keyed by the identity
@@ -2138,7 +2140,8 @@ pub(crate) enum LibraryLoad {
     /// answers false for both, because `getPackageTable` returns null for each
     /// (`:204`, `:216`), and its callers cannot tell them apart.
     Missing,
-    /// The package entry asks for a newer interpreter than this one.
+    /// The package entry asks for a newer interpreter than this one. This ask
+    /// raises; the library is held, and every later ask answers it loaded.
     Version,
 }
 
@@ -4576,16 +4579,29 @@ impl Interp {
     /// spelling the name in lower case loads.
     pub(crate) fn resolve_library(&mut self, name: &[u8]) -> LibraryLoad {
         if let Some(held) = self.libraries.get(name) {
-            return held.clone();
+            return LibraryLoad::Loaded(Rc::clone(held));
         }
         let search = self.library_search_path();
         let spelling = String::from_utf8_lossy(name).into_owned();
-        let loaded = match rexx_api::load::open(&spelling, &search) {
-            Ok(Some(library)) => LibraryLoad::Loaded(Rc::new(library)),
+        let opened = rexx_api::load::open(&spelling, &search);
+        self.settle_library(name, opened)
+    }
+
+    /// What opening `name` answered, held where the oracle's package table
+    /// keeps it.
+    fn settle_library(
+        &mut self,
+        name: &[u8],
+        opened: Result<Option<rexx_api::load::Library>, rexx_api::load::Refused>,
+    ) -> LibraryLoad {
+        match opened {
+            Ok(Some(library)) => LibraryLoad::Loaded(self.libraries.hold(name, Rc::new(library))),
             Ok(None) => LibraryLoad::Missing,
-            Err(rexx_api::load::Failure::LibraryVersion(_)) => LibraryLoad::Version,
-        };
-        self.libraries.hold(name, loaded)
+            Err(refused) => {
+                self.libraries.hold(name, Rc::from(refused.library));
+                LibraryLoad::Version
+            }
+        }
     }
 
     /// [`Interp::resolve_library`] for a caller whose failure is a condition:

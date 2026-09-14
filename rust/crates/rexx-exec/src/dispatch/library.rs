@@ -251,6 +251,7 @@ impl Host for Interp {
 #[cfg(test)]
 mod tests {
     use std::path::{Path, PathBuf};
+    use std::rc::Rc;
 
     use rexx_api::values::Failure as Refused;
 
@@ -264,6 +265,16 @@ mod tests {
             .join("../../../build/lib")
             .canonicalize()
             .expect("the oracle's build directory is four above this crate")
+    }
+
+    /// The oracle's `librxregexp.so`, opened by path.
+    fn open_rxregexp() -> rexx_api::load::Library {
+        rexx_api::load::open_path(
+            &oracle_library_directory().join("librxregexp.so"),
+            "rxregexp",
+        )
+        .expect("the extension asks for 4.0.0, which is below this interpreter")
+        .expect("the extension publishes RexxGetPackage")
     }
 
     /// An interpreter whose own `LD_LIBRARY_PATH` names that directory. The
@@ -327,19 +338,41 @@ mod tests {
         ));
     }
 
-    /// A name that resolves to nothing is held as such, so the second ask
-    /// reports the same way the first did.
+    /// A name that resolved to nothing is not held, so the next ask opens
+    /// again: `PackageManager::loadLibrary` removes a package whose load
+    /// answered false (`interpreter/package/PackageManager.cpp:240-244`).
     #[test]
-    fn a_name_that_resolves_to_nothing_is_held_as_a_miss() {
+    fn a_name_that_resolves_to_nothing_is_not_held() {
         let mut interp = Interp::new();
         assert!(matches!(
-            interp.resolve_library(b"zorkolib"),
+            interp.settle_library(b"zorkolib", Ok(None)),
             LibraryLoad::Missing
         ));
+        assert!(interp.libraries.get(b"zorkolib").is_none());
+    }
+
+    /// A library whose version check refused raises on the ask that opened it
+    /// and is held, so every later ask answers it loaded without opening
+    /// anything: measured on the oracle with a forged package entry asking
+    /// for 6.0.0, `loadLibrary` is 98.982 and then `1`, and a method of the
+    /// library binds and runs afterwards.
+    #[test]
+    fn a_version_refused_library_raises_once_and_is_held() {
+        let mut interp = Interp::new();
+        let refused = rexx_api::load::Refused {
+            failure: rexx_api::load::Failure::LibraryVersion("forgever".to_owned()),
+            library: Box::new(open_rxregexp()),
+        };
         assert!(matches!(
-            interp.resolve_library(b"zorkolib"),
-            LibraryLoad::Missing
+            interp.settle_library(b"forgever", Err(refused)),
+            LibraryLoad::Version
         ));
+        // No `forgever` is on any search path, so an ask that opened again
+        // would answer `Missing`.
+        let LibraryLoad::Loaded(held) = interp.resolve_library(b"forgever") else {
+            panic!("the refused library was not held");
+        };
+        assert!(held.method(b"RegExp_Parse").is_some());
     }
 
     /// **The end-to-end witness answers the same under a collection at every
@@ -389,29 +422,29 @@ mod tests {
         assert_eq!(swept.stderr, plain.stderr);
     }
 
-    /// A name that has resolved keeps the answer it resolved to, which is
-    /// what stops a second write dropping the interpreter's own reference to
-    /// a loaded library.
+    /// A name that has loaded keeps the library it loaded, which is what stops
+    /// a second write dropping the interpreter's own reference to it.
     #[test]
     fn a_held_library_is_not_replaced_by_a_later_answer() {
+        let (first, second) = (Rc::new(open_rxregexp()), Rc::new(open_rxregexp()));
         let mut libraries = crate::Libraries::new();
-        assert!(matches!(
-            libraries.hold(b"rxregexp", LibraryLoad::Missing),
-            LibraryLoad::Missing
+        assert!(Rc::ptr_eq(
+            &libraries.hold(b"rxregexp", Rc::clone(&first)),
+            &first
         ));
-        assert!(matches!(
-            libraries.hold(b"rxregexp", LibraryLoad::Version),
-            LibraryLoad::Missing
+        assert!(Rc::ptr_eq(
+            &libraries.hold(b"rxregexp", Rc::clone(&second)),
+            &first
         ));
-        assert!(matches!(
-            libraries.get(b"rxregexp"),
-            Some(LibraryLoad::Missing)
+        assert!(Rc::ptr_eq(
+            libraries.get(b"rxregexp").expect("a library was held"),
+            &first
         ));
-        // The control that says the second answer was refused rather than
+        // The control that says the second library was refused rather than
         // never built: under a name nothing is held for it is taken.
-        assert!(matches!(
-            libraries.hold(b"zorkolib", LibraryLoad::Version),
-            LibraryLoad::Version
+        assert!(Rc::ptr_eq(
+            &libraries.hold(b"zorkolib", Rc::clone(&second)),
+            &second
         ));
     }
 
