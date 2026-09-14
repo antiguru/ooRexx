@@ -320,7 +320,7 @@ fn every_row_names_the_union_member_the_header_gives_its_code() {
 fn the_special_rows_are_the_ones_that_consume_no_argument() {
     let special: Vec<u16> = rows()
         .map(|(code, _)| code)
-        .filter(|code| consumes_argument(*code) == Some(false))
+        .filter(|code| !consumes_argument(*code))
         .collect();
     assert_eq!(
         special,
@@ -333,7 +333,9 @@ fn the_special_rows_are_the_ones_that_consume_no_argument() {
             code::SUPER
         ]
     );
-    assert_eq!(consumes_argument(9999), None);
+    // A code the table does not know is `processArguments`' `default:`,
+    // which consumes an argument.
+    assert!(consumes_argument(9999));
 }
 
 /// Which rows have a conversion, as a set rather than one name at a time. A
@@ -399,11 +401,15 @@ fn an_unfilled_row_refuses_and_names_its_code() {
     assert!(refusal.to_string().contains("Phase 8"));
 }
 
-/// A code the header does not define is a signature error, which is the
-/// oracle's `default` in both switches.
+/// A code the header does not define is a signature error where the oracle
+/// reaches a `default:` with it, and a missing argument first where the
+/// argument is absent and the code not optional. Measured through a forged
+/// extension, oracle: code 9 with no argument is 88.901, with one 93.968, and
+/// optional with none 93.968.
 #[test]
 fn a_code_the_table_does_not_know_is_a_signature_error() {
     let mut host = Interpreter::new();
+    let supplied = host.text(b"supplied");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
         host: &mut host,
@@ -411,12 +417,41 @@ fn a_code_the_table_does_not_know_is_a_signature_error() {
     };
     assert_eq!(
         to_native(&mut cx, 9999, None, 1),
-        Err(Failure::Signature),
-        "an unknown code must not be read as a missing argument"
+        Err(Failure::MissingArgument { position: 1 }),
+        "a required argument is checked before the code"
+    );
+    assert_eq!(
+        to_native(&mut cx, 9999, Some(supplied), 1),
+        Err(Failure::Signature)
+    );
+    assert_eq!(
+        to_native(&mut cx, OPTIONAL_ARGUMENT | 9999, None, 1),
+        Err(Failure::Signature)
     );
     assert_eq!(
         from_native(&mut cx, 9999, Value::Int(0)),
         Err(Failure::ResultSignature)
+    );
+}
+
+/// A result word carrying the optional bit is no row of `valueToObject`'s
+/// switch, which reads the word unstripped: measured through a forged
+/// extension, oracle 93.968 where the stripped word would convert.
+#[test]
+fn a_result_word_carrying_the_optional_bit_is_a_signature_error() {
+    let mut host = Interpreter::new();
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    assert_eq!(
+        from_native(&mut cx, OPTIONAL_ARGUMENT | code::INT, Value::Int(7)),
+        Err(Failure::ResultSignature)
+    );
+    assert_eq!(
+        from_native(&mut cx, code::INT, Value::Int(7)),
+        Ok(Some(ObjRef::small_int(7).expect("a small integer")))
     );
 }
 

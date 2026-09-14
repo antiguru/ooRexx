@@ -60,20 +60,16 @@ pub fn method(
     let returns = signature.first().copied().unwrap_or(ARGUMENT_TERMINATOR);
 
     let mut descriptors: [ValueDescriptor; MAX_NATIVE_ARGUMENTS] = std::array::from_fn(|_| empty());
-    descriptors[0] = values::descriptor(
-        returns,
-        Converted {
-            value: Value::Omitted,
-            flags: 0,
-        },
-    );
+    // The result word as declared, optional bit and all
+    // (`NativeActivation.cpp:228`).
+    descriptors[0].r#type = returns;
 
     // The oracle's `inputIndex`: a special argument fills a descriptor
     // without consuming one of these, which is why the position an error
     // reports counts only the arguments (`NativeActivation.cpp:327`).
     let mut input = 0;
     for (output, declared) in signature.iter().copied().enumerate().skip(1) {
-        let consumes = values::consumes_argument(declared).ok_or(Failure::Signature)?;
+        let consumes = values::consumes_argument(declared);
         let argument = if consumes {
             arguments.get(input).copied().flatten()
         } else {
@@ -92,8 +88,7 @@ pub fn method(
         return Err(Failure::TooManyArguments { expected: input });
     }
 
-    let repr = values::repr(returns);
-    let written = entry.call(context, &mut descriptors, repr);
+    let written = entry.call(context, &mut descriptors, values::result_repr(returns));
 
     if returns == ARGUMENT_TERMINATOR {
         return Ok(None);
@@ -241,6 +236,27 @@ mod tests {
         arguments: *mut ValueDescriptor,
     ) -> *mut u16 {
         answer(arguments, &TOO_LONG)
+    }
+
+    /// An `int` result and one parameter of a code the header does not
+    /// define.
+    static UNKNOWN_CODE: [u16; 3] = [code::INT, 9, ARGUMENT_TERMINATOR];
+
+    /// An `int` result declared with the optional bit.
+    static OPTIONAL_RESULT: [u16; 2] = [OPTIONAL_ARGUMENT | code::INT, ARGUMENT_TERMINATOR];
+
+    extern "C" fn unknown_code_probe(
+        _context: *mut RexxMethodContext_,
+        arguments: *mut ValueDescriptor,
+    ) -> *mut u16 {
+        answer(arguments, &UNKNOWN_CODE)
+    }
+
+    extern "C" fn optional_result_probe(
+        _context: *mut RexxMethodContext_,
+        arguments: *mut ValueDescriptor,
+    ) -> *mut u16 {
+        answer(arguments, &OPTIONAL_RESULT)
     }
 
     /// A stub that publishes no signature at all.
@@ -545,6 +561,40 @@ mod tests {
             run.events,
             vec![Event::Entered { array: false }],
             "the stub must not be entered a second time"
+        );
+    }
+
+    /// A parameter code nobody defines consumes an argument, and its absence
+    /// is checked first: measured through a forged extension, oracle 88.901
+    /// with no argument and 93.968 with one. Neither reaches the call.
+    #[test]
+    fn an_unknown_parameter_code_is_an_argument_position() {
+        let entry = stub_entry(b"unknown", unknown_code_probe);
+        let missing = run(&entry, 0);
+        assert_eq!(
+            missing.outcome,
+            Err(Failure::MissingArgument { position: 1 })
+        );
+        let supplied = run(&entry, 1);
+        assert_eq!(supplied.outcome, Err(Failure::Signature));
+        assert_eq!(supplied.events, vec![Event::Entered { array: false }]);
+    }
+
+    /// A result word carrying the optional bit is refused once the call has
+    /// run, as `valueToObject` refuses it inside the call's `try`
+    /// (`NativeActivation.cpp:1302-1310`).
+    #[test]
+    fn a_result_word_carrying_the_optional_bit_is_refused_after_the_call() {
+        let entry = stub_entry(b"optional_result", optional_result_probe);
+        let run = run(&entry, 0);
+        assert_eq!(run.outcome, Err(Failure::ResultSignature));
+        assert_eq!(
+            run.events,
+            vec![
+                Event::Entered { array: false },
+                Event::Entered { array: true },
+            ],
+            "the stub runs before the result is refused"
         );
     }
 

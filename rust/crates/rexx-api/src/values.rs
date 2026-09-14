@@ -924,11 +924,20 @@ fn row(code: u16) -> Option<&'static Row> {
     TABLE.iter().find(|row| row.code == code)
 }
 
+/// The union member a declared result word's value occupies, or `None` for
+/// a word the table does not know. The word is read as declared, optional bit
+/// included, because `valueToObject` switches on it unstripped
+/// (`NativeActivation.cpp:720`, `:855-858`).
+pub fn result_repr(declared: u16) -> Option<Repr> {
+    row(declared).map(|row| row.repr)
+}
+
 /// Whether the code in `declared` takes its value from the argument list.
 ///
-/// Returns `None` for a code the table does not know.
-pub fn consumes_argument(declared: u16) -> Option<bool> {
-    row(argument_type(declared)).map(|row| row.source == Source::Argument)
+/// A code the table does not know does: it is `processArguments`' `default:`,
+/// which consumes an argument (`NativeActivation.cpp:325-327`, `:672`).
+pub fn consumes_argument(declared: u16) -> bool {
+    row(argument_type(declared)).is_none_or(|row| row.source == Source::Argument)
 }
 
 /// `argument` converted into the C value `declared` asks for.
@@ -943,29 +952,32 @@ pub fn to_native(
     position: usize,
 ) -> Result<Converted, Failure> {
     let code = argument_type(declared);
-    let Some(row) = row(code) else {
-        return Err(Failure::Signature);
-    };
+    let row = row(code);
     // The absent cases are settled before the per-type conversion, as they
     // are in the C++: a missing required argument and an omitted optional one
-    // are both answered without entering the type switch.
-    let object = match row.source {
-        Source::Special => ObjRef::NIL,
-        Source::Argument => match argument {
+    // are both answered without entering the type switch, and a code the
+    // table does not know is an argument position like any other until then
+    // (`NativeActivation.cpp:607-612`).
+    let object = match row.map(|row| row.source) {
+        Some(Source::Special) => ObjRef::NIL,
+        Some(Source::Argument) | None => match argument {
             Some(object) => object,
             None if !is_optional(declared) => {
                 return Err(Failure::MissingArgument { position });
             }
             None => {
-                return match row.absent {
-                    Absent::Zero => Ok(Converted {
+                return match row.map(|row| row.absent) {
+                    Some(Absent::Zero) => Ok(Converted {
                         value: Value::Omitted,
                         flags: 0,
                     }),
-                    Absent::Signature => Err(Failure::Signature),
+                    Some(Absent::Signature) | None => Err(Failure::Signature),
                 };
             }
         },
+    };
+    let Some(row) = row else {
+        return Err(Failure::Signature);
     };
     let convert = row.to_native.ok_or(Failure::Unfilled {
         code,
@@ -989,12 +1001,14 @@ pub fn from_native(
     declared: u16,
     value: Value,
 ) -> Result<Option<ObjRef>, Failure> {
-    let code = argument_type(declared);
     // `valueToObject` treats a zero type as an omitted value rather than a bad
-    // one, which is what makes a partly filled argument list convertible.
-    if code == ARGUMENT_TERMINATOR {
+    // one, which is what makes a partly filled argument list convertible. The
+    // word is not stripped of its optional bit: the switch reads it as
+    // declared (`NativeActivation.cpp:720`).
+    if declared == ARGUMENT_TERMINATOR {
         return Ok(None);
     }
+    let code = declared;
     let Some(row) = row(code) else {
         return Err(Failure::ResultSignature);
     };

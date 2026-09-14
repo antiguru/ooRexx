@@ -50,7 +50,9 @@
 # argument_not_a_class, argument_not_an_instance and
 # scope_override_not_a_class (88.914), or of any two of
 # missing_internal_argument, missing_named_argument and missing_native_argument
-# (88.901), leaves every test in refusal_sites.rs green. Measured. The groups
+# (88.901), or of missing_argument_named with missing_method_argument (93.903),
+# or of incorrect_method_result_signature with incorrect_method_signature
+# (93.968), leaves every test in refusal_sites.rs green. Measured. The groups
 # are enumerated by `the_answers_more_than_one_row_shares_are_the_recorded_ones`,
 # which is what keeps this paragraph true rather than merely written down.
 #
@@ -138,7 +140,7 @@ Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1591	off-send-sur
 Loud	guard_when_false	body	crates/rexx-exec/src/lib.rs:683	off-send-surface	-	-	-
 Raised	halt	body	crates/rexx-exec/src/error.rs:159	off-send-surface	-	-	-
 Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
-Raised	incorrect_method_result_signature	send	crates/rexx-exec/src/error.rs:345	not-run	no	no route: the one forged return word in reach, OPTIONAL|int, converts until the return word is checked raw	-
+Raised	incorrect_method_result_signature	send	crates/rexx-exec/src/error.rs:345	agrees	yes	93.968	o~retopt over ::method retopt external naming a forged extension's procedure whose result word is OPTIONAL|int -- no oracle-built extension declares one, so the program cannot be a corpus witness
 Raised	incorrect_method_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	93.968	o~unknown(1) over ::method unknown external naming a forged extension's procedure that declares parameter code 9 -- no oracle-built extension declares one, so the program cannot be a corpus witness
 Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:884	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
 Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1119	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
