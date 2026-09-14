@@ -52,3 +52,10 @@ lang/external_method_package_blame.rex
 # argument with no string value names the declaring package with no line.
 lang/library_string_argument.rex
 lang/library_method_no_string_value.rex
+
+# Final-review fixes: a library load failure in a required package names that
+# package's own file and line.
+lang/library_required_method_library_missing.rex
+lang/library_required_method_entry_missing.rex
+lang/library_required_routine_entry_missing.rex
+lang/library_required_attribute_entry_missing.rex

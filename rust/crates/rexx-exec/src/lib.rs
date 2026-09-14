@@ -2887,7 +2887,7 @@ impl Interp {
             // `EXTERNAL`: measured, oracle, a file opening `say "prolog ran"`
             // and carrying `::method x external "LIBRARY zorkolib z"` is
             // 98.903 rc 158 with stdout empty.
-            self.resolve_directive_library(program, directive)?;
+            self.resolve_directive_library(id, program, directive)?;
         }
 
         // **A second pass, because the oracle's own translation-time
@@ -4520,9 +4520,11 @@ impl Interp {
     ///
     /// Answers nothing for a directive whose `EXTERNAL` names the `REXX`
     /// package or none at all; those are [`unresolved_external`]'s and
-    /// [`directive_gap`]'s.
+    /// [`directive_gap`]'s. `id` is the package the directive is in, whose
+    /// file a failure is reported against.
     fn resolve_directive_library(
         &mut self,
+        id: ProgramId,
         program: &Rc<Program>,
         directive: &Directive,
     ) -> Result<(), Failure> {
@@ -4540,7 +4542,7 @@ impl Interp {
         let loaded = match self.require_library(&library) {
             Ok(loaded) => loaded,
             Err(failure) => {
-                self.blame_directive(program, directive);
+                self.blame_directive_in(id, program, directive);
                 return Err(failure);
             }
         };
@@ -4555,7 +4557,7 @@ impl Interp {
                 loaded.method(&bind.procedure).is_some()
             };
             if !found {
-                self.blame_directive(program, directive);
+                self.blame_directive_in(id, program, directive);
                 return Err(if routine {
                     Raised::external_routine_not_found(&bind.procedure).into()
                 } else {
