@@ -318,8 +318,8 @@ mod tests {
         ));
     }
 
-    /// The spellings `getVariableRetriever` answers nothing for, beside the
-    /// two `rxregexp` really writes.
+    /// The spellings `getVariableRetriever` answers nothing for, beside
+    /// `CSELF` and `!POS`, which `rxregexp` really writes.
     #[test]
     fn a_pool_name_is_upcased_and_a_compound_one_is_refused() {
         assert_eq!(pool_variable_name(b"CSELF").as_deref(), Some(&b"CSELF"[..]));

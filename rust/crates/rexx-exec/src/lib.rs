@@ -772,9 +772,9 @@ fn class_references(class: &ClassDirective) -> impl Iterator<Item = &ClassRef> {
         .chain(class.inherit.iter())
 }
 
-// Which stage answers when two directives could each refuse a file, all
+// Which stage answers when directives could each refuse a file, all
 // measured against the oracle. [`directive_gap`] and
-// [`Interp::resolve_directive_library`] are the two walks it describes.
+// [`Interp::resolve_directive_library`] are the walks it describes.
 // ```text
 // ::routine/::method/::attribute EXTERNAL  vs a failing ::CLASS  98.903 rc 158, the EXTERNAL line
 // ::routine/::method/::attribute EXTERNAL  vs a ::CLASS cycle    98.903 rc 158, the EXTERNAL line
@@ -806,7 +806,7 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         })
     };
     match kind {
-        // The two `::ROUTINE EXTERNAL` forms whose entry point is not in a
+        // The `::ROUTINE EXTERNAL` forms whose entry point is not in a
         // shared library: `REGISTERED`, and the `REXX` package, whose routine
         // table is `rexx_routines[]` and not `dispatch::native`'s method
         // registry (`runtime/InternalPackage.cpp:230`, from

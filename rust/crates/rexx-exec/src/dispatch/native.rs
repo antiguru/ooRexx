@@ -99,10 +99,10 @@ const fn implemented(
 /// **Named per row rather than per family**, because the two came apart:
 /// `handle_set` needs `from_raw_fd` and so stays refused after the stream
 /// family is built, and a refusal naming a closed phase would be a lie.
-/// It is owed by the phase that widens D-U1 past this crate's two granted
-/// files, which is Phase 10's -- adopting a descriptor the interpreter did
-/// not open is the same grant RXAPI and the external queues need. It never
-/// needed the loader.
+/// It is owed by the phase that widens D-U1 past `rexx-api`'s `ffi.rs` and
+/// `load.rs`, which is Phase 10's -- adopting a descriptor the interpreter
+/// did not open is the same grant RXAPI and the external queues need. It
+/// never needed the loader.
 const fn deferred(name: &'static str, family: Family, owner: &'static str) -> NativeExternal {
     NativeExternal {
         name,
