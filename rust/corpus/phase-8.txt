@@ -66,3 +66,7 @@ lang/library_method_package.rex
 
 # Final-review fixes: a library name that loaded nothing is asked again.
 lang/library_load_retried.rex
+
+# Final-review fixes: the library search is the LD_LIBRARY_PATH the
+# interpreter started with, whatever the program writes into it afterwards.
+lang/library_search_path_fixed.rex

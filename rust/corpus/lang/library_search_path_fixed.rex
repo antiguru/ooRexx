@@ -1,0 +1,9 @@
+/* The library search reads LD_LIBRARY_PATH as the interpreter was started
+   with it: a directory the program writes into the variable afterwards is not
+   searched, though a copy of the library waits there. */
+address system 'mkdir' value('WIDEN_TO', , 'ENVIRONMENT')
+address system 'cp' value('WIDEN_FROM', , 'ENVIRONMENT') value('WIDEN_TO', , 'ENVIRONMENT')'/libzzregexp.so'
+call value 'LD_LIBRARY_PATH', value('WIDEN_TO', , 'ENVIRONMENT'), 'ENVIRONMENT'
+say 'loadLibrary' .context~package~loadLibrary('zzregexp')
+m = .Method~loadExternalMethod('m', 'LIBRARY zzregexp RegExp_Parse')
+say 'loadExternalMethod' (m \= .nil)

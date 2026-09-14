@@ -1534,6 +1534,15 @@ struct Interp {
     /// edition, and the test harnesses run interpreters on threads in one
     /// process, so a write reaching the process would reach every other run.
     env: Vec<(Vec<u8>, Vec<u8>)>,
+    /// The directories `LD_LIBRARY_PATH` named in the environment this
+    /// interpreter was started with, which a bare library name is looked for
+    /// in before the undecorated `dlopen`.
+    ///
+    /// Taken once, as the process loader takes the variable once: measured,
+    /// oracle rc 0, a program that writes a directory holding a copy of the
+    /// library into `LD_LIBRARY_PATH` through `VALUE` still loads nothing
+    /// from it.
+    library_search: Vec<std::path::PathBuf>,
     /// The directory relative paths resolve against, for the same reason:
     /// `std::env::set_current_dir` is process-wide. `DIRECTORY()` moves this
     /// and nothing else.
@@ -2131,6 +2140,27 @@ enum GeneratedKind {
     Constant,
 }
 
+/// The directories `LD_LIBRARY_PATH` names in `environment`.
+///
+/// The process loader read that variable before any interpreter existed, so a
+/// value an interpreter is handed reaches the search no other way. Writing it
+/// back to the process is forbidden here and would reach every other
+/// interpreter in the process besides.
+fn library_search_of(environment: &[(Vec<u8>, Vec<u8>)]) -> Vec<std::path::PathBuf> {
+    use std::os::unix::ffi::OsStrExt;
+    let Some((_, value)) = environment
+        .iter()
+        .find(|(name, _)| name.as_slice() == b"LD_LIBRARY_PATH")
+    else {
+        return Vec::new();
+    };
+    value
+        .split(|byte| *byte == b':')
+        .filter(|part| !part.is_empty())
+        .map(|part| std::path::PathBuf::from(std::ffi::OsStr::from_bytes(part)))
+        .collect()
+}
+
 /// A native library the interpreter has tried to resolve.
 #[derive(Clone)]
 pub(crate) enum LibraryLoad {
@@ -2242,6 +2272,12 @@ impl Interp {
     /// other caller -- the unit tests throughout this crate, which is nearly
     /// all of them -- gets the value below.
     fn new() -> Interp {
+        let env: Vec<(Vec<u8>, Vec<u8>)> = {
+            use std::os::unix::ffi::OsStrExt;
+            std::env::vars_os()
+                .map(|(name, value)| (name.as_bytes().to_vec(), value.as_bytes().to_vec()))
+                .collect()
+        };
         Interp {
             heap: Heap::new(),
             roots: RootSet::new(),
@@ -2251,12 +2287,8 @@ impl Interp {
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             text_numbers: crate::value::TextNumbers::new(),
             result_buffer: std::cell::Cell::new(Vec::new()),
-            env: {
-                use std::os::unix::ffi::OsStrExt;
-                std::env::vars_os()
-                    .map(|(name, value)| (name.as_bytes().to_vec(), value.as_bytes().to_vec()))
-                    .collect()
-            },
+            library_search: library_search_of(&env),
+            env,
             cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
             locals: Vec::new(),
             running: None,
@@ -4549,24 +4581,11 @@ impl Interp {
         }
     }
 
-    /// The directories a bare library name is looked for in before the
-    /// undecorated `dlopen`, which are the ones `LD_LIBRARY_PATH` names in
-    /// **this interpreter's** environment.
-    ///
-    /// The process loader read that variable once at start-up, so a value
-    /// this interpreter was handed afterwards reaches the search no other
-    /// way. Writing it back to the process is forbidden here and would reach
-    /// every other interpreter in the process besides.
-    fn library_search_path(&self) -> Vec<std::path::PathBuf> {
-        use std::os::unix::ffi::OsStrExt;
-        let Some(value) = self.env_get(b"LD_LIBRARY_PATH") else {
-            return Vec::new();
-        };
-        value
-            .split(|byte| *byte == b':')
-            .filter(|part| !part.is_empty())
-            .map(|part| std::path::PathBuf::from(std::ffi::OsStr::from_bytes(part)))
-            .collect()
+    /// Replaces the environment this interpreter starts with, and the library
+    /// search taken from it.
+    pub(crate) fn adopt_environment(&mut self, environment: Vec<(Vec<u8>, Vec<u8>)>) {
+        self.library_search = library_search_of(&environment);
+        self.env = environment;
     }
 
     /// `PackageManager::loadLibrary` (`package/PackageManager.cpp:229`): the
@@ -4581,9 +4600,8 @@ impl Interp {
         if let Some(held) = self.libraries.get(name) {
             return LibraryLoad::Loaded(Rc::clone(held));
         }
-        let search = self.library_search_path();
         let spelling = String::from_utf8_lossy(name).into_owned();
-        let opened = rexx_api::load::open(&spelling, &search);
+        let opened = rexx_api::load::open(&spelling, &self.library_search);
         self.settle_library(name, opened)
     }
 
@@ -5308,6 +5326,7 @@ impl Interp {
             // own environment, current directory and `SETLOCAL` snapshots are
             // not the collector's.
             env: _,
+            library_search: _,
             cwd: _,
             locals: _,
             // The embedding's own writers, which take bytes and hold nothing
@@ -5656,7 +5675,7 @@ fn execute(
         interp.cwd = directory;
     }
     if let Some(environment) = parts.environment {
-        interp.env = environment;
+        interp.adopt_environment(environment);
     }
     // Armed here rather than in `Interp::new`, and after the parse, so that
     // what it bounds is the running of this program. `Interp::bootstrap_library`

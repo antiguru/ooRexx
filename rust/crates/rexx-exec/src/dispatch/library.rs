@@ -277,15 +277,17 @@ mod tests {
         .expect("the extension publishes RexxGetPackage")
     }
 
-    /// An interpreter whose own `LD_LIBRARY_PATH` names that directory. The
-    /// process variable is not touched: this is the interpreter's copy, which
-    /// is the one the search reads.
+    /// An interpreter started with an `LD_LIBRARY_PATH` naming that
+    /// directory. The process variable is not touched: this is the
+    /// interpreter's copy, which is the one the search reads.
     fn interp_that_can_see_rxregexp() -> Interp {
         let mut interp = Interp::new();
-        let directory = oracle_library_directory()
-            .into_os_string()
-            .into_encoded_bytes();
-        interp.env_set(b"LD_LIBRARY_PATH", Some(directory));
+        interp.adopt_environment(vec![(
+            b"LD_LIBRARY_PATH".to_vec(),
+            oracle_library_directory()
+                .into_os_string()
+                .into_encoded_bytes(),
+        )]);
         interp
     }
 
@@ -325,7 +327,7 @@ mod tests {
     #[test]
     fn the_search_path_is_what_makes_the_name_resolve() {
         let mut bare = Interp::new();
-        bare.env_set(b"LD_LIBRARY_PATH", None);
+        bare.adopt_environment(Vec::new());
         assert!(
             matches!(bare.resolve_library(b"rxregexp"), LibraryLoad::Missing),
             "librxregexp.so is on the process loader's own path, so the test above \
@@ -334,6 +336,29 @@ mod tests {
         let mut seeing = interp_that_can_see_rxregexp();
         assert!(matches!(
             seeing.resolve_library(b"rxregexp"),
+            LibraryLoad::Loaded(_)
+        ));
+    }
+
+    /// The search is the one the interpreter started with: a directory written
+    /// into its `LD_LIBRARY_PATH` afterwards, as `VALUE(..., 'ENVIRONMENT')`
+    /// writes it, is not searched. The control is the same directory handed in
+    /// at the start.
+    #[test]
+    fn a_search_directory_written_after_the_start_is_not_searched() {
+        let directory = oracle_library_directory()
+            .into_os_string()
+            .into_encoded_bytes();
+        let mut late = Interp::new();
+        late.adopt_environment(Vec::new());
+        late.env_set(b"LD_LIBRARY_PATH", Some(directory));
+        assert!(matches!(
+            late.resolve_library(b"rxregexp"),
+            LibraryLoad::Missing
+        ));
+        let mut early = interp_that_can_see_rxregexp();
+        assert!(matches!(
+            early.resolve_library(b"rxregexp"),
             LibraryLoad::Loaded(_)
         ));
     }
