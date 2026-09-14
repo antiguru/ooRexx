@@ -414,8 +414,9 @@ impl Loud {
         }
     }
 
-    /// `loadExternalMethod` and `loadExternalRoutine` for an entry point in
-    /// a shared library, which is Phase 8's `dlopen`.
+    /// `loadExternalRoutine` for an entry point of the `REXX` package, whose
+    /// routine table this crate does not keep, and a library procedure that
+    /// resolved at install and no longer does.
     fn external_entry_point(what: &'static str) -> Loud {
         Loud {
             message: owned_message(what, Some("Phase 8")),
@@ -546,6 +547,17 @@ impl Loud {
     fn parse_trigger_operand() -> Loud {
         Loud {
             message: "a PARSE template trigger carries no position operand".to_string(),
+        }
+    }
+
+    /// A `::ROUTINE EXTERNAL` bound to a procedure of a shared library was
+    /// called. The directive installs, because the library and the procedure
+    /// are the oracle's own 98.903 and 90.999 at install time; running one
+    /// needs the routine half of the two-call protocol, which this phase's
+    /// surface half owes.
+    fn library_routine_call() -> Loud {
+        Loud {
+            message: owned_message("a call to a ::ROUTINE EXTERNAL", Some("Phase 8")),
         }
     }
 
@@ -760,6 +772,31 @@ fn class_references(class: &ClassDirective) -> impl Iterator<Item = &ClassRef> {
         .chain(class.inherit.iter())
 }
 
+// Which stage answers when two directives could each refuse a file, all
+// measured against the oracle. [`directive_gap`] and
+// [`Interp::resolve_directive_library`] are the two walks it describes.
+// ```text
+// ::routine/::method/::attribute EXTERNAL  vs a failing ::CLASS  98.903 rc 158, the EXTERNAL line
+// ::routine/::method/::attribute EXTERNAL  vs a ::CLASS cycle    98.903 rc 158, the EXTERNAL line
+// ::routine EXTERNAL                       vs ::requires         98.903 rc 158, the EXTERNAL line
+// ::annotate routine nosuch                vs a failing ::CLASS  99.945 rc 157, the ::ANNOTATE line
+// ::annotate routine nosuch                vs a ::CLASS cycle    99.945 rc 157, the ::ANNOTATE line
+// ::annotate routine nosuch                vs ::routine EXTERNAL whichever is FIRST in the file
+// ::requires 'nosuch.rex'                  vs a failing ::CLASS  43.901 rc 213, the ::REQUIRES line
+// ::requires 'nosuch.rex'                  vs a ::CLASS cycle    98.911 rc 158, the cycle's root
+// ::options digits 12                      vs a failing ::CLASS  98.909 rc 158, the ::CLASS line
+// ::class q metaclass zzz                  vs a failing ::CLASS  98.908 or 98.909, whichever is first
+// ```
+// ```text
+// ::class a / ::constant kk (1/0) / ::routine r external
+//                              'LIBRARY REXX Filespec'                 42.3 rc 214
+// ```
+// ```text
+// ::routine r / ::annotate routine r / ::class a subclass zzznotaclass  98.909 rc 158
+// ::class a / ::constant kk (1/0) / ::routine r / ::annotate routine r  42.3 rc 214
+// ::routine r / ::annotate routine r / a duplicate ::ROUTINE pair       99.903 rc 157
+// ::routine r / ::annotate routine r / a class-less ::constant (1/0)    99.906 rc 157
+// ```
 /// The gap a `::` directive declares at install time, or `None` for one this
 /// crate can install.
 fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
@@ -769,67 +806,47 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         })
     };
     match kind {
-        // Binds an entry point before `main` and whether or not the routine
-        // is ever called. **Every one of its forms stays here, the
-        // `LIBRARY REXX` one included**, and that is worth saying because the
-        // `::METHOD` arm below moves exactly that spelling: a routine
-        // resolves against `rexx_routines[]`, which
-        // `dispatch::native`'s registry is not
-        // (`runtime/InternalPackage.cpp:230`, from `NativeFunctions.h`).
-        // Measured, oracle: `::routine r external "LIBRARY nosuchlib
-        // nosuchfn"` and the same without the third word are both 98.903 rc
-        // 158 with stdout empty; `"LIBRARY REXX file_separator"` is 90.999 rc
-        // 166, naming a method as a routine it cannot find; `"LIBRARY REXX
-        // Filespec"` is rc 0 and the routine runs.
-        DirectiveKind::Routine(routine) if routine.external.is_some() => {
-            gap("::ROUTINE EXTERNAL", "Phase 8")
-        }
-        // **The `EXTERNAL` forms this phase binds are the ones whose library
-        // is `REXX`**, and `dispatch::native::method_external` and its
-        // `::ATTRIBUTE` half are what decide that -- read here and again by
-        // `Interp::install_directives`, so the forms that bind and the forms
-        // that are refused cannot come apart. An entry point the `REXX`
-        // package does not export is 90.998 in that walk and not a gap here:
-        // the oracle answers it, so it is a differential row rather than a
-        // refusal.
-        DirectiveKind::Method(method) => match dispatch::native::method_external(method) {
-            None
-            | Some(
-                dispatch::native::MethodExternal::LibraryRexx(_)
-                | dispatch::native::MethodExternal::Attribute(_),
-            ) => None,
-            // Loads a shared library, which is Phase 8's, exactly as
-            // `::ROUTINE EXTERNAL` above does.
-            Some(dispatch::native::MethodExternal::OtherLibrary) => gap(
-                "::METHOD EXTERNAL naming a library other than REXX",
-                "Phase 8",
-            ),
-        },
-        DirectiveKind::Attribute(attribute) => {
-            match dispatch::native::attribute_external(attribute) {
-                Some(dispatch::native::MethodExternal::OtherLibrary) => gap(
-                    "::ATTRIBUTE EXTERNAL naming a library other than REXX",
-                    "Phase 8",
-                ),
-                _ => None,
-            }
-        }
-        // Loads a shared library rather than a package file, which is Phase
-        // 8's exactly as `::ROUTINE EXTERNAL` above is.
-        DirectiveKind::Requires(requires) if requires.library => {
-            gap("::REQUIRES LIBRARY", "Phase 8")
+        // The two `::ROUTINE EXTERNAL` forms whose entry point is not in a
+        // shared library: `REGISTERED`, and the `REXX` package, whose routine
+        // table is `rexx_routines[]` and not `dispatch::native`'s method
+        // registry (`runtime/InternalPackage.cpp:230`, from
+        // `NativeFunctions.h`). Measured, oracle: `"LIBRARY REXX
+        // file_separator"` is 90.999 rc 166, naming a method as a routine it
+        // cannot find; `"LIBRARY REXX Filespec"` is rc 0 and the routine runs.
+        // The library-backed forms are `Interp::resolve_directive_library`'s.
+        DirectiveKind::Routine(routine)
+            if routine.external.is_some()
+                && dispatch::native::routine_external(routine).is_none() =>
+        {
+            gap("::ROUTINE EXTERNAL naming REXX or REGISTERED", "Phase 8")
         }
         // `::OPTIONS` installs (`Interp::install_directives`' own walk): it
         // resolves no name, runs no code, and every setting it writes is one
         // an activation of this package's code starts from.
         DirectiveKind::Annotate(_)
+        | DirectiveKind::Attribute(_)
         | DirectiveKind::Class(_)
         | DirectiveKind::Constant(_)
+        | DirectiveKind::Method(_)
         | DirectiveKind::Options(_)
         | DirectiveKind::Requires(_)
         | DirectiveKind::Resource(_)
         | DirectiveKind::Routine(_) => None,
     }
+}
+
+/// The refusal a `::ROUTINE` with no assembled body owes when it is called:
+/// the library-backed refusal for a directive whose `EXTERNAL` names one, and
+/// the internal-inconsistency one otherwise.
+fn routine_without_a_body(program: &Program, directive: usize) -> Loud {
+    let external = match program.directives.get(directive).map(|held| &held.kind) {
+        Some(DirectiveKind::Routine(routine)) => dispatch::native::routine_external(routine),
+        _ => None,
+    };
+    if external.is_some() {
+        return Loud::library_routine_call();
+    }
+    Loud::missing_body()
 }
 
 /// The `LIBRARY REXX` entry point a directive's `EXTERNAL` names and the
@@ -843,38 +860,6 @@ fn unresolved_external(kind: &DirectiveKind) -> Option<Vec<u8>> {
         _ => None,
     };
     dispatch::native::unresolved_entry(external.as_ref()).map(<[u8]>::to_vec)
-}
-
-/// The refusal a directive stage owes, or `None` when every directive the
-/// stage selects installs.
-/// ```text
-/// ::routine/::method/::attribute EXTERNAL  vs a failing ::CLASS  98.903 rc 158, the EXTERNAL line
-/// ::routine/::method/::attribute EXTERNAL  vs a ::CLASS cycle    98.903 rc 158, the EXTERNAL line
-/// ::routine EXTERNAL                       vs ::requires         98.903 rc 158, the EXTERNAL line
-/// ::annotate routine nosuch                vs a failing ::CLASS  99.945 rc 157, the ::ANNOTATE line
-/// ::annotate routine nosuch                vs a ::CLASS cycle    99.945 rc 157, the ::ANNOTATE line
-/// ::annotate routine nosuch                vs ::routine EXTERNAL whichever is FIRST in the file
-/// ::requires 'nosuch.rex'                  vs a failing ::CLASS  43.901 rc 213, the ::REQUIRES line
-/// ::requires 'nosuch.rex'                  vs a ::CLASS cycle    98.911 rc 158, the cycle's root
-/// ::options digits 12                      vs a failing ::CLASS  98.909 rc 158, the ::CLASS line
-/// ::class q metaclass zzz                  vs a failing ::CLASS  98.908 or 98.909, whichever is first
-/// ```
-/// ```text
-/// ::class a / ::constant kk (1/0) / ::routine r external
-///                              'LIBRARY REXX Filespec'                 42.3 rc 214
-/// ```
-/// ```text
-/// ::routine r / ::annotate routine r / ::class a subclass zzznotaclass  98.909 rc 158
-/// ::class a / ::constant kk (1/0) / ::routine r / ::annotate routine r  42.3 rc 214
-/// ::routine r / ::annotate routine r / a duplicate ::ROUTINE pair       99.903 rc 157
-/// ::routine r / ::annotate routine r / a class-less ::constant (1/0)    99.906 rc 157
-/// ```
-fn staged_gap(program: &Program, stage: fn(&DirectiveKind) -> bool) -> Option<Loud> {
-    program
-        .directives
-        .iter()
-        .filter(|directive| stage(&directive.kind))
-        .find_map(|directive| directive_gap(&directive.kind))
 }
 
 /// The classes of the file being installed that a `::CLASS`'s own reference
@@ -1743,12 +1728,20 @@ struct Interp {
     /// to, keyed by the identity [`Interp::install_one_method`] minted for
     /// its dictionary key.
     native_externals: HashMap<MethodId, &'static dispatch::native::NativeExternal>,
-    /// The local-reference tables of the native activations on the stack,
-    /// innermost last: the objects an extension's handles name (D5). Rooted
-    /// by [`Interp::object_roots`] for exactly as long as the activation that
-    /// owns one is on this stack, so a handle that outlives its activation
-    /// resolves to nothing.
-    native_handles: Vec<rexx_api::handles::Table>,
+    /// The native activations on the stack, innermost last. Each carries the
+    /// objects an extension's handles name (D5), rooted by
+    /// [`Interp::object_roots`] for exactly as long as the frame is on this
+    /// stack, so a handle that outlives its activation resolves to nothing.
+    native_handles: Vec<NativeFrame>,
+    /// Every native library a name has been resolved to, by the name it was
+    /// resolved under -- `PackageManager::packages`
+    /// (`interpreter/package/PackageManager.cpp:233`). A miss is held as well
+    /// as a hit, so a name that failed once fails the same way every time.
+    libraries: HashMap<Vec<u8>, LibraryLoad>,
+    /// Which library procedure each `::METHOD`/`::ATTRIBUTE ... EXTERNAL
+    /// "LIBRARY <name>"` bound to, keyed by the identity
+    /// [`Interp::install_one_method`] minted for its dictionary key.
+    library_externals: HashMap<MethodId, LibraryBinding>,
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
@@ -2076,15 +2069,50 @@ enum GeneratedKind {
     Constant,
 }
 
+/// A native library the interpreter has tried to resolve.
+#[derive(Clone)]
+pub(crate) enum LibraryLoad {
+    Loaded(Rc<rexx_api::load::Library>),
+    /// No shared object of that name loaded, or one loaded and published no
+    /// package entry. `LibraryPackage::load` answers false for both and its
+    /// callers cannot tell them apart (`package/LibraryPackage.cpp:204`, `:216`).
+    Missing,
+    /// The package entry asks for a newer interpreter than this one.
+    Version,
+}
+
+/// One dictionary key bound to one procedure of one loaded library.
+#[derive(Clone)]
+pub(crate) struct LibraryBinding {
+    pub(crate) library: Rc<rexx_api::load::Library>,
+    pub(crate) procedure: Vec<u8>,
+}
+
+/// One native activation: what an extension writes its object variables
+/// through, and the handles it has been given.
+struct NativeFrame {
+    /// The object whose [`rexx_core::ScopePools`] the write lands in, which
+    /// is [`Interp::pool_owner`] of the receiver.
+    owner: ObjRef,
+    /// The running method's own scope, not the receiver's class --
+    /// `receiver->getObjectVariables(getScope())`
+    /// (`execution/NativeActivation.cpp:1878`).
+    scope: ObjRef,
+    locals: rexx_api::handles::Table,
+}
+
 /// What one just-installed dictionary key resolves to, handed to
 /// [`Interp::install_one_method`] by whichever installer minted it.
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 enum InstallBody {
     /// The directive's own Rexx body: a row of [`Interp::method_bodies`].
     Written,
     /// A method the directive implements itself: a row of
     /// [`Interp::generated_methods`].
     Generated(GeneratedKind),
+    /// A procedure of a loaded shared library: a row of
+    /// [`Interp::library_externals`].
+    Library(LibraryBinding),
     /// A `LIBRARY REXX` entry point: a row of [`Interp::native_externals`].
     Native(&'static dispatch::native::NativeExternal),
 }
@@ -2211,6 +2239,8 @@ impl Interp {
             message_outcomes: HashMap::new(),
             generated_methods: HashMap::new(),
             native_externals: HashMap::new(),
+            libraries: HashMap::new(),
+            library_externals: HashMap::new(),
             native_handles: Vec::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
@@ -2601,7 +2631,7 @@ impl Interp {
         // and an `EXTERNAL` library. Measured, `::constant sep (1+2)` alone in
         // a file is rc 157 with `Error 99.906`, where the identical directive
         // under a preceding `::CLASS` reaches the install-time evaluation
-        // below instead; and see `staged_gap` for the stage order this walk is
+        // below instead; and see the table above `directive_gap` for the order this walk is
         // the first of, and for every probe placing a form in it.
         let mut saw_class = false;
         // The class a member directive's keys are claimed against, and the
@@ -2816,6 +2846,12 @@ impl Interp {
                 self.blame_directive(program, directive);
                 return Err(Raised::external_method_not_found(&missing).into());
             }
+
+            // The same walk and the same position for a library-backed
+            // `EXTERNAL`: measured, oracle, a file opening `say "prolog ran"`
+            // and carrying `::method x external "LIBRARY zorkolib z"` is
+            // 98.903 rc 158 with stdout empty.
+            self.resolve_directive_library(program, directive)?;
         }
 
         // **A second pass, because the oracle's own translation-time
@@ -2848,10 +2884,7 @@ impl Interp {
         // A `::REQUIRES` file is opened after the cycle check and before any
         // class is created -- measured, 43.901 against a file whose first
         // directive is a `::CLASS` that fails to resolve, and 98.911 against
-        // one whose classes form a cycle. See `staged_gap`.
-        if let Some(loud) = staged_gap(program, |kind| matches!(kind, DirectiveKind::Requires(_))) {
-            return Err(loud.into());
-        }
+        // one whose classes form a cycle. See `directive_gap`.
         self.load_required_packages(id, program)?;
 
         // **The failing-`::CONSTANT` blame target is the class the oracle
@@ -2914,7 +2947,7 @@ impl Interp {
         }
 
         // The gap forms whose stage is after the classes are created; see
-        // `staged_gap` for the probe behind each. Measured, `::options digits
+        // the table above `directive_gap` for the probe behind each. Measured, `::options digits
         // 12` beside a failing `::CLASS` is the oracle's `::CLASS` line, so
         // this walk cannot move ahead of the pass above.
         for directive in &program.directives {
@@ -2967,6 +3000,19 @@ impl Interp {
             let DirectiveKind::Requires(requires) = &directive.kind else {
                 continue;
             };
+            // A `LIBRARY` requires loads a shared object rather than a
+            // package file, and registers nothing this crate can then look a
+            // name up in: `PackageManager::getLibrary`
+            // (`package/PackageManager.cpp:206`) is the whole of it.
+            if requires.library {
+                if let Err(failure) = self.require_library(&requires.name) {
+                    self.seal_site_level();
+                    self.blame_directive_in(id, program, directive);
+                    outcome = Err(failure);
+                    break;
+                }
+                continue;
+            }
             match self.load_requires(Some(id), &requires.name) {
                 Ok(required) => {
                     self.add_imported_package(id, Package::Program(required));
@@ -3980,10 +4026,12 @@ impl Interp {
                  for {}, so one of them is lost",
                 String::from_utf8_lossy(&name)
             );
-            let body = match (generated, native) {
-                (Some(kind), _) => InstallBody::Generated(kind),
-                (None, Some(entry)) => InstallBody::Native(entry),
-                (None, None) => InstallBody::Written,
+            let library = self.library_binding(external.as_ref(), &name);
+            let body = match (generated, native, library) {
+                (Some(kind), _, _) => InstallBody::Generated(kind),
+                (None, Some(entry), _) => InstallBody::Native(entry),
+                (None, None, Some(binding)) => InstallBody::Library(binding),
+                (None, None, None) => InstallBody::Written,
             };
             self.install_one_method(
                 program,
@@ -4015,13 +4063,16 @@ impl Interp {
         // name two different procedures.
         let external = dispatch::native::attribute_external(attribute);
         for (name, generated) in attribute_dictionary_keys(attribute) {
+            let library = self.library_binding(external.as_ref(), &name);
             let body = match (
                 generated,
                 dispatch::native::bound_entry(external.as_ref(), &name),
+                library,
             ) {
-                (Some(kind), _) => InstallBody::Generated(kind),
-                (None, Some(entry)) => InstallBody::Native(entry),
-                (None, None) => InstallBody::Written,
+                (Some(kind), _, _) => InstallBody::Generated(kind),
+                (None, Some(entry), _) => InstallBody::Native(entry),
+                (None, None, Some(binding)) => InstallBody::Library(binding),
+                (None, None, None) => InstallBody::Written,
             };
             // Both accessors of a `Both`-style attribute carry the
             // directive's own access scope, which is the oracle's own shape:
@@ -4105,6 +4156,9 @@ impl Interp {
                 )
                 .is_some(),
             InstallBody::Native(entry) => self.native_externals.insert(method, entry).is_some(),
+            InstallBody::Library(binding) => {
+                self.library_externals.insert(method, binding).is_some()
+            }
         };
         debug_assert!(
             !previous,
@@ -4346,6 +4400,135 @@ impl Interp {
             };
         }
         ExecutableSource::Native
+    }
+
+    /// The directories a bare library name is looked for in before the
+    /// undecorated `dlopen`, which are the ones `LD_LIBRARY_PATH` names in
+    /// **this interpreter's** environment.
+    ///
+    /// The process loader read that variable once at start-up, so a value
+    /// this interpreter was handed afterwards reaches the search no other
+    /// way. Writing it back to the process is forbidden here and would reach
+    /// every other interpreter in the process besides.
+    fn library_search_path(&self) -> Vec<std::path::PathBuf> {
+        use std::os::unix::ffi::OsStrExt;
+        let Some(value) = self.env_get(b"LD_LIBRARY_PATH") else {
+            return Vec::new();
+        };
+        value
+            .split(|byte| *byte == b':')
+            .filter(|part| !part.is_empty())
+            .map(|part| std::path::PathBuf::from(std::ffi::OsStr::from_bytes(part)))
+            .collect()
+    }
+
+    /// `PackageManager::loadLibrary` (`package/PackageManager.cpp:229`): the
+    /// library `name` names, loaded once however many directives, methods and
+    /// `~loadLibrary` sends ask for it.
+    ///
+    /// **The name is matched byte for byte**, which is measured rather than
+    /// assumed: oracle, `::method m external "LIBRARY RXREGEXP RegExp_Init"`
+    /// is `98.903 Unable to load library "RXREGEXP"` where the same directive
+    /// spelling the name in lower case loads.
+    pub(crate) fn resolve_library(&mut self, name: &[u8]) -> LibraryLoad {
+        if let Some(held) = self.libraries.get(name) {
+            return held.clone();
+        }
+        let search = self.library_search_path();
+        let spelling = String::from_utf8_lossy(name).into_owned();
+        let loaded = match rexx_api::load::open(&spelling, &search) {
+            Ok(Some(library)) => LibraryLoad::Loaded(Rc::new(library)),
+            Ok(None) => LibraryLoad::Missing,
+            Err(rexx_api::load::Failure::LibraryVersion(_)) => LibraryLoad::Version,
+        };
+        self.libraries.insert(name.to_vec(), loaded.clone());
+        loaded
+    }
+
+    /// [`Interp::resolve_library`] for a caller whose failure is a condition:
+    /// 98.903 for a name that resolved to nothing and 98.982 for a package
+    /// entry asking for a newer interpreter.
+    fn require_library(&mut self, name: &[u8]) -> Result<Rc<rexx_api::load::Library>, Failure> {
+        match self.resolve_library(name) {
+            LibraryLoad::Loaded(library) => Ok(library),
+            LibraryLoad::Missing => Err(Raised::library_not_loaded(name).into()),
+            LibraryLoad::Version => Err(Raised::library_version(name).into()),
+        }
+    }
+
+    /// The library and the procedures one directive's `EXTERNAL` names,
+    /// resolved at install time so that a program naming a library that is
+    /// not there is refused before its own first clause.
+    ///
+    /// Answers nothing for a directive whose `EXTERNAL` names the `REXX`
+    /// package or none at all; those are [`unresolved_external`]'s and
+    /// [`directive_gap`]'s.
+    fn resolve_directive_library(
+        &mut self,
+        program: &Rc<Program>,
+        directive: &Directive,
+    ) -> Result<(), Failure> {
+        let external = match &directive.kind {
+            DirectiveKind::Method(method) => dispatch::native::method_external(method),
+            DirectiveKind::Attribute(attribute) => dispatch::native::attribute_external(attribute),
+            DirectiveKind::Routine(routine) => dispatch::native::routine_external(routine),
+            _ => return Ok(()),
+        };
+        let Some(dispatch::native::MethodExternal::OtherLibrary { library, binds }) = external
+        else {
+            return Ok(());
+        };
+        let routine = matches!(directive.kind, DirectiveKind::Routine(_));
+        let loaded = match self.require_library(&library) {
+            Ok(loaded) => loaded,
+            Err(failure) => {
+                self.blame_directive(program, directive);
+                return Err(failure);
+            }
+        };
+        // A routine's procedure is in the routine table and a method's in the
+        // method table, and the two are separate exports: measured, oracle,
+        // `::routine zzz external "LIBRARY rxmath"` is `90.999 Unable to find
+        // external routine "ZZZ"`.
+        for bind in &binds {
+            let found = if routine {
+                loaded.routine(&bind.procedure).is_some()
+            } else {
+                loaded.method(&bind.procedure).is_some()
+            };
+            if !found {
+                self.blame_directive(program, directive);
+                return Err(if routine {
+                    Raised::external_routine_not_found(&bind.procedure).into()
+                } else {
+                    Raised::external_method_not_found(&bind.procedure).into()
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// The library procedure a dictionary key's `EXTERNAL` binds it to, or
+    /// `None` where the directive names no library or the procedure is not
+    /// exported.
+    fn library_binding(
+        &mut self,
+        external: Option<&dispatch::native::MethodExternal>,
+        key: &[u8],
+    ) -> Option<LibraryBinding> {
+        let Some(dispatch::native::MethodExternal::OtherLibrary { library, binds }) = external
+        else {
+            return None;
+        };
+        let bind = binds.iter().find(|bind| *bind.key == *key)?;
+        let LibraryLoad::Loaded(library) = self.resolve_library(library) else {
+            return None;
+        };
+        library.method(&bind.procedure)?;
+        Some(LibraryBinding {
+            library,
+            procedure: bind.procedure.clone(),
+        })
     }
 
     /// `Method~setPrivate`'s half that a send can see: the dictionary entry
@@ -4652,6 +4835,21 @@ impl Interp {
         pools.set(scope, name, value);
     }
 
+    /// [`Interp::set_pool_variable`]'s other half: the name returns to the
+    /// uninitialised state.
+    fn clear_pool_variable(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8]) {
+        let pools = self
+            .heap
+            .get_mut(owner)
+            .map(|object| &mut object.body)
+            .and_then(|body| match body {
+                Body::Instance { pools, .. } => Some(pools),
+                _ => None,
+            })
+            .expect("Interp::pool_owner answers a rooted Body::Instance");
+        pools.clear(scope, name);
+    }
+
     /// What an `EXPOSE` bound slot `slot` of `frame` to, if anything.
     fn exposure(&self, frame: SlotFrame, slot: usize) -> Option<&InstanceVar> {
         Interp::exposure_in(self.activation(), frame, slot)
@@ -4860,6 +5058,9 @@ impl Interp {
             message_outcomes: _,
             generated_methods: _,
             native_externals: _,
+            // Library handles and procedure names, no `ObjRef` in either.
+            libraries: _,
+            library_externals: _,
             native_handles,
             special_methods: _,
             out: _,
@@ -4937,11 +5138,16 @@ impl Interp {
         // The raise's own `ADDITIONAL`, alive between the raise and the
         // condition object that will hold it.
         out.extend(*pending_additional);
-        // Everything a native call has been handed. Held here rather than by
-        // the collector's other routes because an extension's handle is the
-        // only reference to it: nothing on the Rexx side names an object a
-        // native method allocated and has not returned yet.
-        out.extend(native_handles.iter().flat_map(|table| table.roots()));
+        // Everything a native call has been handed, and the receiver it is
+        // writing object variables through. Held here rather than by the
+        // collector's other routes because an extension's handle is the only
+        // reference to it: nothing on the Rexx side names an object a native
+        // method allocated and has not returned yet.
+        out.extend(
+            native_handles
+                .iter()
+                .flat_map(|frame| frame.locals.roots().chain([frame.owner, frame.scope])),
+        );
         // A manager is an ordinary program object held by nothing else: the
         // package that carries it is a plan, not an object with a slot.
         out.extend(security_managers.values().copied());
@@ -6335,15 +6541,22 @@ say 1
             dimensions: None,
         });
 
-        let mut table = rexx_api::handles::Table::new();
-        let handle = table.register(object);
-        interp.native_handles.push(table);
+        let mut frame = crate::NativeFrame {
+            owner: rexx_core::ObjRef::NIL,
+            scope: rexx_core::ObjRef::NIL,
+            locals: rexx_api::handles::Table::new(),
+        };
+        let handle = frame.locals.register(object);
+        interp.native_handles.push(frame);
         interp.collect_now();
         assert!(
             interp.heap.get(object).is_some(),
             "a live native activation's local reference was collected"
         );
-        assert_eq!(interp.native_handles[0].resolve(handle), Some(object));
+        assert_eq!(
+            interp.native_handles[0].locals.resolve(handle),
+            Some(object)
+        );
 
         interp.native_handles.pop();
         interp.collect_now();

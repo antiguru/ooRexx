@@ -400,7 +400,11 @@ fn set_security_manager(
 }
 
 /// `PackageClass::loadLibraryRexx`: `PackageManager::loadLibrary`, a
-/// `dlopen` of a native library.
+/// `dlopen` of a native library, answering whether it loaded.
+///
+/// Measured, oracle rc 0: `.context~package~loadLibrary('rxregexp')` is `1`
+/// and the same call naming `zorkolib` is `0`, so a library that is not there
+/// is an answer here rather than the 98.903 a directive gets.
 fn load_library(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -413,9 +417,11 @@ fn load_library(
     let Some(name) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("name").into());
     };
-    required_string_named_argument(interp, name, "name")?;
+    let name = required_string_named_argument(interp, name, "name")?;
+    let name = interp.to_text(name).into_owned();
     writable_package_of(interp, receiver)?;
-    Err(Loud::external_entry_point("a native library load").into())
+    let loaded = matches!(interp.resolve_library(&name), crate::LibraryLoad::Loaded(_));
+    Ok(Some(interp.counted(usize::from(loaded))))
 }
 
 /// `PackageClass::getClassesRexx`: the classes this package's own `::CLASS`

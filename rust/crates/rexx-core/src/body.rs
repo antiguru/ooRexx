@@ -302,8 +302,9 @@ pub struct StreamState {
     /// trailing colon.
     pub standard: Option<StandardStream>,
     /// Set by `!handle_set` for a `HANDLE:` name. This crate refuses to open
-    /// one -- reaching an already-open descriptor needs `unsafe` -- so the
-    /// marker exists to answer the queries that do not open.
+    /// one -- adopting an already-open descriptor needs `unsafe`, which D-U1
+    /// grants to two files of `rexx-api` alone -- so the marker exists to
+    /// answer the queries that do not open.
     pub handle: Option<Vec<u8>>,
     pub status: StreamStatus,
     /// `None` until something opens the stream, and again after a close.

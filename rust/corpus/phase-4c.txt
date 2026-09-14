@@ -94,8 +94,8 @@
 # `<name>.d/` sidecar fixes the working directory and the search variables,
 # which is what the `phase-7.txt` programs that use it do. The dependence is
 # then on the fixture rather than on the ambient machine, and
-# `a_sidecar_changes_what_the_oracle_answers` holds each sidecar to answering
-# differently from its absence.
+# `a_sidecar_changes_what_one_of_the_interpreters_answers` holds each sidecar to
+# answering differently from its absence.
 #
 # A program listed here must also obey the corpus's one standing rule
 # (README.md, "The one rule: determinism"): same bytes on every run, on every

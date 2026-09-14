@@ -22,7 +22,9 @@
 //! ::method m external 'LIBRARY zzznolib zzzr'      98.903 rc 158
 //! ```
 
-use rexx_parse::{AttributeDirective, AttributeStyle, ExternalSpec, MethodDirective};
+use rexx_parse::{
+    AttributeDirective, AttributeStyle, ExternalSpec, MethodDirective, RoutineDirective,
+};
 
 use super::{Arity, NativeMethod, native_file_path_separator, native_file_separator};
 use crate::{Loud, accessor_setter_name};
@@ -97,6 +99,10 @@ const fn implemented(
 /// **Named per row rather than per family**, because the two came apart:
 /// `handle_set` needs `from_raw_fd` and so stays refused after the stream
 /// family is built, and a refusal naming a closed phase would be a lie.
+/// It is owed by the phase that widens D-U1 past this crate's two granted
+/// files, which is Phase 10's -- adopting a descriptor the interpreter did
+/// not open is the same grant RXAPI and the external queues need. It never
+/// needed the loader.
 const fn deferred(name: &'static str, family: Family, owner: &'static str) -> NativeExternal {
     NativeExternal {
         name,
@@ -214,7 +220,7 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
         Arity::Fixed(0),
         super::stream::query_time,
     ),
-    deferred("handle_set", Family::Stream, "Phase 8"),
+    deferred("handle_set", Family::Stream, "Phase 10"),
     implemented(
         "std_set",
         Family::Stream,
@@ -456,8 +462,24 @@ pub(crate) enum MethodExternal {
     /// carrying `ATTRIBUTE`: the accessors [`attribute_binds`] derives, in the
     /// order the oracle creates them.
     Attribute(Vec<AttributeBind>),
-    /// `'LIBRARY <name>'` for any name but `REXX`: a shared library to load.
-    OtherLibrary,
+    /// `'LIBRARY <name>'` for any name but `REXX`: a shared library to load,
+    /// with the dictionary key each of its procedures fills.
+    OtherLibrary {
+        /// The library name as written. Matched byte for byte: measured,
+        /// oracle, `LIBRARY RXREGEXP` is `98.903 Unable to load library
+        /// "RXREGEXP"` where `LIBRARY rxregexp` loads.
+        library: Vec<u8>,
+        binds: Vec<LibraryBind>,
+    },
+}
+
+/// One procedure a library-backed `EXTERNAL` names.
+pub(crate) struct LibraryBind {
+    /// The dictionary key this procedure fills, upcased, as
+    /// [`AttributeBind::key`] is.
+    pub(crate) key: Vec<u8>,
+    /// The procedure to look up in the library's own table.
+    pub(crate) procedure: Vec<u8>,
 }
 
 /// One accessor an attribute-shaped `EXTERNAL` binds.
@@ -491,13 +513,29 @@ pub(crate) struct AttributeBind {
 /// ::method m attribute external 'LIBRARY REXX'             90.998 rc 166 on "GETM"
 /// ```
 fn attribute_binds(upper: &[u8], style: AttributeStyle, spec: &ExternalSpec) -> Vec<AttributeBind> {
+    attribute_accessors(upper, style, spec)
+        .into_iter()
+        .map(|(key, procedure)| AttributeBind {
+            key,
+            entry: entry_point(&procedure).ok_or(procedure),
+        })
+        .collect()
+}
+
+/// The dictionary key and the procedure name of each accessor, which is the
+/// half of [`attribute_binds`] that does not depend on the `REXX` package.
+fn attribute_accessors(
+    upper: &[u8],
+    style: AttributeStyle,
+    spec: &ExternalSpec,
+) -> Vec<(Vec<u8>, Vec<u8>)> {
     let procedure: Vec<u8> = match &spec.entry {
         Some(entry) => entry.to_vec(),
         None => upper.to_vec(),
     };
     let prefixed = |prefix: &str| [prefix.as_bytes(), &procedure].concat();
     let defaulted = *procedure == *upper;
-    let accessors = match style {
+    match style {
         AttributeStyle::Both => vec![
             (upper.to_vec(), prefixed("GET")),
             (accessor_setter_name(upper), prefixed("SET")),
@@ -518,14 +556,7 @@ fn attribute_binds(upper: &[u8], style: AttributeStyle, spec: &ExternalSpec) -> 
                 procedure.clone()
             },
         )],
-    };
-    accessors
-        .into_iter()
-        .map(|(key, procedure)| AttributeBind {
-            key,
-            entry: entry_point(&procedure).ok_or(procedure),
-        })
-        .collect()
+    }
 }
 
 /// [`MethodExternal`] for one `::METHOD`. Half of the boundary between the
@@ -539,7 +570,8 @@ pub(crate) fn method_external(method: &MethodDirective) -> Option<MethodExternal
     // oracle: `::method m attribute external 'LIBRARY nosuchlib x'` is
     // `98.903 Unable to load library "nosuchlib"` at rc 158 and not 90.998.
     if *spec.library != *b"REXX" {
-        return Some(MethodExternal::OtherLibrary);
+        let style = method.attribute.then_some(AttributeStyle::Both);
+        return Some(other_library(&upper, style, spec));
     }
     if method.attribute {
         return Some(MethodExternal::Attribute(attribute_binds(
@@ -562,14 +594,61 @@ pub(crate) fn method_external(method: &MethodDirective) -> Option<MethodExternal
 /// `GET` and `SET` styles [`attribute_binds`] describes on top of it.
 pub(crate) fn attribute_external(attribute: &AttributeDirective) -> Option<MethodExternal> {
     let spec = attribute.external.as_ref()?;
+    let upper = attribute.name.to_ascii_uppercase();
     if *spec.library != *b"REXX" {
-        return Some(MethodExternal::OtherLibrary);
+        return Some(other_library(&upper, Some(attribute.style), spec));
     }
     Some(MethodExternal::Attribute(attribute_binds(
-        &attribute.name.to_ascii_uppercase(),
+        &upper,
         attribute.style,
         spec,
     )))
+}
+
+/// [`MethodExternal`] for one `::ROUTINE`, or `None` for the forms this phase
+/// still refuses: `REGISTERED`, and the `REXX` package, whose routine table
+/// is `rexx_routines[]` and not the method registry above
+/// (`runtime/InternalPackage.cpp:230`).
+///
+/// The entry defaults to the routine's own name upcased -- measured, oracle:
+/// `::routine zzz external "LIBRARY rxmath"` is `90.999 Unable to find
+/// external routine "ZZZ"`.
+pub(crate) fn routine_external(routine: &RoutineDirective) -> Option<MethodExternal> {
+    let spec = routine.external.as_ref()?;
+    if spec.registered || *spec.library == *b"REXX" {
+        return None;
+    }
+    Some(other_library(
+        &routine.name.to_ascii_uppercase(),
+        None,
+        spec,
+    ))
+}
+
+/// [`MethodExternal::OtherLibrary`] for one directive: the accessors of an
+/// attribute-shaped `EXTERNAL`, or the single procedure of every other shape.
+fn other_library(
+    upper: &[u8],
+    style: Option<AttributeStyle>,
+    spec: &ExternalSpec,
+) -> MethodExternal {
+    let accessors = match style {
+        Some(style) => attribute_accessors(upper, style, spec),
+        None => {
+            let procedure = spec
+                .entry
+                .as_ref()
+                .map_or_else(|| upper.to_vec(), |entry| entry.to_vec());
+            vec![(upper.to_vec(), procedure)]
+        }
+    };
+    MethodExternal::OtherLibrary {
+        library: spec.library.to_vec(),
+        binds: accessors
+            .into_iter()
+            .map(|(key, procedure)| LibraryBind { key, procedure })
+            .collect(),
+    }
 }
 
 /// The entry point one dictionary key is bound to, or `None` for a key this
@@ -585,7 +664,7 @@ pub(crate) fn bound_entry(
             .iter()
             .find(|bind| *bind.key == *key)
             .and_then(|bind| bind.entry.as_ref().ok().copied()),
-        MethodExternal::OtherLibrary => None,
+        MethodExternal::OtherLibrary { .. } => None,
     }
 }
 
@@ -598,7 +677,7 @@ pub(crate) fn unresolved_entry(external: Option<&MethodExternal>) -> Option<&[u8
         MethodExternal::Attribute(binds) => binds
             .iter()
             .find_map(|bind| bind.entry.as_ref().err().map(Vec::as_slice)),
-        MethodExternal::OtherLibrary => None,
+        MethodExternal::OtherLibrary { .. } => None,
     }
 }
 
@@ -705,10 +784,11 @@ mod tests {
             MethodExternal::Attribute(binds) => {
                 binds.iter().find_map(|bind| bind.entry.as_ref().err())
             }
-            MethodExternal::OtherLibrary => panic!(
-                "{} declares a {keyword} whose EXTERNAL names a library other than \
-                 REXX, which this phase refuses, so the file cannot install",
-                path.display()
+            MethodExternal::OtherLibrary { library, .. } => panic!(
+                "{} declares a {keyword} whose EXTERNAL names the library {:?}, which \
+                 is not the REXX package the bootstrap files are meant to bind against",
+                path.display(),
+                String::from_utf8_lossy(library)
             ),
         };
         if let Some(missing) = missing {
@@ -912,22 +992,46 @@ mod tests {
         }
     }
 
-    /// The library is tested before the accessors are built, so a directive
-    /// naming another library is that refusal and never a procedure this
-    /// registry could not find.
+    /// The library is tested before the accessors are resolved, so a
+    /// directive naming another library carries that library's own name and
+    /// never a procedure this registry could not find. The accessor spelling
+    /// is still the attribute shape's: measured, oracle, `::attribute at
+    /// external "LIBRARY rxregexp NoSuchGet"` is `90.998 Unable to find
+    /// external method "GETNoSuchGet".`
     #[test]
-    fn a_library_other_than_rexx_is_refused_before_any_accessor_is_built() {
-        for source in [
-            "::class k\n::attribute at external 'LIBRARY zzznolib zzz'\n",
-            "::class k\n::attribute at get external 'LIBRARY zzznolib zzz'\n",
-            "::class k\n::attribute at external 'LIBRARY zzznolib'\n",
-            "::class k\n::method m attribute external 'LIBRARY zzznolib zzz'\n",
-            "::class k\n::method m external 'LIBRARY zzznolib zzz'\n",
-        ] {
-            assert!(
-                matches!(last_external(source), MethodExternal::OtherLibrary),
-                "{source:?}"
-            );
+    fn a_library_other_than_rexx_names_itself_and_its_own_accessors() {
+        let cases: &[(&str, &[&str])] = &[
+            (
+                "::class k\n::attribute at external 'LIBRARY zzznolib zzz'\n",
+                &["GETzzz", "SETzzz"],
+            ),
+            (
+                "::class k\n::attribute at get external 'LIBRARY zzznolib zzz'\n",
+                &["zzz"],
+            ),
+            (
+                "::class k\n::attribute at external 'LIBRARY zzznolib'\n",
+                &["GETAT", "SETAT"],
+            ),
+            (
+                "::class k\n::method m attribute external 'LIBRARY zzznolib zzz'\n",
+                &["GETzzz", "SETzzz"],
+            ),
+            (
+                "::class k\n::method m external 'LIBRARY zzznolib zzz'\n",
+                &["zzz"],
+            ),
+        ];
+        for (source, procedures) in cases {
+            let MethodExternal::OtherLibrary { library, binds } = last_external(source) else {
+                panic!("{source:?} did not name a library other than REXX");
+            };
+            assert_eq!(library, b"zzznolib".to_vec(), "{source:?}");
+            let named: Vec<String> = binds
+                .iter()
+                .map(|bind| String::from_utf8_lossy(&bind.procedure).into_owned())
+                .collect();
+            assert_eq!(named, *procedures, "{source:?}");
         }
     }
 }

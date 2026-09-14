@@ -298,6 +298,40 @@ impl Raised {
         Raised::syntax(90, 998, vec![entry.to_vec()])
     }
 
+    /// 90.999: an `EXTERNAL` on a `::ROUTINE` whose procedure the library
+    /// does not export. One substitution, the procedure as it was resolved.
+    pub(crate) fn external_routine_not_found(entry: &[u8]) -> Raised {
+        Raised::syntax(90, 999, vec![entry.to_vec()])
+    }
+
+    /// 98.903: a library name no shared object answered to, or one that
+    /// answered and published no package entry -- `PackageManager::getLibrary`
+    /// (`interpreter/package/PackageManager.cpp:214`). One substitution, the
+    /// name as the directive spelled it.
+    pub(crate) fn library_not_loaded(name: &[u8]) -> Raised {
+        Raised::syntax(98, 903, vec![name.to_vec()])
+    }
+
+    /// 98.982: a package entry whose `requiredVersion` is above this
+    /// interpreter's (`interpreter/package/LibraryPackage.cpp:232-235`).
+    pub(crate) fn library_version(name: &[u8]) -> Raised {
+        Raised::syntax(98, 982, vec![name.to_vec()])
+    }
+
+    /// 88.901: an argument a native call's signature declares as required
+    /// and that the send left out. `position` counts the arguments alone,
+    /// which is what `NativeActivation.cpp:327` reports.
+    pub(crate) fn missing_native_argument(position: usize) -> Raised {
+        Raised::syntax(88, 901, vec![position.to_string().into_bytes()])
+    }
+
+    /// 93.968: a native method whose declared signature the boundary cannot
+    /// honour (`NativeActivation::reportSignatureError`,
+    /// `execution/NativeActivation.cpp:190-193`). No substitutions.
+    pub(crate) fn incorrect_method_signature() -> Raised {
+        Raised::syntax(93, 968, Vec::new())
+    }
+
     /// 88.922: more arguments than a `LIBRARY REXX` entry point's own
     /// signature declares.
     pub(crate) fn too_many_external_arguments(arity: usize) -> Raised {

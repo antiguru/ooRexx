@@ -4270,7 +4270,11 @@ impl Interp {
                 // (`InstalledRoutine`'s own doc).
                 let routine_program = Rc::clone(&self.programs[installed.program.0]);
                 let Some(body) = body_of(&routine_program, Some(installed.directive)) else {
-                    return Err(Loud::missing_body().into());
+                    return Err(crate::routine_without_a_body(
+                        &routine_program,
+                        installed.directive,
+                    )
+                    .into());
                 };
                 let plan = self.plan_for(
                     BodyKey {

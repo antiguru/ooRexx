@@ -106,6 +106,10 @@ pub(crate) mod context;
 // `Package`'s readers and its four writes, chained the same way.
 mod package;
 
+// Running a procedure of a loaded shared library, and the `Host` the boundary
+// reaches this interpreter through.
+mod library;
+
 /// One primitive method's implementation.
 type NativeMethod =
     fn(&mut Interp, Cleared, ObjRef, &[Option<ObjRef>]) -> Result<Option<ObjRef>, Failure>;
@@ -121,6 +125,9 @@ enum Invocable {
     /// outcome is a refusal, which is why it is not folded into `Native`
     /// beside the primitives.
     External(&'static native::NativeExternal),
+    /// A `::METHOD`/`::ATTRIBUTE ... EXTERNAL 'LIBRARY <name>'` bound at
+    /// install to a procedure of a loaded shared library.
+    Library(crate::LibraryBinding),
 }
 
 /// Files one native method under its own id, growing the table to reach it.
@@ -2100,6 +2107,9 @@ impl Interp {
         if let Some(entry) = self.native_externals.get(&resolution.method).copied() {
             return Ok(Invocable::External(entry));
         }
+        if let Some(binding) = self.library_externals.get(&resolution.method) {
+            return Ok(Invocable::Library(binding.clone()));
+        }
         // The scope's `~id` is rendered only where it is printed -- a
         // successful send has no use for it, and every send would otherwise
         // pay for the copy.
@@ -2181,6 +2191,14 @@ impl Interp {
                     outcome
                 }
             },
+            Invocable::Library(binding) => {
+                let outcome = self.run_library_method(&binding, resolution, receiver, args);
+                if outcome.is_err() {
+                    let scope = self.classes().id_string(resolution.scope).to_string();
+                    self.blame_native_method(name, &scope);
+                }
+                outcome
+            }
             Invocable::Generated(generated) => match generated.kind {
                 crate::GeneratedKind::Getter => {
                     self.read_attribute(cleared, generated, resolution, receiver, args)
@@ -8346,21 +8364,39 @@ fn native_load_external(
     let Some((library, entry)) = external_specification(&descriptor, &name) else {
         return Err(Raised::bad_external_specification(&descriptor).into());
     };
-    if routine {
-        return Err(Loud::external_entry_point("loadExternalRoutine").into());
-    }
     // **The keyword is case-insensitive and the library name is not**, which
     // is measured rather than assumed: oracle rc 0,
     // `library REXX file_separator` and `LiBrArY REXX file_separator` each
     // answer a `Method`, while `LIBRARY rexx file_separator` and
     // `LIBRARY Rexx file_separator` answer `.nil`.
-    if library != b"REXX" {
-        return Err(Loud::external_entry_point(
-            "loadExternalMethod naming a library other than REXX",
-        )
-        .into());
-    }
-    if native::entry_point(&entry).is_none() {
+    let found = if library == b"REXX" {
+        // The `REXX` package's routine table is `rexx_routines[]` and not
+        // this registry (`runtime/InternalPackage.cpp:230`), so a routine
+        // asked for by that name would answer `.nil` here where the oracle
+        // answers a `Routine` -- a wrong answer, not a missing one, which is
+        // why it refuses instead.
+        if routine {
+            return Err(Loud::external_entry_point("loadExternalRoutine on REXX").into());
+        }
+        native::entry_point(&entry).is_some()
+    } else {
+        // **Neither a library that is not there nor a procedure it does not
+        // export raises**: measured, oracle rc 0, `.Method~loadExternalMethod('x',
+        // 'LIBRARY zorkolib RegExp_Parse')` and the same naming `rxregexp
+        // NoSuchEntry` both answer `The NIL object`, and
+        // `.Routine~loadExternalRoutine` answers it for the same two.
+        match interp.resolve_library(&library) {
+            crate::LibraryLoad::Loaded(loaded) => {
+                if routine {
+                    loaded.routine(&entry).is_some()
+                } else {
+                    loaded.method(&entry).is_some()
+                }
+            }
+            crate::LibraryLoad::Missing | crate::LibraryLoad::Version => false,
+        }
+    };
+    if !found {
         return Ok(Some(ObjRef::NIL));
     }
     let object = interp.native_instance(class);

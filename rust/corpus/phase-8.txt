@@ -1,0 +1,26 @@
+# Phase 8 corpus subset -- the C ABI boundary. The union with the earlier
+# phase-*.txt files is what the harnesses read, not this file alone.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored.
+#
+# A program here may load one of the oracle's own compiled extensions. It does
+# not rebuild one, and it prints no address: a .Pointer renders differently on
+# every run.
+
+# Task 8: the directives that name a library, and what each load failure
+# reports. The three EXTERNAL forms and ::REQUIRES LIBRARY all resolve the
+# name through one path, so the same library named twice is loaded once.
+lang/library_requires_missing.rex
+lang/library_method_entry_missing.rex
+lang/library_routine_entry_missing.rex
+lang/library_attribute_entry_missing.rex
+
+# Task 8: a ::METHOD bound to a procedure of librxregexp.so, run end to end --
+# CSELF across sends, SetObjectVariable into the method's own scope, and the
+# one StringData address RegExp_Pos's pointer arithmetic depends on.
+lang/library_method_external.rex
+
+# Task 8: ::REQUIRES LIBRARY, Package~loadLibrary and the two loadExternal
+# class methods, which answer rather than raise for a name that is not there.
+lang/library_loads_once.rex

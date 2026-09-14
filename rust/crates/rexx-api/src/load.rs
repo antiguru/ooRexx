@@ -19,7 +19,7 @@ use crate::layout::{
 };
 use crate::values::ARGUMENT_TERMINATOR;
 use std::ffi::{CStr, c_char, c_int, c_void};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// The C signature of the stub the `RexxMethodN` macros generate
 /// (`api/oorexxapi.h:4286`).
@@ -280,10 +280,27 @@ impl Library {
             .iter()
             .find(|row| row.name.eq_ignore_ascii_case(name))
     }
+
+    /// The routine row `name` names, matched as
+    /// `LibraryPackage::locateRoutineEntry` matches it
+    /// (`interpreter/package/LibraryPackage.cpp:344-356`), and borrowed from
+    /// `self` for [`Library::method`]'s reason.
+    #[must_use]
+    pub fn routine(&self, name: &[u8]) -> Option<&NativeRoutineEntry> {
+        self.routines
+            .iter()
+            .find(|row| row.name.eq_ignore_ascii_case(name))
+    }
 }
 
 /// Open the library `name` names, searching as `SysLibrary::load` searches
 /// (`common/platform/unix/SysLibrary.cpp:75-102`).
+///
+/// `search` is tried, in order, before the undecorated name. The loader reads
+/// `LD_LIBRARY_PATH` once at process start, so a directory the interpreter
+/// learned of afterwards is unreachable through the undecorated attempt and
+/// has to be spelled out here; the caller supplies the directories that
+/// variable names.
 ///
 /// `Ok(None)` is the answer where no library of that name loads, and where one
 /// loads but publishes no `RexxGetPackage`. Neither is an error here: the C++
@@ -293,12 +310,15 @@ impl Library {
 /// # Errors
 /// [`Failure::LibraryVersion`] where the package entry asks for a newer
 /// interpreter than this one.
-pub fn open(name: &str) -> Result<Option<Library>, Failure> {
+pub fn open(name: &str, search: &[PathBuf]) -> Result<Option<Library>, Failure> {
     if name.len() > MAX_LIBRARY_NAME_LENGTH {
         return Ok(None);
     }
     let file = format!("lib{name}{}", std::env::consts::DLL_SUFFIX);
-    let handle = dlopen(Path::new(&file))
+    let handle = search
+        .iter()
+        .find_map(|directory| dlopen(&directory.join(&file)))
+        .or_else(|| dlopen(Path::new(&file)))
         .or_else(|| dlopen(&Path::new(SECOND_ATTEMPT_DIRECTORY).join(&file)));
     let Some(handle) = handle else {
         return Ok(None);

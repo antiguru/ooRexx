@@ -398,8 +398,8 @@ pub trait Host {
     /// Moritz 2026-09-14) so that a collection a callback triggers can see
     /// it, and so that an implementation holding the table inside itself
     /// needs no second mutable borrow of that same object. `NativeActivation`
-    /// both serves the context and owns `localReferences`
-    /// (`interpreter/execution/NativeActivation.hpp:250`).
+    /// both serves the context and owns the save list
+    /// (`interpreter/execution/NativeActivation.hpp:232`).
     fn locals(&mut self) -> &mut Table;
 }
 

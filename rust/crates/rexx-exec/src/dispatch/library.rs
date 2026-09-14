@@ -1,0 +1,332 @@
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+/*                                                                            */
+/* This program and the accompanying materials are made available under       */
+/* the terms of the Common Public License v1.0 which accompanies this         */
+/* distribution. A copy is also available at the following address:           */
+/* https://www.oorexx.org/license.html                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+//! Running a method whose body is a procedure of a loaded shared library, and
+//! the [`Host`] the boundary reaches this interpreter through.
+//!
+//! `NativeActivation::run` (`interpreter/execution/NativeActivation.cpp:1264`)
+//! is the reference for the call, and the `NativeActivation` that runs it is
+//! also what serves the context, which is why one frame carries both the
+//! receiver's pool and the local references.
+
+use std::borrow::Cow;
+use std::rc::Rc;
+
+use rexx_api::ffi::Contexts;
+use rexx_api::handles::Table;
+use rexx_api::invoke;
+use rexx_api::layout::POINTER;
+use rexx_api::values::{Activation, CStringPool, Constants, Conversion, Failure as Refused, Host};
+use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
+
+use super::Resolution;
+use crate::error::Raised;
+use crate::{Failure, Interp, LibraryBinding, Loud, NativeFrame};
+
+/// The bytes a small integer or an inline string renders as, for a reader
+/// that cannot allocate into the interpreter.
+fn rendered(value: ObjRef) -> Option<Vec<u8>> {
+    match value.decode() {
+        Decoded::SmallInt(number) => Some(number.to_string().into_bytes()),
+        Decoded::Text(inline) => Some(inline.to_vec()),
+        _ => None,
+    }
+}
+
+/// The pool name an extension's spelling addresses, or `None` for one
+/// `getVariableRetriever` (`execution/VariableDictionary.cpp:738`) answers
+/// nothing for: the write then does nothing, which is all the API can see of
+/// the refusal.
+fn pool_variable_name(name: &[u8]) -> Option<Vec<u8>> {
+    let first = *name.first()?;
+    if first.is_ascii_digit() || name.contains(&b'.') {
+        return None;
+    }
+    Some(name.to_ascii_uppercase())
+}
+
+impl Interp {
+    /// Runs `binding`'s procedure against `args` with `receiver` as its self,
+    /// and answers what the extension returned.
+    ///
+    /// # Errors
+    /// The condition the extension raised, whatever converting an argument or
+    /// the result refuses, and [`Loud`] for a conversion this phase has not
+    /// written.
+    pub(super) fn run_library_method(
+        &mut self,
+        binding: &LibraryBinding,
+        resolution: Resolution,
+        receiver: ObjRef,
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
+        let owner = self.pool_owner(receiver)?;
+        // Cloned out of the binding before the interpreter is borrowed as the
+        // host: the row is borrowed from the library, and the library has to
+        // outlive that borrow without being reachable through `self`.
+        let library = Rc::clone(&binding.library);
+        let Some(entry) = library.method(&binding.procedure) else {
+            return Err(
+                Loud::external_entry_point("a library procedure that stopped resolving").into(),
+            );
+        };
+        self.native_handles.push(NativeFrame {
+            owner,
+            scope: resolution.scope,
+            locals: Table::new(),
+        });
+        let mut strings = CStringPool::new();
+        let (answered, pending) = {
+            let activation = Activation::new(Conversion {
+                host: self,
+                strings: &mut strings,
+            });
+            let mut contexts = Contexts::new(&activation);
+            let answered = invoke::method(entry, contexts.method(), &activation, args);
+            (answered, activation.pending())
+        };
+        self.native_handles.pop();
+
+        // The condition first, because the oracle raises it in the caller's
+        // frame once the call has returned (`NativeActivation::checkConditions`,
+        // `:1787`) and before it does anything with the value the extension
+        // wrote. Measured, oracle: `.MyRe~new('[')` over `RegExp_Init` is
+        // `Error 38 ... Invalid template or pattern.` at rc 218, and the
+        // extension returned zero on that path.
+        if let Some(number) = pending {
+            return Err(condition_of(number));
+        }
+        answered.map_err(refusal)
+    }
+}
+
+/// The condition an extension raised, whose number is the major and the minor
+/// packed as `major * 1000 + minor` (`api/oorexxerrors.h`).
+fn condition_of(number: usize) -> Failure {
+    let major = u16::try_from(number / 1000).unwrap_or(u16::MAX);
+    let minor = u16::try_from(number % 1000).unwrap_or(0);
+    Raised::syntax(major, minor, Vec::new()).into()
+}
+
+/// What the boundary's own refusal reports.
+fn refusal(refused: Refused) -> Failure {
+    match refused {
+        Refused::MissingArgument { position } => Raised::missing_native_argument(position).into(),
+        Refused::NoStringValue { position } => {
+            Raised::argument_needs_a_string_value(position).into()
+        }
+        Refused::TooManyArguments { expected } => {
+            Raised::too_many_external_arguments(expected).into()
+        }
+        Refused::Signature => Raised::incorrect_method_signature().into(),
+        Refused::Unfilled { .. } | Refused::StaleHandle => Loud {
+            message: crate::owned_message(&format!("{refused}"), Some("Phase 8")),
+        }
+        .into(),
+    }
+}
+
+impl Host for Interp {
+    fn is_method(&self) -> bool {
+        true
+    }
+
+    fn string_value(&mut self, object: ObjRef) -> Option<ObjRef> {
+        // A `makeString` that raises answers `None` here, which is the
+        // conversion's own 88.909 rather than the condition it raised. The
+        // trait has no channel for the second, and nothing in reach produces
+        // one: see the task 8 report.
+        self.required_string_value(object).ok()
+    }
+
+    fn string_bytes(&self, object: ObjRef) -> Option<Cow<'_, [u8]>> {
+        if let Some(bytes) = rendered(object) {
+            return Some(Cow::Owned(bytes));
+        }
+        match &self.heap.get(object)?.body {
+            Body::Text { bytes, .. } => Some(Cow::Borrowed(bytes.as_slice())),
+            Body::Num { text, .. } => text.as_deref().map(Cow::Borrowed),
+            _ => None,
+        }
+    }
+
+    fn cself(&mut self) -> Option<POINTER> {
+        let frame = self.native_handles.last()?;
+        let (owner, scope) = (frame.owner, frame.scope);
+        let held = self.pools_of(owner)?.get(scope, b"CSELF")?;
+        match &self.heap.get(held)?.body {
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => state.pointer(),
+            _ => None,
+        }
+    }
+
+    fn constants(&mut self) -> Constants<ObjRef> {
+        Constants {
+            nil: ObjRef::NIL,
+            true_object: self.counted(1),
+            false_object: self.counted(0),
+            null_string: self.text(b""),
+        }
+    }
+
+    fn set_object_variable(&mut self, name: &[u8], value: Option<ObjRef>) {
+        let Some(frame) = self.native_handles.last() else {
+            return;
+        };
+        let (owner, scope) = (frame.owner, frame.scope);
+        let Some(name) = pool_variable_name(name) else {
+            return;
+        };
+        match value {
+            Some(value) => self.set_pool_variable(owner, scope, &name, value),
+            None => self.clear_pool_variable(owner, scope, &name),
+        }
+    }
+
+    fn drop_object_variable(&mut self, name: &[u8]) {
+        self.set_object_variable(name, None);
+    }
+
+    fn whole_number(&mut self, value: isize) -> ObjRef {
+        match i64::try_from(value).ok().and_then(ObjRef::small_int) {
+            Some(object) => object,
+            None => self.text(value.to_string().as_bytes()),
+        }
+    }
+
+    fn new_pointer(&mut self, value: POINTER) -> ObjRef {
+        let class = self
+            .classes()
+            .lookup("Pointer")
+            .expect("Pointer is a native class");
+        let behaviour = self.classes().instance_behaviour_handle(class);
+        let body = Body::pointer(class, behaviour, value);
+        let object = self.alloc_with(BehaviourId::OBJECT, body);
+        self.roots.push_temp(object);
+        object
+    }
+
+    fn locals(&mut self) -> &mut Table {
+        &mut self
+            .native_handles
+            .last_mut()
+            .expect("a native activation is running")
+            .locals
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    use super::pool_variable_name;
+    use crate::{Interp, LibraryLoad};
+
+    /// The oracle's own build directory, whose `librxregexp.so` D5's amendment
+    /// makes the instrument: it is loaded, never rebuilt.
+    fn oracle_library_directory() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../build/lib")
+            .canonicalize()
+            .expect("the oracle's build directory is four above this crate")
+    }
+
+    /// An interpreter whose own `LD_LIBRARY_PATH` names that directory. The
+    /// process variable is not touched: this is the interpreter's copy, which
+    /// is the one the search reads.
+    fn interp_that_can_see_rxregexp() -> Interp {
+        let mut interp = Interp::new();
+        let directory = oracle_library_directory()
+            .into_os_string()
+            .into_encoded_bytes();
+        interp.env_set(b"LD_LIBRARY_PATH", Some(directory));
+        interp
+    }
+
+    /// **One resolution path, and the assertion is on the side effect rather
+    /// than on the answer.** Two `Loaded` answers would look alike whether or
+    /// not the second one re-opened the library; the same `Rc` says the
+    /// `dlopen` and the package read happened once.
+    #[test]
+    fn a_library_named_twice_is_opened_once() {
+        let mut interp = interp_that_can_see_rxregexp();
+        let LibraryLoad::Loaded(first) = interp.resolve_library(b"rxregexp") else {
+            panic!("librxregexp.so did not load from the oracle's build directory");
+        };
+        let LibraryLoad::Loaded(second) = interp.resolve_library(b"rxregexp") else {
+            panic!("the second resolve did not load");
+        };
+        assert!(
+            std::rc::Rc::ptr_eq(&first, &second),
+            "the same name answered two different libraries, so it was opened twice"
+        );
+
+        // The control that says the pointer comparison can tell two opens
+        // apart at all: a second interpreter opens its own.
+        let mut other = interp_that_can_see_rxregexp();
+        let LibraryLoad::Loaded(elsewhere) = other.resolve_library(b"rxregexp") else {
+            panic!("librxregexp.so did not load for the second interpreter");
+        };
+        assert!(
+            !std::rc::Rc::ptr_eq(&first, &elsewhere),
+            "two interpreters shared one library object, so ptr_eq is not measuring an open"
+        );
+    }
+
+    /// The search directories come from the interpreter's own environment,
+    /// which is what makes the name reachable at all: without the variable the
+    /// same name answers nothing.
+    #[test]
+    fn the_search_path_is_what_makes_the_name_resolve() {
+        let mut bare = Interp::new();
+        bare.env_set(b"LD_LIBRARY_PATH", None);
+        assert!(
+            matches!(bare.resolve_library(b"rxregexp"), LibraryLoad::Missing),
+            "librxregexp.so is on the process loader's own path, so the test above \
+             is not reading the directory it supplies"
+        );
+        let mut seeing = interp_that_can_see_rxregexp();
+        assert!(matches!(
+            seeing.resolve_library(b"rxregexp"),
+            LibraryLoad::Loaded(_)
+        ));
+    }
+
+    /// A name that resolves to nothing is held as such, so the second ask
+    /// reports the same way the first did.
+    #[test]
+    fn a_name_that_resolves_to_nothing_is_held_as_a_miss() {
+        let mut interp = Interp::new();
+        assert!(matches!(
+            interp.resolve_library(b"zorkolib"),
+            LibraryLoad::Missing
+        ));
+        assert!(matches!(
+            interp.resolve_library(b"zorkolib"),
+            LibraryLoad::Missing
+        ));
+    }
+
+    /// The spellings `getVariableRetriever` answers nothing for, beside the
+    /// two `rxregexp` really writes.
+    #[test]
+    fn a_pool_name_is_upcased_and_a_compound_one_is_refused() {
+        assert_eq!(pool_variable_name(b"CSELF").as_deref(), Some(&b"CSELF"[..]));
+        assert_eq!(pool_variable_name(b"!POS").as_deref(), Some(&b"!POS"[..]));
+        assert_eq!(pool_variable_name(b"cself").as_deref(), Some(&b"CSELF"[..]));
+        assert_eq!(pool_variable_name(b""), None);
+        assert_eq!(pool_variable_name(b"a.b"), None);
+        assert_eq!(pool_variable_name(b"1x"), None);
+    }
+}

@@ -1,0 +1,5 @@
+/* A ::ROUTINE resolves against the library's routine table, which rxregexp
+   leaves empty, so every name is missing and the report says routine rather
+   than method. */
+say 'the prolog ran'
+::routine x external "LIBRARY rxregexp NoSuchRoutine"

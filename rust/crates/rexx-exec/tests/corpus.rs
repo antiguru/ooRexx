@@ -224,13 +224,29 @@ fn prepare_run_directory(dir: &Path, sidecar: &Sidecar) -> PathBuf {
     }
 }
 
-/// The sidecar's overrides with `{run}` resolved against the run directory.
+/// The sidecar's overrides with `{run}` resolved against the run directory and
+/// `{oraclelib}` against the oracle's own library directory.
+///
+/// `{oraclelib}` is what a program loading one of the oracle's compiled
+/// extensions needs: the process loader read `LD_LIBRARY_PATH` before this
+/// harness existed, so the value has to reach the interpreter's own
+/// environment instead, and it is the same directory `Oracle::wrapped`
+/// already puts on the spawned side.
 fn resolved_environment(sidecar: &Sidecar, dir: &Path) -> Vec<(String, String)> {
     let run = dir.to_string_lossy().into_owned();
+    let oracle_lib = support::oracle::oracle_root().join("lib");
+    let oracle_lib = oracle_lib.to_string_lossy().into_owned();
     sidecar
         .environment
         .iter()
-        .map(|(name, value)| (name.clone(), value.replace("{run}", &run)))
+        .map(|(name, value)| {
+            (
+                name.clone(),
+                value
+                    .replace("{run}", &run)
+                    .replace("{oraclelib}", &oracle_lib),
+            )
+        })
         .collect()
 }
 
@@ -699,6 +715,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5d.txt",
     "phase-5j.txt",
     "phase-7.txt",
+    "phase-8.txt",
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
@@ -793,12 +810,18 @@ fn every_sidecar_names_a_program_the_subset_runs() {
     }
 }
 
-/// Each sidecar's own control: the program answers differently without it.
+/// Each sidecar's own control: one of the two interpreters answers
+/// differently without it.
 ///
 /// The differential compares the two interpreters, so a sidecar that never
 /// arrives leaves them agreeing on the same failure and the witness stays
 /// green over nothing. Measured: deleting either half of one left the gate at
 /// 507 of 507, and this control red.
+///
+/// **Why the in-process side is asked too.** `Oracle::wrapped` puts the
+/// oracle's own library directory on the spawned process whatever the sidecar
+/// says, so a `LD_LIBRARY_PATH` override is inert there and load-bearing
+/// here. Such a sidecar is checked against this interpreter instead.
 ///
 /// **What it does not cover.** The set it walks is the sidecars on disk, so
 /// deleting a program's only sidecar takes that program out of the set rather
@@ -807,7 +830,7 @@ fn every_sidecar_names_a_program_the_subset_runs() {
 /// removing `trace_debug_skip.stdin`, the only sidecar of its program, leaves
 /// this green.
 #[test]
-fn a_sidecar_changes_what_the_oracle_answers() {
+fn a_sidecar_changes_what_one_of_the_interpreters_answers() {
     let oracle = support::oracle::locate();
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
     let stems = sidecar_stems(&corpus_dir);
@@ -834,18 +857,30 @@ fn a_sidecar_changes_what_the_oracle_answers() {
         let bare = Sidecar::default();
         let cwd = prepare_run_directory(&dir, &bare);
         let without = oracle.run_in(&abs, &cwd, &[]);
-        empty_run_directory(&dir);
 
         // **All three descriptors.** A sidecar whose whole effect is on
         // stderr -- an interactive-debug transcript, say -- reads as inert
         // against stdout alone, which this control was measured doing.
+        let moved_the_oracle = with.stdout != without.stdout
+            || with.stderr != without.stderr
+            || with.termination != without.termination;
+        if moved_the_oracle {
+            empty_run_directory(&dir);
+            continue;
+        }
+
+        let cwd = prepare_run_directory(&dir, &sidecar);
+        let rust_with = run_rust(&abs, &cwd, &overrides, sidecar.stdin.as_deref());
+        let cwd = prepare_run_directory(&dir, &bare);
+        let rust_without = run_rust(&abs, &cwd, &[], sidecar.stdin.as_deref());
+        empty_run_directory(&dir);
         assert!(
-            with.stdout != without.stdout
-                || with.stderr != without.stderr
-                || with.termination != without.termination,
-            "{rel_path}: the oracle answers the same with the sidecar and without it, so \
-             neither the fixtures nor the environment is load-bearing and the witness would \
-             stay green if they were deleted"
+            rust_with.stdout != rust_without.stdout
+                || rust_with.stderr != rust_without.stderr
+                || rust_with.exit_code != rust_without.exit_code,
+            "{rel_path}: neither interpreter answers differently with the sidecar and \
+             without it, so neither the fixtures nor the environment is load-bearing and \
+             the witness would stay green if they were deleted"
         );
     }
 }

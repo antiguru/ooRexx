@@ -400,8 +400,16 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
         let values = layout.compare_values && !unstable;
         fs::write(&path, program(receiver, &method, &list, values)).expect("the probe is writable");
         let cpp = scrub(run(&mut oracle_command(&oracle, &path, &dir)), &dir);
+        // **The same `LD_LIBRARY_PATH` the oracle child is given**, so a row
+        // whose method loads one of the oracle's own extensions is measuring
+        // the two interpreters and not the difference between a child that
+        // was told where the libraries are and one that was not. Set on the
+        // child, never on this process.
         let ours = scrub(
-            run(Command::new(&binary).arg(&path).current_dir(&dir)),
+            run(Command::new(&binary)
+                .arg(&path)
+                .current_dir(&dir)
+                .env("LD_LIBRARY_PATH", oracle.join("lib"))),
             &dir,
         );
         let (verdict, evidence) = classify(&cpp, &ours, unstable);

@@ -7089,41 +7089,16 @@ fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
 /// refuses the program before its first clause, naming the owning phase.
 #[test]
 fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
-    let cases: &[(&[u8], &str)] = &[
-        (
-            b"say 'main ran'\n::requires zzznolib library\n",
-            "::REQUIRES LIBRARY is not implemented (Phase 8)",
-        ),
-        (
-            b"say 'main ran'\n::routine z external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::ROUTINE EXTERNAL is not implemented (Phase 8)",
-        ),
-        (
-            b"say 'main ran'\n::class foo\n::method m external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
-        ),
-        (
-            b"say 'main ran'\n::class foo\n::attribute a external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::ATTRIBUTE EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
-        ),
-        (
-            b"say 'main ran'\n::class foo\n::method m attribute external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
-        ),
-        // **The row that says which `EXTERNAL` form is still refused for the
-        // library this crate binds**, naming `REXX` and an entry point that
-        // package really exports, so the only thing left to refuse it is the
-        // directive. Without it, moving that form by accident would leave
-        // every test in this file green: the rows above name a library
-        // nothing can load, which refuses whatever the directive.
-        // `directive_attribute_external_bind.rex` and
-        // `directive_method_external_bind.rex` are the other side, where the
-        // same library and the same entry points answer.
-        (
-            b"say 'main ran'\n::routine r external \"LIBRARY REXX file_separator\"\n",
-            "::ROUTINE EXTERNAL is not implemented (Phase 8)",
-        ),
-    ];
+    // **The row that says which `EXTERNAL` form is still refused for the
+    // library this crate binds**, naming `REXX` and an entry point that
+    // package really exports as a routine it does not export, so the only
+    // thing left to refuse it is the directive. The `LIBRARY <other>` forms
+    // are `a_directive_naming_a_library_that_is_not_there_is_98_903`'s, where
+    // the oracle's own condition is what answers.
+    let cases: &[(&[u8], &str)] = &[(
+        b"say 'main ran'\n::routine r external \"LIBRARY REXX file_separator\"\n",
+        "::ROUTINE EXTERNAL naming REXX or REGISTERED is not implemented (Phase 8)",
+    )];
     for (source, message) in cases {
         let outcome = routine_program(source);
         assert_eq!(
@@ -7225,37 +7200,26 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
 #[test]
 fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() {
     let failing_class = "::class a subclass zzznotaclass\n";
-    let refusing: &[(&str, &str)] = &[
-        (
-            "::routine zz external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::ROUTINE EXTERNAL is not implemented (Phase 8)",
-        ),
-        (
-            "::class kk\n::method mm external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::METHOD EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
-        ),
-        (
-            "::class kk\n::attribute aa external \"LIBRARY nosuchlib nosuchfn\"\n",
-            "::ATTRIBUTE EXTERNAL naming a library other than REXX is not implemented (Phase 8)",
-        ),
+    let refusing: &[&str] = &[
+        "::routine zz external \"LIBRARY nosuchlib nosuchfn\"\n",
+        "::class kk\n::method mm external \"LIBRARY nosuchlib nosuchfn\"\n",
+        "::class kk\n::attribute aa external \"LIBRARY nosuchlib nosuchfn\"\n",
     ];
-    for (gap, message) in refusing {
+    for gap in refusing {
         for source in [
             format!("say 'main ran'\n{gap}{failing_class}"),
             format!("say 'main ran'\n{failing_class}{gap}"),
         ] {
             let outcome = routine_program(source.as_bytes());
+            let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
             assert_eq!(
-                outcome.exit_code,
-                crate::NOT_IMPLEMENTED_EXIT,
-                "{source}: exit code, stderr {}",
-                String::from_utf8_lossy(&outcome.stderr)
+                outcome.exit_code, 158,
+                "{source}: exit code, stderr {stderr}"
             );
             assert_eq!(outcome.stdout, b"", "{source}: stdout");
-            assert_eq!(
-                outcome.stderr,
-                format!("rexx-exec: {message}\n").into_bytes(),
-                "{source}: stderr"
+            assert!(
+                stderr.contains("Error 98.903:  Unable to load library \"nosuchlib\"."),
+                "{source}: stderr {stderr}"
             );
         }
     }
@@ -7370,18 +7334,100 @@ fn a_directive_owing_both_a_translation_error_and_a_gap_answers_the_translation_
     let outcome = routine_program(
         b"say 'main ran'\n::routine dup external \"LIBRARY nosuchlib nosuchfn\"\n          ::routine dup\n  return 1\n",
     );
+    let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+    assert_eq!(outcome.exit_code, 158, "exit code, stderr {stderr}");
+    assert_eq!(outcome.stdout, b"", "stdout");
+    assert!(
+        stderr.contains("Error 98.903:  Unable to load library \"nosuchlib\"."),
+        "stderr {stderr}"
+    );
+}
+
+/// **A `::ROUTINE EXTERNAL` naming a library installs and refuses at the
+/// call.** The library and the procedure are resolved at install time, so a
+/// name that is not there is the oracle's own condition; running one needs
+/// the routine half of the two-call protocol, which this plan does not build.
+#[test]
+fn a_library_backed_routine_installs_and_refuses_when_it_is_called() {
+    // The oracle's own build directory, reached through this interpreter's
+    // environment rather than the process's, which nothing here may write.
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../build/lib")
+        .canonicalize()
+        .expect("the oracle's build directory is four above this crate");
+    let run = |source: &[u8]| {
+        let invocation = crate::Invocation::none().with_environment(vec![(
+            b"LD_LIBRARY_PATH".to_vec(),
+            directory.clone().into_os_string().into_encoded_bytes(),
+        )]);
+        crate::run_program("/tmp/routine.rex", source.to_vec(), invocation)
+    };
+
+    let outcome = run(b"say 'main ran'\n::routine pi4 external \"LIBRARY rxmath RxCalcPi\"\n");
+    assert_eq!(
+        outcome.exit_code,
+        0,
+        "the directive installs, stderr {}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(outcome.stdout, b"main ran\n");
+
+    let outcome = run(b"say pi4()\n::routine pi4 external \"LIBRARY rxmath RxCalcPi\"\n");
     assert_eq!(
         outcome.exit_code,
         crate::NOT_IMPLEMENTED_EXIT,
         "exit code, stderr {}",
         String::from_utf8_lossy(&outcome.stderr)
     );
-    assert_eq!(outcome.stdout, b"", "stdout");
     assert_eq!(
         outcome.stderr,
-        b"rexx-exec: ::ROUTINE EXTERNAL is not implemented (Phase 8)\n".to_vec(),
-        "stderr"
+        b"rexx-exec: a call to a ::ROUTINE EXTERNAL is not implemented (Phase 8)\n".to_vec()
     );
+}
+
+/// A directive naming a library nothing loads is the oracle's own 98.903,
+/// before the program's first clause and whatever the directive's keyword.
+/// ```text
+/// ::requires 'zorkolib' LIBRARY                          98.903 rc 158
+/// ::method x external "LIBRARY zorkolib z"               98.903 rc 158
+/// ::attribute a external "LIBRARY zorkolib z"            98.903 rc 158
+/// ::method x attribute external "LIBRARY zorkolib z"     98.903 rc 158
+/// ::routine x external "LIBRARY zorkolib z"              98.903 rc 158
+/// ```
+#[test]
+fn a_directive_naming_a_library_that_is_not_there_is_98_903() {
+    let cases: &[&[u8]] = &[
+        b"say 'main ran'\n::requires zzznolib library\n",
+        b"say 'main ran'\n::routine z external \"LIBRARY zzznolib nosuchfn\"\n",
+        b"say 'main ran'\n::class foo\n::method m external \"LIBRARY zzznolib nosuchfn\"\n",
+        b"say 'main ran'\n::class foo\n::attribute a external \"LIBRARY zzznolib nosuchfn\"\n",
+        b"say 'main ran'\n::class foo\n::method m attribute external \"LIBRARY zzznolib f\"\n",
+    ];
+    for source in cases {
+        let outcome = routine_program(source);
+        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+        let shown = String::from_utf8_lossy(source).into_owned();
+        assert_eq!(
+            outcome.exit_code, 158,
+            "{shown}: exit code, stderr {stderr}"
+        );
+        assert_eq!(
+            outcome.stdout, b"",
+            "{shown}: stdout must be empty -- main must not have run"
+        );
+        // The `::REQUIRES` row spells the name unquoted and the rest quote
+        // it inside the `EXTERNAL` string, which is the case difference the
+        // message carries: measured, oracle, `::requires zzznolib library` is
+        // `Unable to load library "ZZZNOLIB".`
+        let upper = shown.contains("::requires");
+        let named = if upper { "ZZZNOLIB" } else { "zzznolib" };
+        assert!(
+            stderr.contains(&format!(
+                "Error 98.903:  Unable to load library \"{named}\"."
+            )),
+            "{shown}: stderr {stderr}"
+        );
+    }
 }
 
 /// A builtin's result is a value whose rendering `NUMERIC DIGITS` cannot

@@ -97,8 +97,27 @@ fn a_method_is_found_without_regard_to_case() {
 
 #[test]
 fn a_library_that_is_nowhere_is_not_an_error() {
-    let answer = load::open("zorkolib").expect("a library that is not there is not an error");
+    let answer = load::open("zorkolib", &[]).expect("a library that is not there is not an error");
     assert!(answer.is_none());
+}
+
+/// A name resolves through a directory the caller supplies, which is the
+/// channel a `LD_LIBRARY_PATH` the process did not start with reaches the
+/// loader by. The empty search is the control: the same name answers nothing.
+#[test]
+fn a_search_directory_resolves_a_name_the_undecorated_attempt_misses() {
+    let directory = repository_root().join("build/lib");
+    assert!(
+        load::open("rxregexp", &[])
+            .expect("a library that is not there is not an error")
+            .is_none(),
+        "librxregexp.so is already on the loader's own path, so the search \
+         directory below is not what this test would be reading"
+    );
+    let found = load::open("rxregexp", &[directory])
+        .expect("the extension asks for 4.0.0, which is below this interpreter")
+        .expect("the extension publishes RexxGetPackage");
+    assert_eq!(found.name(), Some(b"rxregexp".as_slice()));
 }
 
 #[test]

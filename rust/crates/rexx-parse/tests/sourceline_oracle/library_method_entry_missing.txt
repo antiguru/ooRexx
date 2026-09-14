@@ -1,0 +1,6 @@
+count 5
+/* The library loads and does not export the procedure the ::METHOD names, so
+   the directive's own line is blamed at install time and the prolog does not
+   run. */
+say 'the prolog ran'
+::method x external "LIBRARY rxregexp NoSuchEntry"
