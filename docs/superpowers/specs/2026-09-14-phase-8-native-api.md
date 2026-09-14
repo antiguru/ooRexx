@@ -115,8 +115,15 @@ which the interpreter calls **twice** (`NativeActivation.cpp:1296-1306`):
 
 Between the two calls sits `NativeActivation::processArguments` (`:219`), which is the conversion
 table: about thirty `REXX_VALUE_*` cases converting a Rexx object into the declared C type, with
-`OPTIONAL_` variants tolerating an omitted argument and the rest raising
-`Error_Incorrect_method_signature` when they cannot. Afterwards `valueToObject(arguments)` converts
+`OPTIONAL_` variants tolerating an omitted argument and the rest refusing when they cannot.
+
+**What the refusal is, measured 2026-09-14 against the oracle through `rxregexp`**: an absent
+required argument is **88.901** (`Missing argument; argument 1 is required.`) and an unconvertible
+one is **88.909** (`Argument 1 must have a string value.`), rc 168 each. This corroborates Phase
+7's close, which found `stream_position` answering 88.901 for the same reason.
+`Error_Incorrect_method_signature` = 93.968 and `Error_Incorrect_call_signature` = 40.918 are
+`reportSignatureError` and belong to a malformed *signature*, not to an argument; neither is
+reachable without compiling an extension, so neither is witnessed here. Afterwards `valueToObject(arguments)` converts
 element 0 back.
 
 **Two properties this crate must hold and the C++ gets for free.** The signature call happens
