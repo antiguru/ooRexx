@@ -322,7 +322,11 @@ impl Raised {
     /// and that the send left out. `position` counts the arguments alone,
     /// which is what `NativeActivation.cpp:327` reports.
     pub(crate) fn missing_native_argument(position: usize) -> Raised {
-        Raised::syntax(88, 901, vec![position.to_string().into_bytes()])
+        let mut raised = Raised::syntax(88, 901, vec![position.to_string().into_bytes()]);
+        // Measured, oracle rc 168: `Error 88 running <path>:  Invalid
+        // argument.` with no line, under the method's own traceback line.
+        raised.delivery.lineless = true;
+        raised
     }
 
     /// 93.968: a native method whose declared signature the boundary cannot

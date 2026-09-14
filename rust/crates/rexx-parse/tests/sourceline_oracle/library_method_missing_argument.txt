@@ -1,0 +1,11 @@
+count 10
+/* A required parameter of a library procedure's own signature that the send
+   left out is 88.901, raised before any of the extension's code runs and
+   reported against the package rather than against a line. */
+r = .Re~new('a*b')
+say r~doparse()
+
+::class Re subclass Object
+::method init external "LIBRARY rxregexp RegExp_Init"
+::method uninit external "LIBRARY rxregexp RegExp_Uninit"
+::method doparse external "LIBRARY rxregexp RegExp_Parse"

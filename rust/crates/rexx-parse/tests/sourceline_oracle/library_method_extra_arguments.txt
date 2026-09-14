@@ -1,0 +1,10 @@
+count 9
+/* An argument the signature does not consume is 88.922, and the number it
+   reports is what the signature does consume rather than what was sent. */
+r = .Re~new('a*b')
+say r~doparse('aab', 'MAXIMAL', 'extra')
+
+::class Re subclass Object
+::method init external "LIBRARY rxregexp RegExp_Init"
+::method uninit external "LIBRARY rxregexp RegExp_Uninit"
+::method doparse external "LIBRARY rxregexp RegExp_Parse"
