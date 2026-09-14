@@ -33,6 +33,10 @@ pub mod setup_cpp;
 /// to invoke the oracle identically or their results are not comparable.
 pub mod oracle;
 
+/// What a corpus program runs with besides its own text, read and laid out the
+/// same way by every harness that runs corpus programs.
+pub mod sidecar;
+
 /// `RexxActivation.cpp:3567`-`3587`'s `trace_prefix_table`, all nineteen --
 /// not only the subset this crate has an emitter for. See the module doc
 /// for why the markers nothing here has ever produced are carried anyway:

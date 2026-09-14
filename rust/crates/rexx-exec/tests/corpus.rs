@@ -31,6 +31,9 @@ use support::oracle::{
     Oracle, StderrComparison, StdoutComparison, descriptor_diffs_modes, did_not_finish,
     wrapped_exit_code,
 };
+use support::sidecar::{
+    self, Sidecar, empty_run_directory, prepare_run_directory, resolved_environment, sidecar_for,
+};
 
 /// Env var that flips this test from a progress report into the phase gate.
 /// See the module doc's "REPORT vs STRICT" section.
@@ -76,14 +79,6 @@ fn run_directory(rel_path: &str) -> PathBuf {
         .join(rel_path.replace('/', "__"))
 }
 
-/// Empties `dir`, creating it when it is not there.
-fn empty_run_directory(dir: &Path) {
-    if dir.exists() {
-        fs::remove_dir_all(dir).unwrap_or_else(|e| panic!("cannot empty {}: {e}", dir.display()));
-    }
-    fs::create_dir_all(dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
-}
-
 /// Runs the executor in process, on `path`, from `directory`, with
 /// `overrides` laid over the process's own environment.
 fn run_rust(
@@ -100,154 +95,11 @@ fn run_rust(
     // chooses it rather than this function taking the program's own: the
     // process's directory is shared between the interpreters this harness runs
     // on threads, and a program naming a relative path must see one state.
-    let mut invocation = rexx_exec::Invocation::none().with_directory(directory.to_path_buf());
-    if let Some(bytes) = stdin {
-        invocation = invocation.with_input(rexx_exec::ProgramInput::Bytes(bytes.to_vec()));
-    }
-    if !overrides.is_empty() {
-        // Laid over the inherited environment rather than replacing it,
-        // because `Oracle::run_in` sets its overrides on a spawned process
-        // that inherits everything else, and the two sides have to read the
-        // same environment.
-        let mut environment: Vec<(Vec<u8>, Vec<u8>)> = env::vars()
-            .filter(|(name, _)| !overrides.iter().any(|(over, _)| over == name))
-            .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
-            .collect();
-        environment.extend(
-            overrides
-                .iter()
-                .map(|(name, value)| (name.clone().into_bytes(), value.clone().into_bytes())),
-        );
-        invocation = invocation.with_environment(environment);
-    }
-    watchdog::run_bounded(path_str, text, invocation)
-}
-
-/// The fixture directory and environment one corpus program runs with, taken
-/// from `<name>.d/` and `<name>.env` beside it.
-#[derive(Default)]
-struct Sidecar {
-    /// Copied into the run directory before each side runs.
-    fixtures: Option<PathBuf>,
-    /// `NAME=VALUE` overrides, `{run}` in a value spelled as the run
-    /// directory's absolute path.
-    environment: Vec<(String, String)>,
-    /// A subdirectory of the run directory to run from, from `CWD=`.
-    cwd: Option<String>,
-    /// `<name>.stdin`, handed to both sides as standard input.
-    stdin: Option<Vec<u8>>,
-}
-
-impl Sidecar {
-    /// Whether anything beside the program asked for one.
-    fn present(&self) -> bool {
-        self.fixtures.is_some()
-            || !self.environment.is_empty()
-            || self.cwd.is_some()
-            || self.stdin.is_some()
-    }
-}
-
-/// `<name>.d/` and `<name>.env` for one corpus entry.
-fn sidecar_for(corpus_dir: &Path, rel_path: &str) -> Sidecar {
-    let stem = rel_path
-        .strip_suffix(".rex")
-        .unwrap_or_else(|| panic!("corpus entry {rel_path} does not end in .rex"));
-    let fixtures = corpus_dir.join(format!("{stem}.d"));
-    let mut sidecar = Sidecar {
-        fixtures: fixtures.is_dir().then_some(fixtures),
-        ..Sidecar::default()
-    };
-    sidecar.stdin = fs::read(corpus_dir.join(format!("{stem}.stdin"))).ok();
-    let env_path = corpus_dir.join(format!("{stem}.env"));
-    let Ok(text) = fs::read_to_string(&env_path) else {
-        return sidecar;
-    };
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let (name, value) = line
-            .split_once('=')
-            .unwrap_or_else(|| panic!("{}: {line:?} is not a `NAME=VALUE`", env_path.display()));
-        if name == "CWD" {
-            sidecar.cwd = Some(value.to_string());
-        } else {
-            sidecar
-                .environment
-                .push((name.to_string(), value.to_string()));
-        }
-    }
-    sidecar
-}
-
-/// Copies `from`'s tree into `to`, which must exist.
-fn copy_tree(from: &Path, to: &Path) {
-    for entry in
-        fs::read_dir(from).unwrap_or_else(|e| panic!("cannot read {}: {e}", from.display()))
-    {
-        let entry =
-            entry.unwrap_or_else(|e| panic!("cannot read an entry of {}: {e}", from.display()));
-        let target = to.join(entry.file_name());
-        if entry.path().is_dir() {
-            fs::create_dir_all(&target)
-                .unwrap_or_else(|e| panic!("cannot create {}: {e}", target.display()));
-            copy_tree(&entry.path(), &target);
-        } else {
-            fs::copy(entry.path(), &target).unwrap_or_else(|e| {
-                panic!(
-                    "cannot copy {} to {}: {e}",
-                    entry.path().display(),
-                    target.display()
-                )
-            });
-        }
-    }
-}
-
-/// Empties the run directory and lays the sidecar's fixtures back into it,
-/// answering the directory the program is to run from.
-fn prepare_run_directory(dir: &Path, sidecar: &Sidecar) -> PathBuf {
-    empty_run_directory(dir);
-    if let Some(fixtures) = &sidecar.fixtures {
-        copy_tree(fixtures, dir);
-    }
-    match &sidecar.cwd {
-        None => dir.to_path_buf(),
-        Some(relative) => {
-            let cwd = dir.join(relative);
-            fs::create_dir_all(&cwd)
-                .unwrap_or_else(|e| panic!("cannot create {}: {e}", cwd.display()));
-            cwd
-        }
-    }
-}
-
-/// The sidecar's overrides with `{run}` resolved against the run directory and
-/// `{oraclelib}` against the oracle's own library directory.
-///
-/// `{oraclelib}` is what a program loading one of the oracle's compiled
-/// extensions needs: the process loader read `LD_LIBRARY_PATH` before this
-/// harness existed, so the value has to reach the interpreter's own
-/// environment instead, and it is the same directory `Oracle::wrapped`
-/// already puts on the spawned side.
-fn resolved_environment(sidecar: &Sidecar, dir: &Path) -> Vec<(String, String)> {
-    let run = dir.to_string_lossy().into_owned();
-    let oracle_lib = support::oracle::oracle_root().join("lib");
-    let oracle_lib = oracle_lib.to_string_lossy().into_owned();
-    sidecar
-        .environment
-        .iter()
-        .map(|(name, value)| {
-            (
-                name.clone(),
-                value
-                    .replace("{run}", &run)
-                    .replace("{oraclelib}", &oracle_lib),
-            )
-        })
-        .collect()
+    watchdog::run_bounded(
+        path_str,
+        text,
+        sidecar::invocation(directory, overrides, stdin),
+    )
 }
 
 /// One corpus program that disagreed with the oracle, or one where either
@@ -810,13 +662,15 @@ fn every_sidecar_names_a_program_the_subset_runs() {
     }
 }
 
-/// Each sidecar's own control: one of the two interpreters answers
-/// differently without it.
+/// Each sidecar's own control, taken one part at a time: removing any one of
+/// its fixtures, environment, working directory or standard input makes one
+/// of the two interpreters answer differently.
 ///
 /// The differential compares the two interpreters, so a sidecar that never
 /// arrives leaves them agreeing on the same failure and the witness stays
 /// green over nothing. Measured: deleting either half of one left the gate at
-/// 507 of 507, and this control red.
+/// 507 of 507, and this control red. Asking per part is what catches an inert
+/// part beside a live one, which the whole sidecar against none cannot see.
 ///
 /// **Why the in-process side is asked too.** `Oracle::wrapped` puts the
 /// oracle's own library directory on the spawned process whatever the sidecar
@@ -846,42 +700,46 @@ fn a_sidecar_changes_what_one_of_the_interpreters_answers() {
         let dir = run_directory(&format!("{rel_path}#sidecar-control"));
 
         let sidecar = sidecar_for(&corpus_dir, &rel_path);
-        let overrides = resolved_environment(&sidecar, &dir);
-        let borrowed: Vec<(&str, &str)> = overrides
-            .iter()
-            .map(|(name, value)| (name.as_str(), value.as_str()))
-            .collect();
-        let cwd = prepare_run_directory(&dir, &sidecar);
-        let with = oracle.run_in_with(&abs, &cwd, &borrowed, sidecar.stdin.as_deref());
-
-        let bare = Sidecar::default();
-        let cwd = prepare_run_directory(&dir, &bare);
-        let without = oracle.run_in(&abs, &cwd, &[]);
-
-        // **All three descriptors.** A sidecar whose whole effect is on
-        // stderr -- an interactive-debug transcript, say -- reads as inert
-        // against stdout alone, which this control was measured doing.
-        let moved_the_oracle = with.stdout != without.stdout
-            || with.stderr != without.stderr
-            || with.termination != without.termination;
-        if moved_the_oracle {
-            empty_run_directory(&dir);
-            continue;
+        let run_oracle = |sidecar: &Sidecar| {
+            let overrides = resolved_environment(sidecar, &dir);
+            let borrowed: Vec<(&str, &str)> = overrides
+                .iter()
+                .map(|(name, value)| (name.as_str(), value.as_str()))
+                .collect();
+            let cwd = prepare_run_directory(&dir, sidecar);
+            oracle.run_in_with(&abs, &cwd, &borrowed, sidecar.stdin.as_deref())
+        };
+        let run_crate = |sidecar: &Sidecar| {
+            let overrides = resolved_environment(sidecar, &dir);
+            let cwd = prepare_run_directory(&dir, sidecar);
+            run_rust(&abs, &cwd, &overrides, sidecar.stdin.as_deref())
+        };
+        let oracle_with = run_oracle(&sidecar);
+        let mut crate_with = None;
+        for half in sidecar.halves() {
+            let partial = sidecar.without(half);
+            // **All three descriptors.** A sidecar whose whole effect is on
+            // stderr -- an interactive-debug transcript, say -- reads as inert
+            // against stdout alone, which this control was measured doing.
+            let oracle_without = run_oracle(&partial);
+            if oracle_with.stdout != oracle_without.stdout
+                || oracle_with.stderr != oracle_without.stderr
+                || oracle_with.termination != oracle_without.termination
+            {
+                continue;
+            }
+            let with = crate_with.get_or_insert_with(|| run_crate(&sidecar));
+            let without = run_crate(&partial);
+            assert!(
+                with.stdout != without.stdout
+                    || with.stderr != without.stderr
+                    || with.exit_code != without.exit_code,
+                "{rel_path}: neither interpreter answers differently without its {half:?}, so \
+                 that part of the sidecar is not load-bearing and the witness would stay green \
+                 if it were deleted"
+            );
         }
-
-        let cwd = prepare_run_directory(&dir, &sidecar);
-        let rust_with = run_rust(&abs, &cwd, &overrides, sidecar.stdin.as_deref());
-        let cwd = prepare_run_directory(&dir, &bare);
-        let rust_without = run_rust(&abs, &cwd, &[], sidecar.stdin.as_deref());
         empty_run_directory(&dir);
-        assert!(
-            rust_with.stdout != rust_without.stdout
-                || rust_with.stderr != rust_without.stderr
-                || rust_with.exit_code != rust_without.exit_code,
-            "{rel_path}: neither interpreter answers differently with the sidecar and \
-             without it, so neither the fixtures nor the environment is load-bearing and \
-             the witness would stay green if they were deleted"
-        );
     }
 }
 

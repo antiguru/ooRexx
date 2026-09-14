@@ -14,10 +14,13 @@
 //! reads -- passes again under collect-on-every-allocation, and the mode is
 //! proved to do something before its pass is believed.
 
+mod support;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use rexx_exec::{run_program, run_program_collect_every_alloc};
+use support::sidecar::{prepare_run_directory, resolved_environment, sidecar_for};
 
 fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus")
@@ -68,14 +71,6 @@ fn run_directory(rel_path: &str) -> PathBuf {
     Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join("collect-stress-run")
         .join(rel_path.replace('/', "__"))
-}
-
-/// Empties `dir`, creating it when it is not there.
-fn empty_run_directory(dir: &Path) {
-    if dir.exists() {
-        fs::remove_dir_all(dir).unwrap_or_else(|e| panic!("cannot empty {}: {e}", dir.display()));
-    }
-    fs::create_dir_all(dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
 }
 
 /// **Thirty-six programs left this set in Phase 5j, and none joined it.**
@@ -210,19 +205,23 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
         // A directory of the program's own, emptied between the two runs: a
         // program that writes files must not have the second run read what
         // the first left, or its own output differs for a reason that has
-        // nothing to do with collecting on every allocation.
+        // nothing to do with collecting on every allocation. Each run gets the
+        // fixtures, environment and input the corpus differential gives it.
         let dir = run_directory(rel_path);
-        empty_run_directory(&dir);
+        let sidecar = sidecar_for(&corpus_dir, rel_path);
+        let overrides = resolved_environment(&sidecar, &dir);
+        let stdin = sidecar.stdin.as_deref();
+        let cwd = prepare_run_directory(&dir, &sidecar);
         let plain = run_program(
             path_str,
             text.clone(),
-            rexx_exec::Invocation::none().with_directory(dir.clone()),
+            support::sidecar::invocation(&cwd, &overrides, stdin),
         );
-        empty_run_directory(&dir);
+        let cwd = prepare_run_directory(&dir, &sidecar);
         let stress = run_program_collect_every_alloc(
             path_str,
             text,
-            rexx_exec::Invocation::none().with_directory(dir.clone()),
+            support::sidecar::invocation(&cwd, &overrides, stdin),
         );
 
         if stress.collections == 0 {

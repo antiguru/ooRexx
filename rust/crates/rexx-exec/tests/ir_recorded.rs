@@ -16,6 +16,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod support;
 mod watchdog;
 
 use rayon::prelude::*;
@@ -795,6 +796,9 @@ struct Case {
     /// arms.
     path: String,
     text: Vec<u8>,
+    /// The corpus path a corpus program's sidecar is read under, `None` for
+    /// an inline program.
+    corpus: Option<String>,
 }
 
 /// A named group of cases, drawn from one source.
@@ -875,6 +879,7 @@ fn corpus_cases() -> Vec<Case> {
                 name: format!("corpus {line}"),
                 path: path.to_string_lossy().into_owned(),
                 text,
+                corpus: Some(line.to_string()),
             });
         }
     }
@@ -945,6 +950,7 @@ fn case_of(row: &AssertionRow, index: usize) -> Case {
         name: format!("{}::{}#{index}", row.group, row.method),
         path: INLINE_PATH.to_string(),
         text: row_program(row.digits, row.form, &row.prelude, &clauses),
+        corpus: None,
     }
 }
 
@@ -993,6 +999,7 @@ fn bif_cases(suite: &str) -> Vec<Case> {
                 name: format!("{}::{} raise #{index}", row.group, row.method),
                 path: INLINE_PATH.to_string(),
                 text: row_program(row.digits, row.form, &row.prelude, &operands),
+                corpus: None,
             });
         }
     }
@@ -1007,6 +1014,7 @@ fn keyword_cases(suite: &str) -> Vec<Case> {
                 name: format!("{}::{}", body.group, body.method),
                 path: INLINE_PATH.to_string(),
                 text: body.program.clone().into_bytes(),
+                corpus: None,
             });
         }
     }
@@ -1020,14 +1028,20 @@ fn compare(case: &Case) -> Option<String> {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join("ir-recorded-run")
         .join(case.name.replace(['/', ':', ' '], "__"));
-    if dir.exists() {
-        fs::remove_dir_all(&dir).unwrap_or_else(|e| panic!("cannot empty {}: {e}", dir.display()));
-    }
-    fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
+    // A corpus program runs with the fixtures, environment and input the
+    // corpus differential gives it, so a library witness reaches its library
+    // rather than the load failure.
+    let sidecar = case
+        .corpus
+        .as_deref()
+        .map(|rel_path| support::sidecar::sidecar_for(&corpus_dir(), rel_path))
+        .unwrap_or_default();
+    let overrides = support::sidecar::resolved_environment(&sidecar, &dir);
+    let cwd = support::sidecar::prepare_run_directory(&dir, &sidecar);
     let outcome = watchdog::run_bounded(
         &case.path,
         case.text.clone(),
-        Invocation::none().with_directory(dir),
+        support::sidecar::invocation(&cwd, &overrides, sidecar.stdin.as_deref()),
     );
     if watchdog::did_not_finish(&outcome) {
         return Some(
