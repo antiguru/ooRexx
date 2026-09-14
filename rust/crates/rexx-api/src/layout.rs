@@ -382,15 +382,18 @@ fn refuse(entry: &str) -> ! {
 }
 
 /// The Rust type of one interface member.
+///
+/// A function member is `unsafe` to call, because it trusts raw pointers that
+/// only its caller can vouch for.
 macro_rules! entry_type {
     (value $ty:ty = $value:expr) => {
         $ty
     };
     (call($($arg:ty),*)) => {
-        extern "C" fn($($arg),*)
+        unsafe extern "C" fn($($arg),*)
     };
     (call($($arg:ty),*) -> $ret:ty) => {
-        extern "C" fn($($arg),*) -> $ret
+        unsafe extern "C" fn($($arg),*) -> $ret
     };
 }
 

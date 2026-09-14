@@ -360,40 +360,6 @@ fn a_wrapper_puts_the_public_context_first() {
     );
 }
 
-/// The variable this test sets on the child it spawns, so that the child
-/// reaches the stub and this process does not.
-const CALL_A_STUB: &str = "REXX_API_CALL_AN_UNBUILT_ENTRY";
-
-/// A stub is reached the way an extension would reach it, through the table.
-///
-/// The call is in a child because an `extern "C"` frame aborts on panic, so
-/// there is no returning from it.
-#[test]
-fn an_unbuilt_entry_refuses_loudly() {
-    if std::env::var_os(CALL_A_STUB).is_some() {
-        (RexxThreadInterface::REFUSING.HaltThread)(std::ptr::null_mut());
-        unreachable!("the stub returned");
-    }
-
-    let binary = std::env::current_exe().expect("this test binary's own path");
-    let output = std::process::Command::new(binary)
-        .args(["an_unbuilt_entry_refuses_loudly", "--exact", "--nocapture"])
-        .env(CALL_A_STUB, "1")
-        .output()
-        .expect("the child runs");
-
-    assert!(
-        !output.status.success(),
-        "the child returned from an entry nothing has built: {:?}",
-        output.status
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("RexxThreadInterface.HaltThread is not implemented (Phase 8)"),
-        "the refusal did not name the entry and the phase that owes it:\n{stderr}"
-    );
-}
-
 /// The tables outside the L2 slice are declared and nothing builds one, so
 /// the site that would hand one out has to say so rather than answer.
 #[test]

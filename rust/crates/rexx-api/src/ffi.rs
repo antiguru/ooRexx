@@ -99,6 +99,19 @@ pub unsafe fn value_of(descriptor: &ValueDescriptor, repr: Repr) -> Value {
 ///
 /// A plain initializer nothing patches, so it lives at one address for the
 /// process; the members this phase has not written still refuse loudly.
+///
+/// A member trusts the context it is handed, so calling one is `unsafe`:
+///
+/// ```compile_fail,E0133
+/// # use rexx_api::ffi::METHOD_CONTEXT;
+/// # use rexx_api::layout::RexxMethodContext_;
+/// let mut bare = RexxMethodContext_ {
+///     threadContext: std::ptr::null_mut(),
+///     functions: std::ptr::null_mut(),
+///     arguments: std::ptr::null_mut(),
+/// };
+/// (METHOD_CONTEXT.SetObjectVariable)(&raw mut bare, c"X".as_ptr(), std::ptr::null_mut());
+/// ```
 pub static METHOD_CONTEXT: MethodContextInterface = {
     let mut table = MethodContextInterface::REFUSING;
     table.SetObjectVariable = set_object_variable;
@@ -239,14 +252,17 @@ unsafe fn name_of<'a>(name: CSTRING) -> Option<&'a [u8]> {
     Some(unsafe { CStr::from_ptr(name) }.to_bytes())
 }
 
-extern "C" fn set_object_variable(
+/// # Safety
+/// `context` is a method context a live [`Contexts`] handed out, used during
+/// the call it was handed to, and a non-null `name` is a NUL-terminated string.
+unsafe extern "C" fn set_object_variable(
     context: *mut RexxMethodContext_,
     name: CSTRING,
     value: RexxObjectPtr,
 ) {
-    // SAFETY: this is reached only through `METHOD_CONTEXT`, which only a
-    // `Contexts` publishes, and only for the length of the call it made; the
-    // name is the extension's own string.
+    // SAFETY: the caller guarantees the context and the name, and
+    // `invoke::method` holds no conversion state across the call the context
+    // was handed to.
     let (activation, Some(name)) = (unsafe { activation_of(context) }, unsafe { name_of(name) })
     else {
         return;
@@ -254,7 +270,9 @@ extern "C" fn set_object_variable(
     activation.set_object_variable(name, value);
 }
 
-extern "C" fn drop_object_variable(context: *mut RexxMethodContext_, name: CSTRING) {
+/// # Safety
+/// As [`set_object_variable`].
+unsafe extern "C" fn drop_object_variable(context: *mut RexxMethodContext_, name: CSTRING) {
     // SAFETY: as `set_object_variable`.
     let (activation, Some(name)) = (unsafe { activation_of(context) }, unsafe { name_of(name) })
     else {
@@ -263,31 +281,51 @@ extern "C" fn drop_object_variable(context: *mut RexxMethodContext_, name: CSTRI
     activation.drop_object_variable(name);
 }
 
-extern "C" fn whole_number_to_object(
+/// # Safety
+/// `context` is the thread context of a live [`Contexts`], used during the
+/// call its method context was handed to.
+unsafe extern "C" fn whole_number_to_object(
     context: *mut RexxThreadContext_,
     value: wholenumber_t,
 ) -> RexxObjectPtr {
-    // SAFETY: this is reached only through the thread table a `Contexts`
-    // owns, and only for the length of the call it made.
+    // SAFETY: the caller guarantees the context, and `invoke::method` holds no
+    // conversion state across the call it was handed to.
     unsafe { activation_of(context) }.whole_number(value)
 }
 
-extern "C" fn string_data(context: *mut RexxThreadContext_, string: RexxStringObject) -> CSTRING {
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn string_data(
+    context: *mut RexxThreadContext_,
+    string: RexxStringObject,
+) -> CSTRING {
     // SAFETY: as `whole_number_to_object`.
     unsafe { activation_of(context) }.string_data(string.cast())
 }
 
-extern "C" fn string_length(context: *mut RexxThreadContext_, string: RexxStringObject) -> usize {
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn string_length(
+    context: *mut RexxThreadContext_,
+    string: RexxStringObject,
+) -> usize {
     // SAFETY: as `whole_number_to_object`.
     unsafe { activation_of(context) }.string_length(string.cast())
 }
 
-extern "C" fn new_pointer(context: *mut RexxThreadContext_, value: POINTER) -> RexxPointerObject {
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn new_pointer(
+    context: *mut RexxThreadContext_,
+    value: POINTER,
+) -> RexxPointerObject {
     // SAFETY: as `whole_number_to_object`.
     unsafe { activation_of(context) }.new_pointer(value).cast()
 }
 
-extern "C" fn raise_exception0(context: *mut RexxThreadContext_, number: usize) {
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn raise_exception0(context: *mut RexxThreadContext_, number: usize) {
     // SAFETY: as `whole_number_to_object`.
     unsafe { activation_of(context) }.raise(number);
 }
@@ -383,15 +421,59 @@ pub(crate) extern "C" fn dropping_stub(
     let functions = unsafe { (*context).functions };
     // SAFETY: as above, the table is `METHOD_CONTEXT`.
     let drop_variable = unsafe { (*functions).DropObjectVariable };
-    drop_variable(context, c"CSELF".as_ptr());
+    // SAFETY: `context` is the one a `Contexts` handed this call, and the
+    // name is a literal.
+    unsafe { drop_variable(context, c"CSELF".as_ptr()) };
     std::ptr::null_mut()
 }
 
 #[cfg(test)]
 mod tests {
     use super::{owner_of, value_of};
-    use crate::layout::{Owned, RexxCallContext_, RexxMethodContext_, RexxThreadContext_};
+    use crate::layout::{
+        Owned, RexxCallContext_, RexxMethodContext_, RexxThreadContext_, RexxThreadInterface,
+    };
     use crate::values::{Converted, Repr, Value, code, descriptor, repr, rows};
+
+    /// The variable this test sets on the child it spawns, so that the child
+    /// reaches the stub and this process does not.
+    const CALL_A_STUB: &str = "REXX_API_CALL_AN_UNBUILT_ENTRY";
+
+    /// A stub is reached the way an extension would reach it, through the table.
+    ///
+    /// The call is in a child because an `extern "C"` frame aborts on panic, so
+    /// there is no returning from it.
+    #[test]
+    #[cfg_attr(miri, ignore = "spawns a process")]
+    fn an_unbuilt_entry_refuses_loudly() {
+        if std::env::var_os(CALL_A_STUB).is_some() {
+            // SAFETY: the stub reads none of its arguments.
+            unsafe { (RexxThreadInterface::REFUSING.HaltThread)(std::ptr::null_mut()) };
+            unreachable!("the stub returned");
+        }
+
+        let binary = std::env::current_exe().expect("this test binary's own path");
+        let output = std::process::Command::new(binary)
+            .args([
+                "ffi::tests::an_unbuilt_entry_refuses_loudly",
+                "--exact",
+                "--nocapture",
+            ])
+            .env(CALL_A_STUB, "1")
+            .output()
+            .expect("the child runs");
+
+        assert!(
+            !output.status.success(),
+            "the child returned from an entry nothing has built: {:?}",
+            output.status
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("RexxThreadInterface.HaltThread is not implemented (Phase 8)"),
+            "the refusal did not name the entry and the phase that owes it:\n{stderr}"
+        );
+    }
 
     /// A value of each shape, chosen so that a read of the wrong width or the
     /// wrong member answers something else.
