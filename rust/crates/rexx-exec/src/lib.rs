@@ -1769,6 +1769,10 @@ struct Interp {
     /// a library whose version check refused is, because that check raises
     /// between the `put` and the `remove`.
     libraries: Libraries,
+    /// How many times [`Interp::resolve_library`] has opened a library,
+    /// which is what a test reads to see that a held one is not opened again.
+    #[cfg(test)]
+    library_opens: usize,
     /// Which library procedure each `::METHOD`/`::ATTRIBUTE ... EXTERNAL
     /// "LIBRARY <name>"` bound to, keyed by the identity
     /// [`Interp::install_one_method`] minted for its dictionary key.
@@ -2340,6 +2344,8 @@ impl Interp {
             generated_methods: HashMap::new(),
             native_externals: HashMap::new(),
             libraries: Libraries::new(),
+            #[cfg(test)]
+            library_opens: 0,
             library_externals: HashMap::new(),
             external_packages: HashMap::new(),
             library_codes: Vec::new(),
@@ -4600,6 +4606,10 @@ impl Interp {
         if let Some(held) = self.libraries.get(name) {
             return LibraryLoad::Loaded(Rc::clone(held));
         }
+        #[cfg(test)]
+        {
+            self.library_opens += 1;
+        }
         let spelling = String::from_utf8_lossy(name).into_owned();
         let opened = rexx_api::load::open(&spelling, &self.library_search);
         self.settle_library(name, opened)
@@ -5256,6 +5266,8 @@ impl Interp {
             native_externals: _,
             // Library handles and procedure names, no `ObjRef` in either.
             libraries: _,
+            #[cfg(test)]
+                library_opens: _,
             library_externals: _,
             // Program identities, not objects.
             external_packages: _,

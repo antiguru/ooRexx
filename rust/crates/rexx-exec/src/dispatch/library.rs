@@ -293,8 +293,10 @@ mod tests {
 
     /// **One resolution path, and the assertion is on the side effect rather
     /// than on the answer.** Two `Loaded` answers would look alike whether or
-    /// not the second one re-opened the library; the same `Rc` says the
-    /// `dlopen` and the package read happened once.
+    /// not the second one re-opened the library, and so would two answers
+    /// holding the same `Rc`, because a non-replacing hold hands the first one
+    /// back; the open count is what says the `dlopen` and the package read
+    /// happened once.
     #[test]
     fn a_library_named_twice_is_opened_once() {
         let mut interp = interp_that_can_see_rxregexp();
@@ -304,21 +306,20 @@ mod tests {
         let LibraryLoad::Loaded(second) = interp.resolve_library(b"rxregexp") else {
             panic!("the second resolve did not load");
         };
-        assert!(
-            std::rc::Rc::ptr_eq(&first, &second),
-            "the same name answered two different libraries, so it was opened twice"
-        );
+        assert_eq!(interp.library_opens, 1, "the same name was opened twice");
+        assert!(Rc::ptr_eq(&first, &second));
 
-        // The control that says the pointer comparison can tell two opens
-        // apart at all: a second interpreter opens its own.
-        let mut other = interp_that_can_see_rxregexp();
-        let LibraryLoad::Loaded(elsewhere) = other.resolve_library(b"rxregexp") else {
-            panic!("librxregexp.so did not load for the second interpreter");
-        };
-        assert!(
-            !std::rc::Rc::ptr_eq(&first, &elsewhere),
-            "two interpreters shared one library object, so ptr_eq is not measuring an open"
-        );
+        // The control that says the count sees an open at all: a name nothing
+        // is held for opens every time it is asked.
+        assert!(matches!(
+            interp.resolve_library(b"zorkolib"),
+            LibraryLoad::Missing
+        ));
+        assert!(matches!(
+            interp.resolve_library(b"zorkolib"),
+            LibraryLoad::Missing
+        ));
+        assert_eq!(interp.library_opens, 3);
     }
 
     /// The search directories come from the interpreter's own environment,
@@ -398,6 +399,7 @@ mod tests {
             panic!("the refused library was not held");
         };
         assert!(held.method(b"RegExp_Parse").is_some());
+        assert_eq!(interp.library_opens, 0, "the held library was opened again");
     }
 
     /// **The end-to-end witness answers the same under a collection at every
