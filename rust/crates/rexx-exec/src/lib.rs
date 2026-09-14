@@ -2018,6 +2018,9 @@ struct Interp {
     /// The package each `::REQUIRES` name has already loaded, keyed both by
     /// the name as written and by the file it resolved to.
     required_packages: HashMap<Box<[u8]>, ProgramId>,
+    /// The programs whose directives got through the first walk of
+    /// [`Interp::install_directives`], which is this crate's translation.
+    translated: std::collections::HashSet<ProgramId>,
     /// The resolved paths whose `::REQUIRES` directives are still installing
     /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
     requires_installing: Vec<Box<str>>,
@@ -2423,6 +2426,7 @@ impl Interp {
             program_path: String::new(),
             required_paths: HashMap::new(),
             required_packages: HashMap::new(),
+            translated: std::collections::HashSet::new(),
             requires_installing: Vec::new(),
             trace_cache: crate::trace::TraceMode::OFF,
         }
@@ -2993,6 +2997,7 @@ impl Interp {
                 }
             }
         }
+        self.translated.insert(id);
 
         // **A second pass, because the oracle's own translation-time
         // refusals above happen before every install-time one below**
@@ -3287,7 +3292,17 @@ impl Interp {
         self.required_packages.insert(name.into(), required);
         self.required_packages
             .insert(resolved.as_bytes().into(), required);
-        self.run_loaded(parsed, required, CallType::Requires, None, None)?;
+        if let Err(failure) = self.run_loaded(parsed, required, CallType::Requires, None, None) {
+            // `getRequiresFile` caches a package only once it has translated
+            // (`package/PackageManager.cpp:828-836`), so a later ask for one
+            // whose translation raised translates it again; a package that
+            // failed to install or in its prologue stays cached.
+            if !self.translated.contains(&required) {
+                self.required_packages.remove(name);
+                self.required_packages.remove(resolved.as_bytes());
+            }
+            return Err(failure);
+        }
         Ok(required)
     }
 
@@ -5364,6 +5379,7 @@ impl Interp {
             program_path: _,
             required_paths: _,
             required_packages: _,
+            translated: _,
             requires_installing: _,
             // Bytes and paths, no `ObjRef` in any of them: the interpreter's
             // own environment, current directory and `SETLOCAL` snapshots are

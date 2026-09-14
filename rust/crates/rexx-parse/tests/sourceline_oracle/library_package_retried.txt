@@ -1,0 +1,25 @@
+count 24
+/* A package whose translation failed is not kept, so a later loadPackage
+   translates it again: a translation error is raised again, and once the
+   library its directives name can be found the retry installs its class. A
+   package that translated and then failed to install is kept as it stands. */
+say 'pk2.cls first' try('pk2.cls')
+say 'pk2.cls again' try('pk2.cls')
+say 'pk3.cls first' try('pk3.cls')
+.environment~put(.object~subclass('Base'), 'NOSUCHBASE')
+say 'pk3.cls again' try('pk3.cls')
+say 'its class' .K3
+say 'pk.cls first' try('pk.cls')
+address system 'cp' value('RETRY_FROM', , 'ENVIRONMENT') value('RETRY_TO', , 'ENVIRONMENT')
+say 'pk.cls again' try('pk.cls')
+say 'its class' .K
+say 'its method' .K~new('a*b')~doparse('x')
+exit
+
+try: procedure
+  use arg name
+  signal on syntax name raised
+  p = .context~package~loadPackage(name)
+  return 'loaded'
+raised:
+  return 'raised' condition('O')~code
