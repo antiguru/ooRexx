@@ -82,3 +82,7 @@ lang/library_bound_before_refusal.rex
 # Residual fixes: a package whose translation raised is translated again when
 # it is asked for again, and one that translated and failed to install is not.
 lang/library_package_retried.rex
+
+# Residual fixes: a Method or Routine object passed as a context hands its
+# package on, and a loadExternal* answer nothing has bound still answers.
+lang/library_context_package.rex

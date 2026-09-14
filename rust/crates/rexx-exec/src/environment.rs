@@ -2073,11 +2073,18 @@ impl Interp {
             .map(|(which, _)| *which)
     }
 
-    /// Which package a `Method` or `Routine` object belongs to, or `None` for
-    /// an object this crate did not build and for a `loadExternal*` answer no
-    /// directive has bound, whose package the oracle answers as `.nil`.
-    pub(crate) fn executable_package(&self, object: ObjRef) -> Option<Package> {
-        self.source_package(self.executable_sources.get(&object)?.source)
+    /// The package a `Method` or `Routine` object passed as a context argument
+    /// hands on as the new code's parent, or `None` for an object this crate
+    /// did not build.
+    ///
+    /// A `loadExternal*` answer no directive has bound hands on the `REXX`
+    /// package. Its own package is `.nil`, which the oracle hands on as the
+    /// parent (`execution/BaseExecutable.cpp:121-125`): measured, it answers
+    /// until a name is resolved through that parent, and segfaults there
+    /// (`corpus/oracle-crashes.txt` entry 15).
+    pub(crate) fn executable_context_package(&self, object: ObjRef) -> Option<Package> {
+        let source = self.executable_sources.get(&object)?.source;
+        Some(self.source_package(source).unwrap_or(Package::Rexx))
     }
 }
 

@@ -801,3 +801,36 @@ needs to suppress tracing during delivery to the trace route. **No upstream tick
 this crate it is a licensed divergence with one binding requirement: nothing here may
 answer by crashing *or by hanging*, so delivery to the trace route is guarded against
 re-entry and the run terminates.
+
+## 15. A context argument whose package is `.nil`, then a name resolved through it
+
+    m = .Method~loadExternalMethod('m', 'LIBRARY rxregexp RegExp_Pos')
+    p = .Package~new('x', .array~of('say "prolog ran"', 'say .array', 'say .nosuchzz'), m)
+    say 'answered' p~name
+
+SIGSEGV, rc 139, stdout `prolog ran`, stderr empty, measured 2026-09-14. `m` is a
+`loadExternalMethod` answer no directive has bound, so `m~package` is `.nil`, and the crash is at
+the first name resolved through the new code's parent.
+
+The same crash, each its own program, each after printing what came before: a prolog `call` of a
+routine the calling program defines; `.Routine~new('r', .array~of('say .array', 'return 42'),
+m)~call`; `.Routine~newFile(file, m)~call` over a file whose first clause is `say .array`; and
+`say 'findRoutine' p~findRoutine('CALLERROUTINE')` followed by `p~findClass('Array')`, which prints
+`findRoutine CALLERROUTINE` -- an object that is neither the routine nor `.nil` -- and then crashes.
+The first, the third and the `findRoutine` program were each run a second time and crashed the same
+way. With nothing resolved through the context the same object answers at rc 0: a prolog `say`,
+`.Method~new('mm', 'return 43', m)`, `.Routine~new('r', 'return 42', m)~call`, and `newFile` over
+`return 44` or `return 45`. Controls, rc 0 both: the caller's routine called from a prolog whose
+context is `.context~package` runs, and with no context is 43.1.
+
+`BaseExecutable::getPackage` answers `resultOrNil(package)` (`execution/BaseExecutable.cpp:121-125`),
+which `PackageClass::newRexx` (`classes/PackageClass.cpp:202-205`) and the `new`/`newFile` argument
+processing (`execution/BaseExecutable.cpp:274-277`, `:343-346`) take as a `PackageClass *`. It
+becomes the new package's `parentPackage` (`classes/PackageClass.cpp:680-684`), and every lookup
+that misses locally calls a `PackageClass` member on `TheNilObject` (`findLocalRoutine`
+`:836-839`, `findInstalledClass` `:997-1000`), reading fields out of an object that is not a
+package. **Read**, not established under a debugger.
+
+Found 2026-09-14 by the Phase 8 residual fix round. **No upstream ticket.** This crate hands such a
+context on as the `REXX` package, a parent its routine lookup does not search, so it answers every
+shape the oracle answers and answers the crashing ones as if the context held nothing.
