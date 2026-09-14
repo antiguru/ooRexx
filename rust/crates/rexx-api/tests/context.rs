@@ -21,9 +21,7 @@ use rexx_api::invoke;
 use rexx_api::layout::POINTER;
 use rexx_api::load::{self, NativeMethodEntry};
 use rexx_api::values::{Activation, CStringPool, Constants, Conversion, Failure, Host};
-use rexx_core::{
-    BehaviourHandle, BehaviourId, Body, Bytes, CollectStats, Heap, ObjRef, RootSet, ScopePools,
-};
+use rexx_core::{BehaviourHandle, BehaviourId, Body, Bytes, Heap, ObjRef, RootSet, ScopePools};
 
 /// `Rexx_Error_Invalid_template` (`api/oorexxerrors.h:362`).
 const INVALID_TEMPLATE: usize = 38000;
@@ -71,8 +69,8 @@ struct Interpreter {
     /// The one empty string object, which the oracle's `TheNullString` is.
     null_string: ObjRef,
     on_whole_number: OnWholeNumber,
-    /// Every collection [`OnWholeNumber::Collect`] ran, in order.
-    collections: Vec<CollectStats>,
+    /// How many collections [`OnWholeNumber::Collect`] ran.
+    collections: usize,
     /// What a collection inside a call roots besides the receiver, named by
     /// the test rather than read off the local-reference table: a host
     /// callback runs with that table borrowed and cannot reach it.
@@ -110,7 +108,7 @@ impl Interpreter {
             pointer_class,
             null_string,
             on_whole_number: OnWholeNumber::Nothing,
-            collections: Vec::new(),
+            collections: 0,
             roots_during_call: Vec::new(),
         }
     }
@@ -203,8 +201,8 @@ impl Host for Interpreter {
             for (index, object) in self.roots_during_call.iter().enumerate() {
                 roots.add_global(&format!(".HANDLE{index}"), *object);
             }
-            let stats = self.heap.collect(&roots);
-            self.collections.push(stats);
+            self.heap.collect(&roots);
+            self.collections += 1;
         }
         ObjRef::small_int(i64::try_from(value).expect("a position fits an i64"))
             .expect("a position is a small integer")
@@ -264,10 +262,10 @@ impl Session {
 
     /// The roots a collection between two calls sees: the receiver, which the
     /// interpreter is holding for the send, and nothing else.
-    fn between_calls(&mut self) -> CollectStats {
+    fn between_calls(&mut self) {
         let mut roots = RootSet::new();
         roots.add_global(".RECEIVER", self.interpreter.receiver);
-        self.interpreter.heap.collect(&roots)
+        self.interpreter.heap.collect(&roots);
     }
 }
 
@@ -508,10 +506,10 @@ fn cself_survives_a_collection_between_two_calls() {
     // strings the first call interned are not objects, so the pointer object
     // is reachable only through the receiver's own pool.
     session.locals.clear();
-    session.interpreter.text(b"garbage nothing holds");
-    let stats = session.between_calls();
+    let garbage = session.interpreter.text(b"garbage nothing holds");
+    session.between_calls();
     assert!(
-        stats.swept > 0,
+        session.interpreter.heap.get(garbage).is_none(),
         "the collection reclaimed nothing, so it witnesses nothing"
     );
 
@@ -571,17 +569,17 @@ fn a_collection_inside_the_call_leaves_it_able_to_finish() {
 
     session.ran(init, &[template]);
     let before = session.interpreter.cself().expect("CSELF after INIT");
-    session.interpreter.text(b"garbage nothing holds");
+    let garbage = session.interpreter.text(b"garbage nothing holds");
     session.interpreter.roots_during_call = subject.into_iter().collect();
     session.interpreter.on_whole_number = OnWholeNumber::Collect;
 
     assert_eq!(session.ran(matches, &[subject]), returned(1));
 
     session.interpreter.on_whole_number = OnWholeNumber::Nothing;
-    let stats = std::mem::take(&mut session.interpreter.collections);
-    assert_eq!(stats.len(), 1, "the collection hook did not run once");
+    let collections = std::mem::take(&mut session.interpreter.collections);
+    assert_eq!(collections, 1, "the collection hook did not run once");
     assert!(
-        stats[0].swept > 0,
+        session.interpreter.heap.get(garbage).is_none(),
         "the collection inside the call reclaimed nothing, so it witnesses nothing"
     );
     assert_eq!(
