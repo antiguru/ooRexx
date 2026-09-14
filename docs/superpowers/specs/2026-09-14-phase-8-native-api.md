@@ -80,8 +80,12 @@ numbers for the path a program actually takes. A `::REQUIRES ... LIBRARY` naming
 not there is **98.903** (`Error_Execution_library`, `PackageManager.cpp:214`), not 98.982, and it
 fires before the program's first clause. A `::METHOD ... EXTERNAL` naming an entry the library does
 not export is **90.998** and a `::ROUTINE` one is **90.999**, both at directive-install time.
-`Error_Execution_library_method` = 98.978 belongs to `loadExternalMethod` and `Package~loadLibrary`
-(`PackageManager.cpp:947`, `:968`). The transcripts are in this plan's SDD ledger.
+`Error_Execution_library_method` = 98.978 is reachable from no surface at all: measured
+2026-09-14, `loadExternalMethod` and `loadExternalRoutine` answer `.nil`, `Package~loadLibrary`
+answers `1` or `0`, and `.Object~package~loadLibrary` is **98.984**. `PackageManager.cpp:947` and
+`:968` are restore and reflatten paths a program cannot reach. **This was the fifth error number on
+this phase taken from `RexxErrorCodes.h` that named a path nothing runs**, which is why the rule is
+now that a number is measured or it is not written. The transcripts are in this plan's SDD ledger.
 
 **The test target is the oracle's own compiled extension, not a rebuild of it.** Measured
 2026-09-14 and recorded as an amendment to D5: `build/lib/librxregexp.so` imports no symbol whose
@@ -229,7 +233,7 @@ grant.
 | the conversion table is right for the five L2 types | the 20 `rxregexp` L1 cases, differential |
 | `CSELF` survives a collection | a witness that collects between two method calls on one object |
 | a stale handle misses rather than lies | a unit test in `rexx-api` holding a handle past its activation |
-| the load failures | corpus witnesses for 98.903, 90.998, 90.999 and 98.978 |
+| the load failures | corpus witnesses for 98.903, 90.998, 90.999, 98.982 and 98.984 |
 | **L2** | `ooTest.frm` loads and one test group executes |
 | `testbinaries/` compile unchanged | a build of `testbinaries/` against the frozen headers |
 | the six API groups that are not embedding | the ooTest run |
