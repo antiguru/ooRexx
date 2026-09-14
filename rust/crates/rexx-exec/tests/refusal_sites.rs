@@ -421,15 +421,88 @@ fn admissible() -> BTreeMap<String, Identifiers> {
         .map(|name| {
             let body = bodies.get(name).map_or("", String::as_str);
             let site = sites.get(name).map_or("", String::as_str);
-            (name.clone(), identifiers(body, site))
+            (name.clone(), identifiers(&delegated(body, &bodies), site))
         })
         .collect()
+}
+
+/// `body`, followed by the body of every constructor it delegates to.
+///
+/// One level, because that is what the source does: a constructor like
+/// `missing_internal_argument` calls another and then sets a delivery flag, so
+/// its own text names no `syntax(M, N)` and the number it answers with belongs
+/// to the one it called. Without this the check reads a delegating constructor
+/// as producing no identifier at all, and every probe that reaches it looks
+/// like a probe that went somewhere else.
+fn delegated(body: &str, bodies: &BTreeMap<String, String>) -> String {
+    let mut out = body.to_string();
+    for (name, other) in bodies {
+        for prefix in ["Raised::", "Loud::"] {
+            if body.contains(&format!("{prefix}{name}(")) {
+                out.push('\n');
+                out.push_str(other);
+            }
+        }
+    }
+    out
+}
+
+/// Rewrite the committed table from the source, carrying each measured column
+/// forward by constructor name.
+///
+/// Runs only under `REXX_REFUSAL_SITES_REFRESH`, and only from the test below,
+/// so a refresh run wants `--test-threads=1`: the other tests in this binary
+/// read the file this writes. A constructor the source no longer defines is
+/// dropped and one that moved off the send surface loses its verdict, because
+/// the verdict was about a send. A new row on the send surface is written with
+/// its measured columns empty, which `every_send_surface_row_is_walked` then
+/// rejects by name, because only a probe against the oracle can supply them.
+fn refresh() {
+    let text = std::fs::read_to_string(table_path()).expect("the table is checked in");
+    let header: String = text
+        .lines()
+        .take_while(|line| line.starts_with('#') || line.trim().is_empty())
+        .map(|line| format!("{line}\n"))
+        .collect();
+    let measured: BTreeMap<String, Row> = committed()
+        .into_iter()
+        .map(|row| (row.name.clone(), row))
+        .collect();
+    let mut out = header;
+    for (kind, name, surface, definition) in derived() {
+        let on_send = surface.split('+').any(|tag| tag == "send");
+        let carried = measured
+            .get(&name)
+            .filter(|row| on_send == row.surface.split('+').any(|tag| tag == "send"));
+        let (verdict, reached, answer, witness) = match (carried, on_send) {
+            (Some(row), _) => (
+                row.verdict.clone(),
+                row.reached.clone(),
+                row.answer.clone(),
+                row.witness.clone(),
+            ),
+            (None, true) => (String::new(), String::new(), String::new(), String::new()),
+            (None, false) => (
+                "off-send-surface".to_string(),
+                "-".to_string(),
+                "-".to_string(),
+                "-".to_string(),
+            ),
+        };
+        out.push_str(&format!(
+            "{kind}\t{name}\t{surface}\t{definition}\t{verdict}\t{reached}\t{answer}\t{witness}\n"
+        ));
+    }
+    std::fs::write(table_path(), out).expect("the table is writable");
 }
 
 /// The committed table is what the source says, so a constructor added later
 /// is red here rather than silently unwalked.
 #[test]
 fn the_table_holds_every_constructor_the_source_defines() {
+    if std::env::var_os("REXX_REFUSAL_SITES_REFRESH").is_some() {
+        refresh();
+    }
     let derived = derived();
     let committed: Vec<(String, String, String, String)> = committed()
         .into_iter()
@@ -542,6 +615,18 @@ fn a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not()
 /// The `answer` values more than one send-surface row carries, with the rows
 /// that carry them.
 const SHARED_ANSWERS: &[(&str, &[&str])] = &[
+    // Three constructors for one number, and the check cannot tell them apart
+    // because they differ in delivery rather than in the answer: one is a
+    // stream method's own missing option, one a named argument, one an
+    // extension's declared parameter that arrived absent.
+    (
+        "88.901",
+        &[
+            "missing_internal_argument",
+            "missing_named_argument",
+            "missing_native_argument",
+        ],
+    ),
     (
         "88.909",
         &[
@@ -561,7 +646,7 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
     // the raiser passes, a position for one and the word `SEEK` for the other.
     (
         "93.903",
-        &["missing_method_argument", "missing_argument_named"],
+        &["missing_argument_named", "missing_method_argument"],
     ),
 ];
 
