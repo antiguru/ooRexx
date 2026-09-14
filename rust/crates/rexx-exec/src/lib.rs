@@ -1786,11 +1786,17 @@ struct Interp {
     ///
     /// `NativeCode::setPackageObject` (`execution/NativeCode.cpp:130-140`)
     /// sets the package in place on the first binding and copies on every
-    /// later one, so an object a `loadExternalMethod` answered earlier
-    /// reports the first binder's package from then on.
+    /// later one, so an object a `loadExternal*` send answered earlier
+    /// reports the first binder's package from then on. A `::ROUTINE`
+    /// directive discards that copy and stores the shared routine
+    /// (`parser/DirectiveParser.cpp:2691-2693`), so a later routine binder's
+    /// own routine reports the first binder too.
     library_codes: Vec<Option<ProgramId>>,
     /// Which [`Interp::library_codes`] row each procedure owns.
     library_code_rows: HashMap<LibraryCodeKey, usize>,
+    /// The [`Interp::library_codes`] row each library-backed `::ROUTINE`
+    /// directive bound, which is the package its routine reports.
+    library_routine_codes: HashMap<InstalledRoutine, usize>,
     /// The routine each `::REQUIRES ... LIBRARY` made callable, upcased, with
     /// the library that exports it. A call to one of these has to refuse
     /// loudly rather than answer 43.1: the oracle runs it, so "no such
@@ -2073,13 +2079,19 @@ pub(crate) enum ExecutableSource {
     Loaded { code: usize },
 }
 
-/// The code object a library shares between every binding of one procedure
-/// (`LibraryPackage::resolveMethod`, `package/LibraryPackage.cpp:374-400`).
+/// The code object a library shares between every binding of one procedure.
+///
+/// A method's is cached per spelling asked for
+/// (`LibraryPackage::resolveMethod`, `package/LibraryPackage.cpp:374-400`); a
+/// routine's is built once per routine table entry when the library loads
+/// and found without regard to case (`LibraryPackage::loadRoutines` and
+/// `::resolveRoutine`, `:270-299`, `:410-435`).
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct LibraryCodeKey {
     /// The library name byte for byte, as [`Interp::libraries`] keys it.
     pub(crate) library: Vec<u8>,
-    /// The procedure name byte for byte.
+    /// A method's procedure name byte for byte as asked, or the name a
+    /// routine table entry declares.
     pub(crate) procedure: Vec<u8>,
     /// Whether this is the routine table's entry rather than the method
     /// table's.
@@ -2350,6 +2362,7 @@ impl Interp {
             external_packages: HashMap::new(),
             library_codes: Vec::new(),
             library_code_rows: HashMap::new(),
+            library_routine_codes: HashMap::new(),
             library_routines: HashMap::new(),
             native_handles: Vec::new(),
             special_methods: Vec::new(),
@@ -2772,7 +2785,7 @@ impl Interp {
         // object does not exist yet: a `::CLASS` has no class object until
         // the install pass creates one.
         let mut staged: BTreeMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>> = BTreeMap::new();
-        let mut bound: Vec<LibraryCodeKey> = Vec::new();
+        let mut bound: Vec<(usize, LibraryCodeKey)> = Vec::new();
         for (index, directive) in program.directives.iter().enumerate() {
             // **A synthetic directive installs nothing**, which is what lets
             // `Interp::new_file_executable` file a loaded file's main section
@@ -2962,13 +2975,25 @@ impl Interp {
             // `EXTERNAL`: measured, oracle, a file opening `say "prolog ran"`
             // and carrying `::method x external "LIBRARY zorkolib z"` is
             // 98.903 rc 158 with stdout empty.
-            bound.extend(self.resolve_directive_library(id, program, directive)?);
+            for key in self.resolve_directive_library(id, program, directive)? {
+                bound.push((index, key));
+            }
         }
         // A package whose directives all resolved binds each procedure's
         // shared code to itself, where nothing bound it first.
-        for key in bound {
+        for (index, key) in bound {
+            let routine = key.routine;
             let row = self.library_code(key);
             self.library_codes[row].get_or_insert(id);
+            if routine {
+                self.library_routine_codes.insert(
+                    InstalledRoutine {
+                        program: id,
+                        directive: index,
+                    },
+                    row,
+                );
+            }
         }
 
         // **A second pass, because the oracle's own translation-time
@@ -4574,9 +4599,15 @@ impl Interp {
     /// directive has bound yet, whose package the oracle answers as `.nil`.
     pub(crate) fn source_package(&self, source: ExecutableSource) -> Option<Package> {
         match source {
-            ExecutableSource::Directive { program, .. }
-            | ExecutableSource::Main { program }
-            | ExecutableSource::External { program } => Some(Package::Program(program)),
+            ExecutableSource::Directive { program, directive } => Some(Package::Program(
+                self.library_routine_codes
+                    .get(&InstalledRoutine { program, directive })
+                    .and_then(|row| self.library_codes[*row])
+                    .unwrap_or(program),
+            )),
+            ExecutableSource::Main { program } | ExecutableSource::External { program } => {
+                Some(Package::Program(program))
+            }
             ExecutableSource::Native => Some(Package::Rexx),
             ExecutableSource::Loaded { code } => self
                 .library_codes
@@ -4679,29 +4710,30 @@ impl Interp {
         // method table, and the two are separate exports: measured, oracle,
         // `::routine zzz external "LIBRARY rxmath"` is `90.999 Unable to find
         // external routine "ZZZ"`.
+        let mut keys = Vec::with_capacity(binds.len());
         for bind in &binds {
-            let found = if routine {
-                loaded.routine(&bind.procedure).is_some()
+            let procedure = if routine {
+                loaded.routine(&bind.procedure).map(|row| row.name.clone())
             } else {
-                loaded.method(&bind.procedure).is_some()
+                loaded
+                    .method(&bind.procedure)
+                    .map(|_| bind.procedure.clone())
             };
-            if !found {
+            let Some(procedure) = procedure else {
                 self.blame_directive_in(id, program, directive);
                 return Err(if routine {
                     Raised::external_routine_not_found(&bind.procedure).into()
                 } else {
                     Raised::external_method_not_found(&bind.procedure).into()
                 });
-            }
-        }
-        Ok(binds
-            .into_iter()
-            .map(|bind| LibraryCodeKey {
+            };
+            keys.push(LibraryCodeKey {
                 library: library.clone(),
-                procedure: bind.procedure,
+                procedure,
                 routine,
-            })
-            .collect())
+            });
+        }
+        Ok(keys)
     }
 
     /// The library a `::REQUIRES ... LIBRARY` made `name` callable through,
@@ -5273,6 +5305,7 @@ impl Interp {
             external_packages: _,
             library_codes: _,
             library_code_rows: _,
+            library_routine_codes: _,
             // Routine and library names as bytes.
             library_routines: _,
             native_handles,

@@ -8377,7 +8377,9 @@ fn native_load_external(
     // answer a `Method`, while `LIBRARY rexx file_separator` and
     // `LIBRARY Rexx file_separator` answer `.nil`.
     let rexx = library == b"REXX";
-    let found = if rexx {
+    // The procedure the shared code is keyed by, as [`crate::LibraryCodeKey`]
+    // documents, or `None` where nothing answers the name.
+    let procedure = if rexx {
         // The `REXX` package's routine table is `rexx_routines[]` and not
         // this registry (`runtime/InternalPackage.cpp:230`), so a routine
         // asked for by that name would answer `.nil` here where the oracle
@@ -8386,7 +8388,7 @@ fn native_load_external(
         if routine {
             return Err(Loud::external_entry_point("loadExternalRoutine on REXX").into());
         }
-        native::entry_point(&entry).is_some()
+        native::entry_point(&entry).map(|_| entry.clone())
     } else {
         // **Neither a library that is not there nor a procedure it does not
         // export raises**: measured, oracle rc 0, `.Method~loadExternalMethod('x',
@@ -8396,12 +8398,12 @@ fn native_load_external(
         match interp.resolve_library(&library) {
             crate::LibraryLoad::Loaded(loaded) => {
                 if routine {
-                    loaded.routine(&entry).is_some()
+                    loaded.routine(&entry).map(|row| row.name.clone())
                 } else {
-                    loaded.method(&entry).is_some()
+                    loaded.method(&entry).map(|_| entry.clone())
                 }
             }
-            crate::LibraryLoad::Missing => false,
+            crate::LibraryLoad::Missing => None,
             // Measured, oracle rc 158: 98.982 on the first ask, as
             // `Package~loadLibrary` raises it.
             crate::LibraryLoad::Version => {
@@ -8409,16 +8411,16 @@ fn native_load_external(
             }
         }
     };
-    if !found {
+    let Some(procedure) = procedure else {
         return Ok(Some(ObjRef::NIL));
-    }
+    };
     let object = interp.native_instance(class);
     if rexx {
         interp.record_native_executable(object);
     } else {
         let code = interp.library_code(crate::LibraryCodeKey {
             library,
-            procedure: entry,
+            procedure,
             routine,
         });
         interp.record_loaded_executable(object, code);

@@ -1,8 +1,8 @@
 count 28
-/* A library-backed EXTERNAL reports its declaring package. A loadExternal*
-   answer shares the library's code object for that procedure spelling: its
-   package is .nil until a directive binds the procedure and the first binder's
-   afterwards, for an object answered before the binding too. */
+/* A library-backed EXTERNAL method reports its declaring package. A
+   loadExternalMethod answer shares the library's code object for that
+   procedure spelling: its package is .nil until a directive binds the
+   procedure and the first binder's afterwards, for an earlier answer too. */
 early = .Method~loadExternalMethod('m', 'LIBRARY rxregexp RegExp_Parse')
 say 'loaded before binding' show(early)
 say 'unbound procedure' show(.Method~loadExternalMethod('m', 'LIBRARY rxregexp RegExp_Pos'))

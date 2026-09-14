@@ -70,3 +70,7 @@ lang/library_load_retried.rex
 # Final-review fixes: the library search is the LD_LIBRARY_PATH the
 # interpreter started with, whatever the program writes into it afterwards.
 lang/library_search_path_fixed.rex
+
+# Residual fixes: a library routine is one object per routine table entry,
+# whichever spelling asks for it and however many directives bind it.
+lang/library_routine_package.rex
