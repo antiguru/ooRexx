@@ -59,3 +59,7 @@ lang/library_required_method_library_missing.rex
 lang/library_required_method_entry_missing.rex
 lang/library_required_routine_entry_missing.rex
 lang/library_required_attribute_entry_missing.rex
+
+# Final-review fixes: what ~package answers for a library-backed EXTERNAL and
+# for a loadExternal* answer, which shares the library's code object.
+lang/library_method_package.rex

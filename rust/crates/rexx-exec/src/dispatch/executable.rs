@@ -314,7 +314,9 @@ fn set_security_manager(
             ExecutableSource::Directive { program, .. } | ExecutableSource::Main { program } => {
                 program
             }
-            ExecutableSource::Native => unreachable!("native code is not Rexx code"),
+            ExecutableSource::Native
+            | ExecutableSource::External { .. }
+            | ExecutableSource::Loaded { .. } => unreachable!("native code is not Rexx code"),
         };
         interp.install_security_manager(program, args.first().copied().flatten());
     }
@@ -326,7 +328,9 @@ fn set_security_manager(
 fn is_rexx_code(interp: &Interp, source: ExecutableSource) -> bool {
     let (program, directive) = match source {
         ExecutableSource::Main { .. } => return true,
-        ExecutableSource::Native => return false,
+        ExecutableSource::Native
+        | ExecutableSource::External { .. }
+        | ExecutableSource::Loaded { .. } => return false,
         ExecutableSource::Directive { program, directive } => (program, directive),
     };
     let Some(directive) = interp
@@ -347,17 +351,19 @@ fn is_rexx_code(interp: &Interp, source: ExecutableSource) -> bool {
 }
 
 /// `BaseExecutable::getPackage`: the package the declaring directive belongs
-/// to, and `REXX` for an executable no directive declared.
+/// to, `REXX` for a primitive, and `.nil` for a loaded library procedure no
+/// directive has bound.
 fn package(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let Some(package) = interp.executable_package(receiver) else {
-        return Err(Loud::receiver_class("an executable this crate did not build").into());
-    };
-    Ok(Some(interp.package_object(package)))
+    let source = source_of(interp, receiver)?;
+    Ok(Some(match interp.source_package(source) {
+        Some(package) => interp.package_object(package),
+        None => ObjRef::NIL,
+    }))
 }
 
 /// `BaseExecutable::source`: the body's own source lines as an `Array`.
@@ -372,7 +378,9 @@ fn source(
             block_source_lines(interp, program, Some(directive))
         }
         ExecutableSource::Main { program } => block_source_lines(interp, program, None),
-        ExecutableSource::Native => Vec::new(),
+        ExecutableSource::Native
+        | ExecutableSource::External { .. }
+        | ExecutableSource::Loaded { .. } => Vec::new(),
     };
     array_of_texts(interp, lines).map(Some)
 }

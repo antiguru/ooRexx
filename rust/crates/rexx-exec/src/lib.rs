@@ -1766,6 +1766,16 @@ struct Interp {
     /// A raise the native boundary makes for itself is reported against this
     /// package rather than against the running program.
     external_packages: HashMap<MethodId, ProgramId>,
+    /// The package of each library procedure's shared code object, `None`
+    /// until a directive binds it, indexed by [`ExecutableSource::Loaded`].
+    ///
+    /// `NativeCode::setPackageObject` (`execution/NativeCode.cpp:130-140`)
+    /// sets the package in place on the first binding and copies on every
+    /// later one, so an object a `loadExternalMethod` answered earlier
+    /// reports the first binder's package from then on.
+    library_codes: Vec<Option<ProgramId>>,
+    /// Which [`Interp::library_codes`] row each procedure owns.
+    library_code_rows: HashMap<LibraryCodeKey, usize>,
     /// The routine each `::REQUIRES ... LIBRARY` made callable, upcased, with
     /// the library that exports it. A call to one of these has to refuse
     /// loudly rather than answer 43.1: the oracle runs it, so "no such
@@ -2033,11 +2043,32 @@ pub(crate) enum ExecutableSource {
     /// (`parser/LanguageParser.cpp:1193`) where a directive's starts after
     /// the directive clause.
     Main { program: ProgramId },
-    /// A primitive or an `EXTERNAL` binding, which has no directive to report
-    /// on: `BaseCode::getSource` answers an empty array
+    /// A primitive, which has no directive to report on:
+    /// `BaseCode::getSource` answers an empty array
     /// (`execution/BaseCode.cpp:120`) and `BaseCode::setSecurityManager`
     /// answers `0` (`:133`).
     Native,
+    /// An `EXTERNAL` binding a directive of `program` installed, which reads
+    /// as [`ExecutableSource::Native`] except that its package is `program`.
+    External { program: ProgramId },
+    /// A `loadExternalMethod` or `loadExternalRoutine` answer over a library
+    /// procedure, which reads as [`ExecutableSource::Native`] except that its
+    /// package is whatever [`Interp::library_codes`] row `code` holds when
+    /// asked.
+    Loaded { code: usize },
+}
+
+/// The code object a library shares between every binding of one procedure
+/// (`LibraryPackage::resolveMethod`, `package/LibraryPackage.cpp:374-400`).
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct LibraryCodeKey {
+    /// The library name byte for byte, as [`Interp::libraries`] keys it.
+    pub(crate) library: Vec<u8>,
+    /// The procedure name byte for byte.
+    pub(crate) procedure: Vec<u8>,
+    /// Whether this is the routine table's entry rather than the method
+    /// table's.
+    pub(crate) routine: bool,
 }
 
 /// What a namespace qualifier resolved to.
@@ -2276,6 +2307,8 @@ impl Interp {
             libraries: Libraries::new(),
             library_externals: HashMap::new(),
             external_packages: HashMap::new(),
+            library_codes: Vec::new(),
+            library_code_rows: HashMap::new(),
             library_routines: HashMap::new(),
             native_handles: Vec::new(),
             special_methods: Vec::new(),
@@ -2698,6 +2731,7 @@ impl Interp {
         // object does not exist yet: a `::CLASS` has no class object until
         // the install pass creates one.
         let mut staged: BTreeMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>> = BTreeMap::new();
+        let mut bound: Vec<LibraryCodeKey> = Vec::new();
         for (index, directive) in program.directives.iter().enumerate() {
             // **A synthetic directive installs nothing**, which is what lets
             // `Interp::new_file_executable` file a loaded file's main section
@@ -2887,7 +2921,13 @@ impl Interp {
             // `EXTERNAL`: measured, oracle, a file opening `say "prolog ran"`
             // and carrying `::method x external "LIBRARY zorkolib z"` is
             // 98.903 rc 158 with stdout empty.
-            self.resolve_directive_library(id, program, directive)?;
+            bound.extend(self.resolve_directive_library(id, program, directive)?);
+        }
+        // A package whose directives all resolved binds each procedure's
+        // shared code to itself, where nothing bound it first.
+        for key in bound {
+            let row = self.library_code(key);
+            self.library_codes[row].get_or_insert(id);
         }
 
         // **A second pass, because the oracle's own translation-time
@@ -4442,9 +4482,22 @@ impl Interp {
         );
     }
 
+    /// Records a `Method` or `Routine` object a `loadExternal*` send answered
+    /// over a library procedure, whose package is `code`'s.
+    pub(crate) fn record_loaded_executable(&mut self, object: ObjRef, code: usize) {
+        self.executable_sources.insert(
+            object,
+            ExecutableRecord {
+                source: ExecutableSource::Loaded { code },
+                installed: None,
+                routine: None,
+            },
+        );
+    }
+
     /// What the `Method` object for one installed method reports on: the
-    /// directive that declared it, or [`ExecutableSource::Native`] for a
-    /// primitive and for an `EXTERNAL` binding, neither of which has one.
+    /// directive that declared it, [`ExecutableSource::External`] for an
+    /// `EXTERNAL` binding, or [`ExecutableSource::Native`] for a primitive.
     pub(crate) fn installed_executable_source(&self, method: MethodId) -> ExecutableSource {
         if let Some(installed) = self.method_bodies.get(&method) {
             return ExecutableSource::Directive {
@@ -4458,7 +4511,39 @@ impl Interp {
                 directive: generated.directive,
             };
         }
+        if let Some(program) = self.external_packages.get(&method) {
+            return ExecutableSource::External { program: *program };
+        }
         ExecutableSource::Native
+    }
+
+    /// The [`Interp::library_codes`] row for `key`, made unbound where there
+    /// is none yet.
+    pub(crate) fn library_code(&mut self, key: LibraryCodeKey) -> usize {
+        if let Some(row) = self.library_code_rows.get(&key) {
+            return *row;
+        }
+        let row = self.library_codes.len();
+        self.library_codes.push(None);
+        self.library_code_rows.insert(key, row);
+        row
+    }
+
+    /// Which package `source` reports, or `None` for a loaded procedure no
+    /// directive has bound yet, whose package the oracle answers as `.nil`.
+    pub(crate) fn source_package(&self, source: ExecutableSource) -> Option<Package> {
+        match source {
+            ExecutableSource::Directive { program, .. }
+            | ExecutableSource::Main { program }
+            | ExecutableSource::External { program } => Some(Package::Program(program)),
+            ExecutableSource::Native => Some(Package::Rexx),
+            ExecutableSource::Loaded { code } => self
+                .library_codes
+                .get(code)
+                .copied()
+                .flatten()
+                .map(Package::Program),
+        }
     }
 
     /// The directories a bare library name is looked for in before the
@@ -4518,25 +4603,25 @@ impl Interp {
     /// resolved at install time so that a program naming a library that is
     /// not there is refused before its own first clause.
     ///
-    /// Answers nothing for a directive whose `EXTERNAL` names the `REXX`
-    /// package or none at all; those are [`unresolved_external`]'s and
-    /// [`directive_gap`]'s. `id` is the package the directive is in, whose
-    /// file a failure is reported against.
+    /// Answers the procedures it bound, and none for a directive whose
+    /// `EXTERNAL` names the `REXX` package or none at all; those are
+    /// [`unresolved_external`]'s and [`directive_gap`]'s. `id` is the package
+    /// the directive is in, whose file a failure is reported against.
     fn resolve_directive_library(
         &mut self,
         id: ProgramId,
         program: &Rc<Program>,
         directive: &Directive,
-    ) -> Result<(), Failure> {
+    ) -> Result<Vec<LibraryCodeKey>, Failure> {
         let external = match &directive.kind {
             DirectiveKind::Method(method) => dispatch::native::method_external(method),
             DirectiveKind::Attribute(attribute) => dispatch::native::attribute_external(attribute),
             DirectiveKind::Routine(routine) => dispatch::native::routine_external(routine),
-            _ => return Ok(()),
+            _ => return Ok(Vec::new()),
         };
         let Some(dispatch::native::MethodExternal::OtherLibrary { library, binds }) = external
         else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         let routine = matches!(directive.kind, DirectiveKind::Routine(_));
         let loaded = match self.require_library(&library) {
@@ -4565,7 +4650,14 @@ impl Interp {
                 });
             }
         }
-        Ok(())
+        Ok(binds
+            .into_iter()
+            .map(|bind| LibraryCodeKey {
+                library: library.clone(),
+                procedure: bind.procedure,
+                routine,
+            })
+            .collect())
     }
 
     /// The library a `::REQUIRES ... LIBRARY` made `name` callable through,
@@ -4614,12 +4706,9 @@ impl Interp {
         else {
             return;
         };
-        let package = match self.installed_executable_source(method) {
-            ExecutableSource::Directive { program, .. } | ExecutableSource::Main { program } => {
-                plan::Package::Program(program)
-            }
-            ExecutableSource::Native => plan::Package::Rexx,
-        };
+        let package = self
+            .source_package(self.installed_executable_source(method))
+            .unwrap_or(plan::Package::Rexx);
         let row = self.special_method_row(method);
         match row {
             Some(existing) => existing.access = Access::Private,
@@ -5136,6 +5225,8 @@ impl Interp {
             library_externals: _,
             // Program identities, not objects.
             external_packages: _,
+            library_codes: _,
+            library_code_rows: _,
             // Routine and library names as bytes.
             library_routines: _,
             native_handles,

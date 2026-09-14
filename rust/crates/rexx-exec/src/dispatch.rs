@@ -8376,7 +8376,8 @@ fn native_load_external(
     // `library REXX file_separator` and `LiBrArY REXX file_separator` each
     // answer a `Method`, while `LIBRARY rexx file_separator` and
     // `LIBRARY Rexx file_separator` answer `.nil`.
-    let found = if library == b"REXX" {
+    let rexx = library == b"REXX";
+    let found = if rexx {
         // The `REXX` package's routine table is `rexx_routines[]` and not
         // this registry (`runtime/InternalPackage.cpp:230`), so a routine
         // asked for by that name would answer `.nil` here where the oracle
@@ -8407,7 +8408,16 @@ fn native_load_external(
         return Ok(Some(ObjRef::NIL));
     }
     let object = interp.native_instance(class);
-    interp.record_native_executable(object);
+    if rexx {
+        interp.record_native_executable(object);
+    } else {
+        let code = interp.library_code(crate::LibraryCodeKey {
+            library,
+            procedure: entry,
+            routine,
+        });
+        interp.record_loaded_executable(object, code);
+    }
     Ok(Some(object))
 }
 
