@@ -7385,6 +7385,51 @@ fn a_library_backed_routine_installs_and_refuses_when_it_is_called() {
     );
 }
 
+/// **A routine a `::REQUIRES ... LIBRARY` registered refuses loudly when it is
+/// called**, because the oracle runs it: measured, `::requires 'rxmath'
+/// LIBRARY` and `say RxCalcPi()` is `3.14159265` at rc 0, so answering 43.1
+/// would be a wrong answer a program cannot tell from its own typo.
+#[test]
+fn a_routine_a_required_library_exports_refuses_rather_than_answering_43_1() {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../build/lib")
+        .canonicalize()
+        .expect("the oracle's build directory is four above this crate");
+    let run = |source: &[u8]| {
+        let invocation = crate::Invocation::none().with_environment(vec![(
+            b"LD_LIBRARY_PATH".to_vec(),
+            directory.clone().into_os_string().into_encoded_bytes(),
+        )]);
+        crate::run_program("/tmp/routine.rex", source.to_vec(), invocation)
+    };
+
+    let outcome = run(b"say RxCalcPi()\n::requires 'rxmath' LIBRARY\n");
+    assert_eq!(
+        outcome.exit_code,
+        crate::NOT_IMPLEMENTED_EXIT,
+        "exit code, stderr {}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stderr),
+        concat!(
+            "rexx-exec: a call to \"RXCALCPI\", which the library \"rxmath\" ",
+            "exports is not implemented (Phase 8)\n"
+        )
+    );
+
+    // The adjacent pair: a name the library does not export is still the
+    // oracle's own 43.1, so the refusal above is about the library's own
+    // table and not about every unresolved name in such a program.
+    let outcome = run(b"say zorkolo()\n::requires 'rxmath' LIBRARY\n");
+    assert_eq!(outcome.exit_code, 213);
+    let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+    assert!(
+        stderr.contains("Error 43.1:") && stderr.contains("ZORKOLO"),
+        "{stderr}"
+    );
+}
+
 /// A directive naming a library nothing loads is the oracle's own 98.903,
 /// before the program's first clause and whatever the directive's keyword.
 /// ```text

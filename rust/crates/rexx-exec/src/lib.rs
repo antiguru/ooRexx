@@ -561,6 +561,21 @@ impl Loud {
         }
     }
 
+    /// A routine a `::REQUIRES ... LIBRARY` registered was called. The oracle
+    /// runs it, so 43.1 would be a wrong answer rather than a missing one.
+    fn required_library_routine(name: &[u8], library: &[u8]) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!(
+                    "a call to \"{}\", which the library \"{}\" exports",
+                    String::from_utf8_lossy(name),
+                    String::from_utf8_lossy(library)
+                ),
+                Some("Phase 8"),
+            ),
+        }
+    }
+
     /// An activation's body selector named something that is not a routine
     /// body -- an internal inconsistency, never a program error.
     fn missing_body() -> Loud {
@@ -1742,6 +1757,11 @@ struct Interp {
     /// "LIBRARY <name>"` bound to, keyed by the identity
     /// [`Interp::install_one_method`] minted for its dictionary key.
     library_externals: HashMap<MethodId, LibraryBinding>,
+    /// The routine each `::REQUIRES ... LIBRARY` made callable, upcased, with
+    /// the library that exports it. A call to one of these has to refuse
+    /// loudly rather than answer 43.1: the oracle runs it, so "no such
+    /// routine" is a wrong answer and not a missing one.
+    library_routines: HashMap<Vec<u8>, Vec<u8>>,
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
@@ -2241,6 +2261,7 @@ impl Interp {
             native_externals: HashMap::new(),
             libraries: HashMap::new(),
             library_externals: HashMap::new(),
+            library_routines: HashMap::new(),
             native_handles: Vec::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
@@ -3005,11 +3026,23 @@ impl Interp {
             // name up in: `PackageManager::getLibrary`
             // (`package/PackageManager.cpp:206`) is the whole of it.
             if requires.library {
-                if let Err(failure) = self.require_library(&requires.name) {
-                    self.seal_site_level();
-                    self.blame_directive_in(id, program, directive);
-                    outcome = Err(failure);
-                    break;
+                match self.require_library(&requires.name) {
+                    Ok(loaded) => {
+                        let names: Vec<Vec<u8>> = loaded
+                            .routines()
+                            .iter()
+                            .map(|row| row.name.to_ascii_uppercase())
+                            .collect();
+                        for name in names {
+                            self.library_routines.insert(name, requires.name.to_vec());
+                        }
+                    }
+                    Err(failure) => {
+                        self.seal_site_level();
+                        self.blame_directive_in(id, program, directive);
+                        outcome = Err(failure);
+                        break;
+                    }
                 }
                 continue;
             }
@@ -4508,6 +4541,14 @@ impl Interp {
         Ok(())
     }
 
+    /// The library a `::REQUIRES ... LIBRARY` made `name` callable through,
+    /// or `None` for a name no loaded library exports as a routine.
+    pub(crate) fn library_routine_owner(&self, name: &[u8]) -> Option<&[u8]> {
+        self.library_routines
+            .get(&name.to_ascii_uppercase())
+            .map(Vec::as_slice)
+    }
+
     /// The library procedure a dictionary key's `EXTERNAL` binds it to, or
     /// `None` where the directive names no library or the procedure is not
     /// exported.
@@ -5061,6 +5102,8 @@ impl Interp {
             // Library handles and procedure names, no `ObjRef` in either.
             libraries: _,
             library_externals: _,
+            // Routine and library names as bytes.
+            library_routines: _,
             native_handles,
             special_methods: _,
             out: _,

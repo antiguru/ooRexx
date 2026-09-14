@@ -3784,6 +3784,14 @@ impl Interp {
                         return Err(Loud::internal_routine(name, owner).into());
                     }
                 },
+                // **A routine a `::REQUIRES ... LIBRARY` registered**, after
+                // the internal packages so that a name both export still runs
+                // the one this crate implements. Running it needs the routine
+                // half of the two-call protocol, so the call is loud rather
+                // than 43.1, which the oracle does not answer for it.
+                None if let Some(library) = self.library_routine_owner(name) => {
+                    return Err(Loud::required_library_routine(name, library).into());
+                }
                 // **The external file search, which the oracle performs
                 // before answering 43.1.** Only whether it resolves is
                 // decided here; the path is searched for again where the
