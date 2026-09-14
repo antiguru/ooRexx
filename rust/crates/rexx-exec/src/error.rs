@@ -329,10 +329,20 @@ impl Raised {
         raised
     }
 
-    /// 93.968: a native method whose declared signature the boundary cannot
+    /// 93.968: a native method whose declared parameters the boundary cannot
     /// honour (`NativeActivation::reportSignatureError`,
-    /// `execution/NativeActivation.cpp:190-193`). No substitutions.
+    /// `execution/NativeActivation.cpp:190-193`). No substitutions. Measured,
+    /// oracle rc 163: `Error 93 running <declaring package>:` with no line.
     pub(crate) fn incorrect_method_signature() -> Raised {
+        let mut raised = Raised::syntax(93, 968, Vec::new());
+        raised.delivery.lineless = true;
+        raised
+    }
+
+    /// 93.968 for a declared return type `valueToObject` cannot convert,
+    /// which the oracle raises once the extension has run: measured, rc 163,
+    /// `Error 93 running <sender> line <n>:`.
+    pub(crate) fn incorrect_method_result_signature() -> Raised {
         Raised::syntax(93, 968, Vec::new())
     }
 
@@ -1292,6 +1302,15 @@ impl Raised {
     /// 1-based in the method's own argument list.
     pub(crate) fn argument_needs_a_string_value(position: usize) -> Raised {
         Raised::syntax(88, 909, vec![position.to_string().into_bytes()])
+    }
+
+    /// [`Raised::argument_needs_a_string_value`] for a native method's
+    /// declared string parameter. Measured, oracle rc 168: `Error 88 running
+    /// <declaring package>:` with no line.
+    pub(crate) fn native_argument_needs_a_string_value(position: usize) -> Raised {
+        let mut raised = Raised::argument_needs_a_string_value(position);
+        raised.delivery.lineless = true;
+        raised
     }
 
     /// 88.909 for an argument the oracle names rather than numbers.

@@ -132,12 +132,13 @@ fn refusal(refused: Refused) -> Failure {
     match refused {
         Refused::MissingArgument { position } => Raised::missing_native_argument(position).into(),
         Refused::NoStringValue { position } => {
-            Raised::argument_needs_a_string_value(position).into()
+            Raised::native_argument_needs_a_string_value(position).into()
         }
         Refused::TooManyArguments { expected } => {
             Raised::too_many_external_arguments(expected).into()
         }
         Refused::Signature => Raised::incorrect_method_signature().into(),
+        Refused::ResultSignature => Raised::incorrect_method_result_signature().into(),
         Refused::Unfilled { .. } | Refused::StaleHandle | Refused::Raised => Loud {
             message: crate::owned_message(&format!("{refused}"), Some("Phase 8")),
         }
@@ -251,8 +252,10 @@ impl Host for Interp {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::pool_variable_name;
-    use crate::{Interp, LibraryLoad};
+    use rexx_api::values::Failure as Refused;
+
+    use super::{pool_variable_name, refusal};
+    use crate::{Failure, Interp, LibraryLoad};
 
     /// The oracle's own build directory, whose `librxregexp.so` D5's amendment
     /// makes the instrument: it is loaded, never rebuilt.
@@ -483,6 +486,23 @@ mod tests {
         assert_eq!(swept.stdout, plain.stdout);
         assert_eq!(swept.stderr, plain.stderr);
         assert!(swept.collections > 0, "the stress mode did not collect");
+    }
+
+    /// Which refusals are reported against the declaring package with no
+    /// line. Measured, oracle rc 163 and 168: 93.968 for a parameter code and
+    /// 88.909 for an argument with no string value name the package; 93.968
+    /// for a return word carrying `OPTIONAL` names the sending clause's line.
+    #[test]
+    fn a_refusal_before_the_call_is_lineless_and_one_after_it_is_not() {
+        let lineless = |refused: Refused| match refusal(refused) {
+            Failure::Raised(raised) => raised.delivery.lineless,
+            _ => panic!("every condition-shaped refusal is a raise"),
+        };
+        assert!(lineless(Refused::MissingArgument { position: 1 }));
+        assert!(lineless(Refused::NoStringValue { position: 1 }));
+        assert!(lineless(Refused::TooManyArguments { expected: 0 }));
+        assert!(lineless(Refused::Signature));
+        assert!(!lineless(Refused::ResultSignature));
     }
 
     /// The spellings `getVariableRetriever` answers nothing for, beside

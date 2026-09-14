@@ -632,6 +632,7 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
         &[
             "argument_needs_a_string_value",
             "named_argument_needs_a_string_value",
+            "native_argument_needs_a_string_value",
         ],
     ),
     (

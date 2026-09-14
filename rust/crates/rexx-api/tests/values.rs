@@ -416,7 +416,7 @@ fn a_code_the_table_does_not_know_is_a_signature_error() {
     );
     assert_eq!(
         from_native(&mut cx, 9999, Value::Int(0)),
-        Err(Failure::Signature)
+        Err(Failure::ResultSignature)
     );
 }
 
@@ -425,6 +425,8 @@ fn a_code_the_table_does_not_know_is_a_signature_error() {
 fn the_signature_error_is_93_968_in_a_method_and_40_918_in_a_call() {
     assert_eq!(Failure::Signature.error_number(true), Some(93968));
     assert_eq!(Failure::Signature.error_number(false), Some(40918));
+    assert_eq!(Failure::ResultSignature.error_number(true), Some(93968));
+    assert_eq!(Failure::ResultSignature.error_number(false), Some(40918));
 }
 
 /// A zero type is an omitted value rather than a bad one
@@ -929,7 +931,7 @@ fn the_int_row_refuses_a_value_of_another_type() {
     };
     assert_eq!(
         from_native(&mut cx, code::INT, Value::Omitted),
-        Err(Failure::Signature)
+        Err(Failure::ResultSignature)
     );
 }
 

@@ -107,10 +107,13 @@ pub enum Failure {
     MissingArgument { position: usize },
     /// The argument has no string value.
     NoStringValue { position: usize },
-    /// The signature itself cannot be honoured: a code the table does not
-    /// know, a `Value` that does not match the declared code, or a special
-    /// argument asked for outside a method.
+    /// The declared parameters cannot be honoured: a code the table does not
+    /// know, or a special argument asked for outside a method.
     Signature,
+    /// The declared return type cannot be converted back: a code the table
+    /// does not know, or a `Value` that does not match it. The oracle raises
+    /// this once the extension has run (`NativeActivation.cpp:1301-1310`).
+    ResultSignature,
     /// A row whose conversion this phase has not written.
     Unfilled {
         code: u16,
@@ -149,7 +152,9 @@ impl Failure {
             // Measured the same way, passing an instance of a class with no
             // string value: "Error 88.909".
             Failure::NoStringValue { .. } => Some(88909),
-            Failure::Signature => Some(if method { 93968 } else { 40918 }),
+            Failure::Signature | Failure::ResultSignature => {
+                Some(if method { 93968 } else { 40918 })
+            }
             // Measured 2026-09-14 against the oracle: a third argument to
             // `RegularExpression~new` answers "Error 88.922".
             Failure::TooManyArguments { .. } => Some(88922),
@@ -168,6 +173,7 @@ impl std::fmt::Display for Failure {
                 write!(f, "argument {position} must have a string value")
             }
             Failure::Signature => write!(f, "incorrect signature"),
+            Failure::ResultSignature => write!(f, "incorrect signature for the result"),
             Failure::TooManyArguments { expected } => {
                 write!(f, "too many arguments in invocation; {expected} expected")
             }
@@ -992,7 +998,7 @@ pub fn from_native(
         return Ok(None);
     }
     let Some(row) = row(code) else {
-        return Err(Failure::Signature);
+        return Err(Failure::ResultSignature);
     };
     let convert = row.from_native.ok_or(Failure::Unfilled {
         code,
@@ -1052,7 +1058,7 @@ fn string_object_to_native(
 /// `valueToObject` for the object codes (`NativeActivation.cpp:723`).
 fn object_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
     let Value::Object(handle) = value else {
-        return Err(Failure::Signature);
+        return Err(Failure::ResultSignature);
     };
     if handle.is_null() {
         return Ok(None);
@@ -1069,7 +1075,7 @@ fn object_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<Ob
 /// answer is the call's result, which the caller roots.
 fn pointer_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
     let Value::Pointer(address) = value else {
-        return Err(Failure::Signature);
+        return Err(Failure::ResultSignature);
     };
     Ok(Some(cx.host.new_pointer(address)))
 }
@@ -1080,7 +1086,7 @@ fn pointer_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<O
 /// Never for a `c_int`, whose whole range is a small integer.
 fn int_from_native(_cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
     let Value::Int(number) = value else {
-        return Err(Failure::Signature);
+        return Err(Failure::ResultSignature);
     };
     Ok(Some(
         ObjRef::small_int(i64::from(number)).expect("a c_int is a small integer"),

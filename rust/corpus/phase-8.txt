@@ -48,5 +48,7 @@ lang/library_method_program_blame.rex
 lang/external_method_package_blame.rex
 
 # Final-review fixes: a string parameter's conversion is REQUEST('STRING')
-# alone, and a raise inside the argument's MAKESTRING is that raise.
+# alone, a raise inside the argument's MAKESTRING is that raise, and an
+# argument with no string value names the declaring package with no line.
 lang/library_string_argument.rex
+lang/library_method_no_string_value.rex

@@ -44,7 +44,8 @@ pub const MAX_NATIVE_ARGUMENTS: usize = 16;
 /// # Errors
 /// Whatever converting an argument or the result refuses;
 /// [`Failure::Signature`] for a signature the descriptor array cannot hold or
-/// a code the table does not know; [`Failure::TooManyArguments`] for
+/// a parameter code the table does not know; [`Failure::ResultSignature`] for
+/// a return code it does not know; [`Failure::TooManyArguments`] for
 /// arguments the signature does not consume.
 ///
 /// # Panics
@@ -96,7 +97,7 @@ pub fn method(
     if returns == ARGUMENT_TERMINATOR {
         return Ok(None);
     }
-    let repr = values::repr(returns).ok_or(Failure::Signature)?;
+    let repr = values::repr(returns).ok_or(Failure::ResultSignature)?;
     values::from_native(
         &mut cx.conversion(),
         returns,
