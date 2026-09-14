@@ -199,10 +199,14 @@ pub struct Converted {
 }
 
 /// The `ValueDescriptor` a converted argument fills in.
-pub fn descriptor(code: u16, converted: Converted) -> ValueDescriptor {
+///
+/// `declared` is the signature word the extension published. The optional bit
+/// is stripped here, because what the descriptor carries is the type the
+/// extension reads back (`NativeActivation.cpp:243`, `:246`).
+pub fn descriptor(declared: u16, converted: Converted) -> ValueDescriptor {
     ValueDescriptor {
         value: converted.value.as_union(),
-        r#type: code,
+        r#type: argument_type(declared),
         flags: converted.flags,
     }
 }
@@ -296,6 +300,38 @@ pub struct Conversion<'a> {
     pub strings: &'a mut CStringPool,
 }
 
+/// Which member of a `ValueDescriptor`'s union a code's value occupies
+/// (`api/oorexxapi.h:287-364`).
+///
+/// The header's own `ARGUMENT_TYPE_<name>` defines (`:4196-4239`) are what say
+/// which member a code uses, and the test derives this mapping from them.
+/// Reading a union is `unsafe` and lives past the boundary in `ffi.rs` (D-U1),
+/// so this is how the table tells that side what to read without a second
+/// switch on the code.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Repr {
+    /// Any object-typed member, all of them `RexxObjectPtr`-shaped handles.
+    Object,
+    CString,
+    /// `value_POINTER` and `value_POINTERSTRING`.
+    Pointer,
+    Int,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Uint8,
+    Uint16,
+    Uint32,
+    Uint64,
+    /// `wholenumber_t`, `ssize_t` and `intptr_t`.
+    Isize,
+    /// `stringsize_t`, `size_t`, `uintptr_t` and `logical_t`.
+    Usize,
+    Double,
+    Float,
+}
+
 /// Whether a row takes its value from the argument list or from the context.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Source {
@@ -326,47 +362,82 @@ struct Row {
     name: &'static str,
     source: Source,
     absent: Absent,
+    repr: Repr,
     to_native: Option<ToNative>,
     from_native: Option<FromNative>,
 }
 
 /// A row whose conversions are not written yet.
-const fn stub(code: u16, name: &'static str, source: Source, absent: Absent) -> Row {
+const fn stub(code: u16, name: &'static str, source: Source, absent: Absent, repr: Repr) -> Row {
     Row {
         code,
         name,
         source,
         absent,
+        repr,
         to_native: None,
         from_native: None,
     }
 }
 
 static TABLE: &[Row] = &[
-    stub(code::ARGLIST, "ARGLIST", Source::Special, Absent::Signature),
-    stub(code::NAME, "NAME", Source::Special, Absent::Signature),
-    stub(code::SCOPE, "SCOPE", Source::Special, Absent::Signature),
+    stub(
+        code::ARGLIST,
+        "ARGLIST",
+        Source::Special,
+        Absent::Signature,
+        Repr::Object,
+    ),
+    stub(
+        code::NAME,
+        "NAME",
+        Source::Special,
+        Absent::Signature,
+        Repr::CString,
+    ),
+    stub(
+        code::SCOPE,
+        "SCOPE",
+        Source::Special,
+        Absent::Signature,
+        Repr::Object,
+    ),
     Row {
         code: code::CSELF,
         name: "CSELF",
         source: Source::Special,
         absent: Absent::Signature,
+        repr: Repr::Pointer,
         to_native: Some(cself_to_native),
         from_native: None,
     },
-    stub(code::OSELF, "OSELF", Source::Special, Absent::Signature),
-    stub(code::SUPER, "SUPER", Source::Special, Absent::Signature),
+    stub(
+        code::OSELF,
+        "OSELF",
+        Source::Special,
+        Absent::Signature,
+        Repr::Object,
+    ),
+    stub(
+        code::SUPER,
+        "SUPER",
+        Source::Special,
+        Absent::Signature,
+        Repr::Object,
+    ),
     stub(
         code::REXX_OBJECT_PTR,
         "RexxObjectPtr",
         Source::Argument,
         Absent::Zero,
+        Repr::Object,
     ),
     Row {
         code: code::INT,
         name: "int",
         source: Source::Argument,
         absent: Absent::Zero,
+        repr: Repr::Int,
         to_native: None,
         from_native: Some(int_from_native),
     },
@@ -375,22 +446,37 @@ static TABLE: &[Row] = &[
         "wholenumber_t",
         Source::Argument,
         Absent::Zero,
+        Repr::Isize,
     ),
-    stub(code::DOUBLE, "double", Source::Argument, Absent::Zero),
+    stub(
+        code::DOUBLE,
+        "double",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Double,
+    ),
     Row {
         code: code::CSTRING,
         name: "CSTRING",
         source: Source::Argument,
         absent: Absent::Zero,
+        repr: Repr::CString,
         to_native: Some(cstring_to_native),
         from_native: None,
     },
-    stub(code::POINTER, "POINTER", Source::Argument, Absent::Zero),
+    stub(
+        code::POINTER,
+        "POINTER",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Pointer,
+    ),
     Row {
         code: code::REXX_STRING_OBJECT,
         name: "RexxStringObject",
         source: Source::Argument,
         absent: Absent::Zero,
+        repr: Repr::Object,
         to_native: Some(string_object_to_native),
         from_native: Some(object_from_native),
     },
@@ -399,62 +485,154 @@ static TABLE: &[Row] = &[
         "stringsize_t",
         Source::Argument,
         Absent::Zero,
+        Repr::Usize,
     ),
-    stub(code::FLOAT, "float", Source::Argument, Absent::Zero),
-    stub(code::INT8_T, "int8_t", Source::Argument, Absent::Zero),
-    stub(code::INT16_T, "int16_t", Source::Argument, Absent::Zero),
-    stub(code::INT32_T, "int32_t", Source::Argument, Absent::Zero),
-    stub(code::INT64_T, "int64_t", Source::Argument, Absent::Zero),
-    stub(code::UINT8_T, "uint8_t", Source::Argument, Absent::Zero),
-    stub(code::UINT16_T, "uint16_t", Source::Argument, Absent::Zero),
-    stub(code::UINT32_T, "uint32_t", Source::Argument, Absent::Zero),
-    stub(code::UINT64_T, "uint64_t", Source::Argument, Absent::Zero),
-    stub(code::INTPTR_T, "intptr_t", Source::Argument, Absent::Zero),
-    stub(code::UINTPTR_T, "uintptr_t", Source::Argument, Absent::Zero),
-    stub(code::LOGICAL_T, "logical_t", Source::Argument, Absent::Zero),
+    stub(
+        code::FLOAT,
+        "float",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Float,
+    ),
+    stub(
+        code::INT8_T,
+        "int8_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Int8,
+    ),
+    stub(
+        code::INT16_T,
+        "int16_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Int16,
+    ),
+    stub(
+        code::INT32_T,
+        "int32_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Int32,
+    ),
+    stub(
+        code::INT64_T,
+        "int64_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Int64,
+    ),
+    stub(
+        code::UINT8_T,
+        "uint8_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Uint8,
+    ),
+    stub(
+        code::UINT16_T,
+        "uint16_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Uint16,
+    ),
+    stub(
+        code::UINT32_T,
+        "uint32_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Uint32,
+    ),
+    stub(
+        code::UINT64_T,
+        "uint64_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Uint64,
+    ),
+    stub(
+        code::INTPTR_T,
+        "intptr_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Isize,
+    ),
+    stub(
+        code::UINTPTR_T,
+        "uintptr_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Usize,
+    ),
+    stub(
+        code::LOGICAL_T,
+        "logical_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Usize,
+    ),
     stub(
         code::REXX_ARRAY_OBJECT,
         "RexxArrayObject",
         Source::Argument,
         Absent::Zero,
+        Repr::Object,
     ),
     stub(
         code::REXX_STEM_OBJECT,
         "RexxStemObject",
         Source::Argument,
         Absent::Zero,
+        Repr::Object,
     ),
-    stub(code::SIZE_T, "size_t", Source::Argument, Absent::Zero),
-    stub(code::SSIZE_T, "ssize_t", Source::Argument, Absent::Zero),
+    stub(
+        code::SIZE_T,
+        "size_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Usize,
+    ),
+    stub(
+        code::SSIZE_T,
+        "ssize_t",
+        Source::Argument,
+        Absent::Zero,
+        Repr::Isize,
+    ),
     stub(
         code::POINTERSTRING,
         "POINTERSTRING",
         Source::Argument,
         Absent::Zero,
+        Repr::Pointer,
     ),
     stub(
         code::REXX_CLASS_OBJECT,
         "RexxClassObject",
         Source::Argument,
         Absent::Zero,
+        Repr::Object,
     ),
     stub(
         code::REXX_MUTABLE_BUFFER_OBJECT,
         "RexxMutableBufferObject",
         Source::Argument,
         Absent::Zero,
+        Repr::Object,
     ),
     stub(
         code::POSITIVE_WHOLENUMBER_T,
         "positive_wholenumber_t",
         Source::Argument,
         Absent::Zero,
+        Repr::Isize,
     ),
     stub(
         code::NONNEGATIVE_WHOLENUMBER_T,
         "nonnegative_wholenumber_t",
         Source::Argument,
         Absent::Zero,
+        Repr::Isize,
     ),
     // The header marks this one as never optional (`api/oorexxapi.h:98`) and
     // the C++ leaves it out of the absent switch, so an omitted one is a
@@ -464,8 +642,15 @@ static TABLE: &[Row] = &[
         "RexxVariableReferenceObject",
         Source::Argument,
         Absent::Signature,
+        Repr::Object,
     ),
 ];
+
+/// The union member `declared`'s value occupies, or `None` for a code the
+/// table does not know.
+pub fn repr(declared: u16) -> Option<Repr> {
+    row(argument_type(declared)).map(|row| row.repr)
+}
 
 /// Every code the table has a row for, with the header's spelling of its
 /// name.

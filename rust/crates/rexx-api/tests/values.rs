@@ -18,8 +18,9 @@ use std::path::PathBuf;
 use rexx_api::handles::Table;
 use rexx_api::layout::POINTER;
 use rexx_api::values::{
-    ARGUMENT_EXISTS, CStringPool, Conversion, Direction, Failure, Host, OPTIONAL_ARGUMENT,
-    SPECIAL_ARGUMENT, Value, code, consumes_argument, from_native, rows, to_native,
+    ARGUMENT_EXISTS, CStringPool, Conversion, Direction, Failure, Host, OPTIONAL_ARGUMENT, Repr,
+    SPECIAL_ARGUMENT, Value, code, consumes_argument, descriptor, from_native, repr, rows,
+    to_native,
 };
 use rexx_core::{Body, Bytes, Heap, ObjRef, RootSet};
 
@@ -204,6 +205,68 @@ fn every_optional_name_is_a_base_code_with_the_optional_bit() {
     );
 }
 
+/// Each row's union member, checked against the C type the header's own
+/// `ARGUMENT_TYPE_<name>` define gives that code. Reading the union is
+/// `ffi.rs`'s work, and this is what lets it read one without a second switch
+/// on the code.
+#[test]
+fn every_row_names_the_union_member_the_header_gives_its_code() {
+    let mut declared: BTreeMap<String, String> = BTreeMap::new();
+    for line in header().lines() {
+        let line = line.split("//").next().unwrap_or("").trim();
+        let Some(rest) = line.strip_prefix("#define ARGUMENT_TYPE_") else {
+            continue;
+        };
+        let Some((name, c_type)) = rest.split_once(char::is_whitespace) else {
+            continue;
+        };
+        declared.insert(name.to_string(), c_type.trim().to_string());
+    }
+    assert!(
+        declared.contains_key("CSELF"),
+        "the scan found no ARGUMENT_TYPE_ defines, so it is not reading the header"
+    );
+
+    let expected = |c_type: &str| -> Repr {
+        match c_type {
+            "CSTRING" => Repr::CString,
+            "POINTER" => Repr::Pointer,
+            "int" => Repr::Int,
+            "int8_t" => Repr::Int8,
+            "int16_t" => Repr::Int16,
+            "int32_t" => Repr::Int32,
+            "int64_t" => Repr::Int64,
+            "uint8_t" => Repr::Uint8,
+            "uint16_t" => Repr::Uint16,
+            "uint32_t" => Repr::Uint32,
+            "uint64_t" => Repr::Uint64,
+            "wholenumber_t" | "ssize_t" | "intptr_t" => Repr::Isize,
+            "stringsize_t" | "size_t" | "uintptr_t" | "logical_t" => Repr::Usize,
+            "double" => Repr::Double,
+            "float" => Repr::Float,
+            other if other.starts_with("Rexx") => Repr::Object,
+            other => panic!("no union member is known for the C type {other}"),
+        }
+    };
+
+    for (code, name) in rows() {
+        let c_type = declared
+            .get(name)
+            .unwrap_or_else(|| panic!("the header has no ARGUMENT_TYPE_{name}"));
+        assert_eq!(
+            repr(code),
+            Some(expected(c_type)),
+            "REXX_VALUE_{name} is declared {c_type}"
+        );
+        assert_eq!(
+            repr(OPTIONAL_ARGUMENT | code),
+            repr(code),
+            "the optional bit must not change the union member"
+        );
+    }
+    assert_eq!(repr(9999), None);
+}
+
 /// The rows that take their value from the context rather than the argument
 /// list, asserted as a set.
 #[test]
@@ -313,7 +376,7 @@ fn a_code_the_table_does_not_know_is_a_signature_error() {
     );
 }
 
-/// The two numbers a signature error carries, which differ by context.
+/// A signature error's number differs by context.
 #[test]
 fn the_signature_error_is_93_968_in_a_method_and_40_918_in_a_call() {
     assert_eq!(Failure::Signature.error_number(true), Some(93968));
@@ -885,7 +948,14 @@ fn a_descriptor_carries_the_stripped_code_and_the_flags() {
     };
     let declared = OPTIONAL_ARGUMENT | code::CSTRING;
     let converted = to_native(&mut cx, declared, Some(subject), 1).expect("a string converts");
-    let filled = rexx_api::values::descriptor(rexx_api::values::argument_type(declared), converted);
-    assert_eq!(filled.r#type, code::CSTRING);
+    let filled = descriptor(declared, converted);
+    assert_eq!(
+        filled.r#type,
+        code::CSTRING,
+        "the optional bit must not reach the descriptor"
+    );
     assert_eq!(filled.flags, ARGUMENT_EXISTS);
+
+    let plain = to_native(&mut cx, code::CSTRING, Some(subject), 1).expect("a string converts");
+    assert_eq!(descriptor(code::CSTRING, plain).r#type, code::CSTRING);
 }
