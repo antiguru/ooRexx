@@ -150,8 +150,9 @@ reachable through an oracle-built extension, so neither is a corpus witness. 93.
 measured through a forged extension in scratch (the ledger's `final-fix-report.md`, F2 and F9):
 raised for a parameter code the table does not know, it is lineless and names the declaring
 package; raised for a result word carrying the optional bit, it keeps its line and names the
-sender. `rexx-api`'s `invoke` and `values` tests pin the two, and `corpus/refusal-sites.tsv`
-carries both rows as measured. 40.918 is the routine form and waits on the routine half.
+sender. `rexx-api`'s `invoke` and `values` tests pin the two failures, `dispatch/library.rs`'s
+`a_refusal_before_the_call_is_lineless_and_one_after_it_is_not` pins the two deliveries, and
+`corpus/refusal-sites.tsv` carries both rows as measured. 40.918 is the routine form and waits on the routine half.
 Afterwards `valueToObject(arguments)` converts element 0 back.
 
 **Two properties this crate must hold and the C++ gets for free.** The signature call happens
