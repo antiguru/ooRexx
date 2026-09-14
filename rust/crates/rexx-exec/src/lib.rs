@@ -1762,6 +1762,10 @@ struct Interp {
     /// "LIBRARY <name>"` bound to, keyed by the identity
     /// [`Interp::install_one_method`] minted for its dictionary key.
     library_externals: HashMap<MethodId, LibraryBinding>,
+    /// Which package declared each `EXTERNAL` binding, keyed the same way.
+    /// A raise the native boundary makes for itself is reported against this
+    /// package rather than against the running program.
+    external_packages: HashMap<MethodId, ProgramId>,
     /// The routine each `::REQUIRES ... LIBRARY` made callable, upcased, with
     /// the library that exports it. A call to one of these has to refuse
     /// loudly rather than answer 43.1: the oracle runs it, so "no such
@@ -2267,6 +2271,7 @@ impl Interp {
             native_externals: HashMap::new(),
             libraries: Libraries::new(),
             library_externals: HashMap::new(),
+            external_packages: HashMap::new(),
             library_routines: HashMap::new(),
             native_handles: Vec::new(),
             special_methods: Vec::new(),
@@ -3005,6 +3010,13 @@ impl Interp {
             Some(path) => path,
             None => &self.program_path,
         }
+    }
+
+    /// The file the `EXTERNAL` directive behind `method` was written in, or
+    /// `None` for a method no such directive bound.
+    pub(crate) fn external_package_path(&self, method: MethodId) -> Option<Vec<u8>> {
+        let program = *self.external_packages.get(&method)?;
+        Some(self.package_path(program).as_bytes().to_vec())
     }
 
     /// Loads every package this program's `::REQUIRES` directives name, in
@@ -4194,8 +4206,12 @@ impl Interp {
                     },
                 )
                 .is_some(),
-            InstallBody::Native(entry) => self.native_externals.insert(method, entry).is_some(),
+            InstallBody::Native(entry) => {
+                self.external_packages.insert(method, program);
+                self.native_externals.insert(method, entry).is_some()
+            }
             InstallBody::Library(binding) => {
+                self.external_packages.insert(method, program);
                 self.library_externals.insert(method, binding).is_some()
             }
         };
@@ -5112,6 +5128,8 @@ impl Interp {
             // Library handles and procedure names, no `ObjRef` in either.
             libraries: _,
             library_externals: _,
+            // Program identities, not objects.
+            external_packages: _,
             // Routine and library names as bytes.
             library_routines: _,
             native_handles,

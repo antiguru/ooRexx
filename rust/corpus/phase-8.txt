@@ -39,3 +39,10 @@ lang/library_method_raises.rex
 lang/library_uninit_collected.rex
 lang/library_uninit_termination.rex
 lang/library_uninit_twice.rex
+
+# Task 10: which file a native method's failure is reported against. A raise
+# the boundary makes for itself names the package the EXTERNAL directive was
+# written in; one the extension raises for itself propagates to the caller.
+lang/library_method_package_blame.rex
+lang/library_method_program_blame.rex
+lang/external_method_package_blame.rex

@@ -1772,7 +1772,13 @@ pub(crate) enum FailureSite {
     /// activation, whose whole echo line is a catalogue entry
     /// ([`Raised::compiled_method_line`]) carrying its own blank
     /// line-number field, `*-*` marker and text.
-    Rendered(Vec<u8>),
+    Rendered {
+        text: Vec<u8>,
+        /// The file the `EXTERNAL` directive that bound this level was
+        /// written in, which a raise the boundary makes for itself is
+        /// reported against ([`Delivery::lineless`]).
+        package: Option<Vec<u8>>,
+    },
 }
 
 impl FailureSite {
@@ -1781,7 +1787,7 @@ impl FailureSite {
     pub(crate) fn line(&self) -> Option<usize> {
         match self {
             FailureSite::Clause { line, .. } | FailureSite::Named { line, .. } => Some(*line),
-            FailureSite::Rendered(_) => None,
+            FailureSite::Rendered { .. } => None,
         }
     }
 
@@ -1790,7 +1796,16 @@ impl FailureSite {
     pub(crate) fn reported_name(&self) -> Option<&[u8]> {
         match self {
             FailureSite::Named { name, .. } => Some(name),
-            FailureSite::Clause { .. } | FailureSite::Rendered(_) => None,
+            FailureSite::Clause { .. } | FailureSite::Rendered { .. } => None,
+        }
+    }
+
+    /// The file the `EXTERNAL` directive behind a native level was written
+    /// in, or `None` for a level no such directive bound.
+    pub(crate) fn declaring_package(&self) -> Option<&[u8]> {
+        match self {
+            FailureSite::Rendered { package, .. } => package.as_deref(),
+            FailureSite::Clause { .. } | FailureSite::Named { .. } => None,
         }
     }
 
@@ -1800,7 +1815,7 @@ impl FailureSite {
     pub(crate) fn text(&self) -> &[u8] {
         match self {
             FailureSite::Clause { text, .. } | FailureSite::Named { text, .. } => text,
-            FailureSite::Rendered(bytes) => bytes,
+            FailureSite::Rendered { text, .. } => text,
         }
     }
 
@@ -1810,7 +1825,7 @@ impl FailureSite {
     pub(crate) fn indent(&self) -> Option<usize> {
         match self {
             FailureSite::Clause { indent, .. } | FailureSite::Named { indent, .. } => Some(*indent),
-            FailureSite::Rendered(_) => None,
+            FailureSite::Rendered { .. } => None,
         }
     }
 }
@@ -1886,8 +1901,8 @@ impl Raised {
                 }
                 // Already a whole line, `*-*` marker and blank line-number
                 // field included, straight from the catalogue.
-                FailureSite::Rendered(bytes) => {
-                    out.extend_from_slice(bytes);
+                FailureSite::Rendered { text, .. } => {
+                    out.extend_from_slice(text);
                     out.push(b'\n');
                 }
             }
@@ -1908,10 +1923,22 @@ impl Raised {
         // neither, for the reason its own doc gives.
         let innermost = site.sites.iter().find(|entry| entry.line().is_some());
         let line = innermost.and_then(FailureSite::line).unwrap_or(0);
+        // A raise the native boundary makes for itself
+        // (`Delivery::lineless`) is reported against the package that
+        // declared the refused method, where one the extension's own code
+        // raises propagates to the caller and is reported there -- measured,
+        // `p~parse()` on a `::METHOD PARSE EXTERNAL` in a required package is
+        // `Error 88 running <that package>` with no line, and the same
+        // method's own 38.0 is `Error 38 running <the program> line 1`.
+        let boundary = if self.delivery.lineless {
+            site.sites.iter().find_map(FailureSite::declaring_package)
+        } else {
+            None
+        };
         let named = if self.delivery.internal_package {
             "REXX".to_string()
         } else {
-            match innermost.and_then(FailureSite::reported_name) {
+            match boundary.or_else(|| innermost.and_then(FailureSite::reported_name)) {
                 Some(package) => String::from_utf8_lossy(package).into_owned(),
                 None => site.path.to_string(),
             }

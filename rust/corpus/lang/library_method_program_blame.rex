@@ -1,0 +1,7 @@
+/* The other half of library_method_package_blame: a condition the extension
+   itself raises propagates to the caller, so the same required package's
+   method is reported against the running program and the sending line. */
+r = .Re~new('[')
+say 'never printed' r
+
+::requires 're.cls'

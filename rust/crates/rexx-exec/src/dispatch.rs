@@ -2186,7 +2186,7 @@ impl Interp {
                     };
                     if outcome.is_err() {
                         let scope = self.classes().id_string(resolution.scope).to_string();
-                        self.blame_native_method(name, &scope);
+                        self.blame_external_method(name, &scope, resolution.method);
                     }
                     outcome
                 }
@@ -2195,7 +2195,7 @@ impl Interp {
                 let outcome = self.run_library_method(&binding, resolution, receiver, args);
                 if outcome.is_err() {
                     let scope = self.classes().id_string(resolution.scope).to_string();
-                    self.blame_native_method(name, &scope);
+                    self.blame_external_method(name, &scope, resolution.method);
                 }
                 outcome
             }
@@ -2953,23 +2953,30 @@ impl Interp {
     /// Records the traceback line a failing native method contributes, and
     /// closes the level so the sending clause records its own.
     pub(crate) fn blame_native_method(&mut self, name: &[u8], scope: &str) {
-        if self.failure_site.is_some() {
-            return;
-        }
-        let line = Raised::compiled_method_line(name, scope);
-        self.failure_site = Some(FailureSite::Rendered(line));
-        self.seal_site_level();
+        self.blame_native_level(Raised::compiled_method_line(name, scope), None);
+    }
+
+    /// [`Interp::blame_native_method`] for a method an `EXTERNAL` directive
+    /// bound, whose level carries the package that directive was written in.
+    pub(crate) fn blame_external_method(&mut self, name: &[u8], scope: &str, method: MethodId) {
+        let package = self.external_package_path(method);
+        self.blame_native_level(Raised::compiled_method_line(name, scope), package);
     }
 
     /// The same for a routine of an internal package, whose traceback line
     /// names the routine alone and upcased -- measured, `filespec('D')` is
     /// reported for `Filespec` as `"FILESPEC"`.
     pub(crate) fn blame_internal_routine(&mut self, name: &[u8]) {
+        self.blame_native_level(Raised::compiled_routine_line(name), None);
+    }
+
+    /// Records `text` as a native level's whole traceback line, first call
+    /// wins, and closes the level so the sending clause records its own.
+    fn blame_native_level(&mut self, text: Vec<u8>, package: Option<Vec<u8>>) {
         if self.failure_site.is_some() {
             return;
         }
-        let line = Raised::compiled_routine_line(name);
-        self.failure_site = Some(FailureSite::Rendered(line));
+        self.failure_site = Some(FailureSite::Rendered { text, package });
         self.seal_site_level();
     }
 }
