@@ -71,6 +71,7 @@ struct Interpreter {
     on_whole_number: OnWholeNumber,
     /// How many collections [`OnWholeNumber::Collect`] ran.
     collections: usize,
+    locals: Table,
 }
 
 impl Interpreter {
@@ -105,6 +106,7 @@ impl Interpreter {
             null_string,
             on_whole_number: OnWholeNumber::Nothing,
             collections: 0,
+            locals: Table::new(),
         }
     }
 
@@ -204,13 +206,16 @@ impl Host for Interpreter {
         let body = Body::pointer(self.pointer_class, BehaviourHandle::new(0), value);
         self.heap.alloc(body)
     }
+
+    fn locals(&mut self) -> &mut Table {
+        &mut self.locals
+    }
 }
 
 /// One activation's state, reused across the calls of one test the way an
 /// object's methods reuse the object.
 struct Session {
     interpreter: Interpreter,
-    locals: Table,
     strings: CStringPool,
 }
 
@@ -218,7 +223,6 @@ impl Session {
     fn new() -> Session {
         Session {
             interpreter: Interpreter::new(),
-            locals: Table::new(),
             strings: CStringPool::new(),
         }
     }
@@ -236,7 +240,6 @@ impl Session {
     ) -> (Result<Option<ObjRef>, Failure>, Option<usize>) {
         let activation = Activation::new(Conversion {
             host: &mut self.interpreter,
-            locals: &mut self.locals,
             strings: &mut self.strings,
         });
         let mut contexts = Contexts::new(&activation);
@@ -457,12 +460,11 @@ fn the_thread_table_carries_the_four_constant_objects() {
     let expected = session.interpreter.constants();
     let activation = Activation::new(Conversion {
         host: &mut session.interpreter,
-        locals: &mut session.locals,
         strings: &mut session.strings,
     });
     let handles = Contexts::new(&activation).constants();
 
-    let cx = activation.conversion();
+    let mut cx = activation.conversion();
     for (handle, object, name) in [
         (handles.nil, expected.nil, "RexxNil"),
         (handles.true_object, expected.true_object, "RexxTrue"),
@@ -474,7 +476,7 @@ fn the_thread_table_carries_the_four_constant_objects() {
         ),
     ] {
         assert!(!handle.is_null(), "{name} is still null");
-        assert_eq!(cx.locals.resolve(handle), Some(object), "{name}");
+        assert_eq!(cx.host.locals().resolve(handle), Some(object), "{name}");
     }
 }
 
@@ -497,7 +499,7 @@ fn cself_survives_a_collection_between_two_calls() {
     // The local-reference table is not a root between two calls, and the
     // strings the first call interned are not objects, so the pointer object
     // is reachable only through the receiver's own pool.
-    session.locals.clear();
+    session.interpreter.locals().clear();
     let garbage = session.interpreter.text(b"garbage nothing holds");
     session.between_calls();
     assert!(
@@ -528,7 +530,7 @@ fn the_cself_object_is_swept_when_the_receiver_is_not_a_root() {
     let held = session.interpreter.variable(b"CSELF").expect("CSELF");
     let address = session.interpreter.address_of(held).expect("a .Pointer");
 
-    session.locals.clear();
+    session.interpreter.locals().clear();
     let stats = session.interpreter.heap.collect(&RootSet::new());
     assert!(stats.swept > 0);
     assert!(
@@ -591,12 +593,11 @@ fn the_object_keyed_copy_outlives_the_object_it_came_from() {
     let subject = session
         .interpreter
         .text(b"long enough to reach the heap rather than the handle");
-    let handle = session.locals.register(subject);
+    let handle = session.interpreter.locals().register(subject);
 
     let pointer = {
         let activation = Activation::new(Conversion {
             host: &mut session.interpreter,
-            locals: &mut session.locals,
             strings: &mut session.strings,
         });
         let first = activation.string_data(handle);
@@ -609,7 +610,7 @@ fn the_object_keyed_copy_outlives_the_object_it_came_from() {
         first
     };
 
-    session.locals.clear();
+    session.interpreter.locals().clear();
     let stats = session.interpreter.heap.collect(&RootSet::new());
     assert!(stats.swept > 0);
     assert!(session.interpreter.heap.get(subject).is_none());
@@ -629,7 +630,6 @@ fn a_handle_this_activation_does_not_hold_reads_as_nothing() {
     let stranger: rexx_api::layout::RexxObjectPtr = std::ptr::without_provenance_mut(0x5eed_0000);
     let activation = Activation::new(Conversion {
         host: &mut session.interpreter,
-        locals: &mut session.locals,
         strings: &mut session.strings,
     });
     assert!(activation.string_data(stranger).is_null());

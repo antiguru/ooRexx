@@ -142,6 +142,7 @@ struct Interpreter {
     heap: Heap,
     cself: Option<POINTER>,
     variables: Vec<(Vec<u8>, ObjRef)>,
+    locals: Table,
 }
 
 impl Interpreter {
@@ -150,6 +151,7 @@ impl Interpreter {
             heap: Heap::new(),
             cself: None,
             variables: Vec::new(),
+            locals: Table::new(),
         }
     }
 
@@ -213,12 +215,15 @@ impl Host for Interpreter {
         let body = Body::pointer(ObjRef::NIL, BehaviourHandle::new(0), value);
         self.heap.alloc(body)
     }
+
+    fn locals(&mut self) -> &mut Table {
+        &mut self.locals
+    }
 }
 
 /// One activation's conversion state.
 struct Session {
     interpreter: Interpreter,
-    locals: Table,
     strings: CStringPool,
 }
 
@@ -226,7 +231,6 @@ impl Session {
     fn new() -> Session {
         Session {
             interpreter: Interpreter::new(),
-            locals: Table::new(),
             strings: CStringPool::new(),
         }
     }
@@ -243,7 +247,6 @@ impl Session {
     ) -> Result<Option<ObjRef>, Failure> {
         let activation = Activation::new(Conversion {
             host: &mut self.interpreter,
-            locals: &mut self.locals,
             strings: &mut self.strings,
         });
         invoke::method(entry, context, &activation, arguments)

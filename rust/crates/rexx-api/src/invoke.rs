@@ -261,6 +261,7 @@ mod tests {
         heap: Heap,
         asked: usize,
         variables: Vec<(Vec<u8>, ObjRef)>,
+        locals: Table,
     }
 
     impl Interpreter {
@@ -269,6 +270,7 @@ mod tests {
                 heap: Heap::new(),
                 asked: 0,
                 variables: Vec::new(),
+                locals: Table::new(),
             }
         }
 
@@ -321,6 +323,10 @@ mod tests {
         fn new_pointer(&mut self, value: POINTER) -> ObjRef {
             let body = Body::pointer(ObjRef::NIL, BehaviourHandle::new(0), value);
             self.heap.alloc(body)
+        }
+
+        fn locals(&mut self) -> &mut Table {
+            &mut self.locals
         }
     }
 
@@ -393,13 +399,11 @@ mod tests {
         let supplied: Vec<Option<ObjRef>> = (0..arguments)
             .map(|at| Some(interpreter.text(format!("argument {at}").as_bytes())))
             .collect();
-        let mut locals = Table::new();
         let mut strings = CStringPool::new();
         let mut context = method_context(&METHOD_CONTEXT_INTERFACE);
         let outcome = {
             let activation = Activation::new(Conversion {
                 host: &mut interpreter,
-                locals: &mut locals,
                 strings: &mut strings,
             });
             method(entry, &mut context, &activation, &supplied)

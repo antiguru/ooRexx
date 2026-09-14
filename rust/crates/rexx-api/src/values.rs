@@ -389,6 +389,18 @@ pub trait Host {
     /// A `.Pointer` wrapping `value`, which is `new_pointer`
     /// (`interpreter/classes/PointerClass.hpp:81`).
     fn new_pointer(&mut self, value: POINTER) -> ObjRef;
+
+    /// The local-reference table of the native activation this host is
+    /// serving, which is where a handle handed to an extension is registered
+    /// and where the collector reads it back from.
+    ///
+    /// The table lives behind the host rather than beside it (ruling 19,
+    /// Moritz 2026-09-14) so that a collection a callback triggers can see
+    /// it, and so that an implementation holding the table inside itself
+    /// needs no second mutable borrow of that same object. `NativeActivation`
+    /// both serves the context and owns `localReferences`
+    /// (`interpreter/execution/NativeActivation.hpp:250`).
+    fn locals(&mut self) -> &mut Table;
 }
 
 /// The objects the thread table carries as data rather than as functions,
@@ -404,7 +416,6 @@ pub struct Constants<T> {
 /// What one native call's conversions read and write.
 pub struct Conversion<'a> {
     pub host: &'a mut dyn Host,
-    pub locals: &'a mut Table,
     pub strings: &'a mut CStringPool,
 }
 
@@ -462,7 +473,7 @@ impl<'a> Activation<'a> {
     /// `OREF_NULL` the oracle would store (D5).
     pub fn set_object_variable(&self, name: &[u8], value: RexxObjectPtr) {
         let mut cx = self.conversion();
-        let object = cx.locals.resolve(value);
+        let object = cx.host.locals().resolve(value);
         cx.host.set_object_variable(name, object);
     }
 
@@ -477,14 +488,14 @@ impl<'a> Activation<'a> {
     pub fn whole_number(&self, value: isize) -> RexxObjectPtr {
         let mut cx = self.conversion();
         let object = cx.host.whole_number(value);
-        cx.locals.register(object)
+        cx.host.locals().register(object)
     }
 
     /// `NewPointer`, registered as [`Activation::whole_number`]'s answer is.
     pub fn new_pointer(&self, value: POINTER) -> RexxObjectPtr {
         let mut cx = self.conversion();
         let object = cx.host.new_pointer(value);
-        cx.locals.register(object)
+        cx.host.locals().register(object)
     }
 
     /// `StringData`: one address per object for as long as the call lasts, or
@@ -492,7 +503,7 @@ impl<'a> Activation<'a> {
     /// with no bytes, which is the `NULL` the stub answers on an exception.
     pub fn string_data(&self, handle: RexxObjectPtr) -> CSTRING {
         let mut cx = self.conversion();
-        let Some(object) = cx.locals.resolve(handle) else {
+        let Some(object) = cx.host.locals().resolve(handle) else {
             return std::ptr::null();
         };
         let Some(bytes) = cx.host.string_bytes(object) else {
@@ -505,8 +516,8 @@ impl<'a> Activation<'a> {
     /// `StringLength`, or zero where [`Activation::string_data`] answers a
     /// null pointer.
     pub fn string_length(&self, handle: RexxObjectPtr) -> usize {
-        let cx = self.conversion();
-        let Some(object) = cx.locals.resolve(handle) else {
+        let mut cx = self.conversion();
+        let Some(object) = cx.host.locals().resolve(handle) else {
             return 0;
         };
         cx.host.string_bytes(object).map_or(0, |bytes| bytes.len())
@@ -518,10 +529,10 @@ impl<'a> Activation<'a> {
         let mut cx = self.conversion();
         let objects = cx.host.constants();
         Constants {
-            nil: cx.locals.register(objects.nil),
-            true_object: cx.locals.register(objects.true_object),
-            false_object: cx.locals.register(objects.false_object),
-            null_string: cx.locals.register(objects.null_string),
+            nil: cx.host.locals().register(objects.nil),
+            true_object: cx.host.locals().register(objects.true_object),
+            false_object: cx.host.locals().register(objects.false_object),
+            null_string: cx.host.locals().register(objects.null_string),
         }
     }
 }
@@ -1017,7 +1028,7 @@ fn string_object_to_native(
     // The C++ registers a local reference only for a string the conversion
     // had to create. Minting a handle is registering it, so here every one is
     // rooted and the "was it created" question does not arise.
-    Ok(Value::Object(cx.locals.register(string)))
+    Ok(Value::Object(cx.host.locals().register(string)))
 }
 
 /// `valueToObject` for the object codes (`NativeActivation.cpp:723`).
@@ -1028,7 +1039,8 @@ fn object_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<Ob
     if handle.is_null() {
         return Ok(None);
     }
-    cx.locals
+    cx.host
+        .locals()
         .resolve(handle)
         .map(Some)
         .ok_or(Failure::StaleHandle)
