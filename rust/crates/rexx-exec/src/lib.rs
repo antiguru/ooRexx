@@ -4544,6 +4544,11 @@ impl Interp {
     /// The library a `::REQUIRES ... LIBRARY` made `name` callable through,
     /// or `None` for a name no loaded library exports as a routine.
     pub(crate) fn library_routine_owner(&self, name: &[u8]) -> Option<&[u8]> {
+        // Ahead of the upcase, which allocates: a program that requires no
+        // library reaches this on every name that resolves nowhere else.
+        if self.library_routines.is_empty() {
+            return None;
+        }
         self.library_routines
             .get(&name.to_ascii_uppercase())
             .map(Vec::as_slice)

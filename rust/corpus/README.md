@@ -17,6 +17,13 @@ read and delete files inside that directory. It still prints no timestamp, no
 size of a file it did not write, no directory listing it did not create, and
 no host variable's value.
 
+**Narrowed again for the programs `phase-8.txt` lists.** A program there may
+load one of the oracle's own compiled extensions, which is a file outside its
+run directory and outside this repository's own build. It is named through an
+`LD_LIBRARY_PATH={oraclelib}` sidecar rather than found on the ambient
+machine, it is loaded and never rebuilt, and it prints no address: a
+`.Pointer` renders differently on every run.
+
 **The case that joins those last two, because nothing about the program says
 so.** The order `DO OVER` yields a hash collection's indexes in is the order of
 the oracle's own hash table: bucket `key->getHashValue() % bucketSize`,
