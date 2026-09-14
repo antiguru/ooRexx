@@ -70,8 +70,10 @@ The driver is a transform into a copy in the scratchpad, never an edit of `rust/
 
 `::requires` takes an absolute path because this crate is installed nowhere and `rxregexp.cls`
 ships with the interpreter, which is the same constraint Phase 7's close recorded. Both sides are
-then run with `LD_LIBRARY_PATH` pointing at the oracle's own `build/lib`, which is where
-`librxregexp.so` is; the library is loaded, never rebuilt.
+then run with `LD_LIBRARY_PATH` pointing at the oracle checkout's `build/lib`
+(`/home/moritz/dev/repos/ooRexx/build/lib`, not this worktree's `build/lib`, which holds a second
+build from the same sources), which is where `librxregexp.so` is; the library is loaded, never
+rebuilt.
 
 ### 1c. The failing set, before
 
@@ -130,7 +132,11 @@ already set on the boundary's own argument raises and on nothing else. So the fl
 reported name as well as the suppressed line, which is one decision rather than two:
 `FailureSite::Rendered` carries the package the `EXTERNAL` directive was written in,
 `Interp::external_packages` records it at install time for both the `LIBRARY REXX` and the
-other-library forms, and `Raised::report` prefers it when the delivery is `lineless`.
+other-library forms, and `Raised::report` prefers it when the delivery is `lineless`. Since
+`03ceb04df` the flag is also set on the boundary's 88.909 (`native_argument_needs_a_string_value`)
+and on the parameter-side 93.968 (`incorrect_method_signature`), while the result-side 93.968
+(`incorrect_method_result_signature`) keeps its line against the sender, as measured through a
+forged extension (the ledger's `final-fix-report.md`, F2).
 
 Three neighbouring shapes were measured to bound the change, each on two files with the declaration
 in the required package:
@@ -147,8 +153,9 @@ in the required package:
 
 ### 1e. The witnesses and the negative control
 
-Three corpus programs went in, each with a `.d/` holding the required package and a `.env` putting
-the oracle's library directory on the in-process side's search path:
+Three corpus programs went in, each with a `.d/` holding the required package, the first two with a
+`.env` putting the oracle's library directory on the in-process side's search path (the third loads
+no shared object, and its `.env`, inert, was removed at `cf92ff4fb`):
 
 * `lang/library_method_package_blame.rex` -- the boundary raise, reported against the package.
 * `lang/library_method_program_blame.rex` -- the extension's own raise from the same package,
@@ -270,11 +277,15 @@ one-line program, oracle against this crate:
 | `index(1)` | `The NIL object` | refuses, `INDEX` |
 | `remove('ZZ')` | `The NIL object` | refuses, `REMOVE` |
 | `supplier` | `a Supplier` | refuses, `SUPPLIER` |
-| `allIndexes` | `SYSCARGS` | refuses, `ALLINDEXES` |
+| `allIndexes` | ten lines, `SYSCARGS` first | refuses, `ALLINDEXES` |
 
-Every refusal in that column names `Phase 5`. The rows that agree are `at`, which answers, and
-`put`, which stores and then trips 91.999 on the `say`; those are what the environment seam already
-serves. The oracle's `setEntry` row is 91.999 for the same reason and is a send that worked.
+Each program is `say .local~<send>` with the send as the row spells it. The `allIndexes` answer,
+re-run 2026-09-15, is `SYSCARGS`, `INPUT`, `TRACEOUTPUT`, `DEBUGINPUT`, `STDOUT`, `OUTPUT`,
+`STDERR`, `STDIN`, `STDQUE`, `ERROR`, one per line; the table's first version showed the first
+line without saying so. Every refusal in that column names `Phase 5`. The rows that agree are
+`at`, which answers, and `put`, which stores and then trips 91.999 on the `say`; those are what the
+environment seam already serves. The oracle's `setEntry` row is 91.999 for the same reason and is a
+send that worked.
 
 ## 4. Who owes it
 
@@ -291,9 +302,10 @@ finding, and it is the one thing in this document that a reader should act on: t
 column cannot move L2 to another phase's row until some phase takes the `Directory` protocol on the
 environment directories.
 
-## 5. Three other divergences the walk found, none of them Phase 8's
+## 5. Three other divergences the walk found, two of them not Phase 8's
 
-Each was reduced to a two-file program and measured on both sides. None is fixed here.
+Each was reduced to a two-file program and measured on both sides. None was fixed here; the third
+was partly Phase 8's, and its library rows were fixed at `40093e99b`, below.
 
 **The `>I>`/`<I<` package name.** A routine or method of a required package announces itself under
 the running program's path where the oracle names the package. Measured with a `::ROUTINE HELPER` in
@@ -328,7 +340,17 @@ this:    Error 98 running <dir>/t2.rex line 1:  Execution error.
 `Interp::blame_directive` instead. The 98.909 above is not a Phase 8 error, which is how this was
 shown to be wider than the boundary: the same shape appears on
 `::method len class external "LIBRARY REXX xxx_no_such"`, whose 90.998 is Phase 8's, and on a class
-directive whose superclass does not resolve, which is nobody's.
+directive whose superclass does not resolve, which is nobody's. **What the final review added
+(B6):** the rows that name a library other than `REXX` in a required package -- `::method x
+external "LIBRARY zorkolib z"` (98.903), `"LIBRARY rxregexp NoSuchEntry"` (90.998), and the
+`::routine` (90.999) and `::attribute` forms -- were loud refusals naming Phase 8 at `659312de0`
+and became this divergence in this slice, so that part was Phase 8's; `40093e99b` made
+`resolve_directive_library` blame through `blame_directive_in`, and the four two-file witnesses
+`library_required_*_missing.rex` pin it. What still names the program, re-measured 2026-09-15, is
+the `LIBRARY REXX` form (`::method x external "LIBRARY REXX nosuchentry"` at `pk.cls` line 3:
+oracle `Error 90 running <dir>/pk.cls line 3`, this crate `<dir>/main.rex line 3`, 90.998 and rc
+166 on both) and the superclass form above (`k2.cls line 1` against `main.rex line 1`, 98.909, rc
+158 on both), through the `unresolved_external` and class-install arms that predate this phase.
 
 ## 6. A hazard for whoever drives the framework next
 
