@@ -1,0 +1,19 @@
+count 18
+/* The same native UNINIT for an object still reachable when the program
+   ends: the termination sweep runs it, so the library has to still be loaded
+   after the last clause of the program has run. */
+r = .Sub~new('a*b')
+say 'live' r~probe~class~id
+
+::class Re subclass Object
+::method init external "LIBRARY rxregexp RegExp_Init"
+::method uninit external "LIBRARY rxregexp RegExp_Uninit"
+::method probe
+  expose CSELF
+  return CSELF
+
+::class Sub subclass Re
+::method uninit
+  say 'sub before' self~probe~class~id
+  forward class (super) continue
+  say 'sub after' self~probe~class~id

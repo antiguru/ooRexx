@@ -365,6 +365,103 @@ mod tests {
         assert_eq!(swept.stderr, plain.stderr);
     }
 
+    /// A name that has resolved keeps the answer it resolved to, which is
+    /// what stops a second write dropping the interpreter's own reference to
+    /// a loaded library.
+    #[test]
+    fn a_held_library_is_not_replaced_by_a_later_answer() {
+        let mut libraries = crate::Libraries::new();
+        assert!(matches!(
+            libraries.hold(b"rxregexp", LibraryLoad::Missing),
+            LibraryLoad::Missing
+        ));
+        assert!(matches!(
+            libraries.hold(b"rxregexp", LibraryLoad::Version),
+            LibraryLoad::Missing
+        ));
+        assert!(matches!(
+            libraries.get(b"rxregexp"),
+            Some(LibraryLoad::Missing)
+        ));
+        // The control that says the second answer was refused rather than
+        // never built: under a name nothing is held for it is taken.
+        assert!(matches!(
+            libraries.hold(b"zorkolib", LibraryLoad::Version),
+            LibraryLoad::Version
+        ));
+    }
+
+    /// A loaded library survives a collection and the finalizer sweep, which
+    /// is what an object still holding a `CSELF` at termination needs: its
+    /// `UNINIT` is an address inside the mapping.
+    #[test]
+    fn a_loaded_library_outlives_the_finaliser_sweep() {
+        let mut interp = interp_that_can_see_rxregexp();
+        let LibraryLoad::Loaded(library) = interp.resolve_library(b"rxregexp") else {
+            panic!("librxregexp.so did not load from the oracle's build directory");
+        };
+        let watch = std::rc::Rc::downgrade(&library);
+        drop(library);
+        interp.collect_now();
+        assert!(interp.run_termination_uninits().is_empty());
+        assert!(
+            watch.upgrade().is_some(),
+            "the interpreter gave up its library across a collection and the sweep"
+        );
+
+        // The control, and what says the assertion above is about the
+        // interpreter's hold rather than some other one: the interpreter is
+        // the only holder, so the watch reports a release as soon as it goes.
+        drop(interp);
+        assert!(
+            watch.upgrade().is_none(),
+            "something outside the interpreter holds the library, so the watch \
+             above cannot see a release"
+        );
+    }
+
+    /// **A native `UNINIT` allocates**, and nothing about the sweep it runs in
+    /// forbids that: a collection only readies an object, and the sweep is
+    /// reached afterwards from `GC('force')` and from termination. The
+    /// witness answers the same with a collection at every allocation as with
+    /// none.
+    #[test]
+    fn the_native_finaliser_answers_the_same_under_a_collection_at_every_allocation() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../corpus/lang/library_uninit_collected.rex");
+        let text = std::fs::read(&path).expect("the corpus witness is readable");
+        let invocation = || {
+            crate::Invocation::none().with_environment(vec![(
+                b"LD_LIBRARY_PATH".to_vec(),
+                oracle_library_directory()
+                    .into_os_string()
+                    .into_encoded_bytes(),
+            )])
+        };
+        let name = path.to_string_lossy().into_owned();
+
+        let plain = crate::run_program(&name, text.clone(), invocation());
+        assert_eq!(
+            plain.exit_code,
+            0,
+            "{}",
+            String::from_utf8_lossy(&plain.stderr)
+        );
+        // The oracle's own bytes, so that two identical failures cannot pass
+        // for agreement: `sub after String` is `DropObjectVariable` reaching
+        // the pool, which only the extension's own code writes.
+        assert_eq!(
+            String::from_utf8_lossy(&plain.stdout),
+            "live Pointer\nsub before Pointer\nsub after String\ndone\n"
+        );
+
+        let swept = crate::run_program_collect_every_alloc(&name, text, invocation());
+        assert_eq!(swept.exit_code, plain.exit_code);
+        assert_eq!(swept.stdout, plain.stdout);
+        assert_eq!(swept.stderr, plain.stderr);
+        assert!(swept.collections > 0, "the stress mode did not collect");
+    }
+
     /// The spellings `getVariableRetriever` answers nothing for, beside
     /// `CSELF` and `!POS`, which `rxregexp` really writes.
     #[test]

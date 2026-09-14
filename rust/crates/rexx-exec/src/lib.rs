@@ -1752,7 +1752,7 @@ struct Interp {
     /// resolved under -- `PackageManager::packages`
     /// (`interpreter/package/PackageManager.cpp:233`). A miss is held as well
     /// as a hit, so a name that failed once fails the same way every time.
-    libraries: HashMap<Vec<u8>, LibraryLoad>,
+    libraries: Libraries,
     /// Which library procedure each `::METHOD`/`::ATTRIBUTE ... EXTERNAL
     /// "LIBRARY <name>"` bound to, keyed by the identity
     /// [`Interp::install_one_method`] minted for its dictionary key.
@@ -2102,6 +2102,41 @@ pub(crate) enum LibraryLoad {
     Version,
 }
 
+/// What each library name has resolved to.
+///
+/// A name's answer is written once and afterwards neither removed nor
+/// replaced, so a library this hands an [`Rc`] out for stays loaded as long as
+/// the interpreter does. That is a correctness constraint: dropping the last
+/// reference runs `dlclose`, and the mapping it takes away holds the
+/// extension's `UNINIT`, the block a `CSELF` addresses and every entry point
+/// resolved out of the package tables, so a library released while an object
+/// of a class it contributed a method to is still reachable leaves the
+/// finalizer sweep calling an unmapped address.
+pub(crate) struct Libraries {
+    held: HashMap<Vec<u8>, LibraryLoad>,
+}
+
+impl Libraries {
+    fn new() -> Libraries {
+        Libraries {
+            held: HashMap::new(),
+        }
+    }
+
+    /// What `name` has resolved to, or `None` for a name nothing has been
+    /// held for.
+    fn get(&self, name: &[u8]) -> Option<&LibraryLoad> {
+        self.held.get(name)
+    }
+
+    /// Holds `load` for `name` where nothing is held yet, and answers what is
+    /// held afterwards, which for a name already resolved is the earlier
+    /// answer and not `load`.
+    fn hold(&mut self, name: &[u8], load: LibraryLoad) -> LibraryLoad {
+        self.held.entry(name.to_vec()).or_insert(load).clone()
+    }
+}
+
 /// One dictionary key bound to one procedure of one loaded library.
 #[derive(Clone)]
 pub(crate) struct LibraryBinding {
@@ -2260,7 +2295,7 @@ impl Interp {
             message_outcomes: HashMap::new(),
             generated_methods: HashMap::new(),
             native_externals: HashMap::new(),
-            libraries: HashMap::new(),
+            libraries: Libraries::new(),
             library_externals: HashMap::new(),
             library_routines: HashMap::new(),
             native_handles: Vec::new(),
@@ -4475,8 +4510,7 @@ impl Interp {
             Ok(None) => LibraryLoad::Missing,
             Err(rexx_api::load::Failure::LibraryVersion(_)) => LibraryLoad::Version,
         };
-        self.libraries.insert(name.to_vec(), loaded.clone());
-        loaded
+        self.libraries.hold(name, loaded)
     }
 
     /// [`Interp::resolve_library`] for a caller whose failure is a condition:

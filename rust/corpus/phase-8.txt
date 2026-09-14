@@ -30,3 +30,12 @@ lang/library_loads_once.rex
 lang/library_method_missing_argument.rex
 lang/library_method_extra_arguments.rex
 lang/library_method_raises.rex
+
+# Task 9: the native UNINIT at finalization. RegExp_Uninit writes to no
+# descriptor, so each of these reads its DropObjectVariable back through a
+# written method in the scope the extension stores CSELF into: the driven
+# sweep, the termination sweep, and a second finalization reaching the
+# extension's own null-CSELF guard.
+lang/library_uninit_collected.rex
+lang/library_uninit_termination.rex
+lang/library_uninit_twice.rex
