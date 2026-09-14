@@ -1061,7 +1061,30 @@ fn compare(case: &Case) -> Option<String> {
             outcome.chunks_refused
         ));
     }
+    // A corpus program that failed to load a library the oracle's own build
+    // directory holds stopped where its sidecar should have taken it further;
+    // a witness of a missing library names one that directory does not hold.
+    if case.corpus.is_some()
+        && let Some(library) = unloaded_library(&outcome.stderr)
+        && support::oracle::oracle_root()
+            .join("lib")
+            .join(format!("lib{library}{}", std::env::consts::DLL_SUFFIX))
+            .exists()
+    {
+        return Some(format!(
+            "stopped at 98.903 for {library}, which the oracle's build directory holds"
+        ));
+    }
     None
+}
+
+/// The library a 98.903 report in `stderr` names, if there is one.
+fn unloaded_library(stderr: &[u8]) -> Option<String> {
+    const MARKER: &str = "Unable to load library \"";
+    let text = String::from_utf8_lossy(stderr);
+    let start = text.find(MARKER)? + MARKER.len();
+    let length = text[start..].find('"')?;
+    Some(text[start..start + length].to_string())
 }
 
 /// This harness reads **every** phase subset file the corpus has.
@@ -1153,7 +1176,8 @@ fn every_population_the_tree_calls_for_is_present_and_non_empty() {
 }
 
 /// The sweep: every case of every population, run once, to completion, with
-/// no body refused.
+/// no body refused and no corpus program stopped at a library the oracle's
+/// build directory holds.
 #[test]
 fn every_population_runs_without_a_refusal() {
     let populations = populations();

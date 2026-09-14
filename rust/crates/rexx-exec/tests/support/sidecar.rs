@@ -35,10 +35,11 @@ pub struct Sidecar {
 }
 
 /// One separately removable part of a [`Sidecar`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Half {
     Fixtures,
-    Environment,
+    /// One environment override, by name.
+    Variable(String),
     Cwd,
     Stdin,
 }
@@ -55,8 +56,8 @@ impl Sidecar {
         if self.fixtures.is_some() {
             found.push(Half::Fixtures);
         }
-        if !self.environment.is_empty() {
-            found.push(Half::Environment);
+        for (name, _) in &self.environment {
+            found.push(Half::Variable(name.clone()));
         }
         if self.cwd.is_some() {
             found.push(Half::Cwd);
@@ -68,11 +69,11 @@ impl Sidecar {
     }
 
     /// This sidecar with `half` removed and everything else kept.
-    pub fn without(&self, half: Half) -> Sidecar {
+    pub fn without(&self, half: &Half) -> Sidecar {
         let mut rest = self.clone();
         match half {
             Half::Fixtures => rest.fixtures = None,
-            Half::Environment => rest.environment.clear(),
+            Half::Variable(name) => rest.environment.retain(|(held, _)| held != name),
             Half::Cwd => rest.cwd = None,
             Half::Stdin => rest.stdin = None,
         }

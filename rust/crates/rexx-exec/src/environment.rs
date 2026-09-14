@@ -2074,7 +2074,8 @@ impl Interp {
     }
 
     /// Which package a `Method` or `Routine` object belongs to, or `None` for
-    /// an object this crate did not build.
+    /// an object this crate did not build and for a `loadExternal*` answer no
+    /// directive has bound, whose package the oracle answers as `.nil`.
     pub(crate) fn executable_package(&self, object: ObjRef) -> Option<Package> {
         self.source_package(self.executable_sources.get(&object)?.source)
     }

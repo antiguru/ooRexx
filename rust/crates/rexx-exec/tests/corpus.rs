@@ -663,8 +663,8 @@ fn every_sidecar_names_a_program_the_subset_runs() {
 }
 
 /// Each sidecar's own control, taken one part at a time: removing any one of
-/// its fixtures, environment, working directory or standard input makes one
-/// of the two interpreters answer differently.
+/// its fixtures, environment variables, working directory or standard input
+/// makes one of the two interpreters answer differently.
 ///
 /// The differential compares the two interpreters, so a sidecar that never
 /// arrives leaves them agreeing on the same failure and the witness stays
@@ -717,7 +717,7 @@ fn a_sidecar_changes_what_one_of_the_interpreters_answers() {
         let oracle_with = run_oracle(&sidecar);
         let mut crate_with = None;
         for half in sidecar.halves() {
-            let partial = sidecar.without(half);
+            let partial = sidecar.without(&half);
             // **All three descriptors.** A sidecar whose whole effect is on
             // stderr -- an interactive-debug transcript, say -- reads as inert
             // against stdout alone, which this control was measured doing.

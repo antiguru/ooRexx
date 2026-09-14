@@ -427,6 +427,71 @@ pub(crate) extern "C" fn dropping_stub(
     std::ptr::null_mut()
 }
 
+/// The signature [`thread_table_stub`] publishes: an `int` result and one
+/// `RexxStringObject` parameter.
+#[cfg(test)]
+static THREAD_TABLE_TYPES: [u16; 3] = [
+    crate::values::code::INT,
+    crate::values::code::REXX_STRING_OBJECT,
+    crate::values::ARGUMENT_TERMINATOR,
+];
+
+/// The address [`thread_table_stub`] hands `NewPointer`.
+#[cfg(test)]
+pub(crate) const STUB_POINTER: usize = 0x5eed_0000;
+
+/// The condition number [`thread_table_stub`] hands `RaiseException0`.
+#[cfg(test)]
+pub(crate) const STUB_CONDITION: usize = 40_001;
+
+/// A method stub that calls `StringLength`, `StringData`,
+/// `WholeNumberToObject`, `NewPointer` and `RaiseException0` through the
+/// thread context its method context links, and stores what they answered in
+/// object variables through the method table: `LENGTH` and `FIRST` for its
+/// argument's length and first byte, and `POINTER` for [`STUB_POINTER`].
+#[cfg(test)]
+pub(crate) extern "C" fn thread_table_stub(
+    context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return THREAD_TABLE_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: `context` is the one a `Contexts` handed this call, which
+    // linked its thread context and wrote both tables; element one of the
+    // array is this call's argument, whose word `values::descriptor` wrote.
+    let (thread, method, string) = unsafe {
+        (
+            (*context).threadContext,
+            &*(*context).functions,
+            (*arguments.add(1)).value.value_RexxStringObject,
+        )
+    };
+    // SAFETY: as above.
+    let table = unsafe { &*(*thread).functions };
+    // SAFETY: every call passes the contexts this call was handed, a literal
+    // name, and a handle this call was given or the thread table answered;
+    // `StringData`'s bytes are read only where it answered some.
+    unsafe {
+        let length = (table.StringLength)(thread, string);
+        let data = (table.StringData)(thread, string);
+        let first = if data.is_null() || length == 0 {
+            0
+        } else {
+            isize::from(*data.cast::<u8>())
+        };
+        let length = isize::try_from(length).unwrap_or(-1);
+        let length = (table.WholeNumberToObject)(thread, length);
+        (method.SetObjectVariable)(context, c"LENGTH".as_ptr(), length);
+        let first = (table.WholeNumberToObject)(thread, first);
+        (method.SetObjectVariable)(context, c"FIRST".as_ptr(), first);
+        let pointer = (table.NewPointer)(thread, std::ptr::without_provenance_mut(STUB_POINTER));
+        (method.SetObjectVariable)(context, c"POINTER".as_ptr(), pointer.cast());
+        (table.RaiseException0)(thread, STUB_CONDITION);
+    }
+    std::ptr::null_mut()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{owner_of, value_of};

@@ -43,8 +43,11 @@ pub const MAX_NATIVE_ARGUMENTS: usize = 16;
 ///
 /// # Errors
 /// Whatever converting an argument or the result refuses;
-/// [`Failure::Signature`] for a signature the descriptor array cannot hold or
-/// a parameter code the table does not know; [`Failure::ResultSignature`] for
+/// [`Failure::Signature`] for a signature the descriptor array cannot hold,
+/// or for a parameter code the table does not know that is given an argument
+/// or carries the optional bit; [`Failure::MissingArgument`] for a parameter
+/// that takes an argument, is not optional and was given none, whether or not
+/// the table knows its code; [`Failure::ResultSignature`] for
 /// a return code it does not know; [`Failure::TooManyArguments`] for
 /// arguments the signature does not consume.
 ///
@@ -533,6 +536,49 @@ mod tests {
         assert!(
             interpreter.variables.is_empty(),
             "the drop did not reach the activation's host"
+        );
+    }
+
+    /// A stub reaches the activation through the thread context the method
+    /// context links, which is where `ffi::owner_of` reads the owner back past
+    /// the thread wrapper's public struct.
+    #[test]
+    fn a_stub_reaches_its_activation_through_the_thread_context() {
+        let entry = stub_entry(b"thread_table", crate::ffi::thread_table_stub);
+        let mut interpreter = Interpreter::new();
+        let argument = interpreter.text(b"hello");
+        let mut strings = CStringPool::new();
+        let (outcome, pending) = {
+            let activation = Activation::new(Conversion {
+                host: &mut interpreter,
+                strings: &mut strings,
+            });
+            let mut contexts = crate::ffi::Contexts::new(&activation);
+            let outcome = method(&entry, &contexts.method(), &activation, &[Some(argument)]);
+            (outcome, activation.pending())
+        };
+        assert_eq!(outcome, Ok(Some(ObjRef::small_int(0).expect("zero"))));
+        assert_eq!(pending, Some(crate::ffi::STUB_CONDITION));
+        let variable = |name: &[u8]| {
+            interpreter
+                .variables
+                .iter()
+                .find(|(bound, _)| bound == name)
+                .map(|(_, value)| *value)
+        };
+        assert_eq!(variable(b"LENGTH"), ObjRef::small_int(5));
+        assert_eq!(variable(b"FIRST"), ObjRef::small_int(i64::from(b'h')));
+        let pointer = variable(b"POINTER").expect("NewPointer's object reached the host");
+        let address = match interpreter.heap.get(pointer).map(|object| &object.body) {
+            Some(Body::Instance {
+                native: Some(state),
+                ..
+            }) => state.pointer(),
+            _ => None,
+        };
+        assert_eq!(
+            address,
+            Some(std::ptr::without_provenance_mut(crate::ffi::STUB_POINTER))
         );
     }
 

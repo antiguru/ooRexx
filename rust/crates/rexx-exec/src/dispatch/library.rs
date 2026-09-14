@@ -295,7 +295,7 @@ mod tests {
     /// than on the answer.** Two `Loaded` answers would look alike whether or
     /// not the second one re-opened the library, and so would two answers
     /// holding the same `Rc`, because a non-replacing hold hands the first one
-    /// back; the open count is what says the `dlopen` and the package read
+    /// back; the attempt count is what says the `dlopen` and the package read
     /// happened once.
     #[test]
     fn a_library_named_twice_is_opened_once() {
@@ -306,11 +306,15 @@ mod tests {
         let LibraryLoad::Loaded(second) = interp.resolve_library(b"rxregexp") else {
             panic!("the second resolve did not load");
         };
-        assert_eq!(interp.library_opens, 1, "the same name was opened twice");
+        assert_eq!(
+            interp.library_open_attempts, 1,
+            "the same name was opened twice"
+        );
         assert!(Rc::ptr_eq(&first, &second));
 
-        // The control that says the count sees an open at all: a name nothing
-        // is held for opens every time it is asked.
+        // The control that says the count sees an attempt at all: a name
+        // nothing is held for is looked for every time it is asked, whether or
+        // not anything loads.
         assert!(matches!(
             interp.resolve_library(b"zorkolib"),
             LibraryLoad::Missing
@@ -319,7 +323,7 @@ mod tests {
             interp.resolve_library(b"zorkolib"),
             LibraryLoad::Missing
         ));
-        assert_eq!(interp.library_opens, 3);
+        assert_eq!(interp.library_open_attempts, 3);
     }
 
     /// The search directories come from the interpreter's own environment,
@@ -399,7 +403,10 @@ mod tests {
             panic!("the refused library was not held");
         };
         assert!(held.method(b"RegExp_Parse").is_some());
-        assert_eq!(interp.library_opens, 0, "the held library was opened again");
+        assert_eq!(
+            interp.library_open_attempts, 0,
+            "the held library was opened again"
+        );
     }
 
     /// **The end-to-end witness answers the same under a collection at every
