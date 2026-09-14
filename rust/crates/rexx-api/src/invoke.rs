@@ -17,7 +17,6 @@
 
 use rexx_core::ObjRef;
 
-use crate::ffi;
 use crate::layout::{RexxMethodContext_, ValueDescriptor};
 use crate::load::NativeMethodEntry;
 use crate::values::{self, ARGUMENT_TERMINATOR, Activation, Converted, Failure, Value};
@@ -92,17 +91,14 @@ pub fn method(
         return Err(Failure::TooManyArguments { expected: input });
     }
 
-    entry.call(context, &mut descriptors);
+    let repr = values::repr(returns);
+    let written = entry.call(context, &mut descriptors, repr);
 
     if returns == ARGUMENT_TERMINATOR {
         return Ok(None);
     }
-    let repr = values::repr(returns).ok_or(Failure::ResultSignature)?;
-    values::from_native(
-        &mut cx.conversion(),
-        returns,
-        ffi::value_of(&descriptors[0], repr),
-    )
+    let value = written.ok_or(Failure::ResultSignature)?;
+    values::from_native(&mut cx.conversion(), returns, value)
 }
 
 /// The types `entry` declares: its return type, then its parameters.

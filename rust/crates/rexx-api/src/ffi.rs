@@ -46,16 +46,29 @@ pub unsafe fn owner_of<C, T>(context: *mut C) -> *mut T {
 
 /// The value `descriptor` carries, read as the union member `repr` names.
 ///
-/// `repr` is the conversion table's answer for the declared type
-/// (`values::repr`), and the stub writes the member that same type names
-/// (`api/oorexxapi.h:4282`), so the two agree by construction.
-pub fn value_of(descriptor: &ValueDescriptor, repr: Repr) -> Value {
-    // SAFETY: the member read is the one the declared type names, and it is
-    // the member that was written: the stub writes through that same type
-    // (`api/oorexxapi.h:4282`) and the caller derives `repr` from it through
-    // the table, whose rows the frozen header establishes. Every member is an
-    // integer, a float or a pointer, so once written it holds a valid value
-    // of its own type.
+/// Safe code can build a descriptor whose written member is narrower than
+/// the one `repr` names, which is why the read is `unsafe` to ask for:
+///
+/// ```compile_fail,E0133
+/// # use rexx_api::ffi::value_of;
+/// # use rexx_api::layout::{ValueDescriptor, ValueUnion};
+/// # use rexx_api::values::Repr;
+/// let narrow = ValueDescriptor {
+///     value: ValueUnion { value_float: 1.5 },
+///     r#type: 0,
+///     flags: 0,
+/// };
+/// let read = value_of(&narrow, Repr::Double);
+/// ```
+///
+/// # Safety
+/// Every byte of the member `repr` names is initialised: `descriptor`'s word
+/// was written in full, as every union [`crate::values::descriptor`] builds is,
+/// or that member itself was written.
+pub unsafe fn value_of(descriptor: &ValueDescriptor, repr: Repr) -> Value {
+    // SAFETY: the caller guarantees the member's bytes are initialised, and
+    // every member is an integer, a float or a pointer, for which any
+    // initialised bytes are a valid value.
     unsafe {
         match repr {
             Repr::Object => Value::Object(descriptor.value.value_RexxObjectPtr),
@@ -320,8 +333,67 @@ pub(crate) extern "C" fn reading_stub(
 
 #[cfg(test)]
 mod tests {
-    use super::owner_of;
+    use super::{owner_of, value_of};
     use crate::layout::{Owned, RexxCallContext_, RexxMethodContext_, RexxThreadContext_};
+    use crate::values::{Converted, Repr, Value, code, descriptor, repr, rows};
+
+    /// A value of each shape, chosen so that a read of the wrong width or the
+    /// wrong member answers something else.
+    fn sample(repr: Repr) -> Value {
+        let address: *mut std::ffi::c_void =
+            std::ptr::without_provenance_mut(0x0123_4567_89ab_cdef);
+        match repr {
+            Repr::Object => Value::Object(address.cast()),
+            Repr::CString => Value::CString(address.cast()),
+            Repr::Pointer => Value::Pointer(address),
+            Repr::Int => Value::Int(-0x1234_5678),
+            Repr::Int8 => Value::Int8(-0x12),
+            Repr::Int16 => Value::Int16(-0x1234),
+            Repr::Int32 => Value::Int32(-0x1234_5678),
+            Repr::Int64 => Value::Int64(-0x0123_4567_89ab_cdef),
+            Repr::Uint8 => Value::Uint8(0xfe),
+            Repr::Uint16 => Value::Uint16(0xfedc),
+            Repr::Uint32 => Value::Uint32(0xfedc_ba98),
+            Repr::Uint64 => Value::Uint64(0xfedc_ba98_7654_3210),
+            Repr::Isize => Value::Isize(-0x0123_4567_89ab_cdef),
+            Repr::Usize => Value::Usize(0xfedc_ba98_7654_3210),
+            Repr::Double => Value::Double(-1.5e300),
+            Repr::Float => Value::Float(-1.5e30),
+        }
+    }
+
+    /// Whatever `descriptor` writes for a value, `value_of` reads back
+    /// through the row's own [`Repr`], so the two halves of the union agree.
+    #[test]
+    fn every_repr_reads_back_the_member_the_table_wrote() {
+        for (code, name) in rows() {
+            let repr = repr(code).expect("every row names a member");
+            let value = sample(repr);
+            let written = descriptor(code, Converted { value, flags: 0 });
+            // SAFETY: `descriptor` writes the whole word.
+            let read = unsafe { value_of(&written, repr) };
+            assert_eq!(
+                read, value,
+                "REXX_VALUE_{name} does not read back what it wrote"
+            );
+        }
+    }
+
+    /// A narrow member is written over a zeroed word, so the wider read sees
+    /// the member's bytes and zeros above them.
+    #[test]
+    fn a_narrow_value_is_written_over_a_zeroed_word() {
+        let written = descriptor(
+            code::INT64_T,
+            Converted {
+                value: Value::Uint8(0xfe),
+                flags: 0,
+            },
+        );
+        // SAFETY: `descriptor` writes the whole word.
+        let read = unsafe { value_of(&written, Repr::Uint64) };
+        assert_eq!(read, Value::Uint64(0xfe));
+    }
 
     /// Stands in for the interpreter state a later task puts behind a context.
     #[derive(Debug, PartialEq, Eq)]

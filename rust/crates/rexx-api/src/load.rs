@@ -14,10 +14,12 @@
 
 //! The outbound FFI boundary: loading a library and resolving symbols.
 
+use crate::invoke::MAX_NATIVE_ARGUMENTS;
 use crate::layout::{
     RexxMethodContext_, RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry, ValueDescriptor,
+    ValueUnion,
 };
-use crate::values::ARGUMENT_TERMINATOR;
+use crate::values::{ARGUMENT_TERMINATOR, Repr, Value};
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 
@@ -147,25 +149,35 @@ impl NativeMethodEntry {
     }
 
     /// Call the stub with `arguments`, which it reads and writes its result
-    /// into. A row with no address does nothing.
+    /// into, and answer element zero read as `result`'s member, or `None`
+    /// where `result` is. A row with no address calls nothing.
     ///
     /// The array is published on `context` for the call and taken off again
     /// afterwards, because it does not outlive this function.
-    pub(crate) fn call(&self, context: &mut RexxMethodContext_, arguments: &mut [ValueDescriptor]) {
-        let Some(stub) = self.stub() else {
-            return;
-        };
-        let array = arguments.as_mut_ptr();
-        // `argumentExists` reads the array through the context rather than
-        // through the parameter (`api/oorexxapi.h:4276`), which is why the
-        // oracle publishes it (`NativeActivation.cpp:1291`).
-        context.arguments = array;
-        // SAFETY: `stub` names the generated stub, as above. `array` is the
-        // caller's live slice, which nothing else touches for the duration of
-        // the call, and the stub reads and writes only the elements its own
-        // signature declares.
-        unsafe { stub(&raw mut *context, array) };
-        context.arguments = std::ptr::null_mut();
+    pub(crate) fn call(
+        &self,
+        context: &mut RexxMethodContext_,
+        arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
+        result: Option<Repr>,
+    ) -> Option<Value> {
+        // The whole word, before the stub can write a narrower member into it.
+        arguments[0].value = ValueUnion { value_int64_t: 0 };
+        if let Some(stub) = self.stub() {
+            let array = arguments.as_mut_ptr();
+            // `argumentExists` reads the array through the context rather
+            // than through the parameter (`api/oorexxapi.h:4276`), which is
+            // why the oracle publishes it (`NativeActivation.cpp:1291`).
+            context.arguments = array;
+            // SAFETY: `stub` names the generated stub, as above. `array` is
+            // the caller's live array, which nothing else touches for the
+            // duration of the call, and the stub reads and writes only the
+            // elements its own signature declares.
+            unsafe { stub(&raw mut *context, array) };
+            context.arguments = std::ptr::null_mut();
+        }
+        // SAFETY: element zero's word was written in full above, and a stub
+        // writing a member into it leaves every byte initialised.
+        result.map(|repr| unsafe { crate::ffi::value_of(&arguments[0], repr) })
     }
 
     /// The row's address as the callable it names, or `None` for a row that

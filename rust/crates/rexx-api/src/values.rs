@@ -219,37 +219,35 @@ pub enum Value {
 }
 
 impl Value {
-    /// The union with this value's member written.
+    /// The union with this value's member written over a zeroed word, which
+    /// is how `processArguments` fills the result descriptor
+    /// (`NativeActivation.cpp:229`), so every member reads initialised bytes.
     ///
-    /// An omitted argument is a zero word: the C++ writes `value_int64_t = 0`
-    /// for the integer and pointer types and `0.0` for `double` and `float`,
-    /// which are the same bytes.
+    /// An omitted argument is the zero word itself: the C++ writes
+    /// `value_int64_t = 0` for the integer and pointer types and `0.0` for
+    /// `double` and `float`, which are the same bytes.
     fn as_union(self) -> ValueUnion {
+        let mut word = ValueUnion { value_int64_t: 0 };
         match self {
-            Value::Omitted => ValueUnion { value_int64_t: 0 },
-            Value::Int(v) => ValueUnion { value_int: v },
-            Value::CString(p) => ValueUnion { value_CSTRING: p },
-            Value::Pointer(p) => ValueUnion { value_POINTER: p },
-            Value::Object(h) => ValueUnion {
-                value_RexxObjectPtr: h,
-            },
-            Value::Int8(v) => ValueUnion { value_int8_t: v },
-            Value::Int16(v) => ValueUnion { value_int16_t: v },
-            Value::Int32(v) => ValueUnion { value_int32_t: v },
-            Value::Int64(v) => ValueUnion { value_int64_t: v },
-            Value::Uint8(v) => ValueUnion { value_uint8_t: v },
-            Value::Uint16(v) => ValueUnion { value_uint16_t: v },
-            Value::Uint32(v) => ValueUnion { value_uint32_t: v },
-            Value::Uint64(v) => ValueUnion { value_uint64_t: v },
-            Value::Isize(v) => ValueUnion {
-                value_wholenumber_t: v,
-            },
-            Value::Usize(v) => ValueUnion {
-                value_stringsize_t: v,
-            },
-            Value::Double(v) => ValueUnion { value_double: v },
-            Value::Float(v) => ValueUnion { value_float: v },
+            Value::Omitted => {}
+            Value::Int(v) => word.value_int = v,
+            Value::CString(p) => word.value_CSTRING = p,
+            Value::Pointer(p) => word.value_POINTER = p,
+            Value::Object(h) => word.value_RexxObjectPtr = h,
+            Value::Int8(v) => word.value_int8_t = v,
+            Value::Int16(v) => word.value_int16_t = v,
+            Value::Int32(v) => word.value_int32_t = v,
+            Value::Int64(v) => word.value_int64_t = v,
+            Value::Uint8(v) => word.value_uint8_t = v,
+            Value::Uint16(v) => word.value_uint16_t = v,
+            Value::Uint32(v) => word.value_uint32_t = v,
+            Value::Uint64(v) => word.value_uint64_t = v,
+            Value::Isize(v) => word.value_wholenumber_t = v,
+            Value::Usize(v) => word.value_stringsize_t = v,
+            Value::Double(v) => word.value_double = v,
+            Value::Float(v) => word.value_float = v,
         }
+        word
     }
 }
 

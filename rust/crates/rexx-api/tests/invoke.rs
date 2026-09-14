@@ -15,7 +15,6 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 
-use rexx_api::ffi::value_of;
 use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::{
@@ -24,8 +23,7 @@ use rexx_api::layout::{
 };
 use rexx_api::load::{self, NativeMethodEntry};
 use rexx_api::values::{
-    Activation, CStringPool, Constants, Conversion, Converted, Failure, Host, OPTIONAL_ARGUMENT,
-    Raised, Repr, Value, code, descriptor, repr, rows,
+    Activation, CStringPool, Constants, Conversion, Failure, Host, OPTIONAL_ARGUMENT, Raised, code,
 };
 use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef};
 
@@ -477,48 +475,6 @@ fn an_argument_the_signature_does_not_consume_is_refused() {
             "the extension must not have run at all"
         );
     });
-}
-
-// ------------------------------------------------- reading element zero back
-
-/// Whatever `descriptor` writes for a value, `ffi::value_of` reads back
-/// through the row's own [`Repr`], so the two halves of the union agree.
-#[test]
-fn every_repr_reads_back_the_member_the_table_wrote() {
-    for (code, name) in rows() {
-        let repr = repr(code).expect("every row names a member");
-        let value = sample(repr);
-        let written = descriptor(code, Converted { value, flags: 0 });
-        assert_eq!(
-            value_of(&written, repr),
-            value,
-            "REXX_VALUE_{name} does not read back what it wrote"
-        );
-    }
-}
-
-/// A value of each shape, chosen so that a read of the wrong width or the
-/// wrong member answers something else.
-fn sample(repr: Repr) -> Value {
-    let address: *mut std::ffi::c_void = std::ptr::without_provenance_mut(0x0123_4567_89ab_cdef);
-    match repr {
-        Repr::Object => Value::Object(address.cast()),
-        Repr::CString => Value::CString(address.cast()),
-        Repr::Pointer => Value::Pointer(address),
-        Repr::Int => Value::Int(-0x1234_5678),
-        Repr::Int8 => Value::Int8(-0x12),
-        Repr::Int16 => Value::Int16(-0x1234),
-        Repr::Int32 => Value::Int32(-0x1234_5678),
-        Repr::Int64 => Value::Int64(-0x0123_4567_89ab_cdef),
-        Repr::Uint8 => Value::Uint8(0xfe),
-        Repr::Uint16 => Value::Uint16(0xfedc),
-        Repr::Uint32 => Value::Uint32(0xfedc_ba98),
-        Repr::Uint64 => Value::Uint64(0xfedc_ba98_7654_3210),
-        Repr::Isize => Value::Isize(-0x0123_4567_89ab_cdef),
-        Repr::Usize => Value::Usize(0xfedc_ba98_7654_3210),
-        Repr::Double => Value::Double(-1.5e300),
-        Repr::Float => Value::Float(-1.5e30),
-    }
 }
 
 /// The descriptor array is what bounds a signature, and this is the length
