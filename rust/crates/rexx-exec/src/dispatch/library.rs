@@ -420,11 +420,13 @@ mod tests {
         );
     }
 
-    /// **A native `UNINIT` allocates**, and nothing about the sweep it runs in
+    /// **A finalizer allocates**, and nothing about the sweep it runs in
     /// forbids that: a collection only readies an object, and the sweep is
     /// reached afterwards from `GC('force')` and from termination. The
-    /// witness answers the same with a collection at every allocation as with
-    /// none.
+    /// allocating part of this witness is the Rexx subclass finalizer around
+    /// the native one, which sends and says; `RegExp_Uninit` itself allocates
+    /// nothing. The witness answers the same with a collection at every
+    /// allocation as with none.
     #[test]
     fn the_native_finaliser_answers_the_same_under_a_collection_at_every_allocation() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
