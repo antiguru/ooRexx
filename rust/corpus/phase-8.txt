@@ -4,7 +4,10 @@
 # One path per line, relative to this directory (rust/corpus/). Lines starting
 # with # are comments; blank lines are ignored.
 #
-# A program here may load one of the oracle's own compiled extensions. It does
+# A program here may load one of the oracle's compiled extensions, from the
+# directory its .env sidecar names: {oraclelib}, the oracle checkout's
+# build/lib, the same bytes on both sides. (The in-crate tests open this
+# worktree's build/lib copy, a second build from identical sources.) It does
 # not rebuild one, and it prints no address: a .Pointer renders differently on
 # every run.
 
