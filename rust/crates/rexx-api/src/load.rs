@@ -14,9 +14,20 @@
 
 //! The outbound FFI boundary: loading a library and resolving symbols.
 
-use crate::layout::{RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry};
+use crate::layout::{
+    RexxMethodContext_, RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry, ValueDescriptor,
+};
+use crate::values::ARGUMENT_TERMINATOR;
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::Path;
+
+/// The C signature of the stub the `RexxMethodN` macros generate
+/// (`api/oorexxapi.h:4286`).
+///
+/// A null `arguments` is the signature request and answers the static type
+/// array; an array is the call, and answers null (`:4282`).
+pub(crate) type NativeMethod =
+    unsafe extern "C" fn(*mut RexxMethodContext_, *mut ValueDescriptor) -> *mut u16;
 
 /// The interpreter version an extension's `requiredVersion` is measured
 /// against, `REXX_CURRENT_INTERPRETER_VERSION` (`api/oorexxapi.h:242`).
@@ -84,6 +95,97 @@ impl NativeMethodEntry {
     #[must_use]
     pub fn has_entry_point(&self) -> bool {
         !self.entry_point.is_null()
+    }
+
+    /// The type signature the stub publishes, terminator excluded, or `None`
+    /// where the row carries no address, the stub answers no array, or no
+    /// terminator appears in the first `limit` words.
+    ///
+    /// At most `limit - 1` words are answered, which is what bounds the
+    /// descriptor array the caller fills from them.
+    pub(crate) fn signature(
+        &self,
+        context: &mut RexxMethodContext_,
+        limit: usize,
+    ) -> Option<Vec<u16>> {
+        let stub = self.stub()?;
+        // SAFETY: `stub` is the address the extension's own method table gave
+        // for this row, so the code it names is the generated stub and stays
+        // mapped as long as the `Library` this row is borrowed from. A null
+        // `arguments` is the signature request, which returns the static
+        // array without running any of the extension's own code
+        // (`api/oorexxapi.h:4342-4350`).
+        let types = unsafe { stub(&raw mut *context, std::ptr::null_mut()) };
+        if types.is_null() {
+            return None;
+        }
+        let mut words = Vec::new();
+        for offset in 0..limit {
+            // SAFETY: the invariant is the macro's, not this loop's: the
+            // array it emits ends in `REXX_ARGUMENT_TERMINATOR`
+            // (`api/oorexxapi.h:4338`), so every offset up to the first
+            // terminator is inside it. `limit` bounds how far a malformed
+            // array is followed, which the oracle does not bound at all
+            // (`NativeActivation.cpp:235`).
+            let word = unsafe { *types.add(offset) };
+            if word == ARGUMENT_TERMINATOR {
+                return Some(words);
+            }
+            words.push(word);
+        }
+        None
+    }
+
+    /// Call the stub with `arguments`, which it reads and writes its result
+    /// into. A row with no address does nothing.
+    ///
+    /// The array is published on `context` for the call and taken off again
+    /// afterwards, because it does not outlive this function.
+    pub(crate) fn call(&self, context: &mut RexxMethodContext_, arguments: &mut [ValueDescriptor]) {
+        let Some(stub) = self.stub() else {
+            return;
+        };
+        let array = arguments.as_mut_ptr();
+        // `argumentExists` reads the array through the context rather than
+        // through the parameter (`api/oorexxapi.h:4276`), which is why the
+        // oracle publishes it (`NativeActivation.cpp:1291`).
+        context.arguments = array;
+        // SAFETY: `stub` names the generated stub, as above. `array` is the
+        // caller's live slice, which nothing else touches for the duration of
+        // the call, and the stub reads and writes only the elements its own
+        // signature declares.
+        unsafe { stub(&raw mut *context, array) };
+        context.arguments = std::ptr::null_mut();
+    }
+
+    /// The row's address as the callable it names, or `None` for a row that
+    /// carries none.
+    fn stub(&self) -> Option<NativeMethod> {
+        if self.entry_point.is_null() {
+            return None;
+        }
+        // SAFETY: `REXX_METHOD_ENTRY` fills `entryPoint` with the stub the
+        // `RexxMethodN` macro generated (`api/oorexxapi.h:223`), whose C
+        // signature is `NativeMethod`'s. D5 freezes that header and makes it
+        // the declaration both sides compile against, so the code at this
+        // address has this type. The two are the same width, which
+        // `transmute` checks.
+        Some(unsafe { std::mem::transmute::<*mut c_void, NativeMethod>(self.entry_point) })
+    }
+}
+
+/// `METHOD_TYPED_STYLE` (`api/oorexxapi.h:221`).
+#[cfg(test)]
+const METHOD_TYPED_STYLE: c_int = 1;
+
+/// A method row for a stub this image itself defines, for a caller that needs
+/// an entry point without a library.
+#[cfg(test)]
+pub(crate) fn stub_entry(name: &[u8], stub: NativeMethod) -> NativeMethodEntry {
+    NativeMethodEntry {
+        style: METHOD_TYPED_STYLE,
+        name: name.to_vec(),
+        entry_point: stub as *mut c_void,
     }
 }
 

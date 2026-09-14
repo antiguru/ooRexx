@@ -13,6 +13,7 @@
 
 pub mod ffi;
 pub mod handles;
+pub mod invoke;
 pub mod layout;
 pub mod load;
 pub mod values;

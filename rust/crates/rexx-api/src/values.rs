@@ -116,6 +116,9 @@ pub enum Failure {
         name: &'static str,
         direction: Direction,
     },
+    /// More arguments were supplied than the signature consumes.
+    /// `expected` is the number it does consume.
+    TooManyArguments { expected: usize },
     /// A handle the calling activation no longer holds (D5).
     StaleHandle,
 }
@@ -132,6 +135,9 @@ impl Failure {
             // string value: "Error 88.909".
             Failure::NoStringValue { .. } => Some(88909),
             Failure::Signature => Some(if method { 93968 } else { 40918 }),
+            // Measured 2026-09-14 against the oracle: a third argument to
+            // `RegularExpression~new` answers "Error 88.922".
+            Failure::TooManyArguments { .. } => Some(88922),
             Failure::Unfilled { .. } | Failure::StaleHandle => None,
         }
     }
@@ -147,6 +153,9 @@ impl std::fmt::Display for Failure {
                 write!(f, "argument {position} must have a string value")
             }
             Failure::Signature => write!(f, "incorrect signature"),
+            Failure::TooManyArguments { expected } => {
+                write!(f, "too many arguments in invocation; {expected} expected")
+            }
             Failure::Unfilled {
                 code,
                 name,
@@ -161,6 +170,9 @@ impl std::fmt::Display for Failure {
 }
 
 /// One member of a `ValueDescriptor`'s union, chosen by the declared code.
+///
+/// There is one variant per [`Repr`], so a descriptor's live member can be
+/// named without a second switch on the code.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Value {
     /// An optional argument nobody supplied.
@@ -170,6 +182,18 @@ pub enum Value {
     CString(CSTRING),
     Pointer(POINTER),
     Object(RexxObjectPtr),
+    Int8(i8),
+    Int16(i16),
+    Int32(i32),
+    Int64(i64),
+    Uint8(u8),
+    Uint16(u16),
+    Uint32(u32),
+    Uint64(u64),
+    Isize(isize),
+    Usize(usize),
+    Double(f64),
+    Float(f32),
 }
 
 impl Value {
@@ -187,6 +211,22 @@ impl Value {
             Value::Object(h) => ValueUnion {
                 value_RexxObjectPtr: h,
             },
+            Value::Int8(v) => ValueUnion { value_int8_t: v },
+            Value::Int16(v) => ValueUnion { value_int16_t: v },
+            Value::Int32(v) => ValueUnion { value_int32_t: v },
+            Value::Int64(v) => ValueUnion { value_int64_t: v },
+            Value::Uint8(v) => ValueUnion { value_uint8_t: v },
+            Value::Uint16(v) => ValueUnion { value_uint16_t: v },
+            Value::Uint32(v) => ValueUnion { value_uint32_t: v },
+            Value::Uint64(v) => ValueUnion { value_uint64_t: v },
+            Value::Isize(v) => ValueUnion {
+                value_wholenumber_t: v,
+            },
+            Value::Usize(v) => ValueUnion {
+                value_stringsize_t: v,
+            },
+            Value::Double(v) => ValueUnion { value_double: v },
+            Value::Float(v) => ValueUnion { value_float: v },
         }
     }
 }

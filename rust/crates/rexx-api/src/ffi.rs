@@ -14,7 +14,8 @@
 
 //! The inbound FFI boundary: caller-supplied pointers into validated handles.
 
-use crate::layout::Owned;
+use crate::layout::{Owned, ValueDescriptor};
+use crate::values::{Repr, Value};
 
 /// The state that owns the context `context` addresses.
 ///
@@ -34,6 +35,40 @@ pub unsafe fn owner_of<C, T>(context: *mut C) -> *mut T {
     // whose `context` is first by value, so the cast is the identity on the
     // address and `owner` is in bounds.
     unsafe { (*owned).owner }
+}
+
+/// The value `descriptor` carries, read as the union member `repr` names.
+///
+/// `repr` is the conversion table's answer for the declared type
+/// (`values::repr`), and the stub writes the member that same type names
+/// (`api/oorexxapi.h:4282`), so the two agree by construction.
+pub fn value_of(descriptor: &ValueDescriptor, repr: Repr) -> Value {
+    // SAFETY: the member read is the one the declared type names, and it is
+    // the member that was written: the stub writes through that same type
+    // (`api/oorexxapi.h:4282`) and the caller derives `repr` from it through
+    // the table, whose rows the frozen header establishes. Every member is an
+    // integer, a float or a pointer, so once written it holds a valid value
+    // of its own type.
+    unsafe {
+        match repr {
+            Repr::Object => Value::Object(descriptor.value.value_RexxObjectPtr),
+            Repr::CString => Value::CString(descriptor.value.value_CSTRING),
+            Repr::Pointer => Value::Pointer(descriptor.value.value_POINTER),
+            Repr::Int => Value::Int(descriptor.value.value_int),
+            Repr::Int8 => Value::Int8(descriptor.value.value_int8_t),
+            Repr::Int16 => Value::Int16(descriptor.value.value_int16_t),
+            Repr::Int32 => Value::Int32(descriptor.value.value_int32_t),
+            Repr::Int64 => Value::Int64(descriptor.value.value_int64_t),
+            Repr::Uint8 => Value::Uint8(descriptor.value.value_uint8_t),
+            Repr::Uint16 => Value::Uint16(descriptor.value.value_uint16_t),
+            Repr::Uint32 => Value::Uint32(descriptor.value.value_uint32_t),
+            Repr::Uint64 => Value::Uint64(descriptor.value.value_uint64_t),
+            Repr::Isize => Value::Isize(descriptor.value.value_wholenumber_t),
+            Repr::Usize => Value::Usize(descriptor.value.value_stringsize_t),
+            Repr::Double => Value::Double(descriptor.value.value_double),
+            Repr::Float => Value::Float(descriptor.value.value_float),
+        }
+    }
 }
 
 #[cfg(test)]
