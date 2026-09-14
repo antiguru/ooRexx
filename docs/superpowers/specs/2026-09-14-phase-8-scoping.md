@@ -101,14 +101,37 @@ The ooTest groups that consume them are eight files under `ootest/ooRexx/API/`, 
 ootest/ooRexx/API -name '*.testGroup'`: `classic/CLASSIC.testGroup` and, under `oo/`,
 `CONVERSION`, `FUNCTION`, `INVOCATION`, `METHOD`, `ProcessInvocation`, `ProcessRexxStart` and
 `RexxStart`. The suite as a whole has 409 `.testGroup` files, so the native-API groups are a small
-named subset -- but `RexxStart` and `ProcessRexxStart` reach the embedding API, which is a
-different surface from the extension API and is what `rexx-cli` will need in Phase 9.
+named subset.
+
+**Which surface each group reaches was measured on 2026-09-15, and the reading this survey first
+gave -- two embedding groups, six extension-only -- was wrong.** Each group loads its package file
+at its own line 52 with `.context~package~loadPackage(...)`
+(`/bin/grep -n -E "Package\.cls|Tester\.cls" ootest/ooRexx/API/*/*.testGroup`), and each package
+file names one library (`/bin/grep -oE 'LIBRARY [A-Za-z0-9]+' ootest/ooRexx/API/*/*.cls | sort |
+uniq -c`): `METHOD` and `CONVERSION` bind `orxmethod`, `FUNCTION` binds `orxfunction`,
+`INVOCATION`, `ProcessInvocation`, `RexxStart` and `ProcessRexxStart` all load
+`INVOCATIONTester.cls`, which binds `orxinvocation`, and `CLASSIC` binds `orxclassic` and registers
+`orxclassic1` through `rxfuncadd` (`CLASSIC.testGroup:822,861,875`). On the oracle checkout's
+`build/lib`, which holds one product per `testbinaries/` target compiled from sources
+byte-identical to this tree's (`diff -rq` of `api/` and of `testbinaries/` against
+`/home/moritz/dev/repos/ooRexx`, both empty): `readelf -d` gives `liborxmethod.so` and
+`liborxfunction.so` a `NEEDED` list of `libc.so.6` alone, and `nm -D --undefined-only` shows
+neither importing a `Rexx*` symbol; `liborxinvocation.so` NEEDs `liborxexits.so`, which NEEDs
+`librexx.so.4` and `librexxapi.so.4` and imports `RexxCreateInterpreter`, `RexxStart` and the exit
+and subcom registries; `liborxclassic.so` and `liborxclassic1.so` import the function, subcom,
+queue and macro-space registries. So three groups are extension-only and this phase's: `METHOD`,
+`CONVERSION` and `FUNCTION`. Four reach the embedding API, which is what `rexx-cli` will need in
+Phase 9, and are Phase 9's: `RexxStart`, `ProcessRexxStart`, `INVOCATION` and `ProcessInvocation`.
+`CLASSIC` reaches the registries the plan assigns to Phase 10 and is Phase 10's. The roadmap's rows
+9 and 10 and `phase-4-exclusions.txt`'s Phase 8 section record the re-homing.
 
 ## 4. What the crate tree already reserves
 
 The plan's Section 3 tree names `rexx-api/` for this phase, with `src/ffi.rs` annotated as *"the
 only module carrying `#[allow(unsafe_code)]`, under a crate root of deny (not forbid), and only
-after a Section 1 decision block says so"*. The crate does not exist yet: `ls rust/crates/` returns
+after a Section 1 decision block says so"*. D-U1 (section 7) then granted `src/load.rs` as well,
+and the annotation was corrected on 2026-09-15 to name both modules. The crate does not exist yet:
+`ls rust/crates/` returns
 `rexx-bench`, `rexx-classes`, `rexx-core`, `rexx-exec`, `rexx-extract`, `rexx-inventory`,
 `rexx-lib`, `rexx-num`, `rexx-oracle`, `rexx-parse`. Note that `rexx-sys`, which the tree reserves
 for Phase 7's platform layer, was never created either -- Phase 7 put its platform code in
@@ -124,7 +147,9 @@ with `grep -rn 'Phase 8' crates/*/src`:
 * `::REQUIRES LIBRARY` (`lib.rs:820`)
 * `::METHOD EXTERNAL` and `::ATTRIBUTE EXTERNAL` naming a library other than `REXX` (`lib.rs:801`)
 * `loadExternalMethod` / `loadExternalRoutine` and `Package~loadLibrary`
-* `handle_set` (`dispatch/native.rs:217`), the one `Stream` entry point held back here
+* `handle_set` (`dispatch/native.rs:217`), the one `Stream` entry point held back here --
+  re-homed to Phase 10 at `08d232ecc`, whose message says it needs `from_raw_fd` and never needed
+  the loader
 
 `dispatch::native`'s `every_deferred_entry_point_names_an_open_phase` carries `"Phase 8"` in its
 `OPEN` list, so those refusals stay legal until this phase closes and then must all be gone.
@@ -138,11 +163,12 @@ extracted programs rather than the framework, so they can be run before L2 is re
 ## 7. The three decisions, and how they were settled
 
 **D-U1: the unsafe grant, and `dlopen`'s provider. Closed by Moritz 2026-09-14**, before any
-`extern "C"` entry point was written, which is what the roadmap's `:2555` requires. The block is in
-Section 1 of `2026-07-27-rust-rewrite.md`. Two modules are granted `#[allow(unsafe_code)]` --
-`rexx-api/src/ffi.rs` for the inbound boundary and `rexx-api/src/load.rs` for the outbound one --
-and `libloading` 0.8.9 joins the dependency set for the loader. Phase 7's "no new dependency beyond
-`rustix`" constraint was that phase's own and does not carry forward.
+`extern "C"` entry point was written, which the roadmap's section 6 Phase 8 bullet requires
+(`2026-07-27-rust-rewrite.md:2638`). The block is in Section 1 of `2026-07-27-rust-rewrite.md`.
+Two modules are granted `#[allow(unsafe_code)]` -- `rexx-api/src/ffi.rs` for the inbound boundary
+and `rexx-api/src/load.rs` for the outbound one -- and `libloading` 0.8.9 joins the dependency set
+for the loader. Phase 7's "no new dependency beyond `rustix`" constraint was that phase's own and
+does not carry forward.
 
 **D-U3: ordering. Ruled here: L2 first.** Section 2 measures the L2 slice at seven context
 functions, five value types and the load path; section 3's clause is the whole 218-pointer surface

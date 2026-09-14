@@ -17,9 +17,16 @@ and the eight ooTest API groups.
 
 **Out of scope, and owned elsewhere.** The queue entry points and RXAPI are Phase 10's, per D7 and
 the Phase 7 close-out. `rexx`, `rexxc`, `rxqueue` and `rxsubcom` are Phase 9's, and with them the
-embedding half of the API that `RexxStart.testGroup` and `ProcessRexxStart.testGroup` reach --
-those two of the eight groups therefore may not close in this phase, and section 9 says so in the
-gate rather than leaving it to be discovered.
+embedding half of the API. **Which of the eight groups reach it was measured on 2026-09-15** (the
+scoping survey's section 3, corrected): `RexxStart`, `ProcessRexxStart`, `INVOCATION` and
+`ProcessInvocation` all load `INVOCATIONTester.cls`, which binds `orxinvocation`, whose library
+NEEDs `liborxexits.so` and through it `librexx.so.4`, importing `RexxCreateInterpreter` and
+`RexxStart`; those four may not close in this phase and are Phase 9's. `CLASSIC` binds `orxclassic`
+and `orxclassic1`, which import the function, subcom, queue and macro-space registries, and is
+Phase 10's. `METHOD`, `CONVERSION` and `FUNCTION` bind `orxmethod` and `orxfunction`, which NEED
+`libc.so.6` alone and import no `Rexx*` symbol, and are this phase's. This spec first read the
+partition as two embedding groups and six extension-only, from the group names alone; section 9
+records the re-homing rather than leaving it to be discovered.
 
 **Not in scope and not anywhere: ooDialog.** The roadmap's risk register accepts that it may never
 recompile, and D5 must not be read as promising it.
@@ -54,7 +61,9 @@ granted `unsafe` for.
 
 The interface structs themselves are tables of `RexxEntry` function pointers, populated once and
 shared: 7, 142, 26, 21, 11 and 11 pointers for the instance, thread, method, call, exit and
-IO-redirector interfaces respectively. Each is a `static` in Rust with `extern "C"` fields, built
+IO-redirector interfaces respectively. Each is a `static` in Rust whose fields are
+`unsafe extern "C" fn` pointers -- every slot is unsafe to call, since `69a579370`, because a bare
+or forged context reaching a slot from safe code was the boundary re-review's finding -- built
 at first use rather than at load, because a `const` table of function pointers is the shape the C++
 uses (`Activity::methodContextFunctions`) and it costs nothing.
 
@@ -73,7 +82,9 @@ The symbol an extension publishes is `RexxGetPackage`, returning `RexxPackageEnt
 (`interpreter/package/LibraryPackage.cpp:211`). If the entry's `requiredVersion` is non-zero and
 greater than the interpreter's, the load raises `Error_Execution_library_version` = **98.982**
 (`LibraryPackage.cpp:232-235`). Routines are registered from the table, then the optional `loader`
-hook runs (`:237-247`).
+hook runs (`:237-247`). This crate reads the entry's name, version and two tables and runs neither
+the `loader` nor the `unloader` hook; the Phase 8 section of `phase-4-exclusions.txt` records that
+gap.
 
 **Corrected 2026-09-14 by measurement**, because reading the error table produced the wrong
 numbers for the path a program actually takes. A `::REQUIRES ... LIBRARY` naming a library that is
@@ -82,18 +93,26 @@ fires before the program's first clause. A `::METHOD ... EXTERNAL` naming an ent
 not export is **90.998** and a `::ROUTINE` one is **90.999**, both at directive-install time.
 `Error_Execution_library_method` = 98.978 is reachable from no surface at all: measured
 2026-09-14, `loadExternalMethod` and `loadExternalRoutine` answer `.nil`, `Package~loadLibrary`
-answers `1` or `0`, and `.Object~package~loadLibrary` is **98.984**. `PackageManager.cpp:947` and
-`:968` are restore and reflatten paths a program cannot reach. **This was the fifth error number on
-this phase taken from `RexxErrorCodes.h` that named a path nothing runs**, which is why the rule is
-now that a number is measured or it is not written. The transcripts are in this plan's SDD ledger.
+answers `1` or `0`, and `.Object~package~loadLibrary('nosuchlib_zz')` is **98.984** at rc 158 --
+with a name argument; with none it is 88.901 first, rc 168 (re-run 2026-09-15).
+`PackageManager.cpp:947` and `:968` are restore and reflatten paths a program cannot reach. **This
+was the fifth error number on this phase taken from `RexxErrorCodes.h` that named a path nothing
+runs**, which is why the rule is now that a number is measured or it is not written. The
+transcripts are in this plan's SDD ledger.
 
-**The test target is the oracle's own compiled extension, not a rebuild of it.** Measured
-2026-09-14 and recorded as an amendment to D5: `build/lib/librxregexp.so` imports no symbol whose
-name contains `rexx` and its `NEEDED` list is `libstdc++.so.6`, `libgcc_s.so.1`, `libc.so.6`. An
-extension links nothing from the interpreter, so a prebuilt one runs against this crate as soon as
-the `#[repr(C)]` tables match the frozen headers. Loading that exact file removes the question of
-whether the two sides compiled against the same header, which a rebuild would leave open. The
-embedding half of the API stays source-compatible and is Phase 9's, per the same amendment.
+**The test target is a compiled extension, not a rebuild of it.** Measured 2026-09-14 and recorded
+as an amendment to D5: `librxregexp.so` imports no symbol whose name contains `rexx` and its
+`NEEDED` list is `libstdc++.so.6`, `libgcc_s.so.1`, `libc.so.6`. An extension links nothing from
+the interpreter, so a prebuilt one runs against this crate as soon as the `#[repr(C)]` tables match
+the frozen headers. **Two builds of it exist, and the instruments split between them** (measured
+2026-09-15, the amendment's second paragraph): the corpus differential hands both interpreters the
+oracle checkout's `/home/moritz/dev/repos/ooRexx/build/lib/librxregexp.so` through the
+`{oraclelib}` a `.env` sidecar expands, so there loading the same bytes on both sides removes the
+question of whether the two sides compiled against the same header; the in-crate tests
+(`rexx-api/tests/{load,invoke,context}.rs` and `dispatch/library.rs`'s unit tests) open this
+worktree's own `build/lib/librxregexp.so`, a second build from identical sources that the oracle
+never runs. The measurements above hold on both. The embedding half of the API stays
+source-compatible and is Phase 9's, per the same amendment.
 
 **`libloading` owns the handle**, per D-U1. The two-attempt search and the `lib`/`.so` decoration
 are ours to reproduce, because they are observable: a program that names a library which exists in
@@ -127,8 +146,13 @@ one is **88.909** (`Argument 1 must have a string value.`), rc 168 each. This co
 7's close, which found `stream_position` answering 88.901 for the same reason.
 `Error_Incorrect_method_signature` = 93.968 and `Error_Incorrect_call_signature` = 40.918 are
 `reportSignatureError` and belong to a malformed *signature*, not to an argument; neither is
-reachable without compiling an extension, so neither is witnessed here. Afterwards `valueToObject(arguments)` converts
-element 0 back.
+reachable through an oracle-built extension, so neither is a corpus witness. 93.968 was then
+measured through a forged extension in scratch (the ledger's `final-fix-report.md`, F2 and F9):
+raised for a parameter code the table does not know, it is lineless and names the declaring
+package; raised for a result word carrying the optional bit, it keeps its line and names the
+sender. `rexx-api`'s `invoke` and `values` tests pin the two, and `corpus/refusal-sites.tsv`
+carries both rows as measured. 40.918 is the routine form and waits on the routine half.
+Afterwards `valueToObject(arguments)` converts element 0 back.
 
 **Two properties this crate must hold and the C++ gets for free.** The signature call happens
 before any argument is touched, so a signature request must not observe or consume arguments. And
@@ -179,9 +203,12 @@ The plan sizes this as its own task.
 
 ## 7. Errors, and what the extension can raise
 
-`RaiseException`, `RaiseException0` and `RaiseException1` take an error number from
-`api/oorexxerrors.h` and raise it as a condition in the caller's context. `rxregexp` uses
-`Rexx_Error_Incorrect_method`. The requirement is the ordinary one for this project: the number,
+`RaiseException0`, `RaiseException1`, `RaiseException2` and the array-taking `RaiseException`
+(`oorexxapi.h:635-638`) take an error number from `api/oorexxerrors.h` and raise it as a condition
+in the caller's context. `rxregexp` calls `RaiseException0` alone, with
+`Rexx_Error_Incorrect_method` (`rxregexp.cpp:73`, `:130`) and `Rexx_Error_Invalid_template`
+(`:83`); `ffi.rs` fills that one slot and leaves the other three at the refusing stub. The
+requirement is the ordinary one for this project: the number,
 the sub-number and the message text as the oracle produces them, on the descriptor the oracle uses.
 
 The three loading failures in section 3 are the other error surface, and they are what a program
@@ -189,7 +216,8 @@ sees when a `::REQUIRES LIBRARY` names something that is not there.
 
 **Nothing unwinds across the boundary, measured 2026-09-14.** Each of `RaiseException0`, `1` and
 `2` wraps `reportException` in a `try` and catches `NativeActivation *` **inside the stub**
-(`interpreter/api/ThreadContextStubs.cpp:1863-1885`), returning normally to the extension. The
+(`interpreter/api/ThreadContextStubs.cpp:1863-1897`: `RaiseException0` at `:1863`, `1` at `:1875`,
+`2` at `:1887`), returning normally to the extension. The
 condition is stashed on the activation and raised after the native call returns, by
 `NativeActivation::checkConditions` (`NativeActivation.cpp:1787-1807`). The extension's own code
 agrees: `RegExp_Parse` raises for an unrecognised match type and then falls straight through to
@@ -203,8 +231,10 @@ section 4 must deliver `arguments[0]` even for a call that raised.
 
 **The `__cplusplus` branch of the header binds.** Under `#ifndef __cplusplus` a context is
 typedefed to a pointer (`oorexxapi.h:135-174`), which would make `RexxThreadContext *` a pointer to
-a pointer. Nothing in this tree compiles that way: no `.c` file includes `oorexxapi.h`, and
-`testbinaries/orxclassic1.c`, the only C translation unit among the test binaries, includes
+a pointer. Nothing in this tree builds that way: the one `.c` file that includes `oorexxapi.h` is
+`ootest/misc/dlOpenTest.c` (`:49`; `find . -name '*.c' -not -path './build/*' -not -path
+'*/target/*' | xargs /bin/grep -l oorexxapi.h`), which no `CMakeLists.txt` outside `build/` names,
+and `testbinaries/orxclassic1.c`, the only C translation unit among the test binaries, includes
 `rexx.h`, which does not include it either.
 
 ## 8. The crate
@@ -217,8 +247,11 @@ a pointer. Nothing in this tree compiles that way: no `.c` file includes `oorexx
 * `src/ffi.rs` -- the exported `extern "C"` entry points and the recovery cast from a public
   context pointer to our private struct. The inbound boundary.
 
-Everything else is safe Rust: the interface tables are `#[repr(C)]` data, the conversion table is a
-match over a `u16`, and the handle registry is an ordinary map.
+Everything else is safe Rust: the interface tables are `#[repr(C)]` data whose every slot is typed
+`unsafe extern "C" fn`, so a call through one needs an `unsafe` block that only those two modules
+may write; the conversion table is a match over a `u16`; and the handle registry is an ordinary
+map. `ffi::value_of`, which reads a union member, is `pub unsafe fn` since `13268f0e1`, with a
+`compile_fail` doctest as its witness.
 
 `crates/rexx-core/tests/unsafe_sites.rs` names the granted set and fails when it changes. This
 phase's first commit updates it to name three files, and that update is the visible record of the
@@ -228,15 +261,15 @@ grant.
 
 | criterion | instrument |
 |---|---|
-| a library loads and its package entry is read | a corpus witness using `::REQUIRES LIBRARY rxregexp`, against the oracle's own `build/lib/librxregexp.so` |
+| a library loads and its package entry is read | a corpus witness using `::REQUIRES LIBRARY rxregexp`, against the oracle checkout's `build/lib/librxregexp.so` through the `{oraclelib}` sidecar (section 3) |
 | the two-call protocol is honoured | a unit test asserting the signature call sees no arguments |
 | the conversion table is right for the five L2 types | the 20 `rxregexp` L1 cases, differential |
 | `CSELF` survives a collection | a witness that collects between two method calls on one object |
 | a stale handle misses rather than lies | a unit test in `rexx-api` holding a handle past its activation |
-| the load failures | corpus witnesses for 98.903, 90.998, 90.999, 98.982 and 98.984 |
+| the load failures | corpus witnesses for 98.903, 90.998, 90.999 and 98.984; 98.982 cannot be one, since no oracle-built extension asks for a newer interpreter, and is witnessed by `dispatch/library.rs`'s unit tests and by a forged extension in scratch (the ledger's `final-fix-report.md`, F5) |
 | **L2** | `ooTest.frm` loads and one test group executes |
 | `testbinaries/` compile unchanged | a build of `testbinaries/` against the frozen headers |
-| the six API groups that are not embedding | the ooTest run |
+| the three extension-only API groups, `METHOD`, `CONVERSION` and `FUNCTION` (section 1) | the ooTest run |
 | no refusal names Phase 8 | `crates/rexx-exec/tests/closed_phases.rs` with `"Phase 8"` added |
 
 **Negative controls**, each predicted in writing before it is run:
@@ -249,11 +282,12 @@ grant.
   measuring survival
 * `closed_phases.rs` already carries a negative control that finds an open phase by the same walk
 
-**What the gate cannot see, stated here rather than discovered at the close.** `RexxStart` and
-`ProcessRexxStart` reach the embedding API, which section 1 puts in Phase 9; if they do not pass
-here that is a re-homing, and it must be recorded in `phase-4-exclusions.txt` as one rather than
-carried as a silent gap. A `testbinaries/` build that succeeds says the headers are compatible, not
-that the entry points behind them work.
+**What the gate cannot see, stated here rather than discovered at the close.** Five of the eight
+groups reach surfaces section 1 puts elsewhere -- `RexxStart`, `ProcessRexxStart`, `INVOCATION`
+and `ProcessInvocation` the embedding API (Phase 9), `CLASSIC` the registries (Phase 10) --
+measured 2026-09-15 and recorded as a re-homing in `phase-4-exclusions.txt`'s Phase 8 section and
+in the roadmap's rows 9 and 10, rather than carried as a silent gap. A `testbinaries/` build that
+succeeds says the headers are compatible, not that the entry points behind them work.
 
 ## 10. What this spec does not settle
 
