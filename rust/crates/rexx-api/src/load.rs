@@ -305,15 +305,27 @@ impl Library {
             .find(|row| row.name.eq_ignore_ascii_case(name))
     }
 
-    /// The routine row `name` names, matched as
-    /// `LibraryPackage::locateRoutineEntry` matches it
-    /// (`interpreter/package/LibraryPackage.cpp:344-356`), and borrowed from
-    /// `self` for [`Library::method`]'s reason.
+    /// The routine row `name` names, found as `LibraryPackage::resolveRoutine`
+    /// finds it (`interpreter/package/LibraryPackage.cpp:410-435`), and
+    /// borrowed from `self` for [`Library::method`]'s reason.
+    ///
+    /// The spelling is `name` byte for byte where a row has it, and otherwise
+    /// that of the first row matching `name` without regard to case (`:420`,
+    /// `:428`); of rows spelled alike, the answer is the last, which is the
+    /// one `loadRoutines` leaves in its table (`:291`).
     #[must_use]
     pub fn routine(&self, name: &[u8]) -> Option<&NativeRoutineEntry> {
-        self.routines
-            .iter()
-            .find(|row| row.name.eq_ignore_ascii_case(name))
+        let spelling = match self.routines.iter().find(|row| row.name == name) {
+            Some(row) => &row.name,
+            None => {
+                &self
+                    .routines
+                    .iter()
+                    .find(|row| row.name.eq_ignore_ascii_case(name))?
+                    .name
+            }
+        };
+        self.routines.iter().rev().find(|row| row.name == *spelling)
     }
 }
 
@@ -547,5 +559,52 @@ unsafe fn routine_table(table: *mut RexxRoutineEntry) -> Vec<NativeRoutineEntry>
         });
         // SAFETY: `at` was not the terminator, so a further row follows it.
         at = unsafe { at.add(1) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Library, NativeRoutineEntry};
+
+    /// `ROUTINE_TYPED_STYLE` (`api/oorexxapi.h:200`).
+    const ROUTINE_TYPED_STYLE: std::ffi::c_int = 1;
+
+    /// A routine row whose entry point is `tag`, which is never called.
+    fn row(name: &[u8], tag: usize) -> NativeRoutineEntry {
+        NativeRoutineEntry {
+            style: ROUTINE_TYPED_STYLE,
+            name: name.to_vec(),
+            entry_point: std::ptr::without_provenance_mut(tag),
+        }
+    }
+
+    /// Which row `name` finds, by its tag.
+    fn found(library: &Library, name: &[u8]) -> Option<usize> {
+        library.routine(name).map(|row| row.entry_point.addr())
+    }
+
+    /// No extension the C++ tree builds has two routines whose names differ
+    /// only in case, so the table is built here.
+    #[test]
+    #[cfg(unix)]
+    #[cfg_attr(miri, ignore = "opens the running image")]
+    fn a_routine_is_found_by_its_exact_spelling_before_its_case() {
+        let library = Library {
+            name: None,
+            version: None,
+            methods: Vec::new(),
+            routines: vec![
+                row(b"Foo", 1),
+                row(b"FOO", 2),
+                row(b"Foo", 3),
+                row(b"bar", 4),
+            ],
+            handle: libloading::os::unix::Library::this().into(),
+        };
+        assert_eq!(found(&library, b"FOO"), Some(2));
+        assert_eq!(found(&library, b"Foo"), Some(3));
+        assert_eq!(found(&library, b"foo"), Some(3));
+        assert_eq!(found(&library, b"BAR"), Some(4));
+        assert_eq!(found(&library, b"baz"), None);
     }
 }
