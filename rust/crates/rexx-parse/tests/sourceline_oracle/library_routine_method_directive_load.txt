@@ -1,0 +1,9 @@
+count 8
+/* A ::METHOD naming a routine as a method of its library is refused while its
+   package is translated, and the library load that preceded the refusal still
+   makes the library's routines callable. */
+signal on syntax
+p = .context~package~loadPackage('pk.cls')
+syntax:
+say 'loadPackage' condition('O')~code
+say 'main' RxCalcSqrt(16)

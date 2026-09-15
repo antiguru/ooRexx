@@ -419,12 +419,13 @@ impl Loud {
         }
     }
 
-    /// `loadExternalRoutine` for an entry point of the `REXX` package, whose
-    /// routine table this crate does not keep, and a library procedure that
-    /// resolved at install and no longer does.
-    fn external_entry_point(what: &'static str) -> Loud {
+    /// A library procedure that resolved when it was bound and no longer
+    /// does -- an internal inconsistency, never a program error: a held
+    /// library is never released.
+    fn library_procedure_gone() -> Loud {
         Loud {
-            message: owned_message(what, Some("Phase 8")),
+            message: "a library procedure that resolved when it was bound no longer resolves"
+                .to_string(),
         }
     }
 
@@ -552,32 +553,6 @@ impl Loud {
     fn parse_trigger_operand() -> Loud {
         Loud {
             message: "a PARSE template trigger carries no position operand".to_string(),
-        }
-    }
-
-    /// A `::ROUTINE EXTERNAL` bound to a procedure of a shared library was
-    /// called. The directive installs, because the library and the procedure
-    /// are the oracle's own 98.903 and 90.999 at install time; running one
-    /// needs the routine half of the two-call protocol, which this phase's
-    /// surface half owes.
-    fn library_routine_call() -> Loud {
-        Loud {
-            message: owned_message("a call to a ::ROUTINE EXTERNAL", Some("Phase 8")),
-        }
-    }
-
-    /// A routine a `::REQUIRES ... LIBRARY` registered was called. The oracle
-    /// runs it, so 43.1 would be a wrong answer rather than a missing one.
-    fn required_library_routine(name: &[u8], library: &[u8]) -> Loud {
-        Loud {
-            message: owned_message(
-                &format!(
-                    "a call to \"{}\", which the library \"{}\" exports,",
-                    String::from_utf8_lossy(name),
-                    String::from_utf8_lossy(library)
-                ),
-                Some("Phase 8"),
-            ),
         }
     }
 
@@ -826,19 +801,18 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         })
     };
     match kind {
-        // The `::ROUTINE EXTERNAL` forms whose entry point is not in a
-        // shared library: `REGISTERED`, and the `REXX` package, whose routine
-        // table is `rexx_routines[]` and not `dispatch::native`'s method
-        // registry (`runtime/InternalPackage.cpp:230`, from
-        // `NativeFunctions.h`). Measured, oracle: `"LIBRARY REXX
-        // file_separator"` is 90.999 rc 166, naming a method as a routine it
-        // cannot find; `"LIBRARY REXX Filespec"` is rc 0 and the routine runs.
-        // The library-backed forms are `Interp::resolve_directive_library`'s.
+        // `REGISTERED` resolves through the RXAPI function registry, and
+        // registers the name there before resolving it
+        // (`PackageManager::resolveRoutine`, `package/PackageManager.cpp:312`):
+        // measured, a later process's `rxfuncquery` answers `0` for a name
+        // such a directive failed to resolve.
         DirectiveKind::Routine(routine)
-            if routine.external.is_some()
-                && dispatch::native::routine_external(routine).is_none() =>
+            if routine
+                .external
+                .as_ref()
+                .is_some_and(|spec| spec.registered) =>
         {
-            gap("::ROUTINE EXTERNAL naming REXX or REGISTERED", "Phase 8")
+            gap("::ROUTINE EXTERNAL naming REGISTERED", "Phase 10")
         }
         // `::OPTIONS` installs (`Interp::install_directives`' own walk): it
         // resolves no name, runs no code, and every setting it writes is one
@@ -853,20 +827,6 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
         | DirectiveKind::Resource(_)
         | DirectiveKind::Routine(_) => None,
     }
-}
-
-/// The refusal a `::ROUTINE` with no assembled body owes when it is called:
-/// the library-backed refusal for a directive whose `EXTERNAL` names one, and
-/// the internal-inconsistency one otherwise.
-fn routine_without_a_body(program: &Program, directive: usize) -> Loud {
-    let external = match program.directives.get(directive).map(|held| &held.kind) {
-        Some(DirectiveKind::Routine(routine)) => dispatch::native::routine_external(routine),
-        _ => None,
-    };
-    if external.is_some() {
-        return Loud::library_routine_call();
-    }
-    Loud::missing_body()
 }
 
 /// The `LIBRARY REXX` entry point a directive's `EXTERNAL` names and the
@@ -1795,14 +1755,35 @@ struct Interp {
     library_codes: Vec<Option<ProgramId>>,
     /// Which [`Interp::library_codes`] row each procedure owns.
     library_code_rows: HashMap<LibraryCodeKey, usize>,
+    /// The procedure each [`Interp::library_codes`] row is, by row.
+    library_code_keys: Vec<LibraryCodeKey>,
     /// The [`Interp::library_codes`] row each library-backed `::ROUTINE`
     /// directive bound, which is the package its routine reports.
     library_routine_codes: HashMap<InstalledRoutine, usize>,
-    /// The routine each `::REQUIRES ... LIBRARY` made callable, upcased, with
-    /// the library that exports it. A call to one of these has to refuse
-    /// loudly rather than answer 43.1: the oracle runs it, so "no such
-    /// routine" is a wrong answer and not a missing one.
-    library_routines: HashMap<Vec<u8>, Vec<u8>>,
+    /// The `REXX` package routine each `::ROUTINE ... EXTERNAL "LIBRARY REXX"`
+    /// directive bound.
+    rexx_routine_rows: HashMap<InstalledRoutine, &'static internal_routines::InternalRoutine>,
+    /// The `REXX` package routine each `loadExternalRoutine` answer over that
+    /// package is.
+    rexx_routine_objects: HashMap<ObjRef, &'static internal_routines::InternalRoutine>,
+    /// The [`Interp::library_codes`] row of each method a `~define` installed
+    /// from a `loadExternalMethod` answer, which is the package it reports.
+    defined_library_codes: HashMap<MethodId, usize>,
+    /// `PackageManager::packageRoutines`
+    /// (`interpreter/package/PackageManager.cpp:524`): every routine a loaded
+    /// library exports, by upcased name, as the index of its slot in
+    /// [`Interp::package_routine_codes`]. A later library exporting the same
+    /// name replaces the slot's row and keeps its index, so a call site that
+    /// resolved to the slot calls the replacement.
+    package_routines: HashMap<Vec<u8>, usize>,
+    /// The [`Interp::library_codes`] row each [`Interp::package_routines`]
+    /// slot calls.
+    package_routine_codes: Vec<usize>,
+    /// The library routines each package's `::REQUIRES ... LIBRARY`
+    /// directives, and those of the packages it requires, merged into its own
+    /// routine lookup, by upcased name (`PackageClass::mergeLibrary`,
+    /// `classes/PackageClass.cpp:756`).
+    merged_library_routines: HashMap<ProgramId, HashMap<Box<[u8]>, usize>>,
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
@@ -2218,6 +2199,9 @@ struct NativeFrame {
     /// `receiver->getObjectVariables(getScope())`
     /// (`execution/NativeActivation.cpp:1878`).
     scope: ObjRef,
+    /// A method's activation rather than a routine's, which is what decides
+    /// whether a signature may ask for the receiver's state.
+    method: bool,
     locals: rexx_api::handles::Table,
     /// The condition an argument's string conversion raised, held for the
     /// call to raise once the boundary has answered
@@ -2372,8 +2356,14 @@ impl Interp {
             external_packages: HashMap::new(),
             library_codes: Vec::new(),
             library_code_rows: HashMap::new(),
+            library_code_keys: Vec::new(),
             library_routine_codes: HashMap::new(),
-            library_routines: HashMap::new(),
+            defined_library_codes: HashMap::new(),
+            rexx_routine_rows: HashMap::new(),
+            rexx_routine_objects: HashMap::new(),
+            package_routines: HashMap::new(),
+            package_routine_codes: Vec::new(),
+            merged_library_routines: HashMap::new(),
             native_handles: Vec::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
@@ -2807,6 +2797,10 @@ impl Interp {
         let mut routines: HashMap<Box<[u8]>, InstalledRoutine> = HashMap::new();
         let mut public_routines: HashMap<Box<[u8]>, InstalledRoutine> = HashMap::new();
         let mut routine_codes: Vec<(InstalledRoutine, usize)> = Vec::new();
+        let mut rexx_routines: Vec<(
+            InstalledRoutine,
+            &'static internal_routines::InternalRoutine,
+        )> = Vec::new();
         self.untranslated.insert(id);
         for (index, directive) in program.directives.iter().enumerate() {
             // **A synthetic directive installs nothing**, which is what lets
@@ -3004,6 +2998,23 @@ impl Interp {
                     routine_codes.push((installed, row));
                 }
             }
+
+            // The `REXX` package's routine table, found as a library's is:
+            // measured, oracle, `"LIBRARY REXX nosuch"` is 90.999 rc 166 on
+            // the directive's line.
+            if let DirectiveKind::Routine(routine) = &directive.kind
+                && let Some(entry) = dispatch::native::rexx_routine_entry(routine)
+            {
+                let Some(row) = internal_routines::rexx_package_routine(&entry) else {
+                    self.blame_directive_in(id, program, directive);
+                    return Err(Raised::external_routine_not_found(&entry).into());
+                };
+                let installed = InstalledRoutine {
+                    program: id,
+                    directive: index,
+                };
+                rexx_routines.push((installed, row));
+            }
         }
         if !routines.is_empty() {
             self.routines.entry(id).or_default().extend(routines);
@@ -3015,6 +3026,7 @@ impl Interp {
                 .extend(public_routines);
         }
         self.library_routine_codes.extend(routine_codes);
+        self.rexx_routine_rows.extend(rexx_routines);
         self.untranslated.remove(&id);
 
         // **A second pass, because the oracle's own translation-time
@@ -3143,9 +3155,14 @@ impl Interp {
         }
     }
 
-    /// The file the `EXTERNAL` directive behind `method` was written in, or
-    /// `None` for a method no such directive bound.
+    /// The file of the package `method`'s native code reports: the
+    /// `EXTERNAL` directive's, or for a method `~define` installed from a
+    /// `loadExternalMethod` answer, the package of the first directive that
+    /// bound the same code. `None` where there is neither.
     pub(crate) fn external_package_path(&self, method: MethodId) -> Option<Vec<u8>> {
+        if let Some(code) = self.defined_library_codes.get(&method) {
+            return self.library_code_package_path(*code);
+        }
         let program = *self.external_packages.get(&method)?;
         Some(self.package_path(program).as_bytes().to_vec())
     }
@@ -3171,21 +3188,11 @@ impl Interp {
                 continue;
             };
             // A `LIBRARY` requires loads a shared object rather than a
-            // package file, and registers nothing this crate can then look a
-            // name up in: `PackageManager::getLibrary`
-            // (`package/PackageManager.cpp:206`) is the whole of it.
+            // package file; its routines are registered where every load is
+            // settled, [`Interp::settle_library`].
             if requires.library {
                 match self.require_library(&requires.name) {
-                    Ok(loaded) => {
-                        let names: Vec<Vec<u8>> = loaded
-                            .routines()
-                            .iter()
-                            .map(|row| row.name.to_ascii_uppercase())
-                            .collect();
-                        for name in names {
-                            self.library_routines.insert(name, requires.name.to_vec());
-                        }
-                    }
+                    Ok(loaded) => self.merge_library(id, &requires.name, &loaded),
                     Err(failure) => {
                         self.seal_site_level();
                         self.blame_directive_in(id, program, directive);
@@ -3406,6 +3413,17 @@ impl Interp {
         let target = self.merged_public_routines.entry(into).or_default();
         for (name, installed) in routines {
             target.entry(name).or_insert(installed);
+        }
+        let libraries: Vec<(Box<[u8]>, usize)> = self
+            .merged_library_routines
+            .get(&from)
+            .into_iter()
+            .flatten()
+            .map(|(name, code)| (name.clone(), *code))
+            .collect();
+        let target = self.merged_library_routines.entry(into).or_default();
+        for (name, code) in libraries {
+            target.entry(name).or_insert(code);
         }
         let classes: Vec<(Box<[u8]>, ObjRef)> = self
             .package_public_classes
@@ -4626,6 +4644,7 @@ impl Interp {
         }
         let row = self.library_codes.len();
         self.library_codes.push(None);
+        self.library_code_keys.push(key.clone());
         self.library_code_rows.insert(key, row);
         row
     }
@@ -4634,6 +4653,16 @@ impl Interp {
     /// directive has bound yet, whose package the oracle answers as `.nil`.
     pub(crate) fn source_package(&self, source: ExecutableSource) -> Option<Package> {
         match source {
+            ExecutableSource::Directive { program, directive }
+                if self
+                    .rexx_routine_rows
+                    .contains_key(&InstalledRoutine { program, directive }) =>
+            {
+                // Measured, oracle: `findRoutine` of a `::ROUTINE` bound to
+                // `LIBRARY REXX Filespec` answers a routine whose package is
+                // `The REXX Package`.
+                Some(Package::Rexx)
+            }
             ExecutableSource::Directive { program, directive } => Some(Package::Program(
                 self.library_routine_codes
                     .get(&InstalledRoutine { program, directive })
@@ -4689,12 +4718,54 @@ impl Interp {
         opened: Result<Option<rexx_api::load::Library>, rexx_api::load::Refused>,
     ) -> LibraryLoad {
         match opened {
-            Ok(Some(library)) => LibraryLoad::Loaded(self.libraries.hold(name, Rc::new(library))),
+            Ok(Some(library)) => {
+                let held = self.libraries.hold(name, Rc::new(library));
+                self.register_package_routines(name, &held);
+                LibraryLoad::Loaded(held)
+            }
             Ok(None) => LibraryLoad::Missing,
             Err(refused) => {
                 self.libraries.hold(name, Rc::from(refused.library));
                 LibraryLoad::Version
             }
+        }
+    }
+
+    /// `LibraryPackage::loadRoutines` (`package/LibraryPackage.cpp:270-299`):
+    /// every routine `library` exports becomes callable by name from any
+    /// package, whatever loaded it.
+    fn register_package_routines(&mut self, name: &[u8], library: &rexx_api::load::Library) {
+        for (upper, spelling) in library.package_routines() {
+            let code = self.library_code(LibraryCodeKey {
+                library: name.to_vec(),
+                procedure: spelling.to_vec(),
+                routine: true,
+            });
+            match self.package_routines.get(&upper) {
+                Some(slot) => self.package_routine_codes[*slot] = code,
+                None => {
+                    self.package_routines
+                        .insert(upper, self.package_routine_codes.len());
+                    self.package_routine_codes.push(code);
+                }
+            }
+        }
+    }
+
+    /// `PackageClass::mergeLibrary`: `library`'s routines join `id`'s own
+    /// routine lookup where no earlier merge put the name.
+    fn merge_library(&mut self, id: ProgramId, name: &[u8], library: &rexx_api::load::Library) {
+        for (upper, spelling) in library.package_routines() {
+            let code = self.library_code(LibraryCodeKey {
+                library: name.to_vec(),
+                procedure: spelling.to_vec(),
+                routine: true,
+            });
+            self.merged_library_routines
+                .entry(id)
+                .or_default()
+                .entry(upper.into_boxed_slice())
+                .or_insert(code);
         }
     }
 
@@ -4771,17 +4842,87 @@ impl Interp {
         Ok(keys)
     }
 
-    /// The library a `::REQUIRES ... LIBRARY` made `name` callable through,
-    /// or `None` for a name no loaded library exports as a routine.
-    pub(crate) fn library_routine_owner(&self, name: &[u8]) -> Option<&[u8]> {
-        // Ahead of the upcase, which allocates: a program that requires no
+    /// The [`Interp::package_routines`] slot `name` resolves to, or `None`
+    /// for a name no loaded library exports as a routine.
+    pub(crate) fn package_routine(&self, name: &[u8]) -> Option<usize> {
+        // Ahead of the upcase, which allocates: a program that loads no
         // library reaches this on every name that resolves nowhere else.
-        if self.library_routines.is_empty() {
+        if self.package_routines.is_empty() {
             return None;
         }
-        self.library_routines
+        self.package_routines
             .get(&name.to_ascii_uppercase())
-            .map(Vec::as_slice)
+            .copied()
+    }
+
+    /// Whether no `::REQUIRES ... LIBRARY` has merged a routine anywhere.
+    pub(crate) fn merged_library_routines_empty(&self) -> bool {
+        self.merged_library_routines.is_empty()
+    }
+
+    /// The [`Interp::library_codes`] row of the library routine `upper`
+    /// names in `program`'s own merged lookup, or `None`.
+    pub(crate) fn merged_library_routine_in(
+        &self,
+        program: ProgramId,
+        upper: &[u8],
+    ) -> Option<usize> {
+        self.merged_library_routines
+            .get(&program)?
+            .get(upper)
+            .copied()
+    }
+
+    /// The [`Interp::library_codes`] row a [`Interp::package_routine`] slot
+    /// calls.
+    pub(crate) fn package_routine_code(&self, slot: usize) -> usize {
+        self.package_routine_codes[slot]
+    }
+
+    /// The [`Interp::library_codes`] row a library-backed `::ROUTINE`
+    /// directive bound, or `None` for any other routine.
+    pub(crate) fn library_routine_code(&self, installed: InstalledRoutine) -> Option<usize> {
+        self.library_routine_codes.get(&installed).copied()
+    }
+
+    /// The `REXX` package routine a `::ROUTINE` directive bound, or `None`
+    /// for any other routine.
+    pub(crate) fn rexx_routine_row(
+        &self,
+        installed: InstalledRoutine,
+    ) -> Option<&'static internal_routines::InternalRoutine> {
+        self.rexx_routine_rows.get(&installed).copied()
+    }
+
+    /// The `REXX` package routine a `loadExternalRoutine` answer is, or
+    /// `None` for any other object.
+    pub(crate) fn rexx_routine_object(
+        &self,
+        object: ObjRef,
+    ) -> Option<&'static internal_routines::InternalRoutine> {
+        self.rexx_routine_objects.get(&object).copied()
+    }
+
+    /// Records `object` as the `loadExternalRoutine` answer over `row`.
+    pub(crate) fn record_rexx_routine_object(
+        &mut self,
+        object: ObjRef,
+        row: &'static internal_routines::InternalRoutine,
+    ) {
+        self.record_native_executable(object);
+        self.rexx_routine_objects.insert(object, row);
+    }
+
+    /// The procedure [`Interp::library_codes`] row `code` is.
+    pub(crate) fn library_code_key(&self, code: usize) -> &LibraryCodeKey {
+        &self.library_code_keys[code]
+    }
+
+    /// The file of the package row `code`'s shared code reports, or `None`
+    /// while no directive has bound it.
+    pub(crate) fn library_code_package_path(&self, code: usize) -> Option<Vec<u8>> {
+        let program = self.library_codes.get(code).copied().flatten()?;
+        Some(self.package_path(program).as_bytes().to_vec())
     }
 
     /// The library procedure a dictionary key's `EXTERNAL` binds it to, or
@@ -5343,9 +5484,16 @@ impl Interp {
             external_packages: _,
             library_codes: _,
             library_code_rows: _,
+            library_code_keys: _,
             library_routine_codes: _,
-            // Routine and library names as bytes.
-            library_routines: _,
+            defined_library_codes: _,
+            rexx_routine_rows: _,
+            // Keyed by objects a generation bump makes unequal once swept.
+            rexx_routine_objects: _,
+            // Routine names and row indices.
+            package_routines: _,
+            package_routine_codes: _,
+            merged_library_routines: _,
             native_handles,
             special_methods: _,
             out: _,
@@ -6832,6 +6980,7 @@ say 1
         let mut frame = crate::NativeFrame {
             owner: rexx_core::ObjRef::NIL,
             scope: rexx_core::ObjRef::NIL,
+            method: true,
             locals: rexx_api::handles::Table::new(),
             raised: None,
         };

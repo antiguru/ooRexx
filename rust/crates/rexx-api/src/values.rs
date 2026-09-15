@@ -120,9 +120,17 @@ pub enum Failure {
         name: &'static str,
         direction: Direction,
     },
+    /// The argument has no value as a C `double`.
+    InvalidDouble { position: usize, argument: ObjRef },
+    /// The argument is not a whole number from one to
+    /// `Numerics::MAX_WHOLENUMBER`.
+    NotPositive { position: usize, argument: ObjRef },
     /// More arguments were supplied than the signature consumes.
     /// `expected` is the number it does consume.
     TooManyArguments { expected: usize },
+    /// A `ROUTINE_CLASSIC_STYLE` routine, whose `RXSTRING` convention this
+    /// boundary does not call.
+    ClassicStyle,
     /// A handle the calling activation no longer holds (D5).
     StaleHandle,
     /// The interpreter raised a condition while serving the conversion, and
@@ -152,13 +160,21 @@ impl Failure {
             // Measured the same way, passing an instance of a class with no
             // string value: "Error 88.909".
             Failure::NoStringValue { .. } => Some(88909),
+            // Measured 2026-09-15 against the oracle through `RxCalcSqrt`:
+            // `'abc'` answers "Error 88.921" and a precision of `0` "Error
+            // 88.905".
+            Failure::InvalidDouble { .. } => Some(88921),
+            Failure::NotPositive { .. } => Some(88905),
             Failure::Signature | Failure::ResultSignature => {
                 Some(if method { 93968 } else { 40918 })
             }
             // Measured 2026-09-14 against the oracle: a third argument to
             // `RegularExpression~new` answers "Error 88.922".
             Failure::TooManyArguments { .. } => Some(88922),
-            Failure::Unfilled { .. } | Failure::StaleHandle | Failure::Raised => None,
+            Failure::Unfilled { .. }
+            | Failure::StaleHandle
+            | Failure::Raised
+            | Failure::ClassicStyle => None,
         }
     }
 }
@@ -172,6 +188,13 @@ impl std::fmt::Display for Failure {
             Failure::NoStringValue { position } => {
                 write!(f, "argument {position} must have a string value")
             }
+            Failure::InvalidDouble { position, .. } => {
+                write!(f, "argument {position} must be a valid double value")
+            }
+            Failure::NotPositive { position, .. } => {
+                write!(f, "argument {position} must be a positive whole number")
+            }
+            Failure::ClassicStyle => write!(f, "a call to a ROUTINE_CLASSIC_STYLE routine"),
             Failure::Signature => write!(f, "incorrect signature"),
             Failure::ResultSignature => write!(f, "incorrect signature for the result"),
             Failure::TooManyArguments { expected } => {
@@ -412,6 +435,34 @@ pub trait Host {
     /// (`interpreter/classes/PointerClass.hpp:81`).
     fn new_pointer(&mut self, value: POINTER) -> ObjRef;
 
+    /// The `NUMERIC` settings of the Rexx activation that made the call,
+    /// which `NativeActivation::digits`, `fuzz` and `form` answer
+    /// (`interpreter/execution/NativeActivation.cpp:2146-2198`).
+    fn numeric(&self) -> Numeric;
+
+    /// `object`'s value as a C `double`, or `None` where it has none:
+    /// `RexxInternalObject::doubleValue` (`interpreter/classes/ObjectClass.cpp:1101`)
+    /// converts the string `requestString` answers, which is a Rexx number or
+    /// one of `nan`, `+infinity` and `-infinity` spelled exactly
+    /// (`interpreter/classes/StringClass.cpp:510`).
+    ///
+    /// # Errors
+    /// [`Raised`] where the string conversion raised a condition.
+    fn double_value(&mut self, object: ObjRef) -> Result<Option<f64>, Raised>;
+
+    /// `object` as a whole number from one to `Numerics::MAX_WHOLENUMBER`, or
+    /// `None` where it is not one: `NativeActivation::positiveWholeNumberValue`
+    /// (`interpreter/execution/NativeActivation.cpp:1922`).
+    ///
+    /// # Errors
+    /// [`Raised`] where the string conversion raised a condition.
+    fn positive_whole_number(&mut self, object: ObjRef) -> Result<Option<isize>, Raised>;
+
+    /// The number `value` rounded to `precision` digits, which is
+    /// `NumberString::newInstanceFromDouble(value, precision)`
+    /// (`interpreter/classes/NumberStringClass.cpp:4073`).
+    fn double_object(&mut self, value: f64, precision: usize) -> ObjRef;
+
     /// The local-reference table of the native activation this host is
     /// serving, which is where a handle handed to an extension is registered
     /// and where the collector reads it back from.
@@ -423,6 +474,15 @@ pub trait Host {
     /// both serves the context and owns the save list
     /// (`interpreter/execution/NativeActivation.hpp:232`).
     fn locals(&mut self) -> &mut Table;
+}
+
+/// The `NUMERIC` settings a call context reports.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Numeric {
+    pub digits: usize,
+    pub fuzz: usize,
+    /// `NUMERIC FORM ENGINEERING`, the `true` `GetContextForm` answers.
+    pub engineering: bool,
 }
 
 /// The objects the thread table carries as data rather than as functions,
@@ -511,6 +571,19 @@ impl<'a> Activation<'a> {
         let mut cx = self.conversion();
         let object = cx.host.whole_number(value);
         cx.host.locals().register(object)
+    }
+
+    /// `DoubleToObjectWithPrecision`, registered as
+    /// [`Activation::whole_number`]'s answer is.
+    pub fn double_object(&self, value: f64, precision: usize) -> RexxObjectPtr {
+        let mut cx = self.conversion();
+        let object = cx.host.double_object(value, precision);
+        cx.host.locals().register(object)
+    }
+
+    /// `GetContextDigits`, `GetContextFuzz` and `GetContextForm`.
+    pub fn numeric(&self) -> Numeric {
+        self.conversion().host.numeric()
     }
 
     /// `NewPointer`, registered as [`Activation::whole_number`]'s answer is.
@@ -684,13 +757,15 @@ static TABLE: &[Row] = &[
         Absent::Signature,
         Repr::Object,
     ),
-    stub(
-        code::REXX_OBJECT_PTR,
-        "RexxObjectPtr",
-        Source::Argument,
-        Absent::Zero,
-        Repr::Object,
-    ),
+    Row {
+        code: code::REXX_OBJECT_PTR,
+        name: "RexxObjectPtr",
+        source: Source::Argument,
+        absent: Absent::Zero,
+        repr: Repr::Object,
+        to_native: None,
+        from_native: Some(object_from_native),
+    },
     Row {
         code: code::INT,
         name: "int",
@@ -707,13 +782,15 @@ static TABLE: &[Row] = &[
         Absent::Zero,
         Repr::Isize,
     ),
-    stub(
-        code::DOUBLE,
-        "double",
-        Source::Argument,
-        Absent::Zero,
-        Repr::Double,
-    ),
+    Row {
+        code: code::DOUBLE,
+        name: "double",
+        source: Source::Argument,
+        absent: Absent::Zero,
+        repr: Repr::Double,
+        to_native: Some(double_to_native),
+        from_native: None,
+    },
     Row {
         code: code::CSTRING,
         name: "CSTRING",
@@ -881,13 +958,15 @@ static TABLE: &[Row] = &[
         Absent::Zero,
         Repr::Object,
     ),
-    stub(
-        code::POSITIVE_WHOLENUMBER_T,
-        "positive_wholenumber_t",
-        Source::Argument,
-        Absent::Zero,
-        Repr::Isize,
-    ),
+    Row {
+        code: code::POSITIVE_WHOLENUMBER_T,
+        name: "positive_wholenumber_t",
+        source: Source::Argument,
+        absent: Absent::Zero,
+        repr: Repr::Isize,
+        to_native: Some(positive_whole_number_to_native),
+        from_native: None,
+    },
     stub(
         code::NONNEGATIVE_WHOLENUMBER_T,
         "nonnegative_wholenumber_t",
@@ -1065,6 +1144,30 @@ fn string_object_to_native(
     // had to create. Minting a handle is registering it, so here every one is
     // rooted and the "was it created" question does not arise.
     Ok(Value::Object(cx.host.locals().register(string)))
+}
+
+/// `REXX_VALUE_double` (`NativeActivation.cpp:454`).
+fn double_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    cx.host
+        .double_value(argument)?
+        .map(Value::Double)
+        .ok_or(Failure::InvalidDouble { position, argument })
+}
+
+/// `REXX_VALUE_positive_wholenumber_t` (`NativeActivation.cpp:434`).
+fn positive_whole_number_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    cx.host
+        .positive_whole_number(argument)?
+        .map(Value::Isize)
+        .ok_or(Failure::NotPositive { position, argument })
 }
 
 /// `valueToObject` for the object codes (`NativeActivation.cpp:723`).

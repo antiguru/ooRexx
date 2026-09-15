@@ -520,11 +520,40 @@ fn enter_routine(
     receiver: ObjRef,
     values: Vec<Option<ObjRef>>,
 ) -> Result<Option<ObjRef>, Failure> {
-    let body = interp
-        .executable_sources
-        .get(&receiver)
-        .and_then(|record| record.routine);
-    let Some((program, directive)) = body else {
+    let Some(record) = interp.executable_sources.get(&receiver).copied() else {
+        return Err(
+            Loud::method_from_source("a routine whose body this crate does not hold").into(),
+        );
+    };
+    // A library routine runs under its own table spelling, which is the
+    // name `RoutineClass::callRexx` passes
+    // (`interpreter/classes/RoutineClass.cpp:205-211`): measured, `r~call(1,
+    // 2, 3)` over `RxCalcSqrt` is reported under `Compiled routine
+    // "RxCalcSqrt".` whether a directive or `loadExternalRoutine` answered
+    // `r`.
+    let code = match (record.source, record.routine) {
+        (crate::ExecutableSource::Loaded { code }, _) => Some(code),
+        (_, Some((program, directive))) => {
+            interp.library_routine_code(crate::InstalledRoutine { program, directive })
+        }
+        _ => None,
+    };
+    if let Some(code) = code {
+        let name = interp.library_code_key(code).procedure.clone();
+        return interp.run_library_routine(code, &name, &values);
+    }
+    let row = match record.routine {
+        Some((program, directive)) => {
+            interp.rexx_routine_row(crate::InstalledRoutine { program, directive })
+        }
+        None => interp.rexx_routine_object(receiver),
+    };
+    if let Some(row) = row {
+        return interp
+            .run_internal_as(row, Some(row.name.as_bytes()), &values)
+            .map(Some);
+    }
+    let Some((program, directive)) = record.routine else {
         return Err(
             Loud::method_from_source("a routine whose body this crate does not hold").into(),
         );

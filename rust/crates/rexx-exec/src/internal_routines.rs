@@ -153,6 +153,21 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
     util("SysWaitEventSem", "Phase 6"),
 ];
 
+/// The `REXX` package's row `name` names, found as
+/// `LibraryPackage::resolveRoutine` finds a routine table entry
+/// (`interpreter/package/LibraryPackage.cpp:410-435`): by exact spelling, then
+/// without regard to case.
+pub(crate) fn rexx_package_routine(name: &[u8]) -> Option<&'static InternalRoutine> {
+    let rows = || {
+        INTERNAL_ROUTINES
+            .iter()
+            .filter(|row| row.package == Package::Rexx)
+    };
+    rows()
+        .find(|row| row.name.as_bytes() == name)
+        .or_else(|| rows().find(|row| row.name.as_bytes().eq_ignore_ascii_case(name)))
+}
+
 /// The row `name` names, matched caselessly as the oracle's own lookup does.
 pub(crate) fn lookup(name: &[u8]) -> Option<&'static InternalRoutine> {
     INTERNAL_ROUTINES

@@ -1,0 +1,5 @@
+/* A routine a ::REQUIRES ... LIBRARY merged into the package's lookup runs
+   under the name as the call wrote it. */
+say 'start'
+say 'rxcalcsqrt'('x')
+::requires 'pk.cls'

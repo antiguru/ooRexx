@@ -1,0 +1,9 @@
+/* Once a required package's EXTERNAL directive binds the same procedure, a
+   defined loadExternalMethod answer reports that package with no line. */
+.K~define('DOES', .Method~loadExternalMethod('m', 'LIBRARY rxregexp RegExp_Match'))
+.K~define('INIT', .Method~loadExternalMethod('i', 'LIBRARY rxregexp RegExp_Init'))
+k = .K~new('a*b')
+say 'start'
+say k~does()
+::requires 'pk.cls'
+::class K

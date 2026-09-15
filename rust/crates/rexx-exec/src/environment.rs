@@ -1657,10 +1657,38 @@ impl Interp {
     ) -> Option<()> {
         let object = self.method_new_scope(source, class)?;
         let method = self.classes().mint_method_id();
+        self.bind_loaded_method(method, object);
         self.classes()
             .define_instance_method(class, &String::from_utf8_lossy(name), method);
         self.hold_method_object(class, name, object);
         Some(())
+    }
+
+    /// Makes `method` run the library procedure `object` is, where `object` is
+    /// a `loadExternalMethod` answer, and do nothing otherwise.
+    fn bind_loaded_method(&mut self, method: rexx_classes::MethodId, object: ObjRef) {
+        let Some(crate::ExecutableRecord {
+            source: crate::ExecutableSource::Loaded { code },
+            ..
+        }) = self.executable_sources.get(&object).copied()
+        else {
+            return;
+        };
+        let key = self.library_code_key(code).clone();
+        if key.routine {
+            return;
+        }
+        let Some(library) = self.libraries.get(&key.library).map(std::rc::Rc::clone) else {
+            return;
+        };
+        self.library_externals.insert(
+            method,
+            crate::LibraryBinding {
+                library,
+                procedure: key.procedure,
+            },
+        );
+        self.defined_library_codes.insert(method, code);
     }
 
     /// `defineClassMethod`: the same shape as [`Interp::define_method_object`]
@@ -1701,7 +1729,9 @@ impl Interp {
             self.roots.push_temp(object);
             let object = self.method_new_scope(object, class)?;
             self.roots.push_temp(object);
-            installed.push((name_text, Some(self.classes().mint_method_id())));
+            let method = self.classes().mint_method_id();
+            self.bind_loaded_method(method, object);
+            installed.push((name_text, Some(method)));
             objects.push((name.clone(), object));
         }
         self.classes().define_instance_methods(class, &installed);
@@ -1965,8 +1995,19 @@ impl Interp {
                 .and_then(|held| held.get(upper))
                 .copied()
         });
-        match found.and_then(|installed| self.routine_object(installed)) {
-            Some(object) => object,
+        if let Some(object) = found.and_then(|installed| self.routine_object(installed)) {
+            return object;
+        }
+        // Measured, oracle: `findRoutine('RXCALCSQRT')` answers a `Routine` in
+        // a package with `::REQUIRES 'rxmath' LIBRARY` and `.nil` after a
+        // `loadLibrary` of the same library.
+        match self.merged_library_routine_in(program, upper) {
+            Some(code) => {
+                let class = self.routine_class();
+                let object = self.native_instance(class);
+                self.record_loaded_executable(object, code);
+                object
+            }
             None => ObjRef::NIL,
         }
     }

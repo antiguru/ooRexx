@@ -7083,15 +7083,14 @@ fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
 /// refuses the program before its first clause, naming the owning phase.
 #[test]
 fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
-    // **The row that says which `EXTERNAL` form is still refused for the
-    // library this crate binds**, naming `REXX` and an entry point that
-    // package really exports as a routine it does not export, so the only
+    // **The row that says which `EXTERNAL` form is still refused**:
+    // `REGISTERED`, naming a library and a procedure that resolve, so the only
     // thing left to refuse it is the directive. The `LIBRARY <other>` forms
     // are `a_directive_naming_a_library_that_is_not_there_is_98_903`'s, where
     // the oracle's own condition is what answers.
     let cases: &[(&[u8], &str)] = &[(
-        b"say 'main ran'\n::routine r external \"LIBRARY REXX file_separator\"\n",
-        "::ROUTINE EXTERNAL naming REXX or REGISTERED is not implemented (Phase 8)",
+        b"say 'main ran'\n::routine r external \"REGISTERED rxmath RxCalcSqrt\"\n",
+        "::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10)",
     )];
     for (source, message) in cases {
         let outcome = routine_program(source);
@@ -7337,12 +7336,12 @@ fn a_directive_owing_both_a_translation_error_and_a_gap_answers_the_translation_
     );
 }
 
-/// **A `::ROUTINE EXTERNAL` naming a library installs and refuses at the
-/// call.** The library and the procedure are resolved at install time, so a
-/// name that is not there is the oracle's own condition; running one needs
-/// the routine half of the two-call protocol, which this plan does not build.
+/// **A `::ROUTINE EXTERNAL` naming a library installs and runs at the call.**
+/// The library and the procedure are resolved at install time, so a name that
+/// is not there is the oracle's own condition. Measured, oracle: `say pi4()`
+/// is `3.14159265` at rc 0.
 #[test]
-fn a_library_backed_routine_installs_and_refuses_when_it_is_called() {
+fn a_library_backed_routine_installs_and_runs_when_it_is_called() {
     // The oracle's own build directory, reached through this interpreter's
     // environment rather than the process's, which nothing here may write.
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -7369,22 +7368,18 @@ fn a_library_backed_routine_installs_and_refuses_when_it_is_called() {
     let outcome = run(b"say pi4()\n::routine pi4 external \"LIBRARY rxmath RxCalcPi\"\n");
     assert_eq!(
         outcome.exit_code,
-        crate::NOT_IMPLEMENTED_EXIT,
+        0,
         "exit code, stderr {}",
         String::from_utf8_lossy(&outcome.stderr)
     );
-    assert_eq!(
-        outcome.stderr,
-        b"rexx-exec: a call to a ::ROUTINE EXTERNAL is not implemented (Phase 8)\n".to_vec()
-    );
+    assert_eq!(outcome.stdout, b"3.14159265\n");
 }
 
-/// **A routine a `::REQUIRES ... LIBRARY` registered refuses loudly when it is
-/// called**, because the oracle runs it: measured, `::requires 'rxmath'
-/// LIBRARY` and `say RxCalcPi()` is `3.14159265` at rc 0, so answering 43.1
-/// would be a wrong answer a program cannot tell from its own typo.
+/// **A routine a `::REQUIRES ... LIBRARY` registered runs when it is
+/// called**: measured, `::requires 'rxmath' LIBRARY` and `say RxCalcPi()` is
+/// `3.14159265` at rc 0.
 #[test]
-fn a_routine_a_required_library_exports_refuses_rather_than_answering_43_1() {
+fn a_routine_a_required_library_exports_runs_rather_than_answering_43_1() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
@@ -7400,21 +7395,15 @@ fn a_routine_a_required_library_exports_refuses_rather_than_answering_43_1() {
     let outcome = run(b"say RxCalcPi()\n::requires 'rxmath' LIBRARY\n");
     assert_eq!(
         outcome.exit_code,
-        crate::NOT_IMPLEMENTED_EXIT,
+        0,
         "exit code, stderr {}",
         String::from_utf8_lossy(&outcome.stderr)
     );
-    assert_eq!(
-        String::from_utf8_lossy(&outcome.stderr),
-        concat!(
-            "rexx-exec: a call to \"RXCALCPI\", which the library \"rxmath\" ",
-            "exports, is not implemented (Phase 8)\n"
-        )
-    );
+    assert_eq!(outcome.stdout, b"3.14159265\n");
 
     // The adjacent pair: a name the library does not export is still the
-    // oracle's own 43.1, so the refusal above is about the library's own
-    // table and not about every unresolved name in such a program.
+    // oracle's own 43.1, so the call above is found in the library's own
+    // table and not by every unresolved name in such a program.
     let outcome = run(b"say zorkolo()\n::requires 'rxmath' LIBRARY\n");
     assert_eq!(outcome.exit_code, 213);
     let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();

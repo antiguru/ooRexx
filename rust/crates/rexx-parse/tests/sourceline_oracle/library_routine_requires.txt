@@ -1,0 +1,33 @@
+count 32
+/* A typed routine of a library a required package's ::REQUIRES ... LIBRARY
+   loads answers by name from this program, with the double the extension
+   builds at the caller's digits or at a precision argument, and the package's
+   merged lookup finds it. */
+say 'a' RxCalcSqrt(16)
+say 'b' RxCalcSqrt(2)
+say 'c' RxCalcSqrt(2, 3)
+say 'd' RxCalcSqrt(2, 16)
+say 'e' RxCalcSqrt(2, 20)
+numeric digits 20
+say 'f' RxCalcSqrt(2)
+numeric digits 3
+say 'g' RxCalcSqrt(2) RxCalcPower(10, 5)
+numeric digits 9
+say 'h' RxCalcPower(10, 10) RxCalcPower(10, 10, 3) RxCalcPower(10, 9) RxCalcPower(10, 8)
+say 'i' RxCalcSqrt(-1) RxCalcExp(1000) RxCalcExp(-1000) RxCalcSqrt(1e-10)
+say 'j' RxCalcExp(100) RxCalcPi() RxCalcPi(16)
+say 'k' RxCalcPower(9.99, 1, 2) RxCalcPower(0.5, 1, 1) RxCalcPower(123456789, 1, 5)
+say 'l' RxCalcSqrt('nan') RxCalcSqrt('+infinity') RxCalcSqrt(' 16 ') RxCalcSqrt('1e2') RxCalcSqrt(16.0)
+numeric form engineering
+say 'm' RxCalcPower(10, 10, 3) RxCalcPower(10, 7, 3)
+numeric form scientific
+say 'n' RxCalcSqrt(2, 1000000000000) RxCalcSqrt(2, 3.0)
+x = RxCalcSqrt(2)
+say 'o' x + 0 datatype(x)
+call RxCalcSqrt 25
+say 'p' result
+say 'q' 'RxCalcSqrt'(36) rxcalcsqrt(49)
+r = .context~package~findRoutine('RXCALCSQRT')
+say 'r' r~class~id r~call(64) (r~package == .nil)
+say 's' .context~package~findRoutine('NOSUCHROUTINE')
+::requires 'pk.cls'

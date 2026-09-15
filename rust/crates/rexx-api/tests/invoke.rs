@@ -19,9 +19,10 @@ use rexx_api::ffi::Contexts;
 use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::{POINTER, wholenumber_t};
-use rexx_api::load::{self, NativeMethodEntry};
+use rexx_api::load::{self, NativeMethodEntry, NativeRoutineEntry};
 use rexx_api::values::{
-    Activation, CStringPool, Constants, Conversion, Failure, Host, OPTIONAL_ARGUMENT, Raised, code,
+    Activation, CStringPool, Constants, Conversion, Failure, Host, Numeric, OPTIONAL_ARGUMENT,
+    Raised, code,
 };
 use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef};
 
@@ -48,6 +49,15 @@ fn repository_root() -> PathBuf {
 fn rxregexp() -> load::Library {
     let path = repository_root().join("build/lib/librxregexp.so");
     load::open_path(&path, "rxregexp")
+        .expect("the extension asks for 4.0.0, which is below this interpreter")
+        .expect("the extension publishes RexxGetPackage")
+}
+
+/// The oracle's own build of the `rxmath` extension, whose routines are all
+/// typed (`extensions/rxmath/rxmath.cpp:617-638`).
+fn rxmath() -> load::Library {
+    let path = repository_root().join("build/lib/librxmath.so");
+    load::open_path(&path, "rxmath")
         .expect("the extension asks for 4.0.0, which is below this interpreter")
         .expect("the extension publishes RexxGetPackage")
 }
@@ -82,6 +92,9 @@ struct Interpreter {
     cself: Option<POINTER>,
     variables: Vec<(Vec<u8>, ObjRef)>,
     locals: Table,
+    digits: usize,
+    /// What `DoubleToObjectWithPrecision` was asked for, in order.
+    doubles: Vec<(f64, usize)>,
 }
 
 impl Interpreter {
@@ -91,6 +104,8 @@ impl Interpreter {
             cself: None,
             variables: Vec::new(),
             locals: Table::new(),
+            digits: 9,
+            doubles: Vec::new(),
         }
     }
 
@@ -160,6 +175,31 @@ impl Host for Interpreter {
         self.heap.alloc(body)
     }
 
+    fn numeric(&self) -> Numeric {
+        Numeric {
+            digits: self.digits,
+            fuzz: 0,
+            engineering: false,
+        }
+    }
+
+    fn double_value(&mut self, object: ObjRef) -> Result<Option<f64>, Raised> {
+        let text = self.string_bytes(object).map(Cow::into_owned);
+        Ok(text.and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok()))
+    }
+
+    fn positive_whole_number(&mut self, object: ObjRef) -> Result<Option<isize>, Raised> {
+        let text = self.string_bytes(object).map(Cow::into_owned);
+        Ok(text
+            .and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok())
+            .filter(|number| *number >= 1))
+    }
+
+    fn double_object(&mut self, value: f64, precision: usize) -> ObjRef {
+        self.doubles.push((value, precision));
+        self.text(format!("{value}").as_bytes())
+    }
+
     fn locals(&mut self) -> &mut Table {
         &mut self.locals
     }
@@ -201,6 +241,31 @@ impl Session {
             RAISED.with(|seen| seen.borrow_mut().push(number));
         }
         outcome
+    }
+
+    /// Runs the routine `entry` through a call context.
+    fn call_routine(
+        &mut self,
+        entry: &NativeRoutineEntry,
+        arguments: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
+        let activation = Activation::new(Conversion {
+            host: &mut self.interpreter,
+            strings: &mut self.strings,
+        });
+        let mut contexts = Contexts::new(&activation);
+        invoke::routine(entry, &contexts.call(), &activation, arguments)
+    }
+
+    /// The bytes of the object a call answered.
+    fn answered(&self, outcome: Result<Option<ObjRef>, Failure>) -> Vec<u8> {
+        let object = outcome
+            .expect("the routine answered")
+            .expect("the routine answered an object");
+        self.interpreter
+            .string_bytes(object)
+            .expect("the answer is a text object")
+            .into_owned()
     }
 
     fn signature(&mut self, entry: &NativeMethodEntry) -> Result<Vec<u16>, Failure> {
@@ -422,6 +487,84 @@ fn an_argument_the_signature_does_not_consume_is_refused() {
         0,
         "the extension must not have run at all"
     );
+}
+
+// ------------------------------------------------------------ the routines
+
+/// `RxCalcSqrt` over the routine protocol: no precision argument, so the
+/// extension asks the call context for the digits
+/// (`extensions/rxmath/rxmath.cpp:118-123`) and formats the root at them.
+#[test]
+fn rxcalcsqrt_formats_at_the_callers_digits_when_no_precision_is_given() {
+    let library = rxmath();
+    let sqrt = library.routine(b"RxCalcSqrt").expect("RxCalcSqrt");
+    let mut session = Session::new();
+    session.interpreter.digits = 12;
+    let sixteen = session.text(b"16");
+
+    let outcome = session.call_routine(sqrt, &[sixteen]);
+    assert_eq!(session.answered(outcome), b"4");
+    assert_eq!(session.interpreter.doubles, vec![(4.0, 12)]);
+}
+
+/// A precision argument that exists wins over the digits, which is
+/// `argumentExists(2)` read through the array the context publishes, and the
+/// extension caps it at 16 (`extensions/rxmath/rxmath.cpp:124-127`).
+#[test]
+fn rxcalcsqrt_reads_a_precision_argument_that_exists() {
+    let library = rxmath();
+    let sqrt = library.routine(b"RxCalcSqrt").expect("RxCalcSqrt");
+    let mut session = Session::new();
+    let two = session.text(b"2");
+    let three = session.text(b"3");
+    let twenty = session.text(b"20");
+
+    session
+        .call_routine(sqrt, &[two, three])
+        .expect("a precision of three");
+    session
+        .call_routine(sqrt, &[two, twenty])
+        .expect("a precision of twenty");
+    assert_eq!(
+        session.interpreter.doubles,
+        vec![(2f64.sqrt(), 3), (2f64.sqrt(), 16)]
+    );
+}
+
+/// The argument errors are refused before the extension runs, measured
+/// against the oracle as 88.901 and 88.922.
+#[test]
+fn rxcalcsqrt_refuses_a_missing_and_an_extra_argument_before_running() {
+    let library = rxmath();
+    let sqrt = library.routine(b"RxCalcSqrt").expect("RxCalcSqrt");
+    let mut session = Session::new();
+    let one = session.text(b"1");
+
+    assert_eq!(
+        session.call_routine(sqrt, &[]),
+        Err(Failure::MissingArgument { position: 1 })
+    );
+    assert_eq!(
+        session.call_routine(sqrt, &[one, one, one]),
+        Err(Failure::TooManyArguments { expected: 2 })
+    );
+    assert_eq!(session.interpreter.doubles, Vec::new());
+}
+
+/// Every row of `rxmath`'s routine table is typed, so none is refused as
+/// classic.
+#[test]
+fn every_rxmath_routine_is_typed() {
+    let library = rxmath();
+    assert!(!library.routines().is_empty());
+    for row in library.routines() {
+        assert_eq!(
+            row.style,
+            load::ROUTINE_TYPED_STYLE,
+            "{}",
+            String::from_utf8_lossy(&row.name)
+        );
+    }
 }
 
 /// The descriptor array is what bounds a signature, and this is the length

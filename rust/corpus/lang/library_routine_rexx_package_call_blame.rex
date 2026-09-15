@@ -1,0 +1,5 @@
+/* Routine~call runs a REXX package routine under the entry's own spelling, and
+   an argument it lacks is reported against the REXX package. */
+say 'start'
+say .context~package~findRoutine('FS')~call()
+::routine fs external "LIBRARY REXX Filespec"

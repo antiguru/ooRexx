@@ -17,10 +17,10 @@
 
 use rexx_core::ObjRef;
 
-use crate::ffi::MethodContext;
+use crate::ffi::{CallContext, MethodContext};
 use crate::layout::ValueDescriptor;
-use crate::load::NativeMethodEntry;
-use crate::values::{self, ARGUMENT_TERMINATOR, Activation, Converted, Failure, Value};
+use crate::load::{NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE};
+use crate::values::{self, ARGUMENT_TERMINATOR, Activation, Converted, Failure, Repr, Value};
 
 /// `NativeActivation::MaxNativeArguments`
 /// (`interpreter/execution/NativeActivation.hpp:209`), the length of the
@@ -60,6 +60,47 @@ pub fn method(
     arguments: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let signature = signature(entry, context)?;
+    run(&signature, cx, arguments, |descriptors, result| {
+        entry.call(context, descriptors, result)
+    })
+}
+
+/// Run the native routine `entry` against `arguments`, as [`method`] runs a
+/// method: `NativeActivation::callNativeRoutine`
+/// (`interpreter/execution/NativeActivation.cpp:1379`) shares
+/// `processArguments` with the method call.
+///
+/// # Errors
+/// [`method`]'s, and [`Failure::ClassicStyle`] for a
+/// `ROUTINE_CLASSIC_STYLE` row, which is refused before its stub is entered.
+///
+/// # Panics
+/// As [`method`].
+pub fn routine(
+    entry: &NativeRoutineEntry,
+    context: &CallContext<'_>,
+    cx: &Activation<'_>,
+    arguments: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if entry.style == ROUTINE_CLASSIC_STYLE {
+        return Err(Failure::ClassicStyle);
+    }
+    let signature = entry
+        .signature(context, MAX_NATIVE_ARGUMENTS + 1)
+        .ok_or(Failure::Signature)?;
+    run(&signature, cx, arguments, |descriptors, result| {
+        entry.call(context, descriptors, result)
+    })
+}
+
+/// The half of the protocol both calls share once the signature is in hand:
+/// `processArguments`, then `call`, then `valueToObject`.
+fn run(
+    signature: &[u16],
+    cx: &Activation<'_>,
+    arguments: &[Option<ObjRef>],
+    call: impl FnOnce(&mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS], Option<Repr>) -> Option<Value>,
+) -> Result<Option<ObjRef>, Failure> {
     let returns = signature.first().copied().unwrap_or(ARGUMENT_TERMINATOR);
 
     let mut descriptors: [ValueDescriptor; MAX_NATIVE_ARGUMENTS] = std::array::from_fn(|_| empty());
@@ -79,8 +120,8 @@ pub fn method(
             None
         };
         // **The conversion state is taken for one argument and given back**,
-        // never held across `entry.call` below: the context that call hands
-        // the extension reaches this same state.
+        // never held across the call below: the context that call hands the
+        // extension reaches this same state.
         let converted = values::to_native(&mut cx.conversion(), declared, argument, input + 1)?;
         descriptors[output] = values::descriptor(declared, converted);
         if consumes {
@@ -91,7 +132,7 @@ pub fn method(
         return Err(Failure::TooManyArguments { expected: input });
     }
 
-    let written = entry.call(context, &mut descriptors, values::result_repr(returns));
+    let written = call(&mut descriptors, values::result_repr(returns));
 
     if returns == ARGUMENT_TERMINATOR {
         return Ok(None);
@@ -140,17 +181,22 @@ mod tests {
 
     use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef};
 
-    use super::{MAX_NATIVE_ARGUMENTS, method};
-    use crate::ffi::{MethodContext, Seen, forget_seen, reading_stub, seen};
+    use super::{MAX_NATIVE_ARGUMENTS, method, routine};
+    use crate::ffi::{
+        CALL_CONTEXT, CallContext, MethodContext, Seen, forget_seen, reading_stub, seen,
+    };
     use crate::handles::Table;
     use crate::layout::{
-        METHOD_CONTEXT_INTERFACE, MethodContextInterface, POINTER, RexxMethodContext_,
-        ValueDescriptor,
+        METHOD_CONTEXT_INTERFACE, MethodContextInterface, POINTER, RexxCallContext_,
+        RexxMethodContext_, ValueDescriptor,
     };
-    use crate::load::{NativeMethodEntry, stub_entry};
+    use crate::load::{
+        NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE, ROUTINE_TYPED_STYLE,
+        stub_entry, stub_routine_entry,
+    };
     use crate::values::{
         ARGUMENT_EXISTS, ARGUMENT_TERMINATOR, Activation, CStringPool, Constants, Conversion,
-        Failure, Host, OPTIONAL_ARGUMENT, Raised, code,
+        Failure, Host, Numeric, OPTIONAL_ARGUMENT, Raised, code,
     };
 
     /// What the stub and the interpreter each did, in the order they did it.
@@ -262,6 +308,13 @@ mod tests {
         answer(arguments, &OPTIONAL_RESULT)
     }
 
+    extern "C" fn routine_probe(
+        _context: *mut RexxCallContext_,
+        arguments: *mut ValueDescriptor,
+    ) -> *mut u16 {
+        answer(arguments, &ONE_CSTRING)
+    }
+
     /// A stub that publishes no signature at all.
     extern "C" fn silent_probe(
         _context: *mut RexxMethodContext_,
@@ -279,6 +332,9 @@ mod tests {
         asked: usize,
         variables: Vec<(Vec<u8>, ObjRef)>,
         locals: Table,
+        numeric: Numeric,
+        /// What `double_object` was asked for, in order.
+        doubles: Vec<(f64, usize)>,
     }
 
     impl Interpreter {
@@ -288,6 +344,12 @@ mod tests {
                 asked: 0,
                 variables: Vec::new(),
                 locals: Table::new(),
+                numeric: Numeric {
+                    digits: 9,
+                    fuzz: 0,
+                    engineering: false,
+                },
+                doubles: Vec::new(),
             }
         }
 
@@ -340,6 +402,27 @@ mod tests {
         fn new_pointer(&mut self, value: POINTER) -> ObjRef {
             let body = Body::pointer(ObjRef::NIL, BehaviourHandle::new(0), value);
             self.heap.alloc(body)
+        }
+
+        fn numeric(&self) -> Numeric {
+            self.numeric
+        }
+
+        fn double_value(&mut self, object: ObjRef) -> Result<Option<f64>, Raised> {
+            let text = self.string_bytes(object).map(Cow::into_owned);
+            Ok(text.and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok()))
+        }
+
+        fn positive_whole_number(&mut self, object: ObjRef) -> Result<Option<isize>, Raised> {
+            let text = self.string_bytes(object).map(Cow::into_owned);
+            Ok(text
+                .and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok())
+                .filter(|number| *number >= 1))
+        }
+
+        fn double_object(&mut self, value: f64, precision: usize) -> ObjRef {
+            self.doubles.push((value, precision));
+            self.text(format!("{value} at {precision}").as_bytes())
         }
 
         fn locals(&mut self) -> &mut Table {
@@ -436,6 +519,115 @@ mod tests {
             interned: strings.len(),
             left_on_context: context.arguments,
         }
+    }
+
+    /// [`run`] for a routine, over a call context no `Contexts` built.
+    fn run_routine(entry: &NativeRoutineEntry, arguments: usize) -> Run {
+        forget_events();
+        forget_seen();
+        let mut interpreter = Interpreter::new();
+        let supplied: Vec<Option<ObjRef>> = (0..arguments)
+            .map(|at| Some(interpreter.text(format!("argument {at}").as_bytes())))
+            .collect();
+        let mut strings = CStringPool::new();
+        let mut context = RexxCallContext_ {
+            threadContext: std::ptr::null_mut(),
+            functions: std::ptr::from_ref(&CALL_CONTEXT).cast_mut(),
+            arguments: sentinel(),
+        };
+        let outcome = {
+            let activation = Activation::new(Conversion {
+                host: &mut interpreter,
+                strings: &mut strings,
+            });
+            routine(
+                entry,
+                &CallContext::bare(&mut context),
+                &activation,
+                &supplied,
+            )
+        };
+        Run {
+            outcome,
+            events: events(),
+            interned: strings.len(),
+            left_on_context: context.arguments,
+        }
+    }
+
+    /// A typed routine runs the method's two calls in the method's order, and
+    /// publishes its array for exactly the length of the call.
+    #[test]
+    fn a_routine_runs_the_two_calls_a_method_runs() {
+        let entry = stub_routine_entry(ROUTINE_TYPED_STYLE, b"routine", routine_probe);
+        let run = run_routine(&entry, 1);
+        assert_eq!(
+            run.events,
+            vec![
+                Event::Entered { array: false },
+                Event::Asked(1),
+                Event::Entered { array: true },
+            ]
+        );
+        assert!(run.outcome.is_ok(), "{:?}", run.outcome);
+        assert_eq!(run.interned, 1);
+        assert!(run.left_on_context.is_null());
+    }
+
+    /// A classic row's address is a function of another C signature, so it is
+    /// refused before either call and its stub is never entered.
+    #[test]
+    fn a_classic_routine_is_refused_before_its_stub_is_entered() {
+        let entry = stub_routine_entry(ROUTINE_CLASSIC_STYLE, b"classic", routine_probe);
+        let run = run_routine(&entry, 1);
+        assert_eq!(run.outcome, Err(Failure::ClassicStyle));
+        assert_eq!(run.events, Vec::new());
+        assert_eq!(run.outcome.unwrap_err().error_number(false), None);
+    }
+
+    /// The too-many check is the one both calls share.
+    #[test]
+    fn an_argument_a_routine_does_not_consume_is_refused() {
+        let entry = stub_routine_entry(ROUTINE_TYPED_STYLE, b"routine", routine_probe);
+        let run = run_routine(&entry, 2);
+        assert_eq!(run.outcome, Err(Failure::TooManyArguments { expected: 1 }));
+        assert_eq!(
+            run.events,
+            vec![Event::Entered { array: false }, Event::Asked(1)]
+        );
+    }
+
+    /// A routine's stub reaches the calling activation's `NUMERIC` settings
+    /// through the call-context table and builds a number through the thread
+    /// table its call context links, and the object that builds is the
+    /// routine's answer.
+    #[test]
+    fn a_routine_reads_numeric_settings_and_builds_a_double_through_its_contexts() {
+        let entry = stub_routine_entry(ROUTINE_TYPED_STYLE, b"numeric", crate::ffi::numeric_stub);
+        let mut interpreter = Interpreter::new();
+        interpreter.numeric = Numeric {
+            digits: 7,
+            fuzz: 2,
+            engineering: true,
+        };
+        let mut strings = CStringPool::new();
+        let outcome = {
+            let activation = Activation::new(Conversion {
+                host: &mut interpreter,
+                strings: &mut strings,
+            });
+            let mut contexts = crate::ffi::Contexts::new(&activation);
+            routine(&entry, &contexts.call(), &activation, &[])
+        };
+        assert_eq!(crate::ffi::numeric_seen(), Some((7, 2, 1)));
+        assert_eq!(interpreter.doubles, vec![(crate::ffi::STUB_DOUBLE, 7)]);
+        let answered = outcome
+            .expect("the routine answers")
+            .expect("the routine answers an object");
+        assert_eq!(
+            interpreter.string_bytes(answered).as_deref(),
+            Some(&b"1.5 at 7"[..])
+        );
     }
 
     /// **No argument exists when the signature is asked for.** The stub is

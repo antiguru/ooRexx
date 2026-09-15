@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use rexx_api::handles::Table;
 use rexx_api::layout::POINTER;
 use rexx_api::values::{
-    ARGUMENT_EXISTS, CStringPool, Constants, Conversion, Direction, Failure, Host,
+    ARGUMENT_EXISTS, CStringPool, Constants, Conversion, Direction, Failure, Host, Numeric,
     OPTIONAL_ARGUMENT, Raised, Repr, SPECIAL_ARGUMENT, Value, code, consumes_argument, descriptor,
     from_native, repr, rows, to_native,
 };
@@ -128,6 +128,35 @@ impl Host for Interpreter {
     fn new_pointer(&mut self, value: POINTER) -> ObjRef {
         let body = Body::pointer(ObjRef::NIL, BehaviourHandle::new(0), value);
         self.heap.alloc(body)
+    }
+
+    fn numeric(&self) -> Numeric {
+        unreachable!("no conversion reads the call context")
+    }
+
+    /// A text object's bytes parsed as Rust parses a float, standing in for
+    /// the interpreter's number syntax; anything in `raising` raises.
+    fn double_value(&mut self, object: ObjRef) -> Result<Option<f64>, Raised> {
+        if self.raising.contains(&object) {
+            return Err(Raised);
+        }
+        let text = self.string_bytes(object).map(Cow::into_owned);
+        Ok(text.and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok()))
+    }
+
+    /// As `double_value`, for a whole number from one up.
+    fn positive_whole_number(&mut self, object: ObjRef) -> Result<Option<isize>, Raised> {
+        if self.raising.contains(&object) {
+            return Err(Raised);
+        }
+        let text = self.string_bytes(object).map(Cow::into_owned);
+        Ok(text
+            .and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok())
+            .filter(|number| *number >= 1))
+    }
+
+    fn double_object(&mut self, _value: f64, _precision: usize) -> ObjRef {
+        unreachable!("no conversion builds a number from a double")
     }
 
     fn locals(&mut self) -> &mut Table {
@@ -369,11 +398,22 @@ fn exactly_the_filled_rows_convert() {
     }
     assert_eq!(
         inbound,
-        vec![code::CSELF, code::CSTRING, code::REXX_STRING_OBJECT]
+        vec![
+            code::CSELF,
+            code::DOUBLE,
+            code::CSTRING,
+            code::REXX_STRING_OBJECT,
+            code::POSITIVE_WHOLENUMBER_T,
+        ]
     );
     assert_eq!(
         outbound,
-        vec![code::INT, code::POINTER, code::REXX_STRING_OBJECT]
+        vec![
+            code::REXX_OBJECT_PTR,
+            code::INT,
+            code::POINTER,
+            code::REXX_STRING_OBJECT,
+        ]
     );
 }
 
@@ -932,6 +972,204 @@ fn a_null_handle_converts_to_no_object() {
             Value::Object(std::ptr::null_mut())
         ),
         Ok(None)
+    );
+}
+
+// ---------------------------------------------------------------- the double
+
+#[test]
+fn the_double_row_converts_what_the_host_reads() {
+    let mut host = Interpreter::new();
+    let subject = host.text(b"2.25");
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let converted = to_native(&mut cx, code::DOUBLE, Some(subject), 1).expect("2.25 converts");
+    assert_eq!(converted.flags, ARGUMENT_EXISTS);
+    assert_eq!(converted.value, Value::Double(2.25));
+    assert_eq!(descriptor(code::DOUBLE, converted).r#type, code::DOUBLE);
+}
+
+/// Measured against the oracle: `RxCalcSqrt('abc')` is 88.921 naming argument
+/// one and the argument itself.
+#[test]
+fn a_double_the_host_cannot_read_is_88_921_naming_the_argument() {
+    let mut host = Interpreter::new();
+    let subject = host.text(b"abc");
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let refused = to_native(&mut cx, code::DOUBLE, Some(subject), 2).expect_err("abc is no double");
+    assert_eq!(
+        refused,
+        Failure::InvalidDouble {
+            position: 2,
+            argument: subject,
+        }
+    );
+    assert_eq!(refused.error_number(false), Some(88921));
+}
+
+#[test]
+fn a_raise_reading_a_double_is_the_hosts_condition() {
+    let mut host = Interpreter::new();
+    let subject = host.text(b"2.25");
+    host.raising.push(subject);
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    assert_eq!(
+        to_native(&mut cx, code::DOUBLE, Some(subject), 1),
+        Err(Failure::Raised)
+    );
+}
+
+/// Measured against the oracle: `RxCalcSqrt(, 2)` is 88.901, and the
+/// optional form writes a zero with no flags.
+#[test]
+fn an_absent_double_is_88_901_or_a_zero() {
+    let mut host = Interpreter::new();
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    assert_eq!(
+        to_native(&mut cx, code::DOUBLE, None, 1),
+        Err(Failure::MissingArgument { position: 1 })
+    );
+    let omitted = to_native(&mut cx, OPTIONAL_ARGUMENT | code::DOUBLE, None, 1)
+        .expect("an optional double may be left out");
+    assert_eq!(omitted.value, Value::Omitted);
+    assert_eq!(omitted.flags, 0);
+}
+
+// ------------------------------------------------ the positive whole number
+
+#[test]
+fn the_positive_whole_number_row_converts_what_the_host_reads() {
+    let mut host = Interpreter::new();
+    let subject = host.text(b"16");
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let converted =
+        to_native(&mut cx, code::POSITIVE_WHOLENUMBER_T, Some(subject), 2).expect("16 converts");
+    assert_eq!(converted.flags, ARGUMENT_EXISTS);
+    assert_eq!(converted.value, Value::Isize(16));
+}
+
+/// Measured against the oracle: a precision of `0` to `RxCalcSqrt` is 88.905
+/// naming argument two and the argument itself.
+#[test]
+fn a_whole_number_below_one_is_88_905_naming_the_argument() {
+    let mut host = Interpreter::new();
+    let subject = host.text(b"0");
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let refused = to_native(&mut cx, code::POSITIVE_WHOLENUMBER_T, Some(subject), 2)
+        .expect_err("zero is not positive");
+    assert_eq!(
+        refused,
+        Failure::NotPositive {
+            position: 2,
+            argument: subject,
+        }
+    );
+    assert_eq!(refused.error_number(false), Some(88905));
+}
+
+#[test]
+fn an_omitted_optional_whole_number_is_a_zero_with_no_flags() {
+    let mut host = Interpreter::new();
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let omitted = to_native(
+        &mut cx,
+        OPTIONAL_ARGUMENT | code::POSITIVE_WHOLENUMBER_T,
+        None,
+        2,
+    )
+    .expect("an optional whole number may be left out");
+    assert_eq!(omitted.value, Value::Omitted);
+    assert_eq!(omitted.flags, 0);
+}
+
+// ------------------------------------------------------- the RexxObjectPtr
+
+#[test]
+fn a_returned_object_converts_back_through_its_handle() {
+    let mut host = Interpreter::new();
+    let subject = host.text(b"a string long enough to reach the heap");
+    let handle = host.locals().register(subject);
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    assert_eq!(
+        from_native(&mut cx, code::REXX_OBJECT_PTR, Value::Object(handle)),
+        Ok(Some(subject))
+    );
+    assert_eq!(
+        from_native(
+            &mut cx,
+            code::REXX_OBJECT_PTR,
+            Value::Object(std::ptr::null_mut())
+        ),
+        Ok(None)
+    );
+}
+
+#[test]
+fn a_returned_object_the_table_dropped_does_not_convert_back() {
+    let mut host = Interpreter::new();
+    let subject = host.text(b"a string long enough to reach the heap");
+    let handle = host.locals().register(subject);
+    host.locals().clear();
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    assert_eq!(
+        from_native(&mut cx, code::REXX_OBJECT_PTR, Value::Object(handle)),
+        Err(Failure::StaleHandle)
+    );
+}
+
+/// `RexxObjectPtr` is a return type in the extensions this half loads, so the
+/// argument direction is a row a later task owns.
+#[test]
+fn an_object_argument_is_not_converted_yet() {
+    let mut host = Interpreter::new();
+    let subject = host.text(b"a string long enough to reach the heap");
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    assert_eq!(
+        to_native(&mut cx, code::REXX_OBJECT_PTR, Some(subject), 1),
+        Err(Failure::Unfilled {
+            code: code::REXX_OBJECT_PTR,
+            name: "RexxObjectPtr",
+            direction: Direction::ToNative,
+        })
     );
 }
 

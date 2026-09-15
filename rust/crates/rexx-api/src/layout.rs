@@ -660,7 +660,7 @@ interface! {
 
 interface! {
     /// `CallContextInterface` (`api/oorexxapi.h:718-743`).
-    CallContextInterface, unpopulated {
+    CallContextInterface, populated {
         interfaceVersion: { value wholenumber_t = CALL_INTERFACE_VERSION },
         GetArguments: { call(*mut RexxCallContext_) -> RexxArrayObject },
         GetArgument: { call(*mut RexxCallContext_, usize) -> RexxObjectPtr },
@@ -731,22 +731,13 @@ pub static METHOD_CONTEXT_INTERFACE: MethodContextInterface = MethodContextInter
 // hands out a thread context owns the table, which is also what keeps this
 // phase from mutating a global.
 
-/// The instance interface, which the L2 slice does not reach: what a
-/// `RexxMethodContext` addresses is the thread and method-context tables.
+/// The instance interface, which nothing reaches yet: what a method or call
+/// context addresses is the thread table and its own context table.
 ///
 /// # Panics
 /// Always.
 pub fn instance_interface() -> RexxInstanceInterface {
     refuse("RexxInstanceInterface");
-}
-
-/// The call-context interface, unreached for the reason
-/// [`instance_interface`] gives.
-///
-/// # Panics
-/// Always.
-pub fn call_context_interface() -> CallContextInterface {
-    refuse("CallContextInterface");
 }
 
 /// The exit-context interface, unreached for the reason

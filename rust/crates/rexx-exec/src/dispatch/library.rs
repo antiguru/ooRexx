@@ -25,9 +25,11 @@ use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::POINTER;
 use rexx_api::values::{
-    Activation, CStringPool, Constants, Conversion, Failure as Refused, Host, Raised as Condition,
+    Activation, CStringPool, Constants, Conversion, Failure as Refused, Host, Numeric,
+    Raised as Condition,
 };
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
+use rexx_num::Number;
 
 use super::Resolution;
 use crate::error::Raised;
@@ -76,13 +78,12 @@ impl Interp {
         // outlive that borrow without being reachable through `self`.
         let library = Rc::clone(&binding.library);
         let Some(entry) = library.method(&binding.procedure) else {
-            return Err(
-                Loud::external_entry_point("a library procedure that stopped resolving").into(),
-            );
+            return Err(Loud::library_procedure_gone().into());
         };
         self.native_handles.push(NativeFrame {
             owner,
             scope: resolution.scope,
+            method: true,
             locals: Table::new(),
             raised: None,
         });
@@ -110,12 +111,135 @@ impl Interp {
         if let Some(number) = pending {
             return Err(condition_of(number));
         }
+        let packaged = self.external_package_path(resolution.method).is_some();
+        self.settle_native_call(answered, frame, packaged)
+    }
+
+    /// Runs the routine a [`Interp::package_routine`] slot names, as the call
+    /// named `name` passed it.
+    ///
+    /// # Errors
+    /// As [`Interp::run_library_routine`].
+    pub(crate) fn run_package_routine(
+        &mut self,
+        slot: usize,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
+        let code = self.package_routine_code(slot);
+        self.run_library_routine(code, &name.to_ascii_uppercase(), args)
+    }
+
+    /// Runs the library routine [`Interp::library_codes`] row `code` is
+    /// against `args`, and answers what the extension returned.
+    ///
+    /// `name` is the name the traceback's `Compiled routine` line gives.
+    ///
+    /// # Errors
+    /// The condition the extension raised, whatever converting an argument or
+    /// the result refuses, and [`Loud`] for a conversion or a routine style
+    /// this crate does not implement.
+    pub(crate) fn run_library_routine(
+        &mut self,
+        code: usize,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
+        let key = self.library_code_key(code).clone();
+        let Some(library) = self.libraries.get(&key.library).map(Rc::clone) else {
+            return Err(Loud::library_procedure_gone().into());
+        };
+        let Some(entry) = library.routine(&key.procedure) else {
+            return Err(Loud::library_procedure_gone().into());
+        };
+        self.native_handles.push(NativeFrame {
+            owner: ObjRef::NIL,
+            scope: ObjRef::NIL,
+            method: false,
+            locals: Table::new(),
+            raised: None,
+        });
+        let mut strings = CStringPool::new();
+        let (answered, pending) = {
+            let activation = Activation::new(Conversion {
+                host: self,
+                strings: &mut strings,
+            });
+            let mut contexts = Contexts::new(&activation);
+            let answered = invoke::routine(entry, &contexts.call(), &activation, args);
+            (answered, activation.pending())
+        };
+        let frame = self
+            .native_handles
+            .pop()
+            .expect("the frame pushed above is still the innermost");
+        let package = self.library_code_package_path(code);
+        let outcome = match pending {
+            Some(number) => Err(condition_of(number)),
+            None => self.settle_native_call(answered, frame, package.is_some()),
+        };
+        if outcome.is_err() {
+            self.blame_native_routine(name, package);
+        }
+        outcome
+    }
+
+    /// What a native call answers once its frame is off the stack: the value,
+    /// the condition its string conversion raised, or the boundary's own
+    /// refusal. `packaged` is whether the code reports a package, which is
+    /// what a refusal before the call is reported against with no line; one
+    /// that reports none is reported against the caller's clause
+    /// (`Activity::createExceptionObject`, `interpreter/concurrency/Activity.cpp:1093-1113`).
+    fn settle_native_call(
+        &mut self,
+        answered: Result<Option<ObjRef>, Refused>,
+        frame: NativeFrame,
+        packaged: bool,
+    ) -> Result<Option<ObjRef>, Failure> {
         match answered {
             Err(Refused::Raised) => Err(frame
                 .raised
                 .expect("a host answering Raised holds the condition it raised")),
-            answered => answered.map_err(refusal),
+            Ok(value) => Ok(value),
+            Err(refused) => Err(self.refusal(refused, packaged)),
         }
+    }
+
+    /// What the boundary's own refusal reports.
+    fn refusal(&mut self, refused: Refused, packaged: bool) -> Failure {
+        let mut raised = match refused {
+            Refused::MissingArgument { position } => Raised::missing_native_argument(position),
+            Refused::NoStringValue { position } => {
+                Raised::native_argument_needs_a_string_value(position)
+            }
+            Refused::InvalidDouble { position, argument } => {
+                let found = self.to_text(argument).into_owned();
+                Raised::native_argument_not_a_double(position, &found)
+            }
+            Refused::NotPositive { position, argument } => {
+                let found = self.to_text(argument).into_owned();
+                Raised::native_argument_not_positive(position, &found)
+            }
+            Refused::TooManyArguments { expected } => Raised::too_many_external_arguments(expected),
+            Refused::Signature => Raised::incorrect_method_signature(),
+            Refused::ResultSignature => Raised::incorrect_method_result_signature(),
+            Refused::ClassicStyle => {
+                return Loud {
+                    message: crate::owned_message(&format!("{refused}"), Some("Phase 10")),
+                }
+                .into();
+            }
+            Refused::Unfilled { .. } | Refused::StaleHandle | Refused::Raised => {
+                return Loud {
+                    message: crate::owned_message(&format!("{refused}"), Some("Phase 8")),
+                }
+                .into();
+            }
+        };
+        if !packaged {
+            raised.delivery.lineless = false;
+        }
+        raised.into()
     }
 }
 
@@ -127,28 +251,9 @@ fn condition_of(number: usize) -> Failure {
     Raised::syntax(major, minor, Vec::new()).into()
 }
 
-/// What the boundary's own refusal reports.
-fn refusal(refused: Refused) -> Failure {
-    match refused {
-        Refused::MissingArgument { position } => Raised::missing_native_argument(position).into(),
-        Refused::NoStringValue { position } => {
-            Raised::native_argument_needs_a_string_value(position).into()
-        }
-        Refused::TooManyArguments { expected } => {
-            Raised::too_many_external_arguments(expected).into()
-        }
-        Refused::Signature => Raised::incorrect_method_signature().into(),
-        Refused::ResultSignature => Raised::incorrect_method_result_signature().into(),
-        Refused::Unfilled { .. } | Refused::StaleHandle | Refused::Raised => Loud {
-            message: crate::owned_message(&format!("{refused}"), Some("Phase 8")),
-        }
-        .into(),
-    }
-}
-
 impl Host for Interp {
     fn is_method(&self) -> bool {
-        true
+        self.native_handles.last().is_some_and(|frame| frame.method)
     }
 
     fn string_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {
@@ -239,6 +344,56 @@ impl Host for Interp {
         object
     }
 
+    fn numeric(&self) -> Numeric {
+        let settings = &self.activation().settings;
+        Numeric {
+            digits: usize::try_from(settings.digits()).unwrap_or(usize::MAX),
+            fuzz: usize::try_from(settings.fuzz()).unwrap_or(usize::MAX),
+            engineering: settings.form() == rexx_num::Form::Engineering,
+        }
+    }
+
+    fn double_value(&mut self, object: ObjRef) -> Result<Option<f64>, Condition> {
+        if let Decoded::SmallInt(number) = object.decode() {
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "`RexxInteger::doubleValue` is the same C conversion"
+            )]
+            return Ok(Some(number as f64));
+        }
+        let text = self.native_string_conversion(object)?;
+        let bytes = self.to_text(text);
+        if let Some(number) = Number::parse_bytes(&bytes) {
+            return Ok(Some(double_of(&number)));
+        }
+        Ok(match &bytes[..] {
+            b"nan" => Some(f64::NAN),
+            b"+infinity" => Some(f64::INFINITY),
+            b"-infinity" => Some(f64::NEG_INFINITY),
+            _ => None,
+        })
+    }
+
+    fn positive_whole_number(&mut self, object: ObjRef) -> Result<Option<isize>, Condition> {
+        let value = match object.decode() {
+            Decoded::SmallInt(number) => Some(number),
+            _ => {
+                let text = self.native_string_conversion(object)?;
+                let bytes = self.to_text(text);
+                Number::parse_bytes(&bytes).and_then(|number| number.whole_value(SIZE_DIGITS))
+            }
+        };
+        Ok(value
+            .filter(|number| (1..=MAX_WHOLENUMBER).contains(number))
+            .and_then(|number| isize::try_from(number).ok()))
+    }
+
+    fn double_object(&mut self, value: f64, precision: usize) -> ObjRef {
+        let object = self.text(&double_text(value, precision));
+        self.roots.push_temp(object);
+        object
+    }
+
     fn locals(&mut self) -> &mut Table {
         &mut self
             .native_handles
@@ -248,6 +403,101 @@ impl Host for Interp {
     }
 }
 
+/// `Numerics::SIZE_DIGITS` (`interpreter/runtime/Numerics.hpp:92`), the
+/// precision `objectToSignedInteger` converts at.
+const SIZE_DIGITS: usize = 20;
+
+/// `Numerics::MAX_WHOLENUMBER` (`interpreter/runtime/Numerics.hpp:86`).
+const MAX_WHOLENUMBER: i64 = 999_999_999_999_999_999;
+
+impl Interp {
+    /// `requestString` for a native argument, holding a raised condition on
+    /// the running native frame as [`Host::string_value`] does.
+    fn native_string_conversion(&mut self, object: ObjRef) -> Result<ObjRef, Condition> {
+        match self.required_string_value(object) {
+            Ok(text) => {
+                self.roots.push_temp(text);
+                Ok(text)
+            }
+            Err(failure) => {
+                self.native_handles
+                    .last_mut()
+                    .expect("a native activation is running")
+                    .raised = Some(failure);
+                Err(Condition)
+            }
+        }
+    }
+}
+
+/// A Rexx number as the C `double` `strtod` reads from its digits
+/// (`NumberString::doubleValue`, `interpreter/classes/NumberStringClass.cpp:704`).
+fn double_of(number: &Number) -> f64 {
+    let scientific = number.format(u64::MAX);
+    scientific.parse().unwrap_or_else(|_| {
+        unreachable!("a formatted Rexx number is a float literal: {scientific}")
+    })
+}
+
+/// `NumberString::newInstanceFromDouble(value, precision)`
+/// (`interpreter/classes/NumberStringClass.cpp:4073`) as its string value:
+/// `%.*g` at two digits past the precision, capped at sixteen, then rounded
+/// to the precision and formatted at it.
+fn double_text(value: f64, precision: usize) -> Vec<u8> {
+    if value.is_nan() {
+        return b"nan".to_vec();
+    }
+    if value == f64::INFINITY {
+        return b"+infinity".to_vec();
+    }
+    if value == f64::NEG_INFINITY {
+        return b"-infinity".to_vec();
+    }
+    let printed = percent_g(value, precision.min(16) + 2);
+    let digits = u64::try_from(precision).unwrap_or(u64::MAX);
+    Number::parse(&printed)
+        .unwrap_or_else(|| unreachable!("%g prints a Rexx number: {printed}"))
+        .into_round(digits)
+        .format(digits)
+        .into_bytes()
+}
+
+/// C's `%.*g` with `significant` digits: the style `%e` would take where its
+/// exponent is below -4 or not below `significant`, the style `%f` takes
+/// otherwise, and in either no trailing zero after the point.
+fn percent_g(value: f64, significant: usize) -> String {
+    let scientific = format!("{:.*e}", significant - 1, value);
+    let (mantissa, exponent) = scientific
+        .split_once('e')
+        .unwrap_or_else(|| unreachable!("{{:e}} prints an exponent: {scientific}"));
+    let exponent: i64 = exponent
+        .parse()
+        .unwrap_or_else(|_| unreachable!("{{:e}} prints a decimal exponent: {scientific}"));
+    let (sign, mantissa) = match mantissa.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", mantissa),
+    };
+    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
+    let width = i64::try_from(significant).unwrap_or(i64::MAX);
+    if exponent < -4 || exponent >= width {
+        let kept = digits.trim_end_matches('0');
+        let kept = if kept.is_empty() { "0" } else { kept };
+        let (first, rest) = kept.split_at(1);
+        let point = if rest.is_empty() { "" } else { "." };
+        return format!("{sign}{first}{point}{rest}e{exponent}");
+    }
+    if exponent >= 0 {
+        let (whole, fraction) = digits.split_at(usize::try_from(exponent + 1).unwrap_or(0));
+        let fraction = fraction.trim_end_matches('0');
+        if fraction.is_empty() {
+            return format!("{sign}{whole}");
+        }
+        return format!("{sign}{whole}.{fraction}");
+    }
+    let zeros = "0".repeat(usize::try_from(-exponent - 1).unwrap_or(0));
+    format!("{sign}0.{zeros}{}", digits.trim_end_matches('0'))
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::{Path, PathBuf};
@@ -255,7 +505,7 @@ mod tests {
 
     use rexx_api::values::Failure as Refused;
 
-    use super::{pool_variable_name, refusal};
+    use super::{double_text, percent_g, pool_variable_name};
     use crate::{Failure, Interp, LibraryLoad};
 
     /// The oracle's own build directory, whose `librxregexp.so` D5's amendment
@@ -456,6 +706,57 @@ mod tests {
         assert_eq!(swept.stderr, plain.stderr);
     }
 
+    /// **The routine half answers the same under a collection at every
+    /// allocation as under none**: a merged and a loaded routine, a double
+    /// the extension builds, an argument refused after its string conversion,
+    /// and a `loadExternalMethod` answer a class defines. The stdout is the
+    /// oracle's, measured.
+    #[test]
+    fn a_library_routine_answers_the_same_under_a_collection_at_every_allocation() {
+        let text = b"say 'merged' RxCalcSqrt(2) RxCalcPower(10, 10) RxCalcSqrt('nan')\n\
+            signal on syntax\n\
+            say RxCalcSqrt(.object~new)\n\
+            syntax:\n\
+            say 'refused' condition('O')~code\n\
+            r = .Routine~loadExternalRoutine('r', 'LIBRARY rxmath RxCalcPi')\n\
+            say 'loaded' r~call(12) r~callWith(.array~of(3))\n\
+            say 'found' .context~package~findRoutine('RXCALCSQRT')~call(81)\n\
+            .K~define('DOES', .Method~loadExternalMethod('m', 'LIBRARY rxregexp RegExp_Match'))\n\
+            .K~define('INIT', .Method~loadExternalMethod('i', 'LIBRARY rxregexp RegExp_Init'))\n\
+            say 'defined' .K~new('a*b')~does('aab')\n\
+            ::requires 'rxmath' LIBRARY\n\
+            ::class K\n"
+            .to_vec();
+        let invocation = || {
+            crate::Invocation::none().with_environment(vec![(
+                b"LD_LIBRARY_PATH".to_vec(),
+                oracle_library_directory()
+                    .into_os_string()
+                    .into_encoded_bytes(),
+            )])
+        };
+        let name = "/tmp/routine_stress.rex";
+
+        let plain = crate::run_program(name, text.clone(), invocation());
+        assert_eq!(
+            plain.exit_code,
+            0,
+            "{}",
+            String::from_utf8_lossy(&plain.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&plain.stdout),
+            "merged 1.41421356 1.00000000E+10 nan\nrefused 88.921\nloaded 3.14159265359 3.14\n\
+             found 9\ndefined 1\n"
+        );
+
+        let swept = crate::run_program_collect_every_alloc(name, text, invocation());
+        assert_eq!(swept.exit_code, plain.exit_code);
+        assert_eq!(swept.stdout, plain.stdout);
+        assert_eq!(swept.stderr, plain.stderr);
+        assert!(swept.collections > 0, "the stress mode did not collect");
+    }
+
     /// A name that has loaded keeps the library it loaded, which is what stops
     /// a second write dropping the interpreter's own reference to it.
     #[test]
@@ -561,15 +862,58 @@ mod tests {
     /// for a return word carrying `OPTIONAL` names the sending clause's line.
     #[test]
     fn a_refusal_before_the_call_is_lineless_and_one_after_it_is_not() {
-        let lineless = |refused: Refused| match refusal(refused) {
-            Failure::Raised(raised) => raised.delivery.lineless,
-            _ => panic!("every condition-shaped refusal is a raise"),
+        let mut interp = Interp::new();
+        let mut lineless =
+            |refused: Refused, packaged: bool| match interp.refusal(refused, packaged) {
+                Failure::Raised(raised) => raised.delivery.lineless,
+                _ => panic!("every condition-shaped refusal is a raise"),
+            };
+        assert!(lineless(Refused::MissingArgument { position: 1 }, true));
+        assert!(lineless(Refused::NoStringValue { position: 1 }, true));
+        assert!(lineless(Refused::TooManyArguments { expected: 0 }, true));
+        assert!(lineless(Refused::Signature, true));
+        assert!(!lineless(Refused::ResultSignature, true));
+        // Measured, oracle rc 168: `RxCalcSqrt()` through a routine no
+        // directive has bound is `Error 88 running <the caller> line 2`.
+        assert!(!lineless(Refused::MissingArgument { position: 1 }, false));
+        assert!(!lineless(Refused::TooManyArguments { expected: 2 }, false));
+    }
+
+    /// `%g`'s two styles and its trailing zeros, against what glibc prints.
+    #[test]
+    fn percent_g_prints_what_c_prints() {
+        assert_eq!(percent_g(4.0, 11), "4");
+        assert_eq!(percent_g(2f64.sqrt(), 11), "1.4142135624");
+        assert_eq!(percent_g(1e10, 11), "10000000000");
+        assert_eq!(percent_g(1e10, 5), "1e10");
+        assert_eq!(percent_g(1e-5, 11), "1e-5");
+        assert_eq!(percent_g(1e-4, 11), "0.0001");
+        assert_eq!(percent_g(-2.5, 3), "-2.5");
+        assert_eq!(percent_g(9.99, 2), "10");
+        assert_eq!(percent_g(0.0, 11), "0");
+    }
+
+    /// Measured on the oracle through `rxmath`, which hands its precision
+    /// straight to `DoubleToObjectWithPrecision`.
+    #[test]
+    fn a_double_renders_as_the_oracle_renders_it() {
+        let rendered = |value: f64, precision: usize| {
+            String::from_utf8(double_text(value, precision)).expect("ASCII")
         };
-        assert!(lineless(Refused::MissingArgument { position: 1 }));
-        assert!(lineless(Refused::NoStringValue { position: 1 }));
-        assert!(lineless(Refused::TooManyArguments { expected: 0 }));
-        assert!(lineless(Refused::Signature));
-        assert!(!lineless(Refused::ResultSignature));
+        assert_eq!(rendered(4.0, 9), "4");
+        assert_eq!(rendered(2f64.sqrt(), 9), "1.41421356");
+        assert_eq!(rendered(2f64.sqrt(), 3), "1.41");
+        assert_eq!(rendered(2f64.sqrt(), 16), "1.414213562373095");
+        assert_eq!(rendered(1e10, 9), "1.00000000E+10");
+        assert_eq!(rendered(1e10, 3), "1E+10");
+        assert_eq!(rendered(1e9, 9), "1.00000000E+9");
+        assert_eq!(rendered(1e8, 9), "100000000");
+        assert_eq!(rendered(1e-5, 9), "0.00001");
+        assert_eq!(rendered(9.99, 2), "10");
+        assert_eq!(rendered(123_456_789.0, 5), "1.2346E+8");
+        assert_eq!(rendered(f64::NAN, 9), "nan");
+        assert_eq!(rendered(f64::INFINITY, 9), "+infinity");
+        assert_eq!(rendered(0.0, 9), "0");
     }
 
     /// The spellings `getVariableRetriever` answers nothing for, beside

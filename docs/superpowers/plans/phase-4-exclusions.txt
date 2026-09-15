@@ -4550,29 +4550,18 @@ those methods; Moritz ruled on 2026-09-14 that Phase 8 does, as Task 1 of
 docs/superpowers/plans/2026-09-14-phase-8-surface.md. See
 docs/superpowers/plans/phase-8-l2.md.
 
-THE ROUTINE HALF OF THE NATIVE CALLING PROTOCOL IS UNBUILT. ::ROUTINE
-EXTERNAL and a ::REQUIRES ... LIBRARY's routines install and then refuse
-loudly at the call, naming Phase 8, when called by the name the directive
-gave them. rxregexp exports no routines -- verified at the binary,
-rxregexp_package_entry+0x30 is zero with no relocation while +0x38
-relocates to rxregexp_methods -- so L2 is not blocked by it. The surface
-half owes it. Worth knowing how it was found: wiring ::REQUIRES LIBRARY
-first turned that loud refusal into 43.1, a silent wrong answer, which
-3245708c0 closes for that one load site. THE OTHER LOAD SITES STILL ANSWER
-43.1 SILENTLY when a library's routine is called by the library's own name
-(the final review's B7, routed to the surface plan by the controller's
-triage; re-measured 2026-09-15 in fresh directories, each side its own,
-both with the oracle checkout's build/lib on LD_LIBRARY_PATH). After
-  say 'load' .context~package~loadLibrary('rxmath')
-  say 'sqrt' RxCalcSqrt(16)
-the oracle prints load 1 / sqrt 4 at rc 0, and this crate prints load 1
-and then Error 43.1: Could not find routine "RXCALCSQRT" at rc 213. After
-  say 'main' RxCalcSqrt(16)
-  ::routine sq external "LIBRARY rxmath RxCalcSqrt"
-the oracle prints main 4 and this crate 43.1, rc 213. B7 measured the same
-through .Routine~loadExternalRoutine and through a loadLibrary inside a
-required package's routine. OWNER: the surface half, with the rest of the
-routine protocol.
+THE ROUTINE HALF OF THE NATIVE CALLING PROTOCOL: CLOSED by Task 2 of
+docs/superpowers/plans/2026-09-14-phase-8-surface.md. A loaded library's typed
+routines answer by name from every package through each load site, and
+::ROUTINE EXTERNAL "LIBRARY REXX ..." binds the REXX package's routine table;
+the corpus/phase-8.txt rows under "Surface Task 2" are the witnesses, and the
+task's report carries the measurements. Two forms still refuse, each naming
+its owner: a ROUTINE_CLASSIC_STYLE row of a package's routine table (Phase 10,
+with rxsubcom and the registered-function API; no library this crate may
+load ships one, so only rexx-api's unit test reaches it), and ::ROUTINE
+EXTERNAL "REGISTERED ..." (Phase 10: measured 2026-09-15, the oracle writes
+the name into the rxapi daemon's function registry before resolving it, and
+a later process's rxfuncquery sees it).
 
 THREE TRACE AND BLAME DIVERGENCES THE L2 WALK FOUND, WITH TRANSCRIPTS IN
 phase-8-l2.md SECTION 5. Two predate Phase 8: >I>/<I< names the running

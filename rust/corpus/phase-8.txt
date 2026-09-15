@@ -120,3 +120,41 @@ lang/environment_symbol_after_store_changes.rex
 # Surface Task 1 fix round 2: a ::CLASS target looked up in .environment
 # raises what the lookup raises when a package installs, not class-not-found.
 lang/directive_class_environment_raises.rex
+
+# Surface Task 2: a library's typed routines answer by name through every load
+# site -- ::REQUIRES ... LIBRARY, Package~loadLibrary, ::ROUTINE EXTERNAL,
+# loadExternalRoutine, loadExternalMethod and a refused ::METHOD EXTERNAL --
+# from packages loaded before and after the load, and before an external file
+# of the same name.
+lang/library_routine_requires.rex
+lang/library_routine_load_library.rex
+lang/library_routine_directive.rex
+lang/library_routine_load_external.rex
+lang/library_routine_load_external_method.rex
+lang/library_routine_method_directive_load.rex
+lang/library_routine_after_external_file.rex
+
+# Surface Task 2: what the routine boundary refuses, and where it is reported:
+# the caller's clause for code no directive bound, the binding package with no
+# line for code one did, the name as the call passed it.
+lang/library_routine_argument_errors.rex
+lang/library_routine_caller_blame.rex
+lang/library_routine_package_blame.rex
+lang/library_routine_name_as_written.rex
+lang/library_routine_call_blame.rex
+lang/library_routine_quoted_name.rex
+
+# Surface Task 2: a routine a ::REQUIRES ... LIBRARY merged is found before the
+# security manager is asked, and one found through the global table is not.
+lang/library_routine_security_manager.rex
+
+# Surface Task 2: a loadExternalMethod answer a class defines runs, and reports
+# the package of the first directive binding the same procedure.
+lang/library_method_loaded_defined.rex
+lang/library_method_loaded_defined_blame.rex
+
+# Surface Task 2: ::ROUTINE EXTERNAL "LIBRARY REXX ..." and loadExternalRoutine
+# over the REXX package's routine table.
+lang/library_routine_rexx_package.rex
+lang/library_routine_rexx_package_missing.rex
+lang/library_routine_rexx_package_call_blame.rex

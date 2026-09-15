@@ -18,9 +18,9 @@ use std::ffi::CStr;
 use std::marker::PhantomData;
 
 use crate::layout::{
-    CSTRING, MethodContextInterface, Owned, POINTER, RexxMethodContext_, RexxObjectPtr,
-    RexxPointerObject, RexxStringObject, RexxThreadContext_, RexxThreadInterface, ValueDescriptor,
-    wholenumber_t,
+    CSTRING, CallContextInterface, MethodContextInterface, Owned, POINTER, RexxCallContext_,
+    RexxMethodContext_, RexxObjectPtr, RexxPointerObject, RexxStringObject, RexxThreadContext_,
+    RexxThreadInterface, ValueDescriptor, logical_t, stringsize_t, wholenumber_t,
 };
 use crate::values::{Activation, Repr, Value};
 
@@ -119,6 +119,18 @@ pub static METHOD_CONTEXT: MethodContextInterface = {
     table
 };
 
+/// The call-context table a routine's stub is handed
+/// (`Activity::callContextFunctions`,
+/// `interpreter/api/CallContextStubs.cpp:678`), at one address for the process
+/// as [`METHOD_CONTEXT`] is.
+pub static CALL_CONTEXT: CallContextInterface = {
+    let mut table = CallContextInterface::REFUSING;
+    table.GetContextDigits = get_context_digits;
+    table.GetContextFuzz = get_context_fuzz;
+    table.GetContextForm = get_context_form;
+    table
+};
+
 /// The method context a stub is handed: a pointer to the public struct at the
 /// head of an `Owned` wrapper, derived from the whole wrapper, and borrowed
 /// from that wrapper for as long as it is used.
@@ -144,6 +156,29 @@ impl MethodContext<'_> {
     }
 }
 
+/// The call context a routine's stub is handed, shaped as [`MethodContext`].
+pub struct CallContext<'a> {
+    pointer: *mut RexxCallContext_,
+    wrapper: PhantomData<&'a mut RexxCallContext_>,
+}
+
+impl CallContext<'_> {
+    /// The address the stub is handed.
+    pub(crate) fn as_ptr(&self) -> *mut RexxCallContext_ {
+        self.pointer
+    }
+
+    /// A context over a struct no `Contexts` built, for a test whose tables
+    /// never recover an owner.
+    #[cfg(test)]
+    pub(crate) fn bare(context: &mut RexxCallContext_) -> CallContext<'_> {
+        CallContext {
+            pointer: &raw mut *context,
+            wrapper: PhantomData,
+        }
+    }
+}
+
 /// The contexts one native call hands an extension, wired to the state behind
 /// them.
 ///
@@ -153,6 +188,7 @@ impl MethodContext<'_> {
 pub struct Contexts<'a, 'h> {
     thread: Owned<RexxThreadContext_, Activation<'h>>,
     method: Owned<RexxMethodContext_, Activation<'h>>,
+    call: Owned<RexxCallContext_, Activation<'h>>,
     table: RexxThreadInterface,
     /// Ties this wrapper to the activation its tables address, so that no
     /// context it hands out can outlive the state behind it.
@@ -169,6 +205,7 @@ impl<'a, 'h> Contexts<'a, 'h> {
         table.StringData = string_data;
         table.StringLength = string_length;
         table.NewPointer = new_pointer;
+        table.DoubleToObjectWithPrecision = double_to_object_with_precision;
         table.RaiseException0 = raise_exception0;
         table.RexxNil = constants.nil;
         table.RexxTrue = constants.true_object;
@@ -184,6 +221,14 @@ impl<'a, 'h> Contexts<'a, 'h> {
             },
             method: Owned {
                 context: RexxMethodContext_ {
+                    threadContext: std::ptr::null_mut(),
+                    functions: std::ptr::null_mut(),
+                    arguments: std::ptr::null_mut(),
+                },
+                owner,
+            },
+            call: Owned {
+                context: RexxCallContext_ {
                     threadContext: std::ptr::null_mut(),
                     functions: std::ptr::null_mut(),
                     arguments: std::ptr::null_mut(),
@@ -208,6 +253,18 @@ impl<'a, 'h> Contexts<'a, 'h> {
         self.method.context.functions = std::ptr::from_ref(&METHOD_CONTEXT).cast_mut();
         MethodContext {
             pointer: (&raw mut self.method).cast::<RexxMethodContext_>(),
+            wrapper: PhantomData,
+        }
+    }
+
+    /// The call context, linked as [`Contexts::method`] links the method
+    /// context.
+    pub fn call(&mut self) -> CallContext<'_> {
+        self.thread.context.functions = &raw mut self.table;
+        self.call.context.threadContext = (&raw mut self.thread).cast::<RexxThreadContext_>();
+        self.call.context.functions = std::ptr::from_ref(&CALL_CONTEXT).cast_mut();
+        CallContext {
+            pointer: (&raw mut self.call).cast::<RexxCallContext_>(),
             wrapper: PhantomData,
         }
     }
@@ -321,6 +378,40 @@ unsafe extern "C" fn new_pointer(
 ) -> RexxPointerObject {
     // SAFETY: as `whole_number_to_object`.
     unsafe { activation_of(context) }.new_pointer(value).cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn double_to_object_with_precision(
+    context: *mut RexxThreadContext_,
+    value: f64,
+    precision: usize,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { activation_of(context) }.double_object(value, precision)
+}
+
+/// # Safety
+/// `context` is a call context a live [`Contexts`] handed out, used during the
+/// call it was handed to.
+unsafe extern "C" fn get_context_digits(context: *mut RexxCallContext_) -> stringsize_t {
+    // SAFETY: the caller guarantees the context, and `invoke::routine` holds no
+    // conversion state across the call it was handed to.
+    unsafe { activation_of(context) }.numeric().digits
+}
+
+/// # Safety
+/// As [`get_context_digits`].
+unsafe extern "C" fn get_context_fuzz(context: *mut RexxCallContext_) -> stringsize_t {
+    // SAFETY: as `get_context_digits`.
+    unsafe { activation_of(context) }.numeric().fuzz
+}
+
+/// # Safety
+/// As [`get_context_digits`].
+unsafe extern "C" fn get_context_form(context: *mut RexxCallContext_) -> logical_t {
+    // SAFETY: as `get_context_digits`.
+    logical_t::from(unsafe { activation_of(context) }.numeric().engineering)
 }
 
 /// # Safety
@@ -488,6 +579,62 @@ pub(crate) extern "C" fn thread_table_stub(
         let pointer = (table.NewPointer)(thread, std::ptr::without_provenance_mut(STUB_POINTER));
         (method.SetObjectVariable)(context, c"POINTER".as_ptr(), pointer.cast());
         (table.RaiseException0)(thread, STUB_CONDITION);
+    }
+    std::ptr::null_mut()
+}
+
+#[cfg(test)]
+thread_local! {
+    /// What [`numeric_stub`] read through its call context: digits, fuzz and
+    /// form, in that order.
+    static NUMERIC_SEEN: std::cell::Cell<Option<(usize, usize, usize)>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// What [`numeric_stub`] read on its most recent call.
+#[cfg(test)]
+pub(crate) fn numeric_seen() -> Option<(usize, usize, usize)> {
+    NUMERIC_SEEN.get()
+}
+
+/// The value [`numeric_stub`] hands `DoubleToObjectWithPrecision`.
+#[cfg(test)]
+pub(crate) const STUB_DOUBLE: f64 = 1.5;
+
+/// The signature [`numeric_stub`] publishes: a `RexxObjectPtr` result and no
+/// parameter.
+#[cfg(test)]
+static NUMERIC_TYPES: [u16; 2] = [
+    crate::values::code::REXX_OBJECT_PTR,
+    crate::values::ARGUMENT_TERMINATOR,
+];
+
+/// A routine stub that reads `GetContextDigits`, `GetContextFuzz` and
+/// `GetContextForm` through the call-context table, and answers the object
+/// `DoubleToObjectWithPrecision` builds for [`STUB_DOUBLE`] at the digits it
+/// read, which is what `rxmath`'s `NumericFormatter` does
+/// (`extensions/rxmath/rxmath.cpp:118-140`).
+#[cfg(test)]
+pub(crate) extern "C" fn numeric_stub(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return NUMERIC_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: `context` is the one a `Contexts` handed this call, which
+    // linked its thread context and wrote both tables, and element zero is
+    // this call's result descriptor.
+    unsafe {
+        let calls = &*(*context).functions;
+        let thread = (*context).threadContext;
+        let table = &*(*thread).functions;
+        let digits = (calls.GetContextDigits)(context);
+        let fuzz = (calls.GetContextFuzz)(context);
+        let form = (calls.GetContextForm)(context);
+        NUMERIC_SEEN.set(Some((digits, fuzz, form)));
+        let object = (table.DoubleToObjectWithPrecision)(thread, STUB_DOUBLE, digits);
+        (*arguments).value.value_RexxObjectPtr = object;
     }
     std::ptr::null_mut()
 }

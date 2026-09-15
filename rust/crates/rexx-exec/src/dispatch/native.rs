@@ -605,24 +605,33 @@ pub(crate) fn attribute_external(attribute: &AttributeDirective) -> Option<Metho
     )))
 }
 
-/// [`MethodExternal`] for one `::ROUTINE`, or `None` for the forms this phase
-/// still refuses: `REGISTERED`, and the `REXX` package, whose routine table
-/// is `rexx_routines[]` and not the method registry above
-/// (`runtime/InternalPackage.cpp:230`).
+/// [`MethodExternal`] for one `::ROUTINE` naming a shared library, or `None`
+/// for `REGISTERED` and for the `REXX` package, whose routine table is
+/// `rexx_routines[]` and not the method registry above
+/// (`runtime/InternalPackage.cpp:230`) and whose entries [`rexx_routine_entry`]
+/// names.
 ///
-/// The entry defaults to the routine's own name upcased -- measured, oracle:
-/// `::routine zzz external "LIBRARY rxmath"` is `90.999 Unable to find
-/// external routine "ZZZ"`.
+/// The entry defaults to the routine's own name, which the parser upcases for
+/// a symbol and keeps as written for a string -- measured, oracle: `::routine
+/// zzz external "LIBRARY rxmath"` is `90.999 Unable to find external routine
+/// "ZZZ"` and `::routine 'zq' external "LIBRARY rxmath"` names `"zq"`.
 pub(crate) fn routine_external(routine: &RoutineDirective) -> Option<MethodExternal> {
     let spec = routine.external.as_ref()?;
     if spec.registered || *spec.library == *b"REXX" {
         return None;
     }
-    Some(other_library(
-        &routine.name.to_ascii_uppercase(),
-        None,
-        spec,
-    ))
+    Some(other_library(&routine.name, None, spec))
+}
+
+/// The entry point a `::ROUTINE`'s `EXTERNAL "LIBRARY REXX ..."` names,
+/// defaulting as [`routine_external`]'s does, or `None` for every other
+/// directive.
+pub(crate) fn rexx_routine_entry(routine: &RoutineDirective) -> Option<Vec<u8>> {
+    let spec = routine.external.as_ref()?;
+    if spec.registered || *spec.library != *b"REXX" {
+        return None;
+    }
+    Some(spec.entry.as_deref().unwrap_or(&routine.name).to_vec())
 }
 
 /// [`MethodExternal::OtherLibrary`] for one directive: the accessors of an

@@ -2974,6 +2974,12 @@ impl Interp {
         self.blame_native_level(Raised::compiled_routine_line(name), None);
     }
 
+    /// The same for a routine of a loaded library, whose level carries the
+    /// package its shared code reports, if any.
+    pub(crate) fn blame_native_routine(&mut self, name: &[u8], package: Option<Vec<u8>>) {
+        self.blame_native_level(Raised::compiled_routine_line(name), package);
+    }
+
     /// Records `text` as a native level's whole traceback line, first call
     /// wins, and closes the level so the sending clause records its own.
     fn blame_native_level(&mut self, text: Vec<u8>, package: Option<Vec<u8>>) {
@@ -8384,12 +8390,14 @@ fn native_load_external(
     // documents, or `None` where nothing answers the name.
     let procedure = if rexx {
         // The `REXX` package's routine table is `rexx_routines[]` and not
-        // this registry (`runtime/InternalPackage.cpp:230`), so a routine
-        // asked for by that name would answer `.nil` here where the oracle
-        // answers a `Routine` -- a wrong answer, not a missing one, which is
-        // why it refuses instead.
+        // this registry (`runtime/InternalPackage.cpp:230`).
         if routine {
-            return Err(Loud::external_entry_point("loadExternalRoutine on REXX").into());
+            let Some(row) = crate::internal_routines::rexx_package_routine(&entry) else {
+                return Ok(Some(ObjRef::NIL));
+            };
+            let object = interp.native_instance(class);
+            interp.record_rexx_routine_object(object, row);
+            return Ok(Some(object));
         }
         native::entry_point(&entry).map(|_| entry.clone())
     } else {

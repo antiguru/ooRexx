@@ -499,12 +499,14 @@ impl Calls {
 
     /// Records what site `at` resolved to.
     ///
-    /// **A miss is never kept.** `Resolved::Unresolved` is the answer for a
-    /// name nothing has yet, and a file the search would find next time must
-    /// not be masked by this table -- the same reason a raising resolution
-    /// was never cached.
+    /// **A miss is never kept, and nor is an external file.**
+    /// `Resolved::Unresolved` is the answer for a name nothing has yet, and a
+    /// file the search would find next time must not be masked by this
+    /// table -- the same reason a raising resolution was never cached. A
+    /// library loaded after a file was found exports routines the oracle
+    /// finds before that file.
     fn remember(&self, at: u16, resolved: Resolved) {
-        if matches!(resolved, Resolved::Unresolved) {
+        if matches!(resolved, Resolved::Unresolved | Resolved::External) {
             return;
         }
         if let Some(slot) = self.slots.get(at as usize) {

@@ -1,0 +1,3 @@
+/* A quoted ::ROUTINE name is the default entry as written. */
+say 'ran'
+::requires 'pk.cls'

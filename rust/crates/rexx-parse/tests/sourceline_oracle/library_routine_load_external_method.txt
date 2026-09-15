@@ -1,0 +1,5 @@
+count 4
+/* A loadExternalMethod naming a library that exports no such method answers
+   .nil, and the load it made still makes the library's routines callable. */
+say 'method' .Method~loadExternalMethod('m', 'LIBRARY rxmath RxCalcSqrt')
+say 'main' RxCalcSqrt(16)

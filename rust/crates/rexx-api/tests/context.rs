@@ -20,7 +20,9 @@ use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::POINTER;
 use rexx_api::load::{self, NativeMethodEntry};
-use rexx_api::values::{Activation, CStringPool, Constants, Conversion, Failure, Host, Raised};
+use rexx_api::values::{
+    Activation, CStringPool, Constants, Conversion, Failure, Host, Numeric, Raised,
+};
 use rexx_core::{BehaviourHandle, BehaviourId, Body, Bytes, Heap, ObjRef, RootSet, ScopePools};
 
 /// `Rexx_Error_Invalid_template` (`api/oorexxerrors.h:362`).
@@ -205,6 +207,22 @@ impl Host for Interpreter {
     fn new_pointer(&mut self, value: POINTER) -> ObjRef {
         let body = Body::pointer(self.pointer_class, BehaviourHandle::new(0), value);
         self.heap.alloc(body)
+    }
+
+    fn numeric(&self) -> Numeric {
+        unreachable!("rxregexp's methods read no call context")
+    }
+
+    fn double_value(&mut self, _object: ObjRef) -> Result<Option<f64>, Raised> {
+        unreachable!("rxregexp's methods declare no double")
+    }
+
+    fn positive_whole_number(&mut self, _object: ObjRef) -> Result<Option<isize>, Raised> {
+        unreachable!("rxregexp's methods declare no positive whole number")
+    }
+
+    fn double_object(&mut self, _value: f64, _precision: usize) -> ObjRef {
+        unreachable!("rxregexp's methods convert no double")
     }
 
     fn locals(&mut self) -> &mut Table {

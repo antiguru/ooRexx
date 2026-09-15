@@ -1,5 +1,5 @@
-/* ::REQUIRES LIBRARY loads the library and registers nothing a name can be
-   looked up in, so a program naming it twice, and naming it again through
+/* ::REQUIRES LIBRARY loads the library once however often it is named, so a
+   program naming it twice, and naming it again through
    Package~loadLibrary, sees one load and no error. loadExternalMethod and
    loadExternalRoutine answer .nil for a library that is not there and for a
    procedure it does not export. */

@@ -137,18 +137,25 @@ pub(crate) enum Resolved {
     /// `BuiltinFunctions.cpp`'s table, which is why its argument errors are
     /// the native-routine family.
     Internal(&'static crate::internal_routines::InternalRoutine),
+    /// A routine a loaded library exports, as the index of its
+    /// `Interp::package_routines` slot. Like [`Resolved::Internal`] it runs
+    /// no activation.
+    LibraryRoutine(usize),
+    /// A library routine a `::REQUIRES ... LIBRARY` merged into the running
+    /// package's own lookup, as its `Interp::library_codes` row: found where a
+    /// `::ROUTINE` is, before the security manager is asked, and run under the
+    /// name as the call wrote it.
+    MergedLibraryRoutine(usize),
     /// An external Rexx file the search found for this name, entered the way
     /// [`Resolved::Library`] is: a whole program with its own directives and
     /// its own `ProgramId`.
     ///
     /// **It carries no path**, and the consumer searches again to recover it.
-    /// A `Resolved` is cached per call site in a `Cell`, so it has to be
+    /// A `Resolved` is kept per call site in a `Cell`, so it has to be
     /// `Copy`, and the resolver is `&self` and can neither intern a path nor
     /// hand out an index. The second search is stats only, against a call that
-    /// re-reads and re-parses the file anyway. Caching the decision stays
-    /// right either way: a file that disappears fails at the consumer's own
-    /// search rather than being served from a stale hit, and a miss is never
-    /// cached because the call-site table drops [`Resolved::Unresolved`].
+    /// re-reads and re-parses the file anyway. The call-site table keeps
+    /// neither this nor [`Resolved::Unresolved`].
     External,
     /// Nothing answers this name. **Not an error here**: the security
     /// manager's `CALL` checkpoint runs before 43.1 is reported
@@ -3758,6 +3765,9 @@ impl Interp {
             }
             None => match self.installed_routine(name) {
                 Some(installed) => Resolved::Routine(installed),
+                None if let Some(code) = self.merged_library_routine(name) => {
+                    Resolved::MergedLibraryRoutine(code)
+                }
                 // **Ahead of the external file search and behind
                 // everything above it.** `Setup.cpp` resolves
                 // `CoreClasses.orx`'s two `CALL`s against the interpreter's
@@ -3784,13 +3794,13 @@ impl Interp {
                         return Err(Loud::internal_routine(name, owner).into());
                     }
                 },
-                // **A routine a `::REQUIRES ... LIBRARY` registered**, after
-                // the internal packages so that a name both export still runs
-                // the one this crate implements. Running it needs the routine
-                // half of the two-call protocol, so the call is loud rather
-                // than 43.1, which the oracle does not answer for it.
-                None if let Some(library) = self.library_routine_owner(name) => {
-                    return Err(Loud::required_library_routine(name, library).into());
+                // **A routine a loaded library exports**, whichever load
+                // registered it. The oracle keeps these in the table the
+                // internal packages' routines are in, where a library routine
+                // replaces an internal one of the same name; here the internal
+                // one is found first.
+                None if let Some(slot) = self.package_routine(name) => {
+                    Resolved::LibraryRoutine(slot)
                 }
                 // **The external file search, which the oracle performs
                 // before answering 43.1.** Only whether it resolves is
@@ -3838,6 +3848,28 @@ impl Interp {
                 .and_then(|table| table.get(&upper[..]))
             {
                 return Some(*found);
+            }
+            match self.package_parents.get(&program) {
+                Some(crate::plan::Package::Program(parent)) => program = *parent,
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    /// The library routine a `::REQUIRES ... LIBRARY` merged into the running
+    /// package, or into a package it inherits its lookup from as
+    /// [`Interp::installed_routine`] walks them.
+    fn merged_library_routine(&self, name: &[u8]) -> Option<usize> {
+        // Ahead of the upcase, which allocates, as `Interp::package_routine`.
+        if self.merged_library_routines_empty() {
+            return None;
+        }
+        let mut program = self.running_activation()?.program_id;
+        let upper = name.to_ascii_uppercase();
+        for _ in 0..=self.programs.len() {
+            if let Some(code) = self.merged_library_routine_in(program, &upper) {
+                return Some(code);
             }
             match self.package_parents.get(&program) {
                 Some(crate::plan::Package::Program(parent)) => program = *parent,
@@ -3921,7 +3953,7 @@ impl Interp {
         // the same shortcut -- but its arguments are evaluated by the loop
         // below rather than by the builtin path's own, which is why it is not
         // folded into the arm above.
-        if let Resolved::Internal(row) = resolved {
+        if let Resolved::Internal(_) | Resolved::LibraryRoutine(_) = resolved {
             let mut values: Vec<Option<ObjRef>> = Vec::with_capacity(args.len());
             for arg in args {
                 match arg {
@@ -3938,7 +3970,15 @@ impl Interp {
             if let Some(handled) = self.call_checkpoint(name, &values)? {
                 return Ok(Ended::Returned(handled));
             }
-            return Ok(Ended::Returned(Some(self.run_internal(row, &values)?)));
+            return match resolved {
+                Resolved::Internal(row) => {
+                    Ok(Ended::Returned(Some(self.run_internal(row, &values)?)))
+                }
+                Resolved::LibraryRoutine(slot) => self
+                    .run_package_routine(slot, name, &values)
+                    .map(Ended::Returned),
+                _ => unreachable!("only the two arms above reach here"),
+            };
         }
 
         // A fresh `Vec` and not a lent one: this path always hands the
@@ -4026,16 +4066,36 @@ impl Interp {
         row: &'static crate::internal_routines::InternalRoutine,
         values: &[Option<ObjRef>],
     ) -> Result<ObjRef, Failure> {
-        let body = row
-            .body
-            .expect("resolve_call only answers Internal with a body");
+        self.run_internal_as(row, None, values)
+    }
+
+    /// [`Interp::run_internal`] for a call that passes the routine `name`
+    /// rather than its upcased row name, which is what a `::ROUTINE` bound to
+    /// the row and `Routine~call` pass.
+    pub(crate) fn run_internal_as(
+        &mut self,
+        row: &'static crate::internal_routines::InternalRoutine,
+        name: Option<&[u8]>,
+        values: &[Option<ObjRef>],
+    ) -> Result<ObjRef, Failure> {
+        let Some(body) = row.body else {
+            let owner = row
+                .owner
+                .expect("a row with no body names the phase that owes it");
+            return Err(Loud::internal_routine(row.name.as_bytes(), owner).into());
+        };
         let outcome = body(self, row.name.as_bytes(), values);
         if outcome.is_err() {
             // The oracle reports one of these under its own routine line,
             // whether the argument marshalling or the body raised -- measured,
             // `filespec('D')` and `SysSleep('abc')` both carry it.
-            let upper = row.name.to_ascii_uppercase();
-            self.blame_internal_routine(upper.as_bytes());
+            match name {
+                Some(name) => self.blame_internal_routine(name),
+                None => {
+                    let upper = row.name.to_ascii_uppercase();
+                    self.blame_internal_routine(upper.as_bytes());
+                }
+            }
         }
         outcome
     }
@@ -4057,6 +4117,13 @@ impl Interp {
                 return handled.ok_or_else(|| Raised::no_data_returned(name).into());
             }
             return self.run_internal(row, values);
+        }
+        if let Resolved::LibraryRoutine(slot) = resolved {
+            let answered = match self.call_checkpoint(name, values)? {
+                Some(handled) => handled,
+                None => self.run_package_routine(slot, name, values)?,
+            };
+            return answered.ok_or_else(|| Raised::no_data_returned(name).into());
         }
         match self.invoke_call_over(
             resolved,
@@ -4142,10 +4209,34 @@ impl Interp {
                 .map(Ended::Returned);
         }
 
+        // A library routine merged into the package, and a `::ROUTINE` bound
+        // to native code, run no activation either, and are found before the
+        // manager is asked.
+        if let Resolved::MergedLibraryRoutine(code) = resolved {
+            return self
+                .run_library_routine(code, name, &arguments)
+                .map(Ended::Returned);
+        }
+        if let Resolved::Routine(installed) = resolved {
+            if let Some(code) = self.library_routine_code(installed) {
+                return self
+                    .run_library_routine(code, name, &arguments)
+                    .map(Ended::Returned);
+            }
+            if let Some(row) = self.rexx_routine_row(installed) {
+                return self
+                    .run_internal_as(row, Some(name), &arguments)
+                    .map(|value| Ended::Returned(Some(value)));
+            }
+        }
+
         let entered = match resolved {
             // Answered above, before the loop that just ran.
             Resolved::Builtin(_) => unreachable!("the builtin path returns before this"),
             Resolved::Internal(_) => unreachable!("the internal path returns before this"),
+            Resolved::LibraryRoutine(_) | Resolved::MergedLibraryRoutine(_) => {
+                unreachable!("a library routine is run before this")
+            }
             Resolved::Label(target) => Entered::Label(target),
             Resolved::Routine(installed) => Entered::Routine(installed),
             Resolved::Library(_) => unreachable!("the library path returns just above"),
@@ -4278,11 +4369,7 @@ impl Interp {
                 // (`InstalledRoutine`'s own doc).
                 let routine_program = Rc::clone(&self.programs[installed.program.0]);
                 let Some(body) = body_of(&routine_program, Some(installed.directive)) else {
-                    return Err(crate::routine_without_a_body(
-                        &routine_program,
-                        installed.directive,
-                    )
-                    .into());
+                    return Err(Loud::missing_body().into());
                 };
                 let plan = self.plan_for(
                     BodyKey {
@@ -4671,6 +4758,13 @@ impl Interp {
                 Ok(None) => self
                     .run_internal(row, &values[mark..])
                     .map(|value| Ended::Returned(Some(value))),
+                Err(failure) => Err(failure),
+            },
+            Resolved::LibraryRoutine(slot) => match self.call_checkpoint(name, &values[mark..]) {
+                Ok(Some(handled)) => Ok(Ended::Returned(handled)),
+                Ok(None) => self
+                    .run_package_routine(slot, name, &values[mark..])
+                    .map(Ended::Returned),
                 Err(failure) => Err(failure),
             },
             _ => self.invoke_call_over(

@@ -1313,6 +1313,33 @@ impl Raised {
         raised
     }
 
+    /// 88.921: a native argument declared `double` has no value as one.
+    /// `found` is the argument's own rendered bytes. Measured, oracle rc 168:
+    /// `RxCalcSqrt('abc')` is `Argument 1 must be a valid double value; found
+    /// "abc".`
+    pub(crate) fn native_argument_not_a_double(position: usize, found: &[u8]) -> Raised {
+        let mut raised = Raised::syntax(
+            88,
+            921,
+            vec![position.to_string().into_bytes(), found.to_vec()],
+        );
+        raised.delivery.lineless = true;
+        raised
+    }
+
+    /// 88.905: a native argument declared `positive_wholenumber_t` is not a
+    /// whole number from one up. Measured, oracle rc 168: `RxCalcSqrt(2, 0)`
+    /// is `Argument 2 must be a positive whole number; found "0".`
+    pub(crate) fn native_argument_not_positive(position: usize, found: &[u8]) -> Raised {
+        let mut raised = Raised::syntax(
+            88,
+            905,
+            vec![position.to_string().into_bytes(), found.to_vec()],
+        );
+        raised.delivery.lineless = true;
+        raised
+    }
+
     /// 88.909 for an argument the oracle names rather than numbers.
     pub(crate) fn named_argument_needs_a_string_value(argument: &str) -> Raised {
         Raised::syntax(88, 909, vec![argument.as_bytes().to_vec()])

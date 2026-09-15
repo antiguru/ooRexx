@@ -225,6 +225,10 @@ fn the_populated_tables_carry_the_interface_version() {
         rexx_api::layout::METHOD_CONTEXT_INTERFACE.interfaceVersion,
         rexx_api::layout::METHOD_INTERFACE_VERSION
     );
+    assert_eq!(
+        rexx_api::ffi::CALL_CONTEXT.interfaceVersion,
+        rexx_api::layout::CALL_INTERFACE_VERSION
+    );
 }
 
 #[test]
@@ -371,9 +375,6 @@ fn a_table_outside_the_slice_refuses_where_it_would_be_handed_out() {
                 rexx_api::layout::instance_interface();
             }) as fn(),
         ),
-        ("CallContextInterface", || {
-            rexx_api::layout::call_context_interface();
-        }),
         ("ExitContextInterface", || {
             rexx_api::layout::exit_context_interface();
         }),

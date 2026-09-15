@@ -1,0 +1,12 @@
+/* A ::ROUTINE bound to a library entry runs under the directive's name, the
+   directive's library load makes the entry callable by its own name as well,
+   and the Routine findRoutine answers runs it through call, callWith and []. */
+say 'sq' sq(16)
+say 'global' RxCalcSqrt(9)
+r = .context~package~findRoutine('SQ')
+say 'call' r~call(4) r~callWith(.array~of(81)) r[100]
+trace r
+y = sq(100)
+trace o
+say 'traced' y
+::requires 'pk.cls'

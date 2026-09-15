@@ -14,11 +14,11 @@
 
 //! The outbound FFI boundary: loading a library and resolving symbols.
 
-use crate::ffi::MethodContext;
+use crate::ffi::{CallContext, MethodContext};
 use crate::invoke::MAX_NATIVE_ARGUMENTS;
 use crate::layout::{
-    RexxMethodContext_, RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry, ValueDescriptor,
-    ValueUnion,
+    RexxCallContext_, RexxMethodContext_, RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry,
+    ValueDescriptor, ValueUnion,
 };
 use crate::values::{ARGUMENT_TERMINATOR, Repr, Value};
 use std::ffi::{CStr, c_char, c_int, c_void};
@@ -29,8 +29,20 @@ use std::path::{Path, PathBuf};
 ///
 /// A null `arguments` is the signature request and answers the static type
 /// array; an array is the call, and answers null (`:4282`).
-pub(crate) type NativeMethod =
-    unsafe extern "C" fn(*mut RexxMethodContext_, *mut ValueDescriptor) -> *mut u16;
+pub(crate) type NativeMethod = Stub<RexxMethodContext_>;
+
+/// The C signature of the stub the `RexxRoutineN` macros generate
+/// (`api/oorexxapi.h:4562`), answering as [`NativeMethod`] does.
+pub(crate) type NativeRoutine = Stub<RexxCallContext_>;
+
+/// A generated stub over the context struct `C`.
+type Stub<C> = unsafe extern "C" fn(*mut C, *mut ValueDescriptor) -> *mut u16;
+
+/// `ROUTINE_TYPED_STYLE` (`api/oorexxapi.h:200`).
+pub const ROUTINE_TYPED_STYLE: c_int = 1;
+
+/// `ROUTINE_CLASSIC_STYLE` (`api/oorexxapi.h:201`).
+pub const ROUTINE_CLASSIC_STYLE: c_int = 2;
 
 /// The interpreter version an extension's `requiredVersion` is measured
 /// against, `REXX_CURRENT_INTERPRETER_VERSION` (`api/oorexxapi.h:242`).
@@ -119,30 +131,9 @@ impl NativeMethodEntry {
     pub(crate) fn signature(&self, context: &MethodContext<'_>, limit: usize) -> Option<Vec<u16>> {
         let stub = self.stub()?;
         // SAFETY: `stub` is the address the extension's own method table gave
-        // for this row, so the code it names is the generated stub and stays
-        // mapped as long as the `Library` this row is borrowed from. A null
-        // `arguments` is the signature request, which returns the static
-        // array without running any of the extension's own code
-        // (`api/oorexxapi.h:4342-4350`).
-        let types = unsafe { stub(context.as_ptr(), std::ptr::null_mut()) };
-        if types.is_null() {
-            return None;
-        }
-        let mut words = Vec::new();
-        for offset in 0..limit {
-            // SAFETY: the invariant is the macro's, not this loop's: the
-            // array it emits ends in `REXX_ARGUMENT_TERMINATOR`
-            // (`api/oorexxapi.h:4338`), so every offset up to the first
-            // terminator is inside it. `limit` bounds how far a malformed
-            // array is followed, which the oracle does not bound at all
-            // (`NativeActivation.cpp:235`).
-            let word = unsafe { *types.add(offset) };
-            if word == ARGUMENT_TERMINATOR {
-                return Some(words);
-            }
-            words.push(word);
-        }
-        None
+        // for this row, which stays mapped as long as the `Library` this row
+        // is borrowed from, and `context` is live for the borrow.
+        unsafe { signature_of(stub, context.as_ptr(), limit) }
     }
 
     /// Call the stub with `arguments`, which it reads and writes its result
@@ -157,29 +148,12 @@ impl NativeMethodEntry {
         arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
         result: Option<Repr>,
     ) -> Option<Value> {
-        // The whole word, before the stub can write a narrower member into it.
-        arguments[0].value = ValueUnion { value_int64_t: 0 };
-        if let Some(stub) = self.stub() {
-            let array = arguments.as_mut_ptr();
-            // `argumentExists` reads the array through the context rather
-            // than through the parameter (`api/oorexxapi.h:4276`), which is
-            // why the oracle publishes it (`NativeActivation.cpp:1291`).
-            let pointer = context.as_ptr();
-            // SAFETY: `context` holds the only borrow of a live
-            // `RexxMethodContext_` for its lifetime, and it is neither `Clone`
-            // nor `Sync`, so nothing else writes the struct during this call.
-            unsafe { (*pointer).arguments = array };
-            // SAFETY: `stub` names the generated stub, as above. `array` is
-            // the caller's live array, which nothing else touches for the
-            // duration of the call, and the stub reads and writes only the
-            // elements its own signature declares.
-            unsafe { stub(pointer, array) };
-            // SAFETY: as the write above.
-            unsafe { (*pointer).arguments = std::ptr::null_mut() };
-        }
-        // SAFETY: element zero's word was written in full above, and a stub
-        // writing a member into it leaves every byte initialised.
-        result.map(|repr| unsafe { crate::ffi::value_of(&arguments[0], repr) })
+        let pointer = context.as_ptr();
+        // SAFETY: `pointer` addresses the live struct `context` borrows, and
+        // naming a field's address reads and writes nothing.
+        let published = unsafe { &raw mut (*pointer).arguments };
+        // SAFETY: as `signature`, and `published` is `pointer`'s own field.
+        unsafe { call_stub(self.stub(), pointer, published, arguments, result) }
     }
 
     /// The row's address as the callable it names, or `None` for a row that
@@ -213,6 +187,21 @@ pub(crate) fn stub_entry(name: &[u8], stub: NativeMethod) -> NativeMethodEntry {
     }
 }
 
+/// A routine row for a stub this image itself defines, for a caller that
+/// needs an entry point without a library.
+#[cfg(test)]
+pub(crate) fn stub_routine_entry(
+    style: c_int,
+    name: &[u8],
+    stub: NativeRoutine,
+) -> NativeRoutineEntry {
+    NativeRoutineEntry {
+        style,
+        name: name.to_vec(),
+        entry_point: stub as *mut c_void,
+    }
+}
+
 /// One row of an extension's routine table, copied out of the library.
 ///
 /// Shaped as [`NativeMethodEntry`] and for the same reason.
@@ -231,6 +220,117 @@ impl NativeRoutineEntry {
     pub fn has_entry_point(&self) -> bool {
         !self.entry_point.is_null()
     }
+
+    /// [`NativeMethodEntry::signature`] for a routine's stub.
+    ///
+    /// The row must be [`ROUTINE_TYPED_STYLE`]: a classic row's address is a
+    /// function of another signature.
+    pub(crate) fn signature(&self, context: &CallContext<'_>, limit: usize) -> Option<Vec<u16>> {
+        let stub = self.stub()?;
+        // SAFETY: as `NativeMethodEntry::signature`, and the caller has
+        // refused a classic row.
+        unsafe { signature_of(stub, context.as_ptr(), limit) }
+    }
+
+    /// [`NativeMethodEntry::call`] for a routine's stub, which the row must be
+    /// as [`NativeRoutineEntry::signature`] says.
+    pub(crate) fn call(
+        &self,
+        context: &CallContext<'_>,
+        arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
+        result: Option<Repr>,
+    ) -> Option<Value> {
+        let pointer = context.as_ptr();
+        // SAFETY: as `NativeMethodEntry::call`.
+        let published = unsafe { &raw mut (*pointer).arguments };
+        // SAFETY: as `NativeMethodEntry::call`, and the caller has refused a
+        // classic row.
+        unsafe { call_stub(self.stub(), pointer, published, arguments, result) }
+    }
+
+    /// The row's address as the typed stub it names, or `None` for a row that
+    /// carries none.
+    fn stub(&self) -> Option<NativeRoutine> {
+        if self.entry_point.is_null() {
+            return None;
+        }
+        // SAFETY: `REXX_TYPED_ROUTINE` fills `entryPoint` with the stub the
+        // `RexxRoutineN` macro generated (`api/oorexxapi.h:205`), whose C
+        // signature is `NativeRoutine`'s, under the same D5 argument as
+        // `NativeMethodEntry::stub`. A classic row is never turned into a
+        // call: both readers above are reached only past the style check.
+        Some(unsafe { std::mem::transmute::<*mut c_void, NativeRoutine>(self.entry_point) })
+    }
+}
+
+/// What `stub` publishes for a signature request, read as
+/// [`NativeMethodEntry::signature`] describes.
+///
+/// # Safety
+/// `stub` is a generated stub of this C signature in a library that stays
+/// mapped for the call, and `context` addresses a live struct of its context
+/// type.
+unsafe fn signature_of<C>(stub: Stub<C>, context: *mut C, limit: usize) -> Option<Vec<u16>> {
+    // SAFETY: the caller guarantees the stub and the context. A null
+    // `arguments` is the signature request, which returns the static array
+    // without running any of the extension's own code
+    // (`api/oorexxapi.h:4342-4350`).
+    let types = unsafe { stub(context, std::ptr::null_mut()) };
+    if types.is_null() {
+        return None;
+    }
+    let mut words = Vec::new();
+    for offset in 0..limit {
+        // SAFETY: the invariant is the macro's, not this loop's: the array
+        // it emits ends in `REXX_ARGUMENT_TERMINATOR` (`api/oorexxapi.h:4338`),
+        // so every offset up to the first terminator is inside it. `limit`
+        // bounds how far a malformed array is followed, which the oracle does
+        // not bound at all (`NativeActivation.cpp:235`).
+        let word = unsafe { *types.add(offset) };
+        if word == ARGUMENT_TERMINATOR {
+            return Some(words);
+        }
+        words.push(word);
+    }
+    None
+}
+
+/// Call `stub`, where there is one, with `arguments` published on `context`
+/// for the length of the call, and answer element zero read as `result`'s
+/// member.
+///
+/// # Safety
+/// As [`signature_of`], and `published` is `context`'s own `arguments` field.
+unsafe fn call_stub<C>(
+    stub: Option<Stub<C>>,
+    context: *mut C,
+    published: *mut *mut ValueDescriptor,
+    arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
+    result: Option<Repr>,
+) -> Option<Value> {
+    // The whole word, before the stub can write a narrower member into it.
+    arguments[0].value = ValueUnion { value_int64_t: 0 };
+    if let Some(stub) = stub {
+        let array = arguments.as_mut_ptr();
+        // `argumentExists` reads the array through the context rather than
+        // through the parameter (`api/oorexxapi.h:4276`), which is why the
+        // oracle publishes it (`NativeActivation.cpp:1291`).
+        //
+        // SAFETY: the caller's context wrapper holds the only borrow of the
+        // live struct for its lifetime and is neither `Clone` nor `Sync`, so
+        // nothing else writes the field during this call.
+        unsafe { *published = array };
+        // SAFETY: the caller guarantees the stub. `array` is the caller's
+        // live array, which nothing else touches for the duration of the
+        // call, and the stub reads and writes only the elements its own
+        // signature declares.
+        unsafe { stub(context, array) };
+        // SAFETY: as the write above.
+        unsafe { *published = std::ptr::null_mut() };
+    }
+    // SAFETY: element zero's word was written in full above, and a stub
+    // writing a member into it leaves every byte initialised.
+    result.map(|repr| unsafe { crate::ffi::value_of(&arguments[0], repr) })
 }
 
 /// An opened shared library together with the package entry it published.
@@ -326,6 +426,24 @@ impl Library {
             }
         };
         self.routines.iter().rev().find(|row| row.name == *spelling)
+    }
+
+    /// Each upper-cased routine name with the spelling whose row answers it
+    /// through `PackageManager::packageRoutines`, in the order
+    /// `LibraryPackage::loadRoutines` puts them
+    /// (`interpreter/package/LibraryPackage.cpp:270-299`): a later row whose
+    /// name upper-cases alike replaces an earlier one.
+    #[must_use]
+    pub fn package_routines(&self) -> Vec<(Vec<u8>, &[u8])> {
+        let mut registered: Vec<(Vec<u8>, &[u8])> = Vec::new();
+        for row in &self.routines {
+            let upper = row.name.to_ascii_uppercase();
+            match registered.iter_mut().find(|(name, _)| *name == upper) {
+                Some(slot) => slot.1 = &row.name,
+                None => registered.push((upper, &row.name)),
+            }
+        }
+        registered
     }
 }
 
@@ -606,5 +724,34 @@ mod tests {
         assert_eq!(found(&library, b"foo"), Some(3));
         assert_eq!(found(&library, b"BAR"), Some(4));
         assert_eq!(found(&library, b"baz"), None);
+    }
+
+    /// The global table is keyed by the upper-cased name and the last row
+    /// wins, so `FOO` answers the row spelled `Foo` that follows it, which is
+    /// not the row [`Library::routine`] finds for the spelling `FOO`.
+    #[test]
+    #[cfg(unix)]
+    #[cfg_attr(miri, ignore = "opens the running image")]
+    fn the_global_table_keeps_the_last_row_of_each_upper_cased_name() {
+        let library = Library {
+            name: None,
+            version: None,
+            methods: Vec::new(),
+            routines: vec![
+                row(b"Foo", 1),
+                row(b"FOO", 2),
+                row(b"Foo", 3),
+                row(b"bar", 4),
+            ],
+            handle: libloading::os::unix::Library::this().into(),
+        };
+        assert_eq!(
+            library.package_routines(),
+            vec![
+                (b"FOO".to_vec(), &b"Foo"[..]),
+                (b"BAR".to_vec(), &b"bar"[..])
+            ]
+        );
+        assert_eq!(found(&library, b"Foo"), Some(3));
     }
 }

@@ -1,0 +1,14 @@
+/* The security manager is asked about a call of a library routine found in
+   the table every load fills, and not about one a ::REQUIRES ... LIBRARY
+   merged into the calling package, which is found where a ::ROUTINE is. */
+merged = .Routine~newFile('merged.rex')
+say 'declined' merged~setSecurityManager(.Audit~new)
+merged~call
+global = .Routine~newFile('global.rex')
+say 'declined' global~setSecurityManager(.Audit~new)
+global~call
+::class Audit
+::method unknown
+  use arg name, args
+  if name = 'CALL' then say 'event CALL' args[1]['NAME']
+  return 0

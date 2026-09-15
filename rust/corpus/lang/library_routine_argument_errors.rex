@@ -1,0 +1,25 @@
+/* What the boundary refuses before a routine's own code runs, each condition
+   trapped: a double with no value, a precision that is not a positive whole
+   number, a required argument left out, and one argument too many. */
+call try 'abc', "RxCalcSqrt('abc')"
+call try 'object', "RxCalcSqrt(.object~new)"
+call try 'zero', "RxCalcSqrt(2, 0)"
+call try 'negative', "RxCalcSqrt(2, -1)"
+call try 'fraction', "RxCalcSqrt(2, 1.5)"
+call try 'letter', "RxCalcSqrt(2, 'x')"
+call try 'none', "RxCalcSqrt()"
+call try 'omitted', "RxCalcSqrt(, 2)"
+call try 'three', "RxCalcSqrt(1, 2, 3)"
+exit
+
+try:
+  parse arg label, expression
+  signal on syntax
+  interpret 'value =' expression
+  say label 'answered' value
+  return
+syntax:
+  c = condition('O')
+  say label c~code '|' c~message
+  return
+::requires 'pk.cls'

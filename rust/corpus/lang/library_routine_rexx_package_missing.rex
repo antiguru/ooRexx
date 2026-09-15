@@ -1,0 +1,4 @@
+/* An entry the REXX package's routine table does not have is refused while
+   the declaring package is translated, before this program's first clause. */
+say 'ran'
+::requires 'pk.cls'
