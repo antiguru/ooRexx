@@ -455,11 +455,11 @@ impl CallSite {
         }
     }
 
-    /// The kept resolution, or `None` where it is one a routine made
-    /// callable since could shadow and `generation` has moved on.
+    /// The kept resolution, or `None` where it is one the oracle looks up
+    /// on every call and `generation` has moved on.
     fn get(&self, generation: u32) -> Option<Resolved> {
         let resolved = self.resolved.get()?;
-        if resolved.can_be_shadowed() && self.generation.get() != generation {
+        if resolved.kept_until_routines_change() && self.generation.get() != generation {
             return None;
         }
         Some(resolved)

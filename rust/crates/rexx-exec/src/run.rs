@@ -165,20 +165,23 @@ pub(crate) enum Resolved {
 }
 
 impl Resolved {
-    /// Whether a routine made callable after this resolution could answer the
-    /// same name first: every step `Interp::resolve_call` takes after the
-    /// running package's own routines, which a library load
-    /// (`Interp::register_package_routines`) or a merge into the package's
-    /// lookup (`Package~addPackage`, `~loadPackage`, a called external file's
-    /// public routines) can put something in front of. A call site keeping one of these re-resolves once
-    /// `Interp::routine_generation` has moved.
-    pub(crate) fn can_be_shadowed(self) -> bool {
+    /// Whether a call site keeps this resolution only until
+    /// `Interp::routine_generation` moves, rather than for good.
+    ///
+    /// The oracle hands a routine back to the instruction from
+    /// `externalCall`'s Step 2 alone (`findRoutine`,
+    /// `execution/RexxActivation.cpp:3062-3070`), so a `::ROUTINE` or an
+    /// imported routine is kept for good, a label and a builtin are fixed
+    /// when the clause resolves, and everything later in the search (the
+    /// REXX package's routines, a registered library routine, an external
+    /// file) is looked up again on every call. Those are the ones answered
+    /// here: kept while no routine table they come after has been written.
+    pub(crate) fn kept_until_routines_change(self) -> bool {
         matches!(
             self,
             Resolved::Library(_)
                 | Resolved::Internal(_)
                 | Resolved::LibraryRoutine(_)
-                | Resolved::MergedLibraryRoutine(_)
                 | Resolved::External
         )
     }

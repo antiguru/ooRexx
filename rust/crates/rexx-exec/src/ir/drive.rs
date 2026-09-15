@@ -699,9 +699,8 @@ impl Interp {
                                         };
                                         let (name, search_labels) = call_target_name(code, target);
                                         // A raise is deliberately not recorded, and
-                                        // a stale kept answer is dropped by the
-                                        // table: the same reasons `Op::Call`
-                                        // reads them for.
+                                        // the table drops a stale kept answer, for
+                                        // the reasons `Op::Call`'s read gives.
                                         let resolved = match chunk
                                             .resolved_call(*site, self.routine_generation)
                                         {
@@ -1534,10 +1533,11 @@ impl Interp {
                                             break 'cold Err(Loud::call_op_off_its_node().into());
                                         };
                                         // **The site's own kept answer, and the
-                                        // resolution when it has none.** A kept
-                                        // answer a routine made callable since
-                                        // could shadow is dropped by the table
-                                        // itself (`Resolved::can_be_shadowed`). A
+                                        // resolution when it has none.** The table
+                                        // drops a kept answer the oracle would look
+                                        // up again once a routine table has been
+                                        // written
+                                        // (`Resolved::kept_until_routines_change`). A
                                         // raise is deliberately not recorded:
                                         // `resolve_call` answers `Err` for a name
                                         // that matched nothing, and a site that

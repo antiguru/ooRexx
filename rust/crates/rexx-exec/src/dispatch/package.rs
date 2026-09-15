@@ -847,6 +847,7 @@ fn install_routine(
         program: installed.0,
         directive: installed.1,
     };
+    interp.routines_changed();
     interp.routine_objects.insert(installed, routine);
     interp
         .routines

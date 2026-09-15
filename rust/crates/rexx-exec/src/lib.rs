@@ -1781,9 +1781,11 @@ struct Interp {
     /// The [`Interp::library_codes`] row each [`Interp::package_routines`]
     /// slot calls.
     package_routine_codes: Vec<usize>,
-    /// Moved whenever a routine may become callable in front of resolutions a
-    /// call site kept: a library registering routines, and a merge into a
-    /// package's routine lookup. See `Resolved::can_be_shadowed`.
+    /// Moved by every write to a routine table an existing call site's
+    /// lookup reads: a library registering routines
+    /// ([`Interp::register_package_routines`]), a merge that adds a name
+    /// ([`Interp::merge_routines`]), and `~addRoutine`/`~addPublicRoutine`.
+    /// See `Resolved::kept_until_routines_change`.
     pub(crate) routine_generation: u32,
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
@@ -4758,7 +4760,7 @@ impl Interp {
     /// package, whatever loaded it.
     fn register_package_routines(&mut self, name: &[u8], library: &rexx_api::load::Library) {
         for (upper, spelling) in library.package_routines() {
-            self.routine_generation = self.routine_generation.wrapping_add(1);
+            self.routines_changed();
             let code = self.library_code(LibraryCodeKey {
                 library: name.to_vec(),
                 procedure: spelling.to_vec(),
@@ -4806,8 +4808,13 @@ impl Interp {
             }
         }
         if added {
-            self.routine_generation = self.routine_generation.wrapping_add(1);
+            self.routines_changed();
         }
+    }
+
+    /// Moves [`Interp::routine_generation`], for a write to a routine table.
+    pub(crate) fn routines_changed(&mut self) {
+        self.routine_generation = self.routine_generation.wrapping_add(1);
     }
 
     /// [`Interp::resolve_library`] for a caller whose failure is a condition:

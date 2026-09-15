@@ -1,0 +1,15 @@
+/* A call site that found a routine a ::REQUIRES ... LIBRARY merged keeps it
+   for good: through a later ~addRoutine of its name and an unrelated merge in
+   the package it runs in, and through a merge of its name into a package built
+   with this one as its context. */
+do i = 1 to 2
+  say 'own' i RxCalcSqrt(16)
+  if i = 1 then do
+    .context~package~addRoutine('RXCALCSQRT', .routine~new('x', 'return "added" arg(1)'))
+    q = .context~package~loadPackage('q.cls')
+  end
+end
+say 'fresh' RxCalcSqrt(16)
+r = .Routine~newFile('r.rex', .context~package)
+r~call
+::requires 'rxmath' LIBRARY
