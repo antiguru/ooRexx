@@ -321,6 +321,9 @@ fn environment_directory(
     dotted.push(b'.');
     dotted.extend_from_slice(&upper);
     let old = interp.dot_variable(&dotted)?;
+    // The write allocates, and `old` may be a fresh `.NAME` string nothing
+    // else holds.
+    interp.roots.push_temp(old);
     if let Some(value) = new {
         interp.set_directory_entry(EnvScope::Environment, &upper, value)?;
     }

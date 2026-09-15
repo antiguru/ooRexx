@@ -402,6 +402,59 @@ fn values_compound_write_roots_the_old_value_before_the_stems_first_allocation()
     assert!(total_collections > 0);
 }
 
+/// `VALUE(name, new, '')` (`builtin/platform.rs`) holds the *old* value across
+/// the allocation its write into `.environment`'s store performs.
+#[test]
+fn values_environment_write_roots_the_old_value_before_the_stores_allocation() {
+    // The name is long for the compound row's reason: the old value of an
+    // absent name is its `.NAME` text, which has to be a heap string for a
+    // collection to be able to free it.
+    let rows: [(&str, &str, &str); 5] = [
+        (
+            "VALUE's read-only form on an absent name",
+            "say value('ABCDEFGHIJKLMNOP', , '')\n",
+            ".ABCDEFGHIJKLMNOP\n",
+        ),
+        (
+            "a write to a name .environment already holds",
+            ".environment['ABCDEFGHIJKLMNOP'] = 'one'\nsay value('ABCDEFGHIJKLMNOP', 'two', '')\n",
+            "one\n",
+        ),
+        (
+            "the failing shape: VALUE's write on an absent name",
+            "say value('ABCDEFGHIJKLMNOP', 'new', '')\nsay value('ABCDEFGHIJKLMNOP', , '')\n",
+            ".ABCDEFGHIJKLMNOP\nnew\n",
+        ),
+        (
+            "a new value that is itself a heap string built in the call",
+            "say value('ABCDEFGHIJKLMNOP', copies('NEWVALUE', 3), '')\nsay value('ABCDEFGHIJKLMNOP', , '')\n",
+            ".ABCDEFGHIJKLMNOP\nNEWVALUENEWVALUENEWVALUE\n",
+        ),
+        (
+            "a .local entry written by a mint-free send, then read as .NAME",
+            ".local~put(copies('LOCALVALUE', 3), 'ABCDEFGHIJKLMNOP')\nsay .abcdefghijklmnop\n",
+            "LOCALVALUELOCALVALUELOCALVALUE\n",
+        ),
+    ];
+    for (name, text, expected) in rows {
+        let path = format!("<value-environment-write-rooting: {name}>");
+        let stress = run_program_collect_every_alloc(
+            &path,
+            text.as_bytes().to_vec(),
+            rexx_exec::Invocation::none(),
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&stress.stdout),
+            expected,
+            "{name}, under collect-on-every-allocation"
+        );
+        assert!(
+            stress.collections > 0,
+            "{name} performed zero collections, so it cannot see a dropped root"
+        );
+    }
+}
+
 /// A loop's own per-pass roots survive the pass they belong to.
 #[test]
 fn a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop() {
