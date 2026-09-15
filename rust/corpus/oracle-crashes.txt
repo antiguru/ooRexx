@@ -664,6 +664,28 @@ the process dies afterwards with an empty stderr. The control is the same two
 first clauses with no traced clause after them: rc 0. The Phase 7 monitor survey
 also measured that restoring the destination before the end does not save it.
 
+**11d, `.TRACEOUTPUT` answered by a `.local` method entry that exits:**
+
+    .local~setMethod('TRACEOUTPUT', 'say "lookup ran"; exit 7')
+    trace r
+    zz = 1
+    trace off
+    say 'after'
+
+SIGSEGV rc 139 after stdout `lookup ran` / `     3 *-* zz = 1` / `lookup ran` / `       >>>   "1"` /
+`lookup ran` / `     4 *-* trace off` / `after`, stderr empty. **Measured once**, under the standard
+wrapper with a 20-second deadline, and not re-run for a control. The same program with the method
+body `return 1 / 0` is not a crash but ends rc 207 with **both** stdout and stderr empty, not even
+`after`. It is 11c's shape reached through a method entry instead of `~destination(.nil)`: the
+trace route is looked up through `.local` for every traced line.
+
+Found 2026-09-15 by Phase 8 surface Task 1's second fix round
+(`docs/superpowers/records/2026-09-14-phase-8-surface/task-1-report.md`, "Fix round 2"). This crate
+answers both at rc 0: the exiting entry with the oracle's stdout and an empty stderr, the raising one
+with the trace lines on stderr and `after` on stdout. The crash falls under the licence below;
+where this crate writes the raising variant's trace lines is its own answer, recorded here and not
+licensed further.
+
 Cause, for 11a and 11b, **Read** in the survey and not measured further:
 `RexxActivation::resolveStream` (`execution/RexxActivation.cpp:1938`-`:1977`)
 answers `.INPUT` or `.OUTPUT` for an omitted stream name by asking
@@ -676,8 +698,8 @@ back to writing the line itself. For 11c the fallback exists too --
 not established.
 
 Found 2026-09-12 by the Phase 7 survey of the monitors, and re-measured by the
-controller with the controls above. **No upstream ticket.** For this crate all
-three are licensed divergences: nothing here may answer by crashing, so a
+controller with the controls above (11a-11c; 11d is recorded separately above). **No upstream
+ticket.** For this crate all four are licensed divergences: nothing here may answer by crashing, so a
 missing entry answers 97.1 the way a `.nil` entry already does, and a trace
 destination that cannot take a `LINEOUT` leaves the line on stdout and lets the
 program exit normally.
