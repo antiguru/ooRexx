@@ -1306,3 +1306,28 @@ is closed; the surface plan gets its own workspace.
 
 Next: gates at the commit that lands this, and a read-only review of the documentation pass and the
 amended plan in parallel.
+
+### Gates at `476347f52`; readings appended; docs review resumed
+
+G1 0, G2 0, G3 101 (2524 / 5), G4 101 (2524 / 6), G5 0 (545 of 545); clean before and after, HEAD
+unmoved; failing sets unchanged member for member; report-mode figures unchanged
+(`scratchpad/gate8docs/`). Appended as `phase-8-gate.md` §8 at `5f09e0e7b`, with a cross-reference
+corrected at `6a167e462` (section 7 does not say where Miri ran; the exclusions entry does). The
+docs review stopped on a session limit immediately after starting and was resumed with HEAD
+`6a167e462` and §8 in scope.
+
+### Docs review returned: 0 Critical, 5 Important, 11 Minor; all corrected at `509225578`
+
+Report `docs-review.md`. Section 8's figures, every commit hash, the partition commands and ten
+KNOWN GAPS probes re-run on both sides all held. Importants: R1 the roadmap bullet citation moved
+again under `2e0590b40` (now cited by the bullet's opening words, not a line); R2 `build/lib` holds
+the six test libraries, the two test executables are in `build/bin`; R5 the D-L2 ruling left "no
+owner" standing in row 8's lead, gate §5, the exclusions L2 entry and the `Method~new` entry; R6
+surface Task 3 named `Signature` where F9's result side is `ResultSignature`; R7 surface Task 7's
+test asserted against `phase-8.txt`, which runs no group. Minors R3, R4, R8-R16 corrected alongside
+(the exclusions file's "stable by decision" now cites `rust-toolchain.toml` and the roadmap's "No
+nightly features"). The exclusions readers' tests pass. Controller-made corrections, not reviewed
+again: prose only, each re-grepped for the fact in the other documents.
+
+**The L2 plan is closed.** Next: the surface plan in its own workspace, starting with its
+pre-flight scan.
