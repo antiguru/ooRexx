@@ -2035,7 +2035,7 @@ enum MergedRoutine {
 
 impl MergedRoutine {
     /// What a call that finds this entry runs.
-    fn resolved(self) -> run::Resolved {
+    pub(crate) fn resolved(self) -> run::Resolved {
         match self {
             MergedRoutine::Installed(installed) => run::Resolved::Routine(installed),
             MergedRoutine::Library(code) => run::Resolved::MergedLibraryRoutine(code),

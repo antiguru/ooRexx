@@ -1972,9 +1972,8 @@ impl Interp {
         self.rexx_package_class(upper)
     }
 
-    /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:897`):
-    /// `findLocalRoutine` and then `findPublicRoutine`, as the `Routine`
-    /// object or `.nil`.
+    /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:897`), as the
+    /// `Routine` object or `.nil`.
     pub(crate) fn package_find_routine(
         &mut self,
         package: Option<ProgramId>,
@@ -1983,25 +1982,45 @@ impl Interp {
         let Some(program) = package else {
             return ObjRef::NIL;
         };
-        let found = [&self.routines, &self.package_public_routines]
-            .into_iter()
-            .find_map(|table| {
-                table
-                    .get(&program)
-                    .and_then(|held| held.get(upper))
-                    .copied()
-                    .map(crate::MergedRoutine::Installed)
-            })
-            .or_else(|| {
-                self.merged_public_routines
-                    .get(&program)
-                    .and_then(|held| held.get(upper))
-                    .copied()
-            });
-        match found {
+        match self.find_routine(program, upper) {
             Some(merged) => self.merged_routine_object(merged).unwrap_or(ObjRef::NIL),
             None => ObjRef::NIL,
         }
+    }
+
+    /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:822-911`) for
+    /// the upcased `upper`: `findLocalRoutine`, every `routines` table up the
+    /// parent chain, and only then `findPublicRoutine`, every merged table up
+    /// the chain. A package's public routines are among its `routines`, so the
+    /// second walk has only the merged tables left to read.
+    pub(crate) fn find_routine(
+        &self,
+        program: ProgramId,
+        upper: &[u8],
+    ) -> Option<crate::MergedRoutine> {
+        let chain = || {
+            // Bounded rather than argued safe: a parent is always a program
+            // that already existed when its child was built, so the chain
+            // cannot close -- and the bound costs less than that sentence.
+            std::iter::successors(Some(program), |child| {
+                match self.package_parents.get(child) {
+                    Some(crate::plan::Package::Program(parent)) => Some(*parent),
+                    _ => None,
+                }
+            })
+            .take(self.programs.len() + 1)
+        };
+        chain()
+            .find_map(|package| self.routines.get(&package)?.get(upper).copied())
+            .map(crate::MergedRoutine::Installed)
+            .or_else(|| {
+                chain().find_map(|package| {
+                    self.merged_public_routines
+                        .get(&package)?
+                        .get(upper)
+                        .copied()
+                })
+            })
     }
 
     /// The `Routine` object one imported routine is: the `::ROUTINE`'s own,

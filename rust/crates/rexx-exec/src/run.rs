@@ -3836,10 +3836,8 @@ impl Interp {
         Ok(resolved)
     }
 
-    /// The routine `name` reaches from the running package: one the package
-    /// declared itself, then one it imported (a `::REQUIRES ... LIBRARY`'s
-    /// library routine or a `::REQUIRES`'s public routine), then the same pair
-    /// in whichever package built this one.
+    /// The routine `name` reaches from the running package, through
+    /// [`Interp::find_routine`].
     ///
     /// **The parent step is what a `newFile` executable resolves through**,
     /// and only that route has one: a file reached by a *call* records no
@@ -3847,32 +3845,9 @@ impl Interp {
     /// body finds the caller's `::ROUTINE` through `Routine~newFile` and
     /// raises 43.1 through `call`.
     fn package_routine_lookup(&self, name: &[u8]) -> Option<Resolved> {
-        let mut program = self.running_activation()?.program_id;
-        let upper = name.to_ascii_uppercase();
-        // Bounded rather than argued safe: a parent is always a program that
-        // already existed when its child was built, so the chain cannot close
-        // -- and the bound costs less than that sentence.
-        for _ in 0..=self.programs.len() {
-            if let Some(found) = self
-                .routines
-                .get(&program)
-                .and_then(|table| table.get(&upper[..]))
-            {
-                return Some(Resolved::Routine(*found));
-            }
-            if let Some(found) = self
-                .merged_public_routines
-                .get(&program)
-                .and_then(|table| table.get(&upper[..]))
-            {
-                return Some(found.resolved());
-            }
-            match self.package_parents.get(&program) {
-                Some(crate::plan::Package::Program(parent)) => program = *parent,
-                _ => return None,
-            }
-        }
-        None
+        let program = self.running_activation()?.program_id;
+        self.find_routine(program, &name.to_ascii_uppercase())
+            .map(crate::MergedRoutine::resolved)
     }
 
     /// Takes the shared value buffer **with the caller's run intact**, and the
