@@ -2029,19 +2029,24 @@ impl Interp {
     pub(crate) fn merged_routine_object(&mut self, merged: crate::MergedRoutine) -> Option<ObjRef> {
         match merged {
             crate::MergedRoutine::Installed(installed) => self.routine_object(installed),
-            crate::MergedRoutine::Library(code) => {
-                if let Some(found) = self.library_routine_objects.get(&code).copied() {
-                    return Some(found);
-                }
-                let class = self.routine_class();
-                let object = self.native_instance(class);
-                self.roots
-                    .add_global(&library_routine_root_key(code), object);
-                self.library_routine_objects.insert(code, object);
-                self.record_loaded_executable(object, code);
-                Some(object)
-            }
+            crate::MergedRoutine::Library(code) => Some(self.library_routine_object(code)),
         }
+    }
+
+    /// The one `Routine` object for the library routine at `code`'s row,
+    /// which an imported-routine table and `loadExternalRoutine` both answer
+    /// (`LibraryPackage::resolveRoutine`, `package/LibraryPackage.cpp:410-432`).
+    pub(crate) fn library_routine_object(&mut self, code: usize) -> ObjRef {
+        if let Some(found) = self.library_routine_objects.get(&code).copied() {
+            return found;
+        }
+        let class = self.routine_class();
+        let object = self.native_instance(class);
+        self.roots
+            .add_global(&library_routine_root_key(code), object);
+        self.library_routine_objects.insert(code, object);
+        self.record_loaded_executable(object, code);
+        object
     }
 
     /// The file `name` resolves to from `package`'s own directory --

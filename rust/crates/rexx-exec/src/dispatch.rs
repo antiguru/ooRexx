@@ -8425,17 +8425,23 @@ fn native_load_external(
     let Some(procedure) = procedure else {
         return Ok(Some(ObjRef::NIL));
     };
-    let object = interp.native_instance(class);
     if rexx {
+        let object = interp.native_instance(class);
         interp.record_native_executable(object);
-    } else {
-        let code = interp.library_code(crate::LibraryCodeKey {
-            library,
-            procedure,
-            routine,
-        });
-        interp.record_loaded_executable(object, code);
+        return Ok(Some(object));
     }
+    let code = interp.library_code(crate::LibraryCodeKey {
+        library,
+        procedure,
+        routine,
+    });
+    // A routine is the library's own object for the row, the one an
+    // imported-routine table answers.
+    if routine {
+        return Ok(Some(interp.library_routine_object(code)));
+    }
+    let object = interp.native_instance(class);
+    interp.record_loaded_executable(object, code);
     Ok(Some(object))
 }
 
