@@ -18,9 +18,10 @@ use std::path::PathBuf;
 use rexx_api::handles::Table;
 use rexx_api::layout::POINTER;
 use rexx_api::values::{
-    ARGUMENT_EXISTS, CStringPool, Constants, Conversion, Direction, Failure, Host, Numeric,
-    OPTIONAL_ARGUMENT, Raised, Repr, SPECIAL_ARGUMENT, Value, code, consumes_argument, descriptor,
-    from_native, repr, rows, to_native,
+    ARGUMENT_EXISTS, CStringPool, Class, Constants, Conversion, Converted, Failure, Host, Numeric,
+    OPTIONAL_ARGUMENT, Raised, Repr, ResultRead, SPECIAL_ARGUMENT, Value, code, consumes_argument,
+    descriptor, from_native, pointer_string, repr, result_read, rows, takes_argument_list,
+    to_native,
 };
 use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef, RootSet};
 
@@ -28,7 +29,8 @@ use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef, RootSet};
 ///
 /// `string_value` models `requiredString`: a text object is its own string
 /// value, a small integer has one that must be built, and anything in
-/// `speechless` has none.
+/// `speechless` has none. The numeric readers parse a text object's bytes as
+/// Rust parses a number, standing in for the interpreter's number syntax.
 struct Interpreter {
     heap: Heap,
     method: bool,
@@ -38,6 +40,15 @@ struct Interpreter {
     raising: Vec<ObjRef>,
     variables: Vec<(Vec<u8>, ObjRef)>,
     locals: Table,
+    receiver: ObjRef,
+    scope: ObjRef,
+    super_scope: ObjRef,
+    argument_list: ObjRef,
+    name: Vec<u8>,
+    /// The calling activation's stems, by name with the trailing period.
+    stems: Vec<(Vec<u8>, ObjRef)>,
+    /// The objects `is_instance_of` answers true for, with their class.
+    instances: Vec<(ObjRef, Class)>,
 }
 
 impl Interpreter {
@@ -50,6 +61,13 @@ impl Interpreter {
             raising: Vec::new(),
             variables: Vec::new(),
             locals: Table::new(),
+            receiver: ObjRef::NIL,
+            scope: ObjRef::NIL,
+            super_scope: ObjRef::NIL,
+            argument_list: ObjRef::NIL,
+            name: Vec::new(),
+            stems: Vec::new(),
+            instances: Vec::new(),
         }
     }
 
@@ -58,6 +76,42 @@ impl Interpreter {
             bytes: Bytes::from_slice(bytes),
             num: None,
         })
+    }
+
+    fn array(&mut self) -> ObjRef {
+        self.heap.alloc(Body::Array {
+            dimensions: None,
+            slots: vec![None],
+        })
+    }
+
+    fn stem(&mut self, name: &[u8]) -> ObjRef {
+        self.heap.alloc(Body::Stem {
+            name: name.into(),
+            default: None,
+            tails: rexx_core::NameMap::default(),
+        })
+    }
+
+    /// A text object's bytes, parsed.
+    fn parsed<T: std::str::FromStr>(&self, object: ObjRef) -> Result<Option<T>, Raised> {
+        if self.raising.contains(&object) {
+            return Err(Raised);
+        }
+        let text = self.string_bytes(object).map(Cow::into_owned);
+        Ok(text.and_then(|bytes| String::from_utf8(bytes).ok()?.trim().parse().ok()))
+    }
+
+    /// What an answered object reads as: a small integer's digits, a text
+    /// object's bytes.
+    fn rendered(&self, object: ObjRef) -> Vec<u8> {
+        match object.decode() {
+            rexx_core::Decoded::SmallInt(number) => number.to_string().into_bytes(),
+            _ => self
+                .string_bytes(object)
+                .expect("an answered number or string")
+                .into_owned(),
+        }
     }
 }
 
@@ -134,29 +188,117 @@ impl Host for Interpreter {
         unreachable!("no conversion reads the call context")
     }
 
-    /// A text object's bytes parsed as Rust parses a float, standing in for
-    /// the interpreter's number syntax; anything in `raising` raises.
     fn double_value(&mut self, object: ObjRef) -> Result<Option<f64>, Raised> {
+        self.parsed(object)
+    }
+
+    fn signed_integer(
+        &mut self,
+        object: ObjRef,
+        min: i64,
+        max: i64,
+    ) -> Result<Option<i64>, Raised> {
+        Ok(self
+            .parsed(object)?
+            .filter(|number| (min..=max).contains(number)))
+    }
+
+    fn unsigned_integer(&mut self, object: ObjRef, max: u64) -> Result<Option<u64>, Raised> {
+        Ok(self.parsed(object)?.filter(|number| *number <= max))
+    }
+
+    fn logical(&mut self, object: ObjRef) -> Result<Option<bool>, Raised> {
+        Ok(match self.parsed::<String>(object)?.as_deref() {
+            Some("0") => Some(false),
+            Some("1") => Some(true),
+            _ => None,
+        })
+    }
+
+    fn array_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Raised> {
         if self.raising.contains(&object) {
             return Err(Raised);
         }
-        let text = self.string_bytes(object).map(Cow::into_owned);
-        Ok(text.and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok()))
+        Ok(match self.heap.get(object).map(|found| &found.body) {
+            Some(Body::Array { .. }) => Some(object),
+            _ => None,
+        })
     }
 
-    /// As `double_value`, for a whole number from one up.
-    fn positive_whole_number(&mut self, object: ObjRef) -> Result<Option<isize>, Raised> {
-        if self.raising.contains(&object) {
-            return Err(Raised);
+    fn is_stem(&self, object: ObjRef) -> bool {
+        matches!(
+            self.heap.get(object).map(|found| &found.body),
+            Some(Body::Stem { .. })
+        )
+    }
+
+    fn context_stem(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Raised> {
+        let Some(mut name) = self.parsed::<String>(object)? else {
+            return Ok(None);
+        };
+        name.make_ascii_uppercase();
+        if !name.ends_with('.') {
+            name.push('.');
         }
-        let text = self.string_bytes(object).map(Cow::into_owned);
-        Ok(text
-            .and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok())
-            .filter(|number| *number >= 1))
+        Ok(self
+            .stems
+            .iter()
+            .find(|(held, _)| *held == name.as_bytes())
+            .map(|(_, stem)| *stem))
     }
 
-    fn double_object(&mut self, _value: f64, _precision: usize) -> ObjRef {
-        unreachable!("no conversion builds a number from a double")
+    fn is_instance_of(&mut self, object: ObjRef, class: Class) -> bool {
+        self.instances.contains(&(object, class))
+    }
+
+    fn pointer_value(&self, object: ObjRef) -> Option<POINTER> {
+        match &self.heap.get(object)?.body {
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => state.pointer(),
+            _ => None,
+        }
+    }
+
+    fn string_value_text(&mut self, object: ObjRef) -> Vec<u8> {
+        self.string_bytes(object)
+            .map_or_else(|| b"an Object".to_vec(), Cow::into_owned)
+    }
+
+    fn receiver(&mut self) -> ObjRef {
+        self.receiver
+    }
+
+    fn scope(&mut self) -> ObjRef {
+        self.scope
+    }
+
+    fn super_scope(&mut self) -> ObjRef {
+        self.super_scope
+    }
+
+    fn arguments(&mut self) -> ObjRef {
+        self.argument_list
+    }
+
+    fn message_name(&mut self) -> Vec<u8> {
+        self.name.clone()
+    }
+
+    fn unsigned_number(&mut self, value: u64) -> ObjRef {
+        match i64::try_from(value).ok().and_then(ObjRef::small_int) {
+            Some(object) => object,
+            None => self.text(value.to_string().as_bytes()),
+        }
+    }
+
+    fn new_string(&mut self, bytes: &[u8]) -> ObjRef {
+        self.text(bytes)
+    }
+
+    fn double_object(&mut self, value: f64, precision: usize) -> ObjRef {
+        self.text(format!("{value} at {precision}").as_bytes())
     }
 
     fn locals(&mut self) -> &mut Table {
@@ -365,80 +507,6 @@ fn the_special_rows_are_the_ones_that_consume_no_argument() {
     // A code the table does not know is `processArguments`' `default:`,
     // which consumes an argument.
     assert!(consumes_argument(9999));
-}
-
-/// Which rows have a conversion, as a set rather than one name at a time. A
-/// row that stops converting, or one that starts, changes this list.
-#[test]
-fn exactly_the_filled_rows_convert() {
-    let mut host = Interpreter::new();
-    let subject = host.text(b"a string long enough to reach the heap");
-    let mut strings = CStringPool::new();
-    let mut cx = Conversion {
-        host: &mut host,
-        strings: &mut strings,
-    };
-
-    let mut inbound = Vec::new();
-    let mut outbound = Vec::new();
-    for (code, _) in rows() {
-        fn unfilled<T>(result: &Result<T, Failure>) -> bool {
-            matches!(result, Err(Failure::Unfilled { .. }))
-        }
-        if !unfilled(&to_native(&mut cx, code, Some(subject), 1)) {
-            inbound.push(code);
-        }
-        if !unfilled(&from_native(
-            &mut cx,
-            code,
-            Value::Object(std::ptr::null_mut()),
-        )) {
-            outbound.push(code);
-        }
-    }
-    assert_eq!(
-        inbound,
-        vec![
-            code::CSELF,
-            code::DOUBLE,
-            code::CSTRING,
-            code::REXX_STRING_OBJECT,
-            code::POSITIVE_WHOLENUMBER_T,
-        ]
-    );
-    assert_eq!(
-        outbound,
-        vec![
-            code::REXX_OBJECT_PTR,
-            code::INT,
-            code::POINTER,
-            code::REXX_STRING_OBJECT,
-        ]
-    );
-}
-
-/// The refusal a row this phase has not written gives, and the phase it names.
-#[test]
-fn an_unfilled_row_refuses_and_names_its_code() {
-    let mut host = Interpreter::new();
-    let subject = host.text(b"a string long enough to reach the heap");
-    let mut strings = CStringPool::new();
-    let mut cx = Conversion {
-        host: &mut host,
-        strings: &mut strings,
-    };
-    let refusal = to_native(&mut cx, code::REXX_ARRAY_OBJECT, Some(subject), 1)
-        .expect_err("no row converts an array yet");
-    assert_eq!(
-        refusal,
-        Failure::Unfilled {
-            code: code::REXX_ARRAY_OBJECT,
-            name: "RexxArrayObject",
-            direction: Direction::ToNative,
-        }
-    );
-    assert_eq!(refusal.error_number(true), None);
-    assert!(refusal.to_string().contains("Phase 8"));
 }
 
 /// A code the header does not define is a signature error where the oracle
@@ -658,25 +726,6 @@ fn a_raise_inside_the_string_conversion_is_not_a_missing_string_value() {
     }
 }
 
-/// The direction the surface half still owes for this row.
-#[test]
-fn a_cstring_returned_by_an_extension_is_not_converted_yet() {
-    let mut host = Interpreter::new();
-    let mut strings = CStringPool::new();
-    let mut cx = Conversion {
-        host: &mut host,
-        strings: &mut strings,
-    };
-    assert_eq!(
-        from_native(&mut cx, code::CSTRING, Value::CString(std::ptr::null())),
-        Err(Failure::Unfilled {
-            code: code::CSTRING,
-            name: "CSTRING",
-            direction: Direction::FromNative,
-        })
-    );
-}
-
 // ----------------------------------------------------- the OPTIONAL_CSTRING
 
 #[test]
@@ -802,25 +851,6 @@ fn cself_outside_a_method_is_a_signature_error() {
     let refusal = to_native(&mut cx, code::CSELF, None, 1).expect_err("a call has no CSELF");
     assert_eq!(refusal, Failure::Signature);
     assert_eq!(refusal.error_number(false), Some(40918));
-}
-
-/// Minting the `.Pointer` a returned CSELF would need is Task 7's.
-#[test]
-fn a_cself_returned_by_an_extension_is_not_converted_yet() {
-    let mut host = Interpreter::new();
-    let mut strings = CStringPool::new();
-    let mut cx = Conversion {
-        host: &mut host,
-        strings: &mut strings,
-    };
-    assert_eq!(
-        from_native(&mut cx, code::CSELF, Value::Pointer(std::ptr::null_mut())),
-        Err(Failure::Unfilled {
-            code: code::CSELF,
-            name: "CSELF",
-            direction: Direction::FromNative,
-        })
-    );
 }
 
 // ------------------------------------------------------ the RexxStringObject
@@ -1152,27 +1182,6 @@ fn a_returned_object_the_table_dropped_does_not_convert_back() {
     );
 }
 
-/// `RexxObjectPtr` is a return type in the extensions this half loads, so the
-/// argument direction is a row a later task owns.
-#[test]
-fn an_object_argument_is_not_converted_yet() {
-    let mut host = Interpreter::new();
-    let subject = host.text(b"a string long enough to reach the heap");
-    let mut strings = CStringPool::new();
-    let mut cx = Conversion {
-        host: &mut host,
-        strings: &mut strings,
-    };
-    assert_eq!(
-        to_native(&mut cx, code::REXX_OBJECT_PTR, Some(subject), 1),
-        Err(Failure::Unfilled {
-            code: code::REXX_OBJECT_PTR,
-            name: "RexxObjectPtr",
-            direction: Direction::ToNative,
-        })
-    );
-}
-
 // ------------------------------------------------------------------- the int
 
 #[test]
@@ -1208,27 +1217,6 @@ fn the_int_row_refuses_a_value_of_another_type() {
     );
 }
 
-/// `int` is a return type in the extension this slice loads, so the argument
-/// direction is a row the surface half still owes.
-#[test]
-fn an_int_argument_is_not_converted_yet() {
-    let mut host = Interpreter::new();
-    let subject = host.text(b"a string long enough to reach the heap");
-    let mut strings = CStringPool::new();
-    let mut cx = Conversion {
-        host: &mut host,
-        strings: &mut strings,
-    };
-    assert_eq!(
-        to_native(&mut cx, code::INT, Some(subject), 1),
-        Err(Failure::Unfilled {
-            code: code::INT,
-            name: "int",
-            direction: Direction::ToNative,
-        })
-    );
-}
-
 // ------------------------------------------------------------ the descriptor
 
 /// What a converted argument writes into the array the extension reads. The
@@ -1255,4 +1243,842 @@ fn a_descriptor_carries_the_stripped_code_and_the_flags() {
 
     let plain = to_native(&mut cx, code::CSTRING, Some(subject), 1).expect("a string converts");
     assert_eq!(descriptor(code::CSTRING, plain).r#type, code::CSTRING);
+}
+
+// ------------------------------------------------------- every row, as a set
+
+/// A value of `repr`'s shape, converted back through `code`'s row.
+fn back(host: &mut Interpreter, code: u16, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host,
+        strings: &mut strings,
+    };
+    from_native(&mut cx, code, value)
+}
+
+/// A value of each member's shape that every row of that member accepts.
+fn sample(repr: Repr) -> Value {
+    match repr {
+        Repr::Object => Value::Object(std::ptr::null_mut()),
+        Repr::CString => Value::CString(std::ptr::null()),
+        Repr::Pointer => Value::Pointer(std::ptr::null_mut()),
+        Repr::Int => Value::Int(1),
+        Repr::Int8 => Value::Int8(1),
+        Repr::Int16 => Value::Int16(1),
+        Repr::Int32 => Value::Int32(1),
+        Repr::Int64 => Value::Int64(1),
+        Repr::Uint8 => Value::Uint8(1),
+        Repr::Uint16 => Value::Uint16(1),
+        Repr::Uint32 => Value::Uint32(1),
+        Repr::Uint64 => Value::Uint64(1),
+        Repr::Isize => Value::Isize(1),
+        Repr::Usize => Value::Usize(1),
+        Repr::Double => Value::Double(1.0),
+        Repr::Float => Value::Float(1.0),
+    }
+}
+
+/// The rows whose result `valueToObject` refuses (`NativeActivation.cpp:855`)
+/// are exactly the special ones, and every other row converts a value of its
+/// own member back. Measured through a forged extension, oracle: every
+/// special code as a routine's result type is 40.918, and `ARGLIST`, `NAME`
+/// and `CSELF` as a method's are 93.968.
+#[test]
+fn the_result_of_exactly_the_special_rows_is_refused() {
+    let mut host = Interpreter::new();
+    let mut refused = Vec::new();
+    for (code, name) in rows() {
+        let member = repr(code).expect("every row names a member");
+        match back(&mut host, code, sample(member)) {
+            Err(Failure::ResultSignature) => refused.push(code),
+            Ok(_) => {}
+            other => panic!("REXX_VALUE_{name} answered {other:?}"),
+        }
+        assert_eq!(
+            result_read(code).is_none(),
+            refused.last() == Some(&code),
+            "REXX_VALUE_{name}'s result is read though it is refused, or the other way"
+        );
+    }
+    assert_eq!(
+        refused,
+        vec![
+            code::ARGLIST,
+            code::NAME,
+            code::SCOPE,
+            code::CSELF,
+            code::OSELF,
+            code::SUPER
+        ]
+    );
+}
+
+/// A result is read as the member its row names, except a `CSTRING`, whose
+/// bytes are what comes back.
+#[test]
+fn a_result_is_read_as_its_rows_member_and_a_cstring_as_its_bytes() {
+    assert_eq!(result_read(code::CSTRING), Some(ResultRead::Text));
+    assert_eq!(
+        result_read(code::UINT16_T),
+        Some(ResultRead::Member(Repr::Uint16))
+    );
+    assert_eq!(result_read(OPTIONAL_ARGUMENT | code::INT), None);
+    assert_eq!(result_read(9999), None);
+}
+
+/// The argument list waives the check for arguments nothing consumes, and it
+/// alone does: measured, oracle, `TestArglistArg(1, 2, 3)` answers where
+/// `TestNameArg(1)` is 88.922.
+#[test]
+fn only_the_argument_list_lifts_the_too_many_check() {
+    let lifting: Vec<u16> = rows()
+        .map(|(code, _)| code)
+        .filter(|code| takes_argument_list(*code))
+        .collect();
+    assert_eq!(lifting, vec![code::ARGLIST]);
+    assert!(takes_argument_list(OPTIONAL_ARGUMENT | code::ARGLIST));
+    assert!(!takes_argument_list(9999));
+}
+
+#[test]
+fn every_new_refusal_carries_the_number_the_oracle_raises() {
+    let argument = ObjRef::NIL;
+    for (failure, method, routine) in [
+        (
+            Failure::NotNonnegative {
+                position: 1,
+                argument,
+            },
+            88904,
+            88904,
+        ),
+        (
+            Failure::OutOfRange {
+                position: 1,
+                min: 0,
+                max: 1,
+                argument,
+            },
+            88907,
+            88907,
+        ),
+        (Failure::NotLogical { argument }, 34901, 34901),
+        (Failure::NotArray { argument }, 98913, 98913),
+        (
+            Failure::NotInstance {
+                position: 1,
+                class: Class::Class,
+            },
+            88914,
+            88914,
+        ),
+        (
+            Failure::NotPointerString {
+                position: 1,
+                argument,
+            },
+            88919,
+            88919,
+        ),
+        (
+            Failure::NoStem {
+                position: 1,
+                argument,
+            },
+            93969,
+            40919,
+        ),
+    ] {
+        assert_eq!(failure.error_number(true), Some(method), "{failure:?}");
+        assert_eq!(failure.error_number(false), Some(routine), "{failure:?}");
+    }
+    assert_eq!(Class::MutableBuffer.id(), "MutableBuffer");
+    assert_eq!(Class::VariableReference.id(), "VariableReference");
+    assert_eq!(Class::Pointer.id(), "Pointer");
+}
+
+// -------------------------------------------------------- the special rows
+
+/// Runs `declared` through `to_native` with no argument, as a special row is
+/// run.
+fn special(host: &mut Interpreter, declared: u16) -> (Result<Converted, Failure>, CStringPool) {
+    let mut strings = CStringPool::new();
+    let converted = {
+        let mut cx = Conversion {
+            host,
+            strings: &mut strings,
+        };
+        to_native(&mut cx, declared, None, 1)
+    };
+    (converted, strings)
+}
+
+#[test]
+fn the_arglist_row_hands_over_the_calls_argument_array_in_a_method_and_a_routine() {
+    for method in [true, false] {
+        let mut host = Interpreter::new();
+        host.method = method;
+        host.argument_list = host.array();
+        let (converted, _) = special(&mut host, code::ARGLIST);
+        let converted = converted.expect("ARGLIST needs no argument");
+        assert_eq!(converted.flags, ARGUMENT_EXISTS | SPECIAL_ARGUMENT);
+        let Value::Object(handle) = converted.value else {
+            panic!("ARGLIST answers a handle, got {:?}", converted.value)
+        };
+        assert_eq!(host.locals().resolve(handle), Some(host.argument_list));
+    }
+    let mut host = Interpreter::new();
+    assert_eq!(
+        back(
+            &mut host,
+            code::ARGLIST,
+            Value::Object(std::ptr::null_mut())
+        ),
+        Err(Failure::ResultSignature)
+    );
+}
+
+#[test]
+fn the_name_row_points_at_the_name_the_call_was_made_by() {
+    let mut host = Interpreter::new();
+    host.method = false;
+    host.name = b"TESTNAMEARG".to_vec();
+    let (converted, strings) = special(&mut host, code::NAME);
+    let converted = converted.expect("NAME needs no argument");
+    assert_eq!(converted.flags, ARGUMENT_EXISTS | SPECIAL_ARGUMENT);
+    let Value::CString(pointer) = converted.value else {
+        panic!("NAME answers a CSTRING, got {:?}", converted.value)
+    };
+    assert_eq!(strings.bytes_at(pointer), Some(&b"TESTNAMEARG"[..]));
+    assert_eq!(
+        back(&mut host, code::NAME, Value::CString(std::ptr::null())),
+        Err(Failure::ResultSignature)
+    );
+}
+
+/// `OSELF`, `SCOPE` and `SUPER` hand a method the object the host names for
+/// each, and are a signature error in a routine: measured through a forged
+/// routine library, oracle 40.918 for each.
+fn a_method_only_object_row(declared: u16, pick: fn(&mut Interpreter) -> ObjRef) {
+    let mut host = Interpreter::new();
+    host.receiver = host.text(b"the receiver");
+    host.scope = host.text(b"the scope");
+    host.super_scope = host.text(b"the scope above");
+    let (converted, _) = special(&mut host, declared);
+    let converted = converted.expect("a method has one");
+    assert_eq!(converted.flags, ARGUMENT_EXISTS | SPECIAL_ARGUMENT);
+    let Value::Object(handle) = converted.value else {
+        panic!(
+            "code {declared} answers a handle, got {:?}",
+            converted.value
+        )
+    };
+    let expected = pick(&mut host);
+    assert_eq!(host.locals().resolve(handle), Some(expected));
+
+    host.method = false;
+    let (refused, _) = special(&mut host, declared);
+    assert_eq!(refused, Err(Failure::Signature));
+    assert_eq!(
+        back(&mut host, declared, Value::Object(std::ptr::null_mut())),
+        Err(Failure::ResultSignature)
+    );
+}
+
+#[test]
+fn the_oself_row_hands_a_method_its_receiver() {
+    a_method_only_object_row(code::OSELF, |host| host.receiver);
+}
+
+#[test]
+fn the_scope_row_hands_a_method_its_scope() {
+    a_method_only_object_row(code::SCOPE, |host| host.scope);
+}
+
+#[test]
+fn the_super_row_hands_a_method_the_scope_above_its_own() {
+    a_method_only_object_row(code::SUPER, |host| host.super_scope);
+}
+
+#[test]
+fn a_cself_is_never_converted_back() {
+    let mut host = Interpreter::new();
+    assert_eq!(
+        back(&mut host, code::CSELF, Value::Pointer(std::ptr::null_mut())),
+        Err(Failure::ResultSignature)
+    );
+}
+
+// ---------------------------------------------------------- the integer rows
+
+/// `text` converted as `declared` at position 2.
+fn convert(host: &mut Interpreter, declared: u16, text: &str) -> Result<Converted, Failure> {
+    let argument = host.text(text.as_bytes());
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host,
+        strings: &mut strings,
+    };
+    to_native(&mut cx, declared, Some(argument), 2)
+}
+
+/// A signed integer row converts both ends of its range into its own member,
+/// refuses one past each naming that range, and converts a value back to its
+/// digits. The ranges are the ones 88.907 names, measured through
+/// `orxmethod`'s echo methods.
+fn signed_row(declared: u16, min: i128, max: i128, member: fn(i128) -> Value) {
+    let mut host = Interpreter::new();
+    for end in [min, max] {
+        let converted = convert(&mut host, declared, &end.to_string()).expect("an end converts");
+        assert_eq!(converted.value, member(end), "code {declared} at {end}");
+        assert_eq!(converted.flags, ARGUMENT_EXISTS);
+        let object = back(&mut host, declared, converted.value)
+            .expect("a value converts back")
+            .expect("to an object");
+        assert_eq!(host.rendered(object), end.to_string().into_bytes());
+    }
+    for past in [min - 1, max + 1] {
+        let refused = convert(&mut host, declared, &past.to_string())
+            .expect_err("one past an end is out of range");
+        let Failure::OutOfRange {
+            position,
+            min: named_min,
+            max: named_max,
+            ..
+        } = refused
+        else {
+            panic!("code {declared} at {past} refused with {refused:?}")
+        };
+        assert_eq!((position, named_min, named_max), (2, min, max));
+    }
+}
+
+/// [`signed_row`] for an unsigned row, whose range starts at zero.
+fn unsigned_row(declared: u16, max: i128, member: fn(i128) -> Value) {
+    signed_row(declared, 0, max, member);
+}
+
+/// The value an in-range `i128` is, as a member of type `T`.
+fn narrow<T: TryFrom<i128>>(value: i128) -> T {
+    T::try_from(value).unwrap_or_else(|_| panic!("{value} is in range"))
+}
+
+#[test]
+fn the_int_row_converts_its_range_both_ways() {
+    signed_row(code::INT, i128::from(i32::MIN), i128::from(i32::MAX), |v| {
+        Value::Int(narrow(v))
+    });
+}
+
+#[test]
+fn the_int8_row_converts_its_range_both_ways() {
+    signed_row(code::INT8_T, -128, 127, |v| Value::Int8(narrow(v)));
+}
+
+#[test]
+fn the_int16_row_converts_its_range_both_ways() {
+    signed_row(code::INT16_T, -32768, 32767, |v| Value::Int16(narrow(v)));
+}
+
+#[test]
+fn the_int32_row_converts_its_range_both_ways() {
+    signed_row(
+        code::INT32_T,
+        i128::from(i32::MIN),
+        i128::from(i32::MAX),
+        |v| Value::Int32(narrow(v)),
+    );
+}
+
+#[test]
+fn the_int64_row_converts_its_range_both_ways() {
+    signed_row(
+        code::INT64_T,
+        i128::from(i64::MIN),
+        i128::from(i64::MAX),
+        |v| Value::Int64(narrow(v)),
+    );
+}
+
+#[test]
+fn the_intptr_row_converts_its_range_both_ways() {
+    signed_row(
+        code::INTPTR_T,
+        i128::from(i64::MIN),
+        i128::from(i64::MAX),
+        |v| Value::Isize(narrow(v)),
+    );
+}
+
+#[test]
+fn the_ssize_row_converts_its_range_both_ways() {
+    signed_row(
+        code::SSIZE_T,
+        i128::from(i64::MIN),
+        i128::from(i64::MAX),
+        |v| Value::Isize(narrow(v)),
+    );
+}
+
+#[test]
+fn the_wholenumber_row_converts_its_range_both_ways() {
+    signed_row(
+        code::WHOLENUMBER_T,
+        -999_999_999_999_999_999,
+        999_999_999_999_999_999,
+        |v| Value::Isize(narrow(v)),
+    );
+}
+
+#[test]
+fn the_uint8_row_converts_its_range_both_ways() {
+    unsigned_row(code::UINT8_T, 255, |v| Value::Uint8(narrow(v)));
+}
+
+#[test]
+fn the_uint16_row_converts_its_range_both_ways() {
+    unsigned_row(code::UINT16_T, 65535, |v| Value::Uint16(narrow(v)));
+}
+
+#[test]
+fn the_uint32_row_converts_its_range_both_ways() {
+    unsigned_row(code::UINT32_T, i128::from(u32::MAX), |v| {
+        Value::Uint32(narrow(v))
+    });
+}
+
+#[test]
+fn the_uint64_row_converts_its_range_both_ways() {
+    unsigned_row(code::UINT64_T, i128::from(u64::MAX), |v| {
+        Value::Uint64(narrow(v))
+    });
+}
+
+#[test]
+fn the_uintptr_row_converts_its_range_both_ways() {
+    unsigned_row(code::UINTPTR_T, i128::from(u64::MAX), |v| {
+        Value::Usize(narrow(v))
+    });
+}
+
+#[test]
+fn the_size_row_converts_its_range_both_ways() {
+    unsigned_row(code::SIZE_T, i128::from(u64::MAX), |v| {
+        Value::Usize(narrow(v))
+    });
+}
+
+#[test]
+fn the_stringsize_row_converts_its_range_both_ways() {
+    unsigned_row(code::STRINGSIZE_T, 999_999_999_999_999_999, |v| {
+        Value::Usize(narrow(v))
+    });
+}
+
+/// Measured, oracle: `TestNonnegativeWholeNumberArg(-1)` is 88.904 and `0`
+/// converts.
+#[test]
+fn the_nonnegative_whole_number_row_converts_zero_up_both_ways() {
+    let mut host = Interpreter::new();
+    let converted = convert(&mut host, code::NONNEGATIVE_WHOLENUMBER_T, "0").expect("zero");
+    assert_eq!(converted.value, Value::Isize(0));
+    assert_eq!(converted.flags, ARGUMENT_EXISTS);
+    let object = back(&mut host, code::NONNEGATIVE_WHOLENUMBER_T, Value::Isize(7))
+        .expect("converts back")
+        .expect("to an object");
+    assert_eq!(host.rendered(object), b"7");
+    let refused =
+        convert(&mut host, code::NONNEGATIVE_WHOLENUMBER_T, "-1").expect_err("below zero");
+    assert!(
+        matches!(refused, Failure::NotNonnegative { position: 2, .. }),
+        "{refused:?}"
+    );
+    assert!(
+        convert(
+            &mut host,
+            code::NONNEGATIVE_WHOLENUMBER_T,
+            "1000000000000000000"
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn a_positive_whole_number_converts_back_to_its_digits() {
+    let mut host = Interpreter::new();
+    let object = back(&mut host, code::POSITIVE_WHOLENUMBER_T, Value::Isize(16))
+        .expect("converts back")
+        .expect("to an object");
+    assert_eq!(host.rendered(object), b"16");
+}
+
+#[test]
+fn a_raise_reading_an_integer_is_the_hosts_condition() {
+    for declared in [code::INT, code::UINT64_T, code::NONNEGATIVE_WHOLENUMBER_T] {
+        let mut host = Interpreter::new();
+        let subject = host.text(b"7");
+        host.raising.push(subject);
+        let mut strings = CStringPool::new();
+        let mut cx = Conversion {
+            host: &mut host,
+            strings: &mut strings,
+        };
+        assert_eq!(
+            to_native(&mut cx, declared, Some(subject), 1),
+            Err(Failure::Raised),
+            "code {declared}"
+        );
+    }
+}
+
+// ------------------------------------------------------------ the logical_t
+
+/// Measured, oracle: `TestLogicalArg(3)` is 34.901, and any value but zero
+/// an extension returns is `1`.
+#[test]
+fn the_logical_row_converts_zero_and_one_and_any_non_zero_back_as_one() {
+    let mut host = Interpreter::new();
+    for (text, truth) in [("0", 0), ("1", 1)] {
+        let converted = convert(&mut host, code::LOGICAL_T, text).expect("a logical");
+        assert_eq!(converted.value, Value::Usize(truth));
+    }
+    let refused = convert(&mut host, code::LOGICAL_T, "2").expect_err("not logical");
+    assert!(matches!(refused, Failure::NotLogical { .. }), "{refused:?}");
+    for (written, answer) in [(0, &b"0"[..]), (1, b"1"), (5, b"1"), (usize::MAX, b"1")] {
+        let object = back(&mut host, code::LOGICAL_T, Value::Usize(written))
+            .expect("converts back")
+            .expect("to an object");
+        assert_eq!(host.rendered(object), answer, "written {written}");
+    }
+}
+
+// ------------------------------------------------------ the double and float
+
+#[test]
+fn a_double_result_is_rendered_at_nine_digits() {
+    let mut host = Interpreter::new();
+    let object = back(&mut host, code::DOUBLE, Value::Double(2.25))
+        .expect("converts back")
+        .expect("to an object");
+    assert_eq!(host.rendered(object), b"2.25 at 9");
+}
+
+/// Measured, oracle: `TestFloatArg('zz')` is 88.921 as a double's is, and a
+/// float result renders as the double it widens to, at nine digits.
+#[test]
+fn the_float_row_narrows_a_double_and_widens_it_back() {
+    let mut host = Interpreter::new();
+    let converted = convert(&mut host, code::FLOAT, "1.5").expect("1.5 converts");
+    assert_eq!(converted.value, Value::Float(1.5));
+    assert_eq!(converted.flags, ARGUMENT_EXISTS);
+    let refused = convert(&mut host, code::FLOAT, "zz").expect_err("no double");
+    assert!(
+        matches!(refused, Failure::InvalidDouble { position: 2, .. }),
+        "{refused:?}"
+    );
+    let object = back(&mut host, code::FLOAT, Value::Float(0.5))
+        .expect("converts back")
+        .expect("to an object");
+    assert_eq!(host.rendered(object), b"0.5 at 9");
+}
+
+// ------------------------------------------------------- the CSTRING result
+
+/// A `CSTRING` result is the pool's copy of what the extension answered, cut
+/// at its first NUL; a null one is no object, and a pointer the pool did not
+/// mint is refused rather than read. Measured, oracle: a routine answering
+/// `"ab\0cd"` has length 2 and one answering `NULL` is 44.1.
+#[test]
+fn a_cstring_result_is_the_pools_bytes_up_to_the_first_nul() {
+    let mut host = Interpreter::new();
+    let mut strings = CStringPool::new();
+    let whole = strings.intern(b"hello");
+    let cut = strings.intern(b"ab\0cd");
+    let foreign = std::ptr::without_provenance::<std::ffi::c_char>(0x5eed);
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let answered = from_native(&mut cx, code::CSTRING, Value::CString(whole))
+        .expect("converts back")
+        .expect("to an object");
+    let cut_answer = from_native(&mut cx, code::CSTRING, Value::CString(cut))
+        .expect("converts back")
+        .expect("to an object");
+    assert_eq!(
+        from_native(&mut cx, code::CSTRING, Value::CString(std::ptr::null())),
+        Ok(None)
+    );
+    assert_eq!(
+        from_native(&mut cx, code::CSTRING, Value::CString(foreign)),
+        Err(Failure::StaleHandle)
+    );
+    assert_eq!(
+        from_native(&mut cx, code::CSTRING, Value::Omitted),
+        Err(Failure::ResultSignature)
+    );
+    assert_eq!(host.rendered(answered), b"hello");
+    assert_eq!(host.rendered(cut_answer), b"ab");
+}
+
+// ----------------------------------------------------------- the object rows
+
+#[test]
+fn the_object_row_hands_over_the_argument_itself() {
+    let mut host = Interpreter::new();
+    let subject = host.text(b"a string long enough to reach the heap");
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let converted =
+        to_native(&mut cx, code::REXX_OBJECT_PTR, Some(subject), 1).expect("anything converts");
+    assert_eq!(converted.flags, ARGUMENT_EXISTS);
+    let Value::Object(handle) = converted.value else {
+        panic!("an object row answers a handle, got {:?}", converted.value)
+    };
+    assert_eq!(cx.host.locals().resolve(handle), Some(subject));
+}
+
+/// Measured, oracle: `TestArrayArg(.object~new)` is 98.913 and a string
+/// converts through its `makeArray`.
+#[test]
+fn the_array_row_hands_over_what_the_host_converts_and_refuses_the_rest() {
+    let mut host = Interpreter::new();
+    let array = host.array();
+    let refused_object = host.text(b"no array value");
+    let raising = host.array();
+    host.raising.push(raising);
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let converted = to_native(&mut cx, code::REXX_ARRAY_OBJECT, Some(array), 1).expect("converts");
+    assert_eq!(converted.flags, ARGUMENT_EXISTS);
+    let Value::Object(handle) = converted.value else {
+        panic!("an array row answers a handle, got {:?}", converted.value)
+    };
+    assert_eq!(cx.host.locals().resolve(handle), Some(array));
+    assert_eq!(
+        from_native(&mut cx, code::REXX_ARRAY_OBJECT, converted.value),
+        Ok(Some(array))
+    );
+    assert_eq!(
+        to_native(&mut cx, code::REXX_ARRAY_OBJECT, Some(refused_object), 1),
+        Err(Failure::NotArray {
+            argument: refused_object
+        })
+    );
+    assert_eq!(
+        to_native(&mut cx, code::REXX_ARRAY_OBJECT, Some(raising), 1),
+        Err(Failure::Raised)
+    );
+}
+
+/// A stem converts in a method and a call alike; a stem's name only in a
+/// call. Measured, oracle: `TestStemArg('zz')` is 93.969 from `orxmethod` and
+/// the caller's stem from `orxfunction`, whose `TestStemArg('a.b')` is 40.919.
+#[test]
+fn the_stem_row_takes_a_stem_anywhere_and_a_name_only_in_a_call() {
+    let mut host = Interpreter::new();
+    let stem = host.stem(b"X.");
+    let held = host.stem(b"ZZ.");
+    host.stems.push((b"ZZ.".to_vec(), held));
+    let name = host.text(b"zz");
+    let unknown = host.text(b"a.b");
+    let mut strings = CStringPool::new();
+    let handed = |cx: &mut Conversion<'_>, converted: Converted| match converted.value {
+        Value::Object(handle) => cx.host.locals().resolve(handle),
+        other => panic!("a stem row answers a handle, got {other:?}"),
+    };
+    {
+        let mut cx = Conversion {
+            host: &mut host,
+            strings: &mut strings,
+        };
+        let converted = to_native(&mut cx, code::REXX_STEM_OBJECT, Some(stem), 1).expect("a stem");
+        assert_eq!(handed(&mut cx, converted), Some(stem));
+        assert_eq!(
+            to_native(&mut cx, code::REXX_STEM_OBJECT, Some(name), 1),
+            Err(Failure::NoStem {
+                position: 1,
+                argument: name
+            }),
+            "a method has no caller's variables to name"
+        );
+        let handle = cx.host.locals().register(stem);
+        assert_eq!(
+            from_native(&mut cx, code::REXX_STEM_OBJECT, Value::Object(handle)),
+            Ok(Some(stem))
+        );
+    }
+
+    host.method = false;
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let converted = to_native(&mut cx, code::REXX_STEM_OBJECT, Some(name), 1).expect("a name");
+    assert_eq!(handed(&mut cx, converted), Some(held));
+    let converted = to_native(&mut cx, code::REXX_STEM_OBJECT, Some(stem), 1).expect("a stem");
+    assert_eq!(handed(&mut cx, converted), Some(stem));
+    assert_eq!(
+        to_native(&mut cx, code::REXX_STEM_OBJECT, Some(unknown), 3),
+        Err(Failure::NoStem {
+            position: 3,
+            argument: unknown
+        })
+    );
+}
+
+/// An argument whose row requires an instance of `class` is handed over when
+/// the host says it is one, and refused naming the class otherwise.
+/// Measured, oracle, 88.914 for each class.
+fn an_instance_row(declared: u16, class: Class) {
+    let mut host = Interpreter::new();
+    let instance = host.text(b"an instance");
+    let other = host.text(b"something else");
+    host.instances.push((instance, class));
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let converted = to_native(&mut cx, declared, Some(instance), 1).expect("an instance");
+    assert_eq!(converted.flags, ARGUMENT_EXISTS);
+    let Value::Object(handle) = converted.value else {
+        panic!(
+            "code {declared} answers a handle, got {:?}",
+            converted.value
+        )
+    };
+    assert_eq!(cx.host.locals().resolve(handle), Some(instance));
+    assert_eq!(
+        from_native(&mut cx, declared, converted.value),
+        Ok(Some(instance))
+    );
+    assert_eq!(
+        to_native(&mut cx, declared, Some(other), 2),
+        Err(Failure::NotInstance { position: 2, class })
+    );
+}
+
+#[test]
+fn the_class_row_takes_only_a_class() {
+    an_instance_row(code::REXX_CLASS_OBJECT, Class::Class);
+}
+
+#[test]
+fn the_mutable_buffer_row_takes_only_a_mutable_buffer() {
+    an_instance_row(code::REXX_MUTABLE_BUFFER_OBJECT, Class::MutableBuffer);
+}
+
+#[test]
+fn the_variable_reference_row_takes_only_a_variable_reference() {
+    an_instance_row(
+        code::REXX_VARIABLE_REFERENCE_OBJECT,
+        Class::VariableReference,
+    );
+}
+
+// --------------------------------------------------- the POINTER rows
+
+/// Measured, oracle: `TestPointerArg('x')` is 88.914 naming the Pointer
+/// class, and `TestPointerArg(TestPointerValue())` is `1`.
+#[test]
+fn the_pointer_row_unwraps_a_pointer_and_refuses_anything_else() {
+    let mut host = Interpreter::new();
+    let address = std::ptr::without_provenance_mut::<std::ffi::c_void>(0x5eed_0000);
+    let pointer = host.new_pointer(address);
+    let other = host.text(b"x");
+    let mut strings = CStringPool::new();
+    let mut cx = Conversion {
+        host: &mut host,
+        strings: &mut strings,
+    };
+    let converted = to_native(&mut cx, code::POINTER, Some(pointer), 1).expect("a pointer");
+    assert_eq!(converted.value, Value::Pointer(address));
+    assert_eq!(converted.flags, ARGUMENT_EXISTS);
+    assert_eq!(
+        to_native(&mut cx, code::POINTER, Some(other), 1),
+        Err(Failure::NotInstance {
+            position: 1,
+            class: Class::Pointer
+        })
+    );
+    let answered = from_native(&mut cx, code::POINTER, Value::Pointer(address))
+        .expect("converts back")
+        .expect("to an object");
+    assert_eq!(cx.host.pointer_value(answered), Some(address));
+}
+
+#[test]
+fn the_pointer_string_row_reads_an_address_and_writes_one_back() {
+    let mut host = Interpreter::new();
+    let converted = convert(&mut host, code::POINTERSTRING, "0x5eed").expect("an address");
+    assert_eq!(
+        converted.value,
+        Value::Pointer(std::ptr::without_provenance_mut(0x5eed))
+    );
+    assert_eq!(converted.flags, ARGUMENT_EXISTS);
+    let refused = convert(&mut host, code::POINTERSTRING, "zz").expect_err("no address");
+    assert!(
+        matches!(refused, Failure::NotPointerString { position: 2, .. }),
+        "{refused:?}"
+    );
+    for (address, rendered) in [(0x5eed, &b"0x5eed"[..]), (0, b"0x0")] {
+        let object = back(
+            &mut host,
+            code::POINTERSTRING,
+            Value::Pointer(std::ptr::without_provenance_mut(address)),
+        )
+        .expect("converts back")
+        .expect("to an object");
+        assert_eq!(host.rendered(object), rendered);
+    }
+}
+
+/// The forms measured on the oracle over the address `TestPointerStringValue`
+/// answers, here over `0x7f5d14eeece0`, and what `strtoul` reads past the end
+/// of the range.
+#[test]
+fn a_pointer_string_is_read_as_sscanf_reads_0x_p() {
+    let hex = "7f5d14eeece0";
+    let address = 0x7f5d_14ee_ece0_usize;
+    for (text, read) in [
+        (format!("0x{hex}"), Some(address)),
+        (format!("0x0x{hex}"), Some(address)),
+        (format!("0x0X{hex}"), Some(address)),
+        (format!("0x {hex}"), Some(address)),
+        (format!("0x\t{hex}"), Some(address)),
+        (format!("0x\n{hex}"), Some(address)),
+        (format!("0x\u{b}{hex}"), Some(address)),
+        (format!("0x{hex}zz"), Some(address)),
+        (format!("0x{}", hex.to_uppercase()), Some(address)),
+        (format!("0x+{hex}"), Some(address)),
+        (format!("0x000{hex}"), Some(address)),
+        (format!("0x-{:x}", address.wrapping_neg()), Some(address)),
+        (format!("0x-0x{:x}", address.wrapping_neg()), Some(address)),
+        ("0x0".to_string(), Some(0)),
+        (format!("0x1{}", "0".repeat(17)), Some(usize::MAX)),
+        (format!("0x-1{}", "0".repeat(17)), Some(usize::MAX)),
+        (format!("0X{hex}"), None),
+        (format!(" 0x{hex}"), None),
+        ("0xg".to_string(), None),
+        ("0x0xg".to_string(), None),
+        ("0x0x".to_string(), None),
+        ("0x-".to_string(), None),
+        ("0x ".to_string(), None),
+        ("0x--1".to_string(), None),
+        ("0x+-1".to_string(), None),
+        (format!("0x0x {hex}"), None),
+        (format!("0x\0{hex}"), None),
+        ("12".to_string(), None),
+        ("0x".to_string(), None),
+    ] {
+        assert_eq!(pointer_string(text.as_bytes()), read, "{text:?}");
+    }
 }

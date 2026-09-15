@@ -43,6 +43,11 @@ pub const MIN_EXPONENT: i32 = -999_999_999;
 /// width of that integer in decimal digits.
 pub const ARGUMENT_DIGITS: usize = 18;
 
+/// `Numerics::DIGITS64` (`interpreter/runtime/Numerics.hpp:120`), the precision
+/// a native argument converts to a 64-bit integer under, and the widest
+/// integer [`Number::int64_value`] builds.
+pub const DIGITS64: usize = 20;
+
 /// What arithmetic can fail with, carrying the interpreter's error numbers.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ArithError {
@@ -218,6 +223,48 @@ fn unsigned_value(digits: &[u8], length: i64, carry: bool, exponent: i64, max: i
         return None;
     }
     Some(number)
+}
+
+/// `NumberString::createUnsignedInt64Value` (`NumberStringClass.cpp:863`): the
+/// first `length` digits, plus a carry, scaled by `10^exponent`, and no more
+/// than `max`.
+///
+/// Each step is refused only where it answers less than the value before it,
+/// which is the C++'s own overflow test: a multiplication by ten can wrap to a
+/// larger value, and that step passes.
+fn wrapping_unsigned_value(
+    digits: &[u8],
+    length: i64,
+    carry: bool,
+    exponent: i64,
+    max: u64,
+) -> Option<u64> {
+    if exponent + length > i64::try_from(DIGITS64).ok()? {
+        return None;
+    }
+    let mut number: u64 = 0;
+    for &digit in digits.iter().take(usize::try_from(length).ok()?) {
+        let next = number.wrapping_mul(10).wrapping_add(u64::from(digit));
+        if next < number {
+            return None;
+        }
+        number = next;
+    }
+    if carry {
+        let next = number.wrapping_add(1);
+        if next < number {
+            return None;
+        }
+        number = next;
+    }
+    for _ in 0..exponent {
+        let next = number.wrapping_mul(10);
+        if next < number {
+            return None;
+        }
+        number = next;
+    }
+    (number <= max).then_some(number)
 }
 
 /// The `digits + 1` working length every operator truncates its operands to,
@@ -673,6 +720,7 @@ impl Number {
         let precision = i64::try_from(digits).ok()?;
         let mut length = i64::try_from(self.digits.len()).ok()?;
         let mut exponent = i64::from(self.exponent);
+        let carry;
 
         // The common case: no more digits than the precision, and nothing after
         // the decimal point.
@@ -680,9 +728,36 @@ impl Number {
             return Some(unsigned_value(&self.digits, length, false, exponent, max)? * sign);
         }
 
-        // `checkIntegerDigits` (`NumberStringClass.cpp:937`). Round to the
-        // precision, then require every surviving decimal to be a zero, or a
-        // nine when the rounding carried.
+        (length, exponent, carry) = self.integer_digits(digits)?;
+
+        // The point now sits left of the first digit, so the value is whatever
+        // the carry contributed and nothing else. The C++ does NOT apply the
+        // sign here, and that is reproduced rather than corrected: `numberValue`
+        // returns `carry ? 1 : 0` with no `* numberSign`. It is unobservable
+        // through the only caller that can reach it, because a numeric `TRACE`
+        // is rejected at RUN time with error 24.901, "Numeric TRACE requests are
+        // valid only from interactive debugging", whatever value the parse
+        // produced.
+        if -exponent >= length {
+            return Some(i64::from(carry));
+        }
+
+        let converted = if exponent < 0 {
+            unsigned_value(&self.digits, length + exponent, carry, 0, max)?
+        } else {
+            unsigned_value(&self.digits, length, carry, exponent, max)?
+        };
+        Some(converted * sign)
+    }
+
+    /// `NumberString::checkIntegerDigits` (`NumberStringClass.cpp:937`): the
+    /// length and exponent left once the digits are cut to `digits`, and
+    /// whether the first digit cut carries, or `None` where a surviving
+    /// decimal is not a zero (a nine, under a carry).
+    fn integer_digits(&self, digits: usize) -> Option<(i64, i64, bool)> {
+        let precision = i64::try_from(digits).ok()?;
+        let mut length = i64::try_from(self.digits.len()).ok()?;
+        let mut exponent = i64::from(self.exponent);
         let mut carry = false;
         if length > precision {
             exponent += length - precision;
@@ -717,25 +792,73 @@ impl Number {
                 }
             }
         }
+        Some((length, exponent, carry))
+    }
 
-        // The point now sits left of the first digit, so the value is whatever
-        // the carry contributed and nothing else. The C++ does NOT apply the
-        // sign here, and that is reproduced rather than corrected: `numberValue`
-        // returns `carry ? 1 : 0` with no `* numberSign`. It is unobservable
-        // through the only caller that can reach it, because a numeric `TRACE`
-        // is rejected at RUN time with error 24.901, "Numeric TRACE requests are
-        // valid only from interactive debugging", whatever value the parse
-        // produced.
+    /// `NumberString::int64Value` (`NumberStringClass.cpp:1024`): the value as
+    /// an `i64` under `digits` precision, or `None` where it has none.
+    ///
+    /// Two answers are the C++'s rather than arithmetic's, each measured on the
+    /// oracle through `orxmethod`: a value whose digits all round away into a
+    /// carry is `1` whatever its sign (`-0.999999999999999999999` is `1`), and
+    /// the overflow test can miss a wrap ([`wrapping_unsigned_value`]), so
+    /// `21000000000000000000` is `2553255926290448384`.
+    pub fn int64_value(&self, digits: usize) -> Option<i64> {
+        if self.is_zero() {
+            return Some(0);
+        }
+        let precision = i64::try_from(digits).ok()?;
+        let length = i64::try_from(self.digits.len()).ok()?;
+        let exponent = i64::from(self.exponent);
+        let magnitude = i64::MAX.unsigned_abs();
+        if length <= precision && exponent >= 0 {
+            // One past `i64::MAX`, which only a negative value may reach.
+            let number =
+                wrapping_unsigned_value(&self.digits, length, false, exponent, magnitude + 1)?;
+            if number > magnitude {
+                return self.negative.then_some(i64::MIN);
+            }
+            let number = i64::try_from(number).ok()?;
+            return Some(if self.negative { -number } else { number });
+        }
+        let (length, exponent, carry) = self.integer_digits(digits)?;
         if -exponent >= length {
             return Some(i64::from(carry));
         }
-
-        let converted = if exponent < 0 {
-            unsigned_value(&self.digits, length + exponent, carry, 0, max)?
+        let number = if exponent < 0 {
+            wrapping_unsigned_value(&self.digits, length + exponent, carry, 0, magnitude)?
         } else {
-            unsigned_value(&self.digits, length, carry, exponent, max)?
+            wrapping_unsigned_value(&self.digits, length, carry, exponent, magnitude)?
         };
-        Some(converted * sign)
+        let number = i64::try_from(number).ok()?;
+        Some(if self.negative { -number } else { number })
+    }
+
+    /// `NumberString::unsignedInt64Value` (`NumberStringClass.cpp:1132`): the
+    /// value as a `u64` under `digits` precision, or `None` where it has none
+    /// or is negative. The wrap [`Number::int64_value`] describes applies.
+    pub fn unsigned_int64_value(&self, digits: usize) -> Option<u64> {
+        if self.is_zero() {
+            return Some(0);
+        }
+        if self.negative {
+            return None;
+        }
+        let precision = i64::try_from(digits).ok()?;
+        let length = i64::try_from(self.digits.len()).ok()?;
+        let exponent = i64::from(self.exponent);
+        if length <= precision && exponent >= 0 {
+            return wrapping_unsigned_value(&self.digits, length, false, exponent, u64::MAX);
+        }
+        let (length, exponent, carry) = self.integer_digits(digits)?;
+        if -exponent >= length {
+            return Some(u64::from(carry));
+        }
+        if exponent < 0 {
+            wrapping_unsigned_value(&self.digits, length + exponent, carry, 0, u64::MAX)
+        } else {
+            wrapping_unsigned_value(&self.digits, length, carry, exponent, u64::MAX)
+        }
     }
 
     /// Rounds to at most `digits` significant digits, half-up.

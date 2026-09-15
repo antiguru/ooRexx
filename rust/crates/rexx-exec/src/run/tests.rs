@@ -7378,13 +7378,10 @@ fn a_library_backed_routine_installs_and_runs_when_it_is_called() {
 
 /// **An extension reading the interpreter instance through its thread context
 /// reaches a table rather than a null pointer.** `orxmethod`'s
-/// `TestInterpreterVersion` reads `context->InterpreterVersion()`; measured,
-/// oracle rc 0 printing `328448`, and the crate crashed at rc 139 with both
-/// descriptors empty while `instance` was null. Its `size_t` result is a
-/// conversion row this crate does not fill yet, so the call now ends in that
-/// row's refusal with the earlier output kept. The test loads this worktree's
-/// own `build/lib/liborxmethod.so`; the measurements used the oracle
-/// checkout's.
+/// `TestInterpreterVersion` reads `context->InterpreterVersion()` and answers
+/// it as a `size_t`; measured, oracle rc 0 printing `328448`. The test loads
+/// this worktree's own `build/lib/liborxmethod.so`; the measurement used the
+/// oracle checkout's.
 #[test]
 fn an_extension_reading_the_instance_reaches_its_table() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -7402,13 +7399,13 @@ fn an_extension_reading_the_instance_reaches_its_table() {
             .to_vec(),
         invocation,
     );
-    assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
-    assert_eq!(outcome.stdout, b"before\n");
     assert_eq!(
-        String::from_utf8_lossy(&outcome.stderr),
-        "rexx-exec: Phase 8 owes the FromNative conversion for REXX_VALUE_size_t (33) is not \
-         implemented (Phase 8)\n"
+        outcome.exit_code,
+        0,
+        "stderr {}",
+        String::from_utf8_lossy(&outcome.stderr)
     );
+    assert_eq!(outcome.stdout, b"before\n328448\n");
 }
 
 /// **An extension that reaches an interface member this crate has not written

@@ -1342,6 +1342,114 @@ impl Raised {
         raised
     }
 
+    /// 88.904: a native argument declared `nonnegative_wholenumber_t` is not
+    /// a whole number from zero up. Measured, oracle rc 168, through
+    /// `orxmethod`'s `TestNonnegativeWholeNumberArg(-1)`: `The 1 argument must
+    /// be zero or a positive whole number; found "-1".`
+    pub(crate) fn native_argument_not_nonnegative(position: usize, found: &[u8]) -> Raised {
+        let mut raised = Raised::syntax(
+            88,
+            904,
+            vec![position.to_string().into_bytes(), found.to_vec()],
+        );
+        raised.delivery.lineless = true;
+        raised
+    }
+
+    /// 88.907: a native argument declared as a C integer is not a whole number
+    /// in that type's range. Measured, oracle rc 168, through `orxmethod`'s
+    /// `TestIntArg('x')`: `Argument 1 must be in the range -2147483648 to
+    /// 2147483647; found "x".`
+    pub(crate) fn native_argument_outside_range(
+        position: usize,
+        min: i128,
+        max: i128,
+        found: &[u8],
+    ) -> Raised {
+        let mut raised = Raised::syntax(
+            88,
+            907,
+            vec![
+                position.to_string().into_bytes(),
+                min.to_string().into_bytes(),
+                max.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        );
+        raised.delivery.lineless = true;
+        raised
+    }
+
+    /// 34.901: a native argument declared `logical_t` is not exactly `0` or
+    /// `1`. Measured, oracle rc 222, through `orxmethod`'s
+    /// `TestLogicalArg(3)`: `Logical value must be exactly "0" or "1"; found
+    /// "3".`
+    pub(crate) fn native_argument_not_logical(found: &[u8]) -> Raised {
+        let mut raised = Raised::syntax(34, 901, vec![found.to_vec()]);
+        raised.delivery.lineless = true;
+        raised
+    }
+
+    /// 98.913: a native argument declared `RexxArrayObject` has no
+    /// single-dimensional array value. Measured, oracle rc 158, through
+    /// `orxmethod`'s `TestArrayArg(.object~new)`: `Unable to convert object "an
+    /// Object" to a single-dimensional array value.`
+    pub(crate) fn native_argument_not_an_array(found: &[u8]) -> Raised {
+        let mut raised = Raised::syntax(98, 913, vec![found.to_vec()]);
+        raised.delivery.lineless = true;
+        raised
+    }
+
+    /// 88.914: a native argument is not an instance of the class its
+    /// declared type requires. Measured, oracle rc 168, through `orxmethod`'s
+    /// `TestClassArg(1)`: `Argument 1 must be an instance of the Class class.`
+    pub(crate) fn native_argument_not_an_instance(position: usize, class: &str) -> Raised {
+        let mut raised = Raised::syntax(
+            88,
+            914,
+            vec![position.to_string().into_bytes(), class.as_bytes().to_vec()],
+        );
+        raised.delivery.lineless = true;
+        raised
+    }
+
+    /// 88.919: a native argument declared `POINTERSTRING` is not an address
+    /// written after `0x`. Measured, oracle rc 168, through `orxmethod`'s
+    /// `TestPointerStringArg('zz')`: `Argument 1 is not in valid pointer
+    /// format; found "zz".`
+    pub(crate) fn native_argument_not_a_pointer(position: usize, found: &[u8]) -> Raised {
+        let mut raised = Raised::syntax(
+            88,
+            919,
+            vec![position.to_string().into_bytes(), found.to_vec()],
+        );
+        raised.delivery.lineless = true;
+        raised
+    }
+
+    /// A native argument declared `RexxStemObject` is not a stem, nor in a
+    /// routine a stem's name: 93.969 in a method and 40.919 in a routine
+    /// (`NativeActivation::reportStemError`,
+    /// `execution/NativeActivation.cpp:202`). Measured, oracle, through
+    /// `orxmethod`'s `TestStemArg('zz')`, rc 163: `Method argument 1 must have
+    /// a stem object value; found "zz".`; through `orxfunction`'s
+    /// `TestStemArg('a.b')`: `Argument 1 must have a stem object or stem name
+    /// value; found "a.b".`
+    pub(crate) fn native_argument_not_a_stem(
+        method: bool,
+        position: usize,
+        found: &[u8],
+    ) -> Raised {
+        let inserts = vec![position.to_string().into_bytes(), found.to_vec()];
+        let mut raised = if method {
+            Raised::syntax(93, 969, inserts)
+        } else {
+            Raised::syntax(40, 919, inserts)
+        };
+        raised.delivery.lineless = true;
+        raised
+    }
+
     /// 88.909 for an argument the oracle names rather than numbers.
     pub(crate) fn named_argument_needs_a_string_value(argument: &str) -> Raised {
         Raised::syntax(88, 909, vec![argument.as_bytes().to_vec()])

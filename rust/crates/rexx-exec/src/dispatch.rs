@@ -2072,13 +2072,14 @@ impl Interp {
     /// `RexxActivation::run` sets on a method activation
     /// (`RexxActivation.cpp:535`-`536`).
     fn super_scope_for(&mut self, receiver: ObjRef, resolution: Resolution) -> Option<ObjRef> {
+        self.super_scope_of(receiver, resolution.scope)
+    }
+
+    /// [`Interp::super_scope_for`] for a method whose scope is `scope`.
+    pub(crate) fn super_scope_of(&mut self, receiver: ObjRef, scope: ObjRef) -> Option<ObjRef> {
         match self.receiver_behaviour(receiver).ok()? {
-            Behaviour::Instance { methods, .. } => {
-                self.classes().super_scope_at(methods, resolution.scope)
-            }
-            Behaviour::ClassSide(class) => {
-                self.classes().class_super_scope(class, resolution.scope)
-            }
+            Behaviour::Instance { methods, .. } => self.classes().super_scope_at(methods, scope),
+            Behaviour::ClassSide(class) => self.classes().class_super_scope(class, scope),
         }
     }
 
@@ -2196,7 +2197,7 @@ impl Interp {
                 }
             },
             Invocable::Library(binding) => {
-                let outcome = self.run_library_method(&binding, resolution, receiver, args);
+                let outcome = self.run_library_method(&binding, resolution, receiver, name, args);
                 if outcome.is_err() {
                     let scope = self.classes().id_string(resolution.scope).to_string();
                     self.blame_external_method(name, &scope, resolution.method);

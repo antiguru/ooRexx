@@ -91,15 +91,6 @@ pub mod code {
     pub const REXX_VARIABLE_REFERENCE_OBJECT: u16 = 40;
 }
 
-/// Which way a conversion runs.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Direction {
-    /// A Rexx object into the C value the signature declares.
-    ToNative,
-    /// A value the extension wrote back into a Rexx object.
-    FromNative,
-}
-
 /// A conversion that could not be made.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Failure {
@@ -111,23 +102,36 @@ pub enum Failure {
     /// know, or a special argument asked for outside a method.
     Signature,
     /// The declared return type cannot be converted back: a code the table
-    /// does not know, or a `Value` that does not match it. The oracle raises
+    /// does not know, one `valueToObject` refuses, or a `Value` that does not
+    /// match it. The oracle raises
     /// this once the extension has run (`NativeActivation.cpp:1301-1310`).
     ResultSignature,
     /// The extension reached an interface member this phase has not written,
     /// named `Table.Member`; the member recorded itself and returned.
     UnfilledSlot { entry: &'static str },
-    /// A row whose conversion this phase has not written.
-    Unfilled {
-        code: u16,
-        name: &'static str,
-        direction: Direction,
-    },
     /// The argument has no value as a C `double`.
     InvalidDouble { position: usize, argument: ObjRef },
-    /// The argument is not a whole number from one to
-    /// `Numerics::MAX_WHOLENUMBER`.
+    /// The argument is not a whole number from one to [`MAX_WHOLENUMBER`].
     NotPositive { position: usize, argument: ObjRef },
+    /// The argument is not a whole number from zero to [`MAX_WHOLENUMBER`].
+    NotNonnegative { position: usize, argument: ObjRef },
+    /// The argument is not a whole number from `min` to `max`.
+    OutOfRange {
+        position: usize,
+        min: i128,
+        max: i128,
+        argument: ObjRef,
+    },
+    /// The argument is not exactly `0` or `1`.
+    NotLogical { argument: ObjRef },
+    /// The argument has no single-dimensional array value.
+    NotArray { argument: ObjRef },
+    /// The argument is not an instance of the class `class` names.
+    NotInstance { position: usize, class: Class },
+    /// The argument's string value is not an address written after `0x`.
+    NotPointerString { position: usize, argument: ObjRef },
+    /// The argument is not a stem, nor in a call the name of one.
+    NoStem { position: usize, argument: ObjRef },
     /// More arguments were supplied than the signature consumes.
     /// `expected` is the number it does consume.
     TooManyArguments { expected: usize },
@@ -168,6 +172,15 @@ impl Failure {
             // 88.905".
             Failure::InvalidDouble { .. } => Some(88921),
             Failure::NotPositive { .. } => Some(88905),
+            // Measured 2026-09-15 against the oracle through `orxmethod` and
+            // `orxfunction`'s echo methods and routines.
+            Failure::NotNonnegative { .. } => Some(88904),
+            Failure::OutOfRange { .. } => Some(88907),
+            Failure::NotLogical { .. } => Some(34901),
+            Failure::NotArray { .. } => Some(98913),
+            Failure::NotInstance { .. } => Some(88914),
+            Failure::NotPointerString { .. } => Some(88919),
+            Failure::NoStem { .. } => Some(if method { 93969 } else { 40919 }),
             // Measured 2026-09-15 against the oracle through a forged routine
             // library: a routine declaring `CSELF` answers "Error 40.918".
             Failure::Signature | Failure::ResultSignature => {
@@ -176,14 +189,42 @@ impl Failure {
             // Measured 2026-09-14 against the oracle: a third argument to
             // `RegularExpression~new` answers "Error 88.922".
             Failure::TooManyArguments { .. } => Some(88922),
-            Failure::Unfilled { .. }
-            | Failure::UnfilledSlot { .. }
+            Failure::UnfilledSlot { .. }
             | Failure::StaleHandle
             | Failure::Raised
             | Failure::ClassicStyle => None,
         }
     }
 }
+
+/// The classes an argument row requires an instance of.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Class {
+    Class,
+    Pointer,
+    MutableBuffer,
+    VariableReference,
+}
+
+impl Class {
+    /// The class's id, which is what 88.914 names.
+    pub fn id(self) -> &'static str {
+        match self {
+            Class::Class => "Class",
+            Class::Pointer => "Pointer",
+            Class::MutableBuffer => "MutableBuffer",
+            Class::VariableReference => "VariableReference",
+        }
+    }
+}
+
+/// `Numerics::MAX_WHOLENUMBER` (`interpreter/runtime/Numerics.hpp:86`).
+pub const MAX_WHOLENUMBER: i64 = 999_999_999_999_999_999;
+
+/// `Numerics::DEFAULT_DIGITS`, the precision a `double` or `float` result is
+/// rendered at: measured, oracle, `TestDoubleArg(2/3)` is `0.66667` under
+/// `NUMERIC DIGITS 5` and `0.666666667` under `20`.
+const RESULT_DIGITS: usize = 9;
 
 impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -200,20 +241,36 @@ impl std::fmt::Display for Failure {
             Failure::NotPositive { position, .. } => {
                 write!(f, "argument {position} must be a positive whole number")
             }
+            Failure::NotNonnegative { position, .. } => {
+                write!(
+                    f,
+                    "argument {position} must be zero or a positive whole number"
+                )
+            }
+            Failure::OutOfRange {
+                position, min, max, ..
+            } => write!(f, "argument {position} must be in the range {min} to {max}"),
+            Failure::NotLogical { .. } => write!(f, "logical value must be exactly 0 or 1"),
+            Failure::NotArray { .. } => {
+                write!(f, "the argument has no single-dimensional array value")
+            }
+            Failure::NotInstance { position, class } => write!(
+                f,
+                "argument {position} must be an instance of the {} class",
+                class.id()
+            ),
+            Failure::NotPointerString { position, .. } => {
+                write!(f, "argument {position} is not in valid pointer format")
+            }
+            Failure::NoStem { position, .. } => {
+                write!(f, "argument {position} must have a stem object value")
+            }
             Failure::ClassicStyle => write!(f, "a call to a ROUTINE_CLASSIC_STYLE routine"),
             Failure::Signature => write!(f, "incorrect signature"),
             Failure::ResultSignature => write!(f, "incorrect signature for the result"),
             Failure::TooManyArguments { expected } => {
                 write!(f, "too many arguments in invocation; {expected} expected")
             }
-            Failure::Unfilled {
-                code,
-                name,
-                direction,
-            } => write!(
-                f,
-                "Phase 8 owes the {direction:?} conversion for REXX_VALUE_{name} ({code})"
-            ),
             Failure::UnfilledSlot { entry } => write!(f, "{entry}"),
             Failure::StaleHandle => write!(f, "the handle is no longer held by this activation"),
             Failure::Raised => write!(f, "the interpreter raised a condition while converting"),
@@ -457,13 +514,85 @@ pub trait Host {
     /// [`Raised`] where the string conversion raised a condition.
     fn double_value(&mut self, object: ObjRef) -> Result<Option<f64>, Raised>;
 
-    /// `object` as a whole number from one to `Numerics::MAX_WHOLENUMBER`, or
-    /// `None` where it is not one: `NativeActivation::positiveWholeNumberValue`
-    /// (`interpreter/execution/NativeActivation.cpp:1922`).
+    /// `object` as a whole number from `min` to `max`, or `None` where it is
+    /// not one: `Numerics::objectToSignedInteger`
+    /// (`interpreter/runtime/Numerics.cpp:272`), whose string limb is
+    /// `NumberString::int64Value` at `Numerics::SIZE_DIGITS`.
     ///
     /// # Errors
     /// [`Raised`] where the string conversion raised a condition.
-    fn positive_whole_number(&mut self, object: ObjRef) -> Result<Option<isize>, Raised>;
+    fn signed_integer(&mut self, object: ObjRef, min: i64, max: i64)
+    -> Result<Option<i64>, Raised>;
+
+    /// `object` as a whole number from zero to `max`, or `None` where it is
+    /// not one: `Numerics::objectToUnsignedInteger` (`:364`).
+    ///
+    /// # Errors
+    /// [`Raised`] where the string conversion raised a condition.
+    fn unsigned_integer(&mut self, object: ObjRef, max: u64) -> Result<Option<u64>, Raised>;
+
+    /// `object`'s truth value, or `None` where its string value is not exactly
+    /// `0` or `1`: `truthValue` (`interpreter/classes/StringClass.cpp:1475`).
+    ///
+    /// # Errors
+    /// [`Raised`] where the string conversion raised a condition.
+    fn logical(&mut self, object: ObjRef) -> Result<Option<bool>, Raised>;
+
+    /// `object` as a single-dimensional array, or `None` where it has none:
+    /// `requestArray` and the dimension check `arrayArgument` makes
+    /// (`interpreter/runtime/MethodArguments.hpp:675`).
+    ///
+    /// # Errors
+    /// [`Raised`] where the conversion raised a condition.
+    fn array_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Raised>;
+
+    /// Whether `object` is a stem.
+    fn is_stem(&self, object: ObjRef) -> bool;
+
+    /// The stem the calling Rexx activation holds under the name `object`'s
+    /// string value spells, a period added where it has none, or `None` where
+    /// that is not a stem's name: `NativeActivation::getContextStem`
+    /// (`interpreter/execution/NativeActivation.cpp:2835`).
+    ///
+    /// # Errors
+    /// [`Raised`] where the string conversion raised a condition.
+    fn context_stem(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Raised>;
+
+    /// Whether `object` is an instance of `class` or of a subclass of it.
+    fn is_instance_of(&mut self, object: ObjRef, class: Class) -> bool;
+
+    /// The address `object` holds, or `None` where it is not a `.Pointer`.
+    fn pointer_value(&self, object: ObjRef) -> Option<POINTER>;
+
+    /// `object`'s `stringValue()`, which sends nothing: a string's bytes, and
+    /// the default name for an object whose class has no primitive one.
+    fn string_value_text(&mut self, object: ObjRef) -> Vec<u8>;
+
+    /// The running method's receiver.
+    fn receiver(&mut self) -> ObjRef;
+
+    /// The running method's scope (`NativeActivation::getScope`, `:2791`).
+    fn scope(&mut self) -> ObjRef;
+
+    /// The scope above the running method's in its receiver, `.nil` above the
+    /// topmost (`NativeActivation::getSuper`, `:2781`).
+    fn super_scope(&mut self) -> ObjRef;
+
+    /// The running call's arguments as an array, an omitted one an empty
+    /// position, and the same array however often the call asks
+    /// (`NativeActivation::getArguments`, `:2745`).
+    fn arguments(&mut self) -> ObjRef;
+
+    /// The name the running method was sent by, or the running routine was
+    /// called by.
+    fn message_name(&mut self) -> Vec<u8>;
+
+    /// `Numerics::stringsizeToObject` and `uint64ToObject`
+    /// (`interpreter/runtime/Numerics.cpp:163`, `:205`).
+    fn unsigned_number(&mut self, value: u64) -> ObjRef;
+
+    /// A string object holding `bytes`.
+    fn new_string(&mut self, bytes: &[u8]) -> ObjRef;
 
     /// The number `value` rounded to `precision` digits, which is
     /// `NumberString::newInstanceFromDouble(value, precision)`
@@ -680,6 +809,10 @@ pub enum Source {
     /// The row consumes no argument and its descriptor carries
     /// [`SPECIAL_ARGUMENT`] as well.
     Special,
+    /// [`Source::Special`] for the whole argument list, which a call may then
+    /// supply more of than its other rows consume (`usedArglist`,
+    /// `NativeActivation.cpp:680`).
+    Arguments,
 }
 
 /// What an optional argument nobody supplied writes
@@ -690,307 +823,339 @@ pub enum Absent {
     Signature,
 }
 
+/// How a call's result word is read out of element zero.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ResultRead {
+    /// The union member the row's [`Repr`] names.
+    Member(Repr),
+    /// The bytes the `CSTRING` member points at, copied before the call's
+    /// state is used again, or nothing where it is null.
+    Text,
+}
+
+/// What the stub left in element zero, read as [`ResultRead`] says.
+#[derive(Clone, PartialEq, Debug)]
+pub enum Written {
+    Member(Value),
+    Text(Option<Vec<u8>>),
+}
+
 type ToNative = fn(&mut Conversion<'_>, ObjRef, usize) -> Result<Value, Failure>;
 type FromNative = fn(&mut Conversion<'_>, Value) -> Result<Option<ObjRef>, Failure>;
+
+/// How a row's result comes back.
+#[derive(Clone, Copy)]
+enum Back {
+    /// `valueToObject`'s `default:` (`NativeActivation.cpp:855`), which reads
+    /// nothing.
+    Refused,
+    Member(FromNative),
+    Text(FromNative),
+}
 
 /// One `REXX_VALUE_*` code's conversion.
 struct Row {
     code: u16,
-    /// The header's spelling after `REXX_VALUE_`, which is what
-    /// [`Failure::Unfilled`] and the coverage test name.
+    /// The header's spelling after `REXX_VALUE_`, which the coverage test
+    /// names.
     name: &'static str,
     source: Source,
     absent: Absent,
     repr: Repr,
-    to_native: Option<ToNative>,
-    from_native: Option<FromNative>,
+    to_native: ToNative,
+    back: Back,
 }
 
-/// A row whose conversions are not written yet.
-const fn stub(code: u16, name: &'static str, source: Source, absent: Absent, repr: Repr) -> Row {
+const fn argument(
+    code: u16,
+    name: &'static str,
+    repr: Repr,
+    to_native: ToNative,
+    from_native: FromNative,
+) -> Row {
+    Row {
+        code,
+        name,
+        source: Source::Argument,
+        absent: Absent::Zero,
+        repr,
+        to_native,
+        back: Back::Member(from_native),
+    }
+}
+
+const fn special(
+    code: u16,
+    name: &'static str,
+    source: Source,
+    repr: Repr,
+    to_native: ToNative,
+) -> Row {
     Row {
         code,
         name,
         source,
-        absent,
+        absent: Absent::Signature,
         repr,
-        to_native: None,
-        from_native: None,
+        to_native,
+        back: Back::Refused,
     }
 }
 
 static TABLE: &[Row] = &[
-    stub(
+    special(
         code::ARGLIST,
         "ARGLIST",
-        Source::Special,
-        Absent::Signature,
+        Source::Arguments,
         Repr::Object,
+        arglist_to_native,
     ),
-    stub(
+    special(
         code::NAME,
         "NAME",
         Source::Special,
-        Absent::Signature,
         Repr::CString,
+        name_to_native,
     ),
-    stub(
+    special(
         code::SCOPE,
         "SCOPE",
         Source::Special,
-        Absent::Signature,
         Repr::Object,
+        scope_to_native,
     ),
-    Row {
-        code: code::CSELF,
-        name: "CSELF",
-        source: Source::Special,
-        absent: Absent::Signature,
-        repr: Repr::Pointer,
-        to_native: Some(cself_to_native),
-        from_native: None,
-    },
-    stub(
+    special(
+        code::CSELF,
+        "CSELF",
+        Source::Special,
+        Repr::Pointer,
+        cself_to_native,
+    ),
+    special(
         code::OSELF,
         "OSELF",
         Source::Special,
-        Absent::Signature,
         Repr::Object,
+        oself_to_native,
     ),
-    stub(
+    special(
         code::SUPER,
         "SUPER",
         Source::Special,
-        Absent::Signature,
         Repr::Object,
+        super_to_native,
     ),
-    Row {
-        code: code::REXX_OBJECT_PTR,
-        name: "RexxObjectPtr",
-        source: Source::Argument,
-        absent: Absent::Zero,
-        repr: Repr::Object,
-        to_native: None,
-        from_native: Some(object_from_native),
-    },
-    Row {
-        code: code::INT,
-        name: "int",
-        source: Source::Argument,
-        absent: Absent::Zero,
-        repr: Repr::Int,
-        to_native: None,
-        from_native: Some(int_from_native),
-    },
-    stub(
+    argument(
+        code::REXX_OBJECT_PTR,
+        "RexxObjectPtr",
+        Repr::Object,
+        object_to_native,
+        object_from_native,
+    ),
+    argument(code::INT, "int", Repr::Int, int_to_native, int_from_native),
+    argument(
         code::WHOLENUMBER_T,
         "wholenumber_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Isize,
+        whole_number_to_native,
+        isize_from_native,
     ),
-    Row {
-        code: code::DOUBLE,
-        name: "double",
-        source: Source::Argument,
-        absent: Absent::Zero,
-        repr: Repr::Double,
-        to_native: Some(double_to_native),
-        from_native: None,
-    },
+    argument(
+        code::DOUBLE,
+        "double",
+        Repr::Double,
+        double_to_native,
+        double_from_native,
+    ),
     Row {
         code: code::CSTRING,
         name: "CSTRING",
         source: Source::Argument,
         absent: Absent::Zero,
         repr: Repr::CString,
-        to_native: Some(cstring_to_native),
-        from_native: None,
+        to_native: cstring_to_native,
+        back: Back::Text(cstring_from_native),
     },
-    Row {
-        code: code::POINTER,
-        name: "POINTER",
-        source: Source::Argument,
-        absent: Absent::Zero,
-        repr: Repr::Pointer,
-        to_native: None,
-        from_native: Some(pointer_from_native),
-    },
-    Row {
-        code: code::REXX_STRING_OBJECT,
-        name: "RexxStringObject",
-        source: Source::Argument,
-        absent: Absent::Zero,
-        repr: Repr::Object,
-        to_native: Some(string_object_to_native),
-        from_native: Some(object_from_native),
-    },
-    stub(
+    argument(
+        code::POINTER,
+        "POINTER",
+        Repr::Pointer,
+        pointer_to_native,
+        pointer_from_native,
+    ),
+    argument(
+        code::REXX_STRING_OBJECT,
+        "RexxStringObject",
+        Repr::Object,
+        string_object_to_native,
+        object_from_native,
+    ),
+    argument(
         code::STRINGSIZE_T,
         "stringsize_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Usize,
+        string_size_to_native,
+        usize_from_native,
     ),
-    stub(
+    argument(
         code::FLOAT,
         "float",
-        Source::Argument,
-        Absent::Zero,
         Repr::Float,
+        float_to_native,
+        float_from_native,
     ),
-    stub(
+    argument(
         code::INT8_T,
         "int8_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Int8,
+        int8_to_native,
+        int8_from_native,
     ),
-    stub(
+    argument(
         code::INT16_T,
         "int16_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Int16,
+        int16_to_native,
+        int16_from_native,
     ),
-    stub(
+    argument(
         code::INT32_T,
         "int32_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Int32,
+        int32_to_native,
+        int32_from_native,
     ),
-    stub(
+    argument(
         code::INT64_T,
         "int64_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Int64,
+        int64_to_native,
+        int64_from_native,
     ),
-    stub(
+    argument(
         code::UINT8_T,
         "uint8_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Uint8,
+        uint8_to_native,
+        uint8_from_native,
     ),
-    stub(
+    argument(
         code::UINT16_T,
         "uint16_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Uint16,
+        uint16_to_native,
+        uint16_from_native,
     ),
-    stub(
+    argument(
         code::UINT32_T,
         "uint32_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Uint32,
+        uint32_to_native,
+        uint32_from_native,
     ),
-    stub(
+    argument(
         code::UINT64_T,
         "uint64_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Uint64,
+        uint64_to_native,
+        uint64_from_native,
     ),
-    stub(
+    argument(
         code::INTPTR_T,
         "intptr_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Isize,
+        signed_word_to_native,
+        isize_from_native,
     ),
-    stub(
+    argument(
         code::UINTPTR_T,
         "uintptr_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Usize,
+        unsigned_word_to_native,
+        usize_from_native,
     ),
-    stub(
+    argument(
         code::LOGICAL_T,
         "logical_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Usize,
+        logical_to_native,
+        logical_from_native,
     ),
-    stub(
+    argument(
         code::REXX_ARRAY_OBJECT,
         "RexxArrayObject",
-        Source::Argument,
-        Absent::Zero,
         Repr::Object,
+        array_to_native,
+        object_from_native,
     ),
-    stub(
+    argument(
         code::REXX_STEM_OBJECT,
         "RexxStemObject",
-        Source::Argument,
-        Absent::Zero,
         Repr::Object,
+        stem_to_native,
+        object_from_native,
     ),
-    stub(
+    argument(
         code::SIZE_T,
         "size_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Usize,
+        unsigned_word_to_native,
+        usize_from_native,
     ),
-    stub(
+    argument(
         code::SSIZE_T,
         "ssize_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Isize,
+        signed_word_to_native,
+        isize_from_native,
     ),
-    stub(
+    argument(
         code::POINTERSTRING,
         "POINTERSTRING",
-        Source::Argument,
-        Absent::Zero,
         Repr::Pointer,
+        pointer_string_to_native,
+        pointer_string_from_native,
     ),
-    stub(
+    argument(
         code::REXX_CLASS_OBJECT,
         "RexxClassObject",
-        Source::Argument,
-        Absent::Zero,
         Repr::Object,
+        class_to_native,
+        object_from_native,
     ),
-    stub(
+    argument(
         code::REXX_MUTABLE_BUFFER_OBJECT,
         "RexxMutableBufferObject",
-        Source::Argument,
-        Absent::Zero,
         Repr::Object,
+        mutable_buffer_to_native,
+        object_from_native,
     ),
-    Row {
-        code: code::POSITIVE_WHOLENUMBER_T,
-        name: "positive_wholenumber_t",
-        source: Source::Argument,
-        absent: Absent::Zero,
-        repr: Repr::Isize,
-        to_native: Some(positive_whole_number_to_native),
-        from_native: None,
-    },
-    stub(
+    argument(
+        code::POSITIVE_WHOLENUMBER_T,
+        "positive_wholenumber_t",
+        Repr::Isize,
+        positive_whole_number_to_native,
+        isize_from_native,
+    ),
+    argument(
         code::NONNEGATIVE_WHOLENUMBER_T,
         "nonnegative_wholenumber_t",
-        Source::Argument,
-        Absent::Zero,
         Repr::Isize,
+        nonnegative_whole_number_to_native,
+        isize_from_native,
     ),
     // The header marks this one as never optional (`api/oorexxapi.h:98`) and
     // the C++ leaves it out of the absent switch, so an omitted one is a
     // signature error rather than a zero.
-    stub(
-        code::REXX_VARIABLE_REFERENCE_OBJECT,
-        "RexxVariableReferenceObject",
-        Source::Argument,
-        Absent::Signature,
-        Repr::Object,
-    ),
+    Row {
+        code: code::REXX_VARIABLE_REFERENCE_OBJECT,
+        name: "RexxVariableReferenceObject",
+        source: Source::Argument,
+        absent: Absent::Signature,
+        repr: Repr::Object,
+        to_native: variable_reference_to_native,
+        back: Back::Member(object_from_native),
+    },
 ];
 
 /// The union member `declared`'s value occupies, or `None` for a code the
@@ -1010,12 +1175,17 @@ fn row(code: u16) -> Option<&'static Row> {
     TABLE.iter().find(|row| row.code == code)
 }
 
-/// The union member a declared result word's value occupies, or `None` for
-/// a word the table does not know. The word is read as declared, optional bit
-/// included, because `valueToObject` switches on it unstripped
+/// How a declared result word's value is read, or `None` for a word
+/// `valueToObject` refuses without reading. The word is read as declared,
+/// optional bit included, because `valueToObject` switches on it unstripped
 /// (`NativeActivation.cpp:720`, `:855-858`).
-pub fn result_repr(declared: u16) -> Option<Repr> {
-    row(declared).map(|row| row.repr)
+pub fn result_read(declared: u16) -> Option<ResultRead> {
+    let row = row(declared)?;
+    match row.back {
+        Back::Refused => None,
+        Back::Member(_) => Some(ResultRead::Member(row.repr)),
+        Back::Text(_) => Some(ResultRead::Text),
+    }
 }
 
 /// Whether the code in `declared` takes its value from the argument list.
@@ -1026,26 +1196,31 @@ pub fn consumes_argument(declared: u16) -> bool {
     row(argument_type(declared)).is_none_or(|row| row.source == Source::Argument)
 }
 
+/// Whether the code in `declared` hands the extension the whole argument
+/// list, which lifts the check for arguments the signature does not consume.
+pub fn takes_argument_list(declared: u16) -> bool {
+    row(argument_type(declared)).is_some_and(|row| row.source == Source::Arguments)
+}
+
 /// `argument` converted into the C value `declared` asks for.
 ///
 /// `argument` is the Rexx object at this position, or `None` when the caller
-/// supplied nothing there; a [`Source::Special`] row ignores it either way.
-/// `position` is one-based, as the oracle's error inserts are.
+/// supplied nothing there; a row that consumes no argument ignores it either
+/// way. `position` is one-based, as the oracle's error inserts are.
 pub fn to_native(
     cx: &mut Conversion<'_>,
     declared: u16,
     argument: Option<ObjRef>,
     position: usize,
 ) -> Result<Converted, Failure> {
-    let code = argument_type(declared);
-    let row = row(code);
+    let row = row(argument_type(declared));
     // The absent cases are settled before the per-type conversion, as they
     // are in the C++: a missing required argument and an omitted optional one
     // are both answered without entering the type switch, and a code the
     // table does not know is an argument position like any other until then
     // (`NativeActivation.cpp:607-612`).
     let object = match row.map(|row| row.source) {
-        Some(Source::Special) => ObjRef::NIL,
+        Some(Source::Special | Source::Arguments) => ObjRef::NIL,
         Some(Source::Argument) | None => match argument {
             Some(object) => object,
             None if !is_optional(declared) => {
@@ -1065,23 +1240,21 @@ pub fn to_native(
     let Some(row) = row else {
         return Err(Failure::Signature);
     };
-    let convert = row.to_native.ok_or(Failure::Unfilled {
-        code,
-        name: row.name,
-        direction: Direction::ToNative,
-    })?;
     let flags = match row.source {
-        Source::Special => ARGUMENT_EXISTS | SPECIAL_ARGUMENT,
+        Source::Special | Source::Arguments => ARGUMENT_EXISTS | SPECIAL_ARGUMENT,
         Source::Argument => ARGUMENT_EXISTS,
     };
     Ok(Converted {
-        value: convert(cx, object, position)?,
+        value: (row.to_native)(cx, object, position)?,
         flags,
     })
 }
 
 /// The Rexx object `value` describes under `declared`, or `None` where the
 /// oracle answers `OREF_NULL`.
+///
+/// A `CSTRING` value is a pointer into `cx`'s pool, where the call put the
+/// bytes [`Written::Text`] carried.
 pub fn from_native(
     cx: &mut Conversion<'_>,
     declared: u16,
@@ -1094,16 +1267,46 @@ pub fn from_native(
     if declared == ARGUMENT_TERMINATOR {
         return Ok(None);
     }
-    let code = declared;
-    let Some(row) = row(code) else {
+    let Some(row) = row(declared) else {
         return Err(Failure::ResultSignature);
     };
-    let convert = row.from_native.ok_or(Failure::Unfilled {
-        code,
-        name: row.name,
-        direction: Direction::FromNative,
-    })?;
-    convert(cx, value)
+    match row.back {
+        Back::Refused => Err(Failure::ResultSignature),
+        Back::Member(convert) | Back::Text(convert) => convert(cx, value),
+    }
+}
+
+/// `REXX_VALUE_ARGLIST` (`NativeActivation.cpp:306`).
+fn arglist_to_native(
+    cx: &mut Conversion<'_>,
+    _argument: ObjRef,
+    _position: usize,
+) -> Result<Value, Failure> {
+    let arguments = cx.host.arguments();
+    Ok(Value::Object(cx.host.locals().register(arguments)))
+}
+
+/// `REXX_VALUE_NAME` (`NativeActivation.cpp:317`).
+fn name_to_native(
+    cx: &mut Conversion<'_>,
+    _argument: ObjRef,
+    _position: usize,
+) -> Result<Value, Failure> {
+    let name = cx.host.message_name();
+    Ok(Value::CString(cx.strings.intern(&name)))
+}
+
+/// `REXX_VALUE_SCOPE` (`NativeActivation.cpp:266`).
+fn scope_to_native(
+    cx: &mut Conversion<'_>,
+    _argument: ObjRef,
+    _position: usize,
+) -> Result<Value, Failure> {
+    if !cx.host.is_method() {
+        return Err(Failure::Signature);
+    }
+    let scope = cx.host.scope();
+    Ok(Value::Object(cx.host.locals().register(scope)))
 }
 
 /// `REXX_VALUE_CSELF` (`NativeActivation.cpp:294`).
@@ -1118,6 +1321,278 @@ fn cself_to_native(
     Ok(Value::Pointer(
         cx.host.cself().unwrap_or(std::ptr::null_mut()),
     ))
+}
+
+/// `REXX_VALUE_OSELF` (`NativeActivation.cpp:251`).
+fn oself_to_native(
+    cx: &mut Conversion<'_>,
+    _argument: ObjRef,
+    _position: usize,
+) -> Result<Value, Failure> {
+    if !cx.host.is_method() {
+        return Err(Failure::Signature);
+    }
+    let receiver = cx.host.receiver();
+    Ok(Value::Object(cx.host.locals().register(receiver)))
+}
+
+/// `REXX_VALUE_SUPER` (`NativeActivation.cpp:281`).
+fn super_to_native(
+    cx: &mut Conversion<'_>,
+    _argument: ObjRef,
+    _position: usize,
+) -> Result<Value, Failure> {
+    if !cx.host.is_method() {
+        return Err(Failure::Signature);
+    }
+    let scope = cx.host.super_scope();
+    Ok(Value::Object(cx.host.locals().register(scope)))
+}
+
+/// `REXX_VALUE_RexxObjectPtr` (`NativeActivation.cpp:335`).
+fn object_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    _position: usize,
+) -> Result<Value, Failure> {
+    Ok(Value::Object(cx.host.locals().register(argument)))
+}
+
+/// A row `signedIntegerValue(argument, position, max, min)` converts
+/// (`NativeActivation.cpp:1901`), answering the value as the C type `T`.
+fn signed<T: TryFrom<i64>>(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+    min: i64,
+    max: i64,
+) -> Result<T, Failure> {
+    cx.host
+        .signed_integer(argument, min, max)?
+        .filter(|number| (min..=max).contains(number))
+        .and_then(|number| T::try_from(number).ok())
+        .ok_or(Failure::OutOfRange {
+            position,
+            min: i128::from(min),
+            max: i128::from(max),
+            argument,
+        })
+}
+
+/// A row `unsignedIntegerValue(argument, position, max)` converts
+/// (`NativeActivation.cpp:1966`), answering the value as the C type `T`.
+fn unsigned<T: TryFrom<u64>>(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+    max: u64,
+) -> Result<T, Failure> {
+    cx.host
+        .unsigned_integer(argument, max)?
+        .filter(|number| *number <= max)
+        .and_then(|number| T::try_from(number).ok())
+        .ok_or(Failure::OutOfRange {
+            position,
+            min: 0,
+            max: i128::from(max),
+            argument,
+        })
+}
+
+/// `REXX_VALUE_int` (`NativeActivation.cpp:341`).
+fn int_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    let (min, max) = (i64::from(c_int::MIN), i64::from(c_int::MAX));
+    signed(cx, argument, position, min, max).map(Value::Int)
+}
+
+/// `REXX_VALUE_int8_t` (`NativeActivation.cpp:348`).
+fn int8_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    let (min, max) = (i64::from(i8::MIN), i64::from(i8::MAX));
+    signed(cx, argument, position, min, max).map(Value::Int8)
+}
+
+/// `REXX_VALUE_int16_t` (`NativeActivation.cpp:354`).
+fn int16_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    let (min, max) = (i64::from(i16::MIN), i64::from(i16::MAX));
+    signed(cx, argument, position, min, max).map(Value::Int16)
+}
+
+/// `REXX_VALUE_int32_t` (`NativeActivation.cpp:360`).
+fn int32_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    let (min, max) = (i64::from(i32::MIN), i64::from(i32::MAX));
+    signed(cx, argument, position, min, max).map(Value::Int32)
+}
+
+/// `REXX_VALUE_int64_t` (`NativeActivation.cpp:366`), whose `int64Value`
+/// converts at the same twenty digits as `signedIntegerValue`.
+fn int64_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    signed(cx, argument, position, i64::MIN, i64::MAX).map(Value::Int64)
+}
+
+/// `REXX_VALUE_ssize_t` and `REXX_VALUE_intptr_t` (`NativeActivation.cpp:372`,
+/// `:378`), both the whole range of a pointer-sized signed integer.
+fn signed_word_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    signed(cx, argument, position, i64::MIN, i64::MAX).map(Value::Isize)
+}
+
+/// `REXX_VALUE_wholenumber_t` (`NativeActivation.cpp:427`).
+fn whole_number_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    signed(cx, argument, position, -MAX_WHOLENUMBER, MAX_WHOLENUMBER).map(Value::Isize)
+}
+
+/// `REXX_VALUE_uint8_t` (`NativeActivation.cpp:384`).
+fn uint8_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    unsigned(cx, argument, position, u64::from(u8::MAX)).map(Value::Uint8)
+}
+
+/// `REXX_VALUE_uint16_t` (`NativeActivation.cpp:390`).
+fn uint16_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    unsigned(cx, argument, position, u64::from(u16::MAX)).map(Value::Uint16)
+}
+
+/// `REXX_VALUE_uint32_t` (`NativeActivation.cpp:396`).
+fn uint32_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    unsigned(cx, argument, position, u64::from(u32::MAX)).map(Value::Uint32)
+}
+
+/// `REXX_VALUE_uint64_t` (`NativeActivation.cpp:402`), whose
+/// `unsignedInt64Value` converts at the same twenty digits as
+/// `unsignedIntegerValue`.
+fn uint64_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    unsigned(cx, argument, position, u64::MAX).map(Value::Uint64)
+}
+
+/// `REXX_VALUE_size_t` and `REXX_VALUE_uintptr_t` (`NativeActivation.cpp:408`,
+/// `:414`), both the whole range of a pointer-sized unsigned integer.
+fn unsigned_word_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    unsigned(cx, argument, position, u64::MAX).map(Value::Usize)
+}
+
+/// `REXX_VALUE_stringsize_t` (`NativeActivation.cpp:448`).
+fn string_size_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    let max = MAX_WHOLENUMBER.unsigned_abs();
+    unsigned(cx, argument, position, max).map(Value::Usize)
+}
+
+/// `REXX_VALUE_positive_wholenumber_t` (`NativeActivation.cpp:434`).
+fn positive_whole_number_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    cx.host
+        .signed_integer(argument, 1, MAX_WHOLENUMBER)?
+        .filter(|number| (1..=MAX_WHOLENUMBER).contains(number))
+        .and_then(|number| isize::try_from(number).ok())
+        .map(Value::Isize)
+        .ok_or(Failure::NotPositive { position, argument })
+}
+
+/// `REXX_VALUE_nonnegative_wholenumber_t` (`NativeActivation.cpp:441`).
+fn nonnegative_whole_number_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    cx.host
+        .signed_integer(argument, 0, MAX_WHOLENUMBER)?
+        .filter(|number| (0..=MAX_WHOLENUMBER).contains(number))
+        .and_then(|number| isize::try_from(number).ok())
+        .map(Value::Isize)
+        .ok_or(Failure::NotNonnegative { position, argument })
+}
+
+/// `REXX_VALUE_logical_t` (`NativeActivation.cpp:420`).
+fn logical_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    _position: usize,
+) -> Result<Value, Failure> {
+    cx.host
+        .logical(argument)?
+        .map(|truth| Value::Usize(usize::from(truth)))
+        .ok_or(Failure::NotLogical { argument })
+}
+
+/// `REXX_VALUE_double` (`NativeActivation.cpp:454`).
+fn double_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    cx.host
+        .double_value(argument)?
+        .map(Value::Double)
+        .ok_or(Failure::InvalidDouble { position, argument })
+}
+
+/// `REXX_VALUE_float` (`NativeActivation.cpp:461`).
+fn float_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the C++'s own `(float)` cast, which is the conversion measured"
+    )]
+    let narrow = |value: f64| Value::Float(value as f32);
+    cx.host
+        .double_value(argument)?
+        .map(narrow)
+        .ok_or(Failure::InvalidDouble { position, argument })
 }
 
 /// `REXX_VALUE_CSTRING` (`NativeActivation.cpp:467`).
@@ -1153,31 +1628,162 @@ fn string_object_to_native(
     Ok(Value::Object(cx.host.locals().register(string)))
 }
 
-/// `REXX_VALUE_double` (`NativeActivation.cpp:454`).
-fn double_to_native(
+/// `REXX_VALUE_RexxArrayObject` (`NativeActivation.cpp:488`).
+fn array_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    _position: usize,
+) -> Result<Value, Failure> {
+    let array = cx
+        .host
+        .array_value(argument)?
+        .ok_or(Failure::NotArray { argument })?;
+    Ok(Value::Object(cx.host.locals().register(array)))
+}
+
+/// `REXX_VALUE_RexxStemObject` (`NativeActivation.cpp:502`): a stem, or in a
+/// call the name of the caller's.
+fn stem_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    let stem = if cx.host.is_stem(argument) {
+        argument
+    } else if cx.host.is_method() {
+        return Err(Failure::NoStem { position, argument });
+    } else {
+        cx.host
+            .context_stem(argument)?
+            .ok_or(Failure::NoStem { position, argument })?
+    };
+    Ok(Value::Object(cx.host.locals().register(stem)))
+}
+
+/// An argument that must be an instance of `class`, handed over as it is.
+fn instance(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+    class: Class,
+) -> Result<Value, Failure> {
+    if !cx.host.is_instance_of(argument, class) {
+        return Err(Failure::NotInstance { position, class });
+    }
+    Ok(Value::Object(cx.host.locals().register(argument)))
+}
+
+/// `REXX_VALUE_RexxClassObject` (`NativeActivation.cpp:549`).
+fn class_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    instance(cx, argument, position, Class::Class)
+}
+
+/// `REXX_VALUE_RexxMutableBufferObject` (`NativeActivation.cpp:577`).
+fn mutable_buffer_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    instance(cx, argument, position, Class::MutableBuffer)
+}
+
+/// `REXX_VALUE_RexxVariableReferenceObject` (`NativeActivation.cpp:588`).
+fn variable_reference_to_native(
+    cx: &mut Conversion<'_>,
+    argument: ObjRef,
+    position: usize,
+) -> Result<Value, Failure> {
+    instance(cx, argument, position, Class::VariableReference)
+}
+
+/// `REXX_VALUE_POINTER` (`NativeActivation.cpp:560`).
+fn pointer_to_native(
     cx: &mut Conversion<'_>,
     argument: ObjRef,
     position: usize,
 ) -> Result<Value, Failure> {
     cx.host
-        .double_value(argument)?
-        .map(Value::Double)
-        .ok_or(Failure::InvalidDouble { position, argument })
+        .pointer_value(argument)
+        .map(Value::Pointer)
+        .ok_or(Failure::NotInstance {
+            position,
+            class: Class::Pointer,
+        })
 }
 
-/// `REXX_VALUE_positive_wholenumber_t` (`NativeActivation.cpp:434`).
-fn positive_whole_number_to_native(
+/// `REXX_VALUE_POINTERSTRING` (`NativeActivation.cpp:571`).
+fn pointer_string_to_native(
     cx: &mut Conversion<'_>,
     argument: ObjRef,
     position: usize,
 ) -> Result<Value, Failure> {
-    cx.host
-        .positive_whole_number(argument)?
-        .map(Value::Isize)
-        .ok_or(Failure::NotPositive { position, argument })
+    let text = cx.host.string_value_text(argument);
+    pointer_string(&text)
+        .map(|address| Value::Pointer(std::ptr::without_provenance_mut(address)))
+        .ok_or(Failure::NotPointerString { position, argument })
 }
 
-/// `valueToObject` for the object codes (`NativeActivation.cpp:723`).
+/// What `sscanf(text, "0x%p", &pointer)` reads
+/// (`NativeActivation::pointerString`, `:2049`), or `None` where it converts
+/// nothing.
+///
+/// glibc reads `%p` as `%x` does, through `strtoul`: blanks, a sign, an
+/// optional `0x` or `0X`, then hex digits; a value past the range reads as the
+/// largest, and a `-` negates any other. Measured, oracle, over the address
+/// `TestPointerStringValue` answers: `0x0x<hex>`, `0x-<complement>` and
+/// trailing junk convert to it; `0X<hex>`, a leading blank, `0x0x` alone and
+/// `0x--1` refuse; `0x0` converts to something else.
+pub fn pointer_string(text: &[u8]) -> Option<usize> {
+    let text = text.split(|byte| *byte == 0).next().unwrap_or_default();
+    let mut rest = text.strip_prefix(b"0x")?;
+    while let [b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r', tail @ ..] = rest {
+        rest = tail;
+    }
+    let negative = match rest {
+        [b'-', tail @ ..] => {
+            rest = tail;
+            true
+        }
+        [b'+', tail @ ..] => {
+            rest = tail;
+            false
+        }
+        _ => false,
+    };
+    if let [b'0', b'x' | b'X', tail @ ..] = rest {
+        rest = tail;
+        if !rest.first().is_some_and(u8::is_ascii_hexdigit) {
+            return None;
+        }
+    }
+    let digits: Vec<u8> = rest
+        .iter()
+        .copied()
+        .take_while(u8::is_ascii_hexdigit)
+        .collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let read = digits.iter().try_fold(0usize, |value, digit| {
+        let digit = match digit {
+            b'0'..=b'9' => digit - b'0',
+            b'a'..=b'f' => digit - b'a' + 10,
+            _ => digit - b'A' + 10,
+        };
+        value.checked_mul(16)?.checked_add(usize::from(digit))
+    });
+    Some(match read {
+        None => usize::MAX,
+        Some(value) if negative => value.wrapping_neg(),
+        Some(value) => value,
+    })
+}
+
+/// `valueToObject` for the object codes (`NativeActivation.cpp:722`).
 fn object_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
     let Value::Object(handle) = value else {
         return Err(Failure::ResultSignature);
@@ -1202,6 +1808,19 @@ fn pointer_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<O
     Ok(Some(cx.host.new_pointer(address)))
 }
 
+/// `valueToObject` for `REXX_VALUE_POINTERSTRING` (`NativeActivation.cpp:842`).
+fn pointer_string_from_native(
+    cx: &mut Conversion<'_>,
+    value: Value,
+) -> Result<Option<ObjRef>, Failure> {
+    let Value::Pointer(address) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(
+        cx.host.new_string(&rexx_core::pointer_to_string(address)),
+    ))
+}
+
 /// `valueToObject` for `REXX_VALUE_int` (`NativeActivation.cpp:733`).
 ///
 /// # Panics
@@ -1213,4 +1832,136 @@ fn int_from_native(_cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjR
     Ok(Some(
         ObjRef::small_int(i64::from(number)).expect("a c_int is a small integer"),
     ))
+}
+
+/// `valueToObject` for `REXX_VALUE_int8_t` (`NativeActivation.cpp:738`).
+fn int8_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Int8(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(cx.host.whole_number(isize::from(number))))
+}
+
+/// `valueToObject` for `REXX_VALUE_int16_t` (`NativeActivation.cpp:743`).
+fn int16_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Int16(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(cx.host.whole_number(isize::from(number))))
+}
+
+/// `valueToObject` for `REXX_VALUE_int32_t` (`NativeActivation.cpp:748`).
+fn int32_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Int32(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    let number = isize::try_from(number).map_err(|_| Failure::ResultSignature)?;
+    Ok(Some(cx.host.whole_number(number)))
+}
+
+/// `valueToObject` for `REXX_VALUE_int64_t` (`NativeActivation.cpp:753`),
+/// whose `int64ToObject` answers what `wholenumberToObject` does for a
+/// pointer-sized value.
+fn int64_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Int64(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    let number = isize::try_from(number).map_err(|_| Failure::ResultSignature)?;
+    Ok(Some(cx.host.whole_number(number)))
+}
+
+/// `valueToObject` for the pointer-sized signed codes, `wholenumberToObject`
+/// (`NativeActivation.cpp:758`, `:798`, `:803-805`).
+fn isize_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Isize(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(cx.host.whole_number(number)))
+}
+
+/// `valueToObject` for `REXX_VALUE_uint8_t` (`NativeActivation.cpp:763`).
+fn uint8_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Uint8(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(cx.host.unsigned_number(u64::from(number))))
+}
+
+/// `valueToObject` for `REXX_VALUE_uint16_t` (`NativeActivation.cpp:768`).
+fn uint16_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Uint16(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(cx.host.unsigned_number(u64::from(number))))
+}
+
+/// `valueToObject` for `REXX_VALUE_uint32_t` (`NativeActivation.cpp:773`).
+fn uint32_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Uint32(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(cx.host.unsigned_number(u64::from(number))))
+}
+
+/// `valueToObject` for `REXX_VALUE_uint64_t` (`NativeActivation.cpp:778`).
+fn uint64_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Uint64(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(cx.host.unsigned_number(number)))
+}
+
+/// `valueToObject` for the pointer-sized unsigned codes, `stringsizeToObject`
+/// (`NativeActivation.cpp:783`, `:793`, `:810`).
+fn usize_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Usize(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    let number = u64::try_from(number).map_err(|_| Failure::ResultSignature)?;
+    Ok(Some(cx.host.unsigned_number(number)))
+}
+
+/// `valueToObject` for `REXX_VALUE_logical_t` (`NativeActivation.cpp:788`):
+/// any value but zero is true.
+fn logical_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Usize(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(cx.host.whole_number(isize::from(number != 0))))
+}
+
+/// `valueToObject` for `REXX_VALUE_double` (`NativeActivation.cpp:815`).
+fn double_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Double(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(cx.host.double_object(number, RESULT_DIGITS)))
+}
+
+/// `valueToObject` for `REXX_VALUE_float` (`NativeActivation.cpp:820`), which
+/// widens to a `double`.
+fn float_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::Float(number) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    Ok(Some(
+        cx.host.double_object(f64::from(number), RESULT_DIGITS),
+    ))
+}
+
+/// `valueToObject` for `REXX_VALUE_CSTRING` (`NativeActivation.cpp:825`): no
+/// object for a null pointer, and a string of the bytes before the first NUL
+/// otherwise.
+fn cstring_from_native(cx: &mut Conversion<'_>, value: Value) -> Result<Option<ObjRef>, Failure> {
+    let Value::CString(pointer) = value else {
+        return Err(Failure::ResultSignature);
+    };
+    if pointer.is_null() {
+        return Ok(None);
+    }
+    let Some(bytes) = cx.strings.bytes_at(pointer) else {
+        return Err(Failure::StaleHandle);
+    };
+    let bytes = bytes.split(|byte| *byte == 0).next().unwrap_or_default();
+    Ok(Some(cx.host.new_string(bytes)))
 }

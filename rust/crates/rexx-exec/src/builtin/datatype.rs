@@ -21,7 +21,7 @@ use crate::{Interp, Novalue};
 
 /// What `LanguageParser::scanSymbol` classifies a piece of text as.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum SymbolKind {
+pub(crate) enum SymbolKind {
     /// Empty, over 250 bytes, or containing a byte outside `!.?_0-9A-Za-z`
     /// in a position the exponent-tail exception does not excuse.
     Bad,
@@ -58,7 +58,7 @@ fn is_symbol_byte(byte: u8) -> bool {
 /// bytes rather than an interned, already-validated source token, because
 /// this is the one caller that has to classify text a running program built
 /// at any byte value.
-fn classify(text: &[u8]) -> SymbolKind {
+pub(crate) fn classify(text: &[u8]) -> SymbolKind {
     let len = text.len();
     if len == 0 || len > MAX_SYMBOL_LENGTH {
         return SymbolKind::Bad;

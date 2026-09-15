@@ -25,13 +25,14 @@ use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::POINTER;
 use rexx_api::values::{
-    Activation, CStringPool, Constants, Conversion, Failure as Refused, Host, Numeric,
+    Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, Host, Numeric,
     Raised as Condition,
 };
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
-use rexx_num::Number;
+use rexx_num::{DIGITS64, Number};
 
 use super::Resolution;
+use crate::builtin::datatype::{SymbolKind, classify};
 use crate::error::Raised;
 use crate::{Failure, Interp, LibraryBinding, Loud, NativeFrame};
 
@@ -70,6 +71,7 @@ impl Interp {
         binding: &LibraryBinding,
         resolution: Resolution,
         receiver: ObjRef,
+        name: &[u8],
         args: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
         let owner = self.pool_owner(receiver)?;
@@ -84,6 +86,10 @@ impl Interp {
             owner,
             scope: resolution.scope,
             method: true,
+            receiver,
+            name: name.to_vec(),
+            arguments: args.to_vec(),
+            argument_list: None,
             locals: Table::new(),
             raised: None,
         });
@@ -156,6 +162,10 @@ impl Interp {
             owner: ObjRef::NIL,
             scope: ObjRef::NIL,
             method: false,
+            receiver: ObjRef::NIL,
+            name: name.to_vec(),
+            arguments: args.to_vec(),
+            argument_list: None,
             locals: Table::new(),
             raised: None,
         });
@@ -212,13 +222,48 @@ impl Interp {
             Refused::NoStringValue { position } => {
                 Raised::native_argument_needs_a_string_value(position)
             }
+            // `found` is the argument's `stringValue()`, which sends nothing:
+            // measured, oracle, an array is `found "an Array".` for 88.921 and
+            // 88.905 where its string conversion joins its items.
             Refused::InvalidDouble { position, argument } => {
-                let found = self.to_text(argument).into_owned();
+                let found = self.string_value_text(argument);
                 Raised::native_argument_not_a_double(position, &found)
             }
             Refused::NotPositive { position, argument } => {
-                let found = self.to_text(argument).into_owned();
+                let found = self.string_value_text(argument);
                 Raised::native_argument_not_positive(position, &found)
+            }
+            Refused::NotNonnegative { position, argument } => {
+                let found = self.string_value_text(argument);
+                Raised::native_argument_not_nonnegative(position, &found)
+            }
+            Refused::OutOfRange {
+                position,
+                min,
+                max,
+                argument,
+            } => {
+                let found = self.string_value_text(argument);
+                Raised::native_argument_outside_range(position, min, max, &found)
+            }
+            Refused::NotLogical { argument } => {
+                let found = self.string_value_text(argument);
+                Raised::native_argument_not_logical(&found)
+            }
+            Refused::NotArray { argument } => {
+                let found = self.string_value_text(argument);
+                Raised::native_argument_not_an_array(&found)
+            }
+            Refused::NotInstance { position, class } => {
+                Raised::native_argument_not_an_instance(position, class.id())
+            }
+            Refused::NotPointerString { position, argument } => {
+                let found = self.string_value_text(argument);
+                Raised::native_argument_not_a_pointer(position, &found)
+            }
+            Refused::NoStem { position, argument } => {
+                let found = self.string_value_text(argument);
+                Raised::native_argument_not_a_stem(method, position, &found)
             }
             Refused::TooManyArguments { expected } => Raised::too_many_external_arguments(expected),
             Refused::Signature | Refused::ResultSignature => {
@@ -233,10 +278,7 @@ impl Interp {
                 }
                 .into();
             }
-            Refused::Unfilled { .. }
-            | Refused::UnfilledSlot { .. }
-            | Refused::StaleHandle
-            | Refused::Raised => {
+            Refused::UnfilledSlot { .. } | Refused::StaleHandle | Refused::Raised => {
                 return Loud {
                     message: crate::owned_message(&format!("{refused}"), Some("Phase 8")),
                 }
@@ -271,13 +313,7 @@ impl Host for Interp {
                 }
                 Ok(converted)
             }
-            Err(failure) => {
-                self.native_handles
-                    .last_mut()
-                    .expect("a native activation is running")
-                    .raised = Some(failure);
-                Err(Condition)
-            }
+            Err(failure) => Err(self.hold_native_condition(failure)),
         }
     }
 
@@ -381,18 +417,166 @@ impl Host for Interp {
         })
     }
 
-    fn positive_whole_number(&mut self, object: ObjRef) -> Result<Option<isize>, Condition> {
+    fn signed_integer(
+        &mut self,
+        object: ObjRef,
+        min: i64,
+        max: i64,
+    ) -> Result<Option<i64>, Condition> {
         let value = match object.decode() {
             Decoded::SmallInt(number) => Some(number),
             _ => {
                 let text = self.native_string_conversion(object)?;
                 let bytes = self.to_text(text);
-                Number::parse_bytes(&bytes).and_then(|number| number.whole_value(SIZE_DIGITS))
+                Number::parse_bytes(&bytes).and_then(|number| number.int64_value(DIGITS64))
             }
         };
-        Ok(value
-            .filter(|number| (1..=MAX_WHOLENUMBER).contains(number))
-            .and_then(|number| isize::try_from(number).ok()))
+        Ok(value.filter(|number| (min..=max).contains(number)))
+    }
+
+    fn unsigned_integer(&mut self, object: ObjRef, max: u64) -> Result<Option<u64>, Condition> {
+        let value = match object.decode() {
+            Decoded::SmallInt(number) => u64::try_from(number).ok(),
+            _ => {
+                let text = self.native_string_conversion(object)?;
+                let bytes = self.to_text(text);
+                Number::parse_bytes(&bytes).and_then(|number| number.unsigned_int64_value(DIGITS64))
+            }
+        };
+        Ok(value.filter(|number| *number <= max))
+    }
+
+    fn logical(&mut self, object: ObjRef) -> Result<Option<bool>, Condition> {
+        if let Decoded::SmallInt(number) = object.decode() {
+            return Ok(match number {
+                0 => Some(false),
+                1 => Some(true),
+                _ => None,
+            });
+        }
+        let text = self.native_string_conversion(object)?;
+        let bytes = self.to_text(text);
+        Ok(crate::eval::logical_value(&bytes))
+    }
+
+    fn array_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {
+        let converted = if self.array_slots_of(object).is_some() {
+            Some(object)
+        } else {
+            match self.request_array_for_over(object) {
+                Ok(converted) => converted,
+                Err(failure) => return Err(self.hold_native_condition(failure)),
+            }
+        };
+        let Some(array) = converted else {
+            return Ok(None);
+        };
+        self.roots.push_temp(array);
+        // `isMultiDimensional`: an array with a dimension list of any length
+        // but one.
+        Ok(match self.array_body(array) {
+            Some((_, dimensions)) if dimensions.is_none_or(|shape| shape.len() == 1) => Some(array),
+            _ => None,
+        })
+    }
+
+    fn is_stem(&self, object: ObjRef) -> bool {
+        matches!(
+            self.heap.get(object).map(|found| &found.body),
+            Some(Body::Stem { .. })
+        )
+    }
+
+    fn context_stem(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {
+        let text = self.native_string_conversion(object)?;
+        let mut name = self.to_text(text).to_ascii_uppercase();
+        if name.last() != Some(&b'.') {
+            name.push(b'.');
+        }
+        if classify(&name) != SymbolKind::Stem {
+            return Ok(None);
+        }
+        Ok(Some(self.read_stem(&name)))
+    }
+
+    fn is_instance_of(&mut self, object: ObjRef, class: Class) -> bool {
+        if class == Class::Class {
+            return self.is_class_object(object);
+        }
+        let (Some(held), Some(wanted)) = (
+            self.class_of_value(object),
+            self.classes().lookup(class.id()),
+        ) else {
+            return false;
+        };
+        self.classes().is_a(held, wanted)
+    }
+
+    fn pointer_value(&self, object: ObjRef) -> Option<POINTER> {
+        match &self.heap.get(object)?.body {
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => state.pointer(),
+            _ => None,
+        }
+    }
+
+    fn string_value_text(&mut self, object: ObjRef) -> Vec<u8> {
+        Interp::string_value_text(self, object)
+    }
+
+    fn receiver(&mut self) -> ObjRef {
+        self.native_frame().receiver
+    }
+
+    fn scope(&mut self) -> ObjRef {
+        self.native_frame().scope
+    }
+
+    fn super_scope(&mut self) -> ObjRef {
+        let frame = self.native_frame();
+        let (receiver, scope) = (frame.receiver, frame.scope);
+        self.super_scope_of(receiver, scope).unwrap_or(ObjRef::NIL)
+    }
+
+    fn arguments(&mut self) -> ObjRef {
+        let frame = self.native_frame();
+        if let Some(list) = frame.argument_list {
+            return list;
+        }
+        let slots = frame.arguments.clone();
+        let list = self.alloc_with(
+            BehaviourId::ARRAY,
+            Body::Array {
+                dimensions: None,
+                slots,
+            },
+        );
+        self.native_handles
+            .last_mut()
+            .expect("a native activation is running")
+            .argument_list = Some(list);
+        list
+    }
+
+    fn message_name(&mut self) -> Vec<u8> {
+        self.native_frame().name.clone()
+    }
+
+    fn unsigned_number(&mut self, value: u64) -> ObjRef {
+        let object = match i64::try_from(value).ok().and_then(ObjRef::small_int) {
+            Some(object) => object,
+            None => self.text(value.to_string().as_bytes()),
+        };
+        self.roots.push_temp(object);
+        object
+    }
+
+    fn new_string(&mut self, bytes: &[u8]) -> ObjRef {
+        let object = self.text(bytes);
+        self.roots.push_temp(object);
+        object
     }
 
     fn double_object(&mut self, value: f64, precision: usize) -> ObjRef {
@@ -410,13 +594,6 @@ impl Host for Interp {
     }
 }
 
-/// `Numerics::SIZE_DIGITS` (`interpreter/runtime/Numerics.hpp:92`), the
-/// precision `objectToSignedInteger` converts at.
-const SIZE_DIGITS: usize = 20;
-
-/// `Numerics::MAX_WHOLENUMBER` (`interpreter/runtime/Numerics.hpp:86`).
-const MAX_WHOLENUMBER: i64 = 999_999_999_999_999_999;
-
 impl Interp {
     /// `requestString` for a native argument, holding a raised condition on
     /// the running native frame as [`Host::string_value`] does.
@@ -426,14 +603,29 @@ impl Interp {
                 self.roots.push_temp(text);
                 Ok(text)
             }
-            Err(failure) => {
-                self.native_handles
-                    .last_mut()
-                    .expect("a native activation is running")
-                    .raised = Some(failure);
-                Err(Condition)
-            }
+            Err(failure) => Err(self.hold_native_condition(failure)),
         }
+    }
+
+    /// Holds `failure` on the running native frame for the call to raise once
+    /// the boundary has answered [`Refused::Raised`].
+    fn hold_native_condition(&mut self, failure: Failure) -> Condition {
+        self.native_handles
+            .last_mut()
+            .expect("a native activation is running")
+            .raised = Some(failure);
+        Condition
+    }
+
+    /// The running native activation.
+    ///
+    /// # Panics
+    /// If no native activation is running, which is the only time the host is
+    /// asked.
+    fn native_frame(&self) -> &NativeFrame {
+        self.native_handles
+            .last()
+            .expect("a native activation is running")
     }
 }
 
@@ -914,6 +1106,10 @@ mod tests {
                 owner: rexx_core::ObjRef::NIL,
                 scope: rexx_core::ObjRef::NIL,
                 method,
+                receiver: rexx_core::ObjRef::NIL,
+                name: Vec::new(),
+                arguments: Vec::new(),
+                argument_list: None,
                 locals: rexx_api::handles::Table::new(),
                 raised: None,
             };

@@ -695,6 +695,101 @@ pub(crate) extern "C" fn nesting_stub(
     std::ptr::null_mut()
 }
 
+/// The signature [`cstring_stub`] publishes: a `CSTRING` result and no
+/// parameter.
+#[cfg(test)]
+static CSTRING_TYPES: [u16; 2] = [
+    crate::values::code::CSTRING,
+    crate::values::ARGUMENT_TERMINATOR,
+];
+
+/// The bytes [`cstring_stub`] answers a pointer to, a NUL inside them.
+#[cfg(test)]
+pub(crate) static STUB_TEXT: [u8; 15] = *b"answered\0after\0";
+
+/// A method stub answering [`STUB_TEXT`] as its `CSTRING` result.
+#[cfg(test)]
+pub(crate) extern "C" fn cstring_stub(
+    _context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return CSTRING_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: element zero is this call's result descriptor.
+    unsafe { (*arguments).value.value_CSTRING = STUB_TEXT.as_ptr().cast() };
+    std::ptr::null_mut()
+}
+
+/// A method stub answering a null `CSTRING` result, which it leaves as the
+/// zeroed word it was handed.
+#[cfg(test)]
+pub(crate) extern "C" fn null_cstring_stub(
+    _context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return CSTRING_TYPES.as_ptr().cast_mut();
+    }
+    std::ptr::null_mut()
+}
+
+/// The signature [`arglist_stub`] publishes: an `int` result, an `int`
+/// parameter, then the argument list.
+#[cfg(test)]
+static ARGLIST_TYPES: [u16; 4] = [
+    crate::values::code::INT,
+    crate::values::code::INT,
+    crate::values::code::ARGLIST,
+    crate::values::ARGUMENT_TERMINATOR,
+];
+
+/// A method stub answering its `int` argument.
+#[cfg(test)]
+pub(crate) extern "C" fn arglist_stub(
+    _context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return ARGLIST_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: the array is `invoke::run`'s, whose element one this signature
+    // declares an `int` that `values::descriptor` wrote in full.
+    unsafe { (*arguments).value.value_int = (*arguments.add(1)).value.value_int };
+    std::ptr::null_mut()
+}
+
+/// [`arglist_stub`] as a routine.
+#[cfg(test)]
+pub(crate) extern "C" fn arglist_routine_stub(
+    _context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    arglist_stub(std::ptr::null_mut(), arguments)
+}
+
+/// The signature [`name_result_stub`] publishes: `NAME` as its result type.
+#[cfg(test)]
+static NAME_RESULT_TYPES: [u16; 2] = [
+    crate::values::code::NAME,
+    crate::values::ARGUMENT_TERMINATOR,
+];
+
+/// A method stub declaring `NAME` as its result type and writing a `CSTRING`
+/// into it, which nothing reads.
+#[cfg(test)]
+pub(crate) extern "C" fn name_result_stub(
+    _context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return NAME_RESULT_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: element zero is this call's result descriptor.
+    unsafe { (*arguments).value.value_CSTRING = STUB_TEXT.as_ptr().cast() };
+    std::ptr::null_mut()
+}
+
 #[cfg(test)]
 thread_local! {
     /// What [`numeric_stub`] read through its call context: digits, fuzz and

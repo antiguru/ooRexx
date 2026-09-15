@@ -615,6 +615,10 @@ fn a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not()
 /// The `answer` values more than one send-surface row carries, with the rows
 /// that carry them.
 const SHARED_ANSWERS: &[(&str, &[&str])] = &[
+    // An extension's `logical_t` argument and a method's own logical
+    // argument, raised from different constructors because the native one is
+    // delivered against the declaring package.
+    ("34.901", &["native_argument_not_logical", "not_logical"]),
     // Three constructors for one number, and the check cannot tell them apart
     // because they differ in delivery rather than in the answer: one is a
     // stream method's own missing option, one a named argument, one an
@@ -625,6 +629,15 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
             "missing_internal_argument",
             "missing_named_argument",
             "missing_native_argument",
+        ],
+    ),
+    // A stream method's own `size_t` argument and an extension's declared
+    // integer, which differ in how the range's ends are passed.
+    (
+        "88.907",
+        &[
+            "native_argument_out_of_range_unsigned",
+            "native_argument_outside_range",
         ],
     ),
     (
@@ -640,6 +653,7 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
         &[
             "argument_not_a_class",
             "argument_not_an_instance",
+            "native_argument_not_an_instance",
             "scope_override_not_a_class",
         ],
     ),
@@ -648,6 +662,15 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
     (
         "93.903",
         &["missing_argument_named", "missing_method_argument"],
+    ),
+    // An extension's declared array and a message's argument array, which
+    // differ in delivery.
+    (
+        "98.913",
+        &[
+            "native_argument_not_an_array",
+            "object_not_single_dimensional",
+        ],
     ),
 ];
 

@@ -4563,9 +4563,6 @@ refuses on the routine path, each naming its owner:
   daemon's function registry before resolving it, and a later process's
   rxfuncquery sees it). No library this crate may load ships a classic row,
   so only rexx-api's unit test reaches it.
-  A conversion row a routine's signature declares that is not filled yet:
-  the surface plan's Task 3 (for example rxmath's MathLoadFuncs and
-  MathDropFuncs, whose CSTRING result refuses loudly).
   An interface member an extension calls that is not written yet: the
   surface plan's Task 5 (for example RxCalcSin with a units argument it does
   not accept, which refuses loudly naming NewStringFromAsciiz where the
@@ -4972,16 +4969,16 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   ~source, ~package and the flag readers read, and sharing it is new
   mechanism no task names.
 
-  THE Unfilled REFUSAL NAMES ITS OWNER TWICE.
+  THE Unfilled REFUSAL NAMES ITS OWNER TWICE. CLOSED by the surface plan's
+  Task 3, which filled every row of the conversion table in both directions
+  and removed the refusal, and with it the text that doubled.
     ::method v external "LIBRARY orxmethod TestInterpreterVersion" on a
     class t; say 'before'; v = .t~new~v
     oracle: before / version 328448 / ..., rc 0
-    this:   before, rc 120, rexx-exec: Phase 8 owes the FromNative conversion
+    was:    before, rc 120, rexx-exec: Phase 8 owes the FromNative conversion
             for REXX_VALUE_size_t (33) is not implemented (Phase 8)
-  The host appends the owner to a message that already names it
-  (dispatch/library.rs's Unfilled arm). OWNER: the surface plan's Task 3,
-  which fills the rows this refusal names; a row it leaves unfilled still
-  renders the doubled text.
+  corpus/lang/library_native_results.rex prints TestInterpreterVersion's
+  328448 and rxmath's MathLoadFuncs and MathDropFuncs CSTRING results.
 
   NO RUNNING GATE SEES THE IMPORTED LIBRARY ROUTINE OBJECT'S ROOT. With the
   RootSet::add_global that roots it deleted (then in merged_routine_object,
@@ -5049,3 +5046,21 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   required-package and parent orders; which of a library routine and an
   internal label of the same name a call reaches was raised by the task and
   never probed. Unmeasured, so no answer is recorded here. NO OWNER.
+
+  RECORDED BY SURFACE TASK 3 (2026-09-15), NOT FIXED:
+
+  A TRAPPED REFUSAL OF A NATIVE METHOD'S ARGUMENT CARRIES THE CALLER'S
+  POSITION, PROGRAM AND TRACEBACK. With pk.cls declaring ::method int
+  external "LIBRARY orxmethod TestIntArg" on a public class T, main.rex
+  requiring it and calling t~int() inside an INTERPRET under signal on
+  syntax, printing c~code c~position, PROGRAM's file name and TRACEBACK:
+    oracle: 88.901 The NIL object pk.cls, the traceback starting
+            *-* Compiled method "INT" with scope "T".
+    this:   88.901 8 main.rex, the traceback without that line
+  The same for 88.907 and 88.904 through TestIntArg('x') and
+  TestNonnegativeWholeNumberArg(-1); rc 0 both. The untrapped report agrees
+  on all three descriptors (corpus/lang/library_native_refusal_*.rex), so
+  only the condition object differs. The 88.901 comes from the missing
+  argument check, which Task 3 did not change; not run against an earlier
+  binary. NO OWNER: the condition object's fields for a lineless delivery
+  are the traceback family's, like the Compiled routine entry above.

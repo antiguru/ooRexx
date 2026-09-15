@@ -1,0 +1,48 @@
+/* The arguments a native signature takes from the call rather than the
+   argument list: the receiver, the method's scope and the one above it, the
+   whole argument list, which lets the call pass more than the rest consumes,
+   and the name the method was sent or the routine called by. */
+t = .T~new
+say 'oself' (t~oself == t) 'scope' t~scope 'super' t~super
+say 'class side' .T~superc .T~scopec (.T~oselfc == .T)
+say 'subclass side' .U~superc .U~scopec
+al = t~arglist(1, , 3)
+say 'arglist' al~items al~size al[1] al~hasIndex(2) al[3]
+say 'arglist none' t~arglist()~items
+say 'arglist send' t~send('ARGLIST', 1, 2)~items t~sendWith('arglist', .array~of(1, , 3))~size
+say 'arglist routine' TestArglistArg(1, 2, 3)~items TestArglistArg()~items
+say 'name' t~name t~other t~send('OTHER')
+say 'name routine' TestNameArg() testnamearg() aliased()
+call TestNameArg
+say 'name call' result
+r = .Routine~loadExternalRoutine('myname', 'LIBRARY orxfunction TestNameArg')
+say 'name loaded' r~call
+call try "TestNameArg(1)"
+call try "t~name(1)"
+exit
+
+try:
+  parse arg expression
+  signal on syntax name refused
+  interpret 'value =' expression
+  say expression 'answered' value
+  return
+refused:
+  c = condition('O')
+  say expression c~code '|' c~message
+  return
+
+::requires 'orxfunction' LIBRARY
+::routine aliased external "LIBRARY orxfunction TestNameArg"
+::class Base
+::class T subclass Base
+::method oself external "LIBRARY orxmethod TestOSelfArg"
+::method scope external "LIBRARY orxmethod TestScopeArg"
+::method super external "LIBRARY orxmethod TestSuperArg"
+::method arglist external "LIBRARY orxmethod TestArglistArg"
+::method name external "LIBRARY orxmethod TestNameArg"
+::method other external "LIBRARY orxmethod TestNameArg"
+::method superc class external "LIBRARY orxmethod TestSuperArg"
+::method scopec class external "LIBRARY orxmethod TestScopeArg"
+::method oselfc class external "LIBRARY orxmethod TestOSelfArg"
+::class U subclass T

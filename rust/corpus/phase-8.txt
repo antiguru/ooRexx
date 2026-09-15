@@ -201,3 +201,25 @@ lang/library_routine_object_identity.rex
 lang/library_routine_resolved_after_arguments.rex
 lang/library_routine_resolved_after_arguments_merge.rex
 lang/library_routine_resolved_after_arguments_search.rex
+
+# Surface Task 3: every conversion row, through orxmethod's and orxfunction's
+# echo methods and routines: the C integer rows at the ends of each range and
+# past them, a string's number rounded to twenty digits, the results a float,
+# double, logical_t, CSTRING, size_t and pointer string come back as, the
+# object, class, array, stem, logical and pointer arguments, and the arguments
+# a signature takes from the call.
+lang/library_native_integer_arguments.rex
+lang/library_native_results.rex
+lang/library_native_object_arguments.rex
+lang/library_native_special_arguments.rex
+
+# Surface Task 3: each refusal a conversion row makes of its argument names the
+# package its EXTERNAL directive was written in, with no line.
+lang/library_native_refusal_range.rex
+lang/library_native_refusal_nonnegative.rex
+lang/library_native_refusal_logical.rex
+lang/library_native_refusal_array.rex
+lang/library_native_refusal_instance.rex
+lang/library_native_refusal_pointer_string.rex
+lang/library_native_refusal_stem.rex
+lang/library_native_refusal_stem_routine.rex

@@ -21,7 +21,7 @@ use rexx_api::invoke;
 use rexx_api::layout::POINTER;
 use rexx_api::load::{self, NativeMethodEntry};
 use rexx_api::values::{
-    Activation, CStringPool, Constants, Conversion, Failure, Host, Numeric, Raised,
+    Activation, CStringPool, Class, Constants, Conversion, Failure, Host, Numeric, Raised,
 };
 use rexx_core::{BehaviourHandle, BehaviourId, Body, Bytes, Heap, ObjRef, RootSet, ScopePools};
 
@@ -217,8 +217,73 @@ impl Host for Interpreter {
         unreachable!("rxregexp's methods declare no double")
     }
 
-    fn positive_whole_number(&mut self, _object: ObjRef) -> Result<Option<isize>, Raised> {
-        unreachable!("rxregexp's methods declare no positive whole number")
+    fn signed_integer(
+        &mut self,
+        _object: ObjRef,
+        _min: i64,
+        _max: i64,
+    ) -> Result<Option<i64>, Raised> {
+        unreachable!("rxregexp's methods declare no signed integer")
+    }
+
+    fn unsigned_integer(&mut self, _object: ObjRef, _max: u64) -> Result<Option<u64>, Raised> {
+        unreachable!("rxregexp's methods declare no unsigned integer")
+    }
+
+    fn logical(&mut self, _object: ObjRef) -> Result<Option<bool>, Raised> {
+        unreachable!("rxregexp's methods declare no logical_t")
+    }
+
+    fn array_value(&mut self, _object: ObjRef) -> Result<Option<ObjRef>, Raised> {
+        unreachable!("rxregexp's methods declare no array")
+    }
+
+    fn is_stem(&self, _object: ObjRef) -> bool {
+        unreachable!("rxregexp's methods declare no stem")
+    }
+
+    fn context_stem(&mut self, _object: ObjRef) -> Result<Option<ObjRef>, Raised> {
+        unreachable!("rxregexp's methods declare no stem")
+    }
+
+    fn is_instance_of(&mut self, _object: ObjRef, _class: Class) -> bool {
+        unreachable!("rxregexp's methods declare no class-checked argument")
+    }
+
+    fn pointer_value(&self, _object: ObjRef) -> Option<POINTER> {
+        unreachable!("rxregexp's methods declare no POINTER argument")
+    }
+
+    fn string_value_text(&mut self, _object: ObjRef) -> Vec<u8> {
+        unreachable!("rxregexp's methods declare no POINTERSTRING")
+    }
+
+    fn receiver(&mut self) -> ObjRef {
+        unreachable!("rxregexp's methods declare no OSELF")
+    }
+
+    fn scope(&mut self) -> ObjRef {
+        unreachable!("rxregexp's methods declare no SCOPE")
+    }
+
+    fn super_scope(&mut self) -> ObjRef {
+        unreachable!("rxregexp's methods declare no SUPER")
+    }
+
+    fn arguments(&mut self) -> ObjRef {
+        unreachable!("rxregexp's methods declare no ARGLIST")
+    }
+
+    fn message_name(&mut self) -> Vec<u8> {
+        unreachable!("rxregexp's methods declare no NAME")
+    }
+
+    fn unsigned_number(&mut self, _value: u64) -> ObjRef {
+        unreachable!("rxregexp's methods return no unsigned integer")
+    }
+
+    fn new_string(&mut self, _bytes: &[u8]) -> ObjRef {
+        unreachable!("rxregexp's methods return no CSTRING")
     }
 
     fn double_object(&mut self, _value: f64, _precision: usize) -> ObjRef {

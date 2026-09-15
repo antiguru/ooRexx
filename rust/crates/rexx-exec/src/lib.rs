@@ -2229,6 +2229,14 @@ struct NativeFrame {
     /// A method's activation rather than a routine's, which is what decides
     /// whether a signature may ask for the receiver's state.
     method: bool,
+    /// The method's receiver, `.nil` for a routine.
+    receiver: ObjRef,
+    /// The name the method was sent by or the routine called by.
+    name: Vec<u8>,
+    /// The call's arguments, an omitted one `None`.
+    arguments: Vec<Option<ObjRef>>,
+    /// The array [`NativeFrame::arguments`] became, once a conversion asked.
+    argument_list: Option<ObjRef>,
     locals: rexx_api::handles::Table,
     /// The condition an argument's string conversion raised, held for the
     /// call to raise once the boundary has answered
@@ -5617,11 +5625,12 @@ impl Interp {
         // collector's other routes because an extension's handle is the only
         // reference to it: nothing on the Rexx side names an object a native
         // method allocated and has not returned yet.
-        out.extend(
-            native_handles
-                .iter()
-                .flat_map(|frame| frame.locals.roots().chain([frame.owner, frame.scope])),
-        );
+        for frame in native_handles {
+            out.extend(frame.locals.roots());
+            out.extend([frame.owner, frame.scope, frame.receiver]);
+            out.extend(frame.arguments.iter().copied().flatten());
+            out.extend(frame.argument_list);
+        }
         // A manager is an ordinary program object held by nothing else: the
         // package that carries it is a plan, not an object with a slot.
         out.extend(security_managers.values().copied());
@@ -7019,6 +7028,10 @@ say 1
             owner: rexx_core::ObjRef::NIL,
             scope: rexx_core::ObjRef::NIL,
             method: true,
+            receiver: rexx_core::ObjRef::NIL,
+            name: Vec::new(),
+            arguments: Vec::new(),
+            argument_list: None,
             locals: rexx_api::handles::Table::new(),
             raised: None,
         };
@@ -7042,5 +7055,51 @@ say 1
              collection that leaves it alive means these are rooted by \
              something other than the destructure this test is about"
         );
+    }
+
+    /// The receiver, the arguments and the argument array a native activation
+    /// holds for its conversions are roots while it lives, each one alone.
+    #[test]
+    fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
+        let mut interp = Interp::new();
+        let fresh = |interp: &mut Interp| {
+            interp.heap.alloc(rexx_core::Body::Array {
+                slots: Vec::new(),
+                dimensions: None,
+            })
+        };
+        let (receiver, argument, list) =
+            (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
+        interp.native_handles.push(crate::NativeFrame {
+            owner: rexx_core::ObjRef::NIL,
+            scope: rexx_core::ObjRef::NIL,
+            method: true,
+            receiver,
+            name: b"NAME".to_vec(),
+            arguments: vec![None, Some(argument)],
+            argument_list: Some(list),
+            locals: rexx_api::handles::Table::new(),
+            raised: None,
+        });
+        interp.collect_now();
+        for (held, what) in [
+            (receiver, "receiver"),
+            (argument, "argument"),
+            (list, "list"),
+        ] {
+            assert!(interp.heap.get(held).is_some(), "the {what} was collected");
+        }
+        interp.native_handles.pop();
+        interp.collect_now();
+        for (held, what) in [
+            (receiver, "receiver"),
+            (argument, "argument"),
+            (list, "list"),
+        ] {
+            assert!(
+                interp.heap.get(held).is_none(),
+                "the {what} outlived its frame, so something else roots it"
+            );
+        }
     }
 }

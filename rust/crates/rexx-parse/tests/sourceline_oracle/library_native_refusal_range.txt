@@ -1,0 +1,9 @@
+count 8
+/* A native method's refusal of its argument is reported against the package
+   its EXTERNAL directive was written in, with no line: an integer out of its type's range is 88.907. */
+say 'before'
+t = .T~new
+say t~int8(128)
+say 'after'
+
+::requires 'pk.cls'

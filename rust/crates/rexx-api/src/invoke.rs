@@ -20,7 +20,9 @@ use rexx_core::ObjRef;
 use crate::ffi::{CallContext, MethodContext};
 use crate::layout::ValueDescriptor;
 use crate::load::{NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE};
-use crate::values::{self, ARGUMENT_TERMINATOR, Activation, Converted, Failure, Repr, Value};
+use crate::values::{
+    self, ARGUMENT_TERMINATOR, Activation, Converted, Failure, ResultRead, Value, Written,
+};
 
 /// `NativeActivation::MaxNativeArguments`
 /// (`interpreter/execution/NativeActivation.hpp:209`), the length of the
@@ -48,8 +50,9 @@ pub const MAX_NATIVE_ARGUMENTS: usize = 16;
 /// or carries the optional bit; [`Failure::MissingArgument`] for a parameter
 /// that takes an argument, is not optional and was given none, whether or not
 /// the table knows its code; [`Failure::ResultSignature`] for
-/// a return code it does not know; [`Failure::TooManyArguments`] for
-/// arguments the signature does not consume; [`Failure::UnfilledSlot`] for the
+/// a return code it does not know or does not convert back;
+/// [`Failure::TooManyArguments`] for arguments the signature does not consume,
+/// where no parameter takes the argument list; [`Failure::UnfilledSlot`] for the
 /// first interface member the extension reached that this phase has not
 /// written, which also forgets any condition the extension raised.
 ///
@@ -99,7 +102,10 @@ fn run(
     signature: &[u16],
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
-    call: impl FnOnce(&mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS], Option<Repr>) -> Option<Value>,
+    call: impl FnOnce(
+        &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
+        Option<ResultRead>,
+    ) -> Option<Written>,
 ) -> Result<Option<ObjRef>, Failure> {
     let returns = signature.first().copied().unwrap_or(ARGUMENT_TERMINATOR);
 
@@ -112,6 +118,8 @@ fn run(
     // without consuming one of these, which is why the position an error
     // reports counts only the arguments (`NativeActivation.cpp:327`).
     let mut input = 0;
+    // The oracle's `usedArglist` (`NativeActivation.cpp:311`).
+    let mut takes_list = false;
     for (output, declared) in signature.iter().copied().enumerate().skip(1) {
         let consumes = values::consumes_argument(declared);
         let argument = if consumes {
@@ -127,13 +135,14 @@ fn run(
         if consumes {
             input += 1;
         }
+        takes_list |= values::takes_argument_list(declared);
     }
-    if input < arguments.len() {
+    if input < arguments.len() && !takes_list {
         return Err(Failure::TooManyArguments { expected: input });
     }
 
     let (written, refused) =
-        crate::layout::recording_refusals(|| call(&mut descriptors, values::result_repr(returns)));
+        crate::layout::recording_refusals(|| call(&mut descriptors, values::result_read(returns)));
     if let Some(entry) = refused {
         // Ahead of the result and of any condition the extension raised
         // during the call, before the refused member or after it.
@@ -144,7 +153,11 @@ fn run(
     if returns == ARGUMENT_TERMINATOR {
         return Ok(None);
     }
-    let value = written.ok_or(Failure::ResultSignature)?;
+    let value = match written.ok_or(Failure::ResultSignature)? {
+        Written::Member(value) => value,
+        Written::Text(None) => Value::CString(std::ptr::null()),
+        Written::Text(Some(bytes)) => Value::CString(cx.conversion().strings.intern(&bytes)),
+    };
     values::from_native(&mut cx.conversion(), returns, value)
 }
 
@@ -205,8 +218,8 @@ mod tests {
         stub_entry, stub_routine_entry,
     };
     use crate::values::{
-        ARGUMENT_EXISTS, ARGUMENT_TERMINATOR, Activation, CStringPool, Constants, Conversion,
-        Failure, Host, Numeric, OPTIONAL_ARGUMENT, Raised, code,
+        ARGUMENT_EXISTS, ARGUMENT_TERMINATOR, Activation, CStringPool, Class, Constants,
+        Conversion, Failure, Host, Numeric, OPTIONAL_ARGUMENT, Raised, code,
     };
 
     /// What the stub and the interpreter each did, in the order they did it.
@@ -350,6 +363,8 @@ mod tests {
         nest: bool,
         /// What that nested call answered.
         nested: Option<Result<Option<ObjRef>, Failure>>,
+        /// What `arguments` answers.
+        argument_list: ObjRef,
     }
 
     impl Interpreter {
@@ -367,6 +382,7 @@ mod tests {
                 doubles: Vec::new(),
                 nest: false,
                 nested: None,
+                argument_list: ObjRef::NIL,
             }
         }
 
@@ -441,11 +457,76 @@ mod tests {
             Ok(text.and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok()))
         }
 
-        fn positive_whole_number(&mut self, object: ObjRef) -> Result<Option<isize>, Raised> {
+        fn signed_integer(
+            &mut self,
+            object: ObjRef,
+            min: i64,
+            max: i64,
+        ) -> Result<Option<i64>, Raised> {
             let text = self.string_bytes(object).map(Cow::into_owned);
             Ok(text
                 .and_then(|bytes| String::from_utf8(bytes).ok()?.parse().ok())
-                .filter(|number| *number >= 1))
+                .filter(|number| (min..=max).contains(number)))
+        }
+
+        fn unsigned_integer(&mut self, _object: ObjRef, _max: u64) -> Result<Option<u64>, Raised> {
+            unreachable!("the stubs these tests call declare no unsigned integer")
+        }
+
+        fn logical(&mut self, _object: ObjRef) -> Result<Option<bool>, Raised> {
+            unreachable!("the stubs these tests call declare no logical_t")
+        }
+
+        fn array_value(&mut self, _object: ObjRef) -> Result<Option<ObjRef>, Raised> {
+            unreachable!("the stubs these tests call declare no array")
+        }
+
+        fn is_stem(&self, _object: ObjRef) -> bool {
+            unreachable!("the stubs these tests call declare no stem")
+        }
+
+        fn context_stem(&mut self, _object: ObjRef) -> Result<Option<ObjRef>, Raised> {
+            unreachable!("the stubs these tests call declare no stem")
+        }
+
+        fn is_instance_of(&mut self, _object: ObjRef, _class: Class) -> bool {
+            unreachable!("the stubs these tests call declare no class-checked argument")
+        }
+
+        fn pointer_value(&self, _object: ObjRef) -> Option<POINTER> {
+            unreachable!("the stubs these tests call declare no POINTER argument")
+        }
+
+        fn string_value_text(&mut self, _object: ObjRef) -> Vec<u8> {
+            unreachable!("the stubs these tests call declare no POINTERSTRING")
+        }
+
+        fn receiver(&mut self) -> ObjRef {
+            unreachable!("the stubs these tests call declare no OSELF")
+        }
+
+        fn scope(&mut self) -> ObjRef {
+            unreachable!("the stubs these tests call declare no SCOPE")
+        }
+
+        fn super_scope(&mut self) -> ObjRef {
+            unreachable!("the stubs these tests call declare no SUPER")
+        }
+
+        fn arguments(&mut self) -> ObjRef {
+            self.argument_list
+        }
+
+        fn message_name(&mut self) -> Vec<u8> {
+            b"STUB".to_vec()
+        }
+
+        fn unsigned_number(&mut self, _value: u64) -> ObjRef {
+            unreachable!("the stubs these tests call return no unsigned integer")
+        }
+
+        fn new_string(&mut self, bytes: &[u8]) -> ObjRef {
+            self.text(bytes)
         }
 
         fn double_object(&mut self, value: f64, precision: usize) -> ObjRef {
@@ -892,6 +973,88 @@ mod tests {
             pending, None,
             "the condition raised after the refusal survived it"
         );
+    }
+
+    /// Runs the method `stub` against `arguments` freshly made strings, over
+    /// the contexts a `Contexts` builds, and answers the outcome beside the
+    /// bytes of the object it answered, if any.
+    fn run_stub(
+        stub: crate::load::NativeMethod,
+        arguments: &[&[u8]],
+    ) -> (Result<Option<ObjRef>, Failure>, Option<Vec<u8>>) {
+        let entry = stub_entry(b"stub", stub);
+        let mut interpreter = Interpreter::new();
+        let supplied: Vec<Option<ObjRef>> = arguments
+            .iter()
+            .map(|bytes| Some(interpreter.text(bytes)))
+            .collect();
+        let mut strings = CStringPool::new();
+        let outcome = {
+            let activation = Activation::new(Conversion {
+                host: &mut interpreter,
+                strings: &mut strings,
+            });
+            let mut contexts = crate::ffi::Contexts::new(&activation);
+            method(&entry, &contexts.method(), &activation, &supplied)
+        };
+        let bytes = match &outcome {
+            Ok(Some(object)) => interpreter
+                .string_bytes(*object)
+                .map(std::borrow::Cow::into_owned),
+            _ => None,
+        };
+        (outcome, bytes)
+    }
+
+    /// A `CSTRING` result is copied out of the extension's memory when the
+    /// call returns and stops at the first NUL, and a null one is no object.
+    #[test]
+    fn a_cstring_result_is_copied_up_to_its_first_nul() {
+        let (outcome, bytes) = run_stub(crate::ffi::cstring_stub, &[]);
+        assert!(matches!(outcome, Ok(Some(_))), "{outcome:?}");
+        assert_eq!(bytes.as_deref(), Some(&b"answered"[..]));
+        let (outcome, _) = run_stub(crate::ffi::null_cstring_stub, &[]);
+        assert_eq!(outcome, Ok(None));
+    }
+
+    /// A special code as the result type is refused through the call, whose
+    /// descriptor holds a `CSTRING` the refusal does not turn into a string.
+    #[test]
+    fn a_special_code_as_the_result_is_refused() {
+        let (outcome, _) = run_stub(crate::ffi::name_result_stub, &[]);
+        assert_eq!(outcome, Err(Failure::ResultSignature));
+    }
+
+    /// `ARGLIST` lifts the check for arguments the signature does not consume,
+    /// in a method and in a routine, which share it (ruling S2); the
+    /// signature's other parameters still convert. Measured, oracle:
+    /// `ForgeRoutineIntThenArglist(7, 2, 3)` answers `7` and
+    /// `TestIntArg(1, 2)` is 88.922.
+    #[test]
+    fn an_argument_list_parameter_takes_arguments_nothing_else_consumes() {
+        let (outcome, bytes) = run_stub(crate::ffi::arglist_stub, &[b"7", b"8", b"9"]);
+        assert_eq!(outcome, Ok(ObjRef::small_int(7)), "{bytes:?}");
+
+        let entry = stub_routine_entry(
+            ROUTINE_TYPED_STYLE,
+            b"arglist",
+            crate::ffi::arglist_routine_stub,
+        );
+        let mut interpreter = Interpreter::new();
+        let supplied: Vec<Option<ObjRef>> = [&b"5"[..], b"6"]
+            .iter()
+            .map(|bytes| Some(interpreter.text(bytes)))
+            .collect();
+        let mut strings = CStringPool::new();
+        let outcome = {
+            let activation = Activation::new(Conversion {
+                host: &mut interpreter,
+                strings: &mut strings,
+            });
+            let mut contexts = crate::ffi::Contexts::new(&activation);
+            routine(&entry, &contexts.call(), &activation, &supplied)
+        };
+        assert_eq!(outcome, Ok(ObjRef::small_int(5)));
     }
 
     #[test]

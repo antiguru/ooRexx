@@ -20,7 +20,7 @@ use crate::layout::{
     RexxCallContext_, RexxMethodContext_, RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry,
     ValueDescriptor, ValueUnion,
 };
-use crate::values::{ARGUMENT_TERMINATOR, Repr, Value};
+use crate::values::{ARGUMENT_TERMINATOR, ResultRead, Written};
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 
@@ -143,8 +143,8 @@ impl NativeMethodEntry {
     }
 
     /// Call the stub with `arguments`, which it reads and writes its result
-    /// into, and answer element zero read as `result`'s member, or `None`
-    /// where `result` is. A row with no address calls nothing.
+    /// into, and answer element zero read as `result` says, or `None` where
+    /// `result` is. A row with no address calls nothing.
     ///
     /// The array is published on `context` for the call and taken off again
     /// afterwards, because it does not outlive this function.
@@ -152,8 +152,8 @@ impl NativeMethodEntry {
         &self,
         context: &MethodContext<'_>,
         arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
-        result: Option<Repr>,
-    ) -> Option<Value> {
+        result: Option<ResultRead>,
+    ) -> Option<Written> {
         let pointer = context.as_ptr();
         // SAFETY: `pointer` addresses the live struct `context` borrows, and
         // naming a field's address reads and writes nothing.
@@ -243,8 +243,8 @@ impl NativeRoutineEntry {
         &self,
         context: &CallContext<'_>,
         arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
-        result: Option<Repr>,
-    ) -> Option<Value> {
+        result: Option<ResultRead>,
+    ) -> Option<Written> {
         let pointer = context.as_ptr();
         // SAFETY: as `NativeMethodEntry::call`.
         let published = unsafe { &raw mut (*pointer).arguments };
@@ -304,8 +304,7 @@ unsafe fn signature_of<C>(stub: Stub<C>, context: *mut C, limit: usize) -> Optio
 }
 
 /// Call `stub`, where there is one, with `arguments` published on `context`
-/// for the length of the call, and answer element zero read as `result`'s
-/// member.
+/// for the length of the call, and answer element zero read as `result` says.
 ///
 /// # Safety
 /// As [`signature_of`], and `published` is `context`'s own `arguments` field.
@@ -314,8 +313,8 @@ unsafe fn call_stub<C>(
     context: *mut C,
     published: *mut *mut ValueDescriptor,
     arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
-    result: Option<Repr>,
-) -> Option<Value> {
+    result: Option<ResultRead>,
+) -> Option<Written> {
     // The whole word, before the stub can write a narrower member into it.
     arguments[0].value = ValueUnion { value_int64_t: 0 };
     if let Some(stub) = stub {
@@ -336,9 +335,29 @@ unsafe fn call_stub<C>(
         // SAFETY: as the write above.
         unsafe { *published = std::ptr::null_mut() };
     }
-    // SAFETY: element zero's word was written in full above, and a stub
-    // writing a member into it leaves every byte initialised.
-    result.map(|repr| unsafe { crate::ffi::value_of(&arguments[0], repr) })
+    Some(match result? {
+        // SAFETY: element zero's word was written in full above, and a stub
+        // writing a member into it leaves every byte initialised.
+        ResultRead::Member(repr) => {
+            Written::Member(unsafe { crate::ffi::value_of(&arguments[0], repr) })
+        }
+        ResultRead::Text => {
+            // SAFETY: as the read above, for a pointer-sized member.
+            let pointer = unsafe { arguments[0].value.value_CSTRING };
+            if pointer.is_null() {
+                Written::Text(None)
+            } else {
+                // SAFETY: a `CSTRING` result is a NUL-terminated string that
+                // outlives the stub's return, which is the extension's side of
+                // the header's contract and what `valueToObject` relies on when
+                // it copies the string after the call
+                // (`interpreter/execution/NativeActivation.cpp:825-833`). The
+                // bytes are copied here, before anything else runs.
+                let bytes = unsafe { CStr::from_ptr(pointer) }.to_bytes().to_vec();
+                Written::Text(Some(bytes))
+            }
+        }
+    })
 }
 
 /// An opened shared library together with the package entry it published.

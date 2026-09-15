@@ -5546,7 +5546,10 @@ impl Interp {
 
     /// [`Interp::over_target_array`]'s `requestArray` limb, which is a message
     /// send on one path and a direct call on the other.
-    fn request_array_for_over(&mut self, value: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    pub(crate) fn request_array_for_over(
+        &mut self,
+        value: ObjRef,
+    ) -> Result<Option<ObjRef>, Failure> {
         let caller = self.caller();
         if self.is_base_class(value) {
             if self.lookup(value, b"MAKEARRAY", None).is_none() {
