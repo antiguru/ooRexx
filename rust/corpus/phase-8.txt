@@ -116,3 +116,7 @@ lang/directory_enumeration_runs_no_method.rex
 # what the directory holds after puts that grow it, removals, empty, a
 # setMethod entry and an UNKNOWN method set and unset.
 lang/environment_symbol_after_store_changes.rex
+
+# Surface Task 1 fix round 2: a ::CLASS target looked up in .environment
+# raises what the lookup raises when a package installs, not class-not-found.
+lang/directive_class_environment_raises.rex

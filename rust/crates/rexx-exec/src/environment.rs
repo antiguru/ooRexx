@@ -536,36 +536,39 @@ impl Interp {
     /// do not declare it. A `ns:Name` target never comes here --
     /// `Interp::resolve_class_target` answers it from the namespace table
     /// instead, which is `ClassResolver::lookup`'s own split.
+    ///
+    /// Fails with what the `.environment` lookup raised, which a stored method
+    /// or an `UNKNOWN` method there can.
     pub(crate) fn directive_class(
         &mut self,
         installing: ProgramId,
         upper: &[u8],
-    ) -> Option<ObjRef> {
+    ) -> Result<Option<ObjRef>, Failure> {
         if let Some(found) = self.installed_class(upper) {
-            return Some(found);
+            return Ok(Some(found));
         }
         if let Some(found) = self
             .merged_public_classes
             .get(&installing)
             .and_then(|table| table.get(upper))
         {
-            return Some(*found);
+            return Ok(Some(*found));
         }
         // `.environment` alone, not `.NAME`'s pair: `ClassDirective`'s own
         // search is the package's classes and then the environment
         // directory, and `.local` is not in it.
-        if let Ok(hash::DirectoryEntry::Found(found)) =
-            self.directory_lookup(&[EnvScope::Environment], upper, &env_seam::Access::Direct)
+        if let hash::DirectoryEntry::Found(found) =
+            self.directory_lookup(&[EnvScope::Environment], upper, &env_seam::Access::Direct)?
             && self.heap.is_class(found)
         {
-            return Some(found);
+            return Ok(Some(found));
         }
         // A name that answers something which is not a class, and a name
         // whose directory entry this crate has not built, both fall through
         // to the native table -- which is where a `::CLASS` target was
         // resolved before `.environment` was ever consulted, so a miss is the
         // same 98.909 it was.
-        self.classes().lookup_upper(upper)
+        Ok(self.classes().lookup_upper(upper))
     }
 
     /// What the first of `scopes` whose directory holds `bare` answers for it.

@@ -4140,10 +4140,14 @@ impl Interp {
                 None => Err(Loud::missing_body().into()),
             },
             None => match self.directive_class(installing, &target.name) {
-                Some(id) => Ok(id),
-                None => {
+                Ok(Some(id)) => Ok(id),
+                Ok(None) => {
                     self.blame_directive(program, directive);
                     Err(not_found(&target.name).into())
+                }
+                Err(failure) => {
+                    self.blame_directive(program, directive);
+                    Err(failure)
                 }
             },
         }

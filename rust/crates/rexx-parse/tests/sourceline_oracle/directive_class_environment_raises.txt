@@ -1,0 +1,22 @@
+count 21
+/* A ::CLASS target a package's own directives do not declare is looked up in
+   .environment, and what that lookup raises is what installing the package
+   raises: an UNKNOWN method or a method entry that divides by zero gives 42.3,
+   not a class-not-found. The same UNKNOWN answering a class resolves it. */
+pkg = .context~package
+env = .environment
+env~setMethod('UNKNOWN', 'use arg name; say "  unknown asked for" name; if name == "ZZGOOD" then return .array; return 1 / 0')
+say 'raises.cls ' try(pkg, 'raises.cls')
+env~setMethod('ZZMETHOD', 'say "  method entry ran"; return 1 / 0')
+say 'method.cls ' try(pkg, 'method.cls')
+say 'answers.cls' try(pkg, 'answers.cls')
+say 'its class  ' pkg~findPublicClass('BAR')~superclass~id
+exit
+
+try: procedure
+  use arg pkg, name
+  signal on syntax name raised
+  pkg~loadPackage(name)
+  return 'loaded'
+raised:
+  return 'raised' condition('O')~code condition('O')~message
