@@ -19,9 +19,9 @@ use super::{BodyEngine, Chunk, ConditionKeyword, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
 use crate::eval::{SymbolRead, call_target_name};
 use crate::run::{
-    Absorbed, ConditionTrace, Echo, Ended, Flow, LoopHeaderValues, QueueKeyword, ReturnKeyword,
-    SelectEscape, SelectResume, absorb, otherwise_range, otherwise_resume, select_escape,
-    select_parts, when_resume, when_targets,
+    Absorbed, CallResolution, ConditionTrace, Echo, Ended, Flow, LoopHeaderValues, QueueKeyword,
+    ReturnKeyword, SelectEscape, SelectResume, absorb, otherwise_range, otherwise_resume,
+    select_escape, select_parts, when_resume, when_targets,
 };
 use crate::{Code, Failure, Interp, Loud};
 
@@ -698,28 +698,15 @@ impl Interp {
                                             break 'cold Err(Loud::call_op_off_its_node().into());
                                         };
                                         let (name, search_labels) = call_target_name(code, target);
-                                        // A raise is deliberately not recorded, and
-                                        // the table drops a stale kept answer, for
-                                        // the reasons `Op::Call`'s read gives.
-                                        let resolved = match chunk
-                                            .resolved_call(*site, self.routine_generation)
-                                        {
-                                            Some(resolved) => {
-                                                #[cfg(test)]
-                                                count_call_site_hit();
-                                                resolved
-                                            }
-                                            None => match self.resolve_call(name, search_labels) {
-                                                Ok(resolved) => {
-                                                    chunk.remember_call(
-                                                        *site,
-                                                        resolved,
-                                                        self.routine_generation,
-                                                    );
-                                                    resolved
-                                                }
-                                                Err(failure) => break 'cold Err(failure),
-                                            },
+                                        let resolution = match self
+                                            .site_resolution_before_arguments(
+                                                chunk,
+                                                *site,
+                                                name,
+                                                search_labels,
+                                            ) {
+                                            Ok(resolution) => resolution,
+                                            Err(failure) => break 'cold Err(failure),
                                         };
                                         let probe = 0u8;
                                         if let Err(failure) = self.enter_eval_node(&raw const probe)
@@ -727,7 +714,7 @@ impl Interp {
                                             break 'cold Err(failure);
                                         }
                                         let value =
-                                            self.eval_call_resolved(code, resolved, name, args);
+                                            self.eval_call_resolved(code, resolution, name, args);
                                         self.depth -= 1;
                                         let value = match value {
                                             Ok(value) => value,
@@ -1532,52 +1519,24 @@ impl Interp {
                                         else {
                                             break 'cold Err(Loud::call_op_off_its_node().into());
                                         };
-                                        // **The site's own kept answer, and the
-                                        // resolution when it has none.** The table
-                                        // drops a kept answer the oracle would look
-                                        // up again once a routine table has been
-                                        // written
-                                        // (`Resolved::kept_until_routines_change`). A
-                                        // raise is deliberately not recorded:
-                                        // `resolve_call` answers `Err` for a name
-                                        // that matched nothing, and a site that
-                                        // raised asks again.
-                                        let resolved = match chunk
-                                            .resolved_call(*site, self.routine_generation)
+                                        // A failure is held until the arguments
+                                        // have run, which on this op they have not
+                                        // -- `Op::CallNamed` took every clause
+                                        // whose arguments compile, so what is left
+                                        // here evaluates them inside `invoke_call`.
+                                        // `Interp::resolved_after_arguments` has
+                                        // the citation.
+                                        let resolution = self.site_resolution_before_arguments(
+                                            chunk, *site, name, !*literal,
+                                        );
+                                        let resolution = match self
+                                            .resolved_after_arguments(code, resolution, args)
                                         {
-                                            Some(resolved) => {
-                                                #[cfg(test)]
-                                                count_call_site_hit();
-                                                resolved
-                                            }
-                                            // A failure is held until the
-                                            // arguments have run, which on
-                                            // this op they have not --
-                                            // `Op::CallNamed` took every
-                                            // clause whose arguments compile,
-                                            // so what is left here evaluates
-                                            // them inside `invoke_call`.
-                                            // `Interp::resolved_after_
-                                            // arguments` has the citation.
-                                            None => {
-                                                let resolution = self.resolve_call(name, !*literal);
-                                                match self.resolved_after_arguments(
-                                                    code, resolution, args,
-                                                ) {
-                                                    Ok(resolved) => {
-                                                        chunk.remember_call(
-                                                            *site,
-                                                            resolved,
-                                                            self.routine_generation,
-                                                        );
-                                                        resolved
-                                                    }
-                                                    Err(failure) => break 'cold Err(failure),
-                                                }
-                                            }
+                                            Ok(resolution) => resolution,
+                                            Err(failure) => break 'cold Err(failure),
                                         };
                                         let flow = match self
-                                            .invoke_named_call(code, resolved, name, args)
+                                            .invoke_named_call(code, resolution, name, args)
                                         {
                                             Ok(flow) => flow,
                                             Err(failure) => break 'cold Err(failure),
@@ -2463,6 +2422,49 @@ fn count_arith_hint_skip() {
 #[cfg(test)]
 pub(crate) fn arith_hint_skips() -> usize {
     ARITH_HINT_SKIPS.with(std::cell::Cell::get)
+}
+
+impl Interp {
+    /// A call op's resolution before its arguments run, for an op that
+    /// evaluates them itself: the site's kept answer, or the part of the
+    /// resolution the oracle decides before the arguments, kept when it
+    /// decides one.
+    ///
+    /// **A raise is deliberately not recorded**: `resolve_fixed_call` answers
+    /// `Err` for a name it refuses, and a site that raised asks again. A kept
+    /// answer the oracle would search for again is handed on with the
+    /// generation it was read under, since the arguments can write a routine
+    /// table before it is used.
+    fn site_resolution_before_arguments<'c>(
+        &self,
+        chunk: &'c Chunk,
+        site: u16,
+        name: &[u8],
+        search_labels: bool,
+    ) -> Result<CallResolution<'c>, Failure> {
+        let generation = self.routine_generation;
+        if let Some(resolved) = chunk.resolved_call(site, generation) {
+            #[cfg(test)]
+            count_call_site_hit();
+            if !resolved.kept_until_routines_change() {
+                return Ok(CallResolution::Settled(resolved));
+            }
+            return Ok(CallResolution::AfterArguments {
+                kept: Some((resolved, generation)),
+                site: Some(chunk.call_site_slot(site)),
+            });
+        }
+        Ok(match self.resolve_fixed_call(name, search_labels)? {
+            Some(resolved) => {
+                chunk.remember_call(site, resolved, generation);
+                CallResolution::Settled(resolved)
+            }
+            None => CallResolution::AfterArguments {
+                kept: None,
+                site: Some(chunk.call_site_slot(site)),
+            },
+        })
+    }
 }
 
 // Test-only instrumentation: how many times this thread has run a compiled call

@@ -194,3 +194,9 @@ lang/library_routine_parent_before_merged.rex
 # Surface Task 2 fix round 2: an imported library routine is one Routine object,
 # whichever package or send answers it.
 lang/library_routine_object_identity.rex
+
+# Surface Task 2 fix round 3: a call looks its routine up once its arguments have
+# run, and keeps what findRoutine found then.
+lang/library_routine_resolved_after_arguments.rex
+lang/library_routine_resolved_after_arguments_merge.rex
+lang/library_routine_resolved_after_arguments_search.rex

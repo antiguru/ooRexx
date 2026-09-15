@@ -15,7 +15,7 @@
 use crate::activation::CallType;
 use crate::error::Raised;
 use crate::run::CallEntry;
-use crate::run::{Ended, Resolved};
+use crate::run::{CallResolution, Ended, Resolved};
 use crate::value::{canonical_small_int, exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
 use rexx_core::{Body, Decoded, INLINE_BYTES, NotNumeric, ObjRef};
@@ -483,7 +483,7 @@ impl Interp {
                 let package = self.running_program().ok_or_else(Loud::missing_body)?;
                 let resolution = self.namespace_routine(package, &namespace, &name);
                 let resolved = self.resolved_after_arguments(code, resolution, args)?;
-                self.eval_call_resolved(code, resolved, &name, args)
+                self.eval_call_resolved(code, CallResolution::Settled(resolved), &name, args)
             }
             other => Err(Loud::expression(other).into()),
         }
@@ -527,16 +527,16 @@ impl Interp {
         let (name, search_labels) = call_target_name(code, target);
         // Held until the arguments have run -- `Interp::resolved_after_
         // arguments` has the C++ citation and the two measurements.
-        let resolution = self.resolve_call(name, search_labels);
-        let resolved = self.resolved_after_arguments(code, resolution, args)?;
-        self.eval_call_resolved(code, resolved, name, args)
+        let fixed = self.resolve_fixed_call(name, search_labels);
+        let fixed = self.resolved_after_arguments(code, fixed, args)?;
+        self.eval_call_resolved(code, Self::unkept_resolution(fixed), name, args)
     }
 
     /// [`eval_call`]'s second half: everything after the resolution.
     pub(crate) fn eval_call_resolved(
         &mut self,
         code: &Code<'_>,
-        resolved: Resolved,
+        resolution: CallResolution<'_>,
         name: &[u8],
         args: &[Option<Expr>],
     ) -> Result<ObjRef, Failure> {
@@ -547,7 +547,7 @@ impl Interp {
         // What the detour cost is the `Ended` -- wider than a register pair,
         // so built in memory here and read back out one line later, on the
         // path every `length(...)`/`substr(...)` in a program takes.
-        if let Resolved::Builtin(target) = resolved {
+        if let CallResolution::Settled(Resolved::Builtin(target)) = resolution {
             return self.invoke_builtin_call(code, target, name, args);
         }
         // `CallType::Function`: this is the function-invocation route, and a
@@ -556,7 +556,7 @@ impl Interp {
         // `SUBROUTINE`. Measured in one program, the same routine both ways.
         match self.invoke_call(
             code,
-            resolved,
+            resolution,
             name,
             args,
             CallType::Function,

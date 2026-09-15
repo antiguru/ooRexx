@@ -683,6 +683,26 @@ impl Chunk {
     fn remember_call(&self, at: u16, resolved: Resolved, generation: u32) {
         self.calls.remember(at, resolved, generation);
     }
+
+    /// Call site `at`, lent to a call that resolves after its arguments.
+    fn call_site_slot(&self, at: u16) -> CallSiteSlot<'_> {
+        CallSiteSlot { chunk: self, at }
+    }
+}
+
+/// One chunk's call site, lent to a call that settles its resolution once its
+/// arguments have run.
+#[derive(Clone, Copy)]
+pub(crate) struct CallSiteSlot<'a> {
+    chunk: &'a Chunk,
+    at: u16,
+}
+
+impl CallSiteSlot<'_> {
+    /// Records `resolved` at the site, under `generation`.
+    pub(crate) fn remember(self, resolved: Resolved, generation: u32) {
+        self.chunk.remember_call(self.at, resolved, generation);
+    }
 }
 
 #[cfg(test)]

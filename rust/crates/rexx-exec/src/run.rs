@@ -159,9 +159,26 @@ pub(crate) enum Resolved {
     /// Nothing answers this name. **Not an error here**: the security
     /// manager's `CALL` checkpoint runs before 43.1 is reported
     /// (`RexxActivation::externalCall`, `execution/RexxActivation.cpp:3077`
-    /// against `:3102`), and it needs the arguments, which are evaluated
-    /// after resolution. The raise happens where the checkpoint declines.
+    /// against `:3102`), and it needs the arguments. The raise happens where
+    /// the checkpoint declines.
     Unresolved,
+}
+
+/// A call's target as it stands when its arguments are about to run.
+#[derive(Clone, Copy)]
+pub(crate) enum CallResolution<'a> {
+    /// Decided before the arguments: a label or a builtin, a namespace-qualified
+    /// routine, or a routine a call site kept for good.
+    Settled(Resolved),
+    /// Searched for once the arguments have run, as `externalCall` is
+    /// (`expression/ExpressionFunction.cpp:185-210`). `kept` is a call site's
+    /// answer that [`Resolved::kept_until_routines_change`] names, with the
+    /// `Interp::routine_generation` it was read under, used again where the
+    /// arguments moved no generation. `site` keeps the answer taken.
+    AfterArguments {
+        kept: Option<(Resolved, u32)>,
+        site: Option<crate::ir::CallSiteSlot<'a>>,
+    },
 }
 
 impl Resolved {
@@ -1360,7 +1377,7 @@ impl Interp {
                     let package = self.running_program().ok_or_else(Loud::missing_body)?;
                     let resolution = self.namespace_routine(package, &namespace, &name);
                     let resolved = self.resolved_after_arguments(code, resolution, args)?;
-                    self.invoke_named_call(code, resolved, &name, args)
+                    self.invoke_named_call(code, CallResolution::Settled(resolved), &name, args)
                 }
             },
 
@@ -3735,12 +3752,29 @@ impl Interp {
     }
 
     /// Resolves `name` to the thing a call of it runs, with no argument
-    /// evaluated and nothing entered.
+    /// evaluated and nothing entered: [`Interp::resolve_fixed_call`], then
+    /// [`Interp::resolve_routine_call`].
     pub(crate) fn resolve_call(
         &self,
         name: &[u8],
         search_labels: bool,
     ) -> Result<Resolved, Failure> {
+        match self.resolve_fixed_call(name, search_labels)? {
+            Some(resolved) => Ok(resolved),
+            None => self.resolve_routine_call(name),
+        }
+    }
+
+    /// The half of a call's resolution the oracle decides before its
+    /// arguments run: a label (`RexxExpressionFunction::resolve`,
+    /// `expression/ExpressionFunction.cpp:154`) or a builtin (the parser's
+    /// `builtinIndex`), or the refusal of a builtin Phase 4 excludes. `None`
+    /// for a name that is none of those.
+    pub(crate) fn resolve_fixed_call(
+        &self,
+        name: &[u8],
+        search_labels: bool,
+    ) -> Result<Option<Resolved>, Failure> {
         // **Resolved against the running *activation's* body, not against the
         // body a caller is walking, and the two differ inside an `INTERPRET`
         // fragment.** A fragment's `labels` is always empty -- a label in
@@ -3760,13 +3794,6 @@ impl Interp {
         } else {
             None
         };
-        // **The whole resolution happens here, upstream of the argument loop
-        // in `invoke_call`**, and the shape is load-bearing rather than tidy.
-        // The builtin step needs its arguments already evaluated, so it cannot
-        // sit where the raising return sits; putting the lookup between the
-        // label miss and that return would have placed it upstream of the
-        // evaluation it consumes. Deciding all four outcomes first is what
-        // lets one argument loop serve three of them.
         let resolved = match label {
             Some(target) => Resolved::Label(target),
             // **`resolve` rather than `is_builtin`, and it answers the same
@@ -3783,55 +3810,62 @@ impl Interp {
             None if builtin::is_excluded_builtin(name) => {
                 return Err(Loud::unresolved_call(name).into());
             }
-            None => match self.package_routine_lookup(name) {
-                Some(resolved) => resolved,
-                // **Ahead of the external file search and behind
-                // everything above it.** `Setup.cpp` resolves
-                // `CoreClasses.orx`'s two `CALL`s against the interpreter's
-                // own directory, which is neither a label, a builtin nor a
-                // `::ROUTINE`; this crate embeds those files instead. Gated
-                // on the bootstrap running, so the names mean nothing to a
-                // program.
-                None if self.library_bootstrap
-                    && let Some(program) = rexx_lib::lookup(&String::from_utf8_lossy(name)) =>
-                {
-                    Resolved::Library(program)
+            None => return Ok(None),
+        };
+        Ok(Some(resolved))
+    }
+
+    /// The half of a call's resolution the oracle searches once the
+    /// arguments have run (`RexxActivation::externalCall`,
+    /// `execution/RexxActivation.cpp:3062-3105`), for a name
+    /// [`Interp::resolve_fixed_call`] answered `None` for.
+    pub(crate) fn resolve_routine_call(&self, name: &[u8]) -> Result<Resolved, Failure> {
+        let resolved = match self.package_routine_lookup(name) {
+            Some(resolved) => resolved,
+            // **Ahead of the external file search and behind
+            // everything above it.** `Setup.cpp` resolves
+            // `CoreClasses.orx`'s two `CALL`s against the interpreter's
+            // own directory, which is neither a label, a builtin nor a
+            // `::ROUTINE`; this crate embeds those files instead. Gated
+            // on the bootstrap running, so the names mean nothing to a
+            // program.
+            None if self.library_bootstrap
+                && let Some(program) = rexx_lib::lookup(&String::from_utf8_lossy(name)) =>
+            {
+                Resolved::Library(program)
+            }
+            // **A routine of the oracle's own internal packages**, which
+            // it consults here -- after the running package's routines and
+            // before the external file search. Answering 43.1 for one of
+            // these says "no such routine" for a name the oracle does
+            // have, which a program cannot tell from its own typo.
+            None if let Some(row) = crate::internal_routines::lookup(name) => match row.body {
+                Some(_) => Resolved::Internal(row),
+                None => {
+                    let owner = row
+                        .owner
+                        .expect("a row with no body names the phase that owes it");
+                    return Err(Loud::internal_routine(name, owner).into());
                 }
-                // **A routine of the oracle's own internal packages**, which
-                // it consults here -- after the running package's routines and
-                // before the external file search. Answering 43.1 for one of
-                // these says "no such routine" for a name the oracle does
-                // have, which a program cannot tell from its own typo.
-                None if let Some(row) = crate::internal_routines::lookup(name) => match row.body {
-                    Some(_) => Resolved::Internal(row),
-                    None => {
-                        let owner = row
-                            .owner
-                            .expect("a row with no body names the phase that owes it");
-                        return Err(Loud::internal_routine(name, owner).into());
-                    }
-                },
-                // **A routine a loaded library exports**, whichever load
-                // registered it. The oracle keeps these in the table the
-                // internal packages' routines are in, where a library routine
-                // replaces an internal one of the same name; here the internal
-                // one is found first.
-                None if let Some(slot) = self.package_routine(name) => {
-                    Resolved::LibraryRoutine(slot)
-                }
-                // **The external file search, which the oracle performs
-                // before answering 43.1.** Only whether it resolves is
-                // decided here; the path is searched for again where the
-                // file is entered, because a `Resolved` is `Copy` and this
-                // resolver is `&self`.
-                None if self.external_program(name).is_some() => Resolved::External,
-                // 43.1, once the search above has found nothing, and
-                // raised by the consumer rather than here. Measured in a
-                // clean directory with nothing of that name beside the
-                // program: `call zorkolo` gives 43.1 rc 213 `Could not find
-                // routine "ZORKOLO".`
-                None => Resolved::Unresolved,
             },
+            // **A routine a loaded library exports**, whichever load
+            // registered it. The oracle keeps these in the table the
+            // internal packages' routines are in, where a library routine
+            // replaces an internal one of the same name; here the internal
+            // one is found first.
+            None if let Some(slot) = self.package_routine(name) => Resolved::LibraryRoutine(slot),
+            // **The external file search, which the oracle performs
+            // before answering 43.1.** Only whether it resolves is
+            // decided here; the path is searched for again where the
+            // file is entered, because a `Resolved` is `Copy` and this
+            // resolver is `&self`.
+            None if self.external_program(name).is_some() => Resolved::External,
+            // 43.1, once the search above has found nothing, and
+            // raised by the consumer rather than here. Measured in a
+            // clean directory with nothing of that name beside the
+            // program: `call zorkolo` gives 43.1 rc 213 `Could not find
+            // routine "ZORKOLO".`
+            None => Resolved::Unresolved,
         };
         Ok(resolved)
     }
@@ -3898,12 +3932,12 @@ impl Interp {
         })
     }
 
-    /// Evaluates the arguments of a call already resolved to `resolved` and
-    /// runs it, in its own nested activation where it has one.
+    /// Evaluates a call's arguments, settles `resolution` once they have run,
+    /// and runs the call, in its own nested activation where it has one.
     pub(crate) fn invoke_call(
         &mut self,
         code: &Code<'_>,
-        resolved: Resolved,
+        resolution: CallResolution<'_>,
         name: &[u8],
         args: &[Option<Expr>],
         call_type: CallType,
@@ -3915,43 +3949,11 @@ impl Interp {
         // 1/0` is Error 42.3
         // reported against the `CALL` clause, at rc 214, and a version that
         // skipped evaluation would run the callee instead.
-        if let Resolved::Builtin(target) = resolved {
+        if let CallResolution::Settled(Resolved::Builtin(target)) = resolution {
             return Ok(Ended::Returned(Some(
                 self.invoke_builtin_call(code, target, name, args)?,
             )));
         }
-        // An internal-package routine runs no activation either, so it takes
-        // the same shortcut -- but its arguments are evaluated by the loop
-        // below rather than by the builtin path's own, which is why it is not
-        // folded into the arm above.
-        if let Resolved::Internal(_) | Resolved::LibraryRoutine(_) = resolved {
-            let mut values: Vec<Option<ObjRef>> = Vec::with_capacity(args.len());
-            for arg in args {
-                match arg {
-                    None => {
-                        self.trace_argument(self.clause_state.current_value_indent, b"");
-                        values.push(None);
-                    }
-                    Some(expr) if self.leaf_argument(expr) => {
-                        values.push(Some(self.eval_leaf_argument(code, expr)?));
-                    }
-                    Some(expr) => values.push(Some(self.eval_traced_argument(code, expr)?)),
-                }
-            }
-            if let Some(handled) = self.call_checkpoint(name, &values)? {
-                return Ok(Ended::Returned(handled));
-            }
-            return match resolved {
-                Resolved::Internal(row) => {
-                    Ok(Ended::Returned(Some(self.run_internal(row, &values)?)))
-                }
-                Resolved::LibraryRoutine(slot) => self
-                    .run_package_routine(slot, name, &values)
-                    .map(Ended::Returned),
-                _ => unreachable!("only the two arms above reach here"),
-            };
-        }
-
         // A fresh `Vec` and not a lent one: this path always hands the
         // arguments to the callee, which keeps them, so there is nothing to
         // give back and a pool would allocate on every call anyway.
@@ -3971,7 +3973,59 @@ impl Interp {
                 Some(expr) => arguments.push(Some(self.eval_traced_argument(code, expr)?)),
             }
         }
+        let resolved = self.settle_after_arguments(resolution, name)?;
+        // An internal-package routine runs no activation, and neither does a
+        // library routine, so they take the builtin discipline over the values.
+        if let Resolved::Internal(_) | Resolved::LibraryRoutine(_) = resolved {
+            if let Some(handled) = self.call_checkpoint(name, &arguments)? {
+                return Ok(Ended::Returned(handled));
+            }
+            return match resolved {
+                Resolved::Internal(row) => {
+                    Ok(Ended::Returned(Some(self.run_internal(row, &arguments)?)))
+                }
+                Resolved::LibraryRoutine(slot) => self
+                    .run_package_routine(slot, name, &arguments)
+                    .map(Ended::Returned),
+                _ => unreachable!("only the two arms above reach here"),
+            };
+        }
         self.invoke_call_over(resolved, name, arguments, call_type, entry)
+    }
+
+    /// What a call runs, once its arguments have run.
+    fn settle_after_arguments(
+        &self,
+        resolution: CallResolution<'_>,
+        name: &[u8],
+    ) -> Result<Resolved, Failure> {
+        let (kept, site) = match resolution {
+            CallResolution::Settled(resolved) => return Ok(resolved),
+            CallResolution::AfterArguments { kept, site } => (kept, site),
+        };
+        if let Some((resolved, generation)) = kept
+            && generation == self.routine_generation
+        {
+            return Ok(resolved);
+        }
+        let resolved = self.resolve_routine_call(name)?;
+        if let Some(site) = site {
+            site.remember(resolved, self.routine_generation);
+        }
+        Ok(resolved)
+    }
+
+    /// The resolution a call without a site of its own starts from: what
+    /// [`Interp::resolve_fixed_call`] decided, or a search once the arguments
+    /// have run.
+    pub(crate) fn unkept_resolution(fixed: Option<Resolved>) -> CallResolution<'static> {
+        match fixed {
+            Some(resolved) => CallResolution::Settled(resolved),
+            None => CallResolution::AfterArguments {
+                kept: None,
+                site: None,
+            },
+        }
     }
 
     /// One compiled call over the arguments its own ops already evaluated.
@@ -4480,8 +4534,8 @@ impl Interp {
         }
     }
 
-    /// [`Interp::resolve_call`] followed by [`Interp::invoke_call`], with
-    /// nothing remembered in between.
+    /// [`Interp::resolve_fixed_call`] followed by [`Interp::invoke_call`], with
+    /// nothing remembered.
     pub(crate) fn resolve_and_run_call(
         &mut self,
         code: &Code<'_>,
@@ -4491,8 +4545,15 @@ impl Interp {
         call_type: CallType,
         entry: CallEntry,
     ) -> Result<Ended, Failure> {
-        let resolved = self.resolve_call(name, search_labels)?;
-        self.invoke_call(code, resolved, name, args, call_type, entry)
+        let fixed = self.resolve_fixed_call(name, search_labels)?;
+        self.invoke_call(
+            code,
+            Self::unkept_resolution(fixed),
+            name,
+            args,
+            call_type,
+            entry,
+        )
     }
 
     /// Builds the object a `>name` or `<name` term answers: the variable
@@ -4569,12 +4630,12 @@ impl Interp {
 
     /// A call's resolution, held back until its arguments have run.
     #[inline(always)]
-    pub(crate) fn resolved_after_arguments(
+    pub(crate) fn resolved_after_arguments<T>(
         &mut self,
         code: &Code<'_>,
-        resolution: Result<Resolved, Failure>,
+        resolution: Result<T, Failure>,
         args: &[Option<Expr>],
-    ) -> Result<Resolved, Failure> {
+    ) -> Result<T, Failure> {
         match resolution {
             Ok(resolved) => Ok(resolved),
             Err(failure) => Err(self.arguments_before_failure(code, args, failure)),
@@ -4611,7 +4672,8 @@ impl Interp {
         failure
     }
 
-    /// Runs one named `CALL`: `resolve_call`, then [`Interp::invoke_named_call`].
+    /// Runs one named `CALL`: `resolve_fixed_call`, then
+    /// [`Interp::invoke_named_call`].
     fn exec_call(
         &mut self,
         code: &Code<'_>,
@@ -4619,9 +4681,9 @@ impl Interp {
         search_labels: bool,
         args: &[Option<Expr>],
     ) -> Result<Flow, Failure> {
-        let resolution = self.resolve_call(name, search_labels);
-        let resolved = self.resolved_after_arguments(code, resolution, args)?;
-        self.invoke_named_call(code, resolved, name, args)
+        let fixed = self.resolve_fixed_call(name, search_labels);
+        let fixed = self.resolved_after_arguments(code, fixed, args)?;
+        self.invoke_named_call(code, Self::unkept_resolution(fixed), name, args)
     }
 
     /// The `CALL` instruction past its resolution: [`Interp::invoke_call`],
@@ -4630,7 +4692,7 @@ impl Interp {
     pub(crate) fn invoke_named_call(
         &mut self,
         code: &Code<'_>,
-        resolved: Resolved,
+        resolution: CallResolution<'_>,
         name: &[u8],
         args: &[Option<Expr>],
     ) -> Result<Flow, Failure> {
@@ -4641,7 +4703,7 @@ impl Interp {
         let base_indent = self.clause_state.current_value_indent;
         let ended = self.invoke_call(
             code,
-            resolved,
+            resolution,
             name,
             args,
             CallType::Subroutine,
