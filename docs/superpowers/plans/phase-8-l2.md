@@ -302,6 +302,9 @@ finding, and it is the one thing in this document that a reader should act on: t
 column cannot move L2 to another phase's row until some phase takes the `Directory` protocol on the
 environment directories.
 
+*Acted on 2026-09-14:* Moritz ruled that Phase 8 takes it, recorded in D-L2 and carried as Task 1 of
+`docs/superpowers/plans/2026-09-14-phase-8-surface.md`. This section is the finding as it was made.
+
 ## 5. Three other divergences the walk found, two of them not Phase 8's
 
 Each was reduced to a two-file program and measured on both sides. None was fixed here; the third

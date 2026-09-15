@@ -112,7 +112,9 @@ uniq -c`): `METHOD` and `CONVERSION` bind `orxmethod`, `FUNCTION` binds `orxfunc
 `INVOCATION`, `ProcessInvocation`, `RexxStart` and `ProcessRexxStart` all load
 `INVOCATIONTester.cls`, which binds `orxinvocation`, and `CLASSIC` binds `orxclassic` and registers
 `orxclassic1` through `rxfuncadd` (`CLASSIC.testGroup:822,861,875`). On the oracle checkout's
-`build/lib`, which holds one product per `testbinaries/` target compiled from sources
+`build/lib` and `build/bin`, which hold one product per `testbinaries/` target -- the six
+libraries in `build/lib`, the `rexxinstance` and `provoke_locks` executables in `build/bin` --
+compiled from sources
 byte-identical to this tree's (`diff -rq` of `api/` and of `testbinaries/` against
 `/home/moritz/dev/repos/ooRexx`, both empty): `readelf -d` gives `liborxmethod.so` and
 `liborxfunction.so` a `NEEDED` list of `libc.so.6` alone, and `nm -D --undefined-only` shows
@@ -147,7 +149,8 @@ with `grep -rn 'Phase 8' crates/*/src`:
 * `::REQUIRES LIBRARY` (`lib.rs:820`)
 * `::METHOD EXTERNAL` and `::ATTRIBUTE EXTERNAL` naming a library other than `REXX` (`lib.rs:801`)
 * `loadExternalMethod` / `loadExternalRoutine` and `Package~loadLibrary`
-* `handle_set` (`dispatch/native.rs:217`), the one `Stream` entry point held back here --
+* `handle_set` (`dispatch/native.rs`, its `deferred("handle_set", ...)` row), the one `Stream`
+  entry point held back here --
   re-homed to Phase 10 at `08d232ecc`, whose message says it needs `from_raw_fd` and never needed
   the loader
 
@@ -164,7 +167,8 @@ extracted programs rather than the framework, so they can be run before L2 is re
 
 **D-U1: the unsafe grant, and `dlopen`'s provider. Closed by Moritz 2026-09-14**, before any
 `extern "C"` entry point was written, which the roadmap's section 6 Phase 8 bullet requires
-(`2026-07-27-rust-rewrite.md:2638`). The block is in Section 1 of `2026-07-27-rust-rewrite.md`.
+(`2026-07-27-rust-rewrite.md`, the section 6 bullet beginning "**Phase 8** rebuilds `testbinaries/`
+unchanged"). The block is in Section 1 of `2026-07-27-rust-rewrite.md`.
 Two modules are granted `#[allow(unsafe_code)]` -- `rexx-api/src/ffi.rs` for the inbound boundary
 and `rexx-api/src/load.rs` for the outbound one -- and `libloading` 0.8.9 joins the dependency set
 for the loader. Phase 7's "no new dependency beyond `rustix`" constraint was that phase's own and

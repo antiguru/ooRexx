@@ -57,8 +57,8 @@ checked rather than assumed:
   the source does.
 * **Five error numbers in the spec and the plan had been read out of `RexxErrorCodes.h` rather
   than taken from a run.** All five were wrong, and one of them — 98.978 — is reachable from no
-  surface at all. Corrected across `b83ed8312` (the load-failure numbers: 98.982 for `::REQUIRES`
-  and the two entry-missing paths), `378d5613b` (the argument refusals) and `165373cf5` (the last
+  surface at all. Corrected across `b83ed8312` (the load-failure numbers: 98.903 where 98.982 had
+  been written for `::REQUIRES`, and the two entry-missing paths), `378d5613b` (the argument refusals) and `165373cf5` (the last
   one retired).
 
 ## 3. The negative controls
@@ -109,11 +109,12 @@ Each was predicted before it was run.
 Recorded in `docs/superpowers/plans/phase-4-exclusions.txt`'s KNOWN GAPS section with their
 transcripts, and in `docs/superpowers/plans/phase-8-l2.md` for the L2 walk itself:
 
-* **L2 is still not reached, and the blocker is no longer this phase's.** The framework now gets
+* **L2 is still not reached, and its blocker is now this phase's.** The framework now gets
   past `.ENDOFLINE`, past `rxregexp.cls` and past `::METHOD INIT EXTERNAL "LIBRARY rxregexp
   RegExp_Init"`, and stops at `ooTest.frm:49`, `.local~hasEntry(...)`. Nine `Directory` methods
   refuse on `.local` and `.environment`; every refusal names Phase 5, which is closed. Decision
-  D-L2 records that no open phase owns them.
+  D-L2 recorded that no open phase owned them, and Moritz then ruled that Phase 8 does: they are
+  Task 1 of `2026-09-14-phase-8-surface.md`.
 * **The surface half is unbuilt**, with its own plan document.
 * **Three divergences the L2 walk found**, two of them not Phase 8's and the third partly this
   phase's -- its library rows were loud refusals before this slice, silent wrong file names during

@@ -4534,7 +4534,8 @@ of silent. Nobody owns it. It is not Phase 5 work.
 --------------------------------------------------------------------------
 PHASE 8 LEAVES THESE, RECORDED AT ITS L2 SLICE CLOSE (2026-09-14)
 
-L2 IS NOT REACHED AND ITS BLOCKER HAS NO OWNER. The framework now loads a
+L2 IS NOT REACHED; ITS BLOCKER HAD NO OWNER UNTIL MORITZ GAVE IT TO PHASE 8.
+The framework now loads a
 shared library, so it gets past .ENDOFLINE, past rxregexp.cls and past
 ::METHOD INIT EXTERNAL "LIBRARY rxregexp RegExp_Init", and stops at
 ooTest.frm:49, .local~hasEntry(...). Located by running a traced copy, not
@@ -4544,8 +4545,10 @@ index, remove, supplier and allIndexes all refuse on .local and
 which closed on 2026-09-09. On the oracle the same command runs the group,
 33 tests and 11741 assertions, rc 0; ours is rc 120 with one refusal line,
 so the gap is a refusal and not a wrong answer. Decision D-L2 in the
-roadmap records that the Rung column cannot be re-homed until a phase takes
-those methods. See docs/superpowers/plans/phase-8-l2.md.
+roadmap recorded that the Rung column cannot be re-homed until a phase takes
+those methods; Moritz ruled on 2026-09-14 that Phase 8 does, as Task 1 of
+docs/superpowers/plans/2026-09-14-phase-8-surface.md. See
+docs/superpowers/plans/phase-8-l2.md.
 
 THE ROUTINE HALF OF THE NATIVE CALLING PROTOCOL IS UNBUILT. ::ROUTINE
 EXTERNAL and a ::REQUIRES ... LIBRARY's routines install and then refuse
@@ -4618,8 +4621,9 @@ each: METHOD and CONVERSION -> orxmethod; FUNCTION -> orxfunction;
 INVOCATION, ProcessInvocation, RexxStart and ProcessRexxStart ->
 INVOCATIONTester.cls -> orxinvocation; CLASSIC -> orxclassic, plus
 orxclassic1 through rxfuncadd (CLASSIC.testGroup:822,861,875). On the
-oracle checkout's build/lib, which holds one product per testbinaries/
-target from sources byte-identical to this tree's (diff -rq of api/ and of
+oracle checkout's build/lib and build/bin, which hold one product per
+testbinaries/ target (six libraries in build/lib, the rexxinstance and
+provoke_locks executables in build/bin) from sources byte-identical to this tree's (diff -rq of api/ and of
 testbinaries/ against /home/moritz/dev/repos/ooRexx, both empty): readelf
 -d shows liborxmethod.so and liborxfunction.so NEED libc.so.6 alone, and nm
 -D --undefined-only shows no Rexx* import in either; liborxinvocation.so
@@ -4738,8 +4742,9 @@ possible and the citation is what was checked.
     oracle: a Method, rc 0
     this:   rc 120, method "NEW" of class "Method" is not implemented
             (Phase 5)
-  Loud and pre-existing. OWNER: the same unpaid Phase 5 debt D-L2 records
-  for the Directory methods; no open phase holds it.
+  Loud and pre-existing. OWNER: none. It is Phase 5 debt of the kind D-L2
+  recorded for the Directory methods, but the ruling that gave those to
+  Phase 8 named only them, so no open phase holds this one.
 
   THE TRACEBACK OF A RAISE INSIDE .Package~new OR loadPackage LACKS THE
   ORACLE'S COMPILED-METHOD LINE AND THE CALLING CLAUSE (the residual
@@ -4771,7 +4776,7 @@ possible and the citation is what was checked.
   requiredVersion 0x00060000 package in scratch (the ledger's
   final-fix-report.md F5, and nine load sites SAME on the fix re-review's
   own forge). Package~loadLibrary's mapping of Version to 98.982 has no
-  committed test that fails without it (M-F5b there). Instrument gap, NO
+  committed test that fails without it (M-F5b in final-fix-report.md). Instrument gap, NO
   OWNER: forged extensions cannot enter the corpus.
 
   INSTRUMENTS OUTSIDE THE GATE. Miri is the one instrument that sees F7's
@@ -4780,12 +4785,13 @@ possible and the citation is what was checked.
   wrapper-derived context pointers of F8 and X5 (the stub tests pass on
   stable with the field-derived mutant and report a Stacked Borrows read at
   owner_of under Miri). It runs from a scratch RUSTUP_HOME because the
-  system toolchain directory is read-only; Tree Borrows was run once, in
-  the fix round, and passes the unfixed tree too, so Stacked Borrows is the
-  one witness. The stable rustdoc does not check a compile_fail doctest's
+  system toolchain directory is read-only. The fix re-review ran Tree
+  Borrows on the tree before F8 and on a thread-side mutant, and it passed
+  both (fix-rereview-boundary.md), so Stacked Borrows is the one witness. The stable rustdoc does not check a compile_fail doctest's
   error code: the value_of and METHOD_CONTEXT doctests were checked once
   on nightly (E0133, and a wrong code fails there) and by dropping the
-  unsafe on stable. NO OWNER: the gate's toolchain is stable by decision.
+  unsafe on stable. NO OWNER: the gate's toolchain is stable by decision
+  (rust/rust-toolchain.toml; the roadmap's "No nightly features").
 
   collect_stress's L0 TEST STOPS BEFORE ANY phase-8.txt PROGRAM. It panics
   at dispatch.rs:1506 on lang/condition_object_syntax.rex, a phase-7.txt

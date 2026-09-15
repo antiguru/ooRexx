@@ -21,8 +21,8 @@ that stops every ooTest group from loading at all.
 and its whole-branch review the three `final-review-*.md` reports under
 `docs/superpowers/records/2026-09-14-phase-8/`.
 
-**Amended 2026-09-14, before execution**, from the L2 slice's final review and one ruling by
-Moritz. What changed and why:
+**Amended 2026-09-15, before execution**, from the L2 slice's final review and one ruling by
+Moritz of 2026-09-14. What changed and why:
 
 * **Task 1 is new.** Every ooTest API group requires `ooTest.frm`, which stops at `:49` on
   `.local~hasEntry`; nine `Directory` methods refuse on `.local` and `.environment` (D-L2). Moritz
@@ -31,13 +31,13 @@ Moritz. What changed and why:
   designs.
 * **The group partition was wrong, and it is now derived.** The spec and this plan had two
   embedding groups and six that are not. The groups' own directives and the oracle build's
-  `readelf -d`/`nm -D` say otherwise (Task 7 records the commands): `METHOD` and `CONVERSION` load
+  `readelf -d`/`nm -D` say otherwise (the scoping survey's section 3 carries the commands): `METHOD` and `CONVERSION` load
   `orxmethod`, `FUNCTION` loads `orxfunction`, and neither library needs an interpreter library or
   imports a `Rexx*` symbol. `RexxStart`, `ProcessRexxStart`, `INVOCATION` and `ProcessInvocation`
   all load `INVOCATIONTester.cls`, which binds `orxinvocation`, which NEEDs `liborxexits.so`, which
   NEEDs `librexx.so.4` and imports `RexxCreateInterpreter` and `RexxStart`: embedding, Phase 9's.
-  `CLASSIC` loads `orxclassic` and registers `orxclassic1` through `rxfuncadd`, and both import the
-  function, subcom, queue and macro-space registries: Phase 10's. Roadmap rows 9 and 10 and
+  `CLASSIC` loads `orxclassic` and registers `orxclassic1` through `rxfuncadd`; between them they
+  import the function, subcom, queue and macro-space registries: Phase 10's. Roadmap rows 9 and 10 and
   `phase-4-exclusions.txt` carry that re-homing with its commands since `313807bc5` and `3bb1d34d2`.
 * **"`testbinaries/` compile unchanged" is already witnessed**, by the oracle's own build of
   sources byte-identical to this tree's against headers byte-identical to this tree's. Building them
@@ -105,10 +105,12 @@ Moritz. What changed and why:
 * **The C++ tree, `build/`, `samples/`, `ootest/`, `oodocs/` and `testbinaries/` are read-only.**
   No extension is ever rebuilt: loading the oracle's own compiled extensions is the instrument, per
   the D5 amendment. The corpus differential loads them from the oracle checkout's `build/lib`.
-* **Never load a prebuilt extension that NEEDs `librexx.so` or `librexxapi.so` into this crate.**
-  `liborxinvocation.so`, `liborxexits.so`, `liborxclassic.so` and `liborxclassic1.so` do; `dlopen`
+* **Never load a prebuilt extension that NEEDs `librexx.so` or `librexxapi.so` into this crate,
+  directly or through another library it NEEDs.** `liborxexits.so`, `liborxclassic.so` and
+  `liborxclassic1.so` do directly, and `liborxinvocation.so` does through `liborxexits.so`; `dlopen`
   would map the oracle's own interpreter into this process, and a green result would be the
-  oracle's. Check `readelf -d` before the first load of any library not named in this plan.
+  oracle's. Before the first load of any library not named in this plan, follow its `readelf -d`
+  `NEEDED` entries transitively, or run `ldd` on it.
 * **No process-global state is mutated.**
 * **Correctness is byte-identical stdout, stderr and exit status against the C++ oracle**, on three
   separate descriptors, never `2>&1`, through the standard wrapper from a fresh empty directory.
@@ -151,7 +153,8 @@ design step names; witnesses under `rust/corpus/lang/`.
       loop before and after, interleaved, a few runs each; (f) anything else the Phase 5 records
       say (`docs/superpowers/records/2026-08-*-phase-5a*/`, `2026-09-07-phase-5h-*`).
 - [ ] **Step 2: Choose the representation and write the choice into the report before code.** The
-      likely shape is the Task 1 store `Directory~new` already uses, filled in the oracle's
+      likely shape is the store `dispatch/hash.rs` gives a `.Directory~new` instance, with its
+      string-value key protocol, filled in the oracle's
       insertion order at the oracle's bucket size, with the security chokepoint and `.local`'s
       minting kept on the lookup path. If Step 1 shows a cheaper shape reproduces the order, take
       it. Whatever answers must answer for every `Directory` method, not only the nine: enumerate
@@ -191,7 +194,8 @@ use refuses naming Phase 5.
       since its consumers are `rxsubcom` and the registered-function API.
 - [ ] **Step 2:** Populate `CallContextInterface`, which is what a routine receives.
 - [ ] **Step 3:** Register a library's routines at the one resolution path every load site shares,
-      not at one caller of it, so all four load sites make the routines callable by name from any
+      not at one caller of it, so every load site (the fix re-review enumerated nine for a first
+      ask) makes the routines callable by name from any
       package, including one loaded before the library was. Measure on the oracle which packages
       see a routine a library loaded inside a required package's routine made available.
 - [ ] **Step 4:** A `Routine` from `loadExternalRoutine` answers `~call`, and a `Method` from
@@ -213,8 +217,10 @@ use refuses naming Phase 5.
       `Repr` its code uses.
 - [ ] **Step 2:** `ARGLIST` carries `usedArglist` (`NativeActivation.cpp:680`), so the too-many
       check in `invoke::method` is skipped for a signature that takes one.
-- [ ] **Step 3:** The special codes as *return* types answer `Signature` (93.968), which is
-      `valueToObject`'s `default:`, rather than `Unfilled`.
+- [ ] **Step 3:** The special codes as *return* types answer `Failure::ResultSignature` (93.968,
+      reported with its line against the sender, as F9 measured for the result side), which is
+      `valueToObject`'s `default:`, rather than `Unfilled`. Not `Failure::Signature`, which is the
+      argument side's lineless delivery against the declaring package.
 - [ ] **Step 4:** Per-row tests both directions, and the row-deletion control re-run on a row this
       task adds rather than one it inherited. Commit.
 
@@ -293,15 +299,17 @@ is not.
 **Files:** `docs/superpowers/plans/phase-8-gate.md`, a derived test beside `rexx-api/tests/load.rs`
 
 - [ ] **Step 1:** Record, with the commands, that `api/` and `testbinaries/` are byte-identical
-      between the oracle checkout and this tree, and that the oracle's `build/lib` holds every
-      `testbinaries/` product. **This is what "compile unchanged against frozen headers" is
+      between the oracle checkout and this tree, and that the oracle's `build/lib` holds the six
+      library products and its `build/bin` the `rexxinstance` and `provoke_locks` executables. **This is what "compile unchanged against frozen headers" is
       witnessed by**, and the gate document says so, and says that a build succeeding says the
       headers are compatible, not that the entry points behind them work.
 - [ ] **Step 2:** A test that reads each API group's `EXTERNAL "LIBRARY <name>"` and `rxfuncadd`
-      directives, and each named library's `NEEDED` entries and undefined `Rexx*` symbols, and
-      asserts the partition: the groups whose libraries need no interpreter library are the ones
-      `corpus/phase-8.txt` runs; the rest are refused naming the phase their imports belong to.
-      Derived, so a group that changes its library moves on its own.
+      directives, and each named library's `NEEDED` entries followed transitively and its
+      undefined `Rexx*` symbols, and asserts the partition against a list the test itself holds:
+      the groups whose libraries need no interpreter library are exactly `METHOD`, `CONVERSION`
+      and `FUNCTION`, and every other group maps to the phase its imports belong to (embedding to
+      Phase 9, the RXAPI registries to Phase 10). Derived, so a group that changes its library
+      fails the test. Task 8 runs the groups that list names.
 - [ ] **Step 3:** The re-homing is already recorded (`313807bc5`, `3bb1d34d2`); make the test's
       partition and those records agree, and where they do not, correct the records. Commit.
 
