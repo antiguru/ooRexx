@@ -190,3 +190,7 @@ lang/library_requires_install_order.rex
 # Surface Task 2 fix round 2: the routine lookup reads every routines table up
 # the parent chain before any merged table, for a call and for findRoutine.
 lang/library_routine_parent_before_merged.rex
+
+# Surface Task 2 fix round 2: an imported library routine is one Routine object,
+# whichever package or send answers it.
+lang/library_routine_object_identity.rex

@@ -1650,6 +1650,11 @@ struct Interp {
     package_tables: HashMap<(ProgramId, environment::PackageTable), ObjRef>,
     /// The one `Routine` object standing for each installed routine.
     routine_objects: HashMap<InstalledRoutine, ObjRef>,
+    /// The one `Routine` object standing for each library routine an
+    /// imported-routine table holds, by its [`Interp::library_codes`] row:
+    /// `mergeLibrary` merges the library package's own routine objects, so
+    /// every package importing one answers the same object.
+    library_routine_objects: HashMap<usize, ObjRef>,
     /// The packages each program has imported, in the order they were added
     /// -- `PackageClass`'s `loadedPackages`, which `~importedPackages`
     /// answers a copy of.
@@ -2353,6 +2358,7 @@ impl Interp {
             program_routine_objects: HashMap::new(),
             package_tables: HashMap::new(),
             routine_objects: HashMap::new(),
+            library_routine_objects: HashMap::new(),
             package_imports: HashMap::new(),
             package_parents: HashMap::new(),
             constant_values: HashMap::new(),
@@ -5478,6 +5484,8 @@ impl Interp {
             package_tables: _,
             // Rooted by the `.ROUTINES` table each entry is also in.
             routine_objects: _,
+            // `RootSet::add_global`, under `library_routine_root_key`.
+            library_routine_objects: _,
             package_imports: _,
             // Program identities and nothing else.
             package_parents: _,

@@ -2024,13 +2024,20 @@ impl Interp {
     }
 
     /// The `Routine` object one imported routine is: the `::ROUTINE`'s own,
-    /// or for a library routine, one reporting the library code's package.
+    /// or for a library routine, the one kept for its library code row,
+    /// reporting that code's package.
     pub(crate) fn merged_routine_object(&mut self, merged: crate::MergedRoutine) -> Option<ObjRef> {
         match merged {
             crate::MergedRoutine::Installed(installed) => self.routine_object(installed),
             crate::MergedRoutine::Library(code) => {
+                if let Some(found) = self.library_routine_objects.get(&code).copied() {
+                    return Some(found);
+                }
                 let class = self.routine_class();
                 let object = self.native_instance(class);
+                self.roots
+                    .add_global(&library_routine_root_key(code), object);
+                self.library_routine_objects.insert(code, object);
                 self.record_loaded_executable(object, code);
                 Some(object)
             }
@@ -2095,6 +2102,12 @@ fn package_root_key(package: Package) -> String {
         Package::Rexx => "the REXX package".to_string(),
         Package::Program(ProgramId(id)) => format!("the package of program {id}"),
     }
+}
+
+/// The [`rexx_core::RootSet::add_global`] key the `Routine` object for one
+/// [`Interp::library_codes`] row is held under.
+fn library_routine_root_key(code: usize) -> String {
+    format!("the imported library routine of code row {code}")
 }
 
 /// The [`rexx_core::RootSet::add_global`] key one program's own main-section

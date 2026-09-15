@@ -1,0 +1,14 @@
+/* A library routine an imported-routine table holds is one Routine object:
+   findRoutine answers it on every ask, importedRoutines answers the same one,
+   and so does another package importing the same library. A ::ROUTINE a
+   required package made public is one object the same way. */
+p = .context~package
+a = p~findRoutine('RXCALCSQRT')
+say 'library findRoutine' (a~identityHash = p~findRoutine('RXCALCSQRT')~identityHash)
+say 'library importedRoutines' (p~importedRoutines['RXCALCSQRT']~identityHash = a~identityHash)
+say 'library another package' (midpackage()~findRoutine('RXCALCSQRT')~identityHash = a~identityHash)
+c = p~findRoutine('PUBR')
+say 'routine findRoutine' (c~identityHash = p~findRoutine('PUBR')~identityHash)
+say 'routine importedRoutines' (p~importedRoutines['PUBR']~identityHash = c~identityHash)
+::requires 'rxmath' LIBRARY
+::requires 'mid.cls'
