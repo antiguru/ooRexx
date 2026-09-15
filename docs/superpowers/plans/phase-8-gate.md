@@ -266,4 +266,5 @@ tests, `a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop` and
 read at `cf92ff4fb` and `233d2766d` on the way.
 
 Miri is not among these gates: `rexx-api`'s lib tests ran under Stacked Borrows during the rounds
-from a scratch toolchain, as section 7 and `phase-4-exclusions.txt` record.
+from a scratch toolchain, as the INSTRUMENTS OUTSIDE THE GATE entry of `phase-4-exclusions.txt`
+records.
