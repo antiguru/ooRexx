@@ -4818,9 +4818,9 @@ RECORDED BY SURFACE TASK 2 AND ITS FIX ROUNDS, NOT FIXED (2026-09-15). Each
 transcript below was run in a fresh directory per side, the oracle under the
 standard wrapper and this crate's release rexx-run at 273e8f608, both with the
 oracle checkout's build/lib on LD_LIBRARY_PATH, three descriptors to three
-files; <dir> is the run directory. None is a regression of the task: each
-answers the same on the task's base or on the revision before the round that
-found it.
+files; <dir> is the run directory. Where an entry says an answer is the same
+on an earlier revision, that was measured; the others were measured on this
+revision alone.
 
   A .ROUTINES ENTRY PUT FROM REXX IS NEVER FOUND BY A CALL. .ROUTINES is the
   package's own routines table on the oracle (RexxActivation.cpp:2877-2879,
