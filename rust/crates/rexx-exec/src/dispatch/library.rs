@@ -229,7 +229,10 @@ impl Interp {
                 }
                 .into();
             }
-            Refused::Unfilled { .. } | Refused::StaleHandle | Refused::Raised => {
+            Refused::Unfilled { .. }
+            | Refused::UnfilledSlot { .. }
+            | Refused::StaleHandle
+            | Refused::Raised => {
                 return Loud {
                     message: crate::owned_message(&format!("{refused}"), Some("Phase 8")),
                 }

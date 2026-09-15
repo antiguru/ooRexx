@@ -51,6 +51,11 @@ pub const ROUTINE_CLASSIC_STYLE: c_int = 2;
 /// `tests/load.rs` re-reads the header and asserts this value against it.
 pub const CURRENT_INTERPRETER_VERSION: c_int = 0x0005_0300;
 
+/// `REXX_CURRENT_LANGUAGE_LEVEL` (`api/oorexxapi.h:249`), which
+/// `InterpreterInstance::LanguageLevel` answers. `tests/load.rs` re-reads the
+/// header and asserts this value against it.
+pub const CURRENT_LANGUAGE_LEVEL: usize = 0x0606;
+
 /// The symbol `OOREXX_GET_PACKAGE` publishes (`api/oorexxapi.h:253-256`).
 const GET_PACKAGE_SYMBOL: &[u8] = b"RexxGetPackage\0";
 
@@ -221,19 +226,18 @@ impl NativeRoutineEntry {
         !self.entry_point.is_null()
     }
 
-    /// [`NativeMethodEntry::signature`] for a routine's stub.
-    ///
-    /// The row must be [`ROUTINE_TYPED_STYLE`]: a classic row's address is a
-    /// function of another signature.
+    /// [`NativeMethodEntry::signature`] for a routine's stub. A row of any
+    /// style but [`ROUTINE_TYPED_STYLE`] publishes none, since its address is
+    /// a function of another signature.
     pub(crate) fn signature(&self, context: &CallContext<'_>, limit: usize) -> Option<Vec<u16>> {
         let stub = self.stub()?;
-        // SAFETY: as `NativeMethodEntry::signature`, and the caller has
-        // refused a classic row.
+        // SAFETY: as `NativeMethodEntry::signature`; `stub` answers only for a
+        // typed row.
         unsafe { signature_of(stub, context.as_ptr(), limit) }
     }
 
-    /// [`NativeMethodEntry::call`] for a routine's stub, which the row must be
-    /// as [`NativeRoutineEntry::signature`] says.
+    /// [`NativeMethodEntry::call`] for a routine's stub, which calls nothing
+    /// for a row [`NativeRoutineEntry::signature`] publishes nothing for.
     pub(crate) fn call(
         &self,
         context: &CallContext<'_>,
@@ -243,22 +247,21 @@ impl NativeRoutineEntry {
         let pointer = context.as_ptr();
         // SAFETY: as `NativeMethodEntry::call`.
         let published = unsafe { &raw mut (*pointer).arguments };
-        // SAFETY: as `NativeMethodEntry::call`, and the caller has refused a
-        // classic row.
+        // SAFETY: as `NativeMethodEntry::call`; `stub` answers only for a
+        // typed row.
         unsafe { call_stub(self.stub(), pointer, published, arguments, result) }
     }
 
     /// The row's address as the typed stub it names, or `None` for a row that
-    /// carries none.
+    /// carries none and for a row of any style but `ROUTINE_TYPED_STYLE`.
     fn stub(&self) -> Option<NativeRoutine> {
-        if self.entry_point.is_null() {
+        if self.entry_point.is_null() || self.style != ROUTINE_TYPED_STYLE {
             return None;
         }
-        // SAFETY: `REXX_TYPED_ROUTINE` fills `entryPoint` with the stub the
-        // `RexxRoutineN` macro generated (`api/oorexxapi.h:205`), whose C
-        // signature is `NativeRoutine`'s, under the same D5 argument as
-        // `NativeMethodEntry::stub`. A classic row is never turned into a
-        // call: both readers above are reached only past the style check.
+        // SAFETY: the row is `ROUTINE_TYPED_STYLE`, which `REXX_TYPED_ROUTINE`
+        // fills with the stub the `RexxRoutineN` macro generated
+        // (`api/oorexxapi.h:205`), whose C signature is `NativeRoutine`'s,
+        // under the same D5 argument as `NativeMethodEntry::stub`.
         Some(unsafe { std::mem::transmute::<*mut c_void, NativeRoutine>(self.entry_point) })
     }
 }

@@ -49,7 +49,9 @@ pub const MAX_NATIVE_ARGUMENTS: usize = 16;
 /// that takes an argument, is not optional and was given none, whether or not
 /// the table knows its code; [`Failure::ResultSignature`] for
 /// a return code it does not know; [`Failure::TooManyArguments`] for
-/// arguments the signature does not consume.
+/// arguments the signature does not consume; [`Failure::UnfilledSlot`] for the
+/// first interface member the extension reached that this phase has not
+/// written, which also forgets any condition the extension raised.
 ///
 /// # Panics
 /// If the caller holds `cx`'s conversion state across this call.
@@ -85,9 +87,7 @@ pub fn routine(
     if entry.style == ROUTINE_CLASSIC_STYLE {
         return Err(Failure::ClassicStyle);
     }
-    let signature = entry
-        .signature(context, MAX_NATIVE_ARGUMENTS + 1)
-        .ok_or(Failure::Signature)?;
+    let signature = bounded(|limit| entry.signature(context, limit))?;
     run(&signature, cx, arguments, |descriptors, result| {
         entry.call(context, descriptors, result)
     })
@@ -132,7 +132,14 @@ fn run(
         return Err(Failure::TooManyArguments { expected: input });
     }
 
-    let written = call(&mut descriptors, values::result_repr(returns));
+    let (written, refused) =
+        crate::layout::recording_refusals(|| call(&mut descriptors, values::result_repr(returns)));
+    if let Some(entry) = refused {
+        // Ahead of the result and of any condition the extension raised after
+        // the refused member answered it, both of which that answer shaped.
+        cx.clear_pending();
+        return Err(Failure::UnfilledSlot { entry });
+    }
 
     if returns == ARGUMENT_TERMINATOR {
         return Ok(None);
@@ -153,13 +160,16 @@ pub fn signature(
     entry: &NativeMethodEntry,
     context: &MethodContext<'_>,
 ) -> Result<Vec<u16>, Failure> {
+    bounded(|limit| entry.signature(context, limit))
+}
+
+/// The signature `read` answers when it may read at most `limit` words.
+fn bounded(read: impl FnOnce(usize) -> Option<Vec<u16>>) -> Result<Vec<u16>, Failure> {
     // The words are the return type, the parameters the array has room for,
     // and the terminator, so a signature that fits is one word longer than
     // the array. Reading no further is this crate's form of the oracle's
     // bound check (`NativeActivation.cpp:238-241`).
-    entry
-        .signature(context, MAX_NATIVE_ARGUMENTS + 1)
-        .ok_or(Failure::Signature)
+    read(MAX_NATIVE_ARGUMENTS + 1).ok_or(Failure::Signature)
 }
 
 /// A descriptor holding nothing, which is what the oracle's `type` of zero
@@ -335,6 +345,11 @@ mod tests {
         numeric: Numeric,
         /// What `double_object` was asked for, in order.
         doubles: Vec<(f64, usize)>,
+        /// Whether `whole_number` runs [`crate::ffi::refusing_stub`] as a
+        /// native call of its own before answering.
+        nest: bool,
+        /// What that nested call answered.
+        nested: Option<Result<Option<ObjRef>, Failure>>,
     }
 
     impl Interpreter {
@@ -350,6 +365,8 @@ mod tests {
                     engineering: false,
                 },
                 doubles: Vec::new(),
+                nest: false,
+                nested: None,
             }
         }
 
@@ -396,6 +413,17 @@ mod tests {
         }
 
         fn whole_number(&mut self, value: isize) -> ObjRef {
+            if self.nest {
+                let entry = stub_entry(b"refusing", crate::ffi::refusing_stub);
+                let mut inner = Interpreter::new();
+                let mut strings = CStringPool::new();
+                let activation = Activation::new(Conversion {
+                    host: &mut inner,
+                    strings: &mut strings,
+                });
+                let mut contexts = crate::ffi::Contexts::new(&activation);
+                self.nested = Some(method(&entry, &contexts.method(), &activation, &[]));
+            }
             whole_number_object(&mut self.heap, value)
         }
 
@@ -585,6 +613,30 @@ mod tests {
         assert_eq!(run.outcome.unwrap_err().error_number(false), None);
     }
 
+    /// A row of any style but typed publishes no signature and calls nothing,
+    /// whatever its caller checked: its address is a function of the
+    /// `RXSTRING` signature (`api/oorexxapi.h:209`).
+    #[test]
+    fn a_classic_row_publishes_no_signature_and_calls_nothing() {
+        forget_events();
+        let entry = stub_routine_entry(ROUTINE_CLASSIC_STYLE, b"classic", routine_probe);
+        let mut context = RexxCallContext_ {
+            threadContext: std::ptr::null_mut(),
+            functions: std::ptr::from_ref(&CALL_CONTEXT).cast_mut(),
+            arguments: std::ptr::null_mut(),
+        };
+        let bare = CallContext::bare(&mut context);
+        assert_eq!(entry.signature(&bare, MAX_NATIVE_ARGUMENTS + 1), None);
+        let mut descriptors: [ValueDescriptor; MAX_NATIVE_ARGUMENTS] =
+            std::array::from_fn(|_| super::empty());
+        let _ = entry.call(&bare, &mut descriptors, None);
+        assert_eq!(
+            events(),
+            Vec::new(),
+            "the classic row's address was entered"
+        );
+    }
+
     /// The too-many check is the one both calls share.
     #[test]
     fn an_argument_a_routine_does_not_consume_is_refused() {
@@ -771,6 +823,74 @@ mod tests {
         assert_eq!(
             address,
             Some(std::ptr::without_provenance_mut(crate::ffi::STUB_POINTER))
+        );
+    }
+
+    /// A stub reaches the instance through the thread context, and the
+    /// instance answers the version and level the frozen header names:
+    /// measured, oracle, `orxmethod`'s `TestInterpreterVersion` is `328448` and
+    /// `TestLanguageLevel` `1542`.
+    #[test]
+    fn a_stub_reaches_the_instance_through_the_thread_context() {
+        let entry = stub_entry(b"instance", crate::ffi::instance_stub);
+        let mut interpreter = Interpreter::new();
+        let mut strings = CStringPool::new();
+        let outcome = {
+            let activation = Activation::new(Conversion {
+                host: &mut interpreter,
+                strings: &mut strings,
+            });
+            let mut contexts = crate::ffi::Contexts::new(&activation);
+            method(&entry, &contexts.method(), &activation, &[])
+        };
+        assert_eq!(outcome, Ok(Some(ObjRef::small_int(0).expect("zero"))));
+        let variable = |name: &[u8]| {
+            interpreter
+                .variables
+                .iter()
+                .find(|(bound, _)| bound == name)
+                .map(|(_, value)| *value)
+        };
+        assert_eq!(variable(b"VERSION"), ObjRef::small_int(328_448));
+        assert_eq!(variable(b"LEVEL"), ObjRef::small_int(1542));
+    }
+
+    /// **A call that reached an unwritten member refuses naming it, and a
+    /// native call nested inside it keeps its own record.** The outer stub
+    /// reaches `NewStringFromAsciiz`, then a member whose host runs a native
+    /// call reaching `HaltThread`, then raises a condition; the outer call
+    /// answers its own first member and not the inner one, the inner call
+    /// answers its own, and the refusal forgets the condition raised after it.
+    #[test]
+    fn a_refused_member_is_the_calls_answer_and_a_nested_call_keeps_its_own() {
+        let entry = stub_entry(b"nesting", crate::ffi::nesting_stub);
+        let mut interpreter = Interpreter::new();
+        interpreter.nest = true;
+        let mut strings = CStringPool::new();
+        let (outcome, pending) = {
+            let activation = Activation::new(Conversion {
+                host: &mut interpreter,
+                strings: &mut strings,
+            });
+            let mut contexts = crate::ffi::Contexts::new(&activation);
+            let outcome = method(&entry, &contexts.method(), &activation, &[]);
+            (outcome, activation.pending())
+        };
+        assert_eq!(
+            outcome,
+            Err(Failure::UnfilledSlot {
+                entry: "RexxThreadInterface.NewStringFromAsciiz"
+            })
+        );
+        assert_eq!(
+            interpreter.nested,
+            Some(Err(Failure::UnfilledSlot {
+                entry: "RexxThreadInterface.HaltThread"
+            }))
+        );
+        assert_eq!(
+            pending, None,
+            "the condition raised after the refusal survived it"
         );
     }
 

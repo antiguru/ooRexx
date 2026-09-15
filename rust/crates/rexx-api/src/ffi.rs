@@ -19,8 +19,9 @@ use std::marker::PhantomData;
 
 use crate::layout::{
     CSTRING, CallContextInterface, MethodContextInterface, Owned, POINTER, RexxCallContext_,
-    RexxMethodContext_, RexxObjectPtr, RexxPointerObject, RexxStringObject, RexxThreadContext_,
-    RexxThreadInterface, ValueDescriptor, logical_t, stringsize_t, wholenumber_t,
+    RexxInstance_, RexxInstanceInterface, RexxMethodContext_, RexxObjectPtr, RexxPointerObject,
+    RexxStringObject, RexxThreadContext_, RexxThreadInterface, ValueDescriptor, logical_t,
+    stringsize_t, wholenumber_t,
 };
 use crate::values::{Activation, Repr, Value};
 
@@ -131,6 +132,17 @@ pub static CALL_CONTEXT: CallContextInterface = {
     table
 };
 
+/// The instance table a thread context's `instance` addresses
+/// (`InterpreterInstance::interfaceVector`,
+/// `interpreter/api/InterpreterInstanceStubs.cpp:105`), at one address for the
+/// process as [`METHOD_CONTEXT`] is.
+pub static INSTANCE: RexxInstanceInterface = {
+    let mut table = RexxInstanceInterface::REFUSING;
+    table.InterpreterVersion = interpreter_version;
+    table.LanguageLevel = language_level;
+    table
+};
+
 /// The method context a stub is handed: a pointer to the public struct at the
 /// head of an `Owned` wrapper, derived from the whole wrapper, and borrowed
 /// from that wrapper for as long as it is used.
@@ -186,6 +198,7 @@ impl CallContext<'_> {
 /// are handles this activation minted
 /// (`interpreter/concurrency/Activity.cpp:1846-1849`).
 pub struct Contexts<'a, 'h> {
+    instance: Owned<RexxInstance_, Activation<'h>>,
     thread: Owned<RexxThreadContext_, Activation<'h>>,
     method: Owned<RexxMethodContext_, Activation<'h>>,
     call: Owned<RexxCallContext_, Activation<'h>>,
@@ -212,6 +225,13 @@ impl<'a, 'h> Contexts<'a, 'h> {
         table.RexxFalse = constants.false_object;
         table.RexxNullString = constants.null_string.cast();
         Contexts {
+            instance: Owned {
+                context: RexxInstance_ {
+                    functions: std::ptr::null_mut(),
+                    applicationData: std::ptr::null_mut(),
+                },
+                owner,
+            },
             thread: Owned {
                 context: RexxThreadContext_ {
                     instance: std::ptr::null_mut(),
@@ -248,7 +268,7 @@ impl<'a, 'h> Contexts<'a, 'h> {
     /// Both context pointers are taken from their whole wrappers, which is
     /// what lets [`owner_of`] read the `owner` beside the public struct.
     pub fn method(&mut self) -> MethodContext<'_> {
-        self.thread.context.functions = &raw mut self.table;
+        self.link_thread();
         self.method.context.threadContext = (&raw mut self.thread).cast::<RexxThreadContext_>();
         self.method.context.functions = std::ptr::from_ref(&METHOD_CONTEXT).cast_mut();
         MethodContext {
@@ -260,13 +280,21 @@ impl<'a, 'h> Contexts<'a, 'h> {
     /// The call context, linked as [`Contexts::method`] links the method
     /// context.
     pub fn call(&mut self) -> CallContext<'_> {
-        self.thread.context.functions = &raw mut self.table;
+        self.link_thread();
         self.call.context.threadContext = (&raw mut self.thread).cast::<RexxThreadContext_>();
         self.call.context.functions = std::ptr::from_ref(&CALL_CONTEXT).cast_mut();
         CallContext {
             pointer: (&raw mut self.call).cast::<RexxCallContext_>(),
             wrapper: PhantomData,
         }
+    }
+
+    /// Points the thread context at its table and at this wrapper's instance,
+    /// and the instance at its table.
+    fn link_thread(&mut self) {
+        self.instance.context.functions = std::ptr::from_ref(&INSTANCE).cast_mut();
+        self.thread.context.instance = (&raw mut self.instance).cast::<RexxInstance_>();
+        self.thread.context.functions = &raw mut self.table;
     }
 
     /// The handles the thread table's data members carry.
@@ -378,6 +406,19 @@ unsafe extern "C" fn new_pointer(
 ) -> RexxPointerObject {
     // SAFETY: as `whole_number_to_object`.
     unsafe { activation_of(context) }.new_pointer(value).cast()
+}
+
+/// `InterpreterVersion` (`interpreter/api/InterpreterInstanceStubs.cpp:79`),
+/// which reads nothing through the instance.
+extern "C" fn interpreter_version(_instance: *mut RexxInstance_) -> usize {
+    usize::try_from(crate::load::CURRENT_INTERPRETER_VERSION)
+        .expect("the interpreter version is positive")
+}
+
+/// `LanguageLevel` (`interpreter/api/InterpreterInstanceStubs.cpp:84`), which
+/// reads nothing through the instance.
+extern "C" fn language_level(_instance: *mut RexxInstance_) -> usize {
+    crate::load::CURRENT_LANGUAGE_LEVEL
 }
 
 /// # Safety
@@ -583,6 +624,77 @@ pub(crate) extern "C" fn thread_table_stub(
     std::ptr::null_mut()
 }
 
+/// A method stub that reads `InterpreterVersion` and `LanguageLevel` through
+/// the instance its thread context links, and stores them in the object
+/// variables `VERSION` and `LEVEL`.
+#[cfg(test)]
+pub(crate) extern "C" fn instance_stub(
+    context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return DROPPING_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: `context` is the one a `Contexts` handed this call, which
+    // linked its thread context, that context's instance, and all three
+    // tables.
+    unsafe {
+        let method = &*(*context).functions;
+        let thread = (*context).threadContext;
+        let table = &*(*thread).functions;
+        let instance = (*thread).instance;
+        let instance_table = &*(*instance).functions;
+        let version = (instance_table.InterpreterVersion)(instance);
+        let level = (instance_table.LanguageLevel)(instance);
+        let version = (table.WholeNumberToObject)(thread, isize::try_from(version).unwrap_or(-1));
+        (method.SetObjectVariable)(context, c"VERSION".as_ptr(), version);
+        let level = (table.WholeNumberToObject)(thread, isize::try_from(level).unwrap_or(-1));
+        (method.SetObjectVariable)(context, c"LEVEL".as_ptr(), level);
+    }
+    std::ptr::null_mut()
+}
+
+/// A method stub that reaches `HaltThread` through its thread context, which
+/// nothing fills.
+#[cfg(test)]
+pub(crate) extern "C" fn refusing_stub(
+    context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return DROPPING_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: `context` is the one a `Contexts` handed this call, which linked
+    // its thread context and that context's table.
+    unsafe {
+        let thread = (*context).threadContext;
+        ((*(*thread).functions).HaltThread)(thread);
+    }
+    std::ptr::null_mut()
+}
+
+/// A method stub that reaches `NewStringFromAsciiz`, which nothing fills, then
+/// `WholeNumberToObject`, which the host a nesting test builds answers by
+/// running a native call of its own, then raises [`STUB_CONDITION`].
+#[cfg(test)]
+pub(crate) extern "C" fn nesting_stub(
+    context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return DROPPING_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: as `refusing_stub`; the name is a literal.
+    unsafe {
+        let thread = (*context).threadContext;
+        let table = &*(*thread).functions;
+        (table.NewStringFromAsciiz)(thread, c"units".as_ptr());
+        (table.WholeNumberToObject)(thread, 3);
+        (table.RaiseException0)(thread, STUB_CONDITION);
+    }
+    std::ptr::null_mut()
+}
+
 #[cfg(test)]
 thread_local! {
     /// What [`numeric_stub`] read through its call context: digits, fuzz and
@@ -644,30 +756,37 @@ mod tests {
     use super::{owner_of, value_of};
     use crate::layout::{
         Owned, RexxCallContext_, RexxMethodContext_, RexxThreadContext_, RexxThreadInterface,
+        recording_refusals,
     };
     use crate::values::{Converted, Repr, Value, code, descriptor, repr, rows};
 
     /// The variable this test sets on the child it spawns, so that the child
     /// reaches the stub and this process does not.
-    const CALL_A_STUB: &str = "REXX_API_CALL_AN_UNBUILT_ENTRY";
+    const CALL_A_STUB: &str = "REXX_API_CALL_AN_ABORTING_ENTRY";
 
-    /// A stub is reached the way an extension would reach it, through the table.
+    /// A member marked `aborts` is reached the way an extension would reach
+    /// it, through the table, and ends the process naming itself.
     ///
     /// The call is in a child because an `extern "C"` frame aborts on panic, so
     /// there is no returning from it.
     #[test]
     #[cfg_attr(miri, ignore = "spawns a process")]
-    fn an_unbuilt_entry_refuses_loudly() {
+    fn an_aborting_entry_refuses_loudly() {
         if std::env::var_os(CALL_A_STUB).is_some() {
             // SAFETY: the stub reads none of its arguments.
-            unsafe { (RexxThreadInterface::REFUSING.HaltThread)(std::ptr::null_mut()) };
+            unsafe {
+                (RexxThreadInterface::REFUSING.BufferData)(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            };
             unreachable!("the stub returned");
         }
 
         let binary = std::env::current_exe().expect("this test binary's own path");
         let output = std::process::Command::new(binary)
             .args([
-                "ffi::tests::an_unbuilt_entry_refuses_loudly",
+                "ffi::tests::an_aborting_entry_refuses_loudly",
                 "--exact",
                 "--nocapture",
             ])
@@ -677,14 +796,39 @@ mod tests {
 
         assert!(
             !output.status.success(),
-            "the child returned from an entry nothing has built: {:?}",
+            "the child returned from an aborting entry: {:?}",
             output.status
         );
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("RexxThreadInterface.HaltThread is not implemented (Phase 8)"),
+            stderr.contains("RexxThreadInterface.BufferData is not implemented (Phase 8)"),
             "the refusal did not name the entry and the phase that owes it:\n{stderr}"
         );
+    }
+
+    /// Every other unbuilt member records the first of itself the call reached
+    /// and returns the oracle's failure value, whatever context it was handed,
+    /// and the record in force before is back afterwards.
+    #[test]
+    fn a_refusing_entry_records_itself_and_returns() {
+        let table = RexxThreadInterface::REFUSING;
+        let thread = std::ptr::null_mut();
+        let ((), outer) = recording_refusals(|| {
+            let (answers, inner) = recording_refusals(|| {
+                // SAFETY: none of these stubs reads its arguments.
+                unsafe {
+                    (table.HaltThread)(thread);
+                    (
+                        (table.NewStringFromAsciiz)(thread, std::ptr::null()),
+                        (table.IsString)(thread, std::ptr::null_mut()),
+                        (table.DisplayCondition)(thread),
+                    )
+                }
+            });
+            assert_eq!(answers, (std::ptr::null_mut(), 0, 48));
+            assert_eq!(inner, Some("RexxThreadInterface.HaltThread"));
+        });
+        assert_eq!(outer, None, "the inner record leaked into the outer one");
     }
 
     /// A value of each shape, chosen so that a read of the wrong width or the

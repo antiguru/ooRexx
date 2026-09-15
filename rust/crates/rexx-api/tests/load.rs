@@ -12,7 +12,7 @@
 //! The loader, run against the oracle's own compiled extension.
 
 use rexx_api::layout::{RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry};
-use rexx_api::load::{self, CURRENT_INTERPRETER_VERSION, Failure};
+use rexx_api::load::{self, CURRENT_INTERPRETER_VERSION, CURRENT_LANGUAGE_LEVEL, Failure};
 use std::ffi::c_int;
 use std::path::{Path, PathBuf};
 
@@ -172,29 +172,44 @@ fn a_package_asking_for_this_interpreter_or_less_is_accepted() {
     }
 }
 
-#[test]
-fn the_interpreter_version_is_the_frozen_headers() {
+/// The hexadecimal value `#define <current>` names through one more
+/// `#define`, as the header spells both current versions.
+fn current_version(current: &str) -> c_int {
     let header = std::fs::read_to_string(repository_root().join("api/oorexxapi.h"))
         .expect("the frozen header is readable");
     let named = header
         .lines()
-        .find_map(|line| line.strip_prefix("#define REXX_CURRENT_INTERPRETER_VERSION "))
-        .expect("the header defines REXX_CURRENT_INTERPRETER_VERSION")
+        .find_map(|line| line.strip_prefix(&format!("#define {current} ")))
+        .unwrap_or_else(|| panic!("the header defines {current}"))
         .trim();
     let literal = header
         .lines()
         .find_map(|line| line.strip_prefix(&format!("#define {named} ")))
         .unwrap_or_else(|| panic!("the header defines {named}"))
         .trim();
-    let value = c_int::from_str_radix(
+    c_int::from_str_radix(
         literal
             .strip_prefix("0x")
             .unwrap_or_else(|| panic!("{named} is a hexadecimal literal")),
         16,
     )
-    .expect("a hexadecimal literal");
+    .expect("a hexadecimal literal")
+}
+
+#[test]
+fn the_interpreter_version_is_the_frozen_headers() {
     assert_eq!(
-        CURRENT_INTERPRETER_VERSION, value,
-        "the constant no longer matches {named} in api/oorexxapi.h"
+        CURRENT_INTERPRETER_VERSION,
+        current_version("REXX_CURRENT_INTERPRETER_VERSION"),
+        "the constant no longer matches api/oorexxapi.h"
+    );
+}
+
+#[test]
+fn the_language_level_is_the_frozen_headers() {
+    assert_eq!(
+        CURRENT_LANGUAGE_LEVEL,
+        usize::try_from(current_version("REXX_CURRENT_LANGUAGE_LEVEL")).expect("positive"),
+        "the constant no longer matches api/oorexxapi.h"
     );
 }

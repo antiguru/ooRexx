@@ -7375,6 +7375,69 @@ fn a_library_backed_routine_installs_and_runs_when_it_is_called() {
     assert_eq!(outcome.stdout, b"3.14159265\n");
 }
 
+/// **An extension reading the interpreter instance through its thread context
+/// reaches a table rather than a null pointer.** `orxmethod`'s
+/// `TestInterpreterVersion` reads `context->InterpreterVersion()`; measured,
+/// oracle rc 0 printing `328448`, and the crate crashed at rc 139 with both
+/// descriptors empty while `instance` was null. Its `size_t` result is a
+/// conversion row this crate does not fill yet, so the call now ends in that
+/// row's refusal with the earlier output kept.
+#[test]
+fn an_extension_reading_the_instance_reaches_its_table() {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../build/lib")
+        .canonicalize()
+        .expect("the oracle's build directory is four above this crate");
+    let invocation = crate::Invocation::none().with_environment(vec![(
+        b"LD_LIBRARY_PATH".to_vec(),
+        directory.into_os_string().into_encoded_bytes(),
+    )]);
+    let outcome = crate::run_program(
+        "/tmp/instance.rex",
+        b"say 'before'\nsay .k~new~v\n::class k\n\
+          ::method v external \"LIBRARY orxmethod TestInterpreterVersion\"\n"
+            .to_vec(),
+        invocation,
+    );
+    assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
+    assert_eq!(outcome.stdout, b"before\n");
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stderr),
+        "rexx-exec: Phase 8 owes the FromNative conversion for REXX_VALUE_size_t (33) is not \
+         implemented (Phase 8)\n"
+    );
+}
+
+/// **An extension that reaches an interface member this crate has not written
+/// refuses loudly, naming the member, and the program's earlier output is
+/// kept.** Measured, oracle: `RxCalcSin(30, 3, 'X')` is 88.916 at rc 168; its
+/// units check builds the message with `context->String`, which is
+/// `NewStringFromAsciiz`, and the crate aborted there at rc 134 with `before`
+/// lost.
+#[test]
+fn an_extension_reaching_an_unwritten_member_refuses_loudly() {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../build/lib")
+        .canonicalize()
+        .expect("the oracle's build directory is four above this crate");
+    let invocation = crate::Invocation::none().with_environment(vec![(
+        b"LD_LIBRARY_PATH".to_vec(),
+        directory.into_os_string().into_encoded_bytes(),
+    )]);
+    let outcome = crate::run_program(
+        "/tmp/unwritten.rex",
+        b"say 'before'\nsay RxCalcSin(30, 3, 'X')\nsay 'after'\n::requires 'rxmath' LIBRARY\n"
+            .to_vec(),
+        invocation,
+    );
+    assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
+    assert_eq!(outcome.stdout, b"before\n");
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stderr),
+        "rexx-exec: RexxThreadInterface.NewStringFromAsciiz is not implemented (Phase 8)\n"
+    );
+}
+
 /// **A routine a `::REQUIRES ... LIBRARY` registered runs when it is
 /// called**: measured, `::requires 'rxmath' LIBRARY` and `say RxCalcPi()` is
 /// `3.14159265` at rc 0.

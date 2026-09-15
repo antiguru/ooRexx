@@ -114,6 +114,9 @@ pub enum Failure {
     /// does not know, or a `Value` that does not match it. The oracle raises
     /// this once the extension has run (`NativeActivation.cpp:1301-1310`).
     ResultSignature,
+    /// The extension reached an interface member this phase has not written,
+    /// named `Table.Member`; the member recorded itself and returned.
+    UnfilledSlot { entry: &'static str },
     /// A row whose conversion this phase has not written.
     Unfilled {
         code: u16,
@@ -172,6 +175,7 @@ impl Failure {
             // `RegularExpression~new` answers "Error 88.922".
             Failure::TooManyArguments { .. } => Some(88922),
             Failure::Unfilled { .. }
+            | Failure::UnfilledSlot { .. }
             | Failure::StaleHandle
             | Failure::Raised
             | Failure::ClassicStyle => None,
@@ -208,6 +212,7 @@ impl std::fmt::Display for Failure {
                 f,
                 "Phase 8 owes the {direction:?} conversion for REXX_VALUE_{name} ({code})"
             ),
+            Failure::UnfilledSlot { entry } => write!(f, "{entry}"),
             Failure::StaleHandle => write!(f, "the handle is no longer held by this activation"),
             Failure::Raised => write!(f, "the interpreter raised a condition while converting"),
         }

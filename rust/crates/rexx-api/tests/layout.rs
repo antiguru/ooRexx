@@ -55,6 +55,15 @@ fn trailing_name(text: &str) -> String {
 ///
 /// A member is either `RET (RexxEntry *Name)(...)` or a plain declaration.
 fn members_of(header: &str, name: &str) -> Vec<String> {
+    declarations_of(header, name)
+        .into_iter()
+        .map(|(member, _)| member)
+        .collect()
+}
+
+/// [`members_of`], each with the return type a function member declares and
+/// `None` for a data member.
+fn declarations_of(header: &str, name: &str) -> Vec<(String, Option<String>)> {
     let lines: Vec<&str> = header.lines().collect();
     let close = format!("}} {name};");
     let end = lines
@@ -84,9 +93,9 @@ fn members_of(header: &str, name: &str) -> Vec<String> {
                     .chars()
                     .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                     .collect();
-                found.push(entry);
+                found.push((entry, Some(declaration[..at].trim().to_string())));
             }
-            None => found.push(trailing_name(declaration)),
+            None => found.push((trailing_name(declaration), None)),
         }
     }
     found
@@ -121,6 +130,55 @@ fn every_interface_declares_the_members_the_header_does() {
             fields,
             "{name} does not declare what the frozen header declares"
         );
+    }
+}
+
+/// **A refusing member aborts exactly where returning is unsafe**: it answers
+/// a data pointer the extension dereferences (`POINTER`, `CSTRING` or a
+/// `RexxInstance *`), or it is one of the `Throw` members, which the oracle
+/// leaves by a C++ throw (`interpreter/api/CallContextStubs.cpp:207-213`).
+/// Every other member records itself and returns. Derived from the header's
+/// return types, so a member the header adds is classified here.
+#[test]
+fn a_refusing_member_aborts_exactly_where_no_return_is_safe() {
+    let header = header();
+    for (name, fields, aborts) in [
+        (
+            "RexxInstanceInterface",
+            RexxInstanceInterface::FIELDS,
+            RexxInstanceInterface::ABORTS,
+        ),
+        (
+            "RexxThreadInterface",
+            RexxThreadInterface::FIELDS,
+            RexxThreadInterface::ABORTS,
+        ),
+        (
+            "MethodContextInterface",
+            MethodContextInterface::FIELDS,
+            MethodContextInterface::ABORTS,
+        ),
+        (
+            "CallContextInterface",
+            CallContextInterface::FIELDS,
+            CallContextInterface::ABORTS,
+        ),
+    ] {
+        let expected: Vec<bool> = declarations_of(&header, name)
+            .into_iter()
+            .map(|(member, returns)| match returns {
+                None => false,
+                Some(returns) => {
+                    member.starts_with("Throw")
+                        || returns == "POINTER"
+                        || returns == "CSTRING"
+                        || returns.contains('*')
+                }
+            })
+            .collect();
+        let ours: Vec<(&str, bool)> = fields.iter().copied().zip(aborts.iter().copied()).collect();
+        let theirs: Vec<(&str, bool)> = fields.iter().copied().zip(expected).collect();
+        assert_eq!(ours, theirs, "{name}");
     }
 }
 
@@ -228,6 +286,10 @@ fn the_populated_tables_carry_the_interface_version() {
     assert_eq!(
         rexx_api::ffi::CALL_CONTEXT.interfaceVersion,
         rexx_api::layout::CALL_INTERFACE_VERSION
+    );
+    assert_eq!(
+        rexx_api::ffi::INSTANCE.interfaceVersion,
+        rexx_api::layout::INSTANCE_INTERFACE_VERSION
     );
 }
 
@@ -370,14 +432,11 @@ fn a_wrapper_puts_the_public_context_first() {
 fn a_table_outside_the_slice_refuses_where_it_would_be_handed_out() {
     for (name, hand_out) in [
         (
-            "RexxInstanceInterface",
+            "ExitContextInterface",
             (|| {
-                rexx_api::layout::instance_interface();
+                rexx_api::layout::exit_context_interface();
             }) as fn(),
         ),
-        ("ExitContextInterface", || {
-            rexx_api::layout::exit_context_interface();
-        }),
         ("IORedirectorInterface", || {
             rexx_api::layout::io_redirector_interface();
         }),

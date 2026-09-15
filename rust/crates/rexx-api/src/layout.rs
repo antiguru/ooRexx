@@ -18,6 +18,7 @@
 //! The `#[repr(C)]` surface an extension sees, and the tables it calls
 //! through.
 
+use std::cell::Cell;
 use std::ffi::{c_char, c_int, c_void};
 
 /// `wholenumber_t` (`api/rexx.h:237`).
@@ -377,8 +378,54 @@ pub struct Owned<C, T> {
 /// # Panics
 /// Always. The stubs below call it, and each is an `extern "C"` frame, so the
 /// panic aborts rather than unwinding into the extension's stack.
-fn refuse(entry: &str) -> ! {
+fn abort(entry: &str) -> ! {
     panic!("{entry} is not implemented (Phase 8)");
+}
+
+thread_local! {
+    /// The first refusing slot the running native call reached.
+    ///
+    /// Set by a refusing stub and taken by [`recording_refusals`] around the
+    /// one call it records, on the thread making that call, so it holds no
+    /// state beyond that call: a nested call saves the outer record and puts it
+    /// back.
+    static REFUSED: Cell<Option<&'static str>> = const { Cell::new(None) };
+}
+
+/// Records that the running call reached `entry`, keeping an earlier record.
+fn refuse(entry: &'static str) {
+    if REFUSED.get().is_none() {
+        REFUSED.set(Some(entry));
+    }
+}
+
+/// Runs `call` over a fresh record and answers what it answered with the first
+/// refusing slot it reached, restoring the record in force before.
+pub(crate) fn recording_refusals<R>(call: impl FnOnce() -> R) -> (R, Option<&'static str>) {
+    let outer = REFUSED.replace(None);
+    let answered = call();
+    let refused = REFUSED.replace(outer);
+    (answered, refused)
+}
+
+/// What a refusing stub answers after recording itself: the value the
+/// oracle's own stubs answer on their failure paths, a null handle
+/// (`interpreter/api/ThreadContextStubs.cpp:986-997`), a zero or `false`, with
+/// any other value named at its member.
+trait RefusedValue {
+    const REFUSED: Self;
+}
+
+impl<T> RefusedValue for *mut T {
+    const REFUSED: Self = std::ptr::null_mut();
+}
+
+impl RefusedValue for usize {
+    const REFUSED: Self = 0;
+}
+
+impl RefusedValue for isize {
+    const REFUSED: Self = 0;
 }
 
 /// The Rust type of one interface member.
@@ -389,15 +436,19 @@ macro_rules! entry_type {
     (value $ty:ty = $value:expr) => {
         $ty
     };
-    (call($($arg:ty),*)) => {
+    ($(aborts)? call($($arg:ty),*)) => {
         unsafe extern "C" fn($($arg),*)
     };
-    (call($($arg:ty),*) -> $ret:ty) => {
+    ($(aborts)? call($($arg:ty),*) -> $ret:ty $(, failing $value:expr)?) => {
         unsafe extern "C" fn($($arg),*) -> $ret
     };
 }
 
 /// The value one interface member holds in a table nothing has built yet.
+///
+/// A function member records itself and returns, unless it is marked
+/// `aborts`: those answer a data pointer the extension dereferences, or leave
+/// the extension by a C++ throw, so no value they could return is safe.
 macro_rules! entry_stub {
     ($entry:expr, value $ty:ty = $value:expr) => {
         $value
@@ -410,10 +461,40 @@ macro_rules! entry_stub {
     }};
     ($entry:expr, call($($arg:ty),*) -> $ret:ty) => {{
         extern "C" fn stub($(_: $arg),*) -> $ret {
-            refuse($entry)
+            refuse($entry);
+            <$ret as RefusedValue>::REFUSED
         }
         stub
     }};
+    ($entry:expr, call($($arg:ty),*) -> $ret:ty, failing $value:expr) => {{
+        extern "C" fn stub($(_: $arg),*) -> $ret {
+            refuse($entry);
+            $value
+        }
+        stub
+    }};
+    ($entry:expr, aborts call($($arg:ty),*)) => {{
+        extern "C" fn stub($(_: $arg),*) {
+            abort($entry)
+        }
+        stub
+    }};
+    ($entry:expr, aborts call($($arg:ty),*) -> $ret:ty) => {{
+        extern "C" fn stub($(_: $arg),*) -> $ret {
+            abort($entry)
+        }
+        stub
+    }};
+}
+
+/// Whether one interface member is marked `aborts`.
+macro_rules! entry_aborts {
+    (aborts $($rest:tt)*) => {
+        true
+    };
+    ($($rest:tt)*) => {
+        false
+    };
 }
 
 /// One interface table, and the member names a test measures it against.
@@ -432,6 +513,10 @@ macro_rules! interface {
         impl $Name {
             /// The member names the frozen header declares, in order.
             pub const FIELDS: &'static [&'static str] = &[$(stringify!($field)),*];
+
+            /// For each of [`Self::FIELDS`], whether its refusing stub aborts
+            /// rather than records and returns.
+            pub const ABORTS: &'static [bool] = &[$(entry_aborts!($($kind)*)),*];
         }
     };
     (@refusing $Name:ident { $($field:ident : { $($kind:tt)* }),* $(,)? }) => {
@@ -460,7 +545,7 @@ macro_rules! interface {
 
 interface! {
     /// `RexxInstanceInterface` (`api/oorexxapi.h:482-493`).
-    RexxInstanceInterface, unpopulated {
+    RexxInstanceInterface, populated {
         interfaceVersion: { value wholenumber_t = INSTANCE_INTERFACE_VERSION },
         Terminate: { call(*mut RexxInstance_) },
         AttachThread: { call(*mut RexxInstance_, *mut *mut RexxThreadContext_) -> logical_t },
@@ -510,7 +595,7 @@ interface! {
         IsMethod: { call(*mut RexxThreadContext_, RexxObjectPtr) -> logical_t },
         GetRoutinePackage: { call(*mut RexxThreadContext_, RexxRoutineObject) -> RexxPackageObject },
         GetMethodPackage: { call(*mut RexxThreadContext_, RexxMethodObject) -> RexxPackageObject },
-        ObjectToCSelf: { call(*mut RexxThreadContext_, RexxObjectPtr) -> POINTER },
+        ObjectToCSelf: { aborts call(*mut RexxThreadContext_, RexxObjectPtr) -> POINTER },
         WholeNumberToObject: { call(*mut RexxThreadContext_, wholenumber_t) -> RexxObjectPtr },
         UintptrToObject: { call(*mut RexxThreadContext_, usize) -> RexxObjectPtr },
         IntptrToObject: { call(*mut RexxThreadContext_, isize) -> RexxObjectPtr },
@@ -536,10 +621,10 @@ interface! {
         DoubleToObjectWithPrecision: { call(*mut RexxThreadContext_, f64, usize) -> RexxObjectPtr },
         ObjectToDouble: { call(*mut RexxThreadContext_, RexxObjectPtr, *mut f64) -> logical_t },
         ObjectToString: { call(*mut RexxThreadContext_, RexxObjectPtr) -> RexxStringObject },
-        ObjectToStringValue: { call(*mut RexxThreadContext_, RexxObjectPtr) -> CSTRING },
+        ObjectToStringValue: { aborts call(*mut RexxThreadContext_, RexxObjectPtr) -> CSTRING },
         StringGet: { call(*mut RexxThreadContext_, RexxStringObject, usize, POINTER, usize) -> usize },
         StringLength: { call(*mut RexxThreadContext_, RexxStringObject) -> usize },
-        StringData: { call(*mut RexxThreadContext_, RexxStringObject) -> CSTRING },
+        StringData: { aborts call(*mut RexxThreadContext_, RexxStringObject) -> CSTRING },
         NewString: { call(*mut RexxThreadContext_, CSTRING, usize) -> RexxStringObject },
         NewStringFromAsciiz: { call(*mut RexxThreadContext_, CSTRING) -> RexxStringObject },
         StringUpper: { call(*mut RexxThreadContext_, RexxStringObject) -> RexxStringObject },
@@ -547,7 +632,7 @@ interface! {
         IsString: { call(*mut RexxThreadContext_, RexxObjectPtr) -> logical_t },
         NewBufferString: { call(*mut RexxThreadContext_, usize) -> RexxBufferStringObject },
         BufferStringLength: { call(*mut RexxThreadContext_, RexxBufferStringObject) -> usize },
-        BufferStringData: { call(*mut RexxThreadContext_, RexxBufferStringObject) -> POINTER },
+        BufferStringData: { aborts call(*mut RexxThreadContext_, RexxBufferStringObject) -> POINTER },
         FinishBufferString: { call(*mut RexxThreadContext_, RexxBufferStringObject, usize) -> RexxStringObject },
         DirectoryPut: { call(*mut RexxThreadContext_, RexxDirectoryObject, RexxObjectPtr, CSTRING) },
         DirectoryAt: { call(*mut RexxThreadContext_, RexxDirectoryObject, CSTRING) -> RexxObjectPtr },
@@ -567,11 +652,11 @@ interface! {
         ArrayOfThree: { call(*mut RexxThreadContext_, RexxObjectPtr, RexxObjectPtr, RexxObjectPtr) -> RexxArrayObject },
         ArrayOfFour: { call(*mut RexxThreadContext_, RexxObjectPtr, RexxObjectPtr, RexxObjectPtr, RexxObjectPtr) -> RexxArrayObject },
         IsArray: { call(*mut RexxThreadContext_, RexxObjectPtr) -> logical_t },
-        BufferData: { call(*mut RexxThreadContext_, RexxBufferObject) -> POINTER },
+        BufferData: { aborts call(*mut RexxThreadContext_, RexxBufferObject) -> POINTER },
         BufferLength: { call(*mut RexxThreadContext_, RexxBufferObject) -> usize },
         NewBuffer: { call(*mut RexxThreadContext_, usize) -> RexxBufferObject },
         IsBuffer: { call(*mut RexxThreadContext_, RexxObjectPtr) -> logical_t },
-        PointerValue: { call(*mut RexxThreadContext_, RexxPointerObject) -> POINTER },
+        PointerValue: { aborts call(*mut RexxThreadContext_, RexxPointerObject) -> POINTER },
         NewPointer: { call(*mut RexxThreadContext_, POINTER) -> RexxPointerObject },
         IsPointer: { call(*mut RexxThreadContext_, RexxObjectPtr) -> logical_t },
         SupplierItem: { call(*mut RexxThreadContext_, RexxSupplierObject) -> RexxObjectPtr },
@@ -602,15 +687,16 @@ interface! {
         RexxTrue: { value RexxObjectPtr = std::ptr::null_mut() },
         RexxFalse: { value RexxObjectPtr = std::ptr::null_mut() },
         RexxNullString: { value RexxStringObject = std::ptr::null_mut() },
-        ObjectToCSelfScoped: { call(*mut RexxThreadContext_, RexxObjectPtr, RexxObjectPtr) -> POINTER },
-        DisplayCondition: { call(*mut RexxThreadContext_) -> wholenumber_t },
-        MutableBufferData: { call(*mut RexxThreadContext_, RexxMutableBufferObject) -> POINTER },
+        ObjectToCSelfScoped: { aborts call(*mut RexxThreadContext_, RexxObjectPtr, RexxObjectPtr) -> POINTER },
+        // `Error_Interpretation/1000` (`interpreter/api/ThreadContextStubs.cpp:1948`).
+        DisplayCondition: { call(*mut RexxThreadContext_) -> wholenumber_t, failing 48 },
+        MutableBufferData: { aborts call(*mut RexxThreadContext_, RexxMutableBufferObject) -> POINTER },
         MutableBufferLength: { call(*mut RexxThreadContext_, RexxMutableBufferObject) -> usize },
         SetMutableBufferLength: { call(*mut RexxThreadContext_, RexxMutableBufferObject, usize) -> usize },
         NewMutableBuffer: { call(*mut RexxThreadContext_, usize) -> RexxMutableBufferObject },
         IsMutableBuffer: { call(*mut RexxThreadContext_, RexxObjectPtr) -> logical_t },
         MutableBufferCapacity: { call(*mut RexxThreadContext_, RexxMutableBufferObject) -> usize },
-        SetMutableBufferCapacity: { call(*mut RexxThreadContext_, RexxMutableBufferObject, usize) -> POINTER },
+        SetMutableBufferCapacity: { aborts call(*mut RexxThreadContext_, RexxMutableBufferObject, usize) -> POINTER },
         VariableReferenceName: { call(*mut RexxThreadContext_, RexxVariableReferenceObject) -> RexxStringObject },
         VariableReferenceValue: { call(*mut RexxThreadContext_, RexxVariableReferenceObject) -> RexxObjectPtr },
         SetVariableReferenceValue: { call(*mut RexxThreadContext_, RexxVariableReferenceObject, RexxObjectPtr) },
@@ -621,7 +707,7 @@ interface! {
         NewStringTable: { call(*mut RexxThreadContext_) -> RexxStringTableObject },
         IsStringTable: { call(*mut RexxThreadContext_, RexxObjectPtr) -> logical_t },
         SendMessageScoped: { call(*mut RexxThreadContext_, RexxObjectPtr, CSTRING, RexxClassObject, RexxArrayObject) -> RexxObjectPtr },
-        GetInterpreterInstance: { call(*mut RexxThreadContext_) -> *mut RexxInstance_ },
+        GetInterpreterInstance: { aborts call(*mut RexxThreadContext_) -> *mut RexxInstance_ },
     }
 }
 
@@ -631,7 +717,7 @@ interface! {
         interfaceVersion: { value wholenumber_t = METHOD_INTERFACE_VERSION },
         GetArguments: { call(*mut RexxMethodContext_) -> RexxArrayObject },
         GetArgument: { call(*mut RexxMethodContext_, usize) -> RexxObjectPtr },
-        GetMessageName: { call(*mut RexxMethodContext_) -> CSTRING },
+        GetMessageName: { aborts call(*mut RexxMethodContext_) -> CSTRING },
         GetMethod: { call(*mut RexxMethodContext_) -> RexxMethodObject },
         GetSelf: { call(*mut RexxMethodContext_) -> RexxObjectPtr },
         GetSuper: { call(*mut RexxMethodContext_) -> RexxClassObject },
@@ -643,18 +729,18 @@ interface! {
         SetGuardOn: { call(*mut RexxMethodContext_) },
         SetGuardOff: { call(*mut RexxMethodContext_) },
         FindContextClass: { call(*mut RexxMethodContext_, CSTRING) -> RexxClassObject },
-        GetCSelf: { call(*mut RexxMethodContext_) -> POINTER },
-        AllocateObjectMemory: { call(*mut RexxMethodContext_, usize) -> POINTER },
+        GetCSelf: { aborts call(*mut RexxMethodContext_) -> POINTER },
+        AllocateObjectMemory: { aborts call(*mut RexxMethodContext_, usize) -> POINTER },
         FreeObjectMemory: { call(*mut RexxMethodContext_, POINTER) },
-        ReallocateObjectMemory: { call(*mut RexxMethodContext_, POINTER, usize) -> POINTER },
+        ReallocateObjectMemory: { aborts call(*mut RexxMethodContext_, POINTER, usize) -> POINTER },
         GetObjectVariableReference: { call(*mut RexxMethodContext_, CSTRING) -> RexxVariableReferenceObject },
         SetGuardOnWhenUpdated: { call(*mut RexxMethodContext_, CSTRING) -> RexxObjectPtr },
         SetGuardOffWhenUpdated: { call(*mut RexxMethodContext_, CSTRING) -> RexxObjectPtr },
-        ThrowException0: { call(*mut RexxMethodContext_, usize) },
-        ThrowException1: { call(*mut RexxMethodContext_, usize, RexxObjectPtr) },
-        ThrowException2: { call(*mut RexxMethodContext_, usize, RexxObjectPtr, RexxObjectPtr) },
-        ThrowException: { call(*mut RexxMethodContext_, usize, RexxArrayObject) },
-        ThrowCondition: { call(*mut RexxMethodContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException0: { aborts call(*mut RexxMethodContext_, usize) },
+        ThrowException1: { aborts call(*mut RexxMethodContext_, usize, RexxObjectPtr) },
+        ThrowException2: { aborts call(*mut RexxMethodContext_, usize, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException: { aborts call(*mut RexxMethodContext_, usize, RexxArrayObject) },
+        ThrowCondition: { aborts call(*mut RexxMethodContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
     }
 }
 
@@ -664,7 +750,7 @@ interface! {
         interfaceVersion: { value wholenumber_t = CALL_INTERFACE_VERSION },
         GetArguments: { call(*mut RexxCallContext_) -> RexxArrayObject },
         GetArgument: { call(*mut RexxCallContext_, usize) -> RexxObjectPtr },
-        GetRoutineName: { call(*mut RexxCallContext_) -> CSTRING },
+        GetRoutineName: { aborts call(*mut RexxCallContext_) -> CSTRING },
         GetRoutine: { call(*mut RexxCallContext_) -> RexxRoutineObject },
         SetContextVariable: { call(*mut RexxCallContext_, CSTRING, RexxObjectPtr) },
         GetContextVariable: { call(*mut RexxCallContext_, CSTRING) -> RexxObjectPtr },
@@ -678,11 +764,11 @@ interface! {
         GetCallerContext: { call(*mut RexxCallContext_) -> RexxObjectPtr },
         FindContextClass: { call(*mut RexxCallContext_, CSTRING) -> RexxClassObject },
         GetContextVariableReference: { call(*mut RexxCallContext_, CSTRING) -> RexxVariableReferenceObject },
-        ThrowException0: { call(*mut RexxCallContext_, usize) },
-        ThrowException1: { call(*mut RexxCallContext_, usize, RexxObjectPtr) },
-        ThrowException2: { call(*mut RexxCallContext_, usize, RexxObjectPtr, RexxObjectPtr) },
-        ThrowException: { call(*mut RexxCallContext_, usize, RexxArrayObject) },
-        ThrowCondition: { call(*mut RexxCallContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException0: { aborts call(*mut RexxCallContext_, usize) },
+        ThrowException1: { aborts call(*mut RexxCallContext_, usize, RexxObjectPtr) },
+        ThrowException2: { aborts call(*mut RexxCallContext_, usize, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException: { aborts call(*mut RexxCallContext_, usize, RexxArrayObject) },
+        ThrowCondition: { aborts call(*mut RexxCallContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
     }
 }
 
@@ -731,29 +817,21 @@ pub static METHOD_CONTEXT_INTERFACE: MethodContextInterface = MethodContextInter
 // hands out a thread context owns the table, which is also what keeps this
 // phase from mutating a global.
 
-/// The instance interface, which nothing reaches yet: what a method or call
-/// context addresses is the thread table and its own context table.
-///
-/// # Panics
-/// Always.
-pub fn instance_interface() -> RexxInstanceInterface {
-    refuse("RexxInstanceInterface");
-}
-
-/// The exit-context interface, unreached for the reason
-/// [`instance_interface`] gives.
+/// The exit-context interface, which nothing reaches yet: what a method or call
+/// context addresses is the thread table, its instance and its own context
+/// table.
 ///
 /// # Panics
 /// Always.
 pub fn exit_context_interface() -> ExitContextInterface {
-    refuse("ExitContextInterface");
+    abort("ExitContextInterface");
 }
 
 /// The I/O-redirector interface, unreached for the reason
-/// [`instance_interface`] gives.
+/// [`exit_context_interface`] gives.
 ///
 /// # Panics
 /// Always.
 pub fn io_redirector_interface() -> IORedirectorInterface {
-    refuse("IORedirectorInterface");
+    abort("IORedirectorInterface");
 }

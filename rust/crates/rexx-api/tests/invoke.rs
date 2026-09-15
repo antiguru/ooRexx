@@ -257,17 +257,6 @@ impl Session {
         invoke::routine(entry, &contexts.call(), &activation, arguments)
     }
 
-    /// The bytes of the object a call answered.
-    fn answered(&self, outcome: Result<Option<ObjRef>, Failure>) -> Vec<u8> {
-        let object = outcome
-            .expect("the routine answered")
-            .expect("the routine answered an object");
-        self.interpreter
-            .string_bytes(object)
-            .expect("the answer is a text object")
-            .into_owned()
-    }
-
     fn signature(&mut self, entry: &NativeMethodEntry) -> Result<Vec<u16>, Failure> {
         let activation = Activation::new(Conversion {
             host: &mut self.interpreter,
@@ -502,8 +491,9 @@ fn rxcalcsqrt_formats_at_the_callers_digits_when_no_precision_is_given() {
     session.interpreter.digits = 12;
     let sixteen = session.text(b"16");
 
-    let outcome = session.call_routine(sqrt, &[sixteen]);
-    assert_eq!(session.answered(outcome), b"4");
+    session
+        .call_routine(sqrt, &[sixteen])
+        .expect("the routine answers");
     assert_eq!(session.interpreter.doubles, vec![(4.0, 12)]);
 }
 
