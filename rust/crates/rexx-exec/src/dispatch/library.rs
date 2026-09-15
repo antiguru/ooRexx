@@ -189,7 +189,7 @@ impl Interp {
     /// refusal. `packaged` is whether the code reports a package, which is
     /// what a refusal before the call is reported against with no line; one
     /// that reports none is reported against the caller's clause
-    /// (`Activity::createExceptionObject`, `interpreter/concurrency/Activity.cpp:1093-1113`).
+    /// (`Activity::generateProgramInformation`, `interpreter/concurrency/Activity.cpp:1093-1113`).
     fn settle_native_call(
         &mut self,
         answered: Result<Option<ObjRef>, Refused>,
@@ -432,11 +432,21 @@ impl Interp {
 
 /// A Rexx number as the C `double` `strtod` reads from its digits
 /// (`NumberString::doubleValue`, `interpreter/classes/NumberStringClass.cpp:704`).
+///
+/// Rendered at as many digits as the number has, which keeps every digit and
+/// takes the exponential form wherever the plain one would pad with zeros, so
+/// the text is never much longer than the digits themselves.
 fn double_of(number: &Number) -> f64 {
-    let scientific = number.format(u64::MAX);
-    scientific.parse().unwrap_or_else(|_| {
-        unreachable!("a formatted Rexx number is a float literal: {scientific}")
-    })
+    let written = double_literal(number);
+    written
+        .parse()
+        .unwrap_or_else(|_| unreachable!("a formatted Rexx number is a float literal: {written}"))
+}
+
+/// The float literal [`double_of`] reads.
+fn double_literal(number: &Number) -> String {
+    let digits = u64::try_from(number.digit_count()).unwrap_or(u64::MAX);
+    number.format(digits)
 }
 
 /// `NumberString::newInstanceFromDouble(value, precision)`
@@ -505,7 +515,9 @@ mod tests {
 
     use rexx_api::values::Failure as Refused;
 
-    use super::{double_text, percent_g, pool_variable_name};
+    use rexx_num::Number;
+
+    use super::{double_literal, double_of, double_text, percent_g, pool_variable_name};
     use crate::{Failure, Interp, LibraryLoad};
 
     /// The oracle's own build directory, whose `librxregexp.so` D5's amendment
@@ -877,6 +889,29 @@ mod tests {
         // directive has bound is `Error 88 running <the caller> line 2`.
         assert!(!lineless(Refused::MissingArgument { position: 1 }, false));
         assert!(!lineless(Refused::TooManyArguments { expected: 2 }, false));
+    }
+
+    /// A number past either end of a double's range converts to what
+    /// `strtod` answers without being written out digit by digit: measured,
+    /// oracle, `RxCalcSqrt('1E+999999999')` is `+infinity` and
+    /// `RxCalcSqrt('1E-999999999')` is `0` under a 1 GiB address-space cap.
+    #[test]
+    fn a_double_argument_is_read_from_its_digits_and_exponent() {
+        let read = |text: &str| double_of(&Number::parse(text).expect("a Rexx number"));
+        assert_eq!(read("1E+999999999"), f64::INFINITY);
+        assert_eq!(read("-9.99E+999999999"), f64::NEG_INFINITY);
+        assert_eq!(read("1E-999999999"), 0.0);
+        assert_eq!(read("4.9E-324"), 4.9e-324);
+        assert_eq!(read("1.7976931348623157E+308"), f64::MAX);
+        assert_eq!(
+            read("123456789012345678901234567890E-10"),
+            1.2345678901234567e19
+        );
+        assert_eq!(read("0.000000000000000000000000000000000000001"), 1e-39);
+        assert_eq!(read("2.25"), 2.25);
+        assert_eq!(read("-16"), -16.0);
+        let written = double_literal(&Number::parse("1E+999999999").expect("a Rexx number"));
+        assert_eq!(written, "1E+999999999");
     }
 
     /// `%g`'s two styles and its trailing zeros, against what glibc prints.

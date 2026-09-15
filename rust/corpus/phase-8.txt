@@ -158,3 +158,7 @@ lang/library_method_loaded_defined_blame.rex
 lang/library_routine_rexx_package.rex
 lang/library_routine_rexx_package_missing.rex
 lang/library_routine_rexx_package_call_blame.rex
+
+# Surface Task 2 fix round: a double argument past a double's range converts at
+# once, without writing the number out digit by digit.
+lang/library_routine_double_exponent.rex
