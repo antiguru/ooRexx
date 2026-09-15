@@ -171,3 +171,8 @@ lang/library_routine_site_twice_global.rex
 lang/library_routine_site_twice_directive.rex
 lang/library_routine_site_twice_rexx.rex
 lang/library_routine_site_twice_security.rex
+
+# Surface Task 2 fix round: a call site keeps an external file, and drops a kept
+# resolution that a routine made callable since would shadow.
+lang/library_routine_external_site_twice.rex
+lang/library_routine_site_after_add_package.rex

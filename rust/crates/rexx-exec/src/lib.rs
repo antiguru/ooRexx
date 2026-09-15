@@ -1779,6 +1779,10 @@ struct Interp {
     /// The [`Interp::library_codes`] row each [`Interp::package_routines`]
     /// slot calls.
     package_routine_codes: Vec<usize>,
+    /// Moved whenever a routine may become callable in front of resolutions a
+    /// call site kept: a library registering routines, and a merge into a
+    /// package's routine lookup. See `Resolved::can_be_shadowed`.
+    pub(crate) routine_generation: u32,
     /// The library routines each package's `::REQUIRES ... LIBRARY`
     /// directives, and those of the packages it requires, merged into its own
     /// routine lookup, by upcased name (`PackageClass::mergeLibrary`,
@@ -2363,6 +2367,7 @@ impl Interp {
             rexx_routine_objects: HashMap::new(),
             package_routines: HashMap::new(),
             package_routine_codes: Vec::new(),
+            routine_generation: 0,
             merged_library_routines: HashMap::new(),
             native_handles: Vec::new(),
             special_methods: Vec::new(),
@@ -3402,6 +3407,7 @@ impl Interp {
     /// The public routines and classes `from` contributes to `into`: its own
     /// first, then the ones it imported.
     fn merge_required(&mut self, into: ProgramId, from: ProgramId) {
+        let mut added = false;
         let routines: Vec<(Box<[u8]>, InstalledRoutine)> = self
             .package_public_routines
             .get(&from)
@@ -3412,7 +3418,10 @@ impl Interp {
             .collect();
         let target = self.merged_public_routines.entry(into).or_default();
         for (name, installed) in routines {
-            target.entry(name).or_insert(installed);
+            if let std::collections::hash_map::Entry::Vacant(vacant) = target.entry(name) {
+                vacant.insert(installed);
+                added = true;
+            }
         }
         let libraries: Vec<(Box<[u8]>, usize)> = self
             .merged_library_routines
@@ -3423,7 +3432,13 @@ impl Interp {
             .collect();
         let target = self.merged_library_routines.entry(into).or_default();
         for (name, code) in libraries {
-            target.entry(name).or_insert(code);
+            if let std::collections::hash_map::Entry::Vacant(vacant) = target.entry(name) {
+                vacant.insert(code);
+                added = true;
+            }
+        }
+        if added {
+            self.routine_generation = self.routine_generation.wrapping_add(1);
         }
         let classes: Vec<(Box<[u8]>, ObjRef)> = self
             .package_public_classes
@@ -4736,6 +4751,7 @@ impl Interp {
     /// package, whatever loaded it.
     fn register_package_routines(&mut self, name: &[u8], library: &rexx_api::load::Library) {
         for (upper, spelling) in library.package_routines() {
+            self.routine_generation = self.routine_generation.wrapping_add(1);
             let code = self.library_code(LibraryCodeKey {
                 library: name.to_vec(),
                 procedure: spelling.to_vec(),
@@ -4761,11 +4777,15 @@ impl Interp {
                 procedure: spelling.to_vec(),
                 routine: true,
             });
-            self.merged_library_routines
+            if let std::collections::hash_map::Entry::Vacant(vacant) = self
+                .merged_library_routines
                 .entry(id)
                 .or_default()
                 .entry(upper.into_boxed_slice())
-                .or_insert(code);
+            {
+                vacant.insert(code);
+                self.routine_generation = self.routine_generation.wrapping_add(1);
+            }
         }
     }
 
@@ -5493,6 +5513,7 @@ impl Interp {
             // Routine names and row indices.
             package_routines: _,
             package_routine_codes: _,
+            routine_generation: _,
             merged_library_routines: _,
             native_handles,
             special_methods: _,

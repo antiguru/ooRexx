@@ -440,20 +440,34 @@ impl Hints {
 /// Whether a compiled call site keeps the resolution it made.
 const CALL_SITE_CACHE: bool = true;
 
-/// One call site's kept resolution, or none yet.
-struct CallSite(Cell<Option<Resolved>>);
+/// One call site's kept resolution, or none yet, with the
+/// `Interp::routine_generation` it was made under.
+struct CallSite {
+    resolved: Cell<Option<Resolved>>,
+    generation: Cell<u32>,
+}
 
 impl CallSite {
     fn new() -> CallSite {
-        CallSite(Cell::new(None))
+        CallSite {
+            resolved: Cell::new(None),
+            generation: Cell::new(0),
+        }
     }
 
-    fn get(&self) -> Option<Resolved> {
-        self.0.get()
+    /// The kept resolution, or `None` where it is one a routine made
+    /// callable since could shadow and `generation` has moved on.
+    fn get(&self, generation: u32) -> Option<Resolved> {
+        let resolved = self.resolved.get()?;
+        if resolved.can_be_shadowed() && self.generation.get() != generation {
+            return None;
+        }
+        Some(resolved)
     }
 
-    fn set(&self, resolved: Resolved) {
-        self.0.set(Some(resolved));
+    fn set(&self, resolved: Resolved, generation: u32) {
+        self.resolved.set(Some(resolved));
+        self.generation.set(generation);
     }
 }
 
@@ -493,24 +507,24 @@ impl Calls {
     /// resolved yet or has no slot at all -- which is what makes
     /// [`CALL_SITE_CACHE`] off behave as no table rather than as a table that
     /// answers wrongly.
-    fn resolved(&self, at: u16) -> Option<Resolved> {
-        self.slots.get(at as usize).and_then(CallSite::get)
+    fn resolved(&self, at: u16, generation: u32) -> Option<Resolved> {
+        self.slots
+            .get(at as usize)
+            .and_then(|slot| slot.get(generation))
     }
 
-    /// Records what site `at` resolved to.
+    /// Records what site `at` resolved to, under `generation`.
     ///
-    /// **A miss is never kept, and nor is an external file.**
-    /// `Resolved::Unresolved` is the answer for a name nothing has yet, and a
-    /// file the search would find next time must not be masked by this
-    /// table -- the same reason a raising resolution was never cached. A
-    /// library loaded after a file was found exports routines the oracle
-    /// finds before that file.
-    fn remember(&self, at: u16, resolved: Resolved) {
-        if matches!(resolved, Resolved::Unresolved | Resolved::External) {
+    /// **A miss is never kept.** `Resolved::Unresolved` is the answer for a
+    /// name nothing has yet, and a file the search would find next time must
+    /// not be masked by this table -- the same reason a raising resolution
+    /// was never cached.
+    fn remember(&self, at: u16, resolved: Resolved, generation: u32) {
+        if matches!(resolved, Resolved::Unresolved) {
             return;
         }
         if let Some(slot) = self.slots.get(at as usize) {
-            slot.set(resolved);
+            slot.set(resolved, generation);
         }
     }
 }
@@ -661,13 +675,13 @@ impl Chunk {
     }
 
     /// What call site `at` resolved to last time ([`Calls::resolved`]).
-    fn resolved_call(&self, at: u16) -> Option<Resolved> {
-        self.calls.resolved(at)
+    fn resolved_call(&self, at: u16, generation: u32) -> Option<Resolved> {
+        self.calls.resolved(at, generation)
     }
 
     /// Records what call site `at` resolved to ([`Calls::remember`]).
-    fn remember_call(&self, at: u16, resolved: Resolved) {
-        self.calls.remember(at, resolved);
+    fn remember_call(&self, at: u16, resolved: Resolved, generation: u32) {
+        self.calls.remember(at, resolved, generation);
     }
 }
 

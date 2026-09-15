@@ -1,0 +1,10 @@
+count 9
+/* An external file called from one expression call site, and from one CALL
+   site, on every pass of a loop. */
+do i = 1 to 3
+  say i ext(i)
+end
+do i = 1 to 3
+  call ext i * 10
+  say i result
+end

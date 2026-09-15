@@ -252,7 +252,7 @@ impl Interp {
             _ => Err(Failure::from(Loud::call_op_off_its_node())),
         };
         let mut spelling: &[u8] = b"";
-        let resolved = match chunk.resolved_call(site) {
+        let resolved = match chunk.resolved_call(site, self.routine_generation) {
             Some(resolved) => {
                 #[cfg(test)]
                 count_call_site_hit();
@@ -265,7 +265,7 @@ impl Interp {
                 let (name, search_labels) = target()?;
                 spelling = name;
                 let resolved = self.resolve_call(name, search_labels)?;
-                chunk.remember_call(site, resolved);
+                chunk.remember_call(site, resolved, self.routine_generation);
                 resolved
             }
         };
@@ -301,7 +301,7 @@ impl Interp {
         // table read the same way. The name comes off the instruction here
         // rather than off a node, which is why this op needs no address where
         // `Op::CallArgs` does.
-        let resolved = match chunk.resolved_call(site) {
+        let resolved = match chunk.resolved_call(site, self.routine_generation) {
             Some(resolved) => {
                 #[cfg(test)]
                 count_call_site_hit();
@@ -309,7 +309,7 @@ impl Interp {
             }
             None => {
                 let resolved = self.resolve_call(name, !*literal)?;
-                chunk.remember_call(site, resolved);
+                chunk.remember_call(site, resolved, self.routine_generation);
                 resolved
             }
         };
@@ -699,10 +699,12 @@ impl Interp {
                                         };
                                         let (name, search_labels) = call_target_name(code, target);
                                         // A raise is deliberately not recorded, and
-                                        // a hit needs no guard: `CallSite`'s own
-                                        // doc has both reasons, and they are the
-                                        // same ones `Op::Call` reads them for.
-                                        let resolved = match chunk.resolved_call(*site) {
+                                        // a stale kept answer is dropped by the
+                                        // table: the same reasons `Op::Call`
+                                        // reads them for.
+                                        let resolved = match chunk
+                                            .resolved_call(*site, self.routine_generation)
+                                        {
                                             Some(resolved) => {
                                                 #[cfg(test)]
                                                 count_call_site_hit();
@@ -710,7 +712,11 @@ impl Interp {
                                             }
                                             None => match self.resolve_call(name, search_labels) {
                                                 Ok(resolved) => {
-                                                    chunk.remember_call(*site, resolved);
+                                                    chunk.remember_call(
+                                                        *site,
+                                                        resolved,
+                                                        self.routine_generation,
+                                                    );
                                                     resolved
                                                 }
                                                 Err(failure) => break 'cold Err(failure),
@@ -1528,15 +1534,17 @@ impl Interp {
                                             break 'cold Err(Loud::call_op_off_its_node().into());
                                         };
                                         // **The site's own kept answer, and the
-                                        // resolution when it has none.** Nothing
-                                        // invalidates one -- `CallSite`'s own doc
-                                        // comment has the reason per resolution
-                                        // step -- so a hit needs no guard and there
-                                        // is none. A raise is deliberately not
-                                        // recorded: `resolve_call` answers `Err`
-                                        // for a name that matched nothing, and a
-                                        // site that raised asks again.
-                                        let resolved = match chunk.resolved_call(*site) {
+                                        // resolution when it has none.** A kept
+                                        // answer a routine made callable since
+                                        // could shadow is dropped by the table
+                                        // itself (`Resolved::can_be_shadowed`). A
+                                        // raise is deliberately not recorded:
+                                        // `resolve_call` answers `Err` for a name
+                                        // that matched nothing, and a site that
+                                        // raised asks again.
+                                        let resolved = match chunk
+                                            .resolved_call(*site, self.routine_generation)
+                                        {
                                             Some(resolved) => {
                                                 #[cfg(test)]
                                                 count_call_site_hit();
@@ -1557,7 +1565,11 @@ impl Interp {
                                                     code, resolution, args,
                                                 ) {
                                                     Ok(resolved) => {
-                                                        chunk.remember_call(*site, resolved);
+                                                        chunk.remember_call(
+                                                            *site,
+                                                            resolved,
+                                                            self.routine_generation,
+                                                        );
                                                         resolved
                                                     }
                                                     Err(failure) => break 'cold Err(failure),

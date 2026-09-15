@@ -154,8 +154,7 @@ pub(crate) enum Resolved {
     /// A `Resolved` is kept per call site in a `Cell`, so it has to be
     /// `Copy`, and the resolver is `&self` and can neither intern a path nor
     /// hand out an index. The second search is stats only, against a call that
-    /// re-reads and re-parses the file anyway. The call-site table keeps
-    /// neither this nor [`Resolved::Unresolved`].
+    /// re-reads and re-parses the file anyway.
     External,
     /// Nothing answers this name. **Not an error here**: the security
     /// manager's `CALL` checkpoint runs before 43.1 is reported
@@ -163,6 +162,26 @@ pub(crate) enum Resolved {
     /// against `:3102`), and it needs the arguments, which are evaluated
     /// after resolution. The raise happens where the checkpoint declines.
     Unresolved,
+}
+
+impl Resolved {
+    /// Whether a routine made callable after this resolution could answer the
+    /// same name first: every step `Interp::resolve_call` takes after the
+    /// running package's own routines, which a library load
+    /// (`Interp::register_package_routines`) or a merge into the package's
+    /// lookup (`Package~addPackage`, `~loadPackage`, a called external file's
+    /// public routines) can put something in front of. A call site keeping one of these re-resolves once
+    /// `Interp::routine_generation` has moved.
+    pub(crate) fn can_be_shadowed(self) -> bool {
+        matches!(
+            self,
+            Resolved::Library(_)
+                | Resolved::Internal(_)
+                | Resolved::LibraryRoutine(_)
+                | Resolved::MergedLibraryRoutine(_)
+                | Resolved::External
+        )
+    }
 }
 
 /// Which of the two activation-pushing outcomes a resolved call took, kept
