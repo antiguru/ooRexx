@@ -664,12 +664,11 @@ impl Interp {
                                         }
                                     }
                                     // **The one thing this does that `EvalExpr`
-                                    // does not is skip `resolve_call`.** The
-                                    // argument loop, the `>A>` lines, the
-                                    // activation bookkeeping and the three `Ended`
-                                    // arms are the same functions `eval.rs` calls
-                                    // on the same node; only the resolution comes
-                                    // from the site instead of being made again.
+                                    // does not is start from the site's kept
+                                    // resolution.** The argument loop, the `>A>`
+                                    // lines, the activation bookkeeping and the
+                                    // three `Ended` arms are the same functions
+                                    // `eval.rs` calls on the same node.
                                     Op::CallExpr {
                                         index,
                                         slot,
@@ -1495,7 +1494,6 @@ impl Interp {
                                         }
                                     }
                                     // The call, through the same
-                                    // `Interp::resolve_call` and
                                     // `Interp::invoke_named_call` that `step`'s own
                                     // `Call` arm reaches -- so the resolution
                                     // order, the argument loop with its `>A>`

@@ -4819,8 +4819,10 @@ transcript below was run in a fresh directory per side, the oracle under the
 standard wrapper and this crate's release rexx-run at 273e8f608, both with the
 oracle checkout's build/lib on LD_LIBRARY_PATH, three descriptors to three
 files; <dir> is the run directory. Where an entry says an answer is the same
-on an earlier revision, that was measured; the others were measured on this
-revision alone.
+on an earlier revision, that was measured; where an entry names another
+revision or measurer, it was measured there; the others were measured on
+this revision alone. The re-review of fix round 3 re-ran eighteen of these
+programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
 
   A .ROUTINES ENTRY PUT FROM REXX IS NEVER FOUND BY A CALL. .ROUTINES is the
   package's own routines table on the oracle (RexxActivation.cpp:2877-2879,
@@ -4844,7 +4846,10 @@ revision alone.
     m = .Method~loadExternalMethod('m', 'LIBRARY rxregexp RegExp_Pos')
     d = .Directory~new; d~setMethod('POS', m); say 'set'; say d~pos()
     oracle: set, then rc 168, *-* Compiled method "POS" with scope ".NIL". /
+            5 *-* say d~pos() /
+            Error 88 running <dir>/main.rex line 5:  Invalid argument. /
             Error 88.901:  Missing argument; argument 1 is required.
+            (the program's say d~pos() is its fifth line)
     this:   stdout empty, rc 120, rexx-exec: a one-off method whose body this
             crate does not hold is not implemented (Phase 5)
   The same for self~setMethod inside a method (installed / rc 168 against
@@ -4872,8 +4877,11 @@ revision alone.
   Loud. NO OWNER: a translation error's report, which is not the boundary's
   and which no phase names.
 
-  A CALL INSIDE A METHOD'S ARGUMENT LIST IS RESOLVED AGAIN ON EVERY PASS,
-  where the oracle keeps what findRoutine found at the instruction. With a
+  A CALL NESTED IN ANOTHER CALL'S OR A METHOD'S ARGUMENT LIST IS RESOLVED
+  AGAIN ON EVERY PASS, where the oracle keeps what findRoutine found at the
+  instruction. The re-review of fix round 3 measured the function and CALL
+  forms too (id(foo()) and call id foo(): oracle 2 old, this 2 new, on
+  cb13f0033 and 9ff11e465); a call in a concatenation agrees. With a
   ::routine foo answering 'old' and, after the first pass,
   .context~package~addRoutine('FOO', r) where r answers 'new':
     say i .array~of(foo())[1]
@@ -4945,7 +4953,11 @@ revision alone.
     (under signal on syntax, ::requires 'rxmath' LIBRARY)
     oracle: added 4, rc 0
     this:   raised SYNTAX 88 88.914, rc 0
-  install_routine accepts only a Routine whose record names a Rexx body.
+  install_routine (dispatch/package.rs) accepts any Routine whose record
+  names a ::ROUTINE directive, a ::ROUTINE ... EXTERNAL "LIBRARY ..."
+  directive's object included (added 4 on the oracle, cb13f0033 and
+  9ff11e465, measured by fix round 3's re-review), and refuses one with no
+  directive, which the library's shared Routine is.
   NO OWNER: no surface task names ~addRoutine.
 
   A ::ROUTINE ... EXTERNAL "LIBRARY ..." DIRECTIVE'S Routine OBJECT IS NOT
@@ -4975,8 +4987,65 @@ revision alone.
   RootSet::add_global that roots it deleted (then in merged_routine_object,
   now Interp::library_routine_object), library_routine_imported.rex goes red
   under collect-on-every-allocation (rc 120, a message send to a value whose
-  object is no longer live), measured by fix round 2's re-review with a
-  scratch harness over every phase-8.txt library row. The gated corpus does
+  object is no longer live), measured at 9ff11e465 by fix round 2's re-review
+  with a scratch harness over every phase-8.txt library row, and not re-taken
+  since. The gated corpus does
   not run in that mode, and collect_stress's L0 test, which would, stops
   first (the entry above, "L0 TEST STOPS BEFORE ANY phase-8.txt PROGRAM").
   NO OWNER, as that entry records for the panic.
+
+  RECORDED BY THE RE-REVIEW OF SURFACE TASK 2'S FIX ROUND 3 (2026-09-15),
+  each measured at cb13f0033 on both sides and on 9ff11e465, the probes under
+  the session scratchpad's t2-rereview3/, NOT FIXED:
+
+  A NAMESPACE-QUALIFIED CALL STILL RESOLVES BEFORE ITS ARGUMENTS, the one call
+  form fix round 3 did not move. NS:late(add('LATE')), where add does
+  addPublicRoutine('LATE') on the namespace package, trapped:
+    oracle: fn late / call late, rc 0
+    this:   fn raised SYNTAX 43 / call raised SYNTAX 43, rc 0
+  The oracle evaluates the arguments first (CallInstruction.cpp:436, then
+  :450). Silent when trapped. NO OWNER: namespaces are the package model's.
+
+  loadExternalRoutine OF A LIBRARY REXX ROUTINE ANSWERS A NEW OBJECT EACH TIME.
+  Two loadExternalRoutine('r', 'LIBRARY REXX FILESPEC') answers compared by
+  identity: oracle 1, this 0 (native_load_external's REXX arm builds a fresh
+  object). Fix round 3 shared the object for a non-REXX library only. NO
+  OWNER: identity of Routine objects is observable only through identityHash
+  here, since == on a Routine still refuses naming Phase 5.
+
+  A ::routine WHOSE CALL RAISED STAYS KEPT AT ITS CALL SITE. An internal
+  routine sub: calls foo(), which raises 42.3 (trapped); then
+  .context~package~addRoutine('FOO', r); then sub: again:
+    oracle: pass1 raised 42.3 / sub 2 added 2
+    this:   pass1 raised 42.3 / pass2 raised 42.3
+  The oracle keeps a resolution with setField after externalCall returns
+  (ExpressionFunction.cpp:210-214, CallInstruction.cpp:193-197), so a raised
+  call keeps nothing; this crate keeps it before the call. Silent. NO OWNER.
+
+  TRACE I AND TRACE R OF A FUNCTION CALL TO AN EXTERNAL FILE LACK THE >>> LINE.
+  For x = ext(1) and x = ext(id(2)), after >F>   EXT => "ext 1" the oracle
+  prints >>>   "ext 1"; this crate does not. The CALL forms and every other
+  routine kind agree. NO OWNER: trace rendering of external calls, which no
+  open phase names.
+
+  A LIBRARY ROUTINE'S Routine~call TRACEBACK ALSO LACKS
+  *-* Compiled method "CALL" with scope "Routine". beside the Compiled routine
+  line the entry above names (loadExternalRoutine('myname', ...)~call('x'),
+  trapped; the untrapped report agrees). Same owner as that entry.
+
+  THREE ITEMS SURFACE TASK 2 RAISED AND DID NOT RECORD ABOVE, as its report
+  and the re-review of fix round 3 describe them; not re-run for this entry:
+  * The clause call .context~package~loadPackage(...), which does not parse
+    as a CALL, renders rexx-exec: 35.1 at rc 120 where the oracle reports
+    Error 35 at rc 221. Loud.
+  * .K~define of a Method built from source text refuses naming Phase 5.
+    Loud.
+  * StringTable~hasIndex refuses naming Phase 5 (fix round 2's probe u1).
+    Loud.
+  All three NO OWNER: Phase 5 is closed and no ruling moved them.
+
+  NAME COLLISIONS BETWEEN A LIBRARY ROUTINE AND AN INTERNAL ROUTINE ARE NOT
+  MEASURED. Fix rounds 1 and 2 fixed the merged-library against
+  required-package and parent orders; which of a library routine and an
+  internal label of the same name a call reaches was raised by the task and
+  never probed. Unmeasured, so no answer is recorded here. NO OWNER.

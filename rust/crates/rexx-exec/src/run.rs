@@ -115,8 +115,8 @@ pub(crate) struct SteppedClause {
     temps_at_entry: usize,
 }
 
-/// What a called name resolved to, decided in one place before any argument
-/// is evaluated.
+/// What a called name resolved to: a label or a builtin before the arguments
+/// run, anything else after them.
 #[derive(Clone, Copy)]
 pub(crate) enum Resolved {
     /// A label in the *running activation's* body, at this instruction index.
@@ -4633,7 +4633,9 @@ impl Interp {
         Ok(argument)
     }
 
-    /// A call's resolution, held back until its arguments have run.
+    /// A call's resolution, held back until its arguments have run: the oracle
+    /// evaluates a call's arguments before its external search
+    /// (`expression/ExpressionFunction.cpp:184`, `instructions/CallInstruction.cpp:166`).
     #[inline(always)]
     pub(crate) fn resolved_after_arguments<T>(
         &mut self,

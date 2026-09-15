@@ -250,17 +250,27 @@ two calls, aborts rc 134 where the oracle prints `x 42`; AddressSanitizer names
       never for a library refused for its version; and the `unloader` at termination for every held
       library, measured on the oracle for order and for what a raise inside one does. Say which
       shipped extensions declare either hook, from their package entries, since a hook no shipped
-      extension declares can be witnessed only by a unit test.
+      extension declares can be witnessed only by a unit test. **A hook runs extension code outside
+      `invoke::run`**, which is today the only place a refusing slot's record is read (Task 2's fix
+      round 1): a refusal recorded inside a hook must be read and refused loudly there too, not
+      cleared unread, and the record cell's doc must say so. Its re-review named this path.
 - [ ] **Step 4:** Commit.
 
 ---
 
-### Task 5: The thread and method-context tables
+### Task 5: The thread, method-context and call-context tables
+
+**Amended after Task 2**, by the ruling recorded in the ledger (Task 2 pre-flight, Q2): Task 2
+populated `CallContextInterface` with `GetContextDigits`, `GetContextFuzz` and `GetContextForm`, the
+thread table with `DoubleToObjectWithPrecision`, and the instance table with `InterpreterVersion`
+and `LanguageLevel`; this task takes the rest of the call-context members `orxfunction.cpp` calls,
+beside the thread and method tables. `AddCommandEnvironment` stays Task 6's.
 
 **Files:** `rust/crates/rexx-api/src/ffi.rs`, `src/layout.rs`, `tests/layout.rs`
 
 - [ ] **Step 1:** Enumerate, at test time and from the header, the pointers `orxmethod.cpp` and
-      `orxfunction.cpp` call, and fill those first. The rest of the 211 get bodies grouped by what
+      `orxfunction.cpp` call, across the thread, method-context and call-context tables, and fill
+      those first. The rest of the 211 get bodies grouped by what
       they touch: object construction, string and buffer access, collections, variables,
       conditions, and the interpreter's own state. Each group is its own commit.
 - [ ] **Step 2:** `RequestGlobalReference` and its table. The handle is a function of the object, so
