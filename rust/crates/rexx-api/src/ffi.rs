@@ -825,7 +825,7 @@ mod tests {
                     )
                 }
             });
-            assert_eq!(answers, (std::ptr::null_mut(), 0, 48));
+            assert_eq!(answers, (std::ptr::null_mut(), 0, 49));
             assert_eq!(inner, Some("RexxThreadInterface.HaltThread"));
         });
         assert_eq!(outer, None, "the inner record leaked into the outer one");

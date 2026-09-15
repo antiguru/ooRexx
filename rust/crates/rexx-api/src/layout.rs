@@ -688,8 +688,9 @@ interface! {
         RexxFalse: { value RexxObjectPtr = std::ptr::null_mut() },
         RexxNullString: { value RexxStringObject = std::ptr::null_mut() },
         ObjectToCSelfScoped: { aborts call(*mut RexxThreadContext_, RexxObjectPtr, RexxObjectPtr) -> POINTER },
-        // `Error_Interpretation/1000` (`interpreter/api/ThreadContextStubs.cpp:1948`).
-        DisplayCondition: { call(*mut RexxThreadContext_) -> wholenumber_t, failing 48 },
+        // `Error_Interpretation/1000` (`interpreter/api/ThreadContextStubs.cpp:1948`), where
+        // `Error_Interpretation` is 49000 (`interpreter/messages/RexxErrorCodes.h:456`).
+        DisplayCondition: { call(*mut RexxThreadContext_) -> wholenumber_t, failing 49 },
         MutableBufferData: { aborts call(*mut RexxThreadContext_, RexxMutableBufferObject) -> POINTER },
         MutableBufferLength: { call(*mut RexxThreadContext_, RexxMutableBufferObject) -> usize },
         SetMutableBufferLength: { call(*mut RexxThreadContext_, RexxMutableBufferObject, usize) -> usize },
