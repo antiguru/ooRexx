@@ -5064,3 +5064,19 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   argument check, which Task 3 did not change; not run against an earlier
   binary. NO OWNER: the condition object's fields for a lineless delivery
   are the traceback family's, like the Compiled routine entry above.
+
+  condition('O')~message ON A TRAPPED SYNTAX PANICS UNDER
+  COLLECT-ON-EVERY-ALLOCATION, with no native call in the program:
+    signal on syntax / y = 1/0 / exit / syntax: / say 'caught'
+    condition('O')~message
+  panics a live value at dispatch.rs:1510 under
+  run_program_collect_every_alloc, measured on edcf1ff40 through a scratch
+  lib test; the same program printing condition('O')~code instead runs (rc 0,
+  caught 42.3). The assertion is the one collect_stress's L0 test fails at
+  (the entry "L0 TEST STOPS BEFORE ANY phase-8.txt PROGRAM" above); whether
+  this is that failure's whole cause was not measured.
+  library_native_integer_arguments.rex, _object_arguments.rex and
+  _special_arguments.rex, which print condition messages, panic in that mode
+  too, as does Task 2's library_routine_argument_errors.rex; the in-crate
+  stress test of the conversion rows reads codes only. NO OWNER, as that entry
+  records for the panic.
