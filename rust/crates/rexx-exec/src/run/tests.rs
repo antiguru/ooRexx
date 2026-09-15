@@ -7342,12 +7342,13 @@ fn a_directive_owing_both_a_translation_error_and_a_gap_answers_the_translation_
 /// is `3.14159265` at rc 0.
 #[test]
 fn a_library_backed_routine_installs_and_runs_when_it_is_called() {
-    // The oracle's own build directory, reached through this interpreter's
-    // environment rather than the process's, which nothing here may write.
+    // This worktree's own `build/lib`, not the oracle checkout's, reached
+    // through this interpreter's environment rather than the process's, which
+    // nothing here may write.
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the oracle's build directory is four above this crate");
+        .expect("the worktree's build/lib is three directories above this crate");
     let run = |source: &[u8]| {
         let invocation = crate::Invocation::none().with_environment(vec![(
             b"LD_LIBRARY_PATH".to_vec(),
@@ -7381,13 +7382,15 @@ fn a_library_backed_routine_installs_and_runs_when_it_is_called() {
 /// oracle rc 0 printing `328448`, and the crate crashed at rc 139 with both
 /// descriptors empty while `instance` was null. Its `size_t` result is a
 /// conversion row this crate does not fill yet, so the call now ends in that
-/// row's refusal with the earlier output kept.
+/// row's refusal with the earlier output kept. The test loads this worktree's
+/// own `build/lib/liborxmethod.so`; the measurements used the oracle
+/// checkout's.
 #[test]
 fn an_extension_reading_the_instance_reaches_its_table() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the oracle's build directory is four above this crate");
+        .expect("the worktree's build/lib is three directories above this crate");
     let invocation = crate::Invocation::none().with_environment(vec![(
         b"LD_LIBRARY_PATH".to_vec(),
         directory.into_os_string().into_encoded_bytes(),
@@ -7413,13 +7416,14 @@ fn an_extension_reading_the_instance_reaches_its_table() {
 /// kept.** Measured, oracle: `RxCalcSin(30, 3, 'X')` is 88.916 at rc 168; its
 /// units check builds the message with `context->String`, which is
 /// `NewStringFromAsciiz`, and the crate aborted there at rc 134 with `before`
-/// lost.
+/// lost. The test loads this worktree's own `build/lib/librxmath.so`; the
+/// measurements used the oracle checkout's.
 #[test]
 fn an_extension_reaching_an_unwritten_member_refuses_loudly() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the oracle's build directory is four above this crate");
+        .expect("the worktree's build/lib is three directories above this crate");
     let invocation = crate::Invocation::none().with_environment(vec![(
         b"LD_LIBRARY_PATH".to_vec(),
         directory.into_os_string().into_encoded_bytes(),
@@ -7446,7 +7450,7 @@ fn a_routine_a_required_library_exports_runs_rather_than_answering_43_1() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the oracle's build directory is four above this crate");
+        .expect("the worktree's build/lib is three directories above this crate");
     let run = |source: &[u8]| {
         let invocation = crate::Invocation::none().with_environment(vec![(
             b"LD_LIBRARY_PATH".to_vec(),

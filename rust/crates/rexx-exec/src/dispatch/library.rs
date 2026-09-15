@@ -440,9 +440,10 @@ impl Interp {
 /// A Rexx number as the C `double` `strtod` reads from its digits
 /// (`NumberString::doubleValue`, `interpreter/classes/NumberStringClass.cpp:704`).
 ///
-/// Rendered at as many digits as the number has, which keeps every digit and
-/// takes the exponential form wherever the plain one would pad with zeros, so
-/// the text is never much longer than the digits themselves.
+/// Rendered at as many digits as the number has, which keeps every digit.
+/// `Number::format` takes the exponential form where the plain one would
+/// pad the integer part with zeros or put more zeros after the point than
+/// there are digits, so the text stays within about twice the digits.
 fn double_of(number: &Number) -> f64 {
     let written = double_literal(number);
     written
@@ -527,19 +528,21 @@ mod tests {
     use super::{double_literal, double_of, double_text, percent_g, pool_variable_name};
     use crate::{Failure, Interp, LibraryLoad};
 
-    /// The oracle's own build directory, whose `librxregexp.so` D5's amendment
-    /// makes the instrument: it is loaded, never rebuilt.
-    fn oracle_library_directory() -> PathBuf {
+    /// This worktree's own `build/lib`, not the oracle checkout's: a second
+    /// build of the extensions from the same sources, which the oracle never
+    /// runs (D5's amendment, `docs/superpowers/specs/2026-09-14-phase-8-native-api.md`).
+    /// Its libraries are loaded, never rebuilt.
+    fn worktree_library_directory() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../../build/lib")
             .canonicalize()
-            .expect("the oracle's build directory is four above this crate")
+            .expect("the worktree's build/lib is three directories above this crate")
     }
 
     /// The oracle's `librxregexp.so`, opened by path.
     fn open_rxregexp() -> rexx_api::load::Library {
         rexx_api::load::open_path(
-            &oracle_library_directory().join("librxregexp.so"),
+            &worktree_library_directory().join("librxregexp.so"),
             "rxregexp",
         )
         .expect("the extension asks for 4.0.0, which is below this interpreter")
@@ -553,7 +556,7 @@ mod tests {
         let mut interp = Interp::new();
         interp.adopt_environment(vec![(
             b"LD_LIBRARY_PATH".to_vec(),
-            oracle_library_directory()
+            worktree_library_directory()
                 .into_os_string()
                 .into_encoded_bytes(),
         )]);
@@ -570,7 +573,7 @@ mod tests {
     fn a_library_named_twice_is_opened_once() {
         let mut interp = interp_that_can_see_rxregexp();
         let LibraryLoad::Loaded(first) = interp.resolve_library(b"rxregexp") else {
-            panic!("librxregexp.so did not load from the oracle's build directory");
+            panic!("librxregexp.so did not load from the worktree's build directory");
         };
         let LibraryLoad::Loaded(second) = interp.resolve_library(b"rxregexp") else {
             panic!("the second resolve did not load");
@@ -620,7 +623,7 @@ mod tests {
     /// at the start.
     #[test]
     fn a_search_directory_written_after_the_start_is_not_searched() {
-        let directory = oracle_library_directory()
+        let directory = worktree_library_directory()
             .into_os_string()
             .into_encoded_bytes();
         let mut late = Interp::new();
@@ -698,7 +701,7 @@ mod tests {
         let invocation = || {
             crate::Invocation::none().with_environment(vec![(
                 b"LD_LIBRARY_PATH".to_vec(),
-                oracle_library_directory()
+                worktree_library_directory()
                     .into_os_string()
                     .into_encoded_bytes(),
             )])
@@ -749,7 +752,7 @@ mod tests {
         let invocation = || {
             crate::Invocation::none().with_environment(vec![(
                 b"LD_LIBRARY_PATH".to_vec(),
-                oracle_library_directory()
+                worktree_library_directory()
                     .into_os_string()
                     .into_encoded_bytes(),
             )])
@@ -809,7 +812,7 @@ mod tests {
     fn a_loaded_library_outlives_the_finaliser_sweep() {
         let mut interp = interp_that_can_see_rxregexp();
         let LibraryLoad::Loaded(library) = interp.resolve_library(b"rxregexp") else {
-            panic!("librxregexp.so did not load from the oracle's build directory");
+            panic!("librxregexp.so did not load from the worktree's build directory");
         };
         let watch = std::rc::Rc::downgrade(&library);
         drop(library);
@@ -846,7 +849,7 @@ mod tests {
         let invocation = || {
             crate::Invocation::none().with_environment(vec![(
                 b"LD_LIBRARY_PATH".to_vec(),
-                oracle_library_directory()
+                worktree_library_directory()
                     .into_os_string()
                     .into_encoded_bytes(),
             )])

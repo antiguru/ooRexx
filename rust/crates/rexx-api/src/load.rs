@@ -51,8 +51,9 @@ pub const ROUTINE_CLASSIC_STYLE: c_int = 2;
 /// `tests/load.rs` re-reads the header and asserts this value against it.
 pub const CURRENT_INTERPRETER_VERSION: c_int = 0x0005_0300;
 
-/// `REXX_CURRENT_LANGUAGE_LEVEL` (`api/oorexxapi.h:249`), which
-/// `InterpreterInstance::LanguageLevel` answers. `tests/load.rs` re-reads the
+/// `REXX_CURRENT_LANGUAGE_LEVEL` (`api/oorexxapi.h:249`), which the instance
+/// table's `LanguageLevel` answers (`interpreter/api/InterpreterInstanceStubs.cpp:84`,
+/// through `Interpreter::getLanguageLevel`). `tests/load.rs` re-reads the
 /// header and asserts this value against it.
 pub const CURRENT_LANGUAGE_LEVEL: usize = 0x0606;
 
@@ -254,6 +255,10 @@ impl NativeRoutineEntry {
 
     /// The row's address as the typed stub it names, or `None` for a row that
     /// carries none and for a row of any style but `ROUTINE_TYPED_STYLE`.
+    ///
+    /// A style that is neither classic nor typed is therefore refused as an
+    /// unreadable signature, where the oracle calls any non-classic row as a
+    /// typed routine (`interpreter/package/LibraryPackage.cpp:279-286`).
     fn stub(&self) -> Option<NativeRoutine> {
         if self.entry_point.is_null() || self.style != ROUTINE_TYPED_STYLE {
             return None;

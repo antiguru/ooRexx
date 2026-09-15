@@ -134,7 +134,7 @@ pub static CALL_CONTEXT: CallContextInterface = {
 
 /// The instance table a thread context's `instance` addresses
 /// (`InterpreterInstance::interfaceVector`,
-/// `interpreter/api/InterpreterInstanceStubs.cpp:105`), at one address for the
+/// `interpreter/api/InterpreterInstanceStubs.cpp:106`), at one address for the
 /// process as [`METHOD_CONTEXT`] is.
 pub static INSTANCE: RexxInstanceInterface = {
     let mut table = RexxInstanceInterface::REFUSING;

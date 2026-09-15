@@ -135,8 +135,8 @@ fn run(
     let (written, refused) =
         crate::layout::recording_refusals(|| call(&mut descriptors, values::result_repr(returns)));
     if let Some(entry) = refused {
-        // Ahead of the result and of any condition the extension raised after
-        // the refused member answered it, both of which that answer shaped.
+        // Ahead of the result and of any condition the extension raised
+        // during the call, before the refused member or after it.
         cx.clear_pending();
         return Err(Failure::UnfilledSlot { entry });
     }
