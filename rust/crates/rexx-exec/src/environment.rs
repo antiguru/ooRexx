@@ -251,8 +251,8 @@ pub(crate) struct EnvironmentModel {
     /// crate does not build, one per phase owing such entries. A write
     /// replaces one in place, which keeps the oracle's order.
     owed: [(ObjRef, &'static str); 2],
-    /// The last reading of `.local`'s pool and of `.environment`'s, in that
-    /// order.
+    /// A reading of `.local`'s pool and of `.environment`'s, in that order,
+    /// from an earlier lookup; one that is not current is read again.
     views: [Option<hash::StoreView>; 2],
     /// `.methods`, `.routines` and `.resources` all answer one of these.
     string_table: ObjRef,
@@ -2378,7 +2378,7 @@ mod tests {
             "the registry's Directory table is not the one this test is about: {names:?}"
         );
         let fresh = interp.classes().instance_behaviour_handle(class);
-        // `EMPTY` last, since it takes every entry out.
+        // `EMPTY` last, since it takes the contents out.
         let mut ordered: Vec<&String> = names.iter().filter(|name| *name != "EMPTY").collect();
         ordered.extend(names.iter().filter(|name| *name == "EMPTY"));
         let mut sends = String::new();

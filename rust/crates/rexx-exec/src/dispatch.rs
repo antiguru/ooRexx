@@ -10490,8 +10490,7 @@ mod tests {
     fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
         // **`.environment` has none left**, which is why `.local`'s is the
         // only one asked about. Each read below answers or compares
-        // `STDQUE`'s item, and each reaches the refusal through a different
-        // path.
+        // `STDQUE`'s item.
         for source in [
             "say .local['STDQUE']\n",
             "say .context~package~findClass('stdque')\n",

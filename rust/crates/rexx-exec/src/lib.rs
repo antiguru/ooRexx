@@ -1934,8 +1934,8 @@ struct Interp {
     /// entry, a directory put or removal, and an array write, which is how a
     /// monitor's destination queue changes.
     route_generation: u64,
-    /// What a `dispatch::hash::StoreView` is valid against; a write to a
-    /// mapped collection's pool entries moves it.
+    /// What a `dispatch::hash::StoreView` is valid against.
+    /// `hash::bump_store_generation` moves it.
     store_generation: u64,
     /// `SAY`'s route as of [`Interp::route_generation`]: `None` writes
     /// straight to the buffer. Deciding it afresh costs 764 instructions a
@@ -5286,7 +5286,9 @@ impl Interp {
             // Handles into the class registry, so class identities again.
             object_model: _,
             // `.environment`, `.local` and the owed placeholders are globals;
-            // the rest are classes.
+            // the rest are classes. A `StoreView`'s store arrays are held by
+            // its directory's own pool while its generation is current, and a
+            // view whose generation is not current is not read.
             environment: _,
             // A lookup index. Both halves are held by the class itself --
             // the key is the class, the value is in its `owned` list.

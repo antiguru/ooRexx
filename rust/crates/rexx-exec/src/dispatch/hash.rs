@@ -1084,7 +1084,9 @@ fn method_count(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure>
     Ok(walk_in(interp, &store)?.len())
 }
 
-/// Whether a removal hands the item it takes back to the program.
+/// Whether a removal refuses an owed entry before taking it: `Answered` for
+/// one that hands the item to the program unread, `Discarded` for one that
+/// drops it or whose caller has already read it through [`item_at`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Removal {
     Answered,
