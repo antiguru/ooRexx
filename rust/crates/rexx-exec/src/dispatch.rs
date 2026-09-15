@@ -1089,6 +1089,8 @@ pub(crate) struct ObjectModel {
     routine: ObjRef,
     directory: ObjRef,
     string_table: ObjRef,
+    /// The scope a mapped collection's store is bound under.
+    table: ObjRef,
     context: ObjRef,
     /// The class `Setup.cpp` registers with `addToSystem` and whose
     /// *instance* `.RexxInfo` answers -- see [`Primitive::RexxInfo`].
@@ -1243,6 +1245,7 @@ impl ObjectModel {
         let stack_frame = classes
             .lookup("StackFrame")
             .expect("StackFrame is a native class");
+        let table = classes.lookup("Table").expect("Table is a native class");
         ObjectModel {
             classes,
             natives,
@@ -1255,6 +1258,7 @@ impl ObjectModel {
             routine,
             directory,
             string_table,
+            table,
             context,
             rexx_info,
             message,
@@ -5203,9 +5207,9 @@ fn native_hash_at(
     // `Put` and `[]` rows to `StringTable` and that whole set on to
     // `Directory` (`memory/Setup.cpp:881`, `:933`), so `Table`,
     // `IdentityTable`, `StringTable` and `Directory` share one method
-    // identity here exactly as they share one function upstream. The
-    // string-keyed classes read the entry map they are built on; everything
-    // else reads the object-keyed store.
+    // identity here exactly as they share one function upstream. A table
+    // this crate built on `NativeObject`'s map reads that map; everything
+    // else reads the store.
     if !matches!(
         interp.heap.get(receiver).map(|object| &object.body),
         Some(Body::Native(_))
@@ -5214,7 +5218,7 @@ fn native_hash_at(
         return hash::store_at(interp, receiver, args);
     }
     let index = hash_index(interp, args, 1)?;
-    Ok(Some(interp.hash_entry_read(receiver, &index)?))
+    Ok(Some(interp.hash_entry_read(receiver, &index)))
 }
 
 /// `~put(item, index)` on a `Directory` or a `StringTable`: stores `item`
@@ -5261,8 +5265,8 @@ fn native_hash_unknown(
     let Some(forwarded) = interp.array_slots_of(arguments) else {
         return Err(unconverted_array_argument(interp, arguments));
     };
-    // [`native_hash_at`]'s split again: a collection reads its store and the
-    // environment reads its map. Measured, a `.Directory` given
+    // [`native_hash_at`]'s split again: a store or `NativeObject`'s map.
+    // Measured, a `.Directory` given
     // `setEntry('alpha', 42)` answers `d~alpha` as `42`, and `d~beta = 7`
     // stores under `BETA`.
     let store = !matches!(
@@ -5275,7 +5279,7 @@ fn native_hash_unknown(
             let index = interp.text_built(index);
             return hash::store_entry_read(interp, receiver, index);
         }
-        return Ok(Some(interp.hash_entry_read(receiver, &index)?));
+        return Ok(Some(interp.hash_entry_read(receiver, &index)));
     };
     let index = index.to_ascii_uppercase();
     let Some(Some(item)) = forwarded.first().copied() else {
@@ -10486,15 +10490,52 @@ mod tests {
     #[test]
     fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
         // **`.environment` has none left**, which is why `.local`'s is the
-        // only one asked about: `.ENDOFLINE` was the last unbuilt name there
-        // and the ooTest framework's prologue reads it.
-        let (source, owner) = ("say .local['STDQUE']\n", "Phase 10");
-        let (code, stdout, stderr) = run_source(source);
-        assert_eq!((code, stdout.as_str()), (120, ""), "{source:?}");
-        assert!(
-            stderr.starts_with("rexx-exec: directory entry ")
-                && stderr.ends_with(&format!("is not implemented ({owner})\n")),
-            "{source:?} refused with {stderr:?}"
+        // only one asked about. Every read that answers or compares
+        // `STDQUE`'s item refuses, and each reaches the refusal through a
+        // different path.
+        for source in [
+            "say .local['STDQUE']\n",
+            "say .local~entry('stdque')\n",
+            "say .local~stdque\n",
+            "say .local~allItems~items\n",
+            "say .local~supplier~index\n",
+            "say .local~hasItem('x')\n",
+            "say .local~index('x')\n",
+            "say .local~removeItem('x')\n",
+            "say .local~remove('STDQUE')\n",
+            "do n over .local~allItems; end\n",
+        ] {
+            let (code, stdout, stderr) = run_source(source);
+            assert_eq!(
+                (code, stdout.as_str(), stderr.as_str()),
+                (
+                    120,
+                    "",
+                    "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10)\n"
+                ),
+                "{source:?}"
+            );
+        }
+        assert_eq!(
+            run_source("say .stdque\n"),
+            (
+                120,
+                String::new(),
+                "rexx-exec: environment symbol \".STDQUE\" is not implemented (Phase 10)\n"
+                    .to_string()
+            )
+        );
+        // The adjacent successes, each the oracle's own answer: the index and
+        // count reads never touch the item, and once a program has replaced
+        // the entry every item read answers.
+        assert_eq!(
+            run_source(
+                "say .local~items .local~allIndexes~items .local~hasIndex('STDQUE') \
+                 .local~hasEntry('stdque')\n\
+                 .local['STDQUE'] = 'q'\n\
+                 say .local~allItems~items .stdque .local~index('q')\n"
+            ),
+            (0, "10 10 1 1\n10 q STDQUE\n".to_string(), String::new())
         );
         assert_eq!(
             run_source(
@@ -10524,14 +10565,12 @@ mod tests {
     fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer() {
         for (source, message) in [
             // `MAKEARRAY` is in this behaviour's dictionary and this crate
-            // has no code for it. Answering `.nil` would contradict the
-            // oracle, which converts: measured, oracle rc 0 and
-            // `.environment~request("ARRAY")` is an array. `String` is no
-            // longer here -- `native_string_makearray` answers it, and
-            // `string_makearray.rex` compares every shape against the
-            // oracle.
+            // has no code for it on a `Directory` built on `NativeObject`'s
+            // map. Answering `.nil` would contradict the oracle, which
+            // converts: measured, oracle rc 0 and the condition object's
+            // array holds `14` items.
             (
-                "say .environment~request('ARRAY')\n",
+                "signal on syntax\nsay 1 + 'a'\nsyntax:\nsay condition('O')~request('ARRAY')~items\n",
                 "rexx-exec: method \"MAKEARRAY\" of class \"Directory\" is not implemented \
                  (Phase 5)\n",
             ),

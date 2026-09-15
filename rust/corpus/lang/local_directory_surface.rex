@@ -1,0 +1,61 @@
+/* .local answers every method Directory's own table holds, with its entries
+ * present from the first clause: the streams, monitors and SYSCARGS are
+ * built before any program runs, so a whole-collection read before the first
+ * .output sees the same names, in the same order, as one after it.
+ *
+ * STDQUE's item is the external queue, which this crate does not build, so
+ * the reads of indexes and counts come first and the reads that answer or
+ * compare items come after STDQUE is replaced.
+ */
+
+l = .local
+say 'items    ' l~items l~isEmpty
+say 'indexes  ' l~allIndexes~makeString('L', ' ')
+say 'makeArray' l~makeArray~makeString('L', ' ')
+line = ''
+do name over l
+  line = line name
+end
+say 'over     ' strip(line)
+say 'hasIndex ' l~hasIndex('STDOUT') l~hasIndex('stdout') l~hasIndex('STDQUE') l~hasIndex('NOPE')
+say 'hasEntry ' l~hasEntry('stdout') l~hasEntry('StdQue') l~hasEntry('nope')
+
+.output~say('first use of .output')
+say 'after    ' l~items l~allIndexes~makeString('L', ' ')
+
+l['STDQUE'] = 'queue stand-in'
+say 'replaced ' l~allIndexes~makeString('L', ' ')
+s = l~supplier
+do while s~available
+  say 'supplier ' s~index s~item~class~id
+  s~next
+end
+items = l~allItems
+say 'allItems ' items~items items[items~items]
+say 'at       ' l['OUTPUT'] l~at('ERROR') l['output'] l~entry('traceOutput')
+say 'same     ' (l['STDOUT'] == .stdout) (l~entry('input') == .input) (l~debugInput~current == .input)
+say 'hasItem  ' l~hasItem(.stdout) l~hasItem('queue stand-in') l~hasItem('nope')
+say 'index    ' l~index(.error) l~index('queue stand-in') l~index('nope')
+say 'unknown  ' l~unknown('OUTPUT', .array~new) l~nosuchentry
+say 'syscargs ' l~syscargs~class~id l~syscargs~dimension
+
+l~myEntry = 'mine'
+l~put('kept as written', 'lower')
+say 'added    ' .myEntry l['MYENTRY'] l['lower'] l~hasIndex('LOWER')
+say 'order    ' l~allIndexes~makeString('L', ' ')
+l~setEntry('myEntry')
+say 'no value ' l~hasIndex('MYENTRY') l~items .myEntry
+say 'removeEnt' l~removeEntry('LOWER') l~remove('lower') l~items
+
+l~setMethod('ZZVIAMETHOD', 'return "from a method"')
+say 'setMethod' .zzViaMethod l~items l~allIndexes~lastItem
+l~unsetMethod('ZZVIAMETHOD')
+say 'unset    ' l~hasIndex('ZZVIAMETHOD') .zzViaMethod
+
+say 'removeItm' l~removeItem('queue stand-in') l~hasIndex('STDQUE') l~items
+kept = l~remove('SYSCARGS')
+say 'remove   ' kept~class~id l~hasIndex('SYSCARGS') .syscargs
+l~init
+say 'init     ' l~items
+l~empty
+say 'empty    ' l~items l~isEmpty l~allIndexes~items

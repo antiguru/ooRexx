@@ -44,13 +44,19 @@ const CONTENTS: Half = Half {
     free: HASH_FREE,
 };
 
+const METHOD_INDEXES: &[u8] = b"METHODINDEXES";
+const METHOD_ITEMS: &[u8] = b"METHODITEMS";
+const METHOD_NEXT: &[u8] = b"METHODNEXT";
+const METHOD_BUCKETS: &[u8] = b"METHODBUCKETS";
+const METHOD_FREE: &[u8] = b"METHODFREE";
+
 /// `DirectoryClass::methodTable`, which only a `Directory` ever installs.
 const METHODS: Half = Half {
-    indexes: b"METHODINDEXES",
-    items: b"METHODITEMS",
-    next: b"METHODNEXT",
-    buckets: b"METHODBUCKETS",
-    free: b"METHODFREE",
+    indexes: METHOD_INDEXES,
+    items: METHOD_ITEMS,
+    next: METHOD_NEXT,
+    buckets: METHOD_BUCKETS,
+    free: METHOD_FREE,
 };
 
 /// `DirectoryClass::unknownMethod`: the one method `setMethod` keeps out of
@@ -80,10 +86,7 @@ fn calculate_bucket_size(capacity: usize) -> usize {
 
 /// The class the store's entries are bound under.
 fn hash_scope(interp: &mut Interp) -> ObjRef {
-    interp
-        .classes()
-        .lookup("Table")
-        .expect("Table is a native class")
+    interp.object_model().table
 }
 
 /// The two classes this task owns.
@@ -143,9 +146,8 @@ fn index_only(interp: &mut Interp, receiver: ObjRef) -> bool {
 /// Whether `receiver`'s class is one of [`OWNED`].
 pub(crate) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
     // **A `Body::Native` receiver is never one of these**, however its class
-    // reads. `.environment` and `.local` are `Directory`s the bootstrap built
-    // on `NativeObject`'s map and keeps there, so they answer the entry
-    // family and not the store -- see [`store_of`].
+    // reads: a `Directory` built on `NativeObject`'s map, such as a condition
+    // object, has no store -- see [`store_of`].
     if matches!(
         interp.heap.get(receiver).map(|object| &object.body),
         Some(Body::Native(_))
@@ -229,13 +231,8 @@ fn pool_variable(interp: &Interp, owner: ObjRef, scope: ObjRef, name: &[u8]) -> 
     }
 }
 
-fn counted_pool_variable(
-    interp: &Interp,
-    owner: ObjRef,
-    scope: ObjRef,
-    name: &[u8],
-) -> Option<usize> {
-    match pool_variable(interp, owner, scope, name)?.decode() {
+fn counted(value: ObjRef) -> Option<usize> {
+    match value.decode() {
         Decoded::SmallInt(value) if value >= 0 => Some(value as usize),
         _ => None,
     }
@@ -283,25 +280,81 @@ fn install_store(interp: &mut Interp, receiver: ObjRef, half: Half, buckets: usi
 
 /// The receiver's store, built at the minimum size on demand.
 fn read_store(interp: &mut Interp, receiver: ObjRef, half: Half) -> Result<Option<Store>, Failure> {
-    let scope = hash_scope(interp);
-    if let (Some(indexes), Some(items), Some(next), Some(buckets), Some(free)) = (
-        pool_variable(interp, receiver, scope, half.indexes),
-        pool_variable(interp, receiver, scope, half.items),
-        pool_variable(interp, receiver, scope, half.next),
-        counted_pool_variable(interp, receiver, scope, half.buckets),
-        counted_pool_variable(interp, receiver, scope, half.free),
-    ) {
+    let parts = read_parts(interp, receiver);
+    let found = if half == CONTENTS {
+        parts.contents
+    } else {
+        parts.methods
+    };
+    found.store(interp)
+}
+
+/// One half's pool entries, as [`read_parts`] found them.
+#[derive(Clone, Copy, Default)]
+struct Found {
+    indexes: Option<ObjRef>,
+    items: Option<ObjRef>,
+    next: Option<ObjRef>,
+    buckets: Option<usize>,
+    free: Option<usize>,
+}
+
+impl Found {
+    /// The store these entries make, or `None` when any is missing.
+    fn store(self, interp: &Interp) -> Result<Option<Store>, Failure> {
+        let (Some(indexes), Some(items), Some(next), Some(buckets), Some(free)) =
+            (self.indexes, self.items, self.next, self.buckets, self.free)
+        else {
+            return Ok(None);
+        };
         let total = array_slots(interp, indexes)?.len();
-        return Ok(Some(Store {
+        Ok(Some(Store {
             indexes,
             items,
             next,
             buckets,
             free,
             total,
-        }));
+        }))
     }
-    Ok(None)
+}
+
+/// Both halves' entries and the unknown method, from one pass over the pool.
+struct Parts {
+    contents: Found,
+    methods: Found,
+    unknown: Option<ObjRef>,
+}
+
+fn read_parts(interp: &mut Interp, receiver: ObjRef) -> Parts {
+    let scope = hash_scope(interp);
+    let mut parts = Parts {
+        contents: Found::default(),
+        methods: Found::default(),
+        unknown: None,
+    };
+    let Some(Body::Instance { pools, .. }) = interp.heap.get(receiver).map(|object| &object.body)
+    else {
+        return parts;
+    };
+    for (name, value) in pools.entries(scope) {
+        let value = *value;
+        match name.as_ref() {
+            HASH_INDEXES => parts.contents.indexes = Some(value),
+            HASH_ITEMS => parts.contents.items = Some(value),
+            HASH_NEXT => parts.contents.next = Some(value),
+            HASH_BUCKETS => parts.contents.buckets = counted(value),
+            HASH_FREE => parts.contents.free = counted(value),
+            METHOD_INDEXES => parts.methods.indexes = Some(value),
+            METHOD_ITEMS => parts.methods.items = Some(value),
+            METHOD_NEXT => parts.methods.next = Some(value),
+            METHOD_BUCKETS => parts.methods.buckets = counted(value),
+            METHOD_FREE => parts.methods.free = counted(value),
+            UNKNOWN_METHOD => parts.unknown = Some(value).filter(|held| *held != ObjRef::NIL),
+            _ => {}
+        }
+    }
+    parts
 }
 
 /// The store `half` names, installing an empty one if it is not there yet.
@@ -351,6 +404,25 @@ fn set_free(interp: &mut Interp, receiver: ObjRef, half: Half, free: usize) {
 
 fn slot_at(interp: &Interp, array: ObjRef, slot: usize) -> Result<Option<ObjRef>, Failure> {
     Ok(array_slots(interp, array)?.get(slot).copied().flatten())
+}
+
+/// The item at `slot`, for a read that answers it or compares it rather than
+/// moving it.
+///
+/// Refuses an entry `.environment` or `.local` holds on the oracle and this
+/// crate does not build.
+fn item_at(interp: &mut Interp, store: &Store, slot: usize) -> Result<Option<ObjRef>, Failure> {
+    let item = slot_at(interp, store.items, slot)?;
+    if let Some(held) = item
+        && let Some(owner) = interp.owed_entry_owner(held)
+    {
+        let index = slot_at(interp, store.indexes, slot)?;
+        let name = index
+            .map(|index| interp.to_text(index).into_owned())
+            .unwrap_or_default();
+        return Err(Loud::environment_entry(&name, owner).into());
+    }
+    Ok(item)
 }
 
 fn link_at(interp: &Interp, store: &Store, slot: usize) -> Result<usize, Failure> {
@@ -722,7 +794,7 @@ fn insert_in(
     index: ObjRef,
     item: Option<ObjRef>,
 ) -> Result<(), Failure> {
-    // `.local['OUTPUT'] = x` reaches here and never reaches `store_local`.
+    // `.local['OUTPUT'] = x` moves a route's far end.
     interp.bump_route_generation();
     // **The fullness test comes first, and it is the free chain rather than
     // the item count** (`classes/support/HashContents.hpp:297`): a table can
@@ -816,7 +888,7 @@ fn remove_at(
     slot: usize,
     previous: Option<usize>,
 ) -> Result<Option<ObjRef>, Failure> {
-    let item = slot_at(interp, store.items, slot)?;
+    let item = item_at(interp, store, slot)?;
     let next = link_at(interp, store, slot)?;
     if slot < store.buckets {
         // A bucket slot cannot be freed, so the chain is closed by copying
@@ -884,10 +956,11 @@ fn run_stored_method(
     stored: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
+    // An entry holding an object rather than a method answers that object:
+    // `.environment`'s `LOCAL`, which `Setup.cpp:1781` installs as a method
+    // running `ActivityManager::getLocalRexx`.
     let Decoded::SmallInt(id) = stored.decode() else {
-        return Err(
-            Loud::method_from_source("a directory method entry that holds no method").into(),
-        );
+        return Ok(stored);
     };
     let resolution = super::Resolution {
         scope: ObjRef::NIL,
@@ -942,9 +1015,7 @@ fn merged_get(
 ) -> Result<Option<ObjRef>, Failure> {
     let (store, found) = probe(interp, receiver, index)?;
     if let Some(slot) = found.found {
-        return Ok(Some(
-            slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL),
-        ));
+        return Ok(Some(item_at(interp, &store, slot)?.unwrap_or(ObjRef::NIL)));
     }
     if let Some(value) = method_table_value(interp, receiver, index)? {
         return Ok(Some(value));
@@ -1030,6 +1101,20 @@ fn index_argument(args: &[Option<ObjRef>], position: usize) -> Result<ObjRef, Fa
         .ok_or_else(|| Raised::missing_named_argument("index").into())
 }
 
+/// `validateIndex`: a string-keyed collection takes its index as
+/// `stringArgument(index, "index")` (`classes/support/HashCollection.cpp:1112`),
+/// and every other collection takes it as given.
+fn validated_index(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<ObjRef, Failure> {
+    if keys_of(interp, receiver) == Keys::StringValue {
+        return super::required_string_named_argument(interp, index, "index");
+    }
+    Ok(index)
+}
+
 /// `HashCollection::getRexx` and `[]`: the item under that index, or `.nil`.
 pub(super) fn store_at(
     interp: &mut Interp,
@@ -1037,6 +1122,7 @@ pub(super) fn store_at(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let index = index_argument(args, 1)?;
+    let index = validated_index(interp, receiver, index)?;
     Ok(Some(
         merged_get(interp, receiver, index)?.unwrap_or(ObjRef::NIL),
     ))
@@ -1067,7 +1153,8 @@ pub(super) fn store_put(
             _ => item,
         }
     } else {
-        index_argument(args, 2)?
+        let index = index_argument(args, 2)?;
+        validated_index(interp, receiver, index)?
     };
     if multi_value(interp, receiver) {
         insert_front(interp, receiver, index, Some(item))?;
@@ -1085,7 +1172,7 @@ fn pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjRef)>,
         let Some(index) = slot_at(interp, store.indexes, slot)? else {
             continue;
         };
-        let item = slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL);
+        let item = item_at(interp, &store, slot)?.unwrap_or(ObjRef::NIL);
         // Rooted for `ordered_pairs`'s reason: a caller sends `==` per pair
         // and the callback may empty the collection.
         interp.roots.push_temp(index);
@@ -1100,6 +1187,24 @@ fn pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjRef)>,
     Ok(pairs)
 }
 
+/// Every index the receiver holds, in [`pairs`]'s order, **running no
+/// method** -- `DirectoryClass::allIndexes` appends
+/// `methodTable->allIndexes()`, which reads names only.
+fn indexes(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<ObjRef>, Failure> {
+    let mut indexes = Vec::new();
+    let store = store_of(interp, receiver)?;
+    let methods = method_store(interp, receiver)?;
+    for half in std::iter::once(store).chain(methods) {
+        for slot in walk_in(interp, &half)? {
+            if let Some(index) = slot_at(interp, half.indexes, slot)? {
+                interp.roots.push_temp(index);
+                indexes.push(index);
+            }
+        }
+    }
+    Ok(indexes)
+}
+
 fn native_hash_all_indexes(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1109,10 +1214,7 @@ fn native_hash_all_indexes(
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"ALLINDEXES"));
     }
-    let indexes = pairs(interp, receiver)?
-        .into_iter()
-        .map(|(index, _)| index)
-        .collect();
+    let indexes = indexes(interp, receiver)?;
     Ok(Some(super::collection::array_of(interp, indexes)))
 }
 
@@ -1198,6 +1300,7 @@ fn native_hash_has_index(
         return Err(not_this_task(interp, receiver, b"HASINDEX"));
     }
     let index = index_argument(args, 1)?;
+    let index = validated_index(interp, receiver, index)?;
     let held = merged_has_index(interp, receiver, index)?;
     Ok(Some(crate::eval::logical(held)))
 }
@@ -1248,6 +1351,7 @@ fn native_hash_remove(
         return Err(not_this_task(interp, receiver, b"REMOVE"));
     }
     let index = index_argument(args, 1)?;
+    let index = validated_index(interp, receiver, index)?;
     Ok(Some(
         take_merged(interp, receiver, index)?.unwrap_or(ObjRef::NIL),
     ))
@@ -1981,6 +2085,7 @@ fn entry_name(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Fa
     let Some(name) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("index").into());
     };
+    let name = super::required_string_named_argument(interp, name, "index")?;
     let upper = interp.to_text(name).to_ascii_uppercase();
     Ok(interp.text_built(upper))
 }
@@ -2010,6 +2115,109 @@ pub(crate) fn store_item(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -
     let (store, found) = probe(interp, receiver, index).ok()?;
     let slot = found.found?;
     slot_at(interp, store.items, slot).ok().flatten()
+}
+
+/// A fresh `Directory` whose store is sized for `capacity` entries.
+pub(crate) fn new_directory(interp: &mut Interp, capacity: usize) -> Result<ObjRef, Failure> {
+    let class = interp.object_model().directory;
+    let directory = new_instance(interp, class)?;
+    install_store(interp, directory, CONTENTS, calculate_bucket_size(capacity));
+    Ok(directory)
+}
+
+/// `DirectoryClass::put` of `item` under the string `name`.
+pub(crate) fn directory_put(
+    interp: &mut Interp,
+    directory: ObjRef,
+    name: &[u8],
+    item: ObjRef,
+) -> Result<(), Failure> {
+    let index = interp.text(name);
+    interp.roots.push_temp(index);
+    insert(interp, directory, index, Some(item))
+}
+
+/// Puts `value` into the method-table half under `name`, as an entry that
+/// answers `value` when run.
+pub(crate) fn directory_put_method_value(
+    interp: &mut Interp,
+    directory: ObjRef,
+    name: &[u8],
+    value: ObjRef,
+) -> Result<(), Failure> {
+    let index = interp.text(name);
+    interp.roots.push_temp(index);
+    insert_in(interp, directory, METHODS, index, Some(value))
+}
+
+/// What `DirectoryClass::get` finds for a name.
+pub(crate) enum DirectoryEntry {
+    Found(ObjRef),
+    /// An entry the oracle holds and this crate does not build, with the
+    /// phase owing it.
+    Owed(&'static str),
+    Absent,
+}
+
+/// `DirectoryClass::get` over a string-keyed store, by the name's bytes: the
+/// contents, then the method table, then the unknown method.
+pub(crate) fn directory_get(
+    interp: &mut Interp,
+    directory: ObjRef,
+    name: &[u8],
+) -> Result<DirectoryEntry, Failure> {
+    let parts = read_parts(interp, directory);
+    let store = match parts.contents.store(interp)? {
+        Some(store) => store,
+        None => store_of(interp, directory)?,
+    };
+    if let Some(slot) = text_slot(interp, &store, name)? {
+        let item = slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL);
+        return Ok(match interp.owed_entry_owner(item) {
+            Some(owner) => DirectoryEntry::Owed(owner),
+            None => DirectoryEntry::Found(item),
+        });
+    }
+    if let Some(methods) = parts.methods.store(interp)?
+        && let Some(slot) = text_slot(interp, &methods, name)?
+        && let Some(stored) = slot_at(interp, methods.items, slot)?
+    {
+        return run_stored_method(interp, directory, name, stored, &[]).map(DirectoryEntry::Found);
+    }
+    let Some(stored) = parts.unknown else {
+        return Ok(DirectoryEntry::Absent);
+    };
+    let index = interp.text(name);
+    interp.roots.push_temp(index);
+    run_stored_method(interp, directory, b"UNKNOWN", stored, &[Some(index)])
+        .map(DirectoryEntry::Found)
+}
+
+/// The slot holding `name` in a string-keyed store, found without building
+/// an index object.
+fn text_slot(interp: &mut Interp, store: &Store, name: &[u8]) -> Result<Option<usize>, Failure> {
+    let mut slot = (super::string_hash(name) % store.buckets as u64) as usize;
+    while slot < store.total {
+        let Some(held) = slot_at(interp, store.indexes, slot)? else {
+            return Ok(None);
+        };
+        if interp.to_text(held).as_ref() == name {
+            return Ok(Some(slot));
+        }
+        slot = link_at(interp, store, slot)?;
+    }
+    Ok(None)
+}
+
+/// The phase owing an entry `table` still holds and this crate does not
+/// build, or `None` when it holds none.
+pub(crate) fn owed_table_owner(interp: &mut Interp, table: ObjRef) -> Option<&'static str> {
+    let store = read_store(interp, table, CONTENTS).ok()??;
+    let order = walk_in(interp, &store).ok()?;
+    order.into_iter().find_map(|slot| {
+        let item = slot_at(interp, store.items, slot).ok()??;
+        interp.owed_entry_owner(item)
+    })
 }
 
 /// The `UNKNOWN` entry read, over the store rather than the environment's map.

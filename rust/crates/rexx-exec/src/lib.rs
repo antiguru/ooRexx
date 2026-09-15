@@ -2466,6 +2466,9 @@ impl Interp {
         let outcome = self.enter_library_program(entry, None);
         self.library_bootstrap = false;
         rexx_classes::remove_setup_methods(self.classes());
+        if outcome.is_ok() {
+            self.mint_local_directory();
+        }
         // **Every per-run instrument reads from here, not from process
         // start.** `Outcome::collections` and `Outcome::chunks_refused`
         // answer a question about the program, and so do the compiled

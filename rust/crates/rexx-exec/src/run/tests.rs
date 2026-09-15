@@ -7015,16 +7015,10 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 /// because nothing else can assert them.
 #[test]
 fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
-    let cases: &[(&[u8], &str)] = &[
-        (
-            b".K~defineMethods(.local)\n::class K\n",
-            "a directory whose entries this crate does not fill is not implemented (Phase 10)",
-        ),
-        (
-            b".K~defineMethods(.environment)\n::class K\n",
-            "a directory whose entries this crate does not fill is not implemented (Phase 5)",
-        ),
-    ];
+    let cases: &[(&[u8], &str)] = &[(
+        b".K~defineMethods(.local)\n::class K\n",
+        "a directory whose entries this crate does not fill is not implemented (Phase 10)",
+    )];
     for (source, message) in cases {
         let outcome = routine_program(source);
         assert_eq!(

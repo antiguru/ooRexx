@@ -457,6 +457,11 @@ impl ScopePools {
         self.pools[index].1.retain(|(bound, _)| **bound != *name);
     }
 
+    /// Every name `scope`'s pool binds, with its value, in binding order.
+    pub fn entries(&self, scope: ObjRef) -> &[(Box<[u8]>, ObjRef)] {
+        self.pool(scope).map_or(&[], Vec::as_slice)
+    }
+
     fn pool(&self, scope: ObjRef) -> Option<&Vec<(Box<[u8]>, ObjRef)>> {
         self.pools
             .iter()

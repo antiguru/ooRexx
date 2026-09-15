@@ -13,10 +13,11 @@
 //! `.NAME` resolves in, and the one chokepoint `.environment` and `.local`
 //! are read through.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use rexx_core::{BehaviourId, Body, NativeObject, ObjRef};
 
+use crate::dispatch::hash;
 use crate::plan::{ClassPackage, Package, ProgramId};
 use crate::{Failure, Interp, Loud};
 
@@ -129,97 +130,104 @@ const ENVIRONMENT_ROOT: &str = ".environment";
 /// The root name `.local` is held alive under.
 const LOCAL_ROOT: &str = ".local";
 
-/// `.environment`'s own contents, read off the oracle.
+/// `.environment`'s store capacity, which gives the 69 buckets the oracle's
+/// holds its contents at: measured, the contents in `ORACLE_ENVIRONMENT`'s order
+/// are non-decreasing in `hash % 69` and in no other bucket count from 17 to 4999,
+/// and a `.Directory~new(68)` filled in that order answers the oracle's
+/// `allIndexes` before and after 200 more entries.
+const ENVIRONMENT_CAPACITY: usize = 68;
+
+/// `.environment~allIndexes` on the oracle, in its order: the contents at
+/// [`ENVIRONMENT_CAPACITY`], then `LOCAL`, which is a method-table entry.
 static ORACLE_ENVIRONMENT: &[&str] = &[
-    "ALARM",
-    "ALARMNOTIFICATION",
-    "ARGUTIL",
-    "ARRAY",
-    "BAG",
-    "BUFFER",
-    "CASELESSCOLUMNCOMPARATOR",
-    "CASELESSCOMPARATOR",
-    "CASELESSDESCENDINGCOMPARATOR",
-    "CIRCULARQUEUE",
-    "CLASS",
-    "COLLECTION",
-    "COLUMNCOMPARATOR",
-    "COMPARABLE",
-    "COMPARATOR",
-    "DATETIME",
-    "DESCENDINGCOMPARATOR",
-    "DIRECTORY",
-    "ENDOFLINE",
-    "ENVIRONMENT",
-    "EVENTSEMAPHORE",
-    "FALSE",
-    "FILE",
-    "IDENTITYTABLE",
     "INPUTOUTPUTSTREAM",
-    "INPUTSTREAM",
-    "INVERTINGCOMPARATOR",
-    "LIST",
-    "LOCAL",
+    "ALARM",
+    "ENDOFLINE",
+    "COLLECTION",
+    "PACKAGE",
+    "FALSE",
+    "EVENTSEMAPHORE",
+    "COMPARATOR",
+    "IDENTITYTABLE",
+    "REXXINFO",
+    "TICKER",
+    "OUTPUTSTREAM",
+    "NUMERICCOMPARATOR",
     "MAPCOLLECTION",
+    "SET",
+    "NIL",
+    "STRING",
+    "TIMESPAN",
     "MESSAGE",
-    "MESSAGENOTIFICATION",
+    "OBJECT",
+    "CLASS",
+    "REXXQUEUE",
+    "ORDERABLE",
+    "INVERTINGCOMPARATOR",
+    "SINGLETON",
     "METHOD",
+    "TRACEOBJECT",
+    "CASELESSCOMPARATOR",
+    "BAG",
+    "ORDEREDCOLLECTION",
+    "COLUMNCOMPARATOR",
+    "LIST",
+    "SUPPLIER",
+    "DATETIME",
+    "STREAMSUPPLIER",
+    "TRUE",
+    "REXXCONTEXT",
+    "STEM",
+    "MUTEXSEMAPHORE",
+    "QUEUE",
+    "FILE",
+    "ROUTINE",
     "MONITOR",
     "MUTABLEBUFFER",
-    "MUTEXSEMAPHORE",
-    "NIL",
-    "NUMERICCOMPARATOR",
-    "OBJECT",
-    "ORDERABLE",
-    "ORDEREDCOLLECTION",
-    "OUTPUTSTREAM",
-    "PACKAGE",
+    "MESSAGENOTIFICATION",
     "POINTER",
-    "PROPERTIES",
-    "QUEUE",
-    "RELATION",
-    "REXXCONTEXT",
-    "REXXINFO",
-    "REXXQUEUE",
-    "ROUTINE",
-    "SET",
-    "SETCOLLECTION",
-    "SINGLETON",
     "STACKFRAME",
-    "STEM",
-    "STREAM",
-    "STREAMSUPPLIER",
-    "STRING",
-    "STRINGTABLE",
-    "SUPPLIER",
+    "ALARMNOTIFICATION",
+    "INPUTSTREAM",
+    "RELATION",
+    "DIRECTORY",
     "TABLE",
-    "TICKER",
-    "TIMESPAN",
-    "TRACEOBJECT",
-    "TRUE",
-    "VALIDATE",
+    "SETCOLLECTION",
     "VARIABLEREFERENCE",
+    "STREAM",
+    "ENVIRONMENT",
+    "DESCENDINGCOMPARATOR",
+    "CASELESSDESCENDINGCOMPARATOR",
+    "ARGUTIL",
     "WEAKREFERENCE",
+    "CASELESSCOLUMNCOMPARATOR",
+    "VALIDATE",
+    "ARRAY",
+    "COMPARABLE",
+    "PROPERTIES",
+    "STRINGTABLE",
+    "CIRCULARQUEUE",
+    "BUFFER",
+    "LOCAL",
 ];
 
-/// `.local`'s own contents, read off the oracle the same way
-/// [`ORACLE_ENVIRONMENT`] was.
+/// `.local~allIndexes` on the oracle, in its order, at the default size.
 static ORACLE_LOCAL: &[&str] = &[
-    "DEBUGINPUT",
-    "ERROR",
+    "SYSCARGS",
     "INPUT",
+    "TRACEOUTPUT",
+    "DEBUGINPUT",
+    "STDOUT",
     "OUTPUT",
     "STDERR",
     "STDIN",
-    "STDOUT",
     "STDQUE",
-    "SYSCARGS",
-    "TRACEOUTPUT",
+    "ERROR",
 ];
 
-/// Whether `.local` builds this name on demand: every [`ORACLE_LOCAL`] name
-/// but `STDQUE`, which is a `RexxQueue` over the external-queue API the RXAPI
-/// daemon serves.
+/// Whether [`Interp::mint_local_directory`] builds this name: every
+/// [`ORACLE_LOCAL`] name but `STDQUE`, which is a `RexxQueue` over the
+/// external-queue API the RXAPI daemon serves.
 fn minted_local_name(name: &[u8]) -> bool {
     matches!(
         name,
@@ -235,31 +243,18 @@ fn minted_local_name(name: &[u8]) -> bool {
     )
 }
 
-/// `.environment` and `.local`, the classes the other reflection names are
-/// built from, and what a name that resolves to none of them owes.
+/// `.environment` and `.local`, and the classes the other reflection names are
+/// built from.
 pub(crate) struct EnvironmentModel {
     directories: env_seam::Directories,
-    /// A name [`ORACLE_ENVIRONMENT`] or [`ORACLE_LOCAL`] holds that the
-    /// directory holding it here does not answer.
-    unbuilt: HashMap<Box<[u8]>, Unbuilt>,
+    /// The item standing in for an entry the oracle's directory holds and this
+    /// crate does not build, one per phase owing such entries. A write
+    /// replaces one in place, which keeps the oracle's order.
+    owed: [(ObjRef, &'static str); 2],
     /// `.methods`, `.routines` and `.resources` all answer one of these.
     string_table: ObjRef,
     /// What `.context` answers to.
     context: ObjRef,
-}
-
-/// One name the oracle's own directory answers and this crate builds nothing
-/// for.
-#[derive(Copy, Clone)]
-struct Unbuilt {
-    /// The phase owing it.
-    owner: &'static str,
-    /// Which directory holds it, which a message send to one directory has to
-    /// know and a `.NAME` lookup -- searching both -- does not. The two lists
-    /// are disjoint, so one entry per name is enough: measured, no name in
-    /// [`ORACLE_LOCAL`] appears in [`ORACLE_ENVIRONMENT`], which
-    /// `the_two_oracle_directories_share_no_name` asserts.
-    scope: EnvScope,
 }
 
 /// What one `::ANNOTATE` directive's pairs belong to, once the object that
@@ -338,10 +333,6 @@ impl Interp {
     }
 
     fn build_environment(&mut self) -> EnvironmentModel {
-        let directory_class = self
-            .classes()
-            .lookup("Directory")
-            .expect("Directory is a native class");
         let string_table = self
             .classes()
             .lookup("StringTable")
@@ -350,43 +341,47 @@ impl Interp {
             .classes()
             .lookup("RexxContext")
             .expect("RexxContext is a native class");
+        let object_class = self
+            .classes()
+            .lookup("Object")
+            .expect("Object is a native class");
 
-        // Rooted the instant it exists and before the next allocation, which
-        // can collect: the second `alloc_with` below would otherwise be free
-        // to sweep the first object.
-        let environment = self.alloc_with(
-            BehaviourId::OBJECT,
-            Body::Native(Box::new(NativeObject::new(
-                directory_class,
-                b"The Environment Directory",
-            ))),
+        // Every object below is rooted the instant it exists and before the
+        // next allocation, which can collect.
+        let frame = self.roots.push_frame();
+        let mut owed = [(ObjRef::NIL, "Phase 5"), (ObjRef::NIL, "Phase 10")];
+        for (at, (held, owner)) in owed.iter_mut().enumerate() {
+            *held = self.alloc_with(
+                BehaviourId::OBJECT,
+                Body::Native(Box::new(NativeObject::new(
+                    object_class,
+                    format!("an entry owed by {owner}").as_bytes(),
+                ))),
+            );
+            self.roots.add_global(&format!(".owed{at}"), *held);
+        }
+        let environment = self.interpreter_directory(
+            ENVIRONMENT_ROOT,
+            ENVIRONMENT_CAPACITY,
+            b"The Environment Directory",
         );
-        self.roots.add_global(ENVIRONMENT_ROOT, environment);
-        let local = self.alloc_with(
-            BehaviourId::OBJECT,
-            Body::Native(Box::new(NativeObject::new(
-                directory_class,
-                b"The Local Directory",
-            ))),
-        );
-        self.roots.add_global(LOCAL_ROOT, local);
+        let local = self.interpreter_directory(LOCAL_ROOT, 0, b"The Local Directory");
 
         // `completeSystemClass` (`memory/Setup.cpp:199`) puts every native
         // class into the environment under its uppercased id, and that is the
         // whole of what this crate has to put there beyond the entries
         // `addToEnvironment` adds by hand.
-        let classes: Vec<(Box<[u8]>, ObjRef)> = self
+        let mut known: HashMap<Box<[u8]>, ObjRef> = self
             .classes()
             .registered()
             .map(|(name, id)| (name.as_bytes().into(), id))
             .collect();
         // `addToEnvironment` (`Setup.cpp:1730`-`1733`) registers these by
-        // hand; `LOCAL` is a method-backed entry there
-        // (`Setup.cpp:1781`) answering the running activity's own local
-        // directory, and this crate runs one activity, so a plain entry
-        // answers the same object.
+        // hand.
         let true_value = self.text(b"1");
+        self.roots.push_temp(true_value);
         let false_value = self.text(b"0");
+        self.roots.push_temp(false_value);
         // `Setup.cpp:1736`-`:1737`: `REXXINFO` is a pre-built *instance* of a
         // class no environment name reaches, which is why the entry renders
         // as `a RexxInfo` and answers `~class~id` `RexxInfo`. Measured
@@ -400,84 +395,92 @@ impl Interp {
             BehaviourId::OBJECT,
             Body::Native(Box::new(NativeObject::new(rexx_info_class, b"a RexxInfo"))),
         );
+        self.roots.push_temp(rexx_info);
         // `.ENDOFLINE` is the platform's line terminator as a String --
         // measured, `c2x(.endOfLine)` is `0A` here and its length is 1. The
-        // ooTest framework's own prologue reads it (`OOREXXUNIT.CLS:77`),
-        // which is where the suite stopped while this entry was unbuilt.
+        // ooTest framework's own prologue reads it (`OOREXXUNIT.CLS:77`).
         let end_of_line = self.text(crate::parse_template::LINE_END);
-        let extras: [(&[u8], ObjRef); 7] = [
-            (b"ENVIRONMENT", environment),
-            (b"LOCAL", local),
+        self.roots.push_temp(end_of_line);
+        for (name, value) in [
+            (b"ENVIRONMENT".as_slice(), environment),
             (b"NIL", ObjRef::NIL),
             (b"TRUE", true_value),
             (b"FALSE", false_value),
             (b"REXXINFO", rexx_info),
             (b"ENDOFLINE", end_of_line),
-        ];
-
-        let object = self
-            .heap
-            .get_mut(environment)
-            .expect("just allocated and rooted");
-        let Body::Native(native) = &mut object.body else {
-            unreachable!("allocated as Body::Native just above")
-        };
-        for (name, id) in classes {
-            native.set_entry(&name, id);
-        }
-        for (name, value) in extras {
-            native.set_entry(name, value);
+        ] {
+            known.insert(name.into(), value);
         }
 
-        let answered: HashSet<&str> = ORACLE_ENVIRONMENT
-            .iter()
-            .copied()
-            .filter(|name| native.entry(name.as_bytes()).is_some())
-            .collect();
-        // The environment's own unanswered names are Phase 5's: what puts them
-        // there is `Setup.cpp` plus the shipped `.orx` files installing, and
-        // installing those files is this phase's exit. `.local`'s streams,
-        // monitors and command line are minted on demand, so the only name
-        // this map answers for there is the external queue's -- and the
-        // minted ones, for the interpreter that has not bootstrapped.
-        let unbuilt: HashMap<Box<[u8]>, Unbuilt> = ORACLE_ENVIRONMENT
-            .iter()
-            .filter(|name| !answered.contains(*name))
-            .map(|name| {
-                (
-                    name.as_bytes().into(),
-                    Unbuilt {
-                        owner: "Phase 5",
-                        scope: EnvScope::Environment,
-                    },
-                )
-            })
-            .chain(ORACLE_LOCAL.iter().map(|name| {
-                (
-                    name.as_bytes().into(),
-                    Unbuilt {
-                        // A minted name is built on demand and never reaches
-                        // this map -- except before the library has installed,
-                        // where there is no `Stream` or `Monitor` class to
-                        // build one from and the honest owner is the bootstrap
-                        // that installs them.
-                        owner: if minted_local_name(name.as_bytes()) {
-                            "Phase 5"
-                        } else {
-                            "Phase 10"
-                        },
-                        scope: EnvScope::Local,
-                    },
-                )
-            }))
-            .collect();
+        // In the oracle's order, so every entry sits where the oracle's does
+        // and a later write of a name replaces it in place. A name this crate
+        // has not built yet is owed until the library bootstrap puts it.
+        for name in ORACLE_ENVIRONMENT {
+            if *name == "LOCAL" {
+                continue;
+            }
+            let value = known.remove(name.as_bytes()).unwrap_or(owed[0].0);
+            self.put_interpreter_entry(environment, name.as_bytes(), value);
+        }
+        let mut rest: Vec<(Box<[u8]>, ObjRef)> = known.into_iter().collect();
+        rest.sort_by(|a, b| a.0.cmp(&b.0));
+        for (name, value) in rest {
+            self.put_interpreter_entry(environment, &name, value);
+        }
+        // `Setup.cpp:1781`: `LOCAL` is a method answering the running
+        // activity's local directory, and this crate runs one activity.
+        hash::directory_put_method_value(self, environment, b"LOCAL", local)
+            .expect("a string-keyed store accepts a string index");
+        // `LocalServer~initInstance` (`CoreClasses.orx:987`) builds these
+        // before any program runs; `Interp::mint_local_directory` does the
+        // same once the classes it needs exist.
+        for name in ORACLE_LOCAL {
+            let owner = if minted_local_name(name.as_bytes()) {
+                owed[0].0
+            } else {
+                owed[1].0
+            };
+            self.put_interpreter_entry(local, name.as_bytes(), owner);
+        }
+        self.roots.pop_frame(frame);
 
         EnvironmentModel {
             directories: env_seam::hold(environment, local),
-            unbuilt,
+            owed,
             string_table,
             context,
         }
+    }
+
+    /// A `Directory` for `.environment` or `.local`, held alive under `root`
+    /// and rendered as `rendered`.
+    fn interpreter_directory(&mut self, root: &str, capacity: usize, rendered: &[u8]) -> ObjRef {
+        let directory =
+            hash::new_directory(self, capacity).expect("Directory is not an abstract class");
+        self.roots.add_global(root, directory);
+        if let Some(object) = self.heap.get_mut(directory)
+            && let Body::Instance { name, .. } = &mut object.body
+        {
+            *name = Some(rendered.into());
+        }
+        directory
+    }
+
+    /// One entry of a directory [`Interp::build_environment`] is filling.
+    fn put_interpreter_entry(&mut self, directory: ObjRef, name: &[u8], value: ObjRef) {
+        hash::directory_put(self, directory, name, value)
+            .expect("a string-keyed store accepts a string index");
+    }
+
+    /// The phase owing `item`, when it stands in for an entry the oracle's
+    /// directory holds and this crate does not build.
+    pub(crate) fn owed_entry_owner(&self, item: ObjRef) -> Option<&'static str> {
+        let model = self.environment.as_ref()?;
+        model
+            .owed
+            .iter()
+            .find(|(held, _)| *held == item)
+            .map(|(_, owner)| *owner)
     }
 
     /// `.NAME`'s value: `PackageClass::findClass`'s order, then
@@ -502,20 +505,20 @@ impl Interp {
             return Ok(found);
         }
 
-        if let Some(found) = self.directory_lookup(
+        match self.directory_lookup(
             &[EnvScope::Local, EnvScope::Environment],
             bare,
             &env_seam::Access::Resolve,
         )? {
-            return Ok(found);
+            hash::DirectoryEntry::Found(found) => return Ok(found),
+            hash::DirectoryEntry::Owed(owner) => {
+                return Err(Loud::environment_symbol(dotted, owner).into());
+            }
+            hash::DirectoryEntry::Absent => {}
         }
 
         if let Some(found) = self.rexx_variable(bare) {
             return Ok(found);
-        }
-
-        if let Some(owner) = self.unbuilt_owner(bare) {
-            return Err(Loud::environment_symbol(dotted, owner).into());
         }
 
         // `variableName->concatToCstring(".")`
@@ -547,7 +550,7 @@ impl Interp {
         // `.environment` alone, not `.NAME`'s pair: `ClassDirective`'s own
         // search is the package's classes and then the environment
         // directory, and `.local` is not in it.
-        if let Ok(Some(found)) =
+        if let Ok(hash::DirectoryEntry::Found(found)) =
             self.directory_lookup(&[EnvScope::Environment], upper, &env_seam::Access::Direct)
             && self.heap.is_class(found)
         {
@@ -561,44 +564,52 @@ impl Interp {
         self.classes().lookup_upper(upper)
     }
 
-    /// The first of `scopes` whose directory holds `bare`, or the refusal an
-    /// unbuilt entry carries.
+    /// What the first of `scopes` whose directory holds `bare` answers for it.
     fn directory_lookup(
         &mut self,
         scopes: &[EnvScope],
         bare: &[u8],
         access: &env_seam::Access,
-    ) -> Result<Option<ObjRef>, Failure> {
+    ) -> Result<hash::DirectoryEntry, Failure> {
         for &scope in scopes {
             match env_seam::admit(self, scope, bare, access)? {
-                env_seam::Admission::Replaced(value) => return Ok(Some(value)),
+                env_seam::Admission::Replaced(value) => {
+                    return Ok(hash::DirectoryEntry::Found(value));
+                }
                 env_seam::Admission::Permitted(admitted) => {
-                    if let Some(found) = self.directory_entry(admitted, scope, bare) {
-                        return Ok(Some(found));
+                    let handle = {
+                        let model = self.environment_model();
+                        env_seam::directory(&model.directories, admitted, scope)
+                    };
+                    match hash::directory_get(self, handle, bare)? {
+                        hash::DirectoryEntry::Absent => {}
+                        entry => return Ok(entry),
                     }
                 }
             }
         }
-        Ok(None)
+        Ok(hash::DirectoryEntry::Absent)
     }
 
     /// What `.local` holds for one of the route names, or `None` when it holds
     /// nothing.
     ///
     /// **Not [`Interp::dot_variable`]**, which is what a `.NAME` in a program
-    /// resolves through: on a miss that either raises the unbuilt-entry
-    /// refusal or answers the name *as text*, and `SAY` sent to the string
-    /// `".OUTPUT"` is a wrong answer no corpus program could catch, because
-    /// removing the entry needs `Directory~remove` and that refuses as Phase
-    /// 5. The routes need the plain question -- is there an entry -- which is
-    /// what `directory_lookup` answers, and it is reused rather than reopened
-    /// so the seam still has one read chokepoint.
+    /// resolves through: on a miss that answers the name *as text*, and `SAY`
+    /// sent to the string `".OUTPUT"` would be a wrong answer. The routes need
+    /// the plain question -- is there an entry -- which is what
+    /// `directory_lookup` answers, and it is reused rather than reopened so the
+    /// seam still has one read chokepoint. An owed entry is no entry here: it
+    /// is owed only before `Interp::mint_local_directory` runs.
     ///
     /// `.local` only: measured, `RexxActivation::resolveStream` and
     /// `Activity::sayOutput` both read `getLocalEnvironment` and never
     /// `.environment`.
     pub(crate) fn local_route(&mut self, name: &[u8]) -> Result<Option<ObjRef>, Failure> {
-        self.directory_lookup(&[EnvScope::Local], name, &env_seam::Access::Direct)
+        match self.directory_lookup(&[EnvScope::Local], name, &env_seam::Access::Direct)? {
+            hash::DirectoryEntry::Found(found) => Ok(Some(found)),
+            hash::DirectoryEntry::Owed(_) | hash::DirectoryEntry::Absent => Ok(None),
+        }
     }
 
     /// Records that a route's far end may have moved, so the next `SAY`
@@ -905,98 +916,51 @@ impl Interp {
         directory
     }
 
-    /// The entry `scope`'s directory holds for `name`, if any -- **minting one
-    /// of the three standard streams on the first ask**, which is the one
-    /// entry this crate builds late rather than with the directory.
+    /// The `.local` entries `LocalServer~initInstance` builds before any
+    /// program runs (`CoreClasses.orx:987`): the command-line words, then the
+    /// streams and monitors, each stored as it is built. `STDQUE` stays owed.
     ///
-    /// The embedded bootstrap is itself Rexx and evaluates `.environment` while
-    /// it installs (`CoreClasses.orx:55`, `:65`), forcing this model into
-    /// existence before `StreamClasses.orx` has run -- so the `Stream` class
-    /// does not exist when the directory is built and the three cannot be put
-    /// there then. The oracle has no such ordering problem: its
-    /// `LocalServer~initInstance` runs once every class is in place. Nothing
-    /// can observe the difference, because a program's own first clause is the
-    /// earliest anything can look at `.local`.
-    ///
-    /// The mint lives here rather than in the caller so that one clearance is
-    /// spent on one `env_seam::directory` call: `Admitted` is deliberately not
-    /// `Copy`, and the seam's whole claim is that counting those calls bounds
-    /// the reads that reach a directory.
-    fn directory_entry(
-        &mut self,
-        admitted: env_seam::Admitted,
-        scope: EnvScope,
-        name: &[u8],
-    ) -> Option<ObjRef> {
-        let handle = {
-            let model = self.environment_model();
-            env_seam::directory(&model.directories, admitted, scope)
-        };
-        let object = self.heap.get(handle).expect("a rooted directory");
-        let Body::Native(native) = &object.body else {
-            unreachable!("both directories are allocated as Body::Native")
-        };
-        if let Some(found) = native.entry(name) {
-            return Some(found);
-        }
-        if scope != EnvScope::Local || !minted_local_name(name) {
-            return None;
-        }
-        self.mint_local_bundle(handle);
-        self.local_entry(handle, name)
-    }
-
-    /// Whether `.local` builds this name on demand rather than holding it
-    /// from the start -- [`Interp::mint_local_bundle`]'s own set.
-    fn minted_local(&mut self, receiver: ObjRef, index: &[u8]) -> Option<ObjRef> {
-        if !minted_local_name(index) {
-            return None;
-        }
-        self.mint_local_bundle(receiver);
-        self.local_entry(receiver, index)
-    }
-
-    /// The `.local` entries this crate builds late: the command-line words,
-    /// then the streams and monitors in the order `LocalServer~initInstance`
-    /// builds those, each stored as it is built.
-    ///
-    /// **Together rather than one on demand**, because the monitors stack:
-    /// `.DEBUGINPUT` wraps `.INPUT` and `.TRACEOUTPUT` wraps `.ERROR`, so
-    /// building one alone would either mint its target twice or leave the
-    /// identity `.debuginput~current == .input` false. Storing each as it is
-    /// built also keeps it rooted through the directory across the sends that
-    /// follow.
+    /// **Here rather than when the directory is built**, because the embedded
+    /// bootstrap evaluates `.environment` while it installs
+    /// (`CoreClasses.orx:55`), before `StreamClasses.orx` has declared `Stream`.
+    /// Each write replaces an owed entry in place, so the order is the
+    /// oracle's whatever order these are built in.
     ///
     /// **Through the package publics, not the class registry.** A `::CLASS`
     /// directive calls `define_unregistered_class`, which by its own contract
     /// records the class "without registering the name", so
     /// `classes().lookup("Stream")` never finds one the embedded
-    /// `StreamClasses.orx` declared. `rexx_package_class` is the search
-    /// `.Stream` itself resolves through.
+    /// `StreamClasses.orx` declared.
     ///
-    /// **No panic on a miss, at any step.** Before the library installs there
-    /// is nothing to build, and the ordinary refusal is the right answer for
-    /// one name -- an `expect` here would be every program. A send that fails
-    /// leaves what is already stored and stops, which is why the guard below
-    /// keys on the entry built *first*: a re-entrant lookup during a send
-    /// finds the bundle already under construction and takes what is there.
-    fn mint_local_bundle(&mut self, handle: ObjRef) {
-        if self.local_entry(handle, b"SYSCARGS").is_some() {
-            return;
-        }
-        // First, and before any class is looked up: it depends on none, and a
-        // bundle that stops early over a missing class must still leave it
-        // behind. **`Body::array`, not `.Array~of`'s shape** -- measured, a
+    /// **No panic on a miss, at any step.** A step that cannot build its
+    /// entry leaves that entry and every later one owed.
+    pub(crate) fn mint_local_directory(&mut self) {
+        let frame = self.roots.push_frame();
+        self.mint_local_entries();
+        self.roots.pop_frame(frame);
+    }
+
+    /// [`Interp::mint_local_directory`]'s steps, inside its root frame.
+    fn mint_local_entries(&mut self) {
+        // **`Body::array`, not `.Array~of`'s shape** -- measured, a
         // `.SYSCARGS` built from no words answers `~dimension` `0` as
         // `.array~new` does, where `.array~of()` answers `1`.
         let mut slots: Vec<Option<ObjRef>> = Vec::with_capacity(self.command_words.len());
         for at in 0..self.command_words.len() {
             let word = std::mem::take(&mut self.command_words[at]);
-            slots.push(Some(self.text(&word)));
+            let text = self.text(&word);
+            self.roots.push_temp(text);
+            slots.push(Some(text));
             self.command_words[at] = word;
         }
         let arguments = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
-        self.store_local(handle, b"SYSCARGS", arguments);
+        self.roots.push_temp(arguments);
+        if self
+            .set_directory_entry(EnvScope::Local, b"SYSCARGS", arguments)
+            .is_err()
+        {
+            return;
+        }
         let Some(stream_class) = self.rexx_package_class(b"STREAM") else {
             return;
         };
@@ -1015,7 +979,12 @@ impl Interp {
             if name == b"STDOUT".as_slice() {
                 self.bootstrap_stdout = Some(built);
             }
-            self.store_local(handle, name, built);
+            if self
+                .set_directory_entry(EnvScope::Local, name, built)
+                .is_err()
+            {
+                return;
+            }
         }
         let Some(monitor_class) = self.rexx_package_class(b"MONITOR") else {
             return;
@@ -1047,7 +1016,7 @@ impl Interp {
                 "The TRACE OUTPUT monitor",
             ),
         ] {
-            let Some(target) = self.local_entry(handle, over) else {
+            let Ok(Some(target)) = self.local_route(over) else {
                 return;
             };
             let caller = self.caller();
@@ -1056,38 +1025,25 @@ impl Interp {
             else {
                 return;
             };
+            self.roots.push_temp(built);
             if let Some(object) = self.heap.get_mut(built)
                 && let Body::Instance { name: held, .. } = &mut object.body
             {
                 *held = Some(rendered.as_bytes().into());
             }
-            self.store_local(handle, name, built);
+            if self
+                .set_directory_entry(EnvScope::Local, name, built)
+                .is_err()
+            {
+                return;
+            }
         }
     }
 
-    /// One entry of the directory `handle` holds, spending no clearance: the
-    /// caller is already inside the seam call that answered `handle`.
-    fn local_entry(&self, handle: ObjRef, name: &[u8]) -> Option<ObjRef> {
-        let object = self.heap.get(handle).expect("a rooted directory");
-        let Body::Native(native) = &object.body else {
-            unreachable!("both directories are allocated as Body::Native")
-        };
-        native.entry(name)
-    }
-
-    /// [`Interp::local_entry`]'s writer.
-    fn store_local(&mut self, handle: ObjRef, name: &[u8], value: ObjRef) {
-        self.bump_route_generation();
-        let held = self.heap.get_mut(handle).expect("a rooted directory");
-        let Body::Native(native) = &mut held.body else {
-            unreachable!("both directories are allocated as Body::Native")
-        };
-        native.set_entry(name, value);
-    }
-
     /// Writes `name` into `scope`'s directory, through the same seam a read
-    /// passes. `VALUE(name, new, '')` is the only caller: the empty selector
-    /// names `.environment` itself (`expression/BuiltinFunctions.cpp:1848`).
+    /// passes: `VALUE(name, new, '')`, whose empty selector names
+    /// `.environment` itself (`expression/BuiltinFunctions.cpp:1848`), and
+    /// [`Interp::mint_local_directory`].
     pub(crate) fn set_directory_entry(
         &mut self,
         scope: EnvScope,
@@ -1105,12 +1061,7 @@ impl Interp {
             let model = self.environment_model();
             env_seam::directory(&model.directories, admitted, scope)
         };
-        let object = self.heap.get_mut(handle).expect("a rooted directory");
-        let Body::Native(native) = &mut object.body else {
-            unreachable!("both directories are allocated as Body::Native")
-        };
-        native.set_entry(name, value);
-        Ok(())
+        hash::directory_put(self, handle, name, value)
     }
 
     /// `RexxActivation::rexxVariable` (`execution/RexxActivation.cpp:2842`):
@@ -1339,38 +1290,10 @@ impl Interp {
         object
     }
 
-    /// The entry `index` names on a `Directory` or a `StringTable`, or the
-    /// refusal for an index whose entry the oracle has and this crate does
-    /// not.
-    pub(crate) fn hash_entry_read(
-        &mut self,
-        receiver: ObjRef,
-        index: &[u8],
-    ) -> Result<ObjRef, Failure> {
-        if let Some(found) = self.native_entry(receiver, index) {
-            return Ok(found);
-        }
-        // The unbuilt refusal is a directory's alone: `directory_scope`
-        // answers `None` for a package table, whose entries this crate builds
-        // in full.
-        let Some(scope) = self.directory_scope(receiver) else {
-            return Ok(ObjRef::NIL);
-        };
-        // **Reading an entry by index is a demand for it.** `.local`'s
-        // streams and monitors are minted on the first `.NAME` that wants
-        // one, and without this the same name answers a monitor as `.output`
-        // and nothing as `.local['OUTPUT']`.
-        if scope == EnvScope::Local
-            && let Some(found) = self.minted_local(receiver, index)
-        {
-            return Ok(found);
-        }
-        if let Some(unbuilt) = self.environment_model().unbuilt.get(index).copied()
-            && unbuilt.scope == scope
-        {
-            return Err(Loud::environment_entry(index, unbuilt.owner).into());
-        }
-        Ok(ObjRef::NIL)
+    /// The entry `index` names on a `Body::Native` `Directory` or
+    /// `StringTable`, or `.nil`.
+    pub(crate) fn hash_entry_read(&mut self, receiver: ObjRef, index: &[u8]) -> ObjRef {
+        self.native_entry(receiver, index).unwrap_or(ObjRef::NIL)
     }
 
     /// Stores `item` under `index` on a `Directory` or a `StringTable`.
@@ -1391,8 +1314,8 @@ impl Interp {
     }
 
     /// Every key a string-keyed table holds, owned and in the table's own
-    /// order -- `NativeObject`'s map for `.environment` and `.local`, and the
-    /// hash store for a `Directory` or `StringTable` a program made.
+    /// order -- `NativeObject`'s map for a table this crate built on one, and
+    /// the hash store for any other `Directory` or `StringTable`.
     pub(crate) fn native_keys(&mut self, object: ObjRef) -> Vec<Box<[u8]>> {
         match self.heap.get(object).map(|held| &held.body) {
             Some(Body::Native(native)) => native.keys(),
@@ -1457,29 +1380,12 @@ impl Interp {
         env_seam::which(&model.directories, directory)
     }
 
-    /// The phase owing a name the oracle answers and this crate does not
-    /// build, or `None` for a name the oracle does not answer either.
-    fn unbuilt_owner(&mut self, bare: &[u8]) -> Option<&'static str> {
-        Some(self.environment_model().unbuilt.get(bare)?.owner)
-    }
-
-    /// The phase owing the entries of `object` that this crate does not
-    /// build, or `None` for a collection whose entries it fills.
-    /// The owner is the **directory's**, not a representative of its entries:
-    /// the entries are owned name by name, and a refusal about the whole
-    /// directory that named one entry's phase would answer differently as
-    /// entries land.
+    /// The phase owing an entry `object` holds and this crate does not build,
+    /// or `None` for a collection whose entries it fills. Only `.environment`
+    /// and `.local` hold such entries.
     pub(crate) fn unbuilt_collection_owner(&mut self, object: ObjRef) -> Option<&'static str> {
-        let scope = self.directory_scope(object)?;
-        let any_unbuilt = self
-            .environment_model()
-            .unbuilt
-            .values()
-            .any(|entry| entry.scope == scope);
-        any_unbuilt.then_some(match scope {
-            EnvScope::Local => "Phase 10",
-            EnvScope::Environment => "Phase 5",
-        })
+        self.directory_scope(object)?;
+        hash::owed_table_owner(self, object)
     }
 
     /// The program whose directives and installed classes a `.NAME` resolves
@@ -1945,7 +1851,7 @@ impl Interp {
         if let Some(found) = self.native_map_entry(local, upper) {
             return found;
         }
-        if let Ok(Some(found)) = self.directory_lookup(
+        if let Ok(hash::DirectoryEntry::Found(found)) = self.directory_lookup(
             &[EnvScope::Local, EnvScope::Environment],
             upper,
             &env_seam::Access::Resolve,
@@ -2360,10 +2266,10 @@ mod tests {
             .lookup("Directory")
             .expect("Directory is native");
         let object = interp.heap.get(environment).expect("a rooted directory");
-        let Body::Native(native) = &object.body else {
-            panic!("the environment is a Body::Native")
+        let Body::Instance { class, .. } = &object.body else {
+            panic!("the environment is a Directory instance with a store")
         };
-        assert_eq!(native.class(), directory);
+        assert_eq!(*class, directory);
         let local = interp.dot_variable(b".LOCAL").expect("resolves");
         assert_eq!(
             interp.to_text(local).to_vec(),
@@ -2377,23 +2283,111 @@ mod tests {
         );
         assert_ne!(environment, local);
     }
-    /// **The premise [`Unbuilt`] rests on**: one entry per name is enough,
-    /// because a name cannot be in both directories at once.
+    /// The names and order the bootstrap leaves in both directories are the
+    /// oracle's, and the only entry still owed is `.local`'s `STDQUE`.
     #[test]
-    fn the_two_oracle_directories_share_no_name() {
-        let environment: HashSet<&str> = ORACLE_ENVIRONMENT.iter().copied().collect();
-        let shared: Vec<&str> = ORACLE_LOCAL
-            .iter()
-            .copied()
-            .filter(|name| environment.contains(name))
-            .collect();
+    fn the_bootstrap_leaves_the_oracles_names_in_the_oracles_order() {
+        let mut interp = Interp::new();
+        interp
+            .bootstrap_library()
+            .expect("the library bootstrap runs");
+        for (dotted, oracle) in [
+            (b".ENVIRONMENT".as_slice(), ORACLE_ENVIRONMENT),
+            (b".LOCAL".as_slice(), ORACLE_LOCAL),
+        ] {
+            let directory = interp.dot_variable(dotted).expect("resolves");
+            let caller = interp.caller();
+            let indexes = interp
+                .send_message(directory, b"ALLINDEXES", None, &[], caller)
+                .expect("answers")
+                .expect("answers a value");
+            let names: Vec<String> = interp
+                .array_slots_of(indexes)
+                .expect("an array")
+                .into_iter()
+                .flatten()
+                .map(|index| String::from_utf8_lossy(&interp.to_text(index)).into_owned())
+                .collect();
+            assert_eq!(names, oracle, "{}", String::from_utf8_lossy(dotted));
+            let owed: Vec<&str> = oracle
+                .iter()
+                .copied()
+                .filter(|name| {
+                    matches!(
+                        hash::directory_get(&mut interp, directory, name.as_bytes()),
+                        Ok(hash::DirectoryEntry::Owed(_))
+                    )
+                })
+                .collect();
+            let expected: &[&str] = if oracle == ORACLE_LOCAL {
+                &["STDQUE"]
+            } else {
+                &[]
+            };
+            assert_eq!(owed, expected, "{}", String::from_utf8_lossy(dotted));
+        }
+    }
+
+    /// **Every method `Directory`'s own table holds answers on `.environment`
+    /// and on `.local`**, enumerated from the registry rather than listed:
+    /// each resolves to the method a `.Directory~new` resolves to, and a send
+    /// of each is not a not-implemented refusal.
+    #[test]
+    fn every_directory_method_answers_on_both_directories() {
+        let mut interp = Interp::new();
+        interp
+            .bootstrap_library()
+            .expect("the library bootstrap runs");
+        let class = interp
+            .classes()
+            .lookup("Directory")
+            .expect("Directory is native");
+        let names = interp.classes().own_instance_method_names(class);
         assert!(
-            shared.is_empty(),
-            "these names are in both oracle directory listings, so an `Unbuilt` row for one \
-             of them would refuse a lookup in the other: {shared:?}"
+            names.contains("HASENTRY") && names.contains("[]="),
+            "the registry's Directory table is not the one this test is about: {names:?}"
         );
-        // Neither list is empty, so the filter above ran against something.
-        assert!(!ORACLE_ENVIRONMENT.is_empty());
-        assert!(!ORACLE_LOCAL.is_empty());
+        let fresh = interp.classes().instance_behaviour_handle(class);
+        // `EMPTY` last, since it takes `ENVIRONMENT` and `LOCAL` out.
+        let mut ordered: Vec<&String> = names.iter().filter(|name| *name != "EMPTY").collect();
+        ordered.extend(names.iter().filter(|name| *name == "EMPTY"));
+        let mut calls = String::new();
+        for name in ordered {
+            let arguments = match name.as_str() {
+                "ALLINDEXES" | "ALLITEMS" | "EMPTY" | "INIT" | "ISEMPTY" | "ITEMS"
+                | "MAKEARRAY" | "SUPPLIER" => "",
+                "AT" | "[]" | "ENTRY" | "HASENTRY" | "HASINDEX" | "HASITEM" | "INDEX"
+                | "REMOVE" | "REMOVEENTRY" | "REMOVEITEM" | "UNSETMETHOD" => "'ZZ'",
+                "PUT" | "[]=" | "SETENTRY" => "'v', 'ZZ'",
+                "SETMETHOD" => "'ZZ', 'return 1'",
+                "UNKNOWN" => "'ZZ', .array~new",
+                other => panic!("Directory's table holds {other}, which this test has no call for"),
+            };
+            for (directory, variable) in [("environment", "e"), ("local", "l")] {
+                let receiver = interp
+                    .dot_variable(format!(".{}", directory.to_uppercase()).as_bytes())
+                    .expect("resolves");
+                let Some(Body::Instance { behaviour, .. }) =
+                    interp.heap.get(receiver).map(|object| &object.body)
+                else {
+                    panic!(".{directory} is not a Directory instance");
+                };
+                let behaviour = *behaviour;
+                assert_eq!(
+                    interp.classes().lookup_at(behaviour, name),
+                    interp.classes().lookup_at(fresh, name),
+                    ".{directory}~{name} resolves to a different method than a new Directory's"
+                );
+                calls.push_str(&format!("{variable}~\"{name}\"({arguments})\n"));
+            }
+        }
+        let source = format!("e = .environment\nl = .local\nl['STDQUE'] = 'q'\n{calls}");
+        let outcome = crate::run_program("/t.rex", source.into_bytes(), crate::Invocation::none());
+        let stderr = String::from_utf8_lossy(&outcome.stderr);
+        assert!(
+            !stderr.contains("is not implemented"),
+            "a Directory method refused on an interpreter directory: {stderr}"
+        );
+        assert_eq!(outcome.exit_code, 0, "{stderr}");
     }
 }

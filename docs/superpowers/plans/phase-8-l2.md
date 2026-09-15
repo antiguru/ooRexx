@@ -385,3 +385,41 @@ predates this task: `ir::drive::tests::a_call_site_resolves_once_and_answers_fro
 `ir::drive::tests::the_ir_engine_steps_an_ifs_chosen_branch_from_the_chunk`.
 
 The four phase gates are Task 11's and are not run here.
+
+## 8. The walk after the environment directories answer (surface plan, Task 1)
+
+`.environment` and `.local` now answer every `Directory` method (the surface plan's Task 1). The
+walk was re-run from a scratch copy of `ootest/`, each side from its own empty directory, with the
+oracle checkout's `build/lib` on `LD_LIBRARY_PATH` for both. It records where the chain stops; it
+fixes nothing.
+
+**Step 4 passes.** The driver of section 2, beside copies of `rxregexp.cls` and `OOREXXUNIT.CLS`:
+oracle and this crate both rc 0, `ooTest.frm loaded, version 1.0.1_4.0.0`, stderr empty. The stop at
+`ooTest.frm:49` is gone.
+
+**Running the single-group form from a copy needs `rxregexp.cls` beside the framework.** From the
+copy, the oracle itself stops at `ooTest.frm:76` with `43.901 Could not find file "rxregexp.cls" for
+::REQUIRES`; section 2's run found the file through the repository layout. A copy of
+`extensions/rxregexp/rxregexp.cls` (the same bytes as the oracle's `build/bin/rxregexp.cls`) in the
+copy's root is enough for both sides. Before that copy the two 43.901 reports already differed by
+one traceback line: the oracle prints `79 *-* retCode = 'worker.rex'(arguments)` and this crate
+does not.
+
+**The next stop is `worker.rex:1074`.** `testOORexx.rex <copy>/ooRexx/extensions/rxregexp/rxregexp.testGroup`:
+the oracle rc 0 with `Tests ran: 33`, `Assertions: 11741`, `Failures: 0`, `Errors: 0`; this crate rc
+120, stdout empty, stderr `rexx-exec: method "COPY" of class "Object" is not implemented (Phase 5)`.
+A second copy with `::options trace i` appended to `worker.rex` ends at
+`1074 *-* originalCommandLine = cmdLine~copy`, `CMDLINE` the group file's path, inside
+`CommandLine~setAllDefaults` called from `CommandLine~init`. One-line probes: `'abc'~copy` refuses
+the same way, while `~copy` of an `Array`, `Set`, `Bag`, `Table`, `Directory`, `StringTable`,
+`IdentityTable`, `Relation`, `Queue`, `List`, `CircularQueue`, `MutableBuffer`, `.object~new` and
+`.environment` answer.
+
+**Who owns it.** `Object~copy` on a `String` receiver, refused under the closed Phase 5's name. Per
+the surface plan's ruling S4, measuring and routing it is Task 8's first step.
+
+**Found on the way, not on the chain.** Directories built on `NativeObject`'s own map still refuse
+the store-family methods the way `.environment` did: a condition object
+(`condition('O')~hasIndex('CODE')`, oracle `1`) and a package's `~local`
+(`.context~package~local~items`, oracle `1` after one put), both rc 120 naming Phase 5. The framework
+reads condition objects (`OOREXXUNIT.CLS:1595`, `ooTest.frm:2111`).

@@ -93,3 +93,13 @@ lang/library_context_package.rex
 # Residual fixes: a package whose translation raised keeps its settings and none
 # of what it declared, though a library method it bound still names it.
 lang/library_package_discarded.rex
+
+# Surface Task 1: .environment and .local answer every Directory method, the
+# whole-collection reads in the oracle's order, and .local's entries present
+# from the first clause.
+lang/environment_directory_surface.rex
+lang/local_directory_surface.rex
+
+# Surface Task 1: a string-keyed collection takes each index as a string
+# argument, so an index with no string value is 88.909.
+lang/directory_index_string_value.rex

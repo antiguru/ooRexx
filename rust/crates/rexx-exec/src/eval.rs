@@ -2749,11 +2749,6 @@ mod object_operand_tests {
             // `a_class_objects_operators_are_sent_as_messages` is where they
             // are asserted, and the rows below are the control -- a change
             // that widened past class handles would move one of them.
-            (
-                b"say (.environment + 1)\n",
-                "+",
-                "one of the interpreter's own objects",
-            ),
             // oracle 0 -- two distinct tables rendering the same text
             (
                 b"say (.methods == .routines)\n::method m\n  return 1\n::routine r\n  return 2\n",
@@ -2894,7 +2889,7 @@ mod object_operand_tests {
             (
                 b"do i = .environment to 5\nend\n",
                 "initial",
-                "one of the interpreter's own objects",
+                "an instance of a user class",
             ),
             (
                 b"do i = .Object~superClasses to 5\nend\n",
@@ -2941,16 +2936,14 @@ mod object_operand_tests {
     #[test]
     fn an_object_as_a_do_over_target_is_loud() {
         let cases: &[(&[u8], &str)] = &[
+            // Measured, oracle rc 0 and `done`: a package's own local
+            // directory, which starts empty.
             (
-                b"do e over .environment\nsay e\nend\n",
+                b"do e over .context~package~local\nsay e\nend\nsay 'done'\n",
                 "one of the interpreter's own objects",
             ),
             (
-                b"do e over .local\nsay e\nend\n",
-                "one of the interpreter's own objects",
-            ),
-            (
-                b"do e over .environment for 2\nsay e\nend\n",
+                b"signal on syntax\nsay 1 + 'a'\nsyntax:\ndo e over condition('O')\nend\n",
                 "one of the interpreter's own objects",
             ),
         ];
@@ -2971,9 +2964,8 @@ mod object_operand_tests {
         // raises the oracle's own `Error_Execution_noarray` naming itself --
         // measured, oracle rc 158, `Unable to convert object "The Array
         // class" to a single-dimensional array value.` So what is left
-        // refusing above is exactly the two directories this crate models as
-        // a subset, which is a MEMBERSHIP difference rather than a missing
-        // conversion.
+        // refusing above is a `Directory` built on `NativeObject`'s map, which
+        // has no store for `MAKEARRAY` to read.
         let (code, stdout, stderr) = run_source(b"do e over .array\nsay e\nend\n");
         assert_eq!((code, stdout.as_str()), (158, ""));
         assert!(
@@ -2984,11 +2976,15 @@ mod object_operand_tests {
             "a class object must raise the oracle's own noarray, got {stderr:?}"
         );
 
-        // The adjacent success, which is what makes the refusals above about
-        // the *directories* rather than about `Body::Native`: the one
-        // collection this crate does iterate is a `StringTable`, and the
-        // count is order-independent for the reason
-        // `Interp::hash_collection_indexes` gives.
+        // The adjacent successes: `.environment` has a store and iterates
+        // through `MAKEARRAY` (measured, oracle `69` at rc 0), and a
+        // `StringTable` built on the map iterates by its own walk, whose count
+        // is order-independent for the reason `Interp::hash_collection_indexes`
+        // gives.
+        assert_eq!(
+            run_source(b"n = 0\ndo e over .environment\n  n = n + 1\nend\nsay n\n"),
+            (0, "69\n".to_string(), String::new())
+        );
         assert_eq!(
             run_source(
                 b"n = 0\ndo e over .methods\n  n = n + 1\nend\nsay n\n::method a\n::method b\n"
