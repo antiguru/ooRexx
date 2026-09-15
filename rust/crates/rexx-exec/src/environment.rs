@@ -2332,11 +2332,12 @@ mod tests {
     }
 
     /// **Every method `Directory`'s own table holds answers on `.environment`
-    /// and on `.local`**, enumerated from the registry rather than listed:
-    /// each resolves to the method a `.Directory~new` resolves to, and a send
-    /// of each is not a not-implemented refusal.
+    /// and on `.local` what it answers on a `.Directory~new` holding the same
+    /// entries in the same order**, enumerated from the registry rather than
+    /// listed: each name resolves to the method a new `Directory` resolves to,
+    /// and the same sends, in the same order, print the same answers on both.
     #[test]
-    fn every_directory_method_answers_on_both_directories() {
+    fn every_directory_method_answers_on_both_directories_as_on_a_copy() {
         let mut interp = Interp::new();
         interp
             .bootstrap_library()
@@ -2351,46 +2352,109 @@ mod tests {
             "the registry's Directory table is not the one this test is about: {names:?}"
         );
         let fresh = interp.classes().instance_behaviour_handle(class);
-        // `EMPTY` last, since it takes `ENVIRONMENT` and `LOCAL` out.
+        // `EMPTY` last, since it takes every entry out.
         let mut ordered: Vec<&String> = names.iter().filter(|name| *name != "EMPTY").collect();
         ordered.extend(names.iter().filter(|name| *name == "EMPTY"));
-        let mut calls = String::new();
+        let mut sends = String::new();
         for name in ordered {
             let arguments = match name.as_str() {
                 "ALLINDEXES" | "ALLITEMS" | "EMPTY" | "INIT" | "ISEMPTY" | "ITEMS"
                 | "MAKEARRAY" | "SUPPLIER" => "",
-                "AT" | "[]" | "ENTRY" | "HASENTRY" | "HASINDEX" | "HASITEM" | "INDEX"
-                | "REMOVE" | "REMOVEENTRY" | "REMOVEITEM" | "UNSETMETHOD" => "'ZZ'",
-                "PUT" | "[]=" | "SETENTRY" => "'v', 'ZZ'",
-                "SETMETHOD" => "'ZZ', 'return 1'",
+                "AT" | "[]" | "ENTRY" | "HASENTRY" | "HASINDEX" | "REMOVE" | "REMOVEENTRY"
+                | "UNSETMETHOD" => "'ZZ'",
+                "HASITEM" | "INDEX" | "REMOVEITEM" => "'zz value'",
+                "PUT" | "[]=" | "SETENTRY" => "'zz value', 'ZZ'",
+                "SETMETHOD" => "'ZZ', 'return \"zz method\"'",
                 "UNKNOWN" => "'ZZ', .array~new",
                 other => panic!("Directory's table holds {other}, which this test has no call for"),
             };
-            for (directory, variable) in [("environment", "e"), ("local", "l")] {
-                let receiver = interp
-                    .dot_variable(format!(".{}", directory.to_uppercase()).as_bytes())
-                    .expect("resolves");
+            for dotted in [b".ENVIRONMENT".as_slice(), b".LOCAL".as_slice()] {
+                let receiver = interp.dot_variable(dotted).expect("resolves");
                 let Some(Body::Instance { behaviour, .. }) =
                     interp.heap.get(receiver).map(|object| &object.body)
                 else {
-                    panic!(".{directory} is not a Directory instance");
+                    panic!(
+                        "{} is not a Directory instance",
+                        String::from_utf8_lossy(dotted)
+                    );
                 };
                 let behaviour = *behaviour;
                 assert_eq!(
                     interp.classes().lookup_at(behaviour, name),
                     interp.classes().lookup_at(fresh, name),
-                    ".{directory}~{name} resolves to a different method than a new Directory's"
+                    "{}~{name} resolves to a different method than a new Directory's",
+                    String::from_utf8_lossy(dotted)
                 );
-                calls.push_str(&format!("{variable}~\"{name}\"({arguments})\n"));
             }
+            sends.push_str(&format!(
+                "r['ZZ'] = 'zz value'\ndrop result\nr~\"{name}\"({arguments})\n\
+                 if var('RESULT') then say '{name}' show(result, r)\n\
+                 else say '{name} answers nothing'\n"
+            ));
         }
-        let source = format!("e = .environment\nl = .local\nl['STDQUE'] = 'q'\n{calls}");
-        let outcome = crate::run_program("/t.rex", source.into_bytes(), crate::Invocation::none());
-        let stderr = String::from_utf8_lossy(&outcome.stderr);
-        assert!(
-            !stderr.contains("is not implemented"),
-            "a Directory method refused on an interpreter directory: {stderr}"
-        );
-        assert_eq!(outcome.exit_code, 0, "{stderr}");
+        let report = "say 'final' r~items show(r~allIndexes, r)\nexit 0\n\
+                      show: procedure\n\
+                      \x20 use arg value, receiver\n\
+                      \x20 if receiver == value then return 'the receiver'\n\
+                      \x20 if value~isA(.Array) then return 'array' value~items value~makeString('L', '|')\n\
+                      \x20 if value~isA(.Supplier) then do\n\
+                      \x20   out = 'supplier'\n\
+                      \x20   do while value~available\n\
+                      \x20     out = out value~index'='value~item~string\n\
+                      \x20     value~next\n\
+                      \x20   end\n\
+                      \x20   return out\n\
+                      \x20 end\n\
+                      \x20 return value~string\n";
+        for (directory, oracle, capacity, prepare) in [
+            ("environment", ORACLE_ENVIRONMENT, ENVIRONMENT_CAPACITY, ""),
+            ("local", ORACLE_LOCAL, 0, ".local['STDQUE'] = 'q'\n"),
+        ] {
+            // The copy is filled from the oracle's list at the directory's own
+            // size, each value read as `.NAME` rather than by a send to the
+            // directory, and `LOCAL` -- `.environment`'s method-table entry --
+            // goes in as a method.
+            let contents: Vec<&str> = oracle
+                .iter()
+                .copied()
+                .filter(|name| *name != "LOCAL")
+                .collect();
+            let method = if oracle.contains(&"LOCAL") {
+                "r~setMethod('LOCAL', 'return .local')\n"
+            } else {
+                ""
+            };
+            let copy = format!(
+                "list = '{}'\n\
+                 r = .Directory~new({capacity})\n\
+                 do i = 1 to words(list)\n\
+                 \x20 name = word(list, i)\n\
+                 \x20 if name == 'STDQUE' then r[name] = 'q'\n\
+                 \x20 else r[name] = value('.'name)\n\
+                 end\n\
+                 {method}",
+                contents.join(" ")
+            );
+            let original = format!("{prepare}r = .{directory}\n");
+            let mut transcripts = Vec::new();
+            for setup in [original, copy] {
+                let source = format!("{setup}{sends}{report}");
+                let outcome =
+                    crate::run_program("/t.rex", source.into_bytes(), crate::Invocation::none());
+                let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+                assert_eq!(outcome.exit_code, 0, ".{directory}: {stderr}");
+                assert!(stderr.is_empty(), ".{directory}: {stderr}");
+                transcripts.push(String::from_utf8_lossy(&outcome.stdout).into_owned());
+            }
+            assert!(
+                transcripts[1].lines().count() > names.len(),
+                ".{directory}'s copy printed too little to compare: {}",
+                transcripts[1]
+            );
+            assert_eq!(
+                transcripts[0], transcripts[1],
+                ".{directory} answered differently from a Directory holding its entries"
+            );
+        }
     }
 }
