@@ -1355,9 +1355,7 @@ impl Interp {
                     let namespace = code.symbols.name(*namespace).as_bytes().to_vec();
                     let name = code.symbols.name(*name).as_bytes().to_vec();
                     let package = self.running_program().ok_or_else(Loud::missing_body)?;
-                    let resolution = self
-                        .namespace_routine(package, &namespace, &name)
-                        .map(Resolved::Routine);
+                    let resolution = self.namespace_routine(package, &namespace, &name);
                     let resolved = self.resolved_after_arguments(code, resolution, args)?;
                     self.invoke_named_call(code, resolved, &name, args)
                 }
@@ -3782,11 +3780,8 @@ impl Interp {
             None if builtin::is_excluded_builtin(name) => {
                 return Err(Loud::unresolved_call(name).into());
             }
-            None => match self.installed_routine(name) {
-                Some(installed) => Resolved::Routine(installed),
-                None if let Some(code) = self.merged_library_routine(name) => {
-                    Resolved::MergedLibraryRoutine(code)
-                }
+            None => match self.package_routine_lookup(name) {
+                Some(resolved) => resolved,
                 // **Ahead of the external file search and behind
                 // everything above it.** `Setup.cpp` resolves
                 // `CoreClasses.orx`'s two `CALL`s against the interpreter's
@@ -3838,16 +3833,17 @@ impl Interp {
         Ok(resolved)
     }
 
-    /// The `::ROUTINE` `name` reaches from the running package: one the
-    /// package declared itself, then one a `::REQUIRES` imported, then the
-    /// same pair in whichever package built this one.
+    /// The routine `name` reaches from the running package: one the package
+    /// declared itself, then one it imported (a `::REQUIRES ... LIBRARY`'s
+    /// library routine or a `::REQUIRES`'s public routine), then the same pair
+    /// in whichever package built this one.
     ///
     /// **The parent step is what a `newFile` executable resolves through**,
     /// and only that route has one: a file reached by a *call* records no
     /// parent, so it still sees its own package alone -- measured, the same
     /// body finds the caller's `::ROUTINE` through `Routine~newFile` and
     /// raises 43.1 through `call`.
-    fn installed_routine(&self, name: &[u8]) -> Option<InstalledRoutine> {
+    fn package_routine_lookup(&self, name: &[u8]) -> Option<Resolved> {
         let mut program = self.running_activation()?.program_id;
         let upper = name.to_ascii_uppercase();
         // Bounded rather than argued safe: a parent is always a program that
@@ -3859,36 +3855,14 @@ impl Interp {
                 .get(&program)
                 .and_then(|table| table.get(&upper[..]))
             {
-                return Some(*found);
+                return Some(Resolved::Routine(*found));
             }
             if let Some(found) = self
                 .merged_public_routines
                 .get(&program)
                 .and_then(|table| table.get(&upper[..]))
             {
-                return Some(*found);
-            }
-            match self.package_parents.get(&program) {
-                Some(crate::plan::Package::Program(parent)) => program = *parent,
-                _ => return None,
-            }
-        }
-        None
-    }
-
-    /// The library routine a `::REQUIRES ... LIBRARY` merged into the running
-    /// package, or into a package it inherits its lookup from as
-    /// [`Interp::installed_routine`] walks them.
-    fn merged_library_routine(&self, name: &[u8]) -> Option<usize> {
-        // Ahead of the upcase, which allocates, as `Interp::package_routine`.
-        if self.merged_library_routines_empty() {
-            return None;
-        }
-        let mut program = self.running_activation()?.program_id;
-        let upper = name.to_ascii_uppercase();
-        for _ in 0..=self.programs.len() {
-            if let Some(code) = self.merged_library_routine_in(program, &upper) {
-                return Some(code);
+                return Some(found.resolved());
             }
             match self.package_parents.get(&program) {
                 Some(crate::plan::Package::Program(parent)) => program = *parent,

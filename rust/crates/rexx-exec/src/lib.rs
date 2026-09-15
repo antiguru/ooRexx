@@ -1586,10 +1586,12 @@ struct Interp {
     /// oracle's `publicRoutines`, a second table beside `routines` exactly as
     /// [`package_public_classes`] is beside [`package_classes`].
     package_public_routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
-    /// The public routines a program's `::REQUIRES` directives imported --
-    /// `mergedPublicRoutines`, filled by `PackageClass::mergeRequired`
-    /// (`classes/PackageClass.cpp:693`).
-    merged_public_routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
+    /// The routines a program imported -- `mergedPublicRoutines`: every
+    /// `::REQUIRES ... LIBRARY`'s library routines, then each `::REQUIRES`'s
+    /// public and imported routines, a name keeping its first entry
+    /// (`PackageClass::mergeLibrary` and `::mergeRequired`,
+    /// `classes/PackageClass.cpp:693-772`).
+    merged_public_routines: HashMap<ProgramId, HashMap<Box<[u8]>, MergedRoutine>>,
     /// The public classes a program's `::REQUIRES` directives imported --
     /// `mergedPublicClasses`, merged alongside the routines above and read by
     /// `PackageClass::findClass` between the package's own installed classes
@@ -1783,11 +1785,6 @@ struct Interp {
     /// call site kept: a library registering routines, and a merge into a
     /// package's routine lookup. See `Resolved::can_be_shadowed`.
     pub(crate) routine_generation: u32,
-    /// The library routines each package's `::REQUIRES ... LIBRARY`
-    /// directives, and those of the packages it requires, merged into its own
-    /// routine lookup, by upcased name (`PackageClass::mergeLibrary`,
-    /// `classes/PackageClass.cpp:756`).
-    merged_library_routines: HashMap<ProgramId, HashMap<Box<[u8]>, usize>>,
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
@@ -2023,6 +2020,25 @@ struct Interp {
 struct InstalledRoutine {
     program: ProgramId,
     directive: usize,
+}
+
+/// One entry of [`Interp::merged_public_routines`].
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum MergedRoutine {
+    /// A `::ROUTINE` a required package declared or imported.
+    Installed(InstalledRoutine),
+    /// A library routine, as its [`Interp::library_codes`] row.
+    Library(usize),
+}
+
+impl MergedRoutine {
+    /// What a call that finds this entry runs.
+    fn resolved(self) -> run::Resolved {
+        match self {
+            MergedRoutine::Installed(installed) => run::Resolved::Routine(installed),
+            MergedRoutine::Library(code) => run::Resolved::MergedLibraryRoutine(code),
+        }
+    }
 }
 
 /// One `Method` or `Routine` object this crate has handed out, as its own
@@ -2368,7 +2384,6 @@ impl Interp {
             package_routines: HashMap::new(),
             package_routine_codes: Vec::new(),
             routine_generation: 0,
-            merged_library_routines: HashMap::new(),
             native_handles: Vec::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
@@ -3172,8 +3187,8 @@ impl Interp {
         Some(self.package_path(program).as_bytes().to_vec())
     }
 
-    /// Loads every package this program's `::REQUIRES` directives name, in
-    /// source order, and merges each one's public routines and classes in.
+    /// Loads every library and package this program's `::REQUIRES` directives
+    /// name and merges what each makes public.
     fn load_required_packages(
         &mut self,
         id: ProgramId,
@@ -3187,53 +3202,62 @@ impl Interp {
             return Ok(());
         }
         self.requires_installing.push(self.package_path(id).into());
-        let mut outcome = Ok(());
-        for directive in &program.directives {
-            let DirectiveKind::Requires(requires) = &directive.kind else {
-                continue;
-            };
-            // A `LIBRARY` requires loads a shared object rather than a
-            // package file; its routines are registered where every load is
-            // settled, [`Interp::settle_library`].
-            if requires.library {
-                match self.require_library(&requires.name) {
-                    Ok(loaded) => self.merge_library(id, &requires.name, &loaded),
+        let outcome = self.install_requires(id, program);
+        self.requires_installing.pop();
+        outcome
+    }
+
+    /// [`Interp::load_required_packages`]' walk: every `::REQUIRES ... LIBRARY`
+    /// in source order, then every other `::REQUIRES` in source order, as
+    /// `PackageClass::processInstall` installs them
+    /// (`classes/PackageClass.cpp:1227-1260`), stopping at the first that
+    /// fails.
+    fn install_requires(&mut self, id: ProgramId, program: &Rc<Program>) -> Result<(), Failure> {
+        for library in [true, false] {
+            for directive in &program.directives {
+                let DirectiveKind::Requires(requires) = &directive.kind else {
+                    continue;
+                };
+                if requires.library != library {
+                    continue;
+                }
+                if library {
+                    match self.require_library(&requires.name) {
+                        Ok(loaded) => self.merge_library(id, &requires.name, &loaded),
+                        Err(failure) => {
+                            self.seal_site_level();
+                            self.blame_directive_in(id, program, directive);
+                            return Err(failure);
+                        }
+                    }
+                    continue;
+                }
+                match self.load_requires(Some(id), &requires.name) {
+                    Ok(required) => {
+                        self.add_imported_package(id, Package::Program(required));
+                        self.merge_required(id, required);
+                        // `RequiresDirective::install`
+                        // (`instructions/RequiresDirective.cpp:137`): the
+                        // registration is what the directive does *after* the
+                        // load and the merge, so a namespace neither narrows
+                        // the merge nor replaces it.
+                        if let Some(namespace) = requires.namespace {
+                            let name = program.symbols.name(namespace).as_bytes().into();
+                            self.package_namespaces
+                                .entry(id)
+                                .or_default()
+                                .insert(name, Package::Program(required));
+                        }
+                    }
                     Err(failure) => {
                         self.seal_site_level();
                         self.blame_directive_in(id, program, directive);
-                        outcome = Err(failure);
-                        break;
+                        return Err(failure);
                     }
-                }
-                continue;
-            }
-            match self.load_requires(Some(id), &requires.name) {
-                Ok(required) => {
-                    self.add_imported_package(id, Package::Program(required));
-                    self.merge_required(id, required);
-                    // `RequiresDirective::install`
-                    // (`instructions/RequiresDirective.cpp:137`): the
-                    // registration is what the directive does *after* the
-                    // load and the merge, so a namespace neither narrows the
-                    // merge nor replaces it.
-                    if let Some(namespace) = requires.namespace {
-                        let name = program.symbols.name(namespace).as_bytes().into();
-                        self.package_namespaces
-                            .entry(id)
-                            .or_default()
-                            .insert(name, Package::Program(required));
-                    }
-                }
-                Err(failure) => {
-                    self.seal_site_level();
-                    self.blame_directive_in(id, program, directive);
-                    outcome = Err(failure);
-                    break;
                 }
             }
         }
-        self.requires_installing.pop();
-        outcome
+        Ok(())
     }
 
     /// The package `name` names, loaded and its prologue run if this is the
@@ -3407,39 +3431,21 @@ impl Interp {
     /// The public routines and classes `from` contributes to `into`: its own
     /// first, then the ones it imported.
     fn merge_required(&mut self, into: ProgramId, from: ProgramId) {
-        let mut added = false;
-        let routines: Vec<(Box<[u8]>, InstalledRoutine)> = self
+        let routines: Vec<(Box<[u8]>, MergedRoutine)> = self
             .package_public_routines
             .get(&from)
             .into_iter()
-            .chain(self.merged_public_routines.get(&from))
             .flatten()
-            .map(|(name, installed)| (name.clone(), *installed))
+            .map(|(name, installed)| (name.clone(), MergedRoutine::Installed(*installed)))
+            .chain(
+                self.merged_public_routines
+                    .get(&from)
+                    .into_iter()
+                    .flatten()
+                    .map(|(name, merged)| (name.clone(), *merged)),
+            )
             .collect();
-        let target = self.merged_public_routines.entry(into).or_default();
-        for (name, installed) in routines {
-            if let std::collections::hash_map::Entry::Vacant(vacant) = target.entry(name) {
-                vacant.insert(installed);
-                added = true;
-            }
-        }
-        let libraries: Vec<(Box<[u8]>, usize)> = self
-            .merged_library_routines
-            .get(&from)
-            .into_iter()
-            .flatten()
-            .map(|(name, code)| (name.clone(), *code))
-            .collect();
-        let target = self.merged_library_routines.entry(into).or_default();
-        for (name, code) in libraries {
-            if let std::collections::hash_map::Entry::Vacant(vacant) = target.entry(name) {
-                vacant.insert(code);
-                added = true;
-            }
-        }
-        if added {
-            self.routine_generation = self.routine_generation.wrapping_add(1);
-        }
+        self.merge_routines(into, routines);
         let classes: Vec<(Box<[u8]>, ObjRef)> = self
             .package_public_classes
             .get(&from)
@@ -3515,7 +3521,7 @@ impl Interp {
         package: ProgramId,
         namespace: &[u8],
         name: &[u8],
-    ) -> Result<InstalledRoutine, Failure> {
+    ) -> Result<run::Resolved, Failure> {
         let Some(target) = self.find_namespace(package, namespace) else {
             let path = self.package_path(package).to_owned();
             return Err(Raised::namespace_not_found(namespace, &path).into());
@@ -3526,12 +3532,13 @@ impl Interp {
                 .package_public_routines
                 .get(&program)
                 .and_then(|table| table.get(name))
+                .map(|installed| run::Resolved::Routine(*installed))
                 .or_else(|| {
                     self.merged_public_routines
                         .get(&program)
                         .and_then(|table| table.get(name))
-                })
-                .copied(),
+                        .map(|merged| merged.resolved())
+                }),
         };
         found.ok_or_else(|| Raised::namespace_routine_not_found(name, namespace).into())
     }
@@ -4771,21 +4778,35 @@ impl Interp {
     /// `PackageClass::mergeLibrary`: `library`'s routines join `id`'s own
     /// routine lookup where no earlier merge put the name.
     fn merge_library(&mut self, id: ProgramId, name: &[u8], library: &rexx_api::load::Library) {
-        for (upper, spelling) in library.package_routines() {
-            let code = self.library_code(LibraryCodeKey {
-                library: name.to_vec(),
-                procedure: spelling.to_vec(),
-                routine: true,
-            });
-            if let std::collections::hash_map::Entry::Vacant(vacant) = self
-                .merged_library_routines
-                .entry(id)
-                .or_default()
-                .entry(upper.into_boxed_slice())
-            {
-                vacant.insert(code);
-                self.routine_generation = self.routine_generation.wrapping_add(1);
+        let routines: Vec<(Box<[u8]>, MergedRoutine)> = library
+            .package_routines()
+            .into_iter()
+            .map(|(upper, spelling)| {
+                let code = self.library_code(LibraryCodeKey {
+                    library: name.to_vec(),
+                    procedure: spelling.to_vec(),
+                    routine: true,
+                });
+                (upper.into_boxed_slice(), MergedRoutine::Library(code))
+            })
+            .collect();
+        self.merge_routines(id, routines);
+    }
+
+    /// Adds each of `routines` to `into`'s imported routines where the name
+    /// is not there yet (`HashContents::mergePut`), moving
+    /// [`Interp::routine_generation`] when one is added.
+    fn merge_routines(&mut self, into: ProgramId, routines: Vec<(Box<[u8]>, MergedRoutine)>) {
+        let target = self.merged_public_routines.entry(into).or_default();
+        let mut added = false;
+        for (name, merged) in routines {
+            if let std::collections::hash_map::Entry::Vacant(vacant) = target.entry(name) {
+                vacant.insert(merged);
+                added = true;
             }
+        }
+        if added {
+            self.routine_generation = self.routine_generation.wrapping_add(1);
         }
     }
 
@@ -4872,24 +4893,6 @@ impl Interp {
         }
         self.package_routines
             .get(&name.to_ascii_uppercase())
-            .copied()
-    }
-
-    /// Whether no `::REQUIRES ... LIBRARY` has merged a routine anywhere.
-    pub(crate) fn merged_library_routines_empty(&self) -> bool {
-        self.merged_library_routines.is_empty()
-    }
-
-    /// The [`Interp::library_codes`] row of the library routine `upper`
-    /// names in `program`'s own merged lookup, or `None`.
-    pub(crate) fn merged_library_routine_in(
-        &self,
-        program: ProgramId,
-        upper: &[u8],
-    ) -> Option<usize> {
-        self.merged_library_routines
-            .get(&program)?
-            .get(upper)
             .copied()
     }
 
@@ -5514,7 +5517,6 @@ impl Interp {
             package_routines: _,
             package_routine_codes: _,
             routine_generation: _,
-            merged_library_routines: _,
             native_handles,
             special_methods: _,
             out: _,

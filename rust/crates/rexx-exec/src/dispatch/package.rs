@@ -515,11 +515,18 @@ fn imported_routines(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let program = package_of(interp, receiver)?;
-    let entries = routine_entries(interp, program, |interp| &interp.merged_public_routines);
+    let named: Vec<(Box<[u8]>, crate::MergedRoutine)> = program
+        .and_then(|program| interp.merged_public_routines.get(&program))
+        .into_iter()
+        .flatten()
+        .map(|(name, merged)| (name.clone(), *merged))
+        .collect();
+    let entries = rooted_routine_objects(interp, named);
     Ok(Some(interp.string_table_of(entries)))
 }
 
-/// The (name, `Routine` object) pairs one of the three routine tables holds.
+/// The (name, `Routine` object) pairs the table `which` answers holds for
+/// `program`.
 fn routine_entries(
     interp: &mut Interp,
     program: Option<ProgramId>,
@@ -528,12 +535,20 @@ fn routine_entries(
     let Some(program) = program else {
         return Vec::new();
     };
-    let named: Vec<(Box<[u8]>, InstalledRoutine)> = which(interp)
+    let named: Vec<(Box<[u8]>, crate::MergedRoutine)> = which(interp)
         .get(&program)
         .into_iter()
         .flatten()
-        .map(|(name, installed)| (name.clone(), *installed))
+        .map(|(name, installed)| (name.clone(), crate::MergedRoutine::Installed(*installed)))
         .collect();
+    rooted_routine_objects(interp, named)
+}
+
+/// The `Routine` object for each of `named`, skipping one that has none.
+fn rooted_routine_objects(
+    interp: &mut Interp,
+    named: Vec<(Box<[u8]>, crate::MergedRoutine)>,
+) -> Vec<(Box<[u8]>, ObjRef)> {
     // **Each object is rooted as it is built**, because building the next one
     // allocates: `Interp::routine_object` materialises the declaring
     // program's `.ROUTINES` table on a miss, and a `Routine` produced by an
@@ -542,8 +557,8 @@ fn routine_entries(
     // `run_program_collect_every_alloc`: without the temp,
     // `corpus/lang/package_tables.rex` panics at `Interp::not_in_arena`.
     let mut entries = Vec::with_capacity(named.len());
-    for (name, installed) in named {
-        let Some(object) = interp.routine_object(installed) else {
+    for (name, merged) in named {
+        let Some(object) = interp.merged_routine_object(merged) else {
             continue;
         };
         interp.roots.push_temp(object);

@@ -1,0 +1,14 @@
+count 13
+/* A namespace-qualified call finds a library routine the namespace's package
+   merged, as a function and as a CALL, and reports it under the upcased name. */
+say 'qualified' m:RxCalcSqrt(16)
+call m:rxcalcsqrt 25
+say 'call' result
+say 'mid imported' mid()~importedRoutines['RXCALCSQRT']
+signal on syntax
+say m:RxCalcSqrt('x')
+exit
+syntax:
+say 'trapped' condition('O')~code
+say m:rxcalcsqrt('y')
+::requires 'mid.cls' namespace m

@@ -1983,32 +1983,38 @@ impl Interp {
         let Some(program) = package else {
             return ObjRef::NIL;
         };
-        let found = [
-            &self.routines,
-            &self.package_public_routines,
-            &self.merged_public_routines,
-        ]
-        .into_iter()
-        .find_map(|table| {
-            table
-                .get(&program)
-                .and_then(|held| held.get(upper))
-                .copied()
-        });
-        if let Some(object) = found.and_then(|installed| self.routine_object(installed)) {
-            return object;
+        let found = [&self.routines, &self.package_public_routines]
+            .into_iter()
+            .find_map(|table| {
+                table
+                    .get(&program)
+                    .and_then(|held| held.get(upper))
+                    .copied()
+                    .map(crate::MergedRoutine::Installed)
+            })
+            .or_else(|| {
+                self.merged_public_routines
+                    .get(&program)
+                    .and_then(|held| held.get(upper))
+                    .copied()
+            });
+        match found {
+            Some(merged) => self.merged_routine_object(merged).unwrap_or(ObjRef::NIL),
+            None => ObjRef::NIL,
         }
-        // Measured, oracle: `findRoutine('RXCALCSQRT')` answers a `Routine` in
-        // a package with `::REQUIRES 'rxmath' LIBRARY` and `.nil` after a
-        // `loadLibrary` of the same library.
-        match self.merged_library_routine_in(program, upper) {
-            Some(code) => {
+    }
+
+    /// The `Routine` object one imported routine is: the `::ROUTINE`'s own,
+    /// or for a library routine, one reporting the library code's package.
+    pub(crate) fn merged_routine_object(&mut self, merged: crate::MergedRoutine) -> Option<ObjRef> {
+        match merged {
+            crate::MergedRoutine::Installed(installed) => self.routine_object(installed),
+            crate::MergedRoutine::Library(code) => {
                 let class = self.routine_class();
                 let object = self.native_instance(class);
                 self.record_loaded_executable(object, code);
-                object
+                Some(object)
             }
-            None => ObjRef::NIL,
         }
     }
 

@@ -1,0 +1,5 @@
+/* A package's ::REQUIRES ... LIBRARY directives install before its other
+   ::REQUIRES, so a library that does not load is reported before a package
+   file written above it that does not exist. */
+say 'ran'
+::requires 'pk.cls'
