@@ -172,8 +172,9 @@ lang/library_routine_site_twice_rexx.rex
 lang/library_routine_site_twice_security.rex
 
 # Surface Task 2 fix round: a call site keeps an external file. A call site keeps
-# a routine findRoutine found for good, and looks up again whatever the search
-# finds after it once a routine table has been written.
+# the routine findRoutine found, and looks up again whatever the search finds
+# after it once any routine table has been written. The site is per compiled
+# body, and a body compiled under a second trace setting has a site of its own.
 lang/library_routine_external_site_twice.rex
 lang/library_routine_site_after_add_package.rex
 lang/library_routine_site_add_routine.rex

@@ -168,7 +168,7 @@ pub(crate) enum Resolved {
 #[derive(Clone, Copy)]
 pub(crate) enum CallResolution<'a> {
     /// Decided before the arguments: a label or a builtin, a namespace-qualified
-    /// routine, or a routine a call site kept for good.
+    /// routine, or a `findRoutine` answer a call site keeps.
     Settled(Resolved),
     /// Searched for once the arguments have run, as `externalCall` is
     /// (`expression/ExpressionFunction.cpp:185-210`). `kept` is a call site's
@@ -183,16 +183,19 @@ pub(crate) enum CallResolution<'a> {
 
 impl Resolved {
     /// Whether a call site keeps this resolution only until
-    /// `Interp::routine_generation` moves, rather than for good.
+    /// `Interp::routine_generation` moves, rather than for as long as the
+    /// site's compiled body lives.
     ///
     /// The oracle hands a routine back to the instruction from
     /// `externalCall`'s Step 2 alone (`findRoutine`,
     /// `execution/RexxActivation.cpp:3062-3070`), so a `::ROUTINE` or an
-    /// imported routine is kept for good, a label and a builtin are fixed
-    /// when the clause resolves, and everything later in the search (the
+    /// imported routine stays at the instruction, a label and a builtin are
+    /// fixed when the clause resolves, and everything later in the search (the
     /// REXX package's routines, a registered library routine, an external
     /// file) is looked up again on every call. Those are the ones answered
-    /// here: kept while no routine table they come after has been written.
+    /// here, used again only while the generation has not moved; it is one
+    /// counter for the interpreter, so a routine-table write in any package
+    /// or any library registering routines drops all of them.
     pub(crate) fn kept_until_routines_change(self) -> bool {
         matches!(
             self,
@@ -3873,11 +3876,13 @@ impl Interp {
     /// The routine `name` reaches from the running package, through
     /// [`Interp::find_routine`].
     ///
-    /// **The parent step is what a `newFile` executable resolves through**,
-    /// and only that route has one: a file reached by a *call* records no
-    /// parent, so it still sees its own package alone -- measured, the same
-    /// body finds the caller's `::ROUTINE` through `Routine~newFile` and
-    /// raises 43.1 through `call`.
+    /// **The parent step is what code built by a send resolves through**:
+    /// `Routine~newFile` and `Method~newFile` record the context's package or,
+    /// with none, the caller's (`new_file_executable`), and `Package~new`
+    /// records a context's (`package_from_source`). A file reached by a
+    /// *call* records none, so it still sees its own package alone --
+    /// measured, the same body finds the caller's `::ROUTINE` through
+    /// `Routine~newFile` and raises 43.1 through `call`.
     fn package_routine_lookup(&self, name: &[u8]) -> Option<Resolved> {
         let program = self.running_activation()?.program_id;
         self.find_routine(program, &name.to_ascii_uppercase())

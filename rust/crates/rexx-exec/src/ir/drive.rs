@@ -2432,9 +2432,9 @@ impl Interp {
     ///
     /// **A raise is deliberately not recorded**: `resolve_fixed_call` answers
     /// `Err` for a name it refuses, and a site that raised asks again. A kept
-    /// answer the oracle would search for again is handed on with the
-    /// generation it was read under, since the arguments can write a routine
-    /// table before it is used.
+    /// answer of a kind the oracle searches for on every call is handed on
+    /// with the generation it was read under, since the arguments can write a
+    /// routine table before it is used.
     fn site_resolution_before_arguments<'c>(
         &self,
         chunk: &'c Chunk,
