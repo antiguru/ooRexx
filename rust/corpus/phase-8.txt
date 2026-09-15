@@ -162,3 +162,12 @@ lang/library_routine_rexx_package_call_blame.rex
 # Surface Task 2 fix round: a double argument past a double's range converts at
 # once, without writing the number out digit by digit.
 lang/library_routine_double_exponent.rex
+
+# Surface Task 2 fix round: a call site that kept its resolution passes the
+# routine's name on its second call, to the traceback and the security manager,
+# through each route.
+lang/library_routine_site_twice_merged.rex
+lang/library_routine_site_twice_global.rex
+lang/library_routine_site_twice_directive.rex
+lang/library_routine_site_twice_rexx.rex
+lang/library_routine_site_twice_security.rex

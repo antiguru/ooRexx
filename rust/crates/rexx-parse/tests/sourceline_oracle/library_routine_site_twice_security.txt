@@ -1,0 +1,12 @@
+count 11
+/* The security manager's CALL checkpoint names a library routine and an
+   internal routine on every call from one expression call site. */
+say 'load' .context~package~loadLibrary('rxmath')
+g = .Routine~newFile('global.rex')
+say 'declined' g~setSecurityManager(.Audit~new)
+g~call
+::class Audit
+::method unknown
+  use arg name, args
+  if name = 'CALL' then say 'event CALL' args[1]['NAME']
+  return 0

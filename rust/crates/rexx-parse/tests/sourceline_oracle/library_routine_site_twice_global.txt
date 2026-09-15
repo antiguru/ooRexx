@@ -1,0 +1,8 @@
+count 7
+/* A routine loadLibrary registered, called a second time from one expression
+   call site, is reported under the name the call wrote. */
+say 'load' loadit()
+do a over .array~of(4, 'x')
+  say RxCalcSqrt(a)
+end
+::requires 'pk.cls'

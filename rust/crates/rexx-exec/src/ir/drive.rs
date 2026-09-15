@@ -243,24 +243,26 @@ impl Interp {
         let Some(mark) = self.value_buffer.len().checked_sub(argc as usize) else {
             return Err(Loud::call_op_off_its_node().into());
         };
-        // **The spelling is recovered only when the site has nothing**, which
-        // is what makes this op cheaper than `Op::CallExpr`: a resolved
-        // builtin dispatches through the row the site holds, and that dispatch
-        // does not read it.
+        // **A kept builtin is the one resolution that runs without the
+        // spelling**, which is what makes this op cheaper than `Op::CallExpr`:
+        // it dispatches through the row the site holds. Every other resolution
+        // passes the name on, to a traceback line or the security manager.
+        let target = || match Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind) {
+            Some(ExprKind::Call { target, .. }) => Ok(call_target_name(code, target)),
+            _ => Err(Failure::from(Loud::call_op_off_its_node())),
+        };
         let mut spelling: &[u8] = b"";
         let resolved = match chunk.resolved_call(site) {
             Some(resolved) => {
                 #[cfg(test)]
                 count_call_site_hit();
+                if !matches!(resolved, crate::run::Resolved::Builtin(_)) {
+                    spelling = target()?.0;
+                }
                 resolved
             }
             None => {
-                let Some(ExprKind::Call { target, .. }) =
-                    Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind)
-                else {
-                    return Err(Loud::call_op_off_its_node().into());
-                };
-                let (name, search_labels) = call_target_name(code, target);
+                let (name, search_labels) = target()?;
                 spelling = name;
                 let resolved = self.resolve_call(name, search_labels)?;
                 chunk.remember_call(site, resolved);
