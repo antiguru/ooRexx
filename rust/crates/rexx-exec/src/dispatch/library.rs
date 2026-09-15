@@ -82,17 +82,7 @@ impl Interp {
         let Some(entry) = library.method(&binding.procedure) else {
             return Err(Loud::library_procedure_gone().into());
         };
-        self.native_handles.push(NativeFrame {
-            owner,
-            scope: resolution.scope,
-            method: true,
-            receiver,
-            name: name.to_vec(),
-            arguments: args.to_vec(),
-            argument_list: None,
-            locals: Table::new(),
-            raised: None,
-        });
+        self.push_native_frame(owner, resolution.scope, Some(receiver), name, args);
         let mut strings = CStringPool::new();
         let (answered, pending) = {
             let activation = Activation::new(Conversion {
@@ -103,10 +93,7 @@ impl Interp {
             let answered = invoke::method(entry, &contexts.method(), &activation, args);
             (answered, activation.pending())
         };
-        let frame = self
-            .native_handles
-            .pop()
-            .expect("the frame pushed above is still the innermost");
+        let (raised, method) = self.pop_native_frame();
 
         // The condition first, because the oracle raises it in the caller's
         // frame once the call has returned (`NativeActivation::checkConditions`,
@@ -118,7 +105,7 @@ impl Interp {
             return Err(condition_of(number));
         }
         let packaged = self.external_package_path(resolution.method).is_some();
-        self.settle_native_call(answered, frame, packaged)
+        self.settle_native_call(answered, raised, method, packaged)
     }
 
     /// Runs the routine a [`Interp::package_routine`] slot names, as the call
@@ -158,17 +145,7 @@ impl Interp {
         let Some(entry) = library.routine(&key.procedure) else {
             return Err(Loud::library_procedure_gone().into());
         };
-        self.native_handles.push(NativeFrame {
-            owner: ObjRef::NIL,
-            scope: ObjRef::NIL,
-            method: false,
-            receiver: ObjRef::NIL,
-            name: name.to_vec(),
-            arguments: args.to_vec(),
-            argument_list: None,
-            locals: Table::new(),
-            raised: None,
-        });
+        self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, name, args);
         let mut strings = CStringPool::new();
         let (answered, pending) = {
             let activation = Activation::new(Conversion {
@@ -179,14 +156,11 @@ impl Interp {
             let answered = invoke::routine(entry, &contexts.call(), &activation, args);
             (answered, activation.pending())
         };
-        let frame = self
-            .native_handles
-            .pop()
-            .expect("the frame pushed above is still the innermost");
+        let (raised, method) = self.pop_native_frame();
         let package = self.library_code_package_path(code);
         let outcome = match pending {
             Some(number) => Err(condition_of(number)),
-            None => self.settle_native_call(answered, frame, package.is_some()),
+            None => self.settle_native_call(answered, raised, method, package.is_some()),
         };
         if outcome.is_err() {
             self.blame_native_routine(name, package);
@@ -203,16 +177,63 @@ impl Interp {
     fn settle_native_call(
         &mut self,
         answered: Result<Option<ObjRef>, Refused>,
-        frame: NativeFrame,
+        raised: Option<Failure>,
+        method: bool,
         packaged: bool,
     ) -> Result<Option<ObjRef>, Failure> {
         match answered {
-            Err(Refused::Raised) => Err(frame
-                .raised
-                .expect("a host answering Raised holds the condition it raised")),
+            Err(Refused::Raised) => {
+                Err(raised.expect("a host answering Raised holds the condition it raised"))
+            }
             Ok(value) => Ok(value),
-            Err(refused) => Err(self.refusal(refused, packaged, frame.method)),
+            Err(refused) => Err(self.refusal(refused, packaged, method)),
         }
+    }
+
+    /// Pushes the frame of a native call: a method's when `receiver` is
+    /// given, a routine's otherwise.
+    fn push_native_frame(
+        &mut self,
+        owner: ObjRef,
+        scope: ObjRef,
+        receiver: Option<ObjRef>,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) {
+        let mut frame = self.native_spares.pop().unwrap_or_else(|| NativeFrame {
+            owner: ObjRef::NIL,
+            scope: ObjRef::NIL,
+            method: false,
+            receiver: ObjRef::NIL,
+            name: Vec::new(),
+            arguments: Vec::new(),
+            argument_list: None,
+            locals: Table::new(),
+            raised: None,
+        });
+        frame.owner = owner;
+        frame.scope = scope;
+        frame.method = receiver.is_some();
+        frame.receiver = receiver.unwrap_or(ObjRef::NIL);
+        frame.name.extend_from_slice(name);
+        frame.arguments.extend_from_slice(args);
+        self.native_handles.push(frame);
+    }
+
+    /// Pops the innermost native frame, answering the condition it holds and
+    /// whether it was a method's, and keeps it emptied for the next call.
+    fn pop_native_frame(&mut self) -> (Option<Failure>, bool) {
+        let mut frame = self
+            .native_handles
+            .pop()
+            .expect("the frame pushed for this call is still the innermost");
+        let answer = (frame.raised.take(), frame.method);
+        frame.name.clear();
+        frame.arguments.clear();
+        frame.argument_list = None;
+        frame.locals.clear();
+        self.native_spares.push(frame);
+        answer
     }
 
     /// What the boundary's own refusal reports.
@@ -617,6 +638,17 @@ impl Interp {
         Condition
     }
 
+    /// [`Interp::native_frame`], mutably.
+    ///
+    /// # Panics
+    /// As [`Interp::native_frame`].
+    #[cfg(test)]
+    fn native_frame_mut(&mut self) -> &mut NativeFrame {
+        self.native_handles
+            .last_mut()
+            .expect("a native activation is running")
+    }
+
     /// The running native activation.
     ///
     /// # Panics
@@ -971,6 +1003,143 @@ mod tests {
         assert!(swept.collections > 0, "the stress mode did not collect");
     }
 
+    /// **The conversion rows answer the same under a collection at every
+    /// allocation as under none**: integers at their ends, a float, a double,
+    /// a logical, a `CSTRING` both ways, the `size_t` result, an array made by
+    /// conversion, a class, pointers, stems by object and by name, the special
+    /// arguments, and a refusal. The stdout is the oracle's, measured. It reads
+    /// a refusal's `code` and not its `message`: `signal on syntax`, `y = 1/0`,
+    /// then `say condition('O')~message` in the syntax handler panics in this
+    /// mode with no native call, at the assertion `collect_stress`'s L0 test
+    /// fails at.
+    #[test]
+    fn the_conversion_rows_answer_the_same_under_a_collection_at_every_allocation() {
+        let text = b"t = .T~new\n\
+            say 'int' t~int8(-128) t~uint64('18446744073709551615') t~int64('-9223372036854775808') t~size('1E19')\n\
+            say 'num' t~float(1.1) t~double(2/3) t~logical(1) t~cstring('abc') t~version\n\
+            say 'obj' t~array('abc')~items t~array(.list~of(1, 2))~items t~classarg(.string) t~object(t)~class\n\
+            say 'ptr' t~pointerarg(t~pointervalue) t~nullpointerstring t~pointerstringarg(t~pointerstringvalue)\n\
+            y.7 = 'seven'\n\
+            say 'stem' TestStemArg('y')[7] t~stem(y.)[7]\n\
+            drop qq.\n\
+            say 'unset' TestStemArg('qq')~class symbol('QQ.')\n\
+            al = t~arglist(1, , 3)\n\
+            say 'special' al~size al~items (t~oself == t) t~scope t~super t~name TestNameArg() TestArglistArg(1, 2)~items\n\
+            say 'rxmath ['MathLoadFuncs()']'\n\
+            signal on syntax\n\
+            say t~int8(128)\n\
+            exit\n\
+            syntax:\n\
+            say 'refused' condition('O')~code\n\
+            ::requires 'orxfunction' LIBRARY\n\
+            ::requires 'rxmath' LIBRARY\n\
+            ::class Base\n\
+            ::class T subclass Base\n\
+            ::method int8 external \"LIBRARY orxmethod TestInt8Arg\"\n\
+            ::method uint64 external \"LIBRARY orxmethod TestUint64Arg\"\n\
+            ::method int64 external \"LIBRARY orxmethod TestInt64Arg\"\n\
+            ::method size external \"LIBRARY orxmethod TestSizeArg\"\n\
+            ::method float external \"LIBRARY orxmethod TestFloatArg\"\n\
+            ::method double external \"LIBRARY orxmethod TestDoubleArg\"\n\
+            ::method logical external \"LIBRARY orxmethod TestLogicalArg\"\n\
+            ::method cstring external \"LIBRARY orxmethod TestCstringArg\"\n\
+            ::method version external \"LIBRARY orxmethod TestInterpreterVersion\"\n\
+            ::method array external \"LIBRARY orxmethod TestArrayArg\"\n\
+            ::method classarg external \"LIBRARY orxmethod TestClassArg\"\n\
+            ::method object external \"LIBRARY orxmethod TestObjectArg\"\n\
+            ::method pointervalue external \"LIBRARY orxmethod TestPointerValue\"\n\
+            ::method pointerarg external \"LIBRARY orxmethod TestPointerArg\"\n\
+            ::method pointerstringvalue external \"LIBRARY orxmethod TestPointerStringValue\"\n\
+            ::method pointerstringarg external \"LIBRARY orxmethod TestPointerStringArg\"\n\
+            ::method nullpointerstring external \"LIBRARY orxmethod TestNullPointerStringValue\"\n\
+            ::method stem external \"LIBRARY orxmethod TestStemArg\"\n\
+            ::method arglist external \"LIBRARY orxmethod TestArglistArg\"\n\
+            ::method oself external \"LIBRARY orxmethod TestOSelfArg\"\n\
+            ::method scope external \"LIBRARY orxmethod TestScopeArg\"\n\
+            ::method super external \"LIBRARY orxmethod TestSuperArg\"\n\
+            ::method name external \"LIBRARY orxmethod TestNameArg\"\n\
+            "
+        .to_vec();
+        let invocation = || {
+            crate::Invocation::none().with_environment(vec![(
+                b"LD_LIBRARY_PATH".to_vec(),
+                worktree_library_directory()
+                    .into_os_string()
+                    .into_encoded_bytes(),
+            )])
+        };
+        let name = "/tmp/conversion_stress.rex";
+
+        let plain = crate::run_program(name, text.clone(), invocation());
+        assert_eq!(
+            plain.exit_code,
+            0,
+            "{}",
+            String::from_utf8_lossy(&plain.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&plain.stdout),
+            "int -128 18446744073709551615 -9223372036854775808 10000000000000000000\n\
+             num 1.10000002 0.666666667 1 abc 328448\n\
+             obj 1 2 The String class The T class\n\
+             ptr 1 0x0 1\n\
+             stem seven seven\n\
+             unset The Stem class VAR\n\
+             special 3 2 1 The T class The BASE class NAME TESTNAMEARG 2\n\
+             rxmath []\n\
+             refused 88.907\n"
+        );
+
+        let swept = crate::run_program_collect_every_alloc(name, text, invocation());
+        assert_eq!(swept.exit_code, plain.exit_code);
+        assert_eq!(swept.stdout, plain.stdout);
+        assert_eq!(swept.stderr, plain.stderr);
+        assert!(swept.collections > 0, "the stress mode did not collect");
+    }
+
+    /// A native call's frame is reused by the next call with nothing of the
+    /// last one left in it: a handle the last call registered resolves to
+    /// nothing, and its arguments, argument array, name and condition are
+    /// gone.
+    #[test]
+    fn a_reused_native_frame_holds_nothing_of_the_call_before() {
+        let mut interp = Interp::new();
+        let object = interp.text(b"held by the first call");
+        interp.push_native_frame(
+            rexx_core::ObjRef::NIL,
+            rexx_core::ObjRef::NIL,
+            Some(object),
+            b"FIRST",
+            &[Some(object), None],
+        );
+        let handle = interp.native_frame_mut().locals.register(object);
+        interp.native_frame_mut().argument_list = Some(object);
+        interp.native_frame_mut().raised = Some(crate::Loud::library_procedure_gone().into());
+        let (raised, method) = interp.pop_native_frame();
+        assert!(raised.is_some() && method);
+
+        interp.push_native_frame(
+            rexx_core::ObjRef::NIL,
+            rexx_core::ObjRef::NIL,
+            None,
+            b"SECOND",
+            &[],
+        );
+        assert_eq!(
+            interp.native_spares.len(),
+            0,
+            "the spare frame was not reused"
+        );
+        let frame = interp.native_frame_mut();
+        assert_eq!(frame.locals.resolve(handle), None);
+        assert_eq!(frame.name, b"SECOND");
+        assert!(frame.arguments.is_empty());
+        assert_eq!(frame.argument_list, None);
+        assert!(frame.raised.is_none());
+        assert!(!frame.method);
+        assert_eq!(frame.receiver, rexx_core::ObjRef::NIL);
+    }
+
     /// A name that has loaded keeps the library it loaded, which is what stops
     /// a second write dropping the interpreter's own reference to it.
     #[test]
@@ -1101,24 +1270,14 @@ mod tests {
     #[test]
     fn a_signature_refusal_is_numbered_for_a_method_or_a_routine() {
         let mut interp = Interp::new();
-        let mut numbered = |refused: Refused, method: bool| {
-            let frame = crate::NativeFrame {
-                owner: rexx_core::ObjRef::NIL,
-                scope: rexx_core::ObjRef::NIL,
-                method,
-                receiver: rexx_core::ObjRef::NIL,
-                name: Vec::new(),
-                arguments: Vec::new(),
-                argument_list: None,
-                locals: rexx_api::handles::Table::new(),
-                raised: None,
-            };
-            match interp.settle_native_call(Err(refused), frame, true) {
-                Err(Failure::Raised(raised)) => {
-                    (raised.number, raised.sub, raised.delivery.lineless)
-                }
-                _ => panic!("a signature refusal is a raise"),
-            }
+        let mut numbered = |refused: Refused, method: bool| match interp.settle_native_call(
+            Err(refused),
+            None,
+            method,
+            true,
+        ) {
+            Err(Failure::Raised(raised)) => (raised.number, raised.sub, raised.delivery.lineless),
+            _ => panic!("a signature refusal is a raise"),
         };
         assert_eq!(numbered(Refused::Signature, true), (93, 968, true));
         assert_eq!(numbered(Refused::Signature, false), (40, 918, true));

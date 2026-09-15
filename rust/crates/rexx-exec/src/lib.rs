@@ -1729,6 +1729,9 @@ struct Interp {
     /// [`Interp::object_roots`] for exactly as long as the frame is on this
     /// stack, so a handle that outlives its activation resolves to nothing.
     native_handles: Vec<NativeFrame>,
+    /// Frames popped off [`Interp::native_handles`] and emptied, whose buffers
+    /// the next native call reuses.
+    native_spares: Vec<NativeFrame>,
     /// Every native library a name has loaded, by the name it was resolved
     /// under -- `PackageManager::packages`
     /// (`interpreter/package/PackageManager.cpp:229-248`). A miss is not held,
@@ -2401,6 +2404,7 @@ impl Interp {
             package_routine_codes: Vec::new(),
             routine_generation: 0,
             native_handles: Vec::new(),
+            native_spares: Vec::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
@@ -5541,6 +5545,8 @@ impl Interp {
             package_routine_codes: _,
             routine_generation: _,
             native_handles,
+            // Emptied as each is popped.
+            native_spares: _,
             special_methods: _,
             out: _,
             trace: _,
