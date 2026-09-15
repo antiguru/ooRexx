@@ -1310,8 +1310,8 @@ enum Primitive {
     /// A `Body::Native` whose class is `.Routine` -- what a `.ROUTINES` entry
     /// holds. Measured, `.routines~r~class` is `The Routine class`.
     Routine,
-    /// A `Body::Native` whose class is `.Directory` -- a condition object, a
-    /// package's `~local`, a security manager's argument directory.
+    /// A `Body::Native` whose class is `.Directory`, such as a condition
+    /// object.
     Directory,
     /// A `Body::Native` whose class is `.StringTable` or a subclass of it --
     /// `.methods`, `.routines` and `.resources`, and `.TraceObject~new`.

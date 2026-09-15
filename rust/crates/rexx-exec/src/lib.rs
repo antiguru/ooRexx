@@ -1934,8 +1934,8 @@ struct Interp {
     /// entry, a directory put or removal, and an array write, which is how a
     /// monitor's destination queue changes.
     route_generation: u64,
-    /// Bumped by every write to a mapped collection's pool entries, which is
-    /// what a `dispatch::hash::StoreView` is valid against.
+    /// What a `dispatch::hash::StoreView` is valid against; a write to a
+    /// mapped collection's pool entries moves it.
     store_generation: u64,
     /// `SAY`'s route as of [`Interp::route_generation`]: `None` writes
     /// straight to the buffer. Deciding it afresh costs 764 instructions a

@@ -405,8 +405,7 @@ fn set_free(interp: &mut Interp, receiver: ObjRef, half: Half, free: usize) {
     bump_store_generation(interp);
 }
 
-/// Marks every [`StoreView`] taken before this call as stale. Every write to
-/// a store's pool entries calls it.
+/// Marks every [`StoreView`] taken before this call as stale.
 fn bump_store_generation(interp: &mut Interp) {
     interp.store_generation = interp.store_generation.wrapping_add(1);
 }
