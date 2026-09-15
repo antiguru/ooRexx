@@ -107,3 +107,7 @@ lang/directory_index_string_value.rex
 # Surface Task 1 fix round: .local's STDQUE taken out by setEntry with no value
 # and by setMethod, neither of which reads the queue it held.
 lang/local_stdque_removal.rex
+
+# Surface Task 1 fix round: a Directory's index reads (allIndexes, makeArray,
+# DO OVER) name a setMethod entry without running it; item reads run it.
+lang/directory_enumeration_runs_no_method.rex
