@@ -251,6 +251,9 @@ pub(crate) struct EnvironmentModel {
     /// crate does not build, one per phase owing such entries. A write
     /// replaces one in place, which keeps the oracle's order.
     owed: [(ObjRef, &'static str); 2],
+    /// The last reading of `.local`'s pool and of `.environment`'s, in that
+    /// order.
+    views: [Option<hash::StoreView>; 2],
     /// `.methods`, `.routines` and `.resources` all answer one of these.
     string_table: ObjRef,
     /// What `.context` answers to.
@@ -447,6 +450,7 @@ impl Interp {
         EnvironmentModel {
             directories: env_seam::hold(environment, local),
             owed,
+            views: [None, None],
             string_table,
             context,
         }
@@ -571,17 +575,31 @@ impl Interp {
         bare: &[u8],
         access: &env_seam::Access,
     ) -> Result<hash::DirectoryEntry, Failure> {
+        let key = hash::Key::new(bare);
         for &scope in scopes {
             match env_seam::admit(self, scope, bare, access)? {
                 env_seam::Admission::Replaced(value) => {
                     return Ok(hash::DirectoryEntry::Found(value));
                 }
                 env_seam::Admission::Permitted(admitted) => {
-                    let handle = {
-                        let model = self.environment_model();
-                        env_seam::directory(&model.directories, admitted, scope)
+                    let at = match scope {
+                        EnvScope::Local => 0,
+                        EnvScope::Environment => 1,
                     };
-                    match hash::directory_get(self, handle, bare)? {
+                    let (handle, view) = {
+                        let model = self.environment_model();
+                        (
+                            env_seam::directory(&model.directories, admitted, scope),
+                            model.views[at],
+                        )
+                    };
+                    let (entry, fresh) = hash::directory_get(self, handle, key, view.as_ref())?;
+                    if let Some(fresh) = fresh
+                        && let Some(model) = self.environment.as_mut()
+                    {
+                        model.views[at] = Some(fresh);
+                    }
+                    match entry {
                         hash::DirectoryEntry::Absent => {}
                         entry => return Ok(entry),
                     }
@@ -2317,8 +2335,13 @@ mod tests {
                 .copied()
                 .filter(|name| {
                     matches!(
-                        hash::directory_get(&mut interp, directory, name.as_bytes()),
-                        Ok(hash::DirectoryEntry::Owed(_))
+                        hash::directory_get(
+                            &mut interp,
+                            directory,
+                            hash::Key::new(name.as_bytes()),
+                            None
+                        ),
+                        Ok((hash::DirectoryEntry::Owed(_), _))
                     )
                 })
                 .collect();

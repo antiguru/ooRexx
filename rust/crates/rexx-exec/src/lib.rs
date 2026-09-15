@@ -1934,6 +1934,9 @@ struct Interp {
     /// entry, a directory put or removal, and an array write, which is how a
     /// monitor's destination queue changes.
     route_generation: u64,
+    /// Bumped by every write to a mapped collection's pool entries, which is
+    /// what a `dispatch::hash::StoreView` is valid against.
+    store_generation: u64,
     /// `SAY`'s route as of [`Interp::route_generation`]: `None` writes
     /// straight to the buffer. Deciding it afresh costs 764 instructions a
     /// line -- measured, `sayloop` at 1.40x -- and both halves of that are
@@ -2400,6 +2403,7 @@ impl Interp {
             bootstrap_stderr: None,
             bootstrap_stdout: None,
             route_generation: 0,
+            store_generation: 0,
             output_route: None,
             collect_at: COLLECT_FLOOR,
             depth: 0,
@@ -5370,6 +5374,7 @@ impl Interp {
             bootstrap_stderr: _,
             bootstrap_stdout: _,
             route_generation: _,
+            store_generation: _,
             // The route it names is `.local`'s own entry, which that global
             // root holds; this caches the decision, not the object.
             output_route: _,

@@ -111,3 +111,8 @@ lang/local_stdque_removal.rex
 # Surface Task 1 fix round: a Directory's index reads (allIndexes, makeArray,
 # DO OVER) name a setMethod entry without running it; item reads run it.
 lang/directory_enumeration_runs_no_method.rex
+
+# Surface Task 1 fix round: a .NAME read of .local or .environment answers
+# what the directory holds after puts that grow it, removals, empty, a
+# setMethod entry and an UNKNOWN method set and unset.
+lang/environment_symbol_after_store_changes.rex

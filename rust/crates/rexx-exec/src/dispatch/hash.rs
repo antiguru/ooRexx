@@ -208,6 +208,7 @@ fn holds_hash_store(interp: &mut Interp, receiver: ObjRef) -> bool {
 }
 
 /// A hash store's three arrays and its two scalars, read out together.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct Store {
     indexes: ObjRef,
     items: ObjRef,
@@ -268,6 +269,7 @@ fn install_store(interp: &mut Interp, receiver: ObjRef, half: Half, buckets: usi
     interp.set_pool_variable(receiver, scope, half.next, next);
     interp.set_pool_variable(receiver, scope, half.buckets, buckets_value);
     interp.set_pool_variable(receiver, scope, half.free, free_value);
+    bump_store_generation(interp);
     Store {
         indexes,
         items,
@@ -400,6 +402,13 @@ fn set_free(interp: &mut Interp, receiver: ObjRef, half: Half, free: usize) {
     let scope = hash_scope(interp);
     let value = interp.counted(free);
     interp.set_pool_variable(receiver, scope, half.free, value);
+    bump_store_generation(interp);
+}
+
+/// Marks every [`StoreView`] taken before this call as stale. Every write to
+/// a store's pool entries calls it.
+fn bump_store_generation(interp: &mut Interp) {
+    interp.store_generation = interp.store_generation.wrapping_add(1);
 }
 
 fn slot_at(interp: &Interp, array: ObjRef, slot: usize) -> Result<Option<ObjRef>, Failure> {
@@ -941,6 +950,7 @@ fn set_unknown_method(interp: &mut Interp, receiver: ObjRef, held: Option<ObjRef
     let scope = hash_scope(interp);
     let value = held.unwrap_or(ObjRef::NIL);
     interp.set_pool_variable(receiver, scope, UNKNOWN_METHOD, value);
+    bump_store_generation(interp);
 }
 
 /// Whether the name is the one `setMethod` keeps outside the table.
@@ -2183,32 +2193,96 @@ pub(crate) enum DirectoryEntry {
     Absent,
 }
 
-/// `DirectoryClass::get` over a string-keyed store, by the name's bytes: the
-/// contents, then the method table, then the unknown method.
-pub(crate) fn directory_get(
-    interp: &mut Interp,
-    directory: ObjRef,
-    name: &[u8],
-) -> Result<DirectoryEntry, Failure> {
+/// A reading of one directory's pool entries: both halves and the unknown
+/// method, valid while no store's pool entries have been written since.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct StoreView {
+    generation: u64,
+    contents: Store,
+    methods: Option<Store>,
+    unknown: Option<ObjRef>,
+}
+
+fn read_view(interp: &mut Interp, directory: ObjRef) -> Result<StoreView, Failure> {
     let parts = read_parts(interp, directory);
-    let store = match parts.contents.store(interp)? {
+    let contents = match parts.contents.store(interp)? {
         Some(store) => store,
         None => store_of(interp, directory)?,
     };
-    if let Some(slot) = text_slot(interp, &store, name)? {
+    let methods = parts.methods.store(interp)?;
+    Ok(StoreView {
+        generation: interp.store_generation,
+        contents,
+        methods,
+        unknown: parts.unknown,
+    })
+}
+
+/// A name a string-keyed store is searched for, with its string hash.
+#[derive(Clone, Copy)]
+pub(crate) struct Key<'a> {
+    name: &'a [u8],
+    hash: u64,
+}
+
+impl<'a> Key<'a> {
+    pub(crate) fn new(name: &'a [u8]) -> Key<'a> {
+        Key {
+            name,
+            hash: super::string_hash(name),
+        }
+    }
+}
+
+/// `DirectoryClass::get` over a string-keyed store, by the name's bytes: the
+/// contents, then the method table, then the unknown method.
+///
+/// `view` is a reading of `directory`'s pool from an earlier call, used when
+/// still valid. Returns the answer, and the reading this call made when it
+/// could not use `view`.
+pub(crate) fn directory_get(
+    interp: &mut Interp,
+    directory: ObjRef,
+    key: Key<'_>,
+    view: Option<&StoreView>,
+) -> Result<(DirectoryEntry, Option<StoreView>), Failure> {
+    if let Some(view) = view
+        && view.generation == interp.store_generation
+    {
+        debug_assert_eq!(
+            Some(*view),
+            read_view(interp, directory).ok(),
+            "a StoreView was reused after its directory's pool changed without a \
+             bump_store_generation"
+        );
+        return Ok((view_get(interp, directory, key, view)?, None));
+    }
+    let view = read_view(interp, directory)?;
+    Ok((view_get(interp, directory, key, &view)?, Some(view)))
+}
+
+fn view_get(
+    interp: &mut Interp,
+    directory: ObjRef,
+    key: Key<'_>,
+    view: &StoreView,
+) -> Result<DirectoryEntry, Failure> {
+    let name = key.name;
+    let store = view.contents;
+    if let Some(slot) = text_slot(interp, &store, key)? {
         let item = slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL);
         return Ok(match interp.owed_entry_owner(item) {
             Some(owner) => DirectoryEntry::Owed(owner),
             None => DirectoryEntry::Found(item),
         });
     }
-    if let Some(methods) = parts.methods.store(interp)?
-        && let Some(slot) = text_slot(interp, &methods, name)?
+    if let Some(methods) = view.methods
+        && let Some(slot) = text_slot(interp, &methods, key)?
         && let Some(stored) = slot_at(interp, methods.items, slot)?
     {
         return run_stored_method(interp, directory, name, stored, &[]).map(DirectoryEntry::Found);
     }
-    let Some(stored) = parts.unknown else {
+    let Some(stored) = view.unknown else {
         return Ok(DirectoryEntry::Absent);
     };
     let index = interp.text(name);
@@ -2219,13 +2293,13 @@ pub(crate) fn directory_get(
 
 /// The slot holding `name` in a string-keyed store, found without building
 /// an index object.
-fn text_slot(interp: &mut Interp, store: &Store, name: &[u8]) -> Result<Option<usize>, Failure> {
-    let mut slot = (super::string_hash(name) % store.buckets as u64) as usize;
+fn text_slot(interp: &mut Interp, store: &Store, key: Key<'_>) -> Result<Option<usize>, Failure> {
+    let mut slot = (key.hash % store.buckets as u64) as usize;
     while slot < store.total {
         let Some(held) = slot_at(interp, store.indexes, slot)? else {
             return Ok(None);
         };
-        if interp.to_text(held).as_ref() == name {
+        if interp.to_text(held).as_ref() == key.name {
             return Ok(Some(slot));
         }
         slot = link_at(interp, store, slot)?;
