@@ -240,3 +240,30 @@ recorded in the ledger, and the commits are left as they are.
   `RexxStart`; `CLASSIC` to Phase 10, since `orxclassic` and `orxclassic1` import the function,
   subcom, queue and macro-space registries. Recorded in the roadmap's rows 9 and 10 and in
   `phase-4-exclusions.txt`. `METHOD`, `CONVERSION` and `FUNCTION` stay this phase's.
+
+## 8. The gate readings after the rounds
+
+Recorded from the run, unpiped, at `476347f52`, the commit that lands the documentation pass, the
+amended surface plan and the copied records. The tree was clean before and after the run and HEAD
+did not move. Both failing sets were enumerated.
+
+| gate | command | exit | figures |
+|---|---|---|---|
+| G1 | `cargo fmt --all --check` | 0 | |
+| G2 | `cargo clippy -j 4 --workspace --all-targets -- -D warnings` | 0 | |
+| G3 | `cargo test -j 4 --release --workspace --no-fail-fast -- --test-threads=8` | 101 | 2524 passed / 5 failed |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --workspace --no-fail-fast -- --test-threads=8` | 101 | 2524 / 6 |
+| G5 | `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` | 0 | **545 of 545** |
+
+The corpus differential is 545 of 545 in both G4 and G5, against 531 of 531 in section 6. The
+report-mode figures did not move: `base/keyword` 892 of 896 bodies, `base/bif` 4992 of 4999 value
+rows and 186 of 186 raise rows, the assertion table 4247 of 4259 rows.
+
+**Both failing sets are section 6's, member for member.** G3's is the three `ir::drive` counter
+tests, `a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop` and
+`the_l0_subset_passes_again_under_collect_on_every_allocation`; G4's is that set plus
+`concept_and_class_gate_table`. No member joined or left during the rounds; the same sets were
+read at `cf92ff4fb` and `233d2766d` on the way.
+
+Miri is not among these gates: `rexx-api`'s lib tests ran under Stacked Borrows during the rounds
+from a scratch toolchain, as section 7 and `phase-4-exclusions.txt` record.
