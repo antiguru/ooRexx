@@ -148,6 +148,12 @@ pub fn locate() -> Oracle {
 }
 
 impl Oracle {
+    /// The directory holding the oracle's own libraries, its extensions
+    /// among them.
+    pub fn lib_dir(&self) -> &Path {
+        &self.lib_dir
+    }
+
     /// Runs `path` through the oracle under the memory limit, from `path`'s
     /// own directory. See the module doc for the mechanism and how it was
     /// verified.

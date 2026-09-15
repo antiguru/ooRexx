@@ -12,6 +12,11 @@
 //! A library routine's imported `Routine` object, asked for in a loop, under
 //! the address-space cap the corpus gives the oracle. The corpus runs this
 //! crate in-process and uncapped, so it cannot see a run that exceeds it.
+//!
+//! It loads the oracle checkout's `librxmath.so`. On a machine without that
+//! checkout it fails naming what is missing: it calls
+//! [`support::oracle::locate`], as `licensed_divergences.rs` and
+//! `datetime_zone.rs` do, and checks the library the same way.
 
 mod support;
 
@@ -19,7 +24,7 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use support::oracle::{ORACLE_MEMORY_LIMIT_KIB, oracle_root};
+use support::oracle::{ORACLE_MEMORY_LIMIT_KIB, locate};
 
 /// **A loop of `importedRoutines` sends runs to completion under the cap.**
 /// Measured, 400,000 sends under `::requires 'rxmath' LIBRARY` and `ulimit -v
@@ -28,6 +33,15 @@ use support::oracle::{ORACLE_MEMORY_LIMIT_KIB, oracle_root};
 /// output lost.
 #[test]
 fn imported_routines_sent_in_a_loop_run_under_the_oracles_memory_cap() {
+    let oracle = locate();
+    let library = oracle.lib_dir().join("librxmath.so");
+    assert!(
+        library.is_file(),
+        "the oracle's librxmath.so is missing at {}, which this test loads; \
+         without it the run below would fail for that reason and not for \
+         the one this test is about",
+        library.display()
+    );
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("the clock is after the epoch")
@@ -53,7 +67,7 @@ fn imported_routines_sent_in_a_loop_run_under_the_oracles_memory_cap() {
         ))
         .arg(env!("CARGO_BIN_EXE_rexx-run"))
         .current_dir(&dir)
-        .env("LD_LIBRARY_PATH", oracle_root().join("lib"))
+        .env("LD_LIBRARY_PATH", oracle.lib_dir())
         .stdin(Stdio::null())
         .output()
         .expect("the capped run spawns");
