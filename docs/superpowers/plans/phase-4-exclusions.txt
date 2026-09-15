@@ -4813,3 +4813,170 @@ possible and the citation is what was checked.
   raised (Z1 empties the tables both write into; the oracle side was not
   probed), and identity (==) between such a package and its
   re-translation. Recorded as unmeasured, not as agreeing.
+
+RECORDED BY SURFACE TASK 2 AND ITS FIX ROUNDS, NOT FIXED (2026-09-15). Each
+transcript below was run in a fresh directory per side, the oracle under the
+standard wrapper and this crate's release rexx-run at 273e8f608, both with the
+oracle checkout's build/lib on LD_LIBRARY_PATH, three descriptors to three
+files; <dir> is the run directory. None is a regression of the task: each
+answers the same on the task's base or on the revision before the round that
+found it.
+
+  A .ROUTINES ENTRY PUT FROM REXX IS NEVER FOUND BY A CALL. .ROUTINES is the
+  package's own routines table on the oracle (RexxActivation.cpp:2877-2879,
+  settings.parentCode->getRoutines()), which findLocalRoutine reads; here it
+  is a string table ~addRoutine writes beside Interp::routines, and a put on
+  it reaches the string table alone. ext.rex beside a program with a
+  ::routine bar (so the table exists):
+    say 'first' ext(1)
+    .routines~put(.routine~new('x', 'return "put" arg(1)'), 'EXT')
+    say 'second' ext(2)
+    .routines~put(.routine~new('y', 'return "putfoo" arg(1)'), 'FOO')
+    say 'foo' foo(3)        (under signal on syntax)
+    oracle: first ext 1 / second put 2 / foo putfoo 3, rc 0
+    this:   first ext 1 / second ext 2 / raised SYNTAX 43, rc 0
+  Silent, and the same at the task's base e7cb210d9. NO OWNER: the package
+  tables as live lookup tables are the package model's, which no open phase
+  names.
+
+  Directory~setMethod AND self~setMethod OF A loadExternalMethod ANSWER
+  REFUSE, naming Phase 5, at the setMethod send.
+    m = .Method~loadExternalMethod('m', 'LIBRARY rxregexp RegExp_Pos')
+    d = .Directory~new; d~setMethod('POS', m); say 'set'; say d~pos()
+    oracle: set, then rc 168, *-* Compiled method "POS" with scope ".NIL". /
+            Error 88.901:  Missing argument; argument 1 is required.
+    this:   stdout empty, rc 120, rexx-exec: a one-off method whose body this
+            crate does not hold is not implemented (Phase 5)
+  The same for self~setMethod inside a method (installed / rc 168 against
+  rc 120). Loud. NO OWNER: Phase 5 is closed, and the ruling that gave its
+  Directory debt to Phase 8 named the L2 blocker's methods, not setMethod.
+
+  A CONDITION OBJECT'S TRACEBACK LACKS THE Compiled routine LINE for a
+  native routine that raised, internal and library routines alike:
+    signal on syntax name s1; say filespec('Z', 'a')
+    s1: do line over condition('O')['TRACEBACK']; say 'filespec' line; end
+    (and the same over RxCalcSqrt('x') after loadLibrary('rxmath'))
+    oracle: filespec *-* Compiled routine "FILESPEC". / filespec 2 *-* say ...
+            rxmath *-* Compiled routine "RXCALCSQRT". / rxmath 9 *-* say ...
+    this:   filespec 2 *-* say ... / rxmath 9 *-* say ...
+  rc 0 both; the untrapped report carries the line on both (the fix
+  re-review's t1 to t5). Silent, and the same at the task's base. NO OWNER:
+  the traceback family, with the entries above it.
+
+  A LABEL INSIDE A DO BLOCK RENDERS AS A REFUSAL, NOT AS ERROR 47.
+    say 'start' / do i = 1 to 2 / lbl: / say i / end
+    oracle: stdout empty, rc 209, 3 *-* lbl: / Error 47 running <dir>/main.rex
+            line 3:  Unexpected label. / Error 47.2:  Labels are not allowed
+            within a DO/LOOP block; found "LBL".
+    this:   stdout empty, rc 120, rexx-exec: 47.2: Unexpected label.
+  Loud. NO OWNER: a translation error's report, which is not the boundary's
+  and which no phase names.
+
+  A CALL INSIDE A METHOD'S ARGUMENT LIST IS RESOLVED AGAIN ON EVERY PASS,
+  where the oracle keeps what findRoutine found at the instruction. With a
+  ::routine foo answering 'old' and, after the first pass,
+  .context~package~addRoutine('FOO', r) where r answers 'new':
+    say i .array~of(foo())[1]
+    oracle: 1 old / 2 old        this: 1 old / 2 new        rc 0 both
+  A parse value foo(), a WHEN foo() = 'old' and a traced assignment agree on
+  both passes. Silent, and the same before fix round 2. NO OWNER: which
+  expression shapes compile to a call op with a site is the IR's.
+
+  AN ERROR INSIDE AN EXTERNAL FILE LOSES THE CALLER'S TRACEBACK LINE, first
+  call included. ext.rex is return 1 / arg(1):
+    say 'start' / call ext 0
+    oracle: start, rc 214, 1 *-* return 1 / arg(1) / 2 *-* call ext 0 /
+            Error 42 running <dir>/ext.rex line 1: ... / Error 42.3: ...
+    this:   start, rc 214, the same without 2 *-* call ext 0
+  The same for say ext(0) and for a call in a loop. NO OWNER: the traceback
+  family.
+
+  INTERPRET OF A DIRECTIVE REPORTS 99.914 WITHOUT THE DIRECTIVE'S LINE.
+    say 'start' / interpret "::requires 'pub.cls'"
+    oracle: start, rc 157, 2 *-* ::requires 'pub.cls' / 2 *-* interpret ... /
+            Error 99 ... / Error 99.914:  INTERPRET data must not contain
+            directive instructions.
+    this:   start, rc 157, the same without 2 *-* ::requires 'pub.cls'
+  NO OWNER: the traceback family.
+
+  Routine~new WITH A CONTEXT, measured again for this task (see "Method~new
+  AND Routine~new REFUSE ANY THIRD ARGUMENT" above):
+    r = .Routine~new('r', .array~of('return rxcalcsqrt(16)', "::requires
+      'rxmath' LIBRARY"), .context~package); say r~call   (main declares
+      ::routine rxcalcsqrt answering 'main' arg(1))
+    oracle: main 16, rc 0
+    this:   rc 120, method "NEW" of class "Routine" is not implemented
+            (Phase 5)
+  Owner as that entry records: none.
+
+  A KEPT RESOLUTION IS PER COMPILED BODY, AND A BODY HAS ONE PER TRACE
+  SETTING (plan.rs, chunks cached under (BodyKey, ChunkTrace)). An internal
+  routine sub: calling foo() is called twice, the second time under trace r,
+  with addRoutine('FOO') between:
+    oracle: 1 main / 2 main, the traced line >>> "2 main"
+    this:   1 main / 2 added, the traced line >>> "2 added"
+  The same for a merged library routine (1 4 / 2 4 against 2 added). rc 0
+  both; the untraced control agrees. Silent, and the same before fix round
+  2. NO OWNER: the chunk cache's keying is the IR's.
+
+  A NAMESPACE-QUALIFIED CALL WALKS NO PARENT PACKAGE. The oracle's
+  findPublicRoutine walks a context-built package's parent's public and
+  merged tables. p = .Package~new('pp', source, .context~package), added as
+  NS, main declaring ::routine mainpub public and requiring pub.cls (public
+  frompub):
+    oracle: ns parent public mainpub / ns parent merged frompub
+    this:   ns parent public raised SYNTAX 43 / ns parent merged raised
+            SYNTAX 43
+  A private routine of the parent raises 43 on both; p~findPublicRoutine
+  agrees. rc 0 both. NO OWNER: Interp::namespace_routine reads the
+  namespace package's own two tables, and no phase names the namespace walk.
+
+  Routine~new WITH NO CONTEXT GETS NO PARENT PACKAGE, where Routine~newFile
+  with none gets the caller's; the oracle gives both the calling frame's
+  package (BaseExecutable.cpp:252-260).
+    r = .Routine~new('x', 'return mainr()'); say 'new' r~call
+    oracle: new mainr / find a Routine, rc 0
+    this:   stdout empty, rc 213, 43.1 Could not find routine "MAINR".
+  NO OWNER: Routine~new's context handling is Phase 5 debt with the entry
+  above.
+
+  Package~addRoutine REFUSES A LIBRARY Routine OBJECT.
+    p~addRoutine('SQ2', p~findRoutine('RXCALCSQRT')); say 'added' sq2(16)
+    (under signal on syntax, ::requires 'rxmath' LIBRARY)
+    oracle: added 4, rc 0
+    this:   raised SYNTAX 88 88.914, rc 0
+  install_routine accepts only a Routine whose record names a Rexx body.
+  NO OWNER: no surface task names ~addRoutine.
+
+  A ::ROUTINE ... EXTERNAL "LIBRARY ..." DIRECTIVE'S Routine OBJECT IS NOT
+  THE LIBRARY'S SHARED ONE. The oracle stores the library package's routine
+  object for the directive (DirectiveParser.cpp:2691-2693), the object
+  findRoutine and loadExternalRoutine answer for the entry; here those two
+  answer one object and the directive its own.
+    say 'directive' (p~findRoutine('SQ')~identityHash ==
+      p~findRoutine('RXCALCSQRT')~identityHash) sq(16)
+    oracle: directive 1 4        this: directive 0 4        rc 0 both
+  NO OWNER: the directive's object is recorded as the directive, which
+  ~source, ~package and the flag readers read, and sharing it is new
+  mechanism no task names.
+
+  THE Unfilled REFUSAL NAMES ITS OWNER TWICE.
+    ::method v external "LIBRARY orxmethod TestInterpreterVersion" on a
+    class t; say 'before'; v = .t~new~v
+    oracle: before / version 328448 / ..., rc 0
+    this:   before, rc 120, rexx-exec: Phase 8 owes the FromNative conversion
+            for REXX_VALUE_size_t (33) is not implemented (Phase 8)
+  The host appends the owner to a message that already names it
+  (dispatch/library.rs's Unfilled arm). OWNER: the surface plan's Task 3,
+  which fills the rows this refusal names; a row it leaves unfilled still
+  renders the doubled text.
+
+  NO RUNNING GATE SEES THE IMPORTED LIBRARY ROUTINE OBJECT'S ROOT. With the
+  RootSet::add_global that roots it deleted (then in merged_routine_object,
+  now Interp::library_routine_object), library_routine_imported.rex goes red
+  under collect-on-every-allocation (rc 120, a message send to a value whose
+  object is no longer live), measured by fix round 2's re-review with a
+  scratch harness over every phase-8.txt library row. The gated corpus does
+  not run in that mode, and collect_stress's L0 test, which would, stops
+  first (the entry above, "L0 TEST STOPS BEFORE ANY phase-8.txt PROGRAM").
+  NO OWNER, as that entry records for the panic.
