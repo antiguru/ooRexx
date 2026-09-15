@@ -1310,8 +1310,8 @@ enum Primitive {
     /// A `Body::Native` whose class is `.Routine` -- what a `.ROUTINES` entry
     /// holds. Measured, `.routines~r~class` is `The Routine class`.
     Routine,
-    /// A `Body::Native` whose class is `.Directory` -- `.environment` and
-    /// `.local`. Measured, `.environment~class~id` is `Directory`.
+    /// A `Body::Native` whose class is `.Directory` -- a condition object, a
+    /// package's `~local`, a security manager's argument directory.
     Directory,
     /// A `Body::Native` whose class is `.StringTable` or a subclass of it --
     /// `.methods`, `.routines` and `.resources`, and `.TraceObject~new`.
@@ -6352,10 +6352,9 @@ fn native_hash_collection_new(
     // **A `Directory` a program makes is a collection, not the environment.**
     // `NativeObject`'s map holds its keys already uppercased, by its callers,
     // and a `.Directory~new` does not: measured, `d['lower'] = 1` leaves
-    // `allIndexes` reading `lower` and `d['LOWER']` answering `.nil`. So that
-    // map is what `.environment` and `.local` are built on -- they are
-    // `native_instance`s the bootstrap makes and keeps -- and a collection
-    // gets the object-keyed store with a string-key protocol on top.
+    // `allIndexes` reading `lower` and `d['LOWER']` answering `.nil`. So a
+    // collection gets the object-keyed store with a string-key protocol on
+    // top.
     hash::native_hash_new(interp, cleared, receiver, args)
 }
 
@@ -10490,11 +10489,12 @@ mod tests {
     #[test]
     fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
         // **`.environment` has none left**, which is why `.local`'s is the
-        // only one asked about. Every read that answers or compares
-        // `STDQUE`'s item refuses, and each reaches the refusal through a
-        // different path.
+        // only one asked about. Each read below answers or compares
+        // `STDQUE`'s item, and each reaches the refusal through a different
+        // path.
         for source in [
             "say .local['STDQUE']\n",
+            "say .context~package~findClass('stdque')\n",
             "say .local~entry('stdque')\n",
             "say .local~stdque\n",
             "say .local~allItems~items\n",
@@ -10503,6 +10503,7 @@ mod tests {
             "say .local~index('x')\n",
             "say .local~removeItem('x')\n",
             "say .local~remove('STDQUE')\n",
+            "say .local~removeEntry('stdque')\n",
             "do n over .local~allItems; end\n",
         ] {
             let (code, stdout, stderr) = run_source(source);

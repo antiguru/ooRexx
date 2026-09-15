@@ -684,7 +684,7 @@ fn find_class(
 ) -> Result<Option<ObjRef>, Failure> {
     let program = package_of(interp, receiver)?;
     let name = upper_name_argument(interp, args)?;
-    Ok(Some(interp.package_find_class(program, &name)))
+    Ok(Some(interp.package_find_class(program, &name)?))
 }
 
 /// `PackageClass::findPublicClassRexx`: this package's own public classes,

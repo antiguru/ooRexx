@@ -581,9 +581,7 @@ impl Interp {
             // case), rendering the object's own name.
             Body::Stem { name, .. } => Cow::Borrowed(&**name),
             // `stringValue()`, which for every native class but one is the
-            // `~objectName` the object carries -- the two directories were
-            // given theirs by the prologue and the rest derive theirs from a
-            // class id (`environment.rs` builds both). `NativeObject`'s own
+            // `~objectName` the object carries. `NativeObject`'s own
             // `string_value` field carries where the two part and why.
             Body::Native(native) => Cow::Borrowed(native.string_value()),
             // `MutableBuffer::stringValue` (`classes/MutableBufferClass.cpp:740`):

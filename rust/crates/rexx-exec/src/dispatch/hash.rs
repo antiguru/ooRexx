@@ -888,7 +888,7 @@ fn remove_at(
     slot: usize,
     previous: Option<usize>,
 ) -> Result<Option<ObjRef>, Failure> {
-    let item = item_at(interp, store, slot)?;
+    let item = slot_at(interp, store.items, slot)?;
     let next = link_at(interp, store, slot)?;
     if slot < store.buckets {
         // A bucket slot cannot be freed, so the chain is closed by copying
@@ -1075,17 +1075,41 @@ fn method_count(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure>
     Ok(walk_in(interp, &store)?.len())
 }
 
+/// Whether a removal hands the item it takes back to the program.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Removal {
+    Answered,
+    Discarded,
+}
+
 /// `DirectoryClass::remove`: answers what `get` would -- which may run a
 /// method, or the unknown method -- and then drops the name from both halves.
+///
+/// An [`Removal::Answered`] removal refuses an owed entry; a discarded one
+/// takes it without reading it.
 fn take_merged(
     interp: &mut Interp,
     receiver: ObjRef,
     index: ObjRef,
+    removal: Removal,
 ) -> Result<Option<ObjRef>, Failure> {
     if method_store(interp, receiver)?.is_none() && unknown_method(interp, receiver).is_none() {
+        if removal == Removal::Answered {
+            let (store, found) = probe(interp, receiver, index)?;
+            if let Some(slot) = found.found {
+                item_at(interp, &store, slot)?;
+            }
+        }
         return take(interp, receiver, index);
     }
-    let old = merged_get(interp, receiver, index)?;
+    // `get` runs a method only where the contents miss, so a contents entry
+    // that is discarded needs no read.
+    let old = if removal == Removal::Discarded && probe(interp, receiver, index)?.1.found.is_some()
+    {
+        None
+    } else {
+        merged_get(interp, receiver, index)?
+    };
     take(interp, receiver, index)?;
     take_in(interp, receiver, METHODS, index)?;
     Ok(old)
@@ -1353,7 +1377,7 @@ fn native_hash_remove(
     let index = index_argument(args, 1)?;
     let index = validated_index(interp, receiver, index)?;
     Ok(Some(
-        take_merged(interp, receiver, index)?.unwrap_or(ObjRef::NIL),
+        take_merged(interp, receiver, index, Removal::Answered)?.unwrap_or(ObjRef::NIL),
     ))
 }
 
@@ -1369,7 +1393,7 @@ fn native_hash_remove_item(
     let wanted = super::collection::item_argument(args)?;
     for (index, item) in pairs(interp, receiver)? {
         if super::collection::same_item(interp, wanted, item)? {
-            take_merged(interp, receiver, index)?;
+            take_merged(interp, receiver, index, Removal::Discarded)?;
             return Ok(Some(item));
         }
     }
@@ -2287,7 +2311,7 @@ fn native_hash_set_entry(
     match args.get(1).copied().flatten() {
         Some(value) => insert(interp, receiver, name, Some(value))?,
         None => {
-            take_merged(interp, receiver, name)?;
+            take_merged(interp, receiver, name, Removal::Discarded)?;
         }
     }
     Ok(None)
@@ -2360,7 +2384,7 @@ fn native_hash_remove_entry(
     }
     let name = entry_name(interp, args)?;
     Ok(Some(
-        take_merged(interp, receiver, name)?.unwrap_or(ObjRef::NIL),
+        take_merged(interp, receiver, name, Removal::Answered)?.unwrap_or(ObjRef::NIL),
     ))
 }
 

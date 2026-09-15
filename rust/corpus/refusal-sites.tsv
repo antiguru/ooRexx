@@ -119,7 +119,7 @@ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:396	off-send-surface	
 Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:389	off-send-surface	-	-	-
 Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:376	off-send-surface	-	-	-
 Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:400	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
-Loud	environment_entry	send	crates/rexx-exec/src/lib.rs:372	diverges	yes	directory entry	.local['STDQUE'], and any read of .local's items before STDQUE is replaced
+Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:372	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
 Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1639	off-send-surface	-	-	-
 Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:363	off-send-surface	-	-	-
 Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1430	off-send-surface	-	-	-

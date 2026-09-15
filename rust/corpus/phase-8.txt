@@ -103,3 +103,7 @@ lang/local_directory_surface.rex
 # Surface Task 1: a string-keyed collection takes each index as a string
 # argument, so an index with no string value is 88.909.
 lang/directory_index_string_value.rex
+
+# Surface Task 1 fix round: .local's STDQUE taken out by setEntry with no value
+# and by setMethod, neither of which reads the queue it held.
+lang/local_stdque_removal.rex

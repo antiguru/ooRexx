@@ -5277,7 +5277,8 @@ impl Interp {
             package_locals: _,
             // Handles into the class registry, so class identities again.
             object_model: _,
-            // `.environment` and `.local` are globals; the rest are classes.
+            // `.environment`, `.local` and the owed placeholders are globals;
+            // the rest are classes.
             environment: _,
             // A lookup index. Both halves are held by the class itself --
             // the key is the class, the value is in its `owned` list.

@@ -599,8 +599,7 @@ impl Interp {
     /// sent to the string `".OUTPUT"` would be a wrong answer. The routes need
     /// the plain question -- is there an entry -- which is what
     /// `directory_lookup` answers, and it is reused rather than reopened so the
-    /// seam still has one read chokepoint. An owed entry is no entry here: it
-    /// is owed only before `Interp::mint_local_directory` runs.
+    /// seam still has one read chokepoint. An owed entry answers `None`.
     ///
     /// `.local` only: measured, `RexxActivation::resolveStream` and
     /// `Activity::sayOutput` both read `getLocalEnvironment` and never
@@ -787,9 +786,9 @@ impl Interp {
             ))));
         };
         self.roots.push_temp(object);
-        // A `StringTable` keeps its entries in a bucket table, not in the
-        // `Body::Native` map `.local` uses, so the put goes through the
-        // message. `t[i] = v` sends `t~"[]="(v, i)`, so the value leads.
+        // A `StringTable` keeps its entries in a bucket table, so the put goes
+        // through the message. `t[i] = v` sends `t~"[]="(v, i)`, so the value
+        // leads.
         for (name, value) in [
             (b"THREAD".as_slice(), Some(b"1".as_slice())),
             (b"INVOCATION".as_slice(), Some(b"0".as_slice())),
@@ -1833,32 +1832,36 @@ impl Interp {
 
     /// `PackageClass::findClass` (`classes/PackageClass.cpp:1085`): the whole
     /// search order a package resolves a class name over, from `package`.
+    ///
+    /// Refuses a name `.local` or `.environment` holds on the oracle and this
+    /// crate does not build.
     pub(crate) fn package_find_class(
         &mut self,
         package: Option<ProgramId>,
         upper: &[u8],
-    ) -> ObjRef {
+    ) -> Result<ObjRef, Failure> {
         if let Some(found) = self.installed_class_of(package, upper) {
-            return found;
+            return Ok(found);
         }
         if let Some(found) = self.package_public_class_of(package, upper) {
-            return found;
+            return Ok(found);
         }
         let local = self.package_local(match package {
             Some(program) => Package::Program(program),
             None => Package::Rexx,
         });
         if let Some(found) = self.native_map_entry(local, upper) {
-            return found;
+            return Ok(found);
         }
-        if let Ok(hash::DirectoryEntry::Found(found)) = self.directory_lookup(
+        match self.directory_lookup(
             &[EnvScope::Local, EnvScope::Environment],
             upper,
             &env_seam::Access::Resolve,
-        ) {
-            return found;
+        )? {
+            hash::DirectoryEntry::Found(found) => Ok(found),
+            hash::DirectoryEntry::Owed(owner) => Err(Loud::environment_entry(upper, owner).into()),
+            hash::DirectoryEntry::Absent => Ok(ObjRef::NIL),
         }
-        ObjRef::NIL
     }
 
     /// `PackageClass::findPublicClass` (`classes/PackageClass.cpp:1013`) at
