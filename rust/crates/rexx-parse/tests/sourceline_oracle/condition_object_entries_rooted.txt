@@ -1,0 +1,20 @@
+count 19
+/* A condition object's entries stay alive while it is built: a SYNTAX
+   condition's MESSAGE and ERRORTEXT read back after many allocations, with
+   an array growing between the traps. */
+a = .array~new
+do i = 1 to 3000
+  a[i] = copies('x', 40) || i
+  call probe
+end
+say 'done' i length(m)
+exit
+
+probe: procedure expose m
+  signal on syntax
+  y = 1/0
+  return
+syntax:
+  c = condition('O')
+  m = c~message c~errortext
+  return

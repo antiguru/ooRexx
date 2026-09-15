@@ -73,13 +73,8 @@ fn run_directory(rel_path: &str) -> PathBuf {
         .join(rel_path.replace('/', "__"))
 }
 
-/// **Thirty-six programs left this set in Phase 5j, and none joined it.**
-/// A class became an ordinary arena object, so declaring one is an
-/// allocation and the stress mode has something to fire on. Every one of the
-/// thirty-six contains a `::CLASS`, `~subclass` or `~mixinClass`, derived by
-/// reading them rather than assumed from the names. The direction is the
-/// reassuring one: a program *joining* this set would have had an allocation
-/// silently removed.
+/// The programs that allocate nothing under the stress mode, so that one losing
+/// an allocation, or gaining one, is a decision rather than a silent change.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "gate-tables/directives/attribute__external__subkeyword.rex",
     "gate-tables/directives/method__external__subkeyword.rex",
@@ -97,7 +92,6 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/class_rexx_defined_inherit.rex",
     "lang/class_rexx_defined_library_define.rex",
     "lang/class_rexx_defined_library_inherit.rex",
-    "lang/class_rexx_defined_library_no_mutation.rex",
     "lang/class_rexx_defined_uninherit.rex",
     "lang/class_subclass_cycle.rex",
     "lang/class_subclass_not_found.rex",
@@ -123,8 +117,24 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/forward_outside_method.rex",
     "lang/if_else_chain.rex",
     "lang/iterate_from_select.rex",
+    "lang/library_attribute_entry_missing.rex",
+    "lang/library_method_entry_missing.rex",
     "lang/library_method_traceback.rex",
     "lang/library_method_traceback_nested.rex",
+    "lang/library_native_refusal_stem_routine.rex",
+    "lang/library_required_attribute_entry_missing.rex",
+    "lang/library_required_method_entry_missing.rex",
+    "lang/library_required_method_library_missing.rex",
+    "lang/library_required_routine_entry_missing.rex",
+    "lang/library_requires_install_order.rex",
+    "lang/library_requires_missing.rex",
+    "lang/library_routine_caller_blame.rex",
+    "lang/library_routine_entry_missing.rex",
+    "lang/library_routine_external_site_twice.rex",
+    "lang/library_routine_name_as_written.rex",
+    "lang/library_routine_package_blame.rex",
+    "lang/library_routine_quoted_name.rex",
+    "lang/library_routine_rexx_package_missing.rex",
     "lang/message_assignment_form.rex",
     "lang/message_instruction.rex",
     "lang/message_send_argument_not_a_string.rex",
@@ -144,6 +154,7 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/select_when_bodies.rex",
     "lang/string_caseless.rex",
     "lang/string_compare.rex",
+    "lang/trace_debug_skip.rex",
     "lang/trace_numeric_request.rex",
     "lang/trace_output.rex",
     "lang/trace_results.rex",

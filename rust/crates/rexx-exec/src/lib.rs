@@ -5687,6 +5687,16 @@ impl Interp {
                 .chain(suspended.iter().map(Box::as_ref))
                 .filter_map(|activation| activation.context_object),
         );
+        // The trapped condition's object, which a `CALL ON` handler's
+        // activation and every callee that inherits its `CONDITION()` hold
+        // once the queue has handed it over, and nothing else does.
+        out.extend(
+            running
+                .iter()
+                .map(std::ops::Deref::deref)
+                .chain(suspended.iter().map(Box::as_ref))
+                .filter_map(|activation| activation.condition.as_ref()?.object),
+        );
     }
 
     /// The collection itself, kept out of [`Interp::collect_if_due`]'s body so

@@ -4788,15 +4788,14 @@ possible and the citation is what was checked.
   unsafe on stable. NO OWNER: the gate's toolchain is stable by decision
   (rust/rust-toolchain.toml; the roadmap's "No nightly features").
 
-  collect_stress's L0 TEST STOPS BEFORE ANY phase-8.txt PROGRAM. It panics
-  at dispatch.rs:1506 on lang/condition_object_syntax.rex, a phase-7.txt
-  program, before the list reaches phase-8.txt (the fix re-review's I1;
-  the residual re-review's section 3.3); that is G3's pre-existing failing
-  member the_l0_subset_passes_again_under_collect_on_every_allocation.
-  phase-8.txt under collect-on-every-allocation was checked once, by a
-  scratch run narrowed to that file (F11: no plain-versus-stress mismatch,
-  924 collections), and by the two in-crate stress tests in
-  dispatch/library.rs. NO OWNER recorded for the panic.
+  collect_stress's L0 TEST STOPS BEFORE ANY phase-8.txt PROGRAM. CLOSED by
+  the surface plan's Task 3 fix round 1 (2026-09-15), which made
+  the_l0_subset_passes_again_under_collect_on_every_allocation pass. It
+  panicked at dispatch.rs:1506 (later :1510) on
+  lang/condition_object_syntax.rex, a phase-7.txt program, before the list
+  reached phase-8.txt (the fix re-review's I1; the residual re-review's
+  section 3.3). The causes, each fixed, are the entry "A CONDITION OBJECT'S
+  ENTRIES WERE UNROOTED WHILE IT WAS BUILT" in the Task 3 block below.
 
   ir_recorded's LIBRARY CHECK SEES ONE FAILURE SHAPE (X5, R10). Its
   assertion fails a corpus program whose stderr carries an untrapped
@@ -4986,10 +4985,10 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   under collect-on-every-allocation (rc 120, a message send to a value whose
   object is no longer live), measured at 9ff11e465 by fix round 2's re-review
   with a scratch harness over every phase-8.txt library row, and not re-taken
-  since. The gated corpus does
-  not run in that mode, and collect_stress's L0 test, which would, stops
-  first (the entry above, "L0 TEST STOPS BEFORE ANY phase-8.txt PROGRAM").
-  NO OWNER, as that entry records for the panic.
+  since. CLOSED by Task 3's fix round 1, which lets collect_stress's L0 test
+  reach phase-8.txt: with that add_global deleted, the test fails naming
+  lang/library_routine_imported.rex (plain exit 0, the stress run rc 120)
+  and nothing else, measured 2026-09-15.
 
   RECORDED BY THE RE-REVIEW OF SURFACE TASK 2'S FIX ROUND 3 (2026-09-15),
   each measured at cb13f0033 on both sides and on 9ff11e465, the probes under
@@ -5047,7 +5046,7 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   internal label of the same name a call reaches was raised by the task and
   never probed. Unmeasured, so no answer is recorded here. NO OWNER.
 
-  RECORDED BY SURFACE TASK 3 (2026-09-15), NOT FIXED:
+  RECORDED BY SURFACE TASK 3 AND ITS FIX ROUND (2026-09-15):
 
   A TRAPPED REFUSAL OF A NATIVE METHOD'S ARGUMENT CARRIES THE CALLER'S
   POSITION, PROGRAM AND TRACEBACK. With pk.cls declaring ::method int
@@ -5060,23 +5059,43 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   The same for 88.907 and 88.904 through TestIntArg('x') and
   TestNonnegativeWholeNumberArg(-1); rc 0 both. The untrapped report agrees
   on all three descriptors (corpus/lang/library_native_refusal_*.rex), so
-  only the condition object differs. The 88.901 comes from the missing
-  argument check, which Task 3 did not change; not run against an earlier
-  binary. NO OWNER: the condition object's fields for a lineless delivery
-  are the traceback family's, like the Compiled routine entry above.
+  only the condition object differs. Pre-existing: the Task 3 review ran
+  the base 5d84dd8cb and head 034c1c7d7 over 88.905, 88.921 and 88.901,
+  and both print byte-identical condition objects. NO OWNER: the
+  condition object's fields for a lineless delivery are the traceback
+  family's, like the Compiled routine entry above, which is this entry's
+  routine half.
 
-  condition('O')~message ON A TRAPPED SYNTAX PANICS UNDER
-  COLLECT-ON-EVERY-ALLOCATION, with no native call in the program:
-    signal on syntax / y = 1/0 / exit / syntax: / say 'caught'
-    condition('O')~message
-  panics a live value at dispatch.rs:1510 under
-  run_program_collect_every_alloc, measured on edcf1ff40 through a scratch
-  lib test; the same program printing condition('O')~code instead runs (rc 0,
-  caught 42.3). The assertion is the one collect_stress's L0 test fails at
-  (the entry "L0 TEST STOPS BEFORE ANY phase-8.txt PROGRAM" above); whether
-  this is that failure's whole cause was not measured.
-  library_native_integer_arguments.rex, _object_arguments.rex and
-  _special_arguments.rex, which print condition messages, panic in that mode
-  too, as does Task 2's library_routine_argument_errors.rex; the in-crate
-  stress test of the conversion rows reads codes only. NO OWNER, as that entry
-  records for the panic.
+  A CONDITION OBJECT'S ENTRIES WERE UNROOTED WHILE IT WAS BUILT, AND TWO
+  MORE MISSING ROOTS STOOD BEHIND IT. CLOSED by Task 3's fix round 1, each
+  in an ordinary run where one was reached.
+  * Interp::build_condition_object gathered each entry's value in a plain
+    Vec and rooted none before its PUT sends. An ordinary run reached it
+    (the Task 3 host review's p/ord1): a loop growing an array while a
+    procedure traps 1/0 and reads c~message c~errortext was oracle rc 0
+    "done 20001" and rc 101 here, panicking a live value at
+    dispatch.rs:1510, at 5d84dd8cb and 034c1c7d7 alike. Under
+    collect-on-every-allocation three lines were enough: signal on syntax /
+    y = 1/0 / syntax: say condition('O')~message. Fixed by rooting each
+    value as it is made. Witnesses:
+    corpus/lang/condition_object_entries_rooted.rex and condition.rs's unit
+    test.
+  * Interp::resolve_stream built a stream's name and sent it to .Stream~new
+    unrooted. With the first fix alone the L0 test reported five programs
+    at rc 120 for it (address_with_stream, executable_context,
+    sys_file_functions, security_manager, call_miss_not_cached). An
+    ordinary run reached it: 40,000 passes of stream(name, 's') on an
+    unopened name were oracle rc 0 "done 40001 UNKNOWN" and rc 120 here at
+    c00d18052. Fixed by rooting the name; witnessed by run/tests.rs's unit
+    test (the ordinary-run loop takes 47 s under collect-on-every-allocation,
+    too slow for the corpus that mode runs).
+  * A CALL ON handler's condition object, once delivered, was held by the
+    handler's activation alone, which Interp::object_roots did not walk
+    (condition_object.rex at rc 120: a say, then a call to a routine reading
+    condition('O')). Not reached in an ordinary run in two attempts of
+    40,000 NOTREADY traps. Fixed by walking each activation's trapped
+    condition object beside its context object; witnessed by condition.rs's
+    second unit test.
+  The three in-crate conversion-row witnesses and Task 2's
+  library_routine_argument_errors.rex, which read condition messages, run
+  unchanged under that mode since the first fix.

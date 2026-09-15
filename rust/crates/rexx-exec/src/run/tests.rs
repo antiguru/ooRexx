@@ -8297,3 +8297,32 @@ fn a_started_method_that_raises_has_an_error_and_reraises_at_result() {
         )
     );
 }
+
+/// **The name a stream builtin looks up is rooted while the stream object is
+/// built from it.** `STREAM`'s state and description queries keep nothing in
+/// the table, so each builds a fresh object from the name; under a collection
+/// at every allocation both answer as under none. The stdout is the
+/// oracle's.
+#[test]
+fn a_stream_builtins_name_survives_a_collection_at_every_allocation() {
+    let text = b"say stream('a_stream_name_long_enough_for_the_heap.txt', 's')\n\
+        say stream('a_stream_name_long_enough_for_the_heap.txt', 'd')\n"
+        .to_vec();
+    let name = "/tmp/stream_name_rooted.rex";
+    let plain = crate::run_program(name, text.clone(), crate::Invocation::none());
+    assert_eq!(
+        plain.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&plain.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&plain.stdout),
+        "UNKNOWN\nUNKNOWN:\n"
+    );
+    let swept = crate::run_program_collect_every_alloc(name, text, crate::Invocation::none());
+    assert_eq!(swept.exit_code, plain.exit_code);
+    assert_eq!(swept.stdout, plain.stdout);
+    assert_eq!(swept.stderr, plain.stderr);
+    assert!(swept.collections > 0, "the stress mode did not collect");
+}

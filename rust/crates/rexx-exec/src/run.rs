@@ -9151,6 +9151,7 @@ impl Interp {
             return Err(Loud::environment_symbol(b".STREAM", "Phase 5").into());
         };
         let argument = self.text(name);
+        self.roots.push_temp(argument);
         let caller = self.caller();
         let built = self
             .send_message(class, b"NEW", None, &[Some(argument)], caller)?

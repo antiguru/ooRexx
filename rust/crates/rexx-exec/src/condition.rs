@@ -67,14 +67,20 @@ impl Interp {
         let syntax = raised.condition == "SYNTAX";
         let (frames, traceback, frame_line) = self.condition_frames()?;
 
+        // Each value is rooted as it is made: the allocations after it, and the
+        // `PUT` sends below, can collect any that are not.
         let mut entries: Vec<(&[u8], ObjRef)> = Vec::new();
         let condition = self.text(raised.condition.as_bytes());
+        self.roots.push_temp(condition);
         entries.push((key::CONDITION, condition));
         let description = self.text(raised.description.as_deref().unwrap_or(b""));
+        self.roots.push_temp(description);
         entries.push((key::DESCRIPTION, description));
         let instruction = self.text(if call { b"CALL" } else { b"SIGNAL" });
+        self.roots.push_temp(instruction);
         entries.push((key::INSTRUCTION, instruction));
         let package = self.condition_package();
+        self.roots.push_temp(package);
         entries.push((key::PACKAGE, package));
         let position = if raised.position != 0 {
             // Captured at the raise, which is the only correct source when
@@ -88,18 +94,24 @@ impl Interp {
                 None => self.counted(self.clause_state.line()),
             }
         };
+        self.roots.push_temp(position);
         entries.push((key::POSITION, position));
         let program = self.text(self.program_path.clone().as_bytes());
+        self.roots.push_temp(program);
         entries.push((key::PROGRAM, program));
         // Always `0` here: this crate re-raises through `RAISE PROPAGATE`
         // without rebuilding the object, so nothing sets it to 1 yet.
         let propagated = self.text(b"0");
+        self.roots.push_temp(propagated);
         entries.push((key::PROPAGATED, propagated));
+        self.roots.push_temp(frames);
         entries.push((key::STACKFRAMES, frames));
+        self.roots.push_temp(traceback);
         entries.push((key::TRACEBACK, traceback));
 
         if let Some(rc) = raised.rc.as_deref() {
             let rc = self.text(rc);
+            self.roots.push_temp(rc);
             entries.push((key::RC, rc));
         }
         // The same bytes as `RC`, which is why `Raised` carries a flag
@@ -108,16 +120,20 @@ impl Interp {
             && let Some(rc) = raised.rc.as_deref()
         {
             let result = self.text(rc);
+            self.roots.push_temp(result);
             entries.push((key::RESULT, result));
         }
         if syntax {
             let code = self.text(format!("{}.{}", raised.number, raised.sub).as_bytes());
+            self.roots.push_temp(code);
             entries.push((key::CODE, code));
             let errortext = raised.message(raised.number, 0);
             let errortext = self.text_built(errortext);
+            self.roots.push_temp(errortext);
             entries.push((key::ERRORTEXT, errortext));
             let message = raised.message(raised.number, raised.sub);
             let message = self.text_built(message);
+            self.roots.push_temp(message);
             entries.push((key::MESSAGE, message));
         }
         // **Rendered bytes, not the object the raise named.** `Raised`
@@ -127,12 +143,16 @@ impl Interp {
         // are text to begin with; an approximation for `USER`.
         match self.pending_additional.take() {
             // The raise's own object, whatever its class.
-            Some(object) => entries.push((key::ADDITIONAL, object)),
+            Some(object) => {
+                self.roots.push_temp(object);
+                entries.push((key::ADDITIONAL, object));
+            }
             // A `SYNTAX` condition always carries the entry, as the Array its
             // substitutions make -- empty for one raised with none, measured
             // as an `Array` of no items rather than `.NIL`.
             None if syntax => {
                 let additional = self.additional_array(&raised.additional);
+                self.roots.push_temp(additional);
                 entries.push((key::ADDITIONAL, additional));
             }
             None => {}
@@ -246,5 +266,81 @@ impl Interp {
         self.roots.pop_frame(frame);
         self.roots.push_temp(array);
         array
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// **A SYNTAX condition object's entries survive the allocations that
+    /// build it.** Under a collection at every allocation, `MESSAGE`,
+    /// `ERRORTEXT` and `PROGRAM` read back as under none; the oracle prints
+    /// the same line. Each of those is long enough to live in the arena, where
+    /// `CODE` is not, which is why reading `CODE` alone could not see a
+    /// missing root.
+    #[test]
+    fn a_syntax_condition_objects_entries_survive_a_collection_at_every_allocation() {
+        let text = b"signal on syntax\n\
+            y = 1/0\n\
+            exit\n\
+            syntax:\n\
+            c = condition('O')\n\
+            say c~code '|' c~message '|' c~errortext '|' (c~program == .context~package~name)\n"
+            .to_vec();
+        let name = "/tmp/condition_entries.rex";
+        let plain = crate::run_program(name, text.clone(), crate::Invocation::none());
+        assert_eq!(
+            plain.exit_code,
+            0,
+            "{}",
+            String::from_utf8_lossy(&plain.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&plain.stdout),
+            "42.3 | Arithmetic overflow; divisor must not be zero. | Arithmetic overflow/underflow. \
+             | 1\n"
+        );
+        let swept = crate::run_program_collect_every_alloc(name, text, crate::Invocation::none());
+        assert_eq!(swept.exit_code, plain.exit_code);
+        assert_eq!(swept.stdout, plain.stdout);
+        assert_eq!(swept.stderr, plain.stderr);
+        assert!(swept.collections > 0, "the stress mode did not collect");
+    }
+
+    /// **A `CALL ON` handler's condition object is a root for as long as the
+    /// handler runs**, a routine it calls included, once the trap queue has
+    /// handed it to the handler's activation. The stdout is the oracle's; the
+    /// output before the nested call is what gives a collection somewhere to
+    /// fall between the handover and the read.
+    #[test]
+    fn a_call_on_handlers_condition_object_survives_a_collection_at_every_allocation() {
+        let text = b"call on error name onerror\n\
+            \"sh -c 'exit 3'\"\n\
+            exit\n\
+            onerror:\n\
+            say 'a command condition'\n\
+            call report\n\
+            return\n\
+            report:\n\
+            o = condition('O')\n\
+            say o~class~id\n\
+            return\n"
+            .to_vec();
+        let name = "/tmp/handler_condition.rex";
+        let plain = crate::run_program(name, text.clone(), crate::Invocation::none());
+        assert_eq!(
+            plain.exit_code,
+            0,
+            "{}",
+            String::from_utf8_lossy(&plain.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&plain.stdout),
+            "a command condition\nDirectory\n"
+        );
+        let swept = crate::run_program_collect_every_alloc(name, text, crate::Invocation::none());
+        assert_eq!(swept.exit_code, plain.exit_code);
+        assert_eq!(swept.stdout, plain.stdout);
+        assert_eq!(swept.stderr, plain.stderr);
+        assert!(swept.collections > 0, "the stress mode did not collect");
     }
 }
