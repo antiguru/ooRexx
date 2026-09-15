@@ -121,22 +121,21 @@ lang/environment_symbol_after_store_changes.rex
 # raises what the lookup raises when a package installs, not class-not-found.
 lang/directive_class_environment_raises.rex
 
-# Surface Task 2: a library's typed routines answer by name through every load
-# site -- ::REQUIRES ... LIBRARY, Package~loadLibrary, ::ROUTINE EXTERNAL,
-# loadExternalRoutine, loadExternalMethod and a refused ::METHOD EXTERNAL --
-# from packages loaded before and after the load, and before an external file
-# of the same name.
+# Surface Task 2: a library's typed routines answer by name after a load through
+# each of these, from packages loaded before and after the load, and before an
+# external file of the same name.
 lang/library_routine_requires.rex
 lang/library_routine_load_library.rex
 lang/library_routine_directive.rex
 lang/library_routine_load_external.rex
 lang/library_routine_load_external_method.rex
 lang/library_routine_method_directive_load.rex
+lang/library_routine_attribute_directive_load.rex
 lang/library_routine_after_external_file.rex
 
 # Surface Task 2: what the routine boundary refuses, and where it is reported:
 # the caller's clause for code no directive bound, the binding package with no
-# line for code one did, the name as the call passed it.
+# line for code one did, under the name the call passed.
 lang/library_routine_argument_errors.rex
 lang/library_routine_caller_blame.rex
 lang/library_routine_package_blame.rex

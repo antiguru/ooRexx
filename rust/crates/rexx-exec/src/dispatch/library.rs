@@ -201,12 +201,12 @@ impl Interp {
                 .raised
                 .expect("a host answering Raised holds the condition it raised")),
             Ok(value) => Ok(value),
-            Err(refused) => Err(self.refusal(refused, packaged)),
+            Err(refused) => Err(self.refusal(refused, packaged, frame.method)),
         }
     }
 
     /// What the boundary's own refusal reports.
-    fn refusal(&mut self, refused: Refused, packaged: bool) -> Failure {
+    fn refusal(&mut self, refused: Refused, packaged: bool, method: bool) -> Failure {
         let mut raised = match refused {
             Refused::MissingArgument { position } => Raised::missing_native_argument(position),
             Refused::NoStringValue { position } => {
@@ -221,8 +221,12 @@ impl Interp {
                 Raised::native_argument_not_positive(position, &found)
             }
             Refused::TooManyArguments { expected } => Raised::too_many_external_arguments(expected),
-            Refused::Signature => Raised::incorrect_method_signature(),
-            Refused::ResultSignature => Raised::incorrect_method_result_signature(),
+            Refused::Signature | Refused::ResultSignature => {
+                let number = refused
+                    .error_number(method)
+                    .expect("a signature refusal carries its number");
+                Raised::incorrect_native_signature(number, refused == Refused::Signature)
+            }
             Refused::ClassicStyle => {
                 return Loud {
                     message: crate::owned_message(&format!("{refused}"), Some("Phase 10")),
@@ -879,7 +883,7 @@ mod tests {
     fn a_refusal_before_the_call_is_lineless_and_one_after_it_is_not() {
         let mut interp = Interp::new();
         let mut lineless =
-            |refused: Refused, packaged: bool| match interp.refusal(refused, packaged) {
+            |refused: Refused, packaged: bool| match interp.refusal(refused, packaged, true) {
                 Failure::Raised(raised) => raised.delivery.lineless,
                 _ => panic!("every condition-shaped refusal is a raise"),
             };
@@ -892,6 +896,35 @@ mod tests {
         // directive has bound is `Error 88 running <the caller> line 2`.
         assert!(!lineless(Refused::MissingArgument { position: 1 }, false));
         assert!(!lineless(Refused::TooManyArguments { expected: 2 }, false));
+    }
+
+    /// A signature refusal is 93.968 in a method and 40.918 in a routine.
+    /// Measured through a forged routine library, oracle rc 216: a routine
+    /// declaring `CSELF` is `Error 40.918:  Invalid native function signature
+    /// specification.` with no line where a directive bound it, and a result
+    /// word carrying the optional bit the same with the sending clause's line.
+    #[test]
+    fn a_signature_refusal_is_numbered_for_a_method_or_a_routine() {
+        let mut interp = Interp::new();
+        let mut numbered = |refused: Refused, method: bool| {
+            let frame = crate::NativeFrame {
+                owner: rexx_core::ObjRef::NIL,
+                scope: rexx_core::ObjRef::NIL,
+                method,
+                locals: rexx_api::handles::Table::new(),
+                raised: None,
+            };
+            match interp.settle_native_call(Err(refused), frame, true) {
+                Err(Failure::Raised(raised)) => {
+                    (raised.number, raised.sub, raised.delivery.lineless)
+                }
+                _ => panic!("a signature refusal is a raise"),
+            }
+        };
+        assert_eq!(numbered(Refused::Signature, true), (93, 968, true));
+        assert_eq!(numbered(Refused::Signature, false), (40, 918, true));
+        assert_eq!(numbered(Refused::ResultSignature, true), (93, 968, false));
+        assert_eq!(numbered(Refused::ResultSignature, false), (40, 918, false));
     }
 
     /// A number past either end of a double's range converts to what

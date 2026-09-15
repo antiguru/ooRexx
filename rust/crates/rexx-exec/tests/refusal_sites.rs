@@ -649,16 +649,6 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
         "93.903",
         &["missing_argument_named", "missing_method_argument"],
     ),
-    // One number and two deliveries: a parameter the boundary refuses before
-    // the call names the declaring package, a result word refused after it
-    // names the sending clause.
-    (
-        "93.968",
-        &[
-            "incorrect_method_result_signature",
-            "incorrect_method_signature",
-        ],
-    ),
 ];
 
 /// The rows sharing an `answer` are the recorded ones, so the table's own

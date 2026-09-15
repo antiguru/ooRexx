@@ -329,21 +329,23 @@ impl Raised {
         raised
     }
 
-    /// 93.968: a native method whose declared parameters the boundary cannot
-    /// honour (`NativeActivation::reportSignatureError`,
-    /// `execution/NativeActivation.cpp:190-193`). No substitutions. Measured,
-    /// oracle rc 163: `Error 93 running <declaring package>:` with no line.
-    pub(crate) fn incorrect_method_signature() -> Raised {
-        let mut raised = Raised::syntax(93, 968, Vec::new());
-        raised.delivery.lineless = true;
+    /// A native method's or routine's signature the boundary cannot honour
+    /// (`NativeActivation::reportSignatureError`,
+    /// `execution/NativeActivation.cpp:190-193`): `number` is what
+    /// `Failure::error_number` answers, 93968 for a method and 40918 for a
+    /// routine. No substitutions. `before_call` is a parameter refused before
+    /// the extension ran, reported against the declaring package with no line
+    /// (measured, rc 163 and 216); a result word refused after it names the
+    /// sending clause's line.
+    pub(crate) fn incorrect_native_signature(number: u32, before_call: bool) -> Raised {
+        let mut raised = if number == 40918 {
+            Raised::syntax(40, 918, Vec::new())
+        } else {
+            debug_assert_eq!(number, 93968, "a signature refusal is 93.968 or 40.918");
+            Raised::syntax(93, 968, Vec::new())
+        };
+        raised.delivery.lineless = before_call;
         raised
-    }
-
-    /// 93.968 for a declared return type `valueToObject` cannot convert,
-    /// which the oracle raises once the extension has run: measured, rc 163,
-    /// `Error 93 running <sender> line <n>:`.
-    pub(crate) fn incorrect_method_result_signature() -> Raised {
-        Raised::syntax(93, 968, Vec::new())
     }
 
     /// 88.922: more arguments than a `LIBRARY REXX` entry point's own

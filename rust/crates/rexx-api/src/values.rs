@@ -168,6 +168,8 @@ impl Failure {
             // 88.905".
             Failure::InvalidDouble { .. } => Some(88921),
             Failure::NotPositive { .. } => Some(88905),
+            // Measured 2026-09-15 against the oracle through a forged routine
+            // library: a routine declaring `CSELF` answers "Error 40.918".
             Failure::Signature | Failure::ResultSignature => {
                 Some(if method { 93968 } else { 40918 })
             }

@@ -4550,18 +4550,27 @@ those methods; Moritz ruled on 2026-09-14 that Phase 8 does, as Task 1 of
 docs/superpowers/plans/2026-09-14-phase-8-surface.md. See
 docs/superpowers/plans/phase-8-l2.md.
 
-THE ROUTINE HALF OF THE NATIVE CALLING PROTOCOL: CLOSED by Task 2 of
-docs/superpowers/plans/2026-09-14-phase-8-surface.md. A loaded library's typed
-routines answer by name from every package through each load site, and
-::ROUTINE EXTERNAL "LIBRARY REXX ..." binds the REXX package's routine table;
-the corpus/phase-8.txt rows under "Surface Task 2" are the witnesses, and the
-task's report carries the measurements. Two forms still refuse, each naming
-its owner: a ROUTINE_CLASSIC_STYLE row of a package's routine table (Phase 10,
-with rxsubcom and the registered-function API; no library this crate may
-load ships one, so only rexx-api's unit test reaches it), and ::ROUTINE
-EXTERNAL "REGISTERED ..." (Phase 10: measured 2026-09-15, the oracle writes
-the name into the rxapi daemon's function registry before resolving it, and
-a later process's rxfuncquery sees it).
+THE ROUTINE HALF OF THE NATIVE CALLING PROTOCOL: BUILT by Task 2 of
+docs/superpowers/plans/2026-09-14-phase-8-surface.md and its fix round. A
+loaded library's typed routines answer by name from every package through
+each load site, and ::ROUTINE EXTERNAL "LIBRARY REXX ..." binds the REXX
+package's routine table; the corpus/phase-8.txt rows under "Surface Task 2"
+are the witnesses, and the task's report carries the measurements. What still
+refuses on the routine path, each naming its owner:
+  ROUTINE_CLASSIC_STYLE rows of a package's routine table, and ::ROUTINE
+  EXTERNAL "REGISTERED ...": Phase 10, with rxsubcom and the RXAPI function
+  registry (measured 2026-09-15, the oracle writes the name into the rxapi
+  daemon's function registry before resolving it, and a later process's
+  rxfuncquery sees it). No library this crate may load ships a classic row,
+  so only rexx-api's unit test reaches it.
+  A conversion row a routine's signature declares that is not filled yet:
+  the surface plan's Task 3 (for example rxmath's MathLoadFuncs and
+  MathDropFuncs, whose CSTRING result refuses loudly).
+  An interface member an extension calls that is not written yet: the
+  surface plan's Task 5 (for example RxCalcSin with a units argument it does
+  not accept, which refuses loudly naming NewStringFromAsciiz where the
+  oracle raises 88.916). A member answering a data pointer, and the Throw
+  members, still abort the process naming themselves.
 
 THREE TRACE AND BLAME DIVERGENCES THE L2 WALK FOUND, WITH TRANSCRIPTS IN
 phase-8-l2.md SECTION 5. Two predate Phase 8: >I>/<I< names the running
