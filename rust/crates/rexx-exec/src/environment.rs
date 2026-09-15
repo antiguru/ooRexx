@@ -2389,7 +2389,8 @@ mod tests {
                 "AT" | "[]" | "ENTRY" | "HASENTRY" | "HASINDEX" | "REMOVE" | "REMOVEENTRY"
                 | "UNSETMETHOD" => "'ZZ'",
                 "HASITEM" | "INDEX" | "REMOVEITEM" => "'zz value'",
-                "PUT" | "[]=" | "SETENTRY" => "'zz value', 'ZZ'",
+                "PUT" | "[]=" => "'zz value', 'ZZ'",
+                "SETENTRY" => "'ZZ', 'zz value'",
                 "SETMETHOD" => "'ZZ', 'return \"zz method\"'",
                 "UNKNOWN" => "'ZZ', .array~new",
                 other => panic!("Directory's table holds {other}, which this test has no call for"),
