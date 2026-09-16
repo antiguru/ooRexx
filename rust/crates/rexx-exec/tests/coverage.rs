@@ -891,7 +891,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // with a `::CLASS` naming an unresolvable superclass below it; and the
     // control that says each directive kind keeps its own table of names.
     // `::RESOURCE` has no row and cannot -- `every_corpus_program_tiles`
-    // rejects a `::RESOURCE` body byte by byte -- so `run/tests.rs`'s
+    // rejects a `::RESOURCE` body byte by byte -- so `run/tests/routines.rs`'s
     // `a_duplicate_resource_name_is_refused_and_a_distinct_one_is_not` is its
     // sole instrument.
     "lang/class_duplicate_class.rex",
