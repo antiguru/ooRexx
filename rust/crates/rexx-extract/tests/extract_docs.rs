@@ -201,6 +201,36 @@ fn no_construction_program_embeds_this_checkouts_own_location() {
     }
 }
 
+/// Every single-quoted literal in `text` that begins `/`, as Rexx quotes a
+/// string literal (`'...'`). No entry needs an escaped quote inside one.
+fn absolute_path_literals(text: &str) -> impl Iterator<Item = &str> {
+    text.split('\'')
+        .skip(1)
+        .step_by(2)
+        .filter(|literal| literal.starts_with('/'))
+}
+
+/// Gate table C's own principle is that a probe never needs a real file
+/// except through a receiver that locates it relative to its own running
+/// path, so a committed construction naming an absolute path that exists is
+/// a path some contributor's own machine happened to have, not a
+/// deliberate placeholder.
+#[test]
+fn every_absolute_path_literal_in_a_construction_program_does_not_exist() {
+    for (class, program) in classes::CONSTRUCTION_PROGRAMS {
+        for literal in absolute_path_literals(program) {
+            assert!(
+                !Path::new(literal).exists(),
+                "{class}'s committed construction {program:?} names the absolute path \
+                 {literal:?}, which exists on this machine. Gate table C's probes never need \
+                 a real file except through the portable, own-path pattern StreamSupplier's \
+                 does, so an absolute literal that exists reads as a path borrowed from \
+                 whoever authored it rather than a deliberate placeholder"
+            );
+        }
+    }
+}
+
 /// The two class row sets have to agree about every class, or a method row's
 /// status says one thing and its class's row another.
 #[test]
