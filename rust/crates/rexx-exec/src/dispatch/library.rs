@@ -221,7 +221,8 @@ impl Interp {
     }
 
     /// Pops the innermost native frame, answering the condition it holds and
-    /// whether it was a method's, and keeps it emptied for the next call.
+    /// whether it was a method's, and keeps its cleared buffers for the next
+    /// call to refill.
     fn pop_native_frame(&mut self) -> (Option<Failure>, bool) {
         let mut frame = self
             .native_handles
@@ -243,19 +244,19 @@ impl Interp {
             Refused::NoStringValue { position } => {
                 Raised::native_argument_needs_a_string_value(position)
             }
-            // `found` is the argument's `stringValue()`, which sends nothing:
-            // measured, oracle, an array is `found "an Array".` for 88.921 and
-            // 88.905 where its string conversion joins its items.
+            // `found` is the argument's `stringValue()`, which is not its string
+            // conversion: measured, oracle, an array is `found "an Array".` for
+            // 88.921 and 88.905 where its string conversion joins its items.
             Refused::InvalidDouble { position, argument } => {
-                let found = self.string_value_text(argument);
+                let found = self.native_found(argument);
                 Raised::native_argument_not_a_double(position, &found)
             }
             Refused::NotPositive { position, argument } => {
-                let found = self.string_value_text(argument);
+                let found = self.native_found(argument);
                 Raised::native_argument_not_positive(position, &found)
             }
             Refused::NotNonnegative { position, argument } => {
-                let found = self.string_value_text(argument);
+                let found = self.native_found(argument);
                 Raised::native_argument_not_nonnegative(position, &found)
             }
             Refused::OutOfRange {
@@ -264,26 +265,26 @@ impl Interp {
                 max,
                 argument,
             } => {
-                let found = self.string_value_text(argument);
+                let found = self.native_found(argument);
                 Raised::native_argument_outside_range(position, min, max, &found)
             }
-            Refused::NotLogical { argument } => {
-                let found = self.string_value_text(argument);
+            Refused::NotLogical { found } => {
+                let found = self.native_found(found);
                 Raised::native_argument_not_logical(&found)
             }
             Refused::NotArray { argument } => {
-                let found = self.string_value_text(argument);
+                let found = self.native_found(argument);
                 Raised::native_argument_not_an_array(&found)
             }
             Refused::NotInstance { position, class } => {
                 Raised::native_argument_not_an_instance(position, class.id())
             }
             Refused::NotPointerString { position, argument } => {
-                let found = self.string_value_text(argument);
+                let found = self.native_found(argument);
                 Raised::native_argument_not_a_pointer(position, &found)
             }
             Refused::NoStem { position, argument } => {
-                let found = self.string_value_text(argument);
+                let found = self.native_found(argument);
                 Raised::native_argument_not_a_stem(method, position, &found)
             }
             Refused::TooManyArguments { expected } => Raised::too_many_external_arguments(expected),
@@ -467,17 +468,17 @@ impl Host for Interp {
         Ok(value.filter(|number| *number <= max))
     }
 
-    fn logical(&mut self, object: ObjRef) -> Result<Option<bool>, Condition> {
+    fn logical(&mut self, object: ObjRef) -> Result<Result<bool, ObjRef>, Condition> {
         if let Decoded::SmallInt(number) = object.decode() {
             return Ok(match number {
-                0 => Some(false),
-                1 => Some(true),
-                _ => None,
+                0 => Ok(false),
+                1 => Ok(true),
+                _ => Err(object),
             });
         }
         let text = self.native_string_conversion(object)?;
         let bytes = self.to_text(text);
-        Ok(crate::eval::logical_value(&bytes))
+        Ok(crate::eval::logical_value(&bytes).ok_or(text))
     }
 
     fn array_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {
@@ -616,6 +617,35 @@ impl Host for Interp {
 }
 
 impl Interp {
+    /// A native refusal's `found` insert: the object's `stringValue()`, which
+    /// for an instance sends `OBJECTNAME` (`interpreter/classes/ObjectClass.cpp:1157`)
+    /// and so runs a class's own `defaultName`, and which falls back to the
+    /// default name where that send raises, as message substitution does
+    /// (`interpreter/concurrency/Activity.cpp:1300-1306`).
+    fn native_found(&mut self, object: ObjRef) -> Vec<u8> {
+        let sends = match self.heap.get(object).map(|held| &held.body) {
+            // A buffer's or a pointer's own `stringValue` override answers
+            // without a send, which is the arm `Interp::to_text` takes for
+            // one; every other instance reaches `RexxObject::stringValue`.
+            Some(Body::Instance {
+                native: Some(state),
+                ..
+            }) => state.buffer().is_none() && state.pointer().is_none(),
+            Some(Body::Instance { .. }) => true,
+            _ => false,
+        };
+        if sends {
+            let caller = self.caller();
+            if let Ok(Some(answered)) =
+                self.send_message(object, super::OBJECTNAME, None, &[], caller)
+            {
+                self.roots.push_temp(answered);
+                return self.string_value_text(answered);
+            }
+        }
+        self.string_value_text(object)
+    }
+
     /// `requestString` for a native argument, holding a raised condition on
     /// the running native frame as [`Host::string_value`] does.
     fn native_string_conversion(&mut self, object: ObjRef) -> Result<ObjRef, Condition> {

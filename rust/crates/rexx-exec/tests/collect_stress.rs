@@ -75,6 +75,9 @@ fn run_directory(rel_path: &str) -> PathBuf {
 
 /// The programs that allocate nothing under the stress mode, so that one losing
 /// an allocation, or gaining one, is a decision rather than a silent change.
+/// Re-derive it by running this test binary: the assertion below prints the set
+/// it observed beside this list whenever the two differ, and a program added to
+/// the corpus that collects nothing belongs here.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "gate-tables/directives/attribute__external__subkeyword.rex",
     "gate-tables/directives/method__external__subkeyword.rex",

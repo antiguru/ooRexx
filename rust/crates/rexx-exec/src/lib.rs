@@ -1729,8 +1729,8 @@ struct Interp {
     /// [`Interp::object_roots`] for exactly as long as the frame is on this
     /// stack, so a handle that outlives its activation resolves to nothing.
     native_handles: Vec<NativeFrame>,
-    /// Frames popped off [`Interp::native_handles`] and emptied, whose buffers
-    /// the next native call reuses.
+    /// Frames popped off [`Interp::native_handles`] with the buffers that held
+    /// objects cleared, whose allocations the next native call reuses.
     native_spares: Vec<NativeFrame>,
     /// Every native library a name has loaded, by the name it was resolved
     /// under -- `PackageManager::packages`
@@ -5545,7 +5545,9 @@ impl Interp {
             package_routine_codes: _,
             routine_generation: _,
             native_handles,
-            // Emptied as each is popped.
+            // A pop clears the buffers that held objects, and a push
+            // overwrites the handle fields before anything reads them, so a
+            // spare names nothing to root.
             native_spares: _,
             special_methods: _,
             out: _,

@@ -5099,3 +5099,61 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   The three in-crate conversion-row witnesses and Task 2's
   library_routine_argument_errors.rex, which read condition messages, run
   unchanged under that mode since the first fix.
+
+  A SYNTAX CONDITION RAISED INSIDE A DEFAULTNAME REACHED THROUGH ~STRING IS
+  NOT TRAPPED, AND ENDS THE PROGRAM. With
+
+    call try .RB~new
+    say 'back'
+    exit
+    try: procedure
+      use arg v
+      signal on syntax name refused
+      r = v~string
+      say 'answered'
+      return
+    refused:
+      say 'trapped' condition('O')~code
+      return
+    ::class RB
+    ::method defaultname
+      raise syntax 40.1
+
+  the oracle prints "trapped 40.1" then "back" at rc 0, and this crate prints
+  nothing on stdout and ends at rc 216 with
+
+        15 *-* raise syntax 40.1
+           *-* Compiled method "OBJECTNAME" with scope "Object".
+           *-* Compiled method "STRING" with scope "Object".
+         7 *-*   r = v~string
+         1 *-* call try .RB~new
+      Error 40 running <path> line 15:  Incorrect call to routine.
+      Error 40.1:  External routine "&1" failed.
+
+  Pre-existing and not the native boundary's: rc 216 with that traceback at
+  the Task 3 base 5d84dd8cb, at 034c1c7d7 and at the fix round's build, and
+  the program uses no extension. The same shape makes a native refusal whose
+  found runs such a DEFAULTNAME end the program where the oracle reports the
+  refusal. NO OWNER: it is a condition delivered out of a generated method's
+  send, which is the trap machinery rather than this phase's surface.
+
+  AN INSTANCE WHOSE STRING METHOD ANSWERS SOMETHING THAT IS NOT A STRING
+  CONVERTS TO ITS OWN DEFAULT NAME HERE, WHERE THE ORACLE CONVERTS THE
+  ANSWER AGAIN. Over a class S whose ::method string returns what ::method
+  init was given:
+
+    y = .S~new(.array~of(1,2)); say 'concat [' || y || ']'; say length(y)
+
+  is "concat [1" / "2]" and 3 on the oracle, "concat [an Array]" and 8 here;
+  RexxObject::requestString (`interpreter/classes/ObjectClass.cpp:1256-1288`)
+  sends primitiveMakeString to what STRING answered and raises NOSTRING with
+  that, where this crate takes the answer's own string value. An ordinary
+  run reaches it with no extension loaded, and it is pre-existing: identical
+  at the Task 3 base 5d84dd8cb. Its one native effect is the string a
+  logical_t refusal finds, 34.901 found "an Array" here against found "1
+  2" on the oracle. (Where the answer is neither a string nor an array the
+  oracle ends up converting the NIL object: `t~logical(.S~new(.object~new))`
+  finds "The NIL object" there and "an Object" here, and `length(z)` over
+  such an object answers a machine address on the oracle -- 140430029559472
+  in one run -- against 9 here, which is not an answer to match.) NO OWNER:
+  the string conversion protocol is not this phase's surface.

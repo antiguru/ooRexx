@@ -230,7 +230,7 @@ impl Host for Interpreter {
         unreachable!("rxregexp's methods declare no unsigned integer")
     }
 
-    fn logical(&mut self, _object: ObjRef) -> Result<Option<bool>, Raised> {
+    fn logical(&mut self, _object: ObjRef) -> Result<Result<bool, ObjRef>, Raised> {
         unreachable!("rxregexp's methods declare no logical_t")
     }
 

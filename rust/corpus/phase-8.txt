@@ -202,12 +202,14 @@ lang/library_routine_resolved_after_arguments.rex
 lang/library_routine_resolved_after_arguments_merge.rex
 lang/library_routine_resolved_after_arguments_search.rex
 
-# Surface Task 3: every conversion row, through orxmethod's and orxfunction's
-# echo methods and routines: the C integer rows at the ends of each range and
-# past them, a string's number rounded to twenty digits, the results a float,
-# double, logical_t, CSTRING, size_t and pointer string come back as, the
-# object, class, array, stem, logical and pointer arguments, and the arguments
-# a signature takes from the call.
+# Surface Task 3: the conversion rows a shipped extension declares, through
+# orxmethod's and orxfunction's echo methods and routines: the C integer rows
+# at the ends of each range and past them, a string's number rounded to twenty
+# digits, the results a float, double, logical_t, CSTRING, size_t and pointer
+# string come back as, the object, class, array, stem, logical and pointer
+# arguments, and the arguments a signature takes from the call. The rows
+# nothing shipped declares are witnessed by the unit tests in
+# crates/rexx-api/tests/values.rs instead.
 lang/library_native_integer_arguments.rex
 lang/library_native_results.rex
 lang/library_native_object_arguments.rex

@@ -615,8 +615,8 @@ fn a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not()
 /// The `answer` values more than one send-surface row carries, with the rows
 /// that carry them.
 const SHARED_ANSWERS: &[(&str, &[&str])] = &[
-    // An extension's `logical_t` argument and a method's own logical
-    // argument, raised from different constructors because the native one is
+    // An extension's `logical_t` argument and the receiver a string method
+    // tests, raised from different constructors because the native one is
     // delivered against the declaring package.
     ("34.901", &["native_argument_not_logical", "not_logical"]),
     // Three constructors for one number, and the check cannot tell them apart

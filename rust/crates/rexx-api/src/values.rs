@@ -122,8 +122,8 @@ pub enum Failure {
         max: i128,
         argument: ObjRef,
     },
-    /// The argument is not exactly `0` or `1`.
-    NotLogical { argument: ObjRef },
+    /// The argument's string value, `found`, is not exactly `0` or `1`.
+    NotLogical { found: ObjRef },
     /// The argument has no single-dimensional array value.
     NotArray { argument: ObjRef },
     /// The argument is not an instance of the class `class` names.
@@ -222,8 +222,9 @@ impl Class {
 pub const MAX_WHOLENUMBER: i64 = 999_999_999_999_999_999;
 
 /// `Numerics::DEFAULT_DIGITS`, the precision a `double` or `float` result is
-/// rendered at: measured, oracle, `TestDoubleArg(2/3)` is `0.66667` under
-/// `NUMERIC DIGITS 5` and `0.666666667` under `20`.
+/// rendered at whatever `NUMERIC DIGITS` is in force: measured, oracle,
+/// `TestDoubleArg('0.6666666666666666')` is `0.666666667` under `NUMERIC
+/// DIGITS 5` and under `20`.
 const RESULT_DIGITS: usize = 9;
 
 impl std::fmt::Display for Failure {
@@ -531,12 +532,13 @@ pub trait Host {
     /// [`Raised`] where the string conversion raised a condition.
     fn unsigned_integer(&mut self, object: ObjRef, max: u64) -> Result<Option<u64>, Raised>;
 
-    /// `object`'s truth value, or `None` where its string value is not exactly
-    /// `0` or `1`: `truthValue` (`interpreter/classes/StringClass.cpp:1475`).
+    /// `object`'s truth value, or where it has none the object that was tested:
+    /// `truthValue` (`interpreter/classes/StringClass.cpp:1475`), which tests
+    /// the string the conversion answered and reports that string.
     ///
     /// # Errors
     /// [`Raised`] where the string conversion raised a condition.
-    fn logical(&mut self, object: ObjRef) -> Result<Option<bool>, Raised>;
+    fn logical(&mut self, object: ObjRef) -> Result<Result<bool, ObjRef>, Raised>;
 
     /// `object` as a single-dimensional array, or `None` where it has none:
     /// `requestArray` and the dimension check `arrayArgument` makes
@@ -1560,10 +1562,10 @@ fn logical_to_native(
     argument: ObjRef,
     _position: usize,
 ) -> Result<Value, Failure> {
-    cx.host
-        .logical(argument)?
-        .map(|truth| Value::Usize(usize::from(truth)))
-        .ok_or(Failure::NotLogical { argument })
+    match cx.host.logical(argument)? {
+        Ok(truth) => Ok(Value::Usize(usize::from(truth))),
+        Err(found) => Err(Failure::NotLogical { found }),
+    }
 }
 
 /// `REXX_VALUE_double` (`NativeActivation.cpp:454`).
@@ -1733,16 +1735,21 @@ fn pointer_string_to_native(
 ///
 /// glibc reads `%p` as `%x` does, through `strtoul`: blanks, a sign, an
 /// optional `0x` or `0X`, then hex digits; a value past the range reads as the
-/// largest, and a `-` negates any other. Measured, oracle, over the address
+/// largest, and a `-` negates any other. It also spells the null pointer
+/// `(nil)` and reads that spelling back. Measured, oracle, over the address
 /// `TestPointerStringValue` answers: `0x0x<hex>`, `0x-<complement>` and
 /// trailing junk convert to it; `0X<hex>`, a leading blank, `0x0x` alone and
-/// `0x--1` refuse; `0x0` converts to something else.
+/// `0x--1` refuse; `0x0` converts to something else. Measured, `sscanf`
+/// itself: `0x(nil)`, `0x (nil)`, `0x(NIL)`, `0x(nil)zz`, `0x0x(nil)` and
+/// `0x0X(nil)` read a null pointer, where `0x-(nil)`, `0x+(nil)`, `0x(nil`,
+/// `0x( nil)`, `0x(nil )` and `0x0x (nil)` convert nothing.
 pub fn pointer_string(text: &[u8]) -> Option<usize> {
     let text = text.split(|byte| *byte == 0).next().unwrap_or_default();
     let mut rest = text.strip_prefix(b"0x")?;
     while let [b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r', tail @ ..] = rest {
         rest = tail;
     }
+    let signed = matches!(rest, [b'-' | b'+', ..]);
     let negative = match rest {
         [b'-', tail @ ..] => {
             rest = tail;
@@ -1754,9 +1761,15 @@ pub fn pointer_string(text: &[u8]) -> Option<usize> {
         }
         _ => false,
     };
+    if !signed && is_nil_spelling(rest) {
+        return Some(0);
+    }
     if let [b'0', b'x' | b'X', tail @ ..] = rest {
         rest = tail;
         if !rest.first().is_some_and(u8::is_ascii_hexdigit) {
+            if !signed && is_nil_spelling(rest) {
+                return Some(0);
+            }
             return None;
         }
     }
@@ -1781,6 +1794,12 @@ pub fn pointer_string(text: &[u8]) -> Option<usize> {
         Some(value) if negative => value.wrapping_neg(),
         Some(value) => value,
     })
+}
+
+/// Whether `text` opens with the `(nil)` glibc prints for a null pointer,
+/// which it matches without regard to case.
+fn is_nil_spelling(text: &[u8]) -> bool {
+    matches!(text.get(..b"(nil)".len()), Some(head) if head.eq_ignore_ascii_case(b"(nil)"))
 }
 
 /// `valueToObject` for the object codes (`NativeActivation.cpp:722`).
@@ -1821,7 +1840,9 @@ fn pointer_string_from_native(
     ))
 }
 
-/// `valueToObject` for `REXX_VALUE_int` (`NativeActivation.cpp:733`).
+/// `valueToObject` for `REXX_VALUE_int` (`NativeActivation.cpp:733`), built
+/// here rather than through the host: a `c_int` is a tagged value, and asking
+/// the host for it would add an allocation point the call does not have.
 ///
 /// # Panics
 /// Never for a `c_int`, whose whole range is a small integer.

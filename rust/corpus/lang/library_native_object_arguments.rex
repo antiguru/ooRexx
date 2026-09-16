@@ -1,7 +1,9 @@
 /* A native argument declared as an object: any object, an array or what
    converts to one, a stem or in a routine a stem's name, an instance of a
    required class, a logical value, and a pointer or its string. What a
-   refusal finds is the argument's own string value, an array's included. */
+   refusal finds is the argument's `stringValue()`, which runs a class's own
+   `defaultName` and for an array is its default name -- except a logical's,
+   which is the string the conversion answered. */
 t = .T~new
 call try "t~object('x')"
 call try "t~object(.nil)"
@@ -27,6 +29,20 @@ call try "t~logical(' 1')"
 call try "t~logical(2)"
 call try "t~logical('1.0')"
 call try "t~logical(.object~new)"
+call try "t~logical(.array~of(1, 2))"
+call try "t~logical(.S~new('viaString'))"
+call try "t~logical(.M~new('viaMake'))"
+call try "t~logical(.S~new(.nil))"
+call try "t~logical(.D~new)"
+call try "t~int(.D~new)"
+d = .D~new
+d~objectName = 'named'
+call try "t~int(d)"
+call try "t~logical(d)"
+call try "t~int(.mutablebuffer~new('buf'))"
+call try "t~bufferlength('abc')"
+call try "t~refvalue('abc')"
+call try "t~refvalue(.object~new)"
 call try "t~logical()"
 call try "t~pointer('abc')"
 call try "t~pointer(.nil)"
@@ -61,6 +77,16 @@ call pointer t, 'nul', '0x'||'00'x||h
 call pointer t, 'number', 12
 call pointer t, 'string method', .S~new(v)
 call pointer t, 'array', .array~of(v)
+call pointer t, 'nil', '0x(nil)'
+call pointer t, 'nil blank', '0x (nil)'
+call pointer t, 'nil upper', '0x(NIL)'
+call pointer t, 'nil junk after', '0x(nil)zz'
+call pointer t, 'nil prefix twice', '0x0x(nil)'
+call pointer t, 'nil upper prefix', '0x0X(nil)'
+call pointer t, 'nil minus', '0x-(nil)'
+call pointer t, 'nil plus', '0x+(nil)'
+call pointer t, 'nil unclosed', '0x(nil'
+call pointer t, 'nil blank after prefix', '0x0x (nil)'
 call try "t~pointerstring('zz')"
 call try "t~pointerstring(.object~new)"
 call try "t~stem(x.)[1]"
@@ -121,6 +147,16 @@ notpointer:
 ::method string
   expose v
   return v
+::class M
+::method init
+  expose v
+  use arg v
+::method makestring
+  expose v
+  return v
+::class D
+::method defaultname
+  return 'a named thing'
 ::class T
 ::method object external "LIBRARY orxmethod TestObjectArg"
 ::method array external "LIBRARY orxmethod TestArrayArg"
@@ -132,3 +168,5 @@ notpointer:
 ::method pointerstring external "LIBRARY orxmethod TestPointerStringArg"
 ::method stem external "LIBRARY orxmethod TestStemArg"
 ::method int external "LIBRARY orxmethod TestIntArg"
+::method bufferlength external "LIBRARY orxmethod TestMutableBufferLength"
+::method refvalue external "LIBRARY orxmethod TestVariableReferenceValue"

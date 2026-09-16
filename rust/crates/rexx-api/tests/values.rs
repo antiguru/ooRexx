@@ -49,6 +49,8 @@ struct Interpreter {
     stems: Vec<(Vec<u8>, ObjRef)>,
     /// The objects `is_instance_of` answers true for, with their class.
     instances: Vec<(ObjRef, Class)>,
+    /// What `logical` reports it tested, where it is not the argument.
+    converted: Vec<ObjRef>,
 }
 
 impl Interpreter {
@@ -68,6 +70,7 @@ impl Interpreter {
             name: Vec::new(),
             stems: Vec::new(),
             instances: Vec::new(),
+            converted: Vec::new(),
         }
     }
 
@@ -207,11 +210,14 @@ impl Host for Interpreter {
         Ok(self.parsed(object)?.filter(|number| *number <= max))
     }
 
-    fn logical(&mut self, object: ObjRef) -> Result<Option<bool>, Raised> {
+    /// Tests the text `object` holds, and answers the first object in
+    /// `converted` where it is not logical, standing in for the string the
+    /// conversion made.
+    fn logical(&mut self, object: ObjRef) -> Result<Result<bool, ObjRef>, Raised> {
         Ok(match self.parsed::<String>(object)?.as_deref() {
-            Some("0") => Some(false),
-            Some("1") => Some(true),
-            _ => None,
+            Some("0") => Ok(false),
+            Some("1") => Ok(true),
+            _ => Err(self.converted.first().copied().unwrap_or(object)),
         })
     }
 
@@ -1363,7 +1369,7 @@ fn every_new_refusal_carries_the_number_the_oracle_raises() {
             88907,
             88907,
         ),
-        (Failure::NotLogical { argument }, 34901, 34901),
+        (Failure::NotLogical { found: argument }, 34901, 34901),
         (Failure::NotArray { argument }, 98913, 98913),
         (
             Failure::NotInstance {
@@ -1735,7 +1741,9 @@ fn a_raise_reading_an_integer_is_the_hosts_condition() {
 // ------------------------------------------------------------ the logical_t
 
 /// Measured, oracle: `TestLogicalArg(3)` is 34.901, and any value but zero
-/// an extension returns is `1`.
+/// an extension returns is `1`. The refusal names the string that was tested,
+/// which for an object converted through `MAKESTRING` or `STRING` is not the
+/// argument: measured, oracle, `.array~of(1,2)` is `found "1<LF>2"`.
 #[test]
 fn the_logical_row_converts_zero_and_one_and_any_non_zero_back_as_one() {
     let mut host = Interpreter::new();
@@ -1743,8 +1751,10 @@ fn the_logical_row_converts_zero_and_one_and_any_non_zero_back_as_one() {
         let converted = convert(&mut host, code::LOGICAL_T, text).expect("a logical");
         assert_eq!(converted.value, Value::Usize(truth));
     }
+    let tested = host.text(b"the string the conversion made");
+    host.converted.push(tested);
     let refused = convert(&mut host, code::LOGICAL_T, "2").expect_err("not logical");
-    assert!(matches!(refused, Failure::NotLogical { .. }), "{refused:?}");
+    assert_eq!(refused, Failure::NotLogical { found: tested });
     for (written, answer) in [(0, &b"0"[..]), (1, b"1"), (5, b"1"), (usize::MAX, b"1")] {
         let object = back(&mut host, code::LOGICAL_T, Value::Usize(written))
             .expect("converts back")
@@ -2042,8 +2052,9 @@ fn the_pointer_string_row_reads_an_address_and_writes_one_back() {
 }
 
 /// The forms measured on the oracle over the address `TestPointerStringValue`
-/// answers, here over `0x7f5d14eeece0`, and what `strtoul` reads past the end
-/// of the range.
+/// answers, here over `0x7f5d14eeece0`, what `strtoul` reads past the end of
+/// the range, and the `(nil)` spelling glibc prints for a null pointer and
+/// reads back.
 #[test]
 fn a_pointer_string_is_read_as_sscanf_reads_0x_p() {
     let hex = "7f5d14eeece0";
@@ -2063,6 +2074,25 @@ fn a_pointer_string_is_read_as_sscanf_reads_0x_p() {
         (format!("0x-{:x}", address.wrapping_neg()), Some(address)),
         (format!("0x-0x{:x}", address.wrapping_neg()), Some(address)),
         ("0x0".to_string(), Some(0)),
+        ("0x(nil)".to_string(), Some(0)),
+        ("0x (nil)".to_string(), Some(0)),
+        ("0x\t(nil)".to_string(), Some(0)),
+        ("0x(NIL)".to_string(), Some(0)),
+        ("0x(Nil)".to_string(), Some(0)),
+        ("0x(nIL)".to_string(), Some(0)),
+        ("0x(nil)zz".to_string(), Some(0)),
+        ("0x(nil)(nil)".to_string(), Some(0)),
+        ("0x0x(nil)".to_string(), Some(0)),
+        ("0x0X(nil)".to_string(), Some(0)),
+        ("0x-(nil)".to_string(), None),
+        ("0x+(nil)".to_string(), None),
+        ("0x-0x(nil)".to_string(), None),
+        ("0x(nil".to_string(), None),
+        ("0x(nill)".to_string(), None),
+        ("0x(ni)".to_string(), None),
+        ("0x( nil)".to_string(), None),
+        ("0x(nil )".to_string(), None),
+        ("0x0x (nil)".to_string(), None),
         (format!("0x1{}", "0".repeat(17)), Some(usize::MAX)),
         (format!("0x-1{}", "0".repeat(17)), Some(usize::MAX)),
         (format!("0X{hex}"), None),

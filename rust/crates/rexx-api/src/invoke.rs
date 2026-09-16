@@ -473,7 +473,7 @@ mod tests {
             unreachable!("the stubs these tests call declare no unsigned integer")
         }
 
-        fn logical(&mut self, _object: ObjRef) -> Result<Option<bool>, Raised> {
+        fn logical(&mut self, _object: ObjRef) -> Result<Result<bool, ObjRef>, Raised> {
             unreachable!("the stubs these tests call declare no logical_t")
         }
 
