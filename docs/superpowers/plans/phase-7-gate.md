@@ -174,3 +174,28 @@ family still owes something, which stopped being true when `file` was finished. 
 `the_table_holds_every_constructor_the_source_defines` is the assertion that says so on every run.
 Its rows' line numbers drift as the crate moves; the constructor set itself is checked in both
 directions, and this phase kept it current by hand.
+
+## 9. Correction, 2026-09-16
+
+**G4's exit 101 above was not a pre-existing, already-tracked state -- it was this phase's own gate
+staying red, and it stayed red for four days before anyone treated it as the standing gate `rust/
+CLAUDE.md` names.** Section 8 lists `concept_and_class_gate_table` and `directive_option_gate_table`
+in G4's failing set and calls every member of that set "a pre-existing failure carried from before
+this phase"; `concept_and_class_gate_table` was not. It first failed at `98a0db498` (2026-09-12,
+"Repair the eleven test binaries Phase 7 left red, and the cadence that hid them"), the commit that
+put `"7"` in `CLOSED_PHASES` while File's 50, Stream's 24 and StreamSupplier's 8 instance-arm method
+rows were still `unanswered` -- a bare `~new` raising identically on both sides because
+`class-set.txt` committed no construction expression for any of the three. This document's own
+sentence, "the exit gate is the sentence, and it is met", is true of the plan's one-line exit
+criterion, which never mentions G4; it is not evidence that the whole-workspace corpus gate was
+green, and reading it that way is the mistake this correction exists to close off.
+
+Repaired at `a4b6a37ce7261c8dddd656cde434a4e467c54011`, 2026-09-16:
+`rexx-extract`'s `CONSTRUCTION_PROGRAMS` now carries a receiver for File, Stream and StreamSupplier,
+so their 82 rows read `agree`. The investigation and the repair are recorded in
+`.superpowers/sdd/2026-09-14-phase-8-surface/gate-table-c-probe.md` and
+`gate-table-c-repair-report.md`. Two of Phase 6's rows (`Alarm`, `Ticker`) turned out to share the
+same `unanswered` shape and were given the same treatment for consistency; both now read
+`diverge-both`, a genuine, unlicensed gap -- Phase 6's `alarm_startTimer` and `ticker_createTimer`
+native entry points are not implemented -- recorded in `phase-4-exclusions.txt`. Neither is gated,
+because Phase 6 is not in `CLOSED_PHASES`, and nothing here adds it.

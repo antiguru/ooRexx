@@ -5163,3 +5163,32 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   such an object answers a machine address on the oracle -- 140430029559472
   in one run -- against 9 here, which is not an answer to match.) NO OWNER:
   the string conversion protocol is not this phase's surface.
+
+  ALARM AND TICKER CANNOT BE CONSTRUCTED HERE (found while giving gate table
+  C's class-set.txt a construction expression for every class it had none
+  for). The oracle's documented route, a target that is a Message object so
+  no AlarmNotification subclass is needed:
+
+    o = .Alarm~new(99999, .Message~new(.Object~new, 'STRING'))~~cancel
+    say 'instance' o~hasMethod("attachment")
+    ... (five more hasMethod calls)
+
+  is "instance 1" seven times at rc 0 on the oracle, and here
+
+    rexx-exec: a GUARD that has to wait for another activity to make its WHEN
+    expression true is not implemented (Phase 6)
+    rexx-exec: the LIBRARY REXX entry point "alarm_startTimer" is not
+    implemented (Phase 6)
+
+  at rc 120, stdout empty on both sides. Ticker's construction is the same
+  shape and fails at "the LIBRARY REXX entry point \"ticker_createTimer\" is
+  not implemented (Phase 6)", rc 120 against the oracle's six "instance 1"
+  lines at rc 0. Measured 2026-09-16 at a4b6a37ce, this crate's debug
+  rexx-run against the oracle, three descriptors, fresh directory. OWNER:
+  Phase 6, which the refusal itself names -- `alarm_startTimer` and
+  `ticker_createTimer` are native timer entry points its concurrency work
+  has not built. class-set.txt now commits a construction program for both
+  classes (`CONSTRUCTION_PROGRAMS` in `rexx-extract/src/docs/classes.rs`),
+  so their gate table C rows read `diverge-both` rather than `unanswered`;
+  neither is gated today because Phase 6 is not in `CLOSED_PHASES`, and this
+  row is what closing it would have to answer for first.
