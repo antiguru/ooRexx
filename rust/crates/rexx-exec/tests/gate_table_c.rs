@@ -899,6 +899,27 @@ fn run_probe(
         }
     };
 
+    // A committed construction expression may locate a sibling file through
+    // its own running path (StreamSupplier's fixture does), which only
+    // answers correctly when the probe runs at its own committed location.
+    // Staging it into a copy elsewhere -- `method_bodies.rs` already does
+    // this for a different table -- would break that silently, at whichever
+    // row happens to depend on it, rather than here.
+    let corpus_root = fs::canonicalize(corpus)
+        .unwrap_or_else(|e| panic!("cannot canonicalize {}: {e}", corpus.display()));
+    if !abs.starts_with(&corpus_root) {
+        structural.push(Structural {
+            subject: probe.to_string(),
+            detail: format!(
+                "runs from {}, outside {}, so a construction expression resolving a sibling \
+                 path from its own running location would resolve the wrong one",
+                abs.display(),
+                corpus_root.display(),
+            ),
+        });
+        return None;
+    }
+
     let crate_side = run_gate_probe(&abs);
     let cpp: CppOutcome = oracle.run(&abs);
     if did_not_finish(&cpp) {
