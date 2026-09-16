@@ -378,15 +378,18 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     // this crate both refuse at `93.967`. That leaves all ten instance rows
     // `unanswered`: the method was never sent, on either side.
     ("StackFrame", ".context~stackFrames[1]"),
-    // **Phase 7 Task 13.** `class-set.txt` gives `File` the construction
-    // `.File~new('.')`, which is the documented example and the right thing in
-    // that column. It cannot be the probe's receiver: this sweep stages one
+    // `class-set.txt` now commits `.File~new('/nonexistent-gate-table-c-file')`
+    // for File, which cannot be this table's receiver: this sweep stages one
     // directory per row so that an oracle run's own working directory holds
     // exactly its program, so the two sides run from different directories and
     // every method deriving from `.` -- `absolutePath`, `parent`, `parentFile`,
     // `absoluteFile`, `makeString`, `hashCode`, `list`, `listFiles` -- answers
     // a different path on each. Measured: eleven rows diverge on stdout with
-    // `.`, and none with an absolute receiver.
+    // `.`, and none with an absolute receiver. Gate table C's own receiver
+    // constructs without touching the filesystem because it only sends
+    // `hasMethod`; this table sends the documented methods themselves, which
+    // need a real path to answer from, so the two tables cannot share a
+    // receiver and `check_receivers_match_table_c` skips both permanently.
     //
     // `/` rather than `/tmp`: both are stable across the two runs, and the
     // root also reaches the branches a busy directory does not -- `parent` and
@@ -394,14 +397,13 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     // its own contents do not move between the two runs the way a temporary
     // directory's can.
     ("File", ".File~new('/')"),
-    // **Phase 7 Task 22.** Neither class has a construction expression in
-    // `class-set.txt`, and a bare `~new` raises on both sides -- `.Stream`
-    // needs a name -- which left every instance row of both recording that
-    // the method was never sent. `/dev/null` is the receiver for the same
-    // reason `/` is `File`'s: it is absolute, so the two sides answer the
-    // same qualified name from their own directories, and it exists and
-    // does not move. It is writable, which the rows that write need, and
-    // reading it is always at end of file.
+    // `class-set.txt` now commits `.Stream~new('/nonexistent-gate-table-c-stream')`
+    // for Stream, for the same reason it cannot be this table's receiver as
+    // File's above: this table's rows open, read and write the stream, which
+    // a name nothing backs cannot do. `/dev/null` is absolute, so the two
+    // sides answer the same qualified name from their own directories, and it
+    // exists and does not move. It is writable, which the rows that write
+    // need, and reading it is always at end of file.
     ("Stream", ".Stream~new('/dev/null')"),
     // **A persistent file, where `Stream`'s own receiver is `/dev/null`.**
     // Positioning a transient stream is 93.958, and `StreamSupplier~init`
@@ -409,7 +411,12 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     // identically on both sides, which this table would have recorded as
     // `answers` while measuring nothing about any of the methods.
     // `/etc/hostname` is absolute, readable, unwritten by every row here, and
-    // the same file for both sides.
+    // the same file for both sides. Gate table C's own committed receiver
+    // reads a fixture this crate's corpus carries for exactly this purpose
+    // (`corpus/gate-tables/fixtures/streamsupplier_seed.txt`); this table
+    // keeps `/etc/hostname` rather than adopting it, because a fixture this
+    // table happened to write to would no longer be the file every other row
+    // reads.
     ("StreamSupplier", ".Stream~new('/etc/hostname')~supplier"),
 ];
 
@@ -612,7 +619,12 @@ fn check_crashing_sends(rows: &[MethodRow], structural: &mut Vec<Structural>) {
 }
 
 /// Every instance receiver this table sends to is the one gate table C's
-/// committed probe constructs, or an override.
+/// committed probe constructs, or an override. A class in
+/// [`RECEIVER_OVERRIDES`] is skipped rather than reconciled: this table sends
+/// the documented methods and needs a receiver they can act on, where gate
+/// table C only sends `hasMethod` and needs one that merely constructs, so
+/// File, Stream and StreamSupplier are permanently exempt rather than pending
+/// a fix.
 fn check_receivers_match_table_c(
     corpus: &Path,
     classes: &[ClassRow],

@@ -920,13 +920,13 @@ Table	union	instance	covered	mthCollectionUnion	collclasses.xml:560	a bare ~new 
 Table	xor	instance	covered	mthCollectionXor	collclasses.xml:588	a bare ~new constructs an instance on the oracle
 Table	of	class	covered	mthMapCollectionOf	collclasses.xml:668	a bare ~new constructs an instance on the oracle
 Table	putAll	instance	covered	mthMapCollectionPutAll	collclasses.xml:714	a bare ~new constructs an instance on the oracle
-Alarm	attachment	instance	not-covered	mthAlarmAttachment	utilityclasses.xml:100	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Alarm	cancel	instance	not-covered	mthAlarmCancel	utilityclasses.xml:128	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Alarm	canceled	instance	not-covered	mthAlarmCanceled	utilityclasses.xml:147	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Alarm	cancelled	instance	not-covered	mthAlarmCanceled	utilityclasses.xml:147	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Alarm	init	instance	not-covered	mthAlarmInit	utilityclasses.xml:170	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Alarm	scheduledTime	instance	not-covered	mthAlarmScheduledTime	utilityclasses.xml:288	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Alarm	triggered	instance	not-covered	mthAlarmTriggered	utilityclasses.xml:304	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Alarm	attachment	instance	covered	mthAlarmAttachment	utilityclasses.xml:100	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Alarm	cancel	instance	covered	mthAlarmCancel	utilityclasses.xml:128	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Alarm	canceled	instance	covered	mthAlarmCanceled	utilityclasses.xml:147	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Alarm	cancelled	instance	covered	mthAlarmCanceled	utilityclasses.xml:147	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Alarm	init	instance	covered	mthAlarmInit	utilityclasses.xml:170	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Alarm	scheduledTime	instance	covered	mthAlarmScheduledTime	utilityclasses.xml:288	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Alarm	triggered	instance	covered	mthAlarmTriggered	utilityclasses.xml:304	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 AlarmNotification	cancel	instance	covered	mthAlarmNotificationCancel	utilityclasses.xml:371	a bare ~new constructs an instance on the oracle
 AlarmNotification	triggered	instance	covered	mthAlarmNotificationTriggered	utilityclasses.xml:394	a bare ~new constructs an instance on the oracle
 Buffer	new	class	unreachable	mthBufferNew	utilityclasses.xml:459	the reference says instances come only from native code -- utilityclasses.xml:429 "can only be created using the native code application programming interfaces."
@@ -1043,66 +1043,66 @@ EventSemaphore	post	instance	covered	mthEventSemaphorePost	utilityclasses.xml:32
 EventSemaphore	reset	instance	covered	mthEventSemaphoreReset	utilityclasses.xml:3259	a bare ~new constructs an instance on the oracle
 EventSemaphore	uninit	instance	covered	mthEventSemaphoreUninit	utilityclasses.xml:3278	a bare ~new constructs an instance on the oracle
 EventSemaphore	wait	instance	covered	mthEventSemaphoreWait	utilityclasses.xml:3297	a bare ~new constructs an instance on the oracle
-File	isCaseSensitive	class	not-covered	mthFileIsCaseSensitiveClsMth	utilityclasses.xml:3488	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	listRoots	class	not-covered	mthFileListRoots	utilityclasses.xml:3509	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	pathSeparator	class	not-covered	mthFilePathSeparatorClsMth	utilityclasses.xml:3536	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	readChars	class	not-covered	mthFileReadCharsClsMth	utilityclasses.xml:3556	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	readLines	class	not-covered	mthFileReadLinesClsMth	utilityclasses.xml:3579	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	searchPath	class	not-covered	mthFileSearchPath	utilityclasses.xml:3604	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	separator	class	not-covered	mthFileSeparatorClsMth	utilityclasses.xml:3640	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	temporaryPath	class	not-covered	mthFileTemporaryPath	utilityclasses.xml:3669	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	writeChars	class	not-covered	mthFileWriteCharsClsMth	utilityclasses.xml:3701	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	writeLines	class	not-covered	mthFileWriteLinesClsMth	utilityclasses.xml:3725	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	absoluteFile	instance	not-covered	mthFileAbsoluteFile	utilityclasses.xml:3753	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	absolutePath	instance	not-covered	mthFileAbsolutePath	utilityclasses.xml:3787	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	canRead	instance	not-covered	mthFileCanRead	utilityclasses.xml:3821	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	canWrite	instance	not-covered	mthFileCanWrite	utilityclasses.xml:3843	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	compareTo	instance	not-covered	mthFileCompareTo	utilityclasses.xml:3865	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	delete	instance	not-covered	mthFileDelete	utilityclasses.xml:3896	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	exists	instance	not-covered	mthFileExists	utilityclasses.xml:3916	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	extension	instance	not-covered	mthFileExtension	utilityclasses.xml:3936	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	hashCode	instance	not-covered	mthFileHashCode	utilityclasses.xml:3963	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	init	instance	not-covered	mthFileInit	utilityclasses.xml:3981	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	isCaseSensitive	instance	not-covered	mthFileIsCaseSensitive	utilityclasses.xml:4026	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	isDirectory	instance	not-covered	mthFileIsDirectory	utilityclasses.xml:4048	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	isFile	instance	not-covered	mthFileIsFile	utilityclasses.xml:4066	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	isHidden	instance	not-covered	mthFileIsHidden	utilityclasses.xml:4084	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	lastAccessed	instance	not-covered	mthFileLastAccessed	utilityclasses.xml:4119	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	lastModified	instance	not-covered	mthFileLastModified	utilityclasses.xml:4166	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	length	instance	not-covered	mthFileLength	utilityclasses.xml:4231	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	list	instance	not-covered	mthFileList	utilityclasses.xml:4249	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	listFiles	instance	not-covered	mthFileListFiles	utilityclasses.xml:4286	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	makeDir	instance	not-covered	mthFileMakeDir	utilityclasses.xml:4341	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	makeDirs	instance	not-covered	mthFileMakeDirs	utilityclasses.xml:4363	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	makeString	instance	not-covered	mthFileMakeString	utilityclasses.xml:4386	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	name	instance	not-covered	mthFileName	utilityclasses.xml:4401	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	parent	instance	not-covered	mthFileParent	utilityclasses.xml:4434	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	parentFile	instance	not-covered	mthFileParentFile	utilityclasses.xml:4466	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	path	instance	not-covered	mthFilePath	utilityclasses.xml:4486	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	pathSeparator	instance	not-covered	mthFilePathSeparator	utilityclasses.xml:4505	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	renameTo	instance	not-covered	mthFileRenameTo	utilityclasses.xml:4525	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	separator	instance	not-covered	mthFileSeparator	utilityclasses.xml:4549	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	setReadOnly	instance	not-covered	mthFileSetReadOnly	utilityclasses.xml:4569	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	setWritable	instance	not-covered	mthFileSetWritable	utilityclasses.xml:4594	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	string	instance	not-covered	mthFileString	utilityclasses.xml:4613	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	==	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	<=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	<<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	<<=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	<>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	>=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	><	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	>>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	>>=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	\=	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	\==	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	\<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	\<<	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	\>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
-File	\>>	instance	not-covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	no construction program is committed; a bare ~new raises 93.901 on the oracle
+File	isCaseSensitive	class	covered	mthFileIsCaseSensitiveClsMth	utilityclasses.xml:3488	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	listRoots	class	covered	mthFileListRoots	utilityclasses.xml:3509	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	pathSeparator	class	covered	mthFilePathSeparatorClsMth	utilityclasses.xml:3536	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	readChars	class	covered	mthFileReadCharsClsMth	utilityclasses.xml:3556	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	readLines	class	covered	mthFileReadLinesClsMth	utilityclasses.xml:3579	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	searchPath	class	covered	mthFileSearchPath	utilityclasses.xml:3604	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	separator	class	covered	mthFileSeparatorClsMth	utilityclasses.xml:3640	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	temporaryPath	class	covered	mthFileTemporaryPath	utilityclasses.xml:3669	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	writeChars	class	covered	mthFileWriteCharsClsMth	utilityclasses.xml:3701	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	writeLines	class	covered	mthFileWriteLinesClsMth	utilityclasses.xml:3725	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	absoluteFile	instance	covered	mthFileAbsoluteFile	utilityclasses.xml:3753	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	absolutePath	instance	covered	mthFileAbsolutePath	utilityclasses.xml:3787	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	canRead	instance	covered	mthFileCanRead	utilityclasses.xml:3821	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	canWrite	instance	covered	mthFileCanWrite	utilityclasses.xml:3843	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	compareTo	instance	covered	mthFileCompareTo	utilityclasses.xml:3865	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	delete	instance	covered	mthFileDelete	utilityclasses.xml:3896	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	exists	instance	covered	mthFileExists	utilityclasses.xml:3916	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	extension	instance	covered	mthFileExtension	utilityclasses.xml:3936	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	hashCode	instance	covered	mthFileHashCode	utilityclasses.xml:3963	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	init	instance	covered	mthFileInit	utilityclasses.xml:3981	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	isCaseSensitive	instance	covered	mthFileIsCaseSensitive	utilityclasses.xml:4026	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	isDirectory	instance	covered	mthFileIsDirectory	utilityclasses.xml:4048	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	isFile	instance	covered	mthFileIsFile	utilityclasses.xml:4066	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	isHidden	instance	covered	mthFileIsHidden	utilityclasses.xml:4084	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	lastAccessed	instance	covered	mthFileLastAccessed	utilityclasses.xml:4119	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	lastModified	instance	covered	mthFileLastModified	utilityclasses.xml:4166	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	length	instance	covered	mthFileLength	utilityclasses.xml:4231	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	list	instance	covered	mthFileList	utilityclasses.xml:4249	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	listFiles	instance	covered	mthFileListFiles	utilityclasses.xml:4286	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	makeDir	instance	covered	mthFileMakeDir	utilityclasses.xml:4341	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	makeDirs	instance	covered	mthFileMakeDirs	utilityclasses.xml:4363	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	makeString	instance	covered	mthFileMakeString	utilityclasses.xml:4386	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	name	instance	covered	mthFileName	utilityclasses.xml:4401	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	parent	instance	covered	mthFileParent	utilityclasses.xml:4434	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	parentFile	instance	covered	mthFileParentFile	utilityclasses.xml:4466	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	path	instance	covered	mthFilePath	utilityclasses.xml:4486	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	pathSeparator	instance	covered	mthFilePathSeparator	utilityclasses.xml:4505	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	renameTo	instance	covered	mthFileRenameTo	utilityclasses.xml:4525	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	separator	instance	covered	mthFileSeparator	utilityclasses.xml:4549	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	setReadOnly	instance	covered	mthFileSetReadOnly	utilityclasses.xml:4569	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	setWritable	instance	covered	mthFileSetWritable	utilityclasses.xml:4594	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	string	instance	covered	mthFileString	utilityclasses.xml:4613	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	==	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	<=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	<<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	<<=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	<>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	>=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	><	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	>>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	>>=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	\=	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	\==	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	\<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	\<<	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	\>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+File	\>>	instance	covered	mthOrderableComparisonMethods	utilityclasses.xml:6731	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 MessageNotification	messageComplete	instance	covered	mthMessageNotificationMessageComplete	utilityclasses.xml:4679	a bare ~new constructs an instance on the oracle
 Monitor	current	instance	covered	mthMonitorCurrent	utilityclasses.xml:4739	a bare ~new constructs an instance on the oracle
 Monitor	destination	instance	covered	mthMonitorDestination	utilityclasses.xml:4755	a bare ~new constructs an instance on the oracle
@@ -1261,15 +1261,15 @@ StackFrame	string	instance	not-covered	mthStackFrameString	utilityclasses.xml:96
 StackFrame	target	instance	not-covered	mthStackFrameTarget	utilityclasses.xml:9626	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
 StackFrame	traceLine	instance	not-covered	mthStackFrameTraceLine	utilityclasses.xml:9645	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
 StackFrame	type	instance	not-covered	mthStackFrameType	utilityclasses.xml:9664	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."
-StreamSupplier	available	instance	not-covered	mthStreamSupplierAvailable	utilityclasses.xml:9804	no construction program is committed; a bare ~new raises 97.1 on the oracle
-StreamSupplier	index	instance	not-covered	mthStreamSupplierIndex	utilityclasses.xml:9824	no construction program is committed; a bare ~new raises 97.1 on the oracle
-StreamSupplier	init	instance	not-covered	mthStreamSupplierInit	utilityclasses.xml:9843	no construction program is committed; a bare ~new raises 97.1 on the oracle
-StreamSupplier	item	instance	not-covered	mthStreamSupplierItem	utilityclasses.xml:9859	no construction program is committed; a bare ~new raises 97.1 on the oracle
-StreamSupplier	next	instance	not-covered	mthStreamSupplierNext	utilityclasses.xml:9878	no construction program is committed; a bare ~new raises 97.1 on the oracle
-StreamSupplier	new	class	not-covered	mthSupplierNew	utilityclasses.xml:9956	no construction program is committed; a bare ~new raises 97.1 on the oracle
-StreamSupplier	allIndexes	instance	not-covered	mthSupplierAllIndexes	utilityclasses.xml:9984	no construction program is committed; a bare ~new raises 97.1 on the oracle
-StreamSupplier	allItems	instance	not-covered	mthSupplierAllItems	utilityclasses.xml:10003	no construction program is committed; a bare ~new raises 97.1 on the oracle
-StreamSupplier	supplier	instance	not-covered	mthSupplierSupplier	utilityclasses.xml:10147	no construction program is committed; a bare ~new raises 97.1 on the oracle
+StreamSupplier	available	instance	covered	mthStreamSupplierAvailable	utilityclasses.xml:9804	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle
+StreamSupplier	index	instance	covered	mthStreamSupplierIndex	utilityclasses.xml:9824	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle
+StreamSupplier	init	instance	covered	mthStreamSupplierInit	utilityclasses.xml:9843	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle
+StreamSupplier	item	instance	covered	mthStreamSupplierItem	utilityclasses.xml:9859	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle
+StreamSupplier	next	instance	covered	mthStreamSupplierNext	utilityclasses.xml:9878	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle
+StreamSupplier	new	class	covered	mthSupplierNew	utilityclasses.xml:9956	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle
+StreamSupplier	allIndexes	instance	covered	mthSupplierAllIndexes	utilityclasses.xml:9984	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle
+StreamSupplier	allItems	instance	covered	mthSupplierAllItems	utilityclasses.xml:10003	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle
+StreamSupplier	supplier	instance	covered	mthSupplierSupplier	utilityclasses.xml:10147	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle
 Supplier	new	class	covered	mthSupplierNew	utilityclasses.xml:9956	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle
 Supplier	allIndexes	instance	covered	mthSupplierAllIndexes	utilityclasses.xml:9984	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle
 Supplier	allItems	instance	covered	mthSupplierAllItems	utilityclasses.xml:10003	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle
@@ -1278,12 +1278,12 @@ Supplier	index	instance	covered	mthSupplierIndex	utilityclasses.xml:10042	a comm
 Supplier	item	instance	covered	mthSupplierItem	utilityclasses.xml:10079	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle
 Supplier	next	instance	covered	mthSupplierNext	utilityclasses.xml:10098	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle
 Supplier	supplier	instance	covered	mthSupplierSupplier	utilityclasses.xml:10147	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle
-Ticker	attachment	instance	not-covered	mthTickerAttachment	utilityclasses.xml:10218	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Ticker	cancel	instance	not-covered	mthTickerCancel	utilityclasses.xml:10251	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Ticker	canceled	instance	not-covered	mthTickerCanceled	utilityclasses.xml:10283	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Ticker	cancelled	instance	not-covered	mthTickerCanceled	utilityclasses.xml:10283	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Ticker	init	instance	not-covered	mthTickerInit	utilityclasses.xml:10313	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Ticker	interval	instance	not-covered	mthTickerInterval	utilityclasses.xml:10414	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Ticker	attachment	instance	covered	mthTickerAttachment	utilityclasses.xml:10218	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Ticker	cancel	instance	covered	mthTickerCancel	utilityclasses.xml:10251	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Ticker	canceled	instance	covered	mthTickerCanceled	utilityclasses.xml:10283	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Ticker	cancelled	instance	covered	mthTickerCanceled	utilityclasses.xml:10283	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Ticker	init	instance	covered	mthTickerInit	utilityclasses.xml:10313	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Ticker	interval	instance	covered	mthTickerInterval	utilityclasses.xml:10414	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 TimeSpan	init	instance	covered	mthTimeSpanInit	utilityclasses.xml:10700	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 TimeSpan	new	class	covered	mthTimeSpanInit	utilityclasses.xml:10492	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
 TimeSpan	fromCivilTime	class	covered	mthTimeSpanFromCivilTime	utilityclasses.xml:10644	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
@@ -1405,28 +1405,28 @@ OutputStream	lineOut	instance	covered	mthOutputStreamLineOut	streamclasses.xml:3
 OutputStream	lines	instance	covered	mthOutputStreamLines	streamclasses.xml:358	a bare ~new constructs an instance on the oracle
 OutputStream	open	instance	covered	mthOutputStreamOpen	streamclasses.xml:368	a bare ~new constructs an instance on the oracle
 OutputStream	position	instance	covered	mthOutputStreamPosition	streamclasses.xml:378	a bare ~new constructs an instance on the oracle
-Stream	new	class	not-covered	mthStreamNew	streamclasses.xml:483	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	arrayIn	instance	not-covered	mthStreamArrayIn	streamclasses.xml:503	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	arrayOut	instance	not-covered	mthStreamArrayOut	streamclasses.xml:530	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	charIn	instance	not-covered	mthStreamCharIn	streamclasses.xml:553	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	charOut	instance	not-covered	mthStreamCharOut	streamclasses.xml:580	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	chars	instance	not-covered	mthStreamChars	streamclasses.xml:612	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	close	instance	not-covered	mthStreamClose	streamclasses.xml:639	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	command	instance	not-covered	mthStreamCommand	streamclasses.xml:661	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	description	instance	not-covered	mthStreamDescription	streamclasses.xml:1039	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	flush	instance	not-covered	mthStreamFlush	streamclasses.xml:1061	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	init	instance	not-covered	mthStreamInit	streamclasses.xml:1079	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	lineIn	instance	not-covered	mthStreamLineIn	streamclasses.xml:1098	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	lineOut	instance	not-covered	mthStreamLineOut	streamclasses.xml:1126	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	lines	instance	not-covered	mthStreamLines	streamclasses.xml:1152	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	makeArray	instance	not-covered	mthStreamMakeArray	streamclasses.xml:1201	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	open	instance	not-covered	mthStreamOpen	streamclasses.xml:1222	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	position	instance	not-covered	mthStreamPosition	streamclasses.xml:1333	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	qualify	instance	not-covered	mthStreamQualify	streamclasses.xml:1351	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	query	instance	not-covered	mthStreamQuery	streamclasses.xml:1368	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	say	instance	not-covered	mthStreamSay	streamclasses.xml:1509	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	seek	instance	not-covered	mthStreamSeek	streamclasses.xml:1528	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	state	instance	not-covered	mthStreamState	streamclasses.xml:1620	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	string	instance	not-covered	mthStreamString	streamclasses.xml:1667	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	supplier	instance	not-covered	mthStreamSupplier	streamclasses.xml:1685	no construction program is committed; a bare ~new raises 93.901 on the oracle
-Stream	uninit	instance	not-covered	mthStreamUninit	streamclasses.xml:1704	no construction program is committed; a bare ~new raises 93.901 on the oracle
+Stream	new	class	covered	mthStreamNew	streamclasses.xml:483	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	arrayIn	instance	covered	mthStreamArrayIn	streamclasses.xml:503	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	arrayOut	instance	covered	mthStreamArrayOut	streamclasses.xml:530	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	charIn	instance	covered	mthStreamCharIn	streamclasses.xml:553	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	charOut	instance	covered	mthStreamCharOut	streamclasses.xml:580	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	chars	instance	covered	mthStreamChars	streamclasses.xml:612	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	close	instance	covered	mthStreamClose	streamclasses.xml:639	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	command	instance	covered	mthStreamCommand	streamclasses.xml:661	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	description	instance	covered	mthStreamDescription	streamclasses.xml:1039	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	flush	instance	covered	mthStreamFlush	streamclasses.xml:1061	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	init	instance	covered	mthStreamInit	streamclasses.xml:1079	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	lineIn	instance	covered	mthStreamLineIn	streamclasses.xml:1098	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	lineOut	instance	covered	mthStreamLineOut	streamclasses.xml:1126	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	lines	instance	covered	mthStreamLines	streamclasses.xml:1152	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	makeArray	instance	covered	mthStreamMakeArray	streamclasses.xml:1201	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	open	instance	covered	mthStreamOpen	streamclasses.xml:1222	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	position	instance	covered	mthStreamPosition	streamclasses.xml:1333	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	qualify	instance	covered	mthStreamQualify	streamclasses.xml:1351	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	query	instance	covered	mthStreamQuery	streamclasses.xml:1368	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	say	instance	covered	mthStreamSay	streamclasses.xml:1509	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	seek	instance	covered	mthStreamSeek	streamclasses.xml:1528	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	state	instance	covered	mthStreamState	streamclasses.xml:1620	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	string	instance	covered	mthStreamString	streamclasses.xml:1667	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	supplier	instance	covered	mthStreamSupplier	streamclasses.xml:1685	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle
+Stream	uninit	instance	covered	mthStreamUninit	streamclasses.xml:1704	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle

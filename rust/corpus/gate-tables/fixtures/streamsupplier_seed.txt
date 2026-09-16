@@ -1,0 +1,1 @@
+gate table C fixture: StreamSupplier's committed construction reads this file.

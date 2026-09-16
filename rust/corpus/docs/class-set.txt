@@ -72,7 +72,7 @@ Set	class	clsSet	collclasses.xml:7420	covered	a bare ~new constructs an instance
 Stem	class	clsStem	collclasses.xml:7964	covered	a bare ~new constructs an instance on the oracle	.Stem~new	-	5c
 StringTable	class	clsStringTable	collclasses.xml:8504	covered	a bare ~new constructs an instance on the oracle	.StringTable~new	-	5c
 Table	class	clsTable	collclasses.xml:9048	covered	a bare ~new constructs an instance on the oracle	.Table~new	-	5c
-Alarm	class	clsAlarm	utilityclasses.xml:51	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	6
+Alarm	class	clsAlarm	utilityclasses.xml:51	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.Alarm~new(99999, .Message~new(.Object~new, 'STRING'))~~cancel	-	6
 AlarmNotification	class	clsAlarmNotification	utilityclasses.xml:322	covered	a bare ~new constructs an instance on the oracle	.AlarmNotification~new	-	5c
 Buffer	class	clsBuffer	utilityclasses.xml:421	unreachable	the reference says instances come only from native code -- utilityclasses.xml:429 "can only be created using the native code application programming interfaces."	-	-	5c
 Comparable	class	clsComparable	utilityclasses.xml:481	covered	a bare ~new constructs an instance on the oracle	.Comparable~new	-	5c
@@ -86,7 +86,7 @@ InvertingComparator	class	clsInvertingComparator	utilityclasses.xml:1038	covered
 NumericComparator	class	clsNumericComparator	utilityclasses.xml:1139	covered	a bare ~new constructs an instance on the oracle	.NumericComparator~new	-	5c
 DateTime	class	clsDateTime	utilityclasses.xml:1234	covered	a bare ~new constructs an instance on the oracle	.DateTime~new	-	5c
 EventSemaphore	class	clsEventSemaphore	utilityclasses.xml:3142	covered	a bare ~new constructs an instance on the oracle	.EventSemaphore~new	-	5c
-File	class	clsFile	utilityclasses.xml:3382	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	7
+File	class	clsFile	utilityclasses.xml:3382	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.File~new('/nonexistent-gate-table-c-file')	-	7
 MessageNotification	class	clsMessageNotification	utilityclasses.xml:4633	covered	a bare ~new constructs an instance on the oracle	.MessageNotification~new	-	5c
 Monitor	class	clsMonitor	utilityclasses.xml:4701	covered	a bare ~new constructs an instance on the oracle	.Monitor~new	-	5c
 MutableBuffer	class	clsMutableBuffer	utilityclasses.xml:4829	covered	a bare ~new constructs an instance on the oracle	.MutableBuffer~new	-	5c
@@ -98,9 +98,9 @@ RexxInfo	instance	clsRexxInfo	utilityclasses.xml:7934	covered	a committed constr
 RexxQueue	class	clsRexxQueue	utilityclasses.xml:8811	covered	a bare ~new constructs an instance on the oracle	.RexxQueue~new	-	5c
 Singleton	class	clsSingleton	utilityclasses.xml:9260	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	5c
 StackFrame	class	clsStackFrame	utilityclasses.xml:9396	not-covered	no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user."	-	-	deferred-rexxcontext-stackframes
-StreamSupplier	class	clsStreamSupplier	utilityclasses.xml:9754	not-covered	no construction program is committed; a bare ~new raises 97.1 on the oracle	-	-	7
+StreamSupplier	class	clsStreamSupplier	utilityclasses.xml:9754	covered	a committed construction program answers an instance; a bare ~new raises 97.1 on the oracle	.Stream~new('/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/gate-tables/fixtures/streamsupplier_seed.txt')~supplier	-	7
 Supplier	class	clsSupplier	utilityclasses.xml:9903	covered	a committed construction program answers an instance; a bare ~new raises 93.903 on the oracle	.Supplier~new(.Array~new, .Array~new)	-	5c
-Ticker	class	clsTicker	utilityclasses.xml:10169	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	6
+Ticker	class	clsTicker	utilityclasses.xml:10169	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.Ticker~new(99999, .Message~new(.Object~new, 'STRING'))~~cancel	-	6
 TimeSpan	class	clsTimeSpan	utilityclasses.xml:10442	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.TimeSpan~new(1)	-	5c
 TraceObject	class	clsTraceObject	utilityclasses.xml:11301	covered	a bare ~new constructs an instance on the oracle	.TraceObject~new	-	5c
 Validate	class	clsValidate	utilityclasses.xml:12201	covered	a bare ~new constructs an instance on the oracle	.Validate~new	-	5c
@@ -109,5 +109,5 @@ WeakReference	class	clsWeakReference	utilityclasses.xml:12698	covered	a committe
 InputOutputStream	class	clsInputOutputStream	streamclasses.xml:57	covered	a bare ~new constructs an instance on the oracle	.InputOutputStream~new	-	5c
 InputStream	class	clsInputStream	streamclasses.xml:103	covered	a bare ~new constructs an instance on the oracle	.InputStream~new	-	5c
 OutputStream	class	clsOutputStream	streamclasses.xml:245	covered	a bare ~new constructs an instance on the oracle	.OutputStream~new	-	5c
-Stream	class	clsStream	streamclasses.xml:389	not-covered	no construction program is committed; a bare ~new raises 93.901 on the oracle	-	-	7
+Stream	class	clsStream	streamclasses.xml:389	covered	a committed construction program answers an instance; a bare ~new raises 93.901 on the oracle	.Stream~new('/nonexistent-gate-table-c-stream')	-	7
 ArgUtil	class	-	provide.xml:838	covered	a bare ~new constructs an instance on the oracle	.ArgUtil~new	-	5c

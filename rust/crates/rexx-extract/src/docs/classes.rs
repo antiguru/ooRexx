@@ -192,12 +192,17 @@ pub const CONSTRUCTION: &[(&str, &str)] = &[
 /// own syntax for obtaining an instance of that class.
 pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
     (
+        "ALARM",
+        ".Alarm~new(99999, .Message~new(.Object~new, 'STRING'))~~cancel",
+    ),
+    (
         "CASELESSCOLUMNCOMPARATOR",
         ".CaselessColumnComparator~new(3, 100)",
     ),
     ("CIRCULARQUEUE", ".CircularQueue~new(5)"),
     ("CLASS", ".Object~subclass('k')"),
     ("COLUMNCOMPARATOR", ".ColumnComparator~new(3, 100)"),
+    ("FILE", ".File~new('/nonexistent-gate-table-c-file')"),
     (
         "INVERTINGCOMPARATOR",
         ".InvertingComparator~new(.Comparator~new)",
@@ -208,8 +213,17 @@ pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
     ("REXXCONTEXT", ".context"),
     ("REXXINFO", ".RexxInfo"),
     ("ROUTINE", ".routines~r"),
+    ("STREAM", ".Stream~new('/nonexistent-gate-table-c-stream')"),
+    (
+        "STREAMSUPPLIER",
+        ".Stream~new('/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/gate-tables/fixtures/streamsupplier_seed.txt')~supplier",
+    ),
     ("STRING", ".String~new('abc')"),
     ("SUPPLIER", ".Supplier~new(.Array~new, .Array~new)"),
+    (
+        "TICKER",
+        ".Ticker~new(99999, .Message~new(.Object~new, 'STRING'))~~cancel",
+    ),
     ("TIMESPAN", ".TimeSpan~new(1)"),
     ("VARIABLEREFERENCE", ">vr"),
     ("WEAKREFERENCE", ".WeakReference~new(.Object~new)"),

@@ -891,13 +891,13 @@ Table	union	instance	answers	rc 163
 Table	xor	instance	answers	rc 163
 Table	of	class	answers	rc 0
 Table	putAll	instance	answers	rc 163
-Alarm	attachment	instance	unanswered	a bare `~new` raises; the method was never sent
-Alarm	cancel	instance	unanswered	a bare `~new` raises; the method was never sent
-Alarm	canceled	instance	unanswered	a bare `~new` raises; the method was never sent
-Alarm	cancelled	instance	unanswered	a bare `~new` raises; the method was never sent
-Alarm	init	instance	unanswered	a bare `~new` raises; the method was never sent
-Alarm	scheduledTime	instance	unanswered	a bare `~new` raises; the method was never sent
-Alarm	triggered	instance	unanswered	a bare `~new` raises; the method was never sent
+Alarm	attachment	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
+Alarm	cancel	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
+Alarm	canceled	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
+Alarm	cancelled	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
+Alarm	init	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
+Alarm	scheduledTime	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
+Alarm	triggered	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
 AlarmNotification	cancel	instance	answers	rc 165
 AlarmNotification	triggered	instance	answers	rc 163
 Buffer	new	class	answers	rc 163
@@ -1249,12 +1249,12 @@ Supplier	index	instance	answers	rc 163
 Supplier	item	instance	answers	rc 163
 Supplier	next	instance	answers	rc 163
 Supplier	supplier	instance	answers	rc 0
-Ticker	attachment	instance	unanswered	a bare `~new` raises; the method was never sent
-Ticker	cancel	instance	unanswered	a bare `~new` raises; the method was never sent
-Ticker	canceled	instance	unanswered	a bare `~new` raises; the method was never sent
-Ticker	cancelled	instance	unanswered	a bare `~new` raises; the method was never sent
-Ticker	init	instance	unanswered	a bare `~new` raises; the method was never sent
-Ticker	interval	instance	unanswered	a bare `~new` raises; the method was never sent
+Ticker	attachment	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
+Ticker	cancel	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
+Ticker	canceled	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
+Ticker	cancelled	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
+Ticker	init	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
+Ticker	interval	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
 TimeSpan	init	instance	answers	rc 163
 TimeSpan	new	class	answers	rc 163
 TimeSpan	fromCivilTime	class	answers	rc 163
