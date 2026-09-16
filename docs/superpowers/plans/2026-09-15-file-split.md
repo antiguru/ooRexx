@@ -56,9 +56,16 @@ the move (for example "this file's own tests"), which is corrected in the same c
 * **Never drop a comment**, and never re-wrap one. A doc comment stays attached to its item; check
   that no insertion orphaned a doc block onto a different item (memory `insertions-orphan-doc-blocks`).
 * **File-granular invariants must survive.** Three tests enforce design decisions by file:
-  * `rust/crates/rexx-core/tests/unsafe_sites.rs` — D-U1 grants `unsafe` to exactly
-    `rexx-api/src/ffi.rs` and `src/load.rs`. A split may not move an `unsafe` block out of those two
-    files; if keeping them self-contained would need that, leave them as they are and say so.
+  * `rust/crates/rexx-core/tests/unsafe_sites.rs` — the record of which files may contain `unsafe`,
+    and the authority on it: read the test, not this sentence, since the two have already drifted
+    once. Measured by Task 1 at `efe70f926`, it grants `unsafe` to `rexx-api/src/ffi.rs`,
+    `rexx-api/src/load.rs` and `rexx-core/src/bytes.rs`, with `rexx-core/src/lib.rs` on its opt-in
+    list. A split may not move an `unsafe` block out of the file the record names for it; if keeping
+    a file self-contained would need that, leave it as it is and say so.
+    **`rexx-api/src/ffi.rs` is out of scope**, decided here rather than rediscovered: its
+    `#[cfg(test)]` stub region and its `mod tests` both hold `unsafe` in the forms the record
+    matches, so no child file can take them, and moving `mod tests` alone would leave most of the
+    file behind.
   * `rust/crates/rexx-exec/tests/environment_seam.rs` — D45's security chokepoint: the directory
     reads live in `src/environment.rs`. The seam stays in that file.
   * `rust/crates/rexx-exec/tests/dispatch_seam.rs` — an allowlist of dispatch files. Adding a new
@@ -67,8 +74,20 @@ the move (for example "this file's own tests"), which is corrected in the same c
   Before each task, `/bin/grep -rn 'src/<file>' rust/crates/*/tests rust/crates/*/src` for every
   file the task touches, and keep every test that names a path meaning what it meant.
 * **Derived tables that record source locations re-derive**: `rust/corpus/refusal-sites.tsv`
-  (`REXX_REFUSAL_SITES_REFRESH=1`, column 4 only may change), and any other table whose test fails
-  on a moved location. A change outside the location column is a finding, not a refresh.
+  (`REXX_REFUSAL_SITES_REFRESH=1`), and any other table whose test fails on a moved location. A
+  change outside a location column is a finding, not a refresh. Task 1 measured that **column 3 is
+  path-derived as well as column 4**, and that it survives a `dispatch.rs` split only because
+  `/dispatch/` carries the same tag the file does. The dispatch task asserts that rather than
+  relying on it.
+* **Items pinned to a file by something other than the module tree**, found by Task 1. The task that
+  touches one carries it into its own steps:
+  * `rexx-exec/src/dispatch.rs`: `mod seam`; `method_is_protected`, whose occurrences must both sit
+    in a path containing the literal `dispatch.rs`, which `src/dispatch/<child>.rs` does not
+    satisfy; and the `seam::clear(` call inside `Interp::invoke`.
+  * `rexx-exec/src/lib.rs`: `collect_now`, pinned by name and by its four-space indentation.
+  * `rust/corpus/docs/class-set.txt` and `class-methods.txt` each carry a `module is
+    src/docs/classes.rs` header that `rexx-extract/tests/extract_docs.rs` compares in both
+    directions.
 * **Performance:** moving code between modules can change codegen-unit partitioning and inlining.
   Measure `rexxcps` and the `rexx-bench` suite's axes with callgrind before and after each task,
   interleaved, each revision in its own `CARGO_TARGET_DIR`; record the figures. Under ~4% on one
@@ -96,6 +115,13 @@ the move (for example "this file's own tests"), which is corrected in the same c
       proposal, not a line count, is what later tasks execute; a task may revise it for a reason it
       finds while moving, and says so.
 
+**Order, ruled after Task 1.** The tasks below are numbered by subject, not by sequence. `run/tests.rs`
+(Task 3's second half) and `rexx-bench-suite.rs` (Task 10's) run first: they move no production code,
+so they exercise the four instruments, the `cargo doc` pass and the interleaved performance procedure
+while nothing depends on those working yet. `dispatch.rs` follows. It is the largest file, the
+riskiest, and the one where the performance constraint bites hardest, and it should not be the first
+to rely on instruments no task has run.
+
 ### Task 2: `rexx-exec/src/dispatch.rs`
 
 ### Task 3: `rexx-exec/src/run.rs` and `run/tests.rs`
@@ -103,8 +129,9 @@ the move (for example "this file's own tests"), which is corrected in the same c
 ### Task 4: `rexx-exec/src/lib.rs`
 
 ### Task 5: the other `rexx-exec/src/` top-level files over the limit
-`eval.rs`, `environment.rs` (the D45 seam stays in `environment.rs`), `error.rs`, `value.rs`,
-`plan.rs`, `trace.rs`, `activation.rs`, `parse_template.rs`, `builtin.rs`.
+`eval.rs`, `environment.rs` (the D45 seam stays in `environment.rs`), `value.rs`, `plan.rs`,
+`trace.rs`, `parse_template.rs`, `builtin.rs`. Task 1 examined `error.rs` and `activation.rs` and
+they came back leave-or-nearly, so they are out.
 
 ### Task 6: `rexx-exec/src/dispatch/*` over the limit
 `hash.rs`, `collection.rs`, `string.rs`, `stream.rs`, `library.rs`, `native.rs`, `package.rs`
@@ -115,8 +142,8 @@ the move (for example "this file's own tests"), which is corrected in the same c
 `ir/golden_tests.rs`.
 
 ### Task 8: `rexx-api`
-`src/values.rs`, `src/invoke.rs`, `tests/values.rs`, and `src/ffi.rs` only by moving safe code out
-(the D-U1 constraint; stop and ask if that is not enough).
+`src/values.rs`, `src/invoke.rs`, `tests/values.rs`. `src/ffi.rs` is out, per the D-U1 constraint
+above: Task 1 measured that it has no safe region to move.
 
 ### Task 9: `rexx-parse`
 `src/instruction.rs` and `src/instruction/tests.rs`, `src/directive.rs` and
@@ -124,10 +151,15 @@ the move (for example "this file's own tests"), which is corrected in the same c
 `tests/scanner.rs`.
 
 ### Task 10: the remaining test crates and tools
-`rexx-exec/tests/{gate_table_c,coverage,ir_recorded,method_bodies}.rs`,
-`rexx-classes/tests/native_classes_wiring.rs`, `rexx-num/tests/format.rs`,
-`rexx-bench/src/bin/rexx-bench-suite.rs`, `rexx-extract/src/docs/classes.rs`, and any file the
-re-measure at BASE adds.
+`rexx-exec/tests/gate_table_c.rs`, `rexx-bench/src/bin/rexx-bench-suite.rs`,
+`rexx-extract/src/docs/classes.rs`, and any file the re-measure at BASE adds. Task 1 examined
+`rexx-exec/tests/{coverage,ir_recorded,method_bodies}.rs`,
+`rexx-classes/tests/native_classes_wiring.rs` and `rexx-num/tests/format.rs`, and each is this
+plan's own "one set of test cases for one function" exception, so they are out.
+
+`ir_recorded.rs`'s inline `LOOP_CASES` and `BRANCH_CASES` belong in a data file the test reads,
+which is a standing preference of Moritz's. That is not a pure move, and every instrument here
+assumes one, so it is queued separately rather than folded in.
 
 Tasks 2-10 execute the ruled proposal for their files, and share one shape:
 
