@@ -216,7 +216,8 @@ pub const CONSTRUCTION_PROGRAMS: &[(&str, &str)] = &[
     ("STREAM", ".Stream~new('/nonexistent-gate-table-c-stream')"),
     (
         "STREAMSUPPLIER",
-        ".Stream~new('/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/gate-tables/fixtures/streamsupplier_seed.txt')~supplier",
+        ".Stream~new(filespec('path', .context~package~name) || \
+         '../fixtures/streamsupplier_seed.txt')~supplier",
     ),
     ("STRING", ".String~new('abc')"),
     ("SUPPLIER", ".Supplier~new(.Array~new, .Array~new)"),

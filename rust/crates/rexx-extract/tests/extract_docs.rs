@@ -184,6 +184,23 @@ fn every_committed_construction_program_has_an_instance_arm_to_run_it() {
     }
 }
 
+/// A committed construction program runs as a probe wherever the repository
+/// is checked out, so it may not embed this checkout's own path.
+#[test]
+fn no_construction_program_embeds_this_checkouts_own_location() {
+    let root = repo_root()
+        .canonicalize()
+        .unwrap_or_else(|e| panic!("cannot canonicalize {}: {e}", repo_root().display()));
+    let root = root.to_string_lossy();
+    for (class, program) in classes::CONSTRUCTION_PROGRAMS {
+        assert!(
+            !program.contains(root.as_ref()),
+            "{class}'s committed construction {program:?} embeds this checkout's own path \
+             ({root}), so it answers only where this repository happens to be checked out"
+        );
+    }
+}
+
 /// The two class row sets have to agree about every class, or a method row's
 /// status says one thing and its class's row another.
 #[test]

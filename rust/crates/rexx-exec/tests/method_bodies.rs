@@ -413,10 +413,11 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     // `/etc/hostname` is absolute, readable, unwritten by every row here, and
     // the same file for both sides. Gate table C's own committed receiver
     // reads a fixture this crate's corpus carries for exactly this purpose
-    // (`corpus/gate-tables/fixtures/streamsupplier_seed.txt`); this table
-    // keeps `/etc/hostname` rather than adopting it, because a fixture this
-    // table happened to write to would no longer be the file every other row
-    // reads.
+    // (`corpus/gate-tables/fixtures/streamsupplier_seed.txt`), locating it
+    // relative to the running probe's own path rather than an absolute one,
+    // since a `RECEIVER_OVERRIDES` entry here would need the same portable
+    // resolution for no benefit `/etc/hostname` does not already give this
+    // table.
     ("StreamSupplier", ".Stream~new('/etc/hostname')~supplier"),
 ];
 

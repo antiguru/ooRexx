@@ -42,11 +42,13 @@ Gate table C's probes, run by `crates/rexx-exec/tests/gate_table_c.rs`:
 * `methods/` -- one per (class, arm) of `../docs/class-methods.txt`, printing
   one line per row so that a single run answers the whole documented set for
   that class and arm.
-* `fixtures/` -- files a `class-set.txt` construction expression reads,
-  committed here rather than pointed at a path outside the repository.
+* `fixtures/` -- files a `class-set.txt` construction expression reads.
   `streamsupplier_seed.txt` is the one `StreamSupplier`'s instance receiver
   reads, since a supplier's construction needs an existing, readable,
-  seekable file.
+  seekable file; the expression locates it as `filespec('path',
+  .context~package~name) || '../fixtures/streamsupplier_seed.txt'`, relative
+  to the running probe's own path rather than an absolute path baked in at
+  extraction time, so it resolves wherever the repository is checked out.
 
 **Every row's oracle side is checked for having answered at all, before any
 verdict exists.** Two interpreters that fail identically agree on all three
