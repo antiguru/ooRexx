@@ -5088,7 +5088,11 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
     unopened name were oracle rc 0 "done 40001 UNKNOWN" and rc 120 here at
     c00d18052. Fixed by rooting the name; witnessed by run/tests.rs's unit
     test (the ordinary-run loop takes 47 s under collect-on-every-allocation,
-    too slow for the corpus that mode runs).
+    too slow for the corpus that mode runs) and, more loudly, by
+    collect_stress's L0 test: with that push_temp removed it names
+    address_with_stream, executable_context, sys_file_functions,
+    security_manager and call_miss_not_cached, each stress run rc 120 against
+    a plain run that matches, measured at 6c96144d8.
   * A CALL ON handler's condition object, once delivered, was held by the
     handler's activation alone, which Interp::object_roots did not walk
     (condition_object.rex at rc 120: a say, then a call to a routine reading
@@ -5096,8 +5100,10 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
     40,000 NOTREADY traps. Fixed by walking each activation's trapped
     condition object beside its context object; witnessed by condition.rs's
     second unit test.
-  The three in-crate conversion-row witnesses and Task 2's
-  library_routine_argument_errors.rex, which read condition messages, run
+  The corpus conversion-row witnesses lang/library_native_integer_arguments.rex,
+  lang/library_native_object_arguments.rex and
+  lang/library_native_special_arguments.rex, and Task 2's
+  lang/library_routine_argument_errors.rex, which read condition messages, run
   unchanged under that mode since the first fix.
 
   A SYNTAX CONDITION RAISED INSIDE A DEFAULTNAME REACHED THROUGH ~STRING IS

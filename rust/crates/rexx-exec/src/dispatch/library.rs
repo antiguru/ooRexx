@@ -247,6 +247,8 @@ impl Interp {
             // `found` is the argument's `stringValue()`, which is not its string
             // conversion: measured, oracle, an array is `found "an Array".` for
             // 88.921 and 88.905 where its string conversion joins its items.
+            // `NotLogical` below is the exception: its `found` is the string
+            // the conversion answered, `found "1\n2"` for that same array.
             Refused::InvalidDouble { position, argument } => {
                 let found = self.native_found(argument);
                 Raised::native_argument_not_a_double(position, &found)
@@ -624,13 +626,13 @@ impl Interp {
     /// (`interpreter/concurrency/Activity.cpp:1300-1306`).
     fn native_found(&mut self, object: ObjRef) -> Vec<u8> {
         let sends = match self.heap.get(object).map(|held| &held.body) {
-            // A buffer's or a pointer's own `stringValue` override answers
-            // without a send, which is the arm `Interp::to_text` takes for
-            // one; every other instance reaches `RexxObject::stringValue`.
+            // A state that renders its own `stringValue` answers without a
+            // send, which is the arm `Interp::to_text` takes for one; every
+            // other instance reaches `RexxObject::stringValue`.
             Some(Body::Instance {
                 native: Some(state),
                 ..
-            }) => state.buffer().is_none() && state.pointer().is_none(),
+            }) => !state.renders_its_own_string_value(),
             Some(Body::Instance { .. }) => true,
             _ => false,
         };

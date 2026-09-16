@@ -997,14 +997,13 @@ impl Interp {
                 ..
             } => Redirect::StemDefault(*default),
             Body::Array { .. } => Redirect::Array,
-            // A buffer's own body holds the text, named or not.
             // A buffer's own body holds the text; a stream's does not -- its
             // string value is the name a Rexx `expose`d variable keeps, so it
             // takes the ordinary instance arms below.
             Body::Instance {
                 native: Some(state),
                 ..
-            } if state.buffer().is_some() || state.pointer().is_some() => Redirect::None,
+            } if state.renders_its_own_string_value() => Redirect::None,
             Body::Instance {
                 class, name: None, ..
             } => Redirect::InstanceDefault(*class),

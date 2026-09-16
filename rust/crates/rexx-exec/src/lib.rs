@@ -5691,7 +5691,7 @@ impl Interp {
         );
         // The trapped condition's object, which a `CALL ON` handler's
         // activation and every callee that inherits its `CONDITION()` hold
-        // once the queue has handed it over, and nothing else does.
+        // once the queue has handed it over.
         out.extend(
             running
                 .iter()

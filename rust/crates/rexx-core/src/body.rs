@@ -209,6 +209,21 @@ impl NativeState {
             NativeState::Buffer(_) | NativeState::Stream(_) => None,
         }
     }
+
+    /// Whether the object holding this state renders its string value from the
+    /// state itself, as `MutableBuffer::stringValue`
+    /// (`interpreter/classes/MutableBufferClass.cpp:740`) and
+    /// `PointerClass::stringValue` (`interpreter/classes/PointerClass.cpp:152`)
+    /// do, rather than from the name every other instance answers with.
+    ///
+    /// Matched over the variants rather than asked of one of them, so that a
+    /// state added here has to decide.
+    pub fn renders_its_own_string_value(&self) -> bool {
+        match self {
+            NativeState::Buffer(_) | NativeState::Pointer(_) => true,
+            NativeState::Stream(_) => false,
+        }
+    }
 }
 
 /// `Numerics::pointerToString` (`interpreter/runtime/Numerics.cpp:882`): the
