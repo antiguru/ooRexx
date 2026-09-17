@@ -63,7 +63,7 @@ fn a_paths_steps_land_on_the_node_it_names() {
 
 /// **The two message-send indents, pinned here because nothing else in the
 /// tree can pin them**, for the reason
-/// [`task_9s_two_new_indents_are_the_oracles_own_and_normalisation_cannot_see_them`]
+/// [`super::result::task_9s_two_new_indents_are_the_oracles_own_and_normalisation_cannot_see_them`]
 /// gives: `tests/trace_oracle.rs` and `tests/corpus.rs` both compare through
 /// DEVIATION 0's `normalize_stderr`, which collapses exactly the space run
 /// these two lines differ in. A unit test's own `assert_eq!` is outside

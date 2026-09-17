@@ -89,12 +89,41 @@ fn length_dispatches_from_every_call_form_that_reaches_the_builtin_table() {
     );
 }
 
+/// **The name a stream builtin looks up is rooted while the stream object is
+/// built from it.** `STREAM`'s state and description queries keep nothing in
+/// the table, so each builds a fresh object from the name; under a collection
+/// at every allocation both answer as under none. The stdout is the
+/// oracle's.
+#[test]
+fn a_stream_builtins_name_survives_a_collection_at_every_allocation() {
+    let text = b"say stream('a_stream_name_long_enough_for_the_heap.txt', 's')\n\
+        say stream('a_stream_name_long_enough_for_the_heap.txt', 'd')\n"
+        .to_vec();
+    let name = "/tmp/stream_name_rooted.rex";
+    let plain = crate::run_program(name, text.clone(), crate::Invocation::none());
+    assert_eq!(
+        plain.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&plain.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&plain.stdout),
+        "UNKNOWN\nUNKNOWN:\n"
+    );
+    let swept = crate::run_program_collect_every_alloc(name, text, crate::Invocation::none());
+    assert_eq!(swept.exit_code, plain.exit_code);
+    assert_eq!(swept.stdout, plain.stdout);
+    assert_eq!(swept.stderr, plain.stderr);
+    assert!(swept.collections > 0, "the stress mode did not collect");
+}
+
 // ---- `::ROUTINE` dispatch ----
 
 /// Runs `source` through the real entry point, which is the only path
 /// that installs directives -- this module's own `activate` pushes an
 /// activation directly and never sees one.
-fn routine_program(source: &[u8]) -> crate::Outcome {
+pub(super) fn routine_program(source: &[u8]) -> crate::Outcome {
     crate::run_program(
         "/tmp/routine.rex",
         source.to_vec(),
@@ -680,401 +709,6 @@ fn the_invocation_prefixes_are_gated_on_more_than_the_trace_letter() {
     );
 }
 
-/// Every directive form whose installation this crate **can** perform
-/// leaves the program running byte for byte as the oracle runs it, one
-/// program per form.
-#[test]
-fn every_directive_this_crate_can_install_leaves_the_program_alone() {
-    let sources: &[(&str, &[u8])] = &[
-        ("a bare ::CLASS", b"say 'main ran'\n::class foo\n"),
-        (
-            "::CLASS with a ::METHOD",
-            b"say 'main ran'\n::class foo\n::method bar\nreturn 1\n",
-        ),
-        (
-            "::CLASS with a ::ATTRIBUTE",
-            b"say 'main ran'\n::class foo\n::attribute baz\n",
-        ),
-        (
-            "::CLASS MIXINCLASS",
-            b"say 'main ran'\n::class mx mixinclass object\n",
-        ),
-        (
-            "::CLASS INHERIT",
-            b"say 'main ran'\n::class mx mixinclass object\n::class foo inherit mx\n",
-        ),
-        (
-            "a loose ::METHOD with no ::CLASS",
-            b"say 'main ran'\n::method loose\nreturn 1\n",
-        ),
-        ("::CONSTANT", b"say 'main ran'\n::constant kk 5\n"),
-        (
-            "::RESOURCE",
-            b"say 'main ran'\n::resource foo\nsome text\n::END\n",
-        ),
-        (
-            "::ANNOTATE PACKAGE",
-            b"say 'main ran'\n::annotate package author 'me'\n",
-        ),
-        (
-            "::ANNOTATE CLASS",
-            b"say 'main ran'\n::class foo\n::annotate class foo author 'me'\n",
-        ),
-        (
-            "::ANNOTATE ROUTINE",
-            b"say 'main ran'\n::routine r\nreturn 1\n::annotate routine r author 'me'\n",
-        ),
-        (
-            "::ANNOTATE METHOD",
-            b"say 'main ran'\n::class foo\n::method m\nreturn 1\n::annotate method m author 'me'\n",
-        ),
-        (
-            "::ANNOTATE ATTRIBUTE",
-            b"say 'main ran'\n::class foo\n::attribute a\n::annotate attribute a author 'me'\n",
-        ),
-        (
-            "::ANNOTATE CONSTANT",
-            b"say 'main ran'\n::class foo\n::constant c 5\n::annotate constant c author 'me'\n",
-        ),
-    ];
-    for (what, source) in sources {
-        let outcome = routine_program(source);
-        assert_eq!(
-            outcome.exit_code,
-            0,
-            "{what}: stderr {}",
-            String::from_utf8_lossy(&outcome.stderr)
-        );
-        assert_eq!(outcome.stdout, b"main ran\n".to_vec(), "{what}: stdout");
-        assert!(outcome.stderr.is_empty(), "{what}: stderr must be empty");
-    }
-}
-
-/// The refusals Task 21 leaves where the oracle answers, asserted here
-/// because nothing else can assert them.
-#[test]
-fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
-    let cases: &[(&[u8], &str)] = &[(
-        b".K~defineMethods(.local)\n::class K\n",
-        "a directory whose entries this crate does not fill is not implemented (Phase 10)",
-    )];
-    for (source, message) in cases {
-        let outcome = routine_program(source);
-        assert_eq!(
-            outcome.exit_code,
-            crate::NOT_IMPLEMENTED_EXIT,
-            "{message}: exit code"
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stderr),
-            format!("rexx-exec: {message}\n"),
-            "{message}: stderr"
-        );
-    }
-}
-
-/// The source shapes a method compiled from source text refuses, each of
-/// which the shipped oracle takes.
-#[test]
-fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
-    let cases: &[(&[u8], &str)] = &[
-        (
-            b".k~define(\"m\", .environment)\n::class k\n",
-            "a method source that is neither a string nor an array is not implemented (Phase 5)",
-        ),
-        (
-            b".k~define(\"bad\", 'this is not rexx +++')\n::class k\n",
-            "reporting a method source that does not parse (bad, 35.901: Invalid expression.) \
-             is not implemented (Phase 5)",
-        ),
-        (
-            b".k~define(\"m\", 'say 1' || '0a'x || 'say 2')\n::class k\n",
-            "reporting a method source that does not parse (m, 13.1: Invalid character in \
-             program.) is not implemented (Phase 5)",
-        ),
-        (
-            b".k~define(\"m\", ('return 1', '::class zz'))\n::class k\n",
-            "a method source that carries a directive is not implemented (Phase 5)",
-        ),
-        (
-            b".methods~put('return 1', 'M')\n\
-              zk = .object~subclass(\"k\", .Class, .methods)\n\
-              ::method z\n  return 1\n",
-            "a class method built from source text is not implemented (Phase 5)",
-        ),
-    ];
-    for (source, message) in cases {
-        let outcome = routine_program(source);
-        assert_eq!(
-            outcome.exit_code,
-            crate::NOT_IMPLEMENTED_EXIT,
-            "{message}: exit code"
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stderr),
-            format!("rexx-exec: {message}\n"),
-            "{message}: stderr"
-        );
-    }
-}
-
-/// Every directive form whose installation this crate **cannot** perform
-/// refuses the program before its first clause, naming the owning phase.
-#[test]
-fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
-    // **The row that says which `EXTERNAL` form is still refused**:
-    // `REGISTERED`, naming a library and a procedure that resolve, so the only
-    // thing left to refuse it is the directive. The `LIBRARY <other>` forms
-    // are `a_directive_naming_a_library_that_is_not_there_is_98_903`'s, where
-    // the oracle's own condition is what answers.
-    let cases: &[(&[u8], &str)] = &[(
-        b"say 'main ran'\n::routine r external \"REGISTERED rxmath RxCalcSqrt\"\n",
-        "::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10)",
-    )];
-    for (source, message) in cases {
-        let outcome = routine_program(source);
-        assert_eq!(
-            outcome.exit_code,
-            crate::NOT_IMPLEMENTED_EXIT,
-            "{message}: exit code"
-        );
-        assert_eq!(
-            outcome.stdout, b"",
-            "{message}: stdout must be empty -- main must not have run"
-        );
-        assert_eq!(
-            outcome.stderr,
-            format!("rexx-exec: {message}\n").into_bytes(),
-            "{message}: stderr"
-        );
-    }
-}
-
-/// **A routine one of the oracle's internal packages exports refuses loudly**,
-/// naming the phase that owes it, where a routine some phase has written
-/// answers. Either way the name is the oracle's own, and answering 43.1 for
-/// it -- "no such routine", which a program cannot tell from its own typo --
-/// is what this boundary exists to prevent. The excluded builtins take their
-/// owner from the same table, and the last case is the adjacent one: a name
-/// no package exports still raises 43.1.
-#[test]
-fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
-    // The delivered side of the same boundary: a row that has a body answers,
-    // and answers through the very resolver step that refuses the rest. Without
-    // these the test could go green over a resolver that refuses everything.
-    for (source, expected) in [
-        (&b"say filespec('N','/a/b.c')\n"[..], "b.c\n"),
-        (b"say length(directory()) > 0\n", "1\n"),
-        (b"say SysFileExists('.')\n", "1\n"),
-        (b"say words(SysVersion()) > 0\n", "1\n"),
-    ] {
-        let outcome = routine_program(source);
-        assert_eq!(
-            outcome.exit_code,
-            0,
-            "{}",
-            String::from_utf8_lossy(&outcome.stderr)
-        );
-        assert_eq!(String::from_utf8_lossy(&outcome.stdout), expected);
-    }
-
-    let cases: &[(&[u8], &str)] = &[
-        (
-            b"say SysStemSort('a.')\n",
-            "routine \"SYSSTEMSORT\" is not implemented (Phase 10)",
-        ),
-        (
-            b"say SysWaitEventSem(1)\n",
-            "routine \"SYSWAITEVENTSEM\" is not implemented (Phase 6)",
-        ),
-        (
-            b"say rxqueue('G')\n",
-            "routine \"RXQUEUE\" is not implemented (Phase 10)",
-        ),
-    ];
-    for (source, message) in cases {
-        let outcome = routine_program(source);
-        assert_eq!(
-            outcome.exit_code,
-            crate::NOT_IMPLEMENTED_EXIT,
-            "{message}: exit code"
-        );
-        assert_eq!(outcome.stdout, b"", "{message}: stdout");
-        assert_eq!(
-            outcome.stderr,
-            format!("rexx-exec: {message}\n").into_bytes(),
-            "{message}: stderr"
-        );
-    }
-
-    let outcome = routine_program(b"say zorkolo()\n");
-    assert_eq!(
-        outcome.exit_code, 213,
-        "a name no package exports is the oracle's own 43.1, not a refusal"
-    );
-    let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-    assert!(
-        stderr.contains("Error 43.1:") && stderr.contains("ZORKOLO"),
-        "43.1 must still name the routine: {stderr}"
-    );
-}
-
-/// **A gap the oracle diagnoses before it creates any class refuses before
-/// this crate creates one either**, so a `::CLASS` that cannot install does
-/// not answer in its place.
-/// ```text
-/// ::requires 'zzznosuchfile.rex'                        43.901 rc 213, the ::REQUIRES line
-/// ::routine zz external "LIBRARY nosuchlib nosuchfn"    98.903 rc 158, the ::ROUTINE line
-/// ::method mm external "LIBRARY nosuchlib nosuchfn"     98.903 rc 158, the ::METHOD line
-/// ::attribute aa external "LIBRARY nosuchlib nosuchfn"  98.903 rc 158, the ::ATTRIBUTE line
-/// ::options digits 12                                   98.909 rc 158, the ::CLASS line
-/// ```
-#[test]
-fn a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error() {
-    let failing_class = "::class a subclass zzznotaclass\n";
-    let refusing: &[&str] = &[
-        "::routine zz external \"LIBRARY nosuchlib nosuchfn\"\n",
-        "::class kk\n::method mm external \"LIBRARY nosuchlib nosuchfn\"\n",
-        "::class kk\n::attribute aa external \"LIBRARY nosuchlib nosuchfn\"\n",
-    ];
-    for gap in refusing {
-        for source in [
-            format!("say 'main ran'\n{gap}{failing_class}"),
-            format!("say 'main ran'\n{failing_class}{gap}"),
-        ] {
-            let outcome = routine_program(source.as_bytes());
-            let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-            assert_eq!(
-                outcome.exit_code, 158,
-                "{source}: exit code, stderr {stderr}"
-            );
-            assert_eq!(outcome.stdout, b"", "{source}: stdout");
-            assert!(
-                stderr.contains("Error 98.903:  Unable to load library \"nosuchlib\"."),
-                "{source}: stderr {stderr}"
-            );
-        }
-    }
-    for source in [
-        format!("say 'main ran'\n::requires 'zzznosuchfile.rex'\n{failing_class}"),
-        format!("say 'main ran'\n{failing_class}::requires 'zzznosuchfile.rex'\n"),
-    ] {
-        let outcome = routine_program(source.as_bytes());
-        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-        assert_eq!(
-            outcome.exit_code, 213,
-            "{source}: exit code, stderr {stderr}"
-        );
-        assert_eq!(outcome.stdout, b"", "{source}: stdout");
-        assert!(
-            stderr.contains("*-* ::requires 'zzznosuchfile.rex'\n")
-                && stderr.contains(
-                    "Error 43.901:  Could not find file \"zzznosuchfile.rex\" for ::REQUIRES."
-                ),
-            "{source}: stderr {stderr}"
-        );
-    }
-    for source in [
-        format!("say 'main ran'\n::options digits 12\n{failing_class}"),
-        format!("say 'main ran'\n{failing_class}::options digits 12\n"),
-    ] {
-        let outcome = routine_program(source.as_bytes());
-        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-        assert_eq!(
-            outcome.exit_code, 158,
-            "{source}: exit code, stderr {stderr}"
-        );
-        assert_eq!(outcome.stdout, b"", "{source}: stdout");
-        assert!(
-            stderr.contains("Error 98.909:  Class \"ZZZNOTACLASS\" not found."),
-            "{source}: stderr {stderr}"
-        );
-    }
-}
-
-/// **An unresolvable `::CLASS` keyword is diagnosed inside the class pass,
-/// and that is asserted here rather than left incidental.**
-#[test]
-fn a_class_keyword_gap_is_raised_inside_the_class_pass() {
-    let failing_class = "::class a subclass zzznotaclass\n";
-    let cycle = "::class a subclass b\n::class b subclass a\n";
-    let cases: &[&str] = &[
-        "::class q subclass ns:other\n",
-        "::class q mixinclass ns:other\n",
-        "::class q inherit ns:other\n",
-        "::class q metaclass ns:other\n",
-    ];
-    for gap in cases {
-        let source = format!("say 'main ran'\n{gap}{failing_class}");
-        let outcome = routine_program(source.as_bytes());
-        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-        assert_eq!(
-            outcome.exit_code, 158,
-            "{source}: exit code, stderr {stderr}"
-        );
-        assert_eq!(outcome.stdout, b"", "{source}: stdout");
-        assert!(
-            stderr.contains("Error 98.987:  Namespace \"NS\" not found in package"),
-            "{source}: stderr {stderr}"
-        );
-        assert!(
-            stderr.contains(&format!("*-* {}", gap.trim_end())),
-            "{source}: the report does not echo the qualifier's own clause: {stderr}"
-        );
-
-        let source = format!("say 'main ran'\n{gap}{cycle}");
-        let outcome = routine_program(source.as_bytes());
-        let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-        assert_eq!(
-            outcome.exit_code, 158,
-            "{source}: exit code, stderr {stderr}"
-        );
-        assert_eq!(outcome.stdout, b"", "{source}: stdout");
-        assert!(
-            stderr.contains("Error 98.911:  Cyclic inheritance in program"),
-            "{source}: stderr {stderr}"
-        );
-    }
-}
-
-/// **When one directive owes both a translation error and a gap, the
-/// translation error is the answer**, which is where the gap check sits
-/// relative to `Interp::install_directives`' first loop.
-/// ```text
-/// say 'main ran'                                     rc 157
-/// ::routine dup                                        4 *-* ::routine dup external ...
-///   return 1                                         Error 99.903: Duplicate ::ROUTINE
-/// ::routine dup external "LIBRARY nosuchlib ..."     directive instruction.
-/// ```
-#[test]
-fn a_directive_owing_both_a_translation_error_and_a_gap_answers_the_translation_error() {
-    let outcome = routine_program(
-        b"say 'main ran'\n::routine dup\n  return 1\n          ::routine dup external \"LIBRARY nosuchlib nosuchfn\"\n",
-    );
-    let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-    assert_eq!(outcome.exit_code, 157, "exit code, stderr {stderr}");
-    assert_eq!(outcome.stdout, b"", "stdout");
-    assert!(
-        stderr.contains("Error 99.903:  Duplicate ::ROUTINE directive instruction."),
-        "stderr {stderr}"
-    );
-    assert!(
-        stderr.contains("     4 *-* ::routine dup external"),
-        "the blamed clause must be the second directive, not the first: stderr {stderr}"
-    );
-
-    let outcome = routine_program(
-        b"say 'main ran'\n::routine dup external \"LIBRARY nosuchlib nosuchfn\"\n          ::routine dup\n  return 1\n",
-    );
-    let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
-    assert_eq!(outcome.exit_code, 158, "exit code, stderr {stderr}");
-    assert_eq!(outcome.stdout, b"", "stdout");
-    assert!(
-        stderr.contains("Error 98.903:  Unable to load library \"nosuchlib\"."),
-        "stderr {stderr}"
-    );
-}
-
 /// **A `::ROUTINE EXTERNAL` naming a library installs and runs at the call.**
 /// The library and the procedure are resolved at install time, so a name that
 /// is not there is the oracle's own condition. Measured, oracle: `say pi4()`
@@ -1296,33 +930,4 @@ fn a_builtin_called_with_too_few_arguments_reports_the_oracles_40_3() {
              minimum expected is 1.\n"
         )
     );
-}
-
-/// **The name a stream builtin looks up is rooted while the stream object is
-/// built from it.** `STREAM`'s state and description queries keep nothing in
-/// the table, so each builds a fresh object from the name; under a collection
-/// at every allocation both answer as under none. The stdout is the
-/// oracle's.
-#[test]
-fn a_stream_builtins_name_survives_a_collection_at_every_allocation() {
-    let text = b"say stream('a_stream_name_long_enough_for_the_heap.txt', 's')\n\
-        say stream('a_stream_name_long_enough_for_the_heap.txt', 'd')\n"
-        .to_vec();
-    let name = "/tmp/stream_name_rooted.rex";
-    let plain = crate::run_program(name, text.clone(), crate::Invocation::none());
-    assert_eq!(
-        plain.exit_code,
-        0,
-        "{}",
-        String::from_utf8_lossy(&plain.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&plain.stdout),
-        "UNKNOWN\nUNKNOWN:\n"
-    );
-    let swept = crate::run_program_collect_every_alloc(name, text, crate::Invocation::none());
-    assert_eq!(swept.exit_code, plain.exit_code);
-    assert_eq!(swept.stdout, plain.stdout);
-    assert_eq!(swept.stderr, plain.stderr);
-    assert!(swept.collections > 0, "the stress mode did not collect");
 }
