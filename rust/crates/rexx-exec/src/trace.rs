@@ -19,7 +19,7 @@ use crate::Interp;
 use crate::error::Raised;
 use rexx_core::ObjRef;
 use rexx_num::Number;
-use rexx_parse::{Operator, PrefixOp};
+use rexx_parse::{Operator, PrefixOp, Trace};
 
 /// The visible-output shape of the current `TRACE` setting, and whether
 /// interactive debug is on. The separate `pauseInstructions`/`pauseLabels`/
@@ -170,7 +170,7 @@ impl TraceMode {
         debug: false,
     };
     /// `TRACE I` (`setTraceIntermediates`, `traceIntermediatesFlags`).
-    const INTERMEDIATES: TraceMode = TraceMode {
+    pub(crate) const INTERMEDIATES: TraceMode = TraceMode {
         all: true,
         results: true,
         intermediates: true,
@@ -238,6 +238,14 @@ impl ChunkTrace {
         )
     }
 
+    /// Whether interactive debug is on, which is what puts a line typed at a
+    /// pause -- and so a setting no reading of the source fixes -- in reach.
+    #[cfg(debug_assertions)]
+    #[inline(always)]
+    pub(crate) fn debugging(self) -> bool {
+        self.0 & ChunkTrace::DEBUG != 0
+    }
+
     /// Whether a `*-*` line prints for a clause of this kind.
     #[inline(always)]
     pub(crate) fn intermediates(self) -> bool {
@@ -266,6 +274,49 @@ impl ChunkTrace {
             || (self.0 & ChunkTrace::LABELS != 0 && is_label)
             || (self.0 & ChunkTrace::COMMANDS != 0 && is_command)
     }
+}
+
+/// What one instruction does to the `TRACE` setting in force -- the
+/// optimizing function of `crate::ir::trace_flow`'s forward analysis, one
+/// entry per instruction in [`crate::plan::Plan::trace_events`].
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum TraceEvent {
+    /// The setting leaves this instruction as it arrived.
+    Keeps,
+    /// The setting this instruction puts in force, fixed by its own text.
+    Sets(ChunkTrace),
+    /// The instruction can put a setting in force that no reading of the
+    /// source fixes.
+    Unknown,
+}
+
+/// What a `TRACE` instruction whose setting is a literal puts in force,
+/// following `Interp::exec_trace`'s own arms.
+pub(crate) fn literal_trace_event(setting: &Trace) -> TraceEvent {
+    let mode = match setting {
+        Trace::Default => TraceMode::NORMAL,
+        Trace::Setting(bytes) => {
+            let Ok(request) = parse_trace_request(bytes) else {
+                return TraceEvent::Unknown;
+            };
+            // A setting made only of `?`s toggles the flag on whatever is
+            // already in force, so its answer is the incoming pool rather
+            // than this instruction's text.
+            if request.setting.is_none() {
+                return TraceEvent::Unknown;
+            }
+            applied(TraceMode::OFF, &request)
+        }
+        // `TRACE n` raises 24.901 outside a pause, and `TRACE VALUE`
+        // computes its setting at run time.
+        Trace::Skip(_) | Trace::Value(_) => return TraceEvent::Unknown,
+    };
+    // A line typed at an interactive-debug pause changes the setting from
+    // outside the body, which no analysis of the body can see.
+    if mode.debug {
+        return TraceEvent::Unknown;
+    }
+    TraceEvent::Sets(ChunkTrace::of(mode))
 }
 
 /// Classifies a `TRACE` option string exactly like

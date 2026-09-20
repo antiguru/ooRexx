@@ -27,6 +27,11 @@ use crate::trace::ChunkTrace;
 
 mod compile;
 pub(crate) mod drive;
+// Nothing in a release build reads the analysis yet: it is carried, and
+// checked against the setting in force, only where `debug_assert` is compiled
+// in. The commit that wires it into emission is what makes it unconditional.
+#[cfg(debug_assertions)]
+pub(crate) mod trace_flow;
 pub(crate) use compile::compile;
 pub(crate) use golden::render_annotated;
 
@@ -583,6 +588,12 @@ pub(crate) struct Chunk {
     /// The same for [`Op::LoadConstant`], indexed by the constant symbol's own
     /// `SymbolId` rather than by a slot `compile` assigned.
     interned_symbols: Vec<Cell<ObjRef>>,
+    /// What `trace_flow::analyse` answered for each instruction, kept only
+    /// where `debug_assert` is compiled in: the driver checks a `Known`
+    /// answer against the setting actually in force at that clause, which is
+    /// what makes the analysis checked rather than argued.
+    #[cfg(debug_assertions)]
+    settings: Box<[trace_flow::Setting]>,
     /// The quickening hints [`Op::Arith`] reads, one per such op.
     hints: Hints,
     /// The resolutions [`Op::Call`] reads and writes, one per such op.
@@ -616,6 +627,12 @@ impl Chunk {
     /// The setting this chunk's trace ops were emitted for.
     fn trace(&self) -> ChunkTrace {
         self.trace
+    }
+
+    /// What the analysis answered for instruction `index`.
+    #[cfg(debug_assertions)]
+    fn setting_at(&self, index: usize) -> Option<trace_flow::Setting> {
+        self.settings.get(index).copied()
     }
 
     /// The bytes of constant `at`, or `None` when the index is outside the

@@ -199,6 +199,17 @@ pub(crate) fn compile(
     // non-retracing body entered under `TRACE R`, where the setting cannot
     // change under the chunk and so nothing put it back.
     let echoes_keyword = trace.results() || !plan.never_retraces();
+    // The per-clause answer to the same question, which **no emission
+    // decision above reads yet**. It is carried so that the driver can check
+    // a `Known` answer against the setting that turns out to be in force at
+    // that clause, which is what makes the analysis checked rather than
+    // argued.
+    #[cfg(debug_assertions)]
+    let settings = {
+        let settings = super::trace_flow::analyse(body, plan, trace);
+        assert_analysis_only_narrows(plan, trace, echoes_values, echoes_keyword, &settings);
+        settings
+    };
 
     let len = body.instructions.len();
     let mut ops: Vec<Op> = Vec::with_capacity(len);
@@ -1125,6 +1136,8 @@ pub(crate) fn compile(
         .max();
     Ok(Chunk {
         trace,
+        #[cfg(debug_assertions)]
+        settings,
         ops,
         op_of,
         registers: registers.high_water(),
@@ -1628,6 +1641,40 @@ fn op_index(ops: &[Op]) -> Result<u32, ChunkTooLarge> {
 /// An instruction index as an op payload, refused rather than wrapped.
 fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
     u32::try_from(index).map_err(|_| ChunkTooLarge { what: "op stream" })
+}
+
+/// **What wiring the analysis into emission may and may not do**, asserted
+/// while it is not yet wired in, so that the commit that wires it in cannot
+/// be the one that discovers either.
+///
+/// * A body nothing in which can change the setting has one answer at every
+///   clause, and it is the setting this chunk is keyed under -- so no such
+///   body loses the compile-time decision it already has.
+/// * No clause gains an echo the body-wide bool does not already carry, in
+///   either of the two questions those bools answer.
+#[cfg(debug_assertions)]
+fn assert_analysis_only_narrows(
+    plan: &Plan,
+    trace: ChunkTrace,
+    echoes_values: bool,
+    echoes_keyword: bool,
+    settings: &[super::trace_flow::Setting],
+) {
+    debug_assert!(
+        !plan.never_retraces()
+            || settings
+                .iter()
+                .all(|setting| *setting == super::trace_flow::Setting::Known(trace)),
+        "nothing in this body can change the TRACE setting, so every clause runs under the one \
+         the chunk is keyed to: {settings:?}"
+    );
+    debug_assert!(
+        settings
+            .iter()
+            .all(|setting| (!setting.echoes_values() || echoes_values)
+                && (!setting.echoes_keyword() || echoes_keyword)),
+        "a clause's own answer asks for an echo this chunk does not emit today: {settings:?}"
+    );
 }
 
 /// **Every [`Op::TraceClause`] is the first op of a [`Op::Clause`] region**,

@@ -573,6 +573,27 @@ impl Interp {
                     // cost `bench-programs/emptyloop.rex` 1.52% and
                     // `dispatch.rex` 1.14% in `instructions:u`, measured.
                     let sink = self.traced_mode();
+                    // **The analysis, checked at the clause it answered for.**
+                    // A `Known` answer is a claim that this clause always runs
+                    // under exactly that setting, and the claim is what a
+                    // compile-time emission decision rests on; a missing
+                    // control-flow edge shows up here as a mismatch rather
+                    // than as a program that silently stops tracing.
+                    // `debug_pause` is excluded because
+                    // [`Interp::traced_mode`] answers `OFF` under it by
+                    // design, which is not the program's own setting.
+                    #[cfg(debug_assertions)]
+                    if !self.debug_pause
+                        && let Some(crate::ir::trace_flow::Setting::Known(claimed)) =
+                            chunk.setting_at(index)
+                    {
+                        debug_assert_eq!(
+                            claimed,
+                            crate::trace::ChunkTrace::of(sink),
+                            "the trace analysis answered {claimed:?} for instruction {index}, and \
+                             the setting in force when it ran is not that one"
+                        );
+                    }
                     let stale = chunk.trace().clause_echoes()
                         != crate::trace::ChunkTrace::of(sink).clause_echoes();
                     let debugging = sink.debug;

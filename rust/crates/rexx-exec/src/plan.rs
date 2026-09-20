@@ -17,7 +17,7 @@
 
 use crate::Interp;
 use crate::run::{NameShape, shape_of};
-use crate::trace::ChunkTrace;
+use crate::trace::{ChunkTrace, TraceEvent};
 use rexx_parse::{
     Call, CallTarget, CodeBody, DirectiveKind, Expr, ExprKind, Fragment, Instruction,
     InstructionKind, Loop, LoopKind, Parse, ParseSource, ProgramSource, Redirection, Signal,
@@ -131,8 +131,14 @@ pub(crate) struct Plan {
     pub(crate) by_symbol: Vec<Option<usize>>,
     /// Whether nothing this body runs can change the `TRACE` setting in force
     /// while it runs, so that a compiled stream may decide at compile time
-    /// which value echoes it carries rather than gating each one.
+    /// which value echoes it carries rather than gating each one. Derived in
+    /// [`Plan::build`] from [`Plan::trace_events`], which is the one walk
+    /// that decides it.
     never_retraces: bool,
+    /// What each instruction does to the `TRACE` setting in force, by index --
+    /// the optimizing function `crate::ir::trace_flow` runs its forward
+    /// analysis over.
+    trace_events: Box<[TraceEvent]>,
     /// The static clause indent of every instruction in this body, by index.
     pub(crate) indents: Box<[usize]>,
     /// The 1-based source line every instruction in this body sits on, by
@@ -180,6 +186,13 @@ impl Plan {
         self.never_retraces
     }
 
+    /// [`Plan::trace_events`], or an empty slice for a plan built without the
+    /// walk that fills it.
+    #[cfg(debug_assertions)]
+    pub(crate) fn trace_events(&self) -> &[TraceEvent] {
+        &self.trace_events
+    }
+
     pub(crate) fn compound(&self, id: SymbolId) -> Option<&CompoundName> {
         self.compounds.get(id.index())?.as_ref()
     }
@@ -210,9 +223,24 @@ impl Plan {
             never_retraces: true,
             ..Plan::default()
         };
+        let mut trace_events = Vec::with_capacity(body.instructions.len());
         for instruction in &body.instructions {
+            // Set again in front of each instruction and read back after it,
+            // because `note_instruction` only ever clears the flag: the walk
+            // below would otherwise report every instruction after the first
+            // retracing one as retracing too.
+            plan.never_retraces = true;
             plan.note_instruction(&instruction.kind, symbols);
+            trace_events.push(match (plan.never_retraces, &instruction.kind) {
+                (true, _) => TraceEvent::Keeps,
+                (false, InstructionKind::Trace(setting)) => {
+                    crate::trace::literal_trace_event(setting)
+                }
+                (false, _) => TraceEvent::Unknown,
+            });
         }
+        plan.never_retraces = trace_events.iter().all(|event| *event == TraceEvent::Keeps);
+        plan.trace_events = trace_events.into_boxed_slice();
         // **`RESULT`, `RC` and `SIGL` get a slot whether or not the body
         // mentions them**, which is what
         // `interpreter/execution/RexxLocalVariables.hpp` does with
