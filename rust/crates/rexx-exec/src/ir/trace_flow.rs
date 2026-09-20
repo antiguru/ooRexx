@@ -206,6 +206,23 @@ pub(crate) fn analyse(body: &CodeBody, plan: &Plan, entry: ChunkTrace) -> Box<[S
     pools.into_boxed_slice()
 }
 
+/// The answer **emission** may use at instruction `index`, given the pool
+/// [`analyse`] answered for it.
+///
+/// An instruction that can change the setting can change it part-way through
+/// its own clause, and the ops after that point in the clause run under the
+/// new setting rather than under the pool the clause was entered with.
+/// Measured: `trace off` and then `zg = trace('i') 'tail'` echoes
+/// `>L>   "tail"` and `>O>   " " => "O tail"`, the concatenation's own value
+/// lines, under the `I` that the call in the same clause has just installed
+/// -- and emitting that clause for the `OFF` it was entered under loses both.
+pub(crate) fn for_emission(plan: &Plan, index: usize, pool: Setting) -> Setting {
+    match plan.trace_events().get(index) {
+        Some(TraceEvent::Keeps) => pool,
+        _ => Setting::Unknown,
+    }
+}
+
 /// The optimizing function: an instruction that does not change the setting
 /// passes its pool through, one whose own text fixes a setting produces that
 /// setting, and one that can change it to something the source does not fix

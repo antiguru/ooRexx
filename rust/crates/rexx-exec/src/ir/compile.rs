@@ -183,33 +183,16 @@ pub(crate) fn compile(
     #[cfg(test)]
     count_compile_call();
 
-    // **Whether this stream carries a value echo at all**, decided here rather
-    // than gated per execution. `trace` is the setting the chunk is keyed under,
-    // so a body entered while `TRACE I` is in force gets a stream with the ops
-    // and one entered without it gets a stream without them. What makes that
-    // safe is the second half: the setting can change *while* a chunk runs, and
-    // an op that is not in the stream cannot be gated back on, so a body that
-    // can reach the setting keeps its echoes and its run-time gate.
-    let echoes_values = trace.intermediates() || !plan.never_retraces();
-    // **The header's `>K>` line is a *result*, not an intermediate**, so it
-    // asks a different bit than the echoes above. `TraceMode::results`' own
-    // doc names `>>>`/`>K>` as the pair it owns, and the oracle prints `>K>`
-    // under `R` and `I` and under neither `A` nor `N` (measured, `do i = 1 to
-    // 2`). Gating it with `echoes_values` dropped the op from every
-    // non-retracing body entered under `TRACE R`, where the setting cannot
-    // change under the chunk and so nothing put it back.
-    let echoes_keyword = trace.results() || !plan.never_retraces();
-    // The per-clause answer to the same question, which **no emission
-    // decision above reads yet**. It is carried so that the driver can check
-    // a `Known` answer against the setting that turns out to be in force at
-    // that clause, which is what makes the analysis checked rather than
-    // argued.
+    // **Whether a clause carries a value echo at all**, decided here rather
+    // than gated per execution: an op that is not in the stream cannot be
+    // gated back on, so this decision is only safe where the setting the
+    // clause runs under is settled. `trace_flow` settles it per clause, from
+    // the setting the chunk is keyed under; a clause it cannot settle answers
+    // [`super::trace_flow::Setting::Unknown`], which keeps the echoes and
+    // keeps their run-time gate.
+    let settings = super::trace_flow::analyse(body, plan, trace);
     #[cfg(debug_assertions)]
-    let settings = {
-        let settings = super::trace_flow::analyse(body, plan, trace);
-        assert_analysis_only_narrows(plan, trace, echoes_values, echoes_keyword, &settings);
-        settings
-    };
+    assert_analysis_only_narrows(plan, trace, &settings);
 
     let len = body.instructions.len();
     let mut ops: Vec<Op> = Vec::with_capacity(len);
@@ -260,6 +243,14 @@ pub(crate) fn compile(
         }
         emit_before(&mut ops, &mut patches, &mut before[index])?;
         first_op_of.push(op_index(&ops)?);
+        // This clause's own answers, which is where a per-body `bool` used to
+        // stand. The `>K>` op asks a different bit than the value echoes:
+        // `TraceMode::results`' own doc names `>>>`/`>K>` as the pair it owns,
+        // and the oracle prints `>K>` under `R` and `I` and under neither `A`
+        // nor `N` (measured, `do i = 1 to 2`).
+        let pool = super::trace_flow::for_emission(plan, index, settings[index]);
+        let echoes_values = pool.echoes_values();
+        let echoes_keyword = pool.echoes_keyword();
         match &instruction.kind {
             // `DO` and `LOOP` are the same construct under two spellings
             // (`step`'s own arm matches them together), so they compile the
@@ -1656,12 +1647,18 @@ fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
 fn assert_analysis_only_narrows(
     plan: &Plan,
     trace: ChunkTrace,
-    echoes_values: bool,
-    echoes_keyword: bool,
     settings: &[super::trace_flow::Setting],
 ) {
+    // The two body-wide decisions this analysis replaced, restated here
+    // because this is now the only thing that reads them.
+    let never_retraces = plan
+        .trace_events()
+        .iter()
+        .all(|event| *event == crate::trace::TraceEvent::Keeps);
+    let echoes_values = trace.intermediates() || !never_retraces;
+    let echoes_keyword = trace.results() || !never_retraces;
     debug_assert!(
-        !plan.never_retraces()
+        !never_retraces
             || settings
                 .iter()
                 .all(|setting| *setting == super::trace_flow::Setting::Known(trace)),

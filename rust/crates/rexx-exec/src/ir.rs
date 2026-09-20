@@ -27,10 +27,6 @@ use crate::trace::ChunkTrace;
 
 mod compile;
 pub(crate) mod drive;
-// Nothing in a release build reads the analysis yet: it is carried, and
-// checked against the setting in force, only where `debug_assert` is compiled
-// in. The commit that wires it into emission is what makes it unconditional.
-#[cfg(debug_assertions)]
 pub(crate) mod trace_flow;
 pub(crate) use compile::compile;
 pub(crate) use golden::render_annotated;

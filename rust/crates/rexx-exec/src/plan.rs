@@ -129,15 +129,15 @@ pub(crate) struct Plan {
     pub(crate) result_slot: Option<usize>,
     pub(crate) sigl_slot: Option<usize>,
     pub(crate) by_symbol: Vec<Option<usize>>,
-    /// Whether nothing this body runs can change the `TRACE` setting in force
-    /// while it runs, so that a compiled stream may decide at compile time
-    /// which value echoes it carries rather than gating each one. Derived in
-    /// [`Plan::build`] from [`Plan::trace_events`], which is the one walk
-    /// that decides it.
-    never_retraces: bool,
+    /// The walk's own flag, and scratch: `note_instruction` clears it when the
+    /// instruction it is walking can change the `TRACE` setting in force, and
+    /// [`Plan::build`] sets it again in front of each one. It means nothing
+    /// once that walk has finished.
+    keeps_the_trace_setting: bool,
     /// What each instruction does to the `TRACE` setting in force, by index --
     /// the optimizing function `crate::ir::trace_flow` runs its forward
-    /// analysis over.
+    /// analysis over, and the whole of what lets a compiled stream decide at
+    /// compile time which value echoes it carries rather than gating each one.
     trace_events: Box<[TraceEvent]>,
     /// The static clause indent of every instruction in this body, by index.
     pub(crate) indents: Box<[usize]>,
@@ -181,18 +181,13 @@ impl Plan {
         }
     }
 
-    /// How the compound `id` names splits, if this plan's pass saw it.
-    pub(crate) fn never_retraces(&self) -> bool {
-        self.never_retraces
-    }
-
     /// [`Plan::trace_events`], or an empty slice for a plan built without the
     /// walk that fills it.
-    #[cfg(debug_assertions)]
     pub(crate) fn trace_events(&self) -> &[TraceEvent] {
         &self.trace_events
     }
 
+    /// How the compound `id` names splits, if this plan's pass saw it.
     pub(crate) fn compound(&self, id: SymbolId) -> Option<&CompoundName> {
         self.compounds.get(id.index())?.as_ref()
     }
@@ -218,20 +213,17 @@ impl Plan {
             by_symbol: std::iter::repeat_with(|| None)
                 .take(symbols.len())
                 .collect(),
-            // Optimistic, and the walk below falsifies it; the field's own doc
-            // has why the *default* is the other way round.
-            never_retraces: true,
             ..Plan::default()
         };
         let mut trace_events = Vec::with_capacity(body.instructions.len());
         for instruction in &body.instructions {
             // Set again in front of each instruction and read back after it,
             // because `note_instruction` only ever clears the flag: the walk
-            // below would otherwise report every instruction after the first
+            // would otherwise report every instruction after the first
             // retracing one as retracing too.
-            plan.never_retraces = true;
+            plan.keeps_the_trace_setting = true;
             plan.note_instruction(&instruction.kind, symbols);
-            trace_events.push(match (plan.never_retraces, &instruction.kind) {
+            trace_events.push(match (plan.keeps_the_trace_setting, &instruction.kind) {
                 (true, _) => TraceEvent::Keeps,
                 (false, InstructionKind::Trace(setting)) => {
                     crate::trace::literal_trace_event(setting)
@@ -239,7 +231,6 @@ impl Plan {
                 (false, _) => TraceEvent::Unknown,
             });
         }
-        plan.never_retraces = trace_events.iter().all(|event| *event == TraceEvent::Keeps);
         plan.trace_events = trace_events.into_boxed_slice();
         // **`RESULT`, `RC` and `SIGL` get a slot whether or not the body
         // mentions them**, which is what
@@ -298,7 +289,7 @@ impl Plan {
             | InstructionKind::Reply { expression }
             | InstructionKind::Numeric { expression, .. } => self.note_opt(expression, symbols),
             InstructionKind::Interpret { expression } | InstructionKind::Options { expression } => {
-                self.never_retraces = false;
+                self.keeps_the_trace_setting = false;
                 self.note(expression, symbols);
             }
             InstructionKind::Do(loop_) | InstructionKind::Loop(loop_) => {
@@ -398,7 +389,7 @@ impl Plan {
                 }
             }
             InstructionKind::Trace(trace) => {
-                self.never_retraces = false;
+                self.keeps_the_trace_setting = false;
                 if let Trace::Value(expr) = trace {
                     self.note(expr, symbols);
                 }
@@ -484,19 +475,19 @@ impl Plan {
         match call {
             Call::Named { name, args, .. } => {
                 if names_trace(name) {
-                    self.never_retraces = false;
+                    self.keeps_the_trace_setting = false;
                 }
                 self.note_args(args, symbols);
             }
             Call::Qualified { name, args, .. } => {
                 if names_trace(symbols.name(*name).as_bytes()) {
-                    self.never_retraces = false;
+                    self.keeps_the_trace_setting = false;
                 }
                 self.note_args(args, symbols);
             }
             Call::Dynamic { target, args } => {
                 // The target is a run-time value, so this cannot be read here.
-                self.never_retraces = false;
+                self.keeps_the_trace_setting = false;
                 self.note(target, symbols);
                 self.note_args(args, symbols);
             }
@@ -575,13 +566,13 @@ impl Plan {
                     CallTarget::Literal(bytes) => names_trace(bytes),
                 };
                 if named {
-                    self.never_retraces = false;
+                    self.keeps_the_trace_setting = false;
                 }
                 self.note_args(args, symbols);
             }
             ExprKind::QualifiedCall { name, args, .. } => {
                 if names_trace(symbols.name(*name).as_bytes()) {
-                    self.never_retraces = false;
+                    self.keeps_the_trace_setting = false;
                 }
                 self.note_args(args, symbols);
             }
@@ -1789,13 +1780,16 @@ mod tests {
         );
     }
     /// **What may change the `TRACE` setting under a running chunk**, which is
-    /// the whole of what lets `ir::compile` decide a body's value echoes once
-    /// instead of gating each one.
+    /// the whole of what lets `ir::compile` decide a clause's value echoes at
+    /// compile time instead of gating each one.
     #[test]
     fn a_body_that_can_reach_the_trace_setting_is_the_one_that_says_so() {
         let retraces = |source: &[u8]| {
             let program = parse_program(source.to_vec()).expect("test program parses");
-            !Plan::build(&program.main, &program.symbols, None, BodyKind::Plain).never_retraces()
+            let plan = Plan::build(&program.main, &program.symbols, None, BodyKind::Plain);
+            plan.trace_events()
+                .iter()
+                .any(|event| *event != TraceEvent::Keeps)
         };
 
         // The instruction, in each of its forms.

@@ -240,7 +240,6 @@ impl ChunkTrace {
 
     /// Whether interactive debug is on, which is what puts a line typed at a
     /// pause -- and so a setting no reading of the source fixes -- in reach.
-    #[cfg(debug_assertions)]
     #[inline(always)]
     pub(crate) fn debugging(self) -> bool {
         self.0 & ChunkTrace::DEBUG != 0
