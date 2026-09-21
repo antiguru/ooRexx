@@ -15,11 +15,11 @@
 //! optimizing function per node, and a worklist iterated to a fixpoint.
 //!
 //! The edge set is a **superset** of the body's own control flow, which is
-//! what makes a missing edge impossible; [`successors`] states each edge and
-//! what it stands in for, and [`analyse`] states the two preconditions that
-//! make that superset enough.
+//! what makes a missing edge impossible; [`successors`] and [`Blocks`] state
+//! each edge and what it stands in for, and [`analyse`] states the
+//! preconditions that make that superset enough.
 
-use rexx_parse::{CodeBody, InstructionKind};
+use rexx_parse::{CodeBody, Instruction, InstructionKind};
 
 use crate::plan::Plan;
 use crate::trace::{ChunkTrace, TraceEvent};
@@ -81,27 +81,24 @@ struct Graph {
     /// The `LABEL` instructions, which is what the virtual node's own edges
     /// are.
     labels: Box<[usize]>,
+    /// The edges [`Blocks`] found, by node: a loop's back edge and zero-trip
+    /// edge, and a `LEAVE`/`ITERATE`'s reach.
+    extra: Box<[Box<[usize]>]>,
     /// One past the last instruction, which is the virtual node's index.
     virtual_node: usize,
 }
 
-/// The nodes `node`'s output pool reaches: the fallthrough, and the virtual
-/// label node.
+/// The nodes `node`'s output pool reaches: the fallthrough, the edges
+/// [`Blocks`] found for it, and the virtual label node.
 ///
 /// `node + 1` is given to every instruction, including the ones that never
 /// fall through -- a spurious edge only lowers an answer.
 ///
-/// **The two edge kinds a structured body also has need no entry of their
-/// own**, and both arguments rest on [`analyse`]'s second precondition, that
-/// no instruction inside a construct changes the setting:
-///
-/// * A **forward branch** skips only instructions inside the arm it is
-///   skipping, so the chain of fallthrough edges across them carries exactly
-///   what the branch edge would have.
-/// * A **loop's backward edge** carries the pool at the `END` to the header.
-///   Everything between them passes its pool through, so the value arriving
-///   is the header's own output -- which the header already has, if it is not
-///   an event, and which it ignores, if it is.
+/// **A forward branch needs no edge of its own.** It skips only instructions
+/// inside the arm it is skipping, so the chain of fallthrough edges across
+/// them carries exactly what the branch edge would have -- which rests on
+/// [`analyse`]'s second precondition, that no instruction inside an `IF` or a
+/// `SELECT` changes the setting.
 fn successors(graph: &Graph, node: usize, out: &mut Vec<usize>) {
     out.clear();
     if node == graph.virtual_node {
@@ -111,8 +108,123 @@ fn successors(graph: &Graph, node: usize, out: &mut Vec<usize>) {
     if node + 1 < graph.virtual_node {
         out.push(node + 1);
     }
+    out.extend_from_slice(&graph.extra[node]);
     if !graph.labels.is_empty() {
         out.push(graph.virtual_node);
+    }
+}
+
+/// One walk of a body's block structure: which instructions sit inside an
+/// `IF` or a `SELECT`, and the edges a `DO`/`LOOP` and a `LEAVE`/`ITERATE`
+/// contribute.
+struct Blocks {
+    /// Whether the instruction sits anywhere inside an `IF` or a `SELECT`.
+    /// **Initialised to `true`**, so an instruction [`Blocks::scan`] does not
+    /// reach keeps the answer that refuses the body.
+    branchy: Box<[bool]>,
+    /// The extra successor edges, by node, built by [`Blocks::edges`].
+    extra: Vec<Vec<usize>>,
+}
+
+impl Blocks {
+    /// Walks `instructions` once and answers both.
+    ///
+    /// The dispatch on `IF`/`SELECT`/`DO`/`LOOP` is `run::static_indent`'s,
+    /// reading the same fields to walk the same ranges.
+    fn of(instructions: &[Instruction]) -> Blocks {
+        let len = instructions.len();
+        let mut blocks = Blocks {
+            branchy: vec![true; len].into_boxed_slice(),
+            extra: vec![Vec::new(); len],
+        };
+        let mut enclosing = Vec::new();
+        blocks.scan(instructions, 0, len, false, &mut enclosing);
+        blocks
+    }
+
+    /// `[start, end)` at one nesting, marking each instruction and recording
+    /// each block's own edges.
+    fn scan(
+        &mut self,
+        instructions: &[Instruction],
+        start: usize,
+        end: usize,
+        branchy: bool,
+        enclosing: &mut Vec<(usize, usize)>,
+    ) {
+        let len = instructions.len();
+        let mut pc = start;
+        while pc < end {
+            self.branchy[pc] = branchy;
+            match &instructions[pc].kind {
+                InstructionKind::If { false_target, .. } => {
+                    let false_target = false_target.unwrap_or(len);
+                    self.scan(instructions, pc + 1, false_target, true, enclosing);
+                    pc = match instructions.get(false_target).map(|at| &at.kind) {
+                        Some(InstructionKind::Else { then_exit }) => {
+                            let else_end = then_exit.unwrap_or(len);
+                            self.scan(instructions, false_target, else_end, true, enclosing);
+                            else_end
+                        }
+                        _ => false_target,
+                    };
+                }
+                InstructionKind::Do(loop_) | InstructionKind::Loop(loop_) => {
+                    // An unclosed `DO` is error 14.1/14.5, so a body that
+                    // parsed has this set; a body that somehow does not keeps
+                    // the `true` every entry was initialised to.
+                    let Some(end_index) = loop_.end else { return };
+                    // **The back edge and the zero-trip edge**, which are what
+                    // lets a `TRACE` sit inside a loop. The header is reached
+                    // both from before the loop and from the `END`, so it
+                    // answers the meet; the instruction past the `END` is
+                    // reached both from the `END` and -- when the loop runs no
+                    // passes at all -- from the header, so it answers the meet
+                    // too. `DO FOREVER` and `DO UNTIL` cannot trip zero times
+                    // and are given the edge anyway: a spurious edge only
+                    // lowers an answer, and deciding which loops can be empty
+                    // is the reasoning this edge set exists to avoid.
+                    if end_index < len {
+                        self.extra[end_index].push(pc);
+                        if end_index + 1 < len {
+                            self.extra[pc].push(end_index + 1);
+                        }
+                    }
+                    enclosing.push((pc, end_index));
+                    self.scan(instructions, pc + 1, end_index, branchy, enclosing);
+                    enclosing.pop();
+                    if end_index < len {
+                        self.branchy[end_index] = branchy;
+                    }
+                    pc = end_index + 1;
+                }
+                InstructionKind::Select {
+                    end: select_end, ..
+                } => {
+                    let select_end = select_end.unwrap_or(len);
+                    enclosing.push((pc, select_end));
+                    self.scan(instructions, pc + 1, select_end, true, enclosing);
+                    enclosing.pop();
+                    pc = select_end + 1;
+                }
+                // **Every enclosing block, not the innermost one**, and both
+                // of its ends: a named `LEAVE` or `ITERATE` reaches any block
+                // it is inside, and which one is a run-time match against the
+                // name. The `ITERATE` target is the header and the `LEAVE`
+                // target the instruction past the `END`; giving both to both
+                // is the same spurious-edge trade as above.
+                InstructionKind::Leave { .. } | InstructionKind::Iterate { .. } => {
+                    for &(header, block_end) in enclosing.iter() {
+                        self.extra[pc].push(header);
+                        if block_end + 1 < len {
+                            self.extra[pc].push(block_end + 1);
+                        }
+                    }
+                    pc += 1;
+                }
+                _ => pc += 1,
+            }
+        }
     }
 }
 
@@ -124,10 +236,12 @@ fn successors(graph: &Graph, node: usize, out: &mut Vec<usize>) {
 ///
 /// * **`entry` is not in interactive debug.** A line typed at a pause changes
 ///   the setting from outside the body, and no analysis of the body sees it.
-/// * **Every instruction that changes the setting sits at the body's own top
-///   level** (`Plan::indents` answers 0 for it). This is what [`successors`]
-///   rests on: a forward branch skipping a `TRACE` inside its own arm is an
-///   edge that would have to be modelled, and this refuses the body instead.
+/// * **No instruction that changes the setting sits inside an `IF` or a
+///   `SELECT`** ([`Blocks::branchy`]). This is what [`successors`] rests on:
+///   a forward branch skipping a `TRACE` inside its own arm is an edge that
+///   would have to be modelled, and this refuses the body instead. A `TRACE`
+///   inside a loop needs no such refusal, because [`Blocks`] gives the loop
+///   its two edges.
 pub(crate) fn analyse(body: &CodeBody, plan: &Plan, entry: ChunkTrace) -> Box<[Setting]> {
     let len = body.instructions.len();
     let unknown = || vec![Setting::Unknown; len].into_boxed_slice();
@@ -135,10 +249,12 @@ pub(crate) fn analyse(body: &CodeBody, plan: &Plan, entry: ChunkTrace) -> Box<[S
     if events.len() != len || entry.debugging() {
         return unknown();
     }
-    let settles_at_top_level = events.iter().enumerate().all(|(index, event)| {
-        *event == TraceEvent::Keeps || plan.indent_of(&body.instructions, index) == 0
-    });
-    if !settles_at_top_level {
+    let blocks = Blocks::of(&body.instructions);
+    let settles_outside_a_branch = events
+        .iter()
+        .enumerate()
+        .all(|(index, event)| *event == TraceEvent::Keeps || !blocks.branchy[index]);
+    if !settles_outside_a_branch {
         return unknown();
     }
 
@@ -149,6 +265,11 @@ pub(crate) fn analyse(body: &CodeBody, plan: &Plan, entry: ChunkTrace) -> Box<[S
             .enumerate()
             .filter(|(_, instruction)| matches!(instruction.kind, InstructionKind::Label { .. }))
             .map(|(index, _)| index)
+            .collect(),
+        extra: blocks
+            .extra
+            .into_iter()
+            .map(Vec::into_boxed_slice)
             .collect(),
         virtual_node: len,
     };
@@ -331,15 +452,16 @@ mod tests {
         );
     }
 
-    /// A `TRACE` anywhere but the body's own top level is the shape
-    /// [`successors`] does not model, because the branch or loop edge around
-    /// it would have to carry the setting from before it: the body is refused
-    /// whole, in both of the two shapes that reach it.
+    /// A `TRACE` inside an `IF` or a `SELECT` is the shape [`successors`]
+    /// does not model, because the branch edge around it would have to carry
+    /// the setting from before it: the body is refused whole.
     #[test]
-    fn a_trace_below_the_top_level_refuses_the_body() {
+    fn a_trace_inside_a_branch_refuses_the_body() {
         for source in [
             &b"trace i\nif 0 then trace off\nsay 'x'"[..],
-            &b"do zi = 1 to 3\n  trace off\n  say zi\nend\nsay 'x'"[..],
+            &b"trace i\nif 0 then nop\nelse trace off\nsay 'x'"[..],
+            &b"trace i\nselect\n  when 0 then trace off\n  otherwise nop\nend\nsay 'x'"[..],
+            &b"trace i\nselect\n  when 0 then nop\n  otherwise trace off\nend\nsay 'x'"[..],
         ] {
             let settings = settings_of(source, TraceMode::NORMAL);
             assert!(
@@ -348,7 +470,7 @@ mod tests {
             );
         }
         // The control: the same `TRACE OFF`, moved out to the top level,
-        // settles the whole body. Without this the two above would also pass
+        // settles the whole body. Without this the four above would also pass
         // for an analysis that refused every body carrying a `TRACE`.
         assert_eq!(
             settings_of(
@@ -356,6 +478,85 @@ mod tests {
                 TraceMode::NORMAL
             ),
             vec![off(); 4]
+        );
+    }
+
+    /// A `TRACE` inside a loop settles the clauses after it **in the loop**,
+    /// and the loop's own two edges are what keep the header and the
+    /// instruction past the `END` honest.
+    ///
+    /// `TRACE OFF` under a `NORMAL` entry is the case where every one of them
+    /// agrees, because the two are one [`ChunkTrace`]: the whole body settles.
+    #[test]
+    fn a_trace_off_inside_a_loop_settles_the_whole_body() {
+        assert_eq!(
+            settings_of(
+                b"do zi = 1 to 3\n  trace off\n  say zi\nend\nsay 'x'",
+                TraceMode::NORMAL
+            ),
+            vec![off(); 5]
+        );
+    }
+
+    /// The same shape with a setting the entry disagrees with, which is what
+    /// says the two edges are load-bearing rather than decoration.
+    ///
+    /// * the **header** is bottom: it runs under the entry setting on the
+    ///   first pass and under `I` on every later one, which is the back edge;
+    /// * the clauses **after** the `TRACE`, inside the loop, are `Known(I)` --
+    ///   and they are the hot half;
+    /// * the instruction **past the `END`** is bottom, because a loop that
+    ///   runs no passes at all leaves the entry setting in force, which is the
+    ///   zero-trip edge.
+    #[test]
+    fn a_trace_i_inside_a_loop_settles_the_body_and_not_its_ends() {
+        let intermediates = Setting::Known(ChunkTrace::of(TraceMode::INTERMEDIATES));
+        assert_eq!(
+            settings_of(
+                b"do zi = 1 to 3\n  trace i\n  say zi\nend\nsay 'x'",
+                TraceMode::NORMAL
+            ),
+            vec![
+                Setting::Unknown,
+                Setting::Unknown,
+                intermediates,
+                intermediates,
+                Setting::Unknown,
+            ]
+        );
+    }
+
+    /// A `LEAVE` reaches the instruction past its loop's `END` without
+    /// running what lies between it and the `END`, so that instruction
+    /// answers the meet of the setting at the `LEAVE` and the one the `END`
+    /// was reached under.
+    ///
+    /// Measured against the oracle on this very body, rc 0: the `LEAVE` fires
+    /// on the second pass under the `I` the clause above it installed, and
+    /// `say 'x'` echoes `>L>   "x"` and `>>>   "x"`. Without the `LEAVE`'s
+    /// edge the answer there is `Known(OFF)`, which drops both lines.
+    #[test]
+    fn a_leave_carries_the_setting_from_before_the_trace_after_it() {
+        let settings = settings_of(
+            b"do zi = 1 to 3\n  trace i\n  if zi = 2 then leave\n  trace off\nend\nsay 'x'",
+            TraceMode::NORMAL,
+        );
+        assert_eq!(
+            settings.last().copied(),
+            Some(Setting::Unknown),
+            "the instruction past the END, which the LEAVE reaches: {settings:?}"
+        );
+        // The control: the same body with the `LEAVE` replaced by a `NOP`
+        // settles there, so the bottom above is the `LEAVE`'s edge doing it
+        // rather than anything else in the shape.
+        assert_eq!(
+            settings_of(
+                b"do zi = 1 to 3\n  trace i\n  if zi = 2 then nop\n  trace off\nend\nsay 'x'",
+                TraceMode::NORMAL
+            )
+            .last()
+            .copied(),
+            Some(off())
         );
     }
 
