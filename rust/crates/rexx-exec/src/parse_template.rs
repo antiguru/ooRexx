@@ -18,7 +18,7 @@
 
 use crate::error::{Failure, Raised};
 use crate::{Code, Interp, Loud};
-use rexx_core::ObjRef;
+use rexx_core::{Bytes, Decoded, InlineText, ObjRef};
 use rexx_parse::{ExprKind, Parse, ParseSource, ParseTrigger, TriggerKind};
 
 /// The platform name `PARSE SOURCE`'s first word carries.
@@ -101,14 +101,73 @@ enum ParseStrings {
     /// A single-string source. The slot empties on the first take, so a
     /// template past the first parses the null string -- which is the rule
     /// [`Interp::next_template`] wants and gets here for free.
-    One(Option<Vec<u8>>),
+    One(Option<SourceText>),
     /// `PARSE ARG`: the index of the argument the next template reads.
     Arg(usize),
 }
 
-/// One template's parse string and the five positions the triggers move.
+/// Where one template's parse string lives while its triggers walk it.
+enum SourceText {
+    /// Bytes this walk owns, from [`Interp::parse_buffers`].
+    Owned(Vec<u8>),
+    /// Bytes carried in the handle, which is a `Copy` value this enum holds,
+    /// so nothing in the arena reaches them.
+    Inline(InlineText),
+    /// A rooted `Body::Text`, read where it already is rather than copied,
+    /// with the length it had when the walk started.
+    ///
+    /// **The slice is derived at each use and never held across a call that
+    /// can allocate**: an allocation can grow the arena's slot vector and move
+    /// the object's inline bytes with it. The borrow of `Interp` that
+    /// [`SourceText::bytes`] hands back is what enforces that, since a `&mut
+    /// self` call ends it. The length is the one thing kept rather than
+    /// re-derived, and [`SourceText::bytes`] asserts it against the object.
+    Text { value: ObjRef, length: usize },
+}
+
+impl SourceText {
+    /// The parse string's bytes, wherever they live.
+    ///
+    /// # Panics
+    ///
+    /// When [`SourceText::Text`] no longer names a live `Body::Text`, which is
+    /// a parse source that lost its root rather than anything a program can
+    /// write. `Interp::source_text` is the one constructor of that arm and it
+    /// roots what it borrows from.
+    fn bytes<'a>(&'a self, interp: &'a Interp) -> &'a [u8] {
+        match self {
+            SourceText::Owned(buffer) => buffer,
+            SourceText::Inline(inline) => inline,
+            SourceText::Text { value, length } => match interp.heap.body_text(*value) {
+                Some(bytes) => {
+                    debug_assert_eq!(bytes.len(), *length, "the parse source changed length");
+                    bytes
+                }
+                None => unreachable!("the parse source was collected mid-template"),
+            },
+        }
+    }
+
+    /// How long the parse string is, without reaching the arena for it.
+    fn len(&self) -> usize {
+        match self {
+            SourceText::Owned(buffer) => buffer.len(),
+            SourceText::Inline(inline) => inline.len(),
+            SourceText::Text { length, .. } => *length,
+        }
+    }
+
+    /// The pool buffer this source took, for a caller handing it back.
+    fn into_buffer(self) -> Option<Vec<u8>> {
+        match self {
+            SourceText::Owned(buffer) => Some(buffer),
+            SourceText::Inline(_) | SourceText::Text { .. } => None,
+        }
+    }
+}
+
+/// The positions a template's triggers move over its parse string.
 pub(crate) struct Cursor {
-    string: Vec<u8>,
     length: usize,
     /// The start of the section this trigger's targets are carved from.
     start: usize,
@@ -126,17 +185,10 @@ pub(crate) struct Cursor {
 }
 
 impl Cursor {
-    /// The string back, for a caller returning it to a pool.
-    pub(crate) fn into_string(self) -> Vec<u8> {
-        self.string
-    }
-
-    /// A fresh cursor over `string`, every position at the origin
-    /// (`RexxTarget::next`'s own reset).
-    pub(crate) fn new(string: Vec<u8>) -> Cursor {
-        let length = string.len();
+    /// A fresh cursor over a parse string of `length` bytes, every position at
+    /// the origin (`RexxTarget::next`'s own reset).
+    pub(crate) fn new(length: usize) -> Cursor {
         Cursor {
-            string,
             length,
             start: 0,
             end: 0,
@@ -144,11 +196,6 @@ impl Cursor {
             pattern_end: 0,
             subcurrent: 0,
         }
-    }
-
-    /// The string being parsed, for the caller that has to trace it.
-    pub(crate) fn string(&self) -> &[u8] {
-        &self.string
     }
 
     /// The implicit trailing trigger: the section runs from the end of the
@@ -231,19 +278,13 @@ impl Cursor {
 
     /// A literal or `(expr)` pattern. Searches from the end of the last
     /// match, so searches are non-overlapping.
-    fn search(&mut self, needle: &[u8]) {
-        self.match_at(
-            find(&self.string, needle, self.pattern_end, false),
-            needle.len(),
-        );
+    fn search(&mut self, string: &[u8], needle: &[u8]) {
+        self.match_at(find(string, needle, self.pattern_end, false), needle.len());
     }
 
     /// [`search`] under `PARSE CASELESS`.
-    fn caseless_search(&mut self, needle: &[u8]) {
-        self.match_at(
-            find(&self.string, needle, self.pattern_end, true),
-            needle.len(),
-        );
+    fn caseless_search(&mut self, string: &[u8], needle: &[u8]) {
+        self.match_at(find(string, needle, self.pattern_end, true), needle.len());
     }
 
     /// The half of a string search that is not the comparison: where the two
@@ -266,20 +307,25 @@ impl Cursor {
     }
 
     /// The next blank-delimited word of the current section, as a range into
-    /// [`string`], or an empty range once the section is used up.
-    fn next_word(&mut self) -> std::ops::Range<usize> {
+    /// `string`, or an empty range once the section is used up.
+    fn next_word(&mut self, string: &[u8]) -> std::ops::Range<usize> {
+        debug_assert_eq!(
+            string.len(),
+            self.length,
+            "the parse string changed length under the cursor"
+        );
         if self.subcurrent >= self.end {
             return 0..0;
         }
         let mut scan = self.subcurrent;
-        while scan < self.length && is_blank(self.string[scan]) {
+        while scan < self.length && is_blank(string[scan]) {
             scan += 1;
         }
         self.subcurrent = scan;
         if self.subcurrent >= self.end {
             return 0..0;
         }
-        let word_end = (self.subcurrent..self.end).find(|&i| is_blank(self.string[i]));
+        let word_end = (self.subcurrent..self.end).find(|&i| is_blank(string[i]));
         match word_end {
             // No blank before the section's end: the rest of the section is
             // the word.
@@ -377,17 +423,82 @@ impl Interp {
         self.parse_buffers.push(buffer);
     }
 
+    /// Hands back whatever a spent source borrowed from the pool.
+    fn give_source(&mut self, source: SourceText) {
+        if let Some(buffer) = source.into_buffer() {
+            self.give_parse_buffer(buffer);
+        }
+    }
+
     /// Hands back the string a template walk did not consume.
     fn give_parse_strings(&mut self, strings: ParseStrings) {
         match strings {
-            ParseStrings::One(Some(string)) => self.give_parse_buffer(string),
+            ParseStrings::One(Some(source)) => self.give_source(source),
             ParseStrings::One(None) | ParseStrings::Arg(_) => {}
         }
     }
 
-    /// `PARSE ARG`'s string for the template at argument position `at`, in a
-    /// buffer from the pool.
-    fn argument_text(&mut self, at: usize) -> Result<Vec<u8>, Failure> {
+    /// `value` as a parse string: its own bytes where nothing can move them
+    /// out from under the walk, and a copy in a pool buffer where they can.
+    ///
+    /// `Body::Text`'s bytes are written once, by the `alloc` that builds the
+    /// object, and no other body in the value model holds bytes that are
+    /// immutable for a whole clause -- a `MutableBuffer`'s contents are not.
+    /// A folding `PARSE` always copies, because it rewrites the parse string
+    /// in place.
+    fn source_text(&mut self, value: ObjRef, parse: &Parse) -> SourceText {
+        if !parse.upper && !parse.lower {
+            match value.decode() {
+                Decoded::Text(inline) => return SourceText::Inline(inline),
+                Decoded::Heap { .. } => {
+                    if let Some(length) = self.heap.body_text(value).map(<[u8]>::len) {
+                        // Rooted where the borrow is taken, since from here
+                        // the walk reads the object rather than a copy of it.
+                        // The temporary lives until this clause ends, which
+                        // outlasts the walk.
+                        self.roots.push_temp(value);
+                        return SourceText::Text { value, length };
+                    }
+                }
+                _ => {}
+            }
+        }
+        SourceText::Owned(self.rendered_into_parse_buffer(value))
+    }
+
+    /// One piece of the parse string in a buffer from the pool, for a caller
+    /// that needs the bytes across a `&mut self` call.
+    fn copied_piece(&mut self, source: &SourceText, piece: std::ops::Range<usize>) -> Vec<u8> {
+        let mut buffer = self.take_parse_buffer();
+        buffer.extend_from_slice(&source.bytes(self)[piece]);
+        buffer
+    }
+
+    /// Carves one target's piece out of the parse string and builds its text
+    /// value, **under a single borrow of the source**: the carving indexes the
+    /// bytes and so does the value, so one derivation serves both.
+    fn take_piece(
+        &mut self,
+        source: &SourceText,
+        cursor: &mut Cursor,
+        last: bool,
+    ) -> (std::ops::Range<usize>, ObjRef) {
+        let string = source.bytes(self);
+        let piece = if last {
+            cursor.remainder()
+        } else {
+            cursor.next_word(string)
+        };
+        let bytes = &string[piece.start..piece.end];
+        if let Some(inline) = ObjRef::inline_text(bytes) {
+            return (piece, inline);
+        }
+        let bytes = Bytes::from_slice(bytes);
+        (piece, self.text_bytes(bytes))
+    }
+
+    /// `PARSE ARG`'s string for the template at argument position `at`.
+    fn argument_text(&mut self, at: usize, parse: &Parse) -> Result<SourceText, Failure> {
         let argument = match self.call_context.arguments.get(at) {
             Some(Some(argument)) => Some(*argument),
             Some(None) | None => None,
@@ -398,9 +509,9 @@ impl Interp {
             // `>K>` of its own to disagree with.
             Some(value) => {
                 let value = self.required_string_value(value)?;
-                Ok(self.rendered_into_parse_buffer(value))
+                Ok(self.source_text(value, parse))
             }
-            None => Ok(self.take_parse_buffer()),
+            None => Ok(SourceText::Owned(self.take_parse_buffer())),
         }
     }
 
@@ -413,7 +524,7 @@ impl Interp {
     ) -> Result<(), Failure> {
         let indent = self.clause_state.current_value_indent;
         let mut strings = self.parse_strings(code, parse, indent, evaluated)?;
-        let mut cursor = self.next_template(&mut strings, parse, indent)?;
+        let (mut source, mut cursor) = self.next_template(&mut strings, parse, indent)?;
 
         for entry in &parse.template {
             let Some(trigger) = entry else {
@@ -421,18 +532,19 @@ impl Interp {
                 // it advances to the next parse string, which for `PARSE ARG`
                 // is the next argument and for every other source is the null
                 // string (`RexxTarget::next`'s own `next_argument != 1` arm).
-                let next = self.next_template(&mut strings, parse, indent)?;
-                let spent = std::mem::replace(&mut cursor, next);
-                self.give_parse_buffer(spent.into_string());
+                let (next_source, next_cursor) = self.next_template(&mut strings, parse, indent)?;
+                cursor = next_cursor;
+                let spent = std::mem::replace(&mut source, next_source);
+                self.give_source(spent);
                 continue;
             };
-            self.apply_trigger(code, trigger, &mut cursor, indent)?;
-            self.assign_targets(code, trigger, &mut cursor, indent)?;
+            self.apply_trigger(code, trigger, &source, &mut cursor, indent)?;
+            self.assign_targets(code, trigger, &source, &mut cursor, indent)?;
         }
         // Only on the way out through the bottom: a template that leaves
         // through `?` above drops its buffers instead, which is the same
         // trade every lender in this interpreter makes.
-        self.give_parse_buffer(cursor.into_string());
+        self.give_source(source);
         self.give_parse_strings(strings);
         Ok(())
     }
@@ -444,27 +556,38 @@ impl Interp {
         strings: &mut ParseStrings,
         parse: &Parse,
         indent: usize,
-    ) -> Result<Cursor, Failure> {
-        let mut string = match strings {
+    ) -> Result<(SourceText, Cursor), Failure> {
+        let mut source = match strings {
             // A template past the single string parses the null string, and
             // an empty `Vec` is that with nothing taken from the pool -- one
             // of zero capacity is what `give_parse_buffer` declines to park
             // anyway.
-            ParseStrings::One(string) => string.take().unwrap_or_default(),
+            ParseStrings::One(source) => source.take().unwrap_or(SourceText::Owned(Vec::new())),
             ParseStrings::Arg(index) => {
                 let at = *index;
                 *index += 1;
-                self.argument_text(at)?
+                self.argument_text(at, parse)?
             }
         };
-        if parse.upper {
-            string.make_ascii_uppercase();
-        } else if parse.lower {
-            string.make_ascii_lowercase();
+        if parse.upper || parse.lower {
+            // A folding source owns its bytes; `Interp::source_text` is where
+            // that is decided.
+            let SourceText::Owned(buffer) = &mut source else {
+                unreachable!("a folding PARSE reached a borrowed parse string")
+            };
+            if parse.upper {
+                buffer.make_ascii_uppercase();
+            } else {
+                buffer.make_ascii_lowercase();
+            }
         }
-        let cursor = Cursor::new(string);
-        self.trace_result(indent, cursor.string());
-        Ok(cursor)
+        let cursor = Cursor::new(source.len());
+        if self.traced_mode().results {
+            let whole = self.copied_piece(&source, 0..cursor.length);
+            self.trace_result(indent, &whole);
+            self.give_parse_buffer(whole);
+        }
+        Ok((source, cursor))
     }
 
     /// The strings this `PARSE` will consume, in template order, and the
@@ -554,7 +677,7 @@ impl Interp {
         let value = match value {
             Subject::Bytes(bytes) => {
                 self.trace_keyword(indent, keyword, &bytes);
-                bytes
+                SourceText::Owned(bytes)
             }
             // **`>K>` names the object and the template walks the
             // conversion.** `RexxInstructionParse::execute` traces `value`
@@ -564,15 +687,15 @@ impl Interp {
             // class-side `makeString` returning `'p q'`:
             // `>K>   "VALUE" => "The K class"` and then `>>>   "p q"`.
             Subject::Value(value) => {
-                let traced = self.rendered_into_parse_buffer(value);
-                self.trace_keyword(indent, keyword, &traced);
-                let converted = self.required_string_value(value)?;
-                if converted == value {
-                    traced
-                } else {
+                // The rendering exists for that line and for nothing else, so
+                // it is taken under the line's own gate.
+                if self.traced_mode().results {
+                    let traced = self.rendered_into_parse_buffer(value);
+                    self.trace_keyword(indent, keyword, &traced);
                     self.give_parse_buffer(traced);
-                    self.rendered_into_parse_buffer(converted)
                 }
+                let converted = self.required_string_value(value)?;
+                self.source_text(converted, parse)
             }
         };
         Ok(ParseStrings::One(Some(value)))
@@ -642,6 +765,7 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         trigger: &ParseTrigger,
+        source: &SourceText,
         cursor: &mut Cursor,
         indent: usize,
     ) -> Result<(), Failure> {
@@ -681,12 +805,18 @@ impl Interp {
             self.trace_result(indent, &rendered);
         }
         match trigger.kind {
+            // **The needle is rendered before the source slice is taken**, not
+            // after: `render` can allocate, and the borrow below may not
+            // outlive an allocation. `Rendered` re-derives its own bytes for
+            // the same reason [`SourceText`] does.
             TriggerKind::String => {
-                cursor.search(&self.to_text(value));
+                let needle = self.render(value);
+                cursor.search(source.bytes(self), needle.text(self));
                 Ok(())
             }
             TriggerKind::Mixed => {
-                cursor.caseless_search(&self.to_text(value));
+                let needle = self.render(value);
+                cursor.caseless_search(source.bytes(self), needle.text(self));
                 Ok(())
             }
             _ => {
@@ -731,6 +861,7 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         trigger: &ParseTrigger,
+        source: &SourceText,
         cursor: &mut Cursor,
         indent: usize,
     ) -> Result<(), Failure> {
@@ -748,18 +879,13 @@ impl Interp {
                 self.traced_mode(),
                 "the TRACE setting moved while one trigger's targets were assigned"
             );
-            let piece = if index == last {
-                cursor.remainder()
-            } else {
-                cursor.next_word()
-            };
             match target {
                 Some(target) => {
                     // **The value is built inside this arm because the other
                     // arm has nothing to assign it to.** A `.` consumes its
                     // field and stores nowhere, so a value built ahead of the
                     // match is created, rooted and dropped unread.
-                    let value = self.text(&cursor.string()[piece.clone()]);
+                    let (piece, value) = self.take_piece(source, cursor, index == last);
                     self.roots.push_temp(value);
                     // **The slot the upfront pass already bound this target
                     // to.** No compiler resolves a `PARSE` target -- nothing
@@ -775,13 +901,17 @@ impl Interp {
                         ExprKind::Variable(id) => code.slot_for(*id).map(|slot| (*id, slot)),
                         _ => None,
                     };
-                    // A borrow of the parse source rather than a fresh copy of
-                    // the assigned value, so the `Option` guards nothing here
-                    // but the `>=>` line -- see `assign_expr_target`'s own doc
-                    // for what the other caller pays.
-                    let rendered = traced
-                        .intermediates
-                        .then(|| &cursor.string()[piece.clone()]);
+                    // One copy of the piece for whichever of the two lines
+                    // below will print it, taken only where one of them will
+                    // -- the parse string itself may not be borrowed across
+                    // the assignment, which is a `&mut self` call.
+                    let shown = (traced.intermediates || traced.results)
+                        .then(|| self.copied_piece(source, piece));
+                    let rendered = if traced.intermediates {
+                        shown.as_deref()
+                    } else {
+                        None
+                    };
                     if let Some((id, slot)) = bound {
                         self.assign_bound_variable(code, id, slot, value, rendered, indent);
                     } else {
@@ -791,7 +921,13 @@ impl Interp {
                     // `exec_parse` doc for why it is a choice of prefix and
                     // not a second, independent line.
                     if traced.results && !traced.intermediates {
-                        self.trace_result(indent, &cursor.string()[piece]);
+                        let shown = shown
+                            .as_deref()
+                            .expect("a results line is one of the two the copy above is for");
+                        self.trace_result(indent, shown);
+                    }
+                    if let Some(buffer) = shown {
+                        self.give_parse_buffer(buffer);
                     }
                 }
                 // The `.` placeholder consumes a field and assigns nothing,
@@ -799,8 +935,15 @@ impl Interp {
                 // nothing** -- measured, `parse value 'one two' with p . q`
                 // traces `>.>   ""` between `>=> P` and `>=> Q`.
                 None => {
+                    let piece = if index == last {
+                        cursor.remainder()
+                    } else {
+                        cursor.next_word(source.bytes(self))
+                    };
                     if traced.intermediates {
-                        self.trace_dummy(indent, &cursor.string()[piece]);
+                        let shown = self.copied_piece(source, piece);
+                        self.trace_dummy(indent, &shown);
+                        self.give_parse_buffer(shown);
                     }
                 }
             }
@@ -818,7 +961,8 @@ mod tests {
     /// carries the transcripts); the driver below replays only the *movement*,
     /// so a row here is a claim about [`Cursor`] alone.
     fn pieces(source: &str, template: &[Trigger]) -> Vec<String> {
-        let mut cursor = Cursor::new(source.as_bytes().to_vec());
+        let string = source.as_bytes();
+        let mut cursor = Cursor::new(string.len());
         let mut out = Vec::new();
         for step in template {
             match step {
@@ -828,16 +972,16 @@ mod tests {
                 Trigger::Absolute(n) => cursor.absolute(*n),
                 Trigger::PlusLength(n) => cursor.forward_length(*n),
                 Trigger::MinusLength(n) => cursor.backward_length(*n),
-                Trigger::Search(needle) => cursor.search(needle.as_bytes()),
-                Trigger::Caseless(needle) => cursor.caseless_search(needle.as_bytes()),
+                Trigger::Search(needle) => cursor.search(string, needle.as_bytes()),
+                Trigger::Caseless(needle) => cursor.caseless_search(string, needle.as_bytes()),
                 Trigger::Targets(count) => {
                     for index in 0..*count {
                         let piece = if index + 1 == *count {
                             cursor.remainder()
                         } else {
-                            cursor.next_word()
+                            cursor.next_word(string)
                         };
-                        out.push(String::from_utf8_lossy(&cursor.string()[piece]).into_owned());
+                        out.push(String::from_utf8_lossy(&string[piece]).into_owned());
                     }
                 }
             }
@@ -1088,14 +1232,15 @@ mod tests {
         // A byte alphabet, so the two high bytes are compared as bytes and
         // not as text: 0xc9 and 0xe9 are 0x20 apart and match only
         // themselves.
-        let mut high = Cursor::new(vec![b'a', 0xc9, b'b']);
-        high.caseless_search(&[0xe9]);
+        let string = [b'a', 0xc9, b'b'];
+        let mut high = Cursor::new(string.len());
+        high.caseless_search(&string, &[0xe9]);
         let piece = high.remainder();
-        assert_eq!(high.string()[piece], [b'a', 0xc9, b'b']);
-        let mut same = Cursor::new(vec![b'a', 0xc9, b'b']);
-        same.caseless_search(&[0xc9]);
+        assert_eq!(string[piece], [b'a', 0xc9, b'b']);
+        let mut same = Cursor::new(string.len());
+        same.caseless_search(&string, &[0xc9]);
         let piece = same.remainder();
-        assert_eq!(same.string()[piece], [b'a']);
+        assert_eq!(string[piece], [b'a']);
     }
 
     /// Word carving: only the final target keeps its leading blanks, extra
@@ -1211,6 +1356,74 @@ mod tests {
             crate::Invocation::none(),
         );
         assert_eq!(String::from_utf8_lossy(&ordinary.stdout), expected);
+    }
+
+    /// A template walk whose own allocations collect, over a parse string the
+    /// walk reads where it lives rather than out of a copy.
+    ///
+    /// **Every piece below is longer than `INLINE_TEXT`**, so each assignment
+    /// allocates and, under the stress mode, collects -- which is what puts a
+    /// collection between one target and the next. **Every parse string is
+    /// built by concatenation** rather than written as a literal, for the
+    /// reason [`a_late_parse_arg_template_survives_collection`] gives: a
+    /// literal is interned where the collector cannot take it.
+    ///
+    /// **The last template writes over the compound it is reading**, and the
+    /// object was built inside `fill` so no live register still holds it:
+    /// from the second target on, the walk's own temporary is what keeps it.
+    /// Measured with every root on the path deleted -- `Interp::source_text`'s,
+    /// the `PARSE VAR` arm's and `required_string_value`'s -- the stress run
+    /// sweeps the source between two of this template's targets and
+    /// `SourceText::bytes` panics here. Any one of them left in place keeps it
+    /// alive, so this asserts that the source is rooted and not that a
+    /// particular line roots it.
+    #[test]
+    fn a_template_walk_survives_a_collection_between_its_targets() {
+        let source = concat!(
+            "vr = 'alphabetic' 'bookkeeper' 'cannonball' 'dreadnought'\n",
+            "parse var vr w1 w2 w3 w4\n",
+            "say '['w1']['w2']['w3']['w4']'\n",
+            "pat = '=' || '='\n",
+            "st = 'leftmostpiece' || pat || 'rightmostpiece'\n",
+            "parse var st a1 (pat) a2\n",
+            "say '['a1']['a2']'\n",
+            "parse value 'valuepiece' 'secondpiece' 'thirdpiece' with v1 . v3\n",
+            "say '['v1']['v3']'\n",
+            "parse value 'columnarpiece' || 'tailingpiece' with c1 14 c2\n",
+            "say '['c1']['c2']'\n",
+            "call fill\n",
+            "parse var sm.1 s1 sm.1 s3 s4\n",
+            "say '['s1']['sm.1']['s3']['s4']'\n",
+            "exit\n",
+            "fill:\n",
+            "sm.1 = 'firstliteral' 'secondliteral' 'thirdliteral' 'fourthliteral'\n",
+            "return\n",
+        );
+        let expected = concat!(
+            "[alphabetic][bookkeeper][cannonball][dreadnought]\n",
+            "[leftmostpiece][rightmostpiece]\n",
+            "[valuepiece][thirdpiece]\n",
+            "[columnarpiece][tailingpiece]\n",
+            "[firstliteral][secondliteral][thirdliteral][fourthliteral]\n",
+        );
+        let stressed = crate::run_program_collect_every_alloc(
+            "/tmp/parse-in-place-collect.rex",
+            source.as_bytes().to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(String::from_utf8_lossy(&stressed.stdout), expected);
+        assert_eq!(stressed.exit_code, 0);
+        assert!(
+            stressed.collections > 0,
+            "the stress mode collected nothing, so this proves nothing"
+        );
+        let ordinary = crate::run_program(
+            "/tmp/parse-in-place-collect.rex",
+            source.as_bytes().to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(String::from_utf8_lossy(&ordinary.stdout), expected);
+        assert_eq!(ordinary.exit_code, 0);
     }
 
     /// `PARSE SOURCE` and `PARSE VERSION` reach their own strings, which no

@@ -387,6 +387,27 @@ impl Heap {
             .then_some(slot as usize)
     }
 
+    /// A live `Body::Text`'s bytes, and `None` for every other slot state and
+    /// every other body -- one indexing and one match, where [`Heap::get`]
+    /// followed by a body match is two of each. For a caller that reads the
+    /// same handle many times over.
+    pub fn body_text(&self, r: ObjRef) -> Option<&[u8]> {
+        let Decoded::Heap { slot, generation } = r.decode() else {
+            return None;
+        };
+        match self.slots.get(slot as usize)? {
+            Slot::Live {
+                object:
+                    Object {
+                        body: Body::Text { bytes, .. },
+                        ..
+                    },
+                generation: live,
+            } if *live == generation => Some(bytes.as_slice()),
+            _ => None,
+        }
+    }
+
     pub fn get(&self, r: ObjRef) -> Option<&Object> {
         let slot = self.resolve(r)?;
         match &self.slots[slot] {
@@ -464,5 +485,64 @@ mod retire_tests {
         );
         assert!(heap.get(stale).is_none(), "the stale handle still misses");
         assert!(heap.get(next).is_some());
+    }
+}
+
+#[cfg(test)]
+mod body_text_tests {
+    //! [`Heap::body_text`] is a shortcut through [`Heap::get`] and a body
+    //! match, so every case is asserted against that pair rather than against
+    //! a written-down expectation.
+    use super::*;
+    use crate::RootSet;
+    use crate::bytes::Bytes;
+
+    /// What the shortcut is a shortcut *for*, spelled out.
+    fn the_long_way(heap: &Heap, r: ObjRef) -> Option<&[u8]> {
+        match heap.get(r).map(|object| &object.body) {
+            Some(Body::Text { bytes, .. }) => Some(bytes.as_slice()),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn it_answers_what_get_and_a_body_match_answer() {
+        let mut heap = Heap::new();
+        let text = heap.alloc(Body::Text {
+            bytes: Bytes::from_slice(b"a parse source"),
+            num: None,
+        });
+        let other = heap.alloc(Body::WeakRef(ObjRef::NIL));
+        for candidate in [text, other, ObjRef::NIL, ObjRef::inline_byte(b'x')] {
+            assert_eq!(
+                heap.body_text(candidate),
+                the_long_way(&heap, candidate),
+                "{candidate:?}"
+            );
+        }
+        assert_eq!(heap.body_text(text), Some(&b"a parse source"[..]));
+        assert_eq!(heap.body_text(other), None);
+
+        // A swept slot **taken by a live `Body::Text` again**, which is the
+        // state an unrooted parse source reaches and the one the shortcut has
+        // to answer `None` for rather than the next occupant's bytes. Every
+        // freed slot is refilled, because the free list hands them back in an
+        // order this test does not get to choose.
+        let capacity = heap.slot_capacity();
+        heap.collect(&RootSet::new());
+        let occupants: Vec<ObjRef> = (0..capacity)
+            .map(|_| {
+                heap.alloc(Body::Text {
+                    bytes: Bytes::from_slice(b"the next occupant"),
+                    num: None,
+                })
+            })
+            .collect();
+        assert_eq!(heap.slot_capacity(), capacity, "the slots were not reused");
+        for occupant in occupants {
+            assert_eq!(heap.body_text(occupant), Some(&b"the next occupant"[..]));
+        }
+        assert_eq!(heap.body_text(text), None, "a swept handle");
+        assert_eq!(heap.body_text(text), the_long_way(&heap, text));
     }
 }

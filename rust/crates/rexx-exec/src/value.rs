@@ -205,7 +205,7 @@ impl Interp {
     /// The one place a `Body::Text` is built, so the `num` cache's initial
     /// state is stated once.
     #[inline]
-    fn text_bytes(&mut self, bytes: Bytes) -> ObjRef {
+    pub(crate) fn text_bytes(&mut self, bytes: Bytes) -> ObjRef {
         debug_assert!(
             ObjRef::inline_text(&bytes).is_none(),
             "a value that fits the handle built a Bytes on the way here"
