@@ -1,0 +1,450 @@
+# Items 3 and 5: one fusion landed, one sized and declined, 2026-09-21
+
+BASE is `bc26d7936`. One commit: **`725aa8863`**, "Branch from the condition op
+itself, so a test and its jump are one dispatch". Item 5 was sized on the pinned
+axis and **not built**.
+
+All instruction figures are `valgrind --tool=callgrind`'s `summary:` line, two
+rounds per build, each build in its own `CARGO_TARGET_DIR`, with each binary's
+`sha256` beside its figures. All op figures are the summed execution counts at
+the `jmp *` addresses inside every `Interp::run_ops_from` instantiation, the
+method `2026-09-20-instructions-per-op.md` sets out.
+
+## What landed
+
+`Op::Condition` and `Op::JumpUnless` become one `Op::ConditionJump`. The pair is
+emitted together at both sites that emit either -- an `IF` whose condition
+`native_shape` accepts, and a listed `WHEN`'s -- so it is statically adjacent in
+every stream there is.
+
+**The fusion is made where the ops are emitted, not by a pass over a finished
+stream.** That is what dissolves the renumbering hazard; the enumeration below
+is what showed it was the design to choose.
+
+`Op::JumpUnless` stays, for the two arrivals that are not a validated condition:
+an `IF` whose condition falls to `Op::EvalExpr`, and an `Op::WhenTest`.
+
+The fused op still validates, still raises 34.1 for an `IF` and 34.2 for a
+`WHEN`, and still emits the `>>>` line. Only the write-back to the register is
+gone, because the branch was its only reader.
+
+## Adjacency census: 621 programs, not just `rexxcps`
+
+    for f in rust/bench-programs/*.rex rust/corpus/*/*.rex; do
+      <target-base>/release/rexx-ir "$f" > irs-base/$n.ir
+    done
+
+621 files rendered, **0 empty** (`find irs-base -size 0 | wc -l` -> 0), so a
+failed render cannot be counted as a clean zero.
+
+| quantity | count |
+|---|---|
+| `Condition` ops | 765 |
+| ...immediately followed by `JumpUnless` | **765 (100%)** |
+| `JumpUnless` ops | 789 |
+| ...immediately preceded by `Condition` | 765 |
+| programs whose stream carries value echoes | 42 -- `Condition` 27, adjacent **27** |
+| programs without | 579 -- `Condition` 738, adjacent **738** |
+
+The answer is the same in both stream shapes: **nothing ever sits between a
+`Condition` and its `JumpUnless`**, echoes on or off. That is structural rather
+than lucky, because the two are pushed back to back in the same `match` arm at
+both sites, so there is no point at which an echo op could be interleaved.
+
+The same census rendered with the HEAD binary answers **765 `ConditionJump` and
+24 `JumpUnless` left**, which is exactly the 765 fused and the 789 - 765 = 24
+that arrive from `Op::EvalExpr` or `Op::WhenTest`. Coverage verified from both
+sides.
+
+### On `rexxcps` alone
+
+    <target>/release/rexx-ir rust/bench-rexxcps/rexxcps.rex
+
+| | BASE | `725aa8863` |
+|---|---|---|
+| ops in the rendered stream | **739** | **720** |
+| `Condition` | 19 | -- |
+| `JumpUnless` | 19 | **0** |
+| `ConditionJump` | -- | **19** |
+
+19 static pairs found, 19 fused, neither op left unfused. The stream is 19 ops
+shorter, one per pair. A parallel read-only investigation reached 19 of 19
+independently, under settings `n`, `off`, `a`, `i` and `r`.
+
+## Measurements
+
+    valgrind --tool=callgrind --dump-instr=yes --callgrind-out-file=... \
+      rexx-run rust/bench-rexxcps/rexxcps.rex
+
+exit 0 on every run. Each build in its own target directory.
+
+BASE binary `sha256 d54ba9f3c2a353e538a4596eb4a9dede48cebd2e54263000f382ecbf50eb4957`
+HEAD binary `sha256 8dea297a70520ce6212d0a3d27330735517b9d1d7d42c50791f2c4e983efd50d`
+
+| | round 1 | round 2 | mean | within-build spread |
+|---|---|---|---|---|
+| BASE instructions | 21,146,285,889 | 21,147,725,298 | 21,147,005,593.5 | **0.0068%** |
+| HEAD instructions | 20,792,841,179 | 20,792,883,013 | 20,792,862,096.0 | **0.0002%** |
+
+**-354,143,497 instructions, -1.6747%**, against a widest observed within-build
+spread of 0.0068% -- 246 times the noise band.
+
+### Executed pair counts, both instantiations
+
+| dispatch site | BASE | HEAD | delta |
+|---|---|---|---|
+| outer table, `<true>` | 19,441,281 | 19,441,281 | 0 |
+| region table, `<true>` | 98,924,014 | 93,024,008 | **-5,900,006** |
+| outer table, `<false>` | 1,120,000 | 1,120,000 | 0 |
+| region table, `<false>` | 8,400,000 | 7,840,000 | **-560,000** |
+| **total ops dispatched** | **127,885,295** | **121,425,289** | **-6,460,006 (-5.05%)** |
+
+**Executed pairs: 6,460,006, not 5,900,006.** 5,900,006 is the `<true>`
+instantiation alone; the `<false>` one -- `run_bounded_from_chunk`, loop bodies
+stepped as a bounded range -- carries another 560,000. Both rounds of each build
+answered the same op count to the unit.
+
+The BASE per-address rows reproduce `2026-09-20-instructions-per-op.md`'s
+recorded rows (19,441,281 / 1,120,000 / ~98.9M / 8,400,000), which is the method
+cross-checking itself rather than being assumed.
+
+### An independent rebuild agrees
+
+The team lead rebuilt the same commit and measured round 1 at
+**20,794,262,141** from a binary built independently,
+`sha256 b079d104213a2dc188c49a446acf342b00e90c587c8c2850ab0b8e2c6c4b3f11`,
+against the HEAD mean of 20,792,862,096 -- a **0.0067%** gap between two
+different builds of the same source, inside BASE's own within-build spread of
+0.0068%. Two builds, two machines' worth of noise, same answer. Their static
+side agrees too: 720 ops, `JumpUnless` 0, `ConditionJump` 19.
+
+## "Ops removed x 20" is a floor, not a ceiling
+
+The queued item derived **~0.56%** from 5,900,006 ops at 20.0 instructions each.
+The measured figure is **-1.6747%**, and the measured price of a removed op here
+is **54.8 instructions**.
+
+20.0 Ir is the price of a dispatch that *does nothing*, derived from deleting
+trace ops. This fusion removes more than a dispatch. The split is **34.8 of the
+54.8** in register traffic, and it is:
+
+* on the write side, `ObjRef::small_int(i64::from(holds))` and
+  `self.roots.set_temp(registers, reg, logical)`;
+* on the read side, `self.roots.temp_at(registers, reg)` and
+  `register_holds`'s two constant comparisons, its `decode()` and the match on
+  it.
+
+None of that survives, because the branch was the write-back's only reader.
+
+**So a ceiling derived as "ops removed times 20" understates every candidate of
+this shape, and by how much depends on how much register traffic sat between the
+pair.** Anything remaining on the queued list that was sized that way is sized
+low.
+
+## Controls: a program that does not benefit must not pay
+
+Neither control contains an `IF`, `WHEN` or `SELECT` (checked in the source);
+the five ops each loses are in the region dispatch, not in either program's own
+body.
+
+| | BASE mean | HEAD mean | delta | spreads, BASE / HEAD |
+|---|---|---|---|---|
+| `bench-programs/emptyloop.rex` | 9,998,587,053.5 | 9,998,569,167.0 | **-0.00018%** | 0.000014% / 0.00020% |
+| `bench-programs/varlookup.rex` | 17,584,596,499.5 | 17,584,609,595.5 | **+0.00007%** | 0.00013% / 0.0000093% |
+
+Ops: `emptyloop` 50,000,549 -> 50,000,544; `varlookup` 171,000,552 ->
+171,000,547.
+
+Both deltas sit inside their own builds' spreads and point in opposite
+directions. No per-clause conditional was introduced, and no jump-table arm was
+added: the driver has **one** arm where it had two. This is what makes the
+-1.6747% attributable rather than merely observed.
+
+## Differential: eight probes, three descriptors kept separate
+
+Oracle wrapper
+`( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /home/moritz/dev/repos/ooRexx/build/bin/rexx FILE )`,
+run from a fresh empty directory created for the purpose.
+
+1. `if 'x' then say 'a'` -- **34.1**, `found "x"`, rc 222.
+2. `select; when 'y' then ...; otherwise ...; end` -- **34.2**, `found "y"`, rc 222.
+3. `trace i` over `if zn > 1` -- the `>>>   "1"` line emitted after `>O>`, rc 0.
+4. `SELECT` chain inside `do zk = 1 to 3`, rc 0.
+5. `trace r` over `SELECT CASE`, rc 0.
+6. nested `IF` under `SIGNAL ON SYNTAX`, rc 0.
+7. `::method '='` returning `'banana'` reaching an `IF` -- **34.1**, `found "banana"`, rc 222.
+8. the same reaching a `WHEN` -- **34.2**, `found "banana"`, rc 222.
+
+**stdout, stderr and exit status byte-identical across oracle, BASE and HEAD on
+all eight.** Probes 7 and 8 are the soundness case that killed item 4
+(`eval.rs:1287` routes an object-left comparison to a user-defined
+`::method '='` and returns it unvalidated); they confirm the fused op's
+validation is live, since it fuses the validation with the branch rather than
+removing it.
+
+## Item 5: sized, and not built
+
+**Static pairs on `rexxcps`: 6. Executed pairs: 6.** Six ops of 127,885,295 is
+0.0000047%; at 54.8 Ir, 329 instructions out of 21.1 billion. The brief's
+threshold is 0.3%, so its own stopping rule fires on measurement.
+
+The stream holds 28 `Store` ops. Six have a constant load immediately in front:
+
+| op | shape | clause |
+|---|---|---|
+| 2 | `LoadConstant` + `Store` | line 6, `rexxcps=2.2` |
+| 5 | `LoadConstant` + `Store` | line 11, `count=200` |
+| 8 | `LoadConstant` + `Store` | line 12, `averaging=100` |
+| 11 | `Const` + `Store` | line 14, `tracevar='Off'` |
+| 37 | `LoadConstant` + `Store` | line 25, `empty=0` |
+| 69 | `LoadConstant` + `Store` | line 36, `full=0` |
+
+1 `Const` and 5 `LoadConstant`. A parallel investigation reached the same six
+sites independently from a different rendering. Each was then checked against
+the source: **all six sit at the program's top level, outside every loop**, so
+each runs once per program.
+
+### Why the hot ones are not adjacent
+
+Ten further `Store` ops are constant-fed with exactly one op in between, and
+that op is `Op::TraceLiteral`:
+
+    110: Clause index=26 end=114   ; 45: key1='Key Bee'
+    111: Const dst=5 konst=7
+    112: TraceLiteral src=5
+    113: Store index=26 at=13 src=5
+
+The ten: `flag=0` and `p0='b'` (line 42), `key1='Key Bee'` (45), `flag=0` (66),
+`flag=1` (68), `flag=1` (73), and the four `rc='...'` clauses (78-81) -- the hot
+half of the 1000-clause body.
+
+Those echoes exist because `trace_flow::analyse` answers `Unknown` for the whole
+body: two of the three `TRACE` instructions are `trace value <expr>`, which is
+bottom to any static analysis. **Item 5's value on `rexxcps` is a function of
+item 2, not of anything about the fusion.**
+
+**The hot-body route is 1,740,000 ops per run. That figure is measured**, by a
+parallel investigation, and it supersedes a 2,000,000 I derived by hand from the
+loop structure. The ~260,000 gap is most likely my counting line 66's
+`when flag==0 then flag=0` as taken when it is not -- one 14-per-pass site at
+20,000 passes. The conclusion does not move either way.
+
+### The threshold was computed at the wrong price, and the error is larger than one factor
+
+Two corrections to the 0.165% that item 5 was declined against, in opposite
+directions to each other but both in item 5's favour:
+
+* **54.8 Ir is not transferable to item 5.** It decomposes as ~20 of dispatch
+  plus ~34.8 of the handoff *this* pair had. A constant-load-and-store fusion
+  removes `set_temp` and `temp_at` and **none of the rest** -- a strict subset,
+  the cheaper half. So 54.8 is an upper bound for item 5, 20.0 is the lower
+  bound, and nothing between them has been measured.
+* **A three-op fusion removes two ops per execution, not one.** The hot pairs are
+  separated by a live `TraceLiteral`, so reaching them means fusing
+  `LoadConstant` + `TraceLiteral` + `Store` into one op. At 1,740,000 executions
+  that is ~3,480,000 ops, not 1,740,000.
+
+| price | ops removed | instructions | share |
+|---|---|---|---|
+| 20.0 Ir, the floor | 3,480,000 | 69.6M | **0.33%** |
+| 54.8 Ir, the ceiling | 3,480,000 | 190.7M | **0.90%** |
+
+**Even the floor clears 0.3%.** All of this is DERIVED, and rests on the
+measured 1,740,000; that number is the one to re-derive before anyone acts on
+it.
+
+### Is the three-op fusion coherent?
+
+Yes, and structurally it is the same shape as what was built, from what was read
+in the code:
+
+* The three ops are pushed adjacently in one place. `compile.rs`'s `Assignment`
+  arm calls `push_value`, whose `ExprKind::Literal` arm pushes
+  `Op::Const { dst, konst }` and then, `if echoes_values`,
+  `Op::TraceLiteral { src: dst }`; the arm then pushes `Op::Store`. So the
+  three-op fusion is emittable at the same site by the same emission-time
+  technique, with the same "nothing renumbers" property.
+* Nothing is skipped. The driver's `Op::TraceLiteral` arm gates on the setting
+  and calls `echo_literal`; a fused op does the same gate and the same echo,
+  then the store.
+* **It removes more register traffic than the two-op version, not less.**
+  `TraceLiteral` is a *second* reader of the register, so fusing all three lets
+  the value live in a local: one `set_temp` and **two** `temp_at`s go, against
+  one and one. Its per-op price should therefore sit nearer 54.8 than a plain
+  `Const`+`Store` fusion's would.
+* Width is fine: `{ index: u32, at: PlanSlot, konst: u32 }` is 12 bytes, inside
+  the `size_of::<Op>() == 16` assert, and the `src` field the echo needed
+  disappears because the fused op holds the value directly.
+* GC is fine, and this was checked rather than assumed: `Interp::interned_literal`
+  (`value.rs:117`) takes `alloc_immortal_with`, and `lib.rs:5456` records that a
+  chunk's interned literals are immortal. So the constant needs no register to
+  root it, which is what makes dropping the register write safe.
+
+**Not looked at:** `echo_literal` itself, only the driver arm's gate and comment.
+Whether the echo path can raise or re-enter in a way the current op ordering
+depends on is unchecked, and is the thing to check before building it.
+
+**Two things for the decision, not for the implementer:**
+
+1. **Item 2 may obsolete it.** Those `TraceLiteral` ops exist only because the
+   body is `Unknown`. If item 2 lands they leave the hot body, the ten sites
+   become strictly adjacent, and the plain two-op fusion covers them -- at which
+   point a three-op variant is dead weight carrying its own arms.
+2. **It is four new arms, not one.** `Const`/`LoadConstant` x echoed/unechoed.
+   The controls here show one arm *removed* cost nothing; they do not license
+   four *added*. That needs its own `emptyloop`/`varlookup` control run.
+
+### The pattern outside `rexxcps`
+
+Across `bench-programs/` and every `corpus/*/*.rex` -- 621 bodies, 0 empty
+renders, 51,826 static ops, 1,643 `Store` ops -- there are **470 strictly
+adjacent** constant-load-then-`Store` pairs, **0.91% of all static ops**, and
+only 12 echo-blocked. None is on a benchmark axis; they concentrate in
+`corpus/lang/`. A static share is not an executed share, so this sizes nothing.
+It says the shape is ordinary in code that does not trace, and that `rexxcps` is
+the unusual one.
+
+## What is keyed by an op index, and how it was checked
+
+The enumeration was done **first**, before any of the fusion was written, and the
+emission-site design was chosen because of what it showed.
+
+Method: on the clean tree, with `crates/rexx-exec/src` copied to the scratchpad
+first and restored from that copy afterwards (no git involved, so no risk to
+uncommitted work), `Op::Clause`'s `end`, `Op::Jump`'s and `Op::JumpUnless`'s
+`target`, and `Chunk::op_of`'s element type were changed from `u32` to a newtype
+`OpIx(u32)` carrying no arithmetic and no `From`.
+`cargo build --workspace --all-targets` was then run repeatedly, fixing each
+error and re-running, **until the error list was empty**. Every site below is one
+rustc named; because the list was driven to empty, the enumeration is complete
+rather than sampled.
+
+Production:
+
+* `Op::Clause { end }` -- `ir.rs:72`. Written by `compile::close_region`; read by
+  the driver to bound the region slice (`chunk.ops_in(pc + 1, end)`), by
+  `assert_exec_regions_hold_nothing_else` and
+  `assert_region_ops_name_their_clause`, and as the region's fallthrough `next`.
+* `Op::Jump { target }` -- `ir.rs:258`.
+* `Op::JumpUnless { target }` -- `ir.rs:261`; now also `Op::ConditionJump { target }`.
+* `Chunk::op_of: Vec<u32>` -- `ir.rs:564`, instruction index to op index, read
+  through `Chunk::op_at`.
+* `compile::first_op_of` -- the same map without the `Before` ops in front,
+  which `PatchKind::Enter` resolves against.
+* `compile::Patch::op` -- the op a forward jump rewrites.
+* `compile::op_index` -- the sole producer of all of the above.
+* `drive.rs:55` and `drive.rs:65` -- the two frame structs' `op_end`, built by
+  `drive::op_at` from `targets.body_end` and `otherwise_end`, with `u32::MAX` as
+  the sentinel at `:94` and `:2180`.
+* `drive::Settled::At`, `drive::RegionEnd::At`, `drive::BranchEnd::At`.
+* `Interp::run_ops` and `run_ops_from`'s `at` parameter, and `pc`, `stop` and
+  `next` inside it.
+* `drive::op_at`, the helper.
+* `run.rs:343` `FlatLoop::op_body`, `run.rs:6273` `flat_loop_start`'s `op_body`
+  parameter, `run.rs:441` `FlatStep::Body`.
+
+Tests: the hand-built op streams in `compile.rs`'s own unit tests, four
+`chunk.op_of` assertions in `golden_tests.rs`, one `end as usize` in
+`corpus_shape_tests.rs`.
+
+**Named by the brief and *not* keyed by an op index.** rustc flagged none of them
+when the index type changed, and each was then read to confirm it is dense over
+its own sites in emission order: `Chunk::hints` (keyed by `Op::Arith`'s `hint`,
+handed out by `Hints::reserve`), `Chunk::calls` (keyed by `site`,
+`Calls::reserve`), `Chunk::consts` and `Chunk::interned` (keyed by `konst`),
+`Chunk::interned_symbols` (keyed by `SymbolId`), `Chunk::positions` and
+`Chunk::settings` (instruction index), and every op's `index` and `slot` field,
+and `PlanSlot`. The brief's specific worry -- that the hint tables are "dense
+over sites rather than over the stream" -- is real but orthogonal: they renumber
+if an `Arith` or a call op is *deleted*, and neither item deletes one.
+
+**Why the hazard does not arise in what was built.** `op_of`, `first_op_of`, the
+patch list and each `Clause`'s `end` are all taken from `op_index(&ops)` during
+the same forward walk that emits the fused op, so every one of them is
+consistent with the shorter stream by construction. A peephole pass over a
+finished stream would have had to remap all fourteen production entries above;
+the emission-site fusion remaps none.
+
+## Hazards the brief named, against what was built
+
+* **The register must be dead after the fused op.** It is. `ConditionJump` no
+  longer writes the logical back, and the `JumpUnless` that read it is gone.
+  `reg` is the `IF`'s or `WHEN`'s own register, allocated at the top of its
+  `compile` arm and released at the end of it; the branch was its only reader. It
+  keeps the unvalidated value it came in with, which is a live handle rather than
+  a hole, so nothing about rooting changes.
+* **Nothing may branch between the two ops.** Nothing can: a jump target is
+  `first_op_of[i]` or `op_of[i]`, both of which name an instruction's own first
+  op, and the fused op sits inside a clause region rather than at one of those.
+* **No per-clause conditional was added**, which is the failure item 2 hit. The
+  driver has one arm where it had two and one jump-table entry where it had two.
+  The controls above are the evidence.
+
+## Gates
+
+Run at `725aa8863` with the tree frozen, each status written unpiped to a status
+file whose first line is the commit sha, builds outside the memory cap and tests
+under it. Window 2026-09-21T10:56:18+02:00 to 11:08:03+02:00; the commit was made
+at 10:49:59, six minutes before the run started.
+
+    commit: 725aa88639f6f4ccdc4f4b0092e0768447895d0c
+    cargo fmt --all --check                                                      -> rc 0
+    cargo clippy --workspace --all-targets -- -D warnings                        -> rc 0
+    cargo build --workspace --all-targets --release                              -> rc 0
+    REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast -> rc 0, 2649 passed / 0 failed / 4 ignored, 133 binaries
+    cargo build --workspace --all-targets                                        -> rc 0
+    REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast           -> rc 0, 2650 passed / 0 failed / 4 ignored, 133 binaries
+    tree edited during window: no
+
+Identical to the reading recorded for `4ef6af5bb`. "Tree edited during window: no"
+is three checks, not an assumption: `git status --short` empty, and a `find` over
+`rust/` and `.superpowers/` for files modified inside the window (excluding
+`target/` and `.git/`) returning nothing.
+
+Two qualifications, both from output rather than inference:
+
+* The clippy gate finished in 0.09s against a warm `rust/target`, which
+  `rust/CLAUDE.md` says to treat as provisional. It was re-run from an empty
+  `CARGO_TARGET_DIR`: **74 crates compiled cold, rc 0, no warnings.**
+* The per-binary tallies are summed by script from the `test result:` lines in
+  each run's own log, not read off a summary line -- `cargo test` stops at the
+  first failing binary, so a summary can describe a run that never reached the
+  corpus harness.
+
+## Concerns
+
+1. **`2026-09-20-instructions-per-op.md`'s op-mix table is a `<true>`-only table,
+   and other items are being sized from it.** Its `Condition` 5,900,006 and
+   `JumpUnless` 5,900,006 rows omit the `<false>` instantiation, which carries
+   another 560,000 of each -- measured here, 8,400,000 -> 7,840,000. Every
+   executed-count row in that table is understated by whatever its `<false>`
+   share is, and nothing in the document says so. It is the denominator for
+   items 4 through 6.
+2. **The 20 Ir constant is a floor and the queued list is sized in it.** Item 3
+   was sized 0.56% and measured 1.67%.
+3. **`Op::TraceFunction` is emitted unconditionally, and that looks like a gap in
+   item 1.** In `push_native`'s call arm, `TraceLiteral`, `TraceOperator`,
+   `TracePrefix` and `TraceArgument` are each behind `if echoes_values`;
+   `Op::TraceFunction` is pushed at both of its sites with no such gate, and the
+   driver gates it at *run time* instead
+   (`if !self.tracing_intermediates() { continue; }`). So a clause the analysis
+   settled as `Known` and non-echoing still carries a `TraceFunction` dispatch
+   per call that does nothing but test and continue. `rexxcps` has 8 statically,
+   but its body is `Unknown` throughout so gating it would change nothing there
+   -- the gain is on exactly the programs item 1 was built for. **Its executed
+   cost was not measured** and this was not pursued: it is item 1's territory, it
+   looks like a one-line emission gate, and it is the only value-echo op item 1
+   does not reach.
+4. **`Op::JumpUnless` now has two live producers and no benchmark emits either**
+   -- an `IF` outside `native_shape`, and a listed `WHEN` falling to
+   `Op::WhenTest`. 24 of them across the 621-program census. That arm is
+   exercised by the corpus and the golden tests only.
+
+## Scratch
+
+`/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/opfusion/`
+holds `gate-status.txt`, the six `gate-*.log`, `clippy-clean.log`, the twelve
+callgrind dumps under `cg/`, both 621-program renderings (`irs/` at HEAD,
+`irs-base/` at BASE), the eight probes with their three-descriptor outputs, and
+`opcount.py`, the jump-table decoder. The temporary BASE worktree was removed and
+`git worktree list` is back to what it was.

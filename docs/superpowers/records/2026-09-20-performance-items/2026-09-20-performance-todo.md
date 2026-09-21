@@ -840,3 +840,42 @@ separate, is byte-identical across oracle, BASE and HEAD: non-logical `IF` at
 34.1 and `WHEN` at 34.2, `trace i` over `IF`/`ELSE`, a `SELECT` chain in a loop,
 `trace r` over `SELECT CASE`, nested `IF` under `SIGNAL ON SYNTAX`, and the
 object-comparison case from item 4 reaching both an `IF` and a `WHEN`.
+
+### Item 5 is revived as a three-op fusion, and my re-pricing of it was wrong twice
+
+I re-priced item 5's hot route at 54.8 Ir per op and got ~0.45%. Both halves of
+that were wrong, in opposite directions, and the corrected figure clears the
+threshold at its floor.
+
+* **54.8 is not transferable.** It decomposes as about 20 of dispatch plus about
+  34.8 of the handoff *that* pair had. A constant-load-and-store fusion removes
+  `set_temp` and `temp_at` and none of the rest, a strict subset and the cheaper
+  half. So 54.8 is item 5's upper bound, 20.0 its lower bound, and nothing
+  between them has been measured.
+* **A three-op fusion removes two ops per execution, not one.** The hot pairs are
+  separated by a live `Op::TraceLiteral`, so reaching them means fusing
+  `LoadConstant` + `TraceLiteral` + `Store`. At 1,740,000 executions that is
+  about 3,480,000 ops.
+
+| price | ops removed | instructions | share |
+|---|---|---|---|
+| 20.0 Ir, the floor | 3,480,000 | 69.6M | **0.33%** |
+| 54.8 Ir, the ceiling | 3,480,000 | 190.7M | **0.90%** |
+
+All DERIVED, and resting on the measured 1,740,000, which is the number to
+re-derive before acting.
+
+**The fusion is coherent, read from the code rather than assumed.** `compile.rs`'s
+`Assignment` arm calls `push_value`, whose `ExprKind::Literal` arm pushes
+`Op::Const`, then `Op::TraceLiteral` when `echoes_values`, and the arm then
+pushes `Op::Store`. The three are emitted adjacently at one site, so the same
+emission-time technique applies with the same property that nothing renumbers.
+Nothing is skipped: the driver's `Op::TraceLiteral` arm gates on the setting and
+calls `echo_literal`, and a fused op does the same gate and the same echo before
+storing.
+
+**Item 5's value on `rexxcps` is a function of item 2**, not of anything about
+the fusion: the echoes exist because `trace_flow::analyse` answers `Unknown` for
+the whole body, since two of the three `TRACE` instructions are `trace value
+<expr>`. A body that stopped echoing would make the two-op fusion apply directly
+and this item would need no three-op form at all.
