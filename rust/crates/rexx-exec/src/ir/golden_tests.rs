@@ -783,25 +783,24 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
         compile_for_test(b"if 1 = 1 then say 'a'\nelse say 'b'\nsay 'c'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=6\n\
+        "0: Clause index=0 end=5\n\
          1: LoadConstant dst=0\n\
          2: LoadConstant dst=1\n\
          3: Binary op== lhs=0 rhs=1 dst=0\n\
-         4: Condition index=0 reg=0 keyword=IF\n\
-         5: JumpUnless reg=0 target=12\n\
-         6: Clause index=1 end=7\n\
-         7: Clause index=2 end=10\n\
-         8: Const dst=0 konst=0\n\
-         9: Say index=2 src=0\n\
-         10: EndBranch\n\
-         11: Jump target=16\n\
-         12: Clause index=3 end=13\n\
-         13: Clause index=4 end=16\n\
-         14: Const dst=0 konst=1\n\
-         15: Say index=4 src=0\n\
-         16: Clause index=5 end=19\n\
-         17: Const dst=0 konst=2\n\
-         18: Say index=5 src=0\n"
+         4: ConditionJump index=0 reg=0 keyword=IF target=11\n\
+         5: Clause index=1 end=6\n\
+         6: Clause index=2 end=9\n\
+         7: Const dst=0 konst=0\n\
+         8: Say index=2 src=0\n\
+         9: EndBranch\n\
+         10: Jump target=15\n\
+         11: Clause index=3 end=12\n\
+         12: Clause index=4 end=15\n\
+         13: Const dst=0 konst=1\n\
+         14: Say index=4 src=0\n\
+         15: Clause index=5 end=18\n\
+         16: Const dst=0 konst=2\n\
+         17: Say index=5 src=0\n"
     );
     // Two registers throughout: the comparison's right operand takes one of
     // its own beside the register the condition lands in, and gives it back
@@ -809,7 +808,7 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
     // The condition's own register is released at the `IF`'s clause end, so
     // each promoted `SAY` below gets register 0 back.
     assert_eq!(chunk.registers, 2);
-    assert_eq!(chunk.op_of, vec![0, 6, 7, 10, 13, 16, 19]);
+    assert_eq!(chunk.op_of, vec![0, 5, 6, 9, 12, 15, 18]);
     // Three distinct literals, one entry each, in the order they were first
     // seen -- which is the order the `konst` fields above read.
     assert_eq!(
@@ -830,26 +829,25 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
     let chunk = compile_for_test(b"if 1 = 0 then say 'a'\nsay 'b'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=6\n\
+        "0: Clause index=0 end=5\n\
          1: LoadConstant dst=0\n\
          2: LoadConstant dst=1\n\
          3: Binary op== lhs=0 rhs=1 dst=0\n\
-         4: Condition index=0 reg=0 keyword=IF\n\
-         5: JumpUnless reg=0 target=11\n\
-         6: Clause index=1 end=7\n\
-         7: Clause index=2 end=10\n\
-         8: Const dst=0 konst=0\n\
-         9: Say index=2 src=0\n\
-         10: EndBranch\n\
-         11: Clause index=3 end=14\n\
-         12: Const dst=0 konst=1\n\
-         13: Say index=3 src=0\n"
+         4: ConditionJump index=0 reg=0 keyword=IF target=10\n\
+         5: Clause index=1 end=6\n\
+         6: Clause index=2 end=9\n\
+         7: Const dst=0 konst=0\n\
+         8: Say index=2 src=0\n\
+         9: EndBranch\n\
+         10: Clause index=3 end=13\n\
+         11: Const dst=0 konst=1\n\
+         12: Say index=3 src=0\n"
     );
     assert_eq!(chunk.registers, 2);
 }
 
 /// **A condition outside the native set stays one [`super::Op::EvalExpr`] and
-/// takes no `Condition` op**, which is the adjacent refusal to the two streams
+/// takes no `ConditionJump` op**, which is the adjacent refusal to the two streams
 /// above.
 #[test]
 fn a_condition_outside_the_native_set_stays_one_eval_expr() {
@@ -878,28 +876,26 @@ fn nested_ifs_reuse_their_registers() {
         compile_for_test(b"if 1 = 1 then\n  if 2 = 2 then say 'a'\nsay 'b'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=6\n\
+        "0: Clause index=0 end=5\n\
          1: LoadConstant dst=0\n\
          2: LoadConstant dst=1\n\
          3: Binary op== lhs=0 rhs=1 dst=0\n\
-         4: Condition index=0 reg=0 keyword=IF\n\
-         5: JumpUnless reg=0 target=19\n\
-         6: Clause index=1 end=7\n\
-         7: Clause index=2 end=13\n\
-         8: LoadConstant dst=0\n\
-         9: LoadConstant dst=1\n\
-         10: Binary op== lhs=0 rhs=1 dst=0\n\
-         11: Condition index=2 reg=0 keyword=IF\n\
-         12: JumpUnless reg=0 target=19\n\
-         13: Clause index=3 end=14\n\
-         14: Clause index=4 end=17\n\
-         15: Const dst=0 konst=0\n\
-         16: Say index=4 src=0\n\
-         17: EndBranch\n\
-         18: EndBranch\n\
-         19: Clause index=5 end=22\n\
-         20: Const dst=0 konst=1\n\
-         21: Say index=5 src=0\n"
+         4: ConditionJump index=0 reg=0 keyword=IF target=17\n\
+         5: Clause index=1 end=6\n\
+         6: Clause index=2 end=11\n\
+         7: LoadConstant dst=0\n\
+         8: LoadConstant dst=1\n\
+         9: Binary op== lhs=0 rhs=1 dst=0\n\
+         10: ConditionJump index=2 reg=0 keyword=IF target=17\n\
+         11: Clause index=3 end=12\n\
+         12: Clause index=4 end=15\n\
+         13: Const dst=0 konst=0\n\
+         14: Say index=4 src=0\n\
+         15: EndBranch\n\
+         16: EndBranch\n\
+         17: Clause index=5 end=20\n\
+         18: Const dst=0 konst=1\n\
+         19: Say index=5 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -921,41 +917,39 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
         render(&chunk),
         "0: Clause index=0 end=1\n\
          1: SelectCaseText index=0 case=-\n\
-         2: Clause index=1 end=8\n\
+         2: Clause index=1 end=7\n\
          3: LoadConstant dst=0\n\
          4: LoadConstant dst=1\n\
          5: Binary op== lhs=0 rhs=1 dst=0\n\
-         6: Condition index=1 reg=0 keyword=WHEN\n\
-         7: JumpUnless reg=0 target=14\n\
-         8: EnterWhen select=0 when=1\n\
-         9: Clause index=2 end=10\n\
-         10: Clause index=3 end=13\n\
-         11: Const dst=0 konst=0\n\
-         12: Say index=3 src=0\n\
-         13: EndWhen\n\
-         14: Clause index=4 end=20\n\
-         15: LoadConstant dst=0\n\
-         16: LoadConstant dst=1\n\
-         17: Binary op== lhs=0 rhs=1 dst=0\n\
-         18: Condition index=4 reg=0 keyword=WHEN\n\
-         19: JumpUnless reg=0 target=25\n\
-         20: EnterWhen select=0 when=4\n\
-         21: Clause index=5 end=22\n\
-         22: Clause index=6 end=25\n\
-         23: Const dst=0 konst=1\n\
-         24: Say index=6 src=0\n\
-         25: EndWhen\n\
-         26: EnterOtherwise select=0\n\
-         27: Clause index=7 end=28\n\
-         28: Clause index=8 end=31\n\
-         29: Const dst=0 konst=2\n\
-         30: Say index=8 src=0\n\
-         31: EndWhen\n\
-         32: Clause index=9 end=34\n\
-         33: Exec index=9\n\
-         34: Clause index=10 end=37\n\
-         35: Const dst=0 konst=3\n\
-         36: Say index=10 src=0\n"
+         6: ConditionJump index=1 reg=0 keyword=WHEN target=13\n\
+         7: EnterWhen select=0 when=1\n\
+         8: Clause index=2 end=9\n\
+         9: Clause index=3 end=12\n\
+         10: Const dst=0 konst=0\n\
+         11: Say index=3 src=0\n\
+         12: EndWhen\n\
+         13: Clause index=4 end=18\n\
+         14: LoadConstant dst=0\n\
+         15: LoadConstant dst=1\n\
+         16: Binary op== lhs=0 rhs=1 dst=0\n\
+         17: ConditionJump index=4 reg=0 keyword=WHEN target=23\n\
+         18: EnterWhen select=0 when=4\n\
+         19: Clause index=5 end=20\n\
+         20: Clause index=6 end=23\n\
+         21: Const dst=0 konst=1\n\
+         22: Say index=6 src=0\n\
+         23: EndWhen\n\
+         24: EnterOtherwise select=0\n\
+         25: Clause index=7 end=26\n\
+         26: Clause index=8 end=29\n\
+         27: Const dst=0 konst=2\n\
+         28: Say index=8 src=0\n\
+         29: EndWhen\n\
+         30: Clause index=9 end=32\n\
+         31: Exec index=9\n\
+         32: Clause index=10 end=35\n\
+         33: Const dst=0 konst=3\n\
+         34: Say index=10 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -964,7 +958,7 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
     );
     assert_eq!(
         chunk.op_of,
-        vec![0, 2, 9, 10, 13, 21, 22, 25, 28, 31, 34, 37]
+        vec![0, 2, 8, 9, 12, 19, 20, 23, 26, 29, 32, 35]
     );
 }
 
@@ -1049,28 +1043,27 @@ fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
         render(&chunk),
         "0: Clause index=0 end=1\n\
          1: SelectCaseText index=0 case=-\n\
-         2: Clause index=1 end=8\n\
+         2: Clause index=1 end=7\n\
          3: LoadConstant dst=0\n\
          4: LoadConstant dst=1\n\
          5: Binary op== lhs=0 rhs=1 dst=0\n\
-         6: Condition index=1 reg=0 keyword=WHEN\n\
-         7: JumpUnless reg=0 target=14\n\
-         8: EnterWhen select=0 when=1\n\
-         9: Clause index=2 end=10\n\
-         10: Clause index=3 end=13\n\
-         11: Const dst=0 konst=0\n\
-         12: Say index=3 src=0\n\
-         13: EndWhen\n\
-         14: Clause index=4 end=16\n\
-         15: Exec index=4\n\
-         16: Clause index=5 end=19\n\
-         17: Const dst=0 konst=1\n\
-         18: Say index=5 src=0\n"
+         6: ConditionJump index=1 reg=0 keyword=WHEN target=13\n\
+         7: EnterWhen select=0 when=1\n\
+         8: Clause index=2 end=9\n\
+         9: Clause index=3 end=12\n\
+         10: Const dst=0 konst=0\n\
+         11: Say index=3 src=0\n\
+         12: EndWhen\n\
+         13: Clause index=4 end=15\n\
+         14: Exec index=4\n\
+         15: Clause index=5 end=18\n\
+         16: Const dst=0 konst=1\n\
+         17: Say index=5 src=0\n"
     );
 }
 
 /// **A `WHEN`'s condition outside the native set stays one
-/// [`super::Op::WhenTest`] and takes no `Condition` op**, which is the
+/// [`super::Op::WhenTest`] and takes no `ConditionJump` op**, which is the
 /// adjacent refusal to the two `SELECT` streams above and the sibling of
 /// `a_condition_outside_the_native_set_stays_one_eval_expr`.
 #[test]
@@ -1107,21 +1100,20 @@ fn a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot() {
          2: Store index=0 at=0 src=0\n\
          3: Clause index=1 end=4\n\
          4: SelectCaseText index=1 case=-\n\
-         5: Clause index=2 end=14\n\
+         5: Clause index=2 end=13\n\
          6: Load read=Simple at=0 dst=1\n\
          7: PushArg src=1\n\
          8: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
          9: TraceFunction index=2 slot=0 path=root.L src=0\n\
          10: LoadConstant dst=1\n\
          11: Binary op=> lhs=0 rhs=1 dst=0\n\
-         12: Condition index=2 reg=0 keyword=WHEN\n\
-         13: JumpUnless reg=0 target=18\n\
-         14: EnterWhen select=1 when=2\n\
-         15: Clause index=3 end=16\n\
-         16: Clause index=4 end=17\n\
-         17: EndWhen\n\
-         18: Clause index=5 end=20\n\
-         19: Exec index=5\n"
+         12: ConditionJump index=2 reg=0 keyword=WHEN target=17\n\
+         13: EnterWhen select=1 when=2\n\
+         14: Clause index=3 end=15\n\
+         15: Clause index=4 end=16\n\
+         16: EndWhen\n\
+         17: Clause index=5 end=19\n\
+         18: Exec index=5\n"
     );
 }
 
@@ -1136,21 +1128,20 @@ fn an_absorbed_when_compiles_to_its_own_region() {
         render(&chunk),
         "0: Clause index=0 end=1\n\
          1: SelectCaseText index=0 case=-\n\
-         2: Clause index=1 end=8\n\
+         2: Clause index=1 end=7\n\
          3: LoadConstant dst=0\n\
          4: LoadConstant dst=1\n\
          5: Binary op== lhs=0 rhs=1 dst=0\n\
-         6: Condition index=1 reg=0 keyword=WHEN\n\
-         7: JumpUnless reg=0 target=15\n\
-         8: EnterWhen select=0 when=1\n\
-         9: Clause index=2 end=10\n\
-         10: Clause index=3 end=12\n\
-         11: Exec index=3\n\
-         12: EndWhen\n\
-         13: Clause index=4 end=14\n\
-         14: Clause index=5 end=15\n\
-         15: Clause index=6 end=17\n\
-         16: Exec index=6\n"
+         6: ConditionJump index=1 reg=0 keyword=WHEN target=14\n\
+         7: EnterWhen select=0 when=1\n\
+         8: Clause index=2 end=9\n\
+         9: Clause index=3 end=11\n\
+         10: Exec index=3\n\
+         11: EndWhen\n\
+         12: Clause index=4 end=13\n\
+         13: Clause index=5 end=14\n\
+         14: Clause index=6 end=16\n\
+         15: Exec index=6\n"
     );
 }
 
@@ -1162,36 +1153,35 @@ fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {
         .expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=7\n\
+        "0: Clause index=0 end=6\n\
          1: TraceClause index=0\n\
          2: LoadConstant dst=0\n\
          3: LoadConstant dst=1\n\
          4: Binary op== lhs=0 rhs=1 dst=0\n\
-         5: Condition index=0 reg=0 keyword=IF\n\
-         6: JumpUnless reg=0 target=15\n\
-         7: Clause index=1 end=9\n\
-         8: TraceClause index=1\n\
-         9: Clause index=2 end=13\n\
-         10: TraceClause index=2\n\
-         11: Const dst=0 konst=0\n\
-         12: Say index=2 src=0\n\
-         13: EndBranch\n\
-         14: Jump target=21\n\
-         15: Clause index=3 end=17\n\
-         16: TraceClause index=3\n\
-         17: Clause index=4 end=21\n\
-         18: TraceClause index=4\n\
-         19: Const dst=0 konst=1\n\
-         20: Say index=4 src=0\n\
-         21: Clause index=5 end=25\n\
-         22: TraceClause index=5\n\
-         23: Const dst=0 konst=2\n\
-         24: Say index=5 src=0\n"
+         5: ConditionJump index=0 reg=0 keyword=IF target=14\n\
+         6: Clause index=1 end=8\n\
+         7: TraceClause index=1\n\
+         8: Clause index=2 end=12\n\
+         9: TraceClause index=2\n\
+         10: Const dst=0 konst=0\n\
+         11: Say index=2 src=0\n\
+         12: EndBranch\n\
+         13: Jump target=20\n\
+         14: Clause index=3 end=16\n\
+         15: TraceClause index=3\n\
+         16: Clause index=4 end=20\n\
+         17: TraceClause index=4\n\
+         18: Const dst=0 konst=1\n\
+         19: Say index=4 src=0\n\
+         20: Clause index=5 end=24\n\
+         21: TraceClause index=5\n\
+         22: Const dst=0 konst=2\n\
+         23: Say index=5 src=0\n"
     );
     // The echo op addresses no register, so the extra op changes nothing the
     // driver has to reserve.
     assert_eq!(chunk.registers, 2);
-    assert_eq!(chunk.op_of, vec![0, 7, 9, 13, 17, 21, 25]);
+    assert_eq!(chunk.op_of, vec![0, 6, 8, 12, 16, 20, 24]);
 }
 
 /// A traced `SELECT CASE`: **one echo per promoted clause, and exactly one**.

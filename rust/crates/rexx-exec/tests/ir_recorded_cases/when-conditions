@@ -1,7 +1,7 @@
 # What promoting a plain `WHEN`'s condition has to keep.
 
 # 34.2, the WHEN keyword's own raiser, from a condition that compiled.
-# `Op::Condition`'s keyword tag is what picks 34.2 over an `IF`'s 34.1, and
+# `Op::ConditionJump`'s keyword tag is what picks 34.2 over an `IF`'s 34.1, and
 # this row is measured to redden when a `WHEN`'s op is emitted tagged `If`.
 # **Not a unique catch, and the difference is the instrument**: the op-stream
 # pins and the corpus shape sweep read the tag out of the compiled stream and
@@ -74,7 +74,7 @@ err>        >>>         "medium"
 # leave alone -- two `>>>` lines per value tested, the value's own and the
 # comparison's outcome, which is `Interp::test_case_when`'s pair rather than a
 # condition's single line -- and the `>K>   "CASE"` echo above them.
-# Measured to redden when an `Op::Condition` is emitted behind the
+# Measured to redden when an `Op::ConditionJump` is emitted behind the
 # `Op::WhenTest` a declining `WHEN` or a `WhenCase` keeps: a third `>>>` after
 # each pair. **Not a unique catch**: the branch-shape table and the op-stream
 # pins redden under it too.

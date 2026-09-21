@@ -2,7 +2,7 @@
 
 # 34.6, a comma list: the raiser is `eval_logical_list`'s own, per element,
 # rather than the IF keyword's 34.1. `native_shape` has no `ExprKind::Logical`
-# arm, so the whole condition stays one `Op::EvalExpr` and no `Op::Condition`
+# arm, so the whole condition stays one `Op::EvalExpr` and no `Op::ConditionJump`
 # is emitted behind it.
 program
 if 1, 'x' then nop
@@ -40,7 +40,7 @@ err>      3 *-*     say 'long'
 err>        >L>       "long"
 err>        >>>       "long"
 
-# a declining condition under trace: with no `Op::Condition` behind it, the one
+# a declining condition under trace: with no `Op::ConditionJump` behind it, the one
 # `Op::EvalExpr` still owes the `>>>` and the refusal, and both are here. The
 # `>>>` appears once, and the refusal is 34.1 because a single expression is
 # not a list.

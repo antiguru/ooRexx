@@ -84,7 +84,7 @@ impl Root {
             | Op::EnterOtherwise { .. }
             | Op::Jump { .. }
             | Op::JumpUnless { .. }
-            | Op::Condition { .. } => None,
+            | Op::ConditionJump { .. } => None,
         }
     }
 }
@@ -259,7 +259,7 @@ fn listed_whens(body: &CodeBody) -> Vec<usize> {
 struct Seen {
     constructs: BTreeMap<&'static str, usize>,
     roots: BTreeMap<Root, usize>,
-    /// How many `Op::Condition` ops the sweep saw, keyed by the keyword each
+    /// How many `Op::ConditionJump` ops the sweep saw, keyed by the keyword each
     /// is tagged with. Keyed rather than counted in one number, because a
     /// corpus holding a native `IF` condition and no native `WHEN` one would
     /// leave the `WHEN` row below vacuous while the total still looked
@@ -317,7 +317,7 @@ fn check_body(
         // what a declining condition compiles to, and both rows would pass
         // without the promotion ever having fired.
         for op in region.iter() {
-            if let Op::Condition { keyword, .. } = op {
+            if let Op::ConditionJump { keyword, .. } = op {
                 *seen
                     .native_conditions
                     .entry(match keyword {

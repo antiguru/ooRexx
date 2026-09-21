@@ -379,7 +379,7 @@ pub(crate) fn compile(
                     end: 0,
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
-                if native_shape(condition, Some(NodePath::ROOT)) {
+                let jump = if native_shape(condition, Some(NodePath::ROOT)) {
                     push_native(
                         &mut ops,
                         echoes_values,
@@ -394,23 +394,27 @@ pub(crate) fn compile(
                         Some(NodePath::ROOT),
                         dst,
                     )?;
-                    ops.push(Op::Condition {
+                    let jump = op_index(&ops)?;
+                    ops.push(Op::ConditionJump {
                         index: instruction_index(index)?,
                         reg: dst,
                         keyword: ConditionKeyword::If,
+                        target: 0,
                     });
+                    jump
                 } else {
                     ops.push(Op::EvalExpr {
                         index: instruction_index(index)?,
                         slot: 0,
                         dst,
                     });
-                }
-                let jump = op_index(&ops)?;
-                ops.push(Op::JumpUnless {
-                    reg: dst,
-                    target: 0,
-                });
+                    let jump = op_index(&ops)?;
+                    ops.push(Op::JumpUnless {
+                        reg: dst,
+                        target: 0,
+                    });
+                    jump
+                };
                 close_region(&mut ops, at)?;
                 patches.push(Patch {
                     op: jump,
@@ -568,7 +572,7 @@ pub(crate) fn compile(
                 // `0`/`1`. So it stays on `Op::WhenTest`, which is the op that
                 // does that whole job, and so does a `When` whose condition
                 // `native_shape` declines.
-                match &instruction.kind {
+                let jump = match &instruction.kind {
                     InstructionKind::When { condition, .. }
                         if native_shape(condition, Some(NodePath::ROOT)) =>
                     {
@@ -586,23 +590,29 @@ pub(crate) fn compile(
                             Some(NodePath::ROOT),
                             dst,
                         )?;
-                        ops.push(Op::Condition {
+                        let jump = op_index(&ops)?;
+                        ops.push(Op::ConditionJump {
                             index: instruction_index(index)?,
                             reg: dst,
                             keyword: ConditionKeyword::When,
+                            target: 0,
                         });
+                        jump
                     }
-                    _ => ops.push(Op::WhenTest {
-                        index: instruction_index(index)?,
-                        case: info.case,
-                        dst,
-                    }),
-                }
-                let jump = op_index(&ops)?;
-                ops.push(Op::JumpUnless {
-                    reg: dst,
-                    target: 0,
-                });
+                    _ => {
+                        ops.push(Op::WhenTest {
+                            index: instruction_index(index)?,
+                            case: info.case,
+                            dst,
+                        });
+                        let jump = op_index(&ops)?;
+                        ops.push(Op::JumpUnless {
+                            reg: dst,
+                            target: 0,
+                        });
+                        jump
+                    }
+                };
                 // Closed before `EnterWhen`, which opens the branch's frame and
                 // is the branch's business rather than the clause's.
                 close_region(&mut ops, at)?;
@@ -1098,7 +1108,9 @@ pub(crate) fn compile(
             PatchKind::Resume => op_of[patch.target],
         };
         match &mut ops[patch.op as usize] {
-            Op::Jump { target: slot } | Op::JumpUnless { target: slot, .. } => *slot = target,
+            Op::Jump { target: slot }
+            | Op::JumpUnless { target: slot, .. }
+            | Op::ConditionJump { target: slot, .. } => *slot = target,
             _ => unreachable!("a patch names the op it was recorded beside"),
         }
     }
@@ -1914,7 +1926,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Escape { index }
                 | Op::CallExpr { index, .. }
                 | Op::TraceFunction { index, .. }
-                | Op::Condition { index, .. }
+                | Op::ConditionJump { index, .. }
                 | Op::LoopRun { index }
                 | Op::LoopNext { index }
                 | Op::Signal { index, .. }

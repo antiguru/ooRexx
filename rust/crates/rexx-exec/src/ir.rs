@@ -260,16 +260,18 @@ pub(crate) enum Op {
     /// `1`, and at the next op if it does.
     JumpUnless { reg: u16, target: u32 },
     /// Validates the condition value in `reg`, emits the `>>>` line it owes,
-    /// and leaves the logical value [`Op::JumpUnless`] reads back in that same
-    /// register.
-    Condition {
+    /// and continues at op `target` unless it holds -- [`Op::JumpUnless`]'s
+    /// own branch, taken from the logical value rather than from a register
+    /// this op would have to write it to first.
+    ConditionJump {
         index: u32,
         reg: u16,
         keyword: ConditionKeyword,
+        target: u32,
     },
 }
 
-/// Which keyword's condition an [`Op::Condition`] is validating.
+/// Which keyword's condition an [`Op::ConditionJump`] is validating.
 #[derive(Clone, Copy)]
 pub(crate) enum ConditionKeyword {
     If,

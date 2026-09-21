@@ -181,7 +181,7 @@ fn undriven_op_name(op: &Op) -> &'static str {
         Op::Escape { .. } => "Escape",
         Op::Jump { .. } => "Jump",
         Op::JumpUnless { .. } => "JumpUnless",
-        Op::Condition { .. } => "Condition",
+        Op::ConditionJump { .. } => "ConditionJump",
     }
 }
 
@@ -1663,14 +1663,16 @@ impl Interp {
                                     // rather than a second copy. One arm for both
                                     // keywords, because the raiser is the only
                                     // thing that differs and the op carries it.
-                                    // The register is read and written in place:
-                                    // what a jump tests is the logical value of
-                                    // the answer, and the unvalidated value has no
-                                    // reader left.
-                                    Op::Condition {
+                                    // The validated value is branched on here
+                                    // rather than written back to `reg`: the
+                                    // branch was its only reader, so `reg` keeps
+                                    // the unvalidated value it came in with and
+                                    // nothing downstream looks at it.
+                                    Op::ConditionJump {
                                         index,
                                         reg,
                                         keyword,
+                                        target,
                                     } => {
                                         debug_assert!(
                                             chunk.holds_register(*reg),
@@ -1681,7 +1683,7 @@ impl Interp {
                                             code,
                                             *index,
                                             clause,
-                                            "Condition",
+                                            "ConditionJump",
                                         );
                                         debug_assert!(
                                             matches!(
@@ -1692,7 +1694,7 @@ impl Interp {
                                                         ConditionKeyword::When
                                                     )
                                             ),
-                                            "a Condition op's keyword does not name the clause whose \
+                                            "a ConditionJump op's keyword does not name the clause whose \
                                          condition it is validating"
                                         );
                                         let value = self.roots.temp_at(registers, *reg as usize);
@@ -1733,11 +1735,9 @@ impl Interp {
                                                 Err(failure) => break 'cold Err(failure),
                                             },
                                         };
-                                        // In range unconditionally: `SMALL_INT_MAX`
-                                        // is far above one.
-                                        let logical = ObjRef::small_int(i64::from(holds))
-                                            .unwrap_or(ObjRef::NIL);
-                                        self.roots.set_temp(registers, *reg as usize, logical);
+                                        if !holds {
+                                            break 'region *target;
+                                        }
                                     }
                                     Op::JumpUnless { reg, target } => {
                                         debug_assert!(
@@ -2303,7 +2303,7 @@ impl Interp {
         let value = self.roots.temp_at(registers, reg as usize);
         // The two handles a logical arrives in, compared as integers: the
         // constant a comparison answers with, and the small int
-        // `Op::Condition` writes back for everything else.
+        // `Op::WhenTest` writes back for everything else.
         if value == crate::eval::LOGICAL_TRUE {
             return Ok(true);
         }

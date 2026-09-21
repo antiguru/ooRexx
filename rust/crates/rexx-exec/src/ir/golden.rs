@@ -227,7 +227,7 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     render_register(*src)
                 ));
             }
-            // The keyword is rendered for [`Op::Condition`]'s reason: it
+            // The keyword is rendered for [`Op::ConditionJump`]'s reason: it
             // decides which `Flow` the op answers, and a golden expectation
             // reading `RETURN` or `EXIT` is what makes that visible in the
             // stream rather than only in what a called label does.
@@ -303,13 +303,14 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::JumpUnless { reg, target } => {
                 out.push_str(&format!("{index}: JumpUnless reg={reg} target={target}\n"));
             }
-            Op::Condition {
+            Op::ConditionJump {
                 index: at,
                 reg,
                 keyword,
+                target,
             } => {
                 out.push_str(&format!(
-                    "{index}: Condition index={at} reg={reg} keyword={}\n",
+                    "{index}: ConditionJump index={at} reg={reg} keyword={} target={target}\n",
                     render_condition_keyword(*keyword)
                 ));
             }
@@ -376,7 +377,7 @@ fn render_register(register: Option<u16>) -> String {
     }
 }
 
-/// Which keyword an [`Op::Condition`] validates for, as the keyword itself:
+/// Which keyword an [`Op::ConditionJump`] validates for, as the keyword itself:
 /// the tag decides which raiser answers a value that is not `0`/`1`, and a
 /// golden expectation reading `IF` or `WHEN` is what makes that visible in the
 /// stream rather than only in a program's stderr.
