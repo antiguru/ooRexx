@@ -32,56 +32,20 @@ pub(crate) enum Setting {
     Unreached,
     /// The setting every path reaching this instruction leaves in force.
     Known(ChunkTrace),
-    /// The setting every path reaching this instruction leaves in force
-    /// **provided every instruction whose setting the source does not fix
-    /// leaves the one it was entered with**. A `TRACE VALUE`, an `INTERPRET`
-    /// or a `TRACE()` call is assumed to do that, and a clause emitted for
-    /// this answer carries a run-time guard that says so
-    /// (`Chunk::fallback_at`).
-    Speculated(ChunkTrace),
     /// The lattice's bottom: two paths here disagree, or one of them ran
-    /// something whose setting the source does not fix and the analysis is
-    /// not speculating.
+    /// something whose setting the source does not fix.
     Unknown,
 }
 
 impl Setting {
     /// The meet: agreement gives the setting, disagreement gives bottom, and
-    /// top meets anything to that thing. An answer one path speculated is
-    /// speculated at the meet, because the guard has to cover every path.
+    /// top meets anything to that thing.
     fn meet(self, other: Setting) -> Setting {
         match (self, other) {
             (Setting::Unreached, answer) | (answer, Setting::Unreached) => answer,
             (Setting::Known(one), Setting::Known(two)) if one == two => Setting::Known(one),
-            (
-                Setting::Known(one) | Setting::Speculated(one),
-                Setting::Known(two) | Setting::Speculated(two),
-            ) if one == two => Setting::Speculated(one),
             _ => Setting::Unknown,
         }
-    }
-
-    /// This answer as one a guard has to cover, which is what an instruction
-    /// the analysis is speculating past leaves behind.
-    fn speculated(self) -> Setting {
-        match self {
-            Setting::Known(trace) | Setting::Speculated(trace) => Setting::Speculated(trace),
-            Setting::Unreached => Setting::Unreached,
-            Setting::Unknown => Setting::Unknown,
-        }
-    }
-
-    /// The setting this answer fixes, or `None` for one that fixes none.
-    pub(crate) fn fixed(self) -> Option<ChunkTrace> {
-        match self {
-            Setting::Known(trace) | Setting::Speculated(trace) => Some(trace),
-            Setting::Unreached | Setting::Unknown => None,
-        }
-    }
-
-    /// Whether a clause emitted for this answer needs the run-time guard.
-    pub(crate) fn guarded(self) -> bool {
-        matches!(self, Setting::Speculated(_))
     }
 
     /// Whether a clause under this answer carries the value-echo ops
@@ -89,7 +53,7 @@ impl Setting {
     /// could not settle keeps them and keeps its run-time gate.
     pub(crate) fn echoes_values(self) -> bool {
         match self {
-            Setting::Known(trace) | Setting::Speculated(trace) => trace.intermediates(),
+            Setting::Known(trace) => trace.intermediates(),
             Setting::Unreached | Setting::Unknown => true,
         }
     }
@@ -98,7 +62,7 @@ impl Setting {
     /// [`ChunkTrace::results`] rather than the bit above.
     pub(crate) fn echoes_keyword(self) -> bool {
         match self {
-            Setting::Known(trace) | Setting::Speculated(trace) => trace.results(),
+            Setting::Known(trace) => trace.results(),
             Setting::Unreached | Setting::Unknown => true,
         }
     }
@@ -264,18 +228,6 @@ impl Blocks {
     }
 }
 
-/// Whether [`analyse`] may answer [`Setting::Speculated`] at all.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub(crate) enum Speculate {
-    /// An instruction whose setting the source does not fix is assumed to
-    /// leave the one it was entered with, and the answers that rest on that
-    /// are marked for the guard.
-    Assume,
-    /// It produces bottom, which is what the stream a guard deoptimises into
-    /// is compiled from.
-    Refuse,
-}
-
 /// The setting in force at each instruction of `body`, entered under `entry`.
 ///
 /// Answers [`Setting::Unknown`] for every instruction rather than refusing,
@@ -290,12 +242,7 @@ pub(crate) enum Speculate {
 ///   would have to be modelled, and this refuses the body instead. A `TRACE`
 ///   inside a loop needs no such refusal, because [`Blocks`] gives the loop
 ///   its two edges.
-pub(crate) fn analyse(
-    body: &CodeBody,
-    plan: &Plan,
-    entry: ChunkTrace,
-    speculate: Speculate,
-) -> Box<[Setting]> {
+pub(crate) fn analyse(body: &CodeBody, plan: &Plan, entry: ChunkTrace) -> Box<[Setting]> {
     let len = body.instructions.len();
     let unknown = || vec![Setting::Unknown; len].into_boxed_slice();
     let events = plan.trace_events();
@@ -348,7 +295,7 @@ pub(crate) fn analyse(
     let mut reached = Vec::new();
     while let Some(node) = work.pop() {
         queued[node] = false;
-        let out = apply(events, graph.virtual_node, node, pools[node], speculate);
+        let out = apply(events, graph.virtual_node, node, pools[node]);
         successors(&graph, node, &mut reached);
         for &next in &reached {
             let met = pools[next].meet(out);
@@ -365,7 +312,7 @@ pub(crate) fn analyse(
     // that is unsound.
     #[cfg(debug_assertions)]
     for node in 0..=graph.virtual_node {
-        let out = apply(events, graph.virtual_node, node, pools[node], speculate);
+        let out = apply(events, graph.virtual_node, node, pools[node]);
         successors(&graph, node, &mut reached);
         for &next in &reached {
             debug_assert_eq!(
@@ -400,25 +347,15 @@ pub(crate) fn for_emission(plan: &Plan, index: usize, pool: Setting) -> Setting 
 /// The optimizing function: an instruction that does not change the setting
 /// passes its pool through, one whose own text fixes a setting produces that
 /// setting, and one that can change it to something the source does not fix
-/// produces bottom -- or, under [`Speculate::Assume`], its own pool marked
-/// for the guard. The virtual label node passes its pool through.
-fn apply(
-    events: &[TraceEvent],
-    virtual_node: usize,
-    node: usize,
-    pool: Setting,
-    speculate: Speculate,
-) -> Setting {
+/// produces bottom. The virtual label node passes its pool through.
+fn apply(events: &[TraceEvent], virtual_node: usize, node: usize, pool: Setting) -> Setting {
     if node == virtual_node {
         return pool;
     }
     match events[node] {
         TraceEvent::Keeps => pool,
         TraceEvent::Sets(trace) => Setting::Known(trace),
-        TraceEvent::Unknown => match speculate {
-            Speculate::Assume => pool.speculated(),
-            Speculate::Refuse => Setting::Unknown,
-        },
+        TraceEvent::Unknown => Setting::Unknown,
     }
 }
 
@@ -427,20 +364,8 @@ mod tests {
     use super::*;
     use crate::trace::TraceMode;
 
-    /// The analysis over one program's main body, entered under `entry`,
-    /// refusing to speculate -- which is what every answer below but
-    /// [`speculated_settings_of`]'s is about.
+    /// The analysis over one program's main body, entered under `entry`.
     fn settings_of(source: &[u8], entry: TraceMode) -> Vec<Setting> {
-        analysis_of(source, entry, Speculate::Refuse)
-    }
-
-    /// The same, assuming an instruction the source does not fix leaves the
-    /// setting it was entered with.
-    fn speculated_settings_of(source: &[u8], entry: TraceMode) -> Vec<Setting> {
-        analysis_of(source, entry, Speculate::Assume)
-    }
-
-    fn analysis_of(source: &[u8], entry: TraceMode, speculate: Speculate) -> Vec<Setting> {
         let program = rexx_parse::parse_program(source.to_vec()).expect("a program that parses");
         let plan = Plan::build(
             &program.main,
@@ -448,7 +373,7 @@ mod tests {
             Some(&program.source),
             crate::plan::BodyKind::Plain,
         );
-        analyse(&program.main, &plan, ChunkTrace::of(entry), speculate).to_vec()
+        analyse(&program.main, &plan, ChunkTrace::of(entry)).to_vec()
     }
 
     /// `TRACE OFF`'s own answer, which is also `TRACE N`'s: the two differ
@@ -503,45 +428,6 @@ mod tests {
         assert_eq!(
             settings_of(b"say 'a'\ntrace value zv\nsay 'b'", TraceMode::NORMAL),
             vec![off(), off(), Setting::Unknown]
-        );
-    }
-
-    /// The same body under [`Speculate::Assume`]: the clause after the
-    /// `TRACE VALUE` answers the pool the instruction was entered with, and
-    /// it answers it **speculatively**, which is what puts the guard on it.
-    #[test]
-    fn speculation_carries_the_entry_pool_past_a_trace_value() {
-        assert_eq!(
-            speculated_settings_of(b"say 'a'\ntrace value zv\nsay 'b'", TraceMode::NORMAL),
-            vec![
-                off(),
-                off(),
-                Setting::Speculated(ChunkTrace::of(TraceMode::OFF))
-            ]
-        );
-        // The clauses before it are **not** speculated, so the guard is not
-        // put on a clause no `TRACE VALUE` can reach.
-        assert!(
-            !speculated_settings_of(b"say 'a'\ntrace value zv\nsay 'b'", TraceMode::NORMAL)[0]
-                .guarded()
-        );
-    }
-
-    /// A speculated answer meeting an equal unspeculated one stays
-    /// speculated, because the guard has to cover every path into the clause.
-    #[test]
-    fn a_meet_that_mixes_the_two_answers_speculated() {
-        // `zsub:` is reached from the virtual label node, so its answer is
-        // the meet over the whole body -- which includes the speculated pool
-        // after the `TRACE VALUE` and the unspeculated one before it.
-        let settings = speculated_settings_of(
-            b"trace value zv\nsay 'a'\nexit\nzsub:\nsay 'b'\nreturn",
-            TraceMode::NORMAL,
-        );
-        assert_eq!(
-            settings[3],
-            Setting::Speculated(ChunkTrace::of(TraceMode::OFF)),
-            "{settings:?}"
         );
     }
 

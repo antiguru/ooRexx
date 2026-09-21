@@ -536,7 +536,7 @@ impl Interp {
                 return Err(Loud::chunk_map_too_short().into());
             };
             let (flow, next) = match op {
-                Op::Clause { index, end } => 'clause: {
+                Op::Clause { index, end } => {
                     #[cfg(test)]
                     count_clause_op_entry();
                     // Where this region starts, which is where `=` at an
@@ -573,32 +573,8 @@ impl Interp {
                     // cost `bench-programs/emptyloop.rex` 1.52% and
                     // `dispatch.rex` 1.14% in `instructions:u`, measured.
                     let sink = self.traced_mode();
-                    let current = crate::trace::ChunkTrace::of(sink);
-                    // **The guard on a speculated clause, and the whole of
-                    // what makes speculating safe.** A clause emitted for a
-                    // setting the analysis assumed rather than read is right
-                    // only while that setting is the one in force; where it is
-                    // not, the clause runs out of the stream compiled without
-                    // the assumption, whose own `Op::Clause` discharges the
-                    // boundary, the deadline and the permission. `Flow::Next`
-                    // is that one-instruction range running out, settled from
-                    // the op past this region exactly as `RegionEnd::Flowed`
-                    // is. The comparison is the one `stale` needs anyway, so a
-                    // chunk that speculated nothing pays nothing for this.
-                    let settled = current == chunk.trace();
-                    if !settled && let Some(fallback) = chunk.fallback_at(index) {
-                        let flow = self.run_bounded_from_chunk(
-                            code,
-                            fallback,
-                            registers,
-                            index,
-                            index + 1,
-                            source,
-                        )?;
-                        break 'clause (flow, end);
-                    }
                     // **The analysis, checked at the clause it answered for.**
-                    // A settled answer is a claim that this clause always runs
+                    // A `Known` answer is a claim that this clause always runs
                     // under exactly that setting, and the claim is what a
                     // compile-time emission decision rests on; a missing
                     // control-flow edge shows up here as a mismatch rather
@@ -608,18 +584,18 @@ impl Interp {
                     // design, which is not the program's own setting.
                     #[cfg(debug_assertions)]
                     if !self.debug_pause
-                        && let Some(claimed) = chunk
-                            .setting_at(index)
-                            .and_then(crate::ir::trace_flow::Setting::fixed)
+                        && let Some(crate::ir::trace_flow::Setting::Known(claimed)) =
+                            chunk.setting_at(index)
                     {
                         debug_assert_eq!(
-                            claimed, current,
+                            claimed,
+                            crate::trace::ChunkTrace::of(sink),
                             "the trace analysis answered {claimed:?} for instruction {index}, and \
                              the setting in force when it ran is not that one"
                         );
                     }
-                    let stale =
-                        !settled && chunk.trace().clause_echoes() != current.clause_echoes();
+                    let stale = chunk.trace().clause_echoes()
+                        != crate::trace::ChunkTrace::of(sink).clause_echoes();
                     let debugging = sink.debug;
                     // **`stale` moves the clause echo from the stream back to
                     // the run-time gate, in both directions at once.** The
@@ -1971,7 +1947,7 @@ impl Interp {
                             // end the activation, and that is the `Ended` below.
                             RegionEnd::At(next) => {
                                 pc = next;
-                                continue 'ops;
+                                continue;
                             }
                             // Settled against this range from the op past the
                             // region, which is where an absorbed `Flow::Next`
