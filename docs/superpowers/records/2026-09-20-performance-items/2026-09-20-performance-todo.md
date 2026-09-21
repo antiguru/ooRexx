@@ -879,3 +879,88 @@ the fusion: the echoes exist because `trace_flow::analyse` answers `Unknown` for
 the whole body, since two of the three `TRACE` instructions are `trace value
 <expr>`. A body that stopped echoing would make the two-op fusion apply directly
 and this item would need no three-op form at all.
+
+## Item 8 opened 2026-09-21: PARSE, diagnosed and two candidates landed
+
+`exec_parse`'s 6.77% in item 8's table is its **self** cost. Inclusive it is
+**14.90%**, confirmed by `callgrind_annotate --inclusive=yes`, by summing self
+plus every call arc, and by an A/B that replaced the `PARSE` instructions with
+`nop` and removed 2,673,174,085. PARSE is **1.75% of dispatched ops and 14.90% of
+instructions**, which is the clearest case on the list of the two axes pointing
+opposite ways.
+
+**And it is not where we are losing.** The oracle spends **21.49%** of its own
+run on `RexxInstructionParse::execute` over identical structural work: the same
+2,240,011 instructions, 2,520,011 template steps, 3,920,018 triggers. The whole
+headroom against the oracle's design was 854,376,237 instructions before any of
+this landed. The ratio is not quoted because `build/` is `-O2`.
+
+Two candidates died in the measuring, before anything was built:
+
+* **The variable pattern `(p0)` is free.** Replacing it with the literal it
+  always holds made the run 5,639,869 instructions **slower**. There is no
+  variable-pool lookup on that path.
+* **The allocations are required.** Predicted 2,520,000 from the template shapes
+  before reading the profile; `alloc_with` is called 2,520,002. The oracle makes
+  4,480,008 for the same targets.
+
+### What landed
+
+| commit | candidate | measured | attributed |
+|---|---|---|---|
+| `1da095de8` | a store for a `PARSE` target that is a plain variable with a bound slot | **-301,950,504, -1.4520%** | 202,926,832, 0.96% |
+| `bb81ae522` | decide the trace shape once per trigger, not once per target | **-47,957,027, -0.2340%** | 68,880,034, 0.33% |
+
+Cumulative **-1.6784%**, 20,794,787,956 to 20,445,766,416. Six gates green on
+each, 133 binaries, 2649 / 0 / 4 release and 2650 / 0 / 4 debug, with
+`corpus_differential` 604 of 604 in STRICT mode across all four test runs.
+
+**Candidate 3 beat its ceiling by half again**, for the same reason the
+`Condition` fusion beat its estimate threefold: the ceiling priced one side of
+the change. It counted `assign_expr_target`'s own per-call lines and not the
+caller's call setup, `parse_template.rs:771`, which also went. That is two
+instances in one day of an estimate wrong in the direction nobody guards against.
+
+**Candidate 4 is once per trigger, not once per `PARSE`**, established by reading
+`ParseTrigger.cpp:248` and `:290` rather than by inference, and asserted in the
+loop with a `debug_assert_eq!` rather than argued. Re-derived at that scope its
+ceiling is 45,919,904 and the measurement is 104% of it.
+
+### Candidate 5 measured slower, and that is the finding
+
+**+6,624,562, +0.0324%.** Three interleaved rounds, every candidate-5 run above
+every candidate-4 run. `exec_parse`'s own text is flat; `slice/index.rs` inlined
+into it **rises** 19,320,012 while cursor arithmetic falls 10,360,006, the
+opposite of the candidate's premise. The mechanism was deliberately left
+unestablished.
+
+The cause is an attribution expiring **inside one task**: candidate 4 made
+`rendered` an `Option`, which removed two of the three indexings on an untraced
+run, and candidate 5 was sized against all three. **The order the brief specified
+decided which candidate banked them.**
+
+**The rule this produces: when two contained candidates share a cost, either
+order them deliberately and say why, or measure each against the same base.
+Otherwise the second one's figure is not a measurement of it.**
+
+### The re-profile, which is why candidates 1 and 2 were withheld
+
+At `bb81ae522`: `exec_parse` inclusive **2,803,777,215, 13.71%**, and **1,251.7
+Ir per `PARSE`** against 1,406.6. The gap to the oracle is now 507,290,565.
+
+| candidate | at the scout | at `bb81ae522` |
+|---|---|---|
+| 1, bind the template once | 595,767,122, 2.82% | **402,640,295, 1.97%** |
+| 2, parse the source in place | 402,920,653, 1.91% | **400,680,651, 1.96%** |
+| 3, a bound-slot store | 202,926,832, 0.96% | **0**, the arc is gone |
+| 4, hoist the trace decision | 68,880,034 | 61,040,042 remaining |
+| 5, index once per target | 23,986,680 | dead, measured negative |
+
+**Candidate 2 goes next, and not because it is larger.** Its figure is nearly all
+one inclusive measurement of a call that would stop happening, reproduced to the
+digit at two revisions, and it is the only one of the five whose instruction
+count did not move across two landed commits. Candidate 1's has already been
+reduced once by work it did not do, and `:774` grew by 11,200,006 inside it, so
+part of what remains is cost candidate 3 created and candidate 1 would be
+credited for removing. **A candidate whose figure measures the history of the
+file is not sized.** Re-derive candidate 1 after candidate 2 lands.
