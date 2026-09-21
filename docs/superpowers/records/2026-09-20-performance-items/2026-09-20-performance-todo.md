@@ -15,6 +15,11 @@ The constant most of the op work is derived from: **one dispatched op that does
 no work costs 20.0 instructions** (821,610,422 Ir over 41,001,861 ops, from the
 TRACE A/B). Multiply ops removed by 20 to size any fusion.
 
+**Corrected 2026-09-21, see "Item 3 landed" below: 20 is a floor, not a ceiling.**
+A fusion that also removes the value handoff between the two ops is worth more;
+the one measured came to 54.8, of which 34.8 was the handoff. An elision that
+removes a dispatch doing nothing is still worth 20.
+
 The baseline it is all against: `f9ffe9a8b`, 20,000,000 clauses, 127,886,118 ops
 dispatched, 21,147,250,696 instructions, **6.39 ops per clause, 165.4 Ir per op,
 1,057.4 Ir per clause**.
@@ -672,3 +677,166 @@ enclosing block. On the in-loop literal shape -- `rexxcps` with its two
 against 739 and measures 21,148,574,783 against 21,148,181,856, which is
 inside the spread: every one of the 31 ops is at a source line before the
 timed body.
+
+## Items 4 and 5 are dead, 2026-09-21, measured before either was built
+
+Both were sized from counts that were never checked against the stream as
+emitted. A read-only investigation checked them, and the implementer was stopped
+before building item 5.
+
+### Item 4 is unsound, not merely small
+
+`eval.rs:1287` checks `operator_message_receiver(left)` and returns
+`send_operator(...)` **before any per-operator dispatch**, so a comparison whose
+left operand is an object answers whatever a user-defined method answers,
+unvalidated. `logical()`'s validation sites are never reached on that path. It
+covers every comparison operator at once, because the escape sits ahead of the
+operator rather than inside it.
+
+Verified against the oracle, rc 222, stdout `ret: banana`, stderr `Error 34.1:
+... must be exactly "0" or "1"; found "banana".`:
+
+    zk = .Kustom~new
+    zr = (zk = 1)
+    say 'ret:' zr
+    if zk = 1 then say 'then'
+    ::class Kustom
+    ::method '='
+      return 'banana'
+
+`WHEN` raises 34.2 by the same route; a stem whose default is an object, a class
+object through its metaclass, and a method returning an object all reach it.
+Dropping `Op::Condition` swaps a user-visible 34.1/34.2 for
+`Loud::register_not_logical`, whose own doc says it is "an internal
+inconsistency, never a program error". `Op::Condition` also owes the `>>>` line.
+
+**This candidate has now died twice under two names**, as CREXX candidate C and
+as item 4 here, both times reasoned from "a Rexx comparison always answers 0 or
+1" with nothing run.
+
+### Item 5 is six ops per program run, not 1.4%
+
+Strictly adjacent constant-load-then-`Store` pairs on `rexxcps`: one
+`Const` -> `Store` and five `LoadConstant` -> `Store`. Their source clauses are
+`rexxcps=2.2`, `count=200`, `averaging=100`, `tracevar='Off'`, `empty=0` and
+`full=0`, at lines 6, 11, 12, 14, 25 and 36. The timed body is lines 41 to 83, so
+**every one of them is program setup that executes once**.
+
+The pairs inside the timed body are separated by a `TraceLiteral` that still has
+to emit, so reaching them means fusing across a live op. Execution-weighted that
+route is about 1,740,000 ops, roughly 34.8 million instructions, **about
+0.165%** -- under the 0.3% floor the item's own brief set.
+
+**The error was in the sizing method, not the arithmetic.** The ~1.4% counted
+constant loads and store-shaped clause templates without checking whether the two
+were adjacent, or whether the adjacent ones were in the loop.
+
+**Pin the six to the `rust/` subtree `63686bcc7247d7cd2baac82969fc43242c63f01a`,
+measured 2026-09-21.** That subtree is what `941b5fb82`, `4ef6af5bb` and
+`bc26d7936` all carry: `git rev-parse <commit>:rust` answers it for each, and
+`git diff --stat 941b5fb82 4ef6af5bb` is empty because the revert restores the
+tree the speculation was built on. Naming the subtree rather than a commit is
+what removes the ambiguity, since three commit names are equally correct here and
+the one in between them, `3c2e6825a`, is not. The measuring binary's sha256 was
+`3f91e0ac39eda1b203abec64f766ee50fc32295a44bac03dfe9b29a73855fa67`. The
+six adjacent pairs are adjacent *because* `7fbadfecb` made emission per clause:
+`rexxcps`'s first event is at line 38, so the six setup clauses before it now
+compile bare and their constant load sits directly against its `Store`. Rendered
+under setting `i`, where the setting is in force from the first clause, those six
+acquire a `TraceClause` and a `TraceLiteral` and the count goes to **zero**.
+
+So this verdict is conditional, and the condition is the part to carry forward:
+**item 5 is dead while the timed body still emits value echoes.** Anything that
+stops the hot body echoing makes its ten hot pairs adjacent and item 5 worth
+roughly its original figure. That is the same thing item 2 tried and failed to
+do, so the dependency is real but not close.
+
+The execution weighting was tested at its weakest point rather than asserted. The
+two `SELECT` branch counts that decide 87 against 114 per body were run with a
+counter on every branch, on both interpreters: line 66 fires once, line 73 never,
+line 65 thirteen times, line 68 fourteen. And had both been wrong, 0.165% becomes
+0.216%, still under the stop threshold. The model also predicts `Parse` at 112 per
+body against a measured 2,240,002, with the residual two named as `parse source`
+and `parse version` at startup.
+
+**One thing left open, recorded as a hypothesis and not a finding:** `Condition`
+and `Arith` are each exactly 28 per body short of the model and nothing else is.
+Line 50, `if 17<length(j)-1`, is the only clause in the `j` loop carrying both at
+that rate, so one uncounted clause would close both gaps with a single cause.
+Nothing has been run that shows it. An earlier explanation, that the counted
+dispatch excludes an `Op::LoopRun` body, was withdrawn: the `Parse` total only
+reconciles if the `parse var` inside `do 1; ... end` **is** counted.
+
+### Item 3 survives the same check
+
+`Condition` -> `JumpUnless` is adjacent at every site on `rexxcps`, under
+settings `n`, `off`, `a`, `i` and `r`, with `n` confirmed as the stream that
+runs. Nothing sits between them. On the same stream every `Condition` is fed
+through a trace op rather than from its `Binary`, which is why item 4's
+adjacency is zero and item 3's is complete.
+
+## Item 3 landed 2026-09-21 at `725aa8863`, three times its estimate
+
+`Op::Condition` and `Op::JumpUnless` become `Op::ConditionJump`. The fusion is
+made **where the ops are emitted**, not by a pass over a finished stream, so
+nothing renumbers and no side table keyed by an op index moves. `Op::JumpUnless`
+survives for the arrivals that are not a validated condition, an `IF` falling to
+`Op::EvalExpr` and an `Op::WhenTest`.
+
+| | BASE `bc26d7936` | HEAD `725aa8863` |
+|---|---|---|
+| instructions | 21,147,005,593 | 20,792,862,096 |
+| within-build spread | 0.0068% | 0.0002% |
+| ops dispatched | 127,885,295 | 121,425,289 |
+| static stream | 739 | 720 |
+
+**-354,143,497 instructions, -1.6747%**, against a derived estimate of 0.56%.
+
+Reproduced independently: a separate build of the same source, `sha256
+b079d104213a2dc188c49a446acf342b00e90c587c8c2850ab0b8e2c6c4b3f11`, measures two
+rounds at 20,794,262,141 and 20,794,343,764, mean 20,794,302,952, spread
+0.00039%, which is **-1.6679%**. The two builds differ by 0.0068%, inside BASE's
+own spread. The static stream reproduces exactly: 720 ops, `Condition` 0,
+`JumpUnless` 0, `ConditionJump` 19.
+
+Coverage is a census rather than a sample: across 621 programs, 765 `Condition`
+ops and 765 immediately followed by a `JumpUnless`, in both stream shapes,
+echoes on and off. Rendering HEAD independently answers 765 `ConditionJump` and
+24 leftover `JumpUnless`, which reconciles against the 789 `JumpUnless` at BASE
+from the other direction. The adjacency is structural: both ops are pushed
+back-to-back in the same `match` arm at both sites that emit either.
+
+Gates at `725aa8863`: six green, 133 binaries, 2649 passed / 0 failed / 4 ignored
+release and 2650 / 0 / 4 debug, tallies unchanged from before the commit. The
+clippy line finished in 0.09s against a warm target and was re-run from an empty
+`CARGO_TARGET_DIR`, 74 crates cold, rc 0.
+
+Controls: `emptyloop` -0.00018% and `varlookup` +0.00007%, both inside their own
+builds' spreads and pointing opposite ways, neither program containing an `IF`,
+`WHEN` or `SELECT`. **No arm was added**: the driver has one arm where it had two.
+
+### The correction this forces on every remaining estimate
+
+**"Ops removed times 20" is a floor, not a ceiling.** 20.0 Ir is the price of a
+dispatch that does *nothing*, derived by deleting trace ops, which are exactly
+the ops that do nothing. This fusion removed 54.8 instructions per op, and
+**34.8 of the 54.8 were the value handoff between the pair**: `ObjRef::small_int`
+and `set_temp` on the write side, `temp_at`, `register_holds`'s comparisons and
+`decode` on the read side, none of which survives because the branch was the
+write-back's only reader.
+
+So any fusion that also removes a value handoff is underestimated by "ops times
+20", by an amount equal to whatever register traffic sat between the two ops. An
+elision that removes a dispatch doing nothing is not.
+
+This re-prices item 5's hot-body route from 0.165% to roughly 0.45%, above the
+0.3% floor it was declined against. It does **not** revive item 5 as written: its
+hot pairs are separated by an `Op::TraceLiteral` that still has to emit, so
+reaching them means a three-op fusion that keeps the emission rather than the
+two-op one that was measured at six executed pairs.
+
+An eight-probe differential over the fusion, stdout, stderr and exit status kept
+separate, is byte-identical across oracle, BASE and HEAD: non-logical `IF` at
+34.1 and `WHEN` at 34.2, `trace i` over `IF`/`ELSE`, a `SELECT` chain in a loop,
+`trace r` over `SELECT CASE`, nested `IF` under `SIGNAL ON SYNTAX`, and the
+object-comparison case from item 4 reaching both an `IF` and a `WHEN`.

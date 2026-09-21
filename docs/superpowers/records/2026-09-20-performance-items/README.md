@@ -10,8 +10,20 @@ candidates exist nowhere else, and `.superpowers/sdd/` is git-ignored scratch.
 | `2026-09-20-performance-todo.md` | the ordered item list, and the reports for items 1 and 2 written back into it as appended sections rather than as separate files |
 | `2026-09-20-instructions-per-op.md` | the baseline: how ops are counted by summing execution counts at the driver's dispatch jump addresses, and the per-op instruction figures every later candidate is sized against |
 | `2026-09-19-driver-control-flow-spike.md` | the control-flow spike, including the padding control that separates a layout effect from a real one |
+| `2026-09-19-driver-control-flow-spike-report.md` | the spike's own report, beside the queued note derived from it |
+| `2026-09-21-comparison-soundness-report.md` | the enumeration that killed item 4 on soundness and sized item 3's and item 5's adjacency |
+| `2026-09-21-parse-cost-scout-report.md` | the `exec_parse` diagnosis: PARSE is 14.90% inclusive rather than 6.77% self, and five ranked candidates |
+| `2026-09-21-parse-message-target-unimplemented.md` | a defect found incidentally by that scout, with its witness and its control |
 | `trace-emission-brief.md` | item 1's dispatch brief |
 | `trace-quickening-brief.md` | item 2's dispatch brief |
+| `op-fusion-brief.md` | items 3 and 5's dispatch brief |
+| `parse-cost-scout-brief.md` | the `exec_parse` diagnosis brief |
+| `parse-contained-brief.md` | the brief for PARSE candidates 3, 4 and 5 |
+
+`2026-09-20-performance-todo.md` is refreshed here as the live document grows.
+Its own corrections are appended sections, never edits to what they correct, so a
+refresh adds text and does not retouch any. The briefs are copied unedited and
+are not refreshed.
 
 ## What these files get wrong, recorded rather than edited
 
