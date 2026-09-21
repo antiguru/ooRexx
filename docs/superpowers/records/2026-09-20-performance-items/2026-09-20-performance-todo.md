@@ -15,10 +15,21 @@ The constant most of the op work is derived from: **one dispatched op that does
 no work costs 20.0 instructions** (821,610,422 Ir over 41,001,861 ops, from the
 TRACE A/B). Multiply ops removed by 20 to size any fusion.
 
-**Corrected 2026-09-21, see "Item 3 landed" below: 20 is a floor, not a ceiling.**
-A fusion that also removes the value handoff between the two ops is worth more;
-the one measured came to 54.8, of which 34.8 was the handoff. An elision that
-removes a dispatch doing nothing is still worth 20.
+**Corrected twice on 2026-09-21. The constant is 8, not 20, and it is a floor.**
+
+**The 20.0 is wrong.** It came from a whole-program delta that deleted the three
+`TRACE` **instructions** from the source, which removed those clauses' own
+execution as well as the trace ops, so the difference was divided by an op count
+that did not account for all of it. Measured per address at the dispatch jumps,
+the loop overhead of one region op is **8 instructions**: 5 for the dispatch and
+3 for the advance.
+
+**And 8 is a floor, not a ceiling.** A fusion that also removes the value handoff
+between its two ops is worth more; the one measured came to 54.8 per removed op.
+An elision that removes a dispatch doing nothing is worth 8.
+
+Every DERIVED figure below that multiplies an op count by 20 is overstated by
+about 2.5x. Item 5's revived floor goes from 0.33% to roughly 0.14%.
 
 The baseline it is all against: `f9ffe9a8b`, 20,000,000 clauses, 127,886,118 ops
 dispatched, 21,147,250,696 instructions, **6.39 ops per clause, 165.4 Ir per op,
