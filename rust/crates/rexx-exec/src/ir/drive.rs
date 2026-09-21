@@ -496,6 +496,14 @@ impl Interp {
         let Some(stop) = chunk.op_at(end) else {
             return Err(Loud::chunk_map_too_short().into());
         };
+        // **The stream cut to this range's own bound, taken once.** The loop
+        // below continues only while `pc < stop`, and this slice is `stop`
+        // long, so every read of it under that guard is in range already and
+        // the per-op check goes. A stream shorter than `stop` is the same
+        // fault the per-op read used to report, found here instead.
+        let Some(stream) = chunk.ops_upto(stop) else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
         let depth = self.activation_depth();
         // **SPIKE.** Whether the permission is still worth asking about. It is
         // granted to this activation's first instruction and has to be cleared
@@ -525,16 +533,14 @@ impl Interp {
             // follows it and is silent in any program whose branches happen to
             // agree.
             #[cfg(debug_assertions)]
-            if !matches!(chunk.op_at_index(pc), Some(Op::EndWhen)) {
+            if !matches!(stream.get(pc as usize), Some(Op::EndWhen)) {
                 debug_assert!(
                     !(self.frames.len() > base
                         && self.frames.last().is_some_and(|frame| pc >= frame.op_end)),
                     "the innermost SELECT frame ended before op {pc}, which is not its own EndWhen"
                 );
             }
-            let Some(op) = chunk.op_at_index(pc) else {
-                return Err(Loud::chunk_map_too_short().into());
-            };
+            let op = &stream[pc as usize];
             let (flow, next) = match op {
                 Op::Clause { index, end } => {
                     #[cfg(test)]

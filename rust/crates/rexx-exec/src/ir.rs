@@ -611,9 +611,12 @@ impl Chunk {
         self.positions.get(index).copied()
     }
 
-    /// The op at op index `at`.
-    fn op_at_index(&self, at: u32) -> Option<&Op> {
-        self.ops.get(at as usize)
+    /// The ops of `[0, stop)`, or `None` when this stream is shorter than
+    /// that. A counter guarded against the answer's own length is in range
+    /// without a second check per op.
+    #[inline]
+    fn ops_upto(&self, stop: u32) -> Option<&[Op]> {
+        self.ops.get(..stop as usize)
     }
 
     /// The ops of `[at, end)`, or `None` when that is not a range of this
