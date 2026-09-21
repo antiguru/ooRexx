@@ -2673,8 +2673,8 @@ impl Interp {
     }
 
     /// Writes `value` into the slot a plain-variable target is already bound
-    /// to, and traces the write. `rendered` is the assigned value's own text,
-    /// which only the `>=>` line reads.
+    /// to, and traces the write. `rendered` is the assigned value's own text
+    /// where a `>=>` line will print it, and `None` where none will.
     ///
     /// Panics in a debug build when `id` does not name a simple variable: the
     /// slot written here is the whole name's, which a stem or a compound tail
@@ -2686,7 +2686,7 @@ impl Interp {
         id: SymbolId,
         slot: usize,
         value: ObjRef,
-        rendered: &[u8],
+        rendered: Option<&[u8]>,
         indent: usize,
     ) {
         debug_assert!(
@@ -2701,7 +2701,7 @@ impl Interp {
         self.set_variable(frame, slot, value);
         // The name is reached only where a line will print it, which is what
         // the general path below pays on every call.
-        if self.tracing_intermediates() {
+        if let Some(rendered) = rendered {
             self.trace_assignment(indent, code.symbols.name(id).as_bytes(), rendered);
         }
     }

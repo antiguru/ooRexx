@@ -735,7 +735,19 @@ impl Interp {
         indent: usize,
     ) -> Result<(), Failure> {
         let last = trigger.targets.len().saturating_sub(1);
+        // **Decided once for the whole trigger**, which is where
+        // `ParseTrigger::parse` decides it: it keeps two copies of this loop
+        // and chooses between them on `context->tracingResults()`
+        // (`ParseTrigger.cpp:248` and `:290`). Nothing the loop below reaches
+        // runs Rexx code, so the setting cannot move while it runs, and the
+        // assertion inside is what says so rather than leaving it argued.
+        let traced = self.traced_mode();
         for (index, target) in trigger.targets.iter().enumerate() {
+            debug_assert_eq!(
+                traced,
+                self.traced_mode(),
+                "the TRACE setting moved while one trigger's targets were assigned"
+            );
             let piece = if index == last {
                 cursor.remainder()
             } else {
@@ -763,34 +775,22 @@ impl Interp {
                         ExprKind::Variable(id) => code.slot_for(*id).map(|slot| (*id, slot)),
                         _ => None,
                     };
+                    // A borrow of the parse source rather than a fresh copy of
+                    // the assigned value, so the `Option` guards nothing here
+                    // but the `>=>` line -- see `assign_expr_target`'s own doc
+                    // for what the other caller pays.
+                    let rendered = traced
+                        .intermediates
+                        .then(|| &cursor.string()[piece.clone()]);
                     if let Some((id, slot)) = bound {
-                        self.assign_bound_variable(
-                            code,
-                            id,
-                            slot,
-                            value,
-                            &cursor.string()[piece.clone()],
-                            indent,
-                        );
+                        self.assign_bound_variable(code, id, slot, value, rendered, indent);
                     } else {
-                        // Always `Some`: this is a borrow of the parse source
-                        // rather than a fresh copy of the assigned value, so
-                        // there is nothing here for the `Option` to guard
-                        // against -- see `assign_expr_target`'s own doc for what
-                        // the other caller pays.
-                        self.assign_expr_target(
-                            code,
-                            target,
-                            value,
-                            Some(&cursor.string()[piece.clone()]),
-                            indent,
-                            None,
-                        )?;
+                        self.assign_expr_target(code, target, value, rendered, indent, None)?;
                     }
                     // The `TRACE R` half of the pair -- see this module's own
                     // `exec_parse` doc for why it is a choice of prefix and
                     // not a second, independent line.
-                    if !self.tracing_intermediates() {
+                    if traced.results && !traced.intermediates {
                         self.trace_result(indent, &cursor.string()[piece]);
                     }
                 }
@@ -798,7 +798,11 @@ impl Interp {
                 // and its own line is emitted **even when it consumed
                 // nothing** -- measured, `parse value 'one two' with p . q`
                 // traces `>.>   ""` between `>=> P` and `>=> Q`.
-                None => self.trace_dummy(indent, &cursor.string()[piece]),
+                None => {
+                    if traced.intermediates {
+                        self.trace_dummy(indent, &cursor.string()[piece]);
+                    }
+                }
             }
         }
         Ok(())
