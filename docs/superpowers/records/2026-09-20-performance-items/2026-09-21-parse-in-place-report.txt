@@ -1,0 +1,432 @@
+# PARSE candidate 2: parse the source where it already is
+
+Implementation report, 2026-09-21. Branch `plan/rust-rewrite`. Base
+`19a3018a0`, whose code is `bb81ae522`.
+
+**This file is `.txt` and not `.md` because this harness refuses to write a
+`.md` report file** -- same path, same content, different extension. It is
+under `.superpowers/`, which `.gitignore:30` excludes, so it is not committed.
+
+## Gates
+
+Committed first, then started; each status written unpiped to
+`.../scratchpad/parse-in-place/gates-c2/status.txt` as it lands, with the
+commit sha as that file's first line.
+
+| gate | command | status |
+|---|---|---|
+| G1 | `cargo fmt --all --check` | EXIT=0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings` | EXIT=0 |
+| G3 | `cargo build --workspace --all-targets --release` | EXIT=0 |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | EXIT=0 |
+| G5 | `cargo build --workspace --all-targets` | EXIT=0 |
+| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | EXIT=0 |
+
+**133 test binaries either side, 2651 passed / 0 failed / 4 ignored release,
+2652 / 0 / 4 debug.** The brief predicted 2649 and 2650; this commit adds two
+tests, `a_template_walk_survives_a_collection_between_its_targets` and
+`heap::body_text_tests::it_answers_what_get_and_a_body_match_answer`, and the
+counts are those predictions plus two. `corpus_differential` reports
+`604 of 604 matching` in STRICT mode in both runs. The run began 13:58:49 and
+said `finished` at 14:11:00, 12m11s. Every cell above was read from
+`gates-c2/status.txt` after it said `finished`, and the tallies were summed
+from each log's own 133 `test result:` lines rather than from a summary.
+
+**No gate cell above is filled in from anything but that file.** What was run
+by hand before the commit, and read unpiped:
+
+    cargo fmt --all --check                                        EXIT=0
+    cargo clippy --workspace --all-targets -- -D warnings          EXIT=0   (warm)
+    CARGO_TARGET_DIR=<empty> cargo clippy --workspace --all-targets -- -D warnings
+                                                                   EXIT=0   (cold, 521 MB of fresh artifacts, `Checking rexx-exec` in the log)
+    cargo test -p rexx-exec --lib                                  847 passed / 0 failed
+    cargo test -p rexx-core --lib                                  10 passed / 0 failed
+    REXX_CORPUS_GATE=1 memcap 8G cargo test -p rexx-exec --test corpus
+                                                                   `604 of 604 matching` STRICT, 29 passed / 0 failed / 1 ignored
+    memcap 8G cargo test -p rexx-exec --test collect_stress        32 passed / 0 failed
+    cargo test -p rexx-exec --test refusal_sites --test ir_recorded --test licensed_divergences
+                                                                   5 passed / 0 failed
+    cargo test -p rexx-core --test unsafe_sites                    2 passed / 0 failed
+
+`corpus/refusal-sites.tsv` did **not** need re-deriving: `run.rs` was not
+touched and `refusal_sites` is green as committed.
+
+**What changed in the working tree while the gates ran: this file, and nothing
+else.** It is under `.superpowers/`, which `.gitignore:30` excludes and no
+cargo target reads, so `git status` is empty for the whole run and the gated
+tree is the committed tree. The edits were corrections to figures in the
+Measurement and Concerns sections, each replacing a number with one re-read
+from a dump. The gate table above was filled in **after** `status.txt` said
+`finished`, from that file.
+
+## What landed
+
+`Cursor` no longer owns a `Vec<u8>`. It keeps the positions the triggers move
+and nothing else; the parse string sits beside it in `exec_parse` as a
+`SourceText`:
+
+* `Owned(Vec<u8>)` -- a buffer from `Interp::parse_buffers`. `PARSE SOURCE`,
+  `PARSE VERSION`, `PARSE PULL`, `PARSE LINEIN`, a source that is not a string
+  object, and every folding `PARSE UPPER`/`LOWER` still take one.
+* `Inline(InlineText)` -- a source whose bytes are in the handle, which is a
+  `Copy` value the enum holds, so nothing in the arena reaches them.
+* `Text { value, length }` -- a rooted `Body::Text`, read where it already is.
+
+`SourceText::bytes(&self, interp: &Interp) -> &[u8]` is the only reader, and
+the slice it hands back borrows `&Interp`, so a `&mut self` call ends the
+borrow and the next use derives it again. That is the whole of the soundness
+argument against the arena moving the bytes, and it is the compiler's rather
+than mine -- see "the control that does not compile" below.
+
+### The positive key
+
+`Interp::source_text` borrows for `Decoded::Text` and for a heap `Body::Text`,
+and copies for everything else. A `Body::Text`'s bytes are written once, by the
+`alloc` that builds the object, so they cannot change length under the walk;
+a `MutableBuffer`'s contents can, and `Body::Instance` is not admitted. The
+`length` is therefore cached in the arm and asserted at every derivation
+(`debug_assert_eq!` in `SourceText::bytes`) and again against the slice
+`next_word` is handed.
+
+### One derivation per target, which is the whole margin
+
+`take_piece` carves the piece and builds its text value under a single borrow.
+`Heap::body_text` answers a live `Body::Text`'s bytes in one indexing and one
+match where `Heap::get` plus a body match is two of each. `next_template` takes
+the cursor's length from the cache rather than from the arena.
+
+## The hazard, and the test for it
+
+`a_template_walk_survives_a_collection_between_its_targets` runs a program
+under `run_program_collect_every_alloc` whose every piece is longer than
+`INLINE_TEXT`, so every assignment allocates and every allocation collects.
+Its last template is
+
+    call fill
+    parse var sm.1 s1 sm.1 s3 s4
+
+with `sm.1` filled inside `fill`, so no live register holds the object and the
+second target takes the stem entry away from it: from there on, the walk's own
+temporary is the only root. Every expected line was taken from the oracle
+first, under the project wrapper from a fresh directory: rc 0, stdout
+byte-identical, stderr empty.
+
+### The control that reddens it, and what it took
+
+**A collection does fall between two of this template's targets, and that was
+instrumented rather than assumed.** A temporary `eprintln!` in
+`SourceText::bytes` printed the handle, its liveness and
+`Heap::collections_performed` at every derivation: over the last template the
+same slot is derived eight times while the collection count runs 306 -> 309,
+and with the roots removed the eighth derivation reports `live=false`.
+
+**The control is "the parse source is unrooted", and it takes three deletions,
+not one.** The source on the `PARSE VAR` path is rooted three times over:
+`Interp::source_text`'s own `push_temp`, `parse_strings`' `PARSE VAR` arm, and
+`required_string_value`'s armed-latch arm. All eight subsets were run:
+
+    GREEN  removed: none
+    GREEN  removed: source_text
+    GREEN  removed: parse_strings VAR
+    GREEN  removed: source_text, parse_strings VAR
+    GREEN  removed: required_string_value
+    GREEN  removed: source_text, required_string_value
+    GREEN  removed: parse_strings VAR, required_string_value
+    RED    removed: source_text, parse_strings VAR, required_string_value
+
+So the test asserts that the source is rooted, not that a particular line roots
+it, and that is what its doc comment says. `Interp::source_text`'s `push_temp`
+is redundant with the other two **today**; it is kept so the arm's invariant is
+readable in `parse_template.rs` alone, and it costs one `Vec::push` per
+borrowed source.
+
+### Addendum: the latch is never clear, so the third root is never absent
+
+The control above ran with `Interp::reqstr_armed` set, which is what makes
+`required_string_value`'s push happen at all. I flagged the latch-clear case as
+untested. **It is untestable: no program reaching `exec_parse` can have the
+latch clear.** Probes on all four arming sites, over
+`source_and_version_carry_their_own_strings` -- four clauses, no `~new`, no
+directive, no trap -- print `ARM makestring-install` five times and
+`ARM instance-new` once, all of them before the first `PROBE
+reqstr_armed=true` in `source_text`. **The bootstrap arms it while installing
+the core classes**, so the arming has nothing to do with the program.
+
+That makes the redundancy structural rather than incidental: `source_text`'s
+only two callers are `parse_strings`' `Subject::Value` arm and `argument_text`,
+and both call `required_string_value` on the value immediately before it. With
+the latch armed, that function pushes a temp for every `Body::Text`, which is
+exactly the set of values `source_text` takes the borrowing arm for.
+
+Asserted rather than argued, temporarily, at the site:
+
+    debug_assert!(
+        self.roots.iter().any(|root| root == value),
+        "the parse source reached source_text unrooted"
+    );
+
+placed **before** `source_text`'s own `push_temp`. It holds across
+`cargo test -p rexx-exec --lib` (847 passed), `collect_stress` (32 passed, the
+whole L0 subset under collect-on-every-allocation) and the 604-program STRICT
+differential. Inverted to a predicate that cannot hold, it fails the new test
+at once, so it is a live probe and not a vacuous one. The assertion was removed
+again and the tree is the committed tree; it is recorded here as the experiment,
+not left in the code, because it is O(roots) per borrowed source.
+
+**So: `source_text`'s `push_temp` is dead weight, and a reader who deletes it is
+right about the tree.** What would make it matter is a change to
+`required_string_value`'s armed fast path -- whose own comment says the push is
+deliberate, "the caller's rooting of it is not this function's to assume" -- or
+a bootstrap that stops installing `makeString`. Neither is in prospect. The
+honest reason to keep it is the one already given, that it makes the arm
+readable alone; that is a taste argument and not a safety one, and this
+addendum is what a future reader needs to weigh it.
+
+### "Can fail" is not "adds coverage", checked
+
+With all three roots deleted and the new test **skipped**:
+
+    cargo test -p rexx-exec --lib -- --skip a_template_walk_...   846 passed / 0 failed  EXIT=0
+    memcap 8G cargo test -p rexx-exec --test collect_stress       32 passed / 0 failed   EXIT=0
+    REXX_CORPUS_GATE=1 memcap 8G cargo test -p rexx-exec --test corpus
+                                                                  604 of 604 matching    EXIT=0
+    cargo test -p rexx-exec --lib a_template_walk_...             FAILED                 EXIT=101
+
+Nothing else in the suite catches an unrooted parse source -- `collect_stress`
+over the whole L0 subset included.
+
+### The control that does not compile
+
+Hoisting the slice above the target loop -- `let whole = source.bytes(self);`
+then `cursor.next_word(whole)` inside -- is **ten** borrow-check errors, E0500
+and E0502, at every `&mut self` call in the loop:
+
+    error[E0502]: cannot borrow `*self` as mutable because it is also borrowed as immutable
+       --> crates/rexx-exec/src/parse_template.rs:875:33
+    857 |         let whole = source.bytes(self);
+        |                                  ---- immutable borrow occurs here
+    867 |                 cursor.next_word(whole)
+        |                                  ----- immutable borrow later used here
+    875 |                     let value = self.piece_value(source, piece.clone());
+        |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ mutable borrow occurs here
+
+The full output is at `.../scratchpad/parse-in-place/naive-hoist-errors.txt`.
+
+## Measurement
+
+    valgrind --tool=callgrind --callgrind-out-file=<dir>/cg.out ./rexx-run ./rexxcps.rex
+
+`rust/bench-rexxcps/rexxcps.rex`, the pinned copy. Each build in its own
+`CARGO_TARGET_DIR`; each run from a fresh directory holding its own copy of the
+binary and the program; exit status written unpiped; every run `EXIT=0`. Rounds
+interleaved, old then new.
+
+    base  76ac29b21ad3e3f3   the tree at 19a3018a0, from `git archive HEAD`
+    c2    38841b5de2b46a06   the first version, two derivations per target
+    c2b   dfe8c005805b4af6   the optimised version
+    c2c   df3d5bcbfecce8fc   the committed code (c2b plus a pure refactor of
+                             `take_piece` and comment edits)
+
+| build | runs | mean | within-build spread |
+|---|---|---|---|
+| base r1-r6 | 20,445,128,577 / 20,445,561,898 / 20,445,572,192 / 20,446,352,392 / 20,445,538,582 / 20,445,695,342 | 20,445,641,497 | 0.0060% |
+| c2 r1 | 20,458,306,298 | -- | one run |
+| c2b r2-r4 | 20,306,047,077 / 20,306,168,018 / 20,305,976,155 | 20,306,063,750 | 0.0009% |
+| c2c r5-r6 | 20,307,515,497 / 20,307,254,036 | 20,307,384,766 | 0.0013% |
+
+**The committed code, against the base rounds it was interleaved with (r5, r6):
+20,445,616,962 -> 20,307,384,766, -138,232,196, -0.6761%.** Base spread over
+that pair is 0.0008%. Every `c2c` run is below every `base` run of all six
+rounds.
+
+`c2b` against its own three interleaved base rounds (r2-r4) is
+20,445,828,827 -> 20,306,063,750, **-139,765,077, -0.6836%**; base spread
+0.0039%. The 1,532,881 Ir between the two deltas is not inside `exec_parse` -- that
+function's inclusive cost is 2,662,667,358 in the `c2b` dump and 2,662,666,438
+in the `c2c` one, and its self cost is 1,633,801,001 in both -- so it is layout,
+not work.
+
+**The base binary reproduces the previous task's profile**, which is what says
+the two reports are measuring the same thing. To the digit, from `base-r5`:
+`exec_parse`'s self in `parse_template.rs` 434,560,308, the
+`rendered_into_parse_buffer` arc 292,320,374 over 1,960,000 calls, `alloc_with`
+over 2,520,002 calls, `next_template` 268,520,341, `eval_node` 116,200,087,
+`read_at` 70,560,000,
+`to_text` 66,080,000, `memcpy` 64,120,097, `enter_eval_node` 23,800,017,
+`whole_nonneg` 15,120,054, and 2,240,002 calls into `exec_parse`. `exec_parse`
+inclusive is 2,803,765,424 in `base-r5` and 2,803,785,902 in `base-r2` against
+that report's 2,803,777,215. **The per-line self table is byte-identical across
+runs of one binary** -- `base-r2` and `base-r5` agree on every line -- while the
+inclusive figure and the arcs whose callees reach the collector move by tens of
+thousands of Ir (`alloc_with` 433,863,202 against 433,842,729,
+`rendered_into_parse_buffer` 292,320,381 against 292,320,374). So quote a
+per-line figure as exact and an inclusive one with its round.
+
+### The first version measured slower, and that is the finding
+
+`c2 r1` against `base r1`: 20,445,128,577 -> 20,458,306,298, **+13,177,721,
++0.0645%.** One round each, so the magnitude is soft; the sign is not, and it
+is ten times the base's own worst spread. That version was the design the
+scout described, implemented straight: `Heap::get` plus a body match for the
+derivation, a derivation for `next_word` and a second for the value, and the
+cursor's length taken from the arena. **Removing the copy is not the win; doing
+exactly one derivation per target is.** Three changes closed a 152M gap:
+`take_piece`'s single borrow, `Heap::body_text`, and the cached length.
+
+### Where it went, at `exec_parse`
+
+Both from the `r5` pair, which is the round the committed binary was
+interleaved in:
+
+| | base | committed | delta |
+|---|---|---|---|
+| inclusive | 2,803,765,424 | 2,662,666,438 | -141,098,986 |
+| self (all inlined files) | 1,453,200,978 | 1,633,801,001 | +180,600,023 |
+| arcs out | 1,350,564,446 | 1,028,865,437 | -321,699,009 |
+
+Inclusive is 13.71% of the run before and 13.11% after; per `PARSE` execution,
+1,251.7 Ir before and 1,188.7 after over the same 2,240,002 executions, a count
+read off the arcs into `exec_parse` in both dumps.
+
+**The commit message quotes 2,803,785,902 for the before side**, which is
+`base-r2` rather than `base-r5`. Both are real measurements of the same binary
+and they differ by 20,478 Ir, 0.0007%, against a delta of 141,098,986. The
+commit is not amended, so that number stands there and the `r5` pair above is
+the one to read.
+
+The arc that went away is the candidate: `rendered_into_parse_buffer`,
+292,320,374 over 1,960,000 calls from `exec_parse` in `base-r5`, is **absent**
+from the committed dump. `to_text`'s arc (66,080,000 over 1,120,000 calls, the
+string trigger's needle) is gone too -- `Interp::render` is inlined into
+`exec_parse` in its place and is an arc in neither dump. What stayed, at
+identical call counts: `eval_node` 116,200,087, `read_at` 70,560,000, `memcpy`
+64,120,097, `enter_eval_node` 23,800,017 and `whole_nonneg` 15,120,054, every
+one to the digit, and `alloc_with` over 2,520,002 calls at 433,842,729 against
+433,864,066, which is 21,337 Ir apart on 433 million.
+
+**`PARSE UPPER ARG` still copies and the profile says so**: the
+`rendered_into_parse_buffer` arc out of `next_template` is 89,040,259 over
+560,000 calls in both dumps, unmoved.
+
+### The ceiling, corrected
+
+The brief's ceiling was 400,680,651 (1.96%), which is `rendered_into_parse_buffer`'s
+whole inclusive cost over 2,520,000 calls plus the pool lines. **560,000 of
+those calls are `PARSE UPPER ARG`'s and were never removable**, and they are
+89,040,259 of the total. The removable part was the 1,960,000-call arc at
+292,320,374 plus the pool lines the brief prices at 19,320,016, so
+311,640,390. The measured saving is 138,232,196, **44% of that**, and the rest
+is what the derivations, the positive key, the rooting and the trace gates
+cost.
+
+## Candidate 1 re-derived at HEAD
+
+Components, from the `c2c-r5` dump:
+
+    iterator walks (core/src/slice/iter/macros.rs in exec_parse)   111,720,075
+    per-execution matches (:609 :882 :900)                          67,200,045
+    eval_node + enter_eval_node arc                                140,000,104
+    exec_parse prologue + epilogue (:519 :550)                      38,080,034
+                                                                   -----------
+                                                                   357,000,258   (1.76%)
+
+The same components measured from **my build of the base**, which is the code
+at `bb81ae522`:
+
+    iterator walks                                                 134,960,093
+    per-execution matches (:486 :774)                               42,280,030
+    eval_node + enter_eval_node arc                                140,000,104
+    exec_parse prologue + epilogue (:408 :438)                      40,320,036
+                                                                   -----------
+                                                                   357,560,263
+
+**So candidate 1 is worth about 357,000,000 Ir (1.76%) at my HEAD, and this
+task did not move it**: the two totals differ by 560,005, which is 0.16% of the
+figure.
+
+**Three of the four components reproduce the previous report to the digit** --
+iterator walks 134,960,093, the `eval_node` arc 140,000,104, prologue plus
+epilogue 40,320,036. The fourth does not: that report put the per-execution
+matches at 87,360,062 over eight lines (`:419 :486 :655 :660 :683 :756 :774
+:775`), and in my build of the same source only `:486` and `:774` carry any
+attribution at all, summing 42,280,030. This is a property of the build and not
+of the run -- `base-r2` and `base-r5` give byte-identical line tables. **Treat
+the match-line component as build-dependent and the other three as stable.**
+
+### How much of what remains is cost candidate 3 created
+
+`let bound = match &target.kind` -- the line candidate 3 added to take the
+bound-slot fast path -- is **28,000,015** at my HEAD (`:900`), against
+22,400,012 at the base (`:774`). The previous report recorded that line at
+11,200,006 before candidate 3 and 22,400,012 after. So of candidate 1's
+remaining 357,000,258, that one line is 28,000,015, and it decomposes as
+11,200,006 the line cost before candidate 3, **11,200,006 that candidate 3
+created**, and 5,600,003 that this task added there by moving the carve out of
+that line's neighbourhood into `take_piece`.
+
+## Oracle differential beyond the gate
+
+`TRACE I` and `TRACE R` in one program over `PARSE VAR`, `PARSE VALUE`,
+`PARSE ARG`, `PARSE UPPER VALUE`, `PARSE LOWER VALUE`, `PARSE UPPER ARG`,
+`PARSE SOURCE` and `PARSE VERSION`, with simple, stem and compound targets,
+`.` placeholders, a string pattern, a positional trigger and a comma fence, and
+a `trace o` at the end. Both sides run from the same directory on the same
+path: **123 lines of stderr transcript and one line of stdout, all three
+descriptors byte-identical, both sides rc 0.**
+
+## Concerns
+
+* **`SourceText::bytes` panics in release** (`unreachable!`) when the arm is
+  `Text` and the handle no longer names a live `Body::Text`. That is reachable
+  only from an unrooted source, and the alternative -- `try_text`'s
+  `not_in_arena` placeholder, or the next occupant's bytes -- is the silent
+  wrong answer this task exists to avoid. The generation check in
+  `Heap::body_text` is what turns "the slot was reused" into `None` rather than
+  into someone else's bytes; `heap.rs`'s `body_text_tests` reddens if it is
+  dropped, and that was watched.
+* **`trace.rs:616` carries 43,120,035 under `exec_parse` in the committed dump
+  where the base carries none.** That is `traced_mode`'s `debug_pause` test.
+  Two of the gates on that line are this task's (`parse_strings`' `>K>` gate and
+  `next_template`'s `>>>` gate, both of which replace an unconditional render).
+  **Whether that figure is new work or moved attribution was not established**,
+  and I did not chase it: the whole-run total is the figure, and the same dump
+  shows `unix.rs` at 37,240,020 under `exec_parse` where the base has none while
+  the run's whole-program `malloc` and `free` move by 60,101 and 12,043 Ir on
+  totals of 296,419,816 and 433,469,611, which is attribution moving and not
+  work appearing.
+* **Not taken, and sized only by that attribution**: giving `trace.rs` an
+  ungated `trace_result_line`/`trace_keyword_line` would remove one
+  `traced_mode()` per `PARSE` and one per template. It is worth at most the
+  43,120,035 above and probably much less, and it widens `trace.rs`'s surface
+  with two entry points whose gate a caller can forget.
+* **Sources that are not string objects gain nothing.** A `Body::Num`, a stem,
+  an array or an instance still renders into a pool buffer. No regression, but
+  `parse value 3+4 with ...` is unchanged.
+* The `c2` figure (+0.0645%) is **one round against one round**. It was not
+  re-run after the optimised version existed, because the optimised version is
+  what shipped and it has three and two.
+* **The scout's four settled facts were not re-tested and nothing here
+  contradicts them.** No probe in this work touched the variable pattern, the
+  allocation count, the `PARSE UPPER` copy or the oracle comparison.
+* **A process trap that cost about twenty minutes**, recorded because it will
+  recur: a background waiter spelled `until [ "$(pgrep -cf 'measure.sh 3')" =
+  "0" ]; do sleep 15; done` **matches its own shell**, whose command line
+  contains the pattern, and never terminates. Two runner jobs deadlocked that
+  way and had to be killed; `pgrep -af` showed the self-match. Wait on the
+  output file, not on a `pgrep -f` of the command.
+
+## Where the artifacts are
+
+`/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/parse-in-place/`
+
+* `measure.sh` -- the interleaved runner; `runs/<label>-r<n>/` holds each run's
+  binary, program, dump, stdout, stderr and unpiped status.
+* `lines.py` -- per-line self cost; `arcs.py` -- arcs out of one function, and
+  it reproduces the previous report's arc table from the base dump.
+* `stats.py` -- the means and spreads above, computed from `round*.txt`.
+* `roots.py` -- the eight-subset root control.
+* `coverage.txt` -- the "adds coverage" run.
+* `naive-hoist-errors.txt` -- the ten borrow-check errors.
+* `clippy-cold.txt` -- the clippy from an empty target directory.
+* `tdiff/` -- the oracle trace differential, both sides.
+* `gates-c2/` -- the gate logs and `status.txt`.

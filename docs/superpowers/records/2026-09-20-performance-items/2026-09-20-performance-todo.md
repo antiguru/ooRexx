@@ -964,3 +964,36 @@ reduced once by work it did not do, and `:774` grew by 11,200,006 inside it, so
 part of what remains is cost candidate 3 created and candidate 1 would be
 credited for removing. **A candidate whose figure measures the history of the
 file is not sized.** Re-derive candidate 1 after candidate 2 lands.
+
+## Item 7 sized on `rexxcps` at last, 2026-09-21
+
+The gap the entry named, "not yet sized on `rexxcps`", closed from my own
+`callgrind_annotate --threshold=100` over a run of `5e765dc5a` whose whole
+program is 20,313,581,507 instructions.
+
+| file, summed over every inlining site | instructions | share |
+|---|---|---|
+| `core/src/slice/index.rs` | 784,260,164 | **3.86%** |
+| `core/src/slice/iter/macros.rs` | 671,356,756 | 3.30% |
+| `core/src/num/uint_macros.rs` | 287,088,300 | 1.41% |
+| `core/src/slice/mod.rs` | 87,278,013 | 0.43% |
+
+The four largest `index.rs` sites: `run_ops_from::<true>` 287,039,771,
+`exec_parse` 89,040,030, `run_ops_from::<true>'2` 35,000,429, and the rest spread
+thin.
+
+**This is an attribution and the recoverable fraction is unknown.** `index.rs`
+covers the indexing operation, not only its bounds check, so what an assertion
+removes is the check and the panic path rather than the whole figure. Everything
+measured today says an attribution overstates what a fix recovers, three times in
+three different ways.
+
+**It is still the largest single item left on `rexxcps`**, ahead of PARSE
+candidate 1 at 1.76%, and unlike candidate 1 its figure is not partly cost this
+session created. Project memory already records asserting the bound before
+indexing as worth several percent on `Index`'s panic path, and that a message on
+the assertion costs more than the checks it removes.
+
+`slice/iter/macros.rs` at 3.30% is iterator machinery rather than bounds checks
+and is a separate question; it is recorded here only so that nobody sizes item 7
+by adding the two.
