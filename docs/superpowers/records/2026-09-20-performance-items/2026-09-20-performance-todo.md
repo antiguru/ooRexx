@@ -997,3 +997,87 @@ the assertion costs more than the checks it removes.
 `slice/iter/macros.rs` at 3.30% is iterator machinery rather than bounds checks
 and is a separate question; it is recorded here only so that nobody sizes item 7
 by adding the two.
+
+## Item 7 landed 2026-09-21, and the attribution above is not a size
+
+One of three candidates built under this item is in the tree. It cuts the op
+stream to the bound the driver's loop already tests the counter against, so
+the per-op read needs no check of its own: `Chunk::ops_upto(stop)` once at
+`run_ops_from` entry, `&stream[pc as usize]` in the loop.
+
+Measured, `valgrind --tool=callgrind`, two interleaved rounds, own
+`CARGO_TARGET_DIR` per build:
+
+| program | BASE mean | with the change | delta |
+|---|---|---|---|
+| `rexxcps.rex` | 20,308,361,464 | 20,292,230,586 | **-0.0794%** |
+| `emptyloop.rex` | 9,998,582,491 | 9,923,587,247 | **-0.7501%** |
+| `varlookup.rex` | 17,584,590,912 | 17,432,604,196 | **-0.8643%** |
+
+**The `index.rs` share is not a size for this work, and the evidence is a sign
+error rather than a magnitude one.** Across the change above, `varlookup`'s
+whole program fell by 151,986,716 instructions while the `index.rs` cost
+attributed to `run_ops_from::<true>` **rose** from 817,003,219 (4.65%) to
+950,003,537 (5.45%). The function's own self cost fell by 152,000,241, the
+whole of the program delta, so the work really did leave; it is the split of
+that function's cost across source files that moved the other way.
+
+**Two further candidates were built, tested and measured, and both are
+worse.** Cutting `Chunk::positions` to the body's length so the clause
+position costs no check of its own: +0.0548% on `rexxcps`, and nothing at all
+on the two axes that had just moved by 0.75% and 0.86%. A second spelling of
+it, reading the position at its use rather than beside the instruction lookup,
+was also positive. Cutting the region's ops from `stream` rather than from
+`chunk.ops`, which replaces a `Range` `get`'s two checks with a `RangeTo`
+`get`'s one: **+2.015% on `emptyloop`** and +0.654% on `varlookup`.
+
+So: three sites, one technique, one function -- -0.86%, 0.00%, +2.02% on
+`varlookup`. **Nothing further under this item can be sized from a profile.**
+What is left is `exec_parse` (89,040,030 on `rexxcps` at BASE, untouched, and
+PARSE moved earlier the same day) and the driver's own
+`code.body.instructions.get(index)`, whose index arrives inside the op with no
+bound recorded anywhere that a compiler could carry. Each would have to be
+built and A/B'd, and a prediction written down before the second candidate was
+measured was wrong in sign.
+
+The full write-up, with per-round figures and binary sha256s, is
+`2026-09-21-bounds-check-report.md`.
+
+### The sizing above is retired as a guide, 2026-09-21, by the work it sized
+
+My item 7 sizing summed `core/src/slice/index.rs` over every site it was inlined
+into and called it 3.86%. **That number cannot be used to choose the next site,
+and the disproof came from the change it selected.**
+
+On `varlookup` the landed change took the whole program down 151,986,716 while
+`index.rs` attributed to `run_ops_from::<true>` **rose**, 817,003,219 (4.65%) to
+950,003,537 (5.45%). `run_ops_from`'s own self cost fell by 152,000,241, which is
+the whole-program delta, so the work did leave. **What is not trustworthy is the
+per-file split inside one function.** An inlined file's share is where the
+optimiser chose to attribute an instruction, and rewriting the function
+reshuffles that without the work moving.
+
+This is the same shape a `PARSE` implementer flagged earlier today and declined
+to chase: `trace.rs:616` appearing under `exec_parse` from nothing while
+whole-program `malloc` and `free` stayed flat. That one was left unsized on
+suspicion. This one is measured.
+
+**So: a file-level share inside an inlined function sizes nothing.** Use it to
+find a function worth opening, never to rank sites within one, and never as a
+recoverable figure.
+
+### Three signs from one technique, and the predictions were wrong
+
+The same idea applied at three sites in one function on `varlookup`: **-0.86%**,
+**0.00%**, **+2.02%**. The two that came out positive were built, passed the
+`rexx-exec` debug suite, measured, and reverted.
+
+* Cutting `Chunk::positions` to the body's length so the clause position rides
+  the instruction lookup's check: **+0.0548%** on `rexxcps`. A second spelling of
+  the same idea was also positive, so placement was not the cost.
+* Cutting the region's ops from the same stream instead of a `Range` get, two
+  checks to one: **+2.015%** on `emptyloop`, **+0.654%** on `varlookup`. The
+  re-slice costs more than the check it removes.
+
+A prediction and a rival hypothesis were written down before the second
+measurement. **Both were wrong in sign.** They are kept beside the report.
