@@ -19,6 +19,7 @@ use rexx_parse::{
     Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, LoopKind, ParseSource, SymbolId,
 };
 
+use super::trace_flow::Speculate;
 use super::{
     Calls, Chunk, ChunkTooLarge, ClausePosition, ConditionKeyword, Hints, NodePath, Op, PlanSlot,
 };
@@ -174,11 +175,38 @@ enum PatchKind {
     Resume,
 }
 
-/// Compiles `body` into a [`Chunk`], once, whole.
+/// Compiles `body` into a [`Chunk`], once, whole -- and, where any clause was
+/// emitted for a setting the analysis only speculated, the stream that
+/// clause's guard deoptimises into.
+///
+/// **The fallback is the same body compiled with the speculation refused**,
+/// which is what the guard needs it to be: an instruction it runs answers
+/// exactly what the chunk answered before any speculation existed.
 pub(crate) fn compile(
     body: &CodeBody,
     plan: &Plan,
     trace: ChunkTrace,
+) -> Result<Chunk, ChunkTooLarge> {
+    let mut chunk = compile_once(body, plan, trace, Speculate::Assume)?;
+    if chunk.guards_a_clause() {
+        let fallback = compile_once(body, plan, trace, Speculate::Refuse)?;
+        debug_assert_eq!(
+            chunk.registers, fallback.registers,
+            "the two streams allocate registers differently, so a clause run from the fallback \
+             would read the promoted stream's"
+        );
+        chunk.registers = chunk.registers.max(fallback.registers);
+        chunk.fallback = Some(std::rc::Rc::new(fallback));
+    }
+    Ok(chunk)
+}
+
+/// One stream, under one speculation answer.
+fn compile_once(
+    body: &CodeBody,
+    plan: &Plan,
+    trace: ChunkTrace,
+    speculate: Speculate,
 ) -> Result<Chunk, ChunkTooLarge> {
     #[cfg(test)]
     count_compile_call();
@@ -189,10 +217,16 @@ pub(crate) fn compile(
     // clause runs under is settled. `trace_flow` settles it per clause, from
     // the setting the chunk is keyed under; a clause it cannot settle answers
     // [`super::trace_flow::Setting::Unknown`], which keeps the echoes and
-    // keeps their run-time gate.
-    let settings = super::trace_flow::analyse(body, plan, trace);
+    // keeps their run-time gate. Mutable because it is also **what the chunk
+    // goes on to claim**: the loop below lowers a speculated answer it
+    // refuses, so that the driver holds this chunk only to what it emitted
+    // for.
+    let mut settings = super::trace_flow::analyse(body, plan, trace, speculate).into_vec();
     #[cfg(debug_assertions)]
     assert_analysis_only_narrows(plan, trace, &settings);
+    // Indexed by instruction: whether the clause was emitted for an answer
+    // the analysis speculated, and so owes the run-time guard.
+    let mut guarded = vec![false; body.instructions.len()];
 
     let len = body.instructions.len();
     let mut ops: Vec<Op> = Vec::with_capacity(len);
@@ -249,6 +283,31 @@ pub(crate) fn compile(
         // and the oracle prints `>K>` under `R` and `I` and under neither `A`
         // nor `N` (measured, `do i = 1 to 2`).
         let pool = super::trace_flow::for_emission(plan, index, settings[index]);
+        // **A speculated answer is only usable where its guard can
+        // deoptimise**, and the three conditions are what
+        // `Interp::run_bounded_from_chunk` needs to be able to run this one
+        // clause out of the fallback stream: the setting it claims is the one
+        // the chunk is keyed to, so the guard is the comparison the driver
+        // makes anyway; the clause is one [`deoptimisable`] admits; and its
+        // instruction's own ops start at its `Op::Clause` rather than behind
+        // a branch-end boundary the fallback would run a second time.
+        guarded[index] = pool.guarded()
+            && pool.fixed() == Some(trace)
+            && deoptimisable(&instruction.kind)
+            && op_of[index] == first_op_of[index];
+        let pool = if pool.guarded() && !guarded[index] {
+            super::trace_flow::Setting::Unknown
+        } else {
+            pool
+        };
+        // **A speculated answer nothing guards is not a claim.** The clause
+        // is emitted exactly as it was before the speculation existed, and
+        // the driver's check must not hold it to a setting no guard keeps
+        // true -- `trace ?r` and then `say trace()` is that shape, where the
+        // second clause is itself an event and so emits unspeculated.
+        if !guarded[index] && settings[index].guarded() {
+            settings[index] = super::trace_flow::Setting::Unknown;
+        }
         let echoes_values = pool.echoes_values();
         let echoes_keyword = pool.echoes_keyword();
         match &instruction.kind {
@@ -1112,6 +1171,7 @@ pub(crate) fn compile(
     assert_keyword_echoes_precede_their_value(&ops);
     assert_region_ops_name_their_clause(&ops);
     assert_exec_regions_hold_nothing_else(&ops);
+    assert_guarded_clauses_are_self_contained(&ops, &op_of, &guarded);
 
     let consts = consts.values;
     // Sized from the stream rather than from the program's symbol table, which
@@ -1128,7 +1188,13 @@ pub(crate) fn compile(
     Ok(Chunk {
         trace,
         #[cfg(debug_assertions)]
-        settings,
+        settings: settings.into_boxed_slice(),
+        guarded: if guarded.contains(&true) {
+            guarded.into_boxed_slice()
+        } else {
+            Box::default()
+        },
+        fallback: None,
         ops,
         op_of,
         registers: registers.high_water(),
@@ -1624,6 +1690,37 @@ fn clause_positions(body: &CodeBody, plan: &Plan) -> Box<[ClausePosition]> {
     positions.into_boxed_slice()
 }
 
+/// Whether a clause of this kind can be handed to the fallback stream on its
+/// own, which is the whole of what a speculated answer's guard does.
+///
+/// `Interp::run_bounded_from_chunk` runs the fallback's
+/// `[index, index + 1)` and answers a `Flow`, so the kinds that may take it
+/// are the ones whose ops neither open a frame the range does not close nor
+/// jump outside it. That rules out every construct: a `DO`/`LOOP` header
+/// opens a loop whose body is in the other stream, a `SELECT`'s `WHEN` and
+/// `OTHERWISE` open a branch frame carrying that stream's own op positions,
+/// and an `IF`'s or a `WHEN`'s region ends in a `JumpUnless` whose target is
+/// past the range -- where the range's own end is the answer and the jump is
+/// lost. `assert_guarded_clauses_are_self_contained` checks the emitted
+/// stream rather than trusting this list.
+fn deoptimisable(kind: &InstructionKind) -> bool {
+    !matches!(
+        kind,
+        InstructionKind::Do(_)
+            | InstructionKind::Loop(_)
+            | InstructionKind::If { .. }
+            | InstructionKind::Select { .. }
+            | InstructionKind::When { .. }
+            | InstructionKind::WhenCase { .. }
+            | InstructionKind::Otherwise
+            | InstructionKind::Then
+            | InstructionKind::Else { .. }
+            | InstructionKind::End { .. }
+            | InstructionKind::Leave { .. }
+            | InstructionKind::Iterate { .. }
+    )
+}
+
 /// The index the next op will be pushed at, refused rather than wrapped.
 fn op_index(ops: &[Op]) -> Result<u32, ChunkTooLarge> {
     u32::try_from(ops.len()).map_err(|_| ChunkTooLarge { what: "op stream" })
@@ -1672,6 +1769,52 @@ fn assert_analysis_only_narrows(
                 && (!setting.echoes_keyword() || echoes_keyword)),
         "a clause's own answer asks for an echo this chunk does not emit today: {settings:?}"
     );
+}
+
+/// **A guarded clause is one `Interp::run_bounded_from_chunk` can run on its
+/// own**, checked on the emitted stream rather than inferred from the
+/// instruction kind [`deoptimisable`] lists.
+///
+/// Its whole instruction is one `Op::Clause` region reaching exactly the next
+/// instruction's first op, and nothing in that region jumps out of it or
+/// opens a frame -- so the guard's `[index, index + 1)` range both starts at
+/// the region and ends where the region does.
+fn assert_guarded_clauses_are_self_contained(ops: &[Op], op_of: &[u32], guarded: &[bool]) {
+    for (index, _) in guarded.iter().enumerate().filter(|(_, on)| **on) {
+        let at = op_of[index] as usize;
+        let Some(Op::Clause { index: named, end }) = ops.get(at) else {
+            panic!("the guarded clause at instruction {index} does not open a Clause region");
+        };
+        assert_eq!(
+            *named as usize, index,
+            "a Clause region names another clause"
+        );
+        assert_eq!(
+            *end,
+            op_of[index + 1],
+            "the guarded clause at instruction {index} has ops outside its own region, so the \
+             fallback's [index, index + 1) would not run all of it"
+        );
+        for op in &ops[at + 1..*end as usize] {
+            assert!(
+                !matches!(
+                    op,
+                    Op::Jump { .. }
+                        | Op::JumpUnless { .. }
+                        | Op::LoopRun { .. }
+                        | Op::LoopNext { .. }
+                        | Op::EnterWhen { .. }
+                        | Op::EnterOtherwise { .. }
+                        | Op::SelectCaseText { .. }
+                        | Op::WhenTest { .. }
+                        | Op::EndWhen
+                        | Op::EndBranch
+                ),
+                "the guarded clause at instruction {index} carries an op that either jumps out of \
+                 its own region or opens a frame the region does not close"
+            );
+        }
+    }
 }
 
 /// **Every [`Op::TraceClause`] is the first op of a [`Op::Clause`] region**,

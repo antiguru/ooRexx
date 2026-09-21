@@ -1645,3 +1645,41 @@ fn a_traced_exit_carries_its_clause_echo_op() {
          3: Return index=0 src=0 keyword=EXIT\n"
     );
 }
+
+/// **A top-level `TRACE VALUE` no longer taints the clauses after it**, which
+/// is what the speculation is for: the setting it installs is assumed to be
+/// the one the chunk is keyed to, so those clauses lose their value-echo ops
+/// and carry the run-time guard instead.
+#[test]
+fn a_top_level_trace_value_leaves_the_clauses_after_it_promoted() {
+    fn echoes(chunk: &Chunk) -> usize {
+        chunk
+            .ops
+            .iter()
+            .filter(|op| {
+                matches!(
+                    op,
+                    super::Op::TraceLiteral { .. } | super::Op::TraceRead { .. }
+                )
+            })
+            .count()
+    }
+
+    let chunk = compile_for_test(b"zv = 'off'\ntrace value zv\nsay 'x'\n").expect("compiles");
+    assert_eq!(echoes(&chunk), 0, "{}", render(&chunk));
+    // The guard is on the clause **after** the event and not on the event's
+    // own clause, which can change the setting part way through itself.
+    assert_eq!(chunk.guarded.to_vec(), vec![false, false, true]);
+    // The stream the guard deoptimises into still carries the echoes, which
+    // is what makes the guard a fallback rather than a silence.
+    let fallback = chunk.fallback.as_deref().expect("a guarded chunk has one");
+    assert!(echoes(fallback) > 0, "{}", render(fallback));
+
+    // The control: the same `TRACE VALUE` inside a branch refuses the body,
+    // so the echoes stay and nothing is guarded. Without it the assertions
+    // above would also pass for a compile that dropped the echoes outright.
+    let refused =
+        compile_for_test(b"zv = 'off'\nif 1 = 1 then trace value zv\nsay 'x'\n").expect("compiles");
+    assert!(echoes(&refused) > 0, "{}", render(&refused));
+    assert!(refused.guarded.is_empty() && refused.fallback.is_none());
+}

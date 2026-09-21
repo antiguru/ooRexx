@@ -13,6 +13,7 @@
 //! shapes later tasks extend rather than reshape.
 
 use std::cell::Cell;
+use std::rc::Rc;
 
 use rexx_core::{FrameId, ObjRef};
 use rexx_parse::{Operator, PrefixOp, SymbolId};
@@ -590,6 +591,15 @@ pub(crate) struct Chunk {
     /// what makes the analysis checked rather than argued.
     #[cfg(debug_assertions)]
     settings: Box<[trace_flow::Setting]>,
+    /// One entry per instruction, or **empty for a stream that speculated
+    /// nothing**: whether that clause was emitted for a setting the analysis
+    /// assumed rather than read, and so may only run while the setting in
+    /// force is still [`Chunk::trace`].
+    guarded: Box<[bool]>,
+    /// The same body compiled with the speculation refused, for the clauses
+    /// above to be run from when their guard does not hold. `None` exactly
+    /// when [`Chunk::guarded`] is empty.
+    fallback: Option<Rc<Chunk>>,
     /// The quickening hints [`Op::Arith`] reads, one per such op.
     hints: Hints,
     /// The resolutions [`Op::Call`] reads and writes, one per such op.
@@ -623,6 +633,26 @@ impl Chunk {
     /// The setting this chunk's trace ops were emitted for.
     fn trace(&self) -> ChunkTrace {
         self.trace
+    }
+
+    /// Whether any clause here was emitted for a speculated setting.
+    fn guards_a_clause(&self) -> bool {
+        !self.guarded.is_empty()
+    }
+
+    /// The stream instruction `index` must be run from **when the setting in
+    /// force is no longer [`Chunk::trace`]**, or `None` where this clause's
+    /// own emission never depended on it.
+    ///
+    /// The caller has already established that the two differ, which is why
+    /// this is the cold half of that comparison and not a second one.
+    #[cold]
+    fn fallback_at(&self, index: usize) -> Option<&Chunk> {
+        if *self.guarded.get(index)? {
+            self.fallback.as_deref()
+        } else {
+            None
+        }
     }
 
     /// What the analysis answered for instruction `index`.
