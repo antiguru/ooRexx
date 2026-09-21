@@ -759,23 +759,34 @@ impl Interp {
                     // changed: of the `slot_of` calls that program makes,
                     // 2,800,003 were `PARSE` targets and every one of them
                     // resolved to the slot `by_symbol` already held.
-                    let at = match &target.kind {
-                        ExprKind::Variable(id) => code.slot_for(*id),
+                    let bound = match &target.kind {
+                        ExprKind::Variable(id) => code.slot_for(*id).map(|slot| (*id, slot)),
                         _ => None,
                     };
-                    // Always `Some`: this is a borrow of the parse source
-                    // rather than a fresh copy of the assigned value, so
-                    // there is nothing here for the `Option` to guard
-                    // against -- see `assign_expr_target`'s own doc for what
-                    // the other caller pays.
-                    self.assign_expr_target(
-                        code,
-                        target,
-                        value,
-                        Some(&cursor.string()[piece.clone()]),
-                        indent,
-                        at,
-                    )?;
+                    if let Some((id, slot)) = bound {
+                        self.assign_bound_variable(
+                            code,
+                            id,
+                            slot,
+                            value,
+                            &cursor.string()[piece.clone()],
+                            indent,
+                        );
+                    } else {
+                        // Always `Some`: this is a borrow of the parse source
+                        // rather than a fresh copy of the assigned value, so
+                        // there is nothing here for the `Option` to guard
+                        // against -- see `assign_expr_target`'s own doc for what
+                        // the other caller pays.
+                        self.assign_expr_target(
+                            code,
+                            target,
+                            value,
+                            Some(&cursor.string()[piece.clone()]),
+                            indent,
+                            None,
+                        )?;
+                    }
                     // The `TRACE R` half of the pair -- see this module's own
                     // `exec_parse` doc for why it is a choice of prefix and
                     // not a second, independent line.

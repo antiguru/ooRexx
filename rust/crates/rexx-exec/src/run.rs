@@ -2672,6 +2672,40 @@ impl Interp {
         self.assign_expr_target(code, target, value, rendered.as_deref(), indent, at)
     }
 
+    /// Writes `value` into the slot a plain-variable target is already bound
+    /// to, and traces the write. `rendered` is the assigned value's own text,
+    /// which only the `>=>` line reads.
+    ///
+    /// Panics in a debug build when `id` does not name a simple variable: the
+    /// slot written here is the whole name's, which a stem or a compound tail
+    /// does not have.
+    #[inline]
+    pub(crate) fn assign_bound_variable(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        slot: usize,
+        value: ObjRef,
+        rendered: &[u8],
+        indent: usize,
+    ) {
+        debug_assert!(
+            matches!(
+                shape_of(code.symbols.name(id).as_bytes()),
+                NameShape::Simple
+            ),
+            "a bound slot was written for {}, which is not a simple variable",
+            code.symbols.name(id),
+        );
+        let frame = self.activation().frame;
+        self.set_variable(frame, slot, value);
+        // The name is reached only where a line will print it, which is what
+        // the general path below pays on every call.
+        if self.tracing_intermediates() {
+            self.trace_assignment(indent, code.symbols.name(id).as_bytes(), rendered);
+        }
+    }
+
     /// Writes `value` through one assignment *target expression*, and traces
     /// the write.
     pub(crate) fn assign_expr_target(
