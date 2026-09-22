@@ -1,19 +1,19 @@
 # Price a removed op: the store fusion, 2026-09-22
 
-BASE is `87aee846b`. One commit: **`d6aec7d38`**, "Fuse a value op with the
-Store that consumed it".
+BASE is `87aee846b`. One commit of code: **`d6aec7d38`**, "Fuse a value op with
+the Store that consumed it".
 
 All instruction figures are `valgrind --tool=callgrind`'s `summary:` line, two
-rounds per build interleaved, each build in its own `CARGO_TARGET_DIR`. All op
-figures are the summed execution counts at the `jmp *` addresses inside every
-`Interp::run_ops_from` instantiation, the method
+to five rounds per build interleaved, each build in its own `CARGO_TARGET_DIR`.
+All op figures are the summed execution counts at the `jmp *` addresses inside
+every `Interp::run_ops_from` instantiation, the method
 `2026-09-20-instructions-per-op.md` sets out. The counter was checked against
 that document rather than assumed: it reproduces its recorded `rexxcps` rows
-(19,441,281 outer `<true>`, 93,024,008 region `<true>`, 1,120,000 and 8,400,000
-`<false>` -- the last as 7,840,000, which is the `Condition`/`JumpUnless`
-fusion already in BASE), and the op-fusion report's `varlookup` 171,000,547 and
-`emptyloop` 50,000,544. Its own self-cost total equals the `summary:` line to
-the unit.
+(19,441,281 outer `<true>`, 1,120,000 and 8,400,000 `<false>` -- the last as
+7,840,000, the `Condition`/`JumpUnless` fusion already being in BASE), the
+op-fusion report's post-fusion 93,024,008 region `<true>`, and its `varlookup`
+171,000,547 and `emptyloop` 50,000,544. Its own self-cost total equals the
+`summary:` line to the unit.
 
 ## Gates
 
@@ -43,27 +43,27 @@ The clippy gate finished in 0.09s against a warm `rust/target`, which
 `rust/CLAUDE.md` says to treat as provisional. It was re-run from an empty
 `CARGO_TARGET_DIR`: **30 crates compiled cold, rc 0, no warnings.**
 
-## The number, and it is two numbers
+## The number
 
-**A removed op is worth 35.0 instructions on `varlookup` and 38.1 on `arith`,
-with the driver's own code held fixed.** The brief's recorded prediction was 8;
-it is wrong by a factor of four, and the answer sits nearer the 54.8 end of the
-known range than the 8 end.
+**A removed op is worth 35.0 instructions on `varlookup` and 36.0 on `arith`.**
+The two axes agree, and the brief's recorded prediction of 8 is wrong by a
+factor of four and a half. The answer is much nearer the 54.8 point than the 8
+point, and by the brief's own rule the direction is worth a plan rather than an
+afternoon.
 
-**But there is a second constant, and nobody asked for it because nobody knew
-it was there: adding the four arms to the driver costs about three instructions
-per dispatched op on every program, whether or not it fuses anything.** On
-`rexxcps` that tax is **+2.13%** and the fusion buys back 109 ops out of 121
-million, so this commit makes `rexxcps` *slower*. Both numbers are measured
-against the same binary pair.
+**But there is a second constant, and it decides the question the first one was
+asked for: the four new driver arms cost `rexxcps` 2.32% with nothing fused,
+and one arm alone costs 0.26%.** The tax is not a cliff the first arm pays. It
+is super-linear in how much driver code you add: 4.9 times the code for 8.9
+times the cost.
 
-The two together are the answer to "is widening the ops worth a plan":
+Put together:
 
 > **Widening pays only where the new shape removes more than about a tenth of
-> all dispatched ops.** 3 instructions of tax per op against 35 of saving per
-> removed op puts break-even near 8.6% of the stream. `varlookup` removes
-> 22.2% and wins by 4.9%; `arith` removes 13.9% and wins by 0.3%; `rexxcps`
-> removes 0.00009% and loses by 2.1%.
+> the dispatched ops, and the price of the next shape is higher than the price
+> of the last one.** `varlookup` removes 22.2% of its ops and gains 4.88%;
+> `arith` removes 13.9% and gains 0.17%; `rexxcps` removes 0.00009% and
+> **loses 2.32%**. This commit makes `rexxcps` slower.
 
 ### How the second constant was isolated
 
@@ -72,63 +72,71 @@ it is `emptyloop`: **it moves -1.03% while removing three ops in the whole
 run.** A quotient there reads 33 million instructions per removed op, which is
 not a price, it is a code-generation effect wearing one.
 
-So a third binary was built: the committed code with `fuse_store` gated behind
-an environment variable, so **the four driver arms are present and nothing
-fuses**. Its `run_ops_from` is byte-for-byte the same size as the committed
-one -- 3,443 instructions and a 1,368-byte frame for `<true>` -- so
-`noop -> head` isolates the fusion with the driver held fixed, and
-`base -> noop` isolates the driver change with the op stream held fixed. The
-control was inverted to prove it live: with `REXX_FUSE_STORE=1` the same binary
-emits the fused stream.
+So two further binaries were built from `d6aec7d38`:
 
-| | `base -> noop`, arms only | `noop -> head`, fusion only | `base -> head`, what shipped |
+* **`noop`** -- `fuse_store` gated behind an environment variable, so the four
+  driver arms are present and **nothing fuses**. Its `run_ops_from` is the same
+  size as the committed one to the instruction (3,443 for `<true>`, frame
+  1,368), so `base -> noop` is the driver change with the op stream held fixed
+  and `noop -> head` is the fusion with the driver held fixed. The control was
+  inverted to prove it live: with `REXX_FUSE_STORE=1` the same binary emits the
+  fused stream.
+* **`onearm`** -- only `Op::LoadStore` exists, variant and arm and emission.
+  `rexxcps` fuses **nothing** under it, so its `rexxcps` figure is one arm's
+  tax and no fusion at all.
+
+A third, **`loadonly`**, keeps all four arms and fuses only `Load` + `Store`,
+which splits `varlookup`'s answer between the two shapes.
+
+| | `base -> noop`: arms only, 0 ops | `noop -> head`: fusion only | `base -> head`: shipped |
 |---|---:|---:|---:|
-| `varlookup` | +2.8745%, 0 ops | **-7.5229%, 35.00 Ir/op** | -4.8647% |
-| `arith` | +0.4976%, 0 ops | **-0.7650%, 38.12 Ir/op** | -0.2712% |
-| `emptyloop` | -1.0257%, 0 ops | -0.0001%, 3 ops | -1.0258% |
-| `rexxcps` | +2.1289%, 0 ops | +0.0125%, 109 ops | **+2.1417%** |
+| `varlookup` | +2.8847% | **-7.5488%, 35.00 Ir/op** | -4.8818% |
+| `arith` | +0.5936% | **-0.7594%, 36.03 Ir/op** | -0.1703% |
+| `emptyloop` | -1.0322% | -0.0000%, 3 ops | -1.0322% |
+| `rexxcps` | +2.3164% | -0.0000%, 109 ops | **+2.3164%** |
+| `rexxcps`, **one arm** | **+0.2604%** | -- | -- |
 
-The arms' cost per **dispatched** op: `varlookup` +2.889, `arith` +3.426,
-`rexxcps` +3.539, `emptyloop` **-2.000**. `emptyloop` is the one program that
+The arms' cost per **dispatched** op: `varlookup` +2.889, `arith` +3.888,
+`rexxcps` +3.562, `emptyloop` **-2.000**. `emptyloop` is the one program that
 barely enters the region walk -- 288 region dispatches against 50,000,256 outer
 ones -- and it is the one program the arms make faster. That is a correlation
 over four programs, not a mechanism anybody has run down.
 
-### A fourth binary decomposes the two shapes
+### The two shapes agree with each other too
 
-A build fusing only `Load` + `Store`, with the other three arms still in the
-driver, splits `varlookup`'s 35.00:
-
-| | delta | ops | Ir per removed op |
+| on `varlookup` | delta | ops | Ir per removed op |
 |---|---:|---:|---:|
-| `noop -> loadonly` -- `LoadStore` alone | -684,016,185 | -19,000,000 | **36.00** |
-| `loadonly -> head` -- `ArithStore` and two `LoadConstantStore` | -646,010,826 | -19,000,004 | **34.00** |
+| `noop -> loadonly` -- `LoadStore` alone | -684,010,257 | -19,000,000 | **36.00** |
+| `loadonly -> head` -- `ArithStore` and two `LoadConstantStore` | -646,004,833 | -19,000,004 | **34.00** |
 
-The two shapes agree. This is not a `Load`-shaped or an `Arith`-shaped
-constant; it is the price of a dispatch plus the register handoff, and it does
-not care which op produced the value.
+35.00, 36.00, 34.00 and 36.03, from three binary pairs on two axes. This is not
+a `Load`-shaped or an `Arith`-shaped constant; it is a dispatch plus the
+register handoff, and it does not care which op produced the value.
 
 ### Against the predictions
 
-* **The brief's prediction, 8 per removed op on this shape, is falsified**, by
-  four independent quotients: 35.00, 36.00, 34.00 and 38.12. Its derivation --
-  five instructions of region-dispatch preamble and three of latch -- prices
-  the *dispatch*, and the measured figure says the handoff between the pair is
-  worth roughly another 27.
+* **The brief's prediction, 8 per removed op, is falsified** by four
+  quotients. Its derivation -- five instructions of region-dispatch preamble
+  and three of latch -- prices the *dispatch*, and the measurement says the
+  handoff between the pair is worth roughly another 27.
 * **My own prediction was 20 to 24, central 22, recorded for `arith` before its
   figure existed** and with `varlookup`'s `base -> head` quotient of 22.00 in
-  hand. It is wrong in the same direction as the brief's and for the same
-  reason: it was a prediction about the contaminated quotient, and the number
-  it should have been about is 38.12. No prediction was recorded before the
-  first `varlookup` run, and there is no honest way to add one afterwards.
-* **The arithmetic in `2026-09-22-clause-shape-distribution.md` does not close.**
-  It gives the `Condition` + `JumpUnless` fusion as "54.8 per removed op, of
-  which only 8 was dispatch and 34.8 the value handoff"; 8 + 34.8 = 42.8. The
+  hand. Wrong, and in the same direction and for the same reason as the
+  brief's: it was a prediction about the contaminated quotient. Its own
+  stopping rule -- "if `arith` comes out materially below 20 I will read that as
+  the store tail costing more where the clause holds more live state" -- would
+  have fired on the 8.03 that `base -> head` reports and sent me after the
+  wrong thing. No prediction was recorded before the first `varlookup` run, and
+  there is no honest way to add one afterwards.
+* **The brief's two axes were expected to disagree, and they do not.** The
+  disagreement in the shipped column -- 22.00 against 8.03 -- is entirely the
+  driver tax landing on two programs with very different op mixes. Held fixed,
+  35.00 and 36.03.
+* **`2026-09-22-clause-shape-distribution.md`'s arithmetic does not close.** It
+  gives the `Condition` + `JumpUnless` fusion as "54.8 per removed op, of which
+  only 8 was dispatch and 34.8 the value handoff"; 8 + 34.8 = 42.8. The
   op-fusion report it summarises says 20 of dispatch plus 34.8 of handoff, which
-  does sum to 54.8. The brief inherited the 8 from the summary. 20.0 and 8 are
-  different quantities -- one is an A/B of deleting trace ops, the other a
-  static read of a preamble -- and neither is the price of removing an op with
-  a live handoff, which is what this measures.
+  does sum to 54.8. The brief inherited the 8 from the summary.
 
 ## What landed
 
@@ -168,7 +176,7 @@ behind it.
   allocates nothing; every other route is `Interp::assign_evaluated`, whose
   first statement is `self.roots.push_temp(value)`.
 
-### The inlining is the whole result, and it was measured wrong first
+### The inlining is half the result, and it was measured wrong first
 
 Written with the shared store tail as one `#[inline]` method, the compiler put
 it out of line and called it from each fused arm. That build is **worse than
@@ -179,25 +187,53 @@ call in the driver's hot loop costs the live state it clobbers.
 
 Splitting it -- `#[inline(always)]` over the slot write, `#[inline(never)]`
 `store_fused_general` for stems, compounds, unresolved slots and any write that
-owes a `>>>` line -- is what turns +1.33% into -4.86% on `varlookup`. That
-binary was not kept; its dumps are in the scratch directory under
-`cg-outline-variant/`.
+owes a `>>>` line -- is what turns +1.33% into -4.88% on `varlookup`. That
+binary was not kept; its dumps are under `cg-outline-variant/`.
+
+## `arith` cannot resolve better than half a percent, and the cause is glibc
+
+**`arith`'s raw within-build spread is 0.57%**, against `varlookup`'s 0.0002%.
+It is not the op stream: its op counts are identical to the unit across five
+rounds and its stdout is byte-identical. Diffing two `base` rounds function by
+function puts all but 34 thousand of the 70,413,592-instruction difference
+inside `<rexx_num::Number>::mul`'s *inclusive* cost on an identical 500,000 calls, and
+under that in glibc's `_int_malloc` self cost: **115,232,206 in one round and
+63,708,035 in the other**, with `collect_now`, `alloc_with`, `free` and
+`realloc` identical to the unit.
+
+So every figure above is **`summary:` minus everything attributed to
+`libc.so.6` and `ld-linux`**. Under that correction `arith` reproduces to
+**0.0011%** and the other three axes are unchanged in substance -- `varlookup`'s
+fusion delta moves by 12 thousand instructions in 1.33 billion.
+
+| | rounds | raw spread | ex-libc spread |
+|---|---:|---:|---:|
+| `varlookup` | 2 per arm | 0.0002% | 0.0000% |
+| `arith` | 5 per arm | **0.5687%** | **0.0011%** |
+| `emptyloop` | 2 per arm | 0.0001% | 0.0000% |
+| `rexxcps` | 2 per arm | 0.0217% | 0.0018% |
+
+**Anything previously A/B'd on `arith` at under half a percent from raw
+`summary:` lines is unresolved, not measured.**
 
 ## The driver's frame, read before and after
 
-| | BASE | `d6aec7d38` |
-|---|---:|---:|
-| `run_ops_from::<true>` frame | **1,416** bytes (`sub $0x588,%rsp`) | **1,368** (`sub $0x558`) |
-| `run_ops_from::<false>` frame | 1,384 (`sub $0x568`) | 1,320 (`sub $0x528`) |
-| `run_ops_from::<true>` instructions | 2,897 | 3,443 |
-| `run_ops_from::<true>` bytes | 15,071 | 17,599 |
-| whole `.text` | 2,526,059 | 2,531,307 |
+| | BASE | one arm | `d6aec7d38` |
+|---|---:|---:|---:|
+| `run_ops_from::<true>` frame | **1,416** (`sub $0x588,%rsp`) | 1,400 (`$0x578`) | **1,368** (`$0x558`) |
+| `run_ops_from::<false>` frame | 1,384 (`$0x568`) | 1,384 (`$0x568`) | 1,320 (`$0x528`) |
+| `run_ops_from::<true>` instructions | 2,897 | 3,009 | 3,443 |
+| `run_ops_from::<true>` bytes | 15,071 | -- | 17,599 |
+| whole `.text` | 2,526,059 | -- | 2,531,307 |
 
 **The frame shrank while the code grew**, which is the interaction
 `2026-09-22-driver-frame-pressure.md` asked for and the opposite of what that
-note's mechanism would predict: the frame is the direct instrument it names,
-and it moved the *right* way on a change that cost `rexxcps` 2.13%. So the
-+2.13% is not frame size. What it is was not established here.
+note's mechanism predicts: the frame is the direct instrument it names, it
+moved the *right* way, and the change still cost `rexxcps` 2.32%. **So the tax
+is not frame size.** What it is was not established here, and the outlining
+variant that note proposes is now more interesting rather than less, because
+this is a second measurement saying the driver's cost tracks something other
+than its frame.
 
 (The 2,897 reproduces that note's 2,894 for a different commit; the count is
 objdump mnemonic lines between the symbol and the next blank line.)
@@ -273,58 +309,58 @@ a fresh worktree and a fresh `CARGO_TARGET_DIR`: the same `.text` hash.
 ## A defect the existing suite caught
 
 `Chunk::interned_symbols` is sized by scanning the stream for the ops that read
-it, and that scan named `Op::LoadConstant` only. With
-`Op::LoadConstantStore` absent from it the table is short, every lookup misses,
-`remember_symbol` cannot take, and the constant is rebuilt on every execution.
-`a_constant_symbol_is_built_once_and_each_one_gets_its_own_entry` failed
-5 against 32 and named it. This is the "cache that lies" shape: the program
+it, and that scan named `Op::LoadConstant` only. With `Op::LoadConstantStore`
+absent from it the table is short, every lookup misses, `remember_symbol`
+cannot take, and the constant is rebuilt on every execution.
+`a_constant_symbol_is_built_once_and_each_one_gets_its_own_entry` failed 5
+against 32 and named it. This is the "cache that lies" shape: the program
 answers correctly and pays for it forever.
 
 ## Concerns
 
-1. **`arith`'s within-build spread is 0.16% to 0.21%, twenty times
-   `varlookup`'s, and it is not the op stream.** Its op counts are identical to
-   the unit across rounds and its stdout is byte-identical, so the varying
-   instructions are outside op dispatch -- most likely allocation or collection
-   that depends on something run-to-run. The `arith` cells above rest on two
-   rounds against a signal of 0.77%; further rounds are running and this report
-   will be corrected if they move it. `varlookup`, `emptyloop` and `rexxcps`
-   reproduce to 0.0002%, 0.0001% and 0.02%.
-2. **The four arms' cost is a measurement of this change, not a per-arm
-   constant.** Whether it is four times one arm's price or a cliff that the
-   first arm pays is a separate experiment, and it is the one that decides
-   whether a superinstruction set is viable. A one-arm build is running against
-   `rexxcps`, where it fuses nothing, and its result belongs in this report.
-3. **This commit makes `rexxcps` 2.14% slower**, and `rexxcps` is the axis
+1. **This commit makes `rexxcps` 2.32% slower**, and `rexxcps` is the axis
    Moritz's standing goals are stated against. The fusion is not what costs it;
-   the arms are. Reverting would give the 2.14% back and lose `varlookup`'s
-   4.86% and `arith`'s 0.27%.
-4. **Item 2 is the prerequisite, not the alternative.** Ten further `Store` ops
+   the arms are. Reverting gives that back and loses `varlookup`'s 4.88% and
+   `arith`'s 0.17%. **That is a decision, not a defect, and it is not mine to
+   take** -- the commit is the instrument the brief asked for, and it can be
+   reverted with the measurement kept.
+2. **The tax is super-linear and that is the finding that bears on a
+   superinstruction set.** One arm is +112 driver instructions and +0.26% on
+   `rexxcps`; four are +546 and +2.32%. 4.9x the code, 8.9x the cost. A fixed
+   set of ten shapes is not ten times one arm's price, it is more, and nothing
+   here says where it stops. **Two points do not fix a curve** -- a build at two
+   or three arms would.
+3. **Item 2 is the prerequisite, not the alternative.** Ten further `Store` ops
    in `rexxcps`' hot body are constant-fed with exactly one `Op::TraceLiteral`
    in between, and those echoes exist only because `trace_flow::analyse`
    answers `Unknown` for a body containing two `trace value <expr>` clauses. Get
    those ops out of the stream and the ten sites become strictly adjacent and
-   fuse with no new arm at all -- at 1,740,000 executions and 35 Ir each that is
-   60.9M, 0.30%, against a tax already paid. **That arithmetic rests on the
-   1,740,000, which is somebody else's measurement and was not re-derived
-   here.**
-5. **The fused ops dropped `Op::Store`'s `index` field and with it
+   fuse with **no new arm at all** -- the tax is already paid. At 1,740,000
+   executions and 35 Ir each that is 60.9M, 0.30%, against the 2.32% already
+   spent. **That arithmetic rests on the 1,740,000, which is somebody else's
+   measurement and was not re-derived here.**
+4. **The fused ops dropped `Op::Store`'s `index` field and with it
    `debug_assert_names_the_clause`.** The run-time check that the clause is an
    `InstructionKind::Assignment` is retained and still returns
    `Loud::store_op_off_its_node`, so a fused op on the wrong clause fails
    loudly rather than writing a stranger's slot; what is gone is the debug
    tripwire that would have named it earlier.
-6. **`Op::Binary` and `Op::Prefix` were deliberately left unfused.** They are
-   the two remaining value ops that can end an assignment's region. Adding them
-   is two more arms at roughly +1.5% of driver tax by the figures above, against
-   whatever they remove -- and on the four axes measured here they would remove
-   nothing, because no hot clause on any of them ends in either.
+5. **`Op::Binary` and `Op::Prefix` were deliberately left unfused.** They are
+   the two remaining value ops that can end an assignment's region. By point 2
+   they would cost more than the four already added, and on the four axes
+   measured here they would remove nothing, because no hot clause on any of
+   them ends in either.
+6. **The one-arm `rexxcps` reading is two rounds of `summary:` (20,233,461,832
+   and 20,233,551,971, 0.00045% apart) and one intact dump**, because a stale
+   background script wrote the same filename and truncated the first round's
+   dump after its status line was recorded. The ex-libc figure above is from
+   the surviving dump.
 
 ## Scratch
 
 `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/storefusion/`
 holds `gates/` with the six logs and the cold clippy run, the callgrind dumps
 under `cg/` and the discarded out-of-line variant's under `cg-outline-variant/`,
-`opcount.py` and `analyse2.py`, the four build trees and their disassembly, the
-fifteen probes with their three-descriptor outputs, and
+`opcount.py`, `ours.sh` and `final.py`, the five build trees and their
+disassembly, the fifteen probes with their three-descriptor outputs, and
 `prediction-arith.txt`.
