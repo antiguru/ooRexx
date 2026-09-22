@@ -3,6 +3,15 @@
 BASE is `87aee846b`. One commit of code: **`d6aec7d38`**, "Fuse a value op with
 the Store that consumed it".
 
+**The code was reverted by `85992fd09` at 11:36:47, and `rust/` is back at
+BASE.** `d6aec7d38` stays in history and every figure below was taken from
+binaries built at it or from variants patched on top of it, so nothing here
+depends on the code still being in the tree. **The revert landed three minutes
+before the two-arm build's first figure existed**, and its commit message
+therefore states the framing this report's previous revision carried; the
+section "Where the revert message is now wrong" says which of its sentences the
+two-arm run corrects.
+
 All instruction figures are `valgrind --tool=callgrind`'s `summary:` line, two
 to five rounds per build interleaved, each build in its own `CARGO_TARGET_DIR`.
 All op figures are the summed execution counts at the `jmp *` addresses inside
@@ -386,6 +395,10 @@ answers correctly and pays for it forever.
 
 ## Recommendation: revert the code, keep the record
 
+**Ruled and done: `85992fd09`.** The recommendation below was written
+independently and reached the same answer for the same reasons; it is kept as
+written because the two-arm evidence in it is not in the revert message.
+
 **Revert `d6aec7d38`.** Not because the fusion is wrong -- it is measured,
 sound and worth 35 instructions an op -- but because **every shape of this
 change regresses `rexxcps`, and the fusion cannot pay for it there.**
@@ -420,6 +433,29 @@ Growing a single 3,400-instruction dispatch function is the expensive step, so
 the two candidates worth a plan are a dispatch shape where each op's code is
 its own function rather than another arm of one, and item 2, which removes ops
 from the stream without adding a line of driver code.
+
+## Where the revert message is now wrong
+
+`85992fd09` was written from the figures that existed at 11:36. Three of its
+sentences do not survive the two-arm build, and they are worth correcting here
+because a commit message is read long after the report is:
+
+* **"the tax steepens rather than amortising"** -- true from one arm to two and
+  false from two to four. Per added driver instruction the cost is 0.00233%,
+  0.00457%, 0.00424%: it roughly doubles and then flattens.
+* **"Break-even is a shape that removes more than about a tenth of the
+  dispatched ops"** -- true on the three axes that pay and false on
+  `emptyloop`, where the four arms are worth **-2.000** instructions per
+  dispatched op and there is no break-even at all.
+* **"ten arms would cost more than ten times one"** -- not supported. Four arms
+  cost 8.9 times one arm, but the marginal rate had already turned over by
+  then, and `emptyloop`'s ladder runs +0.26% at two arms and **-1.03%** at
+  four. Extrapolating the count in either direction is the thing these
+  measurements say cannot be done.
+
+**What does survive unchanged** is everything the revert actually rests on: the
+price of a removed op, the `rexxcps` cost at one and four arms, the three
+findings it lists, and the ruling itself.
 
 ## Concerns
 
