@@ -655,11 +655,14 @@ pub(crate) fn compile(
                     0,
                     dst,
                 )?;
-                ops.push(Op::Store {
-                    index: instruction_index(index)?,
-                    at: write_slot(plan, target),
-                    src: dst,
-                });
+                let to = write_slot(plan, target);
+                if !fuse_store(&mut ops, dst, to) {
+                    ops.push(Op::Store {
+                        index: instruction_index(index)?,
+                        at: to,
+                        src: dst,
+                    });
+                }
                 close_region(&mut ops, at)?;
                 registers.release(mark);
             }
@@ -1133,7 +1136,9 @@ pub(crate) fn compile(
     let widest_constant_symbol = ops
         .iter()
         .filter_map(|op| match op {
-            Op::LoadConstant { symbol, .. } => Some(symbol.index()),
+            Op::LoadConstant { symbol, .. } | Op::LoadConstantStore { symbol, .. } => {
+                Some(symbol.index())
+            }
             _ => None,
         })
         .max();
@@ -1495,6 +1500,57 @@ fn write_slot(plan: &Plan, target: &Expr) -> PlanSlot {
             .map_or(PlanSlot::UNRESOLVED, PlanSlot::of),
         _ => PlanSlot::UNRESOLVED,
     }
+}
+
+/// Replaces the value op `ops` ends with by the form that writes slot `to`
+/// itself, and answers whether it did -- in which case the caller owes no
+/// [`Op::Store`], because the op now on the end is the store.
+///
+/// The fusion is refused unless the last op is a value op leaving its result
+/// in `dst`, which is what keeps it sound: an echo op behind the value reads
+/// `dst` after the store would have run, and it is the op on the end when one
+/// was emitted, so the shape that needs the register never fuses. Nothing can
+/// branch between the two, because a jump target is an instruction's own first
+/// op and both of these sit inside a clause region.
+fn fuse_store(ops: &mut Vec<Op>, dst: u16, to: PlanSlot) -> bool {
+    let fused = match ops.last() {
+        Some(Op::Load {
+            symbol,
+            read,
+            at,
+            dst: into,
+        }) if *into == dst => Op::LoadStore {
+            symbol: *symbol,
+            read: *read,
+            from: *at,
+            at: to,
+        },
+        Some(Op::Const { dst: into, konst }) if *into == dst => Op::ConstStore {
+            konst: *konst,
+            at: to,
+        },
+        Some(Op::LoadConstant { symbol, dst: into }) if *into == dst => Op::LoadConstantStore {
+            symbol: *symbol,
+            at: to,
+        },
+        Some(Op::Arith {
+            op,
+            hint,
+            lhs,
+            rhs,
+            dst: into,
+        }) if *into == dst => Op::ArithStore {
+            op: *op,
+            hint: *hint,
+            lhs: *lhs,
+            rhs: *rhs,
+            at: to,
+        },
+        _ => return false,
+    };
+    ops.pop();
+    ops.push(fused);
+    true
 }
 
 /// The two ops one bare-symbol read is: the load, and the `>V>`/`>C>` line
@@ -1943,6 +1999,10 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::LoadConstant { .. }
                 | Op::TraceLiteral { .. }
                 | Op::Load { .. }
+                | Op::LoadStore { .. }
+                | Op::ConstStore { .. }
+                | Op::LoadConstantStore { .. }
+                | Op::ArithStore { .. }
                 | Op::TraceRead { .. }
                 | Op::Arith { .. }
                 | Op::Binary { .. }

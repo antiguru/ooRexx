@@ -15,7 +15,7 @@
 use rexx_core::{Decoded, FrameId, ObjRef};
 use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, ProgramSource, SymbolId};
 
-use super::{BodyEngine, Chunk, ConditionKeyword, Op};
+use super::{BodyEngine, Chunk, ConditionKeyword, Op, PlanSlot};
 use crate::clause::{ClauseOutcome, ClauseValue};
 use crate::eval::{SymbolRead, call_target_name};
 use crate::run::{
@@ -182,6 +182,10 @@ fn undriven_op_name(op: &Op) -> &'static str {
         Op::Jump { .. } => "Jump",
         Op::JumpUnless { .. } => "JumpUnless",
         Op::ConditionJump { .. } => "ConditionJump",
+        Op::LoadStore { .. } => "LoadStore",
+        Op::ConstStore { .. } => "ConstStore",
+        Op::LoadConstantStore { .. } => "LoadConstantStore",
+        Op::ArithStore { .. } => "ArithStore",
     }
 }
 
@@ -196,6 +200,71 @@ enum BranchEnd {
 }
 
 impl Interp {
+    /// The write half of a fused store op: [`crate::ir::Op::Store`]'s own
+    /// body, with `value` in hand rather than read back out of a register.
+    ///
+    /// `value` needs no root of its own: the slot write allocates nothing
+    /// between here and the store, and every other route is
+    /// [`Interp::assign_evaluated`], which roots what it is handed before it
+    /// does anything else.
+    ///
+    /// **`inline(always)`, and that is a measurement.** Left to its own
+    /// judgement the compiler put this out of line and called it from each
+    /// fused arm, which costs the driver's live state across a call in the
+    /// hot loop: `bench-programs/varlookup.rex` 17.186 to 17.414 billion user
+    /// instructions and `arith.rex` 12.394 to 12.457, both *worse* than the
+    /// unfused pair. [`Interp::store_fused_general`] carries the cold half so
+    /// that what each arm inlines is the slot write alone.
+    #[inline(always)]
+    fn store_fused(
+        &mut self,
+        code: &Code<'_>,
+        clause: &Instruction,
+        at: PlanSlot,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
+        if let Some(slot) = at.resolved()
+            && !self.trace_mode().results
+            && let InstructionKind::Assignment { target, .. } = &clause.kind
+            && matches!(target.kind, ExprKind::Variable(_))
+        {
+            debug_assert!(
+                matches!(&target.kind, ExprKind::Variable(id) if code.slot_for(*id) == Some(slot)),
+                "a compiled write names a slot this body's plan does not give its target"
+            );
+            let frame = self.activation().frame;
+            self.set_variable(frame, slot, value);
+            return Ok(());
+        }
+        self.store_fused_general(code, clause, at, value)
+    }
+
+    /// [`Interp::store_fused`] for every target the slot write does not reach:
+    /// a stem or compound, an unresolved slot, and any write that owes a
+    /// `>>>` line.
+    #[inline(never)]
+    fn store_fused_general(
+        &mut self,
+        code: &Code<'_>,
+        clause: &Instruction,
+        at: PlanSlot,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
+        let InstructionKind::Assignment { target, .. } = &clause.kind else {
+            return Err(Loud::store_op_off_its_node().into());
+        };
+        let at = at.resolved();
+        debug_assert!(
+            at.is_none()
+                || matches!(
+                    &target.kind,
+                    ExprKind::Variable(id) if code.slot_for(*id) == at
+                ),
+            "a compiled write names a slot this body's plan does not give its target"
+        );
+        self.assign_evaluated(code, target, value, at)
+    }
+
     /// One [`crate::ir::Op::PushArg`]: the register's value, or an omitted
     /// position, onto the argument stack.
     #[inline(never)]
@@ -1297,6 +1366,137 @@ impl Interp {
                                             self.set_variable(frame, slot, value);
                                         } else if let Err(failure) =
                                             self.assign_evaluated(code, target, value, at)
+                                        {
+                                            break 'cold Err(failure);
+                                        }
+                                    }
+                                    // **The four fused stores**: a value op and
+                                    // the `Op::Store` that consumed it, as one
+                                    // dispatch with the value in a local rather
+                                    // than handed over through a register. Each
+                                    // computes exactly what its own op above
+                                    // computes and then does what `Op::Store`
+                                    // does, so the only difference from the pair
+                                    // is where the value lives in between.
+                                    Op::LoadStore {
+                                        symbol,
+                                        read,
+                                        from,
+                                        at,
+                                    } => {
+                                        let from = from.resolved();
+                                        debug_assert!(
+                                            from.is_none() || code.slot_for(*symbol) == from,
+                                            "a compiled read names a slot this body's plan does not \
+                                         give its symbol"
+                                        );
+                                        let value = match read {
+                                            SymbolRead::Simple => {
+                                                let (value, novalue) =
+                                                    self.read_at(code, *symbol, from);
+                                                if let Err(failure) =
+                                                    self.novalue_check(novalue, value)
+                                                {
+                                                    break 'cold Err(failure);
+                                                }
+                                                value
+                                            }
+                                            SymbolRead::Stem | SymbolRead::Compound => {
+                                                match self.read_symbol(code, *read, *symbol, from) {
+                                                    Ok(value) => value,
+                                                    Err(failure) => break 'cold Err(failure),
+                                                }
+                                            }
+                                        };
+                                        if let Err(failure) =
+                                            self.store_fused(code, clause, *at, value)
+                                        {
+                                            break 'cold Err(failure);
+                                        }
+                                    }
+                                    Op::ConstStore { konst, at } => {
+                                        let mut value = chunk.interned_konst(*konst);
+                                        if value == ObjRef::NIL {
+                                            let Some(bytes) = chunk.konst(*konst) else {
+                                                break 'cold Err(
+                                                    Loud::constant_out_of_range().into()
+                                                );
+                                            };
+                                            #[cfg(test)]
+                                            count_const_build();
+                                            value = self.interned_literal(bytes);
+                                            debug_assert_ne!(
+                                                value,
+                                                ObjRef::NIL,
+                                                "a constant interned to the handle that means \
+                                             'not built yet', so it would be rebuilt on every \
+                                             execution and the cache would be dead code"
+                                            );
+                                            chunk.remember_konst(*konst, value);
+                                        }
+                                        if let Err(failure) =
+                                            self.store_fused(code, clause, *at, value)
+                                        {
+                                            break 'cold Err(failure);
+                                        }
+                                    }
+                                    Op::LoadConstantStore { symbol, at } => {
+                                        let mut value = chunk.interned_symbol(*symbol);
+                                        if value == ObjRef::NIL {
+                                            #[cfg(test)]
+                                            count_load_constant_build();
+                                            value = self.interned_literal(
+                                                code.symbols.name(*symbol).as_bytes(),
+                                            );
+                                            debug_assert_ne!(
+                                                value,
+                                                ObjRef::NIL,
+                                                "a constant symbol interned to the handle that means \
+                                             'not built yet', so it would be rebuilt on every \
+                                             execution and the cache would be dead code"
+                                            );
+                                            chunk.remember_symbol(*symbol, value);
+                                        }
+                                        if let Err(failure) =
+                                            self.store_fused(code, clause, *at, value)
+                                        {
+                                            break 'cold Err(failure);
+                                        }
+                                    }
+                                    Op::ArithStore {
+                                        op,
+                                        hint,
+                                        lhs,
+                                        rhs,
+                                        at,
+                                    } => {
+                                        debug_assert!(
+                                            chunk.holds_register(*lhs)
+                                                && chunk.holds_register(*rhs),
+                                            "op reads registers {lhs}/{rhs} outside the region the \
+                                         chunk reserved"
+                                        );
+                                        let left = self.roots.temp_at(registers, *lhs as usize);
+                                        let right = self.roots.temp_at(registers, *rhs as usize);
+                                        let mut quick = None;
+                                        if chunk.tries_small_int(*hint) {
+                                            quick = self.arith_small_int(*op, left, right);
+                                            if quick.is_none() {
+                                                chunk.saw_general(*hint);
+                                            }
+                                        } else {
+                                            #[cfg(test)]
+                                            count_arith_hint_skip();
+                                        }
+                                        let value = match quick {
+                                            Some(value) => value,
+                                            None => match self.arith_general(*op, left, right) {
+                                                Ok(value) => value,
+                                                Err(failure) => break 'cold Err(failure),
+                                            },
+                                        };
+                                        if let Err(failure) =
+                                            self.store_fused(code, clause, *at, value)
                                         {
                                             break 'cold Err(failure);
                                         }
