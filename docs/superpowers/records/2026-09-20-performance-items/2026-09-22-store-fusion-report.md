@@ -12,6 +12,14 @@ therefore states the framing this report's previous revision carried; the
 section "Where the revert message is now wrong" says which of its sentences the
 two-arm run corrects.
 
+**Every instruction delta and percentage in this report is `summary:` minus
+everything attributed to `libc.so.6` and `ld-linux`**, for the reason the
+`arith` section below gives. Two things are raw and say so where they appear:
+the `mean summary` column beside the `mean ex-libc` column in the spread table,
+and the out-of-line variant's figures, which are single raw rounds from a
+binary that was not kept. Op counts are counts, not instructions, and are
+unaffected either way.
+
 All instruction figures are `valgrind --tool=callgrind`'s `summary:` line, two
 to five rounds per build interleaved, each build in its own `CARGO_TARGET_DIR`.
 All op figures are the summed execution counts at the `jmp *` addresses inside
@@ -59,6 +67,14 @@ The two axes agree, and the brief's recorded prediction of 8 is wrong by more
 than a factor of four. The answer is much nearer the 54.8 point than the 8
 point, and by the brief's own rule the direction is worth a plan rather than an
 afternoon.
+
+**Do not carry that number without "The inlining is half the result, and it was
+measured wrong first" below.** Written the obvious way -- one shared store tail behind
+`#[inline]` -- the same fusion measured **worse than not fusing at all** on both
+axes, because the compiler outlined it and each fused op paid a call in the
+driver's hot loop. The value is not in merging the two ops; it is in what the
+merged body lets the compiler keep in registers, and the default codegen
+decision goes the wrong way.
 
 **The second measurement decides the question the first one was asked for, and
 it is not a constant.** Adding arms changes the code generated for the whole of
@@ -167,6 +183,26 @@ it only on `rexxcps`:
 | `arith` | **+0.0676%** | -0.1703% |
 | `emptyloop` | **+0.2581%** | -1.0322% |
 | `rexxcps` | **+1.6641%** | +2.3164% |
+
+### Per region-walk op does not rescue the model either
+
+The three axes that pay cluster better against the **region-walk** op count
+than against the dispatched one -- `varlookup` +4.333, `arith` +4.999,
+`rexxcps` +4.288, against +2.889, +3.888 and +3.562 -- which is what a cost
+landing on the arms' own dispatch table would look like, and it is a fair
+reading of why those three are alike.
+
+**It does not reconcile `emptyloop`, it makes it worse.** That program enters
+the region walk 288 times in a 25,000,000-iteration run, so the same
+-99,999,110 becomes **-347,219 instructions per region-walk op**. A denominator
+that turns a three-order-of-magnitude outlier into a five-order-of-magnitude
+one has not explained anything.
+
+**And no per-op price of any denominator can be right**, because `emptyloop`'s
+op counts are identical to the unit under BASE, two arms and four arms --
+50,000,544 dispatched, 288 through the region walk -- while the program moves
+**+0.2581% and then -1.0322%**. One denominator cannot yield two values from
+the same numerator, let alone two signs.
 
 ### The two shapes agree with each other too
 
@@ -393,6 +429,16 @@ cannot take, and the constant is rebuilt on every execution.
 against 32 and named it. This is the "cache that lies" shape: the program
 answers correctly and pays for it forever.
 
+**It is a standing hazard for the next op, not a one-off.** A table sized by
+scanning the stream for the ops that read it breaks **silently and for the
+whole run** the moment a new op joins the readers, and nothing about adding
+that op points at the scan: the op compiles, the golden stream renders, the
+differential is byte-identical, and the only symptom is that the cache never
+takes. `Chunk::interned_symbols` and `Chunk::interned` are both sized this way.
+**Anything that adds an op reading either table has to join its scan**, and the
+thing that catches a miss is a test asserting the build count rather than the
+answer.
+
 ## Recommendation: revert the code, keep the record
 
 **Ruled and done: `85992fd09`.** The recommendation below was written
@@ -430,9 +476,24 @@ instrument that produced both.
 **What it says about the direction.** The fusion price is good, so "fewer ops
 per clause" is sound; the part that does not work is *how* one gets there.
 Growing a single 3,400-instruction dispatch function is the expensive step, so
-the two candidates worth a plan are a dispatch shape where each op's code is
-its own function rather than another arm of one, and item 2, which removes ops
-from the stream without adding a line of driver code.
+two candidates are left, and both need stating with their own hazard rather
+than as open ground.
+
+* **A dispatch shape where each op's body is its own function.** This is close
+  to the outlining the control-flow spike measured at +2.80%, +3.70% and
+  +2.53%, so it is not obviously free -- but **that experiment bundled every
+  cold arm into one helper**, whose frame and argument list are the union of
+  what all of them need. The per-function form is *untested*, not refuted, and
+  `2026-09-22-driver-frame-pressure.md` says the same thing about its own
+  variant. **Direct threading is not the fallback**: computed `goto` has no
+  safe-Rust equivalent and `become` is unstable, so that shape is closed to us
+  rather than merely unmeasured.
+* **Item 2, which removes ops without adding a line of driver code**, and is
+  therefore the one direction the measurements here cannot poison. It has its
+  own arithmetic to clear, recorded by the team lead rather than measured here:
+  a guard costing **+0.501%** against a **-0.543%** emission saving, with the
+  guard **per clause** -- and a per-clause conditional is the shape this tree
+  has already reverted a commit over.
 
 ## Where the revert message is now wrong
 
