@@ -1,0 +1,32 @@
+diff --git i/rust/crates/rexx-exec/src/ir/compile.rs w/rust/crates/rexx-exec/src/ir/compile.rs
+index 213f83647..2920cae08 100644
+--- i/rust/crates/rexx-exec/src/ir/compile.rs
++++ w/rust/crates/rexx-exec/src/ir/compile.rs
+@@ -1525,27 +1525,6 @@ fn fuse_store(ops: &mut Vec<Op>, dst: u16, to: PlanSlot) -> bool {
+             from: *at,
+             at: to,
+         },
+-        Some(Op::Const { dst: into, konst }) if *into == dst => Op::ConstStore {
+-            konst: *konst,
+-            at: to,
+-        },
+-        Some(Op::LoadConstant { symbol, dst: into }) if *into == dst => Op::LoadConstantStore {
+-            symbol: *symbol,
+-            at: to,
+-        },
+-        Some(Op::Arith {
+-            op,
+-            hint,
+-            lhs,
+-            rhs,
+-            dst: into,
+-        }) if *into == dst => Op::ArithStore {
+-            op: *op,
+-            hint: *hint,
+-            lhs: *lhs,
+-            rhs: *rhs,
+-            at: to,
+-        },
+         _ => return false,
+     };
+     ops.pop();

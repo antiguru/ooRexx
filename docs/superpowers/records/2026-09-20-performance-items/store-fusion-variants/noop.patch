@@ -1,0 +1,15 @@
+diff --git i/rust/crates/rexx-exec/src/ir/compile.rs w/rust/crates/rexx-exec/src/ir/compile.rs
+index 213f83647..318394951 100644
+--- i/rust/crates/rexx-exec/src/ir/compile.rs
++++ w/rust/crates/rexx-exec/src/ir/compile.rs
+@@ -656,7 +656,9 @@ pub(crate) fn compile(
+                     dst,
+                 )?;
+                 let to = write_slot(plan, target);
+-                if !fuse_store(&mut ops, dst, to) {
++                if !(std::env::var_os("REXX_FUSE_STORE").is_some()
++                    && fuse_store(&mut ops, dst, to))
++                {
+                     ops.push(Op::Store {
+                         index: instruction_index(index)?,
+                         at: to,

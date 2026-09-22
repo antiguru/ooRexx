@@ -1,0 +1,238 @@
+diff --git i/rust/crates/rexx-exec/src/ir.rs w/rust/crates/rexx-exec/src/ir.rs
+index 5fe1a1663..b8fc922e2 100644
+--- i/rust/crates/rexx-exec/src/ir.rs
++++ w/rust/crates/rexx-exec/src/ir.rs
+@@ -278,18 +278,6 @@ pub(crate) enum Op {
+         from: PlanSlot,
+         at: PlanSlot,
+     },
+-    /// [`Op::Const`] and its [`Op::Store`], as one op.
+-    ConstStore { konst: u32, at: PlanSlot },
+-    /// [`Op::LoadConstant`] and its [`Op::Store`], as one op.
+-    LoadConstantStore { symbol: SymbolId, at: PlanSlot },
+-    /// [`Op::Arith`] and its [`Op::Store`], as one op.
+-    ArithStore {
+-        op: Operator,
+-        hint: u32,
+-        lhs: u16,
+-        rhs: u16,
+-        at: PlanSlot,
+-    },
+ }
+ 
+ /// Which keyword's condition an [`Op::ConditionJump`] is validating.
+diff --git i/rust/crates/rexx-exec/src/ir/compile.rs w/rust/crates/rexx-exec/src/ir/compile.rs
+index 213f83647..a9a2d24e8 100644
+--- i/rust/crates/rexx-exec/src/ir/compile.rs
++++ w/rust/crates/rexx-exec/src/ir/compile.rs
+@@ -1136,9 +1136,7 @@ pub(crate) fn compile(
+     let widest_constant_symbol = ops
+         .iter()
+         .filter_map(|op| match op {
+-            Op::LoadConstant { symbol, .. } | Op::LoadConstantStore { symbol, .. } => {
+-                Some(symbol.index())
+-            }
++            Op::LoadConstant { symbol, .. } => Some(symbol.index()),
+             _ => None,
+         })
+         .max();
+@@ -1525,27 +1523,6 @@ fn fuse_store(ops: &mut Vec<Op>, dst: u16, to: PlanSlot) -> bool {
+             from: *at,
+             at: to,
+         },
+-        Some(Op::Const { dst: into, konst }) if *into == dst => Op::ConstStore {
+-            konst: *konst,
+-            at: to,
+-        },
+-        Some(Op::LoadConstant { symbol, dst: into }) if *into == dst => Op::LoadConstantStore {
+-            symbol: *symbol,
+-            at: to,
+-        },
+-        Some(Op::Arith {
+-            op,
+-            hint,
+-            lhs,
+-            rhs,
+-            dst: into,
+-        }) if *into == dst => Op::ArithStore {
+-            op: *op,
+-            hint: *hint,
+-            lhs: *lhs,
+-            rhs: *rhs,
+-            at: to,
+-        },
+         _ => return false,
+     };
+     ops.pop();
+@@ -2000,9 +1977,6 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
+                 | Op::TraceLiteral { .. }
+                 | Op::Load { .. }
+                 | Op::LoadStore { .. }
+-                | Op::ConstStore { .. }
+-                | Op::LoadConstantStore { .. }
+-                | Op::ArithStore { .. }
+                 | Op::TraceRead { .. }
+                 | Op::Arith { .. }
+                 | Op::Binary { .. }
+diff --git i/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs w/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs
+index f23eb1774..47f6b1752 100644
+--- i/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs
++++ w/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs
+@@ -47,10 +47,10 @@ impl Root {
+             // so it answers the root its producer answers: what this file
+             // states about an expression's last op has to hold whether or not
+             // the write behind it was absorbed into it.
+-            Op::Const { .. } | Op::ConstStore { .. } => Some(Root::Const),
+-            Op::LoadConstant { .. } | Op::LoadConstantStore { .. } => Some(Root::LoadConstant),
++            Op::Const { .. } => Some(Root::Const),
++            Op::LoadConstant { .. } => Some(Root::LoadConstant),
+             Op::Load { .. } | Op::LoadStore { .. } => Some(Root::Load),
+-            Op::Arith { .. } | Op::ArithStore { .. } => Some(Root::Arith),
++            Op::Arith { .. } => Some(Root::Arith),
+             Op::Binary { .. } => Some(Root::Binary),
+             Op::Prefix { .. } => Some(Root::Prefix),
+             Op::EvalExpr { .. } => Some(Root::EvalExpr),
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index e37f81691..761ae201e 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -183,9 +183,6 @@ fn undriven_op_name(op: &Op) -> &'static str {
+         Op::JumpUnless { .. } => "JumpUnless",
+         Op::ConditionJump { .. } => "ConditionJump",
+         Op::LoadStore { .. } => "LoadStore",
+-        Op::ConstStore { .. } => "ConstStore",
+-        Op::LoadConstantStore { .. } => "LoadConstantStore",
+-        Op::ArithStore { .. } => "ArithStore",
+     }
+ }
+ 
+@@ -1414,93 +1411,6 @@ impl Interp {
+                                             break 'cold Err(failure);
+                                         }
+                                     }
+-                                    Op::ConstStore { konst, at } => {
+-                                        let mut value = chunk.interned_konst(*konst);
+-                                        if value == ObjRef::NIL {
+-                                            let Some(bytes) = chunk.konst(*konst) else {
+-                                                break 'cold Err(
+-                                                    Loud::constant_out_of_range().into()
+-                                                );
+-                                            };
+-                                            #[cfg(test)]
+-                                            count_const_build();
+-                                            value = self.interned_literal(bytes);
+-                                            debug_assert_ne!(
+-                                                value,
+-                                                ObjRef::NIL,
+-                                                "a constant interned to the handle that means \
+-                                             'not built yet', so it would be rebuilt on every \
+-                                             execution and the cache would be dead code"
+-                                            );
+-                                            chunk.remember_konst(*konst, value);
+-                                        }
+-                                        if let Err(failure) =
+-                                            self.store_fused(code, clause, *at, value)
+-                                        {
+-                                            break 'cold Err(failure);
+-                                        }
+-                                    }
+-                                    Op::LoadConstantStore { symbol, at } => {
+-                                        let mut value = chunk.interned_symbol(*symbol);
+-                                        if value == ObjRef::NIL {
+-                                            #[cfg(test)]
+-                                            count_load_constant_build();
+-                                            value = self.interned_literal(
+-                                                code.symbols.name(*symbol).as_bytes(),
+-                                            );
+-                                            debug_assert_ne!(
+-                                                value,
+-                                                ObjRef::NIL,
+-                                                "a constant symbol interned to the handle that means \
+-                                             'not built yet', so it would be rebuilt on every \
+-                                             execution and the cache would be dead code"
+-                                            );
+-                                            chunk.remember_symbol(*symbol, value);
+-                                        }
+-                                        if let Err(failure) =
+-                                            self.store_fused(code, clause, *at, value)
+-                                        {
+-                                            break 'cold Err(failure);
+-                                        }
+-                                    }
+-                                    Op::ArithStore {
+-                                        op,
+-                                        hint,
+-                                        lhs,
+-                                        rhs,
+-                                        at,
+-                                    } => {
+-                                        debug_assert!(
+-                                            chunk.holds_register(*lhs)
+-                                                && chunk.holds_register(*rhs),
+-                                            "op reads registers {lhs}/{rhs} outside the region the \
+-                                         chunk reserved"
+-                                        );
+-                                        let left = self.roots.temp_at(registers, *lhs as usize);
+-                                        let right = self.roots.temp_at(registers, *rhs as usize);
+-                                        let mut quick = None;
+-                                        if chunk.tries_small_int(*hint) {
+-                                            quick = self.arith_small_int(*op, left, right);
+-                                            if quick.is_none() {
+-                                                chunk.saw_general(*hint);
+-                                            }
+-                                        } else {
+-                                            #[cfg(test)]
+-                                            count_arith_hint_skip();
+-                                        }
+-                                        let value = match quick {
+-                                            Some(value) => value,
+-                                            None => match self.arith_general(*op, left, right) {
+-                                                Ok(value) => value,
+-                                                Err(failure) => break 'cold Err(failure),
+-                                            },
+-                                        };
+-                                        if let Err(failure) =
+-                                            self.store_fused(code, clause, *at, value)
+-                                        {
+-                                            break 'cold Err(failure);
+-                                        }
+-                                    }
+                                     // The print, through `Interp::say_evaluated`,
+                                     // for the same reason `Op::Store` goes through
+                                     // `assign_evaluated`.
+diff --git i/rust/crates/rexx-exec/src/ir/golden.rs w/rust/crates/rexx-exec/src/ir/golden.rs
+index 19de6c456..7141f61e1 100644
+--- i/rust/crates/rexx-exec/src/ir/golden.rs
++++ w/rust/crates/rexx-exec/src/ir/golden.rs
+@@ -231,31 +231,6 @@ pub(crate) fn render(chunk: &Chunk) -> String {
+                     render_slot(*at)
+                 ));
+             }
+-            Op::ConstStore { konst, at } => {
+-                out.push_str(&format!(
+-                    "{index}: ConstStore konst={konst} at={}\n",
+-                    render_slot(*at)
+-                ));
+-            }
+-            Op::LoadConstantStore { at, .. } => {
+-                out.push_str(&format!(
+-                    "{index}: LoadConstantStore at={}\n",
+-                    render_slot(*at)
+-                ));
+-            }
+-            Op::ArithStore {
+-                op,
+-                hint,
+-                lhs,
+-                rhs,
+-                at,
+-            } => {
+-                out.push_str(&format!(
+-                    "{index}: ArithStore op={} hint={hint} lhs={lhs} rhs={rhs} at={}\n",
+-                    render_operator(*op),
+-                    render_slot(*at)
+-                ));
+-            }
+             Op::Say { index: at, src } => {
+                 out.push_str(&format!(
+                     "{index}: Say index={at} src={}\n",
