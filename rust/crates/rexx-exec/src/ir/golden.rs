@@ -221,41 +221,6 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     render_slot(*at)
                 ));
             }
-            // The four fused stores, each rendered as its value op's own line
-            // with the register replaced by the slot it writes: `at` is the
-            // write, and a `LoadStore`'s `from` is the read it absorbed.
-            Op::LoadStore { read, from, at, .. } => {
-                out.push_str(&format!(
-                    "{index}: LoadStore read={read:?} from={} at={}\n",
-                    render_slot(*from),
-                    render_slot(*at)
-                ));
-            }
-            Op::ConstStore { konst, at } => {
-                out.push_str(&format!(
-                    "{index}: ConstStore konst={konst} at={}\n",
-                    render_slot(*at)
-                ));
-            }
-            Op::LoadConstantStore { at, .. } => {
-                out.push_str(&format!(
-                    "{index}: LoadConstantStore at={}\n",
-                    render_slot(*at)
-                ));
-            }
-            Op::ArithStore {
-                op,
-                hint,
-                lhs,
-                rhs,
-                at,
-            } => {
-                out.push_str(&format!(
-                    "{index}: ArithStore op={} hint={hint} lhs={lhs} rhs={rhs} at={}\n",
-                    render_operator(*op),
-                    render_slot(*at)
-                ));
-            }
             Op::Say { index: at, src } => {
                 out.push_str(&format!(
                     "{index}: Say index={at} src={}\n",

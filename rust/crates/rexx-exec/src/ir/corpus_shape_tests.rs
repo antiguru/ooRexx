@@ -43,14 +43,10 @@ impl Root {
     /// expression's own value can end in.
     fn of(op: &Op) -> Option<Root> {
         match op {
-            // A fused store is its own value op as much as the unfused one is,
-            // so it answers the root its producer answers: what this file
-            // states about an expression's last op has to hold whether or not
-            // the write behind it was absorbed into it.
-            Op::Const { .. } | Op::ConstStore { .. } => Some(Root::Const),
-            Op::LoadConstant { .. } | Op::LoadConstantStore { .. } => Some(Root::LoadConstant),
-            Op::Load { .. } | Op::LoadStore { .. } => Some(Root::Load),
-            Op::Arith { .. } | Op::ArithStore { .. } => Some(Root::Arith),
+            Op::Const { .. } => Some(Root::Const),
+            Op::LoadConstant { .. } => Some(Root::LoadConstant),
+            Op::Load { .. } => Some(Root::Load),
+            Op::Arith { .. } => Some(Root::Arith),
             Op::Binary { .. } => Some(Root::Binary),
             Op::Prefix { .. } => Some(Root::Prefix),
             Op::EvalExpr { .. } => Some(Root::EvalExpr),

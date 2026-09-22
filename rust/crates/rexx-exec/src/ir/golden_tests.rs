@@ -110,25 +110,27 @@ fn a_call_promotes_at_the_root_and_below_it() {
     let left = compile_for_test(b"zz = length('abc') + 1").expect("the chunk fits");
     assert_eq!(
         render(&left),
-        "0: Clause index=0 end=7\n\
+        "0: Clause index=0 end=8\n\
          1: Const dst=1 konst=0\n\
          2: PushArg src=1\n\
          3: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
          4: TraceFunction index=0 slot=0 path=root.L src=0\n\
          5: LoadConstant dst=1\n\
-         6: ArithStore op=+ hint=0 lhs=0 rhs=1 at=0\n"
+         6: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         7: Store index=0 at=0 src=0\n"
     );
 
     let right = compile_for_test(b"zz = 1 + length('abc')").expect("the chunk fits");
     assert_eq!(
         render(&right),
-        "0: Clause index=0 end=7\n\
+        "0: Clause index=0 end=8\n\
          1: LoadConstant dst=0\n\
          2: Const dst=2 konst=0\n\
          3: PushArg src=2\n\
          4: CallArgs slot=0 path=root.R site=0 argc=1 dst=1\n\
          5: TraceFunction index=0 slot=0 path=root.R src=1\n\
-         6: ArithStore op=+ hint=0 lhs=0 rhs=1 at=0\n"
+         6: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         7: Store index=0 at=0 src=0\n"
     );
 
     // Two calls over one operator: a register each for the two results, and
@@ -215,15 +217,16 @@ fn every_instruction_of_an_all_delegating_body_compiles_to_one_exec_op() {
 }
 
 /// **The phase's first native expression op.** An assignment whose value is a
-/// literal compiles to a constant load fused with the write -- with no
-/// `EvalExpr` in it at all, which is what makes it native.
+/// literal compiles to a constant load, the literal's own value line, and the
+/// write -- with no `EvalExpr` in it at all, which is what makes it native.
 #[test]
-fn an_assignment_of_a_literal_compiles_to_a_fused_constant_store() {
+fn an_assignment_of_a_literal_compiles_to_a_constant_load_and_a_store() {
     let chunk = compile_for_test(b"n1 = 'abc'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=2\n\
-         1: ConstStore konst=0 at=0\n"
+        "0: Clause index=0 end=3\n\
+         1: Const dst=0 konst=0\n\
+         2: Store index=0 at=0 src=0\n"
     );
     // One register, released at the clause's own end, so a body of a hundred
     // assignments reserves one.
@@ -238,10 +241,12 @@ fn two_assignments_and_two_says_in_one_body_reuse_one_register() {
     let chunk = compile_for_test(b"n1 = 'a'\nn2 = 'b'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=2\n\
-         1: ConstStore konst=0 at=0\n\
-         2: Clause index=1 end=4\n\
-         3: ConstStore konst=1 at=1\n"
+        "0: Clause index=0 end=3\n\
+         1: Const dst=0 konst=0\n\
+         2: Store index=0 at=0 src=0\n\
+         3: Clause index=1 end=6\n\
+         4: Const dst=0 konst=1\n\
+         5: Store index=1 at=1 src=0\n"
     );
     assert_eq!(
         chunk.registers, 1,
@@ -287,8 +292,9 @@ fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
     let simple = compile_for_test(b"zw = zv\n").expect("compiles");
     assert_eq!(
         render(&simple),
-        "0: Clause index=0 end=2\n\
-         1: LoadStore read=Simple from=1 at=0\n"
+        "0: Clause index=0 end=3\n\
+         1: Load read=Simple at=1 dst=0\n\
+         2: Store index=0 at=0 src=0\n"
     );
     assert_eq!(simple.registers, 1);
     assert!(
@@ -299,15 +305,17 @@ fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
     let stem = compile_for_test(b"zw = zs.\n").expect("compiles");
     assert_eq!(
         render(&stem),
-        "0: Clause index=0 end=2\n\
-         1: LoadStore read=Stem from=1 at=0\n"
+        "0: Clause index=0 end=3\n\
+         1: Load read=Stem at=1 dst=0\n\
+         2: Store index=0 at=0 src=0\n"
     );
 
     let compound = compile_for_test(b"zw = za.zi\n").expect("compiles");
     assert_eq!(
         render(&compound),
-        "0: Clause index=0 end=2\n\
-         1: LoadStore read=Compound from=- at=0\n"
+        "0: Clause index=0 end=3\n\
+         1: Load read=Compound at=- dst=0\n\
+         2: Store index=0 at=0 src=0\n"
     );
 }
 
@@ -372,10 +380,11 @@ fn an_expression_that_only_contains_a_symbol_is_more_than_that_symbols_read() {
     let chunk = compile_for_test(b"zw = zv + 1\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=5\n\
          1: Load read=Simple at=1 dst=0\n\
          2: LoadConstant dst=1\n\
-         3: ArithStore op=+ hint=0 lhs=0 rhs=1 at=0\n"
+         3: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         4: Store index=0 at=0 src=0\n"
     );
 
     let dotvar = compile_for_test(b"zw = .nil\n").expect("compiles");
@@ -402,14 +411,15 @@ fn a_chain_of_operators_reuses_the_destination_register() {
     let chunk = compile_for_test(b"zw = za + zb + zc + zd\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=8\n\
+        "0: Clause index=0 end=9\n\
          1: Load read=Simple at=1 dst=0\n\
          2: Load read=Simple at=2 dst=1\n\
          3: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
          4: Load read=Simple at=3 dst=1\n\
          5: Arith op=+ hint=1 lhs=0 rhs=1 dst=0\n\
          6: Load read=Simple at=4 dst=1\n\
-         7: ArithStore op=+ hint=2 lhs=0 rhs=1 at=0\n"
+         7: Arith op=+ hint=2 lhs=0 rhs=1 dst=0\n\
+         8: Store index=0 at=0 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -426,12 +436,13 @@ fn precedence_decides_which_operator_is_the_inner_one() {
     let chunk = compile_for_test(b"zw = za + zb * zc\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=6\n\
+        "0: Clause index=0 end=7\n\
          1: Load read=Simple at=1 dst=0\n\
          2: Load read=Simple at=2 dst=1\n\
          3: Load read=Simple at=3 dst=2\n\
          4: Arith op=* hint=0 lhs=1 rhs=2 dst=1\n\
-         5: ArithStore op=+ hint=1 lhs=0 rhs=1 at=0\n"
+         5: Arith op=+ hint=1 lhs=0 rhs=1 dst=0\n\
+         6: Store index=0 at=0 src=0\n"
     );
     assert_eq!(
         chunk.registers, 3,
@@ -508,10 +519,11 @@ fn every_binary_operator_but_arithmetic_compiles_to_one_op() {
     let chunk = compile_for_test(b"za = zb + zc\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=5\n\
          1: Load read=Simple at=1 dst=0\n\
          2: Load read=Simple at=2 dst=1\n\
-         3: ArithStore op=+ hint=0 lhs=0 rhs=1 at=0\n"
+         3: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         4: Store index=0 at=0 src=0\n"
     );
 }
 
@@ -546,8 +558,9 @@ fn a_constant_symbol_is_a_native_load() {
     let chunk = compile_for_test(b"zw = 1\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=2\n\
-         1: LoadConstantStore at=0\n"
+        "0: Clause index=0 end=3\n\
+         1: LoadConstant dst=0\n\
+         2: Store index=0 at=0 src=0\n"
     );
 
     // A quoted literal is the other load, against the chunk's own interned
@@ -555,8 +568,9 @@ fn a_constant_symbol_is_a_native_load() {
     let quoted = compile_for_test(b"zw = '1'\n").expect("compiles");
     assert_eq!(
         render(&quoted),
-        "0: Clause index=0 end=2\n\
-         1: ConstStore konst=0 at=0\n"
+        "0: Clause index=0 end=3\n\
+         1: Const dst=0 konst=0\n\
+         2: Store index=0 at=0 src=0\n"
     );
 }
 
@@ -703,9 +717,10 @@ fn a_header_operands_register_goes_back_to_the_body() {
          5: Arith op=+ hint=0 lhs=1 rhs=2 dst=1\n\
          6: LoopHeaderValue role=To src=1\n\
          7: LoopRun index=0\n\
-         8: Clause index=1 end=10\n\
-         9: LoadConstantStore at=2\n\
-         10: LoopNext index=0\n"
+         8: Clause index=1 end=11\n\
+         9: LoadConstant dst=2\n\
+         10: Store index=1 at=2 src=2\n\
+         11: LoopNext index=0\n"
     );
     assert_eq!(
         chunk.registers, 3,
@@ -1080,24 +1095,25 @@ fn a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot() {
         .expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=2\n\
-         1: ConstStore konst=0 at=0\n\
-         2: Clause index=1 end=3\n\
-         3: SelectCaseText index=1 case=-\n\
-         4: Clause index=2 end=12\n\
-         5: Load read=Simple at=0 dst=1\n\
-         6: PushArg src=1\n\
-         7: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
-         8: TraceFunction index=2 slot=0 path=root.L src=0\n\
-         9: LoadConstant dst=1\n\
-         10: Binary op=> lhs=0 rhs=1 dst=0\n\
-         11: ConditionJump index=2 reg=0 keyword=WHEN target=16\n\
-         12: EnterWhen select=1 when=2\n\
-         13: Clause index=3 end=14\n\
-         14: Clause index=4 end=15\n\
-         15: EndWhen\n\
-         16: Clause index=5 end=18\n\
-         17: Exec index=5\n"
+        "0: Clause index=0 end=3\n\
+         1: Const dst=0 konst=0\n\
+         2: Store index=0 at=0 src=0\n\
+         3: Clause index=1 end=4\n\
+         4: SelectCaseText index=1 case=-\n\
+         5: Clause index=2 end=13\n\
+         6: Load read=Simple at=0 dst=1\n\
+         7: PushArg src=1\n\
+         8: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
+         9: TraceFunction index=2 slot=0 path=root.L src=0\n\
+         10: LoadConstant dst=1\n\
+         11: Binary op=> lhs=0 rhs=1 dst=0\n\
+         12: ConditionJump index=2 reg=0 keyword=WHEN target=17\n\
+         13: EnterWhen select=1 when=2\n\
+         14: Clause index=3 end=15\n\
+         15: Clause index=4 end=16\n\
+         16: EndWhen\n\
+         17: Clause index=5 end=19\n\
+         18: Exec index=5\n"
     );
 }
 
@@ -1483,16 +1499,18 @@ fn a_compiled_write_names_a_slot_only_for_a_simple_target() {
     let simple = compile_for_test(b"zw = 'v'\n").expect("compiles");
     assert_eq!(
         render(&simple),
-        "0: Clause index=0 end=2\n\
-         1: ConstStore konst=0 at=0\n"
+        "0: Clause index=0 end=3\n\
+         1: Const dst=0 konst=0\n\
+         2: Store index=0 at=0 src=0\n"
     );
 
     for source in [&b"zs. = 'v'\n"[..], &b"zs.zk = 'v'\n"[..]] {
         let chunk = compile_for_test(source).expect("compiles");
         assert_eq!(
             render(&chunk),
-            "0: Clause index=0 end=2\n\
-             1: ConstStore konst=0 at=-\n",
+            "0: Clause index=0 end=3\n\
+             1: Const dst=0 konst=0\n\
+             2: Store index=0 at=- src=0\n",
             "{} resolved a slot for a target that does not read one",
             String::from_utf8_lossy(source)
         );
@@ -1505,12 +1523,12 @@ fn a_compiled_write_names_a_slot_only_for_a_simple_target() {
 fn a_compiled_writes_slot_comes_from_the_plan_rather_than_from_its_position() {
     let chunk = compile_for_test(b"say zb za\nza = 1\nzb = 2\n").expect("compiles");
     assert!(
-        render(&chunk).contains("LoadConstantStore at=1\n"),
+        render(&chunk).contains("Store index=1 at=1 src=0\n"),
         "the first write did not take the plan's slot for its own name: {}",
         render(&chunk)
     );
     assert!(
-        render(&chunk).contains("LoadConstantStore at=0\n"),
+        render(&chunk).contains("Store index=2 at=0 src=0\n"),
         "the second write did not take the plan's slot for its own name: {}",
         render(&chunk)
     );

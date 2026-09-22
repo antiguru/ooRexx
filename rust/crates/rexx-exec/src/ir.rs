@@ -269,27 +269,6 @@ pub(crate) enum Op {
         keyword: ConditionKeyword,
         target: u32,
     },
-    /// [`Op::Load`] and the [`Op::Store`] that consumed it, as one op: the
-    /// read `SymbolRead` names from slot `from`, written straight through the
-    /// enclosing `Assignment`'s target with no register in between.
-    LoadStore {
-        symbol: SymbolId,
-        read: SymbolRead,
-        from: PlanSlot,
-        at: PlanSlot,
-    },
-    /// [`Op::Const`] and its [`Op::Store`], as one op.
-    ConstStore { konst: u32, at: PlanSlot },
-    /// [`Op::LoadConstant`] and its [`Op::Store`], as one op.
-    LoadConstantStore { symbol: SymbolId, at: PlanSlot },
-    /// [`Op::Arith`] and its [`Op::Store`], as one op.
-    ArithStore {
-        op: Operator,
-        hint: u32,
-        lhs: u16,
-        rhs: u16,
-        at: PlanSlot,
-    },
 }
 
 /// Which keyword's condition an [`Op::ConditionJump`] is validating.
