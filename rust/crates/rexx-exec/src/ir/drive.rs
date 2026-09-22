@@ -578,7 +578,7 @@ impl Interp {
                     // Asking `self` again after the clause for the debug flag
                     // cost `bench-programs/emptyloop.rex` 1.52% and
                     // `dispatch.rex` 1.14% in `instructions:u`, measured.
-                    let sink = self.traced_mode();
+                    let sink = self.chunk_trace();
                     // **The analysis, checked at the clause it answered for.**
                     // A `Known` answer is a claim that this clause always runs
                     // under exactly that setting, and the claim is what a
@@ -594,15 +594,13 @@ impl Interp {
                             chunk.setting_at(index)
                     {
                         debug_assert_eq!(
-                            claimed,
-                            crate::trace::ChunkTrace::of(sink),
+                            claimed, sink,
                             "the trace analysis answered {claimed:?} for instruction {index}, and \
                              the setting in force when it ran is not that one"
                         );
                     }
-                    let stale = chunk.trace().clause_echoes()
-                        != crate::trace::ChunkTrace::of(sink).clause_echoes();
-                    let debugging = sink.debug;
+                    let stale = chunk.trace().clause_echoes() != sink.clause_echoes();
+                    let debugging = sink.debugging();
                     // **`stale` moves the clause echo from the stream back to
                     // the run-time gate, in both directions at once.** The
                     // region's own [`Op::TraceClause`] is skipped and

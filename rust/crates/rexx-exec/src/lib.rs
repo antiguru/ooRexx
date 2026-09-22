@@ -1518,7 +1518,7 @@ struct Interp {
     running: Option<Box<Activation>>,
     /// The `TRACE` setting of whatever [`Interp::running`] holds, kept beside
     /// it rather than read through it.
-    trace_cache: crate::trace::TraceMode,
+    trace_cache: crate::trace::TraceCache,
     /// The activations that entered before [`Interp::running`], oldest
     /// first, so `suspended.last()` is the running activation's own caller.
     #[expect(
@@ -2466,7 +2466,7 @@ impl Interp {
             required_packages: HashMap::new(),
             untranslated: std::collections::HashSet::new(),
             requires_installing: Vec::new(),
-            trace_cache: crate::trace::TraceMode::OFF,
+            trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF),
         }
     }
 

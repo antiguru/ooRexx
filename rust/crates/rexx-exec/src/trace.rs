@@ -273,6 +273,41 @@ impl ChunkTrace {
             || (self.0 & ChunkTrace::LABELS != 0 && is_label)
             || (self.0 & ChunkTrace::COMMANDS != 0 && is_command)
     }
+
+    /// [`ChunkTrace::of`] applied to [`TraceMode::OFF`]: no bit set.
+    pub(crate) const OFF: ChunkTrace = ChunkTrace(0);
+}
+
+/// A [`TraceMode`] beside the [`ChunkTrace`] it packs down to, so that the
+/// packing is paid where the setting changes rather than at every clause that
+/// reads it.
+///
+/// **The byte cannot drift from the mode**: [`TraceCache::of`] is the only way
+/// to build one, and it derives the byte.
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct TraceCache {
+    mode: TraceMode,
+    chunk: ChunkTrace,
+}
+
+impl TraceCache {
+    #[inline(always)]
+    pub(crate) fn of(mode: TraceMode) -> TraceCache {
+        TraceCache {
+            mode,
+            chunk: ChunkTrace::of(mode),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn mode(self) -> TraceMode {
+        self.mode
+    }
+
+    #[inline(always)]
+    pub(crate) fn chunk(self) -> ChunkTrace {
+        self.chunk
+    }
 }
 
 /// What one instruction does to the `TRACE` setting in force -- the
@@ -599,7 +634,17 @@ impl Interp {
     /// ([`ChunkTrace`]).
     #[inline(always)]
     pub(crate) fn chunk_trace(&self) -> ChunkTrace {
-        ChunkTrace::of(self.traced_mode())
+        let answer = if self.debug_pause {
+            ChunkTrace::OFF
+        } else {
+            self.trace_cache.chunk()
+        };
+        debug_assert_eq!(
+            answer,
+            ChunkTrace::of(self.traced_mode()),
+            "the cached ChunkTrace is not the one the setting in force packs down to"
+        );
+        answer
     }
 
     /// The setting the trace sink obeys, which is [`TraceMode::OFF`] while a

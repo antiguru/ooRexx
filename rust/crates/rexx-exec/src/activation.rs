@@ -1039,7 +1039,7 @@ impl Interp {
         };
         // `trace_cache`'s own invariant: the setting travels with whichever
         // activation is running, and this changes which one that is.
-        self.trace_cache = boxed.trace_mode;
+        self.trace_cache = crate::trace::TraceCache::of(boxed.trace_mode);
         // The clause the activation being suspended is stopped on, which is
         // what its own `StackFrame` reports for as long as it stays
         // suspended: `Interp::clause_state` is about to start describing the
@@ -1072,10 +1072,11 @@ impl Interp {
         self.running = self.suspended.pop();
         // The resumed caller's setting, or `OFF` where nothing is left to
         // resume -- which is the state `Interp::new` starts in.
-        self.trace_cache = self
-            .running
-            .as_deref()
-            .map_or(TraceMode::OFF, |resumed| resumed.trace_mode);
+        self.trace_cache = crate::trace::TraceCache::of(
+            self.running
+                .as_deref()
+                .map_or(TraceMode::OFF, |resumed| resumed.trace_mode),
+        );
         Some(ended)
     }
 
@@ -1089,10 +1090,10 @@ impl Interp {
         debug_assert_eq!(
             self.running_activation()
                 .map(|activation| activation.trace_mode),
-            Some(self.trace_cache),
+            Some(self.trace_cache.mode()),
             "the cached TRACE setting is not the running activation's"
         );
-        self.trace_cache
+        self.trace_cache.mode()
     }
 
     /// Sets the running activation's `TRACE`. Only the `TRACE` instruction
@@ -1100,7 +1101,7 @@ impl Interp {
     /// value through [`Activation::nested`] instead, never through here.
     pub(crate) fn set_trace_mode(&mut self, mode: TraceMode) {
         self.activation_mut().trace_mode = mode;
-        self.trace_cache = mode;
+        self.trace_cache = crate::trace::TraceCache::of(mode);
     }
 }
 
