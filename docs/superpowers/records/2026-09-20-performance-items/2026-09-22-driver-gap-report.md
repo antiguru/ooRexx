@@ -10,18 +10,31 @@ re-derivation of it.
 
 ## Gates
 
-The five gates were started after the commit, in the background, each status
-written unpiped as it lands. They had not finished when this was written, so no
-gate result is stated here: read them from the status file named at the end of
-this document, whose first line is the commit they ran over.
+Over `9a2eb522f`, the committed tree, which was not edited between the commit
+and the last status line. Every status read unpiped from the run's own file.
 
-What *was* run before the commit, and observed: `cargo fmt --all --check`
-exit 0; `cargo clippy --workspace --all-targets -- -D warnings` exit 0 (warm
-target, so provisional -- the gate run repeats it); and
-`REXX_CORPUS_GATE=1 memcap 8G cargo test -p rexx-exec --no-fail-fast`, which
-printed `mode: STRICT (the gate)` and `604 of 604 matching` for
-`corpus_differential` and `test result: ok` for every binary once
-`corpus/refusal-sites.tsv` had been re-derived.
+| gate | command | rc |
+|---|---|---:|
+| G1 | `cargo fmt --all --check` | 0 |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings`, cold `CARGO_TARGET_DIR` | 0 |
+| G3 | `cargo build --workspace --all-targets --release`, outside the cap | 0 |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | 0 |
+| G5 | `cargo build --workspace --all-targets`, outside the cap | 0 |
+| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | 0 |
+
+Tallies summed from each log's own `test result:` lines, not from a summary:
+**release 133 binaries, 2651 passed / 0 failed / 4 ignored**; **debug 133
+binaries, 2652 passed / 0 failed / 4 ignored**; `corpus_differential`
+**604 of 604 matching** in STRICT mode on both. Those are the brief's expected
+figures.
+
+**A first attempt at the release test gate exited 137, and it was my command,
+not the tree.** `memcap 8G` was wrapping `cargo test --release`, which still had
+the test targets to compile, so the cap OOM-killed **rustc** while building
+`rexx-exec` -- `memcap: OOM-killed at the 8G cap (peak 8.0G)` with **zero**
+`test result:` lines in the log. The fix is to build `--all-targets` outside the
+cap first, as G3 and G5 above do; re-running the same command would only have
+reproduced it.
 
 ## `drive.rs:0` is the register allocator, not the jump table
 
@@ -30,11 +43,13 @@ the brief's own dump (`cg-instr.out`, sha256 `7c6977fa...`) with a parser whose
 self total reconciles to the run's `summary:` line with difference 0, then each
 address looked up in an `objdump` of the same binary.
 
-**It is not the `match op` jump table.** Both dispatches are attributed to
-source lines: the region dispatch's five instructions -- `movzbl (%rbx),%eax` /
-`lea` the table / `movslq` the offset / `add` / `jmp *%rax` -- are all
-`drive.rs:664`, and the outer one is `drive.rs:544` with two of its five
-falling to `:0`.
+**It is not the `match op` jump table.** The region dispatch's five
+instructions -- `movzbl (%rbx),%eax` / `lea` the table / `movslq` the offset /
+`add` / `jmp *%rax` -- all carry `drive.rs:664`. The outer dispatch is eleven
+instructions across `drive.rs:543` and `:544`, including a `cmp $0x28` range
+check on the discriminant; three of those eleven fall to `:0`, and they are the
+reload of the stream base, the `add` that forms `&stream[pc]`, and the
+loop-invariant `lea` of the table.
 
 By what the instruction is:
 
@@ -50,9 +65,10 @@ By what the instruction is:
 | `lea` | 26,441,344 | 4.8% |
 | zeroing and constants | 25,601,865 | 4.6% |
 
-**37.6% of it is spill and reload traffic, and most of the rest is block
-glue** -- the `jmp`s, `lea`s and register copies LLVM emits at block boundaries
-with no source position. `run_ops_from::<true>` is **15,087 bytes and 2,894
+**37.6% of it is spill and reload traffic against the stack frame.** The rest
+is register copies, block-boundary `jmp`s and `lea`s, and loads and stores LLVM
+emitted with no source position -- none of it dispatch.
+`run_ops_from::<true>` is **15,087 bytes and 2,894
 instructions** with a **1,416-byte stack frame** (`sub $0x588,%rsp`) and all six
 callee-saved registers pushed; 42.9% of its instructions ever execute on
 `rexxcps`. `run_ops_from::<false>` is 14,959 bytes with 15.5% executed.
@@ -64,9 +80,9 @@ The four largest named pieces inside it:
 * `0x13d1c4`, 38,460,944 -- `add $0x10,%rbx`, the region loop's own advance in
   the arm the six trace ops share.
 * `0x13c02a`, `0x13c052`, `0x13c068`, `0x13c06b`, 19,441,281 each -- the outer
-  loop's per-op `pc` copy, its reload of the stream base, and its
-  **loop-invariant** `lea` of the jump-table base, recomputed every iteration
-  because no register is free to hold it.
+  loop's per-op `pc` copy, its reload of the stream base, the `add` that forms
+  `&stream[pc]`, and its **loop-invariant** `lea` of the jump-table base,
+  recomputed every iteration because no register is free to hold it.
 * `0x13c07f`, `0x13c091`, `0x13c094`, `0x13c961`, 16,321,024 each -- spills
   around the `Op::Clause` arm's instruction lookup.
 
@@ -126,7 +142,17 @@ that reverted an earlier commit; one was removed.
 ### 1. The 38,460,944 trace ops are `rexxcps`'s own, not the interpreter's
 
 Lead 3 and the re-profile's rank 3 rest on 38,460,944 value-echo ops executing
-with tracing off, 41.35% of all region dispatches. **They are there because
+with tracing off, 41.35% of all region dispatches. **Re-derived here at
+`c3f125a88` rather than inherited**: the region jump table at `0x3e7f4` has 43
+entries and 38 distinct targets, and **six of its entries share `0x13d1c4`**,
+which is the arm the six trace ops share; that address's execution count in the
+base dump is exactly **38,460,944**. Summing every arm's entry count gives
+**93,024,008** region dispatches and **19,441,281** outer ones, both
+reproducing the re-profile's figures at a different commit. (33 of the outer
+table's 41 entries point at one arm whose count is **0**: only eight op kinds
+ever appear in the outer stream.)
+
+**They are there because
 `rexxcps.rex` contains two `TRACE VALUE` clauses** -- `trace value tracevar`
 at line 38 and `trace value trace()` at line 71 -- and a `TRACE` whose value the
 source does not fix is `TraceEvent::Unknown`, which the forward analysis carries
@@ -149,9 +175,23 @@ Run over every program in `bench-programs/` --
 the same loop counting `TraceFunction` -- the two counts are equal for every
 one of them: **`Op::TraceFunction` is the only trace op any of them emits at
 all**, and `emptyloop`, `varlookup`, `arith`, `compound`, `dispatch`,
-`dispatchclass`, `decloop`, `alloc`, `sayloop` and `startup` emit none. So rank
-3's ~1.5% is a `rexxcps` figure with no counterpart on the other axes, and the
-item should be re-ranked or closed rather than re-attempted.
+`dispatchclass`, `decloop`, `alloc`, `sayloop` and `startup` emit none.
+
+**So rank 3 is worth about 1.5% on `rexxcps` and zero on every other axis we
+have -- which is a real win with a caveat, not a non-win.** `rexxcps` is the
+figure this project is compared on. What the finding removes is the belief that
+those ops are a property of the interpreter; what it leaves standing is the
+`rexxcps` number.
+
+Two things belong beside it so the 1.5% is not read as available. **Reaching it
+is blocked on a problem already built, gated green and reverted** -- `3c2e6825a`,
+reverted by `4ef6af5bb`: the emission change was worth **-0.543%** and the guard
+that keeps it honest cost **+0.501%**, and the guard is paid by programs
+containing no `TRACE` at all, `emptyloop` **+1.25%** and `varlookup` **+1.08%**.
+And **the unguarded ceiling for the whole shape is -1.706%**, so 1.5% is most of
+what exists there rather than a slice of something larger. Both figures are in
+`docs/superpowers/records/2026-09-20-performance-items/README.md` and
+`2026-09-20-performance-todo.md`; I read them there and did not re-run them.
 
 ### 2. `Op::TraceFunction`'s emission is not gated, and its five siblings' is
 
@@ -222,25 +262,58 @@ Two things in it are visibly redundant and are the next places to look:
   measurement. The -0.5272% is six to twelve times that spread and the two
   rounds agree to 0.06 percentage points, so the sign and the magnitude hold;
   but a future sub-0.1% question on this axis needs a quiet machine.
-* **Finding 1 is static evidence.** I counted ops in the compiled stream, not
-  executions: the 38,460,944 figure is the re-profile's, taken at `3b850d885`,
-  and I did not re-take it. What I measured is that deleting two clauses from
-  `rexxcps.rex` removes 199 of its 207 trace ops.
+* **Finding 1's causal half is static evidence.** The 38,460,944 is measured
+  at this commit, per address. What is *not* measured is the counterfactual: I
+  compared two compiled streams, and did not run the program with the two
+  `TRACE VALUE` clauses deleted to see the instruction count fall. Deleting them
+  changes the clause count, so that run would need its own reading anyway.
 * **I did not attempt the region walk itself**, which is lead 1 and the largest
   single line in the interpreter. The decomposition says its five-instruction
   dispatch and three-instruction latch are already minimal for a jump table in
   safe Rust; what is left there is *fewer ops*, and finding 1 says the largest
   group of removable ones is specific to the benchmark.
-* **The driver's size is a standing cost nobody has priced.** 15,087 bytes in
-  one function, 57% of it never executed on `rexxcps`, a 1,416-byte frame, and
-  208,891,609 Ir -- 4.1% of the driver's self cost -- in spill and reload
-  traffic alone. Outlining the cold arms is
-  mechanical and would test it; it is also exactly the kind of change project
-  memory records as moving cycles up to 4% per axis on layout alone, so it needs
-  instruction counts and a control, and it did not fit this task.
+* **The driver's size is a standing cost, and this finding does not say which
+  of two changes to make.** 15,087 bytes in one function, 57% of it never
+  executed on `rexxcps`, a 1,416-byte frame, and 208,891,609 Ir -- 4.1% of the
+  driver's self cost -- in spill and reload traffic alone. **A frame inflated by
+  cold arms' locals and a frame inflated by state live across the hot arm point
+  at opposite fixes and look identical in this profile.** Reading *which values*
+  are spilled is what separates them, and nobody has done that.
+  **One form of the first fix is already measured and rejected**:
+  `docs/superpowers/records/2026-09-17-crexx-comparison/2026-09-17-crexx-derived-candidates.md`,
+  "Candidate E, settled 2026-09-19", moved the cold arms into **one**
+  `#[inline(never)]` non-generic helper and got `+2.80%`, `+3.70%` and `+2.53%`
+  retired instructions on three axes, 64-way I1 unmoved at +0.16%, `.text` up
+  7,328 bytes, the extracted arms costing 9,965 standalone against roughly 1,900
+  inlined per instantiation. I did not re-run it. **That does not settle the
+  per-arm variant** -- `#[cold]` plus `#[inline(never)]` on each arm separately,
+  each with its own small frame -- because the bundled helper's frame is the
+  union of every cold arm's needs and each pays for all the others. That variant
+  is untested.
+  **The direct instrument is the frame, not a percentage**: `sub $N, %rsp` in
+  the prologue, 0x588 here. If it does not shrink, the change did not do the
+  thing whatever the benchmark says; if it shrinks while instructions rise, that
+  is Candidate E's price reappearing.
 
-## Gates
+## Items this opened, none of them measured by me
 
-Started after the commit, writing each status unpiped as it goes to
-`/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/drivegap/gates.status`,
-whose first line is the commit sha and whose last line reads `finished`.
+All three were written by the controller while I held the tree, and I did not
+re-run anything in them. They are gitignored, so the paths are workspace paths
+rather than committed ones.
+
+* `.superpowers/sdd/queued/2026-09-22-tracefunction-ungated.md` -- finding 2 as
+  its own item, carrying the sizing problem: it cannot be measured on the
+  current benchmark set, so whoever takes it brings a program or sizes it
+  statically and says so.
+* `.superpowers/sdd/queued/2026-09-22-driver-frame-pressure.md` -- the
+  bundled-versus-per-arm distinction the concern bullet above makes, so the two
+  records agree rather than drift.
+* `.superpowers/sdd/queued/2026-09-22-clause-shape-distribution.md` -- `rexxcps`'
+  timed body measured as 80 clauses in 34 distinct shapes, mean 2.81 ops per
+  region with trace ops excluded, ten shapes covering 65%.
+
+## Where the gate evidence is
+
+`drivegap/gates.status` and `drivegap/gates2.status` in the session scratchpad,
+each with the commit sha as its first line and `finished` as its last, and the
+per-gate logs beside them.
