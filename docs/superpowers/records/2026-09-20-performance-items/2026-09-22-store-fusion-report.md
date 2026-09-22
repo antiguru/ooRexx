@@ -348,6 +348,12 @@ proposes is more interesting rather than less, because this is a second
 measurement saying the driver's cost tracks something other than its frame --
 but its own success criterion needs replacing before anyone runs it.
 
+**The correction is beside it, not in it.** `2026-09-22-frame-instrument-falsified.md`
+records the falsification; `2026-09-22-driver-frame-pressure.md` carries the
+stopping rule unchanged and does not point at the correction, because this
+directory is append-only. **A reader who opens the note alone will act on the
+falsified rule**, so anyone citing it should cite the pair.
+
 (The 2,897 reproduces that note's 2,894 for a different commit; the count is
 objdump mnemonic lines between the symbol and the next blank line.)
 
