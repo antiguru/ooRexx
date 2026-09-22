@@ -31,6 +31,16 @@ Append-only, per this tree's policy. Two things in the files above were later
 measured to be wrong, and both are corrected in appended sections of
 `2026-09-20-performance-todo.md` rather than in the documents that state them.
 
+**`2026-09-22-driver-frame-pressure.md`'s stopping rule is falsified**, by
+`2026-09-22-frame-instrument-falsified.md` in this directory. The note ends by
+naming the driver's frame size as the direct instrument for judging an outlining
+change; the frame **shrank** 1,416 to 1,368 bytes on a change that cost
+`rexxcps` 2.32%, so a frame moving the right way is not evidence a change
+helped. Everything in that note before the stopping rule stands. This line
+exists because the correction points at the note and the note cannot point back,
+so a reader who opens it alone would otherwise get the rule with nothing beside
+it.
+
 **The 3.89% ceiling in both briefs is not a ceiling.** It was measured by
 deleting the `TRACE` instructions from `rexxcps`, which measures what the
 feature costs rather than what a fix can recover. The most any promotion of that
