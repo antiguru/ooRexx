@@ -361,6 +361,10 @@ answers correctly and pays for it forever.
 `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/storefusion/`
 holds `gates/` with the six logs and the cold clippy run, the callgrind dumps
 under `cg/` and the discarded out-of-line variant's under `cg-outline-variant/`,
-`opcount.py`, `ours.sh` and `final.py`, the five build trees and their
-disassembly, the fifteen probes with their three-descriptor outputs, and
-`prediction-arith.txt`.
+`opcount.py`, `ours.sh` and `final.py`, each variant's `target/` with its
+binary and its `objdump` listing, the fifteen probes with their
+three-descriptor outputs, and `prediction-arith.txt`.
+
+The five temporary worktrees were removed and `git worktree list` is back to
+what it was; `variant-patches/` holds the diff against `d6aec7d38` that makes
+each of `noop`, `loadonly` and `onearm`.
