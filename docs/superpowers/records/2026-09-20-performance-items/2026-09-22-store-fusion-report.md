@@ -46,26 +46,72 @@ The clippy gate finished in 0.09s against a warm `rust/target`, which
 ## The number
 
 **A removed op is worth 35.0 instructions on `varlookup` and 36.0 on `arith`.**
-The two axes agree, and the brief's recorded prediction of 8 is wrong by a
-factor of four and a half. The answer is much nearer the 54.8 point than the 8
+The two axes agree, and the brief's recorded prediction of 8 is wrong by more
+than a factor of four. The answer is much nearer the 54.8 point than the 8
 point, and by the brief's own rule the direction is worth a plan rather than an
 afternoon.
 
-**But there is a second constant, and it decides the question the first one was
-asked for: the four new driver arms cost `rexxcps` 2.32% with nothing fused,
-and one arm alone costs 0.26%.** The tax is not a cliff the first arm pays. It
-is super-linear in how much driver code you add: 4.9 times the code for 8.9
-times the cost.
+**The second measurement decides the question the first one was asked for, and
+it is not a constant.** Adding arms changes the code generated for the whole of
+`run_ops_from::<true>`, and **the size and the sign of that change differ by
+program and are not monotone in how much code you add.** With nothing material
+fused -- `emptyloop`'s op count is identical to the unit in all three builds,
+and `rexxcps`' two-arm build fuses 101 ops of 121,425,289:
 
-Put together:
+| | two arms | four arms |
+|---|---:|---:|
+| `rexxcps` | **+1.6641%** | **+2.3164%** |
+| `emptyloop` | **+0.2581%** | **-1.0322%** |
 
-> **Widening pays only where the new shape removes more than about a tenth of
-> the dispatched ops, and the price of the next shape is higher than the price
-> of the last one.** `varlookup` removes 22.2% of its ops and gains 4.88%;
-> `arith` removes 13.9% and gains 0.17%; `rexxcps` removes 0.00009% and
-> **loses 2.32%**. This commit makes `rexxcps` slower.
+`emptyloop` reproduces to 0.0001%, so neither of its cells is noise. **No
+per-op tax can make a program faster, and no monotone cost can make four arms
+cheaper than two.**
+What was added is not a tax. It is a codegen perturbation that happens to be a
+tax on three of these four programs.
 
-### How the second constant was isolated
+The same non-monotonicity shows up where the fusion *is* firing. `varlookup`
+fuses the same hot ops under two arms and under four -- **133,000,547 ops
+against 133,000,543, four apart** -- and the four-arm build is **342,005,773
+instructions cheaper**. Four ops are 140 instructions at the measured price;
+the rest is codegen, with the arithmetic closed.
+
+**It is the driver's own code, and not a callee and not the frame.** Summing
+every `run_ops_from::<true>` row on `emptyloop`: base 3,500,037,342, two arms
+3,525,038,981, four arms 3,400,037,545 -- deltas of +25,001,639 and
+-99,999,797 against whole-program deltas of +24,982,455 and -99,991,929. Over
+25,000,000 iterations that is **+1.00 and -4.00 instructions per iteration**,
+whole numbers, which is what a value moving in or out of a register looks
+like.
+
+Where it does cost, it costs more the more you add, but not proportionally. On
+`rexxcps`, where nothing material fuses at any size:
+
+| | driver `<true>` | added | `rexxcps` | per added instruction |
+|---|---:|---:|---:|---:|
+| BASE | 2,897 | -- | -- | -- |
+| one arm | 3,009 | +112 | **+0.2604%** | 0.00233% |
+| two arms | 3,261 | +364 | **+1.6641%** | 0.00457% |
+| four arms | 3,443 | +546 | **+2.3164%** | 0.00424% |
+
+**Neither a cliff that the first arm pays nor a straight slope**: the marginal
+cost roughly doubles between one arm and two and then flattens.
+
+Put together, and stated per axis because there is no shared numerator:
+
+> **On the three axes where the arms cost anything, a new shape has to fuse
+> 8.3% (`varlookup`), 10.8% (`arith`) or 10.2% (`rexxcps`, at `varlookup`'s
+> price because `rexxcps` fuses too few ops to price one) of the dispatched ops
+> before it breaks even. On `emptyloop` the four arms are worth -2.000
+> instructions per dispatched op and there is no break-even to clear at all.**
+> `varlookup` fuses 22.2% and gains 4.88%; `arith` fuses 13.9% and gains 0.17%;
+> `rexxcps` fuses 0.00009% and **loses 2.32%**. This commit makes `rexxcps`
+> slower.
+>
+> **Those break-even figures are three axes' and the fourth contradicts them.**
+> Any plan that budgets "N shapes times a cost per shape" is budgeting a
+> quantity these four programs say does not exist.
+
+### How the driver change was isolated from the fusion
 
 `base -> head` alone cannot price a removed op, and the instrument that shows
 it is `emptyloop`: **it moves -1.03% while removing three ops in the whole
@@ -83,10 +129,11 @@ So two further binaries were built from `d6aec7d38`:
   fused stream.
 * **`onearm`** -- only `Op::LoadStore` exists, variant and arm and emission.
   `rexxcps` fuses **nothing** under it, so its `rexxcps` figure is one arm's
-  tax and no fusion at all.
+  codegen cost on that axis and no fusion at all.
 
-A third, **`loadonly`**, keeps all four arms and fuses only `Load` + `Store`,
-which splits `varlookup`'s answer between the two shapes.
+Two more, **`loadonly`** (all four arms, only `Load` + `Store` fused) and
+**`twoarm`** (`Op::LoadStore` and `Op::ArithStore` only, variant and arm and
+emission), split the answer further.
 
 | | `base -> noop`: arms only, 0 ops | `noop -> head`: fusion only | `base -> head`: shipped |
 |---|---:|---:|---:|
@@ -94,13 +141,23 @@ which splits `varlookup`'s answer between the two shapes.
 | `arith` | +0.5936% | **-0.7594%, 36.03 Ir/op** | -0.1703% |
 | `emptyloop` | -1.0322% | -0.0000%, 3 ops | -1.0322% |
 | `rexxcps` | +2.3164% | -0.0000%, 109 ops | **+2.3164%** |
-| `rexxcps`, **one arm** | **+0.2604%** | -- | -- |
 
-The arms' cost per **dispatched** op: `varlookup` +2.889, `arith` +3.888,
-`rexxcps` +3.562, `emptyloop` **-2.000**. `emptyloop` is the one program that
-barely enters the region walk -- 288 region dispatches against 50,000,256 outer
-ones -- and it is the one program the arms make faster. That is a correlation
-over four programs, not a mechanism anybody has run down.
+The four arms' effect per **dispatched** op: `varlookup` +2.889, `arith`
++3.888, `rexxcps` +3.562, `emptyloop` **-2.000**. `emptyloop` is the one
+program that barely enters the region walk -- 288 region dispatches against
+50,000,256 outer ones -- and it is the one the arms make faster. That is a
+correlation over four programs, not a mechanism anybody has run down.
+
+**The smaller commit is not the safer one.** Against BASE, the shipped
+four-arm build beats the two-arm build on three of the four axes and loses to
+it only on `rexxcps`:
+
+| shipped, against BASE | two arms | four arms |
+|---|---:|---:|
+| `varlookup` | -2.8847% | **-4.8818%** |
+| `arith` | **+0.0676%** | -0.1703% |
+| `emptyloop` | **+0.2581%** | -1.0322% |
+| `rexxcps` | **+1.6641%** | +2.3164% |
 
 ### The two shapes agree with each other too
 
@@ -115,7 +172,14 @@ register handoff, and it does not care which op produced the value.
 
 ### Against the predictions
 
-* **The brief's prediction, 8 per removed op, is falsified** by four
+**Both predictions were falsified, and in the same direction.** The
+driver-gap decomposition predicted 8 per removed op and this task predicted 20
+to 24; the measurement is 35.00, 36.00, 34.00 and 36.03 across four quotients
+from three binary pairs. The useful part is the reason, which is shared: both
+were predictions about a quotient nobody had separated from the driver change,
+so the error was in what was being predicted rather than in the arithmetic.
+
+* **The driver-gap prediction, 8 per removed op, is falsified** by four
   quotients. Its derivation -- five instructions of region-dispatch preamble
   and three of latch -- prices the *dispatch*, and the measurement says the
   handoff between the pair is worth roughly another 27.
@@ -130,8 +194,8 @@ register handoff, and it does not care which op produced the value.
   there is no honest way to add one afterwards.
 * **The brief's two axes were expected to disagree, and they do not.** The
   disagreement in the shipped column -- 22.00 against 8.03 -- is entirely the
-  driver tax landing on two programs with very different op mixes. Held fixed,
-  35.00 and 36.03.
+  driver change landing on two programs with very different op mixes. Held
+  fixed, 35.00 and 36.03.
 * **`2026-09-22-clause-shape-distribution.md`'s arithmetic does not close.** It
   gives the `Condition` + `JumpUnless` fusion as "54.8 per removed op, of which
   only 8 was dispatch and 34.8 the value handoff"; 8 + 34.8 = 42.8. The
@@ -226,14 +290,18 @@ fusion delta moves by 12 thousand instructions in 1.33 billion.
 | `run_ops_from::<true>` bytes | 15,071 | -- | 17,599 |
 | whole `.text` | 2,526,059 | -- | 2,531,307 |
 
-**The frame shrank while the code grew**, which is the interaction
-`2026-09-22-driver-frame-pressure.md` asked for and the opposite of what that
-note's mechanism predicts: the frame is the direct instrument it names, it
-moved the *right* way, and the change still cost `rexxcps` 2.32%. **So the tax
-is not frame size.** What it is was not established here, and the outlining
-variant that note proposes is now more interesting rather than less, because
-this is a second measurement saying the driver's cost tracks something other
-than its frame.
+**The frame shrank while the code grew, and
+`2026-09-22-driver-frame-pressure.md`'s stopping rule should be read as failed
+rather than as still standing.** That note says "the frame size is the direct
+instrument ... if the frame does not shrink, the change did not do the thing,
+whatever the benchmark says". Here the frame shrank by 48 bytes on `<true>` and
+64 on `<false>`, the function grew by 546 instructions, and the change cost
+`rexxcps` 2.32% and gained `emptyloop` 1.03%. **A frame that moves the right
+way is not evidence that the change helped**, and on this measurement frame
+size does not predict the sign on any axis. The outlining variant that note
+proposes is more interesting rather than less, because this is a second
+measurement saying the driver's cost tracks something other than its frame --
+but its own success criterion needs replacing before anyone runs it.
 
 (The 2,897 reproduces that note's 2,894 for a different commit; the count is
 objdump mnemonic lines between the symbol and the next blank line.)
@@ -316,6 +384,43 @@ cannot take, and the constant is rebuilt on every execution.
 against 32 and named it. This is the "cache that lies" shape: the program
 answers correctly and pays for it forever.
 
+## Recommendation: revert the code, keep the record
+
+**Revert `d6aec7d38`.** Not because the fusion is wrong -- it is measured,
+sound and worth 35 instructions an op -- but because **every shape of this
+change regresses `rexxcps`, and the fusion cannot pay for it there.**
+
+* one arm +0.2604%, two arms +1.6641%, four arms +2.3164%, all with nothing
+  material fused on that axis;
+* `rexxcps` fuses **109 executed ops of 121,425,289**, so there is nothing to
+  set against the cost;
+* even granting item 2's 1,740,000 executions, 60.9M recovered against a 432M
+  cost leaves about 2% owed -- and that is arithmetic on somebody else's figure.
+
+**There is no cheaper subset to retreat to.** The cheapest single arm any axis
+needs already costs `rexxcps` a quarter of a percent; the pair `varlookup` and
+`arith` actually need costs it 1.66%; and the two-arm build is *worse* than the
+four-arm one on the other three axes, so shrinking the commit does not trade
+along a line anyone can follow.
+
+**And hunting for a subset that spares `rexxcps` is not engineering here.**
+The sign of the codegen effect is not predictable from arm count, from code
+size or from the frame, and each candidate costs a build plus four callgrind
+runs. That is a brute-force search over a surface these measurements say nobody
+can reason about.
+
+**What survives the revert is the part that was asked for.** The price of a
+removed op is 35, the driver's sensitivity to its own size is measured at three
+code sizes and on four programs, and `d6aec7d38` stays in history as the
+instrument that produced both.
+
+**What it says about the direction.** The fusion price is good, so "fewer ops
+per clause" is sound; the part that does not work is *how* one gets there.
+Growing a single 3,400-instruction dispatch function is the expensive step, so
+the two candidates worth a plan are a dispatch shape where each op's code is
+its own function rather than another arm of one, and item 2, which removes ops
+from the stream without adding a line of driver code.
+
 ## Concerns
 
 1. **This commit makes `rexxcps` 2.32% slower**, and `rexxcps` is the axis
@@ -324,18 +429,17 @@ answers correctly and pays for it forever.
    `arith`'s 0.17%. **That is a decision, not a defect, and it is not mine to
    take** -- the commit is the instrument the brief asked for, and it can be
    reverted with the measurement kept.
-2. **The tax is super-linear and that is the finding that bears on a
-   superinstruction set.** One arm is +112 driver instructions and +0.26% on
-   `rexxcps`; four are +546 and +2.32%. 4.9x the code, 8.9x the cost. A fixed
-   set of ten shapes is not ten times one arm's price, it is more, and nothing
-   here says where it stops. **Two points do not fix a curve** -- a build at two
-   or three arms would.
+2. **Three points now, and they do not lie on a line or a cliff.** +112
+   driver instructions costs `rexxcps` 0.26%, +364 costs 1.66%, +546 costs
+   2.32%; per added instruction 0.00233%, 0.00457%, 0.00424%. And on
+   `emptyloop` the same ladder runs +0.26% then **-1.03%**. Nothing here
+   supports extrapolating to a fixed set of ten shapes in either direction.
 3. **Item 2 is the prerequisite, not the alternative.** Ten further `Store` ops
    in `rexxcps`' hot body are constant-fed with exactly one `Op::TraceLiteral`
    in between, and those echoes exist only because `trace_flow::analyse`
    answers `Unknown` for a body containing two `trace value <expr>` clauses. Get
    those ops out of the stream and the ten sites become strictly adjacent and
-   fuse with **no new arm at all** -- the tax is already paid. At 1,740,000
+   fuse with **no new arm at all** -- the cost is already paid. At 1,740,000
    executions and 35 Ir each that is 60.9M, 0.30%, against the 2.32% already
    spent. **That arithmetic rests on the 1,740,000, which is somebody else's
    measurement and was not re-derived here.**
@@ -350,11 +454,11 @@ answers correctly and pays for it forever.
    they would cost more than the four already added, and on the four axes
    measured here they would remove nothing, because no hot clause on any of
    them ends in either.
-6. **The one-arm `rexxcps` reading is two rounds of `summary:` (20,233,461,832
-   and 20,233,551,971, 0.00045% apart) and one intact dump**, because a stale
-   background script wrote the same filename and truncated the first round's
-   dump after its status line was recorded. The ex-libc figure above is from
-   the surviving dump.
+6. **A stale background script wrote the same dump filenames as a later one**
+   and truncated a round's output after its status line had been recorded. The
+   one-arm `rexxcps` figure above is the mean of the two dumps that survived
+   (20,233,551,971 and 20,234,892,332); a third reading, 20,233,461,832, has a
+   status line and no dump. All three are within 0.0071%.
 
 ## Scratch
 
@@ -365,6 +469,6 @@ under `cg/` and the discarded out-of-line variant's under `cg-outline-variant/`,
 binary and its `objdump` listing, the fifteen probes with their
 three-descriptor outputs, and `prediction-arith.txt`.
 
-The five temporary worktrees were removed and `git worktree list` is back to
-what it was; `variant-patches/` holds the diff against `d6aec7d38` that makes
-each of `noop`, `loadonly` and `onearm`.
+The temporary worktrees were removed and `git worktree list` is back to what it
+was; `variant-patches/` holds the diff against `d6aec7d38` that makes each of
+`noop`, `loadonly`, `onearm` and `twoarm`.
