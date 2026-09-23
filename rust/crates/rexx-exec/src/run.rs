@@ -29,7 +29,9 @@ use crate::{
     ActiveCondition, CallContext, Code, Failure, InstalledRoutine, Interp, Loud, Novalue,
     PendingTrap, VarHome,
 };
-use rexx_core::{BehaviourId, Body, Decoded, FrameId, ObjRef, ScopePools, SlotFrame, VarRefHome};
+use rexx_core::{
+    BehaviourId, Body, Decoded, FrameId, ObjRef, RegFrame, ScopePools, SlotFrame, VarRefHome,
+};
 use rexx_num::{ArithError, CompareOp, Form, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     CodeBody, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Forward,
@@ -6305,7 +6307,7 @@ impl Interp {
         source: Option<&ProgramSource>,
         values: LoopHeaderValues,
         op_body: u32,
-        registers: FrameId,
+        registers: RegFrame<'_>,
     ) -> Result<FlatStart, Failure> {
         // SPIKE: the switch is a run-time one so that both arms are the same
         // binary -- the per-op checks this spike adds to the driver's loop are
@@ -6377,7 +6379,7 @@ impl Interp {
         if let LoopState::OverItems { snapshot, .. } = &state
             && let Some(register) = over_register
         {
-            self.roots.set_temp(registers, register as usize, *snapshot);
+            registers.set(register, *snapshot);
         }
         let end_index = body
             .end
@@ -7641,7 +7643,10 @@ impl Interp {
                 return Err(Loud::chunk_refused().into());
             }
         };
-        let registers = self.roots.reserve_temps(chunk.registers as usize);
+        // Truncated on the way out, so a temp this chunk leaks does not outlive it.
+        let temps = self.roots.push_frame();
+        let arena = self.roots.frames();
+        let registers = arena.reserve(chunk.registers);
         let ran = self.run_bounded(
             &code,
             0,
@@ -7652,9 +7657,10 @@ impl Interp {
                 registers,
             },
         );
-        // Truncated on both paths, exactly as `run_chunk` does: a region left
+        // Released on both paths, exactly as `run_chunk` does: a frame left
         // behind would keep its registers rooted for the rest of the run.
-        self.roots.pop_frame(registers);
+        arena.release(registers);
+        self.roots.pop_frame(temps);
         let flow = match ran {
             Ok(flow) => flow,
             Err(failure) => {

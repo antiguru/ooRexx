@@ -35,6 +35,8 @@
 
 use std::time::Duration;
 
+use rexx_core::FrameBlock;
+
 /// What a command line supplied to the program being run.
 pub struct Invocation {
     /// The one argument string, or `None` when the command line supplied no
@@ -79,6 +81,8 @@ pub struct Invocation {
     /// string says where the second word ended. The two are independent
     /// afterwards -- appending to `.SYSCARGS` leaves `ARG(1)` unchanged.
     words: Vec<Vec<u8>>,
+    /// The register frame arena's block size.
+    frame_block: FrameBlock,
 }
 
 /// What an embedding that owns real descriptors hands the interpreter so that
@@ -128,6 +132,7 @@ impl Invocation {
             standard_transient: [true; 3],
             sinks: None,
             words: Vec::new(),
+            frame_block: FrameBlock::DEFAULT,
         }
     }
 
@@ -190,6 +195,15 @@ impl Invocation {
         }
     }
 
+    /// The same invocation, carving register frames from blocks of
+    /// `frame_block`. The size is validated when the `FrameBlock` is built.
+    pub fn with_frame_block(self, frame_block: FrameBlock) -> Invocation {
+        Invocation {
+            frame_block,
+            ..self
+        }
+    }
+
     /// The argument string, if there is one, where `.input` reads from, how
     /// long the run may take, and the directory and environment it runs
     /// against -- each `None` when the process's own is to be taken.
@@ -203,6 +217,7 @@ impl Invocation {
             standard_transient: self.standard_transient,
             sinks: self.sinks,
             words: self.words,
+            frame_block: self.frame_block,
         }
     }
 }
@@ -218,6 +233,7 @@ pub(crate) struct InvocationParts {
     pub(crate) standard_transient: [bool; 3],
     pub(crate) sinks: Option<Sinks>,
     pub(crate) words: Vec<Vec<u8>>,
+    pub(crate) frame_block: FrameBlock,
 }
 
 /// The one argument string a list of command-line words becomes, or `None`

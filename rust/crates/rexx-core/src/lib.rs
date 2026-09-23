@@ -13,7 +13,7 @@
 
 mod behaviour;
 mod body;
-// **The one module in this workspace granted an `unsafe` exception** (Moritz,
+// **Granted an `unsafe` exception** (Moritz,
 // 2026-08-20). The workspace lint is `deny` rather than `forbid` so that this
 // line can exist at all -- the root `Cargo.toml` has why, and why this
 // attribute is now the record of the grant rather than a lint level somewhere.
@@ -22,6 +22,7 @@ mod body;
 // `tests/unsafe_sites.rs` is what stops a second site appearing quietly.
 #[allow(unsafe_code)]
 mod bytes;
+mod frame;
 mod handle;
 mod heap;
 mod roots;
@@ -33,6 +34,7 @@ pub use body::{
     StandardStream, StreamState, StreamStatus, VarRef, VarRefHome, pointer_to_string,
 };
 pub use bytes::{Bytes, INLINE_BYTES};
+pub use frame::{FrameArena, FrameBlock, RegFrame};
 pub use handle::{
     Decoded, GENERATION_MAX, INLINE_TEXT, InlineText, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN,
 };

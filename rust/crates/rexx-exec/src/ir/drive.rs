@@ -12,7 +12,7 @@
 //! The driver: what runs a compiled [`Chunk`] for the activation on top of
 //! the stack.
 
-use rexx_core::{Decoded, FrameId, ObjRef};
+use rexx_core::{Decoded, ObjRef, RegFrame};
 use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, ProgramSource, SymbolId};
 
 use super::{BodyEngine, Chunk, ConditionKeyword, Op};
@@ -199,11 +199,11 @@ impl Interp {
     /// One [`crate::ir::Op::PushArg`]: the register's value, or an omitted
     /// position, onto the argument stack.
     #[inline(never)]
-    fn push_call_arg(&mut self, registers: FrameId, src: u16) {
+    fn push_call_arg(&mut self, registers: RegFrame<'_>, src: u16) {
         let value = if src == Op::ARG_OMITTED {
             None
         } else {
-            Some(self.roots.temp_at(registers, src as usize))
+            Some(registers.get(src))
         };
         self.value_buffer.push(value);
     }
@@ -211,13 +211,13 @@ impl Interp {
     /// One [`crate::ir::Op::TraceArgument`]'s `>A>` line, its gate already
     /// answered by the caller.
     #[inline(never)]
-    fn trace_call_arg(&mut self, registers: FrameId, src: u16) {
+    fn trace_call_arg(&mut self, registers: RegFrame<'_>, src: u16) {
         let indent = self.clause_state.current_value_indent;
         if src == Op::ARG_OMITTED {
             self.trace_argument(indent, b"");
             return;
         }
-        let value = self.roots.temp_at(registers, src as usize);
+        let value = registers.get(src);
         if let Some(rendered) = self.intermediate_text(value) {
             self.trace_argument(indent, &rendered);
         }
@@ -362,23 +362,27 @@ impl Interp {
         #[cfg(test)]
         count_run_chunk_entry();
 
-        let registers = self.roots.reserve_temps(chunk.registers as usize);
-        // Truncated on both paths rather than only on `Ok`: the loud and
+        // Truncated on the way out, so a temp this chunk leaks does not outlive it.
+        let temps = self.roots.push_frame();
+        let arena = self.roots.frames();
+        let registers = arena.reserve(chunk.registers);
+        // Released on both paths rather than only on `Ok`: the loud and
         // raised paths leave the activation for `Interp::run` and
-        // `resolve_and_run_call` to tear down, and a region left behind
+        // `resolve_and_run_call` to tear down, and a frame left behind
         // would keep its registers rooted for the rest of the run.
         let ended = self.run_chunk_clauses(code, chunk, registers, source);
-        self.roots.pop_frame(registers);
+        arena.release(registers);
+        self.roots.pop_frame(temps);
         ended
     }
 
-    /// The body of `run_chunk` past the register region, split out so the
+    /// The body of `run_chunk` past the register frame, split out so the
     /// truncation above covers every way this returns.
     fn run_chunk_clauses(
         &mut self,
         code: &Code<'_>,
         chunk: &Chunk,
-        registers: FrameId,
+        registers: RegFrame<'_>,
         source: Option<&ProgramSource>,
     ) -> Result<Ended, Failure> {
         let len = code.body.instructions.len();
@@ -427,7 +431,7 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         chunk: &Chunk,
-        registers: FrameId,
+        registers: RegFrame<'_>,
         start: usize,
         end: usize,
         source: Option<&ProgramSource>,
@@ -452,7 +456,7 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         chunk: &Chunk,
-        registers: FrameId,
+        registers: RegFrame<'_>,
         at: u32,
         start: usize,
         end: usize,
@@ -486,7 +490,7 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         chunk: &Chunk,
-        registers: FrameId,
+        registers: RegFrame<'_>,
         at: u32,
         start: usize,
         end: usize,
@@ -744,7 +748,7 @@ impl Interp {
                                             Ok(value) => value,
                                             Err(failure) => break 'cold Err(failure),
                                         };
-                                        self.roots.set_temp(registers, *dst as usize, value);
+                                        registers.set(*dst, value);
                                     }
                                     // **Every one of these bodies is behind
                                     // a call.** What they do is small, but
@@ -793,11 +797,7 @@ impl Interp {
                                             code, chunk, clause, *slot, *path, *site, *argc,
                                         ) {
                                             Ok(value) => {
-                                                self.roots.set_temp(
-                                                    registers,
-                                                    *dst as usize,
-                                                    value,
-                                                );
+                                                registers.set(*dst, value);
                                             }
                                             Err(failure) => break 'cold Err(failure),
                                         }
@@ -832,7 +832,7 @@ impl Interp {
                                         else {
                                             break 'cold Err(Loud::call_op_off_its_node().into());
                                         };
-                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let value = registers.get(*src);
                                         self.trace_intermediate(code, expr, value);
                                     }
                                     Op::EvalExpr { index, slot, dst } => {
@@ -849,7 +849,7 @@ impl Interp {
                                             Ok(value) => value,
                                             Err(failure) => break 'cold Err(failure),
                                         };
-                                        self.roots.set_temp(registers, *dst as usize, value);
+                                        registers.set(*dst, value);
                                     }
                                     // **The phase's first native expression op**:
                                     // the literal's value, built from the chunk's
@@ -893,7 +893,7 @@ impl Interp {
                                             );
                                             chunk.remember_konst(*konst, value);
                                         }
-                                        self.roots.set_temp(registers, *dst as usize, value);
+                                        registers.set(*dst, value);
                                     }
                                     // A constant symbol's own value: its upcased
                                     // spelling, built through the same
@@ -929,7 +929,7 @@ impl Interp {
                                             );
                                             chunk.remember_symbol(*symbol, value);
                                         }
-                                        self.roots.set_temp(registers, *dst as usize, value);
+                                        registers.set(*dst, value);
                                     }
                                     // The `>L>` line of one literal. **Its own op**,
                                     // because the load emits nothing and `eval.rs`
@@ -948,8 +948,8 @@ impl Interp {
                                         // same condition, so this changes no output;
                                         // what it changes is that an untraced run
                                         // does not reach for a value it is not going
-                                        // to print, and `temp_at` is a bounds-check
-                                        // and a load per echo op in a stream that
+                                        // to print, and a register read is a load
+                                        // per echo op in a stream that
                                         // carries one behind every literal, read
                                         // and operator. Measured over this arm and
                                         // the other value-echo arms carrying the
@@ -961,7 +961,7 @@ impl Interp {
                                         if !self.tracing_intermediates() {
                                             continue;
                                         }
-                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let value = registers.get(*src);
                                         self.echo_literal(value);
                                     }
                                     // **The second native expression op**: one bare
@@ -1029,7 +1029,7 @@ impl Interp {
                                                 }
                                             }
                                         };
-                                        self.roots.set_temp(registers, *dst as usize, value);
+                                        registers.set(*dst, value);
                                     }
                                     // The `>V>` line one read owes, and the `>C>`
                                     // line in front of it when the read is a
@@ -1049,7 +1049,7 @@ impl Interp {
                                         if !self.tracing_intermediates() {
                                             continue;
                                         }
-                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let value = registers.get(*src);
                                         self.echo_symbol_read(code, *symbol, value);
                                     }
                                     // **A native expression op**: one arithmetic
@@ -1083,8 +1083,8 @@ impl Interp {
                                         // **Both read before either is written**,
                                         // which is what makes `lhs == dst` -- the
                                         // shape a chain compiles to -- safe.
-                                        let left = self.roots.temp_at(registers, *lhs as usize);
-                                        let right = self.roots.temp_at(registers, *rhs as usize);
+                                        let left = registers.get(*lhs);
+                                        let right = registers.get(*rhs);
                                         // The operands are rooted by the registers
                                         // they came from, which is what
                                         // `arith_general` requires of a caller and
@@ -1117,7 +1117,7 @@ impl Interp {
                                                 Err(failure) => break 'cold Err(failure),
                                             },
                                         };
-                                        self.roots.set_temp(registers, *dst as usize, value);
+                                        registers.set(*dst, value);
                                     }
                                     // **Every other binary operator**: one
                                     // concatenation, comparison or logical
@@ -1144,8 +1144,8 @@ impl Interp {
                                         // **Both read before either is written**,
                                         // which is what makes `lhs == dst` -- the
                                         // shape a chain compiles to -- safe.
-                                        let left = self.roots.temp_at(registers, *lhs as usize);
-                                        let right = self.roots.temp_at(registers, *rhs as usize);
+                                        let left = registers.get(*lhs);
+                                        let right = registers.get(*rhs);
                                         // The operands are rooted by the registers
                                         // they came from, which is what
                                         // `apply_binary` requires of a caller and
@@ -1159,7 +1159,7 @@ impl Interp {
                                             Ok(value) => value,
                                             Err(failure) => break 'cold Err(failure),
                                         };
-                                        self.roots.set_temp(registers, *dst as usize, value);
+                                        registers.set(*dst, value);
                                     }
                                     // The `>O>` line one operator owes. **Its own
                                     // op**, because the operation emits nothing and
@@ -1178,7 +1178,7 @@ impl Interp {
                                         if !self.tracing_intermediates() {
                                             continue;
                                         }
-                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let value = registers.get(*src);
                                         self.echo_operator(*op, value);
                                     }
                                     // **A prefix operator**: `+`, `-` or `\`
@@ -1205,7 +1205,7 @@ impl Interp {
                                         // written**, which is what makes `src ==
                                         // dst` -- the shape a prefix compiles to --
                                         // safe.
-                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let value = registers.get(*src);
                                         // The operand is rooted by the register it
                                         // came from, which is what `apply_prefix`
                                         // requires of a caller and is why no frame
@@ -1218,7 +1218,7 @@ impl Interp {
                                             Ok(value) => value,
                                             Err(failure) => break 'cold Err(failure),
                                         };
-                                        self.roots.set_temp(registers, *dst as usize, value);
+                                        registers.set(*dst, value);
                                     }
                                     // The `>P>` line one prefix operator owes.
                                     // **Its own op**, for the reason
@@ -1236,7 +1236,7 @@ impl Interp {
                                         if !self.tracing_intermediates() {
                                             continue;
                                         }
-                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let value = registers.get(*src);
                                         self.echo_prefix_op(*op, value);
                                     }
                                     // The write, through `Interp::assign_evaluated`
@@ -1277,7 +1277,7 @@ impl Interp {
                                             "a compiled write names a slot this body's plan does not \
                                          give its target"
                                         );
-                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let value = registers.get(*src);
                                         // **A simple target with a resolved slot
                                         // is a slot write**, taken here rather
                                         // than through `assign_evaluated`, which
@@ -1330,9 +1330,7 @@ impl Interp {
                                                     chunk.holds_register(*register),
                                                     "op reads register {register} outside the region                                                  the chunk reserved"
                                                 );
-                                                let value = self
-                                                    .roots
-                                                    .temp_at(registers, *register as usize);
+                                                let value = registers.get(*register);
                                                 match self.signal_to_value(value) {
                                                     Ok(flow) => flow,
                                                     Err(failure) => break 'cold Err(failure),
@@ -1375,7 +1373,7 @@ impl Interp {
                                             "op reads register {register} outside the region the \
                                              chunk reserved"
                                         );
-                                        self.roots.temp_at(registers, register as usize)
+                                        registers.get(register)
                                     });
                                         if let Err(failure) =
                                             self.exec_parse(code, parse, evaluated)
@@ -1401,7 +1399,7 @@ impl Interp {
                                             "op reads register {register} outside the region the \
                                              chunk reserved"
                                         );
-                                        self.roots.temp_at(registers, register as usize)
+                                        registers.get(register)
                                     });
                                         if let Err(failure) = self.say_evaluated(value) {
                                             break 'cold Err(failure);
@@ -1452,7 +1450,7 @@ impl Interp {
                                             "op reads register {register} outside the region the \
                                              chunk reserved"
                                         );
-                                        self.roots.temp_at(registers, register as usize)
+                                        registers.get(register)
                                     });
                                         // `break 'cold Err` rather than `?`,
                                         // which is what puts this failure
@@ -1511,7 +1509,7 @@ impl Interp {
                                             "op reads register {register} outside the region the \
                                              chunk reserved"
                                         );
-                                        self.roots.temp_at(registers, register as usize)
+                                        registers.get(register)
                                     });
                                         if let Err(failure) = self.queue_evaluated(value, *keyword)
                                         {
@@ -1701,7 +1699,7 @@ impl Interp {
                                             "a ConditionJump op's keyword does not name the clause whose \
                                          condition it is validating"
                                         );
-                                        let value = self.roots.temp_at(registers, *reg as usize);
+                                        let value = registers.get(*reg);
                                         // Read live rather than compiled in, for
                                         // the reason `eval_if_condition` reads it
                                         // live: a nested activation moves it.
@@ -1768,9 +1766,7 @@ impl Interp {
                                                     "op reads register {register} outside the region \
                                                  the chunk reserved"
                                                 );
-                                                let value = self
-                                                    .roots
-                                                    .temp_at(registers, *register as usize);
+                                                let value = registers.get(*register);
                                                 Some(self.to_text(value).to_vec())
                                             }
                                             None => None,
@@ -1792,7 +1788,7 @@ impl Interp {
                                         // as an `IF`'s condition is.
                                         let value = ObjRef::small_int(i64::from(holds))
                                             .unwrap_or(ObjRef::NIL);
-                                        self.roots.set_temp(registers, *dst as usize, value);
+                                        registers.set(*dst, value);
                                     }
                                     // The `>K>` line of one header value. **The
                                     // emission is its own op**, which is what lets
@@ -1806,7 +1802,7 @@ impl Interp {
                                             "op reads register {src} outside the region the chunk \
                                          reserved"
                                         );
-                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let value = registers.get(*src);
                                         self.echo_header_value(*role, value);
                                     }
                                     // One header value's own validation, in front of
@@ -1819,7 +1815,7 @@ impl Interp {
                                             "op reads register {src} outside the region the chunk \
                                          reserved"
                                         );
-                                        let value = self.roots.temp_at(registers, *src as usize);
+                                        let value = registers.get(*src);
                                         let values =
                                             header.get_or_insert_with(LoopHeaderValues::default);
                                         if let Err(failure) =
@@ -1992,7 +1988,7 @@ impl Interp {
                             chunk.holds_register(register),
                             "op reads register {register} outside the region the chunk reserved"
                         );
-                        self.roots.temp_at(registers, register as usize)
+                        registers.get(register)
                     });
                     debug_assert!(
                         code.body.instructions.get(*index as usize).is_some(),
@@ -2303,8 +2299,8 @@ impl Interp {
     }
 
     /// Whether register `reg` holds the Rexx logical value `1`.
-    fn register_holds(&self, registers: FrameId, reg: u16) -> Result<bool, Failure> {
-        let value = self.roots.temp_at(registers, reg as usize);
+    fn register_holds(&self, registers: RegFrame<'_>, reg: u16) -> Result<bool, Failure> {
+        let value = registers.get(reg);
         // The two handles a logical arrives in, compared as integers: the
         // constant a comparison answers with, and the small int
         // `Op::WhenTest` writes back for everything else.

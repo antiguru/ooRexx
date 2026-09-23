@@ -42,6 +42,7 @@ use queue::Queue;
 // reads from.
 mod invocation;
 pub use invocation::{Invocation, ProgramInput, Sinks, join_command_line};
+pub use rexx_core::FrameBlock;
 
 // `.input`: one line position, shared by every construct that reads a line,
 // and the queue-first rule `PULL` follows on top of it.
@@ -5964,6 +5965,7 @@ fn execute(
     // "no argument" from "one empty argument" apart.
     interp.call_context.name = path.as_bytes().to_vec();
     let parts = invocation.into_parts();
+    interp.roots.set_frame_block(parts.frame_block);
     let (argument, deadline) = (parts.argument, parts.deadline);
     interp.input = Input::new(parts.input);
     interp.standard_transient = parts.standard_transient;

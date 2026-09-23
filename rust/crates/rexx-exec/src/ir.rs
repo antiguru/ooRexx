@@ -14,7 +14,7 @@
 
 use std::cell::Cell;
 
-use rexx_core::{FrameId, ObjRef};
+use rexx_core::{ObjRef, RegFrame};
 use rexx_parse::{Operator, PrefixOp, SymbolId};
 
 use crate::error::Raised;
@@ -28,6 +28,7 @@ use crate::trace::ChunkTrace;
 mod compile;
 pub(crate) mod drive;
 pub(crate) mod trace_flow;
+mod valid;
 pub(crate) use compile::compile;
 pub(crate) use golden::render_annotated;
 
@@ -293,11 +294,11 @@ impl ConditionKeyword {
 #[derive(Clone, Copy)]
 pub(crate) enum BodyEngine<'a> {
     /// The clauses are stepped from `chunk`, whose `op_of` indexes exactly the
-    /// body `Code::body` names, with `registers` naming the region
+    /// body `Code::body` names, with `registers` naming the frame
     /// `Interp::run_chunk` reserved for it.
     Chunk {
         chunk: &'a Chunk,
-        registers: FrameId,
+        registers: RegFrame<'a>,
     },
 }
 
@@ -556,7 +557,7 @@ pub(crate) struct Chunk {
     /// instruction compiles, nothing refuses" is a claim about instructions,
     /// not about promotion, so an instruction no task has promoted still gets
     /// an op.
-    ops: Vec<Op>,
+    ops: valid::ValidOps,
     /// Instruction index -> **the op control resumes at** when it arrives at
     /// that instruction. One entry per instruction, in order, plus one final
     /// entry at `ops.len()`: `run_bounded`'s absorption guard is inclusive,
@@ -674,7 +675,7 @@ impl Chunk {
         }
     }
 
-    /// Whether `reg` is inside the region `run_chunk` reserves for this
+    /// Whether `reg` is inside the frame `run_chunk` reserves for this
     /// chunk.
     fn holds_register(&self, reg: u16) -> bool {
         reg < self.registers

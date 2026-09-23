@@ -55,55 +55,71 @@ fn a_register_slot_frame_makes_the_variable_frame_beneath_it_ungrowable() {
     roots.grow_slots(variables);
 }
 
-/// The chosen design: registers as an indexable temporaries region, which
-/// the variable frame beneath is free to grow through.
+/// Registers live in the frame arena, so the variable frame beneath them is
+/// free to grow.
 #[test]
-fn registers_in_the_temps_region_leave_the_variable_frame_growable() {
+fn registers_leave_the_variable_frame_growable() {
     let mut roots = RootSet::new();
     let variables = roots.push_slots(2);
-    let registers = roots.reserve_temps(4);
+    let arena = roots.frames();
+    let registers = arena.reserve(4);
     let live = ObjRef::heap(7, 0);
-    roots.set_temp(registers, 3, live);
+    registers.set(3, live);
 
-    // The growth the rejected design could not survive.
     let grown = roots.grow_slots(variables);
     roots.set_frame_slot(variables, grown, ObjRef::heap(8, 0));
 
-    assert_eq!(roots.temp_at(registers, 3), live);
+    assert_eq!(registers.get(3), live);
     assert!(roots.iter().any(|r| r == live));
+    arena.release(registers);
 }
 
-/// A register is a root for as long as its region is open, and stops being
-/// one when the region closes -- the property that makes intermediates safe
-/// to hold in registers at all.
+/// A register is a root for as long as its frame is reserved, and stops being
+/// one when the frame is released -- the property that makes intermediates
+/// safe to hold in registers at all.
 #[test]
-fn registers_are_roots_until_their_region_is_truncated() {
-    let mut roots = RootSet::new();
-    let outer = roots.push_frame();
-    let registers = roots.reserve_temps(2);
+fn registers_are_roots_until_their_frame_is_released() {
+    let roots = RootSet::new();
+    let arena = roots.frames();
+    let registers = arena.reserve(2);
     let held = ObjRef::heap(9, 0);
-    roots.set_temp(registers, 1, held);
+    registers.set(1, held);
     assert!(roots.iter().any(|r| r == held));
-    roots.pop_frame(outer);
+    arena.release(registers);
     assert!(!roots.iter().any(|r| r == held));
 }
 
-/// Register regions nest, which is what a fragment chunk compiled and run
+/// Register frames nest, which is what a fragment chunk compiled and run
 /// inside an already-running chunk needs.
 #[test]
-fn a_nested_register_region_leaves_the_enclosing_one_intact() {
-    let mut roots = RootSet::new();
-    let outer_registers = roots.reserve_temps(3);
+fn a_nested_register_frame_leaves_the_enclosing_one_intact() {
+    let roots = RootSet::new();
+    let arena = roots.frames();
+    let outer = arena.reserve(3);
     let outer_value = ObjRef::heap(11, 0);
-    roots.set_temp(outer_registers, 2, outer_value);
+    outer.set(2, outer_value);
 
-    let fragment = roots.push_frame();
-    let inner_registers = roots.reserve_temps(2);
-    roots.set_temp(inner_registers, 0, ObjRef::heap(12, 0));
-    assert_eq!(roots.temp_at(outer_registers, 2), outer_value);
-    roots.pop_frame(fragment);
+    let inner = arena.reserve(2);
+    inner.set(0, ObjRef::heap(12, 0));
+    assert_eq!(outer.get(2), outer_value);
+    arena.release(inner);
 
-    assert_eq!(roots.temp_at(outer_registers, 2), outer_value);
+    assert_eq!(outer.get(2), outer_value);
+    assert!(roots.iter().any(|r| r == outer_value));
+    assert!(!roots.iter().any(|r| r == ObjRef::heap(12, 0)));
+    arena.release(outer);
+}
+
+/// The block size is fixed before the first frame; afterwards it is refused.
+#[test]
+#[should_panic(expected = "the frame block size is set before the first frame")]
+fn the_frame_block_size_cannot_change_under_a_reserved_frame() {
+    let mut roots = RootSet::new();
+    roots.set_frame_block(rexx_core::FrameBlock::new(8).expect("in range"));
+    let arena = roots.frames();
+    arena.release(arena.reserve(1));
+    drop(arena);
+    roots.set_frame_block(rexx_core::FrameBlock::DEFAULT);
 }
 
 /// A promoted variable keeps answering by name, through the redirect the

@@ -1137,13 +1137,14 @@ pub(crate) fn compile(
             _ => None,
         })
         .max();
+    let registers = registers.high_water();
     Ok(Chunk {
         trace,
         #[cfg(debug_assertions)]
         settings,
-        ops,
+        ops: super::valid::ValidOps::new(ops, registers)?,
         op_of,
-        registers: registers.high_water(),
+        registers,
         positions: clause_positions(body, plan),
         interned: vec![std::cell::Cell::new(rexx_core::ObjRef::NIL); consts.len()],
         interned_symbols: vec![

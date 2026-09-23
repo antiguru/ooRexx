@@ -9,7 +9,10 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
+use std::rc::Rc;
+
 use crate::ObjRef;
+use crate::frame::{FrameArena, FrameBlock};
 
 /// A position in the temporary stack that a frame will unwind to.
 #[derive(Copy, Clone, Debug)]
@@ -52,6 +55,8 @@ impl SlotRef {
 pub struct RootSet {
     globals: Vec<(String, ObjRef)>,
     temps: Vec<ObjRef>,
+    /// The driver's register frames.
+    frames: Rc<FrameArena>,
     /// Local-variable slots for every currently active activation, flattened
     /// into one vector: each `SlotFrame` owns a contiguous range starting at
     /// its `start`. `None` is an unassigned (or `DROP`ped) variable, not a
@@ -90,6 +95,7 @@ impl RootSet {
         RootSet {
             globals: Vec::new(),
             temps: Vec::new(),
+            frames: Rc::new(FrameArena::new(FrameBlock::DEFAULT)),
             slots: Vec::new(),
             aliases: Vec::new(),
             alias_count: 0,
@@ -152,24 +158,23 @@ impl RootSet {
         self.temps.push(value);
     }
 
-    /// Opens a region of `count` indexable temporaries, all [`ObjRef::NIL`],
-    /// and returns the watermark below them.
-    pub fn reserve_temps(&mut self, count: usize) -> FrameId {
-        let frame = FrameId(self.temps.len());
-        self.temps.resize(self.temps.len() + count, ObjRef::NIL);
-        frame
+    /// The register frame arena, whose frames are roots while reserved. A
+    /// frame borrows the handle this answers, not `self`.
+    pub fn frames(&self) -> Rc<FrameArena> {
+        Rc::clone(&self.frames)
     }
 
-    /// Reads register `index` of the region opened at `frame`.
-    pub fn temp_at(&self, frame: FrameId, index: usize) -> ObjRef {
-        assert!(frame.0 + index < self.temps.len());
-        self.temps[frame.0 + index]
-    }
-
-    /// Writes register `index` of the region opened at `frame`.
-    pub fn set_temp(&mut self, frame: FrameId, index: usize, value: ObjRef) {
-        assert!(frame.0 + index < self.temps.len());
-        self.temps[frame.0 + index] = value;
+    /// Replaces the register frame arena with an empty one of `size`.
+    ///
+    /// # Panics
+    ///
+    /// If the current arena has ever reserved a frame or is held elsewhere.
+    pub fn set_frame_block(&mut self, size: FrameBlock) {
+        assert!(
+            self.frames.blocks() == 0 && Rc::strong_count(&self.frames) == 1,
+            "the frame block size is set before the first frame"
+        );
+        self.frames = Rc::new(FrameArena::new(size));
     }
 
     /// How many temporaries are currently rooted.
@@ -422,15 +427,16 @@ impl RootSet {
         index
     }
 
-    /// Yields globals, temps, and every assigned slot across every currently
-    /// active frame -- a popped frame's slots are already gone, truncated
-    /// out of `slots` by `pop_slots`, so nothing here needs to filter them
-    /// out again by frame.
+    /// Yields globals, temps, every live register, and every assigned slot
+    /// across every currently active frame -- a popped frame's slots are
+    /// already gone, truncated out of `slots` by `pop_slots`, so nothing here
+    /// needs to filter them out again by frame.
     pub fn iter(&self) -> impl Iterator<Item = ObjRef> + '_ {
         self.globals
             .iter()
             .map(|(_, v)| *v)
             .chain(self.temps.iter().copied())
+            .chain(self.frames.iter())
             .chain(self.slots.iter().filter_map(|s| *s))
             .chain(self.cells.iter().filter_map(|c| *c))
             .chain(self.parked.iter().flatten().flatten().copied())
