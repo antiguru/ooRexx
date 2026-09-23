@@ -509,11 +509,12 @@ impl Interp {
             return Err(Loud::chunk_map_too_short().into());
         };
         let depth = self.activation_depth();
-        // **SPIKE.** Whether the permission is still worth asking about. It is
-        // granted to this activation's first instruction and has to be cleared
-        // by the one after it; from there on `grant_procedure_permission` writes
-        // the same `false` over and over, once per clause, and this stops it.
+        // Whether the permission is still worth asking about. It is granted to
+        // this activation's first instruction and cleared by the one after it;
+        // the first clause that finds it spent hands the rest of the range to
+        // the instance that never asks.
         let mut granting = GRANTING;
+        let range_end = end;
         let mut pc = at;
         'ops: loop {
             // **A branch that runs out exactly at this range's own end.**
@@ -547,6 +548,11 @@ impl Interp {
             let op = &stream[pc as usize];
             let (flow, next) = match op {
                 Op::Clause { index, end } => {
+                    if GRANTING && !granting {
+                        return self.run_ops_from::<false>(
+                            code, chunk, registers, pc, start, range_end, source, base,
+                        );
+                    }
                     #[cfg(test)]
                     count_clause_op_entry();
                     // Where this region starts, which is where `=` at an
@@ -639,7 +645,17 @@ impl Interp {
                     // Taken on entry exactly as `step` takes it, because a
                     // promoted clause is a clause and the permission is spent
                     // by whichever clause the activation granted it to.
-                    self.region_procedure_permitted = std::mem::take(&mut self.procedure_permitted);
+                    // Outside a granting instance nothing has granted it, so
+                    // there is nothing to take.
+                    self.region_procedure_permitted = if GRANTING {
+                        std::mem::take(&mut self.procedure_permitted)
+                    } else {
+                        debug_assert!(
+                            !self.procedure_permitted,
+                            "a permission granted outside a granting instance"
+                        );
+                        false
+                    };
                     // The ops of this promoted clause, `[pc + 1, end)`, and
                     // where they leave the counter.
                     let ran: Result<RegionEnd, Failure> = 'cold: {
