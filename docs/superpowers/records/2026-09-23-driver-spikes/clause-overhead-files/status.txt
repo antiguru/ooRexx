@@ -1,0 +1,15 @@
+e9eb4f7a20df5fb20d2dfb0f49e28af3e309952b
+?? .claude/
+?? build
+?? oodocs
+?? ootest
+?? rust/target
+fmt exit=0
+clippy(cold) exit=0
+build release exit=0
+build release tests exit=0
+test release exit=0
+build debug exit=0
+build debug tests exit=0
+test debug exit=0
+finished

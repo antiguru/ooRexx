@@ -164,9 +164,20 @@ allocation lottery the round-1 README measured.
 
 ## 3. Gates
 
-Commit first, tree frozen until the status file says `finished`; statuses
-and tallies are in section 4 of this file's follow-up commit, written from the
-status file.
+Run on `e9eb4f7a2` (the status file's first line), committed first, tree
+frozen until `finished`; `gates.sh` and `tally.sh` in the files directory.
+Every status read unpiped from the status file:
+
+| gate | result |
+|---|---|
+| `cargo fmt --all --check` | exit 0 |
+| `cargo clippy --workspace --all-targets -- -D warnings`, fresh target dir | exit 0 |
+| `cargo build --workspace --all-targets --release`, outside the cap | exit 0 |
+| `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | exit 0; 135 binaries, 2663 passed / 0 failed / 4 ignored; `corpus_differential` 604 of 604 STRICT |
+| `cargo build --workspace --all-targets` (debug) | exit 0 |
+| `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0; 135 binaries, 2664 / 0 / 4; 604 of 604 STRICT |
+
+The tallies equal the base's; no test was added.
 
 ## 4. Concerns
 
