@@ -4871,7 +4871,7 @@ impl Interp {
         index: usize,
         instruction: &Instruction,
         source: Option<&ProgramSource>,
-        position: Option<crate::ir::ClausePosition>,
+        position: (bool, crate::ir::ClausePosition),
         counted: crate::clause::DeadlineCounted,
     ) -> SteppedClause {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
@@ -4913,17 +4913,12 @@ impl Interp {
         // `Otherwise`/`When`/`WhenCase`/`Label`) included, matching the
         // oracle's own `RexxInstruction::traceInstruction`, which every one
         // of those calls too from its own `execute`.
-        let shortcut = match position {
-            Some(position) if source.is_some() && self.clause_line_override.is_none() => {
-                Some(position)
-            }
-            _ => None,
-        };
-        let indent = match shortcut {
-            Some(position) => {
-                position.indent as usize + self.activation_indent + self.indent_offset
-            }
-            None => self.printed_indent(code, index),
+        let (tabled, position) = position;
+        let shortcut = tabled && source.is_some() && self.clause_line_override.is_none();
+        let indent = if shortcut {
+            position.indent as usize + self.activation_indent + self.indent_offset
+        } else {
+            self.printed_indent(code, index)
         };
         debug_assert_eq!(
             indent,
@@ -4945,11 +4940,11 @@ impl Interp {
         // the clause boundary are one operation (`clause.rs`), and the
         // `ClauseEntry` this hands back is what `leave_stepped_clause` spends
         // on the matching half.
-        let line = match shortcut {
-            Some(position) => position.line as usize,
-            None => self
-                .clause_line_at(code, index, instruction, source)
-                .unwrap_or_else(|| self.clause_state.line()),
+        let line = if shortcut {
+            position.line as usize
+        } else {
+            self.clause_line_at(code, index, instruction, source)
+                .unwrap_or_else(|| self.clause_state.line())
         };
         debug_assert_eq!(
             line,

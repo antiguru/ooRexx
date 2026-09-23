@@ -606,10 +606,14 @@ impl Chunk {
         self.op_of.get(index).copied()
     }
 
-    /// The clause at instruction index `index`'s own [`ClausePosition`], or
-    /// `None` where this chunk carries no table.
-    pub(crate) fn position_at(&self, index: usize) -> Option<ClausePosition> {
-        self.positions.get(index).copied()
+    /// The clause at instruction index `index`'s own [`ClausePosition`] and
+    /// `true`, or `false` and a zero position where this chunk carries no
+    /// table.
+    pub(crate) fn position_at(&self, index: usize) -> (bool, ClausePosition) {
+        match self.positions.get(index) {
+            Some(position) => (true, *position),
+            None => (false, ClausePosition { line: 0, indent: 0 }),
+        }
     }
 
     /// The ops of `[0, stop)`, or `None` when this stream is shorter than
