@@ -67,3 +67,37 @@ store-fusion builds' per-function rows were not checked for it.
 * `handler-table-files/`: the table-unused control and `#[inline(never)]`
   variant patches, and the per-round tables.
 * `pgo-train-heldout.sh`: the held-out training run.
+
+## Round 2, the same day
+
+Moritz granted `unsafe` for `rust/crates/rexx-core/src/frame.rs` and asked for
+a configurable block size and lifetimes instead of the spike's leak; and for a
+bake-off against a restored tree-walker, with no IR generic op ever coming
+back.
+
+**The frame arena landed** as `d5c4e8bb1` plus `74ae3266e`, fast-forwarded
+onto `plan/rust-rewrite`. `RootSet` holds an `Rc<FrameArena>`, the driver
+clones it into a local, and `RegFrame<'a>` borrows that local, so a frame
+cannot outlive its arena (a `compile_fail` doctest, shown live by making the
+handle `'static`) and blocks are freed on drop. The `Rc` costs 0.005% on
+`rexxcps`; the whole design is +0.050% against the leaking spike. Block size is
+`FrameBlock`, `1..=16,777,216` cells, refused outside that at construction,
+set through `Invocation::with_frame_block`; every block carries `u16::MAX + 1`
+guard cells, so the soundness argument stays inside `frame.rs` for every size.
+Against base: `rexxcps` -1.665%, `varlookup` -3.884%, `compound` -2.522%,
+`dispatch` -0.097%.
+
+`74ae3266e` fixed a soundness hole found in review of `d5c4e8bb1`: `release`
+is safe and checked only by a `debug_assert!`, so a double release in a
+release build wrapped the arena's `top` and the collector's walk built a slice
+past the block. Without the clamp the new release-mode test aborted on a wild
+read; with it the walk stays inside the block, at no measurable cost.
+
+**The tree-walker lost the bake-off** (`tree-walker.md`; branch
+`spike/tree-walker` `95d8cd7ed`, not merged). Restored behind a default-off
+cargo feature, 604 of 604 STRICT, feature-off `.text` identical to base. It is
++28.07% on `rexxcps` (1,195.55 against 933.50 instructions per clause) and
+slower on every axis. The gap is the recursive expression evaluator (+171.1
+per clause); clause stepping costs about the same in both engines, and alone
+is 2.5 times the oracle's whole machinery category. A tree shape is not the
+oracle's advantage.
