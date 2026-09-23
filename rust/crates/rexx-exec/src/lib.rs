@@ -5367,6 +5367,22 @@ impl Interp {
         }
     }
 
+    /// [`Interp::read_at`] for a slot already resolved, inlined into its
+    /// caller.
+    #[inline(always)]
+    pub(crate) fn read_slot(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        slot: usize,
+    ) -> (ObjRef, Novalue) {
+        let frame = self.activation().frame;
+        match self.variable(frame, slot) {
+            Some(value) => (value, Novalue::Set),
+            None => (self.derived_name(code, id), Novalue::Unset),
+        }
+    }
+
     /// What an uninitialised read yields: the derived name, which for a
     /// simple variable is its own upcased spelling.
     #[cold]

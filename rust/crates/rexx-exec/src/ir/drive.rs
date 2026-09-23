@@ -1029,8 +1029,12 @@ impl Interp {
                                         // and nothing else.
                                         let value = match read {
                                             SymbolRead::Simple => {
-                                                let (value, novalue) =
-                                                    self.read_at(code, *symbol, at);
+                                                let (value, novalue) = match at {
+                                                    Some(slot) => {
+                                                        self.read_slot(code, *symbol, slot)
+                                                    }
+                                                    None => self.read_at(code, *symbol, None),
+                                                };
                                                 if let Err(failure) =
                                                     self.novalue_check(novalue, value)
                                                 {
