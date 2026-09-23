@@ -1,0 +1,104 @@
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index bef4df3e9..9e43d9e82 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -470,8 +470,9 @@ impl Interp {
+         let base = self.frames.len();
+         #[cfg(test)]
+         record_frame_floor(base);
+-        let flow =
+-            self.run_ops_from::<GRANTING>(code, chunk, registers, at, start, end, source, base);
++        let flow = self
++            .run_ops_from::<GRANTING>(code, chunk, registers, at, start, end, source, base)
++            .map(|()| std::mem::replace(&mut self.escaped_flow, Flow::Next));
+         // A `Flow` that left through `settle` has already popped every frame
+         // this level opened, so this fires only where a `Failure` unwound past
+         // them -- the point the `Vec` local to this call used to be dropped at.
+@@ -482,6 +483,7 @@ impl Interp {
+     }
+ 
+     /// [`Interp::run_ops`]' body, with the frame stack's floor already taken.
++    /// The answer is left in [`Interp::escaped_flow`].
+     #[expect(
+         clippy::too_many_arguments,
+         reason = "one caller, and every argument is a value it already holds"
+@@ -496,7 +498,7 @@ impl Interp {
+         end: usize,
+         source: Option<&ProgramSource>,
+         base: usize,
+-    ) -> Result<Flow, Failure> {
++    ) -> Result<(), Failure> {
+         let Some(stop) = chunk.op_at(end) else {
+             return Err(Loud::chunk_map_too_short().into());
+         };
+@@ -527,8 +529,8 @@ impl Interp {
+                         pc = target;
+                         continue;
+                     }
+-                    BranchEnd::Escaped(other) => return Ok(other),
+-                    BranchEnd::None => return Ok(Flow::Next),
++                    BranchEnd::Escaped(other) => return Ok(self.escape(other)),
++                    BranchEnd::None => return Ok(self.escape(Flow::Next)),
+                 }
+             }
+             // **The tripwire for the op that replaced the check that used to
+@@ -2031,7 +2033,7 @@ impl Interp {
+                             pc = target;
+                             continue;
+                         }
+-                        BranchEnd::Escaped(other) => return Ok(other),
++                        BranchEnd::Escaped(other) => return Ok(self.escape(other)),
+                         // The scan's own landing place when the branch this
+                         // ends was never entered.
+                         BranchEnd::None => (Flow::Next, pc + 1),
+@@ -2097,11 +2099,17 @@ impl Interp {
+             );
+             match self.settle(code, chunk, base, flow, next, start, end, source)? {
+                 Settled::At(target) => pc = target,
+-                Settled::Escaped(other) => return Ok(other),
++                Settled::Escaped(other) => return Ok(self.escape(other)),
+             }
+         }
+     }
+ 
++    /// Leaves `flow` for [`Interp::run_ops`] to take.
++    #[inline(always)]
++    fn escape(&mut self, flow: Flow) {
++        self.escaped_flow = flow;
++    }
++
+     /// Drops every frame this level opened, and the loop state each open loop
+     /// frame stands for.
+     #[cold]
+diff --git i/rust/crates/rexx-exec/src/lib.rs w/rust/crates/rexx-exec/src/lib.rs
+index a1a0b2135..ffe2051f0 100644
+--- i/rust/crates/rexx-exec/src/lib.rs
++++ w/rust/crates/rexx-exec/src/lib.rs
+@@ -1956,6 +1956,10 @@ struct Interp {
+     /// What [`Interp::procedure_permitted`] held when the running
+     /// [`crate::ir::Op::Clause`] region opened, for the one op that needs it.
+     region_procedure_permitted: bool,
++    /// The `Flow` `run_ops_from` answers, handed to `run_ops` here so the
++    /// driver's own return fits in two registers. `Flow::Next` outside that
++    /// hand-off.
++    escaped_flow: run::Flow,
+     /// The call that entered the running activation: what `USE ARG` reads.
+     call_context: CallContext,
+     /// The in-process external data queue (I15): every line
+@@ -2445,6 +2449,7 @@ impl Interp {
+             stack_deepest: 0,
+             procedure_permitted: false,
+             region_procedure_permitted: false,
++            escaped_flow: run::Flow::Next,
+             call_context: CallContext::default(),
+             queue: Queue::new(),
+             // Nothing to read, which is what makes it impossible for a unit
+@@ -5612,6 +5617,8 @@ impl Interp {
+             stack_deepest: _,
+             procedure_permitted: _,
+             region_procedure_permitted: _,
++            // Written and taken with nothing between that can collect.
++            escaped_flow: _,
+             // A running call's arguments and receiver are the caller's temps;
+             // `CallContext::object_roots` is the parked case's other route.
+             call_context: _,

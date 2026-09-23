@@ -1,0 +1,12 @@
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index bef4df3e9..ee4a7624e 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -522,6 +522,7 @@ impl Interp {
+             // branch's own `Op::EndWhen` sits -- so the op is one past what
+             // this range drives and the boundary owes the close itself.
+             if pc >= stop {
++                std::hint::cold_path();
+                 match self.leave_ended_select_branch(code, chunk, base, pc, start, end, source)? {
+                     BranchEnd::At(target) => {
+                         pc = target;

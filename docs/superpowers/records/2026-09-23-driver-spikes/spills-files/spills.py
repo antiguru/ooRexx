@@ -10,7 +10,8 @@ off - F - 8P. The remark says what LLVM put there: `Spill` (a register-allocator
 slot), `Variable` (an alloca: an array, a value built in place, an address-taken
 local) or `Fixed` (incoming stack arguments). Categories:
   spill-store   mov reg -> spill slot
-  spill-reload  mov spill slot -> reg, or a spill slot read as an ALU/cmp operand
+  spill-reload  mov spill slot -> reg
+  spill-fold    a spill slot read as an ALU/cmp/test operand (no instruction of its own)
   spill-rmw     ALU op writing a spill slot in place
   obj           any access to a Variable slot (incl. lea of it)
   arg           read of a Fixed slot (a stack-passed argument)
@@ -184,12 +185,12 @@ def classify(name, a):
     if op.startswith(("mov", "vmov")):
         return ("spill-store" if memlast else "spill-reload"), slot
     if op.startswith(("cmp", "test", "bt")):
-        return "spill-reload", slot
+        return "spill-fold", slot
     if memlast and "," in operands:
         return "spill-rmw", slot
     if memlast:  # single-operand like incq/decq/notq
         return "spill-rmw", slot
-    return "spill-reload", slot
+    return "spill-fold", slot
 
 
 cat = defaultdict(float)
@@ -213,9 +214,10 @@ def dem(n):
 
 total = sum(cat.values())
 print(f"total\t{total:.3f}")
-for c in ["spill-store", "spill-reload", "spill-rmw", "obj", "arg", "push/pop", "frame", "unknown-rsp", "other"]:
+for c in ["spill-store", "spill-reload", "spill-fold", "spill-rmw", "obj", "arg", "push/pop", "frame", "unknown-rsp", "other"]:
     print(f"{c}\t{cat.get(c, 0):.3f}")
-print(f"spill-total\t{cat['spill-store'] + cat['spill-reload'] + cat['spill-rmw']:.3f}")
+print(f"spill-total\t{cat['spill-store'] + cat['spill-reload'] + cat['spill-fold'] + cat['spill-rmw']:.3f}")
+print(f"spill-extra\t{cat['spill-store'] + cat['spill-reload'] + cat['spill-rmw']:.3f}")
 print("\n# per function (spill store/reload/rmw, obj, push/pop, total)")
 fl = sorted(byfn.items(), key=lambda kv: -sum(kv[1].values()))
 dm = {}
@@ -224,8 +226,7 @@ if names:
     out = subprocess.run(["c++filt"], input="\n".join(names), capture_output=True, text=True).stdout.splitlines()
     dm = dict(zip(names, out))
 for n, d in fl[:40]:
-    sp = d["spill-store"] + d["spill-reload"] + d["spill-rmw"]
-    print(f"{d['spill-store']:.2f}\t{d['spill-reload']:.2f}\t{d['spill-rmw']:.2f}\t{d['obj']:.2f}\t{d['push/pop']:.2f}\t{sum(d.values()):.2f}\t{dm.get(n, n)[:90]}")
+    print(f"{d['spill-store']:.2f}\t{d['spill-reload'] + d['spill-fold']:.2f}\t{d['spill-rmw']:.2f}\t{d['obj']:.2f}\t{d['push/pop']:.2f}\t{sum(d.values()):.2f}\t{dm.get(n, n)[:90]}")
 print("\n# spill slots by executed traffic")
 sl = sorted(byslot.items(), key=lambda kv: -kv[1])
 acc = 0

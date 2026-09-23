@@ -1,0 +1,57 @@
+diff --git i/rust/crates/rexx-exec/src/ir.rs w/rust/crates/rexx-exec/src/ir.rs
+index f8e7b2983..668868ae4 100644
+--- i/rust/crates/rexx-exec/src/ir.rs
++++ w/rust/crates/rexx-exec/src/ir.rs
+@@ -624,10 +624,9 @@ impl Chunk {
+         self.ops.get(..stop as usize)
+     }
+ 
+-    /// The ops of `[at, end)`, or `None` when that is not a range of this
+-    /// stream.
+-    fn ops_in(&self, at: u32, end: u32) -> Option<&[Op]> {
+-        self.ops.get(at as usize..end as usize)
++    /// The whole op stream.
++    fn ops(&self) -> &[Op] {
++        &self.ops
+     }
+ 
+     /// The setting this chunk's trace ops were emitted for.
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index bef4df3e9..a48bed7c4 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -509,6 +509,7 @@ impl Interp {
+             return Err(Loud::chunk_map_too_short().into());
+         };
+         let depth = self.activation_depth();
++        let all_ops = chunk.ops();
+         // Whether the permission is still worth asking about. It is granted to
+         // this activation's first instruction and cleared by the one after it;
+         // the first clause that finds it spent hands the rest of the range to
+@@ -675,10 +676,14 @@ impl Interp {
+                             // have no register to live in: a bound is a `Number` and
+                             // a budget is a count.
+                             let mut header: Option<LoopHeaderValues> = None;
+-                            let Some(ops) = chunk.ops_in(pc + 1, end) else {
++                            // Walked by `pc` itself, which stops at `end`.
++                            if pc >= end || end as usize > all_ops.len() {
+                                 break 'cold Err(Loud::chunk_map_too_short().into());
+-                            };
+-                            for region_op in ops {
++                            }
++                            pc += 1;
++                            while pc < end {
++                                let region_op = &all_ops[pc as usize];
++                                pc += 1;
+                                 match region_op {
+                                     // **No gate**: this op exists only in a chunk
+                                     // compiled under a setting that echoes, which is
+@@ -1975,7 +1980,7 @@ impl Interp {
+                             // op that runs one clause and no more.
+                             RegionEnd::Flowed(flow) => (flow, end),
+                         },
+-                        ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), pc),
++                        ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), clause_pc),
+                     }
+                 }
+                 // **A jump past this range's end is loud rather than a

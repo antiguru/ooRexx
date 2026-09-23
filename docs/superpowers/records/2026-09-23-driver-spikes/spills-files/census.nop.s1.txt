@@ -1,0 +1,70 @@
+total	99.000
+spill-store	8.000
+spill-reload	14.000
+spill-fold	6.000
+spill-rmw	0.000
+obj	2.000
+arg	3.000
+push/pop	0.000
+frame	0.000
+unknown-rsp	0.000
+other	66.000
+spill-total	28.000
+spill-extra	22.000
+
+# per function (spill store/reload/rmw, obj, push/pop, total)
+8.00	20.00	0.00	2.00	0.00	99.00	<rexx_exec[74f6723d182ee374]::Interp>::run_ops_from::<false: bool>
+
+# spill slots by executed traffic
+4.00	14.3%	>::run_ops_from::<false: bool>	SP-1312	self@index.rs:183,index@mod.rs:572,index@drive.rs:563
+3.00	25.0%	>::run_ops_from::<false: bool>	SP-1088	
+3.00	35.7%	>::run_ops_from::<false: bool>	SP-1353	self@trace.rs:244,sink@drive.rs:593
+2.00	42.9%	>::run_ops_from::<false: bool>	SP-616	
+2.00	50.0%	>::run_ops_from::<false: bool>	SP-892	position@run.rs:4874
+2.00	57.1%	>::run_ops_from::<false: bool>	SP-896	position@run.rs:4874
+2.00	64.3%	>::run_ops_from::<false: bool>	SP-1440	text@run.rs:5070,entry@drive.rs:638
+1.00	67.9%	>::run_ops_from::<false: bool>	SP-952	stop@drive.rs:502
+1.00	71.4%	>::run_ops_from::<false: bool>	SP-1448	self@drive.rs:492
+1.00	75.0%	>::run_ops_from::<false: bool>	SP-1296	code@drive.rs:493
+1.00	78.6%	>::run_ops_from::<false: bool>	SP-608	
+1.00	82.1%	>::run_ops_from::<false: bool>	SP-1080	
+1.00	85.7%	>::run_ops_from::<false: bool>	SP-1336	
+1.00	89.3%	>::run_ops_from::<false: bool>	SP-504	
+1.00	92.9%	>::run_ops_from::<false: bool>	SP-1297	
+1.00	96.4%	>::run_ops_from::<false: bool>	SP-1298	
+1.00	100.0%	>::run_ops_from::<false: bool>	SP-512	
+
+# rows
+1.00	0x1c2b51	spill-fold	SP-952	cmp 0x210(%rsp),%r14d
+1.00	0x1c2b59	spill-reload	SP-1448	mov 0x20(%rsp),%r12
+1.00	0x1c2b5e	arg	SP+24	mov 0x5e0(%rsp),%rbp
+1.00	0x1c2b66	spill-reload	SP-1296	mov 0xb8(%rsp),%rbx
+1.00	0x1c2b6e	arg	SP+16	mov 0x5d8(%rsp),%r15
+1.00	0x1c2b83	spill-reload	SP-608	mov 0x368(%rsp),%rdx
+1.00	0x1c2baf	spill-reload	SP-1080	mov 0x190(%rsp),%rcx
+1.00	0x1c2bc4	spill-store	SP-1088	mov %rax,0x188(%rsp)
+1.00	0x1c2bdc	spill-store	SP-1353	mov %sil,0x7f(%rsp)
+1.00	0x1c2be5	spill-store	SP-1336	mov %rax,0x90(%rsp)
+1.00	0x1c2bf5	spill-store	SP-1312	mov %rdx,0xa8(%rsp)
+1.00	0x1c2c03	spill-fold	SP-616	cmp %rdx,0x360(%rsp)
+1.00	0x1c2c0b	spill-reload	SP-892	mov 0x24c(%rsp),%ebx
+1.00	0x1c2c12	spill-reload	SP-896	mov 0x248(%rsp),%esi
+1.00	0x1c2c1b	spill-reload	SP-504	mov 0x3d0(%rsp),%rax
+1.00	0x1c2c23	spill-reload	SP-1312	mov 0xa8(%rsp),%rcx
+1.00	0x1c2c64	spill-store	SP-892	mov %ebx,0x24c(%rsp)
+1.00	0x1c2c6b	spill-store	SP-896	mov %esi,0x248(%rsp)
+1.00	0x1c2c78	spill-reload	SP-1312	mov 0xa8(%rsp),%rax
+1.00	0x1c2c80	spill-fold	SP-616	cmp %rax,0x360(%rsp)
+1.00	0x1c2cc8	spill-reload	SP-1312	mov 0xa8(%rsp),%rcx
+1.00	0x1c2cd8	spill-reload	SP-1353	movzbl 0x7f(%rsp),%ecx
+1.00	0x1c2cdd	spill-fold	SP-1297	xor 0xb7(%rsp),%cl
+1.00	0x1c2cf8	spill-store	SP-1298	mov %cl,0xb6(%rsp)
+1.00	0x1c2e31	spill-store	SP-1440	mov %rax,0x28(%rsp)
+1.00	0x1c2e3f	obj	SP-888	movq $0x2,0x250(%rsp)
+1.00	0x1c2e4b	spill-reload	SP-1088	mov 0x188(%rsp),%rax
+1.00	0x1c2e58	spill-fold	SP-512	cmp %rax,0x3c8(%rsp)
+1.00	0x1c33be	obj	SP-888	cmpl $0x2,0x250(%rsp)
+1.00	0x1c33cc	spill-reload	SP-1088	mov 0x188(%rsp),%r14
+1.00	0x1c33d4	arg	SP+24	mov 0x5e0(%rsp),%rbp
+1.00	0x1c33dc	spill-reload	SP-1440	mov 0x28(%rsp),%rbx
+1.00	0x1c35fd	spill-fold	SP-1353	testb $0x20,0x7f(%rsp)

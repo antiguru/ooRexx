@@ -1,6 +1,7 @@
 total	900.884
 spill-store	34.902
-spill-reload	56.204
+spill-reload	41.143
+spill-fold	15.061
 spill-rmw	0.419
 obj	59.949
 arg	4.030
@@ -9,6 +10,7 @@ frame	15.722
 unknown-rsp	1.530
 other	643.655
 spill-total	91.525
+spill-extra	76.464
 
 # per function (spill store/reload/rmw, obj, push/pop, total)
 13.89	33.15	0.00	10.09	0.50	217.06	<rexx_exec[74f6723d182ee374]::Interp>::run_ops_from::<false: bool>
@@ -164,7 +166,7 @@ spill-total	91.525
 0.04	0x1c2996	spill-store	SP-1000	mov %rax,0x1d0(%rsp)
 0.04	0x1c29a5	spill-store	SP-992	mov %rax,0x1d8(%rsp)
 0.04	0x1c29ad	spill-store	SP-1060	mov %eax,0x194(%rsp)
-1.01	0x1c29b7	spill-reload	SP-936	cmp 0x210(%rsp),%r15d
+1.01	0x1c29b7	spill-fold	SP-936	cmp 0x210(%rsp),%r15d
 1.01	0x1c29bf	spill-reload	SP-1040	mov 0x1a8(%rsp),%rbx
 1.01	0x1c29c7	arg	SP+16	mov 0x5c8(%rsp),%r15
 0.99	0x1c29dc	spill-reload	SP-592	mov 0x368(%rsp),%rdx
@@ -173,7 +175,7 @@ spill-total	91.525
 0.83	0x1c2a34	spill-store	SP-1088	mov %sil,0x178(%rsp)
 0.83	0x1c2a40	spill-store	SP-1336	mov %rax,0x80(%rsp)
 0.83	0x1c2a4f	spill-store	SP-1312	mov %rdx,0x98(%rsp)
-0.83	0x1c2a5d	spill-reload	SP-600	cmp %rdx,0x360(%rsp)
+0.83	0x1c2a5d	spill-fold	SP-600	cmp %rdx,0x360(%rsp)
 0.83	0x1c2a65	spill-reload	SP-876	mov 0x24c(%rsp),%ebx
 0.83	0x1c2a6e	spill-reload	SP-504	mov 0x3c0(%rsp),%rax
 0.83	0x1c2a76	spill-reload	SP-1312	mov 0x98(%rsp),%rdx
@@ -181,16 +183,16 @@ spill-total	91.525
 0.83	0x1c2abd	spill-store	SP-1320	mov %r13,0x90(%rsp)
 0.83	0x1c2ac5	spill-store	SP-876	mov %ebx,0x24c(%rsp)
 0.83	0x1c2ad2	spill-reload	SP-1312	mov 0x98(%rsp),%rax
-0.83	0x1c2ada	spill-reload	SP-600	cmp %rax,0x360(%rsp)
+0.83	0x1c2ada	spill-fold	SP-600	cmp %rax,0x360(%rsp)
 0.83	0x1c2b1a	spill-reload	SP-880	mov 0x248(%rsp),%eax
 0.83	0x1c2b21	spill-reload	SP-1312	mov 0x98(%rsp),%rcx
 0.83	0x1c2b30	spill-reload	SP-1088	movzbl 0x178(%rsp),%ecx
-0.83	0x1c2b38	spill-reload	SP-1297	xor 0xa7(%rsp),%cl
+0.83	0x1c2b38	spill-fold	SP-1297	xor 0xa7(%rsp),%cl
 0.83	0x1c2b51	spill-store	SP-1298	mov %cl,0xa6(%rsp)
 0.83	0x1c2c86	spill-store	SP-1424	mov %rax,0x28(%rsp)
 0.83	0x1c2c93	obj	SP-872	movq $0x2,0x250(%rsp)
 0.83	0x1c2c9f	spill-reload	SP-1080	mov 0x180(%rsp),%rax
-0.83	0x1c2cac	spill-reload	SP-512	cmp %rax,0x3b8(%rsp)
+0.83	0x1c2cac	spill-fold	SP-512	cmp %rax,0x3b8(%rsp)
 0.20	0x1c2d41	spill-reload	SP-1424	mov 0x28(%rsp),%rbx
 0.20	0x1c2d46	obj	SP-872	cmpl $0x2,0x250(%rsp)
 0.03	0x1c2de0	unknown-rsp	SP-1448	mov %rbp,0x10(%rsp)
@@ -205,7 +207,7 @@ spill-total	91.525
 0.03	0x1c2e29	obj	SP-1272	lea 0xcc(%rsp),%rdx
 0.03	0x1c2e34	obj	SP-928	mov %rcx,0x218(%rsp)
 0.03	0x1c2e3f	obj	SP-928	mov %ecx,0x220(%rsp)
-0.00	0x1c2e81	spill-reload	SP-936	cmp 0x210(%rsp),%r15d
+0.00	0x1c2e81	spill-fold	SP-936	cmp 0x210(%rsp),%r15d
 0.03	0x1c2e9b	arg	SP+32	cmp 0x5d8(%rsp),%rax
 0.03	0x1c2ebf	obj	SP-1272	movq $0x0,0xc0(%rsp)
 0.03	0x1c2ecb	obj	SP-872	lea 0x250(%rsp),%rdi
@@ -305,12 +307,12 @@ spill-total	91.525
 0.04	0x1c38a6	obj	SP-1272	mov 0xc0(%rsp),%rbx
 0.04	0x1c38ae	obj	SP-1272	mov 0xc8(%rsp),%r15d
 0.06	0x1c38c3	spill-reload	SP-1320	mov 0x90(%rsp),%r13
-0.63	0x1c391b	spill-reload	SP-1088	testb $0x20,0x178(%rsp)
+0.63	0x1c391b	spill-fold	SP-1088	testb $0x20,0x178(%rsp)
 0.00	0x1c3992	obj	SP-1272	mov 0xc8(%rsp),%rax
 1.32	0x1c399e	spill-reload	SP-1360	mov 0x68(%rsp),%rdx
 2.45	0x1c39a7	spill-reload	SP-1344	mov 0x78(%rsp),%rax
-2.45	0x1c39af	spill-reload	SP-696	cmp 0x300(%rsp),%rax
-2.09	0x1c39de	spill-reload	SP-696	cmp 0x300(%rsp),%rbx
+2.45	0x1c39af	spill-fold	SP-696	cmp 0x300(%rsp),%rax
+2.09	0x1c39de	spill-fold	SP-696	cmp 0x300(%rsp),%rbx
 0.43	0x1c3ae8	spill-store	SP-1344	mov %rax,0x78(%rsp)
 0.12	0x1c3b0b	unknown-rsp	SP-1464	mov %rcx,(%rsp)
 0.12	0x1c3b12	obj	SP-1272	lea 0xc0(%rsp),%rdi
@@ -319,11 +321,11 @@ spill-total	91.525
 0.12	0x1c3b35	obj	SP-1272	mov 0xc8(%rsp),%r15
 0.31	0x1c3b4e	spill-store	SP-1032	mov %edx,0x1b0(%rsp)
 0.25	0x1c3ba0	spill-store	SP-1344	mov %rax,0x78(%rsp)
-0.25	0x1c3ba9	spill-reload	SP-616	cmp %r15,0x350(%rsp)
+0.25	0x1c3ba9	spill-fold	SP-616	cmp %r15,0x350(%rsp)
 0.25	0x1c3bb3	spill-reload	SP-648	mov 0x330(%rsp),%rax
-0.00	0x1c3bc9	spill-reload	SP-544	cmp %r15,0x398(%rsp)
+0.00	0x1c3bc9	spill-fold	SP-544	cmp %r15,0x398(%rsp)
 0.00	0x1c3bde	spill-reload	SP-552	mov 0x390(%rsp),%rcx
-0.00	0x1c3bf7	spill-reload	SP-616	cmp %r15,0x350(%rsp)
+0.00	0x1c3bf7	spill-fold	SP-616	cmp %r15,0x350(%rsp)
 0.00	0x1c3c05	spill-reload	SP-648	mov 0x330(%rsp),%rcx
 0.42	0x1c3ccb	spill-store	SP-1344	mov %rax,0x78(%rsp)
 0.42	0x1c3cd4	spill-reload	SP-1360	mov 0x68(%rsp),%rdx
@@ -372,10 +374,10 @@ spill-total	91.525
 0.08	0x1c4060	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
 0.08	0x1c4065	spill-reload	SP-1024	mov 0x1b8(%rsp),%rcx
 0.55	0x1c40d4	spill-store	SP-1344	mov %rax,0x78(%rsp)
-0.55	0x1c40dd	spill-reload	SP-608	cmp %r15,0x358(%rsp)
+0.55	0x1c40dd	spill-fold	SP-608	cmp %r15,0x358(%rsp)
 0.55	0x1c40e7	spill-reload	SP-640	mov 0x338(%rsp),%rax
 0.00	0x1c40fd	spill-reload	SP-952	mov 0x200(%rsp),%rax
-0.00	0x1c412e	spill-reload	SP-608	cmp %r15,0x358(%rsp)
+0.00	0x1c412e	spill-fold	SP-608	cmp %r15,0x358(%rsp)
 0.00	0x1c413c	spill-reload	SP-640	mov 0x338(%rsp),%rcx
 0.00	0x1c4191	spill-store	SP-1344	mov %rax,0x78(%rsp)
 0.00	0x1c41a1	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
@@ -383,11 +385,11 @@ spill-total	91.525
 0.08	0x1c41c3	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
 0.10	0x1c41da	spill-store	SP-1344	mov %rax,0x78(%rsp)
 0.10	0x1c41e3	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
-0.10	0x1c41f8	spill-reload	SP-632	cmp %r15,0x340(%rsp)
+0.10	0x1c41f8	spill-fold	SP-632	cmp %r15,0x340(%rsp)
 0.10	0x1c4200	spill-store	SP-1296	mov %r9,0xa8(%rsp)
 0.10	0x1c420a	spill-reload	SP-656	mov 0x328(%rsp),%rax
 0.06	0x1c4241	spill-store	SP-1032	mov %r8,0x1b0(%rsp)
-0.00	0x1c437e	spill-reload	SP-632	cmp %r15,0x340(%rsp)
+0.00	0x1c437e	spill-fold	SP-632	cmp %r15,0x340(%rsp)
 0.00	0x1c4386	spill-reload	SP-1296	mov 0xa8(%rsp),%r9
 0.00	0x1c438e	spill-reload	SP-1032	mov 0x1b0(%rsp),%r8
 0.00	0x1c4398	spill-reload	SP-656	mov 0x328(%rsp),%rax
@@ -398,7 +400,7 @@ spill-total	91.525
 0.42	0x1c4757	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
 0.42	0x1c4765	obj	SP-1272	mov 0xc8(%rsp),%rax
 0.31	0x1c4985	spill-store	SP-1296	mov %rax,0xa8(%rsp)
-0.31	0x1c4991	spill-reload	SP-1296	cmpq $0x1,0xa8(%rsp)
+0.31	0x1c4991	spill-fold	SP-1296	cmpq $0x1,0xa8(%rsp)
 0.31	0x1c499c	spill-reload	SP-1296	mov 0xa8(%rsp),%rdx
 0.43	0x1c49b3	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
 0.28	0x1c4a1f	obj	SP-872	lea 0x250(%rsp),%rdi

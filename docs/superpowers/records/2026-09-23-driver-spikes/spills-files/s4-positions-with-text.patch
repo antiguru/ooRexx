@@ -1,0 +1,86 @@
+diff --git i/rust/crates/rexx-exec/src/ir.rs w/rust/crates/rexx-exec/src/ir.rs
+index f8e7b2983..307e22194 100644
+--- i/rust/crates/rexx-exec/src/ir.rs
++++ w/rust/crates/rexx-exec/src/ir.rs
+@@ -548,6 +548,15 @@ pub(crate) struct ClausePosition {
+     pub(crate) indent: u32,
+ }
+ 
++/// Instruction `index`'s own [`ClausePosition`] in `positions` and `true`, or
++/// `false` and a zero position where the table has no entry.
++pub(crate) fn position_in(positions: &[ClausePosition], index: usize) -> (bool, ClausePosition) {
++    match positions.get(index) {
++        Some(position) => (true, *position),
++        None => (false, ClausePosition { line: 0, indent: 0 }),
++    }
++}
++
+ pub(crate) struct Chunk {
+     /// The trace setting this stream's ops were emitted for, which is half of
+     /// the key it is cached under and the thing the driver compares the
+@@ -606,14 +615,13 @@ impl Chunk {
+         self.op_of.get(index).copied()
+     }
+ 
+-    /// The clause at instruction index `index`'s own [`ClausePosition`] and
+-    /// `true`, or `false` and a zero position where this chunk carries no
+-    /// table.
+-    pub(crate) fn position_at(&self, index: usize) -> (bool, ClausePosition) {
+-        match self.positions.get(index) {
+-            Some(position) => (true, *position),
+-            None => (false, ClausePosition { line: 0, indent: 0 }),
+-        }
++    /// This chunk's position table where the body has source text, and an
++    /// empty one where it has none.
++    pub(crate) fn positions_with(
++        &self,
++        text: Option<&rexx_parse::ProgramSource>,
++    ) -> &[ClausePosition] {
++        if text.is_some() { &self.positions } else { &[] }
+     }
+ 
+     /// The ops of `[0, stop)`, or `None` when this stream is shorter than
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index bef4df3e9..ecabdc624 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -509,6 +509,7 @@ impl Interp {
+             return Err(Loud::chunk_map_too_short().into());
+         };
+         let depth = self.activation_depth();
++        let positions = chunk.positions_with(source);
+         // Whether the permission is still worth asking about. It is granted to
+         // this activation's first instruction and cleared by the one after it;
+         // the first clause that finds it spent hands the rest of the range to
+@@ -639,7 +640,7 @@ impl Interp {
+                         index,
+                         clause,
+                         source,
+-                        chunk.position_at(index),
++                        crate::ir::position_in(positions, index),
+                         counted,
+                     );
+                     // Taken on entry exactly as `step` takes it, because a
+diff --git i/rust/crates/rexx-exec/src/run.rs w/rust/crates/rexx-exec/src/run.rs
+index 773f11ce9..4e6dca969 100644
+--- i/rust/crates/rexx-exec/src/run.rs
++++ w/rust/crates/rexx-exec/src/run.rs
+@@ -4858,7 +4858,8 @@ impl Interp {
+ 
+     /// Opens a stepped clause of `code`: everything
+     /// [`crate::ir::Op::Clause`] owes before the clause's own work
+-    /// runs.
++    /// runs. `position` is `false` where there is no table entry or no source
++    /// text.
+     #[inline(always)]
+     #[allow(
+         clippy::too_many_arguments,
+@@ -4914,7 +4915,7 @@ impl Interp {
+         // oracle's own `RexxInstruction::traceInstruction`, which every one
+         // of those calls too from its own `execute`.
+         let (tabled, position) = position;
+-        let shortcut = tabled && source.is_some() && self.clause_line_override.is_none();
++        let shortcut = tabled && self.clause_line_override.is_none();
+         let indent = if shortcut {
+             position.indent as usize + self.activation_indent + self.indent_offset
+         } else {
