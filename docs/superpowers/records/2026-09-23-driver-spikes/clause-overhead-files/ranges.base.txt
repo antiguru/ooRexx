@@ -1,0 +1,35 @@
+# base .text 54fdd95a...; run_ops_from::<true> addresses
+0x13d1e6 0x13d235 A op fetch + dispatch (pc<stop test, 2 hoisted reloads, jump table)
+0x13d237 0x13d25f B clause lookup (instructions[index] bounds, end spill)
+0x13d263 0x13d26b C procedure permission: GRANTING test
+0x13d6a3 0x13d6ac C procedure permission: GRANTING join
+0x13d6e2 0x13d6fa D trace: chunk_trace (debug_pause cmov) + spill
+0x13d701 0x13d71c E deadline countdown (+3 spills scheduled here)
+0x13d722 0x13d73f F trace: position_at (line/indent table)
+0x13d744 0x13d74e G activation lookup (running.is_some)
+0x13d754 0x13d76c H bookkeeping: clock_stale + trace_entry.stepped
+0x13d772 0x13d781 F trace: shortcut test (position again, clause_line_override)
+0x13d783 0x13d7a3 I trace: indent + instructions_traced_at_entry
+0x13d7aa 0x13d7b8 J bookkeeping: line + clause index
+0x13d8d0 0x13d8d7 K trace: stale = chunk ^ sink
+0x13d8de 0x13d8de J bookkeeping: value_buffer.clear
+0x13d8e9 0x13d8e9 J bookkeeping: current_clause_line
+0x13d8f0 0x13d901 K trace: echo gate (Echo::Gated test) + spills
+0x13da49 0x13da50 L rooting: push_frame
+0x13da55 0x13da65 C procedure permission: take
+0x13da6c 0x13da6c M region: header = None
+0x13da78 0x13da8d M region: ops_in bounds
+0x13dbb1 0x13dbba M region: iterator empty test
+0x13dbc2 0x13dbd9 M region: header drop check + reloads
+0x13dbde 0x13dc1b M region: iterator setup for a non-empty region
+0x13dca4 0x13dcac N pending_traps.is_empty
+0x13e16c 0x13e175 L rooting: pop_frame
+0x13e17c 0x13e184 K trace: debugging test (+ loop back)
+0x13e24e 0x13e257 P Load: register write
+0x13e25b 0x13e276 M region: per-op iterator step
+0x13e27c 0x13e28d K trace: tracing_intermediates unswitched per region op
+0x13e2c4 0x13e2d5 M region: per-op dispatch jump table
+0x13e3c0 0x13e42a P Load arm (operands, call read_at, novalue test)
+0x16ab40 0x16ac8c P read_at (out of line)
+0x13e680 0x13e6fe Q Store arm (operands, target kind, results test, activation, exposed)
+0x13efca 0x13f174 Q Store: set_frame_slot (alias count, bounds, write)
