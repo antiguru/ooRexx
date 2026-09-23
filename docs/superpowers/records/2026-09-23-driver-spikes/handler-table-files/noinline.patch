@@ -1,0 +1,12 @@
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index f5fa7f6bf..922aaa2a2 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -482,6 +482,7 @@ impl Interp {
+         clippy::too_many_arguments,
+         reason = "one caller, and every argument is a value it already holds"
+     )]
++    #[inline(never)]
+     fn run_ops_from<const GRANTING: bool>(
+         &mut self,
+         code: &Code<'_>,

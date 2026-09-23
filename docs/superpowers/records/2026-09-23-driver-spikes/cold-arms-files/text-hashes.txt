@@ -1,0 +1,5 @@
+748b2f0679dcddb9cf65d2e30d5c50a18e4f90095ecb634f8d018c4bfcce4c32  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/spikes/cold-arms/bin/baseni.text
+748b2f0679dcddb9cf65d2e30d5c50a18e4f90095ecb634f8d018c4bfcce4c32  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/spikes/cold-arms/bin/base.text
+54f113c47768f3e8cefbad173b0435b88b8c893734730d1694e290a73f40d987  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/spikes/cold-arms/bin/fullni.text
+db2d76563dac4197e3e935447cd7b991c7f763fab35ba01dea8fbecb0aaa76ea  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/spikes/cold-arms/bin/full.text
+e89658508c185d45520fcab26a7a852b494d5d356720d63dbd01bd8c9cff5281  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/spikes/cold-arms/bin/half.text

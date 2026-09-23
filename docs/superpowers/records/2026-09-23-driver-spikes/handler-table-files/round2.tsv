@@ -1,0 +1,12 @@
+748b2f0679dc	rexxcps	base-rexx-run.rexxcps.r2	rc=0	summary=20182678520	selfsum=20182678520	exlibc=18638728403
+16fc472f27d5	rexxcps	head-rexx-run.rexxcps.r2	rc=0	summary=22009815314	selfsum=22009815314	exlibc=20510348205
+748b2f0679dc	varlookup	base-rexx-run.varlookup.r2	rc=0	summary=17185571961	selfsum=17185571961	exlibc=17122897231
+16fc472f27d5	varlookup	head-rexx-run.varlookup.r2	rc=0	summary=19408603302	selfsum=19408603302	exlibc=19345916124
+748b2f0679dc	arith	base-rexx-run.arith.r2	rc=0	summary=12373072024	selfsum=12373072024	exlibc=11764228204
+16fc472f27d5	arith	head-rexx-run.arith.r2	rc=0	summary=12701583710	selfsum=12701583710	exlibc=12070605197
+748b2f0679dc	emptyloop	base-rexx-run.emptyloop.r2	rc=0	summary=9748559337	selfsum=9748559337	exlibc=9685887071
+16fc472f27d5	emptyloop	head-rexx-run.emptyloop.r2	rc=0	summary=10423594246	selfsum=10423594246	exlibc=10360888334
+748b2f0679dc	dispatch	base-rexx-run.dispatch.r2	rc=0	summary=23063978103	selfsum=23063978103	exlibc=20711083771
+16fc472f27d5	dispatch	head-rexx-run.dispatch.r2	rc=0	summary=23454006358	selfsum=23454006358	exlibc=21101087858
+748b2f0679dc	compound	base-rexx-run.compound.r2	rc=0	summary=10351058019	selfsum=10351058019	exlibc=9914439667
+16fc472f27d5	compound	head-rexx-run.compound.r2	rc=0	summary=11096441169	selfsum=11096441169	exlibc=10684475865

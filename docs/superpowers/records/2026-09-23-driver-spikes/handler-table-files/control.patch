@@ -1,0 +1,13 @@
+diff --git i/rust/crates/rexx-exec/src/ir/drive/handlers.rs w/rust/crates/rexx-exec/src/ir/drive/handlers.rs
+index 464162fb2..6375b6e79 100644
+--- i/rust/crates/rexx-exec/src/ir/drive/handlers.rs
++++ w/rust/crates/rexx-exec/src/ir/drive/handlers.rs
+@@ -16,7 +16,7 @@ use crate::{Code, Failure, Interp, Loud};
+ 
+ /// Whether the region walk dispatches through the handlers; `false` is the
+ /// control, which keeps them in the binary and walks the original match.
+-pub(super) const TABLE: bool = true;
++pub(super) const TABLE: bool = false;
+ 
+ /// A handler's answer when the walk goes on to the next op.
+ pub(super) const CONTINUE: u32 = u32::MAX;

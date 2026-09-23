@@ -1,0 +1,298 @@
+diff --git c/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index 4216466f0..696209c21 100644
+--- c/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -709,18 +709,36 @@ impl Interp {
+                                         debug_assert_names_the_clause(
+                                             code, *index, clause, "CallExpr",
+                                         );
+-                                        match self.cold_call_expr(
+-                                            code, chunk, clause, *slot, *path, *site,
+-                                        ) {
+-                                            Ok(value) => {
+-                                                self.roots.set_temp(
+-                                                    registers,
+-                                                    *dst as usize,
+-                                                    value,
+-                                                );
+-                                            }
++                                        let Some(ExprKind::Call { target, args }) =
++                                            Interp::chunk_node_at(clause, *slot, *path)
++                                                .map(|node| &node.kind)
++                                        else {
++                                            break 'cold Err(Loud::call_op_off_its_node().into());
++                                        };
++                                        let (name, search_labels) = call_target_name(code, target);
++                                        let resolution = match self
++                                            .site_resolution_before_arguments(
++                                                chunk,
++                                                *site,
++                                                name,
++                                                search_labels,
++                                            ) {
++                                            Ok(resolution) => resolution,
+                                             Err(failure) => break 'cold Err(failure),
++                                        };
++                                        let probe = 0u8;
++                                        if let Err(failure) = self.enter_eval_node(&raw const probe)
++                                        {
++                                            break 'cold Err(failure);
+                                         }
++                                        let value =
++                                            self.eval_call_resolved(code, resolution, name, args);
++                                        self.depth -= 1;
++                                        let value = match value {
++                                            Ok(value) => value,
++                                            Err(failure) => break 'cold Err(failure),
++                                        };
++                                        self.roots.set_temp(registers, *dst as usize, value);
+                                     }
+                                     // **Every one of these bodies is behind
+                                     // a call.** What they do is small, but
+@@ -1436,8 +1454,37 @@ impl Interp {
+                                         debug_assert_names_the_clause(
+                                             code, *index, clause, "Queue",
+                                         );
+-                                        if let Err(failure) = self
+-                                            .cold_queue(chunk, registers, clause, *src, *keyword)
++                                        debug_assert!(
++                                            matches!(
++                                                &clause.kind,
++                                                InstructionKind::Push { expression }
++                                                    | InstructionKind::Queue { expression }
++                                                    if expression.is_some() == src.is_some()
++                                            ),
++                                            "a Queue op names an instruction that is not a PUSH or a \
++                                         QUEUE of matching arity"
++                                        );
++                                        debug_assert!(
++                                            matches!(
++                                                (&clause.kind, keyword),
++                                                (InstructionKind::Push { .. }, QueueKeyword::Push)
++                                                    | (
++                                                        InstructionKind::Queue { .. },
++                                                        QueueKeyword::Queue
++                                                    )
++                                            ),
++                                            "a Queue op's keyword names the other half of the pair \
++                                         from the clause it writes for"
++                                        );
++                                        let value = src.map(|register| {
++                                        debug_assert!(
++                                            chunk.holds_register(register),
++                                            "op reads register {register} outside the region the \
++                                             chunk reserved"
++                                        );
++                                        self.roots.temp_at(registers, register as usize)
++                                    });
++                                        if let Err(failure) = self.queue_evaluated(value, *keyword)
+                                         {
+                                             break 'cold Err(failure);
+                                         }
+@@ -1655,14 +1702,34 @@ impl Interp {
+                                             "op writes register {dst} outside the region the chunk \
+                                          reserved"
+                                         );
++                                        let case_text = match case {
++                                            Some(register) => {
++                                                debug_assert!(
++                                                    chunk.holds_register(*register),
++                                                    "op reads register {register} outside the region \
++                                                 the chunk reserved"
++                                                );
++                                                let value = self
++                                                    .roots
++                                                    .temp_at(registers, *register as usize);
++                                                Some(self.to_text(value).to_vec())
++                                            }
++                                            None => None,
++                                        };
+                                         debug_assert_names_the_clause(
+                                             code, *index, clause, "WhenTest",
+                                         );
+-                                        if let Err(failure) = self.cold_when_test(
+-                                            code, chunk, registers, clause, *case, *dst,
++                                        let holds = match self.scan_when(
++                                            code,
++                                            clause,
++                                            case_text.as_deref(),
+                                         ) {
+-                                            break 'cold Err(failure);
+-                                        }
++                                            Ok(holds) => holds,
++                                            Err(failure) => break 'cold Err(failure),
++                                        };
++                                        let value = ObjRef::small_int(i64::from(holds))
++                                            .unwrap_or(ObjRef::NIL);
++                                        self.roots.set_temp(registers, *dst as usize, value);
+                                     }
+                                     // The `>K>` line of one header value. **The
+                                     // emission is its own op**, which is what lets
+@@ -1765,19 +1832,19 @@ impl Interp {
+                                         break 'cold Err(cold_not_driven("LoopNext"));
+                                     }
+                                     Op::Clause { .. } => {
+-                                        break 'cold Err(cold_not_driven("Clause"));
++                                        break 'cold Err(Loud::op_not_driven("Clause").into());
+                                     }
+                                     Op::SelectCaseText { .. } => {
+                                         break 'cold Err(cold_not_driven("SelectCaseText"));
+                                     }
+                                     Op::EnterWhen { .. } => {
+-                                        break 'cold Err(cold_not_driven("EnterWhen"));
++                                        break 'cold Err(Loud::op_not_driven("EnterWhen").into());
+                                     }
+                                     Op::EnterOtherwise { .. } => {
+                                         break 'cold Err(cold_not_driven("EnterOtherwise"));
+                                     }
+                                     Op::EndBranch => {
+-                                        break 'cold Err(cold_not_driven("EndBranch"));
++                                        break 'cold Err(Loud::op_not_driven("EndBranch").into());
+                                     }
+                                     Op::EndWhen => {
+                                         break 'cold Err(cold_not_driven("EndWhen"));
+@@ -1894,7 +1961,8 @@ impl Interp {
+                     continue;
+                 }
+                 Op::EnterOtherwise { select } => {
+-                    self.cold_enter_otherwise(code, chunk, *select)?;
++                    let frame = self.otherwise_frame(code, chunk, *select as usize)?;
++                    self.frames.push(Frame::select(frame));
+                     pc += 1;
+                     continue;
+                 }
+@@ -1972,33 +2040,6 @@ impl Interp {
+         self.echo_compiled_clause(source, clause, indent);
+     }
+ 
+-    /// [`Op::CallExpr`]'s body: the call's value, starting from the site's
+-    /// kept resolution.
+-    #[cold]
+-    #[inline(never)]
+-    fn cold_call_expr<'a>(
+-        &mut self,
+-        code: &Code<'a>,
+-        chunk: &Chunk,
+-        clause: &'a Instruction,
+-        slot: u16,
+-        path: super::NodePath,
+-        site: u16,
+-    ) -> Result<ObjRef, Failure> {
+-        let Some(ExprKind::Call { target, args }) =
+-            Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind)
+-        else {
+-            return Err(Loud::call_op_off_its_node().into());
+-        };
+-        let (name, search_labels) = call_target_name(code, target);
+-        let resolution = self.site_resolution_before_arguments(chunk, site, name, search_labels)?;
+-        let probe = 0u8;
+-        self.enter_eval_node(&raw const probe)?;
+-        let value = self.eval_call_resolved(code, resolution, name, args);
+-        self.depth -= 1;
+-        value
+-    }
+-
+     /// [`Op::Prefix`]'s body: the operator applied to `src`, written to `dst`.
+     #[cold]
+     #[inline(never)]
+@@ -2026,44 +2067,6 @@ impl Interp {
+         Ok(())
+     }
+ 
+-    /// [`Op::Queue`]'s body: the queue write and its `>>>`.
+-    #[cold]
+-    #[inline(never)]
+-    fn cold_queue(
+-        &mut self,
+-        chunk: &Chunk,
+-        registers: FrameId,
+-        clause: &Instruction,
+-        src: Option<u16>,
+-        keyword: QueueKeyword,
+-    ) -> Result<(), Failure> {
+-        debug_assert!(
+-            matches!(
+-                &clause.kind,
+-                InstructionKind::Push { expression }
+-                    | InstructionKind::Queue { expression }
+-                    if expression.is_some() == src.is_some()
+-            ),
+-            "a Queue op names an instruction that is not a PUSH or a QUEUE of matching arity"
+-        );
+-        debug_assert!(
+-            matches!(
+-                (&clause.kind, keyword),
+-                (InstructionKind::Push { .. }, QueueKeyword::Push)
+-                    | (InstructionKind::Queue { .. }, QueueKeyword::Queue)
+-            ),
+-            "a Queue op's keyword names the other half of the pair from the clause it writes for"
+-        );
+-        let value = src.map(|register| {
+-            debug_assert!(
+-                chunk.holds_register(register),
+-                "op reads register {register} outside the region the chunk reserved"
+-            );
+-            self.roots.temp_at(registers, register as usize)
+-        });
+-        self.queue_evaluated(value, keyword)
+-    }
+-
+     /// [`Op::Call`]'s body: a `CALL` whose arguments are evaluated inside
+     /// `invoke_call`.
+     #[cold]
+@@ -2093,55 +2096,6 @@ impl Interp {
+         self.invoke_named_call(code, resolution, name, args)
+     }
+ 
+-    /// [`Op::WhenTest`]'s body: the `WHEN`'s outcome, written to `dst` as the
+-    /// logical value `Op::JumpUnless` reads back.
+-    #[cold]
+-    #[inline(never)]
+-    fn cold_when_test(
+-        &mut self,
+-        code: &Code<'_>,
+-        chunk: &Chunk,
+-        registers: FrameId,
+-        clause: &Instruction,
+-        case: Option<u16>,
+-        dst: u16,
+-    ) -> Result<(), Failure> {
+-        debug_assert!(
+-            chunk.holds_register(dst),
+-            "op writes register {dst} outside the region the chunk reserved"
+-        );
+-        let case_text = match case {
+-            Some(register) => {
+-                debug_assert!(
+-                    chunk.holds_register(register),
+-                    "op reads register {register} outside the region the chunk reserved"
+-                );
+-                let value = self.roots.temp_at(registers, register as usize);
+-                Some(self.to_text(value).to_vec())
+-            }
+-            None => None,
+-        };
+-        let holds = self.scan_when(code, clause, case_text.as_deref())?;
+-        // In range unconditionally: `SMALL_INT_MAX` is far above one.
+-        let value = ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL);
+-        self.roots.set_temp(registers, dst as usize, value);
+-        Ok(())
+-    }
+-
+-    /// [`Op::EnterOtherwise`]'s body: opens the `OTHERWISE` branch's frame.
+-    #[cold]
+-    #[inline(never)]
+-    fn cold_enter_otherwise(
+-        &mut self,
+-        code: &Code<'_>,
+-        chunk: &Chunk,
+-        select: u32,
+-    ) -> Result<(), Failure> {
+-        let frame = self.otherwise_frame(code, chunk, select as usize)?;
+-        self.frames.push(Frame::select(frame));
+-        Ok(())
+-    }
+-
+     /// Drops every frame this level opened, and the loop state each open loop
+     /// frame stands for.
+     #[cold]
