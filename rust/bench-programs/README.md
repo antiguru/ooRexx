@@ -18,6 +18,8 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
 | `textnum.rex` | Values that arrive as **text** and are then used as numbers, with fresh handles each iteration so a handle-keyed cache cannot answer from the previous one. Added 2026-09-10 for the same reason: `rexxcps` performs 5,580,002 of these conversions and no program here performed one |
 | `decloop.rex` | A **decimal-controlled** `DO` -- `do j=1.1 to 2.2 by 1.1`. `emptyloop.rex` and every other loop here use integer control, and the two are not the same axis: measured 2026-09-10, integer control is 1.22x the oracle and decimal control 1.63x |
 | `decrender.rex` | The same decimal control plus the renderings a real program performs on the control value (`length(j)`, `j='foobar'`), which is `rexxcps`' inner-loop shape. **1.99x**, the worst ratio in the suite, and the construct that carries `rexxcps` above every other primitive it exercises |
+| `nop.rex` | The fixed cost every clause pays: a counted loop whose body is 100 `nop` clauses, one per line, so the loop step is amortised over them. 1,000,000 passes |
+| `assign.rex` | The same shape with 100 `x = y` clauses, `y` assigned once before the loop: the per-clause cost plus one variable read and one write. 1,000,000 passes |
 | `startup.rex` | `say 1` — cold-start timing (D2's gate), timed separately with `rexx-time`, not through criterion's statistical sampling |
 | `heapshape.rex` | Full-GC pause over a ~1M-object graph. It prints its own figures, so the suite reports those rather than timing the process. **The slot strings are wider than seven bytes on purpose**: a shorter one lives in the Rust handle and allocates nothing, which collapses the graph to ~1,001 objects -- see the program's own comment |
 

@@ -58,6 +58,8 @@ pub static PROGRAMS: &[&str] = &[
     // all. Measured, `emptyloop` says once after its
     // loop and `rexxcps`' in-loop says are guards a passing run never takes.
     "sayloop",
+    "nop",
+    "assign",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does

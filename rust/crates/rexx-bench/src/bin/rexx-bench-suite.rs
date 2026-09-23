@@ -93,6 +93,10 @@ const AXES: &[Axis] = &[
         role: Role::Loop,
     },
     Axis {
+        name: "assign",
+        role: Role::Loop,
+    },
+    Axis {
         name: "compound",
         role: Role::Loop,
     },
@@ -119,6 +123,10 @@ const AXES: &[Axis] = &[
     Axis {
         name: "heapshape",
         role: Role::SelfTimed,
+    },
+    Axis {
+        name: "nop",
+        role: Role::Loop,
     },
     Axis {
         name: "parse",
