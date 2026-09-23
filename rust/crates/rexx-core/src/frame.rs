@@ -12,8 +12,8 @@
 //! Register frames carved from blocks that never move while their arena
 //! lives, read and written through a base pointer with no bound check.
 //!
-//! Every access is in bounds whatever index the caller passes, by four
-//! properties this module alone establishes:
+//! Every access is in bounds whatever index or release order the caller
+//! uses, by properties this module alone establishes:
 //!
 //! 1. a block is one zeroed allocation of `cells + GUARD` cells, freed only by
 //!    `FrameArena`'s `Drop`;
@@ -21,7 +21,9 @@
 //!    opens a fresh block otherwise);
 //! 3. an index is a `u16`, so below `GUARD`, and `start + index < cells + GUARD`;
 //! 4. a `RegFrame<'a>` borrows its arena for `'a`, so it cannot be used once the
-//!    arena is dropped.
+//!    arena is dropped;
+//! 5. `FrameArena::iter` clamps every used length it walks to `cells + GUARD`,
+//!    so bookkeeping a misordered release corrupted cannot widen its slices.
 //!
 //! Staying inside a frame's own `len` is a logical property, not a safety one;
 //! the chunk validator in `rexx-exec` establishes it.
@@ -260,10 +262,11 @@ impl FrameArena {
                 self.top.get()
             } else {
                 self.tops.borrow()[index]
-            };
-            // SAFETY: `used <= size + GUARD`, the block's length, and the block
-            // lives as long as `self` (property 1). The cells are `Cell`s, so
-            // this shared slice cannot alias a `&mut`.
+            }
+            .min(self.size.0 + GUARD);
+            // SAFETY: `used <= size + GUARD` (property 5), the block's length,
+            // and the block lives as long as `self` (property 1). The cells are
+            // `Cell`s, so this shared slice cannot alias a `&mut`.
             let cells = unsafe { std::slice::from_raw_parts(block.as_ptr(), used) };
             cells.iter().map(Cell::get)
         })
@@ -387,5 +390,19 @@ mod tests {
         let first = arena.reserve(1);
         let _second = arena.reserve(1);
         arena.release(first);
+    }
+
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn a_double_release_leaves_the_walk_inside_its_blocks() {
+        let arena = FrameArena::new(FrameBlock::new(4).expect("in range"));
+        let frame = arena.reserve(2);
+        arena.release(frame);
+        arena.release(frame);
+        let read = |arena: &FrameArena| arena.iter().filter(|v| *v != ObjRef::NIL).count();
+        assert!(read(&arena) <= 4 + GUARD);
+        let opener = arena.reserve(1);
+        assert!(read(&arena) <= 2 * (4 + GUARD));
+        arena.release(opener);
     }
 }
