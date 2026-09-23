@@ -1891,7 +1891,8 @@ struct Interp {
     fragment_depth: usize,
     /// Whether a line typed at an interactive-debug pause is running.
     /// `RexxActivation::noTracing` includes this, so a pause's own fragment
-    /// traces nothing and pauses nowhere.
+    /// traces nothing and pauses nowhere. Written only through
+    /// [`Interp::replace_debug_pause`], which keeps `trace_cache` in step.
     pub(crate) debug_pause: bool,
     /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
     /// criterion 4): when true, [`Interp::alloc_with`] calls `Heap::collect`
@@ -2467,7 +2468,7 @@ impl Interp {
             required_packages: HashMap::new(),
             untranslated: std::collections::HashSet::new(),
             requires_installing: Vec::new(),
-            trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF),
+            trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
         }
     }
 

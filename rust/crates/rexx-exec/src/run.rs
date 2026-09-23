@@ -7827,7 +7827,7 @@ impl Interp {
     /// measured, `zz = 1/0` at a pause reports 42.3 and the next line still
     /// runs.
     fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
-        let saved_pause = std::mem::replace(&mut self.debug_pause, true);
+        let saved_pause = self.replace_debug_pause(true);
         self.fragment_depth += 1;
         let saved_entry = self.enter_fragment(self.clause_line_override.is_some());
         let outcome = self.run_fragment(text);
@@ -7836,7 +7836,7 @@ impl Interp {
             .retain(|pending| pending.fragment_depth != depth);
         self.fragment_depth -= 1;
         self.leave_fragment(saved_entry);
-        self.debug_pause = saved_pause;
+        self.replace_debug_pause(saved_pause);
         match outcome {
             Ok(_) => Ok(()),
             Err(Failure::Raised(raised)) => {

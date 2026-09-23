@@ -278,9 +278,10 @@ impl ChunkTrace {
     pub(crate) const OFF: ChunkTrace = ChunkTrace(0);
 }
 
-/// A [`TraceMode`] beside the [`ChunkTrace`] it packs down to, so that the
-/// packing is paid where the setting changes rather than at every clause that
-/// reads it.
+/// A [`TraceMode`] beside the [`ChunkTrace`] the trace sink obeys under it --
+/// its packing, or [`ChunkTrace::OFF`] while a debug pause runs -- so that
+/// both are paid where the setting or the pause changes rather than at every
+/// clause that reads them.
 ///
 /// **The byte cannot drift from the mode**: [`TraceCache::of`] is the only way
 /// to build one, and it derives the byte.
@@ -292,10 +293,14 @@ pub(crate) struct TraceCache {
 
 impl TraceCache {
     #[inline(always)]
-    pub(crate) fn of(mode: TraceMode) -> TraceCache {
+    pub(crate) fn of(mode: TraceMode, paused: bool) -> TraceCache {
         TraceCache {
             mode,
-            chunk: ChunkTrace::of(mode),
+            chunk: if paused {
+                ChunkTrace::OFF
+            } else {
+                ChunkTrace::of(mode)
+            },
         }
     }
 
@@ -634,17 +639,19 @@ impl Interp {
     /// ([`ChunkTrace`]).
     #[inline(always)]
     pub(crate) fn chunk_trace(&self) -> ChunkTrace {
-        let answer = if self.debug_pause {
-            ChunkTrace::OFF
-        } else {
-            self.trace_cache.chunk()
-        };
+        let answer = self.trace_cache.chunk();
         debug_assert_eq!(
             answer,
             ChunkTrace::of(self.traced_mode()),
             "the cached ChunkTrace is not the one the setting in force packs down to"
         );
         answer
+    }
+
+    /// Sets [`Interp::debug_pause`], answering the value it replaces.
+    pub(crate) fn replace_debug_pause(&mut self, paused: bool) -> bool {
+        self.trace_cache = TraceCache::of(self.trace_cache.mode(), paused);
+        std::mem::replace(&mut self.debug_pause, paused)
     }
 
     /// The setting the trace sink obeys, which is [`TraceMode::OFF`] while a
@@ -826,7 +833,7 @@ impl Interp {
     /// `>L>`/`>V>`/`>O>`/`>P>` -- `eval.rs`'s own single post-order insertion
     /// point, gated on `trace_mode.intermediates` (`TRACE I` only).
     pub(crate) fn tracing_intermediates(&self) -> bool {
-        self.traced_mode().intermediates
+        self.chunk_trace().intermediates()
     }
 
     /// `>L>` (`TRACE_PREFIX_LITERAL`): a literal's own value, untagged.
