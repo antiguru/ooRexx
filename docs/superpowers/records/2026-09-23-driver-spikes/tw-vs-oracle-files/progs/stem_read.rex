@@ -1,0 +1,8 @@
+n = 200000; y = 5; x = 0; a = 'abc'; b = 'abd'; s = 'one two three'
+do j = 1 to n; a.j = j; end
+do i = 1 to n
+  x = a.i
+end
+say x
+exit
+r: return

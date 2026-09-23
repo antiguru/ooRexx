@@ -1,0 +1,15 @@
+self/it	incl/it	calls/it	object	function
+42.00	42.00	2.000	librexx.so.4	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)
+35.00	56.00	1.000	librexx.so.4	RexxString::stringComp(RexxString*)
+34.00	218.00	1.000	librexx.so.4	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)
+32.00	250.00	1.000	librexx.so.4	RexxInstructionIf::execute(RexxActivation*, ExpressionStack*)
+30.00	121.00	1.000	librexx.so.4	RexxString::comp(RexxObject*)
+25.25	275.26	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+22.00	29.00	1.000	librexx.so.4	RexxInternalObject::requestString()
+21.00	21.00	1.000	libc.so.6	__memcmp_avx2_movbe
+12.00	133.00	1.000	librexx.so.4	RexxString::equal(RexxObject*)
+9.00	142.00	1.000	librexx.so.4	RexxObject::callOperatorMethod(unsigned long, RexxObject*)
+6.00	6.00	1.000	librexx.so.4	RexxString::numberString()
+5.00	5.00	1.000	librexx.so.4	RexxInternalObject::isBaseClass()
+2.00	2.00	1.000	librexx.so.4	RexxString::primitiveMakeString()
+TOTAL self diff/it 275.36  summary diff/it 275.36

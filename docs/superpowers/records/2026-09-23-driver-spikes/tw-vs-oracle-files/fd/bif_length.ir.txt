@@ -1,0 +1,11 @@
+self/it	incl/it	calls/it	object	function
+280.00	638.97	0.000	tw-rexx-run	<rexx_exec::Interp>::run_ops_from::<true>
+114.00	298.00	1.000	tw-rexx-run	<rexx_exec::Interp>::run_call_args
+89.00	167.00	1.000	tw-rexx-run	rexx_exec::builtin::run
+33.00	54.00	1.000	tw-rexx-run	<rexx_exec::Interp>::text_len
+31.00	31.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_at
+30.00	30.00	1.000	tw-rexx-run	<rexx_exec::Interp>::push_call_arg
+24.00	78.00	1.000	tw-rexx-run	rexx_exec::builtin::string::length
+21.00	21.00	1.000	tw-rexx-run	rexx_exec::value::write_small_int
+17.00	17.00	1.000	tw-rexx-run	<rexx_exec::Interp>::enter_eval_node::<u8>
+TOTAL self diff/it 639.05  summary diff/it 639.05

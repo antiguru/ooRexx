@@ -1,0 +1,35 @@
+self/it	incl/it	calls/it	object	function
+231.00	1341.22	1.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame'2
+141.00	144.00	1.000	tw-rexx-run	<rexx_exec::Interp>::loop_advance
+127.00	1636.11	0.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame
+120.33	204.20	1.000	tw-rexx-run	<hashbrown::map::HashMap<alloc::vec::Vec<u8>, (usize, core::option::Option<rexx_core::handle::ObjRef>), rustc_hash::FxBuildHasher>>::insert
+117.55	118.65	1.000	libc.so.6	_int_malloc
+106.00	898.20	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_expr_target
+95.00	560.47	1.000	tw-rexx-run	<rexx_exec::Interp>::stem_set_at
+82.72	82.72	1.000	tw-rexx-run	rexx_exec::value::write_small_int
+80.19	82.85	0.000	tw-rexx-run	<hashbrown::raw::RawTable<(alloc::vec::Vec<u8>, (usize, core::option::Option<rexx_core::handle::ObjRef>))>>::reserve_rehash::<hashbrown::map::make_has
+72.53	73.63	1.000	tw-rexx-run	<hashbrown::map::HashMap<alloc::vec::Vec<u8>, (usize, core::option::Option<rexx_core::handle::ObjRef>), rustc_hash::FxBuildHasher>>::get_mut::<[u8]>
+68.00	198.73	1.000	tw-rexx-run	<rexx_exec::Interp>::append_tails
+64.00	1110.11	1.000	tw-rexx-run	<rexx_exec::Interp>::exec_instruction
+49.00	947.20	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_evaluated
+43.49	124.61	1.000	libc.so.6	_int_free_merge_chunk
+42.00	42.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_at
+40.00	82.01	1.000	tw-rexx-run	<rexx_exec::Interp>::eval_node
+39.91	49.03	1.000	libc.so.6	_int_free_create_chunk
+38.01	189.62	1.000	libc.so.6	free
+38.00	156.65	1.000	libc.so.6	__libc_malloc2
+34.00	34.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_by_name_at
+33.00	231.73	1.000	tw-rexx-run	<rexx_exec::Interp>::append_tail_key
+27.90	27.90	2.000	libc.so.6	__memcpy_avx_unaligned_erms
+27.00	151.62	1.000	libc.so.6	_int_free_chunk
+24.00	24.00	1.000	tw-rexx-run	<rexx_exec::Interp>::do_body_outcome
+23.02	23.02	1.000	libc.so.6	_int_free_maybe_trim
+18.18	18.18	1.000	libc.so.6	unlink_chunk.isra.0
+17.57	207.16	0.000	tw-rexx-run	core::ptr::drop_glue::<rexx_core::body::Body>
+17.01	173.66	1.000	libc.so.6	malloc
+17.00	17.00	1.000	tw-rexx-run	<rexx_exec::Interp>::enter_eval_node::<u8>
+3.00	3.00	1.000	tw-rexx-run	core::ptr::drop_glue::<core::option::Option<rexx_num::Number>>
+2.61	2.61	0.000	libc.so.6	__memset_avx2_unaligned_erms
+2.11	2.11	0.097	libc.so.6	__memcmp_avx2_movbe
+0.68	0.71	0.006	libc.so.6	sysmalloc
+TOTAL self diff/it 1843.38  summary diff/it 1843.38

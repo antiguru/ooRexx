@@ -1,0 +1,6 @@
+self/it	incl/it	calls/it	object	function
+29.00	63.00	1.000	librexx.so.4	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)
+25.25	88.26	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+24.00	24.00	1.000	librexx.so.4	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)
+10.00	10.00	1.000	librexx.so.4	RexxString::evaluate(RexxActivation*, ExpressionStack*)
+TOTAL self diff/it 88.28  summary diff/it 88.28

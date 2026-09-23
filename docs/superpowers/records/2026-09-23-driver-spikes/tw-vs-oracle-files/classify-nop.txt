@@ -1,0 +1,9 @@
+   38.0  codegen: prologue/epilogue
+   77.0  codegen: hoisted loads/spills at entry
+   59.0  eager trace/debug state (oracle: lazy or in execute)
+   24.0  bookkeeping the oracle also does
+   12.0  Rust checks (bounds, Option)
+   37.0  call layering / dispatch
+   31.0  error propagation (Result/ClauseOutcome)
+  278.0  total classified
+UNCLASSIFIED   1.00 0x13b350 mod.rs:0     stack mov    0x310(%rsp),%rcx

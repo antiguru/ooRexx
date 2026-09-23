@@ -1,0 +1,12 @@
+self/it	incl/it	calls/it	object	function
+267.00	723.87	0.000	tw-rexx-run	<rexx_exec::Interp>::run_ops_from::<true>
+164.00	390.00	1.000	tw-rexx-run	<rexx_exec::Interp>::apply_binary
+69.00	90.00	1.000	tw-rexx-run	rexx_num::compare::compare_strings
+66.00	66.00	2.000	tw-rexx-run	<rexx_exec::Interp>::inline_text_to_number
+62.00	62.00	2.000	tw-rexx-run	<rexx_exec::Interp>::read_at
+54.00	54.00	2.000	tw-rexx-run	<rexx_exec::Interp>::render
+21.01	21.01	1.000	libc.so.6	__memcmp_avx2_movbe
+10.00	10.00	1.000	tw-rexx-run	<rexx_exec::Interp>::operator_message_receiver
+6.00	6.00	1.000	tw-rexx-run	<rexx_exec::Interp>::operator_operand_gap
+5.00	5.00	1.000	tw-rexx-run	core::ptr::drop_glue::<core::option::Option<rexx_exec::run::LoopHeaderValues>>
+TOTAL self diff/it 723.98  summary diff/it 723.98

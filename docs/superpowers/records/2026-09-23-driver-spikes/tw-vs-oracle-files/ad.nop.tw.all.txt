@@ -1,0 +1,348 @@
+  1.00 0x137270 tree_walker.rs:112   other push   %rbp
+  1.00 0x137271 tree_walker.rs:112   other push   %r15
+  1.00 0x137273 tree_walker.rs:112   other push   %r14
+  1.00 0x137275 tree_walker.rs:112   other push   %r13
+  1.00 0x137277 tree_walker.rs:112   other push   %r12
+  1.00 0x137279 tree_walker.rs:112   other push   %rbx
+  1.00 0x13727a tree_walker.rs:112   other sub    $0x488,%rsp
+  1.00 0x137281 tree_walker.rs:112   other mov    %rcx,%r10
+  1.00 0x137284 tree_walker.rs:112   other mov    %rsi,%r12
+  1.00 0x137287 tree_walker.rs:112   stack mov    %rdi,0x310(%rsp)
+  1.00 0x13728f tree_walker.rs:120   other movzbl (%r8),%ecx
+  1.00 0x137293 tree_walker.rs:0     other movabs $0xfffffffd8f,%rbx
+  1.00 0x13729d tree_walker.rs:119   other shr    %cl,%rbx
+  1.00 0x1372a0 tree_walker.rs:119   other movabs $0x8000000000000000,%rsi
+  1.00 0x1372aa tree_walker.rs:0     other mov    (%rdx),%rbp
+  1.00 0x1372ad tree_walker.rs:0     other mov    0x68(%r8),%rdi
+  1.00 0x1372b1 tree_walker.rs:0     other mov    0x70(%r8),%rax
+  1.00 0x1372b5 tree_walker.rs:0     stack mov    %rdi,0x430(%rsp)
+  1.00 0x1372bd tree_walker.rs:0     other lea    (%rdi,%rax,8),%rax
+  1.00 0x1372c1 tree_walker.rs:0     stack mov    %rax,0x460(%rsp)
+  1.00 0x1372c9 tree_walker.rs:0     other movzbl 0x78(%r8),%eax
+  1.00 0x1372ce tree_walker.rs:0     stack mov    %al,0x77(%rsp)
+  1.00 0x1372d2 tree_walker.rs:0     other movzbl 0x88(%r8),%eax
+  1.00 0x1372da tree_walker.rs:0     stack mov    %al,0x6(%rsp)
+  1.00 0x1372de tree_walker.rs:0     other movzbl 0x58(%r8),%eax
+  1.00 0x1372e3 tree_walker.rs:0     stack mov    %al,0xc4(%rsp)
+  1.00 0x1372ea tree_walker.rs:0     stack mov    %rcx,0x2d0(%rsp)
+  1.00 0x1372f2 tree_walker.rs:0     other mov    %ecx,%eax
+  1.00 0x1372f4 tree_walker.rs:0     other and    $0x3e,%al
+  1.00 0x1372f6 tree_walker.rs:0     stack mov    %al,0xc5(%rsp)
+  1.00 0x1372fd tree_walker.rs:0     other mov    0x8(%rdx),%rax
+  1.00 0x137301 tree_walker.rs:0     stack mov    %rax,0x1b0(%rsp)
+  1.00 0x137309 tree_walker.rs:0     other mov    0x20(%rdx),%rax
+  1.00 0x13730d tree_walker.rs:0     stack mov    %rax,0xd8(%rsp)
+  1.00 0x137315 tree_walker.rs:0     other mov    0xa8(%r8),%rax
+  1.00 0x13731c tree_walker.rs:0     stack mov    %rax,0xd0(%rsp)
+  1.00 0x137324 tree_walker.rs:0     other mov    0xb0(%r8),%rax
+  1.00 0x13732b tree_walker.rs:0     stack mov    %rax,0x2c8(%rsp)
+  1.00 0x137333 tree_walker.rs:0     other lea    0x510(%r12),%rax
+  1.00 0x13733b tree_walker.rs:0     stack mov    %rax,0x2b0(%rsp)
+  1.00 0x137343 tree_walker.rs:0     other lea    0x10(%r8),%rax
+  1.00 0x137347 tree_walker.rs:0     stack mov    %rax,0x438(%rsp)
+  1.00 0x13734f tree_walker.rs:0     other mov    0x10(%r8),%rax
+  1.00 0x137353 tree_walker.rs:0     stack mov    %rax,0x440(%rsp)
+  1.00 0x13735b tree_walker.rs:0     other mov    0x80(%r8),%rax
+  1.00 0x137362 tree_walker.rs:0     stack mov    %rax,0x300(%rsp)
+  1.00 0x13736a tree_walker.rs:0     other mov    0x4(%r8),%eax
+  1.00 0x13736e tree_walker.rs:0     stack mov    %eax,0x1dc(%rsp)
+  1.00 0x137375 tree_walker.rs:0     other mov    0x8(%r8),%eax
+  1.00 0x137379 tree_walker.rs:0     stack mov    %rax,0x390(%rsp)
+  1.00 0x137381 tree_walker.rs:0     other lea    0x8(%r8),%rax
+  1.00 0x137385 tree_walker.rs:0     stack mov    %rax,0x3d8(%rsp)
+  1.00 0x13738d tree_walker.rs:0     other mov    0x90(%r8),%rcx
+  1.00 0x137394 tree_walker.rs:0     other mov    0x60(%r8),%rax
+  1.00 0x137398 tree_walker.rs:0     stack mov    %rax,0x448(%rsp)
+  1.00 0x1373a0 tree_walker.rs:0     stack mov    %r8,0x450(%rsp)
+  1.00 0x1373a8 tree_walker.rs:0     other mov    0x8(%r8),%rdi
+  1.00 0x1373ac tree_walker.rs:0     other lea    0xd(%rsi),%rax
+  1.00 0x1373b0 tree_walker.rs:0     stack mov    %rax,0x428(%rsp)
+  1.00 0x1373b8 tree_walker.rs:0     stack mov    %r10,0xb0(%rsp)
+  1.00 0x1373c0 tree_walker.rs:0     other lea    0x1(%r10),%rax
+  1.00 0x1373c4 tree_walker.rs:0     stack mov    %rax,0x118(%rsp)
+  1.00 0x1373cc tree_walker.rs:0     other lea    0xc0(%rdi),%rax
+  1.00 0x1373d3 tree_walker.rs:0     stack mov    %rax,0x458(%rsp)
+  1.00 0x1373db tree_walker.rs:0     other lea    0x70(%rdi),%rax
+  1.00 0x1373df tree_walker.rs:0     stack mov    %rax,0x1c0(%rsp)
+  1.00 0x1373e7 tree_walker.rs:0     other mov    0x18(%rdx),%rax
+  1.00 0x1373eb tree_walker.rs:0     stack mov    %rax,0x340(%rsp)
+  1.00 0x1373f3 tree_walker.rs:0     stack mov    %rdx,0x68(%rsp)
+  1.00 0x1373f8 tree_walker.rs:0     other mov    0x10(%rdx),%rax
+  1.00 0x1373fc tree_walker.rs:0     stack mov    %rax,0x3d0(%rsp)
+  1.00 0x137404 tree_walker.rs:0     stack mov    %rdi,0x120(%rsp)
+  1.00 0x13740c tree_walker.rs:0     other lea    0x10(%rdi),%rax
+  1.00 0x137410 tree_walker.rs:0     stack mov    %rax,0x1b8(%rsp)
+  1.00 0x137418 tree_walker.rs:0     stack mov    %rcx,0x2f8(%rsp)
+  1.00 0x137420 tree_walker.rs:0     other lea    0x1(%rcx),%rax
+  1.00 0x137424 tree_walker.rs:0     stack mov    %rax,0x3c8(%rsp)
+  1.00 0x13742c tree_walker.rs:0     other mov    0x20(%r9),%rax
+  1.00 0x137430 tree_walker.rs:0     stack mov    %rax,0xe8(%rsp)
+  1.00 0x137438 tree_walker.rs:0     stack mov    %r9,0x80(%rsp)
+  1.00 0x137440 tree_walker.rs:0     other mov    0x28(%r9),%rax
+  1.00 0x137444 tree_walker.rs:0     stack mov    %rax,0x178(%rsp)
+  1.00 0x13744c tree_walker.rs:0     other lea    0x290(%r12),%rax
+  1.00 0x137454 tree_walker.rs:0     stack mov    %rax,0x3e8(%rsp)
+  1.00 0x13745c tree_walker.rs:0     stack mov    %r12,0x8(%rsp)
+  1.00 0x137461 tree_walker.rs:0     stack mov    %rbp,0x98(%rsp)
+  1.00 0x137469 tree_walker.rs:0     other nopl   0x0(%rax)
+  1.00 0x137470 trace.rs:637   other movzbl 0x1881(%r12),%eax
+  1.00 0x137479 trace.rs:637   stack mov    %al,0xc6(%rsp)
+  1.00 0x137480 trace.rs:637   other movzbl 0x1884(%r12),%eax
+  1.00 0x137489 trace.rs:0     stack mov    %al,0xc7(%rsp)
+  1.00 0x137490 clause.rs:273   other decl   0x1870(%r12)
+  1.00 0x137498 clause.rs:274   jcc   je     139897 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2627>
+  1.00 0x13749e run.rs:4906  other mov    0x1790(%r12),%rax
+  1.00 0x1374a6 option.rs:765   other test   %rax,%rax
+  1.00 0x1374a9 option.rs:765   jcc   je     13b3e3 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4173>
+  1.00 0x1374af option.rs:0     other movzbl 0x1e6(%rax),%ecx
+  1.00 0x1374b6 option.rs:0     other shl    $0x3,%cl
+  1.00 0x1374b9 activation.rs:201   other mov    $0x3020201,%edx
+  1.00 0x1374be activation.rs:201   other shr    %cl,%edx
+  1.00 0x1374c0 run.rs:4907  other movb   $0x1,0x1e3(%rax)
+  1.00 0x1374c7 run.rs:4919  other mov    %dl,0x1e6(%rax)
+  1.00 0x1374cd run.rs:0     stack mov    0xd8(%rsp),%rax
+  1.00 0x1374d5 run.rs:0     other test   %rax,%rax
+  1.00 0x1374d8 run.rs:0     stack mov    %rbx,0x468(%rsp)
+  1.00 0x1374e0 run.rs:5459  jcc   je     137500 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x290>
+  1.00 0x1374e2 run.rs:0     stack mov    0xb0(%rsp),%r8
+  1.00 0x1374ea index.rs:184   other cmp    0x70(%rax),%r8
+  1.00 0x1374ee index.rs:184   jcc   jae    137520 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2b0>
+  1.00 0x1374f0 run.rs:5460  other mov    0x68(%rax),%rax
+  1.00 0x1374f4 plan.rs:157   other mov    (%rax,%r8,8),%rbx
+  1.00 0x1374f8 plan.rs:157   other jmp    137535 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2c5>
+  1.00 0x137535 run.rs:5463  other add    0x17c8(%r12),%rbx
+  1.00 0x13753d run.rs:5463  other add    0x17c0(%r12),%rbx
+  1.00 0x137545 run.rs:4945  other mov    %rbx,0x938(%r12)
+  1.00 0x13754d activation.rs:1096  other movzbl 0x1878(%r12),%eax
+  1.00 0x137556 run.rs:4949  other mov    %al,0x950(%r12)
+  1.00 0x13755e run.rs:8325  other testb  $0x1,0x10(%r12)
+  1.00 0x137564 run.rs:8325  jcc   je     1375a0 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x330>
+  1.00 0x1375a0 trace.rs:0     stack mov    0xd8(%rsp),%rax
+  1.00 0x1375a8 trace.rs:0     other test   %rax,%rax
+  1.00 0x1375ab run.rs:8336  jcc   je     1375cb <<rexx_exec::Interp>::walk_step_in_temps_frame+0x35b>
+  1.00 0x1375ad run.rs:0     stack mov    0xb0(%rsp),%rcx
+  1.00 0x1375b5 index.rs:184   other cmp    0x80(%rax),%rcx
+  1.00 0x1375bc index.rs:184   jcc   jae    137616 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x3a6>
+  1.00 0x1375be run.rs:8337  other mov    0x78(%rax),%rax
+  1.00 0x1375c2 plan.rs:178   other mov    (%rax,%rcx,8),%rax
+  1.00 0x1375c6 plan.rs:178   other jmp    13769f <<rexx_exec::Interp>::walk_step_in_temps_frame+0x42f>
+  1.00 0x13769f run.rs:0     stack mov    0xb0(%rsp),%rcx
+  1.00 0x1376a7 run.rs:4980  other mov    %rcx,0x948(%r12)
+  1.00 0x1376af mod.rs:3045  other movq   $0x0,0x368(%r12)
+  1.00 0x1376bb clause.rs:265   other mov    %rax,0x940(%r12)
+  1.00 0x1376c3 trace.rs:637   other cmpb   $0x0,0x1884(%r12)
+  1.00 0x1376cc trace.rs:637   jcc   jne    1377ee <<rexx_exec::Interp>::walk_step_in_temps_frame+0x57e>
+  1.00 0x1376d2 trace.rs:640   other movzbl 0x1881(%r12),%eax
+  1.00 0x1376db trace.rs:272   other test   $0x1,%al
+  1.00 0x1376dd trace.rs:272   jcc   jne    137710 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4a0>
+  1.00 0x1376df trace.rs:0     stack cmpl   $0x1,0x2d0(%rsp)
+  1.00 0x1376e7 trace.rs:0     other sete   %cl
+  1.00 0x1376ea trace.rs:273   other mov    %eax,%edx
+  1.00 0x1376ec trace.rs:273   other and    $0x2,%dl
+  1.00 0x1376ef trace.rs:273   other shr    $1,%dl
+  1.00 0x1376f1 trace.rs:273   other test   %dl,%cl
+  1.00 0x1376f3 trace.rs:273   jcc   jne    137710 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4a0>
+  1.00 0x1376f5 trace.rs:0     stack cmpl   $0x3,0x2d0(%rsp)
+  1.00 0x1376fd trace.rs:0     other setne  %cl
+  1.00 0x137700 trace.rs:274   other test   $0x10,%al
+  1.00 0x137702 trace.rs:274   other sete   %al
+  1.00 0x137705 run.rs:5081  other or     %cl,%al
+  1.00 0x137707 run.rs:5081  jcc   jne    1377ee <<rexx_exec::Interp>::walk_step_in_temps_frame+0x57e>
+  1.00 0x1377ee mod.rs:3064  other mov    0x2a0(%r12),%rax
+  1.00 0x1377f6 mod.rs:0     stack mov    %rax,0xa8(%rsp)
+  1.00 0x1377fe mod.rs:967   other movzbl 0x1888(%r12),%eax
+  1.00 0x137807 mod.rs:968   other movb   $0x0,0x1888(%r12)
+  1.00 0x137810 mod.rs:968   stack mov    0x2d0(%rsp),%rdx
+  1.00 0x137818 tree_walker.rs:176   other lea    -0x4(%rdx),%ecx
+  1.00 0x13781b tree_walker.rs:176   other cmp    $0x2,%ecx
+  1.00 0x13781e tree_walker.rs:176   jcc   jb     1378d0 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x660>
+  1.00 0x137824 tree_walker.rs:176   other cmp    $0x6,%edx
+  1.00 0x137827 tree_walker.rs:176   jcc   je     137d14 <<rexx_exec::Interp>::walk_step_in_temps_frame+0xaa4>
+  1.00 0x13782d tree_walker.rs:176   other cmp    $0x9,%edx
+  1.00 0x137830 tree_walker.rs:176   jcc   jne    137e15 <<rexx_exec::Interp>::walk_step_in_temps_frame+0xba5>
+  1.00 0x137e15 tree_walker.rs:262   other sub    $0x8,%rsp
+  1.00 0x137e19 tree_walker.rs:262   other movzbl %al,%eax
+  1.00 0x137e1c tree_walker.rs:262   other lea    0x18(%rsp),%rdi
+  1.00 0x137e21 tree_walker.rs:262   other mov    %r12,%rsi
+  1.00 0x137e24 tree_walker.rs:262   stack mov    0x70(%rsp),%rdx
+  1.00 0x137e29 tree_walker.rs:262   stack mov    0xb8(%rsp),%rcx
+  1.00 0x137e31 tree_walker.rs:262   stack mov    0x458(%rsp),%r8
+  1.00 0x137e39 tree_walker.rs:262   stack mov    0x88(%rsp),%r9
+  1.00 0x137e41 tree_walker.rs:262   other push   %rax
+  1.00 0x137e42 tree_walker.rs:262   call  call   15d6a0 <<rexx_exec::Interp>::exec_instruction>
+  1.00 0x137e47 tree_walker.rs:262   other add    $0x10,%rsp
+  1.00 0x137e4b tree_walker.rs:262   other jmp    13aab5 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x3845>
+  1.00 0x13a190 tree_walker.rs:101   other inc    %r15
+  1.00 0x13a193 tree_walker.rs:0     stack mov    0x38(%rsp),%r10
+  1.00 0x13a198 tree_walker.rs:97    other cmp    %r10,%r15
+  1.00 0x13a19b tree_walker.rs:97    stack mov    0x8(%rsp),%r12
+  1.00 0x13a1a0 tree_walker.rs:97    jcc   jae    13a043 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2dd3>
+  1.00 0x13a1a6 mod.rs:1873  stack mov    0x10(%rbp),%rsi
+  1.00 0x13a1aa index.rs:238   other cmp    %rsi,%r15
+  1.00 0x13a1ad index.rs:238   jcc   jae    13b519 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x42a9>
+  1.00 0x13a1b3 index.rs:238   other imul   $0xb8,%r15,%r8
+  1.00 0x13a1ba index.rs:238   stack add    0x8(%rbp),%r8
+  1.00 0x13a1be tree_walker.rs:99    other lea    0x40(%rsp),%rdi
+  1.00 0x13a1c3 tree_walker.rs:99    other mov    %r12,%rsi
+  1.00 0x13a1c6 tree_walker.rs:0     stack mov    0x68(%rsp),%rdx
+  1.00 0x13a1cb tree_walker.rs:99    other mov    %r15,%rcx
+  1.00 0x13a1ce tree_walker.rs:99    stack mov    0x80(%rsp),%r9
+  1.00 0x13a1d6 tree_walker.rs:99    call  call   137270 <<rexx_exec::Interp>::walk_step_in_temps_frame>
+  1.00 0x13a1db result.rs:2176  stack mov    0x40(%rsp),%rax
+  1.00 0x13a1e0 result.rs:2176  other test   %rax,%rax
+  1.00 0x13a1e3 result.rs:2176  jcc   je     13a190 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2f20>
+  1.00 0x13aab5 unix.rs:0     stack mov    0xa8(%rsp),%rax
+  1.00 0x13aabd mod.rs:1721  other mov    0x588(%r12),%rbx
+  1.00 0x13aac5 mod.rs:1831  other cmp    0x2a0(%r12),%rax
+  1.00 0x13aacd mod.rs:1831  jcc   ja     13aad7 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x3867>
+  1.00 0x13aacf mod.rs:1836  other mov    %rax,0x2a0(%r12)
+  1.00 0x13aad7 result.rs:594   stack cmpq   $0xffffffffffffffff,0x10(%rsp)
+  1.00 0x13aadd run.rs:5028  jcc   jne    13ab55 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x38e5>
+  1.00 0x13ab55 run.rs:0     stack cmpb   $0x4,0xc5(%rsp)
+  1.00 0x13ab5d run.rs:5037  jcc   je     13ac40 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x39d0>
+  1.00 0x13ab63 run.rs:5041  stack movdqa 0x10(%rsp),%xmm0
+  1.00 0x13ab69 run.rs:5041  stack movdqa %xmm0,0x40(%rsp)
+  1.00 0x13ab6f run.rs:5041  stack mov    0x20(%rsp),%rax
+  1.00 0x13ab74 run.rs:5041  stack mov    %rax,0x50(%rsp)
+  1.00 0x13ab79 clause.rs:317   stack mov    0x40(%rsp),%rax
+  1.00 0x13ab7e clause.rs:317   other cmp    $0xffffffffffffffff,%rax
+  1.00 0x13ab82 clause.rs:317   jcc   je     13ac40 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x39d0>
+  1.00 0x13ab88 clause.rs:322   other cmpq   $0x0,0x588(%r12)
+  1.00 0x13ab91 clause.rs:322   jcc   je     13ac40 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x39d0>
+  1.00 0x13ac40 result.rs:0     stack mov    0x20(%rsp),%rax
+  1.00 0x13ac45 result.rs:0     stack mov    %rax,0x150(%rsp)
+  1.00 0x13ac4d result.rs:0     stack movdqa 0x10(%rsp),%xmm0
+  1.00 0x13ac53 result.rs:0     stack movdqa %xmm0,0x140(%rsp)
+  1.00 0x13ac5c result.rs:594   stack mov    0x140(%rsp),%rax
+  1.00 0x13ac64 result.rs:594   other cmp    $0xfffffffffffffffd,%rax
+  1.00 0x13ac68 run.rs:5049  jcc   je     13b2b7 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4047>
+  1.00 0x13ac6e run.rs:5052  stack mov    0x148(%rsp),%r15
+  1.00 0x13ac76 run.rs:5052  stack mov    0x150(%rsp),%r14
+  1.00 0x13ac7e tree_walker.rs:130   other cmp    $0xffffffffffffffff,%rax
+  1.00 0x13ac82 tree_walker.rs:130   jcc   je     13b303 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4093>
+  1.00 0x13ac88 tree_walker.rs:130   other cmp    $0xfffffffffffffffe,%rax
+  1.00 0x13ac8c tree_walker.rs:130   jcc   je     13b2e7 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4077>
+  1.00 0x13ac92 tree_walker.rs:0     stack movzbl 0xc6(%rsp),%ecx
+  1.00 0x13ac9a tree_walker.rs:0     other and    $0x20,%cl
+  1.00 0x13ac9d tree_walker.rs:0     other shr    $0x5,%cl
+  1.00 0x13aca0 tree_walker.rs:0     stack movzbl 0xc7(%rsp),%esi
+  1.00 0x13aca8 tree_walker.rs:0     other not    %sil
+  1.00 0x13acab tree_walker.rs:0     other and    %cl,%sil
+  1.00 0x13acae mod.rs:1721  other test   %rbx,%rbx
+  1.00 0x13acb1 mod.rs:1721  other sete   %cl
+  1.00 0x13acb4 mod.rs:0     stack mov    0x468(%rsp),%rdx
+  1.00 0x13acbc tree_walker.rs:138   other and    %sil,%dl
+  1.00 0x13acbf tree_walker.rs:138   other and    %cl,%dl
+  1.00 0x13acc1 tree_walker.rs:138   other cmp    $0x1,%dl
+  1.00 0x13acc4 tree_walker.rs:138   jcc   jne    13b350 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x40e0>
+  1.00 0x13b350 mod.rs:0     stack mov    0x310(%rsp),%rcx
+  1.00 0x13b358 tree_walker.rs:146   other mov    %rax,(%rcx)
+  1.00 0x13b35b tree_walker.rs:146   other mov    %r15,0x8(%rcx)
+  1.00 0x13b35f tree_walker.rs:146   other mov    %r14,0x10(%rcx)
+  1.00 0x13b363 tree_walker.rs:146   other jmp    13b3d1 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4161>
+  1.00 0x13b3d1 tree_walker.rs:148   other add    $0x488,%rsp
+  1.00 0x13b3d8 tree_walker.rs:148   other pop    %rbx
+  1.00 0x13b3d9 tree_walker.rs:148   other pop    %r12
+  1.00 0x13b3db tree_walker.rs:148   other pop    %r13
+  1.00 0x13b3dd tree_walker.rs:148   other pop    %r14
+  1.00 0x13b3df tree_walker.rs:148   other pop    %r15
+  1.00 0x13b3e1 tree_walker.rs:148   other pop    %rbp
+  1.00 0x13b3e2 tree_walker.rs:148   other ret
+  1.00 0x15d6a0 run.rs:985   other push   %rbp
+  1.00 0x15d6a1 run.rs:985   other push   %r15
+  1.00 0x15d6a3 run.rs:985   other push   %r14
+  1.00 0x15d6a5 run.rs:985   other push   %r13
+  1.00 0x15d6a7 run.rs:985   other push   %r12
+  1.00 0x15d6a9 run.rs:985   other push   %rbx
+  1.00 0x15d6aa run.rs:985   other sub    $0x458,%rsp
+  1.00 0x15d6b1 run.rs:985   other mov    %rcx,%r12
+  1.00 0x15d6b4 run.rs:985   other mov    %rdx,%r15
+  1.00 0x15d6b7 run.rs:985   other mov    %rsi,%r13
+  1.00 0x15d6ba run.rs:985   stack mov    %rdi,0x28(%rsp)
+  1.00 0x15d6bf run.rs:985   stack movzbl 0x490(%rsp),%eax
+  1.00 0x15d6c7 run.rs:993   other movzbl (%r8),%ebp
+  1.00 0x15d6cb run.rs:993   other movzbl %bpl,%esi
+  1.00 0x15d6cf run.rs:0     other lea    -0x11df96(%rip),%rcx        # 3f740 <GCC_except_table3538+0x21a4>
+  1.00 0x15d6d6 run.rs:993   other movslq (%rcx,%rsi,4),%rdx
+  1.00 0x15d6da run.rs:993   other add    %rcx,%rdx
+  1.00 0x15d6dd run.rs:993   other jmp    *%rdx
+  1.00 0x15d6df run.rs:0     stack mov    0x28(%rsp),%rax
+  1.00 0x15d6e4 run.rs:0     other movq   $0x0,(%rax)
+  1.00 0x15d6eb run.rs:0     other jmp    1609a3 <<rexx_exec::Interp>::exec_instruction+0x3303>
+  1.00 0x1609a3 run.rs:1598  other add    $0x458,%rsp
+  1.00 0x1609aa run.rs:1598  other pop    %rbx
+  1.00 0x1609ab run.rs:1598  other pop    %r12
+  1.00 0x1609ad run.rs:1598  other pop    %r13
+  1.00 0x1609af run.rs:1598  other pop    %r14
+  1.00 0x1609b1 run.rs:1598  other pop    %r15
+  1.00 0x1609b3 run.rs:1598  other pop    %rbp
+  1.00 0x1609b4 run.rs:1598  other ret
+-- classes {'stack': 84.0, 'call': 2.0, 'jcc': 26.0, 'other': 167.0} total 279.0
+-- by line
+ 82.00 tree_walker.rs:0
+ 12.00 tree_walker.rs:262
+ 12.00 run.rs:985
+ 11.00 run.rs:0
+ 10.00 tree_walker.rs:112
+  8.00 tree_walker.rs:148
+  8.00 run.rs:1598
+  7.00 trace.rs:0
+  7.00 tree_walker.rs:176
+  5.00 trace.rs:637
+  5.00 trace.rs:273
+  5.00 tree_walker.rs:99
+  5.00 run.rs:993
+  4.00 index.rs:184
+  4.00 index.rs:238
+  4.00 run.rs:5041
+  4.00 result.rs:0
+  4.00 tree_walker.rs:130
+  4.00 tree_walker.rs:138
+  4.00 tree_walker.rs:146
+  3.00 mod.rs:0
+  3.00 tree_walker.rs:97
+  3.00 result.rs:2176
+  3.00 mod.rs:1721
+  3.00 result.rs:594
+  3.00 clause.rs:317
+  2.00 tree_walker.rs:119
+  2.00 option.rs:765
+  2.00 option.rs:0
+  2.00 activation.rs:201
+  2.00 plan.rs:157
+  2.00 run.rs:5463
+  2.00 run.rs:8325
+  2.00 plan.rs:178
+  2.00 trace.rs:272
+  2.00 trace.rs:274
+  2.00 run.rs:5081
+  2.00 mod.rs:968
+  2.00 mod.rs:1831
+  2.00 clause.rs:322
+  2.00 run.rs:5052
+  1.00 tree_walker.rs:120
+  1.00 clause.rs:273
+  1.00 clause.rs:274
+  1.00 run.rs:4906
+  1.00 run.rs:4907
+  1.00 run.rs:4919
+  1.00 run.rs:5459
+  1.00 run.rs:5460
+  1.00 run.rs:4945
+  1.00 activation.rs:1096
+  1.00 run.rs:4949
+  1.00 run.rs:8336
+  1.00 run.rs:8337
+  1.00 run.rs:4980
+  1.00 mod.rs:3045
+  1.00 clause.rs:265
+  1.00 trace.rs:640
+  1.00 mod.rs:3064
+  1.00 mod.rs:967
+  1.00 tree_walker.rs:101
+  1.00 mod.rs:1873
+  1.00 unix.rs:0
+  1.00 mod.rs:1836
+  1.00 run.rs:5028
+  1.00 run.rs:5037
+  1.00 run.rs:5049

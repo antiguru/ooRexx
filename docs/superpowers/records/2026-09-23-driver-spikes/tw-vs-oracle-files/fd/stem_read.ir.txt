@@ -1,0 +1,12 @@
+self/it	incl/it	calls/it	object	function
+216.00	708.42	0.000	tw-rexx-run	<rexx_exec::Interp>::run_ops_from::<true>
+85.64	105.77	1.000	tw-rexx-run	<hashbrown::map::HashMap<alloc::vec::Vec<u8>, (usize, core::option::Option<rexx_core::handle::ObjRef>), rustc_hash::FxBuildHasher>>::get::<[u8]>
+84.00	492.50	1.000	tw-rexx-run	<rexx_exec::Interp>::read_symbol
+82.72	82.72	1.000	tw-rexx-run	rexx_exec::value::write_small_int
+71.00	176.77	1.000	tw-rexx-run	<rexx_exec::Interp>::stem_get_at
+68.00	198.73	1.000	tw-rexx-run	<rexx_exec::Interp>::append_tails
+34.00	34.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_by_name_at
+33.00	231.73	1.000	tw-rexx-run	<rexx_exec::Interp>::append_tail_key
+20.13	20.13	1.006	libc.so.6	__memcmp_avx2_movbe
+13.89	13.89	1.000	libc.so.6	__memcpy_avx_unaligned_erms
+TOTAL self diff/it 708.48  summary diff/it 708.48

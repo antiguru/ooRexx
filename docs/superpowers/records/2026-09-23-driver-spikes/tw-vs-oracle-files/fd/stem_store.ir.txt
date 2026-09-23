@@ -1,0 +1,28 @@
+self/it	incl/it	calls/it	object	function
+196.00	1174.16	0.000	tw-rexx-run	<rexx_exec::Interp>::run_ops_from::<true>
+120.33	204.24	1.000	tw-rexx-run	<hashbrown::map::HashMap<alloc::vec::Vec<u8>, (usize, core::option::Option<rexx_core::handle::ObjRef>), rustc_hash::FxBuildHasher>>::insert
+117.54	118.63	1.000	libc.so.6	_int_malloc
+106.00	898.21	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_expr_target
+95.00	560.48	1.000	tw-rexx-run	<rexx_exec::Interp>::stem_set_at
+82.72	82.72	1.000	tw-rexx-run	rexx_exec::value::write_small_int
+80.19	82.85	0.000	tw-rexx-run	<hashbrown::raw::RawTable<(alloc::vec::Vec<u8>, (usize, core::option::Option<rexx_core::handle::ObjRef>))>>::reserve_rehash::<hashbrown::map::make_has
+72.53	73.59	1.000	tw-rexx-run	<hashbrown::map::HashMap<alloc::vec::Vec<u8>, (usize, core::option::Option<rexx_core::handle::ObjRef>), rustc_hash::FxBuildHasher>>::get_mut::<[u8]>
+68.00	198.73	1.000	tw-rexx-run	<rexx_exec::Interp>::append_tails
+49.00	947.21	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_evaluated
+43.48	124.59	1.000	libc.so.6	_int_free_merge_chunk
+39.90	49.01	1.000	libc.so.6	_int_free_create_chunk
+38.00	189.59	1.000	libc.so.6	free
+38.00	156.62	1.000	libc.so.6	__libc_malloc2
+34.00	34.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_by_name_at
+33.00	231.73	1.000	tw-rexx-run	<rexx_exec::Interp>::append_tail_key
+31.00	31.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_at
+28.03	28.03	2.000	libc.so.6	__memcpy_avx_unaligned_erms
+27.00	151.59	1.000	libc.so.6	_int_free_chunk
+23.02	23.02	1.000	libc.so.6	_int_free_maybe_trim
+18.18	18.18	1.000	libc.so.6	unlink_chunk.isra.0
+17.57	207.16	0.000	tw-rexx-run	core::ptr::drop_glue::<rexx_core::body::Body>
+17.00	173.63	1.000	libc.so.6	malloc
+2.61	2.61	0.000	libc.so.6	__memset_avx2_unaligned_erms
+2.13	2.13	0.097	libc.so.6	__memcmp_avx2_movbe
+0.68	0.71	0.006	libc.so.6	sysmalloc
+TOTAL self diff/it 1381.39  summary diff/it 1381.39

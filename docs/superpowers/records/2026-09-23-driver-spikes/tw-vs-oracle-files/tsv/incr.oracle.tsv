@@ -1,0 +1,321 @@
+1.000	0x167cc0	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	982	push %r14
+1.000	0x167cc2	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	982	push %r13
+1.000	0x167cc4	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	982	mov %rdx,%r13
+1.000	0x167cc7	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	982	push %r12
+1.000	0x167cc9	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	982	mov %rdi,%r12
+1.000	0x167ccc	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	982	push %rbp
+1.000	0x167ccd	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	982	push %rbx
+1.000	0x167cce	MemoryObject::newObject(unsigned long, unsigned long)	memory/Memory.hpp	63	lea 0xf(%rsi),%rbx
+1.000	0x167cd2	MemoryObject::newObject(unsigned long, unsigned long)	memory/Memory.hpp	63	and $0xfffffffffffffff0,%rbx
+1.000	0x167cd6	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	983	addq $0x1,0xac8(%rdi)
+1.000	0x167cde	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	993	cmp $0x2000,%rbx
+1.000	0x167ce5	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	993	jbe 167df0 <MemoryObject::newObject(unsigned long, unsigned long)+0x130>
+1.000	0x167d17	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1045	mov 0x11dc22(%rip),%rax # 285940 <MemoryObject::virtualFunctionTable@@Base-0x14cc0>
+1.000	0x167d1e	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1045	mov 0x20(%r12),%rdx
+1.000	0x167d23	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	272	lea 0x20(%rbp),%rdi
+1.000	0x167d27	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1045	mov (%rax,%r13,8),%rax
+1.000	0x167d2b	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	153	mov %dx,0x10(%rbp)
+1.000	0x167d2f	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	271	lea -0x20(%rsi),%rdx
+1.000	0x167d33	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	277	xor %esi,%esi
+1.000	0x167d35	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	279	mov %rax,0x0(%rbp)
+1.000	0x167d39	MemoryObject::newObject(unsigned long, unsigned long)	behaviour/RexxBehaviour.hpp	153	mov %r13,%rax
+1.000	0x167d3c	MemoryObject::newObject(unsigned long, unsigned long)	behaviour/RexxBehaviour.hpp	153	shl $0x6,%rax
+1.000	0x167d40	MemoryObject::newObject(unsigned long, unsigned long)	behaviour/RexxBehaviour.hpp	153	add 0x11f6f1(%rip),%rax # 287438 <RexxBehaviour::primitiveBehaviours@@Base-0xfdc8>
+1.000	0x167d47	MemoryObject::newObject(unsigned long, unsigned long)	behaviour/RexxBehaviour.hpp	153	mov %rax,0x18(%rbp)
+1.999	0x167d4b	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	277	call ddaa0 <memset@plt>
+1.000	0x167d50	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1047	mov 0x58(%r12),%rdx
+1.000	0x167d55	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1047	test %rdx,%rdx
+1.000	0x167d58	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1047	je 167d75 <MemoryObject::newObject(unsigned long, unsigned long)+0xb5>
+1.000	0x167d5a	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemoryStack.hpp	211	mov 0x28(%rdx),%rax
+1.000	0x167d5e	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemoryStack.hpp	211	xor %ecx,%ecx
+1.000	0x167d60	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemoryStack.hpp	211	add $0x1,%rax
+1.000	0x167d64	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemoryStack.hpp	211	cmp 0x20(%rdx),%rax
+1.000	0x167d68	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemoryStack.hpp	211	cmovae %rcx,%rax
+1.000	0x167d6c	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemoryStack.hpp	211	mov %rax,0x28(%rdx)
+1.000	0x167d70	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemoryStack.hpp	182	mov %rbp,0x30(%rdx,%rax,8)
+1.000	0x167d75	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1057	pop %rbx
+1.000	0x167d76	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1057	mov %rbp,%rax
+1.000	0x167d79	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1057	pop %rbp
+1.000	0x167d7a	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1057	pop %r12
+1.000	0x167d7c	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1057	pop %r13
+1.000	0x167d7e	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1057	pop %r14
+1.000	0x167d80	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1057	ret
+1.000	0x167df0	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	996	mov $0x30,%eax
+1.000	0x167df5	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	996	cmp %rax,%rbx
+1.000	0x167df8	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	996	cmovae %rbx,%rax
+1.000	0x167dfc	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	471	mov %rax,%rcx
+1.000	0x167dff	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	996	mov %rax,%rsi
+1.000	0x167e02	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	471	shr $0x4,%rcx
+1.000	0x167e06	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	356	cmp $0x200,%rax
+1.000	0x167e0c	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	356	ja 167e70 <MemoryObject::newObject(unsigned long, unsigned long)+0x1b0>
+1.000	0x167e0e	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	360	add $0xdc,%rcx
+1.000	0x167e15	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	360	mov 0x158(%rdi,%rcx,8),%rax
+1.000	0x167e1d	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	364	cmp $0x20,%rax
+1.000	0x167e21	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	364	ja 167e60 <MemoryObject::newObject(unsigned long, unsigned long)+0x1a0>
+0.999	0x167e60	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	406	movq $0x21,0x158(%r12,%rcx,8)
+0.999	0x167e6c	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	406	nopl 0x0(%rax)
+0.999	0x167e70	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	235	mov 0x1f0(%r12),%rax
+0.999	0x167e78	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	107	mov 0x8(%rax),%rdx
+0.999	0x167e7c	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	238	test %rdx,%rdx
+0.999	0x167e7f	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	238	je 168010 <MemoryObject::newObject(unsigned long, unsigned long)+0x350>
+0.999	0x167e85	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	237	mov $0x1,%ecx
+0.999	0x167e8a	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	237	jmp 167eb0 <MemoryObject::newObject(unsigned long, unsigned long)+0x1f0>
+0.999	0x167eb0	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	239	mov %rax,%rbp
+0.999	0x167eb3	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	244	mov 0x18(%rax),%rax
+0.999	0x167eb7	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	239	cmp %rsi,%rdx
+0.999	0x167eba	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	239	jb 167ea0 <MemoryObject::newObject(unsigned long, unsigned long)+0x1e0>
+0.999	0x167ebc	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	114	mov 0x20(%rbp),%rdi
+0.999	0x167ec0	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	114	mov %rdi,0x20(%rax)
+0.999	0x167ec4	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	115	mov 0x18(%rbp),%r8
+0.999	0x167ec8	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	115	mov %r8,0x18(%rdi)
+0.999	0x167ecc	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	249	cmp $0x64,%ecx
+0.999	0x167ecf	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	249	jle 167f3b <MemoryObject::newObject(unsigned long, unsigned long)+0x27b>
+0.999	0x167f3b	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	417	sub %rsi,%rdx
+0.999	0x167f3e	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	420	cmp $0x2f,%rdx
+0.999	0x167f42	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	420	jbe 167d13 <MemoryObject::newObject(unsigned long, unsigned long)+0x53>
+0.999	0x167f48	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	494	lea 0x0(%rbp,%rsi,1),%rax
+0.999	0x167f4d	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	497	cmp $0x200,%rdx
+0.999	0x167f54	MemoryObject::newObject(unsigned long, unsigned long)	memory/MemorySegment.hpp	497	jbe 168030 <MemoryObject::newObject(unsigned long, unsigned long)+0x370>
+0.999	0x167f5a	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	98	movq 0x1f0(%r12),%xmm0
+0.999	0x167f64	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	110	mov %rdx,0x8(%rax)
+0.999	0x167f68	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	177	lea 0x1d8(%r12),%rdx
+0.999	0x167f70	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	98	movq %rdx,%xmm2
+0.999	0x167f75	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	144	orw $0x200,0x10(%rax)
+0.999	0x167f7b	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	98	punpcklqdq %xmm2,%xmm0
+0.999	0x167f7f	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	98	movups %xmm0,0x18(%rax)
+0.999	0x167f83	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	100	mov 0x1f0(%r12),%rdx
+0.999	0x167f8b	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	100	mov %rax,0x20(%rdx)
+0.999	0x167f8f	MemoryObject::newObject(unsigned long, unsigned long)	memory/DeadObject.hpp	101	mov %rax,0x1f0(%r12)
+0.999	0x167f97	MemoryObject::newObject(unsigned long, unsigned long)	classes/ObjectClass.hpp	110	mov %rsi,0x8(%rbp)
+0.999	0x167f9b	MemoryObject::newObject(unsigned long, unsigned long)	memory/RexxMemory.cpp	1004	jmp 167d17 <MemoryObject::newObject(unsigned long, unsigned long)+0x57>
+0.999	0x15c040	MemorySegmentSet::sweepSingleSegment(MemorySegment*)	classes/ObjectClass.hpp	107	mov 0x8(%rbx),%rax
+0.999	0x15c044	MemorySegmentSet::sweepSingleSegment(MemorySegment*)	classes/ObjectClass.hpp	274	add %rax,%rbx
+0.999	0x15c047	MemorySegmentSet::sweepSingleSegment(MemorySegment*)	memory/MemorySegment.cpp	1023	add %rax,%rdx
+0.999	0x15c04a	MemorySegmentSet::sweepSingleSegment(MemorySegment*)	memory/MemorySegment.cpp	1018	cmp %rbp,%rbx
+0.999	0x15c04d	MemorySegmentSet::sweepSingleSegment(MemorySegment*)	memory/MemorySegment.cpp	1018	jae 15c05b <MemorySegmentSet::sweepSingleSegment(MemorySegment*)+0xcb>
+1.000	0x15c04f	MemorySegmentSet::sweepSingleSegment(MemorySegment*)	classes/ObjectClass.hpp	122	movzwl 0x10(%rbx),%eax
+1.000	0x15c053	MemorySegmentSet::sweepSingleSegment(MemorySegment*)	classes/ObjectClass.hpp	122	and $0x3,%eax
+1.000	0x15c056	MemorySegmentSet::sweepSingleSegment(MemorySegment*)	memory/MemorySegment.cpp	1018	cmp %rax,%r12
+1.000	0x15c059	MemorySegmentSet::sweepSingleSegment(MemorySegment*)	memory/MemorySegment.cpp	1018	jne 15c040 <MemorySegmentSet::sweepSingleSegment(MemorySegment*)+0xb0>
+1.000	0x14c4b8	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	instructions/RexxInstruction.hpp	96	mov 0x1c8(%rbx),%rax
+1.000	0x14c4bf	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	659	cmpl $0x1b,0x20(%rax)
+1.000	0x14c4c3	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	659	je 14c4cc <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x11c>
+1.000	0x14c4c5	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	659	movb $0x0,0x1da(%rbx)
+1.000	0x14c4cc	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	662	mov 0x1d0(%rbx),%rbp
+1.000	0x14c4d3	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	612	test %rbp,%rbp
+1.000	0x14c4d6	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	612	je 14c728 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x378>
+1.000	0x14c4dc	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	mov 0x230(%rbx),%rax
+1.000	0x14c4e3	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	add $0x1,%rax
+1.000	0x14c4e7	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	cmp $0x32,%rax
+1.000	0x14c4eb	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	ja 14c650 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x2a0>
+0.980	0x14c4f1	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	mov %rax,0x230(%rbx)
+1.000	0x14c4f8	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	mov 0x0(%rbp),%rax
+1.000	0x14c4fc	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	639	movq %rbp,%xmm0
+1.000	0x14c501	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	mov %r12,%rdx
+1.000	0x14c504	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	639	movhps 0x48(%rbp),%xmm0
+1.000	0x14c508	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	mov %rbx,%rsi
+1.000	0x14c50b	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	639	movups %xmm0,0x1c8(%rbx)
+1.000	0x14c512	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	mov %rbp,%rdi
+1.000	0x14c515	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	call *0x130(%rax)
+1.000	0x14c51b	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	expression/ExpressionStack.hpp	91	mov 0x178(%rbx),%rax
+1.000	0x14c522	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	647	movb $0x0,0x100(%rbx)
+1.000	0x14c529	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	expression/ExpressionStack.hpp	91	mov %rax,0x170(%rbx)
+1.000	0x14c530	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	651	cmpb $0x0,0x1d9(%rbx)
+1.000	0x14c537	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	651	je 14c4b8 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x108>
+0.020	0x14c650	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov 0x1a0(%rbx),%r13
+0.020	0x14c657	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	618	movq $0x0,0x230(%rbx)
+0.020	0x14c662	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	movzbl 0x1f1(%r13),%eax
+0.020	0x14c66a	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	624	test %al,%al
+0.020	0x14c66c	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	624	je 14c6a0 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x2f0>
+0.020	0x14c6a0	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov 0x139ce9(%rip),%rax # 286390 <ActivityManager::waitingAccess@@Base-0x15bf0>
+0.020	0x14c6a7	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov (%rax),%rax
+0.020	0x14c6aa	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	test %rax,%rax
+0.020	0x14c6ad	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	je 14c910 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x560>
+0.020	0x14c910	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov 0x138ca1(%rip),%rax # 2855b8 <ActivityManager::waitingAttaches@@Base-0x169d0>
+0.020	0x14c917	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov (%rax),%rax
+0.020	0x14c91a	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	test %rax,%rax
+0.020	0x14c91d	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	jne 14c6b3 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x303>
+0.020	0x14c923	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	jmp 14c4f8 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x148>
+1.000	0x17df10	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	180	push %r13
+1.000	0x17df12	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	180	push %r12
+1.000	0x17df14	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	180	mov %rdi,%r12
+1.000	0x17df17	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	180	push %rbp
+1.000	0x17df18	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	180	mov %rsi,%rbp
+1.000	0x17df1b	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	180	push %rbx
+1.000	0x17df1c	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	180	mov %rdx,%rbx
+1.000	0x17df1f	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	180	sub $0x18,%rsp
+1.000	0x17df23	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	182	mov 0x30(%rdi),%rdi
+1.000	0x17df27	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	182	mov (%rdi),%rax
+1.000	0x17df2a	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	182	call *0x48(%rax)
+1.000	0x17df2d	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	183	mov 0x28(%r12),%rdi
+1.000	0x17df32	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	183	mov %rbx,%rdx
+1.000	0x17df35	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	183	mov %rbp,%rsi
+1.000	0x17df38	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	182	mov %rax,%r13
+1.000	0x17df3b	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	183	mov (%rdi),%rax
+1.000	0x17df3e	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	183	call *0x48(%rax)
+1.000	0x17df41	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	186	mov 0x20(%r12),%esi
+1.000	0x17df46	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	186	mov %r13,%rdi
+1.000	0x17df49	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	186	mov %rax,%rdx
+2.000	0x17df4c	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	186	call e3b80 <RexxObject::callOperatorMethod(unsigned long, RexxObject*)@plt>
+1.000	0x17df51	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	88	mov 0x8(%rbx),%rdx
+1.000	0x17df55	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	88	lea -0x8(%rdx),%rcx
+1.000	0x17df59	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	88	mov %rcx,0x8(%rbx)
+1.000	0x17df5d	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	88	mov %rax,-0x8(%rdx)
+1.000	0x17df61	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	352	cmpb $0x0,0xe0(%rbp)
+1.000	0x17df68	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	352	jne 17df78 <RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)+0x68>
+1.000	0x17df6a	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	192	add $0x18,%rsp
+1.000	0x17df6e	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	192	pop %rbx
+1.000	0x17df6f	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	192	pop %rbp
+1.000	0x17df70	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	192	pop %r12
+1.000	0x17df72	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	192	pop %r13
+1.000	0x17df74	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionOperator.cpp	192	ret
+1.000	0x181230	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	112	push %rbx
+1.000	0x181231	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	112	mov %rdx,%r10
+1.000	0x181234	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	112	mov %rsi,%rbx
+1.000	0x181237	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	112	sub $0x10,%rsp
+1.000	0x18123b	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	114	testb $0x8,0xc8(%rsi)
+1.000	0x181242	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	114	jne 181280 <RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)+0x50>
+1.000	0x181244	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov 0x58(%rdi),%r9
+1.000	0x181248	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov 0x50(%rdi),%rdi
+1.000	0x18124c	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	xor %edx,%edx
+1.000	0x18124e	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov (%r9),%rax
+1.000	0x181251	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov 0x148(%rax),%r8
+1.000	0x181258	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov (%rdi),%rax
+1.000	0x18125b	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov 0x48(%rax),%rcx
+1.000	0x18125f	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	cmp 0x104f2a(%rip),%rcx # 286190 <RexxInternalObject::evaluate(RexxActivation*, ExpressionStack*)@@Base+0x18ddd0>
+1.000	0x181266	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	jne 1812f0 <RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)+0xc0>
+1.000	0x1812f0	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	380	mov %r8,0x8(%rsp)
+1.000	0x1812f5	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov %r10,%rdx
+1.000	0x1812f8	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov %r9,(%rsp)
+1.000	0x1812fc	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	call *%rcx
+1.000	0x1812fe	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov 0x8(%rsp),%r8
+1.000	0x181303	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	cmp 0x10445e(%rip),%r8 # 285768 <RexxVariableBase::assign(RexxActivation*, RexxObject*)@@Base+0x1097c8>
+1.000	0x18130a	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov (%rsp),%r9
+1.000	0x18130e	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov %rax,%rdx
+1.000	0x181311	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	je 181279 <RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)+0x49>
+1.000	0x181317	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	131	add $0x10,%rsp
+1.000	0x18131b	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov %rbx,%rsi
+1.000	0x18131e	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	mov %r9,%rdi
+1.000	0x181321	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	131	pop %rbx
+1.000	0x181322	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)	instructions/AssignmentInstruction.cpp	129	jmp *%r8
+1.000	0xfd900	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	classes/IntegerClass.cpp	1912	mov %rdx,%rcx
+1.000	0xfd903	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	81	mov 0x8(%rdx),%rdx
+1.000	0xfd907	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	classes/IntegerClass.cpp	1912	mov %rdi,%rax
+1.000	0xfd90a	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	classes/IntegerClass.cpp	1912	mov %rsi,%rdi
+1.000	0xfd90d	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	81	lea 0x8(%rdx),%rsi
+1.000	0xfd911	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	81	mov %rsi,0x8(%rcx)
+1.000	0xfd915	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	81	mov %rax,0x8(%rdx)
+1.000	0xfd919	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	339	cmpb $0x0,0xe0(%rdi)
+1.000	0xfd920	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	339	jne fd928 <RexxInteger::evaluate(RexxActivation*, ExpressionStack*)+0x28>
+1.000	0xfd922	RexxInteger::evaluate(RexxActivation*, ExpressionStack*)	classes/IntegerClass.cpp	1918	ret
+1.000	0xff450	RexxInteger::operator new(unsigned long)	classes/IntegerClass.cpp	2053	sub $0x8,%rsp
+1.000	0xff454	RexxInteger::operator new(unsigned long)	classes/IntegerClass.cpp	2053	mov %rdi,%rsi
+1.000	0xff457	RexxInteger::operator new(unsigned long)	memory/RexxMemory.hpp	480	mov 0x188092(%rip),%rdi # 2874f0 <memoryObject@@Base-0x13f30>
+1.000	0xff45e	RexxInteger::operator new(unsigned long)	memory/RexxMemory.hpp	480	mov $0x8,%edx
+1.999	0xff463	RexxInteger::operator new(unsigned long)	memory/RexxMemory.hpp	480	call e0fd0 <MemoryObject::newObject(unsigned long, unsigned long)@plt>
+1.000	0xff468	RexxInteger::operator new(unsigned long)	classes/ObjectClass.hpp	130	orw $0x20,0x10(%rax)
+1.000	0xff46d	RexxInteger::operator new(unsigned long)	classes/IntegerClass.cpp	2058	add $0x8,%rsp
+1.000	0xff471	RexxInteger::operator new(unsigned long)	classes/IntegerClass.cpp	2058	ret
+1.000	0xff5f0	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	553	sub $0x18,%rsp
+1.000	0xff5f4	RexxInteger::plus(RexxInteger*)	runtime/Numerics.hpp	64	mov 0x1866f5(%rip),%rdx # 285cf0 <Numerics::settings@@Base-0xf8e0>
+1.000	0xff5fb	RexxInteger::plus(RexxInteger*)	bits/stl_algobase.h	239	mov 0x185fc6(%rip),%rcx # 2855c8 <Numerics::REXXINTEGER_DIGITS@@Base+0x5e6a8>
+1.000	0xff602	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	553	mov %rdi,%rax
+1.000	0xff605	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	556	mov 0x30(%rdi),%rdi
+1.000	0xff609	RexxInteger::plus(RexxInteger*)	runtime/Numerics.hpp	64	mov (%rdx),%rdx
+1.000	0xff60c	RexxInteger::plus(RexxInteger*)	bits/stl_algobase.h	239	mov (%rcx),%rcx
+1.000	0xff60f	RexxInteger::plus(RexxInteger*)	bits/stl_algobase.h	239	mov (%rdx),%rdx
+1.000	0xff612	RexxInteger::plus(RexxInteger*)	bits/stl_algobase.h	239	cmp %rcx,%rdx
+1.000	0xff615	RexxInteger::plus(RexxInteger*)	bits/stl_algobase.h	239	cmovg %rcx,%rdx
+1.000	0xff619	RexxInteger::plus(RexxInteger*)	runtime/Numerics.hpp	191	mov 0x186738(%rip),%rcx # 285d58 <Numerics::validMaxWhole@@Base+0x5ed78>
+1.000	0xff620	RexxInteger::plus(RexxInteger*)	runtime/Numerics.hpp	191	mov (%rcx,%rdx,8),%rcx
+1.000	0xff624	RexxInteger::plus(RexxInteger*)	bits/std_abs.h	62	mov %rdi,%rdx
+1.000	0xff627	RexxInteger::plus(RexxInteger*)	bits/std_abs.h	62	neg %rdx
+1.000	0xff62a	RexxInteger::plus(RexxInteger*)	bits/std_abs.h	62	cmovs %rdi,%rdx
+1.000	0xff62e	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	556	cmp %rdx,%rcx
+1.000	0xff631	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	556	jl ff650 <RexxInteger::plus(RexxInteger*)+0x60>
+1.000	0xff633	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	559	test %rsi,%rsi
+1.000	0xff636	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	559	je ff6d9 <RexxInteger::plus(RexxInteger*)+0xe9>
+1.000	0xff63c	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	568	mov 0x187df5(%rip),%rdx # 287438 <RexxBehaviour::primitiveBehaviours@@Base-0xfdc8>
+1.000	0xff643	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	568	add $0x200,%rdx
+1.000	0xff64a	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	568	cmp %rdx,0x18(%rsi)
+1.000	0xff64e	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	568	je ff698 <RexxInteger::plus(RexxInteger*)+0xa8>
+1.000	0xff698	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	568	mov 0x30(%rsi),%rdx
+1.000	0xff69c	RexxInteger::plus(RexxInteger*)	bits/std_abs.h	62	mov %rdx,%r8
+1.000	0xff69f	RexxInteger::plus(RexxInteger*)	bits/std_abs.h	62	neg %r8
+1.000	0xff6a2	RexxInteger::plus(RexxInteger*)	bits/std_abs.h	62	cmovs %rdx,%r8
+1.000	0xff6a6	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	568	cmp %r8,%rcx
+1.000	0xff6a9	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	568	jl ff650 <RexxInteger::plus(RexxInteger*)+0x60>
+1.000	0xff6ab	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	577	add %rdi,%rdx
+1.000	0xff6ae	RexxInteger::plus(RexxInteger*)	bits/std_abs.h	62	mov %rdx,%r8
+1.000	0xff6b1	RexxInteger::plus(RexxInteger*)	bits/std_abs.h	62	neg %r8
+1.000	0xff6b4	RexxInteger::plus(RexxInteger*)	bits/std_abs.h	62	cmovs %rdx,%r8
+1.000	0xff6b8	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	581	cmp %r8,%rcx
+1.000	0xff6bb	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	581	jl ff650 <RexxInteger::plus(RexxInteger*)+0x60>
+1.000	0xff6bd	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	190	lea 0xa(%rdx),%rax
+1.000	0xff6c1	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	190	cmp $0x6e,%rax
+1.000	0xff6c5	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	190	ja ff716 <RexxInteger::plus(RexxInteger*)+0x126>
+1.000	0xff6d9	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	591	add $0x18,%rsp
+1.000	0xff6dd	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.cpp	591	ret
+1.000	0xff716	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	196	mov $0x38,%edi
+1.000	0xff71b	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	196	mov %rdx,0x8(%rsp)
+1.999	0xff720	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	196	call e1420 <RexxInteger::operator new(unsigned long)@plt>
+1.000	0xff725	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	57	mov 0x18694c(%rip),%rcx # 286078 <vtable for RexxInteger@@Base+0x14258>
+1.000	0xff72c	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	57	mov 0x8(%rsp),%rdx
+1.000	0xff731	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	57	add $0x10,%rcx
+1.000	0xff735	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	57	mov %rdx,0x30(%rax)
+1.000	0xff739	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	57	mov %rcx,(%rax)
+1.000	0xff73c	RexxInteger::plus(RexxInteger*)	classes/IntegerClass.hpp	57	jmp ff6d9 <RexxInteger::plus(RexxInteger*)+0xe9>
+1.000	0x116090	RexxObject::callOperatorMethod(unsigned long, RexxObject*)	behaviour/RexxBehaviour.hpp	152	mov 0x18(%rdi),%rax
+1.000	0x116094	RexxObject::callOperatorMethod(unsigned long, RexxObject*)	behaviour/RexxBehaviour.hpp	152	shl $0x4,%rsi
+1.000	0x116098	RexxObject::callOperatorMethod(unsigned long, RexxObject*)	behaviour/RexxBehaviour.hpp	152	add 0x30(%rax),%rsi
+1.000	0x11609c	RexxObject::callOperatorMethod(unsigned long, RexxObject*)	behaviour/RexxBehaviour.hpp	152	mov (%rsi),%rax
+1.000	0x11609f	RexxObject::callOperatorMethod(unsigned long, RexxObject*)	classes/ObjectClass.cpp	3098	add 0x8(%rsi),%rdi
+1.000	0x1160a3	RexxObject::callOperatorMethod(unsigned long, RexxObject*)	classes/ObjectClass.cpp	3098	test $0x1,%al
+1.000	0x1160a5	RexxObject::callOperatorMethod(unsigned long, RexxObject*)	classes/ObjectClass.cpp	3098	je 1160af <RexxObject::callOperatorMethod(unsigned long, RexxObject*)+0x1f>
+1.000	0x1160af	RexxObject::callOperatorMethod(unsigned long, RexxObject*)	classes/ObjectClass.cpp	3098	mov %rdx,%rsi
+1.000	0x1160b2	RexxObject::callOperatorMethod(unsigned long, RexxObject*)	classes/ObjectClass.cpp	3098	jmp *%rax
+1.000	0x17fc70	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	296	push %r12
+1.000	0x17fc72	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	296	mov %rdi,%r12
+1.000	0x17fc75	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	296	push %rbp
+1.000	0x17fc76	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	296	mov %rsi,%rbp
+1.000	0x17fc79	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	296	push %rbx
+1.000	0x17fc7a	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	296	mov %rdx,%rbx
+1.000	0x17fc7d	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	296	sub $0x10,%rsp
+1.000	0x17fc81	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	298	mov 0x28(%rdi),%rdx
+1.000	0x17fc85	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	execution/RexxLocalVariables.hpp	142	mov 0x140(%rsi),%rax
+1.000	0x17fc8c	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	execution/RexxLocalVariables.hpp	142	mov (%rax,%rdx,8),%rax
+1.000	0x17fc90	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	execution/RexxActivation.hpp	478	test %rax,%rax
+1.000	0x17fc93	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	execution/RexxActivation.hpp	478	je 17fd10 <RexxSimpleVariable::assign(RexxActivation*, RexxObject*)+0xa0>
+1.000	0x17fc95	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	memory/RexxMemory.hpp	341	testb $0x40,0x10(%rax)
+1.000	0x17fc99	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	memory/RexxMemory.hpp	341	jne 17fcc0 <RexxSimpleVariable::assign(RexxActivation*, RexxObject*)+0x50>
+1.000	0x17fc9b	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	memory/RexxMemory.hpp	345	mov %rbx,0x28(%rax)
+1.000	0x17fc9f	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	execution/RexxVariable.hpp	75	cmpq $0x0,0x38(%rax)
+1.000	0x17fca4	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	execution/RexxVariable.hpp	75	je 17fcae <RexxSimpleVariable::assign(RexxActivation*, RexxObject*)+0x3e>
+1.000	0x17fcae	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	execution/RexxActivation.hpp	356	cmpb $0x0,0xe0(%rbp)
+1.000	0x17fcb5	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	execution/RexxActivation.hpp	356	jne 17fce0 <RexxSimpleVariable::assign(RexxActivation*, RexxObject*)+0x70>
+1.000	0x17fcb7	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	300	add $0x10,%rsp
+1.000	0x17fcbb	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	300	pop %rbx
+1.000	0x17fcbc	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	300	pop %rbp
+1.000	0x17fcbd	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	300	pop %r12
+1.000	0x17fcbf	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)	expression/ExpressionVariable.cpp	300	ret
+1.000	0x17f4e0	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	129	sub $0x28,%rsp
+1.000	0x17f4e4	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	129	mov %rdx,%r11
+1.000	0x17f4e7	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	131	mov 0x28(%rdi),%rdx
+1.000	0x17f4eb	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	131	mov 0x20(%rdi),%r8
+1.000	0x17f4ef	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxLocalVariables.hpp	142	mov 0x140(%rsi),%rax
+1.000	0x17f4f6	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	129	mov %rdi,%r9
+1.000	0x17f4f9	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	129	mov %rsi,%r10
+1.000	0x17f4fc	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxLocalVariables.hpp	142	mov (%rax,%rdx,8),%rcx
+1.000	0x17f500	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	478	test %rcx,%rcx
+1.000	0x17f503	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	478	je 17f5a8 <RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)+0xc8>
+1.000	0x17f509	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxVariable.hpp	86	mov 0x28(%rcx),%rax
+1.000	0x17f50d	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	134	test %rax,%rax
+1.000	0x17f510	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	134	je 17f570 <RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)+0x90>
+1.000	0x17f512	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	81	mov 0x8(%r11),%rdx
+1.000	0x17f516	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	81	lea 0x8(%rdx),%rcx
+1.000	0x17f51a	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	81	mov %rcx,0x8(%r11)
+1.000	0x17f51e	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionStack.hpp	81	mov %rax,0x8(%rdx)
+1.000	0x17f522	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	342	cmpb $0x0,0xe0(%r10)
+1.000	0x17f52a	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	342	jne 17f538 <RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)+0x58>
+1.000	0x17f52c	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	144	add $0x28,%rsp
+1.000	0x17f530	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)	expression/ExpressionVariable.cpp	144	ret

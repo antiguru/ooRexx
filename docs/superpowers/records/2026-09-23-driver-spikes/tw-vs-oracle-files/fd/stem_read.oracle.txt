@@ -1,0 +1,18 @@
+self/it	incl/it	calls/it	object	function
+324.88	324.88	15.613	libc.so.6	__memcmp_avx2_movbe
+248.24	573.12	1.000	librexx.so.4	CompoundVariableTable::findEntry(CompoundVariableTail&)
+89.33	89.33	1.000	librexx.so.4	Numerics::formatWholeNumber(long, char*)
+66.00	874.45	1.000	librexx.so.4	RexxActivation::evaluateLocalCompoundVariable(RexxString*, unsigned long, RexxInternalObject**, unsigned long)
+35.00	137.32	1.000	librexx.so.4	RexxInteger::copyIntoTail(CompoundVariableTail*)
+34.00	181.32	1.000	librexx.so.4	CompoundVariableTail::buildTail(RexxActivation*, RexxInternalObject**, unsigned long)
+29.00	943.46	1.000	librexx.so.4	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)
+25.25	968.72	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+24.00	609.12	1.000	librexx.so.4	StemClass::evaluateCompoundVariableValue(RexxActivation*, RexxString*, CompoundVariableTail&)
+24.00	24.00	1.000	librexx.so.4	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)
+16.00	890.46	1.000	librexx.so.4	RexxCompoundVariable::evaluate(RexxActivation*, ExpressionStack*)
+12.99	12.99	1.000	libc.so.6	__strlen_avx2
+12.00	12.00	1.000	librexx.so.4	ProtectedBase::ProtectedBase()
+12.00	585.12	1.000	librexx.so.4	StemClass::findCompoundVariable(CompoundVariableTail&)
+10.00	10.00	1.000	librexx.so.4	RexxSimpleVariable::getValue(RexxActivation*)
+6.00	6.00	1.000	librexx.so.4	ProtectedBase::~ProtectedBase()
+TOTAL self diff/it 968.74  summary diff/it 968.74

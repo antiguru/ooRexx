@@ -1,0 +1,18 @@
+self/it	incl/it	calls/it	object	function
+71.00	256.00	1.000	librexx.so.4	RexxExpressionFunction::evaluate(RexxActivation*, ExpressionStack*)
+37.00	58.00	1.000	librexx.so.4	RexxInstruction::evaluateArguments(RexxActivation*, ExpressionStack*, RexxInternalObject**, unsigned long)
+29.00	309.00	1.000	librexx.so.4	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)
+28.00	28.00	1.000	librexx.so.4	ExpressionStack::expandArgs(unsigned long, unsigned long, unsigned long, char const*)
+25.25	334.26	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+24.00	24.00	1.000	librexx.so.4	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)
+22.00	31.00	1.000	librexx.so.4	RexxInternalObject::requestString()
+21.00	52.00	1.000	librexx.so.4	ExpressionStack::requiredStringArg(unsigned long)
+21.00	21.00	1.000	librexx.so.4	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)
+20.00	109.00	1.000	librexx.so.4	builtin_function_LENGTH(RexxActivation*, unsigned long, ExpressionStack*)
+12.00	12.00	1.000	librexx.so.4	ProtectedBase::ProtectedBase()
+8.00	8.00	1.000	librexx.so.4	RexxString::lengthRexx()
+6.00	6.00	1.000	librexx.so.4	ProtectedBase::~ProtectedBase()
+5.00	5.00	1.000	librexx.so.4	RexxInternalObject::isBaseClass()
+4.00	4.00	1.000	librexx.so.4	RexxInteger::primitiveMakeString()
+1.00	9.00	1.000	???	0x000000000492a688
+TOTAL self diff/it 334.32  summary diff/it 334.32

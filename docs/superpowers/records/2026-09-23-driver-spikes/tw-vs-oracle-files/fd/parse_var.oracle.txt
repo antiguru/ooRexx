@@ -1,0 +1,22 @@
+self/it	incl/it	calls/it	object	function
+272.99	327.37	3.000	librexx.so.4	MemoryObject::newObject(unsigned long, unsigned long)
+145.00	876.34	1.000	librexx.so.4	ParseTrigger::parse(RexxActivation*, ExpressionStack*, RexxTarget*)
+118.00	432.75	2.000	librexx.so.4	RexxTarget::getWord()
+81.00	465.34	3.000	librexx.so.4	RexxString::newString(char const*, unsigned long)
+72.00	72.00	3.000	librexx.so.4	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)
+69.00	1053.34	1.000	librexx.so.4	RexxInstructionParse::execute(RexxActivation*, ExpressionStack*)
+48.00	48.00	3.000	libc.so.6	__memcpy_avx_unaligned_erms
+43.00	72.00	1.000	librexx.so.4	RexxTarget::next(RexxActivation*)
+36.00	36.00	3.000	librexx.so.4	ProtectedBase::ProtectedBase()
+33.00	33.00	3.000	libc.so.6	__memset_avx2_unaligned_erms
+27.05	27.06	0.000	librexx.so.4	MemorySegmentSet::sweepSingleSegment(MemorySegment*)
+25.25	1069.62	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+22.00	29.00	1.000	librexx.so.4	RexxInternalObject::requestString()
+21.00	21.00	1.000	librexx.so.4	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)
+18.00	18.00	3.000	librexx.so.4	ProtectedBase::~ProtectedBase()
+15.00	87.00	1.000	librexx.so.4	RexxTarget::init(RexxObject*, RexxObject**, unsigned long, FlagSet<ParseFlags, 32>, bool, RexxActivation*, ExpressionStack*)
+13.00	163.59	1.000	librexx.so.4	RexxTarget::remainder()
+9.00	9.00	1.000	librexx.so.4	RexxTarget::moveToEnd()
+5.00	5.00	1.000	librexx.so.4	RexxInternalObject::isBaseClass()
+2.00	2.00	1.000	librexx.so.4	RexxString::primitiveMakeString()
+TOTAL self diff/it 1075.85  summary diff/it 1075.85

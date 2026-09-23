@@ -1,0 +1,47 @@
+1.000	0x14c4b8	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	instructions/RexxInstruction.hpp	96	mov 0x1c8(%rbx),%rax
+1.000	0x14c4bf	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	659	cmpl $0x1b,0x20(%rax)
+1.000	0x14c4c3	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	659	je 14c4cc <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x11c>
+1.000	0x14c4c5	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	659	movb $0x0,0x1da(%rbx)
+1.000	0x14c4cc	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	662	mov 0x1d0(%rbx),%rbp
+1.000	0x14c4d3	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	612	test %rbp,%rbp
+1.000	0x14c4d6	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	612	je 14c728 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x378>
+1.000	0x14c4dc	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	mov 0x230(%rbx),%rax
+1.000	0x14c4e3	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	add $0x1,%rax
+1.000	0x14c4e7	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	cmp $0x32,%rax
+1.000	0x14c4eb	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	ja 14c650 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x2a0>
+0.980	0x14c4f1	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	616	mov %rax,0x230(%rbx)
+1.000	0x14c4f8	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	mov 0x0(%rbp),%rax
+1.000	0x14c4fc	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	639	movq %rbp,%xmm0
+1.000	0x14c501	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	mov %r12,%rdx
+1.000	0x14c504	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	639	movhps 0x48(%rbp),%xmm0
+1.000	0x14c508	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	mov %rbx,%rsi
+1.000	0x14c50b	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	639	movups %xmm0,0x1c8(%rbx)
+1.000	0x14c512	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	mov %rbp,%rdi
+1.000	0x14c515	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	642	call *0x130(%rax)
+1.000	0x14c51b	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	expression/ExpressionStack.hpp	91	mov 0x178(%rbx),%rax
+1.000	0x14c522	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	647	movb $0x0,0x100(%rbx)
+1.000	0x14c529	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	expression/ExpressionStack.hpp	91	mov %rax,0x170(%rbx)
+1.000	0x14c530	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	651	cmpb $0x0,0x1d9(%rbx)
+1.000	0x14c537	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	651	je 14c4b8 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x108>
+0.020	0x14c650	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov 0x1a0(%rbx),%r13
+0.020	0x14c657	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	618	movq $0x0,0x230(%rbx)
+0.020	0x14c662	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	movzbl 0x1f1(%r13),%eax
+0.020	0x14c66a	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	624	test %al,%al
+0.020	0x14c66c	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	execution/RexxActivation.cpp	624	je 14c6a0 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x2f0>
+0.020	0x14c6a0	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov 0x139ce9(%rip),%rax # 286390 <ActivityManager::waitingAccess@@Base-0x15bf0>
+0.020	0x14c6a7	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov (%rax),%rax
+0.020	0x14c6aa	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	test %rax,%rax
+0.020	0x14c6ad	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	je 14c910 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x560>
+0.020	0x14c910	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov 0x138ca1(%rip),%rax # 2855b8 <ActivityManager::waitingAttaches@@Base-0x169d0>
+0.020	0x14c917	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	bits/atomic_base.h	501	mov (%rax),%rax
+0.020	0x14c91a	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	test %rax,%rax
+0.020	0x14c91d	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	jne 14c6b3 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x303>
+0.020	0x14c923	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)	concurrency/ActivityManager.hpp	241	jmp 14c4f8 <RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)+0x148>
+1.000	0x18e290	RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)	common/BitSet.hpp	126	mov 0xc8(%rsi),%eax
+1.000	0x18e296	RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)	instructions/NopInstruction.cpp	54	mov %rdi,%rcx
+1.000	0x18e299	RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)	instructions/NopInstruction.cpp	54	mov %rsi,%rdi
+1.000	0x18e29c	RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	375	test $0x8,%al
+1.000	0x18e29e	RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	375	jne 18e2b8 <RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)+0x28>
+1.000	0x18e2a0	RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	380	test $0x4,%ah
+1.000	0x18e2a3	RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	380	jne 18e2b0 <RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)+0x20>
+1.000	0x18e2a5	RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)	execution/RexxActivation.hpp	380	ret

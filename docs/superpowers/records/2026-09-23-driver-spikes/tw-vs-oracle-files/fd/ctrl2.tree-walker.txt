@@ -1,0 +1,6 @@
+self/it	incl/it	calls/it	object	function
+141.00	144.00	1.000	tw-rexx-run	<rexx_exec::Interp>::loop_advance
+108.00	275.85	0.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame
+24.00	24.00	1.000	tw-rexx-run	<rexx_exec::Interp>::do_body_outcome
+3.00	3.00	1.000	tw-rexx-run	core::ptr::drop_glue::<core::option::Option<rexx_num::Number>>
+TOTAL self diff/it 275.86  summary diff/it 275.86

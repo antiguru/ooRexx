@@ -1,0 +1,8 @@
+self/it	incl/it	calls/it	object	function
+292.00	578.97	0.000	tw-rexx-run	<rexx_exec::Interp>::run_ops_from::<true>
+124.00	172.00	1.000	tw-rexx-run	<rexx_exec::Interp>::concat_values
+62.00	62.00	2.000	tw-rexx-run	<rexx_exec::Interp>::read_at
+48.00	48.00	3.000	libc.so.6	__memcpy_avx_unaligned_erms
+43.00	225.00	1.000	tw-rexx-run	<rexx_exec::Interp>::apply_binary
+10.00	10.00	1.000	tw-rexx-run	<rexx_exec::Interp>::operator_message_receiver
+TOTAL self diff/it 579.04  summary diff/it 579.04

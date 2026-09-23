@@ -1,0 +1,21 @@
+self/it	incl/it	calls/it	object	function
+231.00	1158.00	1.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame'2
+118.00	383.00	1.000	tw-rexx-run	<rexx_exec::Interp>::invoke_builtin_call
+106.00	606.00	1.000	tw-rexx-run	<rexx_exec::Interp>::eval_node
+92.00	92.00	1.000	tw-rexx-run	<rexx_exec::Interp>::walk_site_resolution
+91.00	100.00	1.000	tw-rexx-run	<hashbrown::map::HashMap<alloc::boxed::Box<[u8]>, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::get::<[u8]>
+89.00	167.00	1.000	tw-rexx-run	rexx_exec::builtin::run
+64.00	927.01	1.000	tw-rexx-run	<rexx_exec::Interp>::exec_instruction
+64.00	191.00	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_expr_target
+49.00	240.00	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_evaluated
+42.00	42.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_at
+40.00	82.00	1.000	tw-rexx-run	<rexx_exec::Interp>::eval_node'2
+33.00	33.00	2.000	tw-rexx-run	<rexx_exec::Interp>::enter_eval_node::<u8>
+33.00	54.00	1.000	tw-rexx-run	<rexx_exec::Interp>::text_len
+27.00	127.00	1.000	tw-rexx-run	<rexx_exec::Interp>::slot_of
+25.00	408.00	1.000	tw-rexx-run	<rexx_exec::Interp>::eval_call_resolved
+24.00	78.00	1.000	tw-rexx-run	rexx_exec::builtin::string::length
+21.00	21.00	1.000	tw-rexx-run	rexx_exec::value::write_small_int
+19.00	1177.00	0.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame
+8.98	8.98	1.000	libc.so.6	__memcmp_avx2_movbe
+TOTAL self diff/it 1177.02  summary diff/it 1177.02

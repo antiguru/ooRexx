@@ -1,0 +1,18 @@
+self/it	incl/it	calls/it	object	function
+439.00	541.00	1.000	tw-rexx-run	<rexx_num::Number>::mul
+292.00	1351.80	0.000	tw-rexx-run	<rexx_exec::Interp>::run_ops_from::<true>
+157.00	1028.87	1.000	tw-rexx-run	<rexx_exec::Interp>::arith_general_body
+89.00	89.00	1.000	tw-rexx-run	<rexx_exec::Interp>::arith_left_operand
+58.00	58.00	1.000	tw-rexx-run	<rexx_exec::Interp>::inline_text_to_number
+57.34	85.12	0.000	tw-rexx-run	<rexx_exec::Interp>::collect_now
+56.55	145.87	1.000	tw-rexx-run	<rexx_exec::Interp>::alloc_with
+42.00	42.00	1.000	libc.so.6	calloc
+38.00	38.00	1.000	tw-rexx-run	<rexx_num::Number>::rendered_integer
+32.00	32.01	1.000	libc.so.6	free
+31.00	31.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_at
+28.00	28.00	1.000	tw-rexx-run	<rexx_num::Number>::round_change
+27.00	27.00	1.000	tw-rexx-run	core::ptr::drop_glue::<rexx_core::body::Body>
+4.18	4.18	0.000	libc.so.6	__memcpy_avx_unaligned_erms
+1.69	1354.13	0.000	tw-rexx-run	rexx_exec::execute
+0.98	0.98	0.000	libc.so.6	__memset_avx2_unaligned_erms
+TOTAL self diff/it 1354.13  summary diff/it 1354.13

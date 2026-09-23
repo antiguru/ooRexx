@@ -1,0 +1,28 @@
+self/it	incl/it	calls/it	object	function
+115.00	432.23	1.000	librexx.so.4	NumberString::Multiply(NumberString*)
+91.00	107.46	1.000	librexx.so.4	MemoryObject::newObject(unsigned long, unsigned long)
+54.00	54.00	1.000	librexx.so.4	NumberString::addMultiplier(char const*, long, char*, int)
+46.00	509.24	1.000	librexx.so.4	RexxInteger::multiply(RexxInteger*)
+42.00	76.01	1.000	librexx.so.4	NumberString::adjustPrecision(char*, long)
+34.00	583.24	1.000	librexx.so.4	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)
+29.00	636.24	1.000	librexx.so.4	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)
+25.25	659.74	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+24.00	159.21	1.000	librexx.so.4	NumberString::newInstance(char const*, unsigned long)
+24.00	24.00	1.000	librexx.so.4	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)
+21.00	21.00	2.000	libc.so.6	__memset_avx2_unaligned_erms
+21.00	21.00	1.000	librexx.so.4	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)
+17.00	17.00	1.000	libc.so.6	__memcpy_avx_unaligned_erms
+17.00	17.00	1.000	librexx.so.4	NumberString::NumberString(unsigned long)
+13.00	13.00	1.000	librexx.so.4	NumberStringBase::checkOverflow()
+13.00	17.00	1.000	librexx.so.4	NumberString::operatorArgument(RexxObject*)
+12.00	12.00	1.000	librexx.so.4	ProtectedBase::ProtectedBase()
+10.00	10.00	1.000	librexx.so.4	RexxString::evaluate(RexxActivation*, ExpressionStack*)
+9.02	9.02	0.000	librexx.so.4	MemorySegmentSet::sweepSingleSegment(MemorySegment*)
+9.00	118.21	1.000	librexx.so.4	NumberString::operator new(unsigned long, unsigned long)
+9.00	458.24	1.000	librexx.so.4	NumberString::multiply(RexxObject*)
+9.00	516.48	1.000	librexx.so.4	RexxObject::callOperatorMethod(unsigned long, RexxObject*)
+8.00	8.00	2.000	librexx.so.4	RexxString::numberString()
+6.00	6.00	1.000	librexx.so.4	ProtectedBase::~ProtectedBase()
+4.00	4.00	1.000	librexx.so.4	NumberStringBase::stripLeadingZeros(char*)
+1.00	459.24	1.000	???	0x000000000492a7b0
+TOTAL self diff/it 663.50  summary diff/it 663.50

@@ -1,0 +1,3 @@
+self/it	incl/it	calls/it	object	function
+106.00	106.00	0.000	tw-rexx-run	<rexx_exec::Interp>::run_ops_from::<true>
+TOTAL self diff/it 106.03  summary diff/it 106.03

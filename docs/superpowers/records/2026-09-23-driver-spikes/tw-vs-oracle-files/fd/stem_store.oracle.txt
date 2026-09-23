@@ -1,0 +1,31 @@
+self/it	incl/it	calls/it	object	function
+357.35	357.35	15.648	libc.so.6	__memcmp_avx2_movbe
+316.78	1654.02	1.000	librexx.so.4	CompoundVariableTable::findEntry(CompoundVariableTail&, bool)
+239.96	285.46	1.000	librexx.so.4	CompoundVariableTable::balance(CompoundTableElement*)
+167.71	611.21	2.000	librexx.so.4	MemoryObject::newObject(unsigned long, unsigned long)
+153.88	255.45	2.904	librexx.so.4	CompoundTableElement::live(unsigned long)
+105.01	122.05	0.000	librexx.so.4	MemorySegmentSet::sweepSingleSegment(MemorySegment*)
+101.67	101.67	5.810	librexx.so.4	MemoryObject::mark(RexxInternalObject*)
+89.33	89.33	1.000	librexx.so.4	Numerics::formatWholeNumber(long, char*)
+63.00	1940.39	1.000	librexx.so.4	RexxActivation::assignLocalCompoundVariable(RexxString*, unsigned long, RexxInternalObject**, unsigned long, RexxObject*)
+58.17	314.26	0.000	librexx.so.4	MemoryObject::markObjectsMain(RexxInternalObject*)
+45.50	45.50	1.000	librexx.so.4	CompoundVariableTable::moveNode(CompoundTableElement*&, bool)
+35.00	137.33	1.000	librexx.so.4	RexxInteger::copyIntoTail(CompoundVariableTail*)
+34.00	181.33	1.000	librexx.so.4	CompoundVariableTail::buildTail(RexxActivation*, RexxInternalObject**, unsigned long)
+29.00	1999.39	1.000	librexx.so.4	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)
+29.00	29.00	2.000	libc.so.6	__memset_avx2_unaligned_erms
+26.99	306.47	1.000	librexx.so.4	RexxString::newString(char const*, unsigned long)
+25.25	2001.43	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+21.00	21.00	1.000	librexx.so.4	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)
+17.04	17.04	1.311	librexx.so.4	NormalSegmentSet::addDeadObject(char*, unsigned long)
+14.01	14.01	1.000	libc.so.6	__memcpy_avx_unaligned_erms
+13.99	320.46	1.000	librexx.so.4	CompoundVariableTail::makeString()
+13.00	1678.03	1.000	librexx.so.4	StemClass::setCompoundVariable(CompoundVariableTail&, RexxObject*)
+12.99	12.99	1.000	libc.so.6	__strlen_avx2
+12.00	12.00	1.000	librexx.so.4	ProtectedBase::ProtectedBase()
+11.00	1665.02	1.000	librexx.so.4	StemClass::getCompoundVariable(CompoundVariableTail&)
+10.00	10.00	1.000	librexx.so.4	RexxSimpleVariable::getValue(RexxActivation*)
+9.00	1949.39	1.000	librexx.so.4	RexxCompoundVariable::assign(RexxActivation*, RexxObject*)
+6.00	6.00	1.000	librexx.so.4	ProtectedBase::~ProtectedBase()
+5.00	373.95	1.000	librexx.so.4	CompoundTableElement::operator new(unsigned long)
+TOTAL self diff/it 2023.33  summary diff/it 2023.33

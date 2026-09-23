@@ -1,0 +1,34 @@
+self/it	incl/it	calls/it	object	function
+439.00	541.00	1.000	tw-rexx-run	<rexx_num::Number>::mul
+231.00	2069.87	1.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame'2
+157.00	1028.87	1.000	tw-rexx-run	<rexx_exec::Interp>::arith_general_body
+113.00	1517.87	1.000	tw-rexx-run	<rexx_exec::Interp>::eval_node
+91.00	100.00	1.000	tw-rexx-run	<hashbrown::map::HashMap<alloc::boxed::Box<[u8]>, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::get::<[u8]>
+89.00	89.00	1.000	tw-rexx-run	<rexx_exec::Interp>::arith_left_operand
+85.00	193.00	2.000	tw-rexx-run	<rexx_exec::Interp>::eval_node'2
+64.00	1838.76	1.000	tw-rexx-run	<rexx_exec::Interp>::exec_instruction
+64.00	191.00	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_expr_target
+58.00	58.00	1.000	tw-rexx-run	<rexx_exec::Interp>::inline_text_to_number
+57.34	85.13	0.000	tw-rexx-run	<rexx_exec::Interp>::collect_now
+56.55	145.87	1.000	tw-rexx-run	<rexx_exec::Interp>::alloc_with
+52.00	52.00	2.000	tw-rexx-run	rexx_exec::eval::small_int_operand
+49.00	240.00	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_evaluated
+49.00	66.00	1.000	tw-rexx-run	<rexx_exec::Interp>::literal
+49.00	49.00	3.000	tw-rexx-run	<rexx_exec::Interp>::enter_eval_node::<u8>
+42.00	42.00	1.000	libc.so.6	calloc
+42.00	42.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_at
+38.00	38.00	1.000	tw-rexx-run	<rexx_num::Number>::rendered_integer
+35.00	162.00	1.000	tw-rexx-run	<rexx_exec::Interp>::eval
+32.00	32.02	1.000	libc.so.6	free
+28.00	28.00	1.000	tw-rexx-run	<rexx_num::Number>::round_change
+27.00	27.00	1.000	tw-rexx-run	core::ptr::drop_glue::<rexx_core::body::Body>
+27.00	127.00	1.000	tw-rexx-run	<rexx_exec::Interp>::slot_of
+24.00	76.00	1.000	tw-rexx-run	rexx_exec::eval::spelled_int_arith
+24.00	1052.87	1.000	tw-rexx-run	<rexx_exec::Interp>::arith_general
+21.05	21.05	1.000	libc.so.6	__memcpy_avx_unaligned_erms
+19.00	2088.76	0.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame
+16.00	92.00	1.000	tw-rexx-run	<rexx_exec::Interp>::arith_small_int
+8.98	8.98	1.000	libc.so.6	__memcmp_avx2_movbe
+1.69	2091.00	0.000	tw-rexx-run	rexx_exec::execute
+0.98	0.98	0.000	libc.so.6	__memset_avx2_unaligned_erms
+TOTAL self diff/it 2091.00  summary diff/it 2091.00

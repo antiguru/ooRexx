@@ -1,0 +1,20 @@
+self/it	incl/it	calls/it	object	function
+91.00	110.97	1.000	librexx.so.4	MemoryObject::newObject(unsigned long, unsigned long)
+80.00	380.97	1.000	librexx.so.4	DoBlock::checkControl(RexxActivation*, ExpressionStack*, bool)
+50.00	169.97	1.000	librexx.so.4	RexxInteger::plus(RexxInteger*)
+38.00	38.00	1.000	librexx.so.4	RexxInteger::comp(RexxObject*)
+32.00	420.97	1.000	librexx.so.4	RexxInstructionBaseLoop::reExecute(RexxActivation*, ExpressionStack*, DoBlock*)
+25.25	471.22	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+25.00	445.97	1.000	librexx.so.4	RexxInstructionEnd::execute(RexxActivation*, ExpressionStack*)
+24.00	24.00	1.000	librexx.so.4	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)
+21.00	21.00	1.000	librexx.so.4	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)
+18.00	237.97	2.000	librexx.so.4	RexxObject::callOperatorMethod(unsigned long, RexxObject*)
+12.00	50.00	1.000	librexx.so.4	RexxInteger::isGreaterThan(RexxObject*)
+12.00	12.00	1.000	librexx.so.4	ProtectedBase::ProtectedBase()
+11.00	11.00	1.000	libc.so.6	__memset_avx2_unaligned_erms
+9.02	9.02	0.000	librexx.so.4	MemorySegmentSet::sweepSingleSegment(MemorySegment*)
+9.00	119.97	1.000	librexx.so.4	RexxInteger::operator new(unsigned long)
+6.00	6.00	1.000	librexx.so.4	ProtectedBase::~ProtectedBase()
+5.00	385.97	1.000	librexx.so.4	RexxInstructionControlledDo::iterate(RexxActivation*, ExpressionStack*, DoBlock*, bool)
+3.00	3.00	1.000	librexx.so.4	DoBlock::setCounter(RexxActivation*)
+TOTAL self diff/it 471.42  summary diff/it 471.42

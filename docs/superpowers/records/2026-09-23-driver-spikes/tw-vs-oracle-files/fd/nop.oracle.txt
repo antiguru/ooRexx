@@ -1,0 +1,4 @@
+self/it	incl/it	calls/it	object	function
+25.25	33.26	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+8.00	8.00	1.000	librexx.so.4	RexxInstructionNop::execute(RexxActivation*, ExpressionStack*)
+TOTAL self diff/it 33.27  summary diff/it 33.27

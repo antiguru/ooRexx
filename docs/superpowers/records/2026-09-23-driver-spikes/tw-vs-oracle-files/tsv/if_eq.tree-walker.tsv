@@ -1,0 +1,895 @@
+1.000	0x153b00	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	push %rbp
+1.000	0x153b01	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	push %r15
+1.000	0x153b03	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	push %r14
+1.000	0x153b05	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	push %r13
+1.000	0x153b07	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	push %r12
+1.000	0x153b09	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	push %rbx
+1.000	0x153b0a	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	sub $0x228,%rsp
+1.000	0x153b11	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	mov %r8,%r13
+1.000	0x153b14	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	mov %rcx,%r15
+1.000	0x153b17	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	mov %edx,%ebp
+1.000	0x153b19	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	mov %rsi,%r14
+1.000	0x153b1c	<rexx_exec::Interp>::apply_binary	src/eval.rs	1277	mov %rdi,%rbx
+1.000	0x153b1f	<rexx_exec::Interp>::apply_binary	src/eval.rs	1292	mov %rsi,%rdi
+1.000	0x153b22	<rexx_exec::Interp>::apply_binary	src/eval.rs	1292	mov %rcx,%rsi
+1.000	0x153b25	<rexx_exec::Interp>::apply_binary	src/eval.rs	1292	call 20a630 <<rexx_exec::Interp>::operator_message_receiver>
+1.000	0x153b2a	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	movzbl %bpl,%r12d
+1.000	0x153b2e	<rexx_exec::Interp>::apply_binary	src/eval.rs	1292	cmp $0x1,%rax
+1.000	0x153b32	<rexx_exec::Interp>::apply_binary	src/eval.rs	1292	jne 153b56 <<rexx_exec::Interp>::apply_binary+0x56>
+1.000	0x153b56	<rexx_exec::Interp>::apply_binary	src/eval.rs	1302	cmp $0x2,%r13
+1.000	0x153b5a	<rexx_exec::Interp>::apply_binary	src/eval.rs	1302	jne 153b7f <<rexx_exec::Interp>::apply_binary+0x7f>
+1.000	0x153b7f	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	mov %r13d,%eax
+1.000	0x153b82	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	and $0x3,%eax
+1.000	0x153b85	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	lea -0x11474c(%rip),%rcx # 3f440 <GCC_except_table3538+0x1ea4>
+1.000	0x153b8c	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	movslq (%rcx,%rax,4),%rdx
+1.000	0x153b90	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	add %rcx,%rdx
+1.000	0x153b93	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	jmp *%rdx
+1.000	0x153c40	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	mov %r13,0x28(%rsp)
+1.000	0x153c45	<rexx_exec::Interp>::apply_binary	src/eval.rs	1306	lea -0x7(%r12),%eax
+1.000	0x153c4a	<rexx_exec::Interp>::apply_binary	src/eval.rs	1306	cmp $0x2,%eax
+1.000	0x153c4d	<rexx_exec::Interp>::apply_binary	src/eval.rs	1306	jb 153d73 <<rexx_exec::Interp>::apply_binary+0x273>
+1.000	0x153c53	<rexx_exec::Interp>::apply_binary	src/eval.rs	1306	cmp $0x9,%r12d
+1.000	0x153c57	<rexx_exec::Interp>::apply_binary	src/eval.rs	1306	mov 0x28(%rsp),%r9
+1.000	0x153c5c	<rexx_exec::Interp>::apply_binary	src/eval.rs	1306	jne 153cd1 <<rexx_exec::Interp>::apply_binary+0x1d1>
+1.000	0x153cd1	<rexx_exec::Interp>::apply_binary	src/eval.rs	1475	lea -0xa(%rbp),%eax
+1.000	0x153cd4	<rexx_exec::Interp>::apply_binary	src/eval.rs	1475	cmp $0x12,%al
+1.000	0x153cd6	<rexx_exec::Interp>::apply_binary	src/eval.rs	1309	jae 153d9a <<rexx_exec::Interp>::apply_binary+0x29a>
+1.000	0x153cdc	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	mov %eax,0x38(%rsp)
+1.000	0x153ce0	<rexx_exec::Interp>::apply_binary	src/eval.rs	1010	mov 0x1790(%r14),%rax
+1.000	0x153ce7	<rexx_exec::Interp>::apply_binary	src/option.rs	743	test %rax,%rax
+1.000	0x153cea	<rexx_exec::Interp>::apply_binary	src/option.rs	743	je 154920 <<rexx_exec::Interp>::apply_binary+0xe20>
+1.000	0x153cf0	<rexx_exec::Interp>::apply_binary	src/settings.rs	213	mov 0x98(%rax),%r13
+1.000	0x153cf7	<rexx_exec::Interp>::apply_binary	src/settings.rs	217	mov 0xa0(%rax),%rcx
+1.000	0x153cfe	<rexx_exec::Interp>::apply_binary	src/settings.rs	217	mov %r15d,%r11d
+1.000	0x153d01	<rexx_exec::Interp>::apply_binary	src/settings.rs	217	and $0x3,%r11d
+1.000	0x153d05	<rexx_exec::Interp>::apply_binary	src/settings.rs	217	mov %r11,%rax
+1.000	0x153d08	<rexx_exec::Interp>::apply_binary	src/settings.rs	0	xor $0x1,%rax
+1.000	0x153d0c	<rexx_exec::Interp>::apply_binary	src/settings.rs	0	mov %rcx,0x170(%rsp)
+1.000	0x153d14	<rexx_exec::Interp>::apply_binary	src/eval.rs	1018	or %rcx,%rax
+1.000	0x153d17	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	mov %r13,0x178(%rsp)
+1.000	0x153d1f	<rexx_exec::Interp>::apply_binary	src/eval.rs	1018	jne 15427e <<rexx_exec::Interp>::apply_binary+0x77e>
+1.000	0x1540b5	<rexx_exec::Interp>::apply_binary	src/eval.rs	1313	add $0x228,%rsp
+1.000	0x1540bc	<rexx_exec::Interp>::apply_binary	src/eval.rs	1313	pop %rbx
+1.000	0x1540bd	<rexx_exec::Interp>::apply_binary	src/eval.rs	1313	pop %r12
+1.000	0x1540bf	<rexx_exec::Interp>::apply_binary	src/eval.rs	1313	pop %r13
+1.000	0x1540c1	<rexx_exec::Interp>::apply_binary	src/eval.rs	1313	pop %r14
+1.000	0x1540c3	<rexx_exec::Interp>::apply_binary	src/eval.rs	1313	pop %r15
+1.000	0x1540c5	<rexx_exec::Interp>::apply_binary	src/eval.rs	1313	pop %rbp
+1.000	0x1540c6	<rexx_exec::Interp>::apply_binary	src/eval.rs	1313	ret
+1.000	0x15427e	<rexx_exec::Interp>::apply_binary	src/eval.rs	1578	add $0xee,%bpl
+1.000	0x154282	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	mov $0x1,%r13b
+1.000	0x154285	<rexx_exec::Interp>::apply_binary	src/eval.rs	1578	cmp $0x8,%bpl
+1.000	0x154289	<rexx_exec::Interp>::apply_binary	src/eval.rs	1032	jae 154298 <<rexx_exec::Interp>::apply_binary+0x798>
+1.000	0x154298	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	lea -0x114e07(%rip),%rax # 3f498 <GCC_except_table3538+0x1efc>
+1.000	0x15429f	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	movslq (%rax,%r11,4),%rcx
+1.000	0x1542a3	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	add %rax,%rcx
+1.000	0x1542a6	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	jmp *%rcx
+1.000	0x1542c2	<rexx_exec::Interp>::apply_binary	src/handle.rs	134	mov %r15d,%r8d
+1.000	0x1542c5	<rexx_exec::Interp>::apply_binary	src/handle.rs	134	shr $0x2,%r8d
+1.000	0x1542c9	<rexx_exec::Interp>::apply_binary	src/handle.rs	134	and $0x7,%r8d
+1.000	0x1542cd	<rexx_exec::Interp>::apply_binary	src/handle.rs	136	mov %r15,%rax
+1.000	0x1542d0	<rexx_exec::Interp>::apply_binary	src/handle.rs	136	and $0xffffffffffffff00,%rax
+1.000	0x1542d6	<rexx_exec::Interp>::apply_binary	src/handle.rs	136	or %r8,%rax
+1.000	0x1542d9	<rexx_exec::Interp>::apply_binary	src/value.rs	745	mov %rax,0x40(%rsp)
+1.000	0x1542de	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	lea 0x41(%rsp),%rcx
+1.000	0x1542e3	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	lea 0xb0(%rsp),%rdi
+1.000	0x1542eb	<rexx_exec::Interp>::apply_binary	src/value.rs	745	mov %r14,%rsi
+1.000	0x1542ee	<rexx_exec::Interp>::apply_binary	src/value.rs	745	mov %r15,%rdx
+1.000	0x1542f1	<rexx_exec::Interp>::apply_binary	src/value.rs	745	call 12ef70 <<rexx_exec::Interp>::inline_text_to_number>
+1.000	0x1542f6	<rexx_exec::Interp>::apply_binary	src/value.rs	745	jmp 15430c <<rexx_exec::Interp>::apply_binary+0x80c>
+1.000	0x15430c	<rexx_exec::Interp>::apply_binary	src/result.rs	594	movzbl 0xb0(%rsp),%ebp
+1.000	0x154314	<rexx_exec::Interp>::apply_binary	src/result.rs	0	xor %r13d,%r13d
+1.000	0x154317	<rexx_exec::Interp>::apply_binary	src/result.rs	594	cmp $0x2,%bpl
+1.000	0x15431b	<rexx_exec::Interp>::apply_binary	src/eval.rs	1045	jne 1543e5 <<rexx_exec::Interp>::apply_binary+0x8e5>
+1.000	0x154321	<rexx_exec::Interp>::apply_binary	src/eval.rs	1046	mov %r14,%rdi
+1.000	0x154324	<rexx_exec::Interp>::apply_binary	src/eval.rs	1046	mov %r15,%rsi
+1.000	0x154327	<rexx_exec::Interp>::apply_binary	src/eval.rs	1046	call 187e00 <<rexx_exec::Interp>::operator_operand_gap>
+1.000	0x15432c	<rexx_exec::Interp>::apply_binary	src/eval.rs	1046	test %rax,%rax
+1.000	0x15432f	<rexx_exec::Interp>::apply_binary	src/eval.rs	1046	je 1543c2 <<rexx_exec::Interp>::apply_binary+0x8c2>
+1.000	0x1543c2	<rexx_exec::Interp>::apply_binary	src/eval.rs	1050	test %r13b,%r13b
+1.000	0x1543c5	<rexx_exec::Interp>::apply_binary	src/eval.rs	1050	jne 154414 <<rexx_exec::Interp>::apply_binary+0x914>
+1.000	0x1543c7	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	mov $0x1,%r13b
+1.000	0x1543ca	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	mov $0x2,%bpl
+1.000	0x1543cd	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	mov 0x28(%rsp),%rax
+1.000	0x1543d2	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	and $0x3,%eax
+1.000	0x1543d5	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	lea -0x114f34(%rip),%rcx # 3f4a8 <GCC_except_table3538+0x1f0c>
+1.000	0x1543dc	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	movslq (%rcx,%rax,4),%rax
+1.000	0x1543e0	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	add %rcx,%rax
+1.000	0x1543e3	<rexx_exec::Interp>::apply_binary	src/handle.rs	127	jmp *%rax
+1.000	0x154436	<rexx_exec::Interp>::apply_binary	src/value.rs	0	mov 0x28(%rsp),%rdx
+1.000	0x15443b	<rexx_exec::Interp>::apply_binary	src/handle.rs	134	mov %edx,%r8d
+1.000	0x15443e	<rexx_exec::Interp>::apply_binary	src/handle.rs	134	shr $0x2,%r8d
+1.000	0x154442	<rexx_exec::Interp>::apply_binary	src/handle.rs	134	and $0x7,%r8d
+1.000	0x154446	<rexx_exec::Interp>::apply_binary	src/handle.rs	136	mov %rdx,%rax
+1.000	0x154449	<rexx_exec::Interp>::apply_binary	src/handle.rs	136	and $0xffffffffffffff00,%rax
+1.000	0x15444f	<rexx_exec::Interp>::apply_binary	src/handle.rs	136	or %r8,%rax
+1.000	0x154452	<rexx_exec::Interp>::apply_binary	src/value.rs	745	mov %rax,0x40(%rsp)
+1.000	0x154457	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	lea 0x41(%rsp),%rcx
+1.000	0x15445c	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	lea 0xd8(%rsp),%rdi
+1.000	0x154464	<rexx_exec::Interp>::apply_binary	src/value.rs	745	mov %r14,%rsi
+1.000	0x154467	<rexx_exec::Interp>::apply_binary	src/value.rs	745	call 12ef70 <<rexx_exec::Interp>::inline_text_to_number>
+1.000	0x15446c	<rexx_exec::Interp>::apply_binary	src/value.rs	0	movzbl 0xd8(%rsp),%eax
+1.000	0x154474	<rexx_exec::Interp>::apply_binary	src/value.rs	0	mov %al,0x30(%rsp)
+1.000	0x154478	<rexx_exec::Interp>::apply_binary	src/value.rs	0	cmp $0x2,%al
+1.000	0x15447a	<rexx_exec::Interp>::apply_binary	src/value.rs	0	sete %al
+1.000	0x15447d	<rexx_exec::Interp>::apply_binary	src/eval.rs	1063	or %r13b,%al
+1.000	0x154480	<rexx_exec::Interp>::apply_binary	src/eval.rs	1063	je 1544f3 <<rexx_exec::Interp>::apply_binary+0x9f3>
+1.000	0x154482	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	lea 0x100(%rsp),%rdi
+1.000	0x15448a	<rexx_exec::Interp>::apply_binary	src/eval.rs	1076	mov %r14,%rsi
+1.000	0x15448d	<rexx_exec::Interp>::apply_binary	src/eval.rs	1076	mov %r15,%rdx
+1.000	0x154490	<rexx_exec::Interp>::apply_binary	src/eval.rs	1076	call 1c49e0 <<rexx_exec::Interp>::render>
+1.000	0x154495	<rexx_exec::Interp>::apply_binary	src/eval.rs	1076	mov 0x28(%rsp),%rdx
+1.000	0x15449a	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	lea 0x40(%rsp),%rdi
+1.000	0x15449f	<rexx_exec::Interp>::apply_binary	src/eval.rs	1077	mov %r14,%rsi
+1.000	0x1544a2	<rexx_exec::Interp>::apply_binary	src/eval.rs	1077	call 1c49e0 <<rexx_exec::Interp>::render>
+1.000	0x1544a7	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	movzbl 0x100(%rsp),%eax
+1.000	0x1544af	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	lea -0x114ffe(%rip),%rcx # 3f4b8 <GCC_except_table3538+0x1f1c>
+1.000	0x1544b6	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	movslq (%rcx,%rax,4),%rax
+1.000	0x1544ba	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	add %rcx,%rax
+1.000	0x1544bd	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	jmp *%rax
+1.000	0x1546a1	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	movzbl 0x101(%rsp),%ecx
+1.000	0x1546a9	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	cmp $0x7,%rcx
+1.000	0x1546ad	<rexx_exec::Interp>::apply_binary	num/uint_macros.rs	1052	ja 15494c <<rexx_exec::Interp>::apply_binary+0xe4c>
+1.000	0x1546b3	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	lea 0x102(%rsp),%rdi
+1.000	0x1546bb	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	movzbl 0x40(%rsp),%eax
+1.000	0x1546c0	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	lea -0x1151ff(%rip),%rdx # 3f4c8 <GCC_except_table3538+0x1f2c>
+1.000	0x1546c7	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	movslq (%rdx,%rax,4),%rax
+1.000	0x1546cb	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	add %rdx,%rax
+1.000	0x1546ce	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	mov %rcx,%rsi
+1.000	0x1546d1	<rexx_exec::Interp>::apply_binary	src/value.rs	1059	jmp *%rax
+1.000	0x154762	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	movzbl 0x41(%rsp),%ecx
+1.000	0x154767	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	cmp $0x8,%rcx
+1.000	0x15476b	<rexx_exec::Interp>::apply_binary	num/uint_macros.rs	1052	jae 15494c <<rexx_exec::Interp>::apply_binary+0xe4c>
+1.000	0x154771	<rexx_exec::Interp>::apply_binary	src/handle.rs	60	lea 0x42(%rsp),%rax
+1.000	0x154776	<rexx_exec::Interp>::apply_binary	src/handle.rs	61	jmp 1547a2 <<rexx_exec::Interp>::apply_binary+0xca2>
+1.000	0x1547a2	<rexx_exec::Interp>::apply_binary	src/eval.rs	1430	lea -0xc26cf(%rip),%rdx # 920da <core::unicode::unicode_data::white_space::WHITESPACE_MAP+0x1447>
+1.000	0x1547a9	<rexx_exec::Interp>::apply_binary	src/eval.rs	1093	movzbl -0xa(%r12,%rdx,1),%r8d
+1.000	0x1547af	<rexx_exec::Interp>::apply_binary	src/eval.rs	1093	mov %rax,%rdx
+1.000	0x1547b2	<rexx_exec::Interp>::apply_binary	src/eval.rs	1093	call 2d05d0 <rexx_num::compare::compare_strings>
+1.000	0x1547b7	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	mov %eax,%ebp
+1.000	0x1547b9	<rexx_exec::Interp>::apply_binary	ptr/mod.rs	823	cmpb $0x1,0x40(%rsp)
+1.000	0x1547be	<rexx_exec::Interp>::apply_binary	ptr/mod.rs	823	jne 1547d3 <<rexx_exec::Interp>::apply_binary+0xcd3>
+1.000	0x1547d3	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	movzbl %bpl,%r12d
+1.000	0x1547d7	<rexx_exec::Interp>::apply_binary	ptr/mod.rs	823	cmpb $0x1,0x100(%rsp)
+1.000	0x1547df	<rexx_exec::Interp>::apply_binary	ptr/mod.rs	823	jne 1547fa <<rexx_exec::Interp>::apply_binary+0xcfa>
+1.000	0x1547fa	<rexx_exec::Interp>::apply_binary	src/eval.rs	0	shl $0x8,%r12d
+1.000	0x1547fe	<rexx_exec::Interp>::apply_binary	ptr/mod.rs	823	cmpb $0x1,0xd8(%rsp)
+1.000	0x154806	<rexx_exec::Interp>::apply_binary	ptr/mod.rs	823	jne 154821 <<rexx_exec::Interp>::apply_binary+0xd21>
+1.000	0x154821	<rexx_exec::Interp>::apply_binary	ptr/mod.rs	823	cmpb $0x1,0xb0(%rsp)
+1.000	0x154829	<rexx_exec::Interp>::apply_binary	ptr/mod.rs	823	jne 154844 <<rexx_exec::Interp>::apply_binary+0xd44>
+1.000	0x154844	<rexx_exec::Interp>::apply_binary	alloc/unix.rs	0	or $0x3007,%r12
+1.000	0x15484b	<rexx_exec::Interp>::apply_binary	alloc/unix.rs	0	mov $0xffffffffffffffff,%r13
+1.000	0x154852	<rexx_exec::Interp>::apply_binary	src/eval.rs	994	mov %r13,(%rbx)
+1.000	0x154855	<rexx_exec::Interp>::apply_binary	src/eval.rs	994	mov %r12,0x8(%rbx)
+1.000	0x154859	<rexx_exec::Interp>::apply_binary	src/eval.rs	1309	jmp 1540b5 <<rexx_exec::Interp>::apply_binary+0x5b5>
+1.000	0x163c60	<rexx_exec::Interp>::condition_value	src/run.rs	7495	push %rbp
+1.000	0x163c61	<rexx_exec::Interp>::condition_value	src/run.rs	7495	push %r15
+1.000	0x163c63	<rexx_exec::Interp>::condition_value	src/run.rs	7495	push %r14
+1.000	0x163c65	<rexx_exec::Interp>::condition_value	src/run.rs	7495	push %r13
+1.000	0x163c67	<rexx_exec::Interp>::condition_value	src/run.rs	7495	push %r12
+1.000	0x163c69	<rexx_exec::Interp>::condition_value	src/run.rs	7495	push %rbx
+1.000	0x163c6a	<rexx_exec::Interp>::condition_value	src/run.rs	7495	sub $0xb8,%rsp
+1.000	0x163c71	<rexx_exec::Interp>::condition_value	src/run.rs	7495	mov %rcx,%r12
+1.000	0x163c74	<rexx_exec::Interp>::condition_value	src/run.rs	7495	mov %rsi,%r14
+1.000	0x163c77	<rexx_exec::Interp>::condition_value	src/run.rs	7495	mov %rdi,0x98(%rsp)
+1.000	0x163c7f	<rexx_exec::Interp>::condition_value	vec/mod.rs	3064	mov 0x2a0(%rsi),%rbx
+1.000	0x163c86	<rexx_exec::Interp>::condition_value	vec/mod.rs	1038	cmp 0x290(%rsi),%rbx
+1.000	0x163c8d	<rexx_exec::Interp>::condition_value	vec/mod.rs	1038	je 1640cd <<rexx_exec::Interp>::condition_value+0x46d>
+1.000	0x163c93	<rexx_exec::Interp>::condition_value	raw_vec/mod.rs	615	mov 0x298(%r14),%rax
+1.000	0x163c9a	<rexx_exec::Interp>::condition_value	ptr/mod.rs	1939	mov %rdx,(%rax,%rbx,8)
+1.000	0x163c9e	<rexx_exec::Interp>::condition_value	vec/mod.rs	1044	lea 0x1(%rbx),%rax
+1.000	0x163ca2	<rexx_exec::Interp>::condition_value	vec/mod.rs	1044	mov %rax,0x2a0(%r14)
+1.000	0x163ca9	<rexx_exec::Interp>::condition_value	src/run.rs	7521	testb $0x1,0x1879(%r14)
+1.000	0x163cb1	<rexx_exec::Interp>::condition_value	src/run.rs	7521	je 163cf1 <<rexx_exec::Interp>::condition_value+0x91>
+1.000	0x163cf1	<rexx_exec::Interp>::condition_value	src/handle.rs	127	mov %edx,%eax
+1.000	0x163cf3	<rexx_exec::Interp>::condition_value	src/handle.rs	127	and $0x3,%eax
+1.000	0x163cf6	<rexx_exec::Interp>::condition_value	src/handle.rs	127	lea -0x1244d5(%rip),%rcx # 3f828 <GCC_except_table3538+0x228c>
+1.000	0x163cfd	<rexx_exec::Interp>::condition_value	src/handle.rs	127	movslq (%rcx,%rax,4),%rax
+1.000	0x163d01	<rexx_exec::Interp>::condition_value	src/handle.rs	127	add %rcx,%rax
+1.000	0x163d04	<rexx_exec::Interp>::condition_value	src/handle.rs	127	jmp *%rax
+1.000	0x163e89	<rexx_exec::Interp>::condition_value	src/handle.rs	134	mov %edx,%eax
+1.000	0x163e8b	<rexx_exec::Interp>::condition_value	src/handle.rs	134	shr $0x2,%eax
+1.000	0x163e8e	<rexx_exec::Interp>::condition_value	src/handle.rs	134	and $0x7,%eax
+1.000	0x163e91	<rexx_exec::Interp>::condition_value	src/handle.rs	136	mov %rdx,%rcx
+1.000	0x163e94	<rexx_exec::Interp>::condition_value	src/handle.rs	136	and $0xffffffffffffff00,%rcx
+1.000	0x163e9b	<rexx_exec::Interp>::condition_value	src/handle.rs	136	or %rax,%rcx
+1.000	0x163e9e	<rexx_exec::Interp>::condition_value	src/run.rs	7552	mov %rcx,0xa0(%rsp)
+1.000	0x163ea6	<rexx_exec::Interp>::condition_value	num/uint_macros.rs	1052	shr $0x8,%edx
+1.000	0x163ea9	<rexx_exec::Interp>::condition_value	src/run.rs	7579	test %r8b,%r8b
+1.000	0x163eac	<rexx_exec::Interp>::condition_value	src/run.rs	7579	je 164055 <<rexx_exec::Interp>::condition_value+0x3f5>
+1.000	0x164055	<rexx_exec::Interp>::condition_value	raw_vec/mod.rs	0	mov %r9,%r8
+1.000	0x164058	<rexx_exec::Interp>::condition_value	raw_vec/mod.rs	0	cmp $0x1,%eax
+1.000	0x16405b	<rexx_exec::Interp>::condition_value	src/eval.rs	1408	jne 1640f0 <<rexx_exec::Interp>::condition_value+0x490>
+1.000	0x164061	<rexx_exec::Interp>::condition_value	src/eval.rs	0	mov $0xffffffffffffffff,%rbp
+1.000	0x164068	<rexx_exec::Interp>::condition_value	src/eval.rs	1407	cmp $0x30,%dl
+1.000	0x16406b	<rexx_exec::Interp>::condition_value	src/eval.rs	1407	je 16417e <<rexx_exec::Interp>::condition_value+0x51e>
+1.000	0x16409c	<rexx_exec::Interp>::condition_value	vec/mod.rs	1831	cmp 0x2a0(%r14),%rbx
+1.000	0x1640a3	<rexx_exec::Interp>::condition_value	vec/mod.rs	1831	ja 1640ac <<rexx_exec::Interp>::condition_value+0x44c>
+1.000	0x1640a5	<rexx_exec::Interp>::condition_value	vec/mod.rs	1836	mov %rbx,0x2a0(%r14)
+1.000	0x1640ac	<rexx_exec::Interp>::condition_value	vec/mod.rs	0	mov 0x98(%rsp),%rax
+1.000	0x1640b4	<rexx_exec::Interp>::condition_value	src/run.rs	7569	mov %rbp,(%rax)
+1.000	0x1640b7	<rexx_exec::Interp>::condition_value	src/run.rs	7569	mov %r15,0x8(%rax)
+1.000	0x1640bb	<rexx_exec::Interp>::condition_value	src/run.rs	7570	add $0xb8,%rsp
+1.000	0x1640c2	<rexx_exec::Interp>::condition_value	src/run.rs	7570	pop %rbx
+1.000	0x1640c3	<rexx_exec::Interp>::condition_value	src/run.rs	7570	pop %r12
+1.000	0x1640c5	<rexx_exec::Interp>::condition_value	src/run.rs	7570	pop %r13
+1.000	0x1640c7	<rexx_exec::Interp>::condition_value	src/run.rs	7570	pop %r14
+1.000	0x1640c9	<rexx_exec::Interp>::condition_value	src/run.rs	7570	pop %r15
+1.000	0x1640cb	<rexx_exec::Interp>::condition_value	src/run.rs	7570	pop %rbp
+1.000	0x1640cc	<rexx_exec::Interp>::condition_value	src/run.rs	7570	ret
+1.000	0x16417e	<rexx_exec::Interp>::condition_value	alloc/unix.rs	0	xor %r15d,%r15d
+1.000	0x164181	<rexx_exec::Interp>::condition_value	src/eval.rs	1407	jmp 16409c <<rexx_exec::Interp>::condition_value+0x43c>
+3.000	0x14cfe0	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	64	push %rbx
+3.000	0x14cfe1	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	64	sub $0x70,%rsp
+3.000	0x14cfe5	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	64	mov %rdi,%rbx
+3.000	0x14cfe8	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	67	mov 0x17f0(%rsi),%rax
+3.000	0x14cfef	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	67	lea 0x1(%rax),%rcx
+3.000	0x14cff3	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	67	mov %rcx,0x17f0(%rsi)
+3.000	0x14cffa	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	68	test %rax,%rax
+3.000	0x14cffd	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	68	je 14d10d <<rexx_exec::Interp>::enter_eval_node::<u8>+0x12d>
+2.000	0x14d003	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	71	cmp 0x17f8(%rsi),%rcx
+2.000	0x14d00a	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	71	ja 14d121 <<rexx_exec::Interp>::enter_eval_node::<u8>+0x141>
+3.000	0x14d010	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	87	cmp $0x186a0,%rcx
+3.000	0x14d017	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	87	jbe 14d14a <<rexx_exec::Interp>::enter_eval_node::<u8>+0x16a>
+1.000	0x14d10d	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	69	mov %rdx,0x1800(%rsi)
+1.000	0x14d114	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	71	cmp 0x17f8(%rsi),%rcx
+1.000	0x14d11b	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	71	jbe 14d010 <<rexx_exec::Interp>::enter_eval_node::<u8>+0x30>
+3.000	0x14d14a	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	91	movq $0xffffffffffffffff,(%rbx)
+3.000	0x14d151	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	92	add $0x70,%rsp
+3.000	0x14d155	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	92	pop %rbx
+3.000	0x14d156	<rexx_exec::Interp>::enter_eval_node::<u8>	src/eval.rs	92	ret
+2.000	0x16f680	<rexx_exec::Interp>::eval	src/eval.rs	94	push %r15
+2.000	0x16f682	<rexx_exec::Interp>::eval	src/eval.rs	94	push %r14
+2.000	0x16f684	<rexx_exec::Interp>::eval	src/eval.rs	94	push %r12
+2.000	0x16f686	<rexx_exec::Interp>::eval	src/eval.rs	94	push %rbx
+2.000	0x16f687	<rexx_exec::Interp>::eval	src/eval.rs	94	sub $0x18,%rsp
+2.000	0x16f68b	<rexx_exec::Interp>::eval	src/eval.rs	94	mov %rcx,%r14
+2.000	0x16f68e	<rexx_exec::Interp>::eval	src/eval.rs	94	mov %rdx,%r15
+2.000	0x16f691	<rexx_exec::Interp>::eval	src/eval.rs	94	mov %rsi,%r12
+2.000	0x16f694	<rexx_exec::Interp>::eval	src/eval.rs	94	mov %rdi,%rbx
+2.000	0x16f697	<rexx_exec::Interp>::eval	src/eval.rs	95	movb $0x0,0x7(%rsp)
+2.000	0x16f69c	<rexx_exec::Interp>::eval	src/eval.rs	95	lea 0x8(%rsp),%rdi
+2.000	0x16f6a1	<rexx_exec::Interp>::eval	src/eval.rs	95	lea 0x7(%rsp),%rdx
+2.000	0x16f6a6	<rexx_exec::Interp>::eval	src/eval.rs	96	call 14cfe0 <<rexx_exec::Interp>::enter_eval_node::<u8>>
+2.000	0x16f6ab	<rexx_exec::Interp>::eval	src/result.rs	2176	cmpl $0xffffffff,0x8(%rsp)
+2.000	0x16f6b0	<rexx_exec::Interp>::eval	src/result.rs	2176	jne 16f6fd <<rexx_exec::Interp>::eval+0x7d>
+2.000	0x16f6b2	<rexx_exec::Interp>::eval	src/result.rs	0	lea 0x8(%rsp),%rdi
+2.000	0x16f6b7	<rexx_exec::Interp>::eval	src/eval.rs	97	mov %r12,%rsi
+2.000	0x16f6ba	<rexx_exec::Interp>::eval	src/eval.rs	97	mov %r15,%rdx
+2.000	0x16f6bd	<rexx_exec::Interp>::eval	src/eval.rs	97	mov %r14,%rcx
+2.000	0x16f6c0	<rexx_exec::Interp>::eval	src/eval.rs	97	call 16ab00 <<rexx_exec::Interp>::eval_node>
+2.000	0x16f6c5	<rexx_exec::Interp>::eval	src/eval.rs	98	decq 0x17f0(%r12)
+2.000	0x16f6cd	<rexx_exec::Interp>::eval	src/eval.rs	108	cmpl $0xffffffff,0x8(%rsp)
+2.000	0x16f6d2	<rexx_exec::Interp>::eval	src/eval.rs	108	jne 16f6fd <<rexx_exec::Interp>::eval+0x7d>
+2.000	0x16f6d4	<rexx_exec::Interp>::eval	src/eval.rs	124	cmpb $0x0,0x1884(%r12)
+2.000	0x16f6dd	<rexx_exec::Interp>::eval	src/eval.rs	124	jne 16f6fd <<rexx_exec::Interp>::eval+0x7d>
+2.000	0x16f6df	<rexx_exec::Interp>::eval	src/eval.rs	124	testb $0x1,0x187a(%r12)
+2.000	0x16f6e8	<rexx_exec::Interp>::eval	src/eval.rs	124	je 16f6fd <<rexx_exec::Interp>::eval+0x7d>
+2.000	0x16f6fd	<rexx_exec::Interp>::eval	src/eval.rs	0	movups 0x8(%rsp),%xmm0
+2.000	0x16f702	<rexx_exec::Interp>::eval	src/eval.rs	0	movups %xmm0,(%rbx)
+2.000	0x16f705	<rexx_exec::Interp>::eval	src/eval.rs	112	add $0x18,%rsp
+2.000	0x16f709	<rexx_exec::Interp>::eval	src/eval.rs	112	pop %rbx
+2.000	0x16f70a	<rexx_exec::Interp>::eval	src/eval.rs	112	pop %r12
+2.000	0x16f70c	<rexx_exec::Interp>::eval	src/eval.rs	112	pop %r14
+2.000	0x16f70e	<rexx_exec::Interp>::eval	src/eval.rs	112	pop %r15
+2.000	0x16f710	<rexx_exec::Interp>::eval	src/eval.rs	112	ret
+1.000	0x16ab00	<rexx_exec::Interp>::eval_node	src/eval.rs	330	push %rbp
+1.000	0x16ab01	<rexx_exec::Interp>::eval_node	src/eval.rs	330	push %r15
+1.000	0x16ab03	<rexx_exec::Interp>::eval_node	src/eval.rs	330	push %r14
+1.000	0x16ab05	<rexx_exec::Interp>::eval_node	src/eval.rs	330	push %r13
+1.000	0x16ab07	<rexx_exec::Interp>::eval_node	src/eval.rs	330	push %r12
+1.000	0x16ab09	<rexx_exec::Interp>::eval_node	src/eval.rs	330	push %rbx
+1.000	0x16ab0a	<rexx_exec::Interp>::eval_node	src/eval.rs	330	sub $0x198,%rsp
+1.000	0x16ab11	<rexx_exec::Interp>::eval_node	src/eval.rs	330	mov %rdx,%r15
+1.000	0x16ab14	<rexx_exec::Interp>::eval_node	src/eval.rs	330	mov %rsi,%r14
+1.000	0x16ab17	<rexx_exec::Interp>::eval_node	src/eval.rs	330	mov %rdi,%rbx
+1.000	0x16ab1a	<rexx_exec::Interp>::eval_node	src/eval.rs	330	movabs $0x8000000000000000,%r12
+1.000	0x16ab24	<rexx_exec::Interp>::eval_node	src/eval.rs	331	mov (%rcx),%rax
+1.000	0x16ab27	<rexx_exec::Interp>::eval_node	src/eval.rs	331	mov %rax,%rdx
+1.000	0x16ab2a	<rexx_exec::Interp>::eval_node	src/eval.rs	331	xor %r12,%rdx
+1.000	0x16ab2d	<rexx_exec::Interp>::eval_node	src/eval.rs	331	test %rax,%rax
+1.000	0x16ab30	<rexx_exec::Interp>::eval_node	src/eval.rs	331	mov $0xb,%eax
+1.000	0x16ab35	<rexx_exec::Interp>::eval_node	src/eval.rs	331	cmovs %rdx,%rax
+1.000	0x16ab39	<rexx_exec::Interp>::eval_node	src/eval.rs	331	cmp $0xe,%rax
+1.000	0x16ab3d	<rexx_exec::Interp>::eval_node	src/eval.rs	331	ja 16b247 <<rexx_exec::Interp>::eval_node+0x747>
+1.000	0x16ab43	<rexx_exec::Interp>::eval_node	src/eval.rs	0	lea -0x12b302(%rip),%rdx # 3f848 <GCC_except_table3538+0x22ac>
+1.000	0x16ab4a	<rexx_exec::Interp>::eval_node	src/eval.rs	331	movslq (%rdx,%rax,4),%rax
+1.000	0x16ab4e	<rexx_exec::Interp>::eval_node	src/eval.rs	331	add %rdx,%rax
+1.000	0x16ab51	<rexx_exec::Interp>::eval_node	src/eval.rs	331	jmp *%rax
+1.000	0x16afb7	<rexx_exec::Interp>::eval_node	src/eval.rs	378	movzbl 0x18(%rcx),%r13d
+1.000	0x16afbc	<rexx_exec::Interp>::eval_node	src/eval.rs	1457	cmp $0x7,%r13b
+1.000	0x16afc0	<rexx_exec::Interp>::eval_node	src/eval.rs	378	jae 16b23d <<rexx_exec::Interp>::eval_node+0x73d>
+1.000	0x16b1e0	<rexx_exec::Interp>::eval_node	src/result.rs	0	mov 0x10(%rsp),%rax
+1.000	0x16b1e5	<rexx_exec::Interp>::eval_node	src/result.rs	0	movups %xmm0,(%rax)
+1.000	0x16b1e8	<rexx_exec::Interp>::eval_node	src/eval.rs	406	jmp 16b87e <<rexx_exec::Interp>::eval_node+0xd7e>
+1.000	0x16b23d	<rexx_exec::Interp>::eval_node	src/eval.rs	1457	cmp $0x1f,%r13b
+1.000	0x16b241	<rexx_exec::Interp>::eval_node	src/eval.rs	391	jne 16b3db <<rexx_exec::Interp>::eval_node+0x8db>
+1.000	0x16b3db	<rexx_exec::Interp>::eval_node	src/roots.rs	0	mov %rbx,0x10(%rsp)
+1.000	0x16b3e0	<rexx_exec::Interp>::eval_node	vec/mod.rs	3064	mov 0x2a0(%r14),%rbp
+1.000	0x16b3e7	<rexx_exec::Interp>::eval_node	vec/mod.rs	0	mov %rcx,%rbx
+1.000	0x16b3ea	<rexx_exec::Interp>::eval_node	src/eval.rs	394	mov 0x8(%rcx),%rcx
+1.000	0x16b3ee	<rexx_exec::Interp>::eval_node	src/eval.rs	0	lea 0x18(%rsp),%rdi
+1.000	0x16b3f3	<rexx_exec::Interp>::eval_node	src/eval.rs	394	mov %r14,%rsi
+1.000	0x16b3f6	<rexx_exec::Interp>::eval_node	src/eval.rs	394	mov %r15,%rdx
+1.000	0x16b3f9	<rexx_exec::Interp>::eval_node	src/eval.rs	394	call 16f680 <<rexx_exec::Interp>::eval>
+1.000	0x16b3fe	<rexx_exec::Interp>::eval_node	src/result.rs	2176	mov 0x18(%rsp),%rax
+1.000	0x16b403	<rexx_exec::Interp>::eval_node	src/result.rs	0	mov 0x20(%rsp),%r12
+1.000	0x16b408	<rexx_exec::Interp>::eval_node	src/result.rs	2176	cmp $0xffffffffffffffff,%rax
+1.000	0x16b40c	<rexx_exec::Interp>::eval_node	src/result.rs	2176	je 16b8ef <<rexx_exec::Interp>::eval_node+0xdef>
+1.000	0x16b87e	<rexx_exec::Interp>::eval_node	src/eval.rs	451	add $0x198,%rsp
+1.000	0x16b885	<rexx_exec::Interp>::eval_node	src/eval.rs	451	pop %rbx
+1.000	0x16b886	<rexx_exec::Interp>::eval_node	src/eval.rs	451	pop %r12
+1.000	0x16b888	<rexx_exec::Interp>::eval_node	src/eval.rs	451	pop %r13
+1.000	0x16b88a	<rexx_exec::Interp>::eval_node	src/eval.rs	451	pop %r14
+1.000	0x16b88c	<rexx_exec::Interp>::eval_node	src/eval.rs	451	pop %r15
+1.000	0x16b88e	<rexx_exec::Interp>::eval_node	src/eval.rs	451	pop %rbp
+1.000	0x16b88f	<rexx_exec::Interp>::eval_node	src/eval.rs	451	ret
+1.000	0x16b8ef	<rexx_exec::Interp>::eval_node	src/eval.rs	0	mov %rbp,0x8(%rsp)
+1.000	0x16b8f4	<rexx_exec::Interp>::eval_node	vec/mod.rs	1035	mov 0x2a0(%r14),%rbp
+1.000	0x16b8fb	<rexx_exec::Interp>::eval_node	vec/mod.rs	1038	cmp 0x290(%r14),%rbp
+1.000	0x16b902	<rexx_exec::Interp>::eval_node	vec/mod.rs	1038	je 16bc69 <<rexx_exec::Interp>::eval_node+0x1169>
+1.000	0x16b908	<rexx_exec::Interp>::eval_node	raw_vec/mod.rs	615	mov 0x298(%r14),%rax
+1.000	0x16b90f	<rexx_exec::Interp>::eval_node	ptr/mod.rs	1939	mov %r12,(%rax,%rbp,8)
+1.000	0x16b913	<rexx_exec::Interp>::eval_node	vec/mod.rs	1044	inc %rbp
+1.000	0x16b916	<rexx_exec::Interp>::eval_node	vec/mod.rs	1044	mov %rbp,0x2a0(%r14)
+1.000	0x16b91d	<rexx_exec::Interp>::eval_node	src/eval.rs	396	mov 0x10(%rbx),%rcx
+1.000	0x16b921	<rexx_exec::Interp>::eval_node	src/eval.rs	396	lea 0x18(%rsp),%rdi
+1.000	0x16b926	<rexx_exec::Interp>::eval_node	src/eval.rs	396	mov %r14,%rsi
+1.000	0x16b929	<rexx_exec::Interp>::eval_node	src/eval.rs	396	mov %r15,%rdx
+1.000	0x16b92c	<rexx_exec::Interp>::eval_node	src/eval.rs	396	call 16f680 <<rexx_exec::Interp>::eval>
+1.000	0x16b931	<rexx_exec::Interp>::eval_node	src/result.rs	2176	mov 0x18(%rsp),%rax
+1.000	0x16b936	<rexx_exec::Interp>::eval_node	src/result.rs	0	mov 0x20(%rsp),%r8
+1.000	0x16b93b	<rexx_exec::Interp>::eval_node	src/result.rs	2176	cmp $0xffffffffffffffff,%rax
+1.000	0x16b93f	<rexx_exec::Interp>::eval_node	src/result.rs	2176	je 16ba0a <<rexx_exec::Interp>::eval_node+0xf0a>
+1.000	0x16ba0a	<rexx_exec::Interp>::eval_node	vec/mod.rs	1035	mov 0x2a0(%r14),%rbx
+1.000	0x16ba11	<rexx_exec::Interp>::eval_node	vec/mod.rs	1038	cmp 0x290(%r14),%rbx
+1.000	0x16ba18	<rexx_exec::Interp>::eval_node	vec/mod.rs	1038	je 16bc8b <<rexx_exec::Interp>::eval_node+0x118b>
+1.000	0x16ba1e	<rexx_exec::Interp>::eval_node	raw_vec/mod.rs	615	mov 0x298(%r14),%rax
+1.000	0x16ba25	<rexx_exec::Interp>::eval_node	ptr/mod.rs	1939	mov %r8,(%rax,%rbx,8)
+1.000	0x16ba29	<rexx_exec::Interp>::eval_node	vec/mod.rs	1044	inc %rbx
+1.000	0x16ba2c	<rexx_exec::Interp>::eval_node	vec/mod.rs	1044	mov %rbx,0x2a0(%r14)
+1.000	0x16ba33	<rexx_exec::Interp>::eval_node	src/eval.rs	403	movzbl %r13b,%edx
+1.000	0x16ba37	<rexx_exec::Interp>::eval_node	src/eval.rs	403	lea 0x18(%rsp),%rdi
+1.000	0x16ba3c	<rexx_exec::Interp>::eval_node	src/eval.rs	403	mov %r14,%rsi
+1.000	0x16ba3f	<rexx_exec::Interp>::eval_node	src/eval.rs	403	mov %r12,%rcx
+1.000	0x16ba42	<rexx_exec::Interp>::eval_node	src/eval.rs	403	call 153b00 <<rexx_exec::Interp>::apply_binary>
+1.000	0x16ba47	<rexx_exec::Interp>::eval_node	src/eval.rs	0	mov 0x8(%rsp),%rax
+1.000	0x16ba4c	<rexx_exec::Interp>::eval_node	vec/mod.rs	1831	cmp 0x2a0(%r14),%rax
+1.000	0x16ba53	<rexx_exec::Interp>::eval_node	vec/mod.rs	1831	ja 16ba5c <<rexx_exec::Interp>::eval_node+0xf5c>
+1.000	0x16ba55	<rexx_exec::Interp>::eval_node	vec/mod.rs	1836	mov %rax,0x2a0(%r14)
+1.000	0x16ba5c	<rexx_exec::Interp>::eval_node	src/eval.rs	405	movups 0x18(%rsp),%xmm0
+1.000	0x16ba61	<rexx_exec::Interp>::eval_node	src/eval.rs	405	jmp 16b1e0 <<rexx_exec::Interp>::eval_node+0x6e0>
+2.000	0x16ab00	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	push %rbp
+2.000	0x16ab01	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	push %r15
+2.000	0x16ab03	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	push %r14
+2.000	0x16ab05	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	push %r13
+2.000	0x16ab07	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	push %r12
+2.000	0x16ab09	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	push %rbx
+2.000	0x16ab0a	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	sub $0x198,%rsp
+2.000	0x16ab11	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	mov %rdx,%r15
+2.000	0x16ab14	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	mov %rsi,%r14
+2.000	0x16ab17	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	mov %rdi,%rbx
+2.000	0x16ab1a	<rexx_exec::Interp>::eval_node'2	src/eval.rs	330	movabs $0x8000000000000000,%r12
+2.000	0x16ab24	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	mov (%rcx),%rax
+2.000	0x16ab27	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	mov %rax,%rdx
+2.000	0x16ab2a	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	xor %r12,%rdx
+2.000	0x16ab2d	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	test %rax,%rax
+2.000	0x16ab30	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	mov $0xb,%eax
+2.000	0x16ab35	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	cmovs %rdx,%rax
+2.000	0x16ab39	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	cmp $0xe,%rax
+2.000	0x16ab3d	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	ja 16b247 <<rexx_exec::Interp>::eval_node+0x747>
+2.000	0x16ab43	<rexx_exec::Interp>::eval_node'2	src/eval.rs	0	lea -0x12b302(%rip),%rdx # 3f848 <GCC_except_table3538+0x22ac>
+2.000	0x16ab4a	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	movslq (%rdx,%rax,4),%rax
+2.000	0x16ab4e	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	add %rdx,%rax
+2.000	0x16ab51	<rexx_exec::Interp>::eval_node'2	src/eval.rs	331	jmp *%rax
+2.000	0x16ad48	<rexx_exec::Interp>::eval_node'2	src/eval.rs	342	mov 0x8(%rcx),%edx
+2.000	0x16ad4b	<rexx_exec::Interp>::eval_node'2	src/eval.rs	269	mov %r14,%rdi
+2.000	0x16ad4e	<rexx_exec::Interp>::eval_node'2	src/eval.rs	269	mov %r15,%rsi
+2.000	0x16ad51	<rexx_exec::Interp>::eval_node'2	src/eval.rs	269	xor %ecx,%ecx
+2.000	0x16ad53	<rexx_exec::Interp>::eval_node'2	src/eval.rs	269	call 14f680 <<rexx_exec::Interp>::read_at>
+2.000	0x16ad58	<rexx_exec::Interp>::eval_node'2	src/run.rs	2991	test $0x1,%dl
+2.000	0x16ad5b	<rexx_exec::Interp>::eval_node'2	src/run.rs	2991	je 16b873 <<rexx_exec::Interp>::eval_node+0xd73>
+2.000	0x16b873	<rexx_exec::Interp>::eval_node'2	src/eval.rs	0	mov %rax,0x8(%rbx)
+2.000	0x16b877	<rexx_exec::Interp>::eval_node'2	src/eval.rs	0	movq $0xffffffffffffffff,(%rbx)
+2.000	0x16b87e	<rexx_exec::Interp>::eval_node'2	src/eval.rs	451	add $0x198,%rsp
+2.000	0x16b885	<rexx_exec::Interp>::eval_node'2	src/eval.rs	451	pop %rbx
+2.000	0x16b886	<rexx_exec::Interp>::eval_node'2	src/eval.rs	451	pop %r12
+2.000	0x16b888	<rexx_exec::Interp>::eval_node'2	src/eval.rs	451	pop %r13
+2.000	0x16b88a	<rexx_exec::Interp>::eval_node'2	src/eval.rs	451	pop %r14
+2.000	0x16b88c	<rexx_exec::Interp>::eval_node'2	src/eval.rs	451	pop %r15
+2.000	0x16b88e	<rexx_exec::Interp>::eval_node'2	src/eval.rs	451	pop %rbp
+2.000	0x16b88f	<rexx_exec::Interp>::eval_node'2	src/eval.rs	451	ret
+2.000	0x12ef70	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	753	push %rbp
+2.000	0x12ef71	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	753	push %r15
+2.000	0x12ef73	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	753	push %r14
+2.000	0x12ef75	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	753	push %r13
+2.000	0x12ef77	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	753	push %r12
+2.000	0x12ef79	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	753	push %rbx
+2.000	0x12ef7a	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	753	sub $0x78,%rsp
+2.000	0x12ef7e	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	753	mov %rdi,%rbx
+2.000	0x12ef81	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	753	movabs $0xff51afd7ed558ccd,%rax
+2.000	0x12ef8b	<rexx_exec::Interp>::inline_text_to_number	num/uint_macros.rs	2688	imul %rdx,%rax
+2.000	0x12ef8f	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	46	mov %rax,%rdi
+2.000	0x12ef92	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	46	shr $0x21,%rdi
+2.000	0x12ef96	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	46	xor %eax,%edi
+2.000	0x12ef98	<rexx_exec::Interp>::inline_text_to_number	num/uint_macros.rs	2688	lea (%rdi,%rdi,8),%eax
+2.000	0x12ef9b	<rexx_exec::Interp>::inline_text_to_number	num/uint_macros.rs	2688	lea (%rdi,%rax,2),%r12d
+2.000	0x12ef9f	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	48	and $0x1f,%r12d
+2.000	0x12efa3	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	759	lea 0x958(%rsi),%r15
+2.000	0x12efaa	<rexx_exec::Interp>::inline_text_to_number	src/handle.rs	46	cmp %rdx,0xe58(%rsi,%r12,8)
+2.000	0x12efb2	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	759	jne 12f01d <<rexx_exec::Interp>::inline_text_to_number+0xad>
+2.000	0x12efb4	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	760	lea (%r12,%r12,4),%rcx
+2.000	0x12efb8	<rexx_exec::Interp>::inline_text_to_number	src/result.rs	1897	movzbl (%r15,%rcx,8),%eax
+2.000	0x12efbd	<rexx_exec::Interp>::inline_text_to_number	src/result.rs	1897	cmp $0x2,%al
+2.000	0x12efbf	<rexx_exec::Interp>::inline_text_to_number	src/result.rs	1897	je 12f0a6 <<rexx_exec::Interp>::inline_text_to_number+0x136>
+2.000	0x12f0a6	<rexx_exec::Interp>::inline_text_to_number	src/result.rs	1899	movb $0x2,(%rbx)
+2.000	0x12f0a9	<rexx_exec::Interp>::inline_text_to_number	src/result.rs	1899	jmp 12f1bb <<rexx_exec::Interp>::inline_text_to_number+0x24b>
+2.000	0x12f1bb	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	768	add $0x78,%rsp
+2.000	0x12f1bf	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	768	pop %rbx
+2.000	0x12f1c0	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	768	pop %r12
+2.000	0x12f1c2	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	768	pop %r13
+2.000	0x12f1c4	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	768	pop %r14
+2.000	0x12f1c6	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	768	pop %r15
+2.000	0x12f1c8	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	768	pop %rbp
+2.000	0x12f1c9	<rexx_exec::Interp>::inline_text_to_number	src/value.rs	768	ret
+1.000	0x20a630	<rexx_exec::Interp>::operator_message_receiver	src/eval.rs	1165	push %rbx
+1.000	0x20a631	<rexx_exec::Interp>::operator_message_receiver	src/eval.rs	1165	mov $0x1,%eax
+1.000	0x20a636	<rexx_exec::Interp>::operator_message_receiver	src/eval.rs	1174	cmp $0x2,%rsi
+1.000	0x20a63a	<rexx_exec::Interp>::operator_message_receiver	src/eval.rs	1174	jne 20a643 <<rexx_exec::Interp>::operator_message_receiver+0x13>
+1.000	0x20a643	<rexx_exec::Interp>::operator_message_receiver	src/eval.rs	0	mov %rsi,%rdx
+1.000	0x20a646	<rexx_exec::Interp>::operator_message_receiver	src/handle.rs	127	test $0x3,%dl
+1.000	0x20a649	<rexx_exec::Interp>::operator_message_receiver	src/handle.rs	127	jne 20a76e <<rexx_exec::Interp>::operator_message_receiver+0x13e>
+1.000	0x20a76e	<rexx_exec::Interp>::operator_message_receiver	src/option.rs	0	xor %eax,%eax
+1.000	0x20a770	<rexx_exec::Interp>::operator_message_receiver	src/eval.rs	1202	pop %rbx
+1.000	0x20a771	<rexx_exec::Interp>::operator_message_receiver	src/eval.rs	1202	ret
+1.000	0x187e00	<rexx_exec::Interp>::operator_operand_gap	src/eval.rs	1222	push %rbx
+1.000	0x187e01	<rexx_exec::Interp>::operator_operand_gap	src/handle.rs	127	test $0x3,%sil
+1.000	0x187e05	<rexx_exec::Interp>::operator_operand_gap	src/handle.rs	127	jne 187f64 <<rexx_exec::Interp>::operator_operand_gap+0x164>
+1.000	0x187f64	<rexx_exec::Interp>::operator_operand_gap	src/eval.rs	0	xor %eax,%eax
+1.000	0x187f66	<rexx_exec::Interp>::operator_operand_gap	src/eval.rs	1273	pop %rbx
+1.000	0x187f67	<rexx_exec::Interp>::operator_operand_gap	src/eval.rs	1273	ret
+2.000	0x14f680	<rexx_exec::Interp>::read_at	src/lib.rs	5365	push %r15
+2.000	0x14f682	<rexx_exec::Interp>::read_at	src/lib.rs	5365	push %r14
+2.000	0x14f684	<rexx_exec::Interp>::read_at	src/lib.rs	5365	push %rbx
+2.000	0x14f685	<rexx_exec::Interp>::read_at	src/lib.rs	5365	mov %edx,%ebx
+2.000	0x14f687	<rexx_exec::Interp>::read_at	src/lib.rs	5365	mov %rsi,%r15
+2.000	0x14f68a	<rexx_exec::Interp>::read_at	src/lib.rs	5365	mov %rdi,%r14
+2.000	0x14f68d	<rexx_exec::Interp>::read_at	src/lib.rs	5371	test $0x1,%cl
+2.000	0x14f690	<rexx_exec::Interp>::read_at	src/lib.rs	5371	jne 14f6e1 <<rexx_exec::Interp>::read_at+0x61>
+2.000	0x14f692	<rexx_exec::Interp>::read_at	src/token.rs	58	mov %ebx,%edi
+2.000	0x14f694	<rexx_exec::Interp>::read_at	slice/index.rs	184	cmp %rdi,0x18(%r15)
+2.000	0x14f698	<rexx_exec::Interp>::read_at	slice/index.rs	184	jbe 14f6b4 <<rexx_exec::Interp>::read_at+0x34>
+2.000	0x14f69a	<rexx_exec::Interp>::read_at	src/lib.rs	1379	mov 0x10(%r15),%rax
+2.000	0x14f69e	<rexx_exec::Interp>::read_at	slice/index.rs	186	mov %rdi,%rcx
+2.000	0x14f6a1	<rexx_exec::Interp>::read_at	slice/index.rs	186	shl $0x4,%rcx
+2.000	0x14f6a5	<rexx_exec::Interp>::read_at	src/lib.rs	5373	cmpb $0x0,(%rax,%rcx,1)
+2.000	0x14f6a9	<rexx_exec::Interp>::read_at	src/lib.rs	5373	je 14f6b4 <<rexx_exec::Interp>::read_at+0x34>
+2.000	0x14f6ab	<rexx_exec::Interp>::read_at	src/lib.rs	1379	add %rcx,%rax
+2.000	0x14f6ae	<rexx_exec::Interp>::read_at	src/option.rs	2141	mov 0x8(%rax),%r8
+2.000	0x14f6b2	<rexx_exec::Interp>::read_at	src/option.rs	0	jmp 14f6e1 <<rexx_exec::Interp>::read_at+0x61>
+2.000	0x14f6e1	<rexx_exec::Interp>::read_at	src/lib.rs	5378	mov 0x1790(%r14),%rax
+2.000	0x14f6e8	<rexx_exec::Interp>::read_at	src/option.rs	743	test %rax,%rax
+2.000	0x14f6eb	<rexx_exec::Interp>::read_at	src/option.rs	743	je 14f804 <<rexx_exec::Interp>::read_at+0x184>
+2.000	0x14f6f1	<rexx_exec::Interp>::read_at	src/lib.rs	5378	mov 0x128(%rax),%rsi
+2.000	0x14f6f8	<rexx_exec::Interp>::read_at	src/lib.rs	5225	cmpq $0x0,0x80(%rax)
+2.000	0x14f700	<rexx_exec::Interp>::read_at	src/lib.rs	5225	jne 14f7cd <<rexx_exec::Interp>::read_at+0x14d>
+2.000	0x14f706	<rexx_exec::Interp>::read_at	src/roots.rs	343	add %r8,%rsi
+2.000	0x14f709	<rexx_exec::Interp>::read_at	src/roots.rs	344	cmpq $0x0,0x338(%r14)
+2.000	0x14f711	<rexx_exec::Interp>::read_at	src/roots.rs	344	je 14f785 <<rexx_exec::Interp>::read_at+0x105>
+2.000	0x14f785	<rexx_exec::Interp>::read_at	src/roots.rs	349	cmp 0x2b8(%r14),%rsi
+2.000	0x14f78c	<rexx_exec::Interp>::read_at	src/roots.rs	349	jae 14f81c <<rexx_exec::Interp>::read_at+0x19c>
+2.000	0x14f792	<rexx_exec::Interp>::read_at	raw_vec/mod.rs	615	mov 0x2b0(%r14),%rax
+2.000	0x14f799	<rexx_exec::Interp>::read_at	raw_vec/mod.rs	615	jmp 14f7b1 <<rexx_exec::Interp>::read_at+0x131>
+2.000	0x14f7b1	<rexx_exec::Interp>::read_at	src/roots.rs	0	shl $0x4,%rsi
+2.000	0x14f7b5	<rexx_exec::Interp>::read_at	src/roots.rs	0	mov (%rax,%rsi,1),%rdx
+2.000	0x14f7b9	<rexx_exec::Interp>::read_at	src/roots.rs	0	mov 0x8(%rax,%rsi,1),%rax
+2.000	0x14f7be	<rexx_exec::Interp>::read_at	src/lib.rs	5379	cmp $0x1,%rdx
+2.000	0x14f7c2	<rexx_exec::Interp>::read_at	src/lib.rs	5379	jne 14f7ee <<rexx_exec::Interp>::read_at+0x16e>
+2.000	0x14f7c4	<rexx_exec::Interp>::read_at	src/lib.rs	5383	xor $0x1,%dl
+2.000	0x14f7c7	<rexx_exec::Interp>::read_at	src/lib.rs	5383	pop %rbx
+2.000	0x14f7c8	<rexx_exec::Interp>::read_at	src/lib.rs	5383	pop %r14
+2.000	0x14f7ca	<rexx_exec::Interp>::read_at	src/lib.rs	5383	pop %r15
+2.000	0x14f7cc	<rexx_exec::Interp>::read_at	src/lib.rs	5383	ret
+2.000	0x1c49e0	<rexx_exec::Interp>::render	src/value.rs	689	push %r15
+2.000	0x1c49e2	<rexx_exec::Interp>::render	src/value.rs	689	push %r14
+2.000	0x1c49e4	<rexx_exec::Interp>::render	src/value.rs	689	push %rbx
+2.000	0x1c49e5	<rexx_exec::Interp>::render	src/value.rs	689	sub $0x50,%rsp
+2.000	0x1c49e9	<rexx_exec::Interp>::render	src/value.rs	689	mov %rdx,%r14
+2.000	0x1c49ec	<rexx_exec::Interp>::render	src/value.rs	689	mov %rdi,%rbx
+2.000	0x1c49ef	<rexx_exec::Interp>::render	src/handle.rs	127	mov %r14d,%eax
+2.000	0x1c49f2	<rexx_exec::Interp>::render	src/handle.rs	127	and $0x3,%eax
+2.000	0x1c49f5	<rexx_exec::Interp>::render	src/handle.rs	127	lea -0x1847f8(%rip),%rcx # 40204 <GCC_except_table3538+0x2c68>
+2.000	0x1c49fc	<rexx_exec::Interp>::render	src/handle.rs	127	movslq (%rcx,%rax,4),%rax
+2.000	0x1c4a00	<rexx_exec::Interp>::render	src/handle.rs	127	add %rcx,%rax
+2.000	0x1c4a03	<rexx_exec::Interp>::render	src/handle.rs	127	jmp *%rax
+2.000	0x1c4a5d	<rexx_exec::Interp>::render	src/handle.rs	134	mov %r14d,%eax
+2.000	0x1c4a60	<rexx_exec::Interp>::render	src/handle.rs	134	shr $0x2,%eax
+2.000	0x1c4a63	<rexx_exec::Interp>::render	src/handle.rs	134	and $0x7,%eax
+2.000	0x1c4a66	<rexx_exec::Interp>::render	src/handle.rs	136	mov %r14,%rcx
+2.000	0x1c4a69	<rexx_exec::Interp>::render	src/handle.rs	136	and $0xffffffffffffff00,%rcx
+2.000	0x1c4a70	<rexx_exec::Interp>::render	src/handle.rs	136	or %rax,%rcx
+2.000	0x1c4a73	<rexx_exec::Interp>::render	src/value.rs	695	mov %r14,0x20(%rbx)
+2.000	0x1c4a77	<rexx_exec::Interp>::render	src/value.rs	695	movb $0x2,(%rbx)
+2.000	0x1c4a7a	<rexx_exec::Interp>::render	src/value.rs	695	mov %rcx,0x1(%rbx)
+2.000	0x1c4a7e	<rexx_exec::Interp>::render	src/value.rs	695	jmp 1c4ad3 <<rexx_exec::Interp>::render+0xf3>
+2.000	0x1c4ad3	<rexx_exec::Interp>::render	src/value.rs	729	add $0x50,%rsp
+2.000	0x1c4ad7	<rexx_exec::Interp>::render	src/value.rs	729	pop %rbx
+2.000	0x1c4ad8	<rexx_exec::Interp>::render	src/value.rs	729	pop %r14
+2.000	0x1c4ada	<rexx_exec::Interp>::render	src/value.rs	729	pop %r15
+2.000	0x1c4adc	<rexx_exec::Interp>::render	src/value.rs	729	ret
+1.000	0x13a198	<rexx_exec::Interp>::walk_step_in_temps_frame	run/tree_walker.rs	97	cmp %r10,%r15
+1.000	0x13a19b	<rexx_exec::Interp>::walk_step_in_temps_frame	run/tree_walker.rs	97	mov 0x8(%rsp),%r12
+1.000	0x13a1a0	<rexx_exec::Interp>::walk_step_in_temps_frame	run/tree_walker.rs	97	jae 13a043 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2dd3>
+1.000	0x13a1a6	<rexx_exec::Interp>::walk_step_in_temps_frame	vec/mod.rs	1873	mov 0x10(%rbp),%rsi
+1.000	0x13a1aa	<rexx_exec::Interp>::walk_step_in_temps_frame	slice/index.rs	238	cmp %rsi,%r15
+1.000	0x13a1ad	<rexx_exec::Interp>::walk_step_in_temps_frame	slice/index.rs	238	jae 13b519 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x42a9>
+1.000	0x13a1b3	<rexx_exec::Interp>::walk_step_in_temps_frame	slice/index.rs	238	imul $0xb8,%r15,%r8
+1.000	0x13a1ba	<rexx_exec::Interp>::walk_step_in_temps_frame	slice/index.rs	238	add 0x8(%rbp),%r8
+1.000	0x13a1be	<rexx_exec::Interp>::walk_step_in_temps_frame	run/tree_walker.rs	99	lea 0x40(%rsp),%rdi
+1.000	0x13a1c3	<rexx_exec::Interp>::walk_step_in_temps_frame	run/tree_walker.rs	99	mov %r12,%rsi
+1.000	0x13a1c6	<rexx_exec::Interp>::walk_step_in_temps_frame	run/tree_walker.rs	0	mov 0x68(%rsp),%rdx
+1.000	0x13a1cb	<rexx_exec::Interp>::walk_step_in_temps_frame	run/tree_walker.rs	99	mov %r15,%rcx
+1.000	0x13a1ce	<rexx_exec::Interp>::walk_step_in_temps_frame	run/tree_walker.rs	99	mov 0x80(%rsp),%r9
+1.000	0x13a1d6	<rexx_exec::Interp>::walk_step_in_temps_frame	run/tree_walker.rs	99	call 137270 <<rexx_exec::Interp>::walk_step_in_temps_frame>
+1.000	0x13a1db	<rexx_exec::Interp>::walk_step_in_temps_frame	src/result.rs	2176	mov 0x40(%rsp),%rax
+1.000	0x13a1e0	<rexx_exec::Interp>::walk_step_in_temps_frame	src/result.rs	2176	test %rax,%rax
+1.000	0x13a1e3	<rexx_exec::Interp>::walk_step_in_temps_frame	src/result.rs	2176	je 13a190 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2f20>
+1.000	0x13a1e5	<rexx_exec::Interp>::walk_step_in_temps_frame	src/result.rs	0	mov 0x48(%rsp),%r15
+1.000	0x13a1ea	<rexx_exec::Interp>::walk_step_in_temps_frame	src/result.rs	0	mov 0x50(%rsp),%r12
+1.000	0x13a1ef	<rexx_exec::Interp>::walk_step_in_temps_frame	src/result.rs	2176	cmp $0x1,%eax
+1.000	0x13a1f2	<rexx_exec::Interp>::walk_step_in_temps_frame	src/result.rs	2176	jne 13a5f4 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x3384>
+1.000	0x13a1f8	<rexx_exec::Interp>::walk_step_in_temps_frame	src/result.rs	0	mov $0x1,%eax
+1.000	0x13a1fd	<rexx_exec::Interp>::walk_step_in_temps_frame	src/run.rs	8750	cmp 0x118(%rsp),%r15
+1.000	0x13a205	<rexx_exec::Interp>::walk_step_in_temps_frame	src/run.rs	8750	jb 13a055 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2de5>
+1.000	0x13a20b	<rexx_exec::Interp>::walk_step_in_temps_frame	src/run.rs	0	mov 0x38(%rsp),%r10
+1.000	0x13a210	<rexx_exec::Interp>::walk_step_in_temps_frame	src/run.rs	8750	cmp %r10,%r15
+1.000	0x13a213	<rexx_exec::Interp>::walk_step_in_temps_frame	src/run.rs	8750	jbe 13a198 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2f28>
+1.000	0x137270	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	push %rbp
+1.000	0x137271	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	push %r15
+1.000	0x137273	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	push %r14
+1.000	0x137275	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	push %r13
+1.000	0x137277	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	push %r12
+1.000	0x137279	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	push %rbx
+1.000	0x13727a	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	sub $0x488,%rsp
+1.000	0x137281	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	mov %rcx,%r10
+1.000	0x137284	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	mov %rsi,%r12
+1.000	0x137287	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	112	mov %rdi,0x310(%rsp)
+1.000	0x13728f	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	120	movzbl (%r8),%ecx
+1.000	0x137293	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	movabs $0xfffffffd8f,%rbx
+1.000	0x13729d	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	119	shr %cl,%rbx
+1.000	0x1372a0	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	119	movabs $0x8000000000000000,%rsi
+1.000	0x1372aa	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov (%rdx),%rbp
+1.000	0x1372ad	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x68(%r8),%rdi
+1.000	0x1372b1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x70(%r8),%rax
+1.000	0x1372b5	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rdi,0x430(%rsp)
+1.000	0x1372bd	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea (%rdi,%rax,8),%rax
+1.000	0x1372c1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x460(%rsp)
+1.000	0x1372c9	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	movzbl 0x78(%r8),%eax
+1.000	0x1372ce	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %al,0x77(%rsp)
+1.000	0x1372d2	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	movzbl 0x88(%r8),%eax
+1.000	0x1372da	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %al,0x6(%rsp)
+1.000	0x1372de	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	movzbl 0x58(%r8),%eax
+1.000	0x1372e3	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %al,0xc4(%rsp)
+1.000	0x1372ea	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rcx,0x2d0(%rsp)
+1.000	0x1372f2	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %ecx,%eax
+1.000	0x1372f4	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	and $0x3e,%al
+1.000	0x1372f6	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %al,0xc5(%rsp)
+1.000	0x1372fd	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x8(%rdx),%rax
+1.000	0x137301	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x1b0(%rsp)
+1.000	0x137309	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x20(%rdx),%rax
+1.000	0x13730d	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0xd8(%rsp)
+1.000	0x137315	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0xa8(%r8),%rax
+1.000	0x13731c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0xd0(%rsp)
+1.000	0x137324	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0xb0(%r8),%rax
+1.000	0x13732b	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x2c8(%rsp)
+1.000	0x137333	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0x510(%r12),%rax
+1.000	0x13733b	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x2b0(%rsp)
+1.000	0x137343	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0x10(%r8),%rax
+1.000	0x137347	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x438(%rsp)
+1.000	0x13734f	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x10(%r8),%rax
+1.000	0x137353	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x440(%rsp)
+1.000	0x13735b	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x80(%r8),%rax
+1.000	0x137362	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x300(%rsp)
+1.000	0x13736a	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x4(%r8),%eax
+1.000	0x13736e	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %eax,0x1dc(%rsp)
+1.000	0x137375	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x8(%r8),%eax
+1.000	0x137379	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x390(%rsp)
+1.000	0x137381	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0x8(%r8),%rax
+1.000	0x137385	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x3d8(%rsp)
+1.000	0x13738d	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x90(%r8),%rcx
+1.000	0x137394	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x60(%r8),%rax
+1.000	0x137398	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x448(%rsp)
+1.000	0x1373a0	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %r8,0x450(%rsp)
+1.000	0x1373a8	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x8(%r8),%rdi
+1.000	0x1373ac	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0xd(%rsi),%rax
+1.000	0x1373b0	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x428(%rsp)
+1.000	0x1373b8	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %r10,0xb0(%rsp)
+1.000	0x1373c0	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0x1(%r10),%rax
+1.000	0x1373c4	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x118(%rsp)
+1.000	0x1373cc	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0xc0(%rdi),%rax
+1.000	0x1373d3	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x458(%rsp)
+1.000	0x1373db	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0x70(%rdi),%rax
+1.000	0x1373df	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x1c0(%rsp)
+1.000	0x1373e7	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x18(%rdx),%rax
+1.000	0x1373eb	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x340(%rsp)
+1.000	0x1373f3	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rdx,0x68(%rsp)
+1.000	0x1373f8	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x10(%rdx),%rax
+1.000	0x1373fc	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x3d0(%rsp)
+1.000	0x137404	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rdi,0x120(%rsp)
+1.000	0x13740c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0x10(%rdi),%rax
+1.000	0x137410	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x1b8(%rsp)
+1.000	0x137418	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rcx,0x2f8(%rsp)
+1.000	0x137420	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0x1(%rcx),%rax
+1.000	0x137424	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x3c8(%rsp)
+1.000	0x13742c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x20(%r9),%rax
+1.000	0x137430	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0xe8(%rsp)
+1.000	0x137438	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %r9,0x80(%rsp)
+1.000	0x137440	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov 0x28(%r9),%rax
+1.000	0x137444	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x178(%rsp)
+1.000	0x13744c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	lea 0x290(%r12),%rax
+1.000	0x137454	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rax,0x3e8(%rsp)
+1.000	0x13745c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %r12,0x8(%rsp)
+1.000	0x137461	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	mov %rbp,0x98(%rsp)
+1.000	0x137469	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	nopl 0x0(%rax)
+1.000	0x137470	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	637	movzbl 0x1881(%r12),%eax
+1.000	0x137479	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	637	mov %al,0xc6(%rsp)
+1.000	0x137480	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	637	movzbl 0x1884(%r12),%eax
+1.000	0x137489	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	0	mov %al,0xc7(%rsp)
+1.000	0x137490	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	273	decl 0x1870(%r12)
+1.000	0x137498	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	274	je 139897 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2627>
+1.000	0x13749e	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	4906	mov 0x1790(%r12),%rax
+1.000	0x1374a6	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/option.rs	765	test %rax,%rax
+1.000	0x1374a9	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/option.rs	765	je 13b3e3 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4173>
+1.000	0x1374af	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/option.rs	0	movzbl 0x1e6(%rax),%ecx
+1.000	0x1374b6	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/option.rs	0	shl $0x3,%cl
+1.000	0x1374b9	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/activation.rs	201	mov $0x3020201,%edx
+1.000	0x1374be	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/activation.rs	201	shr %cl,%edx
+1.000	0x1374c0	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	4907	movb $0x1,0x1e3(%rax)
+1.000	0x1374c7	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	4919	mov %dl,0x1e6(%rax)
+1.000	0x1374cd	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	0	mov 0xd8(%rsp),%rax
+1.000	0x1374d5	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	0	test %rax,%rax
+1.000	0x1374d8	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	0	mov %rbx,0x468(%rsp)
+1.000	0x1374e0	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5459	je 137500 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x290>
+1.000	0x1374e2	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	0	mov 0xb0(%rsp),%r8
+1.000	0x1374ea	<rexx_exec::Interp>::walk_step_in_temps_frame'2	slice/index.rs	184	cmp 0x70(%rax),%r8
+1.000	0x1374ee	<rexx_exec::Interp>::walk_step_in_temps_frame'2	slice/index.rs	184	jae 137520 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2b0>
+1.000	0x1374f0	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5460	mov 0x68(%rax),%rax
+1.000	0x1374f4	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/plan.rs	157	mov (%rax,%r8,8),%rbx
+1.000	0x1374f8	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/plan.rs	157	jmp 137535 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2c5>
+1.000	0x137535	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5463	add 0x17c8(%r12),%rbx
+1.000	0x13753d	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5463	add 0x17c0(%r12),%rbx
+1.000	0x137545	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	4945	mov %rbx,0x938(%r12)
+1.000	0x13754d	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/activation.rs	1096	movzbl 0x1878(%r12),%eax
+1.000	0x137556	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	4949	mov %al,0x950(%r12)
+1.000	0x13755e	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	8325	testb $0x1,0x10(%r12)
+1.000	0x137564	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	8325	je 1375a0 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x330>
+1.000	0x1375a0	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	0	mov 0xd8(%rsp),%rax
+1.000	0x1375a8	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	0	test %rax,%rax
+1.000	0x1375ab	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	8336	je 1375cb <<rexx_exec::Interp>::walk_step_in_temps_frame+0x35b>
+1.000	0x1375ad	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	0	mov 0xb0(%rsp),%rcx
+1.000	0x1375b5	<rexx_exec::Interp>::walk_step_in_temps_frame'2	slice/index.rs	184	cmp 0x80(%rax),%rcx
+1.000	0x1375bc	<rexx_exec::Interp>::walk_step_in_temps_frame'2	slice/index.rs	184	jae 137616 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x3a6>
+1.000	0x1375be	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	8337	mov 0x78(%rax),%rax
+1.000	0x1375c2	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/plan.rs	178	mov (%rax,%rcx,8),%rax
+1.000	0x1375c6	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/plan.rs	178	jmp 13769f <<rexx_exec::Interp>::walk_step_in_temps_frame+0x42f>
+1.000	0x13769f	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	0	mov 0xb0(%rsp),%rcx
+1.000	0x1376a7	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	4980	mov %rcx,0x948(%r12)
+1.000	0x1376af	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec/mod.rs	3045	movq $0x0,0x368(%r12)
+1.000	0x1376bb	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	265	mov %rax,0x940(%r12)
+1.000	0x1376c3	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	637	cmpb $0x0,0x1884(%r12)
+1.000	0x1376cc	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	637	jne 1377ee <<rexx_exec::Interp>::walk_step_in_temps_frame+0x57e>
+1.000	0x1376d2	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	640	movzbl 0x1881(%r12),%eax
+1.000	0x1376db	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	272	test $0x1,%al
+1.000	0x1376dd	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	272	jne 137710 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4a0>
+1.000	0x1376df	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	0	cmpl $0x1,0x2d0(%rsp)
+1.000	0x1376e7	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	0	sete %cl
+1.000	0x1376ea	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	273	mov %eax,%edx
+1.000	0x1376ec	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	273	and $0x2,%dl
+1.000	0x1376ef	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	273	shr $1,%dl
+1.000	0x1376f1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	273	test %dl,%cl
+1.000	0x1376f3	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	273	jne 137710 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4a0>
+1.000	0x1376f5	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	0	cmpl $0x3,0x2d0(%rsp)
+1.000	0x1376fd	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	0	setne %cl
+1.000	0x137700	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	274	test $0x10,%al
+1.000	0x137702	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/trace.rs	274	sete %al
+1.000	0x137705	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5081	or %cl,%al
+1.000	0x137707	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5081	jne 1377ee <<rexx_exec::Interp>::walk_step_in_temps_frame+0x57e>
+1.000	0x1377ee	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec/mod.rs	3064	mov 0x2a0(%r12),%rax
+1.000	0x1377f6	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec/mod.rs	0	mov %rax,0xa8(%rsp)
+1.000	0x1377fe	<rexx_exec::Interp>::walk_step_in_temps_frame'2	mem/mod.rs	967	movzbl 0x1888(%r12),%eax
+1.000	0x137807	<rexx_exec::Interp>::walk_step_in_temps_frame'2	mem/mod.rs	968	movb $0x0,0x1888(%r12)
+1.000	0x137810	<rexx_exec::Interp>::walk_step_in_temps_frame'2	mem/mod.rs	968	mov 0x2d0(%rsp),%rdx
+1.000	0x137818	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	176	lea -0x4(%rdx),%ecx
+1.000	0x13781b	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	176	cmp $0x2,%ecx
+1.000	0x13781e	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	176	jb 1378d0 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x660>
+1.000	0x137824	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	176	cmp $0x6,%edx
+1.000	0x137827	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	176	je 137d14 <<rexx_exec::Interp>::walk_step_in_temps_frame+0xaa4>
+1.000	0x137d14	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec/mod.rs	1873	mov 0x10(%rbp),%rax
+1.000	0x137d18	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/option.rs	0	cmpb $0x0,0xc4(%rsp)
+1.000	0x137d20	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/option.rs	0	mov %rax,%r14
+1.000	0x137d23	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/option.rs	0	cmovne 0x448(%rsp),%r14
+1.000	0x137d2c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/option.rs	0	mov %r14,%r15
+1.000	0x137d2f	<rexx_exec::Interp>::walk_step_in_temps_frame'2	slice/index.rs	184	cmp %rax,%r14
+1.000	0x137d32	<rexx_exec::Interp>::walk_step_in_temps_frame'2	slice/index.rs	184	jae 137d58 <<rexx_exec::Interp>::walk_step_in_temps_frame+0xae8>
+1.000	0x137d34	<rexx_exec::Interp>::walk_step_in_temps_frame'2	raw_vec/mod.rs	615	mov 0x8(%rbp),%rcx
+1.000	0x137d38	<rexx_exec::Interp>::walk_step_in_temps_frame'2	slice/index.rs	186	imul $0xb8,%r14,%rdx
+1.000	0x137d3f	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	8902	cmpb $0x8,(%rcx,%rdx,1)
+1.000	0x137d43	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	8902	mov %r14,%r15
+1.000	0x137d46	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	8902	jne 137d58 <<rexx_exec::Interp>::walk_step_in_temps_frame+0xae8>
+1.000	0x137d58	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	183	mov 0x940(%r12),%rbx
+1.000	0x137d60	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	273	decl 0x1870(%r12)
+1.000	0x137d68	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	274	je 1399f3 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x2783>
+1.000	0x137d6e	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec/mod.rs	3045	movq $0x0,0x368(%r12)
+1.000	0x137d7a	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	265	mov %rbx,0x940(%r12)
+1.000	0x137d82	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	7308	mov 0x938(%r12),%rax
+1.000	0x137d8a	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	7312	mov %rax,0x1e8(%rsp)
+1.000	0x137d92	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	7312	movq $0x0,0x1e0(%rsp)
+1.000	0x137d9e	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	95	movb $0x0,0x180(%rsp)
+1.000	0x137da6	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	95	lea 0x40(%rsp),%rbx
+1.000	0x137dab	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	96	mov %rbx,%rdi
+1.000	0x137dae	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	96	mov %r12,%rsi
+1.000	0x137db1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	96	lea 0x180(%rsp),%rdx
+1.000	0x137db9	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	96	call 14cfe0 <<rexx_exec::Interp>::enter_eval_node::<u8>>
+1.000	0x137dbe	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	2176	mov 0x40(%rsp),%rax
+1.000	0x137dc3	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	2176	cmp $0xffffffffffffffff,%rax
+1.000	0x137dc7	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	2176	jne 137df8 <<rexx_exec::Interp>::walk_step_in_temps_frame+0xb88>
+1.000	0x137dc9	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	97	mov %rbx,%rdi
+1.000	0x137dcc	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	97	mov %r12,%rsi
+1.000	0x137dcf	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	97	mov 0x68(%rsp),%rdx
+1.000	0x137dd4	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	97	mov 0x3d8(%rsp),%rcx
+1.000	0x137ddc	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	97	call 16ab00 <<rexx_exec::Interp>::eval_node>
+1.000	0x137de1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	98	decq 0x17f0(%r12)
+1.000	0x137de9	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	108	mov 0x40(%rsp),%rax
+1.000	0x137dee	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	108	cmp $0xffffffffffffffff,%rax
+1.000	0x137df2	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	108	je 13898c <<rexx_exec::Interp>::walk_step_in_temps_frame+0x171c>
+1.000	0x13898c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	111	mov 0x48(%rsp),%rbx
+1.000	0x138991	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	124	cmpb $0x0,0x1884(%r12)
+1.000	0x13899a	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	124	jne 1389bf <<rexx_exec::Interp>::walk_step_in_temps_frame+0x174f>
+1.000	0x13899c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	124	testb $0x1,0x187a(%r12)
+1.000	0x1389a5	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	124	je 1389bf <<rexx_exec::Interp>::walk_step_in_temps_frame+0x174f>
+1.000	0x1389bf	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	0	xor %r8d,%r8d
+1.000	0x1389c2	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	0	mov 0x428(%rsp),%rax
+1.000	0x1389ca	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	0	cmp %rax,0x120(%rsp)
+1.000	0x1389d2	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/eval.rs	0	sete %r8b
+1.000	0x1389d6	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	7490	lea 0x140(%rsp),%rdi
+1.000	0x1389de	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	7490	mov %r12,%rsi
+1.000	0x1389e1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	7490	mov %rbx,%rdx
+1.000	0x1389e4	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	7490	lea 0x1e0(%rsp),%rcx
+1.000	0x1389ec	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	7490	lea 0x2b18d(%rip),%r9 # 163b80 <rexx_exec::run::raised_if_not_logical>
+1.000	0x1389f3	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	7490	call 163c60 <<rexx_exec::Interp>::condition_value>
+1.000	0x1389f8	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	317	mov 0x140(%rsp),%rax
+1.000	0x138a00	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	317	cmp $0xffffffffffffffff,%rax
+1.000	0x138a04	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	317	je 138be3 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x1973>
+1.000	0x138be3	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	322	cmpq $0x0,0x588(%r12)
+1.000	0x138bec	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	322	je 138c27 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x19b7>
+1.000	0x138c27	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	189	testb $0x1,0x148(%rsp)
+1.000	0x138c2f	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	189	je 1392fe <<rexx_exec::Interp>::walk_step_in_temps_frame+0x208e>
+1.000	0x1392fe	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	196	movq $0x1,0x10(%rsp)
+1.000	0x139307	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	196	mov %r14,0x18(%rsp)
+1.000	0x13930c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	196	jmp 13aab5 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x3845>
+1.000	0x13aab5	<rexx_exec::Interp>::walk_step_in_temps_frame'2	alloc/unix.rs	0	mov 0xa8(%rsp),%rax
+1.000	0x13aabd	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec_deque/mod.rs	1721	mov 0x588(%r12),%rbx
+1.000	0x13aac5	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec/mod.rs	1831	cmp 0x2a0(%r12),%rax
+1.000	0x13aacd	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec/mod.rs	1831	ja 13aad7 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x3867>
+1.000	0x13aacf	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec/mod.rs	1836	mov %rax,0x2a0(%r12)
+1.000	0x13aad7	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	594	cmpq $0xffffffffffffffff,0x10(%rsp)
+1.000	0x13aadd	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5028	jne 13ab55 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x38e5>
+1.000	0x13ab55	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	0	cmpb $0x4,0xc5(%rsp)
+1.000	0x13ab5d	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5037	je 13ac40 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x39d0>
+1.000	0x13ab63	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5041	movdqa 0x10(%rsp),%xmm0
+1.000	0x13ab69	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5041	movdqa %xmm0,0x40(%rsp)
+1.000	0x13ab6f	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5041	mov 0x20(%rsp),%rax
+1.000	0x13ab74	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5041	mov %rax,0x50(%rsp)
+1.000	0x13ab79	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	317	mov 0x40(%rsp),%rax
+1.000	0x13ab7e	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	317	cmp $0xffffffffffffffff,%rax
+1.000	0x13ab82	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	317	je 13ac40 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x39d0>
+1.000	0x13ab88	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	322	cmpq $0x0,0x588(%r12)
+1.000	0x13ab91	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/clause.rs	322	je 13ac40 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x39d0>
+1.000	0x13ac40	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	0	mov 0x20(%rsp),%rax
+1.000	0x13ac45	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	0	mov %rax,0x150(%rsp)
+1.000	0x13ac4d	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	0	movdqa 0x10(%rsp),%xmm0
+1.000	0x13ac53	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	0	movdqa %xmm0,0x140(%rsp)
+1.000	0x13ac5c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	594	mov 0x140(%rsp),%rax
+1.000	0x13ac64	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/result.rs	594	cmp $0xfffffffffffffffd,%rax
+1.000	0x13ac68	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5049	je 13b2b7 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4047>
+1.000	0x13ac6e	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5052	mov 0x148(%rsp),%r15
+1.000	0x13ac76	<rexx_exec::Interp>::walk_step_in_temps_frame'2	src/run.rs	5052	mov 0x150(%rsp),%r14
+1.000	0x13ac7e	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	130	cmp $0xffffffffffffffff,%rax
+1.000	0x13ac82	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	130	je 13b303 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4093>
+1.000	0x13ac88	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	130	cmp $0xfffffffffffffffe,%rax
+1.000	0x13ac8c	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	130	je 13b2e7 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4077>
+1.000	0x13ac92	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	movzbl 0xc6(%rsp),%ecx
+1.000	0x13ac9a	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	and $0x20,%cl
+1.000	0x13ac9d	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	shr $0x5,%cl
+1.000	0x13aca0	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	movzbl 0xc7(%rsp),%esi
+1.000	0x13aca8	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	not %sil
+1.000	0x13acab	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	0	and %cl,%sil
+1.000	0x13acae	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec_deque/mod.rs	1721	test %rbx,%rbx
+1.000	0x13acb1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec_deque/mod.rs	1721	sete %cl
+1.000	0x13acb4	<rexx_exec::Interp>::walk_step_in_temps_frame'2	vec_deque/mod.rs	0	mov 0x468(%rsp),%rdx
+1.000	0x13acbc	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	138	and %sil,%dl
+1.000	0x13acbf	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	138	and %cl,%dl
+1.000	0x13acc1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	138	cmp $0x1,%dl
+1.000	0x13acc4	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	138	jne 13b350 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x40e0>
+1.000	0x13b350	<rexx_exec::Interp>::walk_step_in_temps_frame'2	ptr/mod.rs	0	mov 0x310(%rsp),%rcx
+1.000	0x13b358	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	146	mov %rax,(%rcx)
+1.000	0x13b35b	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	146	mov %r15,0x8(%rcx)
+1.000	0x13b35f	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	146	mov %r14,0x10(%rcx)
+1.000	0x13b363	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	146	jmp 13b3d1 <<rexx_exec::Interp>::walk_step_in_temps_frame+0x4161>
+1.000	0x13b3d1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	148	add $0x488,%rsp
+1.000	0x13b3d8	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	148	pop %rbx
+1.000	0x13b3d9	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	148	pop %r12
+1.000	0x13b3db	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	148	pop %r13
+1.000	0x13b3dd	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	148	pop %r14
+1.000	0x13b3df	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	148	pop %r15
+1.000	0x13b3e1	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	148	pop %rbp
+1.000	0x13b3e2	<rexx_exec::Interp>::walk_step_in_temps_frame'2	run/tree_walker.rs	148	ret
+1.000	0x2d05d0	rexx_num::compare::compare_strings	src/compare.rs	144	push %rbp
+1.000	0x2d05d1	rexx_num::compare::compare_strings	src/compare.rs	144	push %r15
+1.000	0x2d05d3	rexx_num::compare::compare_strings	src/compare.rs	144	push %r14
+1.000	0x2d05d5	rexx_num::compare::compare_strings	src/compare.rs	144	push %r13
+1.000	0x2d05d7	rexx_num::compare::compare_strings	src/compare.rs	144	push %r12
+1.000	0x2d05d9	rexx_num::compare::compare_strings	src/compare.rs	144	push %rbx
+1.000	0x2d05da	rexx_num::compare::compare_strings	src/compare.rs	144	sub $0x28,%rsp
+1.000	0x2d05de	rexx_num::compare::compare_strings	src/compare.rs	144	mov %r8d,%ebx
+1.000	0x2d05e1	rexx_num::compare::compare_strings	src/compare.rs	40	cmp $0x5,%bl
+1.000	0x2d05e4	rexx_num::compare::compare_strings	src/compare.rs	40	jbe 2d062b <rexx_num::compare::compare_strings+0x5b>
+1.000	0x2d062b	rexx_num::compare::compare_strings	src/compare.rs	0	xor %r14d,%r14d
+1.000	0x2d062e	rexx_num::compare::compare_strings	ptr/non_null.rs	1650	test %rsi,%rsi
+1.000	0x2d0631	rexx_num::compare::compare_strings	iter/macros.rs	180	jne 2d0648 <rexx_num::compare::compare_strings+0x78>
+1.000	0x2d0648	rexx_num::compare::compare_strings	src/compare.rs	283	movzbl (%rdi,%r14,1),%eax
+1.000	0x2d064d	rexx_num::compare::compare_strings	src/compare.rs	283	cmp $0x20,%eax
+1.000	0x2d0650	rexx_num::compare::compare_strings	adapters/take_while.rs	81	je 2d0640 <rexx_num::compare::compare_strings+0x70>
+1.000	0x2d0652	rexx_num::compare::compare_strings	adapters/take_while.rs	81	cmp $0x9,%eax
+1.000	0x2d0655	rexx_num::compare::compare_strings	adapters/take_while.rs	81	je 2d0640 <rexx_num::compare::compare_strings+0x70>
+1.000	0x2d0657	rexx_num::compare::compare_strings	slice/index.rs	544	cmp %rsi,%r14
+1.000	0x2d065a	rexx_num::compare::compare_strings	slice/index.rs	544	ja 2d0800 <rexx_num::compare::compare_strings+0x230>
+1.000	0x2d0660	rexx_num::compare::compare_strings	slice/index.rs	0	xor %r15d,%r15d
+1.000	0x2d0663	rexx_num::compare::compare_strings	ptr/non_null.rs	1650	test %rcx,%rcx
+1.000	0x2d0666	rexx_num::compare::compare_strings	iter/macros.rs	180	jne 2d0688 <rexx_num::compare::compare_strings+0xb8>
+1.000	0x2d0688	rexx_num::compare::compare_strings	src/compare.rs	283	movzbl (%rdx,%r15,1),%eax
+1.000	0x2d068d	rexx_num::compare::compare_strings	src/compare.rs	283	cmp $0x20,%eax
+1.000	0x2d0690	rexx_num::compare::compare_strings	adapters/take_while.rs	81	je 2d0680 <rexx_num::compare::compare_strings+0xb0>
+1.000	0x2d0692	rexx_num::compare::compare_strings	adapters/take_while.rs	81	cmp $0x9,%eax
+1.000	0x2d0695	rexx_num::compare::compare_strings	adapters/take_while.rs	81	je 2d0680 <rexx_num::compare::compare_strings+0xb0>
+1.000	0x2d0697	rexx_num::compare::compare_strings	slice/index.rs	544	cmp %rcx,%r15
+1.000	0x2d069a	rexx_num::compare::compare_strings	slice/index.rs	544	jbe 2d06b7 <rexx_num::compare::compare_strings+0xe7>
+1.000	0x2d06b7	rexx_num::compare::compare_strings	slice/index.rs	0	mov %rsi,0x20(%rsp)
+1.000	0x2d06bc	rexx_num::compare::compare_strings	slice/index.rs	0	mov %rsi,%r12
+1.000	0x2d06bf	rexx_num::compare::compare_strings	slice/index.rs	0	sub %r14,%r12
+1.000	0x2d06c2	rexx_num::compare::compare_strings	slice/index.rs	0	mov %rdi,0x18(%rsp)
+1.000	0x2d06c7	rexx_num::compare::compare_strings	slice/index.rs	0	add %r14,%rdi
+1.000	0x2d06ca	rexx_num::compare::compare_strings	slice/index.rs	0	mov %rcx,0x10(%rsp)
+1.000	0x2d06cf	rexx_num::compare::compare_strings	slice/index.rs	549	mov %rcx,%rbp
+1.000	0x2d06d2	rexx_num::compare::compare_strings	slice/index.rs	549	sub %r15,%rbp
+1.000	0x2d06d5	rexx_num::compare::compare_strings	slice/index.rs	0	mov %rdx,0x8(%rsp)
+1.000	0x2d06da	rexx_num::compare::compare_strings	slice/index.rs	90	lea (%rdx,%r15,1),%rsi
+1.000	0x2d06de	rexx_num::compare::compare_strings	src/cmp.rs	1077	cmp %r12,%rbp
+1.000	0x2d06e1	rexx_num::compare::compare_strings	src/cmp.rs	1077	mov %r12,%r13
+1.000	0x2d06e4	rexx_num::compare::compare_strings	src/cmp.rs	1077	cmovb %rbp,%r13
+1.000	0x2d06e8	rexx_num::compare::compare_strings	slice/cmp.rs	339	mov %r13,%rdx
+1.000	0x2d06eb	rexx_num::compare::compare_strings	slice/cmp.rs	339	call *0x948bf(%rip) # 364fb0 <memcmp@GLIBC_2.2.5>
+1.000	0x2d06f1	rexx_num::compare::compare_strings	slice/cmp.rs	339	movslq %eax,%rdx
+1.000	0x2d06f4	rexx_num::compare::compare_strings	src/cmp.rs	2011	test %rdx,%rdx
+1.000	0x2d06f7	rexx_num::compare::compare_strings	src/cmp.rs	2011	sets %cl
+1.000	0x2d06fa	rexx_num::compare::compare_strings	src/cmp.rs	2011	setg %al
+1.000	0x2d06fd	rexx_num::compare::compare_strings	src/compare.rs	303	test %edx,%edx
+1.000	0x2d06ff	rexx_num::compare::compare_strings	src/compare.rs	303	je 2d0708 <rexx_num::compare::compare_strings+0x138>
+1.000	0x2d0701	rexx_num::compare::compare_strings	src/compare.rs	303	sub %cl,%al
+1.000	0x2d0703	rexx_num::compare::compare_strings	src/compare.rs	303	jmp 2d0795 <rexx_num::compare::compare_strings+0x1c5>
+1.000	0x2d0795	rexx_num::compare::compare_strings	src/compare.rs	56	movzbl %bl,%ecx
+1.000	0x2d0798	rexx_num::compare::compare_strings	src/compare.rs	56	lea -0x28ed67(%rip),%rdx # 41a38 <GCC_except_table3538+0x449c>
+1.000	0x2d079f	rexx_num::compare::compare_strings	src/compare.rs	56	movslq (%rdx,%rcx,4),%rcx
+1.000	0x2d07a3	rexx_num::compare::compare_strings	src/compare.rs	56	add %rdx,%rcx
+1.000	0x2d07a6	rexx_num::compare::compare_strings	src/compare.rs	56	jmp *%rcx
+1.000	0x2d07a8	rexx_num::compare::compare_strings	src/cmp.rs	444	test %al,%al
+1.000	0x2d07aa	rexx_num::compare::compare_strings	src/cmp.rs	444	sete %al
+1.000	0x2d07ad	rexx_num::compare::compare_strings	src/compare.rs	57	jmp 2d07f1 <rexx_num::compare::compare_strings+0x221>
+1.000	0x2d07f1	rexx_num::compare::compare_strings	src/compare.rs	150	add $0x28,%rsp
+1.000	0x2d07f5	rexx_num::compare::compare_strings	src/compare.rs	150	pop %rbx
+1.000	0x2d07f6	rexx_num::compare::compare_strings	src/compare.rs	150	pop %r12
+1.000	0x2d07f8	rexx_num::compare::compare_strings	src/compare.rs	150	pop %r13
+1.000	0x2d07fa	rexx_num::compare::compare_strings	src/compare.rs	150	pop %r14
+1.000	0x2d07fc	rexx_num::compare::compare_strings	src/compare.rs	150	pop %r15
+1.000	0x2d07fe	rexx_num::compare::compare_strings	src/compare.rs	150	pop %rbp
+1.000	0x2d07ff	rexx_num::compare::compare_strings	src/compare.rs	150	ret

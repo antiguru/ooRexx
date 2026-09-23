@@ -1,0 +1,10 @@
+--- a/rust/crates/rexx-exec/src/run/tree_walker.rs
++++ b/rust/crates/rexx-exec/src/run/tree_walker.rs
+@@ -165,6 +165,7 @@
+
+     /// One instruction's work: the block constructs recurse here, and every
+     /// other instruction is `exec_instruction`'s.
++    #[inline(never)]
+     fn walk_step(
+         &mut self,
+         code: &Code<'_>,

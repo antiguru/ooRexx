@@ -101,3 +101,17 @@ slower on every axis. The gap is the recursive expression evaluator (+171.1
 per clause); clause stepping costs about the same in both engines, and alone
 is 2.5 times the oracle's whole machinery category. A tree shape is not the
 oracle's advantage.
+
+## Round 3: the tree-walker against the oracle
+
+Moritz: both are tree walkers, so why does the oracle need about 40% of our
+walker's instructions? `tw-vs-oracle.md` (branch `investigate/tw-vs-oracle`
+`49f1193ab`) measures matched constructs on the oracle, the walker and the IR.
+**The gap is a fixed per-clause cost, not per-operation work**: a `nop` is 33.3
+instructions on the oracle, 279 on the walker, 106 on the IR, and every clause
+pays it. Where a construct's own work dominates (PARSE, stems, the loop step)
+we are near parity or cheaper, and allocation is in our favour throughout.
+The three largest causes are code generation in the per-clause entry
+(a `#[inline(never)]` control removes 45 per clause), assignment targets
+resolved by name in the walker, and trace/debug state computed eagerly on
+every clause (37 to 59 against the oracle's 6).

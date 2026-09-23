@@ -1,0 +1,14 @@
+self/it	incl/it	calls/it	object	function
+231.00	642.00	1.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame'2
+91.00	100.00	1.000	tw-rexx-run	<hashbrown::map::HashMap<alloc::boxed::Box<[u8]>, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::get::<[u8]>
+64.00	191.00	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_expr_target
+64.00	410.87	1.000	tw-rexx-run	<rexx_exec::Interp>::exec_instruction
+49.00	240.00	1.000	tw-rexx-run	<rexx_exec::Interp>::assign_evaluated
+39.00	90.00	1.000	tw-rexx-run	<rexx_exec::Interp>::eval_node
+34.00	51.00	1.000	tw-rexx-run	<rexx_exec::Interp>::literal
+27.00	127.00	1.000	tw-rexx-run	<rexx_exec::Interp>::slot_of
+19.00	660.87	0.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame
+17.00	17.00	1.000	tw-rexx-run	<rexx_exec::Interp>::enter_eval_node::<u8>
+16.87	16.87	1.000	libc.so.6	__memcpy_avx_unaligned_erms
+9.00	9.00	1.000	libc.so.6	__memcmp_avx2_movbe
+TOTAL self diff/it 660.90  summary diff/it 660.90

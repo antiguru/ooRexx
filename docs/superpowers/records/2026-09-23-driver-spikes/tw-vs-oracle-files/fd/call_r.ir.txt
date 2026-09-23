@@ -1,0 +1,22 @@
+self/it	incl/it	calls/it	object	function
+428.00	1709.87	1.000	tw-rexx-run	<rexx_exec::Interp>::invoke_call_over
+409.00	436.00	1.000	tw-rexx-run	<rexx_exec::Interp>::run_ops_from::<true>'2
+279.00	786.00	1.000	tw-rexx-run	<rexx_exec::Interp>::run_activation'2
+177.00	2064.88	0.000	tw-rexx-run	<rexx_exec::Interp>::run_ops_from::<true>
+127.00	1887.87	1.000	tw-rexx-run	<rexx_exec::Interp>::run_call_named
+120.87	120.87	4.000	libc.so.6	__memcpy_avx_unaligned_erms
+70.00	254.00	1.000	tw-rexx-run	<rexx_exec::Interp>::push_activation
+66.00	108.00	1.000	tw-rexx-run	core::ptr::drop_glue::<rexx_exec::activation::Activation>
+64.00	64.01	2.000	libc.so.6	free
+54.00	54.00	2.000	libc.so.6	malloc
+51.00	51.00	1.000	tw-rexx-run	<rexx_exec::Interp>::settle_call_result
+34.00	70.00	1.000	tw-rexx-run	<rexx_exec::Interp>::counted_text
+30.00	100.00	1.000	tw-rexx-run	<rexx_exec::Interp>::set_sigl
+29.00	29.00	1.000	tw-rexx-run	<hashbrown::map::HashMap<alloc::boxed::Box<[u8]>, usize, rustc_hash::FxBuildHasher> as core::clone::Clone>::clone
+27.00	27.00	1.000	tw-rexx-run	<rexx_exec::Interp>::returned_value
+27.00	27.00	1.000	tw-rexx-run	<rexx_exec::Interp>::apply_flow
+21.00	21.00	1.000	tw-rexx-run	<rexx_exec::Interp>::shared_arguments
+21.00	21.00	1.000	tw-rexx-run	rexx_exec::value::write_small_int
+20.00	20.00	1.000	tw-rexx-run	<rexx_exec::Interp>::trace_invocation_exit
+10.00	42.00	1.000	tw-rexx-run	<alloc::rc::Rc<[u8]>>::drop_slow
+TOTAL self diff/it 2064.93  summary diff/it 2064.93

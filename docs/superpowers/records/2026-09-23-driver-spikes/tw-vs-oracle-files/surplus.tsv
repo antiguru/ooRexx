@@ -1,0 +1,11 @@
+construct	codegen	error propagation	Rust checks	missing caching	D19 depth	trace gating/state	rooting	clause bookkeeping	allocation	representation	work + dispatch	total
+nop	140	28	10	0	0	37	1	3	0	0	27	246
+assign_var	192	41	23	132	18	46	1	3	0	10	79	545
+assign_lit	187	41	14	166	18	48	1	3	0	5	64	547
+incr	229	57	30	175	52	55	4	3	-109	25	130	651
+concat	277	59	34	132	52	49	4	3	-100	60	174	744
+if_eq	266	61	44	66	52	43	6	10	0	97	203	848
+bif_length	273	61	39	224	34	43	-68	8	0	17	203	834
+mul	385	91	47	315	52	44	-22	3	32	45	368	1360
+call_r	707	118	80	121	0	137	-44	59	-33	15	86	1246
+ctrl2	20	8	12	0	0	-4	-37	-9	-106	17	-85	-184

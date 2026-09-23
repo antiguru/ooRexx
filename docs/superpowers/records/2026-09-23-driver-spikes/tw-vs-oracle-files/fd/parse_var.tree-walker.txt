@@ -1,0 +1,9 @@
+self/it	incl/it	calls/it	object	function
+769.00	912.00	1.000	tw-rexx-run	<rexx_exec::Interp>::exec_parse
+231.00	1181.02	1.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame'2
+53.00	53.00	1.000	tw-rexx-run	<rexx_exec::Interp>::next_template
+48.00	48.00	3.000	libc.so.6	__memcpy_avx_unaligned_erms
+42.00	42.00	1.000	tw-rexx-run	<rexx_exec::Interp>::read_at
+38.00	950.05	1.000	tw-rexx-run	<rexx_exec::Interp>::exec_instruction
+19.00	1200.04	0.000	tw-rexx-run	<rexx_exec::Interp>::walk_step_in_temps_frame
+TOTAL self diff/it 1200.07  summary diff/it 1200.07

@@ -1,0 +1,17 @@
+self/it	incl/it	calls/it	object	function
+91.00	109.02	1.000	librexx.so.4	MemoryObject::newObject(unsigned long, unsigned long)
+42.00	42.00	2.000	librexx.so.4	RexxSimpleVariable::evaluate(RexxActivation*, ExpressionStack*)
+40.00	236.00	1.000	librexx.so.4	RexxString::concatRexx(RexxObject*)
+34.00	34.00	2.000	libc.so.6	__memcpy_avx_unaligned_erms
+34.00	321.00	1.000	librexx.so.4	RexxBinaryOperator::evaluate(RexxActivation*, ExpressionStack*)
+29.00	374.00	1.000	librexx.so.4	RexxInstructionAssignment::execute(RexxActivation*, ExpressionStack*)
+25.25	390.27	0.000	librexx.so.4	RexxActivation::run(RexxObject*, RexxString*, RexxObject**, unsigned long, RexxInstruction*, ProtectedObject&)
+24.00	24.00	1.000	librexx.so.4	RexxSimpleVariable::assign(RexxActivation*, RexxObject*)
+22.00	29.00	1.000	librexx.so.4	RexxInternalObject::requestString()
+15.00	133.00	1.000	librexx.so.4	RexxString::rawString(unsigned long)
+11.00	11.00	1.000	libc.so.6	__memset_avx2_unaligned_erms
+9.02	9.02	0.000	librexx.so.4	MemorySegmentSet::sweepSingleSegment(MemorySegment*)
+9.00	236.02	1.000	librexx.so.4	RexxObject::callOperatorMethod(unsigned long, RexxObject*)
+5.00	5.00	1.000	librexx.so.4	RexxInternalObject::isBaseClass()
+2.00	2.00	1.000	librexx.so.4	RexxString::primitiveMakeString()
+TOTAL self diff/it 392.47  summary diff/it 392.47
