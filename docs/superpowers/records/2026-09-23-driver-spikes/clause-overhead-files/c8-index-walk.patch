@@ -1,0 +1,40 @@
+diff --git i/rust/crates/rexx-exec/src/ir.rs w/rust/crates/rexx-exec/src/ir.rs
+index 1aab5ee16..eba85e060 100644
+--- i/rust/crates/rexx-exec/src/ir.rs
++++ w/rust/crates/rexx-exec/src/ir.rs
+@@ -620,12 +620,6 @@ impl Chunk {
+         self.ops.get(..stop as usize)
+     }
+ 
+-    /// The ops of `[at, end)`, or `None` when that is not a range of this
+-    /// stream.
+-    fn ops_in(&self, at: u32, end: u32) -> Option<&[Op]> {
+-        self.ops.get(at as usize..end as usize)
+-    }
+-
+     /// The setting this chunk's trace ops were emitted for.
+     fn trace(&self) -> ChunkTrace {
+         self.trace
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index bef4df3e9..af4e464f2 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -675,10 +675,14 @@ impl Interp {
+                             // have no register to live in: a bound is a `Number` and
+                             // a budget is a count.
+                             let mut header: Option<LoopHeaderValues> = None;
+-                            let Some(ops) = chunk.ops_in(pc + 1, end) else {
+-                                break 'cold Err(Loud::chunk_map_too_short().into());
+-                            };
+-                            for region_op in ops {
++                            // Walked by index into the stream already cut to
++                            // this range, so an empty region costs one compare.
++                            let mut region_pc = pc + 1;
++                            while region_pc < end {
++                                let Some(region_op) = stream.get(region_pc as usize) else {
++                                    break 'cold Err(Loud::chunk_map_too_short().into());
++                                };
++                                region_pc += 1;
+                                 match region_op {
+                                     // **No gate**: this op exists only in a chunk
+                                     // compiled under a setting that echoes, which is

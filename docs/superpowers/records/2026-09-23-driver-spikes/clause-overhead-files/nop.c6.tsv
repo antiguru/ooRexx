@@ -1,0 +1,97 @@
+1.000	0x1c29b4	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	0	mov %r15d,%r12d
+1.000	0x1c29b7	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	524	cmp 0x210(%rsp),%r15d
+1.000	0x1c29bf	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	524	mov 0x1a8(%rsp),%rbx
+1.000	0x1c29c7	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	524	mov 0x5c8(%rsp),%r15
+1.000	0x1c29cf	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	524	jae 1c2de0 <<rexx_exec::Interp>::run_ops_from::<false>+0x700>
+1.000	0x1c29d5	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	548	mov %r12d,%eax
+1.000	0x1c29d8	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	548	shl $0x4,%rax
+1.000	0x1c29dc	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	0	mov 0x368(%rsp),%rdx
+1.000	0x1c29e4	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	549	movzbl (%rdx,%rax,1),%ecx
+1.000	0x1c29e8	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	549	cmp $0x28,%rcx
+1.000	0x1c29ec	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	549	ja 1c5ca2 <<rexx_exec::Interp>::run_ops_from::<false>+0x35c2>
+1.000	0x1c29f2	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	0	add %rdx,%rax
+1.000	0x1c29f5	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	0	lea -0x18290c(%rip),%rsi # 400f0 <GCC_except_table3538+0x2d78>
+1.000	0x1c29fc	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	549	movslq (%rsi,%rcx,4),%rdx
+1.000	0x1c2a00	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	549	add %rsi,%rdx
+1.000	0x1c2a03	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	549	jmp *%rdx
+1.000	0x1c2a05	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	561	mov 0x4(%rax),%edx
+1.000	0x1c2a08	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	0	mov 0x188(%rsp),%rcx
+1.000	0x1c2a10	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	184	cmp %rdx,0x10(%rcx)
+1.000	0x1c2a14	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	184	jbe 1c5b21 <<rexx_exec::Interp>::run_ops_from::<false>+0x3441>
+1.000	0x1c2a1a	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	0	mov 0x8(%rax),%eax
+1.000	0x1c2a1d	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	0	mov %rax,0x180(%rsp)
+1.000	0x1c2a25	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	186	imul $0xb8,%rdx,%rax
+1.000	0x1c2a2c	<rexx_exec::Interp>::run_ops_from::<false>	src/trace.rs	642	movzbl 0x1849(%r14),%esi
+1.000	0x1c2a34	<rexx_exec::Interp>::run_ops_from::<false>	src/trace.rs	0	mov %sil,0x178(%rsp)
+1.000	0x1c2a3c	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	186	add 0x8(%rcx),%rax
+1.000	0x1c2a40	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	0	mov %rax,0x80(%rsp)
+1.000	0x1c2a48	<rexx_exec::Interp>::run_ops_from::<false>	src/clause.rs	273	decl 0x1838(%r14)
+1.000	0x1c2a4f	<rexx_exec::Interp>::run_ops_from::<false>	src/clause.rs	273	mov %rdx,0x98(%rsp)
+1.000	0x1c2a57	<rexx_exec::Interp>::run_ops_from::<false>	src/clause.rs	274	je 1c559d <<rexx_exec::Interp>::run_ops_from::<false>+0x2ebd>
+1.000	0x1c2a5d	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	184	cmp %rdx,0x360(%rsp)
+1.000	0x1c2a65	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	184	mov 0x24c(%rsp),%ebx
+1.000	0x1c2a6c	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	184	jbe 1c2a8c <<rexx_exec::Interp>::run_ops_from::<false>+0x3ac>
+1.000	0x1c2a6e	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	0	mov 0x3c0(%rsp),%rax
+1.000	0x1c2a76	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	0	mov 0x98(%rsp),%rdx
+1.000	0x1c2a7e	<rexx_exec::Interp>::run_ops_from::<false>	src/option.rs	2141	mov (%rax,%rdx,8),%ecx
+1.000	0x1c2a81	<rexx_exec::Interp>::run_ops_from::<false>	src/option.rs	2141	mov %ecx,0x248(%rsp)
+1.000	0x1c2a88	<rexx_exec::Interp>::run_ops_from::<false>	src/option.rs	2141	mov 0x4(%rax,%rdx,8),%ebx
+1.000	0x1c2a8c	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4894	mov 0x1778(%r14),%rax
+1.000	0x1c2a93	<rexx_exec::Interp>::run_ops_from::<false>	src/option.rs	765	test %rax,%rax
+1.000	0x1c2a96	<rexx_exec::Interp>::run_ops_from::<false>	src/option.rs	765	je 1c5cb9 <<rexx_exec::Interp>::run_ops_from::<false>+0x35d9>
+1.000	0x1c2a9c	<rexx_exec::Interp>::run_ops_from::<false>	src/option.rs	0	movzbl 0x1e6(%rax),%ecx
+1.000	0x1c2aa3	<rexx_exec::Interp>::run_ops_from::<false>	src/option.rs	0	shl $0x3,%cl
+1.000	0x1c2aa6	<rexx_exec::Interp>::run_ops_from::<false>	src/activation.rs	201	mov $0x3020201,%edx
+1.000	0x1c2aab	<rexx_exec::Interp>::run_ops_from::<false>	src/activation.rs	201	shr %cl,%edx
+1.000	0x1c2aad	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4895	movb $0x1,0x1e3(%rax)
+1.000	0x1c2ab4	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4907	mov %dl,0x1e6(%rax)
+1.000	0x1c2aba	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4907	test %rbp,%rbp
+1.000	0x1c2abd	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4907	mov %r13,0x90(%rsp)
+1.000	0x1c2ac5	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4907	mov %ebx,0x24c(%rsp)
+1.000	0x1c2acc	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4916	je 1c3200 <<rexx_exec::Interp>::run_ops_from::<false>+0xb20>
+1.000	0x1c2ad2	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	0	mov 0x98(%rsp),%rax
+1.000	0x1c2ada	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4916	cmp %rax,0x360(%rsp)
+1.000	0x1c2ae2	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4916	jbe 1c3200 <<rexx_exec::Interp>::run_ops_from::<false>+0xb20>
+1.000	0x1c2ae8	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4916	cmpq $0x0,0x10(%r14)
+1.000	0x1c2aed	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4916	jne 1c3200 <<rexx_exec::Interp>::run_ops_from::<false>+0xb20>
+1.000	0x1c2af3	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4924	mov %ebx,%r15d
+1.000	0x1c2af6	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4924	add 0x17b0(%r14),%r15
+1.000	0x1c2afd	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4924	add 0x17a8(%r14),%r15
+1.000	0x1c2b04	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4933	mov %r15,0x940(%r14)
+1.000	0x1c2b0b	<rexx_exec::Interp>::run_ops_from::<false>	src/activation.rs	1097	movzbl 0x1840(%r14),%eax
+1.000	0x1c2b13	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4937	mov %al,0x958(%r14)
+1.000	0x1c2b1a	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4949	mov 0x248(%rsp),%eax
+1.000	0x1c2b21	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	0	mov 0x98(%rsp),%rcx
+1.000	0x1c2b29	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4968	mov %rcx,0x950(%r14)
+1.000	0x1c2b30	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	0	movzbl 0x178(%rsp),%ecx
+1.000	0x1c2b38	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	0	xor 0xa7(%rsp),%cl
+1.000	0x1c2b3f	<rexx_exec::Interp>::run_ops_from::<false>	vec/mod.rs	3045	movq $0x0,0x370(%r14)
+1.000	0x1c2b4a	<rexx_exec::Interp>::run_ops_from::<false>	src/clause.rs	265	mov %rax,0x948(%r14)
+1.000	0x1c2b51	<rexx_exec::Interp>::run_ops_from::<false>	src/clause.rs	265	mov %cl,0xa6(%rsp)
+1.000	0x1c2b58	<rexx_exec::Interp>::run_ops_from::<false>	src/trace.rs	195	test $0x13,%cl
+1.000	0x1c2b5b	<rexx_exec::Interp>::run_ops_from::<false>	src/run.rs	4978	je 1c2c7f <<rexx_exec::Interp>::run_ops_from::<false>+0x59f>
+1.000	0x1c2c7f	<rexx_exec::Interp>::run_ops_from::<false>	vec/mod.rs	3064	mov 0x2a0(%r14),%rax
+1.000	0x1c2c86	<rexx_exec::Interp>::run_ops_from::<false>	vec/mod.rs	0	mov %rax,0x28(%rsp)
+1.000	0x1c2c8b	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	650	movb $0x0,0x1851(%r14)
+1.000	0x1c2c93	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	677	movq $0x2,0x250(%rsp)
+1.000	0x1c2c9f	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	0	mov 0x180(%rsp),%rax
+1.000	0x1c2ca7	<rexx_exec::Interp>::run_ops_from::<false>	num/uint_macros.rs	1052	cmp %r12d,%eax
+1.000	0x1c2caa	<rexx_exec::Interp>::run_ops_from::<false>	num/uint_macros.rs	1052	jbe 1c2cba <<rexx_exec::Interp>::run_ops_from::<false>+0x5da>
+1.000	0x1c2cac	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	338	cmp %rax,0x3b8(%rsp)
+1.000	0x1c2cb4	<rexx_exec::Interp>::run_ops_from::<false>	slice/index.rs	338	jae 1c3225 <<rexx_exec::Interp>::run_ops_from::<false>+0xb45>
+1.000	0x1c3225	<rexx_exec::Interp>::run_ops_from::<false>	src/plan.rs	0	lea 0x1(%r12),%ebx
+1.000	0x1c322a	<rexx_exec::Interp>::run_ops_from::<false>	ptr/non_null.rs	1650	cmp %eax,%ebx
+1.000	0x1c322c	<rexx_exec::Interp>::run_ops_from::<false>	ptr/non_null.rs	1650	mov 0x90(%rsp),%r13
+1.000	0x1c3234	<rexx_exec::Interp>::run_ops_from::<false>	ptr/non_null.rs	1650	jne 1c3329 <<rexx_exec::Interp>::run_ops_from::<false>+0xc49>
+1.000	0x1c323a	<rexx_exec::Interp>::run_ops_from::<false>	ptr/mod.rs	823	cmpl $0x2,0x250(%rsp)
+1.000	0x1c3242	<rexx_exec::Interp>::run_ops_from::<false>	ptr/mod.rs	823	jne 1c33a5 <<rexx_exec::Interp>::run_ops_from::<false>+0xcc5>
+1.000	0x1c3248	<rexx_exec::Interp>::run_ops_from::<false>	ptr/mod.rs	0	mov 0x180(%rsp),%r15
+1.000	0x1c3250	<rexx_exec::Interp>::run_ops_from::<false>	ptr/mod.rs	0	mov 0x28(%rsp),%rbx
+1.000	0x1c3255	<rexx_exec::Interp>::run_ops_from::<false>	ptr/mod.rs	0	jmp 1c3429 <<rexx_exec::Interp>::run_ops_from::<false>+0xd49>
+1.000	0x1c3429	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	1945	cmpq $0x0,0x590(%r14)
+1.000	0x1c3431	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	1945	je 1c390b <<rexx_exec::Interp>::run_ops_from::<false>+0x122b>
+1.000	0x1c390b	<rexx_exec::Interp>::run_ops_from::<false>	vec/mod.rs	1831	cmp 0x2a0(%r14),%rbx
+1.000	0x1c3912	<rexx_exec::Interp>::run_ops_from::<false>	vec/mod.rs	1831	ja 1c391b <<rexx_exec::Interp>::run_ops_from::<false>+0x123b>
+1.000	0x1c3914	<rexx_exec::Interp>::run_ops_from::<false>	vec/mod.rs	1836	mov %rbx,0x2a0(%r14)
+1.000	0x1c391b	<rexx_exec::Interp>::run_ops_from::<false>	src/trace.rs	245	testb $0x20,0x178(%rsp)
+1.000	0x1c3923	<rexx_exec::Interp>::run_ops_from::<false>	ir/drive.rs	1953	je 1c29b4 <<rexx_exec::Interp>::run_ops_from::<false>+0x2d4>

@@ -1,0 +1,36 @@
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index 5669d6752..a954d2234 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -515,6 +515,11 @@ impl Interp {
+         // the instance that never asks.
+         let mut granting = GRANTING;
+         let range_end = end;
++        // A `DO`/`LOOP` header's values, accumulated across its region's ops
++        // because they are not `ObjRef`s and so have no register to live in.
++        // Empty at every region's start: `Op::LoopRun` takes it in the region
++        // that filled it, and a region that fails leaves this function.
++        let mut header: Option<LoopHeaderValues> = None;
+         let mut pc = at;
+         'ops: loop {
+             // **A branch that runs out exactly at this range's own end.**
+@@ -555,6 +560,7 @@ impl Interp {
+                     }
+                     #[cfg(test)]
+                     count_clause_op_entry();
++                    debug_assert!(header.is_none(), "a loop header outlived its region");
+                     // Where this region starts, which is where `=` at an
+                     // interactive-debug pause sends the counter back to.
+                     let clause_pc = pc;
+@@ -670,11 +676,6 @@ impl Interp {
+                         // every clause takes and the value exists only on the
+                         // paths that have something to put in it.
+                         let next: u32 = 'region: {
+-                            // A `DO`/`LOOP` header's values, accumulated across this
+-                            // region's own ops because they are not `ObjRef`s and so
+-                            // have no register to live in: a bound is a `Number` and
+-                            // a budget is a count.
+-                            let mut header: Option<LoopHeaderValues> = None;
+                             let Some(ops) = chunk.ops_in(pc + 1, end) else {
+                                 break 'cold Err(Loud::chunk_map_too_short().into());
+                             };

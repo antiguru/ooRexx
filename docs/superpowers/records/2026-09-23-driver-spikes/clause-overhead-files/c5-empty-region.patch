@@ -1,0 +1,15 @@
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index 6bf77fb2a..7c10d8ba9 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -670,6 +670,10 @@ impl Interp {
+                         // every clause takes and the value exists only on the
+                         // paths that have something to put in it.
+                         let next: u32 = 'region: {
++                            // A clause with no ops of its own, `NOP` among them.
++                            if end == pc + 1 {
++                                break 'region end;
++                            }
+                             // A `DO`/`LOOP` header's values, accumulated across this
+                             // region's own ops because they are not `ObjRef`s and so
+                             // have no register to live in: a bound is a `Number` and

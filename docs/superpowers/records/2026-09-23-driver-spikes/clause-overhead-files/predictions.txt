@@ -1,0 +1,30 @@
+c1 (fold debug_pause into TraceCache's byte; tracing_intermediates reads it), written before measuring:
+  mechanism: chunk_trace's movzbl/cmpb/mov/cmovne -> one load (-3 per clause); the per-region-op
+  unswitched test (movzbl/xor/test/je, 4) -> testb/je (2), -2 per region op.
+  nop -3/102 = -2.9%; assign -3 - 2*2 = -7/231 = -3.0%; rexxcps -1% (several region ops per clause,
+  inside the 2.5% floor); varlookup -1.5%; emptyloop -1 per iteration or noise; arith, dispatch,
+  compound -0.5..-1%. Register allocation may move any of these by whole instructions.
+c2 (hand the range to run_ops_from::<false> once the permission is spent; the take becomes a store of false), written before measuring:
+  mechanism: granting test and join (5) go; take (3) -> one store (1). -7 per clause if the hot loop's allocation is otherwise unchanged.
+  nop -7/100 = -7%; assign -7/226 = -3.1%; rexxcps -7*20M/18.17G = -0.8%; varlookup (2 clauses/iter) -1%; emptyloop (1 clause/iter) -2%; others -0.5%.
+  risk: the hot loop now runs in a different monomorphization; register allocation may move every axis by whole instructions either way.
+c3 (loop-header accumulator declared once per run_ops_from instead of once per region), written before measuring:
+  mechanism: header=None store (1) and its drop check with reloads (5) leave the clause path. nop -4..-6 per clause (-5%); assign the same -5/221 = -2.3%; rexxcps -0.5%; emptyloop -1..-2%; others under 1%. Allocation may move it.
+c3 result: nop -7.093%, assign +0.455%, rexxcps +0.157% -> not kept (never committed; patch c3-header-hoist.patch).
+c4 (Op::Load with a resolved slot reads it inline instead of calling read_at), written before measuring:
+  mechanism: read_at's prologue/epilogue and call setup go, the activation/exposure/alias/bounds tests stay: about -12 per x = y. nop 0 (+-2 regalloc); assign -12/221 = -5%; varlookup (y = x reads) -1..-2%; rexxcps -0.5% (reads are frequent); arith/compound -0.5%. Risk: a bigger Load arm raises driver pressure (cold-arms record).
+c5 (an empty region skips ops_in, the iterator and the header init/drop), written before measuring:
+  mechanism: nop saves ops_in bounds 5 + iterator test 4 + header 6, pays cmp/jne 2: -10..-13 per clause. assign pays +2 (the new test) unless allocation moves. rexxcps: most clauses have ops, so +0.1..+0.3% from the branch unless its empty clauses (END, labels) outweigh; varlookup +0.2%; emptyloop -5 per iteration (-2%).
+c5 result: nop -8.964%, assign +0.946%, rexxcps +0.13% (three more runs each: 18,035.86M vs 18,059.49M) -> not kept (patch c5-empty-region.patch).
+c6 (Op::Store's fast path keyed on the resolved slot alone; the clause-kind and target-kind tests move to the slow path), written before measuring:
+  mechanism: InstructionKind::Assignment test (3) and ExprKind::Variable test (5) leave x = y: -8 per clause. nop 0 (+-2); assign -8/208 = -3.8%; varlookup -1% (two stores per iteration); rexxcps -0.3%; compound/arith -0.3%.
+c6 result: nop +0.000%, assign -4.257% (-9.0), rexxcps -0.101% -> kept (18115d7ed).
+c7 (read_slot answers Result with the unset read and its NOVALUE check in one cold function, so the (value, Novalue) pair no longer travels through a stack slot), written before measuring:
+  mechanism: the tuple spill/reload and the xor/test on Novalue (about 5) go. nop 0; assign -5/199 = -2.5%; varlookup -0.5%; rexxcps -0.2%.
+c7 result: nop -3.984% (no Load in nop: allocation), assign -1.976% (-4.0), rexxcps +0.034% (+6.1M, spreads under 4k) -> not kept (c7-read-result.patch).
+c8 (region walked by index into the already-cut stream instead of a slice iterator from ops_in), written before measuring:
+  mechanism: ops_in's two bounds checks and the iterator setup go; one compare per step and one get per op remain. nop -5 (empty region: one compare); assign -6 (setup 12 -> ~4, per op about the same); rexxcps -0.3%; varlookup -1%. Allocation may move it.
+c8 result: nop -4.980%, assign -3.952%, rexxcps +0.944% -> not kept (c8-index-walk.patch).
+c9 (TraceEntry::stepped as discriminant arithmetic: x + (x < Spent) instead of the byte-table shift LLVM emitted), written before measuring:
+  mechanism: movzbl/shl/mov imm/shr (4) -> cmp/adc (2 or 3): -1..-2 per clause, on every axis in proportion to clauses. nop -1.5%; assign -0.7%; rexxcps -0.1..-0.2%; emptyloop -0.5%. Small enough that allocation noise can swamp it.
+c9 result: nop +2.988% (+3.0), assign +1.482%, rexxcps +0.290% -> not kept (c9-trace-entry.patch). Third consecutive failure (c7, c8, c9): stop.

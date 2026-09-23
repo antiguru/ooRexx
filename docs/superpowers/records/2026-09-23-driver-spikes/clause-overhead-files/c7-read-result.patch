@@ -1,0 +1,82 @@
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index bef4df3e9..88162435e 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -1028,20 +1028,24 @@ impl Interp {
+                                         // control saying the change reached the read
+                                         // and nothing else.
+                                         let value = match read {
+-                                            SymbolRead::Simple => {
+-                                                let (value, novalue) = match at {
+-                                                    Some(slot) => {
+-                                                        self.read_slot(code, *symbol, slot)
++                                            SymbolRead::Simple => match at {
++                                                Some(slot) => {
++                                                    match self.read_slot(code, *symbol, slot) {
++                                                        Ok(value) => value,
++                                                        Err(failure) => break 'cold Err(failure),
+                                                     }
+-                                                    None => self.read_at(code, *symbol, None),
+-                                                };
+-                                                if let Err(failure) =
+-                                                    self.novalue_check(novalue, value)
+-                                                {
+-                                                    break 'cold Err(failure);
+                                                 }
+-                                                value
+-                                            }
++                                                None => {
++                                                    let (value, novalue) =
++                                                        self.read_at(code, *symbol, None);
++                                                    if let Err(failure) =
++                                                        self.novalue_check(novalue, value)
++                                                    {
++                                                        break 'cold Err(failure);
++                                                    }
++                                                    value
++                                                }
++                                            },
+                                             SymbolRead::Stem | SymbolRead::Compound => {
+                                                 match self.read_symbol(code, *read, *symbol, at) {
+                                                     Ok(value) => value,
+diff --git i/rust/crates/rexx-exec/src/lib.rs w/rust/crates/rexx-exec/src/lib.rs
+index a1a0b2135..f9ee368fb 100644
+--- i/rust/crates/rexx-exec/src/lib.rs
++++ w/rust/crates/rexx-exec/src/lib.rs
+@@ -5367,22 +5367,31 @@ impl Interp {
+         }
+     }
+ 
+-    /// [`Interp::read_at`] for a slot already resolved, inlined into its
+-    /// caller.
++    /// [`Interp::read_at`] for a slot already resolved, with its
++    /// `NOVALUE` check, inlined into its caller.
+     #[inline(always)]
+     pub(crate) fn read_slot(
+         &mut self,
+         code: &Code<'_>,
+         id: SymbolId,
+         slot: usize,
+-    ) -> (ObjRef, Novalue) {
++    ) -> Result<ObjRef, Failure> {
+         let frame = self.activation().frame;
+         match self.variable(frame, slot) {
+-            Some(value) => (value, Novalue::Set),
+-            None => (self.derived_name(code, id), Novalue::Unset),
++            Some(value) => Ok(value),
++            None => self.read_unset(code, id),
+         }
+     }
+ 
++    /// [`Interp::read_slot`]'s uninitialised half.
++    #[cold]
++    #[inline(never)]
++    fn read_unset(&mut self, code: &Code<'_>, id: SymbolId) -> Result<ObjRef, Failure> {
++        let value = self.derived_name(code, id);
++        self.novalue_check(Novalue::Unset, value)?;
++        Ok(value)
++    }
++
+     /// What an uninitialised read yields: the derived name, which for a
+     /// simple variable is its own upcased spelling.
+     #[cold]

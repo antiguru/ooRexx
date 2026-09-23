@@ -1,0 +1,45 @@
+diff --git i/rust/crates/rexx-exec/src/activation.rs w/rust/crates/rexx-exec/src/activation.rs
+index b0ee053a5..e4b492389 100644
+--- i/rust/crates/rexx-exec/src/activation.rs
++++ w/rust/crates/rexx-exec/src/activation.rs
+@@ -181,27 +181,32 @@ impl AddressState {
+ /// interpret "interpret 'trace l'"                -
+ /// ```
+ #[derive(Copy, Clone, PartialEq, Eq, Debug)]
++#[repr(u8)]
+ pub(crate) enum TraceEntry {
+     /// No clause of this activation has been stepped yet.
+-    Pending,
++    Pending = 0,
+     /// The clause being stepped is this activation's first, so a `TRACE`
+     /// executing right now may announce.
+-    Allowed,
++    Allowed = 1,
+     /// A second clause has begun, or a fragment was entered from a state that
+     /// could not announce. Nothing more will be announced and no `<I<` is
+     /// owed.
+-    Spent,
++    Spent = 2,
+     /// `>I>` has been announced, which is also the precondition for `<I<`.
+-    Done,
++    Done = 3,
+ }
+ 
+ impl TraceEntry {
+     /// The state one more stepped clause leaves this in.
++    #[inline(always)]
+     pub(crate) fn stepped(self) -> TraceEntry {
+-        match self {
+-            TraceEntry::Pending => TraceEntry::Allowed,
+-            TraceEntry::Allowed | TraceEntry::Spent => TraceEntry::Spent,
+-            TraceEntry::Done => TraceEntry::Done,
++        // Written as the discriminant arithmetic the match reduces to, so the
++        // per-clause step is a compare and an add rather than a table lookup.
++        match self as u8 + u8::from((self as u8) < TraceEntry::Spent as u8) {
++            0 => TraceEntry::Pending,
++            1 => TraceEntry::Allowed,
++            2 => TraceEntry::Spent,
++            _ => TraceEntry::Done,
+         }
+     }
+ 

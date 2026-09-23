@@ -4,6 +4,27 @@ Branch `perf/clause-overhead` from `eba87258d` (`plan/rust-rewrite`). Brief:
 `round4/clause-overhead.md` in the session scratchpad. Scripts, range files and
 listings: `clause-overhead-files/`.
 
+## 0. Result
+
+Stopped after three consecutive candidates failed to pay (c7, c8, c9); `nop`
+did not reach 2x the oracle. Four of nine candidates kept. Base `.text`
+`54fdd95a`, head `.text` `adaacbb0`, two interleaved rounds each
+(`results-final.txt`):
+
+| axis | base | head | delta |
+|---|---:|---:|---:|
+| `nop` | 10,540,100,344 | 10,040,100,248 | -4.744% |
+| `assign` | 23,440,362,254 | 20,240,363,278 | -13.652% |
+| `rexxcps` | 18,328,368,836 | 18,017,675,768 | -1.695% |
+| `varlookup` | 16,457,902,077 | 15,108,897,888 | -8.197% |
+| `emptyloop` | 9,585,886,980 | 9,460,885,172 | -1.304% |
+| `arith` | 11,674,842,654 | 11,543,837,780 | -1.122% |
+| `dispatch` | 20,691,083,588 | 20,556,079,038 | -0.652% |
+| `compound` | 9,664,426,975 | 9,304,398,613 | -3.725% |
+
+Per clause (section 1's method on the head): `nop` 102.1 -> **97.1** against
+the oracle's 33.3 (2.92x); `x = y` 231.2 -> **199.2** against 99.3 (2.01x).
+
 ## 1. Accounting, on the base, before any code change
 
 Base binary: `cargo build --release -p rexx-exec --bin rexx-run` at
@@ -94,3 +115,77 @@ Of the walker's candidates, not found on the IR: no name-resolved target (the
 `Store` carries its slot, as `tw-vs-oracle.md` said), no `Result` threading on
 the hot exit (the `finish_plain_clause` path, `drive.rs:1925`), no line
 lookup (a table load, `position_at`).
+
+## 2. Candidates, one per commit, measured
+
+Each prediction was written to `predictions.txt` before its measurement.
+Each row is callgrind `summary:` minus libc and ld-linux, two interleaved
+rounds, against the previous kept head, every binary confirmed by `.text`
+hash (`hashes.txt`); per-clause figures by section 1's method.
+The null control (base against a second copy of itself, `results-null.txt`)
+moved no axis by more than 0.000%, spreads under 12,000 instructions per run.
+
+| # | change | predicted `nop` / `assign` | `nop` | `assign` | `rexxcps` | verdict |
+|---|---|---|---:|---:|---:|---|
+| c1 | the debug pause folded into `TraceCache`'s byte, so `chunk_trace()` and `tracing_intermediates()` read one byte | -3 / -7 | -1.898% (-2.0) | -2.133% (-5.0) | -0.855% | kept `eb3130f71` |
+| c2 | a range continues in `run_ops_from::<false>` once the procedure permission is spent; that instance stores `false` instead of taking | -7 / -7 | -4.836% (-5.0) | -2.180% (-5.0) | -0.165% (-0.179% on four further runs each) | kept `48004b4e7` |
+| c3 | the loop-header accumulator declared once per `run_ops_from` | -5 / -5 | -7.093% (-7.0) | +0.455% (+1.0) | +0.157% | not kept, never committed (`c3-header-hoist.patch`) |
+| c4 | `Op::Load` with a resolved slot reads it inline (`read_slot`) instead of calling `read_at` | 0 / -12 | +2.032% (+2.0) | -5.793% (-13.0) | -0.570% | kept `47a957d99` |
+| c5 | an empty region skips `ops_in`, the iterator and the header | -10..-13 / +2 | -8.964% | +0.946% | +0.131% (three further runs each) | not kept (`c5-empty-region.patch`) |
+| c6 | `Op::Store`'s fast path keyed on the resolved slot alone; clause-kind and target-kind tests moved to the slow path | 0 / -8 | +0.000% | -4.257% (-9.0) | -0.101% | kept `18115d7ed` |
+| c7 | `read_slot` answers `Result`, the unset read and its `NOVALUE` check in one cold function | 0 / -5 | -3.984% | -1.976% (-4.0) | +0.034% | not kept (`c7-read-result.patch`) |
+| c8 | the region walked by index into the cut stream instead of an `ops_in` slice iterator | -5 / -6 | -4.980% | -3.952% | +0.944% | not kept (`c8-index-walk.patch`) |
+| c9 | `TraceEntry::stepped` as discriminant arithmetic | -1.5 / -1.5 | +2.988% (+3.0) | +1.482% | +0.290% | not kept (`c9-trace-entry.patch`) |
+
+The rejected candidates were measured as uncommitted working-tree changes and
+reversed from their saved patch with `git apply -R`; none reached a commit, so
+there is nothing to revert on the branch.
+
+**Attribution of the kept changes.** c1: the `nop` listing's `chunk_trace`
+rows went from the movzbl/cmpb/mov/cmovne sequence to one load; the region
+ops' unswitched test from four instructions to two. c2: the hot loop moved to
+`run_ops_from::<false>`, the granting test and join are gone from its
+listing, the take is one store. c4: `read_at` no longer appears in the
+`x = y` listing (208 instructions, all in the driver); the `nop`'s +2 is two
+stack moves in lines c4 did not touch, the allocation noise the brief
+describes, and it is why the head's `nop` is 97 rather than c2's 95. c6:
+`x = y` lost the `Assignment` and `Variable` tests (-9 per clause); `nop` and
+`emptyloop`, which run no `Store`, moved by 0 and 0. `arith_small_int` and
+`read_at` stay out of line in every kept binary (`nm`), so no kept delta is
+an inlining flip of those helpers.
+
+**What the rejections show.** Three candidates (c3, c5, c8) removed work from
+the `nop` path as predicted and then cost `rexxcps` or `assign` elsewhere;
+c7 helped both micro-axes and cost `rexxcps` +6.1M against spreads under
+8,000. c9 removed two instructions of work and added three of allocation.
+The per-clause path inside `run_ops_from` is where every remaining named
+surplus lives, so every further candidate is a driver edit and carries the
+allocation lottery the round-1 README measured.
+
+## 3. Gates
+
+Commit first, tree frozen until the status file says `finished`; statuses
+and tallies are in section 4 of this file's follow-up commit, written from the
+status file.
+
+## 4. Concerns
+
+1. `rexxcps` is not perfectly deterministic here: one of c2's rounds read
+   4.76M above the other, and c5's head repeated it once; further runs of each
+   binary repeated to within 8,000, and those figures are the ones used.
+   Its `TIME` and `DATE` calls are the likely source; not measured.
+2. The `nop` per-clause gain is 5.0 of 102 at the head, not the 7 c2 alone
+   gave: c4's allocation change took 2 back. Remaining named surplus against
+   the oracle: trace state about 27, dispatch and lookup about 24, bookkeeping
+   and rooting about 26 against 17, and the empty-region walk 15 that c5 and
+   c8 could remove only at a `rexxcps` cost.
+3. c2 makes every activation body run its steady state in
+   `run_ops_from::<false>` behind one extra call frame (1.4 KB) per body
+   entry. The debug `rexx-exec` suite was green on c2 (1581 passed, 0
+   failed, 604 of 604); how deep a recursion runs before the interpreter
+   thread's stack gives out was not re-measured.
+4. The test harness needs both `CARGO_TARGET_DIR` set to the scratch target
+   and the `rust/target` symlink: with only the symlink, 24 corpus programs
+   and `package_requires` compare a symlinked path against the oracle's
+   canonical one; with only the variable, the arity harnesses do not find
+   `target/release/rexx-run`. Neither is a code defect.
