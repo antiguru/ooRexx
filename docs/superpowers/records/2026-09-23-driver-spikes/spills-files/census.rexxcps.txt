@@ -1,0 +1,510 @@
+total	900.884
+spill-store	34.902
+spill-reload	56.204
+spill-rmw	0.419
+obj	59.949
+arg	4.030
+push/pop	84.473
+frame	15.722
+unknown-rsp	1.530
+other	643.655
+spill-total	91.525
+
+# per function (spill store/reload/rmw, obj, push/pop, total)
+13.89	33.15	0.00	10.09	0.50	217.06	<rexx_exec[74f6723d182ee374]::Interp>::run_ops_from::<false: bool>
+5.59	7.98	0.32	4.91	1.34	81.38	<rexx_exec[74f6723d182ee374]::Interp>::exec_parse
+1.52	1.50	0.00	3.14	5.05	43.72	<rexx_exec[74f6723d182ee374]::Interp>::apply_binary
+0.00	0.00	0.00	0.00	2.52	24.28	rexx_num[434928c583d044cb]::compare::numeric_order
+0.88	0.71	0.00	2.67	1.01	23.41	<rexx_num[434928c583d044cb]::Number>::add_signed
+0.69	1.00	0.00	0.87	2.33	20.88	<rexx_exec[74f6723d182ee374]::Interp>::append_tails
+0.42	0.50	0.00	4.47	1.68	19.10	<rexx_exec[74f6723d182ee374]::Interp>::concat_values
+2.15	3.08	0.00	0.32	0.00	17.65	<rexx_exec[74f6723d182ee374]::Interp>::collect_now
+0.60	0.91	0.00	0.98	1.51	16.45	rexx_exec[74f6723d182ee374]::builtin::run
+0.38	0.43	0.03	2.36	0.32	15.78	<rexx_num[434928c583d044cb]::Number>::mul
+0.00	0.00	0.00	0.05	3.07	15.71	<rexx_exec[74f6723d182ee374]::Interp>::alloc_with
+0.00	0.00	0.00	1.18	3.35	14.59	<rexx_exec[74f6723d182ee374]::Interp>::inline_text_to_number
+0.00	0.00	0.00	0.67	2.00	13.53	<rexx_exec[74f6723d182ee374]::Interp>::heap_to_number
+0.49	0.49	0.00	2.06	1.37	11.17	<rexx_exec[74f6723d182ee374]::Interp>::run_call_args
+0.00	0.00	0.00	0.80	1.51	10.81	<rexx_exec[74f6723d182ee374]::Interp>::next_template
+0.38	0.25	0.00	1.12	1.62	10.25	<rexx_exec[74f6723d182ee374]::Interp>::read_symbol
+0.95	1.02	0.00	0.89	0.68	9.87	<rexx_exec[74f6723d182ee374]::Interp>::flat_loop_start
+0.37	0.28	0.00	0.66	1.04	9.76	<rexx_exec[74f6723d182ee374]::Interp>::loop_advance
+0.00	0.00	0.00	0.00	0.00	9.12	rexx_exec[74f6723d182ee374]::value::write_small_int
+0.01	0.01	0.00	0.00	3.68	8.98	core[c0acaeba6ab4c2e0]::ptr::drop_glue::<rexx_core[758b0da1ff9da881]::body::Body>
+0.00	0.00	0.00	0.00	1.50	8.79	<rexx_exec[74f6723d182ee374]::Interp>::stem_get_at
+0.97	1.15	0.04	0.53	0.22	8.57	<rexx_exec[74f6723d182ee374]::Interp>::run_ops_from::<true: bool>
+0.00	0.00	0.00	0.00	2.02	8.57	<rexx_exec[74f6723d182ee374]::Interp>::read_by_name_at
+0.00	0.00	0.00	0.97	0.27	8.47	<rexx_num[434928c583d044cb]::Number>::from_i64
+0.00	0.00	0.00	0.56	2.02	8.26	<rexx_exec[74f6723d182ee374]::Interp>::to_text
+0.50	0.29	0.00	0.62	1.13	8.09	<rexx_exec[74f6723d182ee374]::Interp>::assign_expr_target
+0.42	0.00	0.00	0.00	1.15	7.96	<hashbrown[b5c94476ffc33875]::map::HashMap<alloc[12e961f32105355]::vec::Vec<u8>, (usize, c
+0.19	0.22	0.00	1.39	0.66	7.77	<rexx_num[434928c583d044cb]::Number>::parse_bytes
+0.52	0.40	0.00	0.71	0.81	7.63	<rexx_exec[74f6723d182ee374]::Interp>::flat_loop_step_top
+0.00	0.00	0.00	0.00	0.84	7.29	<rexx_exec[74f6723d182ee374]::Interp>::operator_message_receiver
+0.00	0.00	0.00	0.00	0.67	7.00	<rexx_exec[74f6723d182ee374]::Interp>::try_text
+0.16	0.16	0.00	2.21	0.49	6.45	<rexx_exec[74f6723d182ee374]::Interp>::arith_general_body
+0.00	0.00	0.00	0.00	1.94	6.40	<rexx_exec[74f6723d182ee374]::Interp>::append_tail_key
+0.39	0.43	0.00	1.57	0.17	6.20	<rexx_exec[74f6723d182ee374]::Interp>::invoke_call_over
+0.00	0.00	0.00	0.00	2.14	6.19	<rexx_exec[74f6723d182ee374]::Interp>::push_call_arg
+0.00	0.00	0.00	0.00	0.84	5.88	<rexx_exec[74f6723d182ee374]::Interp>::read_at
+0.13	0.14	0.00	1.22	0.63	5.64	rexx_exec[74f6723d182ee374]::builtin::string::substr
+0.34	0.00	0.00	0.00	1.34	5.49	rexx_exec[74f6723d182ee374]::builtin::whole_number
+0.07	0.07	0.00	0.11	0.83	5.46	<rexx_exec[74f6723d182ee374]::Interp>::stem_set_at
+0.22	0.36	0.00	0.90	0.50	5.43	<rexx_exec[74f6723d182ee374]::Interp>::run_loop_with_header
+
+# spill slots by executed traffic
+5.33	5.8%	>::run_ops_from::<false: bool>	SP-696	text@trace.rs:693,text@run.rs:5070
+5.15	11.4%	>::run_ops_from::<false: bool>	SP-1344	line@run.rs:5070,iter@drive.rs:681
+3.38	15.1%	>::run_ops_from::<false: bool>	SP-1312	self@index.rs:183,index@mod.rs:572,index@drive.rs:561
+3.27	18.7%	>::run_ops_from::<false: bool>	SP-1360	
+2.29	21.2%	>::run_ops_from::<false: bool>	SP-1080	
+2.29	23.7%	>::run_ops_from::<false: bool>	SP-1088	self@trace.rs:244,sink@drive.rs:591
+2.29	26.2%	>::run_ops_from::<false: bool>	SP-1336	
+1.95	28.3%	182ee374]::Interp>::exec_parse	SP-584	self@parse_template.rs:596,self@parse_template.rs:520
+1.94	30.5%	>::run_ops_from::<false: bool>	SP-1320	
+1.76	32.4%	>::run_ops_from::<false: bool>	SP-592	
+1.70	34.3%	>::run_ops_from::<false: bool>	SP-600	
+1.66	36.1%	>::run_ops_from::<false: bool>	SP-876	position@run.rs:4874
+1.66	37.9%	>::run_ops_from::<false: bool>	SP-880	
+1.66	39.7%	>::run_ops_from::<false: bool>	SP-1424	text@run.rs:5070,entry@drive.rs:636
+1.40	41.2%	2ee374]::Interp>::apply_binary	SP-560	src@mod.rs:1916,value@mod.rs:1033,value@mod.rs:1001,value@roots.rs:157
+1.34	42.7%	182ee374]::Interp>::exec_parse	SP-544	parse@parse_template.rs:598,parse@parse_template.rs:522,target@parse_template.rs:876
+1.23	44.0%	82ee374]::Interp>::collect_now	SP-1096	element@mod.rs:4045,elt@flatten.rs:523,self@uint_macros.rs:890,generation@heap.rs:214
+1.20	45.3%	>::run_ops_from::<false: bool>	SP-1040	chunk@drive.rs:492
+1.06	46.5%	>::run_ops_from::<false: bool>	SP-936	stop@drive.rs:500
+1.02	47.6%	>::run_ops_from::<false: bool>	SP-1296	self@mod.rs:1974,self@mod.rs:1856,self@mod.rs:3796,args@drive.rs:738
+0.93	48.6%	>::run_ops_from::<false: bool>	SP-1072	
+0.90	49.6%	>::run_ops_from::<false: bool>	SP-1024	
+0.87	50.6%	>::run_ops_from::<false: bool>	SP-512	
+0.87	51.5%	>::run_ops_from::<false: bool>	SP-1297	
+0.87	52.5%	>::run_ops_from::<false: bool>	SP-504	
+0.84	53.4%	182ee374]::Interp>::exec_parse	SP-552	iter@parse_template.rs:876
+0.83	54.3%	>::run_ops_from::<false: bool>	SP-1298	
+0.74	55.1%	>::run_ops_from::<false: bool>	SP-1352	code@drive.rs:491
+0.74	55.9%	182ee374]::Interp>::exec_parse	SP-536	cursor@parse_template.rs:527,self@uint_macros.rs:2499
+0.67	56.7%	182ee374]::Interp>::exec_parse	SP-560	cursor@parse_template.rs:527
+0.66	57.4%	182ee374]::Interp>::exec_parse	SP-248	iter@parse_template.rs:529
+0.61	58.0%	82ee374]::Interp>::collect_now	SP-1088	required_cap@mod.rs:519,additional@mod.rs:656,additional@mod.rs:339,additional@mod.rs:1468
+0.61	58.7%	82ee374]::Interp>::collect_now	SP-1080	self@raw.rs:2438,self@raw.rs:2138,self@raw.rs:1361,self@map.rs:733
+0.61	59.4%	82ee374]::Interp>::collect_now	SP-816	stats@lib.rs:5734
+0.61	60.1%	82ee374]::Interp>::collect_now	SP-1000	registry@heap.rs:160
+0.61	60.7%	82ee374]::Interp>::collect_now	SP-888	registry@heap.rs:160
+0.59	61.4%	>::run_ops_from::<false: bool>	SP-640	
+0.59	62.0%	>::run_ops_from::<false: bool>	SP-608	
+0.59	62.7%	182ee374]::Interp>::exec_parse	SP-400	cursor@parse_template.rs:527
+0.56	63.3%	182ee374]::Interp>::exec_parse	SP-112	self@option.rs:1158,bound@parse_template.rs:900
+0.56	63.9%	2ee374]::Interp>::append_tails	SP-112	self@stem.rs:95
+0.52	64.5%	182ee374]::Interp>::exec_parse	SP-352	dst@mod.rs:528,dest@const_ptr.rs:1229,last@parse_template.rs:868,self@mut_ptr.rs:936
+0.52	65.0%	182ee374]::Interp>::exec_parse	SP-256	start@trace.rs:1084
+0.48	65.5%	182ee374]::Interp>::exec_parse	SP-409	
+0.48	66.1%	182ee374]::Interp>::exec_parse	SP-410	
+0.46	66.6%	182ee374]::Interp>::exec_parse	SP-240	
+0.45	67.1%	2ee374]::Interp>::apply_binary	SP-232	fuzz@eval.rs:1006
+0.45	67.5%	2ee374]::Interp>::apply_binary	SP-224	u@num.rs:290,digits@eval.rs:1546,digits@eval.rs:1005
+0.42	68.0%	182ee374]::Interp>::exec_parse	SP-576	
+0.41	68.4%	2ee374]::Interp>::apply_binary	SP-552	
+0.39	68.9%	182ee374]::Interp>::exec_parse	SP-96	
+0.39	69.3%	182ee374]::Interp>::exec_parse	SP-104	
+0.39	69.7%	2ee374]::Interp>::append_tails	SP-56	
+0.39	70.2%	2ee374]::Interp>::append_tails	SP-64	tails@stem.rs:95
+0.38	70.6%	4f6723d182ee374]::builtin::run	SP-216	name@dispatch.rs:3173
+0.38	71.0%	182ee374]::Interp>::exec_parse	SP-384	code@parse_template.rs:521
+0.37	71.4%	>::run_ops_from::<false: bool>	SP-1032	id@lib.rs:5376,self@handle.rs:126,right_value@eval.rs:698,right@drive.rs:1107
+0.36	71.8%	ee374]::Interp>::concat_values	SP-384	self@eval.rs:896
+0.36	72.2%	2ee374]::Interp>::append_tails	SP-120	
+0.32	72.5%	182ee374]::Interp>::exec_parse	SP-136	
+
+# rows
+0.04	0x1c26e0	push/pop		push %rbp
+0.04	0x1c26e1	push/pop		push %r15
+0.04	0x1c26e3	push/pop		push %r14
+0.04	0x1c26e5	push/pop		push %r13
+0.04	0x1c26e7	push/pop		push %r12
+0.04	0x1c26e9	push/pop		push %rbx
+0.04	0x1c26ea	frame		sub $0x588,%rsp
+0.04	0x1c26f1	spill-store	SP-1352	mov %rdx,0x70(%rsp)
+0.04	0x1c26fc	arg	SP+16	mov 0x5c8(%rsp),%rax
+0.04	0x1c2723	spill-store	SP-936	mov %rax,0x210(%rsp)
+0.04	0x1c2822	frame		add $0x588,%rsp
+0.04	0x1c2829	push/pop		pop %rbx
+0.04	0x1c282a	push/pop		pop %r12
+0.04	0x1c282c	push/pop		pop %r13
+0.04	0x1c282e	push/pop		pop %r14
+0.04	0x1c2830	push/pop		pop %r15
+0.04	0x1c2832	push/pop		pop %rbp
+0.04	0x1c2834	spill-store	SP-512	mov %r10,0x3b8(%rsp)
+0.04	0x1c283c	spill-store	SP-592	mov %r9,0x368(%rsp)
+0.04	0x1c2844	spill-store	SP-976	mov %rdi,0x1e8(%rsp)
+0.04	0x1c284c	spill-store	SP-944	mov %rsi,0x208(%rsp)
+0.04	0x1c2854	arg	SP+24	mov 0x5d0(%rsp),%rbp
+0.04	0x1c285c	spill-reload	SP-1352	mov 0x70(%rsp),%rax
+0.04	0x1c2864	spill-store	SP-1072	mov %rdx,0x188(%rsp)
+0.04	0x1c2870	spill-store	SP-952	mov %rdx,0x200(%rsp)
+0.04	0x1c287f	spill-store	SP-984	mov %rdx,0x1e0(%rsp)
+0.04	0x1c2887	spill-store	SP-960	mov %r8,0x1f8(%rsp)
+0.04	0x1c2892	spill-store	SP-1360	mov %rdx,0x68(%rsp)
+0.04	0x1c289e	spill-store	SP-1297	mov %dl,0xa7(%rsp)
+0.04	0x1c28ac	spill-store	SP-600	mov %rdx,0x360(%rsp)
+0.04	0x1c28bb	spill-store	SP-504	mov %rdx,0x3c0(%rsp)
+0.04	0x1c28c7	spill-store	SP-1016	mov %rax,0x1c0(%rsp)
+0.04	0x1c28d6	spill-store	SP-520	mov %rax,0x3b0(%rsp)
+0.04	0x1c28e5	spill-store	SP-656	mov %rax,0x328(%rsp)
+0.04	0x1c28f4	spill-store	SP-632	mov %rax,0x340(%rsp)
+0.04	0x1c2900	spill-store	SP-640	mov %rax,0x338(%rsp)
+0.04	0x1c290c	spill-store	SP-608	mov %rax,0x358(%rsp)
+0.04	0x1c2918	spill-store	SP-648	mov %rax,0x330(%rsp)
+0.04	0x1c2924	spill-store	SP-616	mov %rax,0x350(%rsp)
+0.04	0x1c2930	spill-store	SP-552	mov %rax,0x390(%rsp)
+0.04	0x1c293c	spill-store	SP-544	mov %rax,0x398(%rsp)
+0.04	0x1c294b	spill-store	SP-968	mov %rax,0x1f0(%rsp)
+0.04	0x1c2953	spill-store	SP-1040	mov %rcx,0x1a8(%rsp)
+0.04	0x1c2962	spill-store	SP-624	mov %rax,0x348(%rsp)
+0.04	0x1c2971	spill-store	SP-528	mov %rax,0x3a8(%rsp)
+0.04	0x1c2987	spill-store	SP-536	mov %rax,0x3a0(%rsp)
+0.04	0x1c2996	spill-store	SP-1000	mov %rax,0x1d0(%rsp)
+0.04	0x1c29a5	spill-store	SP-992	mov %rax,0x1d8(%rsp)
+0.04	0x1c29ad	spill-store	SP-1060	mov %eax,0x194(%rsp)
+1.01	0x1c29b7	spill-reload	SP-936	cmp 0x210(%rsp),%r15d
+1.01	0x1c29bf	spill-reload	SP-1040	mov 0x1a8(%rsp),%rbx
+1.01	0x1c29c7	arg	SP+16	mov 0x5c8(%rsp),%r15
+0.99	0x1c29dc	spill-reload	SP-592	mov 0x368(%rsp),%rdx
+0.83	0x1c2a08	spill-reload	SP-1072	mov 0x188(%rsp),%rcx
+0.83	0x1c2a1d	spill-store	SP-1080	mov %rax,0x180(%rsp)
+0.83	0x1c2a34	spill-store	SP-1088	mov %sil,0x178(%rsp)
+0.83	0x1c2a40	spill-store	SP-1336	mov %rax,0x80(%rsp)
+0.83	0x1c2a4f	spill-store	SP-1312	mov %rdx,0x98(%rsp)
+0.83	0x1c2a5d	spill-reload	SP-600	cmp %rdx,0x360(%rsp)
+0.83	0x1c2a65	spill-reload	SP-876	mov 0x24c(%rsp),%ebx
+0.83	0x1c2a6e	spill-reload	SP-504	mov 0x3c0(%rsp),%rax
+0.83	0x1c2a76	spill-reload	SP-1312	mov 0x98(%rsp),%rdx
+0.83	0x1c2a81	spill-store	SP-880	mov %ecx,0x248(%rsp)
+0.83	0x1c2abd	spill-store	SP-1320	mov %r13,0x90(%rsp)
+0.83	0x1c2ac5	spill-store	SP-876	mov %ebx,0x24c(%rsp)
+0.83	0x1c2ad2	spill-reload	SP-1312	mov 0x98(%rsp),%rax
+0.83	0x1c2ada	spill-reload	SP-600	cmp %rax,0x360(%rsp)
+0.83	0x1c2b1a	spill-reload	SP-880	mov 0x248(%rsp),%eax
+0.83	0x1c2b21	spill-reload	SP-1312	mov 0x98(%rsp),%rcx
+0.83	0x1c2b30	spill-reload	SP-1088	movzbl 0x178(%rsp),%ecx
+0.83	0x1c2b38	spill-reload	SP-1297	xor 0xa7(%rsp),%cl
+0.83	0x1c2b51	spill-store	SP-1298	mov %cl,0xa6(%rsp)
+0.83	0x1c2c86	spill-store	SP-1424	mov %rax,0x28(%rsp)
+0.83	0x1c2c93	obj	SP-872	movq $0x2,0x250(%rsp)
+0.83	0x1c2c9f	spill-reload	SP-1080	mov 0x180(%rsp),%rax
+0.83	0x1c2cac	spill-reload	SP-512	cmp %rax,0x3b8(%rsp)
+0.20	0x1c2d41	spill-reload	SP-1424	mov 0x28(%rsp),%rbx
+0.20	0x1c2d46	obj	SP-872	cmpl $0x2,0x250(%rsp)
+0.03	0x1c2de0	unknown-rsp	SP-1448	mov %rbp,0x10(%rsp)
+0.03	0x1c2de5	unknown-rsp	SP-1456	mov %r15,0x8(%rsp)
+0.03	0x1c2dea	arg	SP+8	mov 0x5c0(%rsp),%rax
+0.03	0x1c2df2	unknown-rsp	SP-1464	mov %rax,(%rsp)
+0.03	0x1c2df6	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.03	0x1c2e01	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.03	0x1c2e09	arg	SP+32	mov 0x5d8(%rsp),%r8
+0.03	0x1c2e19	obj	SP-1272	mov 0xc0(%rsp),%rax
+0.03	0x1c2e21	obj	SP-1272	mov 0xc8(%rsp),%r12d
+0.03	0x1c2e29	obj	SP-1272	lea 0xcc(%rsp),%rdx
+0.03	0x1c2e34	obj	SP-928	mov %rcx,0x218(%rsp)
+0.03	0x1c2e3f	obj	SP-928	mov %ecx,0x220(%rsp)
+0.00	0x1c2e81	spill-reload	SP-936	cmp 0x210(%rsp),%r15d
+0.03	0x1c2e9b	arg	SP+32	cmp 0x5d8(%rsp),%rax
+0.03	0x1c2ebf	obj	SP-1272	movq $0x0,0xc0(%rsp)
+0.03	0x1c2ecb	obj	SP-872	lea 0x250(%rsp),%rdi
+0.03	0x1c2ed6	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.03	0x1c2ede	obj	SP-1272	lea 0xc0(%rsp),%r8
+0.03	0x1c2eeb	obj	SP-872	mov 0x250(%rsp),%rdx
+0.03	0x1c2ef3	obj	SP-872	mov 0x258(%rsp),%r15d
+0.02	0x1c2f05	obj	SP-872	mov 0x25c(%rsp),%esi
+0.02	0x1c2f0c	obj	SP-872	mov 0x260(%rsp),%rax
+0.04	0x1c2f5d	obj	SP-1272	movq $0x0,0xc0(%rsp)
+0.04	0x1c2f69	obj	SP-872	lea 0x250(%rsp),%rdi
+0.04	0x1c2f74	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.04	0x1c2f79	obj	SP-1272	lea 0xc0(%rsp),%rcx
+0.04	0x1c2f86	obj	SP-872	mov 0x250(%rsp),%rdx
+0.04	0x1c2f8e	obj	SP-872	mov 0x258(%rsp),%r15
+0.04	0x1c2f96	obj	SP-872	mov 0x260(%rsp),%rax
+0.03	0x1c2fbe	spill-reload	SP-1072	mov 0x188(%rsp),%rcx
+0.03	0x1c2fce	unknown-rsp	SP-1464	mov %rax,(%rsp)
+0.03	0x1c2fd2	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.03	0x1c2fda	spill-reload	SP-976	mov 0x1e8(%rsp),%rcx
+0.03	0x1c2fe2	spill-reload	SP-944	mov 0x208(%rsp),%r8
+0.03	0x1c2ff4	unknown-rsp	SP-1448	mov %rbp,0x10(%rsp)
+0.03	0x1c2ff9	unknown-rsp	SP-1456	mov %r15,0x8(%rsp)
+0.03	0x1c2ffe	arg	SP+8	mov 0x5c0(%rsp),%rax
+0.03	0x1c3006	unknown-rsp	SP-1464	mov %rax,(%rsp)
+0.03	0x1c300a	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.03	0x1c3015	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.03	0x1c301d	arg	SP+32	mov 0x5d8(%rsp),%r8
+0.03	0x1c302d	obj	SP-1272	mov 0xc0(%rsp),%rax
+0.03	0x1c3035	obj	SP-1272	mov 0xc8(%rsp),%r15d
+0.03	0x1c303d	obj	SP-1272	lea 0xcc(%rsp),%rdx
+0.03	0x1c3048	obj	SP-912	mov %rcx,0x228(%rsp)
+0.03	0x1c3053	obj	SP-912	mov %ecx,0x230(%rsp)
+0.03	0x1c30b5	obj	SP-1272	mov 0xc0(%rsp),%rbx
+0.03	0x1c30bd	obj	SP-1272	lea 0xcc(%rsp),%rcx
+0.03	0x1c30c9	obj	SP-1288	movaps %xmm0,0xb0(%rsp)
+0.03	0x1c30db	spill-store	SP-1320	mov %r13,0x90(%rsp)
+0.03	0x1c30e7	obj	SP-872	mov %rax,0x260(%rsp)
+0.03	0x1c30f3	obj	SP-872	movaps %xmm0,0x250(%rsp)
+0.03	0x1c30fb	obj	SP-1272	mov 0xf0(%rsp),%r15
+0.03	0x1c3103	obj	SP-1272	mov 0xf8(%rsp),%rbp
+0.03	0x1c310f	obj	SP-1384	movaps %xmm0,0x50(%rsp)
+0.03	0x1c3114	obj	SP-1272	movsd 0x110(%rsp),%xmm1
+0.03	0x1c311d	obj	SP-1272	mov 0x110(%rsp),%esi
+0.03	0x1c3124	obj	SP-1288	movaps 0xb0(%rsp),%xmm0
+0.03	0x1c312c	obj	SP-1272	movaps %xmm0,0xc0(%rsp)
+0.03	0x1c3157	obj	SP-1272	movaps 0xc0(%rsp),%xmm0
+0.03	0x1c3164	obj	SP-872	movaps 0x250(%rsp),%xmm0
+0.03	0x1c3171	obj	SP-872	mov 0x260(%rsp),%rdx
+0.03	0x1c3188	obj	SP-1384	movaps 0x50(%rsp),%xmm0
+0.03	0x1c31b5	spill-reload	SP-1320	mov 0x90(%rsp),%r13
+0.03	0x1c31bd	arg	SP+24	mov 0x5d0(%rsp),%rbp
+0.03	0x1c31cc	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.03	0x1c31dc	obj	SP-1272	cmpq $0x0,0xc0(%rsp)
+0.83	0x1c322c	spill-reload	SP-1320	mov 0x90(%rsp),%r13
+0.35	0x1c323a	obj	SP-872	cmpl $0x2,0x250(%rsp)
+0.35	0x1c3248	spill-reload	SP-1080	mov 0x180(%rsp),%r15
+0.63	0x1c3250	spill-reload	SP-1424	mov 0x28(%rsp),%rbx
+0.73	0x1c3330	spill-reload	SP-592	mov 0x368(%rsp),%rax
+0.73	0x1c333b	spill-store	SP-696	mov %rcx,0x300(%rsp)
+0.73	0x1c334a	spill-reload	SP-1336	mov 0x80(%rsp),%rax
+0.73	0x1c3356	spill-store	SP-1024	mov %rax,0x1b8(%rsp)
+0.20	0x1c3455	obj	SP-1416	cmpq $0xfffffffffffffffe,0x30(%rsp)
+0.20	0x1c34d4	spill-reload	SP-1336	mov 0x80(%rsp),%rax
+0.17	0x1c34e9	obj	SP-1416	movaps 0x30(%rsp),%xmm0
+0.17	0x1c34ee	obj	SP-872	movaps %xmm0,0x250(%rsp)
+0.17	0x1c34f6	obj	SP-1416	mov 0x40(%rsp),%rax
+0.17	0x1c34fb	obj	SP-872	mov %rax,0x260(%rsp)
+0.17	0x1c3503	obj	SP-872	mov 0x250(%rsp),%rax
+0.20	0x1c35e5	obj	SP-1416	mov 0x40(%rsp),%rax
+0.20	0x1c35ea	obj	SP-1384	mov %rax,0x60(%rsp)
+0.20	0x1c35ef	obj	SP-1416	movaps 0x30(%rsp),%xmm0
+0.20	0x1c35f4	obj	SP-1384	movaps %xmm0,0x50(%rsp)
+0.20	0x1c35f9	obj	SP-1384	mov 0x50(%rsp),%rdx
+0.20	0x1c3608	obj	SP-1384	mov 0x58(%rsp),%r15
+0.20	0x1c360d	obj	SP-1384	mov 0x60(%rsp),%rax
+0.20	0x1c3633	spill-reload	SP-1080	mov 0x180(%rsp),%r12
+0.09	0x1c365d	spill-store	SP-1320	mov %r13,0x90(%rsp)
+0.10	0x1c370d	arg	SP+32	cmp 0x5d8(%rsp),%rdi
+0.03	0x1c3773	obj	SP-1272	mov %rdx,0xc0(%rsp)
+0.03	0x1c377b	obj	SP-1272	mov %rcx,0xc8(%rsp)
+0.03	0x1c3783	obj	SP-1272	mov %rax,0xd0(%rsp)
+0.03	0x1c378b	obj	SP-872	lea 0x250(%rsp),%rdi
+0.03	0x1c3796	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.03	0x1c379e	obj	SP-1272	lea 0xc0(%rsp),%r8
+0.03	0x1c37ab	obj	SP-872	mov 0x250(%rsp),%rdx
+0.03	0x1c37b3	obj	SP-872	mov 0x258(%rsp),%ebx
+0.03	0x1c37ba	obj	SP-872	mov 0x25c(%rsp),%esi
+0.03	0x1c37c1	obj	SP-872	mov 0x260(%rsp),%rax
+0.03	0x1c3833	spill-reload	SP-1320	mov 0x90(%rsp),%r13
+0.01	0x1c385c	arg	SP+8	cmp 0x5c0(%rsp),%rcx
+0.01	0x1c386a	arg	SP+16	cmp 0x5c8(%rsp),%rcx
+0.01	0x1c3878	spill-reload	SP-976	mov 0x1e8(%rsp),%rax
+0.04	0x1c3889	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.04	0x1c3891	spill-reload	SP-976	mov 0x1e8(%rsp),%rsi
+0.04	0x1c3899	spill-reload	SP-944	mov 0x208(%rsp),%rdx
+0.04	0x1c38a6	obj	SP-1272	mov 0xc0(%rsp),%rbx
+0.04	0x1c38ae	obj	SP-1272	mov 0xc8(%rsp),%r15d
+0.06	0x1c38c3	spill-reload	SP-1320	mov 0x90(%rsp),%r13
+0.63	0x1c391b	spill-reload	SP-1088	testb $0x20,0x178(%rsp)
+0.00	0x1c3992	obj	SP-1272	mov 0xc8(%rsp),%rax
+1.32	0x1c399e	spill-reload	SP-1360	mov 0x68(%rsp),%rdx
+2.45	0x1c39a7	spill-reload	SP-1344	mov 0x78(%rsp),%rax
+2.45	0x1c39af	spill-reload	SP-696	cmp 0x300(%rsp),%rax
+2.09	0x1c39de	spill-reload	SP-696	cmp 0x300(%rsp),%rbx
+0.43	0x1c3ae8	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.12	0x1c3b0b	unknown-rsp	SP-1464	mov %rcx,(%rsp)
+0.12	0x1c3b12	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.12	0x1c3b1d	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.12	0x1c3b27	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.12	0x1c3b35	obj	SP-1272	mov 0xc8(%rsp),%r15
+0.31	0x1c3b4e	spill-store	SP-1032	mov %edx,0x1b0(%rsp)
+0.25	0x1c3ba0	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.25	0x1c3ba9	spill-reload	SP-616	cmp %r15,0x350(%rsp)
+0.25	0x1c3bb3	spill-reload	SP-648	mov 0x330(%rsp),%rax
+0.00	0x1c3bc9	spill-reload	SP-544	cmp %r15,0x398(%rsp)
+0.00	0x1c3bde	spill-reload	SP-552	mov 0x390(%rsp),%rcx
+0.00	0x1c3bf7	spill-reload	SP-616	cmp %r15,0x350(%rsp)
+0.00	0x1c3c05	spill-reload	SP-648	mov 0x330(%rsp),%rcx
+0.42	0x1c3ccb	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.42	0x1c3cd4	spill-reload	SP-1360	mov 0x68(%rsp),%rdx
+0.42	0x1c3ce9	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.10	0x1c3d02	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.10	0x1c3d16	unknown-rsp	SP-1448	mov %edx,0x10(%rsp)
+0.10	0x1c3d1a	unknown-rsp	SP-1456	mov %eax,0x8(%rsp)
+0.10	0x1c3d1e	unknown-rsp	SP-1464	mov %ecx,(%rsp)
+0.10	0x1c3d21	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.10	0x1c3d2c	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.10	0x1c3d31	spill-reload	SP-1040	mov 0x1a8(%rsp),%rcx
+0.10	0x1c3d39	spill-reload	SP-1336	mov 0x80(%rsp),%r8
+0.10	0x1c3d46	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.10	0x1c3d54	obj	SP-1272	mov 0xc8(%rsp),%rax
+0.24	0x1c3da9	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.24	0x1c3db5	spill-reload	SP-1360	mov 0x68(%rsp),%rsi
+0.00	0x1c3dc8	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.00	0x1c3dd1	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.00	0x1c3ddc	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.00	0x1c3de1	spill-reload	SP-1336	mov 0x80(%rsp),%rcx
+0.00	0x1c3dee	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.06	0x1c3e05	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.06	0x1c3e0f	spill-reload	SP-1360	mov 0x68(%rsp),%rax
+0.06	0x1c3e18	obj	SP-872	cmpl $0x2,0x250(%rsp)
+0.03	0x1c3e22	obj	SP-872	movq $0x0,0x250(%rsp)
+0.03	0x1c3e2e	obj	SP-872	movq $0x0,0x260(%rsp)
+0.03	0x1c3e3a	obj	SP-872	movq $0x0,0x270(%rsp)
+0.03	0x1c3e46	obj	SP-872	movb $0x2,0x280(%rsp)
+0.03	0x1c3e4e	obj	SP-872	movb $0x2,0x2a8(%rsp)
+0.03	0x1c3e56	obj	SP-872	movb $0xff,0x2d0(%rsp)
+0.03	0x1c3e5e	obj	SP-872	movw $0x0,0x2f8(%rsp)
+0.06	0x1c3e6f	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.06	0x1c3e7a	obj	SP-872	lea 0x250(%rsp),%r8
+0.06	0x1c3e87	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.00	0x1c3e9e	obj	SP-872	movw $0x1,0x2f8(%rsp)
+0.00	0x1c3ea8	obj	SP-872	mov %r15w,0x2fa(%rsp)
+0.04	0x1c3eba	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.04	0x1c3ec3	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
+0.32	0x1c3f8b	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.32	0x1c3f94	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
+0.18	0x1c3fd5	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.18	0x1c3fe4	spill-reload	SP-1360	mov 0x68(%rsp),%rdx
+0.08	0x1c403d	spill-reload	SP-1336	mov 0x80(%rsp),%rdx
+0.08	0x1c4051	unknown-rsp	SP-1464	mov %rcx,(%rsp)
+0.08	0x1c4055	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.08	0x1c4060	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.08	0x1c4065	spill-reload	SP-1024	mov 0x1b8(%rsp),%rcx
+0.55	0x1c40d4	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.55	0x1c40dd	spill-reload	SP-608	cmp %r15,0x358(%rsp)
+0.55	0x1c40e7	spill-reload	SP-640	mov 0x338(%rsp),%rax
+0.00	0x1c40fd	spill-reload	SP-952	mov 0x200(%rsp),%rax
+0.00	0x1c412e	spill-reload	SP-608	cmp %r15,0x358(%rsp)
+0.00	0x1c413c	spill-reload	SP-640	mov 0x338(%rsp),%rcx
+0.00	0x1c4191	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.00	0x1c41a1	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
+0.00	0x1c41b3	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.08	0x1c41c3	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.10	0x1c41da	spill-store	SP-1344	mov %rax,0x78(%rsp)
+0.10	0x1c41e3	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
+0.10	0x1c41f8	spill-reload	SP-632	cmp %r15,0x340(%rsp)
+0.10	0x1c4200	spill-store	SP-1296	mov %r9,0xa8(%rsp)
+0.10	0x1c420a	spill-reload	SP-656	mov 0x328(%rsp),%rax
+0.06	0x1c4241	spill-store	SP-1032	mov %r8,0x1b0(%rsp)
+0.00	0x1c437e	spill-reload	SP-632	cmp %r15,0x340(%rsp)
+0.00	0x1c4386	spill-reload	SP-1296	mov 0xa8(%rsp),%r9
+0.00	0x1c438e	spill-reload	SP-1032	mov 0x1b0(%rsp),%r8
+0.00	0x1c4398	spill-reload	SP-656	mov 0x328(%rsp),%rax
+0.04	0x1c43ad	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.04	0x1c43c3	obj	SP-1272	mov 0xc0(%rsp),%rax
+0.04	0x1c43d5	obj	SP-1272	mov 0xc8(%rsp),%rdx
+0.10	0x1c43e1	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
+0.42	0x1c4757	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.42	0x1c4765	obj	SP-1272	mov 0xc8(%rsp),%rax
+0.31	0x1c4985	spill-store	SP-1296	mov %rax,0xa8(%rsp)
+0.31	0x1c4991	spill-reload	SP-1296	cmpq $0x1,0xa8(%rsp)
+0.31	0x1c499c	spill-reload	SP-1296	mov 0xa8(%rsp),%rdx
+0.43	0x1c49b3	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
+0.28	0x1c4a1f	obj	SP-872	lea 0x250(%rsp),%rdi
+0.00	0x1c4a31	spill-reload	SP-1336	mov 0x80(%rsp),%rax
+0.00	0x1c4a44	spill-reload	SP-1336	mov 0x80(%rsp),%rax
+0.00	0x1c4a5a	spill-reload	SP-1024	mov 0x1b8(%rsp),%r8
+0.00	0x1c4a66	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.00	0x1c4a74	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.03	0x1c4d71	spill-reload	SP-1336	mov 0x80(%rsp),%rax
+0.03	0x1c4d80	unknown-rsp	SP-1464	movups %xmm0,(%rsp)
+0.03	0x1c4d84	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.03	0x1c4d92	spill-reload	SP-1072	mov 0x188(%rsp),%rdx
+0.03	0x1c4d9a	spill-reload	SP-1016	mov 0x1c0(%rsp),%rcx
+0.03	0x1c4da2	spill-reload	SP-1312	mov 0x98(%rsp),%r8
+0.03	0x1c4dc2	obj	SP-1272	movups 0xc0(%rsp),%xmm0
+0.03	0x1c4dca	obj	SP-1272	movups 0xd0(%rsp),%xmm1
+0.03	0x1c4dd2	obj	SP-1272	movups 0xe0(%rsp),%xmm2
+0.03	0x1c4de5	spill-reload	SP-1336	mov 0x80(%rsp),%rax
+0.03	0x1c4e6a	unknown-rsp	SP-1464	mov %eax,(%rsp)
+0.03	0x1c4e6d	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.03	0x1c4e7b	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.03	0x1c4e80	spill-reload	SP-1312	mov 0x98(%rsp),%rcx
+0.03	0x1c4e88	spill-reload	SP-1336	mov 0x80(%rsp),%r8
+0.03	0x1c4e9b	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.03	0x1c4ea9	obj	SP-1272	mov 0xd0(%rsp),%rax
+0.03	0x1c4eb1	obj	SP-1416	mov %rax,0x40(%rsp)
+0.03	0x1c4eb6	obj	SP-1272	movups 0xc0(%rsp),%xmm0
+0.03	0x1c4ebe	obj	SP-1416	movaps %xmm0,0x30(%rsp)
+0.06	0x1c4ed1	spill-reload	SP-1336	mov 0x80(%rsp),%rax
+0.06	0x1c4eed	obj	SP-872	mov 0x250(%rsp),%rbx
+0.06	0x1c4ef5	obj	SP-872	movq $0x2,0x250(%rsp)
+0.03	0x1c4f0b	obj	SP-400	movb $0xff,0x4a8(%rsp)
+0.03	0x1c4f13	obj	SP-400	movb $0x2,0x458(%rsp)
+0.03	0x1c4f1b	obj	SP-400	movb $0x2,0x480(%rsp)
+0.03	0x1c4f23	obj	SP-400	movq $0x0,0x438(%rsp)
+0.03	0x1c4f2f	obj	SP-400	movw $0x0,0x4d0(%rsp)
+0.03	0x1c4f39	obj	SP-400	movq $0x0,0x448(%rsp)
+0.08	0x1c5010	spill-reload	SP-1336	mov 0x80(%rsp),%rax
+0.01	0x1c5036	spill-reload	SP-1360	mov 0x68(%rsp),%rcx
+0.00	0x1c506c	spill-reload	SP-1336	mov 0x80(%rsp),%rax
+0.00	0x1c507f	spill-reload	SP-1024	mov 0x1b8(%rsp),%rax
+0.01	0x1c50f9	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.01	0x1c5107	spill-reload	SP-1336	mov 0x80(%rsp),%rdx
+0.01	0x1c510f	spill-reload	SP-1040	mov 0x1a8(%rsp),%rcx
+0.01	0x1c511c	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.01	0x1c5214	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.01	0x1c5227	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.03	0x1c5231	obj	SP-1272	mov 0xd0(%rsp),%rax
+0.03	0x1c5239	obj	SP-1416	mov %rax,0x40(%rsp)
+0.03	0x1c523e	obj	SP-1272	movups 0xc0(%rsp),%xmm0
+0.03	0x1c5246	obj	SP-1416	movaps %xmm0,0x30(%rsp)
+0.03	0x1c52cf	spill-reload	SP-1336	mov 0x80(%rsp),%rcx
+0.03	0x1c52db	obj	SP-1416	mov %rax,0x30(%rsp)
+0.03	0x1c52e0	obj	SP-1416	mov %r15,0x38(%rsp)
+0.03	0x1c52e5	obj	SP-1416	mov %rcx,0x40(%rsp)
+0.03	0x1c52ea	spill-reload	SP-1320	mov 0x90(%rsp),%r13
+0.03	0x1c536f	obj	SP-400	lea 0x430(%rsp),%rdi
+0.03	0x1c5377	obj	SP-872	lea 0x258(%rsp),%rsi
+0.06	0x1c5385	obj	SP-400	mov %rbx,0x428(%rsp)
+0.06	0x1c538d	spill-reload	SP-1336	mov 0x80(%rsp),%r8
+0.06	0x1c5399	spill-reload	SP-960	mov 0x1f8(%rsp),%rax
+0.06	0x1c53a1	unknown-rsp	SP-1440	mov %rax,0x18(%rsp)
+0.06	0x1c53a6	spill-reload	SP-1080	mov 0x180(%rsp),%rax
+0.06	0x1c53ae	unknown-rsp	SP-1448	mov %eax,0x10(%rsp)
+0.06	0x1c53b2	obj	SP-400	lea 0x428(%rsp),%rax
+0.06	0x1c53ba	unknown-rsp	SP-1456	mov %rax,0x8(%rsp)
+0.06	0x1c53bf	unknown-rsp	SP-1464	mov %r13,(%rsp)
+0.06	0x1c53c3	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.06	0x1c53ce	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.06	0x1c53db	obj	SP-1272	mov 0xc0(%rsp),%rax
+0.03	0x1c5412	obj	SP-224	lea 0x4d8(%rsp),%rdi
+0.03	0x1c541a	obj	SP-1272	lea 0xc0(%rsp),%rbx
+0.03	0x1c542b	spill-reload	SP-1336	mov 0x80(%rsp),%r8
+0.03	0x1c5437	spill-reload	SP-1040	mov 0x1a8(%rsp),%rax
+0.03	0x1c543f	obj	SP-1272	mov %rax,0xc0(%rsp)
+0.03	0x1c5447	spill-reload	SP-960	mov 0x1f8(%rsp),%rax
+0.03	0x1c5452	obj	SP-1272	lea 0xc8(%rsp),%rax
+0.03	0x1c545d	obj	SP-224	lea 0x4d8(%rsp),%rax
+0.03	0x1c5465	unknown-rsp	SP-1448	mov %rax,0x10(%rsp)
+0.03	0x1c546a	unknown-rsp	SP-1456	mov %rbx,0x8(%rsp)
+0.03	0x1c546f	unknown-rsp	SP-1464	mov %r13,(%rsp)
+0.03	0x1c5473	obj	SP-1384	lea 0x50(%rsp),%rdi
+0.03	0x1c547b	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.03	0x1c5488	obj	SP-1384	cmpl $0xffffffff,0x50(%rsp)
+0.03	0x1c5493	obj	SP-1384	mov 0x60(%rsp),%rax
+0.03	0x1c5498	obj	SP-1416	mov %rax,0x40(%rsp)
+0.03	0x1c549d	obj	SP-1384	movups 0x50(%rsp),%xmm0
+0.08	0x1c54aa	spill-reload	SP-1024	mov 0x1b8(%rsp),%rax
+0.08	0x1c54b5	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.08	0x1c54c0	spill-reload	SP-1352	mov 0x70(%rsp),%rdx
+0.08	0x1c54ca	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.08	0x1c551f	obj	SP-1416	movq $0x0,0x30(%rsp)
+0.03	0x1c55e7	obj	SP-1272	movups 0xc8(%rsp),%xmm0
+0.03	0x1c55ef	spill-store	SP-696	movaps %xmm0,0x300(%rsp)
+0.00	0x1c5607	spill-reload	SP-984	mov 0x1e0(%rsp),%rdi
+0.03	0x1c562a	spill-reload	SP-696	movaps 0x300(%rsp),%xmm0
+0.03	0x1c5649	spill-reload	SP-1080	mov 0x180(%rsp),%r15
+0.03	0x1c5654	spill-reload	SP-1320	mov 0x90(%rsp),%r13
+0.03	0x1c5675	obj	SP-1416	movaps %xmm0,0x30(%rsp)
+0.00	0x1c569c	obj	SP-1272	lea 0xc0(%rsp),%rdi
+0.00	0x1c56ae	obj	SP-1272	cmpl $0xffffffff,0xc0(%rsp)
+0.00	0x1c56b8	obj	SP-1272	mov 0xd0(%rsp),%rax
+0.00	0x1c56c0	obj	SP-584	mov %rax,0x380(%rsp)
+0.00	0x1c56c8	obj	SP-1272	movups 0xc0(%rsp),%xmm0
+0.00	0x1c56d0	obj	SP-584	movaps %xmm0,0x370(%rsp)
+0.00	0x1c56d8	obj	SP-584	mov 0x380(%rsp),%rax
+0.00	0x1c56e0	obj	SP-1416	mov %rax,0x40(%rsp)
+0.00	0x1c56e5	obj	SP-584	movaps 0x370(%rsp),%xmm0
+0.00	0x1c56ed	obj	SP-1416	movaps %xmm0,0x30(%rsp)

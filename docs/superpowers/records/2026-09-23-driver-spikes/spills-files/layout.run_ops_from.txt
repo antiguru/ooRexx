@@ -1,0 +1,361 @@
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.claude/worktrees/agent-a5b211e2b657b43ee/rust/crates/rexx-exec/src/ir/drive.rs:489:0 stack-frame-layout (analysis): 
+      Function: _RINvMs1_NtNtCsa2AyrgIrlD4_9rexx_exec2ir5driveNtBa_6Interp12run_ops_fromKb1_EBa_
+      Offset: [SP+24], Type: Fixed, Align: 16, Size: 8
+      Offset: [SP+16], Type: Fixed, Align: 8, Size: 8
+      Offset: [SP+8], Type: Fixed, Align: 16, Size: 8
+      Offset: [SP-8], Type: Spill, Align: 16, Size: 8
+      Offset: [SP-16], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-24], Type: Spill, Align: 16, Size: 8
+      Offset: [SP-32], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-40], Type: Spill, Align: 16, Size: 8
+      Offset: [SP-48], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-224], Type: Variable, Align: 8, Size: 176
+          values @ crates/rexx-exec/src/ir/drive.rs:1875
+      Offset: [SP-400], Type: Variable, Align: 8, Size: 176
+          values @ crates/rexx-exec/src/ir/drive.rs:1869
+      Offset: [SP-448], Type: Variable, Align: 8, Size: 48
+          resolution @ crates/rexx-exec/src/ir/drive.rs:1573
+      Offset: [SP-496], Type: Variable, Align: 8, Size: 48
+          resolution @ crates/rexx-exec/src/ir/drive.rs:745
+      Offset: [SP-504], Type: Spill, Align: 8, Size: 8
+          stop @ crates/rexx-exec/src/ir/drive.rs:500
+      Offset: [SP-512], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-520], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-528], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-536], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-544], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-552], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-560], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-568], Type: Spill, Align: 8, Size: 8
+          name @ crates/rexx-exec/src/ir/drive.rs:2481
+          name @ crates/rexx-exec/src/ir/drive.rs:744
+      Offset: [SP-600], Type: Variable, Align: 16, Size: 24
+          flow @ crates/rexx-exec/src/ir/drive.rs:1341
+      Offset: [SP-608], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-616], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-624], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-632], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-640], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-648], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-656], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-664], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-672], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-680], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-688], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-696], Type: Spill, Align: 8, Size: 8
+          layout @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:455
+          capacity @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:448
+          capacity @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:434
+          capacity @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:175
+          capacity @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:974
+          len @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/slice.rs:447
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/slice.rs:372
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/slice.rs:396
+          s @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/slice.rs:446
+      Offset: [SP-704], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-728], Type: Spill, Align: 16, Size: 16
+          text @ crates/rexx-exec/src/trace.rs:693
+          text @ crates/rexx-exec/src/run.rs:5070
+      Offset: [SP-904], Type: Variable, Align: 16, Size: 176
+          src @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1916
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1033
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1001
+          header @ crates/rexx-exec/src/ir/drive.rs:677
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          ran @ crates/rexx-exec/src/clause.rs:314
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+      Offset: [SP-908], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-912], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-916], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-920], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-924], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-936], Type: Variable, Align: 8, Size: 12
+      Offset: [SP-952], Type: Variable, Align: 8, Size: 12
+      Offset: [SP-960], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-968], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-976], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-984], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-992], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1000], Type: Spill, Align: 8, Size: 8
+          registers @ crates/rexx-exec/src/ir/drive.rs:493
+      Offset: [SP-1008], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1016], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1020], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-1032], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1040], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1048], Type: Spill, Align: 8, Size: 8
+          id @ crates/rexx-exec/src/lib.rs:5376
+          self @ crates/rexx-core/src/handle.rs:126
+          right_value @ crates/rexx-exec/src/eval.rs:698
+          right @ crates/rexx-exec/src/ir/drive.rs:1107
+          name @ crates/rexx-exec/src/ir/drive.rs:2481
+          name @ crates/rexx-exec/src/ir/drive.rs:744
+      Offset: [SP-1056], Type: Spill, Align: 8, Size: 8
+          case_text @ crates/rexx-exec/src/ir/drive.rs:1782
+      Offset: [SP-1058], Type: Spill, Align: 2, Size: 2
+          site @ crates/rexx-exec/src/ir/drive.rs:2480
+      Offset: [SP-1060], Type: Spill, Align: 2, Size: 2
+      Offset: [SP-1062], Type: Spill, Align: 2, Size: 2
+      Offset: [SP-1064], Type: Spill, Align: 2, Size: 2
+      Offset: [SP-1068], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-1072], Type: Spill, Align: 4, Size: 4
+          position @ crates/rexx-exec/src/run.rs:4874
+      Offset: [SP-1076], Type: Spill, Align: 4, Size: 4
+          generation @ crates/rexx-exec/src/ir.rs:514
+          generation @ crates/rexx-exec/src/ir.rs:514
+          generation @ crates/rexx-exec/src/ir.rs:697
+          val @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:510
+          val @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:433
+          generation @ crates/rexx-exec/src/ir.rs:472
+          generation @ crates/rexx-exec/src/ir.rs:526
+          generation @ crates/rexx-exec/src/ir.rs:702
+          generation @ crates/rexx-exec/src/ir/drive.rs:2484
+      Offset: [SP-1096], Type: Spill, Align: 16, Size: 16
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:183
+          index @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/mod.rs:572
+          index @ crates/rexx-exec/src/ir/drive.rs:561
+      Offset: [SP-1104], Type: Spill, Align: 8, Size: 8
+          chunk @ crates/rexx-exec/src/ir/drive.rs:492
+      Offset: [SP-1112], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1120], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1128], Type: Spill, Align: 8, Size: 8
+          self @ crates/rexx-exec/src/trace.rs:244
+          sink @ crates/rexx-exec/src/ir/drive.rs:591
+      Offset: [SP-1304], Type: Variable, Align: 16, Size: 176
+          src @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1916
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1033
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1001
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/convert/mod.rs:779
+          value @ crates/rexx-exec/src/ir/drive.rs:760
+          resolution @ crates/rexx-exec/src/ir/drive.rs:1570
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          result @ crates/rexx-exec/src/eval.rs:606
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          result @ crates/rexx-exec/src/eval.rs:721
+          resolution @ crates/rexx-exec/src/run.rs:4679
+          resolved @ crates/rexx-exec/src/run.rs:4683
+          x @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:284
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          frame @ crates/rexx-exec/src/ir/drive.rs:2187
+      Offset: [SP-1320], Type: Variable, Align: 16, Size: 16
+          what @ crates/rexx-exec/src/lib.rs:586
+      Offset: [SP-1328], Type: Spill, Align: 8, Size: 8
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1974
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1856
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3796
+          args @ crates/rexx-exec/src/ir/drive.rs:738
+          value @ crates/rexx-exec/src/eval.rs:605
+          value @ crates/rexx-exec/src/ir/drive.rs:1228
+          left @ crates/rexx-exec/src/ir/drive.rs:1106
+      Offset: [SP-1329], Type: Spill, Align: 1, Size: 1
+      Offset: [SP-1330], Type: Spill, Align: 1, Size: 1
+      Offset: [SP-1344], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1352], Type: Spill, Align: 8, Size: 8
+          line @ crates/rexx-exec/src/run.rs:5070
+          iter @ crates/rexx-exec/src/ir/drive.rs:681
+      Offset: [SP-1353], Type: Spill, Align: 1, Size: 1
+      Offset: [SP-1368], Type: Spill, Align: 8, Size: 8
+          code @ crates/rexx-exec/src/ir/drive.rs:491
+      Offset: [SP-1376], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1384], Type: Spill, Align: 8, Size: 8
+          slice @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:183
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/mod.rs:572
+          clause @ crates/rexx-exec/src/ir/drive.rs:572
+      Offset: [SP-1416], Type: Variable, Align: 16, Size: 24
+          src @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1916
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1033
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1001
+          probe @ crates/rexx-exec/src/ir/drive.rs:755
+          what @ crates/rexx-exec/src/lib.rs:586
+          outcome @ crates/rexx-exec/src/run.rs:5025
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+      Offset: [SP-1448], Type: Variable, Align: 16, Size: 24
+          ran @ crates/rexx-exec/src/ir/drive.rs:661
+          ran @ crates/rexx-exec/src/run.rs:5006
+      Offset: [SP-1456], Type: Spill, Align: 8, Size: 8
+          text @ crates/rexx-exec/src/run.rs:5070
+          entry @ crates/rexx-exec/src/ir/drive.rs:636
+
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.claude/worktrees/agent-a5b211e2b657b43ee/rust/crates/rexx-exec/src/ir/drive.rs:489:0 stack-frame-layout (analysis): 
+      Function: _RINvMs1_NtNtCsa2AyrgIrlD4_9rexx_exec2ir5driveNtBa_6Interp12run_ops_fromKb0_EBa_
+      Offset: [SP+32], Type: Fixed, Align: 8, Size: 8
+      Offset: [SP+24], Type: Fixed, Align: 16, Size: 8
+      Offset: [SP+16], Type: Fixed, Align: 8, Size: 8
+      Offset: [SP+8], Type: Fixed, Align: 16, Size: 8
+      Offset: [SP-8], Type: Spill, Align: 16, Size: 8
+      Offset: [SP-16], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-24], Type: Spill, Align: 16, Size: 8
+      Offset: [SP-32], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-40], Type: Spill, Align: 16, Size: 8
+      Offset: [SP-48], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-224], Type: Variable, Align: 8, Size: 176
+          values @ crates/rexx-exec/src/ir/drive.rs:1875
+      Offset: [SP-400], Type: Variable, Align: 8, Size: 176
+          values @ crates/rexx-exec/src/ir/drive.rs:1869
+      Offset: [SP-448], Type: Variable, Align: 8, Size: 48
+          resolution @ crates/rexx-exec/src/ir/drive.rs:1573
+      Offset: [SP-496], Type: Variable, Align: 8, Size: 48
+          resolution @ crates/rexx-exec/src/ir/drive.rs:745
+      Offset: [SP-504], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-512], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-520], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-528], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-536], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-544], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-552], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-560], Type: Spill, Align: 8, Size: 8
+          name @ crates/rexx-exec/src/ir/drive.rs:2481
+          name @ crates/rexx-exec/src/ir/drive.rs:744
+      Offset: [SP-584], Type: Variable, Align: 16, Size: 24
+          flow @ crates/rexx-exec/src/ir/drive.rs:1341
+      Offset: [SP-592], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-600], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-608], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-616], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-624], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-632], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-640], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-648], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-656], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-664], Type: Spill, Align: 8, Size: 8
+          layout @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:455
+          capacity @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:448
+          capacity @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:434
+          capacity @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:175
+          capacity @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:974
+          len @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/slice.rs:447
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/slice.rs:372
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/slice.rs:396
+          s @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/slice.rs:446
+      Offset: [SP-672], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-696], Type: Spill, Align: 16, Size: 16
+          text @ crates/rexx-exec/src/trace.rs:693
+          text @ crates/rexx-exec/src/run.rs:5070
+      Offset: [SP-872], Type: Variable, Align: 16, Size: 176
+          src @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1916
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1033
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1001
+          header @ crates/rexx-exec/src/ir/drive.rs:677
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          ran @ crates/rexx-exec/src/clause.rs:314
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+      Offset: [SP-876], Type: Spill, Align: 4, Size: 4
+          position @ crates/rexx-exec/src/run.rs:4874
+      Offset: [SP-880], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-884], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-888], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-892], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-896], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-912], Type: Variable, Align: 8, Size: 12
+      Offset: [SP-928], Type: Variable, Align: 8, Size: 12
+      Offset: [SP-936], Type: Spill, Align: 8, Size: 8
+          stop @ crates/rexx-exec/src/ir/drive.rs:500
+      Offset: [SP-944], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-952], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-960], Type: Spill, Align: 8, Size: 8
+          registers @ crates/rexx-exec/src/ir/drive.rs:493
+      Offset: [SP-968], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-976], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-984], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-992], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1000], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1004], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-1016], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1024], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1032], Type: Spill, Align: 8, Size: 8
+          id @ crates/rexx-exec/src/lib.rs:5376
+          self @ crates/rexx-core/src/handle.rs:126
+          right_value @ crates/rexx-exec/src/eval.rs:698
+          right @ crates/rexx-exec/src/ir/drive.rs:1107
+          name @ crates/rexx-exec/src/ir/drive.rs:2481
+          name @ crates/rexx-exec/src/ir/drive.rs:744
+      Offset: [SP-1040], Type: Spill, Align: 8, Size: 8
+          chunk @ crates/rexx-exec/src/ir/drive.rs:492
+      Offset: [SP-1048], Type: Spill, Align: 8, Size: 8
+          case_text @ crates/rexx-exec/src/ir/drive.rs:1782
+      Offset: [SP-1050], Type: Spill, Align: 2, Size: 2
+          site @ crates/rexx-exec/src/ir/drive.rs:2480
+      Offset: [SP-1052], Type: Spill, Align: 2, Size: 2
+      Offset: [SP-1054], Type: Spill, Align: 2, Size: 2
+      Offset: [SP-1056], Type: Spill, Align: 2, Size: 2
+      Offset: [SP-1060], Type: Spill, Align: 4, Size: 4
+      Offset: [SP-1064], Type: Spill, Align: 4, Size: 4
+          generation @ crates/rexx-exec/src/ir.rs:514
+          generation @ crates/rexx-exec/src/ir.rs:514
+          generation @ crates/rexx-exec/src/ir.rs:697
+          val @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:510
+          val @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:433
+          generation @ crates/rexx-exec/src/ir.rs:472
+          generation @ crates/rexx-exec/src/ir.rs:526
+          generation @ crates/rexx-exec/src/ir.rs:702
+          generation @ crates/rexx-exec/src/ir/drive.rs:2484
+      Offset: [SP-1072], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1080], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1088], Type: Spill, Align: 8, Size: 8
+          self @ crates/rexx-exec/src/trace.rs:244
+          sink @ crates/rexx-exec/src/ir/drive.rs:591
+      Offset: [SP-1272], Type: Variable, Align: 16, Size: 176
+          src @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1916
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1033
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1001
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/convert/mod.rs:779
+          value @ crates/rexx-exec/src/ir/drive.rs:760
+          resolution @ crates/rexx-exec/src/ir/drive.rs:1570
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          result @ crates/rexx-exec/src/eval.rs:606
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          result @ crates/rexx-exec/src/eval.rs:721
+          resolution @ crates/rexx-exec/src/run.rs:4679
+          resolved @ crates/rexx-exec/src/run.rs:4683
+          x @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:284
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+          frame @ crates/rexx-exec/src/ir/drive.rs:2187
+      Offset: [SP-1288], Type: Variable, Align: 16, Size: 16
+          what @ crates/rexx-exec/src/lib.rs:586
+      Offset: [SP-1296], Type: Spill, Align: 8, Size: 8
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1974
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1856
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3796
+          args @ crates/rexx-exec/src/ir/drive.rs:738
+          value @ crates/rexx-exec/src/eval.rs:605
+          value @ crates/rexx-exec/src/ir/drive.rs:1228
+          left @ crates/rexx-exec/src/ir/drive.rs:1106
+      Offset: [SP-1297], Type: Spill, Align: 1, Size: 1
+      Offset: [SP-1298], Type: Spill, Align: 1, Size: 1
+      Offset: [SP-1312], Type: Spill, Align: 8, Size: 8
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/index.rs:183
+          index @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/mod.rs:572
+          index @ crates/rexx-exec/src/ir/drive.rs:561
+      Offset: [SP-1320], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1336], Type: Spill, Align: 16, Size: 16
+      Offset: [SP-1344], Type: Spill, Align: 8, Size: 8
+          line @ crates/rexx-exec/src/run.rs:5070
+          iter @ crates/rexx-exec/src/ir/drive.rs:681
+      Offset: [SP-1352], Type: Spill, Align: 8, Size: 8
+          code @ crates/rexx-exec/src/ir/drive.rs:491
+      Offset: [SP-1360], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-1384], Type: Variable, Align: 16, Size: 24
+          src @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1916
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1033
+          value @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1001
+          probe @ crates/rexx-exec/src/ir/drive.rs:755
+          what @ crates/rexx-exec/src/lib.rs:586
+          outcome @ crates/rexx-exec/src/run.rs:5025
+          self @ /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:2175
+      Offset: [SP-1416], Type: Variable, Align: 16, Size: 24
+          ran @ crates/rexx-exec/src/ir/drive.rs:661
+          ran @ crates/rexx-exec/src/run.rs:5006
+      Offset: [SP-1424], Type: Spill, Align: 8, Size: 8
+          text @ crates/rexx-exec/src/run.rs:5070
+          entry @ crates/rexx-exec/src/ir/drive.rs:636
+

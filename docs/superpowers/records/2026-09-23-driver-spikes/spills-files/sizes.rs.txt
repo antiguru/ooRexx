@@ -1,0 +1,33 @@
+
+#[cfg(test)]
+mod spill_sizes {
+    #[test]
+    fn spill_sizes() {
+        use crate::Failure;
+        use crate::clause::ClauseOutcome;
+        use crate::run::{Ended, Flow, LoopHeaderValues, SteppedClause};
+        use rexx_core::ObjRef;
+        use std::mem::size_of;
+        eprintln!("SIZE Flow {}", size_of::<Flow>());
+        eprintln!("SIZE Failure {}", size_of::<Failure>());
+        eprintln!("SIZE Result<Flow,Failure> {}", size_of::<Result<Flow, Failure>>());
+        eprintln!("SIZE Result<ObjRef,Failure> {}", size_of::<Result<ObjRef, Failure>>());
+        eprintln!("SIZE Result<(),Failure> {}", size_of::<Result<(), Failure>>());
+        eprintln!("SIZE Result<bool,Failure> {}", size_of::<Result<bool, Failure>>());
+        eprintln!("SIZE Ended {}", size_of::<Ended>());
+        eprintln!("SIZE Result<Ended,Failure> {}", size_of::<Result<Ended, Failure>>());
+        eprintln!("SIZE RegionEnd {}", size_of::<super::RegionEnd>());
+        eprintln!("SIZE Result<RegionEnd,Failure> {}", size_of::<Result<super::RegionEnd, Failure>>());
+        eprintln!("SIZE ClauseOutcome<RegionEnd> {}", size_of::<ClauseOutcome<super::RegionEnd>>());
+        eprintln!("SIZE Result<ClauseOutcome<RegionEnd>,Failure> {}", size_of::<Result<ClauseOutcome<super::RegionEnd>, Failure>>());
+        eprintln!("SIZE Settled {}", size_of::<super::Settled>());
+        eprintln!("SIZE Result<Settled,Failure> {}", size_of::<Result<super::Settled, Failure>>());
+        eprintln!("SIZE Result<BranchEnd,Failure> {}", size_of::<Result<super::BranchEnd, Failure>>());
+        eprintln!("SIZE SteppedClause {}", size_of::<SteppedClause>());
+        eprintln!("SIZE Option<LoopHeaderValues> {}", size_of::<Option<LoopHeaderValues>>());
+        eprintln!("SIZE (ObjRef,bool) {}", size_of::<(ObjRef, bool)>());
+        eprintln!("SIZE Result<DeadlineCounted,Failure> {}", size_of::<Result<crate::clause::DeadlineCounted, Failure>>());
+        eprintln!("SIZE Option<ClausePosition> {}", size_of::<Option<crate::ir::ClausePosition>>());
+        eprintln!("SIZE Frame {}", size_of::<super::Frame>());
+    }
+}
