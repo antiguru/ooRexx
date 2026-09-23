@@ -1274,51 +1274,51 @@ impl Interp {
                                         debug_assert_names_the_clause(
                                             code, *index, clause, "Store",
                                         );
-                                        let InstructionKind::Assignment { target, .. } =
-                                            &clause.kind
-                                        else {
-                                            break 'cold Err(Loud::store_op_off_its_node().into());
-                                        };
                                         let at = at.resolved();
-                                        // `Op::Load`'s own tripwire, on the writing
-                                        // side: `at` came out of the plan this chunk
-                                        // was compiled from, `code.slots` is a view
-                                        // of that same map, and a mismatch is two
-                                        // different plans for one body -- which would
-                                        // write into somebody else's slot rather than
-                                        // fail.
-                                        debug_assert!(
-                                            at.is_none()
-                                                || matches!(
-                                                    &target.kind,
-                                                    ExprKind::Variable(id)
-                                                        if code.slot_for(*id) == at
-                                                ),
-                                            "a compiled write names a slot this body's plan does not \
-                                         give its target"
-                                        );
                                         let value = registers.get(*src);
-                                        // **A simple target with a resolved slot
-                                        // is a slot write**, taken here rather
-                                        // than through `assign_evaluated`, which
-                                        // roots the value, materialises the
-                                        // `Option` its `>>>` line would want, reads
-                                        // the clause indent, and then matches the
-                                        // target's shape to reach the same store.
-                                        // The cost is that path, not rendering:
-                                        // `result_text` and `trace_result` both
-                                        // gate on `trace_mode().results` themselves,
-                                        // so an untraced run renders nothing.
+                                        // **A resolved slot is a simple target's slot write**, taken
+                                        // here rather than through `assign_evaluated`, which roots the
+                                        // value, materialises the `Option` its `>>>` line would want,
+                                        // reads the clause indent, and then matches the target's shape
+                                        // to reach the same store. `write_slot` resolves a slot only
+                                        // for a `Variable` target, so the fast path does not read the
+                                        // clause at all. An untraced run renders nothing on either
+                                        // path: `result_text` and `trace_result` gate on
+                                        // `trace_mode().results` themselves.
                                         if let Some(slot) = at
-                                            && matches!(target.kind, ExprKind::Variable(_))
                                             && !self.trace_mode().results
                                         {
+                                            // `Op::Load`'s own tripwire, on the writing side: `at`
+                                            // came out of the plan this chunk was compiled from, and a
+                                            // mismatch is two different plans for one body -- which
+                                            // would write into somebody else's slot rather than fail.
+                                            debug_assert!(
+                                                matches!(
+                                                    &clause.kind,
+                                                    InstructionKind::Assignment { target, .. }
+                                                        if matches!(
+                                                            &target.kind,
+                                                            ExprKind::Variable(id) if code.slot_for(*id) == at
+                                                        )
+                                                ),
+                                                "a compiled write names a slot this body's plan does not give \
+                                                 its target"
+                                            );
                                             let frame = self.activation().frame;
                                             self.set_variable(frame, slot, value);
-                                        } else if let Err(failure) =
-                                            self.assign_evaluated(code, target, value, at)
-                                        {
-                                            break 'cold Err(failure);
+                                        } else {
+                                            let InstructionKind::Assignment { target, .. } =
+                                                &clause.kind
+                                            else {
+                                                break 'cold Err(
+                                                    Loud::store_op_off_its_node().into()
+                                                );
+                                            };
+                                            if let Err(failure) =
+                                                self.assign_evaluated(code, target, value, at)
+                                            {
+                                                break 'cold Err(failure);
+                                            }
                                         }
                                     }
                                     // The print, through `Interp::say_evaluated`,
