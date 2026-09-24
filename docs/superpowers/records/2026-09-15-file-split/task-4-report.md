@@ -282,8 +282,29 @@ clauses-per-second line.
 
 ## Gates
 
-Pending: they run after this report is committed. The results go in the
-report's next commit.
+These ran over `b76bce29b`, this report's first commit, whose code is
+identical to c5. `files/tools/gates.sh` ran them after the commit, and the
+tree did not change from start to finish (`git status --short` was empty
+before and after). The statuses, each read unpiped, are in
+`files/gates/status.txt`. G3 to G6 use the default target directory, so
+the arity suites ran the binary G3 built.
+
+| gate | command | result | load average (1, 5, 15 min) |
+| --- | --- | --- | --- |
+| G1 | `cargo fmt --all --check` | exit 0 | 14.01, 16.18, 11.28 before the run |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings`, empty target dir | exit 0 | |
+| G3 | `cargo build --workspace --all-targets --release`, no cap | exit 0 | |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | exit 0; 135 result blocks; 2663 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 19.91, 19.34, 13.31 before; 2.40, 10.16, 11.21 after |
+| G5 | `cargo build --workspace --all-targets` (debug) | exit 0 | |
+| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0; 135 result blocks; 2664 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 3.08, 9.92, 11.11 before; 3.46, 7.46, 10.03 after |
+
+Every figure matches BASE's. The counts come from `tools/test_results.py`
+run over each gate's own log (`files/gates/test-release.results`,
+`test-debug.results`), and the 604 from that log's differential report
+(`files/gates/corpus-differential-*.txt`).
+`introspection_arity::every_unstable_row_is_really_unstable` passed in
+both runs, so nothing was re-run. G4 started at load 19.9, which came from
+other work on the machine, and still had no timeouts.
 
 ## Concerns
 

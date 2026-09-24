@@ -1,0 +1,5 @@
+   Compiling half v2.7.1
+   Compiling ciborium-ll v0.2.2
+   Compiling ciborium v0.2.2
+   Compiling criterion v0.8.2
+    Finished `release` profile [optimized + debuginfo] target(s) in 2m 26s
