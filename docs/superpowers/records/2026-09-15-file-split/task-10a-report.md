@@ -12,6 +12,14 @@ Done. All required commands run and read: `cargo fmt --all --check`,
 rexx-bench-suite`, and `cargo doc --no-deps -p rexx-bench` are all exit 0.
 Tree clean at `4d65ccf5a`.
 
+**Fix round 2 replaced instrument 3's own decoder and its output**, after
+fix round 1's version turned out to be blind to most of its subject (a real
+bug in the instrument, not in the move). "## Fix round 2" below has the
+corrected methodology, control, and numbers; "## The four instruments"'s
+own instrument-3 bullet still describes fix round 1's evidence, left as
+written per this report's own established practice of appending
+corrections rather than rewriting reviewed sections in place.
+
 This report supersedes the working-copy report this task originally wrote
 under `.superpowers/sdd/2026-09-15-file-split/task-10a-report.md` (untracked,
 per this project's standing convention for that directory), which is left in
@@ -22,9 +30,13 @@ round -- `4d65ccf5a` is unamended -- only the evidence and its write-up.
 ## Commits
 
 1. `4d65ccf5a` -- the split. Unchanged from the original report.
-2. This fix round's own commit (see below) -- adds the instruments' scripts
-   and outputs under `task-10a-files/`, this corrected report, and no code
-   changes.
+2. `353d5c601` ("Task 10a fix round 1: run instrument 3 for real, cite
+   artifacts") -- adds the instruments' scripts and outputs under
+   `task-10a-files/`, this report, no code changes.
+3. This fix round's own commit (see "Fix round 2" below) -- replaces
+   instrument 3's decoder (fix round 1's version was blind to literals
+   inside macro arguments) and its output, adds a control and a whole-file
+   cross-check, no code changes.
 
 ## Fix round 1: what was wrong and what changed
 
@@ -237,3 +249,85 @@ from this task's own files.
 None found. The `#[path]` requirement is worth the controller flagging for
 any later task in this plan that creates a new child module under a
 `[[bin]]` crate root.
+
+## Fix round 2: instrument 3's decoder was blind to most of its subject
+
+The move itself is still sound -- nothing in this round changes the verdict
+above. What was wrong is fix round 1's own instrument-3 tooling, caught by
+a check that compared its output against the raw source rather than
+trusting a clean `0 mismatches` on faith.
+
+**The bug.** `` write_provenance ``, the largest single function this task
+moved, reported **0 literals** under fix round 1's decoder, while its body
+in `report.rs` contains 19 double-quote characters on inspection (46
+counting both the extracted-item copy's own duplication of the `capture`
+call sites -- the point is that it is obviously not zero). The decoder used
+`syn::visit::Visit` over a parsed `syn::File`/`syn::Item`. Syn's typed AST
+does not descend into a macro invocation's arguments: `Macro::tokens` is an
+opaque `proc_macro2::TokenStream` that syn does not know how to parse
+further (it does not know `writeln!`'s or `format!`'s grammar), so
+`visit_lit` is never called for anything inside one. Every one of
+`report.rs`'s writer functions is built almost entirely out of
+`writeln!(report, "...")` calls, so this blind spot ate nearly the whole
+instrument: fix round 1's reported total was **43 literals across the 20
+moved items**; the true total, below, is **119**.
+
+**The fix.** `task-10a-files/instrument3_lit_decoder/main.rs` no longer
+parses a `syn::File` at all. It tokenizes the raw source with
+`proc_macro2::TokenStream::from_str` and walks every `TokenTree`
+recursively, decoding each `TokenTree::Literal` via `syn::Lit::new(...)`
+and recursing into every `TokenTree::Group`. A macro's parenthesized
+argument list is, at the raw-token level, an ordinary `Group` -- nothing
+marks it as macro-internal until a macro-aware parser (which syn's default
+AST walk is, and which this no longer needs) tries to interpret it -- so
+this reaches every literal regardless of what syntactic position it sits
+in, macro argument included.
+
+**The control this fix adds, and its own result.** A second, independent
+implementation -- `task-10a-files/instrument3_independent_lexer_count.py`,
+a hand-written character-by-character scanner with no dependency on `syn`
+or `proc_macro2` -- counts the same class of tokens (string, byte-string,
+char, byte, including the one genuine subtlety worth naming: a `///`/`//!`
+doc-comment line is lexically desugared into a `#[doc = "..."]` string
+literal by rustc's own tokenizer, which `proc_macro2` mirrors and which the
+Rust decoder therefore correctly counts, so the independent lexer counts
+doc-comment lines too, deliberately, rather than trying to make the
+numbers agree by narrowing scope). `task-10a-files/instrument3_compare.py`
+runs both counters over every item, both sides, and fails loudly on any
+disagreement: **the two agree exactly on every one of the 20 items, both
+base and head (0 control mismatches)**. This control would have caught the
+original bug immediately -- on `write_provenance` alone it would have
+reported the decoder's 0 against the lexer's 23 -- and was itself validated
+against exactly that case before being trusted (re-run by hand against
+`write_provenance` first, matching 23/23, and the `Stats` item's one
+`///` doc-comment token, missed by the lexer's first draft and fixed
+before this round's numbers were taken, recorded in the script's own
+comment rather than quietly dropped).
+
+**A second, whole-file cross-check, run for extra assurance rather than
+because the per-item one needed it.**
+`task-10a-files/instrument3_whole_file_check.py` decodes BASE's entire
+`rexx-bench-suite.rs` and HEAD's `rexx-bench-suite.rs` +
+`rexx-bench-suite/report.rs` combined (not just the 20 moved items -- the
+whole file on each side) and multiset-diffs the two literal lists,
+order-independent since the split legitimately reorders content across two
+files. Output: `task-10a-files/instrument3_whole_file_output.txt`. BASE:
+383 literals. HEAD: 386. The diff is exactly four literals, and every one
+of the four is a change this report already names as deliberate: the one
+doc-comment correction (`` [`PAIRS`] `` -> `` [`crate::PAIRS`] ``, one
+string removed and its corrected replacement added) and the two new
+literals `4d65ccf5a` itself introduced (`"rexx-bench-suite/report.rs"`,
+the `#[path]` string, and `report.rs`'s own two-line module doc comment,
+each `//!` line its own literal, so two more). Nothing else in either
+whole file differs. This is not a required instrument by the plan's own
+wording (which asks for moved items, not a whole-file diff), but is
+strictly stronger evidence than the per-item comparison alone and is kept
+as a corroborating artifact.
+
+**Corrected instrument 3 result, replacing fix round 1's `43`.** PASS.
+`task-10a-files/instrument3_output.txt` (script:
+`task-10a-files/instrument3_compare.py`, consuming
+`task-10a-files/instrument3_extract_items.py`'s raw per-item extraction,
+unchanged from fix round 1): **0 decode mismatches of 20 items, 119
+decodable literals (STR/BYTESTR/CHAR/BYTE) compared, 0 control
+mismatches.** Corroborated by the whole-file check above.

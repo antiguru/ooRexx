@@ -1,22 +1,24 @@
-OK   counter_median (0 literals)
-OK   fingerprint (7 literals)
-OK   interval_coverage (0 literals)
-OK   interval_for (7 literals)
-OK   joint_coverage_bound (4 literals)
-OK   median_of (1 literals)
-OK   parse_cps (3 literals)
-OK   quoted_line (1 literals)
-OK   ratio_interval_caveat (1 literals)
-OK   seconds (0 literals)
-OK   self_timed_figures (1 literals)
-OK   Stats (4 literals)
-OK   TARGET_COVERAGE (1 literals)
-OK   write_axes (5 literals)
-OK   write_blocked (0 literals)
-OK   write_counters (2 literals)
-OK   write_offset (2 literals)
-OK   write_provenance (0 literals)
-OK   write_rexxcps (4 literals)
-OK   write_self_timed (0 literals)
+OK  Stats: base/head decoder-vs-lexer counts base=1/1 head=1/1  (4 total literal tokens, 1 decodable) decode-match
+OK  TARGET_COVERAGE: base/head decoder-vs-lexer counts base=0/0 head=0/0  (1 total literal tokens, 0 decodable) decode-match
+OK  counter_median: base/head decoder-vs-lexer counts base=0/0 head=0/0  (0 total literal tokens, 0 decodable) decode-match
+OK  fingerprint: base/head decoder-vs-lexer counts base=8/8 head=8/8  (8 total literal tokens, 8 decodable) decode-match
+OK  interval_coverage: base/head decoder-vs-lexer counts base=0/0 head=0/0  (0 total literal tokens, 0 decodable) decode-match
+OK  interval_for: base/head decoder-vs-lexer counts base=0/0 head=0/0  (7 total literal tokens, 0 decodable) decode-match
+OK  joint_coverage_bound: base/head decoder-vs-lexer counts base=0/0 head=0/0  (4 total literal tokens, 0 decodable) decode-match
+OK  median_of: base/head decoder-vs-lexer counts base=0/0 head=0/0  (1 total literal tokens, 0 decodable) decode-match
+OK  parse_cps: base/head decoder-vs-lexer counts base=2/2 head=2/2  (3 total literal tokens, 2 decodable) decode-match
+OK  quoted_line: base/head decoder-vs-lexer counts base=2/2 head=2/2  (2 total literal tokens, 2 decodable) decode-match
+OK  ratio_interval_caveat: base/head decoder-vs-lexer counts base=2/2 head=2/2  (6 total literal tokens, 2 decodable) decode-match
+OK  seconds: base/head decoder-vs-lexer counts base=0/0 head=0/0  (0 total literal tokens, 0 decodable) decode-match
+OK  self_timed_figures: base/head decoder-vs-lexer counts base=1/1 head=1/1  (1 total literal tokens, 1 decodable) decode-match
+OK  write_axes: base/head decoder-vs-lexer counts base=27/27 head=27/27  (28 total literal tokens, 27 decodable) decode-match
+OK  write_blocked: base/head decoder-vs-lexer counts base=10/10 head=10/10  (10 total literal tokens, 10 decodable) decode-match
+OK  write_counters: base/head decoder-vs-lexer counts base=13/13 head=13/13  (13 total literal tokens, 13 decodable) decode-match
+OK  write_offset: base/head decoder-vs-lexer counts base=8/8 head=8/8  (15 total literal tokens, 8 decodable) decode-match
+OK  write_provenance: base/head decoder-vs-lexer counts base=23/23 head=23/23  (24 total literal tokens, 23 decodable) decode-match
+OK  write_rexxcps: base/head decoder-vs-lexer counts base=16/16 head=16/16  (18 total literal tokens, 16 decodable) decode-match
+OK  write_self_timed: base/head decoder-vs-lexer counts base=6/6 head=6/6  (6 total literal tokens, 6 decodable) decode-match
 
-TOTAL MISMATCHES: 0 of 20
+20 items compared, 119 decodable literals (STR/BYTESTR/CHAR/BYTE) total.
+decode mismatches: 0
+control (decoder-count vs independent-lexer-count) mismatches: 0

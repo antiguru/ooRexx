@@ -1,0 +1,8 @@
+base total literals: 383, head total literals: 386
+literals present in base but not head: 1
+  x1  STR " size rather than restated, so it cannot drift from [`PAIRS`]."
+literals present in head but not base: 4
+  x1  STR "rexx-bench-suite/report.rs"
+  x1  STR " Renders the paired samples `measure_interleaved` collects into the"
+  x1  STR " markdown report `main` prints."
+  x1  STR " size rather than restated, so it cannot drift from [`crate::PAIRS`]."
