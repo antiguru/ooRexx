@@ -1030,3 +1030,34 @@ fn cloned<K: Clone, V: Copy, S>(held: Option<&std::collections::HashMap<K, V, S>
         .map(|(key, value)| (key.clone(), *value))
         .collect()
 }
+
+/// `Package~local`: the package's own environment directory, which is
+/// `rexxpg`'s step 5 of the environment-symbol search order and the one route
+/// a program has to it.
+pub(super) fn native_package_local(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(package) = interp.which_package(receiver) else {
+        return Err(Loud::receiver_class("a package object this crate did not build").into());
+    };
+    Ok(Some(interp.package_local(package)))
+}
+
+/// `Package~name`: the package's own name -- `PackageClass::getProgramName`
+/// (`classes/PackageClass.hpp:147`), bound as `Name` by `memory/Setup.cpp:1189`.
+pub(super) fn native_package_name(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    // Loud rather than a panic where the receiver is a package handle this
+    // crate did not build, which is `Interp::package_name`'s own `None`.
+    let Some(name) = interp.package_name(receiver) else {
+        return Err(Loud::receiver_class("a package object this crate did not build").into());
+    };
+    Ok(Some(interp.text_built(name)))
+}

@@ -105,6 +105,7 @@ pub(crate) mod context;
 
 // `Package`'s readers and its four writes, chained the same way.
 mod package;
+use package::{native_package_local, native_package_name};
 
 // Running a procedure of a loaded shared library, and the `Host` the boundary
 // reaches this interpreter through.
@@ -2986,37 +2987,6 @@ fn referenced_receiver(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, 
     interp
         .referenced_object(receiver)
         .ok_or_else(|| Loud::receiver_class("a value that is not a variable reference").into())
-}
-
-/// `Package~local`: the package's own environment directory, which is
-/// `rexxpg`'s step 5 of the environment-symbol search order and the one route
-/// a program has to it.
-fn native_package_local(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    receiver: ObjRef,
-    _args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    let Some(package) = interp.which_package(receiver) else {
-        return Err(Loud::receiver_class("a package object this crate did not build").into());
-    };
-    Ok(Some(interp.package_local(package)))
-}
-
-/// `Package~name`: the package's own name -- `PackageClass::getProgramName`
-/// (`classes/PackageClass.hpp:147`), bound as `Name` by `memory/Setup.cpp:1189`.
-fn native_package_name(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    receiver: ObjRef,
-    _args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    // Loud rather than a panic where the receiver is a package handle this
-    // crate did not build, which is `Interp::package_name`'s own `None`.
-    let Some(name) = interp.package_name(receiver) else {
-        return Err(Loud::receiver_class("a package object this crate did not build").into());
-    };
-    Ok(Some(interp.text_built(name)))
 }
 
 /// `String~makeString`: a string is its own string value --
