@@ -1,0 +1,9 @@
+  visibility impl Interp::fn run_fragment: private -> pub(super) (run/interpret.rs)
+  TRAILING-COMMA-ONLY impl Interp::fn drop_variable: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility impl Interp::fn drop_variable: private -> pub(super) (run/interpret.rs)
+  visibility impl Interp::fn drop_by_name: private -> pub(super) (run/interpret.rs)
+  visibility impl Interp::fn enter_fragment: private -> pub(super) (run/interpret.rs)
+  visibility impl Interp::fn leave_fragment: private -> pub(super) (run/interpret.rs)
+  ONLY-POST mod interpret (run.rs)
+  ONLY-POST use super::{BodyEngine,Code,Failure,Flow,Fragment,Interp,Loud,NameShape,Raised,Rc,TraceEntry,VariableRef,parse_interpret,raised_iterate_no_loop,raised_iterate_no_match,raised_leave_no_loop,raised_leave_no_match,shape_of,split_indirect_words,validate_indirect_word,} (run/interpret.rs)
+240 of 240 units present on both sides have identical token streams (9 of them moved); 0 only before, 2 only after

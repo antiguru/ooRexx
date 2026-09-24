@@ -1,0 +1,9 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-3b/t-check/doc/rexx_exec/index.html and 2 other files
+files: 15 (run/tests.rs and run/tests/*.rs)
+warnings located in run/tests.rs or run/tests/: 1
+warning: unresolved link to `super::result::task_9s_two_new_indents_are_the_oracles_own_and_normalisation_cannot_see_them`
+  --> crates/rexx-exec/src/run/tests/message.rs:66:7
+   |
+66 | /// [`super::result::task_9s_two_new_indents_are_the_oracles_own_and_normalisation_cannot_see_them`]
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no item named `task_9s_two_new_indents_are_the_oracles_own_and_normalisation_cannot_see_them` in module `result`
+

@@ -1,0 +1,14 @@
+(a) unmoved lines: PRE run.rs minus the removed lines, against POST run.rs
+  INSERTED post:66: 
+  INSERTED post:67: // `INTERPRET` fragments, `DROP`, and the interactive debug pause.
+  INSERTED post:68: mod interpret;
+  CHANGED (declared edit) post:1072: '            // arm, below), and the conversion needs nothing this loop knows' -> '            // arm), and the conversion needs nothing this loop knows'
+  3 equal blocks, 8141 lines, each also compared with cmp; 8142 expected lines, 8145 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK impl Interp::fn run_fragment -> run/interpret.rs (101 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY impl Interp::fn drop_variable -> run/interpret.rs: /tmp/tmp725d2hm3/a /tmp/tmp725d2hm3/b differ: byte 649, line 11 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK impl Interp::fn drop_by_name -> run/interpret.rs (20 lines; visibility private -> pub(super))
+  OK impl Interp::fn enter_fragment -> run/interpret.rs (12 lines; visibility private -> pub(super))
+  OK impl Interp::fn leave_fragment -> run/interpret.rs (7 lines; visibility private -> pub(super))
+  8 of 9 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only
