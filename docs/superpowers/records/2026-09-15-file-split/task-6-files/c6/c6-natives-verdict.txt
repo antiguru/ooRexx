@@ -1,0 +1,1 @@
+natives table identical to BASE: 536 entries

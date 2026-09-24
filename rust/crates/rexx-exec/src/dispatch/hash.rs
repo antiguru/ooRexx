@@ -12,6 +12,7 @@
 //! The mapped collections' store, and the two classes that are the store with
 //! nothing on top.
 
+use super::required_string_named_argument;
 use super::{
     Arity, BehaviourId, Body, Cleared, Decoded, Failure, Interp, Loud, NativeMethod, ObjRef,
     Raised, array_slots, new_instance, required_string_argument, unconverted_array_argument,
@@ -2338,6 +2339,119 @@ pub(super) fn store_entry_write(
     item: ObjRef,
 ) -> Result<Option<ObjRef>, Failure> {
     insert(interp, receiver, index, Some(item))?;
+    Ok(None)
+}
+
+/// The index argument a hash-collection method was given, as the bytes it is
+/// stored and looked up under.
+fn hash_index(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Result<Vec<u8>, Failure> {
+    let Some(Some(argument)) = args.get(position - 1).copied() else {
+        return Err(Raised::missing_named_argument("index").into());
+    };
+    let argument = required_string_named_argument(interp, argument, "index")?;
+    Ok(interp.to_text(argument).to_vec())
+}
+
+/// `~at(index)` and `~[index]` on a `Directory` or a `StringTable`: the entry
+/// stored under `index`, or `.nil` -- `HashCollection::getRexx`, donated to
+/// each of them by an `InheritInstanceMethods`.
+pub(super) fn native_hash_at(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    // **One body, two stores.** `Setup.cpp` donates `IdentityTable`'s `At`,
+    // `Put` and `[]` rows to `StringTable` and that whole set on to
+    // `Directory` (`memory/Setup.cpp:881`, `:933`), so `Table`,
+    // `IdentityTable`, `StringTable` and `Directory` share one method
+    // identity here exactly as they share one function upstream. A table
+    // this crate built on `NativeObject`'s map reads that map; everything
+    // else reads the store.
+    if !matches!(
+        interp.heap.get(receiver).map(|object| &object.body),
+        Some(Body::Native(_))
+    ) && owns(interp, receiver)
+    {
+        return store_at(interp, receiver, args);
+    }
+    let index = hash_index(interp, args, 1)?;
+    Ok(Some(interp.hash_entry_read(receiver, &index)))
+}
+
+/// `~put(item, index)` on a `Directory` or a `StringTable`: stores `item`
+/// under `index`, replacing whatever was there -- `HashCollection::putRexx`.
+pub(super) fn native_hash_put(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    // [`native_hash_at`]'s split, for the same reason.
+    if !matches!(
+        interp.heap.get(receiver).map(|object| &object.body),
+        Some(Body::Native(_))
+    ) && owns(interp, receiver)
+    {
+        return store_put(interp, receiver, args);
+    }
+    let Some(Some(item)) = args.first().copied() else {
+        return Err(Raised::missing_named_argument("item").into());
+    };
+    let index = hash_index(interp, args, 2)?;
+    interp.hash_entry_write(receiver, &index, item)?;
+    Ok(None)
+}
+
+/// `~unknown(message, arguments)` on a `Directory` or a `StringTable`: **the
+/// entry-method mechanism**, `StringHashCollection::unknown`
+/// (`classes/support/HashCollection.cpp:1015`).
+pub(super) fn native_hash_unknown(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(message)) = args.first().copied() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let message = required_string_argument(interp, message, 1)?;
+    let name = interp.to_text(message).to_vec();
+    let Some(Some(arguments)) = args.get(1).copied() else {
+        return Err(Raised::missing_method_argument(2).into());
+    };
+    let Some(forwarded) = interp.array_slots_of(arguments) else {
+        return Err(unconverted_array_argument(interp, arguments));
+    };
+    // [`native_hash_at`]'s split again: a store or `NativeObject`'s map.
+    // Measured, a `.Directory` given
+    // `setEntry('alpha', 42)` answers `d~alpha` as `42`, and `d~beta = 7`
+    // stores under `BETA`.
+    let store = !matches!(
+        interp.heap.get(receiver).map(|object| &object.body),
+        Some(Body::Native(_))
+    ) && owns(interp, receiver);
+    let Some(index) = name.strip_suffix(b"=") else {
+        let index = name.to_ascii_uppercase();
+        if store {
+            let index = interp.text_built(index);
+            return store_entry_read(interp, receiver, index);
+        }
+        return Ok(Some(interp.hash_entry_read(receiver, &index)));
+    };
+    let index = index.to_ascii_uppercase();
+    let Some(Some(item)) = forwarded.first().copied() else {
+        return Err(Loud::entry_method_without_a_value(&index).into());
+    };
+    if store {
+        let index = interp.text_built(index);
+        return store_entry_write(interp, receiver, index, item);
+    }
+    interp.hash_entry_write(receiver, &index, item)?;
     Ok(None)
 }
 
