@@ -1,0 +1,5 @@
+rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + phase-4b.txt + phase-4c.txt + phase-5a.txt + phase-5b.txt + phase-5c.txt + phase-5d.txt + phase-5j.txt + phase-7.txt + phase-8.txt
+mode: STRICT (the gate) -- REXX_CORPUS_GATE is set
+604 of 604 matching
+==============================================================================
+test corpus_differential ... ok
