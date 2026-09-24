@@ -1,0 +1,6 @@
+$ /bin/grep -a -n -E '^ *//[/!].*\[`[^`]+`\](\[|\(|$| |[^([])' dispatch/tests.rs
+1334:/// the instrument [`Loud::array_index_hole`]'s own doc names.
+1480:/// [`Loud::entry_method_without_a_value`] for the measurement.
+1508:/// and this crate has no `NEW` to run -- see [`factory_metaclass`] for why
+1764:/// [`Interp::run_termination_uninits`] refuses to re-enter itself, and
+exit 0

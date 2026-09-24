@@ -1,0 +1,8 @@
+instruments.py exit 1 (1 expected)
+FAILURES:
+I1a changed unmoved line pre-expected:1064 post:1064: 'const SWEEPS: usize = 2;' -> 'const SWEEPS: usize = 2 ;'
+I1b tests::fn a_class_identity_used_as_a_receiver_answers_from_the_class_side: /tmp/tmp17yz4v5o/a /tmp/tmp17yz4v5o/b differ: byte 411, line 8
+I2 token stream differs: tests::fn a_class_identity_used_as_a_receiver_answers_from_the_class_side
+I3 literals differ: tests::fn a_directory_subclass_keeps_the_instance
+
+

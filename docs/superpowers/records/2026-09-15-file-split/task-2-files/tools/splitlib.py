@@ -1,0 +1,106 @@
+"""Shared helpers for the dispatch.rs split: find a unit's lines, take units
+out of a file, and describe exactly which lines were taken.
+
+A unit is one line of `item-tool`'s output: a top-level item, an `impl`
+member, or a row of a native method table. Its lines run from its first
+attribute or doc comment to its last line, extended upward over any plain
+`//` comment lines directly above it (no blank line between), because such a
+comment belongs to the item or row it sits on.
+"""
+import json
+import os
+import subprocess
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ITEM_TOOL = os.path.join(HERE, "..", "item-tool", "target", "release", "item-tool")
+
+
+def load_units(path):
+    out = subprocess.run([ITEM_TOOL, path], capture_output=True, text=True, check=True).stdout
+    units = []
+    for line in out.splitlines():
+        key, first, last, vis, decodable, toks, lits = line.split("\t")
+        units.append(
+            dict(
+                key=key,
+                first=int(first),
+                last=int(last),
+                vis=vis,
+                decodable=int(decodable),
+                toks=toks,
+                lits=lits,
+            )
+        )
+    return units
+
+
+def is_plain_comment(line):
+    s = line.lstrip()
+    return s.startswith("//") and not s.startswith("///") and not s.startswith("//!") or s.startswith(
+        "////"
+    )
+
+
+def span(lines, unit):
+    """0-based inclusive (start, end) of `unit` in `lines`."""
+    a = unit["first"] - 1
+    while a > 0 and is_plain_comment(lines[a - 1]):
+        a -= 1
+    return a, unit["last"] - 1
+
+
+def take(path, keys):
+    """Removes the units named by `keys` from the file at `path`.
+
+    Returns (new_lines, blocks, removed) where `blocks` maps each key to its
+    text (lines joined with newlines, no trailing newline) and `removed` is
+    the sorted list of 0-based line indices of the ORIGINAL file that are
+    gone: each unit's own lines, and for a top-level unit (one that starts in
+    column one) the blank line that separated it from what came before it.
+    """
+    text = open(path).read()
+    lines = text.split("\n")
+    assert lines[-1] == ""
+    lines = lines[:-1]
+    units = {u["key"]: u for u in load_units(path)}
+    for key in keys:
+        if key.startswith("LINES:"):
+            a, b = key[len("LINES:") :].split("-")
+            units[key] = dict(key=key, first=int(a), last=int(b))
+    missing = [k for k in keys if k not in units]
+    assert not missing, missing
+    removed = set()
+    blocks = {}
+    for key in keys:
+        a, b = span(lines, units[key])
+        overlap = removed.intersection(range(a, b + 1))
+        assert not overlap, (key, sorted(overlap))
+        blocks[key] = "\n".join(lines[a : b + 1])
+        removed.update(range(a, b + 1))
+        top_level = not lines[a].startswith(" ")
+        if top_level:
+            if a > 0 and lines[a - 1] == "" and (a - 1) not in removed:
+                removed.add(a - 1)
+            elif b + 1 < len(lines) and lines[b + 1] == "":
+                removed.add(b + 1)
+    new_lines = [l for i, l in enumerate(lines) if i not in removed]
+    return new_lines, blocks, sorted(removed)
+
+
+def floating_lines(path, lo, hi):
+    """Non-blank lines in [lo, hi] (1-based) that no unit's span covers."""
+    lines = open(path).read().split("\n")[:-1]
+    covered = set()
+    for u in load_units(path):
+        a, b = span(lines, u)
+        covered.update(range(a, b + 1))
+    return [
+        (i + 1, lines[i])
+        for i in range(lo - 1, hi)
+        if lines[i].strip() and i not in covered
+    ]
+
+
+def write_json(path, value):
+    with open(path, "w") as f:
+        json.dump(value, f, indent=1)

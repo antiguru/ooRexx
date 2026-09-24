@@ -853,7 +853,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     // Task 17: the environment search order this phase can observe, the
     // Directory entry-method mechanism on the shipped entry and on one a
     // program stores, and the `.METHODS` and `.ROUTINES` tables --
-    // `.RESOURCES` is `dispatch.rs`'s own test, because a `::RESOURCE` body is
+    // `.RESOURCES` is `dispatch/tests.rs`'s own test, because a `::RESOURCE` body is
     // source lines that no clause span covers and `rexx-parse`'s
     // `every_corpus_program_tiles` requires every byte of a corpus program to
     // be tiled by one.

@@ -162,7 +162,7 @@ and which holds exactly one item is the crashing shape.
 Consequence for this crate: **there is no oracle behaviour to match**, so
 `rexx-exec` refuses the shape rather than answering it -- `Loud::
 array_index_hole`, whose own doc names
-`dispatch.rs`'s `an_expanded_index_of_one_empty_slot_is_loud` as the
+`dispatch/tests.rs`'s `an_expanded_index_of_one_empty_slot_is_loud` as the
 instrument. No differential row can cover it.
 
 Found 2026-08-22 while building this crate's own `~at`; filed upstream the
