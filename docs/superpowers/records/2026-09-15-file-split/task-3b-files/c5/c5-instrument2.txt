@@ -1,0 +1,6 @@
+  visibility impl Interp::fn exec_trace: private -> pub(super) (run/settings.rs)
+  visibility impl Interp::fn exec_address: private -> pub(super) (run/settings.rs)
+  visibility impl Interp::fn exec_numeric: private -> pub(super) (run/settings.rs)
+  ONLY-POST mod settings (run.rs)
+  ONLY-POST use super::{Announced,Code,DirectiveKind,Expr,Failure,Form,Interp,Loud,NumericSetting,ObjRef,Raised,Trace,TraceEntry,is_whole_number,raised_from_settings,raised_invalid_trace_letter,raised_naming_the_operand,raised_numeric_trace_interactive_only,} (run/settings.rs)
+232 of 232 units present on both sides have identical token streams (11 of them moved); 0 only before, 2 only after

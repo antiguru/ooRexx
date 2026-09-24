@@ -1,0 +1,11 @@
+(a) unmoved lines: PRE run.rs minus the removed lines, against POST run.rs
+  INSERTED post:69: 
+  INSERTED post:70: // `ADDRESS`, `NUMERIC` and `TRACE`, and the `>I>`/`<I<` invocation lines.
+  INSERTED post:71: mod settings;
+  2 equal blocks, 7766 lines, each also compared with cmp; 7766 expected lines, 7769 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK impl Interp::fn exec_trace -> run/settings.rs (60 lines; visibility private -> pub(super))
+  OK impl Interp::fn exec_address -> run/settings.rs (60 lines; visibility private -> pub(super))
+  OK impl Interp::fn exec_numeric -> run/settings.rs (109 lines; visibility private -> pub(super))
+  11 of 11 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

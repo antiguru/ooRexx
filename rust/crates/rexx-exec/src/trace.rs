@@ -504,7 +504,7 @@ pub(crate) fn raised_numeric_trace_interactive_only() -> Raised {
 /// 24.1, "TRACE request letter must be one of \"ACEFILNOR\"; found \"&1\"."
 /// -- `mode_from_setting`'s `Err` case, reachable only through `TRACE
 /// VALUE` (a `Trace::Setting`'s own text is pre-validated, so this arm is
-/// unreachable from it; `run.rs`'s own `Trace::Setting` call site
+/// unreachable from it; `run/settings.rs`'s own `Trace::Setting` call site
 /// `.expect()`s that rather than routing through this at all). `found` is
 /// the offending byte exactly as `mode_from_setting` returned it -- not
 /// uppercased, matching `TraceSetting.cpp`'s own `badOption = value->
