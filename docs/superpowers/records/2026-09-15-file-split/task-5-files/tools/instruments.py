@@ -248,10 +248,12 @@ for key in moved:
     pl = post_lines(rel)
     qa, qb = splitlib.span(pl, post_units[key])
     post_text = pl[qa : qb + 1]
-    if tests_mode:
+    if tests_mode and len(post_text) == len(pre_text):
         # The mover strips four spaces from every line except one inside a
         # string literal that is not a backslash continuation starting with
         # four spaces; those stay verbatim. Re-indent exactly the others.
+        # (A unit rustfmt re-wrapped to another line count is not re-indented:
+        # it cannot be byte-identical, and falls to the whitespace-only test.)
         st = pre_states[a : b + 1]
         post_text = [l if (not l or keep_verbatim(st[k], pre_text[k])) else "    " + l for k, l in enumerate(post_text)]
     notes = []

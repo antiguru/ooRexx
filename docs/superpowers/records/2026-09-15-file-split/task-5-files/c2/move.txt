@@ -1,0 +1,1 @@
+moved lines 819-1819 (1-based) of plan.rs, 1001 lines, 0 kept verbatim inside literals; 0 lines after the module stay
