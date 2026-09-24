@@ -309,7 +309,7 @@ const CONCEPTS: &[Concept] = &[
                     which the enumeration files under 5a",
         control: "stop uppercasing a method name as it is added, so a name defined in lower \
                   case is not found by the message that names it. Both sites have to go \
-                  together, measured: `dispatch.rs`'s own `method_name_pair`, and \
+                  together, measured: `dispatch/class_protocol.rs`'s own `method_name_pair`, and \
                   `MethodDict::replace_method`. Either one alone leaves this row `agree` \
                   and the corpus untouched",
         oracle_lines: 4,

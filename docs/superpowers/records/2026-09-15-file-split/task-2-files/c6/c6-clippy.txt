@@ -1,0 +1,2 @@
+    Checking rexx-exec v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-2/dev/rust/crates/rexx-exec)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.13s

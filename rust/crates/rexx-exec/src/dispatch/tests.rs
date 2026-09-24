@@ -1505,7 +1505,7 @@ fn an_entry_method_send_with_no_value_is_loud() {
 }
 
 /// **A metaclass carrying its own `NEW` decides what `~subclass` builds**,
-/// and this crate has no `NEW` to run -- see [`factory_metaclass`] for why
+/// and this crate has no `NEW` to run -- see [`class_protocol::factory_metaclass`] for why
 /// that is a loud refusal rather than a class built from `.Class`'s path.
 #[test]
 fn a_metaclass_with_its_own_new_is_loud() {

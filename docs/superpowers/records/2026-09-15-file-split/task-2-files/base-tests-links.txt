@@ -1,0 +1,2 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-2/t-base/doc/rexx_exec/index.html and 2 other files
+warnings located in crates/rexx-exec/src/dispatch.rs: 0

@@ -275,7 +275,7 @@ shortening this program to the direct send measures the wrong thing.
 
 Consequence for this crate: none to match. `rexx-exec` refuses a metaclass
 whose `NEW` resolves anywhere other than `.Class` at rc 120 before it builds
-anything -- `dispatch.rs`'s `factory_metaclass`, whose doc carries the reason
+anything -- `dispatch/class_protocol.rs`'s `factory_metaclass`, whose doc carries the reason
 -- so the crashing shape is one this crate cannot reach.
 
 Found 2026-08-26 while building `Class~subclass`. **No upstream ticket.**

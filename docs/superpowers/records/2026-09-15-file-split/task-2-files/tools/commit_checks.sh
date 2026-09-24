@@ -10,3 +10,4 @@ python3 $S/tools/positional.py $PRE/dispatch.rs $S/dev/rust/crates/rexx-exec/src
 $S/tools/docs.sh $S/dev/rust $S/t-base $S/art/c$N
 $S/tools/refusal_refresh.sh $S/dev/rust $S/t-base $S/art/c$N-refusal-sites.txt
 rm -f $S/art/c$N-refusal-sites.txt.log
+$S/tools/tests_links.sh $S/dev/rust $S/t-base $S/art/c$N-tests-links.txt > /dev/null; sed -n 2p $S/art/c$N-tests-links.txt
