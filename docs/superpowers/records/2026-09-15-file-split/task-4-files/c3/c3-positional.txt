@@ -1,0 +1,6 @@
+lib.rs:2347-2356: ['directive_gap']: [('preceding', ''), ('below', ''), ('above', '')]
+lib.rs:2639-2642: ['class_install_order']: [('below', '')]
+lib.rs:2658-2671: ['class_install_order', 'class_members']: [('preceding', ''), ('below', ''), ('above', '')]
+lib.rs:2701-2705: ['annotation_target']: [('above', '')]
+lib.rs:2717-2720: ['directive_gap']: [('above', ''), ('beside', ''), ('above', '')]
+done

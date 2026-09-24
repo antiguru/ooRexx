@@ -105,6 +105,9 @@ for rel in [PARENT_RS] + NEW_FILES:
         key = u["key"]
         if key in had:
             continue
+        if key.startswith("use ") and rel != PARENT_RS and not (tests_mode and rel == TESTS_RS):
+            # Each file's own imports are its own units.
+            key = rel + "::" + key
         if tests_mode and rel == TESTS_RS:
             key = "tests::" + key
         assert key not in post_units, ("duplicate key across files", key, rel)
@@ -137,31 +140,44 @@ def declared_line(post_index):
     return False
 
 
-# A parent import list that lost names the moved code alone used: allowed when
-# both sides of a differing block are `use` declarations and nothing but
-# whole names were dropped (no name added, no path changed).
-def import_names(block):
-    text = " ".join(l.strip() for l in block)
-    if not re.fullmatch(r"(use [^;]*;\s*)+", text):
-        return None
-    out = set()
-    for stmt in re.findall(r"use ([^;]*);", text):
-        m = re.fullmatch(r"([\w:]+)::\{(.*)\}", stmt.replace(" ", ""))
-        if m:
-            out.update(m.group(1) + "::" + n for n in m.group(2).split(",") if n)
-        else:
-            out.add(stmt.replace(" ", ""))
-    return out
-
-
-def import_narrowing(before, after):
-    a, b = import_names(before), import_names(after)
-    return a is not None and (b is not None or not "".join(after).strip()) and (b or set()) < a
-
-
 out1 = []
 removed = set(json.load(open(removed_json)))
 expected = [l for i, l in enumerate(pre_dispatch) if i not in removed]
+expected_at = [i for i in range(len(pre_dispatch)) if i not in removed]
+
+
+def use_unit_at(units, line0):
+    for u in units:
+        if u["key"].startswith("use ") and u["first"] - 1 <= line0 <= u["last"] - 1:
+            return u
+    return None
+
+
+def use_names(key):
+    body = key[len("use "):]
+    m = re.fullmatch(r"([\w:]+)::\{(.*)\}", body)
+    return {m.group(1) + "::" + n for n in m.group(2).split(",") if n} if m else {body}
+
+
+def use_block_narrowed(i1, i2, j1, j2):
+    """A differing block wholly inside one `use` declaration on each side
+    (PRE's lines by their original index), whose POST names are a strict
+    subset of PRE's: the parent import list losing names only moved code
+    used. Answers the names dropped, or None."""
+    if i1 == i2 or j1 == j2:
+        return None
+    pre_list = list(pre_units.values())
+    post_list = [u for k, u in post_units.items() if post_units_file[k] == PARENT_RS]
+    a = use_unit_at(pre_list, expected_at[i1])
+    b = use_unit_at(post_list, j1)
+    if a is None or b is None:
+        return None
+    if not all(a["first"] - 1 <= expected_at[i] <= a["last"] - 1 for i in range(i1, i2)):
+        return None
+    if not all(b["first"] - 1 <= j <= b["last"] - 1 for j in range(j1, j2)):
+        return None
+    before, after = use_names(a["key"]), use_names(b["key"])
+    return sorted(before - after) if after < before else None
 actual = read_lines(os.path.join(post_root, PARENT_RS))
 sm = difflib.SequenceMatcher(a=expected, b=actual, autojunk=False)
 equal_blocks = 0
@@ -177,6 +193,8 @@ for tag, i1, i2, j1, j2 in sm.get_opcodes():
     elif tag == "insert":
         for j in range(j1, j2):
             out1.append(f"  INSERTED post:{j + 1}: {actual[j]}")
+    elif use_block_narrowed(i1, i2, j1, j2):
+        out1.append(f"  IMPORTS NARROWED post:{j1 + 1}-{j2}: {use_block_narrowed(i1, i2, j1, j2)}")
     elif tag == "replace" and (i2 - i1) == (j2 - j1):
         for k in range(i2 - i1):
             before, after = expected[i1 + k], actual[j1 + k]
@@ -189,9 +207,6 @@ for tag, i1, i2, j1, j2 in sm.get_opcodes():
             else:
                 failures.append(f"I1a changed unmoved line pre-expected:{i1 + k + 1} post:{j1 + k + 1}: {before!r} -> {after!r}")
                 out1.append(f"  CHANGED {before!r} -> {after!r}")
-    elif import_narrowing(expected[i1:i2], actual[j1:j2]):
-        gone = sorted(import_names(expected[i1:i2]) - import_names(actual[j1:j2]))
-        out1.append(f"  IMPORTS NARROWED post:{j1 + 1}-{j2}: names no longer imported {gone}")
     else:
         failures.append(f"I1a {tag} expected[{i1}:{i2}] actual[{j1}:{j2}]")
         out1.append(f"  {tag.upper()} expected {expected[i1:i2]!r} actual {actual[j1:j2]!r}")
@@ -245,6 +260,10 @@ for key in moved:
         post_text = [decl.sub(r"\1", l, count=1) for l in post_text]
         notes.append(f"visibility {pu['vis']} -> {post_units[key]['vis']}")
     ok, msg = cmp_bytes("\n".join(pre_text) + "\n", "\n".join(post_text) + "\n", key)
+    if not ok and splitlib.strip_field_vis_lines(post_text) != post_text:
+        ok, msg = cmp_bytes("\n".join(splitlib.strip_field_vis_lines(pre_text)) + "\n", "\n".join(splitlib.strip_field_vis_lines(post_text)) + "\n", key)
+        if ok:
+            notes.append("field visibility widened: " + ", ".join(l.strip().split(":")[0] for l in post_text if splitlib.FIELD_VIS_LINE.match(l)))
     if ok:
         moved_ok += 1
         if notes:
@@ -270,6 +289,9 @@ tok_ok = 0
 for k in common:
     if pre_units[k]["toks"] == post_units[k]["toks"]:
         tok_ok += 1
+    elif splitlib.strip_field_vis(pre_units[k]["toks"].split("\x01")) == splitlib.strip_field_vis(post_units[k]["toks"].split("\x01")):
+        tok_ok += 1
+        out2.append(f"  FIELD-VISIBILITY-ONLY {k}: identical once a field's `pub(super)`/`pub(crate)` is dropped")
     elif drop_trailing_commas(pre_units[k]["toks"].split("\x01")) == drop_trailing_commas(post_units[k]["toks"].split("\x01")):
         tok_ok += 1
         out2.append(f"  TRAILING-COMMA-ONLY {k}: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)")

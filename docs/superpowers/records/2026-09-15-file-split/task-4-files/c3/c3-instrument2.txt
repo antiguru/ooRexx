@@ -1,0 +1,31 @@
+  visibility fn directive_gap: private -> pub(super) (directives.rs)
+  visibility fn unresolved_external: private -> pub(super) (directives.rs)
+  FIELD-VISIBILITY-ONLY struct FileClasses: identical once a field's `pub(super)`/`pub(crate)` is dropped
+  visibility struct FileClasses: private -> pub(super) (directives.rs)
+  visibility fn directive_clause: private -> pub(super) (directives.rs)
+  visibility fn class_install_order: private -> pub(super) (directives.rs)
+  TRAILING-COMMA-ONLY fn method_dictionary_keys: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility fn method_dictionary_keys: private -> pub(super) (directives.rs)
+  visibility fn attribute_dictionary_keys: private -> pub(super) (directives.rs)
+  visibility fn member_dictionary_keys: private -> pub(super) (directives.rs)
+  visibility fn class_members: private -> pub(super) (directives.rs)
+  visibility fn constant_root_key: private -> pub(super) (directives.rs)
+  visibility enum AnnotatedSite: private -> pub(super) (directives.rs)
+  FIELD-VISIBILITY-ONLY struct MissingTarget: identical once a field's `pub(super)`/`pub(crate)` is dropped
+  visibility struct MissingTarget: private -> pub(super) (directives.rs)
+  visibility fn annotation_target: private -> pub(super) (directives.rs)
+  visibility fn method_body_gap: private -> pub(super) (directives.rs)
+  visibility fn accessor_variable: private -> pub(super) (directives.rs)
+  visibility fn delegate_variable: private -> pub(super) (directives.rs)
+  DIFFERS (declared edit) impl Interp::fn install_attribute
+  ONLY-PRE use rexx_parse::{Access,AnnotationTarget,AttributeDirective,AttributeStyle,ClassDirective,ClassRef,CodeBody,ConstantDirective,ConstantValue,Directive,DirectiveKind,Expr,ExprKind,GuardOption,InstructionKind,MethodDirective,Operator,Program,Protection,SymbolId,SymbolTable,compound_parts,parse_program,}
+  ONLY-POST use rexx_parse::{Access,AttributeDirective,ClassDirective,ClassRef,CodeBody,ConstantDirective,ConstantValue,Directive,DirectiveKind,Expr,ExprKind,GuardOption,InstructionKind,MethodDirective,Operator,Program,Protection,SymbolId,SymbolTable,compound_parts,parse_program,} (lib.rs)
+  ONLY-POST mod directives (lib.rs)
+  ONLY-POST use directives::{AnnotatedSite,FileClasses,accessor_setter_name,accessor_variable,annotation_target,attribute_dictionary_keys,class_install_order,class_members,constant_root_key,delegate_variable,directive_clause,directive_gap,member_dictionary_keys,method_body_gap,method_dictionary_keys,unresolved_external,} (lib.rs)
+  ONLY-POST directives.rs::use crate::plan::ProgramId (directives.rs)
+  ONLY-POST directives.rs::use crate::{GeneratedKind,Loud,dispatch,owned_message} (directives.rs)
+  ONLY-POST directives.rs::use rexx_core::ObjRef (directives.rs)
+  ONLY-POST directives.rs::use rexx_parse::{AnnotationTarget,AttributeDirective,AttributeStyle,ClassDirective,ClassRef,Directive,DirectiveKind,MethodDirective,Program,SymbolId,} (directives.rs)
+  ONLY-POST directives.rs::use std::collections::HashMap (directives.rs)
+  ONLY-POST directives.rs::use std::rc::Rc (directives.rs)
+287 of 288 units present on both sides have identical token streams (20 of them moved); 1 only before, 9 only after

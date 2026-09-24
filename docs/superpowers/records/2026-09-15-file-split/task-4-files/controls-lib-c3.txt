@@ -1,0 +1,9 @@
+control 5 field type changes beside a widened field visibility: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b struct FileClasses: /tmp/tmpfpl612th/a /tmp/tmpfpl612th/b differ: byte 310, line 6
+  I2 token stream differs: struct FileClasses
+control 6 a widened field is renamed: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b struct MissingTarget: /tmp/tmpq1ylatod/a /tmp/tmpq1ylatod/b differ: byte 193, line 5
+  I2 token stream differs: struct MissingTarget
+2 of 2 controls caught as expected

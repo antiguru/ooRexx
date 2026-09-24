@@ -1,0 +1,32 @@
+(a) unmoved lines: PRE lib.rs minus the removed lines, against POST lib.rs
+  IMPORTS NARROWED post:18-21: ['rexx_parse::AnnotationTarget', 'rexx_parse::AttributeStyle']
+  INSERTED post:147: 
+  INSERTED post:148: // What a program's directives say before any of them is installed.
+  INSERTED post:149: mod directives;
+  INSERTED post:150: use directives::{
+  INSERTED post:151:     AnnotatedSite, FileClasses, accessor_setter_name, accessor_variable, annotation_target,
+  INSERTED post:152:     attribute_dictionary_keys, class_install_order, class_members, constant_root_key,
+  INSERTED post:153:     delegate_variable, directive_clause, directive_gap, member_dictionary_keys, method_body_gap,
+  INSERTED post:154:     method_dictionary_keys, unresolved_external,
+  INSERTED post:155: };
+  CHANGED (declared edit) post:3859: '    /// [`AttributeStyle`] -- the plain name for a getter, the name with `=`' -> '    /// [`AttributeStyle`](rexx_parse::AttributeStyle) -- the plain name for a getter, the name with `=`'
+  4 equal blocks, 5705 lines, each also compared with cmp; 5710 expected lines, 5719 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn directive_gap -> directives.rs (61 lines; visibility private -> pub(super))
+  OK fn unresolved_external -> directives.rs (12 lines; visibility private -> pub(super))
+  OK struct FileClasses -> directives.rs (7 lines; visibility private -> pub(super); field visibility widened: pub(super) declared, pub(super) installed)
+  OK fn directive_clause -> directives.rs (12 lines; visibility private -> pub(super))
+  OK fn class_install_order -> directives.rs (65 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY fn method_dictionary_keys -> directives.rs: /tmp/tmpfx1hzx0t/a /tmp/tmpfx1hzx0t/b differ: byte 126, line 3 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK fn attribute_dictionary_keys -> directives.rs (30 lines; visibility private -> pub(super))
+  OK fn member_dictionary_keys -> directives.rs (19 lines; visibility private -> pub(super))
+  OK fn class_members -> directives.rs (25 lines; visibility private -> pub(super))
+  OK fn constant_root_key -> directives.rs (5 lines; visibility private -> pub(super))
+  OK enum AnnotatedSite -> directives.rs (12 lines; visibility private -> pub(super))
+  OK struct MissingTarget -> directives.rs (7 lines; visibility private -> pub(super); field visibility widened: pub(super) kind, pub(super) name)
+  OK fn annotation_target -> directives.rs (77 lines; visibility private -> pub(super))
+  OK fn method_body_gap -> directives.rs (25 lines; visibility private -> pub(super))
+  OK fn accessor_variable -> directives.rs (9 lines; visibility private -> pub(super))
+  OK fn delegate_variable -> directives.rs (9 lines; visibility private -> pub(super))
+  19 of 20 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

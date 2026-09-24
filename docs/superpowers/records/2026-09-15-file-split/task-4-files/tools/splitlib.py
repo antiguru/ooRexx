@@ -188,3 +188,27 @@ def drop_trailing_commas(tokens):
                     return before + tokens[j:]
                 return tokens
     return tokens
+
+
+FIELD_VIS = (["pub", "(", "super", ")"], ["pub", "(", "crate", ")"])
+
+
+def strip_field_vis(tokens):
+    """`tokens` without a `pub(super)`/`pub(crate)` directly after `{` or `,`:
+    a struct field's visibility, which a move out of the module that
+    constructs or reads the struct has to widen. Nothing else is dropped."""
+    out, i = [], 0
+    while i < len(tokens):
+        if out and out[-1] in ("{", ",") and any(tokens[i : i + 4] == v for v in FIELD_VIS):
+            i += 4
+            continue
+        out.append(tokens[i])
+        i += 1
+    return out
+
+
+FIELD_VIS_LINE = re.compile(r"^(\s+)pub\((super|crate)\) (?=[a-z_][a-z_0-9]*: )")
+
+
+def strip_field_vis_lines(lines):
+    return [FIELD_VIS_LINE.sub(r"\1", l) for l in lines]

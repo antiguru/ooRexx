@@ -10,11 +10,14 @@ show each is reported. Each is planted in its own copy.
      a token (`TEST_PATH` const's path gains a character)      -> I1b, I2, I3
   3. c1: an import in the parent gains a name instead of losing one
                                                               -> I1a
+  5. c3: a field's type changes on a line whose visibility was widened
+                                                              -> I1b, I2
+  6. c3: a widened field is renamed                           -> I1b, I2
   4. seal commit: an unmoved line of the existing destination run.rs gains a
      space                                                    -> I1c
 
 usage: controls_lib.py CASE PRE_ROOT POST_ROOT REMOVED_JSON WORKDIR
-  (CASE is c1 or seal; SPLIT_PARENT_RS / SPLIT_DESTS / SPLIT_TESTS_RS are
+  (CASE is c1, c3 or seal; SPLIT_PARENT_RS / SPLIT_DESTS / SPLIT_TESTS_RS are
   set here per case)
 """
 import os, shutil, subprocess, sys
@@ -26,6 +29,12 @@ CASES = {
         ("2 de-indented line changes a literal", ["I1b", "I2", "I3"], "tests.rs",
          '"/nonexistent/lib-test-program.rex"', '"/nonexistent/lib-test-program.rexx"'),
         ("3 parent import gains a name", ["I1a"], "lib.rs", "use std::rc::Rc;\n", "use std::rc::{Rc, Weak};\n"),
+    ]),
+    "c3": (dict(SPLIT_PARENT="lib", SPLIT_PARENT_RS="lib.rs", SPLIT_DESTS="directives.rs", SPLIT_TESTS_RS="tests.rs"), ["--expect-edit=impl Interp::fn install_attribute"], [
+        ("5 field type changes beside a widened field visibility", ["I1b", "I2"], "directives.rs",
+         "pub(super) installed: &'a HashMap<usize, ObjRef>,", "pub(super) installed: &'a HashMap<u32, ObjRef>,"),
+        ("6 a widened field is renamed", ["I1b", "I2"], "directives.rs",
+         "pub(super) kind: &'static str,", "pub(super) kinds: &'static str,"),
     ]),
     "seal": (dict(SPLIT_PARENT="run/interpret", SPLIT_PARENT_RS="run/interpret.rs", SPLIT_DESTS="run.rs", SPLIT_TESTS_RS="none"), [], [
         ("4 unmoved destination line gains a space", ["I1c"], "run.rs",
