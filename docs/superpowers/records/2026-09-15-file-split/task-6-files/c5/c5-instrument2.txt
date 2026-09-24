@@ -1,0 +1,9 @@
+  visibility fn native_string_sign: private -> pub(super) (dispatch/string.rs)
+  visibility fn native_string_make_string: private -> pub(super) (dispatch/string.rs)
+  visibility fn native_string_upper: private -> pub(super) (dispatch/string.rs)
+  visibility fn native_length: private -> pub(super) (dispatch/string.rs)
+  visibility fn native_string_makearray: private -> pub(super) (dispatch/string.rs)
+  visibility fn native_reverse: private -> pub(super) (dispatch/string.rs)
+  ONLY-POST use string::{native_length,native_reverse,native_string_make_string,native_string_makearray,native_string_sign,native_string_upper,} (dispatch.rs)
+  ONLY-POST dispatch/string.rs::use super::{BehaviourId,Body,INIT,refuse_method_argument,usize_or_refuse,whole_method_argument,} (dispatch/string.rs)
+299 of 299 units present on both sides have identical token streams (6 of them moved); 0 only before, 2 only after

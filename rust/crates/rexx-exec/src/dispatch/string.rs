@@ -21,6 +21,9 @@ use super::{
     replace_at_plan, space_arguments, starts_with, strip_arguments, substr_arguments,
     translate_arguments, translate_in_table, verify_arguments, wordpos_arguments,
 };
+use super::{
+    BehaviourId, Body, INIT, refuse_method_argument, usize_or_refuse, whole_method_argument,
+};
 use crate::builtin::convert;
 use crate::builtin::numeric;
 use crate::error::Raised;
@@ -1842,6 +1845,145 @@ fn string_compare_to(
     });
     interp.give_result_buffer(other);
     Ok(Some(answer))
+}
+
+/// `String~sign`: `RexxString::sign`, which is
+/// `ArithmeticMethod(Sign(), "SIGN")` (`classes/StringClass.cpp:1084`) and so
+/// is the `SIGN` builtin's own computation on the receiver.
+pub(super) fn native_string_sign(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Ok(value) = interp.to_number(receiver) else {
+        let found = interp.string_value_text(receiver);
+        return Err(Raised::method_target_not_a_number(b"SIGN", &found).into());
+    };
+    Ok(Some(crate::builtin::numeric::sign_of(interp, &value)))
+}
+
+/// `String~makeString`: a string is its own string value --
+/// `RexxString::makeString` (`classes/StringClass.hpp`), which
+/// `Object~request("STRING")` is what finds.
+pub(super) fn native_string_make_string(
+    _interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(receiver))
+}
+
+/// `String~upper([n [, length]])`: the receiver with a range of it
+/// uppercased -- `RexxString::upperRexx` (`classes/StringClass.cpp:1765`),
+/// bound at `memory/Setup.cpp:681` with a declared count of 2.
+pub(super) fn native_string_upper(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let start = match whole_method_argument(interp, args, 0, Raised::invalid_position)? {
+        Some(value) if value > 0 => {
+            usize_or_refuse(interp, args, 0, value, Raised::invalid_position)?
+        }
+        Some(_) => {
+            return Err(refuse_method_argument(
+                interp,
+                args,
+                0,
+                Raised::invalid_position,
+            ));
+        }
+        None => 1,
+    } - 1;
+    let text = interp.to_text(receiver).into_owned();
+    let range = match whole_method_argument(interp, args, 1, Raised::invalid_length)? {
+        Some(value) if value >= 0 => {
+            usize_or_refuse(interp, args, 1, value, Raised::invalid_length)?
+        }
+        Some(_) => {
+            return Err(refuse_method_argument(
+                interp,
+                args,
+                1,
+                Raised::invalid_length,
+            ));
+        }
+        None => text.len(),
+    };
+    if start >= text.len() {
+        return Ok(Some(interp.text(&text)));
+    }
+    let range = range.min(text.len() - start);
+    if range == 0 {
+        return Ok(Some(interp.text(&text)));
+    }
+    let mut result = text;
+    for byte in &mut result[start..start + range] {
+        *byte = byte.to_ascii_uppercase();
+    }
+    Ok(Some(interp.text_built(result)))
+}
+
+/// `String~length`: the receiver's own byte count.
+pub(super) fn native_length(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let length = interp.text_len(receiver);
+    Ok(Some(interp.counted(length)))
+}
+
+/// `String~makeArray`: the receiver's lines, one array element each.
+pub(super) fn native_string_makearray(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let bytes = interp.to_text(receiver).to_vec();
+    let lines = crate::builtin::string::line_slices(&bytes);
+    // **Each line is rooted as it is built.** The `Vec` gathering them is a
+    // Rust local and invisible to the collector, so a line built earlier is
+    // swept by the allocation of the next one -- and, for a single-line
+    // string, by the `alloc_with` below. Measured under
+    // `run_program_collect_every_alloc`: `'.RESOURCES'~makeArray` then
+    // `a[1]` panicked at `not_in_arena`'s "a live value", while `'abc'`
+    // survived only because a short string is inline and never a heap object
+    // at all.
+    let mut slots: Vec<Option<ObjRef>> = Vec::with_capacity(lines.len());
+    for line in lines {
+        let text = interp.text_built(line.to_vec());
+        interp.roots.push_temp(text);
+        slots.push(Some(text));
+    }
+    // Measured, oracle: `''~makeArray~dimension` is 0, so an empty result
+    // carries no dimensions rather than one of size 0.
+    let body = Body::Array {
+        dimensions: None,
+        slots,
+    };
+    let object = interp.alloc_with(BehaviourId::ARRAY, body);
+    interp.roots.push_temp(object);
+    let caller = interp.caller();
+    interp.send_message(object, INIT, None, &[], caller)?;
+    Ok(Some(object))
+}
+
+/// `String~reverse`: the receiver's own bytes, last to first.
+pub(super) fn native_reverse(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let mut bytes = interp.to_text(receiver).to_vec();
+    bytes.reverse();
+    Ok(Some(interp.text_built(bytes)))
 }
 
 /// `String`'s rows, in the shape [`super::NATIVE_METHODS`] uses.
