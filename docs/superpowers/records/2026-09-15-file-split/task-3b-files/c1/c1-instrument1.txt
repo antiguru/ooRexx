@@ -1,0 +1,20 @@
+(a) unmoved lines: PRE run.rs minus the removed lines, against POST run.rs
+  INSERTED post:43: 
+  INSERTED post:44: // Each clause's static nesting indent, and the printed indent built on it.
+  INSERTED post:45: mod indent;
+  INSERTED post:46: pub(crate) use indent::{all_indents, static_indent};
+  2 equal blocks, 8924 lines, each also compared with cmp; 8924 expected lines, 8928 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  DIFFERS (declared edit) fn indent_in_range -> run/indent.rs: /tmp/tmpao4rujhm/a /tmp/tmpao4rujhm/b differ: byte 6191, line 111; the edit:
+    --- before
+    +++ after
+    @@ -111 +111 @@
+    -                            // rc_0`, this module's own test) is exactly a
+    +                            // rc_0`, `run`'s own test) is exactly a
+    @@ -183,2 +183,2 @@
+    -                    // instead of aborting; `clause_site`'s own fallback, this
+    -                    // file, cites the identical reasoning) is that a
+    +                    // instead of aborting; `clause_site`'s own fallback, in
+    +                    // `run.rs`, cites the identical reasoning) is that a
+  4 of 5 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

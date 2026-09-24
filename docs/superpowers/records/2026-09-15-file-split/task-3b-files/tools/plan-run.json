@@ -1,0 +1,227 @@
+{
+ "select": {
+  "items": [
+   "enum Absorbed",
+   "fn absorb",
+   "struct IfTargets",
+   "fn if_targets",
+   "struct WhenTargets",
+   "fn when_resume",
+   "fn otherwise_resume",
+   "fn when_targets",
+   "struct SelectParts",
+   "fn select_parts",
+   "fn otherwise_range",
+   "fn select_exit",
+   "struct SelectResume",
+   "enum SelectEscape",
+   "fn select_escape",
+   "fn skip_else"
+  ],
+  "methods": [
+   "impl Interp::fn select_case",
+   "impl Interp::fn open_select_case",
+   "impl Interp::fn scan_when",
+   "impl Interp::fn leave_otherwise",
+   "impl Interp::fn leave_select",
+   "impl Interp::fn pop_search_frame"
+  ]
+ },
+ "settings": {
+  "items": [
+   "const MAX_ADDRESS_NAME_LENGTH"
+  ],
+  "methods": [
+   "impl Interp::fn set_debug_skip",
+   "impl Interp::fn apply_trace_request",
+   "impl Interp::fn exec_trace",
+   "impl Interp::fn trace_invocation_entry",
+   "impl Interp::fn trace_package_invocation_entry",
+   "impl Interp::fn trace_invocation_exit",
+   "impl Interp::fn invocation_subject",
+   "impl Interp::fn exec_address",
+   "impl Interp::fn exec_numeric",
+   "impl Interp::fn numeric_operand"
+  ]
+ },
+ "loops": {
+  "items": [
+   "enum DoOutcome",
+   "enum HeaderOutcome",
+   "impl HeaderOutcome::fn entered",
+   "impl ClauseValue for HeaderOutcome::fn rooted",
+   "enum HeaderClause",
+   "type IterateSite",
+   "struct FlatLoop",
+   "impl FlatLoop::fn vacant",
+   "impl FlatLoop::fn header_line",
+   "fn flat_header_outcome",
+   "fn loop_conditional_of",
+   "enum FlatStart",
+   "enum FlatStep",
+   "enum LoopState",
+   "enum ControlValue",
+   "impl ControlValue::fn number",
+   "impl ControlValue::fn small",
+   "enum HeaderRole",
+   "impl HeaderRole::fn keyword",
+   "impl HeaderRole::fn value_name",
+   "struct HeaderPlan",
+   "impl HeaderPlan::fn new",
+   "impl HeaderPlan::fn push",
+   "impl HeaderPlan::fn roles",
+   "fn loop_header_plan",
+   "fn header_expr_for",
+   "fn loop_header_slot",
+   "struct LoopHeaderValues",
+   "fn control_slot",
+   "fn numeric_less",
+   "fn round_via_unary_plus"
+  ],
+  "methods": [
+   "impl Interp::fn echo_header_value",
+   "impl Interp::fn accept_header_value",
+   "impl Interp::fn over_target_array",
+   "impl Interp::fn request_array_for_over",
+   "impl Interp::fn over_target_gap",
+   "impl Interp::fn is_hash_collection",
+   "impl Interp::fn over_snapshot",
+   "impl Interp::fn hash_collection_indexes",
+   "impl Interp::fn header_number",
+   "impl Interp::fn header_number_body",
+   "impl Interp::fn run_loop_with_header",
+   "impl Interp::fn settle_block_indent",
+   "impl Interp::fn run_repeating",
+   "impl Interp::fn do_body_outcome",
+   "impl Interp::fn flat_loop_start",
+   "impl Interp::fn flat_loop_step_top",
+   "impl Interp::fn flat_loop_step",
+   "impl Interp::fn flat_loop_until",
+   "impl Interp::fn blame_header_failure",
+   "impl Interp::fn blame_while_failure",
+   "impl Interp::fn flat_loop_header",
+   "impl Interp::fn flat_loop_header_while",
+   "impl Interp::fn loop_advance",
+   "impl Interp::fn controlled_step_wide",
+   "impl Interp::fn controlled_value_wide",
+   "impl Interp::fn controlled_within_wide",
+   "impl Interp::fn bind_control",
+   "impl Interp::fn whole_nonneg"
+  ]
+ },
+ "raised": {
+  "items": [
+   "fn raised_symbol_expected",
+   "fn raised_digit_led",
+   "fn raised_dot_led",
+   "fn raised_if_not_logical",
+   "fn raised_guard_not_logical",
+   "fn raised_when_not_logical",
+   "fn raised_select_no_when",
+   "fn raise_syntax_condition",
+   "fn raised_naming_the_operand",
+   "fn raised_from_settings",
+   "fn raised_while_not_logical",
+   "fn raised_until_not_logical",
+   "fn raised_repetition_count_not_whole",
+   "fn raised_for_count_not_whole",
+   "fn raised_leave_no_loop",
+   "fn raised_iterate_no_loop",
+   "fn raised_leave_no_match",
+   "fn raised_iterate_no_match",
+   "fn raised_iterate_wrong_kind"
+  ],
+  "methods": []
+ },
+ "condition": {
+  "items": [
+   "fn condition_name"
+  ],
+  "methods": [
+   "impl Interp::fn exec_condition_trap",
+   "impl Interp::fn trap_for",
+   "impl Interp::fn raise_notready",
+   "impl Interp::fn novalue_check",
+   "impl Interp::fn novalue_raised",
+   "impl Interp::fn derived_name_text",
+   "impl Interp::fn lostdigits_check",
+   "impl Interp::fn lostdigits_check2",
+   "impl Interp::fn lostdigits_raise",
+   "impl Interp::fn offer_to_trap",
+   "impl Interp::fn deliver_pending_traps",
+   "impl Interp::fn deliver_one_pending_trap",
+   "impl Interp::fn caller_trap_for",
+   "impl Interp::fn exec_raise",
+   "impl Interp::fn exec_raise_propagate",
+   "impl Interp::fn signal_to_label",
+   "impl Interp::fn signal_to_value",
+   "impl Interp::fn resolve_signal_target"
+  ]
+ },
+ "interpret": {
+  "items": [],
+  "methods": [
+   "impl Interp::fn run_fragment",
+   "impl Interp::fn seal_site_level",
+   "impl Interp::fn drop_variable",
+   "impl Interp::fn drop_by_name",
+   "impl Interp::fn debug_pause_after_clause",
+   "impl Interp::fn run_debug_fragment",
+   "impl Interp::fn report_debug_error",
+   "impl Interp::fn enter_fragment",
+   "impl Interp::fn leave_fragment"
+  ]
+ },
+ "call": {
+  "items": [
+   "enum CallResolution",
+   "enum Entered",
+   "enum CallEntry",
+   "fn entered_receiver",
+   "const MAX_ACTIVATION_DEPTH"
+  ],
+  "methods": [
+   "impl Interp::fn resolve_call",
+   "impl Interp::fn resolve_fixed_call",
+   "impl Interp::fn resolve_routine_call",
+   "impl Interp::fn package_routine_lookup",
+   "impl Interp::fn take_value_buffer",
+   "impl Interp::fn give_value_buffer",
+   "impl Interp::fn invoke_builtin_call",
+   "impl Interp::fn invoke_call",
+   "impl Interp::fn settle_after_arguments",
+   "impl Interp::fn unkept_resolution",
+   "impl Interp::fn call_over_pushed_args",
+   "impl Interp::fn run_over_pushed_args",
+   "impl Interp::fn call_checkpoint",
+   "impl Interp::fn run_internal",
+   "impl Interp::fn run_internal_as",
+   "impl Interp::fn call_over_values",
+   "impl Interp::fn call_over_installed_routine",
+   "impl Interp::fn invoke_call_over",
+   "impl Interp::fn resolve_and_run_call",
+   "impl Interp::fn variable_reference",
+   "impl Interp::fn leaf_argument",
+   "impl Interp::fn eval_leaf_argument",
+   "impl Interp::fn eval_traced_argument",
+   "impl Interp::fn resolved_after_arguments",
+   "impl Interp::fn arguments_before_failure",
+   "impl Interp::fn exec_call",
+   "impl Interp::fn invoke_named_call",
+   "impl Interp::fn settle_call_result",
+   "impl Interp::fn invoke_named_call_over_pushed_args",
+   "impl Interp::fn subroutine_over_pushed_args"
+  ]
+ },
+ "indent": {
+  "items": [
+   "fn fill_indents",
+   "fn all_indents",
+   "fn static_indent",
+   "fn indent_in_range"
+  ],
+  "methods": [
+   "impl Interp::fn printed_indent"
+  ]
+ }
+}

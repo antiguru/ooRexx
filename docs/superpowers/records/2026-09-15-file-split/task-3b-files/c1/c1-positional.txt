@@ -1,0 +1,6 @@
+run.rs:1296-1310: ['static_indent']: [('above', ''), ('earlier', '')]
+run.rs:5821-5830: ['printed_indent']: [('above', '')]
+run/indent.rs:277-285: ['value']: [('below', '')]
+run/indent.rs:294-307: ['number']: [('below', '')]
+run/indent.rs:320-345: ['clause_site']: [('above', ''), ('above', '')]
+done

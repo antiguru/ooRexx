@@ -1,0 +1,72 @@
+refresh exit 0; table mtime before 2026-09-24 15:05:10.646011911 +0200, after 2026-09-24 15:05:44.685916842 +0200
+ rust/corpus/refusal-sites.tsv | 38 +++++++++++++++++++-------------------
+ 1 file changed, 19 insertions(+), 19 deletions(-)
+diff --git i/rust/corpus/refusal-sites.tsv w/rust/corpus/refusal-sites.tsv
+index f4e05421e..8dc7fbee0 100644
+--- i/rust/corpus/refusal-sites.tsv
++++ w/rust/corpus/refusal-sites.tsv
+@@ -248,7 +248,7 @@ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:765	off-send-surfa
+-Raised	raise_syntax_condition	body	crates/rexx-exec/src/run.rs:8983	off-send-surface	-	-	-
+-Raised	raised_digit_led	body	crates/rexx-exec/src/run.rs:8924	off-send-surface	-	-	-
+-Raised	raised_dot_led	body	crates/rexx-exec/src/run.rs:8929	off-send-surface	-	-	-
+-Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run.rs:9073	off-send-surface	-	-	-
+-Raised	raised_from_settings	body	crates/rexx-exec/src/run.rs:9039	off-send-surface	-	-	-
+-Raised	raised_guard_not_logical	body	crates/rexx-exec/src/run.rs:8947	off-send-surface	-	-	-
+-Raised	raised_if_not_logical	body+ir	crates/rexx-exec/src/run.rs:8937	off-send-surface	-	-	-
++Raised	raise_syntax_condition	body	crates/rexx-exec/src/run.rs:8647	off-send-surface	-	-	-
++Raised	raised_digit_led	body	crates/rexx-exec/src/run.rs:8588	off-send-surface	-	-	-
++Raised	raised_dot_led	body	crates/rexx-exec/src/run.rs:8593	off-send-surface	-	-	-
++Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run.rs:8737	off-send-surface	-	-	-
++Raised	raised_from_settings	body	crates/rexx-exec/src/run.rs:8703	off-send-surface	-	-	-
++Raised	raised_guard_not_logical	body	crates/rexx-exec/src/run.rs:8611	off-send-surface	-	-	-
++Raised	raised_if_not_logical	body+ir	crates/rexx-exec/src/run.rs:8601	off-send-surface	-	-	-
+@@ -256,6 +256,6 @@ Raised	raised_invalid_trace_letter	body	crates/rexx-exec/src/trace.rs:512	off-se
+-Raised	raised_iterate_no_loop	body	crates/rexx-exec/src/run.rs:9085	off-send-surface	-	-	-
+-Raised	raised_iterate_no_match	body	crates/rexx-exec/src/run.rs:9099	off-send-surface	-	-	-
+-Raised	raised_iterate_wrong_kind	body	crates/rexx-exec/src/run.rs:9108	off-send-surface	-	-	-
+-Raised	raised_leave_no_loop	body	crates/rexx-exec/src/run.rs:9079	off-send-surface	-	-	-
+-Raised	raised_leave_no_match	body	crates/rexx-exec/src/run.rs:9094	off-send-surface	-	-	-
+-Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run.rs:9025	off-send-surface	-	-	-
++Raised	raised_iterate_no_loop	body	crates/rexx-exec/src/run.rs:8749	off-send-surface	-	-	-
++Raised	raised_iterate_no_match	body	crates/rexx-exec/src/run.rs:8763	off-send-surface	-	-	-
++Raised	raised_iterate_wrong_kind	body	crates/rexx-exec/src/run.rs:8772	off-send-surface	-	-	-
++Raised	raised_leave_no_loop	body	crates/rexx-exec/src/run.rs:8743	off-send-surface	-	-	-
++Raised	raised_leave_no_match	body	crates/rexx-exec/src/run.rs:8758	off-send-surface	-	-	-
++Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run.rs:8689	off-send-surface	-	-	-
+@@ -263,6 +263,6 @@ Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace.rs:
+-Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run.rs:9067	off-send-surface	-	-	-
+-Raised	raised_select_no_when	body	crates/rexx-exec/src/run.rs:8967	off-send-surface	-	-	-
+-Raised	raised_symbol_expected	body	crates/rexx-exec/src/run.rs:8919	off-send-surface	-	-	-
+-Raised	raised_until_not_logical	body	crates/rexx-exec/src/run.rs:9059	off-send-surface	-	-	-
+-Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run.rs:8958	off-send-surface	-	-	-
+-Raised	raised_while_not_logical	body	crates/rexx-exec/src/run.rs:9054	off-send-surface	-	-	-
++Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run.rs:8731	off-send-surface	-	-	-
++Raised	raised_select_no_when	body	crates/rexx-exec/src/run.rs:8631	off-send-surface	-	-	-
++Raised	raised_symbol_expected	body	crates/rexx-exec/src/run.rs:8583	off-send-surface	-	-	-
++Raised	raised_until_not_logical	body	crates/rexx-exec/src/run.rs:8723	off-send-surface	-	-	-
++Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run.rs:8622	off-send-surface	-	-	-
++Raised	raised_while_not_logical	body	crates/rexx-exec/src/run.rs:8718	off-send-surface	-	-	-
+every column but column 4, before (HEAD) vs after refresh:
+  identical, 247 rows
+header (comment) lines, before vs after:
+  identical
+column 4 changes, by row (constructor: before -> after):
+  Raised/raised_digit_led: crates/rexx-exec/src/run.rs:8924 -> crates/rexx-exec/src/run.rs:8588
+  Raised/raised_dot_led: crates/rexx-exec/src/run.rs:8929 -> crates/rexx-exec/src/run.rs:8593
+  Raised/raised_for_count_not_whole: crates/rexx-exec/src/run.rs:9073 -> crates/rexx-exec/src/run.rs:8737
+  Raised/raised_from_settings: crates/rexx-exec/src/run.rs:9039 -> crates/rexx-exec/src/run.rs:8703
+  Raised/raised_guard_not_logical: crates/rexx-exec/src/run.rs:8947 -> crates/rexx-exec/src/run.rs:8611
+  Raised/raised_if_not_logical: crates/rexx-exec/src/run.rs:8937 -> crates/rexx-exec/src/run.rs:8601
+  Raised/raised_iterate_no_loop: crates/rexx-exec/src/run.rs:9085 -> crates/rexx-exec/src/run.rs:8749
+  Raised/raised_iterate_no_match: crates/rexx-exec/src/run.rs:9099 -> crates/rexx-exec/src/run.rs:8763
+  Raised/raised_iterate_wrong_kind: crates/rexx-exec/src/run.rs:9108 -> crates/rexx-exec/src/run.rs:8772
+  Raised/raised_leave_no_loop: crates/rexx-exec/src/run.rs:9079 -> crates/rexx-exec/src/run.rs:8743
+  Raised/raised_leave_no_match: crates/rexx-exec/src/run.rs:9094 -> crates/rexx-exec/src/run.rs:8758
+  Raised/raised_naming_the_operand: crates/rexx-exec/src/run.rs:9025 -> crates/rexx-exec/src/run.rs:8689
+  Raised/raised_repetition_count_not_whole: crates/rexx-exec/src/run.rs:9067 -> crates/rexx-exec/src/run.rs:8731
+  Raised/raised_select_no_when: crates/rexx-exec/src/run.rs:8967 -> crates/rexx-exec/src/run.rs:8631
+  Raised/raised_symbol_expected: crates/rexx-exec/src/run.rs:8919 -> crates/rexx-exec/src/run.rs:8583
+  Raised/raised_until_not_logical: crates/rexx-exec/src/run.rs:9059 -> crates/rexx-exec/src/run.rs:8723
+  Raised/raised_when_not_logical: crates/rexx-exec/src/run.rs:8958 -> crates/rexx-exec/src/run.rs:8622
+  Raised/raised_while_not_logical: crates/rexx-exec/src/run.rs:9054 -> crates/rexx-exec/src/run.rs:8718
+  Raised/raise_syntax_condition: crates/rexx-exec/src/run.rs:8983 -> crates/rexx-exec/src/run.rs:8647

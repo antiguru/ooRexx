@@ -1899,7 +1899,7 @@ pub(crate) enum FailureSite {
         text: Vec<u8>,
         /// Spaces to prefix `text` with on the echo line, Task 11's own
         /// nesting-depth quantity. **Computed statically from the AST**
-        /// (`run.rs`'s `static_indent`), never carried on a running counter:
+        /// (`run/indent.rs`'s `static_indent`), never carried on a running counter:
         /// Task 10's own report concluded the depth is derivable from the
         /// instruction list alone with no runtime block stack, and this
         /// task's own oracle measurements confirm it for the ordinary case
