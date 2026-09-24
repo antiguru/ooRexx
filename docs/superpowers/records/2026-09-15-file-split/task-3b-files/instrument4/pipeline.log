@@ -1,0 +1,31 @@
+== c2 15:18:25
+error: Your local changes to the following files would be overwritten by checkout:
+	rust/corpus/refusal-sites.tsv
+	rust/crates/rexx-exec/src/error.rs
+	rust/crates/rexx-exec/src/run.rs
+Please commit your changes or stash them before you switch branches.
+error: The following untracked working tree files would be overwritten by checkout:
+	rust/crates/rexx-exec/src/run/indent.rs
+Please move or remove them before you switch branches.
+Aborting
+staged rust tree 851ab77bfeb31feb72fcdeed325d69757fd10f43, instrument 4 tree 851ab77bfeb31feb72fcdeed325d69757fd10f43
+dcce5b15d Move the instruction loop's Raised constructors into run/raised.rs
+== c3 15:29:54
+staged rust tree 074606118c8cfd31e35a07fe2e0cdb55958167d5, instrument 4 tree 074606118c8cfd31e35a07fe2e0cdb55958167d5
+9aa22f02d Move SELECT and the branch-target arithmetic into run/select.rs
+== c4 15:41:32
+staged rust tree 428de676f8055b5ee5c90c0ed40c57d8568e73d1, instrument 4 tree 428de676f8055b5ee5c90c0ed40c57d8568e73d1
+91ffafaaf Move INTERPRET, DROP and the debug pause into run/interpret.rs
+== c5 15:53:16
+staged rust tree 49724cb984526b71481c5b82c08559e31d94f3cc, instrument 4 tree 49724cb984526b71481c5b82c08559e31d94f3cc
+863e9b813 Move ADDRESS, NUMERIC and TRACE into run/settings.rs
+== c6 16:04:45
+staged rust tree 3f592f72e7c3b658be65d053f69ad82d56d32f32, instrument 4 tree 3f592f72e7c3b658be65d053f69ad82d56d32f32
+2d9aadebd Move condition traps, RAISE and SIGNAL into run/condition.rs
+== c7 16:20:43
+staged rust tree 8b01d907e3aad7d09da1429c9935c6d0d5e0989a, instrument 4 tree 8b01d907e3aad7d09da1429c9935c6d0d5e0989a
+d37641150 Move CALL and function-call resolution into run/call.rs
+== c8 16:33:27
+staged rust tree 90d4c020369f8d2db54d2083e255ccc33bc03a74, instrument 4 tree 90d4c020369f8d2db54d2083e255ccc33bc03a74
+5c5380b79 Move DO/LOOP into run/loops.rs
+pipeline finished 16:45:23

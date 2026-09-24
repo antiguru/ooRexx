@@ -1,0 +1,19 @@
+control 1 unmoved line gains a space: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:1064 post:1064: 'const SWEEPS: usize = 2;' -> 'const SWEEPS: usize = 2 ;'
+control 2 space inside a continued string's value: exit 1, expected ['I3'], reported ['I3']: CAUGHT
+  FAILURES:
+  I3 literals differ: tests::fn a_directory_subclass_keeps_the_instance
+control 3 token change: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b tests::fn a_class_identity_used_as_a_receiver_answers_from_the_class_side: /tmp/tmpgh25ug7s/a /tmp/tmpgh25ug7s/b differ: byte 411, line 8
+  I2 token stream differs: tests::fn a_class_identity_used_as_a_receiver_answers_from_the_class_side
+control 4 tuple loses its trailing comma: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b tests::fn run_source: /tmp/tmp97pbtl_9/a /tmp/tmp97pbtl_9/b differ: byte 455, line 11
+  I2 token stream differs: tests::fn run_source
+control 5 tuple gains a trailing comma: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b tests::fn a_pointer_comparison_needs_its_argument: /tmp/tmpszfkoxok/a /tmp/tmpszfkoxok/b differ: byte 543, line 11
+  I2 token stream differs: tests::fn a_pointer_comparison_needs_its_argument
+5 of 5 controls caught as expected

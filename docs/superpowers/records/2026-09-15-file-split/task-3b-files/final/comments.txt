@@ -1,0 +1,38 @@
+3339 comment lines in BASE run.rs, 3435 after
+lost (6):
+  x1 // arm, below), and the conversion needs nothing this loop knows
+  x1 // file, cites the identical reasoning) is that a
+  x1 // instead of aborting; `clause_site`'s own fallback, this
+  x1 // rc_0`, this module's own test) is exactly a
+  x1 /// [`Interp::eval_condition`] hands a list over already `checked`, and
+  x1 /// identical fix for `CALL`, immediately below (`run.rs:2153-2154` in
+added (102):
+  x24 /*                                                                            */
+  x8 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x8 /* This program and the accompanying materials are made available under       */
+  x8 /* distribution. A copy is also available at the following address:           */
+  x8 /* https://www.oorexx.org/license.html                                        */
+  x8 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x16 /*----------------------------------------------------------------------------*/
+  x1 // Condition traps and their delivery, `RAISE`, and `SIGNAL`.
+  x1 // Each clause's static nesting indent, and the printed indent built on it.
+  x1 // The `Raised` constructors for the conditions the instruction loop raises.
+  x1 // `ADDRESS`, `NUMERIC` and `TRACE`, and the `>I>`/`<I<` invocation lines.
+  x1 // `CALL` and function calls: resolving the name, running the arguments, entering the callee.
+  x1 // `DO`/`LOOP`: the header, each kind of repetition, and the flat-loop path the op driver takes.
+  x1 // `INTERPRET` fragments, `DROP`, and the interactive debug pause.
+  x1 // `SELECT`'s own clauses, and where `IF`, `WHEN` and `SELECT` send control.
+  x1 // `run.rs`, cites the identical reasoning) is that a
+  x1 // arm), and the conversion needs nothing this loop knows
+  x1 // instead of aborting; `clause_site`'s own fallback, in
+  x1 // rc_0`, `run`'s own test) is exactly a
+  x1 //! Condition traps and their delivery, `RAISE`, and `SIGNAL`.
+  x1 //! Each clause's static nesting indent, and the printed indent built on it.
+  x1 //! The `Raised` constructors for the conditions the instruction loop raises.
+  x1 //! `ADDRESS`, `NUMERIC` and `TRACE`, and the `>I>`/`<I<` invocation lines.
+  x1 //! `CALL` and function calls: resolving the name, running the arguments, entering the callee.
+  x1 //! `DO`/`LOOP`: the header, each kind of repetition, and the flat-loop path the op driver takes.
+  x1 //! `INTERPRET` fragments, `DROP`, and the interactive debug pause.
+  x1 //! `SELECT`'s own clauses, and where `IF`, `WHEN` and `SELECT` send control.
+  x1 /// [`crate::Interp::eval_condition`] hands a list over already `checked`, and
+  x1 /// identical fix for `CALL` (`run.rs:2153-2154` in

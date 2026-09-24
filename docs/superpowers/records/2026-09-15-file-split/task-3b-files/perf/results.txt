@@ -1,0 +1,19 @@
+columns: program, then (exit status, callgrind summary minus libc.so.6 and ld-linux) for base round 1, head round 1, base round 2, head round 2
+base = 36bbb3684 built in its own worktree and CARGO_TARGET_DIR (t-base); head = 5c5380b79 built in the main checkout with CARGO_TARGET_DIR t-rel
+cargo build -j 4 --release -p rexx-exec --bin rexx-run; valgrind --tool=callgrind --cache-sim=no --branch-sim=no, run from an empty directory, 9 at a time (tools/perf.sh)
+rexxcps 0 17897281850 0 17897276202 0 17897269939 0 17897270309
+nop 0 9340095825 0 9340098936 0 9340101869 0 9340095640
+assign 0 19540359902 0 19540360482 0 19540363573 0 19540357306
+emptyloop 0 9285882102 0 9285881270 0 9285882851 0 9285883334
+varlookup 0 14842896448 0 14842902737 0 14842899362 0 14842896505
+arith 0 11519344673 0 11519339397 0 11519344093 0 11519339631
+compound 0 9234392334 0 9234392866 0 9234395965 0 9234390632
+dispatch 0 20471075413 0 20471078671 0 20471073085 0 20471076023
+strings 0 17788063283 0 17788058872 0 17788065447 0 17788054477
+
+.text sha256 (objcopy -O binary --only-section=.text BIN OUT && sha256sum OUT):
+f6840a66328ea749a33dcddf4b931ce9764836b0f5d51ec4c346b948148781a1  base.text
+da915d7cd1b81d342ecdfe684d3a11d8be6779dc981e6a15068b4f2110b03d1b  head.text
+
+load: 16:51:06 load average: 0.54, 2.70, 7.51 before; 16:55:59 load average: 6.02, 6.16, 7.81 after
+stdout: identical across all four runs for every program except rexxcps, whose four differ only in the 'Performance: N REXX clauses per second' line (wall-clock under valgrind)

@@ -1,0 +1,429 @@
+ Documenting rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+warning: unresolved link to `literal`
+   --> crates/rexx-exec/src/value.rs:115:11
+    |
+115 |     /// [`literal`], for a caller that will keep the handle and read it for the
+    |           ^^^^^^^ no item named `literal` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+    = note: `#[warn(rustdoc::broken_intra_doc_links)]` on by default
+
+warning: unresolved link to `text`
+   --> crates/rexx-exec/src/value.rs:162:11
+    |
+162 |     /// [`text`], for a caller that already owns the bytes.
+    |           ^^^^ no item named `text` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `to_text`
+   --> crates/rexx-exec/src/value.rs:249:26
+    |
+249 |     /// How many bytes [`to_text`] would answer, for a caller that wants the
+    |                          ^^^^^^^ no item named `to_text` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `text_len`
+   --> crates/rexx-exec/src/value.rs:266:11
+    |
+266 |     /// [`text_len`] itself, with the assertion lifted off it so that the
+    |           ^^^^^^^^ no item named `text_len` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `string_value_text`
+   --> crates/rexx-exec/src/value.rs:356:46
+    |
+356 |     /// An array's items, each rendered as [`string_value_text`] renders it and
+    |                                              ^^^^^^^^^^^^^^^^^ no item named `string_value_text` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `array_string`
+   --> crates/rexx-exec/src/value.rs:475:11
+    |
+475 |     /// [`array_string`] for an array named by its handle, whose items it looks
+    |           ^^^^^^^^^^^^ no item named `array_string` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `try_text`
+   --> crates/rexx-exec/src/value.rs:687:46
+    |
+687 |     /// Makes `value`'s bytes reachable by [`try_text`], and carries the ones
+    |                                              ^^^^^^^^ no item named `try_text` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `to_number`
+   --> crates/rexx-exec/src/value.rs:750:11
+    |
+750 |     /// [`to_number`]'s arm for a value whose bytes are in its own handle,
+    |           ^^^^^^^^^ no item named `to_number` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `to_number`
+   --> crates/rexx-exec/src/value.rs:770:11
+    |
+770 |     /// [`to_number`]'s arm for a value that lives in the arena.
+    |           ^^^^^^^^^ no item named `to_number` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `Raised::description`
+  --> crates/rexx-exec/src/activation.rs:72:39
+   |
+72 |     /// the raise carried none. See [`Raised::description`] for the one
+   |                                       ^^^^^^^^^^^^^^^^^^^ no item named `Raised` in scope
+
+warning: unresolved link to `frame`
+   --> crates/rexx-exec/src/activation.rs:277:68
+    |
+277 |     /// Whether this activation is the one that must `pop_slots` [`frame`],
+    |                                                                    ^^^^^ no item named `frame` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `traps`
+   --> crates/rexx-exec/src/activation.rs:360:30
+    |
+360 |     /// follows along with [`traps`].
+    |                              ^^^^^ no item named `traps` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `clock_stale`
+   --> crates/rexx-exec/src/activation.rs:365:37
+    |
+365 |     /// per-clause cache** -- see [`clock_stale`] for that half -- because
+    |                                     ^^^^^^^^^^^ no item named `clock_stale` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `cached_clock`
+   --> crates/rexx-exec/src/activation.rs:373:19
+    |
+373 |     /// Whether [`cached_clock`] needs a fresh read before this activation's
+    |                   ^^^^^^^^^^^^ no item named `cached_clock` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `cached_clock`
+   --> crates/rexx-exec/src/activation.rs:374:54
+    |
+374 |     /// clause may trust it -- the per-clause half [`cached_clock`]'s own
+    |                                                      ^^^^^^^^^^^^ no item named `cached_clock` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `call_name`
+   --> crates/rexx-exec/src/activation.rs:394:11
+    |
+394 |     /// [`call_name`]'s snapshot -- `StackFrame~arguments` and
+    |           ^^^^^^^^^ no item named `call_name` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `argument_not_whole`
+   --> crates/rexx-exec/src/error.rs:645:28
+    |
+645 |     /// Substitutions as [`argument_not_whole`]'s, and `found` is the
+    |                            ^^^^^^^^^^^^^^^^^^ no item named `argument_not_whole` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `argument_not_whole`
+   --> crates/rexx-exec/src/error.rs:662:57
+    |
+662 |     /// new value for it. `routine` and `position` as [`argument_not_whole`]'s;
+    |                                                         ^^^^^^^^^^^^^^^^^^ no item named `argument_not_whole` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `argument_not_whole`
+   --> crates/rexx-exec/src/error.rs:682:33
+    |
+682 |     /// position, found -- as [`argument_not_whole`]'s.
+    |                                 ^^^^^^^^^^^^^^^^^^ no item named `argument_not_whole` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `invalid_length`
+   --> crates/rexx-exec/src/error.rs:873:54
+    |
+873 |     /// or negative. Same shape and same rc 163 as [`invalid_length`], and
+    |                                                      ^^^^^^^^^^^^^^ no item named `invalid_length` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `invalid_length`
+   --> crates/rexx-exec/src/error.rs:882:14
+    |
+882 |     /// as [`invalid_length`] and [`invalid_position`] -- measured,
+    |              ^^^^^^^^^^^^^^ no item named `invalid_length` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `invalid_position`
+   --> crates/rexx-exec/src/error.rs:882:37
+    |
+882 |     /// as [`invalid_length`] and [`invalid_position`] -- measured,
+    |                                     ^^^^^^^^^^^^^^^^ no item named `invalid_position` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `argument_not_whole`
+   --> crates/rexx-exec/src/error.rs:925:57
+    |
+925 |     /// single character is neither. Substitutions as [`argument_not_whole`]'s.
+    |                                                         ^^^^^^^^^^^^^^^^^^ no item named `argument_not_whole` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `argument_not_whole`
+   --> crates/rexx-exec/src/error.rs:950:43
+    |
+950 |     /// value**, which is the pair with [`argument_not_whole`]'s measurement:
+    |                                           ^^^^^^^^^^^^^^^^^^ no item named `argument_not_whole` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `d2x_value_not_whole`
+   --> crates/rexx-exec/src/error.rs:957:19
+    |
+957 |     /// 93.929: [`d2x_value_not_whole`]'s twin for `D2C`, measured to be the
+    |                   ^^^^^^^^^^^^^^^^^^^ no item named `d2x_value_not_whole` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `x2d_result_too_large`
+   --> crates/rexx-exec/src/error.rs:970:19
+    |
+970 |     /// 93.936: [`x2d_result_too_large`]'s twin for `C2D`.
+    |                   ^^^^^^^^^^^^^^^^^^^^ no item named `x2d_result_too_large` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `random_range_too_wide`
+    --> crates/rexx-exec/src/error.rs:1034:11
+     |
+1034 |     /// [`random_range_too_wide`]'s, including the null string for an omitted
+     |           ^^^^^^^^^^^^^^^^^^^^^ no item named `random_range_too_wide` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `not_a_stem_variable_reference`
+    --> crates/rexx-exec/src/error.rs:1706:33
+     |
+1706 |     /// 88.930: the mirror of [`not_a_stem_variable_reference`] -- the target
+     |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no item named `not_a_stem_variable_reference` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `eval_call`
+   --> crates/rexx-exec/src/eval.rs:535:11
+    |
+535 |     /// [`eval_call`]'s second half: everything after the resolution.
+    |           ^^^^^^^^^ no item named `eval_call` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `base_time`
+   --> crates/rexx-exec/src/builtin/datetime.rs:183:11
+    |
+183 |     /// [`base_time`] adjusted by this timestamp's own [`time_zone_offset`]
+    |           ^^^^^^^^^ no item named `base_time` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `time_zone_offset`
+   --> crates/rexx-exec/src/builtin/datetime.rs:183:58
+    |
+183 |     /// [`base_time`] adjusted by this timestamp's own [`time_zone_offset`]
+    |                                                          ^^^^^^^^^^^^^^^^ no item named `time_zone_offset` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `Activation::clock_stale`
+   --> crates/rexx-exec/src/builtin/datetime.rs:768:17
+    |
+768 | /// only once [`Activation::clock_stale`] says so. See its own doc for why
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^ no item named `Activation` in scope
+
+warning: unresolved link to `wins`
+   --> crates/rexx-exec/src/builtin/numeric.rs:291:11
+    |
+291 |     /// [`wins`] as a `rexx-num` predicate, for the general path, where the
+    |           ^^^^ no item named `wins` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `step`
+  --> crates/rexx-exec/src/builtin/word.rs:56:20
+   |
+56 |     /// The word [`step`] last found, as a byte range of `text`.
+   |                    ^^^^ no item named `step` in scope
+   |
+   = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `dispatch`
+  --> crates/rexx-exec/src/builtin.rs:64:23
+   |
+64 |     /// side -- see [`dispatch`] for the measurement that makes that the rule
+   |                       ^^^^^^^^ no item named `dispatch` in scope
+   |
+   = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `name`
+  --> crates/rexx-exec/src/builtin.rs:72:43
+   |
+72 |     /// The code, taking this row's own [`name`] as its second argument.
+   |                                           ^^^^ no item named `name` in scope
+   |
+   = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `Interp::step`
+   --> crates/rexx-exec/src/run.rs:979:27
+    |
+979 |     /// whoever called: [`Interp::step`] takes the permission and enters from
+    |                           ^^^^^^^^^^^^ the struct `Interp` has no field or associated item named `step`
+
+warning: unresolved link to `search`
+   --> crates/rexx-exec/src/parse_template.rs:285:11
+    |
+285 |     /// [`search`] under `PARSE CASELESS`.
+    |           ^^^^^^ no item named `search` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `echo_literal`
+   --> crates/rexx-exec/src/trace.rs:872:58
+    |
+872 |     /// The rendering and the line, out of line behind [`echo_literal`]'s gate.
+    |                                                          ^^^^^^^^^^^^ no item named `echo_literal` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `Blocks::edges`
+   --> crates/rexx-exec/src/ir/trace_flow.rs:125:56
+    |
+125 |     /// The extra successor edges, by node, built by [`Blocks::edges`].
+    |                                                        ^^^^^^^^^^^^^ the struct `Blocks` has no field or associated item named `edges`
+
+warning: public documentation for `chunks_refused` links to private item `Loud::chunk_refused`
+   --> crates/rexx-exec/src/lib.rs:193:11
+    |
+193 |     /// [`Loud::chunk_refused`]; there is no second engine to run it.
+    |           ^^^^^^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link resolves only because you passed `--document-private-items`, but will break without
+    = note: `#[warn(rustdoc::private_intra_doc_links)]` on by default
+
+warning: unresolved link to `routines`
+    --> crates/rexx-exec/src/lib.rs:1586:25
+     |
+1586 |     /// The subset of [`routines`] a `::ROUTINE ... PUBLIC` filed -- the
+     |                         ^^^^^^^^ no item named `routines` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `package_public_classes`
+    --> crates/rexx-exec/src/lib.rs:1588:11
+     |
+1588 |     /// [`package_public_classes`] is beside [`package_classes`].
+     |           ^^^^^^^^^^^^^^^^^^^^^^ no item named `package_public_classes` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `package_classes`
+    --> crates/rexx-exec/src/lib.rs:1588:48
+     |
+1588 |     /// [`package_public_classes`] is beside [`package_classes`].
+     |                                                ^^^^^^^^^^^^^^^ no item named `package_classes` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `package_classes`
+    --> crates/rexx-exec/src/lib.rs:1630:25
+     |
+1630 |     /// The subset of [`package_classes`] a `::CLASS ... PUBLIC` directive or
+     |                         ^^^^^^^^^^^^^^^ no item named `package_classes` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `package_classes`
+    --> crates/rexx-exec/src/lib.rs:1637:24
+     |
+1637 |     /// direction of [`package_classes`], which `~package` reads.
+     |                        ^^^^^^^^^^^^^^^ no item named `package_classes` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `method_bodies`
+    --> crates/rexx-exec/src/lib.rs:1721:41
+     |
+1721 |     /// for why these are not rows of [`method_bodies`], which is a
+     |                                         ^^^^^^^^^^^^^ no item named `method_bodies` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `elapsed_anchor`
+    --> crates/rexx-exec/src/lib.rs:1998:19
+     |
+1998 |     /// to move [`elapsed_anchor`] the next time the clock cache next
+     |                   ^^^^^^^^^^^^^^ no item named `elapsed_anchor` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `elapsed_anchor`
+    --> crates/rexx-exec/src/lib.rs:2002:11
+     |
+2002 |     /// [`elapsed_anchor`]'s own doc for why the reset is lazy at all.
+     |           ^^^^^^^^^^^^^^ no item named `elapsed_anchor` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: unresolved link to `alloc_with`
+    --> crates/rexx-exec/src/lib.rs:5794:11
+     |
+5794 |     /// [`alloc_with`], for an object the collector must never take.
+     |           ^^^^^^^^^^ no item named `alloc_with` in scope
+     |
+     = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: `format` is both a function and a macro
+   --> crates/rexx-exec/src/builtin/numeric.rs:215:7
+    |
+215 | /// [`format`]'s answer once its target and its four widths are in hand, shared
+    |       ^^^^^^ ambiguous link
+    |
+help: to link to the function, add parentheses
+    |
+215 | /// [`format()`]'s answer once its target and its four widths are in hand, shared
+    |             ++
+help: to link to the macro, add an exclamation mark
+    |
+215 | /// [`format!`]'s answer once its target and its four widths are in hand, shared
+    |             +
+
+warning: `compile` is both a function and a module
+   --> crates/rexx-exec/src/ir.rs:355:19
+    |
+355 | /// The one way [`compile`] can fail: a body that does not fit the index
+    |                   ^^^^^^^ ambiguous link
+    |
+help: to link to the function, add parentheses
+    |
+355 | /// The one way [`compile()`] can fail: a body that does not fit the index
+    |                          ++
+help: to link to the module, prefix with `mod@`
+    |
+355 | /// The one way [`mod@compile`] can fail: a body that does not fit the index
+    |                   ++++
+
+warning: `rexx-exec` (lib doc) generated 52 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.97s
+   Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-3b/t-check/doc/rexx_exec/index.html and 2 other files
+exit 0
