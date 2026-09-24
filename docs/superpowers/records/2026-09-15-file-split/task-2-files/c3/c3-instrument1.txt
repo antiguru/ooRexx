@@ -1,0 +1,37 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:112: 
+  INSERTED post:113: // Array slot and subscript arithmetic, and `Array`'s primitive methods.
+  INSERTED post:114: mod array;
+  INSERTED post:115: use array::{
+  INSERTED post:116:     IndexUse, MAX_FIXED_ARRAY_SIZE, array_dimensions, array_position, array_size_argument,
+  INSERTED post:117:     array_slots, array_slots_owned, is_whole_method_argument, native_array_at, native_array_at_for,
+  INSERTED post:118:     native_array_dimension, native_array_items, native_array_make_string, native_array_new,
+  INSERTED post:119:     native_array_of, native_array_put, native_array_size, positive_index, request_array,
+  INSERTED post:120:     unconverted_array_argument, unsigned_index, whole_comparison,
+  INSERTED post:121: };
+  2 equal blocks, 7855 lines, each also compared with cmp; 7855 expected lines, 7865 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn array_slots -> dispatch/array.rs (8 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY fn array_slots_owned -> dispatch/array.rs: /tmp/tmpav7hsx66/a /tmp/tmpav7hsx66/b differ: byte 128, line 3 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn array_dimensions -> dispatch/array.rs: /tmp/tmpxrec53xn/a /tmp/tmpxrec53xn/b differ: byte 158, line 3 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK const MAX_FIXED_ARRAY_SIZE -> dispatch/array.rs (2 lines; visibility private -> pub(super))
+  OK enum IndexUse -> dispatch/array.rs (9 lines; visibility private -> pub(super))
+  OK fn array_position -> dispatch/array.rs (28 lines; visibility private -> pub(super))
+  OK fn is_whole_method_argument -> dispatch/array.rs (9 lines; visibility private -> pub(super))
+  OK fn unsigned_index -> dispatch/array.rs (14 lines; visibility private -> pub(super))
+  OK fn whole_comparison -> dispatch/array.rs (11 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY fn positive_index -> dispatch/array.rs: /tmp/tmp85bg6_io/a /tmp/tmp85bg6_io/b differ: byte 193, line 4 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK fn native_array_at -> dispatch/array.rs (12 lines; visibility private -> pub(super))
+  OK fn native_array_at_for -> dispatch/array.rs (20 lines; visibility private -> pub(super))
+  OK fn native_array_put -> dispatch/array.rs (27 lines; visibility private -> pub(super))
+  OK fn native_array_dimension -> dispatch/array.rs (31 lines; visibility private -> pub(super))
+  OK fn native_array_new -> dispatch/array.rs (36 lines; visibility private -> pub(super))
+  OK fn native_array_of -> dispatch/array.rs (19 lines; visibility private -> pub(super))
+  OK fn array_size_argument -> dispatch/array.rs (25 lines; visibility private -> pub(super))
+  OK fn native_array_size -> dispatch/array.rs (11 lines; visibility private -> pub(super))
+  OK fn native_array_items -> dispatch/array.rs (10 lines; visibility private -> pub(super))
+  OK fn request_array -> dispatch/array.rs (13 lines; visibility private -> pub(super))
+  OK fn unconverted_array_argument -> dispatch/array.rs (7 lines; visibility private -> pub(super))
+  OK fn native_array_make_string -> dispatch/array.rs (44 lines; visibility private -> pub(super))
+  32 of 35 moved units byte-identical (visibility edits listed above), 3 differing in whitespace only

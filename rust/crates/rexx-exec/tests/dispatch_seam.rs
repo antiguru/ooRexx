@@ -209,6 +209,7 @@ const CLEARANCE_CONSUMERS: &[&str] = &[
     "src/dispatch/package.rs",
     "src/dispatch/stream.rs",
     "src/dispatch/files.rs",
+    "src/dispatch/array.rs",
 ];
 
 /// **Every consumer of the seam's token is written in one of
