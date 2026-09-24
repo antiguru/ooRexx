@@ -1,0 +1,1 @@
+moved lines 966-1318 (1-based) of builtin.rs, 353 lines, 0 kept verbatim inside literals; 0 lines after the module stay

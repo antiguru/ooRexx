@@ -1,0 +1,64 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-5/t-check/doc/rexx_exec/index.html and 2 other files
+files: builtin.rs builtin/convert.rs builtin/datatype.rs builtin/datetime.rs builtin/numeric.rs builtin/platform.rs builtin/rexxutil.rs builtin/state.rs builtin/stream.rs builtin/string.rs builtin/tests.rs builtin/word.rs 
+warnings located in builtin.rs or builtin/: 9
+warning: unresolved link to `month_name`
+    --> crates/rexx-exec/src/builtin/datetime.rs:1493:54
+     |
+1493 |     /// answer for it is the deliberate divergence [`month_name`]'s own doc
+     |                                                      ^^^^^^^^^^ no item named `month_name` in scope
+     |
+--
+warning: unresolved link to `base_time`
+   --> crates/rexx-exec/src/builtin/datetime.rs:183:11
+    |
+183 |     /// [`base_time`] adjusted by this timestamp's own [`time_zone_offset`]
+    |           ^^^^^^^^^ no item named `base_time` in scope
+    |
+--
+warning: unresolved link to `time_zone_offset`
+   --> crates/rexx-exec/src/builtin/datetime.rs:183:58
+    |
+183 |     /// [`base_time`] adjusted by this timestamp's own [`time_zone_offset`]
+    |                                                          ^^^^^^^^^^^^^^^^ no item named `time_zone_offset` in scope
+    |
+--
+warning: unresolved link to `Activation::clock_stale`
+   --> crates/rexx-exec/src/builtin/datetime.rs:768:17
+    |
+768 | /// only once [`Activation::clock_stale`] says so. See its own doc for why
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^ no item named `Activation` in scope
+
+warning: unresolved link to `wins`
+   --> crates/rexx-exec/src/builtin/numeric.rs:291:11
+    |
+291 |     /// [`wins`] as a `rexx-num` predicate, for the general path, where the
+    |           ^^^^ no item named `wins` in scope
+    |
+--
+warning: unresolved link to `converted`
+   --> crates/rexx-exec/src/builtin/state.rs:727:22
+    |
+727 |     /// rendering. [`converted`] has the oracle transcripts.
+    |                      ^^^^^^^^^ no item named `converted` in scope
+    |
+--
+warning: unresolved link to `step`
+  --> crates/rexx-exec/src/builtin/word.rs:56:20
+   |
+56 |     /// The word [`step`] last found, as a byte range of `text`.
+   |                    ^^^^ no item named `step` in scope
+   |
+--
+warning: unresolved link to `name`
+  --> crates/rexx-exec/src/builtin.rs:72:43
+   |
+72 |     /// The code, taking this row's own [`name`] as its second argument.
+   |                                           ^^^^ no item named `name` in scope
+   |
+--
+warning: `format` is both a function and a macro
+   --> crates/rexx-exec/src/builtin/numeric.rs:215:7
+    |
+215 | /// [`format`]'s answer once its target and its four widths are in hand, shared
+    |       ^^^^^^ ambiguous link
+    |
