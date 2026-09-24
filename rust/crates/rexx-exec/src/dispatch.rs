@@ -86,6 +86,7 @@ pub(crate) mod stream;
 /// `.File`'s entry points, whose Rexx half hands each one an already-qualified
 /// path.
 mod files;
+use files::{native_file_path_separator, native_file_separator};
 
 // The collection classes' primitive methods, chained the same way.
 mod collection;
@@ -3062,26 +3063,6 @@ fn native_length(
 ) -> Result<Option<ObjRef>, Failure> {
     let length = interp.text_len(receiver);
     Ok(Some(interp.counted(length)))
-}
-
-/// `file_separator`: the file system's name separator.
-fn native_file_separator(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    _receiver: ObjRef,
-    _args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text_built(b"/".to_vec())))
-}
-
-/// `file_path_separator`: the separator between the entries of a search path.
-fn native_file_path_separator(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    _receiver: ObjRef,
-    _args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text_built(b":".to_vec())))
 }
 
 /// `String~makeArray`: the receiver's lines, one array element each.

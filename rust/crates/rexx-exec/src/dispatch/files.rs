@@ -461,6 +461,26 @@ pub(super) fn set_writable(
     write_bits(interp, args, true)
 }
 
+/// `file_separator`: the file system's name separator.
+pub(super) fn native_file_separator(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.text_built(b"/".to_vec())))
+}
+
+/// `file_path_separator`: the separator between the entries of a search path.
+pub(super) fn native_file_path_separator(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.text_built(b":".to_vec())))
+}
+
 /// `file_case_sensitive`: whether this platform's names are, which on the one
 /// this crate targets they are.
 pub(super) fn case_sensitive(

@@ -1,0 +1,12 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:89: use files::{native_file_path_separator, native_file_separator};
+  2 equal blocks, 3116 lines, each also compared with cmp; 3116 expected lines, 3117 actual lines
+
+(c) destination dispatch/files.rs: PRE against POST, inserted lines only
+  INSERTED post:464-483: 20 lines
+  565 of 565 PRE lines equal, each block compared with cmp
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn native_file_separator -> dispatch/files.rs (9 lines; visibility private -> pub(super))
+  OK fn native_file_path_separator -> dispatch/files.rs (9 lines; visibility private -> pub(super))
+  2 of 2 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only
