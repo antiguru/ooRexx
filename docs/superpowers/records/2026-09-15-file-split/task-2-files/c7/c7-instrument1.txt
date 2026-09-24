@@ -1,0 +1,51 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:161: };
+  INSERTED post:162: 
+  INSERTED post:163: // `Object`'s own methods, `run`/`send`/`start`, and the `Message` readers.
+  INSERTED post:164: mod object_protocol;
+  INSERTED post:165: use object_protocol::{
+  INSERTED post:166:     ArrayArgument, array_argument, decode_message_name, hash_value, native_class, native_copy,
+  INSERTED post:167:     native_default_name, native_has_method, native_hash_code, native_identity_hash, native_is_a,
+  INSERTED post:168:     native_is_nil, native_message_completed, native_message_has_error, native_message_result,
+  INSERTED post:169:     native_no_op, native_object_concat, native_object_concat_blank, native_object_different,
+  INSERTED post:170:     native_object_identical, native_object_name, native_object_name_set, native_request,
+  INSERTED post:171:     native_run, native_send, native_send_with, native_set_method, native_start, native_start_with,
+  INSERTED post:172:     native_string, native_unset_method, operator_argument, run_method_body, string_hash,
+  2 equal blocks, 3154 lines, each also compared with cmp; 3154 expected lines, 3166 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn native_no_op -> dispatch/object_protocol.rs (10 lines; visibility private -> pub(super))
+  OK fn native_has_method -> dispatch/object_protocol.rs (39 lines; visibility private -> pub(super))
+  OK fn native_default_name -> dispatch/object_protocol.rs (25 lines; visibility private -> pub(super))
+  OK fn native_class -> dispatch/object_protocol.rs (33 lines; visibility private -> pub(super))
+  OK fn native_is_a -> dispatch/object_protocol.rs (21 lines; visibility private -> pub(super))
+  OK fn native_identity_hash -> dispatch/object_protocol.rs (10 lines; visibility private -> pub(super))
+  OK fn string_hash -> dispatch/object_protocol.rs (11 lines; visibility private -> pub(super))
+  OK fn native_hash_code -> dispatch/object_protocol.rs (11 lines; visibility private -> pub(super))
+  OK fn operator_argument -> dispatch/object_protocol.rs (7 lines; visibility private -> pub(super))
+  OK fn native_object_identical -> dispatch/object_protocol.rs (12 lines; visibility private -> pub(super))
+  OK fn native_object_different -> dispatch/object_protocol.rs (12 lines; visibility private -> pub(super))
+  OK fn native_object_concat -> dispatch/object_protocol.rs (11 lines; visibility private -> pub(super))
+  OK fn native_object_concat_blank -> dispatch/object_protocol.rs (10 lines; visibility private -> pub(super))
+  OK fn native_string -> dispatch/object_protocol.rs (34 lines; visibility private -> pub(super))
+  OK fn native_object_name -> dispatch/object_protocol.rs (76 lines; visibility private -> pub(super))
+  OK fn native_object_name_set -> dispatch/object_protocol.rs (61 lines; visibility private -> pub(super))
+  OK fn native_set_method -> dispatch/object_protocol.rs (33 lines; visibility private -> pub(super))
+  OK fn native_unset_method -> dispatch/object_protocol.rs (13 lines; visibility private -> pub(super))
+  OK fn native_copy -> dispatch/object_protocol.rs (39 lines; visibility private -> pub(super))
+  OK const COLLECTION_STORES -> dispatch/object_protocol.rs (18 lines; visibility private -> pub(super))
+  OK fn native_run -> dispatch/object_protocol.rs (23 lines; visibility private -> pub(super))
+  OK fn run_method_body -> dispatch/object_protocol.rs (20 lines; visibility private -> pub(super))
+  OK fn native_send -> dispatch/object_protocol.rs (12 lines; visibility private -> pub(super))
+  OK fn native_send_with -> dispatch/object_protocol.rs (13 lines; visibility private -> pub(super))
+  OK fn native_start -> dispatch/object_protocol.rs (14 lines; visibility private -> pub(super))
+  OK fn native_start_with -> dispatch/object_protocol.rs (18 lines; visibility private -> pub(super))
+  OK fn native_message_result -> dispatch/object_protocol.rs (19 lines; visibility private -> pub(super))
+  OK fn native_message_completed -> dispatch/object_protocol.rs (12 lines; visibility private -> pub(super))
+  OK fn native_message_has_error -> dispatch/object_protocol.rs (11 lines; visibility private -> pub(super))
+  OK fn decode_message_name -> dispatch/object_protocol.rs (46 lines; visibility private -> pub(super))
+  OK enum ArrayArgument -> dispatch/object_protocol.rs (10 lines; visibility private -> pub(super))
+  OK fn array_argument -> dispatch/object_protocol.rs (23 lines; visibility private -> pub(super))
+  OK fn native_request -> dispatch/object_protocol.rs (30 lines; visibility private -> pub(super))
+  OK fn native_is_nil -> dispatch/object_protocol.rs (9 lines; visibility private -> pub(super))
+  46 of 46 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

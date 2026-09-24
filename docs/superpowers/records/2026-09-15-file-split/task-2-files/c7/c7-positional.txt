@@ -1,0 +1,2 @@
+dispatch/object_protocol.rs:267: ['receiver', 'string']: /// The shared body of the two above: the receiver's string value, then
+done

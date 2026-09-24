@@ -499,7 +499,7 @@ fn native_pointer_is_null(
 }
 
 /// The entry `WeakReference`'s scope pool binds the referent cell to, in the
-/// position [`super::COLLECTION_STORES`]' entries are in.
+/// position [`super::object_protocol::COLLECTION_STORES`]' entries are in.
 pub(super) const WEAK_REFERENT: &[u8] = b"REFERENT";
 
 /// The cell `WEAK_REFERENT` holds: a `Body::WeakRef` allocated for `referent`.
