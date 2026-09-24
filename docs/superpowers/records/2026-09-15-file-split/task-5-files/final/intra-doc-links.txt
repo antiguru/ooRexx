@@ -1,0 +1,26 @@
+Intra-doc links in the moved test modules at 61478d685, enumerated with
+  /bin/grep -a -n -o '\[`[^]]*`\]' FILE    (a link written [`path`], then any [text](target) form with a second command below)
+and resolved by tests_links.sh (the #[test] lines stripped, cargo doc with --cfg test --document-private-items), whose located warnings per commit are c<N>/c<N>-tests-links.txt and at BASE base/tests-links-<parent>.txt.
+== value/tests.rs: 0 [`..`] links, 0 ](..) links
+== plan/tests.rs: 0 [`..`] links, 0 ](..) links
+== builtin/tests.rs: 4 [`..`] links, 0 ](..) links
+  36:[`resolve`]
+  130:[`check_arity`]
+  181:[`RAW_ARGUMENT_POSITIONS`]
+  328:[`RAW_ARGUMENT_POSITIONS`]
+== eval/tests.rs: 0 [`..`] links, 0 ](..) links
+== eval/object_operand_tests.rs: 5 [`..`] links, 0 ](..) links
+  561:[`Interp::operator_operand_gap`]
+  562:[`Interp::compare_values`]
+  564:[`Interp::operator_message_receiver`]
+  565:[`Interp::arith_left_operand`]
+  565:[`Interp::to_number`]
+== parse_template/tests.rs: 6 [`..`] links, 0 ](..) links
+  20:[`Cursor`]
+  50:[`pieces`]
+  315:[`Cursor`]
+  317:[`Interp::apply_trigger`]
+  426:[`a_late_parse_arg_template_survives_collection`]
+  502:[`VERSION`]
+== environment/tests.rs: 0 [`..`] links, 0 ](..) links
+(second command: /bin/grep -a -n -o '\]([^)]*)' FILE)

@@ -1,0 +1,4 @@
+84 of 84 units decode to identical literal lists; 521 decodable literals (string, byte string, char, byte, doc line) on the PRE side; 0 units where the tool's count and the independent lexer's disagree
+whole-file literal multiset, PRE eval.rs against POST eval.rs + new files:
+  only POST x1: STR " **R12: an operator whose left operand is an object this phase can build"
+  only POST x1: STR " and send no message to.**"

@@ -1,0 +1,89 @@
+=== value.rs -> value.rs + value/tests.rs
+426 comment lines in BASE value.rs, 436 after
+lost (0):
+added (10):
+  x3 /*                                                                            */
+  x1 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x1 /* This program and the accompanying materials are made available under       */
+  x1 /* distribution. A copy is also available at the following address:           */
+  x1 /* https://www.oorexx.org/license.html                                        */
+  x1 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x2 /*----------------------------------------------------------------------------*/
+=== plan.rs -> plan.rs + plan/tests.rs
+356 comment lines in BASE plan.rs, 366 after
+lost (0):
+added (10):
+  x3 /*                                                                            */
+  x1 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x1 /* This program and the accompanying materials are made available under       */
+  x1 /* distribution. A copy is also available at the following address:           */
+  x1 /* https://www.oorexx.org/license.html                                        */
+  x1 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x2 /*----------------------------------------------------------------------------*/
+=== builtin.rs -> builtin.rs + builtin/tests.rs
+271 comment lines in BASE builtin.rs, 281 after
+lost (0):
+added (10):
+  x3 /*                                                                            */
+  x1 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x1 /* This program and the accompanying materials are made available under       */
+  x1 /* distribution. A copy is also available at the following address:           */
+  x1 /* https://www.oorexx.org/license.html                                        */
+  x1 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x2 /*----------------------------------------------------------------------------*/
+=== eval.rs -> eval.rs + eval/tests.rs eval/object_operand_tests.rs
+939 comment lines in BASE eval.rs, 959 after
+lost (0):
+added (20):
+  x6 /*                                                                            */
+  x2 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x2 /* This program and the accompanying materials are made available under       */
+  x2 /* distribution. A copy is also available at the following address:           */
+  x2 /* https://www.oorexx.org/license.html                                        */
+  x2 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x4 /*----------------------------------------------------------------------------*/
+=== parse_template.rs -> parse_template.rs + parse_template/tests.rs version.rs
+378 comment lines in BASE parse_template.rs, 400 after
+lost (0):
+added (22):
+  x6 /*                                                                            */
+  x2 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x2 /* This program and the accompanying materials are made available under       */
+  x2 /* distribution. A copy is also available at the following address:           */
+  x2 /* https://www.oorexx.org/license.html                                        */
+  x2 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x4 /*----------------------------------------------------------------------------*/
+  x1 //! The interpreter's version string and the fields `RexxInfo` cuts from it, the
+  x1 //! platform name and the line terminator.
+=== environment.rs -> environment.rs + environment/tests.rs environment/route.rs environment/identities.rs
+555 comment lines in BASE environment.rs, 592 after
+lost (0):
+added (37):
+  x9 /*                                                                            */
+  x3 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x3 /* This program and the accompanying materials are made available under       */
+  x3 /* distribution. A copy is also available at the following address:           */
+  x3 /* https://www.oorexx.org/license.html                                        */
+  x3 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x6 /*----------------------------------------------------------------------------*/
+  x1 // Package, `Method` and `Routine` objects and annotation tables, each built once and kept.
+  x1 // Where `SAY` output and trace lines go: the `.OUTPUT` and `.TRACEOUTPUT` routes.
+  x1 //! Output routing: where `SAY` sends and where a finished trace line is
+  x1 //! The interpreter's own object identities: the package, `Method` and
+  x1 //! `Routine` objects and the annotation tables, each built on first ask and
+  x1 //! delivered, through `.local`'s `OUTPUT` and `TRACEOUTPUT` entries.
+  x1 //! kept, and the class and routine lookups a package object answers.
+=== trace.rs -> trace.rs + trace/format.rs
+474 comment lines in BASE trace.rs, 487 after
+lost (0):
+added (13):
+  x3 /*                                                                            */
+  x1 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x1 /* This program and the accompanying materials are made available under       */
+  x1 /* distribution. A copy is also available at the following address:           */
+  x1 /* https://www.oorexx.org/license.html                                        */
+  x1 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x2 /*----------------------------------------------------------------------------*/
+  x1 // The mode a `TRACE` setting parses into, and the byte layout of each trace line.
+  x1 //! The mode a `TRACE` setting parses into, and the byte layout of each
+  x1 //! prefix's line: pure functions on bytes, which `trace.rs`'s emission calls.

@@ -1,0 +1,46 @@
+=== value.rs -> value.rs + value/tests.rs
+89 BASE units; where they are now: {'value.rs': 60, 'value/tests.rs': 29}
+differing and declared: []
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+=== plan.rs -> plan.rs + plan/tests.rs
+65 BASE units; where they are now: {'plan.rs': 40, 'plan/tests.rs': 25}
+differing and declared: []
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+=== builtin.rs -> builtin.rs + builtin/tests.rs
+58 BASE units; where they are now: {'builtin.rs': 47, 'builtin/tests.rs': 11}
+differing and declared: []
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+=== eval.rs -> eval.rs + eval/tests.rs eval/object_operand_tests.rs
+143 BASE units; where they are now: {'eval.rs': 67, 'eval/object_operand_tests.rs': 16, 'eval/tests.rs': 60}
+differing and declared: ['tests::fn the_small_int_fast_path_answers_what_the_general_path_answers (eval/tests.rs)']
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+=== parse_template.rs -> parse_template.rs + parse_template/tests.rs version.rs
+79 BASE units; where they are now: {'parse_template.rs': 41, 'parse_template/tests.rs': 18, 'version.rs': 20}
+differing and declared: []
+visibility changes: 1
+  const BIT_WIDTH: private -> pub(super) (version.rs)
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+=== environment.rs -> environment.rs + environment/tests.rs environment/route.rs environment/identities.rs (declared: impl Interp::fn build_environment, c7's rename of crate::parse_template:: to crate::version::, checked in c7-other-edits-check.txt)
+122 BASE units; where they are now: {'environment.rs': 71, 'environment/identities.rs': 36, 'environment/route.rs': 9, 'environment/tests.rs': 6}
+differing and declared: ['impl Interp::fn build_environment (environment.rs)']
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+=== trace.rs -> trace.rs + trace/format.rs (declared: impl Interp::fn debug_source_string, c7's rename of crate::parse_template:: to crate::version::, checked in c7-other-edits-check.txt)
+102 BASE units; where they are now: {'trace.rs': 52, 'trace/format.rs': 50}
+differing and declared: ['impl Interp::fn debug_source_string (trace.rs)']
+visibility changes: 3
+  impl TraceMode::const LABELS: private -> pub(super) (trace/format.rs)
+  impl TraceMode::const ALL: private -> pub(super) (trace/format.rs)
+  fn make_displayable: private -> pub(super) (trace/format.rs)
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0

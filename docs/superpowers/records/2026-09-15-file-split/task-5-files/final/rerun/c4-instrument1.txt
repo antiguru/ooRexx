@@ -1,0 +1,236 @@
+(a) unmoved lines: PRE eval.rs minus the removed lines, against POST eval.rs
+  INSERTED post:1587: mod tests;
+  2 equal blocks, 2205 lines, each also compared with cmp; 2205 expected lines, 2206 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  DIFFERS (declared edit) tests::fn the_small_int_fast_path_answers_what_the_general_path_answers -> eval/tests.rs: /tmp/tmp21g09ae9/a /tmp/tmp21g09ae9/b differ: byte 1, line 1; the edit:
+    --- before
+    +++ after
+    @@ -1,5 +1,5 @@
+    -    /// Every answer the fast path gives is the answer the general path
+    -    /// gives, over a grid of operands, precisions and both `FORM`s.
+    -    #[test]
+    -    fn the_small_int_fast_path_answers_what_the_general_path_answers() {
+    -        use rexx_num::Form;
+    +/// Every answer the fast path gives is the answer the general path
+    +/// gives, over a grid of operands, precisions and both `FORM`s.
+    +#[test]
+    +fn the_small_int_fast_path_answers_what_the_general_path_answers() {
+    +    use rexx_num::Form;
+    @@ -7,29 +7,29 @@
+    -        let operands: [i64; 25] = [
+    -            0,
+    -            1,
+    -            -1,
+    -            2,
+    -            -2,
+    -            3,
+    -            5,
+    -            -5,
+    -            7,
+    -            -7,
+    -            25,
+    -            -25,
+    -            99,
+    -            100,
+    -            999,
+    -            -999,
+    -            1000,
+    -            -1000,
+    -            1001,
+    -            12345,
+    -            -12345,
+    -            1 << 30,
+    -            -(1 << 30),
+    -            rexx_core::SMALL_INT_MAX,
+    -            rexx_core::SMALL_INT_MIN,
+    -        ];
+    -        let precisions: [u64; 9] = [1, 2, 3, 5, 9, 15, 18, 19, 20];
+    -        let forms = [Form::Scientific, Form::Engineering];
+    +    let operands: [i64; 25] = [
+    +        0,
+    +        1,
+    +        -1,
+    +        2,
+    +        -2,
+    +        3,
+    +        5,
+    +        -5,
+    +        7,
+    +        -7,
+    +        25,
+    +        -25,
+    +        99,
+    +        100,
+    +        999,
+    +        -999,
+    +        1000,
+    +        -1000,
+    +        1001,
+    +        12345,
+    +        -12345,
+    +        1 << 30,
+    +        -(1 << 30),
+    +        rexx_core::SMALL_INT_MAX,
+    +        rexx_core::SMALL_INT_MIN,
+    +    ];
+    +    let precisions: [u64; 9] = [1, 2, 3, 5, 9, 15, 18, 19, 20];
+    +    let forms = [Form::Scientific, Form::Engineering];
+    @@ -37,16 +37,16 @@
+    -        // Pinned to `is_arithmetic` in the direction that is a correctness
+    -        // claim: nothing listed here is outside the set `eval_arithmetic`
+    -        // dispatches. The other direction is not asserted and does not need
+    -        // to be -- an arithmetic operator missing from this list is one
+    -        // `small_int_arith`'s own `_` arm declines, which costs speed and
+    -        // cannot cost an answer.
+    -        let ops = [
+    -            Operator::Plus,
+    -            Operator::Subtract,
+    -            Operator::Multiply,
+    -            Operator::Divide,
+    -            Operator::IntDiv,
+    -            Operator::Remainder,
+    -            Operator::Power,
+    -        ];
+    -        assert!(ops.iter().all(|op| is_arithmetic(*op)));
+    +    // Pinned to `is_arithmetic` in the direction that is a correctness
+    +    // claim: nothing listed here is outside the set `eval_arithmetic`
+    +    // dispatches. The other direction is not asserted and does not need
+    +    // to be -- an arithmetic operator missing from this list is one
+    +    // `small_int_arith`'s own `_` arm declines, which costs speed and
+    +    // cannot cost an answer.
+    +    let ops = [
+    +        Operator::Plus,
+    +        Operator::Subtract,
+    +        Operator::Multiply,
+    +        Operator::Divide,
+    +        Operator::IntDiv,
+    +        Operator::Remainder,
+    +        Operator::Power,
+    +    ];
+    +    assert!(ops.iter().all(|op| is_arithmetic(*op)));
+    @@ -54,14 +54,14 @@
+    -        let mut interp = Interp::new();
+    -        // Per operator rather than one total: `+` alone reaches the fast path
+    -        // thousands of times, so an aggregate count is satisfied by a guard
+    -        // that admits nothing else. Each operator has to be seen going fast
+    -        // on its own.
+    -        let mut compared = [0usize; 7];
+    -        for (index, op) in ops.into_iter().enumerate() {
+    -            for left in operands {
+    -                for right in operands {
+    -                    for digits in precisions {
+    -                        let Some(fast) = small_int_arith(op, left, right, digits) else {
+    -                            continue;
+    -                        };
+    -                        let fast_text = interp.to_text(fast).to_vec();
+    +    let mut interp = Interp::new();
+    +    // Per operator rather than one total: `+` alone reaches the fast path
+    +    // thousands of times, so an aggregate count is satisfied by a guard
+    +    // that admits nothing else. Each operator has to be seen going fast
+    +    // on its own.
+    +    let mut compared = [0usize; 7];
+    +    for (index, op) in ops.into_iter().enumerate() {
+    +        for left in operands {
+    +            for right in operands {
+    +                for digits in precisions {
+    +                    let Some(fast) = small_int_arith(op, left, right, digits) else {
+    +                        continue;
+    +                    };
+    +                    let fast_text = interp.to_text(fast).to_vec();
+    @@ -69,19 +69,11 @@
+    -                        let left_number =
+    -                            Number::parse(&left.to_string()).expect("an i64 spelling parses");
+    -                        let right_number =
+    -                            Number::parse(&right.to_string()).expect("an i64 spelling parses");
+    -                        let result = match op {
+    -                            Operator::Plus => left_number.add(&right_number, digits),
+    -                            Operator::Subtract => left_number.sub(&right_number, digits),
+    -                            Operator::Multiply => left_number.mul(&right_number, digits),
+    -                            Operator::Divide => {
+    -                                left_number.div(&right_number, digits, DivOp::Divide)
+    -                            }
+    -                            Operator::IntDiv => {
+    -                                left_number.div(&right_number, digits, DivOp::IntegerDivide)
+    -                            }
+    -                            Operator::Remainder => {
+    -                                left_number.div(&right_number, digits, DivOp::Remainder)
+    -                            }
+    -                            Operator::Power => left_number.pow(&right_number, digits),
+    -                            other => unreachable!("{other:?} is not on the fast path"),
+    +                    let left_number =
+    +                        Number::parse(&left.to_string()).expect("an i64 spelling parses");
+    +                    let right_number =
+    +                        Number::parse(&right.to_string()).expect("an i64 spelling parses");
+    +                    let result = match op {
+    +                        Operator::Plus => left_number.add(&right_number, digits),
+    +                        Operator::Subtract => left_number.sub(&right_number, digits),
+    +                        Operator::Multiply => left_number.mul(&right_number, digits),
+    +                        Operator::Divide => left_number.div(&right_number, digits, DivOp::Divide),
+    +                        Operator::IntDiv => {
+    +                            left_number.div(&right_number, digits, DivOp::IntegerDivide)
+    @@ -89 +81,7 @@
+    -                        .expect("no arithmetic error on the general path either");
+    +                        Operator::Remainder => {
+    +                            left_number.div(&right_number, digits, DivOp::Remainder)
+    +                        }
+    +                        Operator::Power => left_number.pow(&right_number, digits),
+    +                        other => unreachable!("{other:?} is not on the fast path"),
+    +                    }
+    +                    .expect("no arithmetic error on the general path either");
+    @@ -91,15 +89,12 @@
+    -                        // Both `FORM`s, because the fast path never reads
+    -                        // `FORM` at all: the claim being tested is that under
+    -                        // its own guard the two forms cannot disagree, which
+    -                        // only an assertion over both can carry.
+    -                        for form in forms {
+    -                            let general =
+    -                                interp.number(result.clone(), saturate_digits(digits), form);
+    -                            let general_text = interp.to_text(general).to_vec();
+    -                            assert_eq!(
+    -                                String::from_utf8_lossy(&fast_text),
+    -                                String::from_utf8_lossy(&general_text),
+    -                                "{left} {op:?} {right} at DIGITS {digits}, FORM {form:?}"
+    -                            );
+    -                        }
+    -                        compared[index] += 1;
+    +                    // Both `FORM`s, because the fast path never reads
+    +                    // `FORM` at all: the claim being tested is that under
+    +                    // its own guard the two forms cannot disagree, which
+    +                    // only an assertion over both can carry.
+    +                    for form in forms {
+    +                        let general = interp.number(result.clone(), saturate_digits(digits), form);
+    +                        let general_text = interp.to_text(general).to_vec();
+    +                        assert_eq!(
+    +                            String::from_utf8_lossy(&fast_text),
+    +                            String::from_utf8_lossy(&general_text),
+    +                            "{left} {op:?} {right} at DIGITS {digits}, FORM {form:?}"
+    +                        );
+    @@ -106,0 +102 @@
+    +                    compared[index] += 1;
+    @@ -110,11 +105,0 @@
+    -        // The grid is mostly refusals at the low precisions, and `/` and `**`
+    -        // decline most of what they are handed by construction, so the floor
+    -        // is the one every operator clears rather than one scaled to the
+    -        // widest.
+    -        for (index, op) in ops.into_iter().enumerate() {
+    -            assert!(
+    -                compared[index] > 100,
+    -                "{op:?} reached the fast path only {} times over the grid",
+    -                compared[index]
+    -            );
+    -        }
+    @@ -121,0 +107,12 @@
+    +    // The grid is mostly refusals at the low precisions, and `/` and `**`
+    +    // decline most of what they are handed by construction, so the floor
+    +    // is the one every operator clears rather than one scaled to the
+    +    // widest.
+    +    for (index, op) in ops.into_iter().enumerate() {
+    +        assert!(
+    +            compared[index] > 100,
+    +            "{op:?} reached the fast path only {} times over the grid",
+    +            compared[index]
+    +        );
+    +    }
+    +}
+  59 of 60 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

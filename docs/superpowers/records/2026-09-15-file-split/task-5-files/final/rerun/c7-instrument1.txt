@@ -1,0 +1,7 @@
+(a) unmoved lines: PRE parse_template.rs minus the removed lines, against POST parse_template.rs
+  INSERTED post:20: use crate::version::{PLATFORM, VERSION};
+  2 equal blocks, 888 lines, each also compared with cmp; 888 expected lines, 889 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK const BIT_WIDTH -> version.rs (6 lines; visibility private -> pub(super))
+  20 of 20 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

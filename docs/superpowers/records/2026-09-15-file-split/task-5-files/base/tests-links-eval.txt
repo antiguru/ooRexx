@@ -1,0 +1,39 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-5/t-base/doc/rexx_exec/index.html and 2 other files
+files: eval.rs 
+warnings located in eval.rs or eval/: 6
+warning: unresolved link to `Interp::operator_operand_gap`
+    --> crates/rexx-exec/src/eval.rs:3278:19
+     |
+3278 |     /// A value [`Interp::operator_operand_gap`] names parses as no number,
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no item named `Interp` in scope
+
+warning: unresolved link to `Interp::compare_values`
+    --> crates/rexx-exec/src/eval.rs:3279:31
+     |
+3279 |     /// which is what makes [`Interp::compare_values`]'s skip past that gap
+     |                               ^^^^^^^^^^^^^^^^^^^^^^ no item named `Interp` in scope
+
+warning: unresolved link to `Interp::operator_message_receiver`
+    --> crates/rexx-exec/src/eval.rs:3281:11
+     |
+3281 |     /// [`Interp::operator_message_receiver`], which
+     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no item named `Interp` in scope
+
+warning: unresolved link to `Interp::arith_left_operand`
+    --> crates/rexx-exec/src/eval.rs:3282:11
+     |
+3282 |     /// [`Interp::arith_left_operand`] asks only where [`Interp::to_number`]
+     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^ no item named `Interp` in scope
+
+warning: unresolved link to `Interp::to_number`
+    --> crates/rexx-exec/src/eval.rs:3282:58
+     |
+3282 |     /// [`Interp::arith_left_operand`] asks only where [`Interp::to_number`]
+     |                                                          ^^^^^^^^^^^^^^^^^ no item named `Interp` in scope
+
+warning: unresolved link to `eval_call`
+   --> crates/rexx-exec/src/eval.rs:535:11
+    |
+535 |     /// [`eval_call`]'s second half: everything after the resolution.
+    |           ^^^^^^^^^ no item named `eval_call` in scope
+    |

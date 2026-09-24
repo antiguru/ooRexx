@@ -1,0 +1,9 @@
+(a) unmoved lines: PRE plan.rs minus the removed lines, against POST plan.rs
+  INSERTED post:818: mod tests;
+  1 equal blocks, 817 lines, each also compared with cmp; 817 expected lines, 818 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY tests::fn line_at_answers_what_line_of_answers_at_every_index -> plan/tests.rs: /tmp/tmpxrzu9ll1/a /tmp/tmpxrzu9ll1/b differ: byte 1, line 1 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY tests::fn clause_line_at_answers_what_clause_line_answers_and_the_override_still_wins -> plan/tests.rs: /tmp/tmpsuritvq3/a /tmp/tmpsuritvq3/b differ: byte 1, line 1 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY tests::fn only_a_method_body_holds_self_and_super -> plan/tests.rs: /tmp/tmpx__s0p55/a /tmp/tmpx__s0p55/b differ: byte 1, line 1 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  22 of 25 moved units byte-identical (visibility edits listed above), 3 differing in whitespace only

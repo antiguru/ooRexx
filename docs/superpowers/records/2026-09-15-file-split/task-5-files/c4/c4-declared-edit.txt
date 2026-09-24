@@ -1,0 +1,12 @@
+diff of the unit, PRE (pre4/eval.rs:1699-1819) with four spaces stripped from each line, against POST eval/tests.rs:122-239
+77,79c77
+<                         Operator::Divide => {
+<                             left_number.div(&right_number, digits, DivOp::Divide)
+<                         }
+---
+>                         Operator::Divide => left_number.div(&right_number, digits, DivOp::Divide),
+96,97c94
+<                         let general =
+<                             interp.number(result.clone(), saturate_digits(digits), form);
+---
+>                         let general = interp.number(result.clone(), saturate_digits(digits), form);

@@ -1,0 +1,10 @@
+BASE 1b851ae96, built in its own worktree and target directory:
+  (cd base-wt/rust && CARGO_TARGET_DIR=t-base cargo build --release -p rexx-exec --bin rexx-run)
+final 61478d685, built in the instrument-4 worktree (synced to 61478d685, nothing else differing) and its target directory:
+  (cd wt/rust && CARGO_TARGET_DIR=t-rel cargo build --release -p rexx-exec --bin rexx-run)
+.text hashes (text-hashes.txt: name, sha256 of .text, file size):
+  objcopy -O binary --only-section=.text BIN OUT && sha256sum OUT
+runs: tools/perf.sh BASE_BIN FINAL_BIN OUTDIR 6: two interleaved rounds, each program run under
+  valgrind --tool=callgrind --cache-sim=no --branch-sim=no from an empty directory; the figure is
+  callgrind's summary minus libc.so.6 and ld-linux (tools/cg_objects.py). summary.txt columns:
+  program, then (exit status, instructions) for BASE round 1, final round 1, BASE round 2, final round 2.
