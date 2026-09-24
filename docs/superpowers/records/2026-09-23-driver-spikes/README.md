@@ -115,3 +115,22 @@ The three largest causes are code generation in the per-clause entry
 (a `#[inline(never)]` control removes 45 per clause), assignment targets
 resolved by name in the walker, and trace/debug state computed eagerly on
 every clause (37 to 59 against the oracle's 6).
+
+## Rounds 4 and 5: the clause overhead and the spills
+
+`clause-overhead.md`: four of nine candidates kept, `nop` 102.1 to 97.1 and
+`x = y` 231.2 to 199.2 instructions per clause, `rexxcps` -1.695%. `spills.md`:
+one of five kept (`c6a2ad7a1`, a clause position answered as a defined
+`(bool, position)` pair instead of an `Option` whose `None` payload the
+driver merged through a stack slot), `nop` -6.972%, `x = y` -3.458%,
+`rexxcps` -0.668%, spill instructions per `nop` clause 29 to 23. **The spill
+count did not track the instruction count on any rejected candidate**, the
+same way the frame size did not.
+
+The spill round's final gate run at `49c109ba7` failed one release test,
+`introspection_arity::every_unstable_row_is_really_unstable`, which runs only
+the oracle, twice, and fails when the two runs agree; it is the queued defect
+`2026-09-20-performance-items/2026-09-21-flaky-unstable-row-gate.md`. It
+passed in the round's first run and three times in isolation on the same
+tree afterwards; every other test passed in both profiles, 604 of 604 STRICT.
+The branch was fast-forwarded on that basis rather than gated a third time.
