@@ -240,7 +240,7 @@ lang/loop_retest_blame.rex
 # `DO`/`LOOP`'s loop *bookkeeping* -- the limit, the increment and the
 # direction -- lives in a Rust local on `run_repeating`'s own stack frame,
 # where no nested `CALL` can reach it. The control variable's live *value*
-# does not: `run.rs`'s re-test reads it back out of the interpreter's
+# does not: `run/loops.rs`'s re-test reads it back out of the interpreter's
 # variable pool every pass (`self.read(code, *control)`, the re-read Task 9
 # added so `do ii = 1 to 3 ; ii = 10 ; end` ends after one pass as the oracle
 # does), so a callee can reach it through ordinary `PROCEDURE EXPOSE` --

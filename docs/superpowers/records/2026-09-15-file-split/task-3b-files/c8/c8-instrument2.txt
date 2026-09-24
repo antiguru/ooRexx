@@ -1,0 +1,8 @@
+  visibility impl Interp::fn settle_block_indent: private -> pub(super) (run/loops.rs)
+  TRAILING-COMMA-ONLY fn numeric_less: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility fn numeric_less: private -> pub(super) (run/loops.rs)
+  ONLY-POST mod loops (run.rs)
+  ONLY-POST use loops::numeric_less (run.rs)
+  ONLY-POST use loops::{FlatLoop,FlatStart,FlatStep,HeaderPlan,HeaderRole,LoopHeaderValues,loop_header_plan,loop_header_slot,} (run.rs)
+  ONLY-POST use super::{ArithError,BehaviourId,Body,BodyEngine,ClauseOutcome,ClauseValue,Code,CompareOp,ConditionTrace,ControlExpr,Cow,Decoded,Expr,ExprKind,Failure,Flow,Instruction,InstructionKind,Interp,Loop,LoopConditional,LoopKind,Loud,NameShape,Novalue,Number,ObjRef,ProgramSource,Raised,RegFrame,SymbolId,compare_decoded,exact_small_int,raised_for_count_not_whole,raised_iterate_wrong_kind,raised_repetition_count_not_whole,raised_until_not_logical,raised_while_not_logical,shape_of,within_digits,} (run/loops.rs)
+172 of 172 units present on both sides have identical token streams (59 of them moved); 0 only before, 4 only after

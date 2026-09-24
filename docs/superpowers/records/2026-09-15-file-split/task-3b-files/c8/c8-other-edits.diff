@@ -1,0 +1,26 @@
+diff --git i/rust/corpus/phase-4b.txt w/rust/corpus/phase-4b.txt
+index e7ddf6dda..aab7d4923 100644
+--- i/rust/corpus/phase-4b.txt
++++ w/rust/corpus/phase-4b.txt
+@@ -240,7 +240,7 @@ lang/loop_retest_blame.rex
+ # `DO`/`LOOP`'s loop *bookkeeping* -- the limit, the increment and the
+ # direction -- lives in a Rust local on `run_repeating`'s own stack frame,
+ # where no nested `CALL` can reach it. The control variable's live *value*
+-# does not: `run.rs`'s re-test reads it back out of the interpreter's
++# does not: `run/loops.rs`'s re-test reads it back out of the interpreter's
+ # variable pool every pass (`self.read(code, *control)`, the re-read Task 9
+ # added so `do ii = 1 to 3 ; ii = 10 ; end` ends after one pass as the oracle
+ # does), so a callee can reach it through ordinary `PROCEDURE EXPOSE` --
+diff --git i/rust/crates/rexx-exec/src/trace.rs w/rust/crates/rexx-exec/src/trace.rs
+index 44ab1ddf6..8915cbfcb 100644
+--- i/rust/crates/rexx-exec/src/trace.rs
++++ w/rust/crates/rexx-exec/src/trace.rs
+@@ -673,7 +673,7 @@ impl Interp {
+ 
+     /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:
+     /// the loop drivers' own re-echo of a `DO`/`LOOP`/`END`, and a
+-    /// `WHEN`/`OTHERWISE` header (see `run.rs`'s own doc comments on those
++    /// `WHEN`/`OTHERWISE` header (see `run/loops.rs`'s own doc comments on those
+     /// call sites for why a `DO`/`LOOP` needs a second echo and nothing else
+     /// built so far does). A label cannot appear at any of them -- one
+     /// inside a `DO` block is error 47.2 at parse time, measured.

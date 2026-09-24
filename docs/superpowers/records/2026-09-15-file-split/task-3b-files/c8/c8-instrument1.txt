@@ -1,0 +1,16 @@
+(a) unmoved lines: PRE run.rs minus the removed lines, against POST run.rs
+  INSERTED post:81: 
+  INSERTED post:82: // `DO`/`LOOP`: the header, each kind of repetition, and the flat-loop path the op driver takes.
+  INSERTED post:83: mod loops;
+  INSERTED post:84: #[cfg(test)]
+  INSERTED post:85: use loops::numeric_less;
+  INSERTED post:86: pub(crate) use loops::{
+  INSERTED post:87:     FlatLoop, FlatStart, FlatStep, HeaderPlan, HeaderRole, LoopHeaderValues, loop_header_plan,
+  INSERTED post:88:     loop_header_slot,
+  INSERTED post:89: };
+  2 equal blocks, 3421 lines, each also compared with cmp; 3421 expected lines, 3430 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK impl Interp::fn settle_block_indent -> run/loops.rs (20 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY fn numeric_less -> run/loops.rs: /tmp/tmprip2llbi/a /tmp/tmprip2llbi/b differ: byte 473, line 8 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  58 of 59 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

@@ -673,7 +673,7 @@ impl Interp {
 
     /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:
     /// the loop drivers' own re-echo of a `DO`/`LOOP`/`END`, and a
-    /// `WHEN`/`OTHERWISE` header (see `run.rs`'s own doc comments on those
+    /// `WHEN`/`OTHERWISE` header (see `run/loops.rs`'s own doc comments on those
     /// call sites for why a `DO`/`LOOP` needs a second echo and nothing else
     /// built so far does). A label cannot appear at any of them -- one
     /// inside a `DO` block is error 47.2 at parse time, measured.
