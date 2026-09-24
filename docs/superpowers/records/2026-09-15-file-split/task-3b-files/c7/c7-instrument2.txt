@@ -1,0 +1,9 @@
+  visibility enum Entered: private -> pub(super) (run/call.rs)
+  TRAILING-COMMA-ONLY fn entered_receiver: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility fn entered_receiver: private -> pub(super) (run/call.rs)
+  visibility impl Interp::fn exec_call: private -> pub(super) (run/call.rs)
+  ONLY-POST mod call (run.rs)
+  ONLY-POST use call::{CallEntry,CallResolution,MAX_ACTIVATION_DEPTH} (run.rs)
+  ONLY-POST use call::{Entered,entered_receiver} (run.rs)
+  ONLY-POST use super::{Activation,BehaviourId,Body,BodyKey,CallContext,CallType,Code,Ended,Expr,ExprKind,Failure,Flow,Inherited,InstalledRoutine,Interp,Loud,ObjRef,Raised,Rc,Resolved,VarRefHome,body_of,builtin,} (run/call.rs)
+204 of 204 units present on both sides have identical token streams (35 of them moved); 0 only before, 4 only after

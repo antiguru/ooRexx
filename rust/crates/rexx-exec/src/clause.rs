@@ -49,7 +49,7 @@ pub(crate) struct DeadlineCounted(());
 
 /// Every piece of state `Op::Clause`'s region sets fresh, unconditionally, on
 /// **every** instruction it steps -- and so every field a caller pushing a
-/// nested activation (`Interp::invoke_call`, `run.rs`) must save before the
+/// nested activation (`Interp::invoke_call`, `run/call.rs`) must save before the
 /// callee runs and restore after it returns, because the callee's own
 /// `Op::Clause`'s region calls overwrite these exactly as the caller's own
 /// next clause would.

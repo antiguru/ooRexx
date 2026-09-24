@@ -186,7 +186,7 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
     // loud fallback for.
     ExprKind::Call { .. } => ("Call", Owner::InScope),
     // `>x`/`<x` answers a `VariableReference`, built by `eval.rs`'s own arm
-    // over `run.rs`'s `Interp::variable_reference`. Every rendering and every
+    // over `run/call.rs`'s `Interp::variable_reference`. Every rendering and every
     // conversion of one answers as the variable it names, which is why
     // `say >p` still prints `p`'s value.
     ExprKind::VariableReference(_) => ("VariableReference", Owner::InScope),

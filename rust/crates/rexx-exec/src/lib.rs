@@ -1345,7 +1345,7 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         // `::ROUTINE` raises the oracle's own 43.1 -- exactly the same shape
         // `InstructionKind::Call`'s own comment above describes for `CALL`.
         // `>name`/`<name` answers a `VariableReference`, which `eval.rs`'s
-        // own arm builds and `run.rs`'s `Interp::variable_reference` binds to
+        // own arm builds and `run/call.rs`'s `Interp::variable_reference` binds to
         // the variable.
         ExprKind::Call { .. }
         | ExprKind::VariableReference(_)
@@ -6020,7 +6020,7 @@ fn execute(
             // temporaries stack back to a watermark it takes on entry, and every
             // such watermark sits above this push. This is the same mechanism
             // `Interp::invoke_call` uses to keep a call's own arguments reachable
-            // (`run.rs`, the `push_temp(argument.value())` beside the argument
+            // (`run/call.rs`, the `push_temp(argument.value())` beside the argument
             // list it builds); `call_context` itself is not walked by the
             // collector, so without this the value is unreachable the first time
             // anything allocates.

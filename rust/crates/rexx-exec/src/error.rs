@@ -1851,7 +1851,7 @@ pub(crate) enum Failure {
     /// `ExprKind::Call`'s expression form (Task 4), or that routine falling
     /// off its own end, either of which ends the whole program exactly as
     /// the same event does when reached through `CALL` (`resolve_and_run_
-    /// call`'s own doc, `run.rs`). `CALL`'s own instruction form carries
+    /// call`'s own doc, `run/call.rs`). `CALL`'s own instruction form carries
     /// this through `Flow::Exit`/`Ended::Exited` instead, entirely through
     /// `Ok` returns, because `step` and `run_activation` both return a
     /// `Flow`/`Ended` that has room for "the program is exiting" as a

@@ -114,7 +114,7 @@ impl Interp {
     /// `>L>`/`>V>`/`>E>`/`>C>`/`>O>`/`>P>`/`>F>`, dispatched on `expr.kind`
     /// (`>A>` is not here: an argument's line belongs to the *call site*
     /// that evaluated it, not to the argument expression's own node --
-    /// `Interp::invoke_call`, `run.rs`, owns it) --
+    /// `Interp::invoke_call`, `run/call.rs`, owns it) --
     /// `eval`'s own hook, called once per node with `value` already
     /// computed. A no-op immediately when `!self.tracing_intermediates()`
     /// (`TRACE I` only; `TRACE R` never reaches any of these, measured),
@@ -565,7 +565,7 @@ impl Interp {
             // `EXIT` inside the routine, or the routine falling off its own
             // end, ends the whole program exactly as it does when the same
             // routine is reached through `CALL` (`Interp::invoke_call`'s
-            // own doc, `run.rs`). Propagated as `Failure::Exited` because
+            // own doc, `run/call.rs`). Propagated as `Failure::Exited` because
             // `eval`'s own return type is a plain `ObjRef` with no `Flow` to
             // carry the event through instead -- see that variant's own doc
             // (`error.rs`) for why every intervening `?` needs no special
@@ -2699,7 +2699,7 @@ mod tests {
 
     /// **Measured**: a caller's `RESULT` is unaffected by `f(1)` appearing in
     /// an expression, unlike `CALL`, which settles it on every return
-    /// (`Interp::invoke_named_call`'s own doc, `run.rs`). `result = 'before'`
+    /// (`Interp::invoke_named_call`'s own doc, `run/call.rs`). `result = 'before'`
     /// survives `zz = f(1)` untouched.
     #[test]
     fn an_internal_functions_expression_form_does_not_touch_result() {

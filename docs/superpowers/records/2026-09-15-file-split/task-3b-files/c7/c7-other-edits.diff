@@ -1,0 +1,92 @@
+diff --git i/rust/crates/rexx-exec/src/clause.rs w/rust/crates/rexx-exec/src/clause.rs
+index fd27c4736..20ac54742 100644
+--- i/rust/crates/rexx-exec/src/clause.rs
++++ w/rust/crates/rexx-exec/src/clause.rs
+@@ -49,7 +49,7 @@ pub(crate) struct DeadlineCounted(());
+ 
+ /// Every piece of state `Op::Clause`'s region sets fresh, unconditionally, on
+ /// **every** instruction it steps -- and so every field a caller pushing a
+-/// nested activation (`Interp::invoke_call`, `run.rs`) must save before the
++/// nested activation (`Interp::invoke_call`, `run/call.rs`) must save before the
+ /// callee runs and restore after it returns, because the callee's own
+ /// `Op::Clause`'s region calls overwrite these exactly as the caller's own
+ /// next clause would.
+diff --git i/rust/crates/rexx-exec/src/error.rs w/rust/crates/rexx-exec/src/error.rs
+index a05c39844..ed9877a55 100644
+--- i/rust/crates/rexx-exec/src/error.rs
++++ w/rust/crates/rexx-exec/src/error.rs
+@@ -1851,7 +1851,7 @@ pub(crate) enum Failure {
+     /// `ExprKind::Call`'s expression form (Task 4), or that routine falling
+     /// off its own end, either of which ends the whole program exactly as
+     /// the same event does when reached through `CALL` (`resolve_and_run_
+-    /// call`'s own doc, `run.rs`). `CALL`'s own instruction form carries
++    /// call`'s own doc, `run/call.rs`). `CALL`'s own instruction form carries
+     /// this through `Flow::Exit`/`Ended::Exited` instead, entirely through
+     /// `Ok` returns, because `step` and `run_activation` both return a
+     /// `Flow`/`Ended` that has room for "the program is exiting" as a
+diff --git i/rust/crates/rexx-exec/src/eval.rs w/rust/crates/rexx-exec/src/eval.rs
+index 38e214d15..bb47afad6 100644
+--- i/rust/crates/rexx-exec/src/eval.rs
++++ w/rust/crates/rexx-exec/src/eval.rs
+@@ -114,7 +114,7 @@ impl Interp {
+     /// `>L>`/`>V>`/`>E>`/`>C>`/`>O>`/`>P>`/`>F>`, dispatched on `expr.kind`
+     /// (`>A>` is not here: an argument's line belongs to the *call site*
+     /// that evaluated it, not to the argument expression's own node --
+-    /// `Interp::invoke_call`, `run.rs`, owns it) --
++    /// `Interp::invoke_call`, `run/call.rs`, owns it) --
+     /// `eval`'s own hook, called once per node with `value` already
+     /// computed. A no-op immediately when `!self.tracing_intermediates()`
+     /// (`TRACE I` only; `TRACE R` never reaches any of these, measured),
+@@ -565,7 +565,7 @@ impl Interp {
+             // `EXIT` inside the routine, or the routine falling off its own
+             // end, ends the whole program exactly as it does when the same
+             // routine is reached through `CALL` (`Interp::invoke_call`'s
+-            // own doc, `run.rs`). Propagated as `Failure::Exited` because
++            // own doc, `run/call.rs`). Propagated as `Failure::Exited` because
+             // `eval`'s own return type is a plain `ObjRef` with no `Flow` to
+             // carry the event through instead -- see that variant's own doc
+             // (`error.rs`) for why every intervening `?` needs no special
+@@ -2699,7 +2699,7 @@ mod tests {
+ 
+     /// **Measured**: a caller's `RESULT` is unaffected by `f(1)` appearing in
+     /// an expression, unlike `CALL`, which settles it on every return
+-    /// (`Interp::invoke_named_call`'s own doc, `run.rs`). `result = 'before'`
++    /// (`Interp::invoke_named_call`'s own doc, `run/call.rs`). `result = 'before'`
+     /// survives `zz = f(1)` untouched.
+     #[test]
+     fn an_internal_functions_expression_form_does_not_touch_result() {
+diff --git i/rust/crates/rexx-exec/src/lib.rs w/rust/crates/rexx-exec/src/lib.rs
+index a1a0b2135..a825d5dcf 100644
+--- i/rust/crates/rexx-exec/src/lib.rs
++++ w/rust/crates/rexx-exec/src/lib.rs
+@@ -1345,7 +1345,7 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
+         // `::ROUTINE` raises the oracle's own 43.1 -- exactly the same shape
+         // `InstructionKind::Call`'s own comment above describes for `CALL`.
+         // `>name`/`<name` answers a `VariableReference`, which `eval.rs`'s
+-        // own arm builds and `run.rs`'s `Interp::variable_reference` binds to
++        // own arm builds and `run/call.rs`'s `Interp::variable_reference` binds to
+         // the variable.
+         ExprKind::Call { .. }
+         | ExprKind::VariableReference(_)
+@@ -6020,7 +6020,7 @@ fn execute(
+             // temporaries stack back to a watermark it takes on entry, and every
+             // such watermark sits above this push. This is the same mechanism
+             // `Interp::invoke_call` uses to keep a call's own arguments reachable
+-            // (`run.rs`, the `push_temp(argument.value())` beside the argument
++            // (`run/call.rs`, the `push_temp(argument.value())` beside the argument
+             // list it builds); `call_context` itself is not walked by the
+             // collector, so without this the value is unreachable the first time
+             // anything allocates.
+diff --git i/rust/crates/rexx-exec/tests/owners.rs w/rust/crates/rexx-exec/tests/owners.rs
+index 6469ee1cc..831e06d3a 100644
+--- i/rust/crates/rexx-exec/tests/owners.rs
++++ w/rust/crates/rexx-exec/tests/owners.rs
+@@ -186,7 +186,7 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
+     // loud fallback for.
+     ExprKind::Call { .. } => ("Call", Owner::InScope),
+     // `>x`/`<x` answers a `VariableReference`, built by `eval.rs`'s own arm
+-    // over `run.rs`'s `Interp::variable_reference`. Every rendering and every
++    // over `run/call.rs`'s `Interp::variable_reference`. Every rendering and every
+     // conversion of one answers as the variable it names, which is why
+     // `say >p` still prints `p`'s value.
+     ExprKind::VariableReference(_) => ("VariableReference", Owner::InScope),

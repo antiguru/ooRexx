@@ -1,0 +1,14 @@
+(a) unmoved lines: PRE run.rs minus the removed lines, against POST run.rs
+  INSERTED post:75: 
+  INSERTED post:76: // `CALL` and function calls: resolving the name, running the arguments, entering the callee.
+  INSERTED post:77: mod call;
+  INSERTED post:78: pub(crate) use call::{CallEntry, CallResolution, MAX_ACTIVATION_DEPTH};
+  INSERTED post:79: #[cfg(test)]
+  INSERTED post:80: use call::{Entered, entered_receiver};
+  2 equal blocks, 5709 lines, each also compared with cmp; 5709 expected lines, 5715 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK enum Entered -> run/call.rs (7 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY fn entered_receiver -> run/call.rs: /tmp/tmpn98j91zh/a /tmp/tmpn98j91zh/b differ: byte 113, line 3 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK impl Interp::fn exec_call -> run/call.rs (13 lines; visibility private -> pub(super))
+  34 of 35 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only
