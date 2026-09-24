@@ -1,0 +1,5 @@
+  DECODE-DIFFERS (declared edit) impl Interp::fn signal_to_label
+221 of 222 units decode to identical literal lists; 982 decodable literals (string, byte string, char, byte, doc line) on the PRE side; 0 units where the tool's count and the independent lexer's disagree
+whole-file literal multiset, PRE run.rs against POST run.rs + new files:
+  only PRE  x1: STR " identical fix for `CALL`, immediately below (`run.rs:2153-2154` in"
+  only POST x1: STR " identical fix for `CALL` (`run.rs:2153-2154` in"

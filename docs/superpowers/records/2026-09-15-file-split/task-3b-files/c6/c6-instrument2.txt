@@ -1,0 +1,5 @@
+  visibility impl Interp::fn exec_raise: private -> pub(super) (run/condition.rs)
+  DIFFERS (declared edit) impl Interp::fn signal_to_label
+  ONLY-POST mod condition (run.rs)
+  ONLY-POST use super::{ActiveCondition,CallEntry,CallType,Code,ConditionTrap,Cow,Ended,Failure,Flow,HandlerExit,Interp,Loud,Novalue,Number,ObjRef,PendingTrap,Raise,Raised,Rc,Search,Trap,TrappedCondition,body_of,raise_syntax_condition,} (run/condition.rs)
+221 of 222 units present on both sides have identical token streams (19 of them moved); 0 only before, 2 only after
