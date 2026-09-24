@@ -1092,3 +1092,26 @@ The same idea applied at three sites in one function on `varlookup`: **-0.86%**,
 
 A prediction and a rival hypothesis were written down before the second
 measurement. **Both were wrong in sign.** They are kept beside the report.
+
+## 2026-09-23 and 24: the driver rounds, recorded elsewhere
+
+Five rounds ran after this list's last item, and their records live in
+`docs/superpowers/records/2026-09-23-driver-spikes/`, one README section per
+round. What this list needs to know from them:
+
+* **Landed**: the register frame arena (`rexx-core/src/frame.rs`, `unsafe`
+  granted by Moritz 2026-09-23), four clause-overhead changes and one spill
+  change. `rexxcps` -1.665%, -1.695% and -0.668% against each round's own base.
+* **Closed by measurement**: per-arm `#[cold]` outlining (+0.94%), one
+  function per op through a table (+10.04%), and the tree-walker as an engine
+  (+28.07% against the IR; the gap is its recursive expression evaluator).
+* **The oracle's lead is a fixed per-clause cost**, not per-operation work: a
+  `nop` clause is 33.3 instructions in the oracle and 90 in the IR after these
+  rounds, and where a construct's own work dominates we are at parity or ahead
+  (`tw-vs-oracle.md`).
+* **Instruments falsified**: the driver's frame size (already, 2026-09-22) and
+  now its executed spill count; neither predicted the instruction count of any
+  rejected candidate. Retired instructions on the axes remain the judge.
+* **Still open**: harvesting the PGO in-sample ceiling (-12.78% on `rexxcps`
+  with no source change) into source; a perturbed-build study of the driver's
+  noise; whether to ship PGO at all (Moritz's decision).

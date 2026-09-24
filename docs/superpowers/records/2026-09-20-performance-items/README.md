@@ -83,3 +83,10 @@ restructuring around it: the same arm with the branch deleted measures
 So an optimisation that buys under about 1% by adding a per-clause test does not
 pay here, and the items that remain on the list are the ones that **remove
 dispatches** rather than adding a test.
+
+## Continued in `2026-09-23-driver-spikes/`
+
+The work after this directory's last item -- the frame arena, PGO, the
+tree-walker bake-off, the clause-overhead and spill rounds -- is recorded in
+`docs/superpowers/records/2026-09-23-driver-spikes/README.md`, and summarised
+in an appended section of `2026-09-20-performance-todo.md`.
