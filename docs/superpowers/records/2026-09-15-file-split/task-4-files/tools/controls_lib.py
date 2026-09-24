@@ -13,11 +13,15 @@ show each is reported. Each is planted in its own copy.
   5. c3: a field's type changes on a line whose visibility was widened
                                                               -> I1b, I2
   6. c3: a widened field is renamed                           -> I1b, I2
+  7. c5: an import declaration the move narrowed also changes its path
+                                                              -> I1a
+  8. c5: an import declaration the move narrowed also gains a name
+                                                              -> I1a
   4. seal commit: an unmoved line of the existing destination run.rs gains a
      space                                                    -> I1c
 
 usage: controls_lib.py CASE PRE_ROOT POST_ROOT REMOVED_JSON WORKDIR
-  (CASE is c1, c3 or seal; SPLIT_PARENT_RS / SPLIT_DESTS / SPLIT_TESTS_RS are
+  (CASE is c1, c3, c5 or seal; SPLIT_PARENT_RS / SPLIT_DESTS / SPLIT_TESTS_RS are
   set here per case)
 """
 import os, shutil, subprocess, sys
@@ -35,6 +39,12 @@ CASES = {
          "pub(super) installed: &'a HashMap<usize, ObjRef>,", "pub(super) installed: &'a HashMap<u32, ObjRef>,"),
         ("6 a widened field is renamed", ["I1b", "I2"], "directives.rs",
          "pub(super) kind: &'static str,", "pub(super) kinds: &'static str,"),
+    ]),
+    "c5": (dict(SPLIT_PARENT="lib", SPLIT_PARENT_RS="lib.rs", SPLIT_DESTS="install.rs", SPLIT_TESTS_RS="tests.rs"), [], [
+        ("7 a narrowed parent import also changes a path", ["I1a"], "lib.rs",
+         "use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotRef};", "use rexx_num::{Heap, NameMap, ObjRef, RootSet, SlotRef};"),
+        ("8 a narrowed parent import also gains a name", ["I1a"], "lib.rs",
+         "use rexx_classes::MethodId;", "use rexx_classes::{MethodId, Weak};"),
     ]),
     "seal": (dict(SPLIT_PARENT="run/interpret", SPLIT_PARENT_RS="run/interpret.rs", SPLIT_DESTS="run.rs", SPLIT_TESTS_RS="none"), [], [
         ("4 unmoved destination line gains a space", ["I1c"], "run.rs",

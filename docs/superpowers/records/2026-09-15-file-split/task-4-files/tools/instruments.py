@@ -160,23 +160,22 @@ def use_names(key):
 
 
 def use_block_narrowed(i1, i2, j1, j2):
-    """A differing block wholly inside one `use` declaration on each side
-    (PRE's lines by their original index), whose POST names are a strict
-    subset of PRE's: the parent import list losing names only moved code
-    used. Answers the names dropped, or None."""
-    if i1 == i2 or j1 == j2:
+    """A differing block made only of lines of `use` declarations on each
+    side (PRE's lines by their original index), where the union of the names
+    of the POST declarations it touches is a strict subset of the PRE ones':
+    the parent import list losing names only moved code used. The lines of
+    those declarations outside the block are the equal blocks around it,
+    compared with cmp. Answers the names dropped, or None."""
+    if i1 == i2:
         return None
     pre_list = list(pre_units.values())
     post_list = [u for k, u in post_units.items() if post_units_file[k] == PARENT_RS]
-    a = use_unit_at(pre_list, expected_at[i1])
-    b = use_unit_at(post_list, j1)
-    if a is None or b is None:
+    a = [use_unit_at(pre_list, expected_at[i]) for i in range(i1, i2)]
+    b = [use_unit_at(post_list, j) for j in range(j1, j2)]
+    if any(u is None for u in a + b):
         return None
-    if not all(a["first"] - 1 <= expected_at[i] <= a["last"] - 1 for i in range(i1, i2)):
-        return None
-    if not all(b["first"] - 1 <= j <= b["last"] - 1 for j in range(j1, j2)):
-        return None
-    before, after = use_names(a["key"]), use_names(b["key"])
+    before = set().union(*(use_names(u["key"]) for u in a))
+    after = set().union(*(use_names(u["key"]) for u in b))
     return sorted(before - after) if after < before else None
 actual = read_lines(os.path.join(post_root, PARENT_RS))
 sm = difflib.SequenceMatcher(a=expected, b=actual, autojunk=False)

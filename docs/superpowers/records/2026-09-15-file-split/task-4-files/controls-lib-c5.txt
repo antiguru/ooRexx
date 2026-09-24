@@ -1,0 +1,9 @@
+control 7 a narrowed parent import also changes a path: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:14 post:14: 'use rexx_classes::{ClassKind, InheritRefusal, MethodId};' -> 'use rexx_classes::MethodId;'
+  I1a changed unmoved line pre-expected:15 post:15: 'use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};' -> 'use rexx_num::{Heap, NameMap, ObjRef, RootSet, SlotRef};'
+control 8 a narrowed parent import also gains a name: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:14 post:14: 'use rexx_classes::{ClassKind, InheritRefusal, MethodId};' -> 'use rexx_classes::{MethodId, Weak};'
+  I1a changed unmoved line pre-expected:15 post:15: 'use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};' -> 'use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotRef};'
+2 of 2 controls caught as expected
