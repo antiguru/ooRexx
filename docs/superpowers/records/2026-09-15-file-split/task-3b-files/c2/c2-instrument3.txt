@@ -1,0 +1,5 @@
+  DECODE-DIFFERS (declared edit) fn raised_when_not_logical
+274 of 275 units decode to identical literal lists; 1216 decodable literals (string, byte string, char, byte, doc line) on the PRE side; 0 units where the tool's count and the independent lexer's disagree
+whole-file literal multiset, PRE run.rs against POST run.rs + new files:
+  only PRE  x1: STR " [`Interp::eval_condition`] hands a list over already `checked`, and"
+  only POST x1: STR " [`crate::Interp::eval_condition`] hands a list over already `checked`, and"

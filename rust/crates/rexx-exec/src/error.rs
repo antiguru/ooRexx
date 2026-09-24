@@ -2438,7 +2438,7 @@ mod tests {
     }
 
     // The new Task 11 raisers themselves -- 26.2/26.3/28.1-28.5/34.3/34.4 --
-    // live in `run.rs` as local `fn raised_*` free functions, matching that
+    // live in `run/raised.rs` as local `fn raised_*` free functions, matching that
     // file's own established convention for every other instruction-
     // specific raiser (`raised_if_not_logical`, `raised_select_no_when`,
     // `raised_symbol_expected`, ...), not as `Raised::` methods here: this

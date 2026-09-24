@@ -6,7 +6,8 @@ S=/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940
 M=/home/moritz/dev/repos/ooRexx-rust-rewrite
 W=$S/wt
 git -C $W reset -q --mixed
-git -C $W checkout -q --detach $(git -C $M rev-parse HEAD)
 git -C $W checkout -q -- rust
+git -C $W ls-files --others --exclude-standard -- rust/crates | while read f; do rm -- "$W/$f"; done
+git -C $W checkout -q --detach $(git -C $M rev-parse HEAD) || exit 1
 while read f; do mkdir -p $W/$(dirname $f); cp $1/tree/$f $W/$f; done < $1/files
 git -C $W status --short | /bin/grep -v '^?? \(build\|oodocs\|ootest\|rust/corpus-l1\|rust/bench-baselines/pinned\|rust/target\)$'

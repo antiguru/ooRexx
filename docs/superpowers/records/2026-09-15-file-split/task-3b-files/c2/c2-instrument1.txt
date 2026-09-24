@@ -1,0 +1,38 @@
+(a) unmoved lines: PRE run.rs minus the removed lines, against POST run.rs
+  INSERTED post:47: 
+  INSERTED post:48: // The `Raised` constructors for the conditions the instruction loop raises.
+  INSERTED post:49: mod raised;
+  INSERTED post:50: use raised::{
+  INSERTED post:51:     raise_syntax_condition, raised_digit_led, raised_dot_led, raised_for_count_not_whole,
+  INSERTED post:52:     raised_guard_not_logical, raised_iterate_no_loop, raised_iterate_no_match,
+  INSERTED post:53:     raised_iterate_wrong_kind, raised_leave_no_loop, raised_leave_no_match,
+  INSERTED post:54:     raised_naming_the_operand, raised_repetition_count_not_whole, raised_select_no_when,
+  INSERTED post:55:     raised_symbol_expected, raised_until_not_logical, raised_while_not_logical,
+  INSERTED post:56: };
+  INSERTED post:57: pub(crate) use raised::{raised_from_settings, raised_if_not_logical, raised_when_not_logical};
+  2 equal blocks, 8737 lines, each also compared with cmp; 8737 expected lines, 8748 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn raised_symbol_expected -> run/raised.rs (6 lines; visibility private -> pub(super))
+  OK fn raised_digit_led -> run/raised.rs (4 lines; visibility private -> pub(super))
+  OK fn raised_dot_led -> run/raised.rs (4 lines; visibility private -> pub(super))
+  OK fn raised_guard_not_logical -> run/raised.rs (9 lines; visibility private -> pub(super))
+  DIFFERS (declared edit) fn raised_when_not_logical -> run/raised.rs: /tmp/tmphn21wkw8/a /tmp/tmphn21wkw8/b differ: byte 302, line 5; the edit:
+    --- before
+    +++ after
+    @@ -5 +5 @@
+    -/// [`Interp::eval_condition`] hands a list over already `checked`, and
+    +/// [`crate::Interp::eval_condition`] hands a list over already `checked`, and
+  OK fn raised_select_no_when -> run/raised.rs (8 lines; visibility private -> pub(super))
+  OK fn raise_syntax_condition -> run/raised.rs (46 lines; visibility private -> pub(super))
+  OK fn raised_naming_the_operand -> run/raised.rs (15 lines; visibility private -> pub(super))
+  OK fn raised_while_not_logical -> run/raised.rs (7 lines; visibility private -> pub(super))
+  OK fn raised_until_not_logical -> run/raised.rs (4 lines; visibility private -> pub(super))
+  OK fn raised_repetition_count_not_whole -> run/raised.rs (7 lines; visibility private -> pub(super))
+  OK fn raised_for_count_not_whole -> run/raised.rs (5 lines; visibility private -> pub(super))
+  OK fn raised_leave_no_loop -> run/raised.rs (5 lines; visibility private -> pub(super))
+  OK fn raised_iterate_no_loop -> run/raised.rs (5 lines; visibility private -> pub(super))
+  OK fn raised_leave_no_match -> run/raised.rs (8 lines; visibility private -> pub(super))
+  OK fn raised_iterate_no_match -> run/raised.rs (4 lines; visibility private -> pub(super))
+  OK fn raised_iterate_wrong_kind -> run/raised.rs (8 lines; visibility private -> pub(super))
+  18 of 19 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only
