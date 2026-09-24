@@ -1,0 +1,3 @@
+The same controls 4 and 5 against the tooling committed at e78303803 (its drop_trailing_commas/squash relaxed every comma before a closing delimiter):
+control 4: PASS: no failures  
+control 5: PASS: no failures  

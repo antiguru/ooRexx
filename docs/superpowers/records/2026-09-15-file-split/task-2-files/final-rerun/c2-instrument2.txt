@@ -1,4 +1,4 @@
-  TRAILING-COMMA-ONLY impl Interp::fn blamed_string_conversion: identical once a comma directly before a closing delimiter is dropped (rustfmt's vertical layout)
+  TRAILING-COMMA-ONLY impl Interp::fn blamed_string_conversion: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
   visibility impl Interp::fn blamed_string_conversion: private -> pub(super) (dispatch/reqstr.rs)
   visibility fn required_string_argument: private -> pub(super) (dispatch/reqstr.rs)
   visibility fn required_string_named_argument: private -> pub(super) (dispatch/reqstr.rs)

@@ -13,15 +13,15 @@
 
 (b) moved units: PRE text against POST text, compared with cmp
   OK fn array_slots -> dispatch/array.rs (8 lines; visibility private -> pub(super))
-  WHITESPACE-ONLY fn array_slots_owned -> dispatch/array.rs: /tmp/tmphp3k8uc5/a /tmp/tmphp3k8uc5/b differ: byte 128, line 3 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
-  WHITESPACE-ONLY fn array_dimensions -> dispatch/array.rs: /tmp/tmp2i07_oev/a /tmp/tmp2i07_oev/b differ: byte 158, line 3 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn array_slots_owned -> dispatch/array.rs: /tmp/tmp12qz37d5/a /tmp/tmp12qz37d5/b differ: byte 128, line 3 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn array_dimensions -> dispatch/array.rs: /tmp/tmpd1r1t__h/a /tmp/tmpd1r1t__h/b differ: byte 158, line 3 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
   OK const MAX_FIXED_ARRAY_SIZE -> dispatch/array.rs (2 lines; visibility private -> pub(super))
   OK enum IndexUse -> dispatch/array.rs (9 lines; visibility private -> pub(super))
   OK fn array_position -> dispatch/array.rs (28 lines; visibility private -> pub(super))
   OK fn is_whole_method_argument -> dispatch/array.rs (9 lines; visibility private -> pub(super))
   OK fn unsigned_index -> dispatch/array.rs (14 lines; visibility private -> pub(super))
   OK fn whole_comparison -> dispatch/array.rs (11 lines; visibility private -> pub(super))
-  WHITESPACE-ONLY fn positive_index -> dispatch/array.rs: /tmp/tmpsixayax6/a /tmp/tmpsixayax6/b differ: byte 193, line 4 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn positive_index -> dispatch/array.rs: /tmp/tmp4zdpumel/a /tmp/tmp4zdpumel/b differ: byte 193, line 4 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
   OK fn native_array_at -> dispatch/array.rs (12 lines; visibility private -> pub(super))
   OK fn native_array_at_for -> dispatch/array.rs (20 lines; visibility private -> pub(super))
   OK fn native_array_put -> dispatch/array.rs (27 lines; visibility private -> pub(super))

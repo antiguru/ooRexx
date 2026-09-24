@@ -8,11 +8,12 @@ attribute or doc comment to its last line, extended upward over any plain
 comment belongs to the item or row it sits on.
 """
 import json
+import re
 import os
 import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ITEM_TOOL = os.path.join(HERE, "..", "item-tool", "target", "release", "item-tool")
+ITEM_TOOL = os.environ.get("ITEM_TOOL", os.path.join(HERE, "..", "item-tool", "target", "release", "item-tool"))
 
 
 def load_units(path):
@@ -104,3 +105,74 @@ def floating_lines(path, lo, hi):
 def write_json(path, value):
     with open(path, "w") as f:
         json.dump(value, f, indent=1)
+
+
+def _signature_close(text):
+    """Index of the `)` closing the parameter list of the first `fn`
+    declaration in `text`, or None."""
+    m = re.search(r"(?m)^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*fn\s+\w+", text)
+    if not m:
+        return None
+    open_at = text.find("(", m.end())
+    if open_at == -1:
+        return None
+    depth = 0
+    for i in range(open_at, len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+    return None
+
+
+def squash(text_lines):
+    """All whitespace removed, after dropping one comma: the one directly
+    before the `)` that closes a `fn` declaration's parameter list, which is
+    what rustfmt's vertical layout adds when it re-wraps a signature. No other
+    comma is dropped, so `(x,)` against `(x)` anywhere else still differs."""
+    text = "\n".join(text_lines)
+    close = _signature_close(text)
+    if close is not None:
+        head = text[:close].rstrip()
+        if head.endswith(","):
+            text = head[:-1] + text[close:]
+    return "".join(text.split())
+
+
+def drop_trailing_commas(tokens):
+    """`tokens` without the one comma directly before the `)` that closes the
+    first `fn` declaration's parameter list (outside attributes); every other
+    token, every other comma included, is kept."""
+    i, n = 0, len(tokens)
+    while i < n:
+        if tokens[i] == "#" and i + 1 < n and tokens[i + 1] == "[":
+            depth, j = 0, i + 1
+            while True:
+                if tokens[j] == "[":
+                    depth += 1
+                elif tokens[j] == "]":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            i = j + 1
+            continue
+        if tokens[i] == "fn":
+            break
+        i += 1
+    else:
+        return tokens
+    open_at = tokens.index("(", i)
+    depth = 0
+    for j in range(open_at, n):
+        if tokens[j] == "(":
+            depth += 1
+        elif tokens[j] == ")":
+            depth -= 1
+            if depth == 0:
+                if tokens[j - 1] == ",":
+                    return tokens[: j - 1] + tokens[j:]
+                return tokens
+    return tokens

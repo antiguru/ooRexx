@@ -31,7 +31,7 @@
   OK fn method_source_lines -> dispatch/class_protocol.rs (29 lines; visibility private -> pub(super))
   OK fn compile_method_source -> dispatch/class_protocol.rs (34 lines; visibility private -> pub(super))
   OK fn compile_routine_source -> dispatch/class_protocol.rs (32 lines; visibility private -> pub(super))
-  WHITESPACE-ONLY fn method_name_argument -> dispatch/class_protocol.rs: /tmp/tmpu_136q7q/a /tmp/tmpu_136q7q/b differ: byte 290, line 5 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn method_name_argument -> dispatch/class_protocol.rs: /tmp/tmp1jrr285n/a /tmp/tmp1jrr285n/b differ: byte 290, line 5 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
   OK fn native_define -> dispatch/class_protocol.rs (41 lines; visibility private -> pub(super))
   OK fn native_define_methods -> dispatch/class_protocol.rs (51 lines; visibility private -> pub(super))
   OK fn native_subclass -> dispatch/class_protocol.rs (13 lines; visibility private -> pub(super))
@@ -47,7 +47,7 @@
   OK fn native_package_add_class -> dispatch/class_protocol.rs (12 lines; visibility private -> pub(super))
   OK fn native_package_add_public_class -> dispatch/class_protocol.rs (9 lines; visibility private -> pub(super))
   OK fn native_package -> dispatch/class_protocol.rs (11 lines; visibility private -> pub(super))
-  DIFFERS (declared edit) fn native_class_copy -> dispatch/class_protocol.rs: /tmp/tmpwx0i65mi/a /tmp/tmpwx0i65mi/b differ: byte 66, line 1
+  DIFFERS (declared edit) fn native_class_copy -> dispatch/class_protocol.rs: /tmp/tmpwzln1y_0/a /tmp/tmpwzln1y_0/b differ: byte 66, line 1
   OK fn native_enhanced -> dispatch/class_protocol.rs (48 lines; visibility private -> pub(super))
   OK fn is_enhanced_instance -> dispatch/class_protocol.rs (9 lines; visibility private -> pub(super))
   48 of 50 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

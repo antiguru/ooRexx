@@ -35,6 +35,7 @@ import tempfile
 
 import rustlex
 import splitlib
+from splitlib import drop_trailing_commas, squash
 
 pre_root, post_root, removed_json, out_prefix = sys.argv[1:5]
 tests_mode = "--tests" in sys.argv[5:]
@@ -82,17 +83,6 @@ def strip_vis_line(line):
         if s.startswith(v):
             return ind + s[len(v) :], v.strip()
     return line, None
-
-
-def squash(text_lines):
-    """All whitespace removed, then any comma directly before a closing
-    delimiter: what rustfmt's vertical layout adds when it reflows."""
-    flat = "".join("".join(text_lines).split())
-    return re.sub(r",(?=[)\]}])", "", flat)
-
-
-def drop_trailing_commas(tokens):
-    return [t for i, t in enumerate(tokens) if not (t == "," and i + 1 < len(tokens) and tokens[i + 1] in (")", "]", "}"))]
 
 
 # ---------------------------------------------------------------- units
@@ -197,7 +187,7 @@ for key in moved:
             out1.append(f"  OK {key} -> {rel} ({b - a + 1} lines; {'; '.join(notes)})")
     elif squash(pre_text) == squash(post_text):
         reformatted.append(key)
-        out1.append(f"  WHITESPACE-ONLY {key} -> {rel}: {msg} ({'; '.join(notes + ['rustfmt reflow, trailing commas before a closing delimiter ignored'])}; tokens are instrument 2's, literal values instrument 3's)")
+        out1.append(f"  WHITESPACE-ONLY {key} -> {rel}: {msg} ({'; '.join(notes + ['rustfmt reflow, the trailing comma of a signature ignored'])}; tokens are instrument 2's, literal values instrument 3's)")
     elif key in expected_edits:
         out1.append(f"  DIFFERS (declared edit) {key} -> {rel}: {msg}")
     else:
@@ -216,7 +206,7 @@ for k in common:
         tok_ok += 1
     elif drop_trailing_commas(pre_units[k]["toks"].split("\x01")) == drop_trailing_commas(post_units[k]["toks"].split("\x01")):
         tok_ok += 1
-        out2.append(f"  TRAILING-COMMA-ONLY {k}: identical once a comma directly before a closing delimiter is dropped (rustfmt's vertical layout)")
+        out2.append(f"  TRAILING-COMMA-ONLY {k}: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)")
     elif k in expected_edits:
         out2.append(f"  DIFFERS (declared edit) {k}")
     else:

@@ -7,7 +7,7 @@
   2 equal blocks, 8525 lines, each also compared with cmp; 8525 expected lines, 8530 actual lines
 
 (b) moved units: PRE text against POST text, compared with cmp
-  WHITESPACE-ONLY impl Interp::fn blamed_string_conversion -> dispatch/reqstr.rs: /tmp/tmp4k7tf1v1/a /tmp/tmp4k7tf1v1/b differ: byte 250, line 4 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY impl Interp::fn blamed_string_conversion -> dispatch/reqstr.rs: /tmp/tmpr6o9ksv7/a /tmp/tmpr6o9ksv7/b differ: byte 250, line 4 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
   OK fn required_string_argument -> dispatch/reqstr.rs (23 lines; visibility private -> pub(super))
   OK fn required_string_named_argument -> dispatch/reqstr.rs (12 lines; visibility private -> pub(super))
   19 of 20 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

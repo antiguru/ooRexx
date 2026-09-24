@@ -26,6 +26,6 @@
   OK fn native_string_new -> dispatch/construct.rs (23 lines; visibility private -> pub(super))
   OK fn native_stem_new -> dispatch/construct.rs (33 lines; visibility private -> pub(super))
   OK fn native_unsupported_new -> dispatch/construct.rs (13 lines; visibility private -> pub(super))
-  DIFFERS (declared edit) const WEAK_REFERENT -> dispatch/construct.rs: /tmp/tmpcrddegh2/a /tmp/tmpcrddegh2/b differ: byte 94, line 2
+  DIFFERS (declared edit) const WEAK_REFERENT -> dispatch/construct.rs: /tmp/tmppkx984cn/a /tmp/tmppkx984cn/b differ: byte 94, line 2
   OK fn native_weak_reference_new -> dispatch/construct.rs (21 lines; visibility private -> pub(super))
   31 of 32 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

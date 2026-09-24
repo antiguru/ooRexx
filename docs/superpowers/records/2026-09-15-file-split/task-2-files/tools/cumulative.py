@@ -9,6 +9,7 @@ usage: cumulative.py BASE_SRC FINAL_SRC NEW_FILE...
 import sys
 from collections import Counter
 import splitlib
+from splitlib import drop_trailing_commas
 
 base_src, final_src, new = sys.argv[1], sys.argv[2], sys.argv[3:]
 DECLARED = {"impl ObjectModel::fn build", "struct ObjectModel", "const WEAK_REFERENT",
@@ -22,8 +23,9 @@ for rel in ["dispatch.rs"] + new:
         after[k] = u; where[k] = rel
 
 def trim(t):
-    t = t.split("\x01")
-    return [x for i, x in enumerate(t) if not (x == "," and i + 1 < len(t) and t[i + 1] in (")", "]", "}"))]
+    # The same single relaxation instruments.py makes: the trailing comma of a
+    # signature's parameter list, nothing else.
+    return drop_trailing_commas(t.split("\x01"))
 
 bad, declared, vis, per_file = [], [], [], Counter()
 for k, u in base.items():

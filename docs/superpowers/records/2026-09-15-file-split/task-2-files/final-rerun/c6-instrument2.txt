@@ -14,7 +14,7 @@
   visibility fn method_source_lines: private -> pub(super) (dispatch/class_protocol.rs)
   visibility fn compile_method_source: private -> pub(super) (dispatch/class_protocol.rs)
   visibility fn compile_routine_source: private -> pub(super) (dispatch/class_protocol.rs)
-  TRAILING-COMMA-ONLY fn method_name_argument: identical once a comma directly before a closing delimiter is dropped (rustfmt's vertical layout)
+  TRAILING-COMMA-ONLY fn method_name_argument: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
   visibility fn method_name_argument: private -> pub(super) (dispatch/class_protocol.rs)
   visibility fn native_define: private -> pub(super) (dispatch/class_protocol.rs)
   visibility fn native_define_methods: private -> pub(super) (dispatch/class_protocol.rs)
