@@ -1,0 +1,31 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:138: };
+  INSERTED post:139: 
+  INSERTED post:140: // The native constructors, and `Pointer`'s and `WeakReference`'s methods,
+  INSERTED post:141: // chained the same way.
+  INSERTED post:142: mod construct;
+  INSERTED post:143: use construct::{
+  INSERTED post:144:     native_capacity_init, native_class_new, native_directory_new, native_executable_new,
+  INSERTED post:145:     native_hash_collection_new, native_load_external, native_message_new, native_new_file,
+  INSERTED post:146:     native_package_new, native_stem_new, native_string_new, native_unsupported_new,
+  INSERTED post:147:     native_weak_reference_new, pointer_address,
+  CHANGED (declared edit) post:826: "    /// The scope [`WEAK_REFERENT`] is bound in, so that a subclass's instance" -> "    /// The scope [`construct::WEAK_REFERENT`] is bound in, so that a subclass's instance"
+  INSERTED post:867:             .chain(construct::NATIVE_METHODS)
+  4 equal blocks, 5173 lines, each also compared with cmp; 5174 expected lines, 5185 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn native_hash_collection_new -> dispatch/construct.rs (18 lines; visibility private -> pub(super))
+  OK fn native_directory_new -> dispatch/construct.rs (15 lines; visibility private -> pub(super))
+  OK fn native_capacity_init -> dispatch/construct.rs (14 lines; visibility private -> pub(super))
+  OK fn native_class_new -> dispatch/construct.rs (18 lines; visibility private -> pub(super))
+  OK fn native_message_new -> dispatch/construct.rs (24 lines; visibility private -> pub(super))
+  OK fn native_executable_new -> dispatch/construct.rs (27 lines; visibility private -> pub(super))
+  OK fn native_new_file -> dispatch/construct.rs (23 lines; visibility private -> pub(super))
+  OK fn native_load_external -> dispatch/construct.rs (87 lines; visibility private -> pub(super))
+  OK fn native_package_new -> dispatch/construct.rs (13 lines; visibility private -> pub(super))
+  OK fn native_string_new -> dispatch/construct.rs (23 lines; visibility private -> pub(super))
+  OK fn native_stem_new -> dispatch/construct.rs (33 lines; visibility private -> pub(super))
+  OK fn native_unsupported_new -> dispatch/construct.rs (13 lines; visibility private -> pub(super))
+  DIFFERS (declared edit) const WEAK_REFERENT -> dispatch/construct.rs: /tmp/tmpoddsf_vy/a /tmp/tmpoddsf_vy/b differ: byte 94, line 2
+  OK fn native_weak_reference_new -> dispatch/construct.rs (21 lines; visibility private -> pub(super))
+  31 of 32 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

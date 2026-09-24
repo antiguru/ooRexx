@@ -1,0 +1,21 @@
+  DIFFERS (declared edit) struct ObjectModel
+  DIFFERS (declared edit) impl ObjectModel::fn build
+  visibility fn native_hash_collection_new: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_directory_new: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_capacity_init: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_class_new: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_message_new: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_executable_new: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_new_file: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_load_external: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_package_new: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_string_new: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_stem_new: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_unsupported_new: private -> pub(super) (dispatch/construct.rs)
+  DIFFERS (declared edit) const WEAK_REFERENT
+  visibility const WEAK_REFERENT: private -> pub(super) (dispatch/construct.rs)
+  visibility fn native_weak_reference_new: private -> pub(super) (dispatch/construct.rs)
+  ONLY-POST mod construct (dispatch.rs)
+  ONLY-POST use construct::{native_capacity_init,native_class_new,native_directory_new,native_executable_new,native_hash_collection_new,native_load_external,native_message_new,native_new_file,native_package_new,native_stem_new,native_string_new,native_unsupported_new,native_weak_reference_new,pointer_address,} (dispatch.rs)
+  ONLY-POST use super::{Arity,Body,Cleared,Failure,INIT,Interp,Loud,NativeMethod,ObjRef,Package,Raised,class_receiver,compile_method_source,compile_routine_source,decode_message_name,hash,native,native_new,new_instance,optional_length_argument,required_string_argument,required_string_named_argument,} (dispatch/construct.rs)
+420 of 423 units present on both sides have identical token streams (32 of them moved); 0 only before, 3 only after

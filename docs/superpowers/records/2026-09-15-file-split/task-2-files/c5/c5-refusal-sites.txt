@@ -1,0 +1,17 @@
+refresh exit 0; table mtime before 2026-09-24 12:59:42.950574601 +0200, after 2026-09-24 13:00:09.937759916 +0200
+ rust/corpus/refusal-sites.tsv | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+diff --git i/rust/corpus/refusal-sites.tsv w/rust/corpus/refusal-sites.tsv
+index a658bcfc4..f4e05421e 100644
+--- i/rust/corpus/refusal-sites.tsv
++++ w/rust/corpus/refusal-sites.tsv
+@@ -13,3 +13,4 @@
+-# (outside its #[cfg(test)] mod tests) and dispatch/native.rs, where
+-# Interp::send_message and Interp::enter_method_body both are; `ir` is ir.rs
+-# and ir/; `body` is everything else.
++# (outside an inline #[cfg(test)] mod) and every file under dispatch/, the test
++# module dispatch/tests.rs among them; Interp::send_message and
++# Interp::enter_method_body are both in dispatch.rs. `ir` is ir.rs and ir/;
++# `body` is everything else.
+column 3 (surface) of every row, before (HEAD) vs after refresh:
+  identical, 247 rows

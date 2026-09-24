@@ -1,0 +1,4 @@
+dispatch/construct.rs:23: ['ObjectModel', 'build']: /// `ObjectModel::build` beside [`super::NATIVE_METHODS`].
+dispatch/construct.rs:61: ['hash']: /// `Directory~new`: the hash body above for `.Directory` itself, and
+dispatch/construct.rs:80: ['classes']: /// and `ListClass::initRexx` beside it (`classes/QueueClass.cpp:261`,
+done

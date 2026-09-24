@@ -10,9 +10,10 @@
 # directions -- see `reached` below.
 #
 # surface -- which files the construction sites are in. `send` is dispatch.rs
-# (outside its #[cfg(test)] mod tests) and dispatch/native.rs, where
-# Interp::send_message and Interp::enter_method_body both are; `ir` is ir.rs
-# and ir/; `body` is everything else.
+# (outside an inline #[cfg(test)] mod) and every file under dispatch/, the test
+# module dispatch/tests.rs among them; Interp::send_message and
+# Interp::enter_method_body are both in dispatch.rs. `ir` is ir.rs and ir/;
+# `body` is everything else.
 #
 # verdict, for the `send` rows only -- about the program in the witness column:
 #   agrees    probed against the oracle on both engines, three descriptors and

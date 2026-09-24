@@ -120,6 +120,16 @@ def post_lines(rel):
 
 
 # ---------------------------------------------------------------- instrument 1
+def declared_line(post_index):
+    """Whether a POST dispatch.rs line (0-based) is inside a declared edit."""
+    for key in expected_edits:
+        if post_units_file.get(key) == "dispatch.rs":
+            a, b = splitlib.span(read_lines(os.path.join(post_root, "dispatch.rs")), post_units[key])
+            if a <= post_index <= b:
+                return True
+    return False
+
+
 out1 = []
 removed = set(json.load(open(removed_json)))
 expected = [l for i, l in enumerate(pre_dispatch) if i not in removed]
@@ -145,6 +155,8 @@ for tag, i1, i2, j1, j2 in sm.get_opcodes():
             before_stripped, before_vis = strip_vis_line(before)
             if stripped == before_stripped and vis != before_vis:
                 out1.append(f"  VISIBILITY post:{j1 + k + 1}: {before_vis or 'private'} -> {vis or 'private'}: {after.strip()}")
+            elif declared_line(j1 + k):
+                out1.append(f"  CHANGED (declared edit) post:{j1 + k + 1}: {before!r} -> {after!r}")
             else:
                 failures.append(f"I1a changed unmoved line pre-expected:{i1 + k + 1} post:{j1 + k + 1}: {before!r} -> {after!r}")
                 out1.append(f"  CHANGED {before!r} -> {after!r}")
@@ -186,6 +198,8 @@ for key in moved:
     elif squash(pre_text) == squash(post_text):
         reformatted.append(key)
         out1.append(f"  WHITESPACE-ONLY {key} -> {rel}: {msg} ({'; '.join(notes + ['rustfmt reflow, trailing commas before a closing delimiter ignored'])}; tokens are instrument 2's, literal values instrument 3's)")
+    elif key in expected_edits:
+        out1.append(f"  DIFFERS (declared edit) {key} -> {rel}: {msg}")
     else:
         failures.append(f"I1b {key}: {msg}")
         out1.append(f"  FAIL {key} -> {rel}: {msg}")
@@ -245,6 +259,8 @@ for k in common:
         out3.append(f"  CONTROL-MISMATCH {k}: tool pre/post {pu['decodable']}/{qu['decodable']}, lexer pre/post {c_pre}/{c_post}")
     if same:
         lit_ok += 1
+    elif k in expected_edits:
+        out3.append(f"  DECODE-DIFFERS (declared edit) {k}")
     else:
         failures.append(f"I3 literals differ: {k}")
         out3.append(f"  DECODE-DIFFERS {k}")
