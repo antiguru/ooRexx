@@ -13,7 +13,7 @@ import os
 import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ITEM_TOOL = os.environ.get("ITEM_TOOL", os.path.join(HERE, "..", "item-tool", "target", "release", "item-tool"))
+ITEM_TOOL = os.environ.get("ITEM_TOOL", os.path.join(HERE, "item-tool", "target", "release", "item-tool"))
 
 
 def load_units(path):

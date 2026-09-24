@@ -334,3 +334,30 @@ other work on the machine, and still had no timeouts.
    because `/dispatch/` carries the same tag" is true but incomplete:
    column 3 also depends on where a constructor is *defined*, through the
    free-function rule.
+
+## Corrections from the task review (controller, 2026-09-24)
+
+**Departure 6 and `3fc6cbd71`'s message name the wrong callers of
+`seal_site_level`.** Both say it is called from `run/interpret.rs`,
+`run/call.rs` and `lib.rs`, and the report adds that `dispatch.rs`, "which the
+brief names, does not call it". That is false at BASE and at head. Derived at
+`34d2fe9b0` with
+
+    /bin/grep -rna 'seal_site_level' rust/crates --include=*.rs | awk -F: '{print $1}' | sort | uniq -c
+
+it appears in `dispatch.rs` (3), `install.rs` (4, the calls that were in
+`lib.rs` before `97ad8c334` moved installation), `run/call.rs` (2),
+`run/interpret.rs` (4), `run.rs` (1, the definition) and `lib.rs` (1, not a
+call). The move and the `pub(crate)` it keeps are unaffected: `dispatch.rs`
+needs `pub(crate)` anyway.
+
+**`97ad8c334`'s message says every member is "byte-identical but for
+visibility"**; `install_directives`'s signature was re-wrapped by rustfmt
+after `pub(super)` was added (token-identical, and disclosed above).
+
+**The committed tools did not run as committed**: `tools/splitlib.py`
+defaulted `ITEM_TOOL` to `tools/../item-tool/`, while the tool is committed at
+`tools/item-tool/`; a reader re-running the controls got a `FileNotFoundError`
+that the harness reported as every control missed. The default now points at
+`tools/item-tool/` (build it with `cargo build --release` in that directory,
+or set `ITEM_TOOL`).
