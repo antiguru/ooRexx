@@ -1,0 +1,6 @@
+Instrument 4 at c9 differed from BASE in one test only: introspection_arity::every_unstable_row_is_really_unstable, FAILED (the known oracle-only flake the brief allows re-running in isolation). Re-run in isolation on the same test worktree, rust tree 410be3566492ed1725b6c0a6ed3c7031da1fe044 (the tree i4-c9.meta records):
+  CARGO_TARGET_DIR=t-rel memcap 8G cargo test -j 4 --release -p rexx-exec --test introspection_arity -- every_unstable_row_is_really_unstable
+  load before 2.36 5.06 5.31
+  test every_unstable_row_is_really_unstable ... ok
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.05s
+Every other test line and result block is identical to BASE (i4-c9.compare lists the one difference).

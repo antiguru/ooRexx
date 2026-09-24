@@ -1,0 +1,8 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running tests/introspection_arity.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-5/t-rel/release/deps/introspection_arity-cd6cf9132e1f6d09)
+
+running 1 test
+test every_unstable_row_is_really_unstable ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.05s
+

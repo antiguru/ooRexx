@@ -1,0 +1,1632 @@
+doc-tests rexx_exec	RESULT ok passed=1 failed=0 ignored=0 measured=0 filtered=0
+doc-tests rexx_exec	RESULT ok passed=1 failed=0 ignored=0 measured=0 filtered=0
+tests/assertions.rs [assertions]	RESULT ok passed=5 failed=0 ignored=0 measured=0 filtered=0
+tests/bif_assertions.rs [bif_assertions]	RESULT ok passed=5 failed=0 ignored=0 measured=0 filtered=0
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	RESULT ok passed=22 failed=0 ignored=0 measured=0 filtered=0
+tests/builtin_status.rs [builtin_status]	RESULT ok passed=26 failed=0 ignored=0 measured=0 filtered=0
+tests/class_lifetime.rs [class_lifetime]	RESULT ok passed=3 failed=0 ignored=0 measured=0 filtered=0
+tests/class_weak_reference.rs [class_weak_reference]	RESULT ok passed=1 failed=0 ignored=0 measured=0 filtered=0
+tests/closed_phases.rs [closed_phases]	RESULT ok passed=2 failed=0 ignored=0 measured=0 filtered=0
+tests/collect_policy.rs [collect_policy]	RESULT ok passed=2 failed=0 ignored=0 measured=0 filtered=0
+tests/collect_stress.rs [collect_stress]	RESULT ok passed=32 failed=0 ignored=0 measured=0 filtered=0
+tests/collection_arity.rs [collection_arity]	RESULT ok passed=24 failed=0 ignored=0 measured=0 filtered=0
+tests/collection_scopes.rs [collection_scopes]	RESULT ok passed=23 failed=0 ignored=0 measured=0 filtered=0
+tests/corpus.rs [corpus]	RESULT ok passed=29 failed=0 ignored=1 measured=0 filtered=0
+tests/coverage.rs [coverage]	RESULT ok passed=21 failed=0 ignored=0 measured=0 filtered=0
+tests/datetime_zone.rs [datetime_zone]	RESULT ok passed=21 failed=0 ignored=0 measured=0 filtered=0
+tests/deadline.rs [deadline]	RESULT ok passed=10 failed=0 ignored=0 measured=0 filtered=0
+tests/directive_options.rs [directive_options]	RESULT ok passed=24 failed=0 ignored=0 measured=0 filtered=0
+tests/dispatch_seam.rs [dispatch_seam]	RESULT ok passed=6 failed=0 ignored=0 measured=0 filtered=0
+tests/environment_seam.rs [environment_seam]	RESULT ok passed=3 failed=0 ignored=0 measured=0 filtered=0
+tests/frame_block.rs [frame_block]	RESULT ok passed=2 failed=0 ignored=0 measured=0 filtered=0
+tests/gate_table_c.rs [gate_table_c]	RESULT ok passed=22 failed=0 ignored=0 measured=0 filtered=0
+tests/gate_table_d.rs [gate_table_d]	RESULT ok passed=23 failed=0 ignored=0 measured=0 filtered=0
+tests/input_oracle.rs [input_oracle]	RESULT ok passed=22 failed=0 ignored=0 measured=0 filtered=0
+tests/internal_routines.rs [internal_routines]	RESULT ok passed=2 failed=0 ignored=0 measured=0 filtered=0
+tests/introspection_arity.rs [introspection_arity]	RESULT FAILED passed=25 failed=1 ignored=0 measured=0 filtered=0
+tests/introspection_scopes.rs [introspection_scopes]	RESULT ok passed=24 failed=0 ignored=0 measured=0 filtered=0
+tests/ir_recorded.rs [ir_recorded]	RESULT ok passed=28 failed=0 ignored=0 measured=0 filtered=0
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	RESULT ok passed=21 failed=0 ignored=0 measured=0 filtered=0
+tests/keyword_assertions.rs [keyword_assertions]	RESULT ok passed=7 failed=0 ignored=0 measured=0 filtered=0
+tests/library_routine_memory.rs [library_routine_memory]	RESULT ok passed=21 failed=0 ignored=0 measured=0 filtered=0
+tests/licensed_divergences.rs [licensed_divergences]	RESULT ok passed=22 failed=0 ignored=0 measured=0 filtered=0
+tests/loud.rs [loud]	RESULT ok passed=9 failed=0 ignored=0 measured=0 filtered=0
+tests/method_bodies.rs [method_bodies]	RESULT ok passed=23 failed=0 ignored=0 measured=0 filtered=0
+tests/native_entries.rs [native_entries]	RESULT ok passed=24 failed=0 ignored=0 measured=0 filtered=0
+tests/no_process_state.rs [no_process_state]	RESULT ok passed=1 failed=0 ignored=0 measured=0 filtered=0
+tests/oracle_deadline.rs [oracle_deadline]	RESULT ok passed=22 failed=0 ignored=0 measured=0 filtered=0
+tests/owners.rs [owners]	RESULT ok passed=6 failed=0 ignored=0 measured=0 filtered=0
+tests/package_requires.rs [package_requires]	RESULT ok passed=24 failed=0 ignored=0 measured=0 filtered=0
+tests/parse_version_oracle.rs [parse_version_oracle]	RESULT ok passed=21 failed=0 ignored=0 measured=0 filtered=0
+tests/prompt_before_read.rs [prompt_before_read]	RESULT ok passed=2 failed=0 ignored=0 measured=0 filtered=0
+tests/refusal_sites.rs [refusal_sites]	RESULT ok passed=5 failed=0 ignored=0 measured=0 filtered=0
+tests/spike.rs [spike]	RESULT ok passed=8 failed=0 ignored=0 measured=0 filtered=0
+tests/state_builtin_oracle.rs [state_builtin_oracle]	RESULT ok passed=22 failed=0 ignored=0 measured=0 filtered=0
+tests/trace_indent.rs [trace_indent]	RESULT ok passed=23 failed=0 ignored=0 measured=0 filtered=0
+tests/trace_oracle.rs [trace_oracle]	RESULT ok passed=41 failed=0 ignored=0 measured=0 filtered=0
+tests/unreachable_classes.rs [unreachable_classes]	RESULT ok passed=21 failed=0 ignored=0 measured=0 filtered=0
+unittests src/bin/rexx-ir.rs [rexx_ir]	RESULT ok passed=0 failed=0 ignored=0 measured=0 filtered=0
+unittests src/bin/rexx-run.rs [rexx_run]	RESULT ok passed=0 failed=0 ignored=0 measured=0 filtered=0
+unittests src/lib.rs [rexx_exec]	RESULT ok passed=848 failed=0 ignored=0 measured=0 filtered=0
+doc-tests rexx_exec	crates/rexx-exec/src/run.rs - run::Interp::run_activation (line _)	ok
+doc-tests rexx_exec	crates/rexx-exec/src/run.rs - run::Interp::run_activation (line _) - compile fail	ok
+tests/assertions.rs [assertions]	assertions_differential	ok
+tests/assertions.rs [assertions]	digits_and_form_are_carried_not_defaulted	ok
+tests/assertions.rs [assertions]	the_exempt_set_matches_the_current_blocked_rows	ok
+tests/assertions.rs [assertions]	the_falsification_proof	ok
+tests/assertions.rs [assertions]	the_raise_falsification_proof	ok
+tests/bif_assertions.rs [bif_assertions]	a_raise_row_needs_the_sub_number_too	ok
+tests/bif_assertions.rs [bif_assertions]	bif_assertions_differential	ok
+tests/bif_assertions.rs [bif_assertions]	every_exempt_attribution_is_a_known_phase_or_a_declared_outcome	ok
+tests/bif_assertions.rs [bif_assertions]	the_exempt_set_matches_the_current_failures	ok
+tests/bif_assertions.rs [bif_assertions]	the_falsification_proof	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	the_composed_program_carries_both_files_directives_and_neither_prologue	ok
+tests/bootstrap_install_oracle.rs [bootstrap_install_oracle]	the_two_library_files_install_and_answer_what_the_oracle_answers	ok
+tests/builtin_status.rs [builtin_status]	a_name_is_only_mentioned_when_it_stands_alone	ok
+tests/builtin_status.rs [builtin_status]	every_divergent_row_has_a_known_gap	ok
+tests/builtin_status.rs [builtin_status]	every_loud_row_is_loud_about_its_own_builtin	ok
+tests/builtin_status.rs [builtin_status]	every_state_builtin_is_implemented	ok
+tests/builtin_status.rs [builtin_status]	every_string_builtin_is_implemented	ok
+tests/builtin_status.rs [builtin_status]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/builtin_status.rs [builtin_status]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/builtin_status.rs [builtin_status]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/builtin_status.rs [builtin_status]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/builtin_status.rs [builtin_status]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/builtin_status.rs [builtin_status]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/builtin_status.rs [builtin_status]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/builtin_status.rs [builtin_status]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/builtin_status.rs [builtin_status]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/builtin_status.rs [builtin_status]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/builtin_status.rs [builtin_status]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/builtin_status.rs [builtin_status]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/builtin_status.rs [builtin_status]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/builtin_status.rs [builtin_status]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/builtin_status.rs [builtin_status]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/builtin_status.rs [builtin_status]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/builtin_status.rs [builtin_status]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/builtin_status.rs [builtin_status]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/builtin_status.rs [builtin_status]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/builtin_status.rs [builtin_status]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/builtin_status.rs [builtin_status]	the_status_file_matches_a_live_differential_run	ok
+tests/class_lifetime.rs [class_lifetime]	a_class_nothing_refers_to_is_collected	ok
+tests/class_lifetime.rs [class_lifetime]	a_class_side_uninit_runs_at_the_collection_that_reaches_the_class	ok
+tests/class_lifetime.rs [class_lifetime]	an_instance_keeps_its_class_alive_and_nothing_else_does	ok
+tests/class_weak_reference.rs [class_weak_reference]	a_weak_reference_to_a_live_class_answers_the_class	ok
+tests/closed_phases.rs [closed_phases]	no_refusal_names_a_closed_phase	ok
+tests/closed_phases.rs [closed_phases]	the_scan_finds_an_open_phase_it_is_not_asked_about	ok
+tests/collect_policy.rs [collect_policy]	a_dead_transients_slots_are_reused_before_the_collector_runs_again	ok
+tests/collect_policy.rs [collect_policy]	a_live_set_that_does_not_die_still_collects_as_it_grows	ok
+tests/collect_stress.rs [collect_stress]	a_clause_value_survives_the_handler_its_boundary_runs	ok
+tests/collect_stress.rs [collect_stress]	a_command_line_argument_survives_collect_on_every_allocation	ok
+tests/collect_stress.rs [collect_stress]	a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop	ok
+tests/collect_stress.rs [collect_stress]	a_method_that_assigns_over_self_keeps_its_exposed_variables	ok
+tests/collect_stress.rs [collect_stress]	a_parked_reply_keeps_its_variables_across_a_collection	ok
+tests/collect_stress.rs [collect_stress]	a_running_activation_keeps_its_context_object_across_a_collection	ok
+tests/collect_stress.rs [collect_stress]	a_trapped_conditions_object_survives_collect_on_every_allocation	ok
+tests/collect_stress.rs [collect_stress]	a_weak_reference_clears_only_when_its_referent_becomes_unreachable	ok
+tests/collect_stress.rs [collect_stress]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/collect_stress.rs [collect_stress]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/collect_stress.rs [collect_stress]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/collect_stress.rs [collect_stress]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/collect_stress.rs [collect_stress]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/collect_stress.rs [collect_stress]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/collect_stress.rs [collect_stress]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/collect_stress.rs [collect_stress]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/collect_stress.rs [collect_stress]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/collect_stress.rs [collect_stress]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/collect_stress.rs [collect_stress]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/collect_stress.rs [collect_stress]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/collect_stress.rs [collect_stress]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/collect_stress.rs [collect_stress]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/collect_stress.rs [collect_stress]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/collect_stress.rs [collect_stress]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/collect_stress.rs [collect_stress]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/collect_stress.rs [collect_stress]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/collect_stress.rs [collect_stress]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/collect_stress.rs [collect_stress]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/collect_stress.rs [collect_stress]	the_l0_subset_passes_again_under_collect_on_every_allocation	ok
+tests/collect_stress.rs [collect_stress]	the_stress_subset_reads_every_phase_subset_file	ok
+tests/collect_stress.rs [collect_stress]	values_compound_write_roots_the_old_value_before_the_stems_first_allocation	ok
+tests/collect_stress.rs [collect_stress]	values_environment_write_roots_the_old_value_before_the_stores_allocation	ok
+tests/collection_arity.rs [collection_arity]	every_exemption_says_why	ok
+tests/collection_arity.rs [collection_arity]	every_row_is_sent_something_its_arity_needs	ok
+tests/collection_arity.rs [collection_arity]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/collection_arity.rs [collection_arity]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/collection_arity.rs [collection_arity]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/collection_arity.rs [collection_arity]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/collection_arity.rs [collection_arity]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/collection_arity.rs [collection_arity]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/collection_arity.rs [collection_arity]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/collection_arity.rs [collection_arity]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/collection_arity.rs [collection_arity]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/collection_arity.rs [collection_arity]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/collection_arity.rs [collection_arity]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/collection_arity.rs [collection_arity]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/collection_arity.rs [collection_arity]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/collection_arity.rs [collection_arity]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/collection_arity.rs [collection_arity]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/collection_arity.rs [collection_arity]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/collection_arity.rs [collection_arity]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/collection_arity.rs [collection_arity]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/collection_arity.rs [collection_arity]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/collection_arity.rs [collection_arity]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/collection_arity.rs [collection_arity]	the_oracle_completes_every_send	ok
+tests/collection_arity.rs [collection_arity]	the_table_matches_the_three_sides	ok
+tests/collection_scopes.rs [collection_scopes]	every_documented_row_resolves_to_a_scope	ok
+tests/collection_scopes.rs [collection_scopes]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/collection_scopes.rs [collection_scopes]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/collection_scopes.rs [collection_scopes]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/collection_scopes.rs [collection_scopes]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/collection_scopes.rs [collection_scopes]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/collection_scopes.rs [collection_scopes]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/collection_scopes.rs [collection_scopes]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/collection_scopes.rs [collection_scopes]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/collection_scopes.rs [collection_scopes]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/collection_scopes.rs [collection_scopes]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/collection_scopes.rs [collection_scopes]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/collection_scopes.rs [collection_scopes]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/collection_scopes.rs [collection_scopes]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/collection_scopes.rs [collection_scopes]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/collection_scopes.rs [collection_scopes]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/collection_scopes.rs [collection_scopes]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/collection_scopes.rs [collection_scopes]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/collection_scopes.rs [collection_scopes]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/collection_scopes.rs [collection_scopes]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/collection_scopes.rs [collection_scopes]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/collection_scopes.rs [collection_scopes]	the_kind_column_agrees_with_the_two_it_governs	ok
+tests/collection_scopes.rs [collection_scopes]	the_table_matches_the_interpreter	ok
+tests/corpus.rs [corpus]	a_sidecar_changes_what_one_of_the_interpreters_answers	ok
+tests/corpus.rs [corpus]	corpus_differential	ok
+tests/corpus.rs [corpus]	demonstrate_the_report_reaches_a_plain_cargo_test	ok
+tests/corpus.rs [corpus]	every_lang_program_is_run_or_named_unfiled	ok
+tests/corpus.rs [corpus]	every_opted_in_comparison_names_a_program_the_subset_runs	ok
+tests/corpus.rs [corpus]	every_sidecar_names_a_program_the_subset_runs	ok
+tests/corpus.rs [corpus]	probe_emit_uncaptured_marker	ignored, run only by demonstrate_the_report_reaches_a_plain_cargo_test, as a child process
+tests/corpus.rs [corpus]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/corpus.rs [corpus]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/corpus.rs [corpus]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/corpus.rs [corpus]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/corpus.rs [corpus]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/corpus.rs [corpus]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/corpus.rs [corpus]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/corpus.rs [corpus]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/corpus.rs [corpus]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/corpus.rs [corpus]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/corpus.rs [corpus]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/corpus.rs [corpus]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/corpus.rs [corpus]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/corpus.rs [corpus]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/corpus.rs [corpus]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/corpus.rs [corpus]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/corpus.rs [corpus]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/corpus.rs [corpus]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/corpus.rs [corpus]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/corpus.rs [corpus]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/corpus.rs [corpus]	the_differential_reads_every_phase_subset_file	ok
+tests/corpus.rs [corpus]	the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list	ok
+tests/corpus.rs [corpus]	the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else	ok
+tests/coverage.rs [coverage]	a_class_directive_is_admitted_without_panicking	ok
+tests/coverage.rs [coverage]	an_unadmitted_directive_still_panics - should panic	ok
+tests/coverage.rs [coverage]	every_directive_keyword_is_correctly_admitted_or_refused	ok
+tests/coverage.rs [coverage]	every_in_scope_variant_is_witnessed_by_the_phase_subsets	ok
+tests/coverage.rs [coverage]	owners::assert_owner_strings_are_split_table_phases	ok
+tests/coverage.rs [coverage]	owners::every_excluded_builtin_names_a_phase_that_owes_it	ok
+tests/coverage.rs [coverage]	owners::only_backslash_is_unreachable	ok
+tests/coverage.rs [coverage]	owners::out_of_scope_set_matches_the_committed_expectation	ok
+tests/coverage.rs [coverage]	owners::the_two_harnesses_include_this_exact_file	ok
+tests/coverage.rs [coverage]	owners::variant_counts_match_the_audited_split	ok
+tests/coverage.rs [coverage]	phase_4a_subset_matches_the_committed_list	ok
+tests/coverage.rs [coverage]	phase_4b_subset_matches_the_committed_list	ok
+tests/coverage.rs [coverage]	phase_4c_subset_matches_the_committed_list	ok
+tests/coverage.rs [coverage]	phase_5a_subset_matches_the_committed_list	ok
+tests/coverage.rs [coverage]	phase_5b_subset_matches_the_committed_list	ok
+tests/coverage.rs [coverage]	phase_5c_subset_matches_the_committed_list	ok
+tests/coverage.rs [coverage]	phase_5d_subset_matches_the_committed_list	ok
+tests/coverage.rs [coverage]	read_subset_unions_two_files_first_seen_order_deduplicated	ok
+tests/coverage.rs [coverage]	the_builtin_exclusion_set_matches_the_committed_file	ok
+tests/coverage.rs [coverage]	the_union_reads_every_phase_subset_file	ok
+tests/coverage.rs [coverage]	the_walker_descends_into_a_method_body_and_an_attribute_body	ok
+tests/datetime_zone.rs [datetime_zone]	date_and_time_read_the_same_zone_the_oracle_does	ok
+tests/datetime_zone.rs [datetime_zone]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/datetime_zone.rs [datetime_zone]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/datetime_zone.rs [datetime_zone]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/datetime_zone.rs [datetime_zone]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/datetime_zone.rs [datetime_zone]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/datetime_zone.rs [datetime_zone]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/datetime_zone.rs [datetime_zone]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/datetime_zone.rs [datetime_zone]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/datetime_zone.rs [datetime_zone]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/datetime_zone.rs [datetime_zone]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/datetime_zone.rs [datetime_zone]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/datetime_zone.rs [datetime_zone]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/datetime_zone.rs [datetime_zone]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/datetime_zone.rs [datetime_zone]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/datetime_zone.rs [datetime_zone]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/datetime_zone.rs [datetime_zone]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/datetime_zone.rs [datetime_zone]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/datetime_zone.rs [datetime_zone]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/datetime_zone.rs [datetime_zone]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/datetime_zone.rs [datetime_zone]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/deadline.rs [deadline]	a_deadline_a_run_finishes_inside_changes_nothing	ok
+tests/deadline.rs [deadline]	a_finalizer_that_outlives_the_deadline_is_still_reported	ok
+tests/deadline.rs [deadline]	a_run_that_traced_before_its_deadline_still_reads_as_unfinished	ok
+tests/deadline.rs [deadline]	a_sweep_containing_the_self_forward_reddens_one_row_and_completes	ok
+tests/deadline.rs [deadline]	a_valued_reply_ends_the_same_program	ok
+tests/deadline.rs [deadline]	every_unbounded_shape_this_crate_can_take_is_bounded	ok
+tests/deadline.rs [deadline]	layer_two_returns_for_a_run_layer_one_is_not_watching	ok
+tests/deadline.rs [deadline]	no_trap_catches_the_deadline	ok
+tests/deadline.rs [deadline]	the_report_is_not_a_condition	ok
+tests/deadline.rs [deadline]	the_self_forward_ends_at_its_deadline_on_both_engines	ok
+tests/directive_options.rs [directive_options]	every_directive_options_program_answers_the_oracle	ok
+tests/directive_options.rs [directive_options]	lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else	ok
+tests/directive_options.rs [directive_options]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/directive_options.rs [directive_options]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/directive_options.rs [directive_options]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/directive_options.rs [directive_options]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/directive_options.rs [directive_options]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/directive_options.rs [directive_options]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/directive_options.rs [directive_options]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/directive_options.rs [directive_options]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/directive_options.rs [directive_options]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/directive_options.rs [directive_options]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/directive_options.rs [directive_options]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/directive_options.rs [directive_options]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/directive_options.rs [directive_options]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/directive_options.rs [directive_options]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/directive_options.rs [directive_options]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/directive_options.rs [directive_options]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/directive_options.rs [directive_options]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/directive_options.rs [directive_options]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/directive_options.rs [directive_options]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/directive_options.rs [directive_options]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/directive_options.rs [directive_options]	the_licensed_list_names_exactly_the_programs_that_can_trace_from_two_threads	ok
+tests/directive_options.rs [directive_options]	the_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/dispatch_seam.rs [dispatch_seam]	dispatch_passes_through_exactly_one_chokepoint	ok
+tests/dispatch_seam.rs [dispatch_seam]	heap_collect_is_called_from_collect_now_alone	ok
+tests/dispatch_seam.rs [dispatch_seam]	the_protected_question_is_asked_only_inside_the_seam	ok
+tests/dispatch_seam.rs [dispatch_seam]	the_scan_can_tell_a_present_token_from_an_absent_one	ok
+tests/dispatch_seam.rs [dispatch_seam]	the_seam_module_holds_one_struct_one_enum_and_one_function	ok
+tests/dispatch_seam.rs [dispatch_seam]	the_seam_token_is_named_only_by_the_dispatch_module	ok
+tests/environment_seam.rs [environment_seam]	directory_lookup_passes_through_exactly_one_chokepoint	ok
+tests/environment_seam.rs [environment_seam]	the_scan_can_tell_a_present_token_from_an_absent_one	ok
+tests/environment_seam.rs [environment_seam]	the_seam_module_holds_only_the_items_it_is_designed_around	ok
+tests/frame_block.rs [frame_block]	a_block_size_outside_the_range_is_refused_before_any_run	ok
+tests/frame_block.rs [frame_block]	registers_in_every_block_stay_rooted_under_the_smallest_block	ok
+tests/gate_table_c.rs [gate_table_c]	concept_and_class_gate_table	ok
+tests/gate_table_c.rs [gate_table_c]	every_closed_phase_this_table_owns_rows_for_is_gated	ok
+tests/gate_table_c.rs [gate_table_c]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/gate_table_c.rs [gate_table_c]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/gate_table_c.rs [gate_table_c]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/gate_table_c.rs [gate_table_c]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/gate_table_c.rs [gate_table_c]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/gate_table_c.rs [gate_table_c]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/gate_table_c.rs [gate_table_c]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/gate_table_c.rs [gate_table_c]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/gate_table_c.rs [gate_table_c]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/gate_table_c.rs [gate_table_c]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/gate_table_c.rs [gate_table_c]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/gate_table_c.rs [gate_table_c]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/gate_table_c.rs [gate_table_c]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/gate_table_c.rs [gate_table_c]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/gate_table_c.rs [gate_table_c]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/gate_table_c.rs [gate_table_c]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/gate_table_c.rs [gate_table_c]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/gate_table_c.rs [gate_table_c]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/gate_table_c.rs [gate_table_c]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/gate_table_c.rs [gate_table_c]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/gate_table_d.rs [gate_table_d]	directive_option_gate_table	ok
+tests/gate_table_d.rs [gate_table_d]	every_closed_phase_this_table_owns_rows_for_is_gated	ok
+tests/gate_table_d.rs [gate_table_d]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/gate_table_d.rs [gate_table_d]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/gate_table_d.rs [gate_table_d]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/gate_table_d.rs [gate_table_d]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/gate_table_d.rs [gate_table_d]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/gate_table_d.rs [gate_table_d]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/gate_table_d.rs [gate_table_d]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/gate_table_d.rs [gate_table_d]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/gate_table_d.rs [gate_table_d]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/gate_table_d.rs [gate_table_d]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/gate_table_d.rs [gate_table_d]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/gate_table_d.rs [gate_table_d]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/gate_table_d.rs [gate_table_d]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/gate_table_d.rs [gate_table_d]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/gate_table_d.rs [gate_table_d]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/gate_table_d.rs [gate_table_d]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/gate_table_d.rs [gate_table_d]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/gate_table_d.rs [gate_table_d]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/gate_table_d.rs [gate_table_d]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/gate_table_d.rs [gate_table_d]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/gate_table_d.rs [gate_table_d]	the_verdict_function_partitions_the_descriptor_cube	ok
+tests/input_oracle.rs [input_oracle]	an_unreadable_console_is_end_of_input	ok
+tests/input_oracle.rs [input_oracle]	command_line_arguments_and_the_console_agree_with_the_oracle	ok
+tests/input_oracle.rs [input_oracle]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/input_oracle.rs [input_oracle]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/input_oracle.rs [input_oracle]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/input_oracle.rs [input_oracle]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/input_oracle.rs [input_oracle]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/input_oracle.rs [input_oracle]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/input_oracle.rs [input_oracle]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/input_oracle.rs [input_oracle]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/input_oracle.rs [input_oracle]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/input_oracle.rs [input_oracle]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/input_oracle.rs [input_oracle]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/input_oracle.rs [input_oracle]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/input_oracle.rs [input_oracle]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/input_oracle.rs [input_oracle]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/input_oracle.rs [input_oracle]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/input_oracle.rs [input_oracle]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/input_oracle.rs [input_oracle]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/input_oracle.rs [input_oracle]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/input_oracle.rs [input_oracle]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/input_oracle.rs [input_oracle]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/internal_routines.rs [internal_routines]	every_unimplemented_row_names_an_open_phase_that_owes_it	ok
+tests/internal_routines.rs [internal_routines]	the_table_names_exactly_what_the_two_internal_packages_register	ok
+tests/introspection_arity.rs [introspection_arity]	every_exemption_says_why	ok
+tests/introspection_arity.rs [introspection_arity]	every_refused_row_is_really_refused	ok
+tests/introspection_arity.rs [introspection_arity]	every_row_is_sent_something_its_arity_needs	ok
+tests/introspection_arity.rs [introspection_arity]	every_unstable_row_is_really_unstable	FAILED
+tests/introspection_arity.rs [introspection_arity]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/introspection_arity.rs [introspection_arity]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/introspection_arity.rs [introspection_arity]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/introspection_arity.rs [introspection_arity]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/introspection_arity.rs [introspection_arity]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/introspection_arity.rs [introspection_arity]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/introspection_arity.rs [introspection_arity]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/introspection_arity.rs [introspection_arity]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/introspection_arity.rs [introspection_arity]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/introspection_arity.rs [introspection_arity]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/introspection_arity.rs [introspection_arity]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/introspection_arity.rs [introspection_arity]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/introspection_arity.rs [introspection_arity]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/introspection_arity.rs [introspection_arity]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/introspection_arity.rs [introspection_arity]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/introspection_arity.rs [introspection_arity]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/introspection_arity.rs [introspection_arity]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/introspection_arity.rs [introspection_arity]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/introspection_arity.rs [introspection_arity]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/introspection_arity.rs [introspection_arity]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/introspection_arity.rs [introspection_arity]	the_oracle_completes_every_send	ok
+tests/introspection_arity.rs [introspection_arity]	the_table_matches_the_three_sides	ok
+tests/introspection_scopes.rs [introspection_scopes]	every_class_in_scope_has_a_receiver	ok
+tests/introspection_scopes.rs [introspection_scopes]	every_documented_row_resolves_to_a_scope	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/introspection_scopes.rs [introspection_scopes]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/introspection_scopes.rs [introspection_scopes]	the_kind_column_agrees_with_the_two_it_governs	ok
+tests/introspection_scopes.rs [introspection_scopes]	the_table_matches_the_interpreter	ok
+tests/ir_recorded.rs [ir_recorded]	every_branch_shape_answers_as_recorded	ok
+tests/ir_recorded.rs [ir_recorded]	every_case_file_answers_as_recorded	ok
+tests/ir_recorded.rs [ir_recorded]	every_loop_shape_answers_as_recorded	ok
+tests/ir_recorded.rs [ir_recorded]	every_population_runs_without_a_refusal	ok
+tests/ir_recorded.rs [ir_recorded]	every_population_the_tree_calls_for_is_present_and_non_empty	ok
+tests/ir_recorded.rs [ir_recorded]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/ir_recorded.rs [ir_recorded]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/ir_recorded.rs [ir_recorded]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/ir_recorded.rs [ir_recorded]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/ir_recorded.rs [ir_recorded]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/ir_recorded.rs [ir_recorded]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/ir_recorded.rs [ir_recorded]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/ir_recorded.rs [ir_recorded]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/ir_recorded.rs [ir_recorded]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/ir_recorded.rs [ir_recorded]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/ir_recorded.rs [ir_recorded]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/ir_recorded.rs [ir_recorded]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/ir_recorded.rs [ir_recorded]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/ir_recorded.rs [ir_recorded]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/ir_recorded.rs [ir_recorded]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/ir_recorded.rs [ir_recorded]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/ir_recorded.rs [ir_recorded]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/ir_recorded.rs [ir_recorded]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/ir_recorded.rs [ir_recorded]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/ir_recorded.rs [ir_recorded]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/ir_recorded.rs [ir_recorded]	the_harness_reads_every_phase_subset_file	ok
+tests/ir_recorded.rs [ir_recorded]	the_smallest_program_answers	ok
+tests/ir_recorded.rs [ir_recorded]	the_sweep_runs_every_ootest_suite_a_sibling_harness_runs	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	every_recorded_expectation_is_still_what_the_oracle_produces	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/ir_recorded_oracle.rs [ir_recorded_oracle]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/keyword_assertions.rs [keyword_assertions]	a_body_that_runs_only_some_of_its_assertions_is_credited_only_those	ok
+tests/keyword_assertions.rs [keyword_assertions]	a_body_whose_assertions_never_run_is_not_a_pass	ok
+tests/keyword_assertions.rs [keyword_assertions]	an_assertion_inside_a_loop_is_checked_on_every_pass	ok
+tests/keyword_assertions.rs [keyword_assertions]	every_exempt_attribution_is_a_known_phase_or_a_declared_defect	ok
+tests/keyword_assertions.rs [keyword_assertions]	keyword_assertions_differential	ok
+tests/keyword_assertions.rs [keyword_assertions]	the_exempt_set_matches_the_current_failures	ok
+tests/keyword_assertions.rs [keyword_assertions]	the_falsification_proof	ok
+tests/library_routine_memory.rs [library_routine_memory]	imported_routines_sent_in_a_loop_run_under_the_oracles_memory_cap	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/library_routine_memory.rs [library_routine_memory]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/licensed_divergences.rs [licensed_divergences]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/licensed_divergences.rs [licensed_divergences]	the_licensed_divergences_still_diverge_exactly_as_recorded	ok
+tests/licensed_divergences.rs [licensed_divergences]	the_prose_rows_and_this_table_name_the_same_divergences	ok
+tests/loud.rs [loud]	assert_witness_set_is_complete	ok
+tests/loud.rs [loud]	every_out_of_scope_variant_fails_loudly	ok
+tests/loud.rs [loud]	in_scope_counts_match_the_audited_split	ok
+tests/loud.rs [loud]	owners::assert_owner_strings_are_split_table_phases	ok
+tests/loud.rs [loud]	owners::every_excluded_builtin_names_a_phase_that_owes_it	ok
+tests/loud.rs [loud]	owners::only_backslash_is_unreachable	ok
+tests/loud.rs [loud]	owners::out_of_scope_set_matches_the_committed_expectation	ok
+tests/loud.rs [loud]	owners::the_two_harnesses_include_this_exact_file	ok
+tests/loud.rs [loud]	owners::variant_counts_match_the_audited_split	ok
+tests/method_bodies.rs [method_bodies]	every_verdict_parses_back_from_its_label	ok
+tests/method_bodies.rs [method_bodies]	no_row_started_diverging_or_stopped_answering	ok
+tests/method_bodies.rs [method_bodies]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/method_bodies.rs [method_bodies]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/method_bodies.rs [method_bodies]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/method_bodies.rs [method_bodies]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/method_bodies.rs [method_bodies]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/method_bodies.rs [method_bodies]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/method_bodies.rs [method_bodies]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/method_bodies.rs [method_bodies]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/method_bodies.rs [method_bodies]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/method_bodies.rs [method_bodies]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/method_bodies.rs [method_bodies]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/method_bodies.rs [method_bodies]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/method_bodies.rs [method_bodies]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/method_bodies.rs [method_bodies]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/method_bodies.rs [method_bodies]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/method_bodies.rs [method_bodies]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/method_bodies.rs [method_bodies]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/method_bodies.rs [method_bodies]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/method_bodies.rs [method_bodies]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/method_bodies.rs [method_bodies]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/method_bodies.rs [method_bodies]	the_regression_rule_is_the_two_rules_it_states	ok
+tests/native_entries.rs [native_entries]	every_family_has_a_program_and_every_program_has_a_family	ok
+tests/native_entries.rs [native_entries]	invoking_an_unimplemented_entry_point_is_loud_and_names_its_phase	ok
+tests/native_entries.rs [native_entries]	no_family_program_is_a_corpus_row	ok
+tests/native_entries.rs [native_entries]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/native_entries.rs [native_entries]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/native_entries.rs [native_entries]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/native_entries.rs [native_entries]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/native_entries.rs [native_entries]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/native_entries.rs [native_entries]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/native_entries.rs [native_entries]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/native_entries.rs [native_entries]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/native_entries.rs [native_entries]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/native_entries.rs [native_entries]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/native_entries.rs [native_entries]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/native_entries.rs [native_entries]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/native_entries.rs [native_entries]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/native_entries.rs [native_entries]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/native_entries.rs [native_entries]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/native_entries.rs [native_entries]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/native_entries.rs [native_entries]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/native_entries.rs [native_entries]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/native_entries.rs [native_entries]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/native_entries.rs [native_entries]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/native_entries.rs [native_entries]	the_implemented_entry_points_are_the_ones_the_plan_names	ok
+tests/no_process_state.rs [no_process_state]	the_interpreter_never_writes_the_process_environment_or_directory	ok
+tests/oracle_deadline.rs [oracle_deadline]	a_background_process_holding_the_pipe_open_does_not_hang_the_run	ok
+tests/oracle_deadline.rs [oracle_deadline]	a_program_that_never_finishes_reddens_at_the_deadline_instead_of_hanging	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/oracle_deadline.rs [oracle_deadline]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/owners.rs [owners]	assert_owner_strings_are_split_table_phases	ok
+tests/owners.rs [owners]	every_excluded_builtin_names_a_phase_that_owes_it	ok
+tests/owners.rs [owners]	only_backslash_is_unreachable	ok
+tests/owners.rs [owners]	out_of_scope_set_matches_the_committed_expectation	ok
+tests/owners.rs [owners]	the_two_harnesses_include_this_exact_file	ok
+tests/owners.rs [owners]	variant_counts_match_the_audited_split	ok
+tests/package_requires.rs [package_requires]	a_requires_cycle_is_the_oracles_own_report	ok
+tests/package_requires.rs [package_requires]	each_of_the_four_search_routes_finds_the_required_file	ok
+tests/package_requires.rs [package_requires]	noprolog_suppresses_a_required_files_prologue_and_not_a_programs_own	ok
+tests/package_requires.rs [package_requires]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/package_requires.rs [package_requires]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/package_requires.rs [package_requires]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/package_requires.rs [package_requires]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/package_requires.rs [package_requires]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/package_requires.rs [package_requires]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/package_requires.rs [package_requires]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/package_requires.rs [package_requires]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/package_requires.rs [package_requires]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/package_requires.rs [package_requires]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/package_requires.rs [package_requires]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/package_requires.rs [package_requires]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/package_requires.rs [package_requires]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/package_requires.rs [package_requires]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/package_requires.rs [package_requires]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/package_requires.rs [package_requires]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/package_requires.rs [package_requires]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/package_requires.rs [package_requires]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/package_requires.rs [package_requires]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/package_requires.rs [package_requires]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/package_requires.rs [package_requires]	the_earliest_route_wins_when_every_one_of_them_holds_a_copy	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	parse_version_still_answers_what_the_oracle_answers	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/parse_version_oracle.rs [parse_version_oracle]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/prompt_before_read.rs [prompt_before_read]	a_say_before_a_pull_arrives_before_the_answer_is_typed	ok
+tests/prompt_before_read.rs [prompt_before_read]	an_interactive_trace_prompt_arrives_before_its_command_is_typed	ok
+tests/refusal_sites.rs [refusal_sites]	a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not	ok
+tests/refusal_sites.rs [refusal_sites]	every_send_surface_row_is_walked	ok
+tests/refusal_sites.rs [refusal_sites]	the_answers_more_than_one_row_shares_are_the_recorded_ones	ok
+tests/refusal_sites.rs [refusal_sites]	the_scanner_finds_constructors_and_only_constructors	ok
+tests/refusal_sites.rs [refusal_sites]	the_table_holds_every_constructor_the_source_defines	ok
+tests/spike.rs [spike]	a_loud_failure_message_does_not_grow_with_the_expression	ok
+tests/spike.rs [spike]	a_raised_condition_reports_the_failing_clause	ok
+tests/spike.rs [spike]	a_variable_round_trips_through_its_slot	ok
+tests/spike.rs [spike]	an_unset_variable_reads_as_its_own_name	ok
+tests/spike.rs [spike]	records_the_stack_cost_of_one_eval_frame	ok
+tests/spike.rs [spike]	say_hello_prints_hello	ok
+tests/spike.rs [spike]	the_loud_failure_code_cannot_be_confused_with_a_rexx_error	ok
+tests/spike.rs [spike]	unbounded_call_recursion_raises_11_1_rather_than_overflowing	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	every_declared_gap_names_a_case_and_fails_loudly	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	every_state_builtin_case_matches_the_oracle_except_the_declared_gaps	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/state_builtin_oracle.rs [state_builtin_oracle]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/trace_indent.rs [trace_indent]	deviation_0_collapses_every_wrong_answer_this_file_holds	ok
+tests/trace_indent.rs [trace_indent]	every_case_matches_the_oracle	ok
+tests/trace_indent.rs [trace_indent]	every_case_ships_all_three_files	ok
+tests/trace_indent.rs [trace_indent]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/trace_indent.rs [trace_indent]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/trace_indent.rs [trace_indent]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/trace_indent.rs [trace_indent]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/trace_indent.rs [trace_indent]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/trace_indent.rs [trace_indent]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/trace_indent.rs [trace_indent]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/trace_indent.rs [trace_indent]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/trace_indent.rs [trace_indent]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/trace_indent.rs [trace_indent]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/trace_indent.rs [trace_indent]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/trace_indent.rs [trace_indent]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/trace_indent.rs [trace_indent]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/trace_indent.rs [trace_indent]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/trace_indent.rs [trace_indent]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/trace_indent.rs [trace_indent]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/trace_indent.rs [trace_indent]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/trace_indent.rs [trace_indent]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/trace_indent.rs [trace_indent]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/trace_indent.rs [trace_indent]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/trace_oracle.rs [trace_oracle]	call_arguments_covers_the_argument_prefix_at_every_position_shape	ok
+tests/trace_oracle.rs [trace_oracle]	compound_read_write_covers_the_resolved_compound_name	ok
+tests/trace_oracle.rs [trace_oracle]	control_variable_novalue_covers_a_dropped_control_variable_under_a_trap	ok
+tests/trace_oracle.rs [trace_oracle]	control_variable_reread_covers_a_body_that_writes_the_control_variable	ok
+tests/trace_oracle.rs [trace_oracle]	controlled_loop_covers_the_control_variables_own_value_lines	ok
+tests/trace_oracle.rs [trace_oracle]	dotvariable_beyond_the_list_covers_the_spec_correction	ok
+tests/trace_oracle.rs [trace_oracle]	every_live_witness_emits_its_prefix_and_is_run_by_the_corpus	ok
+tests/trace_oracle.rs [trace_oracle]	every_trace_prefix_the_oracle_emits_has_a_witness	ok
+tests/trace_oracle.rs [trace_oracle]	every_witness_still_emits_every_prefix_it_is_named_for	ok
+tests/trace_oracle.rs [trace_oracle]	exit_value_covers_the_exit_instructions_own_result_line	ok
+tests/trace_oracle.rs [trace_oracle]	function_call_covers_the_function_prefix_after_the_callees_own_lines	ok
+tests/trace_oracle.rs [trace_oracle]	keyword_while_covers_a_re_evaluated_keyword_across_every_pass	ok
+tests/trace_oracle.rs [trace_oracle]	message_send_covers_the_message_result_line	ok
+tests/trace_oracle.rs [trace_oracle]	namespace_lookup_covers_the_class_resolution_line	ok
+tests/trace_oracle.rs [trace_oracle]	parse_placeholder_covers_the_dummy_prefix_and_the_two_modes_disagreement	ok
+tests/trace_oracle.rs [trace_oracle]	prefix_operators_covers_plus_and_backslash	ok
+tests/trace_oracle.rs [trace_oracle]	pull_queue_covers_the_line_reading_sources_in_both_modes	ok
+tests/trace_oracle.rs [trace_oracle]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/trace_oracle.rs [trace_oracle]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/trace_oracle.rs [trace_oracle]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/trace_oracle.rs [trace_oracle]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/trace_oracle.rs [trace_oracle]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/trace_oracle.rs [trace_oracle]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/trace_oracle.rs [trace_oracle]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/trace_oracle.rs [trace_oracle]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/trace_oracle.rs [trace_oracle]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/trace_oracle.rs [trace_oracle]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/trace_oracle.rs [trace_oracle]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/trace_oracle.rs [trace_oracle]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/trace_oracle.rs [trace_oracle]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/trace_oracle.rs [trace_oracle]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/trace_oracle.rs [trace_oracle]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/trace_oracle.rs [trace_oracle]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/trace_oracle.rs [trace_oracle]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/trace_oracle.rs [trace_oracle]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/trace_oracle.rs [trace_oracle]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/trace_oracle.rs [trace_oracle]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/trace_oracle.rs [trace_oracle]	the_prefix_table_reads_every_phase_subset_file	ok
+tests/trace_oracle.rs [trace_oracle]	trace_labels_covers_the_labels_only_mode	ok
+tests/trace_oracle.rs [trace_oracle]	trace_output_covers_clause_result_assignment_literal_variable_and_operator	ok
+tests/trace_oracle.rs [trace_oracle]	use_arg_alias_covers_the_alias_prefix_and_its_results_level_gate	ok
+tests/unreachable_classes.rs [unreachable_classes]	a_class_marked_unreachable_still_has_no_route_to_an_instance	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::arity::tests::an_empty_argument_list_sends_no_parentheses	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::arity::tests::directives_are_appended_after_the_program	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::oracle::tests::labels_name_exactly_the_channels_that_differ	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::tests::a_changed_value_still_differs_after_normalisation	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::tests::a_missing_line_still_differs_after_normalisation	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::tests::a_non_trace_line_is_untouched_including_its_own_spaces	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::tests::a_reordered_line_still_differs_after_normalisation	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal	ok
+tests/unreachable_classes.rs [unreachable_classes]	support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal	ok
+unittests src/lib.rs [rexx_exec]	activation::address_tests::set_bytes_agrees_with_set	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::a_converted_number_is_text_that_no_later_digits_setting_reshapes	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::a_d2x_length_pads_and_truncates_on_the_left	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::a_grouped_string_carries_its_residue_to_the_end	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::a_length_makes_the_read_a_signed_window	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::a_result_too_large_to_allocate_raises_the_oracles_error_5	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::a_scan_takes_apart_every_text_the_number_parser_accepts	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::a_substitution_carries_bytes_and_the_report_makes_them_displayable	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::a_two_argument_call_ending_in_a_range_drops_a_preceding_class	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::an_omitted_pad_leaves_the_longer_strings_tail_alone	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::c2x_and_x2c_are_inverse_over_every_byte	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::decimals_are_significant_relative_to_the_precision	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::every_base64_digit_decodes_to_the_value_that_encoded_it	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::every_byte_survives_the_base64_round_trip	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::every_character_class_is_the_oracles_own_table	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::only_blank_and_tab_separate_groups	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::the_arity_rows_are_the_oracles_own	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::the_call_layer_is_checked_before_the_operation_layer	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::the_precision_bounds_the_result_one_way_and_the_value_the_other	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::the_residue_is_checked_at_every_gap_and_not_only_at_the_end	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::whitespace_at_either_end_names_its_position	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::x2c_pads_an_odd_nibble_where_x2b_does_not	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::xrange_concatenates_ranges_and_wraps_at_the_top	ok
+unittests src/lib.rs [rexx_exec]	builtin::convert::tests::xrange_names_the_position_that_is_wrong_and_what_it_wanted	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::a_stems_default_value_makes_every_tail_report_var	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::classify_matches_every_symbol_testgroup_numbered_case	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::datatype_answers_the_one_argument_form_and_every_option_letter	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::datatype_tells_an_omitted_option_from_an_empty_one	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::datatype_w_reads_the_running_digits_not_the_values_captured_one	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::no_byte_above_0x7f_is_a_whole_number	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::no_byte_above_0x7f_is_alphanumeric_upper_lower_or_mixed	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::symbol_reads_the_variable_pool_for_names_and_compounds	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::the_empty_string_is_char_but_a_valid_binary_string	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::value_40_26_substitutes_the_arguments_own_bytes_case_and_all	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::value_of_an_undefined_dot_literal_is_its_own_spelling	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::value_of_an_unset_name_is_its_own_upcased_spelling	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::value_raises_40_26_for_a_bad_symbol_and_for_writing_a_constant	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::value_substitutes_a_compound_tail_through_the_variable_pool	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::value_writes_the_pool_and_returns_the_old_value	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::values_third_argument_is_decided_by_presence_not_content	ok
+unittests src/lib.rs [rexx_exec]	builtin::datatype::tests::var_answers_the_documented_example_line_for_line	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::a_callees_own_time_r_leaks_into_the_caller_after_it_returns	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::a_dates_result_survives_the_next_calls_allocations	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::a_high_byte_round_trips_raw_and_a_control_byte_becomes_a_placeholder	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::a_nul_byte_is_handled_via_strchrs_own_terminator_quirk_at_all_three_sites	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::a_parse_failure_with_an_input_separator_is_40_44_not_40_19	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::an_input_separator_incompatible_with_the_input_style_is_40_44	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::an_interior_option2_omission_with_osep_supplied_defaults_style2_to_n	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::date_365_is_always_a_valid_day_of_year	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::date_366_is_valid_only_in_a_leap_year	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::date_and_times_option_lists_match_the_oracles_own_error_insert	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::date_conversion_errors_are_40_19	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::date_day_of_year_zero_is_defined_across_five_output_styles	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::date_every_input_letter_round_trips_to_standard	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::date_every_output_letter_from_a_fixed_standard_input	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::date_reads_a_numeric_arguments_own_captured_rendering_not_the_running_digits	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::dates_absolute_clock_is_cached_the_same_way	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::dates_day_of_year_style_round_trips_regardless_of_the_current_year	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::dates_option2_without_indate_is_missing_not_omitted	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::every_date_input_letter_is_accepted	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::every_date_output_letter_is_accepted	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::letters_from_other_dialects_are_rejected_here_too	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::separator_errors_are_40_43_and_40_44	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::the_empty_option_renders_as_the_empty_string_not_a_placeholder	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::the_same_burn_between_two_clauses_changes_the_answer	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::time_conversion_errors_are_40_19	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::time_e_does_not_reset_the_anchor_time_r_does	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::time_every_output_letter_from_a_fixed_normal_input	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::time_f_and_t_round_trip_through_their_own_style	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::time_h_s_m_diverge_from_the_oracle_for_a_date_shaped_output	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::time_n_c_l_agree_with_the_oracle_but_h_s_m_do_not	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::time_o_offset_round_trips	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::time_r_or_e_with_an_intime_is_refused_up_front	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::time_r_resets_relative_to_the_last_reset_not_program_start	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::times_option2_requires_intime	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::two_clock_reads_in_one_clause_answer_identically_across_a_real_burn	ok
+unittests src/lib.rs [rexx_exec]	builtin::datetime::tests::two_time_r_reads_in_one_clause_answer_identically	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::a_before_of_zero_always_fails_and_an_omitted_one_does_not	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::a_padding_width_too_large_to_allocate_raises_error_5	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::a_random_answer_keeps_its_own_spelling_at_every_precision	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::a_result_is_rendered_under_the_settings_that_produced_it	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::a_seed_starts_a_stream_that_later_calls_continue	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::a_tie_keeps_the_earlier_value_at_both_ends	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::abs_rounds_whatever_the_sign_and_sign_ignores_the_precision	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::an_omitted_argument_answers_differently_on_the_two_paths	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::expp_zero_suppresses_exponential_and_beats_expt_zero	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::format_honours_numeric_form	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::format_rounds_half_up_away_from_zero	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::max_and_min_compare_under_the_fuzz_in_force	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::max_and_min_take_as_many_arguments_as_they_are_given	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::min_answers_a_lone_target_before_max_would	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::random_validates_its_range_and_its_seed_separately	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::the_oversize_message_names_the_number_as_it_stands_at_the_failure	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::the_target_and_the_later_arguments_raise_different_numbers	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::the_three_validation_layers_run_in_the_oracles_order	ok
+unittests src/lib.rs [rexx_exec]	builtin::numeric::tests::trunc_rounds_to_digits_first_and_never_goes_exponential	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::a_call_handler_reports_call_and_delay_and_leaves_nothing_behind	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::a_description_survives_as_far_as_the_handler	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::a_digit_string_is_a_bad_letter_to_the_builtin_and_a_skip_count_to_the_instruction	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::a_range_message_ignores_the_digits_the_value_was_rendered_under	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::a_range_message_substitutes_the_converted_integer	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::a_reset_dies_with_the_activation_that_asked_for_it	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::address_reports_the_default_and_then_follows_the_swap	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::an_arg_option_without_a_position_is_a_missing_argument	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::arg_option_a_copies_the_list_holes_and_all	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::arg_option_a_shapes_position_one_even_with_no_arguments	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::arg_reads_the_calls_own_positions_with_omissions_in_place	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::args_three_checks_run_in_the_oracles_order	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::condition_answers_a_syntax_handler_from_inside_it	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::condition_is_empty_outside_a_handler_and_defaults_to_the_instruction	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::condition_rejects_an_unknown_option_and_the_null_string	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::errortext_answers_the_major_message_and_refuses_the_range_ends	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::gc_forces_a_collection_only_when_asked	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::novalues_description_is_the_variables_own_name	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::queued_counts_the_lines_still_waiting	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::sourceline_reads_the_programs_own_text	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::the_instruction_is_stored_and_the_state_is_looked_up_live	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::the_numeric_settings_are_read_back_after_they_change	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::the_numeric_settings_are_the_running_activations_own	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::the_object_valued_options_answer_their_objects	ok
+unittests src/lib.rs [rexx_exec]	builtin::state::tests::trace_reports_the_setting_it_was_given_and_not_only_its_behaviour	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::scan_tests::find_byte_agrees_with_position	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::a_bad_argument_kind_names_the_routine_and_the_call_position	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::a_bad_argument_range_reports_the_converted_value	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::a_counted_answer_is_tagged_rather_than_a_heap_string	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::a_counting_builtin_answers_text_that_no_digits_setting_reshapes	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::a_null_option_byte_is_accepted_and_matches_no_letter	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::a_result_too_large_to_allocate_is_the_oracles_own_error_5	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::a_substitution_carries_bytes_and_the_report_makes_them_displayable	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_call_layer_is_checked_before_the_operation_layer	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_case_shifting_builtins_answer_the_oracles_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_extraction_builtins_answer_the_oracles_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_new_raisers_render_the_oracles_own_message_text	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_option_taking_builtins_answer_the_oracles_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_padding_builtins_answer_the_oracles_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_rewriting_builtins_answer_the_oracles_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_searching_builtins_answer_the_oracles_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_splicing_builtins_answer_the_oracles_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_two_argument_families_exit_differently	ok
+unittests src/lib.rs [rexx_exec]	builtin::string::tests::the_whole_number_conversion_uses_the_argument_precision	ok
+unittests src/lib.rs [rexx_exec]	builtin::tests::dispatch_declines_a_name_that_is_not_a_builtin	ok
+unittests src/lib.rs [rexx_exec]	builtin::tests::every_implemented_row_names_an_in_scope_builtin	ok
+unittests src/lib.rs [rexx_exec]	builtin::tests::every_raw_argument_row_names_a_builtin_and_a_position_it_can_take	ok
+unittests src/lib.rs [rexx_exec]	builtin::tests::resolve_partitions_the_in_scope_set_into_rows_and_gaps	ok
+unittests src/lib.rs [rexx_exec]	builtin::tests::the_arity_checks_answer_the_oracles_own_sub_codes	ok
+unittests src/lib.rs [rexx_exec]	builtin::tests::the_partial_exclusions_are_builtin_names_and_the_whole_ones_are_not	ok
+unittests src/lib.rs [rexx_exec]	builtin::tests::the_raw_argument_table_re_derives_from_the_oracles_own_source	ok
+unittests src/lib.rs [rexx_exec]	builtin::tests::too_many_arguments_wins_over_a_missing_required_one	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::a_bad_argument_kind_names_the_routine_and_the_call_position	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::a_byte_string_alphabet_crosses_every_position	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::a_counting_builtin_answers_text_that_no_digits_setting_reshapes	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::a_negative_count_is_an_invalid_length	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::a_non_positive_position_is_the_operation_layers_own_error	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::a_substitution_carries_bytes_and_the_report_makes_them_displayable	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::an_omitted_count_reaches_every_remaining_word	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::delword_answers_the_oracles_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::only_blank_and_tab_separate_words	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::separators_outside_the_words_do_not_make_words	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::subword_answers_a_slice_of_its_argument	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::the_arity_rows_are_the_oracles_own	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::the_call_layer_is_checked_before_the_operation_layer	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::the_position_is_range_checked_before_the_count_is_honoured	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::the_positional_builtins_answer_the_oracles_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	builtin::word::tests::wordpos_matches_words_and_not_their_separators	ok
+unittests src/lib.rs [rexx_exec]	command::tests::a_command_past_the_argument_cap_does_not_split	ok
+unittests src/lib.rs [rexx_exec]	command::tests::a_metacharacter_outside_quotes_needs_a_shell	ok
+unittests src/lib.rs [rexx_exec]	command::tests::path_splits_on_blanks_and_keeps_quoted_runs_whole	ok
+unittests src/lib.rs [rexx_exec]	command::tests::the_registered_environments_resolve_to_their_shells	ok
+unittests src/lib.rs [rexx_exec]	condition::tests::a_call_on_handlers_condition_object_survives_a_collection_at_every_allocation	ok
+unittests src/lib.rs [rexx_exec]	condition::tests::a_syntax_condition_objects_entries_survive_a_collection_at_every_allocation	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_double_argument_is_read_from_its_digits_and_exponent	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_double_renders_as_the_oracle_renders_it	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_held_library_is_not_replaced_by_a_later_answer	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_library_call_answers_the_same_under_a_collection_at_every_allocation	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_library_named_twice_is_opened_once	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_library_routine_answers_the_same_under_a_collection_at_every_allocation	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_loaded_library_outlives_the_finaliser_sweep	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_name_that_resolves_to_nothing_is_not_held	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_pool_name_is_upcased_and_a_compound_one_is_refused	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_refusal_before_the_call_is_lineless_and_one_after_it_is_not	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_reused_native_frame_holds_nothing_of_the_call_before	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_search_directory_written_after_the_start_is_not_searched	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_signature_refusal_is_numbered_for_a_method_or_a_routine	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::a_version_refused_library_raises_once_and_is_held	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::percent_g_prints_what_c_prints	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::the_conversion_rows_answer_the_same_under_a_collection_at_every_allocation	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::the_native_finaliser_answers_the_same_under_a_collection_at_every_allocation	ok
+unittests src/lib.rs [rexx_exec]	dispatch::library::tests::the_search_path_is_what_makes_the_name_resolve	ok
+unittests src/lib.rs [rexx_exec]	dispatch::native::tests::a_library_other_than_rexx_names_itself_and_its_own_accessors	ok
+unittests src/lib.rs [rexx_exec]	dispatch::native::tests::an_attribute_external_resolves_the_procedure_the_oracle_names	ok
+unittests src/lib.rs [rexx_exec]	dispatch::native::tests::an_entry_point_resolves_whatever_case_it_is_asked_for	ok
+unittests src/lib.rs [rexx_exec]	dispatch::native::tests::every_bootstrap_external_binds_to_an_entry_point_this_registry_holds	ok
+unittests src/lib.rs [rexx_exec]	dispatch::native::tests::every_deferred_entry_point_names_an_open_phase	ok
+unittests src/lib.rs [rexx_exec]	dispatch::native::tests::the_bootstrap_files_and_the_registry_name_the_same_entry_points	ok
+unittests src/lib.rs [rexx_exec]	dispatch::string::tests::every_listed_operator_has_a_row	ok
+unittests src/lib.rs [rexx_exec]	dispatch::string::tests::operator_spellings_match_the_parser	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_class_identity_used_as_a_receiver_answers_from_the_class_side	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_class_scope_name_does_not_reach_a_receiver_that_is_not_a_class_object	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_delegate_directive_forwards_under_every_key_it_claims	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_directory_subclass_keeps_the_instance	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_generated_accessor_pair_reads_and_writes_the_declaring_scopes_pool	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_hash_collection_forwards_a_missing_name_to_its_own_unknown	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_metaclass_with_its_own_new_is_loud	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_method_body_this_crate_cannot_run_is_loud_and_its_neighbours_still_run	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_method_send_binds_self_from_the_receiver_in_the_calling_convention	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_new_directory_reads_nil_until_an_entry_is_put_there	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_null_pointer_renders_as_zero_and_answers_is_null	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_pointer_compares_on_its_address_and_nothing_else	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_pointer_comparison_needs_its_argument	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_pointer_renders_as_its_address_and_names_its_class	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_primitive_constructor_answers_an_instance_or_the_oracle_s_own_refusal	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_private_send_from_another_instance_of_the_declaring_class_is_allowed	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_program_with_no_send_and_no_class_never_builds_the_object_model	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_refused_send_reaches_unknown_and_the_unknown_lookup_is_not_checked	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_reqstr_context_whose_instruction_is_another_phases_is_still_loud	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_scope_override_answers_and_has_one_refusal_for_each_bad_scope	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_semaphore_instance_runs_its_finalizer_without_refusing	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_small_integer_receiver_takes_the_small_int_arm	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_start_scope_hides_a_method_defined_after_it_and_not_one_defined_before	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_stem_forwards_a_message_it_has_no_method_for_to_its_value	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_stem_receiver_answers_stem_and_renders_its_own_value	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_string_table_subclass_answers_its_own_class_methods_and_entries	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::a_subscript_refusal_names_the_position_its_own_method_counts_from	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::an_abstract_send_is_refused_at_the_send_naming_the_message	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::an_argument_with_no_string_value_raises_where_one_with_a_string_value_answers	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::an_entry_method_send_with_no_value_is_loud	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::an_expanded_index_of_one_empty_slot_is_loud	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::an_interlocked_termination_sweep_runs_nothing_and_consumes_nothing	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::an_ordinary_resolution_answers_the_defining_scope	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::an_unimplemented_method_is_loud_where_an_unknown_one_is_a_condition	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::an_unknown_sent_by_hand_needs_an_array_this_crate_does_not_convert	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::array_of_fills_its_slots_from_its_arguments	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::array_of_on_a_subclass_answers_an_instance_of_it	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::identity_hash_answers_a_number_that_follows_the_handle	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::identity_hash_answers_every_receiver_kind_as_the_oracle_does	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::new_on_a_subclass_of_array_answers_an_instance_of_it	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::package_scope_refuses_a_caller_from_another_package	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::private_sends_are_refused_by_who_is_sending	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::self_and_super_are_bound_before_the_bodys_first_instruction	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::the_object_model_is_built_on_first_use	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::the_object_protocol_answers_a_receiver_that_is_not_a_class_object	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::the_package_tables_hold_what_their_directives_declare	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::the_string_hash_matches_the_oracle_including_above_7f	ok
+unittests src/lib.rs [rexx_exec]	dispatch::tests::two_equal_inline_strings_share_one_handle	ok
+unittests src/lib.rs [rexx_exec]	environment::tests::every_directory_method_answers_on_both_directories_as_on_a_copy	ok
+unittests src/lib.rs [rexx_exec]	environment::tests::every_name_the_oracle_answers_resolves_or_is_loud	ok
+unittests src/lib.rs [rexx_exec]	environment::tests::the_bootstrap_leaves_the_oracles_names_in_the_oracles_order	ok
+unittests src/lib.rs [rexx_exec]	environment::tests::the_default_object_name_picks_its_article_by_the_ids_first_letter	ok
+unittests src/lib.rs [rexx_exec]	environment::tests::the_environment_holds_the_native_classes_and_the_hand_registered_entries	ok
+unittests src/lib.rs [rexx_exec]	error::tests::a_bare_ampersand_and_a_missing_value_pass_through	ok
+unittests src/lib.rs [rexx_exec]	error::tests::a_catalogue_miss_is_visible_rather_than_silent	ok
+unittests src/lib.rs [rexx_exec]	error::tests::a_parse_error_becomes_the_condition_the_oracle_raises	ok
+unittests src/lib.rs [rexx_exec]	error::tests::a_substituted_message_and_a_clause_echo_that_keeps_its_trailing_space	ok
+unittests src/lib.rs [rexx_exec]	error::tests::a_substitution_value_containing_an_ampersand_digit_is_left_alone	ok
+unittests src/lib.rs [rexx_exec]	error::tests::every_measured_family_has_catalogue_text	ok
+unittests src/lib.rs [rexx_exec]	error::tests::the_7_3_report_matches_the_oracle_byte_for_byte	ok
+unittests src/lib.rs [rexx_exec]	error::tests::the_clause_echo_saturates_at_forty_columns	ok
+unittests src/lib.rs [rexx_exec]	error::tests::the_exit_code_is_256_minus_the_major	ok
+unittests src/lib.rs [rexx_exec]	error::tests::the_indent_field_prefixes_the_clause_echo_with_that_many_spaces	ok
+unittests src/lib.rs [rexx_exec]	error::tests::the_line_number_field_is_six_wide	ok
+unittests src/lib.rs [rexx_exec]	error::tests::the_report_echoes_one_line_per_level_innermost_first	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::a_class_objects_operators_are_sent_as_messages	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::a_condition_on_an_object_keeps_the_oracles_own_diagnostic	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::a_header_position_that_reads_text_keeps_the_oracles_own_diagnostic	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::a_nil_defaulted_stem_carries_no_operator_frame	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::a_raise_the_oracle_does_not_array_convert_still_answers	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::a_value_the_operator_gap_names_parses_as_no_number	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::an_object_as_a_do_over_target_is_loud	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::an_object_as_a_raise_syntax_substitution_is_loud	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::an_object_assigned_to_a_control_variable_is_loud_at_the_increment	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::an_object_in_a_do_headers_numeric_position_is_loud	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::an_object_reached_through_a_stem_default_answers_as_the_object	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::an_object_the_operator_is_not_sent_to_still_answers	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::an_operator_on_an_instance_is_the_send_the_oracle_makes	ok
+unittests src/lib.rs [rexx_exec]	eval::object_operand_tests::an_operator_sent_to_an_object_is_loud	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_bare_stem_reads_through_the_same_path_as_a_variable	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_comma_list_element_failure_raises_34_6_not_34_901	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_comma_list_is_an_and_of_its_parts	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_comma_list_short_circuits_on_the_first_false_element	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_comparison_reuses_an_already_parsed_num_cache	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_compound_read_resolves_its_tail_and_looks_it_up	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_constant_is_its_own_upcased_spelling	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_dot_variable_beyond_the_three_resolves_falls_back_or_is_loud	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_literal_call_target_never_reaches_the_label_table	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_literal_is_its_own_bytes	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_native_chain_past_the_eval_limit_runs	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_non_numeric_power_exponent_raises_26_8_not_41_1	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_nonnumeric_operand_raises_41_1_with_its_own_text	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_number_created_by_arithmetic_renders_under_the_digits_that_made_it	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_routine_falling_off_its_own_end_in_expression_form_also_ends_the_whole_program	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_routine_returning_no_value_in_expression_form_raises_44_1	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_variable_reads_through_the_plan	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_wholly_excluded_builtin_stays_loud_rather_than_raising_43_1	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::a_zero_divisor_leaves_the_fast_path	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::an_exit_inside_a_routine_reached_by_expression_call_ends_the_whole_program	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::an_internal_function_returns_its_value_into_an_expression	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::an_internal_functions_expression_form_does_not_touch_result	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::an_operand_that_spells_an_integer_reads_as_that_integer	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::an_operand_too_wide_for_the_precision_leaves_the_fast_path	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::an_unresolvable_name_raises_43_1	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::backslash_negated_and_synonym_forms	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::divide_by_zero_raises_42_3	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::division_goes_fast_only_when_it_is_exact	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::eval_raises_11_1_exactly_one_term_past_max_eval_depth	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::eval_survives_exactly_max_eval_depth_terms_and_prints_the_oracles_own_answer	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::integer_division_truncates_toward_zero_and_the_remainder_follows_the_dividend	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::logical_operators_check_the_left_operand_first	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::logical_operators_do_not_short_circuit	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::logical_operators_raise_34_901_on_a_non_logical_operand	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::power_goes_fast_only_for_an_exact_non_negative_exponent	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::prefix_not_flips_a_logical_value	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::prefix_not_on_a_non_logical_value_raises_34_901	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::prefix_plus_and_minus_are_arithmetic_not_a_sign_flip	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::remainder_by_zero_also_raises_42_3	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::strict_equality_compares_bytes_where_the_ordinary_form_compares_value	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::the_seven_arithmetic_operators	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::the_small_int_fast_path_answers_what_the_general_path_answers	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::the_thirteen_line_comparison_transcript	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::the_three_concatenation_forms	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::the_three_logical_operators_and_their_truth_tables	ok
+unittests src/lib.rs [rexx_exec]	eval::tests::the_three_parse_time_dot_variables	ok
+unittests src/lib.rs [rexx_exec]	input::tests::a_byte_read_answers_what_is_there_without_waiting	ok
+unittests src/lib.rs [rexx_exec]	input::tests::a_byte_read_does_not_wait_for_a_source_that_stays_open	ok
+unittests src/lib.rs [rexx_exec]	input::tests::a_count_parts_a_live_source_from_a_drained_one	ok
+unittests src/lib.rs [rexx_exec]	input::tests::a_line_is_the_bytes_before_the_terminator	ok
+unittests src/lib.rs [rexx_exec]	input::tests::an_empty_input_is_exhausted_from_the_start	ok
+unittests src/lib.rs [rexx_exec]	input::tests::an_unterminated_last_line_counts	ok
+unittests src/lib.rs [rexx_exec]	input::tests::reading_past_the_end_keeps_answering_nothing	ok
+unittests src/lib.rs [rexx_exec]	invocation::tests::command_line_words_join_the_way_the_oracle_joins_them	ok
+unittests src/lib.rs [rexx_exec]	invocation::tests::no_words_is_absent_and_one_empty_word_is_present	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_literal_echo_behind_its_own_load_is_accepted	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_literal_echo_in_front_of_its_load_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_literal_echo_reading_another_register_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_read_echo_behind_its_own_load_is_accepted	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_read_echo_in_front_of_its_load_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_read_echo_naming_another_symbol_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_read_echo_of_another_kind_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_read_echo_reading_another_register_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_region_op_naming_a_neighbouring_instruction_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_register_file_wider_than_u16_is_refused	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_released_register_is_handed_out_again_and_a_nested_one_is_not	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_slot_too_wide_for_a_compiled_read_is_unresolved_rather_than_refused	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_trace_op_after_the_regions_first_op_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_trace_op_at_the_head_of_a_clause_region_is_accepted	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_trace_op_naming_a_neighbouring_instruction_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::a_trace_op_outside_a_clause_region_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::an_exec_region_holding_an_op_that_drives_clauses_is_refused - should panic	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::ops_naming_their_own_region_clause_are_accepted	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::the_emitted_exec_shapes_and_every_other_region_are_accepted	ok
+unittests src/lib.rs [rexx_exec]	ir::compile::tests::the_high_water_mark_is_the_deepest_the_stack_reached	ok
+unittests src/lib.rs [rexx_exec]	ir::corpus_shape_tests::every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::a_body_entered_under_trace_r_echoes_its_promoted_clause_from_the_chunk	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::a_call_site_resolves_once_and_answers_from_what_it_kept	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::a_compound_control_resolves_its_tail_on_every_pass	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::a_constant_symbol_is_built_once_and_each_one_gets_its_own_entry	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::a_long_constant_is_built_once_however_many_passes_read_it	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::a_quickened_site_falls_through_to_the_general_path	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::a_resolved_slot_still_names_its_variable_after_the_frame_grows	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::a_trapped_raise_gives_back_every_frame_the_loops_it_escaped_opened	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::no_body_is_refused	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::no_trace_op_echoes_without_the_setting	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::the_ir_engine_drives_every_body_the_program_enters	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::the_ir_engine_steps_a_loop_body_from_the_chunk	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::the_ir_engine_steps_a_selects_chosen_branch_from_the_chunk	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::the_ir_engine_steps_a_simple_blocks_body_from_the_chunk	ok
+unittests src/lib.rs [rexx_exec]	ir::drive::tests::the_ir_engine_steps_an_ifs_chosen_branch_from_the_chunk	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_block_has_an_empty_header_region_and_a_do_over_for_echoes_both_its_target_and_count	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_call_compiles_its_arguments_to_ops_and_one_call_op	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_call_in_a_returns_expression_is_addressed_at_the_returns_slot	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_call_nested_past_the_paths_width_leaves_the_slot_general	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_call_promotes_at_the_root_and_below_it	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_chain_of_operators_reuses_the_destination_register	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_compiled_read_names_the_symbol_its_expression_does	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_compiled_write_names_a_slot_only_for_a_simple_target	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_compiled_writes_slot_comes_from_the_plan_rather_than_from_its_position	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_condition_outside_the_native_set_stays_one_eval_expr	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_constant_symbol_is_a_native_load	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_a_marker	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_header_bound_that_is_a_symbol_and_one_that_is_a_call_take_their_own_ops	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_header_operands_register_goes_back_to_the_body	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_header_slot_outside_the_native_set_leaves_the_other_slots_native	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_message_send_clause_compiles_to_a_region_ending_in_one_message_op	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reuse_them	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_prefix_operator_compiles_to_a_native_op_and_its_own_echo	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_push_and_a_queue_compile_to_one_op_tagged_with_their_end	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_return_and_an_exit_compile_to_one_op_tagged_with_their_keyword	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_return_expression_outside_the_native_set_keeps_its_return_op	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_say_of_a_bare_symbol_compiles_to_a_native_read	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_select_cases_own_value_outlives_the_registers_its_whens_take	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_select_with_no_otherwise_scans_out_onto_its_own_end	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_traced_call_carries_its_clause_echo_in_front_of_the_call	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_traced_counted_loop_echoes_its_do_clause_from_the_stream	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_traced_exit_carries_its_clause_echo_op	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_traced_if_carries_its_clause_echo_as_an_op_of_the_region	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_traced_select_echoes_its_header_and_each_listed_when	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_trap_call_and_a_dynamic_call_keep_no_resolved_site	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_when_condition_outside_the_native_set_stays_one_when_test	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::a_whens_branch_end_is_emitted_in_front_of_an_ifs	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::an_absorbed_when_compiles_to_its_own_region	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::an_argument_that_is_not_a_plain_value_keeps_the_whole_call_unpromoted	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::an_assignment_of_a_literal_compiles_to_a_constant_load_and_a_store	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::an_expression_that_only_contains_a_symbol_is_more_than_that_symbols_read	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::an_if_with_no_else_emits_no_branch_end_jump	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::chunk_for_compiles_a_body_once_across_repeated_lookups	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::each_call_site_takes_a_resolution_site_of_its_own	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::every_binary_operator_but_arithmetic_compiles_to_one_op	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::every_instruction_of_an_all_delegating_body_compiles_to_one_exec_op	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::nested_ifs_reuse_their_registers	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::one_body_under_two_trace_settings_is_two_cached_chunks	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::one_literal_written_twice_is_one_interned_constant	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::precedence_decides_which_operator_is_the_inner_one	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::the_instruction_map_has_an_entry_one_past_the_last_instruction	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::the_value_shapes_outside_the_native_set_stay_general	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::two_assignments_and_two_says_in_one_body_reuse_one_register	ok
+unittests src/lib.rs [rexx_exec]	ir::golden_tests::two_constructs_ending_at_one_instruction_release_to_the_lower_mark	ok
+unittests src/lib.rs [rexx_exec]	ir::tests::a_node_path_carries_thirty_one_steps_and_refuses_the_thirty_second	ok
+unittests src/lib.rs [rexx_exec]	ir::tests::a_node_paths_steps_come_back_outermost_first	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::a_body_that_never_retraces_is_known_at_every_clause	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::a_debug_entry_setting_refuses_the_body	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::a_label_answers_the_meet_over_the_whole_body	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::a_leave_carries_the_setting_from_before_the_trace_after_it	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::a_trace_i_inside_a_loop_settles_the_body_and_not_its_ends	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::a_trace_inside_a_branch_refuses_the_body	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::a_trace_off_inside_a_loop_settles_the_whole_body	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::interpret_leaves_what_follows_it_unknown	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::the_trace_builtin_leaves_what_follows_it_unknown	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::trace_off_from_intermediates_settles_what_follows_it	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::trace_off_from_normal_leaves_the_whole_body_known	ok
+unittests src/lib.rs [rexx_exec]	ir::trace_flow::tests::trace_value_leaves_what_follows_it_unknown	ok
+unittests src/lib.rs [rexx_exec]	ir::valid::tests::a_register_at_the_count_is_refused_and_one_below_it_is_accepted	ok
+unittests src/lib.rs [rexx_exec]	options::tests::a_remaining_novalue_trap_keeps_that_one_escalation	ok
+unittests src/lib.rs [rexx_exec]	options::tests::a_trap_clause_disables_the_escalation_its_own_condition_asked_for	ok
+unittests src/lib.rs [rexx_exec]	options::tests::all_writes_every_escalatable_condition_and_no_other_name	ok
+unittests src/lib.rs [rexx_exec]	options::tests::each_condition_option_writes_only_its_own_slot	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::a_late_parse_arg_template_survives_collection	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::a_positional_operand_must_be_a_whole_number_within_the_active_digits	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::a_relative_trigger_after_a_pattern_measures_from_the_match_start	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::a_template_walk_survives_a_collection_between_its_targets	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::absolute_and_relative_share_the_backward_rule	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::caseless_folds_ascii_letters_only	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::every_trigger_kind_and_source_reaches_its_own_operation	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::length_triggers_are_exact_slices	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::minus_and_minus_length_differ_on_the_same_movement	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::source_and_version_carry_their_own_strings	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::string_patterns_match_at_end_when_absent	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::the_version_fields_reassemble_into_the_constant	ok
+unittests src/lib.rs [rexx_exec]	parse_template::tests::word_carving_keeps_leading_blanks_only_on_the_last_target	ok
+unittests src/lib.rs [rexx_exec]	paths::tests::normalize_makes_one_spelling_of_a_path	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::a_body_that_can_reach_the_trace_setting_is_the_one_that_says_so	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::a_compound_seen_after_the_control_variable_still_gets_its_slots	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::a_control_variable_does_not_take_the_slots_off_a_compound_already_seen	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::a_fragments_plan_resolves_against_the_enclosing_frame	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::a_runtime_name_grows_the_frame	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::a_stem_with_no_plan_slot_binds_in_extra	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::a_tail_piece_and_a_plain_variable_share_one_slot	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::a_tail_piece_with_no_plan_slot_binds_in_extra	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::bind_keeps_a_stem_shaped_names_own_slot_as_its_stems	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::build_fills_what_line_of_computes_for_every_corpus_program	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::build_records_a_compounds_split_under_the_compounds_own_id	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::build_registers_every_name_a_stem_or_compound_touches	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::build_registers_exactly_the_expected_set_not_merely_a_superset	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::clause_line_at_answers_what_clause_line_answers_and_the_override_still_wins	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::indent_of_answers_what_static_indent_answers_at_every_index	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::line_at_answers_what_line_of_answers_at_every_index	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::line_at_falls_back_when_the_plan_was_built_without_a_source	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::names_are_keyed_upcased_but_tail_values_are_not	ok
+unittests src/lib.rs [rexx_exec]	plan::tests::only_a_method_body_holds_self_and_super	ok
+unittests src/lib.rs [rexx_exec]	queue::tests::interleaved_push_and_queue_match_the_oracle_order	ok
+unittests src/lib.rs [rexx_exec]	queue::tests::interleaved_push_and_queue_survive_a_round_trip	ok
+unittests src/lib.rs [rexx_exec]	queue::tests::push_and_queue_actually_write_into_the_running_interpreters_queue	ok
+unittests src/lib.rs [rexx_exec]	queue::tests::queue_alone_is_plain_fifo	ok
+unittests src/lib.rs [rexx_exec]	require::tests::a_directory_qualified_name_bypasses_the_path	ok
+unittests src/lib.rs [rexx_exec]	require::tests::a_leading_dot_is_not_an_extension	ok
+unittests src/lib.rs [rexx_exec]	require::tests::a_name_with_an_extension_is_searched_once	ok
+unittests src/lib.rs [rexx_exec]	require::tests::a_non_regular_hit_abandons_the_rest_of_its_group	ok
+unittests src/lib.rs [rexx_exec]	require::tests::an_absent_environment_entry_removes_only_itself	ok
+unittests src/lib.rs [rexx_exec]	require::tests::an_extension_is_looked_for_in_the_last_component_alone	ok
+unittests src/lib.rs [rexx_exec]	require::tests::each_extension_is_tried_in_the_written_case_and_then_in_lower_case	ok
+unittests src/lib.rs [rexx_exec]	require::tests::the_default_resolve_does_not_try_the_requires_extension	ok
+unittests src/lib.rs [rexx_exec]	require::tests::the_extension_order_is_cls_then_the_parents_then_the_defaults	ok
+unittests src/lib.rs [rexx_exec]	require::tests::the_four_routes_are_searched_in_the_oracles_order	ok
+unittests src/lib.rs [rexx_exec]	require::tests::the_lower_case_pass_is_ascii_only	ok
+unittests src/lib.rs [rexx_exec]	run::tests::address::a_bare_address_with_no_prior_environment_changes_nothing	ok
+unittests src/lib.rs [rexx_exec]	run::tests::address::a_callees_own_environment_does_not_survive_the_return	ok
+unittests src/lib.rs [rexx_exec]	run::tests::address::an_environment_name_over_two_hundred_and_fifty_bytes_raises_29_1	ok
+unittests src/lib.rs [rexx_exec]	run::tests::address::bare_address_is_a_toggle_and_not_a_stack	ok
+unittests src/lib.rs [rexx_exec]	run::tests::address::only_the_symbol_form_upcases_the_environment_name	ok
+unittests src/lib.rs [rexx_exec]	run::tests::address::setting_the_same_environment_twice_leaves_the_toggle_nothing_to_do	ok
+unittests src/lib.rs [rexx_exec]	run::tests::address::with_after_no_environment_names_an_environment_called_with	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::assignment_to_a_variable_a_stem_and_a_compound	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::drop_of_a_tail_tombstones_it_without_taking_the_default	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::drop_of_a_variable_returns_it_to_unset	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::drop_of_a_whole_stem_leaves_it_looking_untouched	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::drop_of_the_indirect_form	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::drop_of_the_indirect_form_is_a_subsidiary_list_of_words	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::drop_of_the_indirect_form_on_an_empty_or_blanks_only_value_is_a_no_op	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::drop_of_the_indirect_form_validates_before_dropping_any_of_it	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::drop_of_the_indirect_form_validates_every_word	ok
+unittests src/lib.rs [rexx_exec]	run::tests::assignment::say_of_each_value_kind_and_of_an_omitted_expression	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_label_is_a_traced_no_op	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_labelled_select_with_otherwise_runs_normally	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_raise_inside_an_ifs_then_body_is_attributed_to_its_own_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_select_cases_own_expression_failure_is_attributed_to_the_select	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_select_nested_inside_an_ifs_then_branch_is_fully_resolved_before_resuming	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_true_comma_list_condition_is_an_and_of_its_parts	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_when_conditions_own_failure_is_attributed_to_the_when_not_the_select	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::a_whencase_values_own_failure_is_attributed_to_the_when_not_the_select	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::an_absorbed_when_runs_neither_its_own_consequence_nor_otherwise	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::an_absorbed_whencases_escape_to_end_reports_the_same_constant_offset_nested	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::an_absorbed_whencases_escape_to_otherwise_reports_a_named_iterate_as_28_5_not_28_4	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::an_absorbed_whencases_escape_to_otherwise_still_finds_the_enclosing_selects_own_label	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::an_absorbed_whencases_escaping_false_branch_reports_end_at_its_own_residual_indent	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::an_absorbed_whencases_false_condition_branches_to_its_own_false_target	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::an_absorbed_whencases_true_condition_still_never_runs_its_own_consequence	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::an_absorbed_whens_raising_condition_escapes_even_though_its_own_consequence_never_runs	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::an_absorbed_whens_true_condition_still_never_runs_its_own_consequence	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::if_condition_that_is_a_comma_list_raises_34_6_not_34_1	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::if_condition_that_is_not_0_or_1_raises_34_1	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::if_else_if_chain_takes_exactly_one_link	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::if_then_else_runs_exactly_one_branch	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::if_then_with_no_else_falls_through_on_false	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::nop_is_a_no_op	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::select_case_compares_with_strict_equality_not_numeric_equality	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::select_case_evaluates_its_own_expression_and_runs_exactly_the_matching_when	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::select_when_runs_exactly_the_first_matching_when	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::select_when_wrong_exit_would_land_in_a_later_whens_multi_instruction_body	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::select_with_no_when_true_and_an_otherwise_runs_it_without_error	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::select_with_no_when_true_and_no_otherwise_raises_7_3	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::the_second_of_two_whens_own_failure_moves_the_line_with_it	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::when_absorbing_a_when_parses_and_runs_at_rc_0	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::when_condition_that_is_not_0_or_1_raises_34_2	ok
+unittests src/lib.rs [rexx_exec]	run::tests::branch::whencase_comma_is_an_or_of_equals_the_opposite_of_a_plain_whens_and	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_call_handler_restores_the_condition_it_interrupted	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_call_trap_declines_a_condition_with_nowhere_to_resume_but_a_signal_trap_takes_it	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_call_trap_is_put_back_after_its_handler_returns	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_call_trap_waits_for_the_raising_clause_to_finish	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_callees_signal_off_leaves_the_callers_trap_enabled	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_construct_header_is_a_clause_with_its_own_boundary	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_handler_that_fails_at_a_clause_boundary_blames_that_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_loop_header_is_a_clause_with_its_own_boundary	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_loop_retest_after_an_iterate_belongs_to_the_iterate_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_pending_trap_is_delivered_inside_a_do_body	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_pending_trap_is_delivered_inside_a_when_body_and_a_fragment	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_pending_trap_is_delivered_when_the_trapping_clause_is_a_return	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_pending_trap_is_not_delivered_into_a_later_activation_at_the_same_depth	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_pending_trap_whose_activation_is_gone_is_never_delivered	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_returned_call_handler_leaves_no_active_condition_to_propagate	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_second_raise_after_a_trapped_one_reports_its_own_site	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_second_raise_inside_a_handler_is_fatal_without_a_re_arm	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_signal_handler_that_runs_on_can_still_propagate	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_signal_on_syntax_trap_runs_its_handler_and_sets_sigl_to_the_raising_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_single_line_then_reports_the_same_line_either_way	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_trap_can_be_re_armed_inside_its_own_handler	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_trap_is_inherited_by_a_callee_and_fires_in_the_callees_own_activation	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_trap_label_that_does_not_exist_is_16_1_at_the_raising_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_trap_that_resumes_does_not_accumulate_temps_frames	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_trap_that_resumes_mid_clause_leaves_the_enclosing_clauses_state_intact	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::a_while_retest_belongs_to_the_do_clause_then_to_the_end_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::an_interpret_clause_does_not_deliver_before_its_fragment_runs	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::an_untrapped_novalue_still_reads_the_derived_name	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::an_untrapped_raise_reports_for_halt_and_is_silent_for_the_rest	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::end_does_not_echo_for_a_pass_an_iterate_ended	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::novalue_fires_for_a_simple_variable_and_a_compound_but_not_a_bare_stem	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::raise_delivery_depends_on_the_tail_and_on_the_condition	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::raise_propagate_of_an_unreportable_condition_ends_the_program_silently	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::raise_propagate_re_raises_the_original_condition_and_its_site	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::raise_propagate_with_no_active_condition_is_98_918	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::raise_syntax_validates_its_argument	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::rc_is_set_from_the_condition_when_a_trap_fires	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::signal_off_removes_a_trap_that_signal_on_had_enabled	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::the_same_program_without_the_trap_is_the_ordinary_fatal_condition	ok
+unittests src/lib.rs [rexx_exec]	run::tests::conditions::the_trap_that_fired_is_removed_from_the_table	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::a_class_answers_one_method_object_per_dictionary_entry	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::a_class_keyword_gap_is_raised_inside_the_class_pass	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::a_directive_owing_both_a_translation_error_and_a_gap_answers_the_translation_error	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::a_gap_the_oracle_diagnoses_before_a_class_refuses_ahead_of_the_class_error	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::an_annotate_target_resolves_the_way_the_directive_walk_accumulates	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::an_annotate_target_the_package_does_not_hold_is_the_oracles_own_refusal	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::every_directive_this_crate_can_install_leaves_the_program_alone	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::every_directive_this_crate_cannot_install_refuses_before_the_first_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::the_method_source_shapes_this_task_leaves_refuse_loudly	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::the_refusals_this_task_leaves_where_the_oracle_answers_still_fire	ok
+unittests src/lib.rs [rexx_exec]	run::tests::directives::two_runs_in_one_process_allocate_the_annotation_tables_alike	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::a_matched_whens_then_body_indents_six_but_otherwises_body_indents_only_four	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::a_select_nested_inside_a_do_composes_the_two_constructs_own_contributions	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::a_then_else_when_then_or_otherwise_markers_own_clause_indents_half_its_bodys	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::a_whens_own_condition_is_indented_at_the_selects_own_two_spaces	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::all_indents_fills_what_static_indent_computes_for_every_corpus_program	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::an_ifs_matched_then_or_else_branch_indents_four_and_an_else_if_chain_indents_eight	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::control_setup_expressions_are_unindented_unlike_the_loop_body_they_precede	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::one_two_and_three_enclosing_dos_indent_by_two_four_and_six	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it	ok
+unittests src/lib.rs [rexx_exec]	run::tests::indent::while_and_until_are_indented_inside_the_loops_own_frame	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::a_controlled_loops_own_control_variable_is_an_automatic_label	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::a_fragments_leave_or_iterate_never_reaches_the_enclosing_loop	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::a_fragments_named_leave_is_resolved_against_the_fragments_own_table	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::a_labelled_simple_block_is_leavable_by_its_own_name	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::a_leave_inside_the_fragments_own_loop_is_consumed_there	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::a_named_iterate_matching_a_labelled_simple_block_raises_28_5_not_28_4	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::a_named_iterate_matching_a_select_label_raises_28_5	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::an_ordinary_clause_label_does_not_name_the_loop_it_precedes	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::bare_iterate_skips_the_rest_of_the_current_pass	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::bare_leave_in_an_unlabelled_simple_block_with_nothing_enclosing_it_raises_28_1	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::bare_leave_passes_transparently_through_an_unlabelled_simple_block	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::bare_leave_stops_the_innermost_loop	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::interpret_traces_the_text_it_is_about_to_run	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::iterate_from_inside_a_select_nested_in_a_loop_skips_only_the_current_pass	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::iterate_naming_the_outer_loops_control_variable_cuts_every_outer_pass_short	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::iterate_wrong_kind_through_a_transparent_unlabelled_block_reports_full_lexical_depth	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::leave_and_iterate_survive_a_do_nested_in_an_ifs_then_iterating_repeatedly	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::leave_by_name_exits_a_select_only_when_it_was_given_that_label	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::leave_by_name_reaches_a_select_label_from_inside_its_otherwise_branch	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::leave_no_match_through_two_real_loops_resets_to_the_outer_ones_own_indent	ok
+unittests src/lib.rs [rexx_exec]	run::tests::iterate_leave::the_corrected_28x_indent_rule_matches_all_fourteen_probed_shapes	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_bad_for_expression_raises_26_3	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_bad_repetition_count_raises_26_2	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_bare_repeat_count_traces_as_for_the_same_as_an_explicit_one	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_comma_list_conditions_own_elements_each_trace_their_result_under_trace_r	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_comma_list_while_condition_raises_34_6_not_34_3	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_compound_control_variable_is_bound_on_every_pass	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_compound_control_variable_traces_its_own_c_line	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_compound_control_variables_tail_re_resolves_every_pass	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_compound_controls_to_bound_survives_a_masking_stem_default	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_controlled_loop_runs_to_then_by_then_stops	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_controlled_loop_with_by_0_loops_forever	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_controlled_loops_header_values_round_at_entry_not_the_exact_parse	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_controlled_loops_own_for_caps_the_iteration_count_independent_of_to	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_controlled_loops_own_values_need_only_be_numeric_not_whole	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_do_loops_own_end_is_a_pure_marker_never_independently_dispatched	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_do_over_for_echoes_the_for_keyword_the_oracle_prints	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_negative_by_is_what_comparing_it_against_zero_says	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_non_numeric_control_value_raises_41_1	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_repetition_or_for_count_is_validated_under_the_current_digits_not_a_fixed_width	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_simple_control_variable_still_binds_through_the_fast_slot_path	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_simple_do_block_runs_its_body_exactly_once_with_no_control	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_stem_control_inside_a_fragment_writes_the_enclosing_frames_slot	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_stem_control_variable_binds_through_stem_assign	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::a_while_condition_that_is_not_0_or_1_raises_34_3_not_34_1	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::an_until_condition_that_is_not_0_or_1_raises_34_4	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_count_repeats_exactly_the_evaluated_number_of_times	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_forever_runs_until_a_bare_leave	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_over_a_non_stem_target_iterates_once_yielding_itself	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_over_a_parenthesised_stem_target_is_also_caught	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_over_a_stem_target_takes_the_loud_path	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_over_for_0_skips_the_single_non_stem_iteration	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_until_re_echoes_its_clause_exactly_once_per_pass_not_twice_or_zero	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_while_tests_the_condition_before_the_body_and_do_until_after	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::do_with_takes_the_loud_path	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::iterate_reaches_untils_own_bottom_of_iteration_test_rather_than_skipping_it	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::leave_and_iterate_by_name_still_reach_a_compound_controlled_loop	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::loop_alone_is_forever_and_do_alone_is_a_block_not_a_loop	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::the_control_variable_is_bound_even_when_the_loop_never_runs_its_body	ok
+unittests src/lib.rs [rexx_exec]	run::tests::loops::until_is_attributed_to_the_end_clause_while_while_is_attributed_to_the_do_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::message::a_condition_inside_a_method_body_echoes_the_body_and_then_the_send	ok
+unittests src/lib.rs [rexx_exec]	run::tests::message::a_message_sends_two_indents_are_the_oracles_own_and_normalisation_cannot_see_them	ok
+unittests src/lib.rs [rexx_exec]	run::tests::message::a_method_activations_trace_indents_are_the_oracles_own_and_normalisation_cannot_see_them	ok
+unittests src/lib.rs [rexx_exec]	run::tests::message::a_paths_steps_land_on_the_node_it_names	ok
+unittests src/lib.rs [rexx_exec]	run::tests::message::a_second_reply_reports_the_oracles_own_98_935	ok
+unittests src/lib.rs [rexx_exec]	run::tests::message::a_started_method_that_raises_has_an_error_and_reraises_at_result	ok
+unittests src/lib.rs [rexx_exec]	run::tests::message::a_trap_handler_and_an_internal_call_do_not_carry_the_same_receiver	ok
+unittests src/lib.rs [rexx_exec]	run::tests::message::a_value_returned_after_a_reply_reports_the_oracles_own_98_936	ok
+unittests src/lib.rs [rexx_exec]	run::tests::message::the_guard_instructions_answers_and_the_phase_6_refusals	ok
+unittests src/lib.rs [rexx_exec]	run::tests::numeric::numeric_digits_changes_rounding_and_resets_to_9_with_no_expression	ok
+unittests src/lib.rs [rexx_exec]	run::tests::numeric::numeric_digits_fuzz_and_form_value_trace_k_only_with_an_expression	ok
+unittests src/lib.rs [rexx_exec]	run::tests::numeric::numeric_digits_reset_refuses_a_fuzz_the_operand_form_would_refuse	ok
+unittests src/lib.rs [rexx_exec]	run::tests::numeric::numeric_form_scientific_engineering_and_default	ok
+unittests src/lib.rs [rexx_exec]	run::tests::numeric::numeric_form_value_is_not_case_insensitive	ok
+unittests src/lib.rs [rexx_exec]	run::tests::numeric::numeric_form_value_spellings	ok
+unittests src/lib.rs [rexx_exec]	run::tests::numeric::numeric_fuzz_changes_comparison_and_resets_to_0_with_no_expression	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_call_inside_a_fragment_echoes_each_activations_own_line	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_called_label_runs_its_own_clauses_not_the_main_body	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_callees_clauses_echo_at_the_calling_clauses_indent_plus_two	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_callees_trace_setting_does_not_survive_its_return	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_calls_arguments_are_evaluated_in_the_caller	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_dynamic_call_target_searches_labels_with_the_value_verbatim	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_name_bound_by_interpret_inside_a_callee_survives_the_return	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_quoted_call_name_never_reaches_the_label_table	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_return_escapes_every_enclosing_block_in_the_callee	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_return_in_the_main_body_ends_the_program_with_its_value	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_returned_value_traces_in_the_callee_and_again_in_the_caller	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::a_routine_without_procedure_shares_the_callers_pool	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::an_interpret_inside_a_callee_runs_at_the_callees_own_level	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::current_clause_line_is_restored_after_a_nested_expression_call	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::current_value_indent_is_restored_after_a_nested_expression_call	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::exit_code_for_converts_the_result_the_way_the_oracle_does	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::exit_with_and_without_an_expression	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::exiting_or_falling_off_the_end_inside_a_callee_ends_the_program	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::numeric_settings_are_inherited_by_a_callee_and_not_written_back	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::result_is_settled_on_return_and_a_bare_return_drops_it	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::task_9s_two_new_indents_are_the_oracles_own_and_normalisation_cannot_see_them	ok
+unittests src/lib.rs [rexx_exec]	run::tests::result::the_report_echoes_one_clause_per_activation_innermost_first	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_builtin_called_with_too_few_arguments_reports_the_oracles_40_3	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_builtins_result_renders_independently_of_the_digits_in_force	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_directive_naming_a_library_that_is_not_there_is_98_903	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_duplicate_resource_name_is_refused_and_a_distinct_one_is_not	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_duplicate_routine_directive_is_99_903_before_the_first_clause	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_library_backed_routine_installs_and_runs_when_it_is_called	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_routine_a_required_library_exports_runs_rather_than_answering_43_1	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_routine_call_sets_no_sigl_where_a_called_label_does	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_routine_does_not_inherit_the_callers_condition_traps	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_routine_has_its_own_pool_and_a_called_label_shares_the_callers	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_routine_inherits_none_of_the_five_a_called_label_inherits	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_routine_lookup_upcases_both_sides_where_the_builtin_lookup_does_not	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_routines_own_clauses_echo_at_indent_zero_however_deep_the_call_site_is	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::a_stream_builtins_name_survives_a_collection_at_every_allocation	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::an_extension_reaching_an_unwritten_member_refuses_loudly	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::an_extension_reading_the_instance_reaches_its_table	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::an_uncalled_routine_directive_changes_nothing	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::exit_inside_a_routine_ends_the_routine_where_a_labels_exit_ends_the_program	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::length_dispatches_from_every_call_form_that_reaches_the_builtin_table	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::nothing_is_rendered_for_a_trace_line_that_will_not_print	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::the_body_selector_resolves_a_routine_directive_and_rejects_a_bad_index	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::the_invocation_prefixes_are_gated_on_more_than_the_trace_letter	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::the_invocation_prefixes_are_not_announced_from_inside_a_nested_construct	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::the_invocation_prefixes_fire_for_exactly_the_four_label_tracing_letters	ok
+unittests src/lib.rs [rexx_exec]	run::tests::routines::the_resolution_order_is_label_then_builtin_then_routine	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_callers_arguments_survive_a_nested_call	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_computed_expose_of_a_name_no_instruction_mentions_survives_the_return	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_pool_entry_belongs_to_one_scope_and_not_to_another	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_procedure_first_in_a_called_routine_is_17_1_with_the_calling_clause_second	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_procedure_first_in_a_label_reached_as_a_function_still_runs	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_procedure_first_in_a_routine_reached_as_a_function_is_17_1_too	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_procedure_that_is_not_a_calls_first_instruction_raises_17_1	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_variable_reference_answers_the_variable	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_variable_reference_forwards_an_unknown_message	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_variable_reference_outlives_its_frame	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_variable_reference_reads_and_writes_the_variable	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::a_variable_reference_renders_as_the_referenced_value	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::an_exposed_stem_aliases_the_callers_entry_not_the_object	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::an_isolated_callees_frame_is_released_on_both_paths	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::expose_of_a_single_compound_tail_fails_loudly	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::expose_of_a_whole_stem_binds_rather_than_refusing	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::exposure_is_transitive_through_an_intermediate_procedure	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::one_procedure_can_expose_names_living_in_two_different_frames	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::procedure_expose_of_a_single_compound_tail_fails_loudly	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::procedure_isolates_and_expose_aliases_the_caller_entry	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::the_indirect_expose_form_is_plural_and_exposes_its_own_selector	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::two_references_to_one_variable_share_it	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_alias_binds_the_callers_variable_and_a_plain_target_does_not	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_alias_refuses_a_plain_value_and_an_omitted_position	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_alias_reports_the_kind_mismatch_before_the_uninitialised_target	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_alias_requires_an_uninitialised_target	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_alias_requires_the_reference_kind_to_match_the_target	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_alias_takes_any_variable_reference_value	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_alias_treats_an_empty_stem_as_uninitialised	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_binds_positionally_and_ignores_extra_arguments	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_defaults_fill_an_absent_or_omitted_position	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_arg_drops_a_target_with_no_argument_and_no_default	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_local_as_a_programs_first_instruction_raises_98_993	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_local_first_in_a_routine_raises_98_993_not_99_910	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_strict_arg_checks_arity_at_both_ends	ok
+unittests src/lib.rs [rexx_exec]	run::tests::scope::use_strict_arg_reports_method_errors_in_a_method_and_call_errors_outside	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::a_quoted_signal_label_searches_case_sensitively_unlike_a_quoted_call	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::sigl_is_set_at_every_control_transfer	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::signal_escapes_an_interpret_fragment_to_reach_an_enclosing_label	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::signal_from_a_called_routine_reaches_a_label_in_the_shared_body_and_never_returns	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::signal_out_of_a_fragment_does_not_collide_with_the_fragments_own_index_space	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::signal_out_of_a_select_unwinds_it_and_lands_on_its_label	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::signal_to_an_undefined_label_inside_a_fragment_reports_both_clauses	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::signal_to_an_undefined_label_raises_16_1	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::signal_unwinds_a_nested_do_and_lands_on_its_label	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::signal_value_targets_that_match_no_label_all_raise_16_1_naming_the_rendered_text	ok
+unittests src/lib.rs [rexx_exec]	run::tests::signal::signal_value_traces_its_own_keyword_line_and_then_searches_like_label	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::a_dropped_tail_is_a_tombstone_that_does_not_take_the_default	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::a_multi_level_tail_joins_its_pieces_with_a_period	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::a_tail_on_a_completely_untouched_stem_derives_its_name	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::an_unset_tail_piece_variable_still_derives_its_own_name_not_a_stem	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::an_untouched_stem_derives_its_own_name_with_the_period	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::bare_stem_assignment_shares_the_object_when_the_value_is_already_a_stem	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::dropping_the_whole_stem_leaves_an_old_alias_intact	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::reading_an_untouched_stem_auto_vivifies_a_shared_object	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::reassigning_the_whole_stem_leaves_an_old_alias_intact	ok
+unittests src/lib.rs [rexx_exec]	stem::tests::tail_keys_are_verbatim_and_case_sensitive	ok
+unittests src/lib.rs [rexx_exec]	tests::a_bare_class_directive_creates_a_class_object	ok
+unittests src/lib.rs [rexx_exec]	tests::a_bare_class_directive_subclasses_object	ok
+unittests src/lib.rs [rexx_exec]	tests::a_class_method_directive_lands_in_the_classs_class_dictionary	ok
+unittests src/lib.rs [rexx_exec]	tests::a_class_objects_metaclass_and_its_class_are_separate_fields	ok
+unittests src/lib.rs [rexx_exec]	tests::a_class_side_uninit_sets_neither_flag	ok
+unittests src/lib.rs [rexx_exec]	tests::a_delegate_method_is_a_generated_method	ok
+unittests src/lib.rs [rexx_exec]	tests::a_fragment_shares_the_enclosing_frames_variable_pool	ok
+unittests src/lib.rs [rexx_exec]	tests::a_fragment_that_does_not_parse_raises_the_oracles_condition	ok
+unittests src/lib.rs [rexx_exec]	tests::a_fragments_activation_base_survives_every_indent_writer_inside_it	ok
+unittests src/lib.rs [rexx_exec]	tests::a_loose_method_with_no_preceding_class_is_not_recorded	ok
+unittests src/lib.rs [rexx_exec]	tests::a_method_attribute_installs_a_getter_and_a_setter	ok
+unittests src/lib.rs [rexx_exec]	tests::a_method_directive_lands_in_the_classs_instance_dictionary	ok
+unittests src/lib.rs [rexx_exec]	tests::a_native_activations_call_state_is_rooted_only_while_it_lives	ok
+unittests src/lib.rs [rexx_exec]	tests::a_native_activations_local_references_are_roots_only_while_it_lives	ok
+unittests src/lib.rs [rexx_exec]	tests::a_raise_inside_a_fragment_reports_both_clauses	ok
+unittests src/lib.rs [rexx_exec]	tests::a_user_class_inherits_objects_instance_methods	ok
+unittests src/lib.rs [rexx_exec]	tests::a_when_scan_inside_a_fragment_echoes_at_the_fragments_own_indent	ok
+unittests src/lib.rs [rexx_exec]	tests::an_abstract_accessor_pair_is_abstract_on_both_halves	ok
+unittests src/lib.rs [rexx_exec]	tests::an_attribute_get_installs_only_the_getter	ok
+unittests src/lib.rs [rexx_exec]	tests::an_attribute_with_no_style_installs_both_accessor_names	ok
+unittests src/lib.rs [rexx_exec]	tests::an_exit_inside_a_fragment_ends_the_program	ok
+unittests src/lib.rs [rexx_exec]	tests::an_installed_class_does_not_displace_the_environments_own_entry	ok
+unittests src/lib.rs [rexx_exec]	tests::every_class_the_library_declares_carries_the_rexx_defined_flag	ok
+unittests src/lib.rs [rexx_exec]	tests::interpret_binds_a_name_the_enclosing_body_never_mentions	ok
+unittests src/lib.rs [rexx_exec]	tests::method_bodies_names_each_directive_by_its_minted_identity	ok
+unittests src/lib.rs [rexx_exec]	tests::no_written_directive_has_an_empty_clause_span	ok
+unittests src/lib.rs [rexx_exec]	tests::the_ir_render_compiles_under_the_setting_it_is_given	ok
+unittests src/lib.rs [rexx_exec]	tests::the_ir_render_covers_every_body_and_only_the_ones_that_exist	ok
+unittests src/lib.rs [rexx_exec]	tests::the_ir_render_names_the_clause_a_region_opens_and_not_its_inner_ops	ok
+unittests src/lib.rs [rexx_exec]	tests::the_ir_render_refuses_a_setting_that_is_not_one	ok
+unittests src/lib.rs [rexx_exec]	tests::the_stack_span_does_not_depend_on_what_else_the_program_evaluated	ok
+unittests src/lib.rs [rexx_exec]	tests::the_two_formatting_arms_do_not_grow_with_the_subtree	ok
+unittests src/lib.rs [rexx_exec]	tests::the_uninit_flags_are_set_for_the_classes_a_file_declares	ok
+unittests src/lib.rs [rexx_exec]	trace::tests::a_digit_string_is_a_whole_number_and_a_letter_is_not	ok
+unittests src/lib.rs [rexx_exec]	trace::tests::every_completed_trace_line_is_made_displayable	ok
+unittests src/lib.rs [rexx_exec]	trace::tests::every_formatter_matches_its_own_oracle_transcript	ok
+unittests src/lib.rs [rexx_exec]	trace::tests::every_recognised_letter_classifies_and_unrecognised_ones_report_the_byte	ok
+unittests src/lib.rs [rexx_exec]	trace::tests::off_refuses_the_debug_flag_from_either_side	ok
+unittests src/lib.rs [rexx_exec]	trace::tests::the_three_gates_fire_under_exactly_the_modes_that_should_show_them	ok
+unittests src/lib.rs [rexx_exec]	trace::tests::the_two_argument_prefixes_are_intermediates_and_the_alias_prefix_is_results	ok
+unittests src/lib.rs [rexx_exec]	value::tests::a_numbers_rendering_is_fixed_when_it_is_created	ok
+unittests src/lib.rs [rexx_exec]	value::tests::a_remembered_parse_answers_what_a_fresh_one_does	ok
+unittests src/lib.rs [rexx_exec]	value::tests::a_second_tagged_read_does_not_show_the_first_ones_tail	ok
+unittests src/lib.rs [rexx_exec]	value::tests::a_short_value_holds_its_bytes_in_the_slot_and_a_long_one_does_not	ok
+unittests src/lib.rs [rexx_exec]	value::tests::a_small_int_is_only_admissible_within_the_digits_of_its_own_operation	ok
+unittests src/lib.rs [rexx_exec]	value::tests::a_tagged_integer_renders_as_its_own_display_does	ok
+unittests src/lib.rs [rexx_exec]	value::tests::a_value_short_enough_is_the_handle_and_has_no_slot	ok
+unittests src/lib.rs [rexx_exec]	value::tests::nil_has_a_string_value_and_the_booleans_are_plain_strings	ok
+unittests src/lib.rs [rexx_exec]	value::tests::nonnumeric_text_and_nil_both_collapse_to_not_numeric	ok
+unittests src/lib.rs [rexx_exec]	value::tests::numeric_form_is_captured_at_creation_too	ok
+unittests src/lib.rs [rexx_exec]	value::tests::small_int_admissibility_is_checked_once_against_the_producing_operations_digits	ok
+unittests src/lib.rs [rexx_exec]	value::tests::text_keeps_its_own_spelling_and_caches_an_exact_parse	ok
+unittests src/lib.rs [rexx_exec]	value::tests::text_len_agrees_with_to_text	ok
+unittests src/lib.rs [rexx_exec]	value::tests::text_owned_takes_the_buffer_rather_than_copying_it	ok
+unittests src/lib.rs [rexx_exec]	value::tests::the_borrowing_accessor_answers_what_to_text_answers	ok
+unittests src/lib.rs [rexx_exec]	value::tests::the_tag_decision_is_the_rendering_read_back	ok
+unittests src/lib.rs [rexx_exec]	value::tests::the_tag_test_agrees_with_parsing_the_same_bytes	ok
+unittests src/lib.rs [rexx_exec]	value::tests::the_text_cache_holds_the_exact_parse_not_a_rounded_one	ok
+unittests src/lib.rs [rexx_exec]	value::tests::to_number_on_a_defaultless_stem_parses_its_own_name_and_fails	ok
+unittests src/lib.rs [rexx_exec]	value::tests::to_number_on_a_stem_aliasing_another_stem_chases_through_both	ok
+unittests src/lib.rs [rexx_exec]	value::tests::to_number_on_a_stem_redirects_through_its_numeric_default	ok
+unittests src/lib.rs [rexx_exec]	value::tests::try_text_answers_only_where_the_bytes_already_exist	ok
+unittests src/lib.rs [rexx_exec]	value::tests::two_spellings_sharing_a_slot_each_keep_their_own_answer	ok
+unittests src/lib.rs [rexx_exec]	value::tests::write_text_writes_what_to_text_renders	ok

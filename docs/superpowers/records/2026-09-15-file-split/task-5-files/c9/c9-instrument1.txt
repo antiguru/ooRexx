@@ -1,0 +1,8 @@
+(a) unmoved lines: PRE environment.rs minus the removed lines, against POST environment.rs
+  INSERTED post:23: 
+  INSERTED post:24: // Where `SAY` output and trace lines go: the `.OUTPUT` and `.TRACEOUTPUT` routes.
+  INSERTED post:25: mod route;
+  2 equal blocks, 2085 lines, each also compared with cmp; 2085 expected lines, 2088 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  9 of 9 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

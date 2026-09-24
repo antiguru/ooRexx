@@ -1,0 +1,11 @@
+tests --- before
+tests +++ after
+tests @@ -337 +337 @@
+tests -tests/introspection_arity.rs [introspection_arity]	every_unstable_row_is_really_unstable	ok
+tests +tests/introspection_arity.rs [introspection_arity]	every_unstable_row_is_really_unstable	FAILED
+blocks --- before
+blocks +++ after
+blocks @@ -26 +26 @@
+blocks -tests/introspection_arity.rs [introspection_arity]	RESULT ok passed=26 failed=0 ignored=0 measured=0 filtered=0
+blocks +tests/introspection_arity.rs [introspection_arity]	RESULT FAILED passed=25 failed=1 ignored=0 measured=0 filtered=0
+compare exit 1
