@@ -1,0 +1,5 @@
+    Checking rexx-bench v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench)
+ Documenting rexx-bench v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.59s
+   Generated /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/target/doc/rexx_bench/index.html and 4 other files
+exit: 0

@@ -1,0 +1,6 @@
+    Checking rexx-oracle v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10a/base-doc-check2/rust/crates/rexx-oracle)
+ Documenting rexx-bench v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10a/base-doc-check2/rust/crates/rexx-bench)
+    Checking rexx-bench v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10a/base-doc-check2/rust/crates/rexx-bench)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.63s
+   Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10a/base-doc-target2/doc/rexx_bench/index.html and 4 other files
+exit: 0

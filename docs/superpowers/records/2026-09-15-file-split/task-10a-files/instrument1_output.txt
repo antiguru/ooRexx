@@ -1,0 +1,22 @@
+13 matching (unmoved) blocks between base_main.rs and head_main.rs
+
+OK  BASE 1-14 <-> HEAD 1-14 (14 lines)
+OK  BASE 16-22 <-> HEAD 15-21 (7 lines)
+OK  BASE 27-43 <-> HEAD 29-45 (17 lines)
+OK  BASE 47-255 <-> HEAD 46-254 (209 lines)
+OK  BASE 257-289 <-> HEAD 256-288 (33 lines)
+OK  BASE 291-311 <-> HEAD 290-310 (21 lines)
+OK  BASE 314-325 <-> HEAD 313-324 (12 lines)
+OK  BASE 327-340 <-> HEAD 326-339 (14 lines)
+OK  BASE 342-345 <-> HEAD 341-344 (4 lines)
+OK  BASE 347-546 <-> HEAD 346-545 (200 lines)
+OK  BASE 648-681 <-> HEAD 546-579 (34 lines)
+OK  BASE 1293-1294 <-> HEAD 580-581 (2 lines)
+OK  BASE 1295-1522 <-> HEAD 585-812 (228 lines)
+
+795 unmoved lines total across 13 blocks, 0 block(s) failed direct comparison.
+
+Re-confirmed with the `cmp` binary, per block:
+cmp: 0 failure(s) of 13 blocks.
+
+BASE total lines: 1522; HEAD total lines: 812

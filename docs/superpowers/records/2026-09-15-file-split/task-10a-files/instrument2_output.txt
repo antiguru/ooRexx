@@ -1,0 +1,22 @@
+OK   TARGET_COVERAGE: base_len=30 report_len=30
+OK   interval_for: base_len=180 report_len=180
+OK   interval_coverage: base_len=86 report_len=86
+OK   joint_coverage_bound: base_len=76 report_len=76
+OK   ratio_interval_caveat: base_len=843 report_len=843
+OK   seconds: base_len=93 report_len=93
+OK   fingerprint: base_len=290 report_len=290
+OK   write_provenance: base_len=2410 report_len=2410
+OK   write_offset: base_len=1067 report_len=1067
+OK   counter_median: base_len=166 report_len=166
+OK   write_counters: base_len=2836 report_len=2836
+OK   write_axes: base_len=3454 report_len=3454
+OK   write_rexxcps: base_len=2779 report_len=2779
+OK   self_timed_figures: base_len=370 report_len=370
+OK   median_of: base_len=117 report_len=117
+OK   write_self_timed: base_len=1059 report_len=1059
+OK   quoted_line: base_len=202 report_len=202
+OK   parse_cps: base_len=250 report_len=250
+OK   write_blocked: base_len=1445 report_len=1445
+OK   Stats(struct+impl): base_len=433 report_len=433
+
+TOTAL MISMATCHES: 0 of 20
