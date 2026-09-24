@@ -1,0 +1,42 @@
+2229 comment lines in BASE dispatch.rs, 2323 after
+lost (4):
+  x1 /// The scope [`WEAK_REFERENT`] is bound in, so that a subclass's instance
+  x1 /// `Class~copy`: the refusal `memory/Setup.cpp:483` puts over [`native_copy`]
+  x1 /// and this crate has no `NEW` to run -- see [`factory_metaclass`] for why
+  x1 /// position [`COLLECTION_STORES`]' entries are in.
+added (98):
+  x21 /*                                                                            */
+  x7 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x7 /* This program and the accompanying materials are made available under       */
+  x7 /* distribution. A copy is also available at the following address:           */
+  x7 /* https://www.oorexx.org/license.html                                        */
+  x7 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x14 /*----------------------------------------------------------------------------*/
+  x1 // Array slot and subscript arithmetic, and `Array`'s primitive methods.
+  x1 // The native constructors, and `Pointer`'s and `WeakReference`'s methods,
+  x1 // The required-string protocol and the string conversion behind it.
+  x1 // `Class`'s own methods: its readers, the mutators, the class factory.
+  x1 // `MutableBuffer`'s primitive methods, and the argument parsers and byte-search
+  x1 // `Object`'s own methods, `run`/`send`/`start`, and the `Message` readers.
+  x1 // chained the same way.
+  x1 // helpers the other primitive methods share, chained the same way.
+  x1 //! Array slot and subscript arithmetic, and `Array`'s primitive methods.
+  x1 //! The native constructors -- each primitive class's own `~new` and a
+  x1 //! The required-string protocol: `request("STRING")`, `makeString`, and the
+  x1 //! `Class`'s own methods: its identity and graph readers, `define`, `subclass`,
+  x1 //! `MutableBuffer`'s primitive methods, and the method-argument parsers and
+  x1 //! `Object`'s own methods: identity, hashing, the operators, `objectName`,
+  x1 //! `new`, `inherit`, the metaclass factory, and a package's `addClass`.
+  x1 //! `setMethod`, `copy`, `request`, and `run`/`send`/`start` with the `Message`
+  x1 //! byte-search helpers the other primitive methods share.
+  x1 //! collection's `~init` -- and `Pointer`'s and `WeakReference`'s methods.
+  x1 //! fallbacks behind them.
+  x1 //! readers.
+  x1 /// The scope [`construct::WEAK_REFERENT`] is bound in, so that a subclass's instance
+  x1 /// `Class~copy`: the refusal `memory/Setup.cpp:483` puts over [`super::native_copy`]
+  x1 /// `MutableBuffer`'s instance methods. Chained into `ObjectModel::build`
+  x1 /// `ObjectModel::build` beside [`super::NATIVE_METHODS`].
+  x1 /// `Pointer`'s and `WeakReference`'s instance methods. Chained into
+  x1 /// and this crate has no `NEW` to run -- see [`class_protocol::factory_metaclass`] for why
+  x1 /// beside [`super::NATIVE_METHODS`].
+  x1 /// position [`super::object_protocol::COLLECTION_STORES`]' entries are in.

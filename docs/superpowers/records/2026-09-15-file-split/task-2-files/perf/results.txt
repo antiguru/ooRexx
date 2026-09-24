@@ -1,0 +1,19 @@
+columns: program, then (exit status, callgrind summary minus libc.so.6 and ld-linux) for base round 1, head round 1, base round 2, head round 2
+base = d6dd60d90 built in its own worktree and CARGO_TARGET_DIR (t-base); head = 79b530f6f built in the main checkout's CARGO_TARGET_DIR (t-head)
+valgrind --tool=callgrind --cache-sim=no --branch-sim=no, run from an empty directory, 16 at a time (tools/perf.sh)
+rexxcps 0 17897295183 0 17897284566 0 17897293209 0 17897281776
+dispatch 0 20471073882 0 20471071256 0 20471077217 0 20471080827
+dispatchclass 0 15832995341 0 15832983942 0 15832979201 0 15832983129
+varlookup 0 14842900428 0 14842893859 0 14842900664 0 14842894157
+arith 0 11519340181 0 11519334215 0 11519340732 0 11519331358
+compound 0 9234397761 0 9234397236 0 9234398223 0 9234393743
+alloc 0 25153461759 0 25153457550 0 25153466497 0 25153458420
+strings 0 17788061276 0 17788058479 0 17788063225 0 17788059194
+
+.text sha256 (objcopy -O binary --only-section=.text BIN OUT && sha256sum OUT):
+597b63b4f49206ff91bc1b1987298e154a9f32deb282b3d9fc5bf2c4eb0c685d  base.text
+f6840a66328ea749a33dcddf4b931ce9764836b0f5d51ec4c346b948148781a1  head.text
+
+load:
+ 14:10:02 up 16 days, 16:23,  0 users,  load average: 1.92, 4.53, 6.56
+ 14:13:49 up 16 days, 16:27,  0 users,  load average: 6.47, 7.76, 7.61

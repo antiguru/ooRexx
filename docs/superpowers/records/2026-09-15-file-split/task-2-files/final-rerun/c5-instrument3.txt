@@ -1,0 +1,8 @@
+  DECODE-DIFFERS (declared edit) struct ObjectModel
+  DECODE-DIFFERS (declared edit) const WEAK_REFERENT
+421 of 423 units decode to identical literal lists; 1223 decodable literals (string, byte string, char, byte, doc line) on the PRE side; 0 units where the tool's count and the independent lexer's disagree
+whole-file literal multiset, PRE dispatch.rs against POST dispatch.rs + new files:
+  only PRE  x1: STR " The scope [`WEAK_REFERENT`] is bound in, so that a subclass's instance"
+  only PRE  x1: STR " position [`COLLECTION_STORES`]' entries are in."
+  only POST x1: STR " The scope [`construct::WEAK_REFERENT`] is bound in, so that a subclass's instance"
+  only POST x1: STR " position [`super::COLLECTION_STORES`]' entries are in."

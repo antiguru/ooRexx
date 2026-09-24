@@ -1,0 +1,53 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:138: };
+  INSERTED post:139: 
+  INSERTED post:140: // `Class`'s own methods: its readers, the mutators, the class factory.
+  INSERTED post:141: mod class_protocol;
+  INSERTED post:142: use class_protocol::{
+  INSERTED post:143:     class_argument, class_receiver, compile_method_source, compile_routine_source,
+  INSERTED post:144:     is_enhanced_instance, method_name_argument, method_source_lines, native_annotation,
+  INSERTED post:145:     native_annotations, native_base_class, native_class_copy, native_class_default_name,
+  INSERTED post:146:     native_class_inherit, native_define, native_define_class_method, native_define_methods,
+  INSERTED post:147:     native_delete, native_enhanced, native_id, native_inherit_instance_methods,
+  INSERTED post:148:     native_is_subclass_of, native_metaclass, native_method, native_mixin_class_factory, native_new,
+  INSERTED post:149:     native_package, native_package_add_class, native_package_add_public_class, native_scope,
+  INSERTED post:150:     native_subclass, native_superclass, native_superclasses, native_uninherit, new_instance,
+  2 equal blocks, 4142 lines, each also compared with cmp; 4142 expected lines, 4155 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn native_base_class -> dispatch/class_protocol.rs (11 lines; visibility private -> pub(super))
+  OK fn class_receiver -> dispatch/class_protocol.rs (9 lines; visibility private -> pub(super))
+  OK fn class_argument -> dispatch/class_protocol.rs (13 lines; visibility private -> pub(super))
+  OK fn native_id -> dispatch/class_protocol.rs (12 lines; visibility private -> pub(super))
+  OK fn native_class_default_name -> dispatch/class_protocol.rs (12 lines; visibility private -> pub(super))
+  OK fn native_metaclass -> dispatch/class_protocol.rs (10 lines; visibility private -> pub(super))
+  OK fn native_superclass -> dispatch/class_protocol.rs (15 lines; visibility private -> pub(super))
+  OK fn native_superclasses -> dispatch/class_protocol.rs (24 lines; visibility private -> pub(super))
+  OK fn native_is_subclass_of -> dispatch/class_protocol.rs (14 lines; visibility private -> pub(super))
+  OK fn native_annotation -> dispatch/class_protocol.rs (18 lines; visibility private -> pub(super))
+  OK fn native_annotations -> dispatch/class_protocol.rs (10 lines; visibility private -> pub(super))
+  OK fn native_method -> dispatch/class_protocol.rs (33 lines; visibility private -> pub(super))
+  OK fn native_scope -> dispatch/class_protocol.rs (11 lines; visibility private -> pub(super))
+  OK fn method_source_lines -> dispatch/class_protocol.rs (29 lines; visibility private -> pub(super))
+  OK fn compile_method_source -> dispatch/class_protocol.rs (34 lines; visibility private -> pub(super))
+  OK fn compile_routine_source -> dispatch/class_protocol.rs (32 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY fn method_name_argument -> dispatch/class_protocol.rs: /tmp/tmpu_136q7q/a /tmp/tmpu_136q7q/b differ: byte 290, line 5 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK fn native_define -> dispatch/class_protocol.rs (41 lines; visibility private -> pub(super))
+  OK fn native_define_methods -> dispatch/class_protocol.rs (51 lines; visibility private -> pub(super))
+  OK fn native_subclass -> dispatch/class_protocol.rs (13 lines; visibility private -> pub(super))
+  OK fn native_mixin_class_factory -> dispatch/class_protocol.rs (11 lines; visibility private -> pub(super))
+  OK fn native_new -> dispatch/class_protocol.rs (13 lines; visibility private -> pub(super))
+  OK fn new_instance -> dispatch/class_protocol.rs (34 lines; visibility private -> pub(super))
+  OK fn factory_metaclass -> dispatch/class_protocol.rs (37 lines; visibility private -> pub(super))
+  OK fn native_delete -> dispatch/class_protocol.rs (17 lines; visibility private -> pub(super))
+  OK fn native_class_inherit -> dispatch/class_protocol.rs (27 lines; visibility private -> pub(super))
+  OK fn native_define_class_method -> dispatch/class_protocol.rs (29 lines; visibility private -> pub(super))
+  OK fn native_inherit_instance_methods -> dispatch/class_protocol.rs (26 lines; visibility private -> pub(super))
+  OK fn native_uninherit -> dispatch/class_protocol.rs (16 lines; visibility private -> pub(super))
+  OK fn native_package_add_class -> dispatch/class_protocol.rs (12 lines; visibility private -> pub(super))
+  OK fn native_package_add_public_class -> dispatch/class_protocol.rs (9 lines; visibility private -> pub(super))
+  OK fn native_package -> dispatch/class_protocol.rs (11 lines; visibility private -> pub(super))
+  DIFFERS (declared edit) fn native_class_copy -> dispatch/class_protocol.rs: /tmp/tmpwx0i65mi/a /tmp/tmpwx0i65mi/b differ: byte 66, line 1
+  OK fn native_enhanced -> dispatch/class_protocol.rs (48 lines; visibility private -> pub(super))
+  OK fn is_enhanced_instance -> dispatch/class_protocol.rs (9 lines; visibility private -> pub(super))
+  48 of 50 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only
