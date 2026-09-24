@@ -98,6 +98,16 @@ the move (for example "this file's own tests"), which is corrected in the same c
 * Every gate green at the plan's closing commit, with the failing sets identical member for member
   to BASE's.
 * `/tmp` is a shared tmpfs: `df -h /tmp` before builds; delete target directories by path.
+* **Owed from Task 3a, added 2026-09-24.** `cargo doc --no-deps` does not cover `#[cfg(test)]`
+  code: for a test-only move, an enumeration of the intra-doc links in the moved code replaces it,
+  and the task states the command it enumerated with. The line trigger is measured with the plan's
+  own `wc -l` command, never with the length of a moved chunk. Each instrument names the artifact
+  the task leaves behind, and the task commits or cites it: a verification script is an author's
+  account of an instrument, not the instrument.
+* **Tests need a quiet machine.** The oracle-backed suites run under a wall-clock deadline
+  (`tests/support/oracle.rs`), so a gate run at high load times rows out; Task 3a's gate was red at
+  load 37 to 77 and green at 4.68 on the same commit. Record the load average beside every gate
+  run, and treat a timeout as a machine state until a quiet rerun says otherwise.
 
 ---
 
