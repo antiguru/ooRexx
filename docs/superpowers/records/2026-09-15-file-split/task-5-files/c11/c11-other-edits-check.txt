@@ -1,0 +1,4 @@
+trace.rs: covered by instruments 1-3
+trace/format.rs: covered by instruments 1-3
+crates/rexx-exec/tests/support/mod.rs: OK 3 occurrences of '\\btrace\\.rs' -> 'trace/format.rs'; HEAD with them replaced equals the working text
+PASS

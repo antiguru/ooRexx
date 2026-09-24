@@ -1,0 +1,17 @@
+(a) unmoved lines: PRE trace.rs minus the removed lines, against POST trace.rs
+  INSERTED post:23: 
+  INSERTED post:24: // The mode a `TRACE` setting parses into, and the byte layout of each trace line.
+  INSERTED post:25: mod format;
+  INSERTED post:26: pub(crate) use format::{
+  INSERTED post:27:     ChunkTrace, TraceCache, TraceEvent, TraceMode, TraceRequest, applied, is_whole_number,
+  INSERTED post:28:     literal_trace_event, mode_from_setting, parse_trace_request, push_clause,
+  INSERTED post:29:     raised_invalid_trace_letter, raised_numeric_trace_interactive_only,
+  INSERTED post:30: };
+  INSERTED post:31: use format::{make_displayable, push_operator, push_tagged, push_value};
+  2 equal blocks, 860 lines, each also compared with cmp; 860 expected lines, 869 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK impl TraceMode::const LABELS -> trace/format.rs (16 lines; visibility private -> pub(super))
+  OK impl TraceMode::const ALL -> trace/format.rs (20 lines; visibility private -> pub(super))
+  OK fn make_displayable -> trace/format.rs (5 lines; visibility private -> pub(super))
+  50 of 50 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

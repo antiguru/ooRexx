@@ -1,0 +1,20 @@
+refresh exit 0; table mtime before 2026-09-24 22:25:06.483789654 +0200, after 2026-09-24 22:37:30.684778897 +0200
+ rust/corpus/refusal-sites.tsv | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+diff --git i/rust/corpus/refusal-sites.tsv w/rust/corpus/refusal-sites.tsv
+index 53a03d49c..f9a80ff33 100644
+--- i/rust/corpus/refusal-sites.tsv
++++ w/rust/corpus/refusal-sites.tsv
+@@ -255 +255 @@ Raised	raised_if_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:37	off-s
+-Raised	raised_invalid_trace_letter	body	crates/rexx-exec/src/trace.rs:512	off-send-surface	-	-	-
++Raised	raised_invalid_trace_letter	body	crates/rexx-exec/src/trace/format.rs:505	off-send-surface	-	-	-
+@@ -262 +262 @@ Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run/raised.rs:120	off
+-Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace.rs:500	off-send-surface	-	-	-
++Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace/format.rs:493	off-send-surface	-	-	-
+every column but column 4, before (HEAD) vs after refresh:
+  identical, 247 rows
+header (comment) lines, before vs after:
+  identical
+column 4 changes, by row (constructor: before -> after):
+  Raised/raised_invalid_trace_letter: crates/rexx-exec/src/trace.rs:512 -> crates/rexx-exec/src/trace/format.rs:505
+  Raised/raised_numeric_trace_interactive_only: crates/rexx-exec/src/trace.rs:500 -> crates/rexx-exec/src/trace/format.rs:493

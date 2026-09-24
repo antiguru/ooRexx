@@ -1,0 +1,9 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-5/t-check/doc/rexx_exec/index.html and 2 other files
+files: trace.rs trace/format.rs 
+warnings located in trace.rs or trace/: 1
+warning: unresolved link to `echo_literal`
+   --> crates/rexx-exec/src/trace.rs:277:58
+    |
+277 |     /// The rendering and the line, out of line behind [`echo_literal`]'s gate.
+    |                                                          ^^^^^^^^^^^^ no item named `echo_literal` in scope
+    |

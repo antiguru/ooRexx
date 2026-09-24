@@ -70,7 +70,7 @@ pub const TRACE_PREFIXES: &[[u8; 3]] = &[
 ];
 
 /// Byte offset of the 3-byte prefix marker, identical on every trace line
-/// regardless of shape: `rexx-exec/src/trace.rs`'s `push_clause` puts
+/// regardless of shape: `rexx-exec/src/trace/format.rs`'s `push_clause` puts
 /// `*-*` at 7 (`{line:>6} ` is 7 bytes), and its `push_prefixed_blanks`
 /// puts a value line's own prefix at 7 too (7 blanks standing in for the
 /// unused line-number field). Re-derived here rather than imported: this
@@ -141,7 +141,7 @@ fn is_trace_line(line: &[u8]) -> bool {
 }
 
 /// Whether `line` contains an odd number of `"` bytes. `push_quoted`/
-/// `push_quoted_tag` (`trace.rs`) always emit `"` in a pair -- open, then
+/// `push_quoted_tag` (`trace/format.rs`) always emit `"` in a pair -- open, then
 /// close -- so a physical line carrying only one of the pair is exactly
 /// the signal that the value it belongs to continues onto the next
 /// physical line.
@@ -166,7 +166,7 @@ fn normalize_line(line: &[u8]) -> Vec<u8> {
 
     let mut out = Vec::with_capacity(line.len());
     out.extend_from_slice(&line[..marker_end]);
-    // Every formatter in `trace.rs` guarantees at least one space here
+    // Every formatter in `trace/format.rs` guarantees at least one space here
     // (the fixed template byte on a clause line, or the fixed `3 +
     // indent` run on a value line), so `space_run` is never really 0 in
     // practice; guarded anyway so a malformed or truncated line never

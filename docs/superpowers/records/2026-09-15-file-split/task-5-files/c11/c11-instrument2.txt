@@ -1,0 +1,8 @@
+  visibility impl TraceMode::const LABELS: private -> pub(super) (trace/format.rs)
+  visibility impl TraceMode::const ALL: private -> pub(super) (trace/format.rs)
+  visibility fn make_displayable: private -> pub(super) (trace/format.rs)
+  ONLY-POST mod format (trace.rs)
+  ONLY-POST use format::{ChunkTrace,TraceCache,TraceEvent,TraceMode,TraceRequest,applied,is_whole_number,literal_trace_event,mode_from_setting,parse_trace_request,push_clause,raised_invalid_trace_letter,raised_numeric_trace_interactive_only,} (trace.rs)
+  ONLY-POST use format::{make_displayable,push_operator,push_tagged,push_value} (trace.rs)
+  ONLY-POST trace/format.rs::use super::{Number,Raised,Trace} (trace/format.rs)
+102 of 102 units present on both sides have identical token streams (50 of them moved); 0 only before, 4 only after
