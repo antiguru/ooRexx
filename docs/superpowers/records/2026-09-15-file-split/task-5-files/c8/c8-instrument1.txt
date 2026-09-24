@@ -1,0 +1,7 @@
+(a) unmoved lines: PRE environment.rs minus the removed lines, against POST environment.rs
+  INSERTED post:2314: mod tests;
+  1 equal blocks, 2313 lines, each also compared with cmp; 2313 expected lines, 2314 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY tests::fn every_directory_method_answers_on_both_directories_as_on_a_copy -> environment/tests.rs: /tmp/tmpm8a1t_x7/a /tmp/tmpm8a1t_x7/b differ: byte 1499, line 28 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  5 of 6 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only
