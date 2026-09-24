@@ -2805,6 +2805,14 @@ impl Interp {
         }
     }
 
+    /// Closes off the level that is unwinding now, so the level above it can
+    /// record its own clause.
+    pub(crate) fn seal_site_level(&mut self) {
+        if let Some(site) = self.failure_site.take() {
+            self.failure_sites.push(site);
+        }
+    }
+
     /// The clause boundary a promoted construct owes once the branch it chose
     /// has finished, which flattening removed.
     /// ```text

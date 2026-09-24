@@ -1,0 +1,4 @@
+control 4 unmoved destination line gains a space: exit 1, expected ['I1c'], reported ['I1c']: CAUGHT
+  FAILURES:
+  I1c run.rs replace pre[3410:3411] post[3418:3419]
+1 of 1 controls caught as expected

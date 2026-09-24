@@ -1,0 +1,1 @@
+10 of 10 units present on both sides have identical token streams (1 of them moved); 0 only before, 0 only after

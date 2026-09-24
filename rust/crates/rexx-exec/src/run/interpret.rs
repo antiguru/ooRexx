@@ -121,14 +121,6 @@ impl Interp {
         }
     }
 
-    /// Closes off the level that is unwinding now, so the level above it can
-    /// record its own clause.
-    pub(crate) fn seal_site_level(&mut self) {
-        if let Some(site) = self.failure_site.take() {
-            self.failure_sites.push(site);
-        }
-    }
-
     /// Drops one `DROP` target: a plain variable, a whole stem, one tail, or
     /// the `(v)` indirect form.
     /// ```text
