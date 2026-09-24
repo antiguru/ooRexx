@@ -1,0 +1,72 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-4/t-check/doc/rexx_exec/index.html and 2 other files
+files: lib.rs 
+warnings located in lib.rs or tests.rs: 10
+warning: public documentation for `chunks_refused` links to private item `Loud::chunk_refused`
+   --> crates/rexx-exec/src/lib.rs:193:11
+    |
+193 |     /// [`Loud::chunk_refused`]; there is no second engine to run it.
+    |           ^^^^^^^^^^^^^^^^^^^ this item is private
+    |
+--
+warning: unresolved link to `routines`
+    --> crates/rexx-exec/src/lib.rs:1586:25
+     |
+1586 |     /// The subset of [`routines`] a `::ROUTINE ... PUBLIC` filed -- the
+     |                         ^^^^^^^^ no item named `routines` in scope
+     |
+--
+warning: unresolved link to `package_public_classes`
+    --> crates/rexx-exec/src/lib.rs:1588:11
+     |
+1588 |     /// [`package_public_classes`] is beside [`package_classes`].
+     |           ^^^^^^^^^^^^^^^^^^^^^^ no item named `package_public_classes` in scope
+     |
+--
+warning: unresolved link to `package_classes`
+    --> crates/rexx-exec/src/lib.rs:1588:48
+     |
+1588 |     /// [`package_public_classes`] is beside [`package_classes`].
+     |                                                ^^^^^^^^^^^^^^^ no item named `package_classes` in scope
+     |
+--
+warning: unresolved link to `package_classes`
+    --> crates/rexx-exec/src/lib.rs:1630:25
+     |
+1630 |     /// The subset of [`package_classes`] a `::CLASS ... PUBLIC` directive or
+     |                         ^^^^^^^^^^^^^^^ no item named `package_classes` in scope
+     |
+--
+warning: unresolved link to `package_classes`
+    --> crates/rexx-exec/src/lib.rs:1637:24
+     |
+1637 |     /// direction of [`package_classes`], which `~package` reads.
+     |                        ^^^^^^^^^^^^^^^ no item named `package_classes` in scope
+     |
+--
+warning: unresolved link to `method_bodies`
+    --> crates/rexx-exec/src/lib.rs:1721:41
+     |
+1721 |     /// for why these are not rows of [`method_bodies`], which is a
+     |                                         ^^^^^^^^^^^^^ no item named `method_bodies` in scope
+     |
+--
+warning: unresolved link to `elapsed_anchor`
+    --> crates/rexx-exec/src/lib.rs:1998:19
+     |
+1998 |     /// to move [`elapsed_anchor`] the next time the clock cache next
+     |                   ^^^^^^^^^^^^^^ no item named `elapsed_anchor` in scope
+     |
+--
+warning: unresolved link to `elapsed_anchor`
+    --> crates/rexx-exec/src/lib.rs:2002:11
+     |
+2002 |     /// [`elapsed_anchor`]'s own doc for why the reset is lazy at all.
+     |           ^^^^^^^^^^^^^^ no item named `elapsed_anchor` in scope
+     |
+--
+warning: unresolved link to `alloc_with`
+    --> crates/rexx-exec/src/lib.rs:5794:11
+     |
+5794 |     /// [`alloc_with`], for an object the collector must never take.
+     |           ^^^^^^^^^^ no item named `alloc_with` in scope
+     |

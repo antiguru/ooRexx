@@ -1,0 +1,12 @@
+control 1 verbatim literal line gains a space: exit 1, expected ['I3'], reported ['I3']: CAUGHT
+  FAILURES:
+  I3 literals differ: tests::const EVERY_BODY
+control 2 de-indented line changes a literal: exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']: CAUGHT
+  FAILURES:
+  I1b tests::const TEST_PATH: /tmp/tmph2c_5yqs/a /tmp/tmph2c_5yqs/b differ: byte 115, line 2
+  I2 token stream differs: tests::const TEST_PATH
+  I3 literals differ: tests::const TEST_PATH
+control 3 parent import gains a name: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:24 post:24: 'use std::rc::Rc;' -> 'use std::rc::{Rc, Weak};'
+3 of 3 controls caught as expected
