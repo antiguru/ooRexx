@@ -180,6 +180,16 @@ tooling and are superseded by `final-rerun/c1-*`).
   time): an unmoved line gaining a space is caught by 1(a); a space inside a
   moved test's continued string, token-blind by construction, by 3; a changed
   token by 1(b) and 2.
+* **Controls with the final tooling** (`files/final-rerun/controls.txt`, added
+  after review): the three above plus a tuple losing its trailing comma
+  (`(.., x,)` to `(.., x)`) and one gaining it (`(93, 903)` to `(93, 903,)`)
+  in moved units, each planted in its own copy; all five caught, 4 and 5 by
+  1(b) and 2. The tooling committed at `e78303803` relaxed every comma before
+  a closing delimiter and passed both
+  (`files/final-rerun/controls-old-tooling.txt`); the relaxation is now only
+  the comma closing a `fn` signature's parameter list, the case rustfmt's
+  re-wrap produced here, and every commit pair and the cumulative check were
+  re-run with it, with the same verdicts.
 * **Cumulative** (`files/final-rerun/cumulative.txt`): every one of BASE's 692
   units is present exactly once after c7, identical modulo visibility, or one
   of the five declared edits (`ObjectModel`'s field doc, `build`'s chain,
@@ -197,7 +207,8 @@ tooling and are superseded by `final-rerun/c1-*`).
 
 "Reflowed" is rustfmt re-wrapping a signature after `pub(super)` was added
 (in c1, after the de-indent gave four more columns); each is token-identical
-once the trailing comma rustfmt's vertical layout adds is dropped, and
+once the trailing comma rustfmt's vertical layout adds to the
+signature's parameter list is dropped, and
 literal-identical. c7's edit to `construct.rs` (one doc link) and c6's to
 `tests.rs` (one doc link) are in files that existed before their commit, which
 instruments 1-3 do not scan; each is the single line shown above, and the
