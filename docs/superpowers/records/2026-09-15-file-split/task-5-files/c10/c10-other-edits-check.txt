@@ -1,0 +1,5 @@
+environment.rs: covered by instruments 1-3
+environment/identities.rs: covered by instruments 1-3
+crates/rexx-exec/src/install.rs: OK 1 occurrences of '`environment\\.rs`' -> '`environment/identities.rs`'; HEAD with them replaced equals the working text
+crates/rexx-exec/src/dispatch.rs: OK 2 occurrences of '`environment\\.rs`' -> '`environment/identities.rs`'; HEAD with them replaced equals the working text
+PASS

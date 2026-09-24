@@ -1180,7 +1180,7 @@ impl Interp {
             self.classes().set_rexx_defined(id);
         }
         // The package's own installed-class table, which is what `.NAME`
-        // resolution reads first -- see `environment.rs`'s
+        // resolution reads first -- see `environment/identities.rs`'s
         // `record_package_class` for why the registry's flat table is not
         // that.
         // `ClassDirective::install` passes the directive's own `isPublic()`

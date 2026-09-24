@@ -9,7 +9,9 @@ copy.
   2. c5 (object_operand_tests): a moved test vanishes from the child, which
      is found only if the child's keys carry `object_operand_tests::`
                                                               -> I2
-  3. c5: a moved test in that child changes a literal         -> I1b, I2, I3
+  3. c5: a space inside a moved test's string literal: whitespace-only to
+     instruments 1 (b) and 2 by design, so instrument 3 is the one that
+     fails                                                    -> I3
   4. c4 (eval tests, one declared edit): a test other than the declared one
      changes a token, so the declaration masks nothing else   -> I1b, I2
   5. c7 (version.rs): a moved const's literal changes       -> I1b, I2, I3
@@ -54,13 +56,13 @@ CASES = [
     ]),
     (5, "eval.rs", "eval/object_operand_tests.rs", "eval/object_operand_tests.rs", [], [
         ("2 moved test vanishes from the child", ["I2"], "eval/object_operand_tests.rs", None, "fn "),
-        ("3 moved test changes a literal", ["I1b", "I2", "I3"], "eval/object_operand_tests.rs", "b\"before\\n\"", "b\"before \\n\""),
+        ("3 space inside a moved test's literal", ["I3"], "eval/object_operand_tests.rs", "(.Object~superClasses & 1)", "(.Object~superClasses &  1)"),
     ]),
     (4, "eval.rs", "eval/tests.rs", "eval/tests.rs", ["--expect-edit=tests::fn the_small_int_fast_path_answers_what_the_general_path_answers"], [
         ("4 undeclared test changes a token", ["I1b", "I2"], "eval/tests.rs", "interp.to_text(value).to_vec()", "interp.to_text(value).to_owned()"),
     ]),
     (7, "parse_template.rs", "version.rs", "none", [], [
-        ("5 moved const changes its literal", ["I1b", "I2", "I3"], "version.rs", 'b"LINUX"', 'b"LINUX "'),
+        ("5 moved const changes its literal", ["I1b", "I2", "I3"], "version.rs", 'b"LINUX"', 'b"LINUS"'),
     ]),
     (9, "environment.rs", "environment/route.rs", "none", [], [
         ("6 unmoved list static changes a name", ["I1a", "I2", "I3"], "environment.rs", '    "DEBUGINPUT",\n', '    "DEBUG_INPUT",\n'),

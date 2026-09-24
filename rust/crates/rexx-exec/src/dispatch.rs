@@ -1327,13 +1327,13 @@ impl Interp {
     }
 
     /// `.Package`: the class of the object `~package` answers, which
-    /// `environment.rs` builds one of per package.
+    /// `environment/identities.rs` builds one of per package.
     pub(crate) fn package_class(&mut self) -> ObjRef {
         self.object_model().package
     }
 
     /// `.Method`: the class of the object `Class~method` answers, which
-    /// `environment.rs` builds one of per instance dictionary entry a program
+    /// `environment/identities.rs` builds one of per instance dictionary entry a program
     /// asks for.
     pub(crate) fn method_class(&mut self) -> ObjRef {
         self.object_model().method
