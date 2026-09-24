@@ -1,0 +1,37 @@
+   Compiling num-traits v0.2.19
+   Compiling either v1.16.0
+   Compiling syn v2.0.119
+   Compiling rayon v1.12.0
+   Compiling chrono v0.4.45
+   Compiling thiserror-impl v1.0.69
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+   Compiling thiserror v1.0.69
+   Compiling datadriven v0.9.0
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 05s
+     Running tests/parse_version_oracle.rs (target/release/deps/parse_version_oracle-b228824c60a5755a)
+
+running 21 tests
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test parse_version_still_answers_what_the_oracle_answers ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

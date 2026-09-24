@@ -1,0 +1,14 @@
+git grep -n -I -E '(trace|environment|parse_template)\.rs' 6227093ac -- rust '*.md' ':!docs/superpowers' ':!.superpowers' | grep -v refusal-sites.tsv
+(run at 6227093ac, before this round's edit; the output, with HEAD: as the ref prefix)
+HEAD:rust/corpus/lang/parse_sources.rex:49:   constant in parse_template.rs instead.
+HEAD:rust/corpus/phase-4c.txt:31:#   as a measured constant in parse_template.rs instead.
+HEAD:rust/crates/rexx-exec/src/run.rs:2348:                // rule `rendered` below already follows -- `trace.rs`'s own
+HEAD:rust/crates/rexx-exec/src/tests.rs:19:/// `environment.rs`'s `package_table_entries`.
+HEAD:rust/crates/rexx-exec/src/trace/format.rs:13://! prefix's line: pure functions on bytes, which `trace.rs`'s emission calls.
+HEAD:rust/crates/rexx-exec/tests/environment_seam.rs:81:            .all(|site| site.contains("src/environment.rs")),
+HEAD:rust/crates/rexx-exec/tests/environment_seam.rs:96:        reads.iter().all(|site| site.contains("src/environment.rs")),
+HEAD:rust/crates/rexx-exec/tests/environment_seam.rs:119:    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/environment.rs");
+HEAD:rust/crates/rexx-exec/tests/parse_version_oracle.rs:92:         parse_template.rs VERSION constant is a recorded measurement of the \
+HEAD:rust/crates/rexx-parse/tests/sourceline_oracle/parse_sources.txt:50:   constant in parse_template.rs instead.
+HEAD:rust/scripts/mutate-4a.sh:77:#     `trace_variable`/etc. method in trace.rs re-checks
+HEAD:rust/scripts/mutate-4c.sh:133:PARSE_RS="crates/rexx-exec/src/parse_template.rs"

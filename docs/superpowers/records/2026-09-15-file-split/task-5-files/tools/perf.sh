@@ -5,7 +5,8 @@
 # Reports callgrind's summary total minus libc.so.6 and ld-linux per run.
 B=$1; H=$2; OUT=$3; J=$4
 R=/home/moritz/dev/repos/ooRexx-rust-rewrite/rust
-S=/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-5
+# cg_objects.py is the one beside this script, in the committed tools/.
+HERE=$(cd "$(dirname "$0")" && pwd)
 mkdir -p $OUT/cwd
 PROGS="$R/bench-rexxcps/rexxcps.rex $R/bench-programs/nop.rex $R/bench-programs/assign.rex $R/bench-programs/emptyloop.rex $R/bench-programs/varlookup.rex $R/bench-programs/arith.rex $R/bench-programs/compound.rex $R/bench-programs/dispatch.rex $R/bench-programs/strings.rex"
 jobs=()
@@ -17,7 +18,7 @@ printf '%s\n' "${jobs[@]}" | xargs -P $J -L 1 bash -c '
   bin='$B'; [ $side = head ] && bin='$H'
   f='$OUT'/$name.$side.$round
   (cd '$OUT'/cwd && valgrind --tool=callgrind --cache-sim=no --branch-sim=no --callgrind-out-file=$f.cg $bin $p > $f.stdout 2> $f.stderr)
-  echo "$? $(python3 '$S'/tools/cg_objects.py $f.cg | tail -1 | awk "{print \$NF}")" > $f.result
+  echo "$? $(python3 '$HERE'/cg_objects.py $f.cg | tail -1 | awk "{print \$NF}")" > $f.result
   rm $f.cg
 '
 for p in $PROGS; do name=$(basename $p .rex)

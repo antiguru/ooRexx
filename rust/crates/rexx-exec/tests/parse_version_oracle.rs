@@ -89,7 +89,7 @@ fn parse_version_still_answers_what_the_oracle_answers() {
     assert!(
         diffs.is_empty(),
         "PARSE VERSION disagrees with the oracle on [{}]. This crate's \
-         parse_template.rs VERSION constant is a recorded measurement of the \
+         version.rs VERSION constant is a recorded measurement of the \
          oracle's own build identity -- name, language level, build date -- and \
          a rebuilt oracle moves the date. Re-measure rather than editing this \
          test:\n  rust:   {:?}\n  oracle: {:?}\n  exit: rust {} oracle {}",

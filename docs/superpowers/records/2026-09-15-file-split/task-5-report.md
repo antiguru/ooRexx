@@ -390,3 +390,60 @@ both runs, so nothing was re-run.
 4. **The parents keep imports that only a child uses** through `super::`
    (departure 7). It compiles cleanly and matches `dispatch/`, but it means
    a parent's import list no longer shows what the parent itself uses.
+
+## Fix round 1
+
+From the task review (`.superpowers/sdd/2026-09-15-file-split/task-5-review.md`),
+findings I1 and M3.
+
+**I1.** c7 made one more mention false, and the report missed four. The
+reviewer's enumeration, run at `6227093ac` (command and output in
+`files/fix1/path-mentions.txt`), gives 12 lines. The disposition of each:
+
+* `rust/crates/rexx-exec/tests/parse_version_oracle.rs:92`: **corrected.**
+  The failure message named "parse_template.rs VERSION constant". It now
+  says "version.rs VERSION constant". This is the only edit, a text change
+  inside a string literal.
+* `rust/corpus/lang/parse_sources.rex:49`: left alone. It says the version
+  is "pinned as a measured constant in parse_template.rs instead", which is
+  now false, but a corpus `.rex` may not be edited:
+  `sourceline_matches_the_interpreter_for_every_corpus_program` compares its
+  every line with the recording.
+* `rust/crates/rexx-parse/tests/sourceline_oracle/parse_sources.txt:50`:
+  left alone. It is that recording, and has to match the `.rex`
+  byte for byte.
+* `rust/corpus/phase-4c.txt:31`: left alone. It is the same sentence in a
+  corpus record, and the corpus is read-only for this task.
+* Still true, so left alone:
+  * `rust/crates/rexx-exec/src/run.rs:2348`: "`trace.rs`'s own doc comment"
+    is on the emission members, which stayed.
+  * `rust/crates/rexx-exec/src/tests.rs:19`: `package_table_entries` stayed
+    in `environment.rs`.
+  * `rust/crates/rexx-exec/src/trace/format.rs:13`: the emission is in
+    `trace.rs`.
+  * `rust/crates/rexx-exec/tests/environment_seam.rs:81`, `:96` and `:119`:
+    the seam pin, and it holds.
+  * `rust/scripts/mutate-4a.sh:77`: `trace_variable` and the other
+    `trace_*` members stayed in `trace.rs`.
+  * `rust/scripts/mutate-4c.sh:133`: the script sets `PARSE_RS` to
+    `parse_template.rs`. Mutations 3 and 4 anchor on lines that are still
+    in that file once each (checked with `grep -c -F`).
+* **Found in passing, not caused by this task:** mutation 5's anchor,
+  `cursor = self.next_template(&mut strings, parse, indent);`, occurs 0
+  times in `parse_template.rs` at BASE `1b851ae96` as well as at HEAD.
+  It was already stale before this task.
+
+**M3.** The committed `tools/perf.sh` called `cg_objects.py` from my
+scratch directory. It now calls the copy beside it in the committed
+`tools/`. It was not re-run: the figures above came from the scratch copy,
+whose content is the committed one.
+
+Checks, over this commit's tree. The default target directory was used,
+and `df -h /tmp` showed 39G free before them.
+
+* `cargo fmt --all --check`: exit 0.
+* `cargo test --release -p rexx-exec --test parse_version_oracle`: exit 0.
+  `test parse_version_still_answers_what_the_oracle_answers ... ok`, and
+  21 passed, 0 failed in the binary (`files/fix1/parse-version-oracle.log`).
+* `cargo clippy -p rexx-exec --all-targets -- -D warnings`: exit 0
+  (`files/fix1/clippy.log`).
