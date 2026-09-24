@@ -1,0 +1,3 @@
+   Compiling criterion v0.8.2
+   Compiling rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.77s

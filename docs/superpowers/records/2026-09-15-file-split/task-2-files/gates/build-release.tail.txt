@@ -1,0 +1,3 @@
+   Compiling rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory)
+   Compiling rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2m 22s
