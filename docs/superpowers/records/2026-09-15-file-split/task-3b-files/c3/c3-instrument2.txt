@@ -1,0 +1,7 @@
+  visibility impl Interp::fn pop_search_frame: private -> pub(super) (run/select.rs)
+  visibility fn skip_else: private -> pub(super) (run/select.rs)
+  ONLY-POST mod select (run.rs)
+  ONLY-POST use select::skip_else (run.rs)
+  ONLY-POST use select::{Absorbed,SelectEscape,SelectResume,absorb,if_targets,otherwise_range,otherwise_resume,select_escape,select_parts,when_resume,when_targets,} (run.rs)
+  ONLY-POST use super::{Code,ConditionTrace,Expr,Failure,Flow,Instruction,InstructionKind,Interp,LeaveOrigin,ObjRef,SymbolId,raised_iterate_wrong_kind,raised_when_not_logical,static_indent,} (run/select.rs)
+259 of 259 units present on both sides have identical token streams (22 of them moved); 0 only before, 4 only after

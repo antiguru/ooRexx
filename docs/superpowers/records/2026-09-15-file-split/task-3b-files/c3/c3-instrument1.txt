@@ -1,0 +1,15 @@
+(a) unmoved lines: PRE run.rs minus the removed lines, against POST run.rs
+  INSERTED post:58: 
+  INSERTED post:59: // `SELECT`'s own clauses, and where `IF`, `WHEN` and `SELECT` send control.
+  INSERTED post:60: mod select;
+  INSERTED post:61: use select::skip_else;
+  INSERTED post:62: pub(crate) use select::{
+  INSERTED post:63:     Absorbed, SelectEscape, SelectResume, absorb, if_targets, otherwise_range, otherwise_resume,
+  INSERTED post:64:     select_escape, select_parts, when_resume, when_targets,
+  INSERTED post:65: };
+  2 equal blocks, 8416 lines, each also compared with cmp; 8416 expected lines, 8424 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK impl Interp::fn pop_search_frame -> run/select.rs (23 lines; visibility private -> pub(super))
+  OK fn skip_else -> run/select.rs (7 lines; visibility private -> pub(super))
+  22 of 22 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

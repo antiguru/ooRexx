@@ -31,7 +31,7 @@ fn signal_out_of_a_fragment_does_not_collide_with_the_fragments_own_index_space(
 
 /// I3 (Task 6 fix round 1): `SIGNAL` out of a `SELECT`, the one Step 1
 /// shape the original landing measured for `DO` and `INTERPRET` but
-/// never for `SELECT` -- `leave_select` (`run.rs`) is one of the
+/// never for `SELECT` -- `leave_select` (`run/select.rs`) is one of the
 /// forwarding sites `Flow::Signal`'s own design argument depends on, and
 /// it was the only one with no witness. Measured (source with a leading
 /// `trace r` clause, lines decremented by one as every other traced test
