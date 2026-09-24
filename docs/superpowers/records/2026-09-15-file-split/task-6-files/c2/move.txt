@@ -1,0 +1,1 @@
+moved lines 705-1045 (1-based) of dispatch/native.rs, 341 lines, 0 kept verbatim inside literals; 0 lines after the module stay

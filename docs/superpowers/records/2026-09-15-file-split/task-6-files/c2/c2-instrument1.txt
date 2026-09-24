@@ -1,0 +1,93 @@
+(a) unmoved lines: PRE dispatch/native.rs minus the removed lines, against POST dispatch/native.rs
+  INSERTED post:704: mod tests;
+  1 equal blocks, 703 lines, each also compared with cmp; 703 expected lines, 704 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  DIFFERS (declared edit) tests::fn check_binds -> dispatch/native/tests.rs: /tmp/tmpq6gi29c_/a /tmp/tmpq6gi29c_/b differ: byte 1, line 1; the edit:
+    --- before
+    +++ after
+    @@ -1,24 +1,21 @@
+    -    /// One bootstrap directive's `EXTERNAL`: it names `LIBRARY REXX` and every
+    -    /// entry point it resolves against is one the registry holds. Panics with
+    -    /// what a reader needs to place the failure otherwise.
+    -    fn check_binds(path: &Path, keyword: &str, external: &MethodExternal) {
+    -        let missing = match external {
+    -            MethodExternal::LibraryRexx(entry) => entry.as_ref().err(),
+    -            MethodExternal::Attribute(binds) => {
+    -                binds.iter().find_map(|bind| bind.entry.as_ref().err())
+    -            }
+    -            MethodExternal::OtherLibrary { library, .. } => panic!(
+    -                "{} declares a {keyword} whose EXTERNAL names the library {:?}, which \
+    -                 is not the REXX package the bootstrap files are meant to bind against",
+    -                path.display(),
+    -                String::from_utf8_lossy(library)
+    -            ),
+    -        };
+    -        if let Some(missing) = missing {
+    -            panic!(
+    -                "{} declares a {keyword} binding the entry point {:?}, which the REXX \
+    -                 package does not export -- so the whole file is refused at install",
+    -                path.display(),
+    -                String::from_utf8_lossy(missing)
+    -            );
+    -        }
+    +/// One bootstrap directive's `EXTERNAL`: it names `LIBRARY REXX` and every
+    +/// entry point it resolves against is one the registry holds. Panics with
+    +/// what a reader needs to place the failure otherwise.
+    +fn check_binds(path: &Path, keyword: &str, external: &MethodExternal) {
+    +    let missing = match external {
+    +        MethodExternal::LibraryRexx(entry) => entry.as_ref().err(),
+    +        MethodExternal::Attribute(binds) => binds.iter().find_map(|bind| bind.entry.as_ref().err()),
+    +        MethodExternal::OtherLibrary { library, .. } => panic!(
+    +            "{} declares a {keyword} whose EXTERNAL names the library {:?}, which \
+    +             is not the REXX package the bootstrap files are meant to bind against",
+    +            path.display(),
+    +            String::from_utf8_lossy(library)
+    +        ),
+    +    };
+    +    if let Some(missing) = missing {
+    +        panic!(
+    +            "{} declares a {keyword} binding the entry point {:?}, which the REXX \
+    +             package does not export -- so the whole file is refused at install",
+    +            path.display(),
+    +            String::from_utf8_lossy(missing)
+    +        );
+    @@ -25,0 +23 @@
+    +}
+  DIFFERS (declared edit) tests::fn an_entry_point_resolves_whatever_case_it_is_asked_for -> dispatch/native/tests.rs: /tmp/tmp07oehkb8/a /tmp/tmp07oehkb8/b differ: byte 1, line 1; the edit:
+    --- before
+    +++ after
+    @@ -1,16 +1,12 @@
+    -    /// The lookup is caseless and the spelling the table carries is not what
+    -    /// makes a name resolve.
+    -    #[test]
+    -    fn an_entry_point_resolves_whatever_case_it_is_asked_for() {
+    -        for spelling in [
+    -            b"file_temporary_path".to_vec(),
+    -            b"FILE_TEMPORARY_PATH".to_vec(),
+    -            b"File_Temporary_Path".to_vec(),
+    -        ] {
+    -            let found = entry_point(&spelling).unwrap_or_else(|| {
+    -                panic!("{} did not resolve", String::from_utf8_lossy(&spelling))
+    -            });
+    -            assert_eq!(found.name, "file_temporary_path");
+    -        }
+    -        assert!(entry_point(b"file_temporary_path ").is_none());
+    -        assert!(entry_point(b"no_such_entry_point_xyz").is_none());
+    +/// The lookup is caseless and the spelling the table carries is not what
+    +/// makes a name resolve.
+    +#[test]
+    +fn an_entry_point_resolves_whatever_case_it_is_asked_for() {
+    +    for spelling in [
+    +        b"file_temporary_path".to_vec(),
+    +        b"FILE_TEMPORARY_PATH".to_vec(),
+    +        b"File_Temporary_Path".to_vec(),
+    +    ] {
+    +        let found = entry_point(&spelling)
+    +            .unwrap_or_else(|| panic!("{} did not resolve", String::from_utf8_lossy(&spelling)));
+    +        assert_eq!(found.name, "file_temporary_path");
+    @@ -17,0 +14,3 @@
+    +    assert!(entry_point(b"file_temporary_path ").is_none());
+    +    assert!(entry_point(b"no_such_entry_point_xyz").is_none());
+    +}
+  13 of 15 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

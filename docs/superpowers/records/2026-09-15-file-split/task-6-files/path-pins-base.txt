@@ -1,0 +1,28 @@
+== /bin/grep -rn 'dispatch/library' crates/*/tests crates/*/src
+== /bin/grep -rn 'library.rs' corpus
+== /bin/grep -rn 'dispatch/native' crates/*/tests crates/*/src
+== /bin/grep -rn 'native.rs' corpus
+corpus/refusal-sites.tsv:119:Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:694	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+== /bin/grep -rn 'dispatch/hash' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:204:    "src/dispatch/hash.rs",
+== /bin/grep -rn 'hash.rs' corpus
+== /bin/grep -rn 'dispatch/collection' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:203:    "src/dispatch/collection.rs",
+== /bin/grep -rn 'collection.rs' corpus
+== /bin/grep -rn 'dispatch/buffer' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:213:    "src/dispatch/buffer.rs",
+== /bin/grep -rn 'buffer.rs' corpus
+== /bin/grep -rn 'dispatch/string' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:202:    "src/dispatch/string.rs",
+== /bin/grep -rn 'string.rs' corpus
+corpus/oracle-crashes.txt:78:`rust/crates/rexx-exec/src/builtin/string.rs` for the full mechanism).
+corpus/phase-4c.txt:192:# the transcribed table in builtin/string.rs, which is why a witness the
+== /bin/grep -rn 'dispatch/stream' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:210:    "src/dispatch/stream.rs",
+== /bin/grep -rn 'stream.rs' corpus
+== /bin/grep -rn 'dispatch/package' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:209:    "src/dispatch/package.rs",
+== /bin/grep -rn 'package.rs' corpus
+== /bin/grep -rn 'dispatch/files' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:211:    "src/dispatch/files.rs",
+== /bin/grep -rn 'files.rs' corpus

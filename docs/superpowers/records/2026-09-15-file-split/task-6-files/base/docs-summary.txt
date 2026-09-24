@@ -1,0 +1,3 @@
+/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-6/art/base/base-doc.txt: 2 warning lines, 0 located in dispatch.rs or dispatch/, exit 0
+/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-6/art/base/base-doc-private.txt: 53 warning lines, 0 located in dispatch.rs or dispatch/, exit 0
+/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-6/art/base/base-doc-cfgtest.txt: 52 warning lines, 0 located in dispatch.rs or dispatch/, exit 0

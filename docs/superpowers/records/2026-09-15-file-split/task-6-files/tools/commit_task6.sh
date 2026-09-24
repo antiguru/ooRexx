@@ -13,7 +13,8 @@ cp $S/art/c$N-* $D/c$N/; cp $S/c$N/removed.json $D/c$N/removed.json
 [ -f $S/c$N/move.txt ] && cp $S/c$N/move.txt $D/c$N/
 cp $S/art/i4-c$N.meta $S/art/i4-c$N.results $S/art/i4-c$N.compare $D/instrument4/
 [ -f $D/instrument4/i4-base.meta ] || cp $S/art/i4-base.meta $S/art/i4-base.results $D/instrument4/
-cp $S/art/controls-*-before.txt $D/ 2>/dev/null
+cp $S/art/controls-*.txt $S/art/path-pins-*.txt $D/ 2>/dev/null
+mkdir -p $D/base; cp $S/art/base/* $S/art/natives-base.txt $D/base/ 2>/dev/null
 cp $S/tools/*.py $S/tools/*.sh $D/tools/
 cp $S/tools/item-tool/Cargo.toml $D/tools/item-tool/; cp $S/tools/item-tool/src/main.rs $D/tools/item-tool/src/
 for f in $(cat $S/snap$N/files); do cmp -s $f $S/snap$N/tree/$f || { echo "DIFF $f from snapshot"; exit 1; }; done
