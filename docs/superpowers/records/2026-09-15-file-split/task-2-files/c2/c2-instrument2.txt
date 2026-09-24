@@ -1,0 +1,9 @@
+  TRAILING-COMMA-ONLY impl Interp::fn blamed_string_conversion: identical once a comma directly before a closing delimiter is dropped (rustfmt's vertical layout)
+  visibility impl Interp::fn blamed_string_conversion: private -> pub(super) (dispatch/reqstr.rs)
+  visibility fn required_string_argument: private -> pub(super) (dispatch/reqstr.rs)
+  visibility fn required_string_named_argument: private -> pub(super) (dispatch/reqstr.rs)
+  ONLY-POST mod reqstr (dispatch.rs)
+  ONLY-POST use reqstr::MAKESTRING (dispatch.rs)
+  ONLY-POST use reqstr::{DEFAULTNAME,OBJECTNAME,required_string_argument,required_string_named_argument} (dispatch.rs)
+  ONLY-POST use super::{Body,Decoded,Failure,Interp,ObjRef,Primitive,Raised} (dispatch/reqstr.rs)
+637 of 637 units present on both sides have identical token streams (20 of them moved); 0 only before, 4 only after

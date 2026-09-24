@@ -1,0 +1,3 @@
+dispatch.rs:177: ['MAKESTRING']: // shape `MAKESTRING`/`TOSTRING` below have, and for the same reason: a
+dispatch/reqstr.rs:129: ['build', 'string']: /// can allocate and can collect, and both fallbacks below build a string
+done

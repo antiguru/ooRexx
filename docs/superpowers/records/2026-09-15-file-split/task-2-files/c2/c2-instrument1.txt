@@ -1,0 +1,13 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:112: 
+  INSERTED post:113: // The required-string protocol and the string conversion behind it.
+  INSERTED post:114: mod reqstr;
+  INSERTED post:115: pub(crate) use reqstr::MAKESTRING;
+  INSERTED post:116: use reqstr::{DEFAULTNAME, OBJECTNAME, required_string_argument, required_string_named_argument};
+  2 equal blocks, 8525 lines, each also compared with cmp; 8525 expected lines, 8530 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY impl Interp::fn blamed_string_conversion -> dispatch/reqstr.rs: /tmp/tmpnu5jp8rm/a /tmp/tmpnu5jp8rm/b differ: byte 250, line 4 (visibility private -> pub(super); rustfmt reflow, trailing commas before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK fn required_string_argument -> dispatch/reqstr.rs (23 lines; visibility private -> pub(super))
+  OK fn required_string_named_argument -> dispatch/reqstr.rs (12 lines; visibility private -> pub(super))
+  19 of 20 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

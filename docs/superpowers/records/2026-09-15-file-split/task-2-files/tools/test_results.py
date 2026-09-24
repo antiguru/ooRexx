@@ -15,7 +15,7 @@ def parse(path):
     summaries = []
     for line in open(path, errors="replace"):
         line = line.rstrip("\n")
-        m = re.match(r"\s*Running (\S+) \((.*)\)$", line)
+        m = re.match(r"\s*Running (.+?) \((.*)\)$", line)
         if m:
             binary = re.sub(r"-[0-9a-f]{16}$", "", m.group(2).split("/")[-1])
             block = f"{m.group(1)} [{binary}]"

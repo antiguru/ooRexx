@@ -26,6 +26,7 @@ Instrument 3 (`OUT_PREFIX-instrument3.txt`): per unit key, the decoded
 Exit status 1 if any check fails.
 """
 import difflib
+import re
 import json
 import os
 import subprocess
@@ -77,6 +78,17 @@ def strip_vis_line(line):
         if s.startswith(v):
             return ind + s[len(v) :], v.strip()
     return line, None
+
+
+def squash(text_lines):
+    """All whitespace removed, then any comma directly before a closing
+    delimiter: what rustfmt's vertical layout adds when it reflows."""
+    flat = "".join("".join(text_lines).split())
+    return re.sub(r",(?=[)\]}])", "", flat)
+
+
+def drop_trailing_commas(tokens):
+    return [t for i, t in enumerate(tokens) if not (t == "," and i + 1 < len(tokens) and tokens[i + 1] in (")", "]", "}"))]
 
 
 # ---------------------------------------------------------------- units
@@ -156,21 +168,20 @@ for key in moved:
     if tests_mode:
         post_text = [("    " + l) if l else l for l in post_text]
     notes = []
-    for i, line in enumerate(post_text):
-        if i < len(pre_text) and line != pre_text[i]:
-            s1, v1 = strip_vis_line(line)
-            s0, v0 = strip_vis_line(pre_text[i])
-            if s1 == s0 and v1 != v0:
-                post_text[i] = pre_text[i]
-                notes.append(f"visibility {v0 or 'private'} -> {v1 or 'private'}")
+    if pu["vis"] != post_units[key]["vis"]:
+        # Undo only the visibility change, on the declaration line.
+        decl = re.compile(r"^(\s*)(pub(\([a-z:_ ]+\))? )?(?=(async |unsafe )?(fn|const|static|struct|enum|type|mod|use|trait) )")
+        pre_text = [decl.sub(r"\1", l, count=1) for l in pre_text]
+        post_text = [decl.sub(r"\1", l, count=1) for l in post_text]
+        notes.append(f"visibility {pu['vis']} -> {post_units[key]['vis']}")
     ok, msg = cmp_bytes("\n".join(pre_text) + "\n", "\n".join(post_text) + "\n", key)
     if ok:
         moved_ok += 1
         if notes:
             out1.append(f"  OK {key} -> {rel} ({b - a + 1} lines; {'; '.join(notes)})")
-    elif "".join("".join(pre_text).split()) == "".join("".join(post_text).split()):
+    elif squash(pre_text) == squash(post_text):
         reformatted.append(key)
-        out1.append(f"  WHITESPACE-ONLY {key} -> {rel}: {msg} (rustfmt reflow; tokens are instrument 2's, literal values instrument 3's)")
+        out1.append(f"  WHITESPACE-ONLY {key} -> {rel}: {msg} ({'; '.join(notes + ['rustfmt reflow, trailing commas before a closing delimiter ignored'])}; tokens are instrument 2's, literal values instrument 3's)")
     else:
         failures.append(f"I1b {key}: {msg}")
         out1.append(f"  FAIL {key} -> {rel}: {msg}")
@@ -185,6 +196,9 @@ tok_ok = 0
 for k in common:
     if pre_units[k]["toks"] == post_units[k]["toks"]:
         tok_ok += 1
+    elif drop_trailing_commas(pre_units[k]["toks"].split("\x01")) == drop_trailing_commas(post_units[k]["toks"].split("\x01")):
+        tok_ok += 1
+        out2.append(f"  TRAILING-COMMA-ONLY {k}: identical once a comma directly before a closing delimiter is dropped (rustfmt's vertical layout)")
     else:
         failures.append(f"I2 token stream differs: {k}")
         out2.append(f"  DIFFERS {k}")
