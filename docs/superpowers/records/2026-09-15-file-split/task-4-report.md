@@ -20,7 +20,7 @@ members are in one `impl Interp { ... }` block per child, still indented as
 members. Their text is byte-identical to BASE except where this report lists
 a difference.
 
-**`Loud` did not move** (departure 1). Nothing was committed for it.
+**`Loud` did not move** (departure 1, ruled). Nothing was committed for it.
 
 ## What stays in `lib.rs`
 
@@ -61,7 +61,10 @@ four-space indent). Beside those:
    `dispatch/tests.rs`. The brief said to report this to the controller
    before committing that child. I did, with the rows, the cause and two
    options: keep `Loud` in `lib.rs`, or fix the scanner first in a separate
-   commit. I had no ruling by the end of the task, so `Loud` stays.
+   commit. The controller ruled for the first, after the commits below
+   were made: `Loud` stays in `lib.rs`, and the move waits for a scanner
+   fix, queued together with the scanner reading file-level test modules
+   as surface code, since both decide surface by file name.
    `form_name`, `owned_message`, `instruction_owner` and `expr_owner` stay
    with it. The survey listed `instruction_owner` and `expr_owner` under the
    directive-analysis range, but they build `Loud`'s messages, not
@@ -308,9 +311,9 @@ other work on the machine, and still had no timeouts.
 
 ## Concerns
 
-1. **`Loud` is still in `lib.rs`**, pending the ruling on departure 1. If
-   the scanner is fixed to key on "defined inside an `impl`" rather than on
-   the file name, the move becomes location-only and can be a later commit.
+1. **`Loud` is still in `lib.rs`**, by ruling (departure 1). Once the
+   scanner keys on "defined inside an `impl`" rather than on the file name,
+   the move becomes location-only and can be a later commit.
 2. **`lib.rs` is 3206 lines** and holds more than one responsibility:
    * `Loud`, `form_name` and the owner functions, about 650 lines;
    * `Code`, the `Interp` struct and its types, about 950;
