@@ -1,0 +1,7 @@
+head ed8cb3f03c3b49b35cffb12e2298d35c727e024e
+rust tree f7b5ac2195d18a6999a4c67e6c213fa6a8c07bd6
+load-before 3.90 5.21 4.98 3/3843 503074
+exit 0
+load-after 1.95 4.66 4.95 1/3823 625946
+finished
+note: the rust tree line was empty as first written (git add exited 1 on the ignored rust/target pathspec); it was filled in afterwards from the same worktree, unchanged since the run

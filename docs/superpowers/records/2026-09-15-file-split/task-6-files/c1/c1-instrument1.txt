@@ -1,0 +1,7 @@
+(a) unmoved lines: PRE dispatch/library.rs minus the removed lines, against POST dispatch/library.rs
+  INSERTED post:776: mod tests;
+  1 equal blocks, 775 lines, each also compared with cmp; 775 expected lines, 776 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY tests::fn a_library_call_answers_the_same_under_a_collection_at_every_allocation -> dispatch/library/tests.rs: /tmp/tmpq67ho60y/a /tmp/tmpq67ho60y/b differ: byte 849, line 15 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  26 of 27 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

@@ -1,0 +1,16 @@
+control 1 unmoved line gains a space: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:3402 post:3411: "fn standard_stream_name(name: &[u8], input: bool) -> Option<&'static [u8]> {" -> "fn standard_stream_name(name: &[u8],  input: bool) -> Option<&'static [u8]> {"
+control 2 space inside a macro argument's string: exit 1, expected ['I3'], reported ['I3']: CAUGHT
+  FAILURES:
+  I3 literals differ: impl HeaderPlan::fn push
+control 3 token change: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b impl HeaderPlan::fn push: /tmp/tmp3jn1tljx/a /tmp/tmp3jn1tljx/b differ: byte 267, line 7
+  I2 token stream differs: impl HeaderPlan::fn push
+  I3 literals differ: impl HeaderPlan::fn push
+control 4 token change beside a re-wrapped signature's comma: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b fn numeric_less: /tmp/tmp5vyboe8s/a /tmp/tmp5vyboe8s/b differ: byte 473, line 8
+  I2 token stream differs: fn numeric_less
+4 of 4 controls caught as expected

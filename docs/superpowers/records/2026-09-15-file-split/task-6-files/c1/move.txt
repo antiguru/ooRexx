@@ -1,0 +1,1 @@
+moved lines 777-1390 (1-based) of dispatch/library.rs, 614 lines, 0 kept verbatim inside literals; 0 lines after the module stay
