@@ -28,6 +28,6 @@ python3 $S/tools/version_edits.py . || exit 1
 cd $R && cargo fmt --all || exit 1
 python3 $S/tools/other_edits.py $R $S/art/c$N-other-edits-check.txt \
   "parse_template.rs=instruments" "version.rs=instruments" "lib.rs=insert" "parse_template/tests.rs=insert" \
-  "dispatch/rexx_info.rs=subst:\\bparse_template\\b=>version" \
+  "dispatch/rexx_info.rs=substsort:\\bparse_template\\b=>version" \
   "trace.rs=subst:crate::parse_template::PLATFORM=>crate::version::PLATFORM" \
   "environment.rs=subst:crate::parse_template::LINE_END=>crate::version::LINE_END"

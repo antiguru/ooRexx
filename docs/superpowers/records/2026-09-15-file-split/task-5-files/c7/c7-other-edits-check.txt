@@ -1,0 +1,15 @@
+parse_template.rs: covered by instruments 1-3
+version.rs: covered by instruments 1-3
+crates/rexx-exec/src/lib.rs: OK inserted lines only
+  +89: 
+  +90: // The interpreter's version string, platform name and line terminator:
+  +91: // what `PARSE VERSION`, `PARSE SOURCE`, `.ENDOFLINE` and `RexxInfo` answer.
+  +92: mod version;
+crates/rexx-exec/src/parse_template/tests.rs: OK inserted lines only
+  +13: use crate::version::{
+  +14:     BIT_WIDTH, BUILD_DATE, LANGUAGE_LEVEL, MAJOR_VERSION, MODIFICATION, RELEASE, VERSION_NUMBER,
+  +15: };
+crates/rexx-exec/src/dispatch/rexx_info.rs: OK 10 occurrences of '\\bparse_template\\b' -> 'version'; HEAD with them replaced equals the working text
+crates/rexx-exec/src/trace.rs: OK 1 occurrences of 'crate::parse_template::PLATFORM' -> 'crate::version::PLATFORM'; HEAD with them replaced equals the working text
+crates/rexx-exec/src/environment.rs: OK 1 occurrences of 'crate::parse_template::LINE_END' -> 'crate::version::LINE_END'; HEAD with them replaced equals the working text
+PASS

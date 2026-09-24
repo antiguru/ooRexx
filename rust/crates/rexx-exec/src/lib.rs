@@ -87,6 +87,10 @@ use run::Ended;
 // evaluates trigger operands, traces, and assigns the targets.
 mod parse_template;
 
+// The interpreter's version string, platform name and line terminator:
+// what `PARSE VERSION`, `PARSE SOURCE`, `.ENDOFLINE` and `RexxInfo` answer.
+mod version;
+
 // `TRACE` (D17): the mode, the nine reachable prefixes' own byte formatting,
 // and the classification a `TRACE`/`TRACE VALUE` setting goes through to
 // become one. The `Op::Clause` region and its loop drivers, and

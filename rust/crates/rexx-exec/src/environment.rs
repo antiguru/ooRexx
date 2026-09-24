@@ -402,7 +402,7 @@ impl Interp {
         // `.ENDOFLINE` is the platform's line terminator as a String --
         // measured, `c2x(.endOfLine)` is `0A` here and its length is 1. The
         // ooTest framework's own prologue reads it (`OOREXXUNIT.CLS:77`).
-        let end_of_line = self.text(crate::parse_template::LINE_END);
+        let end_of_line = self.text(crate::version::LINE_END);
         self.roots.push_temp(end_of_line);
         for (name, value) in [
             (b"ENVIRONMENT".as_slice(), environment),

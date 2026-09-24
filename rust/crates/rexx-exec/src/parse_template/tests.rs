@@ -10,6 +10,9 @@
 /*----------------------------------------------------------------------------*/
 
 use super::*;
+use crate::version::{
+    BIT_WIDTH, BUILD_DATE, LANGUAGE_LEVEL, MAJOR_VERSION, MODIFICATION, RELEASE, VERSION_NUMBER,
+};
 
 /// The measured oracle answers for one template, as `(template, pieces)`.
 /// Every row was taken from the oracle on 2026-08-05 (this task's report

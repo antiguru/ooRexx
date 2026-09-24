@@ -1,0 +1,147 @@
+diff --git i/rust/crates/rexx-exec/src/dispatch/rexx_info.rs w/rust/crates/rexx-exec/src/dispatch/rexx_info.rs
+index 937236310..4b92ea3c9 100644
+--- i/rust/crates/rexx-exec/src/dispatch/rexx_info.rs
++++ w/rust/crates/rexx-exec/src/dispatch/rexx_info.rs
+@@ -13,8 +13,8 @@
+ //! `memory/Setup.cpp:1252`-`:1279`.
+ 
+ use super::{Arity, Cleared, Failure, Interp, NativeMethod, ObjRef};
+-use crate::parse_template;
+ use crate::plan::Package;
++use crate::version;
+ 
+ /// `RexxInfo`'s instance methods. Chained into `ObjectModel::build` beside
+ /// [`super::NATIVE_METHODS`].
+@@ -115,14 +115,14 @@ fn case_sensitive_files(
+ }
+ 
+ /// `RexxInfo::getInterpreterDate`: the build date, which is
+-/// [`parse_template::VERSION`]'s tail.
++/// [`version::VERSION`]'s tail.
+ fn date(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     _receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    Ok(Some(interp.text(parse_template::BUILD_DATE)))
++    Ok(Some(interp.text(version::BUILD_DATE)))
+ }
+ 
+ /// `RexxInfo::getDebug`: `#ifdef _DEBUG`.
+@@ -235,7 +235,7 @@ fn language_level(
+     _receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    Ok(Some(interp.text(parse_template::LANGUAGE_LEVEL)))
++    Ok(Some(interp.text(version::LANGUAGE_LEVEL)))
+ }
+ 
+ /// `RexxInfo::getMajorVersion`: `ORX_VER`.
+@@ -245,7 +245,7 @@ fn major_version(
+     _receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    Ok(Some(interp.text(parse_template::MAJOR_VERSION)))
++    Ok(Some(interp.text(version::MAJOR_VERSION)))
+ }
+ 
+ /// `RexxInfo::getMaxArraySize`: `ArrayClass::MaxFixedArraySize`, the same
+@@ -301,7 +301,7 @@ fn modification(
+     _receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    Ok(Some(interp.text(parse_template::MODIFICATION)))
++    Ok(Some(interp.text(version::MODIFICATION)))
+ }
+ 
+ /// `RexxInfo::getInterpreterName`: `Interpreter::getVersionString()`, the
+@@ -312,7 +312,7 @@ fn name(
+     _receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    Ok(Some(interp.text(parse_template::VERSION)))
++    Ok(Some(interp.text(version::VERSION)))
+ }
+ 
+ /// `RexxInfo::getPackage`: `TheRexxPackage`, the package the primitive
+@@ -345,7 +345,7 @@ fn platform(
+     _receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    Ok(Some(interp.text(parse_template::PLATFORM)))
++    Ok(Some(interp.text(version::PLATFORM)))
+ }
+ 
+ /// `RexxInfo::getRelease`: `ORX_REL`.
+@@ -355,7 +355,7 @@ fn release(
+     _receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    Ok(Some(interp.text(parse_template::RELEASE)))
++    Ok(Some(interp.text(version::RELEASE)))
+ }
+ 
+ /// `RexxInfo::getRevision`: `ORX_BLD` -- see [`BUILD_LEVEL`].
+@@ -375,5 +375,5 @@ fn version(
+     _receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    Ok(Some(interp.text(parse_template::VERSION_NUMBER)))
++    Ok(Some(interp.text(version::VERSION_NUMBER)))
+ }
+diff --git i/rust/crates/rexx-exec/src/environment.rs w/rust/crates/rexx-exec/src/environment.rs
+index e3aa934de..662ca7bc1 100644
+--- i/rust/crates/rexx-exec/src/environment.rs
++++ w/rust/crates/rexx-exec/src/environment.rs
+@@ -402,7 +402,7 @@ impl Interp {
+         // `.ENDOFLINE` is the platform's line terminator as a String --
+         // measured, `c2x(.endOfLine)` is `0A` here and its length is 1. The
+         // ooTest framework's own prologue reads it (`OOREXXUNIT.CLS:77`).
+-        let end_of_line = self.text(crate::parse_template::LINE_END);
++        let end_of_line = self.text(crate::version::LINE_END);
+         self.roots.push_temp(end_of_line);
+         for (name, value) in [
+             (b"ENVIRONMENT".as_slice(), environment),
+diff --git i/rust/crates/rexx-exec/src/lib.rs w/rust/crates/rexx-exec/src/lib.rs
+index 6034e6365..57f45a62c 100644
+--- i/rust/crates/rexx-exec/src/lib.rs
++++ w/rust/crates/rexx-exec/src/lib.rs
+@@ -87,6 +87,10 @@ use run::Ended;
+ // evaluates trigger operands, traces, and assigns the targets.
+ mod parse_template;
+ 
++// The interpreter's version string, platform name and line terminator:
++// what `PARSE VERSION`, `PARSE SOURCE`, `.ENDOFLINE` and `RexxInfo` answer.
++mod version;
++
+ // `TRACE` (D17): the mode, the nine reachable prefixes' own byte formatting,
+ // and the classification a `TRACE`/`TRACE VALUE` setting goes through to
+ // become one. The `Op::Clause` region and its loop drivers, and
+diff --git i/rust/crates/rexx-exec/src/parse_template/tests.rs w/rust/crates/rexx-exec/src/parse_template/tests.rs
+index c63fd8ed5..0b2ec0be4 100644
+--- i/rust/crates/rexx-exec/src/parse_template/tests.rs
++++ w/rust/crates/rexx-exec/src/parse_template/tests.rs
+@@ -10,6 +10,9 @@
+ /*----------------------------------------------------------------------------*/
+ 
+ use super::*;
++use crate::version::{
++    BIT_WIDTH, BUILD_DATE, LANGUAGE_LEVEL, MAJOR_VERSION, MODIFICATION, RELEASE, VERSION_NUMBER,
++};
+ 
+ /// The measured oracle answers for one template, as `(template, pieces)`.
+ /// Every row was taken from the oracle on 2026-08-05 (this task's report
+diff --git i/rust/crates/rexx-exec/src/trace.rs w/rust/crates/rexx-exec/src/trace.rs
+index 8915cbfcb..077c3f82d 100644
+--- i/rust/crates/rexx-exec/src/trace.rs
++++ w/rust/crates/rexx-exec/src/trace.rs
+@@ -733,7 +733,7 @@ impl Interp {
+     /// The `PARSE SOURCE` string this activation would answer, which is what
+     /// the banner names.
+     fn debug_source_string(&self) -> Vec<u8> {
+-        let mut source = crate::parse_template::PLATFORM.to_vec();
++        let mut source = crate::version::PLATFORM.to_vec();
+         source.push(b' ');
+         source.extend_from_slice(self.activation().call_type.token());
+         source.push(b' ');

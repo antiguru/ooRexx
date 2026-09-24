@@ -13,8 +13,8 @@
 //! `memory/Setup.cpp:1252`-`:1279`.
 
 use super::{Arity, Cleared, Failure, Interp, NativeMethod, ObjRef};
-use crate::parse_template;
 use crate::plan::Package;
+use crate::version;
 
 /// `RexxInfo`'s instance methods. Chained into `ObjectModel::build` beside
 /// [`super::NATIVE_METHODS`].
@@ -115,14 +115,14 @@ fn case_sensitive_files(
 }
 
 /// `RexxInfo::getInterpreterDate`: the build date, which is
-/// [`parse_template::VERSION`]'s tail.
+/// [`version::VERSION`]'s tail.
 fn date(
     interp: &mut Interp,
     _cleared: Cleared,
     _receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text(parse_template::BUILD_DATE)))
+    Ok(Some(interp.text(version::BUILD_DATE)))
 }
 
 /// `RexxInfo::getDebug`: `#ifdef _DEBUG`.
@@ -235,7 +235,7 @@ fn language_level(
     _receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text(parse_template::LANGUAGE_LEVEL)))
+    Ok(Some(interp.text(version::LANGUAGE_LEVEL)))
 }
 
 /// `RexxInfo::getMajorVersion`: `ORX_VER`.
@@ -245,7 +245,7 @@ fn major_version(
     _receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text(parse_template::MAJOR_VERSION)))
+    Ok(Some(interp.text(version::MAJOR_VERSION)))
 }
 
 /// `RexxInfo::getMaxArraySize`: `ArrayClass::MaxFixedArraySize`, the same
@@ -301,7 +301,7 @@ fn modification(
     _receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text(parse_template::MODIFICATION)))
+    Ok(Some(interp.text(version::MODIFICATION)))
 }
 
 /// `RexxInfo::getInterpreterName`: `Interpreter::getVersionString()`, the
@@ -312,7 +312,7 @@ fn name(
     _receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text(parse_template::VERSION)))
+    Ok(Some(interp.text(version::VERSION)))
 }
 
 /// `RexxInfo::getPackage`: `TheRexxPackage`, the package the primitive
@@ -345,7 +345,7 @@ fn platform(
     _receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text(parse_template::PLATFORM)))
+    Ok(Some(interp.text(version::PLATFORM)))
 }
 
 /// `RexxInfo::getRelease`: `ORX_REL`.
@@ -355,7 +355,7 @@ fn release(
     _receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text(parse_template::RELEASE)))
+    Ok(Some(interp.text(version::RELEASE)))
 }
 
 /// `RexxInfo::getRevision`: `ORX_BLD` -- see [`BUILD_LEVEL`].
@@ -375,5 +375,5 @@ fn version(
     _receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.text(parse_template::VERSION_NUMBER)))
+    Ok(Some(interp.text(version::VERSION_NUMBER)))
 }

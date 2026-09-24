@@ -4,6 +4,10 @@ working tree's:
 
   subst:REGEX=>REPL   HEAD's text with REGEX replaced by REPL, everywhere,
                       equals the working text byte for byte (cmp);
+  substsort:REGEX=>REPL
+                      the same, after sorting each run of consecutive
+                      single-line `use` declarations on both sides (rustfmt
+                      re-sorts an import the rename moved in the order);
   insert              the working text is HEAD's with lines inserted only.
 
 Every file the working tree changes under rust/crates must have a rule
@@ -18,6 +22,18 @@ rules = dict(a.split("=", 1) for a in sys.argv[3:])
 changed = subprocess.run(["git", "-C", rust, "status", "--porcelain", "-uall", "--", "crates"], capture_output=True, text=True).stdout.split("\n")
 changed = sorted(l[3:].removeprefix("rust/") for l in changed if l)
 lines, bad = [], 0
+
+
+def sort_use_runs(text):
+    out, run = [], []
+    for l in text.split("\n"):
+        if l.startswith("use ") and l.endswith(";"):
+            run.append(l)
+            continue
+        out += sorted(run) + [l]
+        run = []
+    return "\n".join(out + sorted(run))
+
 full = lambda r: r if r.startswith("crates/") else "crates/rexx-exec/src/" + r
 unruled = [c for c in changed if c not in {full(r) for r in rules}]
 for c in unruled:
@@ -29,10 +45,13 @@ for rel, rule in rules.items():
     path = full(rel)
     head = subprocess.run(["git", "-C", rust, "show", f"HEAD:rust/{path}"], capture_output=True, text=True, check=True).stdout
     now = open(f"{rust}/{path}").read()
-    if rule.startswith("subst:"):
-        pat, repl = rule[len("subst:"):].split("=>", 1)
+    if rule.startswith(("subst:", "substsort:")):
+        pat, repl = rule.split(":", 1)[1].split("=>", 1)
         n = len(re.findall(pat, head))
-        ok = n > 0 and re.sub(pat, repl, head) == now
+        a, b = re.sub(pat, repl, head), now
+        if rule.startswith("substsort:"):
+            a, b = sort_use_runs(a), sort_use_runs(b)
+        ok = n > 0 and a == b
         lines.append(f"{path}: {'OK' if ok else 'FAIL'} {n} occurrences of {pat!r} -> {repl!r}; HEAD with them replaced {'equals' if ok else 'DIFFERS from'} the working text")
     elif rule == "insert":
         a, b = head.split("\n"), now.split("\n")

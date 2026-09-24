@@ -1,0 +1,9 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-5/t-check/doc/rexx_exec/index.html and 2 other files
+files: parse_template.rs parse_template/tests.rs 
+warnings located in parse_template.rs or parse_template/: 1
+warning: unresolved link to `search`
+   --> crates/rexx-exec/src/parse_template.rs:218:11
+    |
+218 |     /// [`search`] under `PARSE CASELESS`.
+    |           ^^^^^^ no item named `search` in scope
+    |

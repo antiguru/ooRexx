@@ -733,7 +733,7 @@ impl Interp {
     /// The `PARSE SOURCE` string this activation would answer, which is what
     /// the banner names.
     fn debug_source_string(&self) -> Vec<u8> {
-        let mut source = crate::parse_template::PLATFORM.to_vec();
+        let mut source = crate::version::PLATFORM.to_vec();
         source.push(b' ');
         source.extend_from_slice(self.activation().call_type.token());
         source.push(b' ');
