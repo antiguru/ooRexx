@@ -1,0 +1,34 @@
+control 1 verbatim literal line gains a space: exit 1, expected ['I3'], reported ['I3']: CAUGHT
+  FAILURES:
+  I3 literals differ: tests::const EVERY_BODY
+control 2 de-indented line changes a literal: exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']: CAUGHT
+  FAILURES:
+  I1b tests::const TEST_PATH: /tmp/tmpkxaa9ov4/a /tmp/tmpkxaa9ov4/b differ: byte 115, line 2
+  I2 token stream differs: tests::const TEST_PATH
+  I3 literals differ: tests::const TEST_PATH
+control 3 parent import gains a name: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:24 post:24: 'use std::rc::Rc;' -> 'use std::rc::{Rc, Weak};'
+3 of 3 controls caught as expected
+control 5 field type changes beside a widened field visibility: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b struct FileClasses: /tmp/tmpr670x3b7/a /tmp/tmpr670x3b7/b differ: byte 310, line 6
+  I2 token stream differs: struct FileClasses
+control 6 a widened field is renamed: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b struct MissingTarget: /tmp/tmpo6cedzm2/a /tmp/tmpo6cedzm2/b differ: byte 193, line 5
+  I2 token stream differs: struct MissingTarget
+2 of 2 controls caught as expected
+control 7 a narrowed parent import also changes a path: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:14 post:14: 'use rexx_classes::{ClassKind, InheritRefusal, MethodId};' -> 'use rexx_classes::MethodId;'
+  I1a changed unmoved line pre-expected:15 post:15: 'use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};' -> 'use rexx_num::{Heap, NameMap, ObjRef, RootSet, SlotRef};'
+control 8 a narrowed parent import also gains a name: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:14 post:14: 'use rexx_classes::{ClassKind, InheritRefusal, MethodId};' -> 'use rexx_classes::{MethodId, Weak};'
+  I1a changed unmoved line pre-expected:15 post:15: 'use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotFrame, SlotRef};' -> 'use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotRef};'
+2 of 2 controls caught as expected
+control 4 unmoved destination line gains a space: exit 1, expected ['I1c'], reported ['I1c']: CAUGHT
+  FAILURES:
+  I1c run.rs replace pre[3410:3411] post[3418:3419]
+1 of 1 controls caught as expected

@@ -1,0 +1,7 @@
+(a) unmoved lines: PRE value.rs minus the removed lines, against POST value.rs
+  INSERTED post:1089: mod tests;
+  1 equal blocks, 1088 lines, each also compared with cmp; 1088 expected lines, 1089 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY tests::fn a_remembered_parse_answers_what_a_fresh_one_does -> value/tests.rs: /tmp/tmpntc8qbgb/a /tmp/tmpntc8qbgb/b differ: byte 373, line 7 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  28 of 29 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

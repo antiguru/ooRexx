@@ -1,0 +1,65 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-5/t-check/doc/rexx_exec/index.html and 2 other files
+files: value.rs value/tests.rs 
+warnings located in value.rs or value/: 9
+warning: unresolved link to `literal`
+   --> crates/rexx-exec/src/value.rs:115:11
+    |
+115 |     /// [`literal`], for a caller that will keep the handle and read it for the
+    |           ^^^^^^^ no item named `literal` in scope
+    |
+--
+warning: unresolved link to `text`
+   --> crates/rexx-exec/src/value.rs:162:11
+    |
+162 |     /// [`text`], for a caller that already owns the bytes.
+    |           ^^^^ no item named `text` in scope
+    |
+--
+warning: unresolved link to `to_text`
+   --> crates/rexx-exec/src/value.rs:249:26
+    |
+249 |     /// How many bytes [`to_text`] would answer, for a caller that wants the
+    |                          ^^^^^^^ no item named `to_text` in scope
+    |
+--
+warning: unresolved link to `text_len`
+   --> crates/rexx-exec/src/value.rs:266:11
+    |
+266 |     /// [`text_len`] itself, with the assertion lifted off it so that the
+    |           ^^^^^^^^ no item named `text_len` in scope
+    |
+--
+warning: unresolved link to `string_value_text`
+   --> crates/rexx-exec/src/value.rs:356:46
+    |
+356 |     /// An array's items, each rendered as [`string_value_text`] renders it and
+    |                                              ^^^^^^^^^^^^^^^^^ no item named `string_value_text` in scope
+    |
+--
+warning: unresolved link to `array_string`
+   --> crates/rexx-exec/src/value.rs:475:11
+    |
+475 |     /// [`array_string`] for an array named by its handle, whose items it looks
+    |           ^^^^^^^^^^^^ no item named `array_string` in scope
+    |
+--
+warning: unresolved link to `try_text`
+   --> crates/rexx-exec/src/value.rs:687:46
+    |
+687 |     /// Makes `value`'s bytes reachable by [`try_text`], and carries the ones
+    |                                              ^^^^^^^^ no item named `try_text` in scope
+    |
+--
+warning: unresolved link to `to_number`
+   --> crates/rexx-exec/src/value.rs:750:11
+    |
+750 |     /// [`to_number`]'s arm for a value whose bytes are in its own handle,
+    |           ^^^^^^^^^ no item named `to_number` in scope
+    |
+--
+warning: unresolved link to `to_number`
+   --> crates/rexx-exec/src/value.rs:770:11
+    |
+770 |     /// [`to_number`]'s arm for a value that lives in the arena.
+    |           ^^^^^^^^^ no item named `to_number` in scope
+    |
