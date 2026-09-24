@@ -1,0 +1,34 @@
+  TRAILING-COMMA-ONLY impl Interp::fn install_directives: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility impl Interp::fn install_directives: private -> pub(super) (install.rs)
+  visibility impl Interp::fn package_path: private -> pub(super) (install.rs)
+  visibility impl Interp::fn add_imported_package: private -> pub(super) (install.rs)
+  visibility impl Interp::fn merge_package: private -> pub(super) (install.rs)
+  visibility impl Interp::fn merge_required: private -> pub(super) (install.rs)
+  visibility impl Interp::fn namespace_class: private -> pub(super) (install.rs)
+  visibility impl Interp::fn namespace_routine: private -> pub(super) (install.rs)
+  visibility impl Interp::fn record_compiled_body: private -> pub(super) (install.rs)
+  visibility impl Interp::fn record_compiled_routine: private -> pub(super) (install.rs)
+  visibility impl Interp::fn settle_library: private -> pub(super) (install.rs)
+  ONLY-PRE use rexx_classes::{ClassKind,InheritRefusal,MethodId}
+  ONLY-PRE use rexx_core::{Heap,NameMap,ObjRef,RootSet,SlotFrame,SlotRef}
+  ONLY-PRE use rexx_parse::{Access,AttributeDirective,ClassDirective,ClassRef,CodeBody,ConstantDirective,ConstantValue,Directive,DirectiveKind,Expr,ExprKind,GuardOption,InstructionKind,MethodDirective,Operator,Program,Protection,SymbolId,SymbolTable,compound_parts,parse_program,}
+  ONLY-PRE use std::collections::{BTreeMap,HashMap,VecDeque}
+  ONLY-PRE use directives::{AnnotatedSite,FileClasses,accessor_setter_name,accessor_variable,annotation_target,attribute_dictionary_keys,class_install_order,class_members,constant_root_key,delegate_variable,directive_clause,directive_gap,member_dictionary_keys,method_body_gap,method_dictionary_keys,unresolved_external,}
+  ONLY-POST use rexx_classes::MethodId (lib.rs)
+  ONLY-POST use rexx_core::{Heap,NameMap,ObjRef,RootSet,SlotRef} (lib.rs)
+  ONLY-POST use rexx_parse::{CodeBody,ExprKind,InstructionKind,Operator,Program,SymbolId,SymbolTable,compound_parts,parse_program,} (lib.rs)
+  ONLY-POST use std::collections::{HashMap,VecDeque} (lib.rs)
+  ONLY-POST use directives::{accessor_setter_name,accessor_variable,delegate_variable,method_body_gap} (lib.rs)
+  ONLY-POST mod install (lib.rs)
+  ONLY-POST install.rs::use crate::activation::{Activation,CallType} (install.rs)
+  ONLY-POST install.rs::use crate::directives::{AnnotatedSite,FileClasses,annotation_target,attribute_dictionary_keys,class_install_order,class_members,constant_root_key,directive_clause,directive_gap,member_dictionary_keys,method_dictionary_keys,unresolved_external,} (install.rs)
+  ONLY-POST install.rs::use crate::error::{Failure,FailureSite,Raised} (install.rs)
+  ONLY-POST install.rs::use crate::options::PackageOptions (install.rs)
+  ONLY-POST install.rs::use crate::plan::{Package,Plan,ProgramId} (install.rs)
+  ONLY-POST install.rs::use crate::{CallContext,Code,ExecutableRecord,ExecutableSource,GeneratedKind,GeneratedMethod,InstallBody,InstalledMethodBody,InstalledRoutine,Interp,LIBRARY_PACKAGE_NAME,LibraryBinding,LibraryCodeKey,LibraryLoad,Loud,MergedRoutine,Namespace,dispatch,environment,internal_routines,library_search_of,plan,require,run,} (install.rs)
+  ONLY-POST install.rs::use rexx_classes::{ClassKind,InheritRefusal,MethodId} (install.rs)
+  ONLY-POST install.rs::use rexx_core::{ObjRef,SlotFrame} (install.rs)
+  ONLY-POST install.rs::use rexx_parse::{Access,AttributeDirective,ClassDirective,ClassRef,CodeBody,ConstantDirective,ConstantValue,Directive,DirectiveKind,Expr,GuardOption,MethodDirective,Program,Protection,parse_program,} (install.rs)
+  ONLY-POST install.rs::use std::collections::{BTreeMap,HashMap} (install.rs)
+  ONLY-POST install.rs::use std::rc::Rc (install.rs)
+250 of 250 units present on both sides have identical token streams (76 of them moved); 5 only before, 17 only after

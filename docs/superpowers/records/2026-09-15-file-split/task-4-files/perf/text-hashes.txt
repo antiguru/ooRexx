@@ -1,0 +1,2 @@
+base da915d7cd1b81d342ecdfe684d3a11d8be6779dc981e6a15068b4f2110b03d1b  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-4/text-base.bin
+head a0c2d9b6c52e47a094164f67e708addddfd1a75d35ddae861a7441fdd47c6108  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-4/text-head.bin

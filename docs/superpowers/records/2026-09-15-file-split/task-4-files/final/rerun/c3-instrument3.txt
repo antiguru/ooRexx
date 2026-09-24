@@ -1,0 +1,5 @@
+  DECODE-DIFFERS (declared edit) impl Interp::fn install_attribute
+287 of 288 units decode to identical literal lists; 1326 decodable literals (string, byte string, char, byte, doc line) on the PRE side; 0 units where the tool's count and the independent lexer's disagree
+whole-file literal multiset, PRE lib.rs against POST lib.rs + new files:
+  only PRE  x1: STR " [`AttributeStyle`] -- the plain name for a getter, the name with `=`"
+  only POST x1: STR " [`AttributeStyle`](rexx_parse::AttributeStyle) -- the plain name for a getter, the name with `=`"

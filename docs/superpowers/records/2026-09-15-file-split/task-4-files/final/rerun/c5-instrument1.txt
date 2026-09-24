@@ -1,0 +1,23 @@
+(a) unmoved lines: PRE lib.rs minus the removed lines, against POST lib.rs
+  IMPORTS NARROWED post:14-15: ['rexx_classes::ClassKind', 'rexx_classes::InheritRefusal', 'rexx_core::SlotFrame']
+  IMPORTS NARROWED post:18-18: ['rexx_parse::Access', 'rexx_parse::AttributeDirective', 'rexx_parse::ClassDirective', 'rexx_parse::ClassRef', 'rexx_parse::ConstantDirective', 'rexx_parse::ConstantValue', 'rexx_parse::Directive', 'rexx_parse::DirectiveKind', 'rexx_parse::Expr', 'rexx_parse::GuardOption', 'rexx_parse::MethodDirective', 'rexx_parse::Protection']
+  IMPORTS NARROWED post:21-21: ['std::collections::BTreeMap']
+  IMPORTS NARROWED post:148-148: ['directives::AnnotatedSite', 'directives::FileClasses', 'directives::annotation_target', 'directives::attribute_dictionary_keys', 'directives::class_install_order', 'directives::class_members', 'directives::constant_root_key', 'directives::directive_clause', 'directives::directive_gap', 'directives::member_dictionary_keys', 'directives::method_dictionary_keys', 'directives::unresolved_external']
+  INSERTED post:153: 
+  INSERTED post:154: // Installing a program's directives, and the libraries and executable records
+  INSERTED post:155: // they bind.
+  INSERTED post:156: mod install;
+  6 equal blocks, 3197 lines, each also compared with cmp; 3209 expected lines, 3206 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY impl Interp::fn install_directives -> install.rs: /tmp/tmpy0ut7rzm/a /tmp/tmpy0ut7rzm/b differ: byte 1103, line 24 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK impl Interp::fn package_path -> install.rs (8 lines; visibility private -> pub(super))
+  OK impl Interp::fn add_imported_package -> install.rs (10 lines; visibility private -> pub(super))
+  OK impl Interp::fn merge_package -> install.rs (12 lines; visibility private -> pub(super))
+  OK impl Interp::fn merge_required -> install.rs (32 lines; visibility private -> pub(super))
+  OK impl Interp::fn namespace_class -> install.rs (18 lines; visibility private -> pub(super))
+  OK impl Interp::fn namespace_routine -> install.rs (28 lines; visibility private -> pub(super))
+  OK impl Interp::fn record_compiled_body -> install.rs (50 lines; visibility private -> pub(super))
+  OK impl Interp::fn record_compiled_routine -> install.rs (37 lines; visibility private -> pub(super))
+  OK impl Interp::fn settle_library -> install.rs (20 lines; visibility private -> pub(super))
+  75 of 76 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

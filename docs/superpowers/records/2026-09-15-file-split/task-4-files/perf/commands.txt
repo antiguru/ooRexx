@@ -1,0 +1,3 @@
+perf.sh /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-4/rexx-run-base /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-4/rexx-run-head /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-4/art/perf 6
+BASE 2f3065b2b built in its own worktree, CARGO_TARGET_DIR=t-base; final 97ad8c334 in the instrument-4 worktree, CARGO_TARGET_DIR=t-rel; cargo build --release -p rexx-exec --bin rexx-run
+columns: program, then per run: exit status and callgrind summary minus libc.so.6 and ld-linux, in the order BASE round 1, final round 1, BASE round 2, final round 2

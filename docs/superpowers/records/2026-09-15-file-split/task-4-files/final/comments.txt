@@ -1,0 +1,22 @@
+2176 comment lines in BASE lib.rs, 2226 after
+lost (1):
+  x1 /// [`AttributeStyle`] -- the plain name for a getter, the name with `=`
+added (51):
+  x12 /*                                                                            */
+  x4 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x4 /* This program and the accompanying materials are made available under       */
+  x4 /* distribution. A copy is also available at the following address:           */
+  x4 /* https://www.oorexx.org/license.html                                        */
+  x4 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x8 /*----------------------------------------------------------------------------*/
+  x1 // Installing a program's directives, and the libraries and executable records
+  x1 // Variable storage and reads: a slot's own storage, what an `EXPOSE` bound it
+  x1 // What a program's directives say before any of them is installed.
+  x1 // they bind.
+  x1 // to, and the scope pools.
+  x1 //! Installing a program's directives: requires and namespaces, classes, methods,
+  x1 //! Variable storage and reads: a slot's own storage, what an `EXPOSE` bound it
+  x1 //! What a program's directives say before any of them is installed.
+  x1 //! attributes and constants, libraries, and the executable records.
+  x1 //! to, and the scope pools.
+  x1 /// [`AttributeStyle`](rexx_parse::AttributeStyle) -- the plain name for a getter, the name with `=`

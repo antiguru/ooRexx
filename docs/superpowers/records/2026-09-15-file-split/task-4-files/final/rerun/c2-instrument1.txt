@@ -1,0 +1,9 @@
+(a) unmoved lines: PRE run/interpret.rs minus the removed lines, against POST run/interpret.rs
+  1 equal blocks, 299 lines, each also compared with cmp; 299 expected lines, 299 actual lines
+
+(c) destination run.rs: PRE against POST, inserted lines only
+  INSERTED post:2808-2815: 8 lines
+  3430 of 3430 PRE lines equal, each block compared with cmp
+
+(b) moved units: PRE text against POST text, compared with cmp
+  1 of 1 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

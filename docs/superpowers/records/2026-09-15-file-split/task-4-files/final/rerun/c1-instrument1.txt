@@ -1,0 +1,8 @@
+(a) unmoved lines: PRE lib.rs minus the removed lines, against POST lib.rs
+  INSERTED post:6168: mod tests;
+  1 equal blocks, 6167 lines, each also compared with cmp; 6167 expected lines, 6168 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY tests::fn an_attribute_get_installs_only_the_getter -> tests.rs: /tmp/tmprzmfokm9/a /tmp/tmprzmfokm9/b differ: byte 273, line 6 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY tests::fn a_native_activations_call_state_is_rooted_only_while_it_lives -> tests.rs: /tmp/tmpq3ffp1om/a /tmp/tmpq3ffp1om/b differ: byte 515, line 12 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  41 of 43 moved units byte-identical (visibility edits listed above), 2 differing in whitespace only

@@ -8,7 +8,7 @@ import sys
 from collections import Counter
 import os, rustlex
 PARENT = os.environ.get("SPLIT_PARENT", "dispatch")
-PARENT_RS = PARENT + ".rs"
+PARENT_RS = os.environ.get("SPLIT_PARENT_RS", PARENT + ".rs")
 
 def comments(path):
     text = open(path).read()

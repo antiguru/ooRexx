@@ -1,0 +1,15 @@
+  visibility impl Interp::fn variable: private -> pub(super) (variables.rs)
+  visibility impl Interp::fn clear_variable: private -> pub(super) (variables.rs)
+  TRAILING-COMMA-ONLY impl Interp::fn set_pool_variable: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility impl Interp::fn set_pool_variable: private -> pub(super) (variables.rs)
+  visibility impl Interp::fn clear_pool_variable: private -> pub(super) (variables.rs)
+  visibility impl Interp::fn exposure: private -> pub(super) (variables.rs)
+  visibility impl Interp::fn read: private -> pub(super) (variables.rs)
+  ONLY-PRE use rexx_core::{Body,Heap,NameMap,ObjRef,RootSet,SlotFrame,SlotRef}
+  ONLY-POST use rexx_core::{Heap,NameMap,ObjRef,RootSet,SlotFrame,SlotRef} (lib.rs)
+  ONLY-POST mod variables (lib.rs)
+  ONLY-POST variables.rs::use crate::activation::{Activation,InstanceVar} (variables.rs)
+  ONLY-POST variables.rs::use crate::{Code,Interp,Novalue} (variables.rs)
+  ONLY-POST variables.rs::use rexx_core::{Body,ObjRef,SlotFrame} (variables.rs)
+  ONLY-POST variables.rs::use rexx_parse::SymbolId (variables.rs)
+270 of 270 units present on both sides have identical token streams (17 of them moved); 1 only before, 6 only after

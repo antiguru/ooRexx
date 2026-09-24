@@ -10,7 +10,7 @@ import sys
 from collections import Counter
 import os, splitlib
 PARENT = os.environ.get("SPLIT_PARENT", "dispatch")
-PARENT_RS = PARENT + ".rs"
+PARENT_RS = os.environ.get("SPLIT_PARENT_RS", PARENT + ".rs")
 from splitlib import drop_trailing_commas
 
 base_src, final_src, new = sys.argv[1], sys.argv[2], sys.argv[3:]
@@ -20,13 +20,15 @@ after, where = {}, {}
 for rel in [PARENT_RS] + new:
     for u in splitlib.load_units(f"{final_src}/{rel}"):
         k = ("tests::" if rel.endswith("tests.rs") else "") + u["key"]
+        if k.startswith("use ") and rel != PARENT_RS:
+            continue
         assert k not in after, k
         after[k] = u; where[k] = rel
 
 def trim(t):
-    # The same single relaxation instruments.py makes: the trailing comma of a
-    # signature's parameter list, nothing else.
-    return drop_trailing_commas(t.split("\x01"))
+    # The same relaxations instruments.py makes: the trailing comma of a
+    # signature's parameter list, and a struct field's widened visibility.
+    return splitlib.strip_field_vis(drop_trailing_commas(t.split("\x01")))
 
 bad, declared, vis, per_file = [], [], [], Counter()
 for k, u in base.items():

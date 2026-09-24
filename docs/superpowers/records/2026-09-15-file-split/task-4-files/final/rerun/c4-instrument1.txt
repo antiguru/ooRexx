@@ -1,0 +1,16 @@
+(a) unmoved lines: PRE lib.rs minus the removed lines, against POST lib.rs
+  IMPORTS NARROWED post:15-15: ['rexx_core::Body']
+  INSERTED post:156: 
+  INSERTED post:157: // Variable storage and reads: a slot's own storage, what an `EXPOSE` bound it
+  INSERTED post:158: // to, and the scope pools.
+  INSERTED post:159: mod variables;
+  3 equal blocks, 5493 lines, each also compared with cmp; 5494 expected lines, 5498 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK impl Interp::fn variable -> variables.rs (10 lines; visibility private -> pub(super))
+  OK impl Interp::fn clear_variable -> variables.rs (11 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY impl Interp::fn set_pool_variable -> variables.rs: /tmp/tmpj6wtsbig/a /tmp/tmpj6wtsbig/b differ: byte 195, line 4 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK impl Interp::fn clear_pool_variable -> variables.rs (14 lines; visibility private -> pub(super))
+  OK impl Interp::fn exposure -> variables.rs (4 lines; visibility private -> pub(super))
+  OK impl Interp::fn read -> variables.rs (4 lines; visibility private -> pub(super))
+  16 of 17 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only
