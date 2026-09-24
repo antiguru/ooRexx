@@ -24,3 +24,8 @@ $S/tools/tests_links.sh $R $S/t-check $S/art/c$N-tests-links.txt | sed -n 3p
 EXCL=":!crates/rexx-exec/src/$SPLIT_PARENT_RS"; for d in ${SPLIT_DESTS//,/ }; do EXCL="$EXCL :!crates/rexx-exec/src/$d"; done
 git -C $R diff -- . $EXCL ':!corpus/refusal-sites.tsv' > $S/art/c$N-other-edits.diff
 echo "other edits: $(/bin/grep -a -c '^diff --git' $S/art/c$N-other-edits.diff) files"
+if [ -f $S/c$N/rules ]; then
+  mapfile -t RULES < $S/c$N/rules
+  python3 $S/tools/other_edits.py $R $S/art/c$N-other-edits-check.txt "${RULES[@]}" > /dev/null
+  echo "other-edits check: $(tail -1 $S/art/c$N-other-edits-check.txt)"
+fi

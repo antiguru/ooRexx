@@ -56,6 +56,10 @@ tests_mode = "--tests" in sys.argv[5:]
 # its token difference is listed rather than failed; instrument 1 (a) shows
 # the edited lines themselves.
 expected_edits = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--expect-edit=")]
+# A line of the parent outside any unit (a module doc) that this commit
+# corrects because the move made it false: its new text, exactly. Each must
+# match one changed line, and is listed.
+expected_lines = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--expect-line=")]
 
 if os.environ.get("SPLIT_DESTS"):
     DESTS = os.environ["SPLIT_DESTS"].split(",")
@@ -178,6 +182,10 @@ def use_block_narrowed(i1, i2, j1, j2):
     post_list = [u for k, u in post_units.items() if post_units_file[k] == PARENT_RS]
     a = [use_unit_at(pre_list, expected_at[i]) for i in range(i1, i2)]
     b = [use_unit_at(post_list, j) for j in range(j1, j2)]
+    if not b:
+        # A deletion inside a declaration: the declaration it left is the
+        # one holding the line before the gap.
+        b = [use_unit_at(post_list, j1 - 1)]
     if any(u is None for u in a + b):
         return None
     before = set().union(*(use_names(u["key"]) for u in a))
@@ -207,6 +215,9 @@ for tag, i1, i2, j1, j2 in sm.get_opcodes():
             before_stripped, before_vis = strip_vis_line(before)
             if stripped == before_stripped and vis != before_vis:
                 out1.append(f"  VISIBILITY post:{j1 + k + 1}: {before_vis or 'private'} -> {vis or 'private'}: {after.strip()}")
+            elif after in expected_lines:
+                out1.append(f"  CHANGED (declared line) post:{j1 + k + 1}: {before!r} -> {after!r}")
+                expected_lines.remove(after)
             elif declared_line(j1 + k):
                 out1.append(f"  CHANGED (declared edit) post:{j1 + k + 1}: {before!r} -> {after!r}")
             else:
@@ -215,6 +226,8 @@ for tag, i1, i2, j1, j2 in sm.get_opcodes():
     else:
         failures.append(f"I1a {tag} expected[{i1}:{i2}] actual[{j1}:{j2}]")
         out1.append(f"  {tag.upper()} expected {expected[i1:i2]!r} actual {actual[j1:j2]!r}")
+for text in expected_lines:
+    failures.append(f"I1a declared line not found: {text!r}")
 out1.append(
     f"  {equal_blocks} equal blocks, {equal_lines} lines, each also compared with cmp; "
     f"{len(expected)} expected lines, {len(actual)} actual lines"

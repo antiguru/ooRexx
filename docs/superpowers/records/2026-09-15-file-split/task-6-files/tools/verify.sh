@@ -10,6 +10,7 @@ df -h /tmp | tail -1
 $S/tools/checks.sh "$@" > $S/art/checks-c$N.out 2>&1
 cat $S/art/checks-c$N.out
 /bin/grep -q '^fmt 0' $S/art/checks-c$N.out && /bin/grep -q '^clippy 0' $S/art/checks-c$N.out && /bin/grep -q '^PASS' $S/art/c$N-verdict.txt || { echo "CHECKS FAILED c$N"; exit 1; }
+[ ! -f $S/c$N/rules ] || /bin/grep -q '^other-edits check: PASS' $S/art/checks-c$N.out || { echo "OTHER EDITS FAILED c$N"; exit 1; }
 rm -rf $S/snap$N; $S/tools/snap.sh save $S/snap$N
 $S/tools/i4.sh $N > /dev/null
 /bin/grep -q '^compare exit 0' $S/art/i4-c$N.compare && /bin/grep -q '^exit 0' $S/art/i4-c$N.meta || { echo "INSTRUMENT 4 FAILED c$N"; cat $S/art/i4-c$N.compare; exit 1; }

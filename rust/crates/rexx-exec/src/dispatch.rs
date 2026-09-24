@@ -127,8 +127,8 @@ use array::{
     unconverted_array_argument, unsigned_index, whole_comparison,
 };
 
-// `MutableBuffer`'s primitive methods, and the argument parsers and byte-search
-// helpers the other primitive methods share, chained the same way.
+// `MutableBuffer`'s primitive methods, and the argument and byte-search helpers
+// the other primitive methods share, chained the same way.
 mod buffer;
 use buffer::{
     abbrev_arguments, array_of_texts, backward_search, backward_search_arguments, bit_arguments,
@@ -136,12 +136,17 @@ use buffer::{
     conversion_length_argument, copies_argument, count_method_argument, datatype_option_argument,
     delete_arguments, delword_arguments, ends_with, equals_argument, forward_search,
     forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
-    named_string_argument, native_mutable_buffer_new, optional_length_argument,
-    optional_position_argument, overlay_arguments, pad_arguments, pad_method_argument,
-    refuse_method_argument, replace_at_bytes, replace_at_plan, required_position_argument,
-    space_arguments, starts_with, string_method_argument, strip_arguments, substr_arguments,
-    translate_arguments, translate_in_table, usize_or_refuse, verify_arguments,
-    whole_method_argument, wordpos_arguments,
+    native_mutable_buffer_new, overlay_arguments, pad_arguments, replace_at_bytes, replace_at_plan,
+    space_arguments, starts_with, strip_arguments, substr_arguments, translate_arguments,
+    translate_in_table, verify_arguments, wordpos_arguments,
+};
+
+// The method-argument parsers the primitive methods share.
+mod method_arguments;
+use method_arguments::{
+    named_string_argument, optional_length_argument, optional_position_argument,
+    pad_method_argument, refuse_method_argument, required_position_argument,
+    string_method_argument, usize_or_refuse, whole_method_argument,
 };
 
 // `Class`'s own methods: its readers, the mutators, the class factory.

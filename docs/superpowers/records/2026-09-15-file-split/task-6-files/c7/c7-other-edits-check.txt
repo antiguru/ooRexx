@@ -1,0 +1,20 @@
+dispatch/buffer.rs: covered by instruments 1-3
+dispatch/method_arguments.rs: covered by instruments 1-3
+crates/rexx-exec/src/dispatch.rs: OK import/mod lines only, names moved buffer -> method_arguments
+  2756 lines outside the declarations identical, in order, with 1 blank lines inserted
+  comment removed or edited: // `MutableBuffer`'s primitive methods, and the argument parsers and byte-search
+  comment removed or edited: // helpers the other primitive methods share, chained the same way.
+  comment added: // `MutableBuffer`'s primitive methods, and the argument and byte-search helpers
+  comment added: // the other primitive methods share, chained the same way.
+  comment added: // The method-argument parsers the primitive methods share.
+  moved named_string_argument: ['buffer'] -> ['method_arguments']
+  moved optional_length_argument: ['buffer'] -> ['method_arguments']
+  moved optional_position_argument: ['buffer'] -> ['method_arguments']
+  moved pad_method_argument: ['buffer'] -> ['method_arguments']
+  moved refuse_method_argument: ['buffer'] -> ['method_arguments']
+  moved required_position_argument: ['buffer'] -> ['method_arguments']
+  moved string_method_argument: ['buffer'] -> ['method_arguments']
+  moved usize_or_refuse: ['buffer'] -> ['method_arguments']
+  moved whole_method_argument: ['buffer'] -> ['method_arguments']
+  added mod method_arguments;
+PASS

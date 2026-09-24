@@ -50,12 +50,13 @@ def decl_spans(text):
         l = ls[i]
         m = re.match(r"(pub(\([a-z:_ ]+\))? )?(use|mod) ", l)
         if m:
-            j = i
-            while not ls[j].rstrip().endswith((";", "{")):
-                j += 1
-            if ls[j].rstrip().endswith("{") and m.group(3) == "mod":
+            if m.group(3) == "mod" and not l.rstrip().endswith(";"):
+                # an inline module, which is code, not a declaration
                 i += 1
                 continue
+            j = i
+            while not ls[j].rstrip().endswith(";"):
+                j += 1
             body = " ".join(x.strip() for x in ls[i : j + 1])
             if m.group(3) == "use":
                 u = re.sub(r"^(pub(\([a-z:_ ]+\))? )?use ", "", body).rstrip(";").replace(" ", "")
@@ -93,12 +94,14 @@ def imports_rule(head, now, old, new, allowed_comment_edits):
     notes = []
     ka, ca_c = split_comments(a, ai)
     kb, cb_c = split_comments(b, bi)
-    ok = ka == kb
+    ops = difflib.SequenceMatcher(a=ka, b=kb, autojunk=False).get_opcodes()
+    blanks = sum(j2 - j1 for t, i1, i2, j1, j2 in ops if t == "insert" and not any(kb[j1:j2]))
+    ok = all(t == "equal" or (t == "insert" and not any(kb[j1:j2])) for t, i1, i2, j1, j2 in ops)
     if not ok:
         for d in difflib.unified_diff(ka, kb, "head", "now", lineterm="", n=0):
             notes.append("REST " + d)
     else:
-        notes.append(f"{len(ka)} lines outside the declarations identical, in order")
+        notes.append(f"{len(ka)} lines outside the declarations identical, in order, with {blanks} blank lines inserted")
     removed_c = Counter(ca_c) - Counter(cb_c)
     added_c = Counter(cb_c) - Counter(ca_c)
     for c in removed_c.elements():

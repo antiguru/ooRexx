@@ -1,0 +1,13 @@
+  visibility fn required_length_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  visibility fn option_method_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  visibility fn optional_string_method_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  visibility fn optional_string_or_none_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  visibility fn optional_non_negative_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  visibility fn named_position_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  visibility fn optional_named_length_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  visibility fn named_pad_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  ONLY-PRE use super::{Arity,BehaviourId,Body,BufferState,Cleared,Failure,INIT,Interp,Loud,NativeMethod,ObjRef,Object,Raised,class_receiver,new_instance,required_string_argument,required_string_named_argument,}
+  ONLY-POST use super::method_arguments::{named_pad_argument,named_position_argument,named_string_argument,option_method_argument,optional_length_argument,optional_named_length_argument,optional_non_negative_argument,optional_position_argument,optional_string_method_argument,optional_string_or_none_argument,pad_method_argument,refuse_method_argument,required_length_argument,required_position_argument,string_method_argument,whole_method_argument,} (dispatch/buffer.rs)
+  ONLY-POST use super::{Arity,BehaviourId,Body,BufferState,Cleared,Failure,INIT,Interp,Loud,NativeMethod,ObjRef,Object,Raised,class_receiver,new_instance,required_string_argument,} (dispatch/buffer.rs)
+  ONLY-POST dispatch/method_arguments.rs::use super::{Failure,Interp,ObjRef,Raised,required_string_argument,required_string_named_argument,} (dispatch/method_arguments.rs)
+166 of 166 units present on both sides have identical token streams (18 of them moved); 1 only before, 3 only after
