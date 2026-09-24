@@ -1,0 +1,16 @@
+  DIFFERS (declared edit) impl ObjectModel::fn build
+  visibility fn optional_length_argument: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn optional_position_argument: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn required_position_argument: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn string_method_argument: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn pad_method_argument: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn named_string_argument: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn native_mutable_buffer_new: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn array_of_texts: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn whole_method_argument: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn refuse_method_argument: private -> pub(super) (dispatch/buffer.rs)
+  visibility fn usize_or_refuse: private -> pub(super) (dispatch/buffer.rs)
+  ONLY-POST mod buffer (dispatch.rs)
+  ONLY-POST use buffer::{abbrev_arguments,array_of_texts,backward_search,backward_search_arguments,bit_arguments,case_shift_arguments,changestr_arguments,compare_arguments,compare_to_arguments,conversion_length_argument,copies_argument,count_method_argument,datatype_option_argument,delete_arguments,delword_arguments,ends_with,equals_argument,forward_search,forward_search_arguments,insert_arguments,match_region_arguments,match_region_over,named_string_argument,native_mutable_buffer_new,optional_length_argument,optional_position_argument,overlay_arguments,pad_arguments,pad_method_argument,refuse_method_argument,replace_at_bytes,replace_at_plan,required_position_argument,space_arguments,starts_with,string_method_argument,strip_arguments,substr_arguments,translate_arguments,translate_in_table,usize_or_refuse,verify_arguments,whole_method_argument,wordpos_arguments,} (dispatch.rs)
+  ONLY-POST use super::{Arity,BehaviourId,Body,BufferState,Cleared,Failure,INIT,Interp,Loud,NativeMethod,ObjRef,Object,Raised,class_receiver,new_instance,required_string_argument,required_string_named_argument,} (dispatch/buffer.rs)
+586 of 587 units present on both sides have identical token streams (166 of them moved); 0 only before, 3 only after

@@ -1,0 +1,34 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:121: };
+  INSERTED post:122: 
+  INSERTED post:123: // `MutableBuffer`'s primitive methods, and the argument parsers and byte-search
+  INSERTED post:124: // helpers the other primitive methods share, chained the same way.
+  INSERTED post:125: mod buffer;
+  INSERTED post:126: use buffer::{
+  INSERTED post:127:     abbrev_arguments, array_of_texts, backward_search, backward_search_arguments, bit_arguments,
+  INSERTED post:128:     case_shift_arguments, changestr_arguments, compare_arguments, compare_to_arguments,
+  INSERTED post:129:     conversion_length_argument, copies_argument, count_method_argument, datatype_option_argument,
+  INSERTED post:130:     delete_arguments, delword_arguments, ends_with, equals_argument, forward_search,
+  INSERTED post:131:     forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
+  INSERTED post:132:     named_string_argument, native_mutable_buffer_new, optional_length_argument,
+  INSERTED post:133:     optional_position_argument, overlay_arguments, pad_arguments, pad_method_argument,
+  INSERTED post:134:     refuse_method_argument, replace_at_bytes, replace_at_plan, required_position_argument,
+  INSERTED post:135:     space_arguments, starts_with, string_method_argument, strip_arguments, substr_arguments,
+  INSERTED post:136:     translate_arguments, translate_in_table, usize_or_refuse, verify_arguments,
+  INSERTED post:137:     whole_method_argument, wordpos_arguments,
+  INSERTED post:871:             .chain(buffer::NATIVE_METHODS)
+  3 equal blocks, 5683 lines, each also compared with cmp; 5683 expected lines, 5701 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn optional_length_argument -> dispatch/buffer.rs (25 lines; visibility private -> pub(super))
+  OK fn optional_position_argument -> dispatch/buffer.rs (25 lines; visibility private -> pub(super))
+  OK fn required_position_argument -> dispatch/buffer.rs (13 lines; visibility private -> pub(super))
+  OK fn string_method_argument -> dispatch/buffer.rs (16 lines; visibility private -> pub(super))
+  OK fn pad_method_argument -> dispatch/buffer.rs (22 lines; visibility private -> pub(super))
+  OK fn named_string_argument -> dispatch/buffer.rs (17 lines; visibility private -> pub(super))
+  OK fn native_mutable_buffer_new -> dispatch/buffer.rs (44 lines; visibility private -> pub(super))
+  OK fn array_of_texts -> dispatch/buffer.rs (22 lines; visibility private -> pub(super))
+  OK fn whole_method_argument -> dispatch/buffer.rs (20 lines; visibility private -> pub(super))
+  OK fn refuse_method_argument -> dispatch/buffer.rs (14 lines; visibility private -> pub(super))
+  OK fn usize_or_refuse -> dispatch/buffer.rs (13 lines; visibility private -> pub(super))
+  166 of 166 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

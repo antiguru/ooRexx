@@ -38,6 +38,10 @@ import splitlib
 
 pre_root, post_root, removed_json, out_prefix = sys.argv[1:5]
 tests_mode = "--tests" in sys.argv[5:]
+# A unit this commit edits on purpose (the chain in `ObjectModel::build`):
+# its token difference is listed rather than failed; instrument 1 (a) shows
+# the edited lines themselves.
+expected_edits = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--expect-edit=")]
 
 CHILDREN = sorted(
     os.path.join("dispatch", f)
@@ -199,6 +203,8 @@ for k in common:
     elif drop_trailing_commas(pre_units[k]["toks"].split("\x01")) == drop_trailing_commas(post_units[k]["toks"].split("\x01")):
         tok_ok += 1
         out2.append(f"  TRAILING-COMMA-ONLY {k}: identical once a comma directly before a closing delimiter is dropped (rustfmt's vertical layout)")
+    elif k in expected_edits:
+        out2.append(f"  DIFFERS (declared edit) {k}")
     else:
         failures.append(f"I2 token stream differs: {k}")
         out2.append(f"  DIFFERS {k}")

@@ -1,0 +1,12 @@
+control: collection::NATIVE_METHODS chained first instead of after hash's
+NATIVES DIFFER
+190c190
+< 189 -1 native_queue_at
+---
+> 189 -1 native_array_at
+192c192
+< 191 -1 native_queue_at
+---
+> 191 -1 native_array_at
+196c196
+< 195 0 native_queue_items
