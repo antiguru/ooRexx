@@ -3231,7 +3231,7 @@ impl Interp {
     // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside `Plan`
     // itself; `stem_assign`/`stem_set`/`stem_drop`/`stem_drop_tail`/
     // `tail_key` live in `stem.rs` (Task 5), beside the rest of the D15a
-    // library. `read` lives in `lib.rs`, beside `Interp`'s other value-model
+    // library. `read` lives in `variables.rs`, beside `Interp`'s other variable
     // entry points.
 }
 
