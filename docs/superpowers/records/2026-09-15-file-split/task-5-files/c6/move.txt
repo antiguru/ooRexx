@@ -1,0 +1,1 @@
+moved lines 957-1515 (1-based) of parse_template.rs, 559 lines, 0 kept verbatim inside literals; 0 lines after the module stay
