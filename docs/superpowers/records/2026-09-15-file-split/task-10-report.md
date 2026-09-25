@@ -352,9 +352,29 @@ builds and 9.85 9.25 11.03 after.
 
 ## Gates
 
-NOT YET RUN at the time of this commit. They run over the commit that adds
-this report, with the tree frozen until the status file says `finished`;
-the results are added in a following commit.
+Over `283017495`, this report's first commit, whose `rust/` tree is
+c5's. `tools/gates.sh` (Task 9's) ran them after the commit with the
+default target directory (`rust/target`), waiting before G4 and G6 until
+the one-minute load was under 15 and the five-minute under 40. The tree did
+not change from start to finish (`tree-changes 0` before and after,
+`files/gates/status.txt`). Each status was read unpiped. The counts come
+from `tools/test_results.py` over each gate's own log
+(`files/gates/test-*.results`), and the 604 from that log's differential
+report (`files/gates/corpus-differential-*.txt`).
+
+| gate | command | result | load average (1, 5, 15 min) |
+| --- | --- | --- | --- |
+| G1 | `cargo fmt --all --check` | exit 0 | 8.48, 8.92, 10.65 before the run |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings`, empty target dir | exit 0 | |
+| G3 | `cargo build --workspace --all-targets --release`, no cap | exit 0 | |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | exit 0; 135 result blocks; 2663 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 14.92, 16.81, 13.78 before; 8.64, 14.10, 14.01 after |
+| G5 | `cargo build --workspace --all-targets` (debug) | exit 0 | |
+| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0; 135 result blocks; 2664 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 8.64, 14.10, 14.01 before; 13.17, 15.17, 14.93 after |
+
+Every figure matches BASE's (135 binaries, 2663 / 0 / 4 release,
+2664 / 0 / 4 debug, 604 of 604 STRICT). Nothing was re-run:
+`introspection_arity::every_unstable_row_is_really_unstable` passed in
+both test gates.
 
 ## Concerns
 
