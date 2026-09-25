@@ -242,6 +242,24 @@ PART_B = {
         ("B7-c1 two fields of a moved struct swap", ["I1b", "I2"], "table_c/rows.rs",
          first("    pub(crate) child: String,\n    pub(crate) parent: String,\n", "    pub(crate) parent: String,\n    pub(crate) child: String,\n"), same),
     ],
+    2: [
+        ("B1-c2 a moved probe line's literal changes", ["I1b", "I3"], "table_c/probes.rs",
+         first('text.push_str("edge = 0\\n");', 'text.push_str("edge = 1\\n");'), same),
+        # Whitespace-only to instrument 1 (b), which admits a reflow and defers
+        # to 2 and 3, and invisible to whitespace-stripped instrument 2: the
+        # decoded value is the only instrument that can see it (first run
+        # expected I1b as well; corrected).
+        ("B2-c2 a space inside a continued literal, seen by instrument 3 alone", ["I3"], "table_c/probes.rs",
+         first("\\x20  renders as and what its class is", "\\x20 renders as and what its class is"), same),
+        ("B3-c2 a moved helper is deleted", ["I2"], "table_c/probes.rs",
+         delete_item("pub(crate) fn derived_say_lines("), same),
+        ("B4-c2 two moved constants swap their values", ["I1b", "I3"], "table_c/probes.rs",
+         swap('"gate-tables/classes"', '"gate-tables/hierarchy"'), same),
+        ("B5-c2 an unmoved line of gate_table_c.rs changes", ["I1a"], "gate_table_c.rs",
+         first('const INSTANCE_ARM: &str = "instance";', 'const INSTANCE_ARM: &str = "instances";'), same),
+        ("B6-c2 an existing destination (mod.rs) changes a line", ["I1c"], "table_c/mod.rs",
+         first("pub(super) mod rows;", "pub(crate) mod rows;"), same),
+    ],
 }
 for n, plants in PART_B.items():
     p = pair(n)

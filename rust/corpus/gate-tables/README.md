@@ -92,7 +92,7 @@ not built, so none of them can ever be a `phase-*.txt` row. `native_entries.rs`
 asserts that -- it reads every subset file and fails on a line naming this
 directory.
 
-**Those last three are derived, text and all.** `gate_table_c.rs`'s
+**Those last three are derived, text and all.** `tests/table_c/probes.rs`'s
 `class_probe_text`, `edge_probe_text` and `method_probe_text` are the
 definition of what the programs contain, and every run compares the committed
 file against the re-derivation in both directions. Editing one of them by hand

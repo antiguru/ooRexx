@@ -1,0 +1,31 @@
+(a) unmoved lines: PRE gate_table_c.rs minus the removed lines, against POST gate_table_c.rs
+  INSERTED post:28: use table_c::probes::{
+  INSERTED post:29:     CLASS_SUBDIR, CONCEPT_SUBDIR, DOCUMENTED_EDGE_MARKER, EDGE_SUBDIR, ENTRY_MARKER, METHOD_SUBDIR,
+  INSERTED post:30:     class_probe, class_probe_class_questions, class_probe_entry_questions, class_probe_text,
+  INSERTED post:31:     concept_probe, derived_say_lines, edge_probe, edge_probe_text, method_probe, method_probe_text,
+  INSERTED post:32: };
+  INSERTED post:41: 
+  3 equal blocks, 1529 lines, each also compared with cmp; 1529 expected lines, 1535 actual lines
+
+(c) destination table_c/mod.rs: PRE against POST, inserted lines only
+  INSERTED post:14-14: 1 lines
+  14 of 14 PRE lines equal, each block compared with cmp
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK const CONCEPT_SUBDIR -> table_c/probes.rs (2 lines; visibility private -> pub(crate))
+  OK const CLASS_SUBDIR -> table_c/probes.rs (1 lines; visibility private -> pub(crate))
+  OK const EDGE_SUBDIR -> table_c/probes.rs (1 lines; visibility private -> pub(crate))
+  OK const METHOD_SUBDIR -> table_c/probes.rs (1 lines; visibility private -> pub(crate))
+  OK fn concept_probe -> table_c/probes.rs (4 lines; visibility private -> pub(crate))
+  OK fn class_probe -> table_c/probes.rs (4 lines; visibility private -> pub(crate))
+  OK fn edge_probe -> table_c/probes.rs (8 lines; visibility private -> pub(crate))
+  OK fn method_probe -> table_c/probes.rs (4 lines; visibility private -> pub(crate))
+  OK const ENTRY_MARKER -> table_c/probes.rs (2 lines; visibility private -> pub(crate))
+  OK fn class_probe_entry_questions -> table_c/probes.rs (8 lines; visibility private -> pub(crate))
+  OK fn class_probe_class_questions -> table_c/probes.rs (11 lines; visibility private -> pub(crate))
+  OK fn class_probe_text -> table_c/probes.rs (19 lines; visibility private -> pub(crate))
+  OK fn edge_probe_text -> table_c/probes.rs (30 lines; visibility private -> pub(crate))
+  OK fn method_probe_text -> table_c/probes.rs (77 lines; visibility private -> pub(crate))
+  OK fn derived_say_lines -> table_c/probes.rs (4 lines; visibility private -> pub(crate))
+  OK const DOCUMENTED_EDGE_MARKER -> table_c/probes.rs (3 lines; visibility private -> pub(crate))
+  17 of 17 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

@@ -1,0 +1,2 @@
+corpus/gate-tables/README.md: OK 1 occurrence(s) of "`gate_table_c\\.rs`'s\\n`class_probe_text`" -> "`tests/table_c/probes.rs`'s\\n`class_probe_text`"; HEAD with them applied equals the working text; changed
+extra edits: 1 files, all as declared

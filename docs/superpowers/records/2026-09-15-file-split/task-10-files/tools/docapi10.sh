@@ -3,7 +3,13 @@
 # docapi.sh (Task 9, whose header says what the manifest holds and leaves
 # out) with the crate a parameter: `rexx-extract` here, whose public API
 # `docs::classes` is, so a manifest identical to BASE's says every public
-# item, path, signature and doc of it is unchanged.
+# item, path, signature and doc of it is unchanged. One normalisation more
+# than docapi.sh: `data-current-crate="..."` becomes `~` on every page.
+# `cargo doc -p rexx-extract` documents the library and the crate's three
+# binaries, and the shared root pages (`help.html`, `settings.html`) carry
+# whichever target rustdoc wrote last: measured, three runs on one tree gave
+# `rexx_extract_docs` and `rexx_extract_assertions`, so without it the
+# manifest differs between two runs of an unchanged tree.
 C=$4; CU=${C//-/_}
 cd $1
 rm -rf $2/doc
@@ -16,7 +22,7 @@ CARGO_TARGET_DIR=$2 cargo doc -j 8 --no-deps -p $C > $3.log 2>&1; echo "exit $?"
     elif [ "${f%.js}" != "$f" ]; then
       echo "$(sed -E "s#$CU(::[a-z_]+)+::([A-Z])#$CU::~::\2#g; s#\"fragment_lengths\":\[[0-9,]*\]#\"fragment_lengths\":[~]#g" "$f" | sha256sum | cut -c1-16) $f"
     else
-      echo "$(sed -E "s#href=\"[^\"]*src/$CU/[^\"]*\"#href=\"SRC\"#g" "$f" | sha256sum | cut -c1-16) $f"
+      echo "$(sed -E "s#href=\"[^\"]*src/$CU/[^\"]*\"#href=\"SRC\"#g; s#data-current-crate=\"[^\"]*\"#data-current-crate=\"~\"#g" "$f" | sha256sum | cut -c1-16) $f"
     fi
   done | sort -k2)
 } > $3

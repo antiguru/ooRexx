@@ -1,0 +1,11 @@
+O0 clean tree (expected PASS): other edits: 0 files;untracked: 0 files; verify10 would PASS
+O1 untracked tests/table_c/planted.rs (expected FAIL): other edits: 0 files;untracked: 1 files; verify10 would FAIL
+O2 untracked crates/rexx-exec/tests-out-verdict.txt (expected FAIL): other edits: 0 files;untracked: 1 files; verify10 would FAIL
+O3 tracked edit to tests/gate_table_d.rs (expected FAIL): other edits: 1 files;untracked: 0 files; verify10 would FAIL
+O4 after the plants (expected PASS): other edits: 0 files;untracked: 0 files; verify10 would PASS
+D1 a broken intra-doc link in table_c/rows.rs (expected a warning): rustdoc exit 0 warning lines: 2  3 lines name it
+D2 unplanted (expected none): rustdoc exit 0 warning lines: 0 
+A1: expected differs, manifest differs: CAUGHT (4 lines differ; doc: exit 0; 2 warning lines)
+A2: expected differs, manifest differs: CAUGHT (9 lines differ; doc: exit 0; 4 warning lines)
+A3: expected same, manifest same: CAUGHT (0 lines differ; doc: exit 0; 2 warning lines)
+tree afterwards: [] (expected empty)

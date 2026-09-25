@@ -1,0 +1,46 @@
+control T1 strip_field_vis drops a field's visibility after its attributes and nowhere else: CAUGHT
+  every case as expected: doc-commented field; two attributes before a field; a `]` closing an index; an attribute after `;`
+control T2 Task 9's instruments miss the doc-commented field this task's admit (c1, f61c596a5): CAUGHT
+  Task 9's: exit 1, ['I2 token stream differs: struct ClassRow']
+  this task's: exit 0, []
+control T3 a widened doc-commented field whose doc also changed (c1, f61c596a5): CAUGHT
+  exit 1, expected I1b and I3, reported ['I1b', 'I2', 'I3']
+control T4 comments10.py lists a planted comment in a tests/ parent; Task 9's comments7.py does not: CAUGHT
+  comments10.py: ['  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.', '  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.'] (exit 0)
+  comments7.py: [] (exit 1; subprocess.CalledProcessError: Command '['/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/tools/item-tool/target/release/item-tool', '/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t4/crates/rexx-exec/src/table_c/mod.rs']' returned non-zero exit status 101.)
+control T5 move_items10.py widens exactly the declared declarations and fields: CAUGHT
+  exit 0; Edge True, read_edges True, read_table verbatim True, the child's units verbatim in BASE once the widening is removed True
+  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t5/t5child/c.rs: 3 units (2 widened), 45 parent lines removed
+control B c2 as committed passes (working tree): CAUGHT
+  exit 0, reported []
+control B1-c2 a moved probe line's literal changes (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn edge_probe_text: /tmp/tmpqu8_yr8b/a /tmp/tmpqu8_yr8b/b differ: byte 806, line 14
+  I2 token stream differs: fn edge_probe_text
+  I3 literals differ: fn edge_probe_text
+control B2-c2 a space inside a continued literal, seen by instrument 3 alone (working tree): CAUGHT
+  exit 1, expected ['I3'], reported ['I3']
+  I3 literals differ: fn class_probe_text
+control B3-c2 a moved helper is deleted (working tree): CAUGHT
+  exit 1, expected ['I2'], reported ['I1b', 'I2', 'I3']
+  I1b const DOCUMENTED_EDGE_MARKER: /tmp/tmp5lxait1h/a /tmp/tmp5lxait1h/b differ: byte 5, line 1
+  I2 token stream differs: const DOCUMENTED_EDGE_MARKER
+  I2 unit vanished: fn derived_say_lines
+  I3 literals differ: const DOCUMENTED_EDGE_MARKER
+control B4-c2 two moved constants swap their values (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b const CLASS_SUBDIR: /tmp/tmpkw10dxha/a /tmp/tmpkw10dxha/b differ: byte 41, line 1
+  I1b const EDGE_SUBDIR: /tmp/tmprz6qw463/a /tmp/tmprz6qw463/b differ: byte 40, line 1
+  I2 token stream differs: const CLASS_SUBDIR
+  I2 token stream differs: const EDGE_SUBDIR
+  I3 literals differ: const CLASS_SUBDIR
+  I3 literals differ: const EDGE_SUBDIR
+control B5-c2 an unmoved line of gate_table_c.rs changes (working tree): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2', 'I3']
+  I1a changed unmoved line pre-expected:279 post:285: 'const INSTANCE_ARM: &str = "instance";' -> 'const INSTANCE_ARM: &str = "instances";'
+  I2 token stream differs: const INSTANCE_ARM
+  I3 literals differ: const INSTANCE_ARM
+control B6-c2 an existing destination (mod.rs) changes a line (working tree): CAUGHT
+  exit 1, expected ['I1c'], reported ['I1c']
+  I1c table_c/mod.rs replace pre[13:14] post[13:15]
+12 of 12 controls caught as expected

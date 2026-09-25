@@ -4,7 +4,8 @@
 # (SPLIT_CRATE, SPLIT_ROOT: `rexx-exec` and `tests`, or `rexx-extract` and
 # `src`). Every change under rust/ outside the parent and the destinations:
 # the tracked diff (`git diff`), and every untracked file (`git ls-files
-# --others --exclude-standard -- rust`), which `git diff` cannot see. Prints
+# --others --exclude-standard -- rust`), which `git diff` cannot see; a
+# declared extra edit is excluded (below). Prints
 # "other edits: K files" (tracked) and "untracked: U files"; verify10.sh
 # requires both to be 0.
 S=/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10
@@ -14,6 +15,12 @@ B=crates/$SPLIT_CRATE/$SPLIT_ROOT
 [ -n "$SPLIT_CRATE" ] && [ -n "$SPLIT_ROOT" ] || { echo "SPLIT_CRATE and SPLIT_ROOT must be set"; exit 2; }
 EXCL=":!$B/$P"; KEEP="$B/$P"
 for d in ${DESTS//,/ }; do EXCL="$EXCL :!$B/$d"; KEEP="$KEEP|$B/$d"; done
+# A declared edit outside the parent and destinations (S/c<N>/extra, one
+# PATH=RULE per line, checked against its rule by extra_edits10.py) is left
+# out here and listed.
+if [ -f $S/c$N/extra ]; then
+  while IFS= read -r x; do EXCL="$EXCL :!${x%%=*}"; echo "declared extra edit: ${x%%=*}"; done < $S/c$N/extra
+fi
 git -C $R diff -- . $EXCL ':!corpus/refusal-sites.tsv' > $S/art/c$N-other-edits.diff
 UNTRACKED=$(git -C $R ls-files --others --exclude-standard -- . | /bin/grep -a -v -x -E "$KEEP")
 { echo "untracked files under rust/ outside the parent and destinations (git ls-files --others --exclude-standard -- rust):"; [ -n "$UNTRACKED" ] && echo "$UNTRACKED" | sed 's/^/  /'; } >> $S/art/c$N-other-edits.diff

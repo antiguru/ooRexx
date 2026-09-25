@@ -23,6 +23,7 @@ fi
 /bin/grep -q "^unsafe: NONE" $S/art/checks-c$N.out || { echo "UNSAFE IN MOVED CODE c$N"; exit 1; }
 /bin/grep -q '^other edits: 0 files' $S/art/checks-c$N.out || { echo "OTHER FILES EDITED c$N"; exit 1; }
 /bin/grep -q '^untracked: 0 files' $S/art/checks-c$N.out || { echo "UNTRACKED FILES UNDER rust/ c$N"; exit 1; }
+[ ! -f $S/c$N/extra ] || /bin/grep -q '^extra edits: .* all as declared' $S/art/checks-c$N.out || { echo "EXTRA EDITS NOT AS DECLARED c$N"; exit 1; }
 [ -f $S/c$N/comment-pass.md ] || { echo "NO COMMENT PASS c$N"; exit 1; }
 rm -rf $S/snap$N; $S/tools/snap.sh save $S/snap$N
 $S/tools/i410.sh $N > /dev/null

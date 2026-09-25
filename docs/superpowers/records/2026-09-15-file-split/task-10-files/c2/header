@@ -1,0 +1,4 @@
+//! The probe programs gate table C derives from its rows: where each
+//! family's programs live, and the text each row's program holds.
+
+use super::rows::Construction;

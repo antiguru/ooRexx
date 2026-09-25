@@ -1,0 +1,24 @@
+moved units: 17; names searched in backticks: 17
+file tails searched: gate_table_c.rs gate_table_c/ mod.rs probes.rs table_c/mod.rs table_c/mod/ table_c/probes.rs table_c/probes/
+
+(a) comments naming a moved unit: 1
+  crates/rexx-exec/tests/table_c/probes.rs:110: // The marker is spelled once, in `DOCUMENTED_EDGE_MARKER`, because
+
+(b) comments naming a touched file: 5
+  crates/rexx-exec/tests/support/mod.rs:12: //! This file stays `mod.rs`, not `support.rs`, because `tests/` is Cargo's
+  crates/rexx-parse/tests/gate_walk/mod.rs:12: //! This file stays `mod.rs`, not `gate_walk.rs`, because `tests/` is Cargo's
+  corpus/phase-5c.txt:11: # still landing this file could not exist: gate_table_c.rs's
+  corpus/docs/class-set.txt:29: # book's own syntax for obtaining an instance. gate_table_c.rs derives the
+  corpus/docs/class-set.txt:38: # which gate_table_c.rs reads instead of one constant over every method row.
+
+(c) positional words inside the destinations and the parent: 10
+  crates/rexx-exec/tests/gate_table_c.rs:331: /// Every class row's `entry` column is a value this file knows how to read.
+  crates/rexx-exec/tests/gate_table_c.rs:552: // row happens to depend on it, rather than here.
+  crates/rexx-exec/tests/gate_table_c.rs:618: // the orphan half of the check below -- present in the directory,
+  crates/rexx-exec/tests/gate_table_c.rs:660: // **Returning quietly here is only right for one of the ways this
+  crates/rexx-exec/tests/gate_table_c.rs:821: /// The `ArgUtil` assertion, carried here as a wiring row.
+  crates/rexx-exec/tests/gate_table_c.rs:887: // none of them would leave the filters below iterating the concept and
+  crates/rexx-exec/tests/gate_table_c.rs:967: // directory, before anything runs.
+  crates/rexx-exec/tests/gate_table_c.rs:1193: // every `say` below it is reached too, and a group whose oracle
+  crates/rexx-exec/tests/gate_table_c.rs:1416: // Said here, in the summary a reader meets the counts in, rather than
+  crates/rexx-exec/tests/gate_table_c.rs:1419: // raised before reaching them, so they are `unanswered` above rather than

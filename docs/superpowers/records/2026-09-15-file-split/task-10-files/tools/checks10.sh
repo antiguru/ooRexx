@@ -7,7 +7,8 @@
 # three ways with its warning signatures compared with BASE's, the
 # rexx-extract public-API manifest compared with BASE's, the refusal-sites
 # refresh, and the diff of every file outside the parent and destinations,
-# tracked and untracked. For the test crate (SPLIT_ROOT=tests): rustdoc over
+# tracked and untracked, and each declared extra edit (S/c<N>/extra)
+# against its rule (extra_edits10.py). For the test crate (SPLIT_ROOT=tests): rustdoc over
 # the gate_table_c target (testdoc10.sh) and the rexx-exec target list
 # against BASE's. For rexx-extract (SPLIT_ROOT=src): the test-module
 # intra-doc links (tests_links.sh).
@@ -51,3 +52,4 @@ else
   $S/tools/tests_links.sh $R $S/t-check $S/art/c$N-tests-links.txt | sed -n 3p
 fi
 $S/tools/other_edits10.sh $N $SPLIT_PARENT_RS $SPLIT_DESTS
+if [ -f $S/c$N/extra ]; then mapfile -t X < $S/c$N/extra; python3 $S/tools/extra_edits10.py $R $S/art/c$N-extra-edits.txt "${X[@]}" | tail -1; fi
