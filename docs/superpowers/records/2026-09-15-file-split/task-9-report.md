@@ -369,7 +369,30 @@ only.
 
 ## Gates
 
-GATES_TODO
+Over `59b608676`, this report's first commit, whose `rust/` tree is
+c7's. `tools/gates.sh` ran them after the commit with the default target
+directory (`rust/target`), so the arity suites ran the binary G3 built. It
+now waits, before G4 and before G6, until the one-minute load is under 15
+and the five-minute load under 40 (the brief's condition), and records the
+load it started at. The tree did not change from start to finish
+(`tree-changes 0` before and after, `files/gates/status.txt`). Each status
+was read unpiped. The counts come from `tools/test_results.py` over each
+gate's own log (`files/gates/test-*.results`), and the 604 from that log's
+differential report (`files/gates/corpus-differential-*.txt`).
+
+| gate | command | result | load average (1, 5, 15 min) |
+| --- | --- | --- | --- |
+| G1 | `cargo fmt --all --check` | exit 0 | 7.55, 8.41, 13.50 before the run |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings`, empty target dir | exit 0 | |
+| G3 | `cargo build --workspace --all-targets --release`, no cap | exit 0 | |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | exit 0; 135 result blocks; 2663 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 14.33, 15.07, 15.36 before; 10.52, 16.24, 16.35 after |
+| G5 | `cargo build --workspace --all-targets` (debug) | exit 0 | |
+| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0; 135 result blocks; 2664 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 10.84, 16.04, 16.28 before; 17.35, 17.06, 17.00 after |
+
+Every figure matches BASE's (135 binaries, 2663 / 0 / 4 release,
+2664 / 0 / 4 debug, 604 of 604 STRICT). Nothing was re-run:
+`introspection_arity::every_unstable_row_is_really_unstable` passed in
+both test gates.
 
 ## Concerns
 
