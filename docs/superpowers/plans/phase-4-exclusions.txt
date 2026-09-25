@@ -4657,11 +4657,19 @@ the loadable ones that declare a loader, rxsock and rxunixsys, print nothing.
   which the next entry explains. OWNER: none; a C++ exception's text is not
   something this crate can print, and matching it would buy nothing a
   program can act on.
-  THE UNLOADER IS HANDED THE LOADER'S THREAD CONTEXT. The oracle runs
-  termination on an instance it creates for it, so an extension comparing
-  the context its unloader gets with the one its loader got sees two; here
-  there is one per interpreter. OWNER: Phase 9, whose instance API is where a
-  second instance would come from.
+  THE UNLOADER AND EVERY TERMINATION UNINIT RUN ON THE LOADER'S THREAD
+  CONTEXT. The oracle creates an instance for termination and runs both on it
+  (runtime/Interpreter.cpp:277-281, `InstanceBlock instance;`, then
+  `lastChanceUninit()`, then `PackageManager::unload()`), so an extension
+  comparing the context its unloader or a termination UNINIT's call gets with
+  the one its loader got sees two; here there is one per interpreter. Measured
+  with a class whose UNINIT, run at termination from an object kept in
+  .local, calls the forge's Same and then UseStash (which calls
+  WholeNumberToObject through the context the loader or an earlier Stash
+  kept): the oracle prints "same 0" and no UseStash line, rc 0; ours prints
+  "same 1" and "use 42", rc 0. The task's re-review measured the oracle at
+  rc 139 on its own variant of the probe. OWNER: Phase 9, whose instance API
+  is where a second instance would come from.
   SAY OUTPUT AND AN EXTENSION'S OWN printf INTERLEAVE DIFFERENTLY. SAY is
   buffered in the interpreter and written at exit (Phase 7 spec A1,
   docs/superpowers/specs/2026-09-11-phase-7-streams-platform.md:12), while a

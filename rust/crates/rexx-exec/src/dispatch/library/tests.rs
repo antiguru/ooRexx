@@ -761,3 +761,14 @@ fn a_programs_end_runs_its_librarys_unloader() {
         vec!["loader", "unloader"]
     );
 }
+
+/// A library termination left open is closed when the interpreter's
+/// libraries go, whoever else still holds it.
+#[test]
+fn dropping_the_libraries_closes_what_termination_left_open() {
+    let mut libraries = crate::Libraries::new();
+    let held = libraries.hold(b"hooked", Rc::new(rexx_api::load::hooks_only(None, None)));
+    assert!(held.is_open());
+    drop(libraries);
+    assert!(!held.is_open(), "dropping the libraries left one open");
+}
