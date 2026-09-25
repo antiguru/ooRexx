@@ -1,2 +1,0 @@
-26 of 26 units decode to identical literal lists; 112 decodable literals (string, byte string, char, byte, doc line) on the PRE side; 0 units where the tool's count and the independent lexer's disagree
-whole-file literal multiset, PRE token.rs against POST token.rs + new files:
