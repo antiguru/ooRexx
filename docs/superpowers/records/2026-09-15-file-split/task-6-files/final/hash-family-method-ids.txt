@@ -1,0 +1,23 @@
+MethodId of every row of the three hash-family slices at ddeeb5640, from a
+scratch build of that commit whose ObjectModel::build prints each row's
+class, method name and MethodId as it files it (never committed).
+hash::NATIVE_METHODS: 32 rows, at positions 278-309 of the 524-row chain
+hash::relation::NATIVE_METHODS: 10 rows, at positions 310-319 of the 524-row chain
+hash::stem::NATIVE_METHODS: 19 rows, at positions 320-338 of the 524-row chain
+MethodIds filed by more than one hash-family slice: 0
+MethodIds filed twice within one hash-family slice: 12
+  240: ['hash::NATIVE_METHODS Table~MAKEARRAY', 'hash::NATIVE_METHODS IdentityTable~MAKEARRAY']
+  242: ['hash::NATIVE_METHODS Table~HASINDEX', 'hash::NATIVE_METHODS IdentityTable~HASINDEX']
+  243: ['hash::NATIVE_METHODS Table~ITEMS', 'hash::NATIVE_METHODS IdentityTable~ITEMS']
+  245: ['hash::NATIVE_METHODS Table~REMOVE', 'hash::NATIVE_METHODS IdentityTable~REMOVE']
+  246: ['hash::NATIVE_METHODS Table~SUPPLIER', 'hash::NATIVE_METHODS IdentityTable~SUPPLIER']
+  247: ['hash::NATIVE_METHODS Table~ALLITEMS', 'hash::NATIVE_METHODS IdentityTable~ALLITEMS']
+  248: ['hash::NATIVE_METHODS Table~ALLINDEXES', 'hash::NATIVE_METHODS IdentityTable~ALLINDEXES']
+  249: ['hash::NATIVE_METHODS Table~EMPTY', 'hash::NATIVE_METHODS IdentityTable~EMPTY']
+  250: ['hash::NATIVE_METHODS Table~ISEMPTY', 'hash::NATIVE_METHODS IdentityTable~ISEMPTY']
+  251: ['hash::NATIVE_METHODS Table~INDEX', 'hash::NATIVE_METHODS IdentityTable~INDEX']
+  252: ['hash::NATIVE_METHODS Table~HASITEM', 'hash::NATIVE_METHODS IdentityTable~HASITEM']
+  253: ['hash::NATIVE_METHODS Table~REMOVEITEM', 'hash::NATIVE_METHODS IdentityTable~REMOVEITEM']
+hash-family MethodIds also filed by a row outside the three slices (positions 278-338): 0
+The twelve IDs filed twice sit inside hash::NATIVE_METHODS (Table's and IdentityTable's rows, one
+identity by donation), whose internal order c8 and c9 did not change.

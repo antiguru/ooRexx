@@ -441,7 +441,56 @@ both runs, so nothing was re-run.
    touch it, and it filters to `String` rows, which neither slice has.
    c14 replaced `collection::NATIVE_METHODS`, which it did have to touch,
    with all five of its successors.
-6. **`pub(in crate::dispatch)` was used without a ruling** (Departure 1).
+6. **`pub(in crate::dispatch)` was used before the ruling came**
+   (Departure 1). The ruling that followed accepted it; see below.
 7. The rules and spec files behind each commit's other-edits check
    (`files/c<N>/rules`, `spec.json`) are committed with this report and
    not with their commits.
+
+## Rulings after the report
+
+team-lead ruled on four points after the gates ran.
+
+**Q1: `pub(in crate::dispatch)` is accepted** for items two levels down
+that are read from outside their subtree. Each such item, and what reads
+it (`/bin/grep -rn 'pub(in crate::dispatch)' src/dispatch`, `native.rs`'s
+two older ones left out):
+
+| item | file | read by |
+| --- | --- | --- |
+| `NATIVE_METHODS` | `hash/relation.rs` | `ObjectModel::build` (`dispatch.rs`) |
+| `NATIVE_METHODS` | `hash/stem.rs` | `ObjectModel::build` |
+| `NATIVE_METHODS` | `collection/list.rs` | `ObjectModel::build`; the test chain in `dispatch/tests.rs` |
+| `NATIVE_METHODS` | `collection/queue.rs` | `ObjectModel::build`; the test chain |
+| `NATIVE_METHODS` | `collection/supplier.rs` | `ObjectModel::build`; the test chain |
+| `NATIVE_METHODS` | `array/sort.rs` | `ObjectModel::build`; the test chain |
+| `NATIVE_METHODS` | `array/surface.rs` | `ObjectModel::build`; the test chain |
+| `new_supplier` | `collection/supplier.rs` | through `collection.rs`'s `pub(super) use supplier::new_supplier`: `hash.rs`, `hash/stem.rs`, `hash/relation.rs` (as `super::collection::new_supplier`), `introspection.rs`, `array/surface.rs`; within its subtree, `collection/list.rs` |
+| `native_array_delete` | `array/surface.rs` | `collection.rs` imports it (`use super::array::surface::native_array_delete`) for `collection/queue.rs`'s `native_queue_delete` |
+
+Each parent declares its children `pub(super) mod`: `hash.rs` (`relation`,
+`stem`), `collection.rs` (`list`, `queue`, `supplier`) and `array.rs`
+(`sort`, `surface`).
+
+**The hash chain reorder is accepted**, on the condition that
+`natives_dump` is identical to BASE's at that commit. It is at c8 and at c9
+(`files/c8/c8-natives-verdict.txt`, `files/c9/...`), and at every commit
+since. **No MethodId appears in more than one hash-family slice.** A
+scratch build of `ddeeb5640`, whose `build` printed each row's class,
+method name and MethodId as it filed it, was never committed.
+`files/final/hash-family-method-ids.txt` records it:
+* `hash::NATIVE_METHODS` has 32 rows, `hash::relation` 10 and `hash::stem`
+  19.
+* No MethodId is filed by two of these slices.
+* No MethodId of theirs is filed by any row outside them.
+* The only MethodIds filed twice are twelve inside `hash::NATIVE_METHODS`:
+  `Table`'s rows and `IdentityTable`'s, which share an identity. Each pair
+  names the same function, and c8 and c9 did not change their order.
+
+So the reorder cannot change what `build` files, and the identical dump
+agrees.
+
+**`dispatch/tests.rs:123` is accepted** as a declared path edit. The
+test's name is unchanged, and instrument 4 at c14 is identical.
+
+**`Array` under `dispatch/array/` is accepted.**
