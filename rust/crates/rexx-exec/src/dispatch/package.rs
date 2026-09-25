@@ -430,7 +430,7 @@ fn load_library(
     let loaded = match interp.resolve_library(&name) {
         crate::LibraryLoad::Loaded(_) => true,
         crate::LibraryLoad::Missing => false,
-        crate::LibraryLoad::Version => return Err(Raised::library_version(&name).into()),
+        crate::LibraryLoad::Raised(failure) => return Err(failure),
     };
     Ok(Some(interp.counted(usize::from(loaded))))
 }

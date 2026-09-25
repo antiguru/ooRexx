@@ -275,7 +275,7 @@ pub struct ValueDescriptor {
     pub flags: u16,
 }
 
-/// `RexxPackageLoader` and `RexxPackageUnloader` (`api/oorexxapi.h:259-260`).
+/// `RexxPackageLoader` and `RexxPackageUnloader` (`api/oorexxapi.h:257-258`).
 pub type PackageHook = unsafe extern "C" fn(*mut RexxThreadContext_);
 
 /// `RexxRoutineEntry` (`api/oorexxapi.h:190-198`).
@@ -383,12 +383,15 @@ fn abort(entry: &str) -> ! {
 }
 
 thread_local! {
-    /// The first refusing slot the running native call reached.
+    /// The first refusing slot the running native call or package hook
+    /// reached.
     ///
     /// Set by a refusing stub and taken by [`recording_refusals`] around the
     /// one call it records, on the thread making that call, so it holds no
     /// state beyond that call: a nested call saves the outer record and puts it
-    /// back.
+    /// back. Every place extension code runs reads the record and refuses
+    /// loudly on it: `invoke::run` for a method or routine, `invoke::hook` for
+    /// a loader or unloader.
     static REFUSED: Cell<Option<&'static str>> = const { Cell::new(None) };
 }
 

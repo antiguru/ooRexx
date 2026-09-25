@@ -15,7 +15,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 
-use rexx_api::ffi::Contexts;
+use rexx_api::ffi::ThreadContext;
 use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::{POINTER, wholenumber_t};
@@ -95,17 +95,25 @@ struct Interpreter {
     digits: usize,
     /// What `DoubleToObjectWithPrecision` was asked for, in order.
     doubles: Vec<(f64, usize)>,
+    /// The one empty string every call's `RexxNullString` names.
+    null_string: ObjRef,
 }
 
 impl Interpreter {
     fn new() -> Interpreter {
+        let mut heap = Heap::new();
+        let null_string = heap.alloc(Body::Text {
+            bytes: Bytes::from_slice(b""),
+            num: None,
+        });
         Interpreter {
-            heap: Heap::new(),
+            heap,
             cself: None,
             variables: Vec::new(),
             locals: Table::new(),
             digits: 9,
             doubles: Vec::new(),
+            null_string,
         }
     }
 
@@ -142,7 +150,7 @@ impl Host for Interpreter {
             nil: ObjRef::NIL,
             true_object: ObjRef::small_int(1).expect("one is a small integer"),
             false_object: ObjRef::small_int(0).expect("zero is a small integer"),
-            null_string: self.text(b""),
+            null_string: self.null_string,
         }
     }
 
@@ -275,6 +283,7 @@ impl Host for Interpreter {
 struct Session {
     interpreter: Interpreter,
     strings: CStringPool,
+    thread: ThreadContext,
 }
 
 impl Session {
@@ -283,6 +292,7 @@ impl Session {
         Session {
             interpreter: Interpreter::new(),
             strings: CStringPool::new(),
+            thread: ThreadContext::new(),
         }
     }
 
@@ -300,8 +310,9 @@ impl Session {
             host: &mut self.interpreter,
             strings: &mut self.strings,
         });
-        let mut contexts = Contexts::new(&activation);
-        let outcome = invoke::method(entry, &contexts.method(), &activation, arguments);
+        let outcome = self.thread.enter(&activation, |contexts| {
+            invoke::method(entry, &contexts.method(), &activation, arguments)
+        });
         if let Some(number) = activation.pending() {
             RAISED.with(|seen| seen.borrow_mut().push(number));
         }
@@ -318,8 +329,9 @@ impl Session {
             host: &mut self.interpreter,
             strings: &mut self.strings,
         });
-        let mut contexts = Contexts::new(&activation);
-        invoke::routine(entry, &contexts.call(), &activation, arguments)
+        self.thread.enter(&activation, |contexts| {
+            invoke::routine(entry, &contexts.call(), &activation, arguments)
+        })
     }
 
     fn signature(&mut self, entry: &NativeMethodEntry) -> Result<Vec<u16>, Failure> {
@@ -327,8 +339,9 @@ impl Session {
             host: &mut self.interpreter,
             strings: &mut self.strings,
         });
-        let mut contexts = Contexts::new(&activation);
-        invoke::signature(entry, &contexts.method())
+        self.thread.enter(&activation, |contexts| {
+            invoke::signature(entry, &contexts.method())
+        })
     }
 }
 

@@ -15,7 +15,7 @@
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
-use rexx_api::ffi::Contexts;
+use rexx_api::ffi::ThreadContext;
 use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::POINTER;
@@ -300,6 +300,7 @@ impl Host for Interpreter {
 struct Session {
     interpreter: Interpreter,
     strings: CStringPool,
+    thread: ThreadContext,
 }
 
 impl Session {
@@ -307,6 +308,7 @@ impl Session {
         Session {
             interpreter: Interpreter::new(),
             strings: CStringPool::new(),
+            thread: ThreadContext::new(),
         }
     }
 
@@ -325,8 +327,9 @@ impl Session {
             host: &mut self.interpreter,
             strings: &mut self.strings,
         });
-        let mut contexts = Contexts::new(&activation);
-        let outcome = invoke::method(entry, &contexts.method(), &activation, arguments);
+        let outcome = self.thread.enter(&activation, |contexts| {
+            invoke::method(entry, &contexts.method(), &activation, arguments)
+        });
         (outcome, activation.pending())
     }
 
@@ -545,7 +548,9 @@ fn the_thread_table_carries_the_four_constant_objects() {
         host: &mut session.interpreter,
         strings: &mut session.strings,
     });
-    let handles = Contexts::new(&activation).constants();
+    let thread = ThreadContext::new();
+    thread.enter(&activation, |_| ());
+    let handles = thread.constants();
 
     let mut cx = activation.conversion();
     for (handle, object, name) in [

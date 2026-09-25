@@ -14,16 +14,18 @@ use std::cell::RefCell;
 
 use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef};
 
-use super::{MAX_NATIVE_ARGUMENTS, method, routine};
-use crate::ffi::{CALL_CONTEXT, CallContext, MethodContext, Seen, forget_seen, reading_stub, seen};
+use super::{MAX_NATIVE_ARGUMENTS, hook, method, routine};
+use crate::ffi::{
+    CALL_CONTEXT, CallContext, MethodContext, Seen, ThreadContext, forget_seen, reading_stub, seen,
+};
 use crate::handles::Table;
 use crate::layout::{
     METHOD_CONTEXT_INTERFACE, MethodContextInterface, POINTER, RexxCallContext_,
     RexxMethodContext_, ValueDescriptor,
 };
 use crate::load::{
-    NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE, ROUTINE_TYPED_STYLE, stub_entry,
-    stub_routine_entry,
+    Hook, NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE, ROUTINE_TYPED_STYLE,
+    hooked_library, stub_entry, stub_routine_entry,
 };
 use crate::values::{
     ARGUMENT_EXISTS, ARGUMENT_TERMINATOR, Activation, CStringPool, Class, Constants, Conversion,
@@ -171,6 +173,10 @@ struct Interpreter {
     nest: bool,
     /// What that nested call answered.
     nested: Option<Result<Option<ObjRef>, Failure>>,
+    /// What that nested call left pending.
+    nested_pending: Option<usize>,
+    /// The thread context that nested call enters, a fresh one where `None`.
+    thread: Option<ThreadContext>,
     /// What `arguments` answers.
     argument_list: ObjRef,
 }
@@ -190,6 +196,8 @@ impl Interpreter {
             doubles: Vec::new(),
             nest: false,
             nested: None,
+            nested_pending: None,
+            thread: None,
             argument_list: ObjRef::NIL,
         }
     }
@@ -239,14 +247,17 @@ impl Host for Interpreter {
     fn whole_number(&mut self, value: isize) -> ObjRef {
         if self.nest {
             let entry = stub_entry(b"refusing", crate::ffi::refusing_stub);
+            let thread = self.thread.clone().unwrap_or_default();
             let mut inner = Interpreter::new();
             let mut strings = CStringPool::new();
             let activation = Activation::new(Conversion {
                 host: &mut inner,
                 strings: &mut strings,
             });
-            let mut contexts = crate::ffi::Contexts::new(&activation);
-            self.nested = Some(method(&entry, &contexts.method(), &activation, &[]));
+            self.nested = Some(thread.enter(&activation, |contexts| {
+                method(&entry, &contexts.method(), &activation, &[])
+            }));
+            self.nested_pending = activation.pending();
         }
         whole_number_object(&mut self.heap, value)
     }
@@ -557,8 +568,9 @@ fn a_routine_reads_numeric_settings_and_builds_a_double_through_its_contexts() {
             host: &mut interpreter,
             strings: &mut strings,
         });
-        let mut contexts = crate::ffi::Contexts::new(&activation);
-        routine(&entry, &contexts.call(), &activation, &[])
+        crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
+            routine(&entry, &contexts.call(), &activation, &[])
+        })
     };
     assert_eq!(crate::ffi::numeric_seen(), Some((7, 2, 1)));
     assert_eq!(interpreter.doubles, vec![(crate::ffi::STUB_DOUBLE, 7)]);
@@ -662,8 +674,9 @@ fn a_stub_reaches_its_activation_through_the_context_it_was_handed() {
             host: &mut interpreter,
             strings: &mut strings,
         });
-        let mut contexts = crate::ffi::Contexts::new(&activation);
-        method(&entry, &contexts.method(), &activation, &[])
+        crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
+            method(&entry, &contexts.method(), &activation, &[])
+        })
     };
     assert_eq!(outcome, Ok(Some(ObjRef::small_int(0).expect("zero"))));
     assert!(
@@ -686,8 +699,9 @@ fn a_stub_reaches_its_activation_through_the_thread_context() {
             host: &mut interpreter,
             strings: &mut strings,
         });
-        let mut contexts = crate::ffi::Contexts::new(&activation);
-        let outcome = method(&entry, &contexts.method(), &activation, &[Some(argument)]);
+        let outcome = crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
+            method(&entry, &contexts.method(), &activation, &[Some(argument)])
+        });
         (outcome, activation.pending())
     };
     assert_eq!(outcome, Ok(Some(ObjRef::small_int(0).expect("zero"))));
@@ -729,8 +743,9 @@ fn a_stub_reaches_the_instance_through_the_thread_context() {
             host: &mut interpreter,
             strings: &mut strings,
         });
-        let mut contexts = crate::ffi::Contexts::new(&activation);
-        method(&entry, &contexts.method(), &activation, &[])
+        crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
+            method(&entry, &contexts.method(), &activation, &[])
+        })
     };
     assert_eq!(outcome, Ok(Some(ObjRef::small_int(0).expect("zero"))));
     let variable = |name: &[u8]| {
@@ -761,8 +776,9 @@ fn a_refused_member_is_the_calls_answer_and_a_nested_call_keeps_its_own() {
             host: &mut interpreter,
             strings: &mut strings,
         });
-        let mut contexts = crate::ffi::Contexts::new(&activation);
-        let outcome = method(&entry, &contexts.method(), &activation, &[]);
+        let outcome = crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
+            method(&entry, &contexts.method(), &activation, &[])
+        });
         (outcome, activation.pending())
     };
     assert_eq!(
@@ -802,8 +818,9 @@ fn run_stub(
             host: &mut interpreter,
             strings: &mut strings,
         });
-        let mut contexts = crate::ffi::Contexts::new(&activation);
-        method(&entry, &contexts.method(), &activation, &supplied)
+        crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
+            method(&entry, &contexts.method(), &activation, &supplied)
+        })
     };
     let bytes = match &outcome {
         Ok(Some(object)) => interpreter
@@ -859,8 +876,9 @@ fn an_argument_list_parameter_takes_arguments_nothing_else_consumes() {
             host: &mut interpreter,
             strings: &mut strings,
         });
-        let mut contexts = crate::ffi::Contexts::new(&activation);
-        routine(&entry, &contexts.call(), &activation, &supplied)
+        crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
+            routine(&entry, &contexts.call(), &activation, &supplied)
+        })
     };
     assert_eq!(outcome, Ok(ObjRef::small_int(5)));
 }
@@ -947,5 +965,154 @@ fn an_argument_the_signature_does_not_consume_is_refused() {
         vec![Event::Entered { array: false }, Event::Asked(1)],
         "the stub must not be entered with an argument list that was \
          refused"
+    );
+}
+
+/// Runs [`crate::ffi::stashing_stub`] through `thread` in a frame of its own,
+/// which has returned by the time the caller goes on.
+#[inline(never)]
+fn keep_the_thread_context(thread: &ThreadContext) {
+    let entry = stub_entry(b"stashing", crate::ffi::stashing_stub);
+    let mut interpreter = Interpreter::new();
+    let mut strings = CStringPool::new();
+    let activation = Activation::new(Conversion {
+        host: &mut interpreter,
+        strings: &mut strings,
+    });
+    let outcome = thread.enter(&activation, |contexts| {
+        method(&entry, &contexts.method(), &activation, &[])
+    });
+    assert_eq!(outcome, Ok(Some(ObjRef::small_int(0).expect("zero"))));
+}
+
+/// Runs [`crate::ffi::stash_using_stub`] through `thread` from `depth` frames
+/// further down the stack than its caller, and answers what it returned.
+#[inline(never)]
+fn use_the_kept_thread_context(
+    thread: &ThreadContext,
+    depth: usize,
+) -> Result<Option<ObjRef>, Failure> {
+    if depth > 0 {
+        return std::hint::black_box(use_the_kept_thread_context(thread, depth - 1));
+    }
+    let entry = stub_entry(b"stash_using", crate::ffi::stash_using_stub);
+    let mut interpreter = Interpreter::new();
+    let mut strings = CStringPool::new();
+    let activation = Activation::new(Conversion {
+        host: &mut interpreter,
+        strings: &mut strings,
+    });
+    thread.enter(&activation, |contexts| {
+        method(&entry, &contexts.method(), &activation, &[])
+    })
+}
+
+/// **A thread context an extension keeps from one call reaches the call in
+/// flight when it uses it in another**, which is what the oracle does:
+/// measured with a forged extension, keeping `context->threadContext` in one
+/// call and calling `WholeNumberToObject` through it forty Rexx levels deeper
+/// in a later one prints `x 42`. The answer converts only where the callback
+/// registered it in the later call's own local references.
+#[test]
+fn a_thread_context_kept_from_one_call_reaches_the_next() {
+    let thread = ThreadContext::new();
+    keep_the_thread_context(&thread);
+    assert_eq!(crate::ffi::stashed(), thread.pointer());
+    let answered = use_the_kept_thread_context(&thread, 40);
+    assert_eq!(
+        answered,
+        Ok(ObjRef::small_int(
+            i64::try_from(crate::ffi::STASHED_NUMBER).expect("a small number")
+        ))
+    );
+}
+
+/// A native call nested inside a callback enters the same thread context,
+/// and once it returns the outer call is the innermost again: the outer
+/// stub's raise, made through the thread context after the nested call,
+/// lands on the outer activation and not on the nested one.
+#[test]
+fn a_nested_call_hands_the_thread_context_back_to_the_outer_call() {
+    let thread = ThreadContext::new();
+    let entry = stub_entry(b"nest_then_raise", crate::ffi::nest_then_raise_stub);
+    let mut interpreter = Interpreter::new();
+    interpreter.nest = true;
+    interpreter.thread = Some(thread.clone());
+    let mut strings = CStringPool::new();
+    let (outcome, pending) = {
+        let activation = Activation::new(Conversion {
+            host: &mut interpreter,
+            strings: &mut strings,
+        });
+        let outcome = thread.enter(&activation, |contexts| {
+            method(&entry, &contexts.method(), &activation, &[])
+        });
+        (outcome, activation.pending())
+    };
+    assert_eq!(outcome, Ok(Some(ObjRef::small_int(0).expect("zero"))));
+    assert_eq!(pending, Some(crate::ffi::STUB_CONDITION));
+    assert_eq!(
+        interpreter.nested,
+        Some(Err(Failure::UnfilledSlot {
+            entry: "RexxThreadInterface.HaltThread"
+        }))
+    );
+    assert_eq!(interpreter.nested_pending, None);
+}
+
+/// Runs `library`'s `which` hook through `thread`, and answers what the
+/// hook answered beside the condition it left pending.
+fn run_hook(
+    thread: &ThreadContext,
+    library: &crate::load::Library,
+    which: Hook,
+) -> (Result<(), Failure>, Option<usize>) {
+    let mut interpreter = Interpreter::new();
+    let mut strings = CStringPool::new();
+    let activation = Activation::new(Conversion {
+        host: &mut interpreter,
+        strings: &mut strings,
+    });
+    let answered = thread.enter(&activation, |contexts| {
+        hook(library, which, contexts, &activation)
+    });
+    (answered, activation.pending())
+}
+
+/// A package hook is handed the interpreter's thread context, and a
+/// condition it raises through it is left on the activation it runs in.
+#[test]
+#[cfg_attr(miri, ignore = "opens the running image")]
+fn a_hook_is_handed_the_thread_context_and_its_raise_is_kept() {
+    let thread = ThreadContext::new();
+    let library = hooked_library(None, Some(crate::ffi::raising_hook));
+    assert_eq!(
+        run_hook(&thread, &library, Hook::Unloader),
+        (Ok(()), Some(crate::ffi::STUB_CONDITION))
+    );
+    assert_eq!(crate::ffi::hooked(), thread.pointer());
+    assert_eq!(
+        run_hook(&thread, &library, Hook::Loader),
+        (Ok(()), None),
+        "a hook the entry does not declare ran"
+    );
+}
+
+/// **A hook that reaches an unwritten member is refused naming it**, which is
+/// `invoke::run`'s answer for a method or routine, and the condition it raised
+/// after the refusal is forgotten.
+#[test]
+#[cfg_attr(miri, ignore = "opens the running image")]
+fn a_hook_that_reaches_an_unwritten_member_is_refused() {
+    let thread = ThreadContext::new();
+    let library = hooked_library(Some(crate::ffi::refusing_hook), None);
+    assert_eq!(
+        run_hook(&thread, &library, Hook::Loader),
+        (
+            Err(Failure::UnfilledSlot {
+                entry: "RexxThreadInterface.NewStringFromAsciiz"
+            }),
+            None
+        )
     );
 }

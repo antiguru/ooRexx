@@ -1296,6 +1296,9 @@ struct Interp {
     /// a library whose version check refused is, because that check raises
     /// between the `put` and the `remove`.
     libraries: Libraries,
+    /// The thread context every native call and package hook is handed,
+    /// which an extension may keep for as long as this interpreter runs.
+    thread: rexx_api::ffi::ThreadContext,
     /// How many times [`Interp::resolve_library`] has asked `load::open` for a
     /// name nothing held, whether or not a library loaded, which is what a
     /// test reads to see that a held one is not asked for again.
@@ -1757,7 +1760,6 @@ fn library_search_of(environment: &[(Vec<u8>, Vec<u8>)]) -> Vec<std::path::PathB
 }
 
 /// A native library the interpreter has tried to resolve.
-#[derive(Clone)]
 pub(crate) enum LibraryLoad {
     Loaded(Rc<rexx_api::load::Library>),
     /// No shared object of that name loaded, or one loaded and published no
@@ -1765,9 +1767,10 @@ pub(crate) enum LibraryLoad {
     /// answers false for both, because `getPackageTable` returns null for each
     /// (`:204`, `:216`), and its callers cannot tell them apart.
     Missing,
-    /// The package entry asks for a newer interpreter than this one. This ask
-    /// raises; the library is held, and every later ask answers it loaded.
-    Version,
+    /// This ask raised: the package entry asks for a newer interpreter than
+    /// this one, or its loader raised. The library is held, and every later
+    /// ask answers it loaded.
+    Raised(Failure),
 }
 
 /// One dictionary key bound to one procedure of one loaded library.
@@ -1947,6 +1950,7 @@ impl Interp {
             generated_methods: HashMap::new(),
             native_externals: HashMap::new(),
             libraries: Libraries::new(),
+            thread: rexx_api::ffi::ThreadContext::new(),
             #[cfg(test)]
             library_open_attempts: 0,
             library_externals: HashMap::new(),
@@ -2587,6 +2591,9 @@ impl Interp {
             native_externals: _,
             // Library handles and procedure names, no `ObjRef` in either.
             libraries: _,
+            // Handles for constants that are not heap objects, and the
+            // innermost native call, whose frame `native_handles` roots.
+            thread: _,
             #[cfg(test)]
                 library_open_attempts: _,
             library_externals: _,
@@ -3169,6 +3176,15 @@ fn execute(
     // whose main body raises 42.3 still prints its class `UNINIT` and exits
     // 214, and one ending `exit 7` prints it and exits 7.
     for loud in interp.run_termination_uninits() {
+        interp
+            .trace
+            .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+        exit_code = NOT_IMPLEMENTED_EXIT;
+    }
+
+    // `PackageManager::unload`, which `Interpreter::terminateInterpreter`
+    // reaches after `lastChanceUninit` (`runtime/Interpreter.cpp:279-281`).
+    if let Some(loud) = interp.run_package_unloaders() {
         interp
             .trace
             .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());

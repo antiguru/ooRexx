@@ -1,0 +1,114 @@
+# Each case is a sequence of library loads, one per line, by `::REQUIRES ...
+# LIBRARY` or `~loadLibrary`, `missing` before a name that loaded nothing. The
+# expected output is the order the oracle ran the loaded libraries' unloaders
+# in at termination, measured with a forged extension whose unloader prints
+# its own name. None is this crate's output, so do not REWRITE.
+
+# ::requires in the order forgeb, forgea, forgec, forged
+loads
+forgeb
+forgea
+forgec
+forged
+----
+forgea forgeb forgec forged
+
+# the same four in the order forged, forgec, forgea, forgeb
+loads
+forged
+forgec
+forgea
+forgeb
+----
+forgea forgeb forgec forged
+
+# a bucket collision chain long enough to empty the free chain
+loads
+uryooq
+ufzq
+uutzfd
+ujecrz
+vaal
+vabo
+vaca
+vacr
+vadd
+vadu
+vaeg
+vaex
+vafj
+utm
+uuxtuf
+uqc
+ubg
+vagm
+vahp
+vaib
+vais
+vaje
+vajv
+----
+vaal vabo vaca vacr vadd vadu vaeg vaex vafj vagm vahp vaib vais vaje vajv uuxtuf ufzq uutzfd uryooq ujecrz ubg uqc utm
+
+# the same, then a miss, whose put expands the table before its remove
+loads
+uryooq
+ufzq
+uutzfd
+ujecrz
+vaal
+vabo
+vaca
+vacr
+vadd
+vadu
+vaeg
+vaex
+vafj
+utm
+uuxtuf
+uqc
+ubg
+vagm
+vahp
+vaib
+vais
+vaje
+vajv
+missing uqqmissing
+----
+vaex vacr vaal ubg uryooq utm vajv ufzq vahp vafj vadd uutzfd ujecrz vaib vadu vabo uuxtuf uqc vais vagm vaeg vaca vaje
+
+# the miss in the middle, and more loads after the expansion
+loads
+uryooq
+ufzq
+uutzfd
+ujecrz
+vaal
+vabo
+vaca
+vacr
+vadd
+vadu
+vaeg
+vaex
+vafj
+utm
+uuxtuf
+uqc
+ubg
+vagm
+vahp
+vaib
+vais
+vaje
+vajv
+missing uqqmissing
+vakh
+vaky
+valk
+vamn
+vanq
+----
+vaex vacr vaal ubg uryooq utm vajv ufzq vahp vafj vadd uutzfd ujecrz vamn vakh vaib vadu vabo uuxtuf uqc vaky vais vagm vaeg vaca vanq valk vaje

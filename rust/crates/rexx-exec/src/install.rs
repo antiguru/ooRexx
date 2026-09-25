@@ -1932,15 +1932,25 @@ impl Interp {
         opened: Result<Option<rexx_api::load::Library>, rexx_api::load::Refused>,
     ) -> LibraryLoad {
         match opened {
-            Ok(Some(library)) => {
+            Ok(Some(mut library)) => {
+                library.keep_thread_context(&self.thread);
                 let held = self.libraries.hold(name, Rc::new(library));
                 self.register_package_routines(name, &held);
-                LibraryLoad::Loaded(held)
+                // Measured, oracle: a loader that raises leaves the library
+                // held with its routines callable, and the ask raises.
+                match self.run_package_hook(&held, rexx_api::load::Hook::Loader) {
+                    Ok(()) => LibraryLoad::Loaded(held),
+                    Err(failure) => LibraryLoad::Raised(failure),
+                }
             }
-            Ok(None) => LibraryLoad::Missing,
-            Err(refused) => {
+            Ok(None) => {
+                self.libraries.missed(name);
+                LibraryLoad::Missing
+            }
+            Err(mut refused) => {
+                refused.library.keep_thread_context(&self.thread);
                 self.libraries.hold(name, Rc::from(refused.library));
-                LibraryLoad::Version
+                LibraryLoad::Raised(Raised::library_version(name).into())
             }
         }
     }
@@ -2014,7 +2024,7 @@ impl Interp {
         match self.resolve_library(name) {
             LibraryLoad::Loaded(library) => Ok(library),
             LibraryLoad::Missing => Err(Raised::library_not_loaded(name).into()),
-            LibraryLoad::Version => Err(Raised::library_version(name).into()),
+            LibraryLoad::Raised(failure) => Err(failure),
         }
     }
 

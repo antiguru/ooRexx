@@ -17,9 +17,9 @@
 
 use rexx_core::ObjRef;
 
-use crate::ffi::{CallContext, MethodContext};
+use crate::ffi::{CallContext, Contexts, MethodContext};
 use crate::layout::ValueDescriptor;
-use crate::load::{NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE};
+use crate::load::{Hook, Library, NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE};
 use crate::values::{
     self, ARGUMENT_TERMINATOR, Activation, Converted, Failure, ResultRead, Value, Written,
 };
@@ -94,6 +94,29 @@ pub fn routine(
     run(&signature, cx, arguments, |descriptors, result| {
         entry.call(context, descriptors, result)
     })
+}
+
+/// Run `library`'s `hook`, where its package entry declares one, with the
+/// thread context `contexts` links.
+///
+/// A condition the hook raised is left on `cx`, as [`method`] leaves one.
+///
+/// # Errors
+/// [`Failure::UnfilledSlot`] for the first interface member the hook reached
+/// that this phase has not written, which also forgets any condition it
+/// raised.
+pub fn hook(
+    library: &Library,
+    hook: Hook,
+    contexts: &Contexts<'_, '_>,
+    cx: &Activation<'_>,
+) -> Result<(), Failure> {
+    let ((), refused) = crate::layout::recording_refusals(|| library.run_hook(hook, contexts));
+    if let Some(entry) = refused {
+        cx.clear_pending();
+        return Err(Failure::UnfilledSlot { entry });
+    }
+    Ok(())
 }
 
 /// The half of the protocol both calls share once the signature is in hand:

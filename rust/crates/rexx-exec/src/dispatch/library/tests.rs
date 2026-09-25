@@ -158,7 +158,7 @@ fn a_version_refused_library_raises_once_and_is_held() {
     };
     assert!(matches!(
         interp.settle_library(b"forgever", Err(refused)),
-        LibraryLoad::Version
+        LibraryLoad::Raised(_)
     ));
     // No `forgever` is on any search path, so an ask that opened again
     // would answer `Missing`.
@@ -622,4 +622,54 @@ fn a_pool_name_is_upcased_and_a_compound_one_is_refused() {
     assert_eq!(pool_variable_name(b""), None);
     assert_eq!(pool_variable_name(b"a.b"), None);
     assert_eq!(pool_variable_name(b"1x"), None);
+}
+
+/// The cases [`unloaders_run_in_the_oracles_table_order`] reads.
+const UNLOAD_ORDER_CASES: &str = "tests/unload_order_cases";
+
+/// The order an interpreter holds its libraries in for termination after the
+/// loads in `input`, one name per line, `missing` before a name that loaded
+/// nothing. Every name that loads is the same shared object.
+fn unload_order(input: &str) -> String {
+    let mut interp = Interp::new();
+    for line in input.lines() {
+        match line.strip_prefix("missing ") {
+            Some(name) => {
+                assert!(matches!(
+                    interp.settle_library(name.as_bytes(), Ok(None)),
+                    LibraryLoad::Missing
+                ));
+            }
+            None => {
+                assert!(matches!(
+                    interp.settle_library(line.as_bytes(), Ok(Some(open_rxregexp()))),
+                    LibraryLoad::Loaded(_)
+                ));
+            }
+        }
+    }
+    let order: Vec<String> = interp
+        .libraries
+        .in_unload_order()
+        .into_iter()
+        .map(|(name, _)| String::from_utf8(name).expect("a case's names are ASCII"))
+        .collect();
+    format!("{}\n", order.join(" "))
+}
+
+#[test]
+fn unloaders_run_in_the_oracles_table_order() {
+    let mut cases = 0;
+    datadriven::walk(UNLOAD_ORDER_CASES, |file| {
+        file.run(|case| {
+            cases += 1;
+            assert_eq!(
+                case.directive, "loads",
+                "unknown directive {:?}",
+                case.directive
+            );
+            unload_order(&case.input)
+        });
+    });
+    assert!(cases > 0, "{UNLOAD_ORDER_CASES} ran no case");
 }

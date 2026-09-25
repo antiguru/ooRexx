@@ -14,8 +14,11 @@
 
 //! The inbound FFI boundary: caller-supplied pointers into validated handles.
 
+use std::cell::Cell;
 use std::ffi::CStr;
 use std::marker::PhantomData;
+use std::ptr::NonNull;
+use std::rc::Rc;
 
 use crate::layout::{
     CSTRING, CallContextInterface, MethodContextInterface, Owned, POINTER, RexxCallContext_,
@@ -37,7 +40,8 @@ use crate::values::{Activation, Repr, Value};
 /// its provenance covers `owner`. Nothing about the pointer witnesses that:
 /// an extension holds it as an opaque address and can hand back any value at
 /// all, so the guarantee is the interpreter's, which mints every context it
-/// hands out ([`Contexts::method`]) and never hands out one it did not build.
+/// hands out ([`Contexts::method`], [`ThreadContext::new`]) and never hands out
+/// one it did not build.
 pub unsafe fn owner_of<C, T>(context: *mut C) -> *mut T {
     let owned = context.cast::<Owned<C, T>>();
     // SAFETY: the caller guarantees `owned` was derived from a live
@@ -191,28 +195,54 @@ impl CallContext<'_> {
     }
 }
 
-/// The contexts one native call hands an extension, wired to the state behind
-/// them.
+/// The thread context an extension is handed, which it may keep for as long as
+/// the interpreter runs: the oracle's belongs to the activity
+/// (`interpreter/concurrency/ActivationApiContexts.hpp:64-68`), and
+/// `RexxPackageLoader` is handed it (`api/oorexxapi.h:257`).
 ///
-/// The thread table is owned here and not shared, because its object members
-/// are handles this activation minted
-/// (`interpreter/concurrency/Activity.cpp:1846-1849`).
-pub struct Contexts<'a, 'h> {
-    instance: Owned<RexxInstance_, Activation<'h>>,
-    thread: Owned<RexxThreadContext_, Activation<'h>>,
-    method: Owned<RexxMethodContext_, Activation<'h>>,
-    call: Owned<RexxCallContext_, Activation<'h>>,
-    table: RexxThreadInterface,
-    /// Ties this wrapper to the activation its tables address, so that no
-    /// context it hands out can outlive the state behind it.
-    activation: PhantomData<&'a Activation<'h>>,
+/// Its callbacks reach the innermost native call in flight, which is what
+/// `contextToActivation` does for a thread context
+/// (`interpreter/concurrency/Activity.hpp:458`). A clone addresses the same
+/// context; the allocation lives until the last clone is dropped.
+#[derive(Clone)]
+pub struct ThreadContext {
+    home: Rc<Home>,
 }
 
-impl<'a, 'h> Contexts<'a, 'h> {
-    /// The contexts for a call whose state is `activation`.
-    pub fn new(activation: &'a Activation<'h>) -> Contexts<'a, 'h> {
-        let owner = std::ptr::from_ref(activation).cast_mut();
-        let constants = activation.constants();
+/// Owns the allocation a [`ThreadContext`] hands out addresses into. Nothing
+/// forms a reference to the whole of it, so an address an extension kept is
+/// never invalidated by one.
+struct Home(NonNull<Thread>);
+
+impl Drop for Home {
+    fn drop(&mut self) {
+        // SAFETY: the pointer came from `Box::into_raw` in
+        // `ThreadContext::new`, and only this `Home`, which is not `Clone`,
+        // frees it.
+        drop(unsafe { Box::from_raw(self.0.as_ptr()) });
+    }
+}
+
+/// The public structs a thread context links, its table, and the native
+/// call its callbacks reach.
+struct Thread {
+    thread: Owned<RexxThreadContext_, Innermost>,
+    instance: Owned<RexxInstance_, Innermost>,
+    table: RexxThreadInterface,
+    innermost: Innermost,
+}
+
+/// The activation of the innermost native call in flight, null where none is.
+///
+/// The lifetime is erased: the pointer is written only by
+/// [`ThreadContext::enter`], for the length of a borrow of the activation,
+/// and put back before that borrow ends.
+struct Innermost(Cell<*const Activation<'static>>);
+
+impl ThreadContext {
+    /// A thread context with no native call in flight.
+    #[must_use]
+    pub fn new() -> ThreadContext {
         let mut table = RexxThreadInterface::REFUSING;
         table.WholeNumberToObject = whole_number_to_object;
         table.StringData = string_data;
@@ -220,32 +250,96 @@ impl<'a, 'h> Contexts<'a, 'h> {
         table.NewPointer = new_pointer;
         table.DoubleToObjectWithPrecision = double_to_object_with_precision;
         table.RaiseException0 = raise_exception0;
-        table.RexxNil = constants.nil;
-        table.RexxTrue = constants.true_object;
-        table.RexxFalse = constants.false_object;
-        table.RexxNullString = constants.null_string.cast();
-        Contexts {
-            instance: Owned {
-                context: RexxInstance_ {
-                    functions: std::ptr::null_mut(),
-                    applicationData: std::ptr::null_mut(),
-                },
-                owner,
-            },
+        let raw = Box::into_raw(Box::new(Thread {
             thread: Owned {
                 context: RexxThreadContext_ {
                     instance: std::ptr::null_mut(),
                     functions: std::ptr::null_mut(),
                 },
-                owner,
+                owner: std::ptr::null_mut(),
             },
+            instance: Owned {
+                context: RexxInstance_ {
+                    functions: std::ptr::null_mut(),
+                    applicationData: std::ptr::null_mut(),
+                },
+                owner: std::ptr::null_mut(),
+            },
+            table,
+            innermost: Innermost(Cell::new(std::ptr::null())),
+        }));
+        // SAFETY: `raw` is the allocation just made and nothing else addresses
+        // it yet. Every link is taken from `raw` itself, so its provenance is
+        // the whole allocation's, which is what lets `owner_of` read `owner`
+        // beside a public struct.
+        unsafe {
+            let innermost = &raw mut (*raw).innermost;
+            (*raw).thread.context.instance = (&raw mut (*raw).instance).cast();
+            (*raw).thread.context.functions = &raw mut (*raw).table;
+            (*raw).thread.owner = innermost;
+            (*raw).instance.context.functions = std::ptr::from_ref(&INSTANCE).cast_mut();
+            (*raw).instance.owner = innermost;
+        }
+        ThreadContext {
+            home: Rc::new(Home(
+                NonNull::new(raw).expect("Box::into_raw answers a non-null pointer"),
+            )),
+        }
+    }
+
+    /// The address an extension is handed.
+    pub(crate) fn pointer(&self) -> *mut RexxThreadContext_ {
+        let raw = self.home.0.as_ptr();
+        // SAFETY: the allocation is live while `self` is, and naming a
+        // field's address reads and writes nothing.
+        unsafe { (&raw mut (*raw).thread).cast() }
+    }
+
+    /// Runs `body` with `activation` as the innermost native call, and puts
+    /// back the call that was innermost before, however `body` ends.
+    ///
+    /// The thread table's data members are written from `activation`'s
+    /// constants on the first call and read on every later one.
+    ///
+    /// # Panics
+    /// In a debug build, if `activation`'s constants are not the handles the
+    /// first call wrote.
+    pub fn enter<'h, R>(
+        &self,
+        activation: &Activation<'h>,
+        body: impl FnOnce(&mut Contexts<'_, 'h>) -> R,
+    ) -> R {
+        let raw = self.home.0.as_ptr();
+        let constants = activation.constants();
+        // SAFETY: the allocation is live while `self` is. The data members
+        // are written only while they are still null, which is before any
+        // extension has been handed this context, so nothing is reading them.
+        unsafe {
+            if (*raw).table.RexxNil.is_null() {
+                (*raw).table.RexxNil = constants.nil;
+                (*raw).table.RexxTrue = constants.true_object;
+                (*raw).table.RexxFalse = constants.false_object;
+                (*raw).table.RexxNullString = constants.null_string.cast();
+            }
+        }
+        debug_assert_eq!(self.constants(), constants, "a constant's handle moved");
+        // SAFETY: as above; the reference covers only the cell.
+        let innermost = unsafe { &(*raw).innermost };
+        let _entered = Entered {
+            innermost,
+            previous: innermost
+                .0
+                .replace(std::ptr::from_ref(activation).cast::<Activation<'static>>()),
+        };
+        let mut contexts = Contexts {
+            thread: self.pointer(),
             method: Owned {
                 context: RexxMethodContext_ {
                     threadContext: std::ptr::null_mut(),
                     functions: std::ptr::null_mut(),
                     arguments: std::ptr::null_mut(),
                 },
-                owner,
+                owner: std::ptr::from_ref(activation).cast_mut(),
             },
             call: Owned {
                 context: RexxCallContext_ {
@@ -253,23 +347,71 @@ impl<'a, 'h> Contexts<'a, 'h> {
                     functions: std::ptr::null_mut(),
                     arguments: std::ptr::null_mut(),
                 },
-                owner,
+                owner: std::ptr::from_ref(activation).cast_mut(),
             },
-            table,
             activation: PhantomData,
-        }
+        };
+        body(&mut contexts)
     }
 
-    /// The method context, addressing this wrapper's own thread context and
-    /// tables.
+    /// The handles the thread table's data members carry, null before the
+    /// first [`ThreadContext::enter`].
+    #[must_use]
+    pub fn constants(&self) -> crate::values::Constants<RexxObjectPtr> {
+        let raw = self.home.0.as_ptr();
+        // SAFETY: the allocation is live while `self` is, and a data member
+        // is written only before any extension could read it.
+        unsafe {
+            crate::values::Constants {
+                nil: (*raw).table.RexxNil,
+                true_object: (*raw).table.RexxTrue,
+                false_object: (*raw).table.RexxFalse,
+                null_string: (*raw).table.RexxNullString.cast(),
+            }
+        }
+    }
+}
+
+impl Default for ThreadContext {
+    fn default() -> ThreadContext {
+        ThreadContext::new()
+    }
+}
+
+/// Puts back the native call that was innermost before an
+/// [`ThreadContext::enter`].
+struct Entered<'a> {
+    innermost: &'a Innermost,
+    previous: *const Activation<'static>,
+}
+
+impl Drop for Entered<'_> {
+    fn drop(&mut self) {
+        self.innermost.0.set(self.previous);
+    }
+}
+
+/// The method and call contexts one native call hands an extension, each
+/// linking the interpreter's [`ThreadContext`]. Built only by
+/// [`ThreadContext::enter`], for the length of the call.
+pub struct Contexts<'a, 'h> {
+    thread: *mut RexxThreadContext_,
+    method: Owned<RexxMethodContext_, Activation<'h>>,
+    call: Owned<RexxCallContext_, Activation<'h>>,
+    /// Ties this wrapper to the activation its contexts address, so that no
+    /// context it hands out can outlive the state behind it.
+    activation: PhantomData<&'a Activation<'h>>,
+}
+
+impl Contexts<'_, '_> {
+    /// The method context, linking the thread context.
     ///
-    /// The links are written here rather than at construction because each
-    /// one is the address of a field of `self`, which moving `self` changes.
-    /// Both context pointers are taken from their whole wrappers, which is
-    /// what lets [`owner_of`] read the `owner` beside the public struct.
+    /// The links are written here rather than at construction because the
+    /// context pointer is the address of a field of `self`, which moving
+    /// `self` changes. It is taken from the whole wrapper, which is what lets
+    /// [`owner_of`] read the `owner` beside the public struct.
     pub fn method(&mut self) -> MethodContext<'_> {
-        self.link_thread();
-        self.method.context.threadContext = (&raw mut self.thread).cast::<RexxThreadContext_>();
+        self.method.context.threadContext = self.thread;
         self.method.context.functions = std::ptr::from_ref(&METHOD_CONTEXT).cast_mut();
         MethodContext {
             pointer: (&raw mut self.method).cast::<RexxMethodContext_>(),
@@ -280,8 +422,7 @@ impl<'a, 'h> Contexts<'a, 'h> {
     /// The call context, linked as [`Contexts::method`] links the method
     /// context.
     pub fn call(&mut self) -> CallContext<'_> {
-        self.link_thread();
-        self.call.context.threadContext = (&raw mut self.thread).cast::<RexxThreadContext_>();
+        self.call.context.threadContext = self.thread;
         self.call.context.functions = std::ptr::from_ref(&CALL_CONTEXT).cast_mut();
         CallContext {
             pointer: (&raw mut self.call).cast::<RexxCallContext_>(),
@@ -289,38 +430,59 @@ impl<'a, 'h> Contexts<'a, 'h> {
         }
     }
 
-    /// Points the thread context at its table and at this wrapper's instance,
-    /// and the instance at its table.
-    fn link_thread(&mut self) {
-        self.instance.context.functions = std::ptr::from_ref(&INSTANCE).cast_mut();
-        self.thread.context.instance = (&raw mut self.instance).cast::<RexxInstance_>();
-        self.thread.context.functions = &raw mut self.table;
-    }
-
-    /// The handles the thread table's data members carry.
-    pub fn constants(&self) -> crate::values::Constants<RexxObjectPtr> {
-        crate::values::Constants {
-            nil: self.table.RexxNil,
-            true_object: self.table.RexxTrue,
-            false_object: self.table.RexxFalse,
-            null_string: self.table.RexxNullString.cast(),
-        }
+    /// The thread context a package loader or unloader is handed.
+    pub(crate) fn thread(&self) -> *mut RexxThreadContext_ {
+        self.thread
     }
 }
 
-/// The activation `context` addresses.
+/// The activation a method or call context addresses.
 ///
 /// # Safety
-/// `context` is a context handed out by a [`Contexts`] that is still alive,
-/// and no caller holds its conversion state for the duration of the call this
-/// reference is used in.
+/// `context` is a method or call context a [`Contexts`] handed out, used
+/// during the call it was handed to, and no caller holds its conversion state
+/// for the duration of the call this reference is used in.
 unsafe fn activation_of<'a, C>(context: *mut C) -> &'a Activation<'a> {
     // SAFETY: the caller guarantees `context` came from a live `Contexts`,
-    // which builds both of its wrappers with `owner` pointing at the
+    // whose wrappers `ThreadContext::enter` built with `owner` pointing at the
     // `&'a Activation` it was given. That reference is shared, so forming
     // another one here aliases nothing: every write past it goes through the
     // activation's own cells.
     unsafe { &*owner_of::<C, Activation<'a>>(context) }
+}
+
+/// The activation of the innermost native call in flight, reached through a
+/// thread context.
+///
+/// # Panics
+/// Where no native call is in flight. The oracle aborts there too: measured,
+/// an extension's destructor calling `WholeNumberToObject` through a thread
+/// context it kept, run once the interpreter has terminated, ends the oracle
+/// at rc 134 with `terminate called after throwing an instance of
+/// 'NativeActivation*'`. The caller is an `extern "C"` frame, so the panic
+/// aborts.
+///
+/// # Safety
+/// `context` is a thread context a [`ThreadContext`] handed out, some clone
+/// of which is alive, and no caller holds the innermost call's conversion
+/// state for the duration of the call this reference is used in.
+unsafe fn innermost_activation<'a>(
+    context: *mut RexxThreadContext_,
+    slot: &str,
+) -> &'a Activation<'a> {
+    // SAFETY: the caller guarantees `context` came from a live
+    // `ThreadContext`, whose wrapper's `owner` is its `Innermost`, a field of
+    // the same allocation.
+    let innermost = unsafe { &*owner_of::<RexxThreadContext_, Innermost>(context) };
+    let activation = innermost.0.get();
+    assert!(
+        !activation.is_null(),
+        "RexxThreadInterface.{slot} was called with no native call in flight"
+    );
+    // SAFETY: a non-null pointer is the activation `ThreadContext::enter` is
+    // running a call for, which is borrowed for as long as the pointer is
+    // there. The reference is shared, as in `activation_of`.
+    unsafe { &*activation.cast::<Activation<'a>>() }
 }
 
 /// The bytes of a name an extension passed, or `None` for a null pointer.
@@ -338,8 +500,8 @@ unsafe fn name_of<'a>(name: CSTRING) -> Option<&'a [u8]> {
 }
 
 /// # Safety
-/// `context` is a method context a live [`Contexts`] handed out, used during
-/// the call it was handed to, and a non-null `name` is a NUL-terminated string.
+/// `context` is a method context a [`Contexts`] handed out, used during the
+/// call it was handed to, and a non-null `name` is a NUL-terminated string.
 unsafe extern "C" fn set_object_variable(
     context: *mut RexxMethodContext_,
     name: CSTRING,
@@ -367,15 +529,14 @@ unsafe extern "C" fn drop_object_variable(context: *mut RexxMethodContext_, name
 }
 
 /// # Safety
-/// `context` is the thread context of a live [`Contexts`], used during the
-/// call its method context was handed to.
+/// `context` is a thread context a live [`ThreadContext`] handed out.
 unsafe extern "C" fn whole_number_to_object(
     context: *mut RexxThreadContext_,
     value: wholenumber_t,
 ) -> RexxObjectPtr {
-    // SAFETY: the caller guarantees the context, and `invoke::method` holds no
-    // conversion state across the call it was handed to.
-    unsafe { activation_of(context) }.whole_number(value)
+    // SAFETY: the caller guarantees the context, and `invoke::run` and
+    // `invoke::hook` hold no conversion state across the call they make.
+    unsafe { innermost_activation(context, "WholeNumberToObject") }.whole_number(value)
 }
 
 /// # Safety
@@ -385,7 +546,7 @@ unsafe extern "C" fn string_data(
     string: RexxStringObject,
 ) -> CSTRING {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { activation_of(context) }.string_data(string.cast())
+    unsafe { innermost_activation(context, "StringData") }.string_data(string.cast())
 }
 
 /// # Safety
@@ -395,7 +556,7 @@ unsafe extern "C" fn string_length(
     string: RexxStringObject,
 ) -> usize {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { activation_of(context) }.string_length(string.cast())
+    unsafe { innermost_activation(context, "StringLength") }.string_length(string.cast())
 }
 
 /// # Safety
@@ -405,7 +566,9 @@ unsafe extern "C" fn new_pointer(
     value: POINTER,
 ) -> RexxPointerObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { activation_of(context) }.new_pointer(value).cast()
+    unsafe { innermost_activation(context, "NewPointer") }
+        .new_pointer(value)
+        .cast()
 }
 
 /// `InterpreterVersion` (`interpreter/api/InterpreterInstanceStubs.cpp:79`),
@@ -429,11 +592,12 @@ unsafe extern "C" fn double_to_object_with_precision(
     precision: usize,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { activation_of(context) }.double_object(value, precision)
+    unsafe { innermost_activation(context, "DoubleToObjectWithPrecision") }
+        .double_object(value, precision)
 }
 
 /// # Safety
-/// `context` is a call context a live [`Contexts`] handed out, used during the
+/// `context` is a call context a [`Contexts`] handed out, used during the
 /// call it was handed to.
 unsafe extern "C" fn get_context_digits(context: *mut RexxCallContext_) -> stringsize_t {
     // SAFETY: the caller guarantees the context, and `invoke::routine` holds no
@@ -459,7 +623,7 @@ unsafe extern "C" fn get_context_form(context: *mut RexxCallContext_) -> logical
 /// As [`whole_number_to_object`].
 unsafe extern "C" fn raise_exception0(context: *mut RexxThreadContext_, number: usize) {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { activation_of(context) }.raise(number);
+    unsafe { innermost_activation(context, "RaiseException0") }.raise(number);
 }
 
 /// What a stub read through the context, which is the channel
@@ -847,6 +1011,116 @@ pub(crate) extern "C" fn numeric_stub(
 }
 
 #[cfg(test)]
+thread_local! {
+    /// The thread context [`stashing_stub`] was last handed.
+    static STASH: std::cell::Cell<*mut RexxThreadContext_> =
+        const { std::cell::Cell::new(std::ptr::null_mut()) };
+}
+
+/// A method stub that keeps the thread context its method context links, as
+/// an extension may.
+#[cfg(test)]
+pub(crate) extern "C" fn stashing_stub(
+    context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return DROPPING_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: `context` is the one a `Contexts` handed this call.
+    STASH.set(unsafe { (*context).threadContext });
+    std::ptr::null_mut()
+}
+
+/// The thread context [`stashing_stub`] kept.
+#[cfg(test)]
+pub(crate) fn stashed() -> *mut RexxThreadContext_ {
+    STASH.get()
+}
+
+/// The value [`stash_using_stub`] hands `WholeNumberToObject`.
+#[cfg(test)]
+pub(crate) const STASHED_NUMBER: isize = 42;
+
+/// A method stub answering what `WholeNumberToObject` builds for
+/// [`STASHED_NUMBER`] through the thread context [`stashing_stub`] kept,
+/// rather than through the one its own method context links.
+#[cfg(test)]
+pub(crate) extern "C" fn stash_using_stub(
+    _context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return NUMERIC_TYPES.as_ptr().cast_mut();
+    }
+    let thread = STASH.get();
+    // SAFETY: `thread` is a thread context a `ThreadContext` handed out, which
+    // the test keeps alive, and element zero is this call's result.
+    unsafe {
+        let object = ((*(*thread).functions).WholeNumberToObject)(thread, STASHED_NUMBER);
+        (*arguments).value.value_RexxObjectPtr = object;
+    }
+    std::ptr::null_mut()
+}
+
+/// A method stub that reaches `WholeNumberToObject`, which the host a nesting
+/// test builds answers by running a native call of its own, and then raises
+/// [`STUB_CONDITION`], both through its thread context.
+#[cfg(test)]
+pub(crate) extern "C" fn nest_then_raise_stub(
+    context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return DROPPING_TYPES.as_ptr().cast_mut();
+    }
+    // SAFETY: as `refusing_stub`.
+    unsafe {
+        let thread = (*context).threadContext;
+        let table = &*(*thread).functions;
+        (table.WholeNumberToObject)(thread, 3);
+        (table.RaiseException0)(thread, STUB_CONDITION);
+    }
+    std::ptr::null_mut()
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The thread context [`raising_hook`] or [`refusing_hook`] was last
+    /// handed.
+    static HOOKED: std::cell::Cell<*mut RexxThreadContext_> =
+        const { std::cell::Cell::new(std::ptr::null_mut()) };
+}
+
+/// The thread context a hook stub was last handed.
+#[cfg(test)]
+pub(crate) fn hooked() -> *mut RexxThreadContext_ {
+    HOOKED.get()
+}
+
+/// A package hook that keeps the thread context it is handed and raises
+/// [`STUB_CONDITION`] through it.
+#[cfg(test)]
+pub(crate) extern "C" fn raising_hook(thread: *mut RexxThreadContext_) {
+    HOOKED.set(thread);
+    // SAFETY: `thread` is the context `invoke::hook` handed this call.
+    unsafe { ((*(*thread).functions).RaiseException0)(thread, STUB_CONDITION) };
+}
+
+/// A package hook that reaches `NewStringFromAsciiz`, which nothing fills,
+/// and then raises [`STUB_CONDITION`].
+#[cfg(test)]
+pub(crate) extern "C" fn refusing_hook(thread: *mut RexxThreadContext_) {
+    HOOKED.set(thread);
+    // SAFETY: as `raising_hook`; the name is a literal.
+    unsafe {
+        let table = &*(*thread).functions;
+        (table.NewStringFromAsciiz)(thread, c"units".as_ptr());
+        (table.RaiseException0)(thread, STUB_CONDITION);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::{owner_of, value_of};
     use crate::layout::{
@@ -898,6 +1172,48 @@ mod tests {
         assert!(
             stderr.contains("RexxThreadInterface.BufferData is not implemented (Phase 8)"),
             "the refusal did not name the entry and the phase that owes it:\n{stderr}"
+        );
+    }
+
+    /// The variable this test sets on the child it spawns.
+    const CALL_WITH_NO_FRAME: &str = "REXX_API_CALL_WITH_NO_NATIVE_CALL";
+
+    /// A thread context called through with no native call in flight ends
+    /// the process naming the member, which is the oracle's rc 134.
+    #[test]
+    #[cfg_attr(miri, ignore = "spawns a process")]
+    fn a_thread_context_with_no_call_in_flight_aborts() {
+        if std::env::var_os(CALL_WITH_NO_FRAME).is_some() {
+            let thread = super::ThreadContext::new();
+            let context = thread.pointer();
+            // SAFETY: `context` is the live `thread`'s, and the table is its own.
+            unsafe { ((*(*context).functions).WholeNumberToObject)(context, 42) };
+            unreachable!("the member returned");
+        }
+
+        let binary = std::env::current_exe().expect("this test binary's own path");
+        let output = std::process::Command::new(binary)
+            .args([
+                "ffi::tests::a_thread_context_with_no_call_in_flight_aborts",
+                "--exact",
+                "--nocapture",
+            ])
+            .env(CALL_WITH_NO_FRAME, "1")
+            .output()
+            .expect("the child runs");
+
+        assert_eq!(
+            std::os::unix::process::ExitStatusExt::signal(&output.status),
+            Some(6),
+            "the child did not abort: {:?}",
+            output.status
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(
+                "RexxThreadInterface.WholeNumberToObject was called with no native call in flight"
+            ),
+            "the abort did not name the member:\n{stderr}"
         );
     }
 

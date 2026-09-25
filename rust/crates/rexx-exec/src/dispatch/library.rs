@@ -20,10 +20,10 @@
 use std::borrow::Cow;
 use std::rc::Rc;
 
-use rexx_api::ffi::Contexts;
 use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::POINTER;
+use rexx_api::load::{Hook, Library};
 use rexx_api::values::{
     Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, Host, Numeric,
     Raised as Condition,
@@ -84,13 +84,15 @@ impl Interp {
         };
         self.push_native_frame(owner, resolution.scope, Some(receiver), name, args);
         let mut strings = CStringPool::new();
+        let thread = self.thread.clone();
         let (answered, pending) = {
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
             });
-            let mut contexts = Contexts::new(&activation);
-            let answered = invoke::method(entry, &contexts.method(), &activation, args);
+            let answered = thread.enter(&activation, |contexts| {
+                invoke::method(entry, &contexts.method(), &activation, args)
+            });
             (answered, activation.pending())
         };
         let (raised, method) = self.pop_native_frame();
@@ -147,13 +149,15 @@ impl Interp {
         };
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, name, args);
         let mut strings = CStringPool::new();
+        let thread = self.thread.clone();
         let (answered, pending) = {
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
             });
-            let mut contexts = Contexts::new(&activation);
-            let answered = invoke::routine(entry, &contexts.call(), &activation, args);
+            let answered = thread.enter(&activation, |contexts| {
+                invoke::routine(entry, &contexts.call(), &activation, args)
+            });
             (answered, activation.pending())
         };
         let (raised, method) = self.pop_native_frame();
@@ -166,6 +170,59 @@ impl Interp {
             self.blame_native_routine(name, package);
         }
         outcome
+    }
+
+    /// Runs `library`'s `hook` in a native frame of its own, as
+    /// `Activity::run` runs a `CallbackDispatcher`
+    /// (`interpreter/concurrency/Activity.cpp:3461-3474`).
+    ///
+    /// # Errors
+    /// The condition the hook raised, and [`Loud`] for an interface member it
+    /// reached that this phase has not written.
+    pub(crate) fn run_package_hook(
+        &mut self,
+        library: &Library,
+        hook: Hook,
+    ) -> Result<(), Failure> {
+        if !library.has_hook(hook) {
+            return Ok(());
+        }
+        self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[]);
+        let mut strings = CStringPool::new();
+        let thread = self.thread.clone();
+        let (ran, pending) = {
+            let activation = Activation::new(Conversion {
+                host: self,
+                strings: &mut strings,
+            });
+            let ran = thread.enter(&activation, |contexts| {
+                invoke::hook(library, hook, contexts, &activation)
+            });
+            (ran, activation.pending())
+        };
+        let (raised, method) = self.pop_native_frame();
+        if let Some(number) = pending {
+            return Err(condition_of(number));
+        }
+        self.settle_native_call(ran.map(|()| None), raised, method, true)
+            .map(|_| ())
+    }
+
+    /// `PackageManager::unload` (`interpreter/package/PackageManager.cpp:642-650`):
+    /// each held library's unloader, in the order the oracle's table walks
+    /// them, answering the refusal that ended the walk if one did.
+    ///
+    /// Measured, oracle: a condition raised inside an unloader ends the walk,
+    /// reports nothing and leaves the exit status alone. A refusal ends it too.
+    pub(crate) fn run_package_unloaders(&mut self) -> Option<Loud> {
+        for (_, library) in self.libraries.in_unload_order() {
+            match self.run_package_hook(&library, Hook::Unloader) {
+                Ok(()) => {}
+                Err(Failure::Loud(loud)) => return Some(*loud),
+                Err(_) => return None,
+            }
+        }
+        None
     }
 
     /// What a native call answers once its frame is off the stack: the value,

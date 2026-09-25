@@ -14,11 +14,11 @@
 
 //! The outbound FFI boundary: loading a library and resolving symbols.
 
-use crate::ffi::{CallContext, MethodContext};
+use crate::ffi::{CallContext, Contexts, MethodContext, ThreadContext};
 use crate::invoke::MAX_NATIVE_ARGUMENTS;
 use crate::layout::{
-    RexxCallContext_, RexxMethodContext_, RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry,
-    ValueDescriptor, ValueUnion,
+    PackageHook, RexxCallContext_, RexxMethodContext_, RexxMethodEntry, RexxPackageEntry,
+    RexxRoutineEntry, ValueDescriptor, ValueUnion,
 };
 use crate::values::{ARGUMENT_TERMINATOR, ResultRead, Written};
 use std::ffi::{CStr, c_char, c_int, c_void};
@@ -208,6 +208,26 @@ pub(crate) fn stub_routine_entry(
     }
 }
 
+/// A library with no tables whose package entry declares `loader` and
+/// `unloader`, for a caller that needs hooks without a shared object.
+#[cfg(test)]
+#[cfg(unix)]
+pub(crate) fn hooked_library(
+    loader: Option<PackageHook>,
+    unloader: Option<PackageHook>,
+) -> Library {
+    Library {
+        name: None,
+        version: None,
+        methods: Vec::new(),
+        routines: Vec::new(),
+        loader,
+        unloader,
+        handle: libloading::os::unix::Library::this().into(),
+        thread: None,
+    }
+}
+
 /// One row of an extension's routine table, copied out of the library.
 ///
 /// Shaped as [`NativeMethodEntry`] and for the same reason.
@@ -360,18 +380,49 @@ unsafe fn call_stub<C>(
     })
 }
 
+/// Which of a package entry's hooks to run.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Hook {
+    /// `loader`, which `LibraryPackage::loadPackage` runs once the routines
+    /// have registered (`interpreter/package/LibraryPackage.cpp:237-245`).
+    Loader,
+    /// `unloader`, which `LibraryPackage::unload` runs at termination
+    /// (`interpreter/package/LibraryPackage.cpp:166-174`).
+    Unloader,
+}
+
 /// An opened shared library together with the package entry it published.
-#[derive(Debug)]
 pub struct Library {
     name: Option<Vec<u8>>,
     version: Option<Vec<u8>>,
     methods: Vec<NativeMethodEntry>,
     routines: Vec<NativeRoutineEntry>,
-    /// The mapping every `entry_point` above addresses. No safe code outside
+    /// Private for the reason `entry_point` is. Never set on a library
+    /// refused for its version, whose loader the oracle never reaches.
+    loader: Option<PackageHook>,
+    unloader: Option<PackageHook>,
+    /// The mapping every address above points into. No safe code outside
     /// this module can copy an address out of a row, which is what keeps one
     /// from outliving this field.
     #[expect(dead_code)]
     handle: libloading::Library,
+    /// Declared after `handle`, so that it is dropped after the close, whose
+    /// destructors may call through a thread context the extension kept.
+    thread: Option<ThreadContext>,
+}
+
+impl std::fmt::Debug for Library {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Library")
+            .field("name", &self.name)
+            .field("version", &self.version)
+            .field("methods", &self.methods)
+            .field("routines", &self.routines)
+            .field("loader", &self.loader.is_some())
+            .field("unloader", &self.unloader.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Library {
@@ -386,6 +437,37 @@ impl Library {
     #[must_use]
     pub fn version(&self) -> Option<&[u8]> {
         self.version.as_deref()
+    }
+
+    /// Whether the package entry declares `hook`.
+    #[must_use]
+    pub fn has_hook(&self, hook: Hook) -> bool {
+        self.hook(hook).is_some()
+    }
+
+    fn hook(&self, hook: Hook) -> Option<PackageHook> {
+        match hook {
+            Hook::Loader => self.loader,
+            Hook::Unloader => self.unloader,
+        }
+    }
+
+    /// Runs `hook`, where the package entry declares it, handing it the
+    /// thread context `contexts` links.
+    pub(crate) fn run_hook(&self, hook: Hook, contexts: &Contexts<'_, '_>) {
+        let Some(function) = self.hook(hook) else {
+            return;
+        };
+        // SAFETY: the address is the package entry's own `loader` or
+        // `unloader`, a `RexxPackageLoader`/`RexxPackageUnloader`
+        // (`api/oorexxapi.h:257-258`) in the mapping `self.handle` holds, and
+        // the thread context is the one `contexts` links, live for the call.
+        unsafe { function(contexts.thread()) };
+    }
+
+    /// Keeps `thread` allocated until this library has been closed.
+    pub fn keep_thread_context(&mut self, thread: &ThreadContext) {
+        self.thread = Some(thread.clone());
     }
 
     /// The exported method table, in the order the extension declares it.
@@ -591,14 +673,26 @@ fn package_of(handle: libloading::Library, name: &str) -> Result<Option<Library>
     // SAFETY: `entry` is non-null and, by the contract above, is the address
     // of the `RexxPackageEntry` static the library defines, which lives as
     // long as the mapping `handle` holds. Its layout is the frozen header's.
-    let entry = unsafe { &*entry };
+    // Being the library's own entry, each table pointer in it is null or the
+    // array the extension declared, and every string a literal in the same
+    // mapping.
+    unsafe { library_of(&*entry, handle, name) }
+}
 
+/// The library `entry` describes, refused where its version check refuses.
+///
+/// # Safety
+/// Each of `entry`'s table pointers is null or an array terminated by a
+/// zero-`style` row, and every string it or a row names is null or
+/// NUL-terminated; all of it outlives `handle`.
+unsafe fn library_of(
+    entry: &RexxPackageEntry,
+    handle: libloading::Library,
+    name: &str,
+) -> Result<Option<Library>, Refused> {
     let refused = check_version(entry, name).err();
 
-    // SAFETY: `entry` is the library's own package entry, so each table
-    // pointer is null or the array the extension declared, terminated by a
-    // zero-`style` row, and every string in it is a literal in the same
-    // mapping. All of it outlives `handle`.
+    // SAFETY: the caller guarantees the tables and strings.
     let (package_name, version, methods) = unsafe {
         (
             c_bytes(entry.package_name),
@@ -616,7 +710,10 @@ fn package_of(handle: libloading::Library, name: &str) -> Result<Option<Library>
         version,
         methods,
         routines,
+        loader: entry.loader.filter(|_| refused.is_none()),
+        unloader: entry.unloader,
         handle,
+        thread: None,
     };
     match refused {
         Some(failure) => Err(Refused {
@@ -709,7 +806,62 @@ unsafe fn routine_table(table: *mut RexxRoutineEntry) -> Vec<NativeRoutineEntry>
 
 #[cfg(test)]
 mod tests {
-    use super::{Library, NativeRoutineEntry};
+    use super::{CURRENT_INTERPRETER_VERSION, Hook, Library, NativeRoutineEntry, library_of};
+    use crate::layout::{RexxPackageEntry, RexxThreadContext_};
+
+    extern "C" fn ignoring_hook(_thread: *mut RexxThreadContext_) {}
+
+    /// A package entry with no tables asking for `required`, declaring both
+    /// hooks.
+    fn entry_asking_for(required: std::ffi::c_int) -> RexxPackageEntry {
+        RexxPackageEntry {
+            size: 0,
+            api_version: 0,
+            required_version: required,
+            package_name: std::ptr::null(),
+            package_version: std::ptr::null(),
+            loader: Some(ignoring_hook),
+            unloader: Some(ignoring_hook),
+            routines: std::ptr::null_mut(),
+            methods: std::ptr::null_mut(),
+        }
+    }
+
+    /// A library refused for its version keeps its unloader and not its
+    /// loader: measured, oracle, such a library's unloader runs at
+    /// termination and its loader never does, since `loadPackage` raises
+    /// before it (`interpreter/package/LibraryPackage.cpp:232-245`).
+    #[test]
+    #[cfg(unix)]
+    #[cfg_attr(miri, ignore = "opens the running image")]
+    fn a_library_refused_for_its_version_keeps_only_its_unloader() {
+        let refused_entry = entry_asking_for(CURRENT_INTERPRETER_VERSION + 1);
+        // SAFETY: the entry has no tables and no strings.
+        let refused = unsafe {
+            library_of(
+                &refused_entry,
+                libloading::os::unix::Library::this().into(),
+                "forged",
+            )
+        }
+        .expect_err("a newer version is refused");
+        assert!(!refused.library.has_hook(Hook::Loader));
+        assert!(refused.library.has_hook(Hook::Unloader));
+
+        let accepted_entry = entry_asking_for(CURRENT_INTERPRETER_VERSION);
+        // SAFETY: as above.
+        let accepted = unsafe {
+            library_of(
+                &accepted_entry,
+                libloading::os::unix::Library::this().into(),
+                "forged",
+            )
+        }
+        .expect("the current version is accepted")
+        .expect("an entry is a package");
+        assert!(accepted.has_hook(Hook::Loader));
+        assert!(accepted.has_hook(Hook::Unloader));
+    }
 
     /// `ROUTINE_TYPED_STYLE` (`api/oorexxapi.h:200`).
     const ROUTINE_TYPED_STYLE: std::ffi::c_int = 1;
@@ -744,7 +896,10 @@ mod tests {
                 row(b"Foo", 3),
                 row(b"bar", 4),
             ],
+            loader: None,
+            unloader: None,
             handle: libloading::os::unix::Library::this().into(),
+            thread: None,
         };
         assert_eq!(found(&library, b"FOO"), Some(2));
         assert_eq!(found(&library, b"Foo"), Some(3));
@@ -770,7 +925,10 @@ mod tests {
                 row(b"Foo", 3),
                 row(b"bar", 4),
             ],
+            loader: None,
+            unloader: None,
             handle: libloading::os::unix::Library::this().into(),
+            thread: None,
         };
         assert_eq!(
             library.package_routines(),
