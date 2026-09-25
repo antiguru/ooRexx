@@ -21,8 +21,10 @@ use crate::layout::{
     RexxRoutineEntry, RexxThreadContext_, ValueDescriptor, ValueUnion,
 };
 use crate::values::{ARGUMENT_TERMINATOR, ResultRead, Written};
+use std::cell::{Cell, RefCell};
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 /// The C signature of the stub the `RexxMethodN` macros generate
 /// (`api/oorexxapi.h:4286`).
@@ -98,6 +100,70 @@ impl Failure {
     }
 }
 
+/// The mapping a library's addresses point into, shared by the library and
+/// every row copied out of it, so that closing it stops every one of them
+/// calling in.
+struct Mapping {
+    /// `None` for this image's own stubs, which nothing closes, and once
+    /// closed.
+    handle: RefCell<Option<libloading::Library>>,
+    open: Cell<bool>,
+    /// Calls into the mapping in flight, which a close waits out by refusing.
+    calls: Cell<usize>,
+}
+
+impl Mapping {
+    fn new(handle: Option<libloading::Library>) -> Rc<Mapping> {
+        Rc::new(Mapping {
+            handle: RefCell::new(handle),
+            open: Cell::new(true),
+            calls: Cell::new(0),
+        })
+    }
+
+    /// Runs `call`, counted as in flight.
+    fn hold<R>(&self, call: impl FnOnce() -> R) -> R {
+        struct InFlight<'a>(&'a Cell<usize>);
+        impl Drop for InFlight<'_> {
+            fn drop(&mut self) {
+                self.0.set(self.0.get() - 1);
+            }
+        }
+        self.calls.set(self.calls.get() + 1);
+        let _in_flight = InFlight(&self.calls);
+        call()
+    }
+
+    /// Closes the mapping, or answers `false` where a call into it is in
+    /// flight.
+    fn close(&self) -> bool {
+        if self.calls.get() > 0 {
+            return false;
+        }
+        self.open.set(false);
+        drop(self.handle.borrow_mut().take());
+        true
+    }
+}
+
+impl std::fmt::Debug for Mapping {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Mapping")
+            .field("open", &self.open.get())
+            .finish_non_exhaustive()
+    }
+}
+
+/// One mapping is equal only to itself.
+impl PartialEq for Mapping {
+    fn eq(&self, other: &Mapping) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+impl Eq for Mapping {}
+
 /// One row of an extension's method table, copied out of the library.
 ///
 /// Neither `Clone` nor holder of a public address: both would hand safe code
@@ -119,6 +185,7 @@ pub struct NativeMethodEntry {
     pub style: c_int,
     pub name: Vec<u8>,
     entry_point: *mut c_void,
+    mapping: Rc<Mapping>,
 }
 
 impl NativeMethodEntry {
@@ -137,9 +204,10 @@ impl NativeMethodEntry {
     pub(crate) fn signature(&self, context: &MethodContext<'_>, limit: usize) -> Option<Vec<u16>> {
         let stub = self.stub()?;
         // SAFETY: `stub` is the address the extension's own method table gave
-        // for this row, which stays mapped as long as the `Library` this row
-        // is borrowed from, and `context` is live for the borrow.
-        unsafe { signature_of(stub, context.as_ptr(), limit) }
+        // for this row, in a mapping that is open and that a close leaves
+        // open while this call is held, and `context` is live for the borrow.
+        self.mapping
+            .hold(|| unsafe { signature_of(stub, context.as_ptr(), limit) })
     }
 
     /// Call the stub with `arguments`, which it reads and writes its result
@@ -158,14 +226,16 @@ impl NativeMethodEntry {
         // SAFETY: `pointer` addresses the live struct `context` borrows, and
         // naming a field's address reads and writes nothing.
         let published = unsafe { &raw mut (*pointer).arguments };
+        let stub = self.stub();
         // SAFETY: as `signature`, and `published` is `pointer`'s own field.
-        unsafe { call_stub(self.stub(), pointer, published, arguments, result) }
+        self.mapping
+            .hold(|| unsafe { call_stub(stub, pointer, published, arguments, result) })
     }
 
     /// The row's address as the callable it names, or `None` for a row that
-    /// carries none.
+    /// carries none or whose library has been closed.
     fn stub(&self) -> Option<NativeMethod> {
-        if self.entry_point.is_null() {
+        if self.entry_point.is_null() || !self.mapping.open.get() {
             return None;
         }
         // SAFETY: `REXX_METHOD_ENTRY` fills `entryPoint` with the stub the
@@ -190,6 +260,7 @@ pub(crate) fn stub_entry(name: &[u8], stub: NativeMethod) -> NativeMethodEntry {
         style: METHOD_TYPED_STYLE,
         name: name.to_vec(),
         entry_point: stub as *mut c_void,
+        mapping: Mapping::new(None),
     }
 }
 
@@ -205,6 +276,7 @@ pub(crate) fn stub_routine_entry(
         style,
         name: name.to_vec(),
         entry_point: stub as *mut c_void,
+        mapping: Mapping::new(None),
     }
 }
 
@@ -253,7 +325,7 @@ pub(crate) fn hooked_library(
         routines: Vec::new(),
         loader,
         unloader,
-        handle: libloading::os::unix::Library::this().into(),
+        mapping: Mapping::new(Some(libloading::os::unix::Library::this().into())),
         thread: None,
     }
 }
@@ -268,6 +340,7 @@ pub struct NativeRoutineEntry {
     pub style: c_int,
     pub name: Vec<u8>,
     entry_point: *mut c_void,
+    mapping: Rc<Mapping>,
 }
 
 impl NativeRoutineEntry {
@@ -284,7 +357,8 @@ impl NativeRoutineEntry {
         let stub = self.stub()?;
         // SAFETY: as `NativeMethodEntry::signature`; `stub` answers only for a
         // typed row.
-        unsafe { signature_of(stub, context.as_ptr(), limit) }
+        self.mapping
+            .hold(|| unsafe { signature_of(stub, context.as_ptr(), limit) })
     }
 
     /// [`NativeMethodEntry::call`] for a routine's stub, which calls nothing
@@ -298,19 +372,25 @@ impl NativeRoutineEntry {
         let pointer = context.as_ptr();
         // SAFETY: as `NativeMethodEntry::call`.
         let published = unsafe { &raw mut (*pointer).arguments };
+        let stub = self.stub();
         // SAFETY: as `NativeMethodEntry::call`; `stub` answers only for a
         // typed row.
-        unsafe { call_stub(self.stub(), pointer, published, arguments, result) }
+        self.mapping
+            .hold(|| unsafe { call_stub(stub, pointer, published, arguments, result) })
     }
 
     /// The row's address as the typed stub it names, or `None` for a row that
-    /// carries none and for a row of any style but `ROUTINE_TYPED_STYLE`.
+    /// carries none, for a row of any style but `ROUTINE_TYPED_STYLE`, and for
+    /// a row whose library has been closed.
     ///
     /// A style that is neither classic nor typed is therefore refused as an
     /// unreadable signature, where the oracle calls any non-classic row as a
     /// typed routine (`interpreter/package/LibraryPackage.cpp:279-286`).
     fn stub(&self) -> Option<NativeRoutine> {
-        if self.entry_point.is_null() || self.style != ROUTINE_TYPED_STYLE {
+        if self.entry_point.is_null()
+            || self.style != ROUTINE_TYPED_STYLE
+            || !self.mapping.open.get()
+        {
             return None;
         }
         // SAFETY: the row is `ROUTINE_TYPED_STYLE`, which `REXX_TYPED_ROUTINE`
@@ -433,10 +513,9 @@ pub struct Library {
     unloader: Option<PackageHook>,
     /// The mapping every address above points into. No safe code outside
     /// this module can copy an address out of a row, which is what keeps one
-    /// from outliving this field.
-    #[expect(dead_code)]
-    handle: libloading::Library,
-    /// Declared after `handle`, so that it is dropped after the close, whose
+    /// from outliving it.
+    mapping: Rc<Mapping>,
+    /// Declared last, so that it is dropped after the close, whose
     /// destructors may call through a thread context the extension kept.
     thread: Option<ThreadContext>,
 }
@@ -488,11 +567,28 @@ impl Library {
         let Some(function) = self.hook(hook) else {
             return;
         };
+        if !self.mapping.open.get() {
+            return;
+        }
         // SAFETY: the address is the package entry's own `loader` or
         // `unloader`, a `RexxPackageLoader`/`RexxPackageUnloader`
-        // (`api/oorexxapi.h:257-258`) in the mapping `self.handle` holds, and
-        // the thread context is the one `contexts` links, live for the call.
-        unsafe { function(contexts.thread()) };
+        // (`api/oorexxapi.h:257-258`), in a mapping that is open and that a
+        // close leaves open while this call is held; the thread context is
+        // the one `contexts` links, live for the call.
+        self.mapping.hold(|| unsafe { function(contexts.thread()) });
+    }
+
+    /// `SysLibrary::unload`: closes the library, after which none of its rows
+    /// or hooks calls in, and answers whether it closed, which it does not
+    /// while a call into it is in flight.
+    pub fn close(&self) -> bool {
+        self.mapping.close()
+    }
+
+    /// Whether [`Library::close`] has not yet closed it.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        self.mapping.open.get()
     }
 
     /// Keeps `thread` allocated until this library has been closed.
@@ -721,19 +817,20 @@ unsafe fn library_of(
     name: &str,
 ) -> Result<Option<Library>, Refused> {
     let refused = check_version(entry, name).err();
+    let mapping = Mapping::new(Some(handle));
 
     // SAFETY: the caller guarantees the tables and strings.
     let (package_name, version, methods) = unsafe {
         (
             c_bytes(entry.package_name),
             c_bytes(entry.package_version),
-            method_table(entry.methods),
+            method_table(entry.methods, &mapping),
         )
     };
     let routines = match refused {
         Some(_) => Vec::new(),
         // SAFETY: as above.
-        None => unsafe { routine_table(entry.routines) },
+        None => unsafe { routine_table(entry.routines, &mapping) },
     };
     let library = Library {
         name: package_name,
@@ -742,7 +839,7 @@ unsafe fn library_of(
         routines,
         loader: entry.loader.filter(|_| refused.is_none()),
         unloader: entry.unloader,
-        handle,
+        mapping,
         thread: None,
     };
     match refused {
@@ -774,7 +871,10 @@ unsafe fn c_bytes(ptr: *const c_char) -> Option<Vec<u8>> {
 /// A non-null `table` addresses an array holding a row whose `style` is zero,
 /// with every earlier row's `name` a live NUL-terminated string; all of it
 /// outlives the call.
-unsafe fn method_table(table: *mut RexxMethodEntry) -> Vec<NativeMethodEntry> {
+unsafe fn method_table(
+    table: *mut RexxMethodEntry,
+    mapping: &Rc<Mapping>,
+) -> Vec<NativeMethodEntry> {
     let mut rows = Vec::new();
     if table.is_null() {
         return rows;
@@ -796,6 +896,7 @@ unsafe fn method_table(table: *mut RexxMethodEntry) -> Vec<NativeMethodEntry> {
             // carries a non-null one, held in the library's own image.
             name: unsafe { CStr::from_ptr(row.name) }.to_bytes().to_vec(),
             entry_point: row.entry_point,
+            mapping: Rc::clone(mapping),
         });
         // SAFETY: `at` was not the terminator, so a further row follows it.
         at = unsafe { at.add(1) };
@@ -807,7 +908,10 @@ unsafe fn method_table(table: *mut RexxMethodEntry) -> Vec<NativeMethodEntry> {
 ///
 /// # Safety
 /// As [`method_table`].
-unsafe fn routine_table(table: *mut RexxRoutineEntry) -> Vec<NativeRoutineEntry> {
+unsafe fn routine_table(
+    table: *mut RexxRoutineEntry,
+    mapping: &Rc<Mapping>,
+) -> Vec<NativeRoutineEntry> {
     let mut rows = Vec::new();
     if table.is_null() {
         return rows;
@@ -828,6 +932,7 @@ unsafe fn routine_table(table: *mut RexxRoutineEntry) -> Vec<NativeRoutineEntry>
             // carries a non-null one, held in the library's own image.
             name: unsafe { CStr::from_ptr(row.name) }.to_bytes().to_vec(),
             entry_point: row.entry_point,
+            mapping: Rc::clone(mapping),
         });
         // SAFETY: `at` was not the terminator, so a further row follows it.
         at = unsafe { at.add(1) };
@@ -902,6 +1007,7 @@ mod tests {
             style: ROUTINE_TYPED_STYLE,
             name: name.to_vec(),
             entry_point: std::ptr::without_provenance_mut(tag),
+            mapping: super::Mapping::new(None),
         }
     }
 
@@ -928,7 +1034,7 @@ mod tests {
             ],
             loader: None,
             unloader: None,
-            handle: libloading::os::unix::Library::this().into(),
+            mapping: super::Mapping::new(Some(libloading::os::unix::Library::this().into())),
             thread: None,
         };
         assert_eq!(found(&library, b"FOO"), Some(2));
@@ -957,7 +1063,7 @@ mod tests {
             ],
             loader: None,
             unloader: None,
-            handle: libloading::os::unix::Library::this().into(),
+            mapping: super::Mapping::new(Some(libloading::os::unix::Library::this().into())),
             thread: None,
         };
         assert_eq!(

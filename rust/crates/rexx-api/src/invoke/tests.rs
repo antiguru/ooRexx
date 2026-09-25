@@ -1116,3 +1116,14 @@ fn a_hook_that_reaches_an_unwritten_member_is_refused() {
         )
     );
 }
+
+/// A closed library's hooks call nothing.
+#[test]
+#[cfg_attr(miri, ignore = "opens the running image")]
+fn a_closed_librarys_hook_does_not_run() {
+    let thread = ThreadContext::new();
+    let library = hooked_library(Some(crate::ffi::raising_hook), None);
+    assert!(library.close());
+    assert!(!library.is_open());
+    assert_eq!(run_hook(&thread, &library, Hook::Loader), (Ok(()), None));
+}

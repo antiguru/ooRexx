@@ -219,14 +219,19 @@ impl Interp {
 
     /// `PackageManager::unload` (`interpreter/package/PackageManager.cpp:642-650`):
     /// each held library's unloader, in the order the oracle's table walks
-    /// them, answering the refusal that ended the walk if one did.
+    /// them, each library closed straight after its own
+    /// (`LibraryPackage::unload`, `interpreter/package/LibraryPackage.cpp:166-181`),
+    /// answering the refusal that ended the walk if one did.
     ///
     /// Measured, oracle: a condition raised inside an unloader ends the walk,
-    /// reports nothing and leaves the exit status alone. A refusal ends it too.
+    /// reports nothing, leaves the exit status alone and leaves that library
+    /// and every later one open. A refusal ends it too.
     fn run_package_unloaders(&mut self) -> Option<Loud> {
         for (_, library) in self.libraries.in_unload_order() {
             match self.run_package_hook(&library, Hook::Unloader) {
-                Ok(()) => {}
+                Ok(()) => {
+                    library.close();
+                }
                 Err(Failure::Loud(loud)) => return Some(*loud),
                 Err(_) => return None,
             }

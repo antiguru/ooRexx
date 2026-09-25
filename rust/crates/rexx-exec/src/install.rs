@@ -1918,6 +1918,9 @@ impl Interp {
         #[cfg(test)]
         {
             self.library_open_attempts += 1;
+            if let Some(library) = offered_library(name) {
+                return self.settle_library(name, Ok(Some(library)));
+            }
         }
         let spelling = String::from_utf8_lossy(name).into_owned();
         let opened = rexx_api::load::open(&spelling, &self.library_search);
@@ -2341,4 +2344,30 @@ impl Interp {
             },
         });
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Libraries a test offers by name, which [`Interp::resolve_library`]
+    /// takes before it searches for a shared object of that name.
+    static OFFERED: std::cell::RefCell<Vec<(Vec<u8>, fn() -> rexx_api::load::Library)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Offers the library `make` builds under `name`, on this thread.
+#[cfg(test)]
+pub(crate) fn offer_library(name: &[u8], make: fn() -> rexx_api::load::Library) {
+    OFFERED.with(|offered| offered.borrow_mut().push((name.to_vec(), make)));
+}
+
+/// The library a test offered under `name` on this thread, built afresh.
+#[cfg(test)]
+fn offered_library(name: &[u8]) -> Option<rexx_api::load::Library> {
+    OFFERED.with(|offered| {
+        offered
+            .borrow()
+            .iter()
+            .find(|(offered, _)| offered == name)
+            .map(|(_, make)| make())
+    })
 }

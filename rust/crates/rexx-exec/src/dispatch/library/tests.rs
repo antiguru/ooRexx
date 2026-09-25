@@ -713,4 +713,51 @@ fn a_loaded_librarys_loader_and_unloader_run() {
         vec![("loader", true), ("unloader", true)],
         "terminating ran no unloader"
     );
+    let LibraryLoad::Loaded(held) = interp.resolve_library(b"hooked") else {
+        panic!("the library is held");
+    };
+    assert!(!held.is_open(), "terminating left the library open");
+}
+
+/// Which of [`program_loader`] and [`program_unloader`] ran, in order, on
+/// whichever thread ran them.
+static PROGRAM_HOOKS: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+extern "C" fn program_loader(_thread: *mut rexx_api::layout::RexxThreadContext_) {
+    PROGRAM_HOOKS.lock().expect("unpoisoned").push("loader");
+}
+
+extern "C" fn program_unloader(_thread: *mut rexx_api::layout::RexxThreadContext_) {
+    PROGRAM_HOOKS.lock().expect("unpoisoned").push("unloader");
+}
+
+/// **A program's end runs the unloader of a library it required**, through
+/// the whole run, not only through [`Interp::terminate`].
+#[test]
+fn a_programs_end_runs_its_librarys_unloader() {
+    PROGRAM_HOOKS.lock().expect("unpoisoned").clear();
+    let outcome = crate::on_interpreter_thread(|| {
+        crate::install::offer_library(b"hooked", || {
+            rexx_api::load::hooks_only(Some(program_loader), Some(program_unloader))
+        });
+        crate::execute(
+            "hooked.rex",
+            b"say 'main'\n::requires 'hooked' LIBRARY\n".to_vec(),
+            false,
+            crate::Invocation::none(),
+        )
+    });
+    assert_eq!(
+        (
+            outcome.exit_code,
+            String::from_utf8_lossy(&outcome.stdout).into_owned()
+        ),
+        (0, "main\n".to_owned()),
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(
+        *PROGRAM_HOOKS.lock().expect("unpoisoned"),
+        vec!["loader", "unloader"]
+    );
 }

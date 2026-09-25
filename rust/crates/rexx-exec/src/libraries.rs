@@ -36,6 +36,8 @@ use rexx_api::load::Library;
 pub(crate) struct Libraries {
     held: HashMap<Vec<u8>, Rc<Library>>,
     order: PackageTable,
+    /// The names held, in the order they loaded.
+    loaded: Vec<Vec<u8>>,
 }
 
 impl Libraries {
@@ -43,6 +45,7 @@ impl Libraries {
         Libraries {
             held: HashMap::new(),
             order: PackageTable::new(),
+            loaded: Vec::new(),
         }
     }
 
@@ -55,9 +58,10 @@ impl Libraries {
     /// is held afterwards, which for a name already held is the earlier
     /// library and not `library`.
     pub(crate) fn hold(&mut self, name: &[u8], library: Rc<Library>) -> Rc<Library> {
-        let order = &mut self.order;
+        let (order, loaded) = (&mut self.order, &mut self.loaded);
         Rc::clone(self.held.entry(name.to_vec()).or_insert_with(|| {
             order.put(name);
+            loaded.push(name.to_vec());
             library
         }))
     }
@@ -79,6 +83,19 @@ impl Libraries {
             .names()
             .filter_map(|name| Some((name.to_vec(), Rc::clone(self.held.get(name)?))))
             .collect()
+    }
+}
+
+/// Closes every library termination left open, in the order they loaded,
+/// which is the order the oracle's process exit runs their destructors in:
+/// measured with forged extensions, after an unloader raised.
+impl Drop for Libraries {
+    fn drop(&mut self) {
+        for name in &self.loaded {
+            if let Some(library) = self.held.get(name) {
+                library.close();
+            }
+        }
     }
 }
 
