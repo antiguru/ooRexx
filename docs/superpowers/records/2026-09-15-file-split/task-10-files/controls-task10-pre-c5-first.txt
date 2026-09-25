@@ -1,0 +1,39 @@
+control T1 strip_field_vis drops a field's visibility after its attributes and nowhere else: CAUGHT
+  every case as expected: doc-commented field; two attributes before a field; a `]` closing an index; an attribute after `;`
+control T2 Task 9's instruments miss the doc-commented field this task's admit (c1, f61c596a5): CAUGHT
+  Task 9's: exit 1, ['I2 token stream differs: struct ClassRow']
+  this task's: exit 0, []
+control T3 a widened doc-commented field whose doc also changed (c1, f61c596a5): CAUGHT
+  exit 1, expected I1b and I3, reported ['I1b', 'I2', 'I3']
+control T4 comments10.py lists a planted comment in a tests/ parent; Task 9's comments7.py does not: CAUGHT
+  comments10.py: ['  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.', '  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.'] (exit 0)
+  comments7.py: [] (exit 1; subprocess.CalledProcessError: Command '['/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/tools/item-tool/target/release/item-tool', '/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t4/crates/rexx-exec/src/table_c/mod.rs']' returned non-zero exit status 101.)
+control T5 move_items10.py widens exactly the declared declarations and fields: CAUGHT
+  exit 0; Edge True, read_edges True, read_table verbatim True, the child's units verbatim in BASE once the widening is removed True
+  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t5/t5child/c.rs: 3 units (2 widened), 45 parent lines removed
+control B c5 as committed passes (working tree): CAUGHT
+  exit 0, reported []
+control B1-c5 a moved arm table entry changes (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b const TITLE_PARENTHETICALS: /tmp/tmphjv4b39g/a /tmp/tmphjv4b39g/b differ: byte 271, line 6
+  I2 token stream differs: const TITLE_PARENTHETICALS
+control B2-c5 a moved template row's text changes (working tree): MISSED
+  exit 1, expected ['I1b', 'I3'], reported ['I2']
+  I2 unit vanished: row TEMPLATE_MEMBERS/mthTimeSpanInit/"template:new (Inherited Class Method)"
+control B3-c5 a moved table row is deleted (working tree): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: row TEMPLATE_MEMBERS/mthRexxQueueNew/"template:new (Inherited Class Method)"
+control B4-c5 a moved field's doc changes (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b struct Listed: /tmp/tmpehsw46h5/a /tmp/tmpehsw46h5/b differ: byte 113, line 3
+  I2 token stream differs: struct Listed
+  I3 literals differ: struct Listed
+control B5-c5 an unmoved placeholder the moved names_of reads changes (working tree): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2', 'I3']
+  I1a changed unmoved line pre-expected:325 post:324: 'const OPERATOR_PLACEHOLDERS: &[(&str, &str)] = &[("(abuttal)", ""), ("(blank)", " ")];' -> 'const OPERATOR_PLACEHOLDERS: &[(&str, &str)] = &[("(abuttal)", ""), ("(blank)", "  ")];'
+  I2 unit vanished: row OPERATOR_PLACEHOLDERS/(blank)/" "
+  I3 literals differ: row OPERATOR_PLACEHOLDERS/(abuttal)/""
+control B6-c5 a name dropped from the narrowed import is put back as another (working tree): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a replace expected[16:20] actual[16:17]
+11 of 12 controls caught as expected

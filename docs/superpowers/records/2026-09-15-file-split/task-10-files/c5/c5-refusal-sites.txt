@@ -1,0 +1,6 @@
+refresh exit 0; table mtime before 2026-09-25 18:07:26.546284927 +0200, after 2026-09-25 18:20:16.139058405 +0200
+every column but column 4, before (HEAD) vs after refresh:
+  identical, 247 rows
+header (comment) lines, before vs after:
+  identical
+column 4 changes, by row (constructor: before -> after):

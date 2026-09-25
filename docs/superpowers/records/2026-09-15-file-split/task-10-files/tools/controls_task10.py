@@ -286,6 +286,24 @@ PART_B = {
         ("B5-c4 a moved doc loses its intra-doc link", ["I1b", "I3"], "docs/classes/coverage.rs",
          first("/// Re-reads each [`UNCONSTRUCTIBLE`] quotation", "/// Re-reads each `UNCONSTRUCTIBLE` quotation"), same),
     ],
+    5: [
+        ("B1-c5 a moved arm table entry changes", ["I1b", "I2"], "docs/classes/methods.rs",
+         first('("abstract method", Some(Arm::Instance)),', '("abstract method", Some(Arm::Class)),'), same),
+        # A table row's key carries its first two literals, so changing the
+        # second renames the unit: instrument 2 reports it vanished, and 1 (b)
+        # and 3 compare only units present on both sides (first run expected
+        # I1b and I3; corrected).
+        ("B2-c5 a moved template row's text changes", ["I2"], "docs/classes/methods.rs",
+         first('("mthTimeSpanInit", "template:new (Inherited Class Method)"),', '("mthTimeSpanInit", "template:new (Class Method)"),'), same),
+        ("B3-c5 a moved table row is deleted", ["I2"], "docs/classes/methods.rs",
+         first('    ("mthRexxQueueNew", "template:new (Inherited Class Method)"),\n', ''), same),
+        ("B4-c5 a moved field's doc changes", ["I1b", "I3"], "docs/classes/methods.rs",
+         first("    /// The `mth*` section the member links to.", "    /// The `mth*` section a member links to."), same),
+        ("B5-c5 an unmoved placeholder the moved names_of reads changes", ["I1a"], "docs/classes.rs",
+         first('("(blank)", " ")', '("(blank)", "  ")'), same),
+        ("B6-c5 a name dropped from the narrowed import is put back as another", ["I1a"], "docs/classes.rs",
+         first("use crate::docs::xml::{Section, blank_comments, line_of, sections, xincludes};", "use crate::docs::xml::{Section, blank_comments, line_of, members, sections, xincludes, xrefs};"), same),
+    ],
 }
 for n, plants in PART_B.items():
     p = pair(n)

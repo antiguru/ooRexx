@@ -1,0 +1,3 @@
+    Checking rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.09s
+clippy 0

@@ -1,0 +1,27 @@
+command: /bin/grep -rnE 'BARE_NEW_CLASS_SIDE|GROUP_HEADINGS|TITLE_XREFSTYLE|TEMPLATE_MEMBERS|method_sections|\bListed\b|listed_members|displayed_names|names_of|\bMarker\b|TITLE_PARENTHETICALS|split_marker' crates corpus | /bin/grep -v '^crates/rexx-extract/src/docs/classes'
+inside docs/classes.rs (the parent), outside the import and the tests:
+22:use methods::{Listed, displayed_names, listed_members, method_sections, names_of};
+485:    let titles = method_sections(books);
+498:        let mut listed: Vec<Listed> = Vec::new();
+502:        listed.extend(listed_members(head, &book.name, head_base));
+512:            listed.extend(listed_members(text, &href, 0));
+530:            let Listed {
+542:                displayed_names(&target, xrefstyle.as_deref(), &title, &source)
+554:                for (method, arm) in names_of(&target, &displayed, &trailing, &source) {
+817:        let out = names_of(
+829:        let out = names_of(
+843:        let out = names_of("mthQueueSize", "&added50;size", "", "collclasses.xml");
+849:        let class = |section: &str, title: &str| names_of(section, title, "", "x")[0].1;
+872:        let out = names_of(
+886:        names_of("mthX", "frobnicate (Ceremonial Method)", "", "x");
+891:        assert_eq!(names_of("mthClassNew", "new", "", "x")[0].1, Arm::Class);
+892:        assert_eq!(names_of("mthRexxQueueNew", "new", "", "x")[0].1, Arm::Class);
+894:        assert_eq!(names_of("mthObjectNew", "new", "", "x")[0].1, Arm::Instance);
+900:            names_of("mthX", title, "", "x")
+916:            displayed_names("mthArrayAppend", Some("select:title"), "append", "x"),
+927:        let out = displayed_names(
+945:            .flat_map(|(d, _)| names_of("mthDateTimeInit", d, "", "utilityclasses.xml"))
+963:        displayed_names(
+976:        displayed_names(
+987:        displayed_names("mthArrayAppend", None, "append", "collclasses.xml");
+993:        names_of(

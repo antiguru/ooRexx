@@ -1,0 +1,13 @@
+moved units: 14; names searched in backticks: 12
+file tails searched: classes.rs classes/methods.rs docs/classes.rs docs/classes/ docs/classes/methods.rs docs/classes/methods/ methods.rs
+
+(a) comments naming a moved unit: 0
+
+(b) comments naming a touched file: 0
+
+(c) positional words inside the destinations and the parent: 5
+  crates/rexx-extract/src/docs/classes.rs:38: /// carries the reason beside the hierarchy list.
+  crates/rexx-extract/src/docs/classes.rs:83: /// instance arm binds `o` to, and the directive the probe carries below its
+  crates/rexx-extract/src/docs/classes.rs:235: /// The directive a committed construction program needs below the probe's
+  crates/rexx-extract/src/docs/classes.rs:546: // table's `xrefstyle` displays instead, following the
+  crates/rexx-extract/src/docs/classes/methods.rs:81: /// Text after the `<xref/>`, where a group heading spells out its

@@ -14,6 +14,10 @@
 #   A1 a public doc line of rexx-extract's docs/classes.rs changes -> manifest differs
 #   A2 a public fn of it narrows to pub(crate)            -> manifest differs
 #   A3 lines shift only (a comment inserted)              -> manifest the same
+#   E1 corpus/gate-tables/README.md edited exactly as a declared rule says -> extra_edits10 passes
+#   E2 the same, and a second word of the file changed    -> fails
+#   E3 a rule whose pattern matches twice                 -> fails
+#   E4 a declared rule with the file left as HEAD has it  -> fails
 S=/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10
 R=/home/moritz/dev/repos/ooRexx-rust-rewrite/rust
 T=$R/crates/rexx-exec/tests
@@ -50,4 +54,20 @@ run A3 same "
 /// Every \`cls*\` section across the books" "
 // planted
 /// Every \`cls*\` section across the books"
+G=$R/corpus/gate-tables/README.md
+ex() { # name expect(PASS|FAIL) rule [second-edit]
+  cp $G $S/ctl-readme.orig
+  [ -n "$4" ] && python3 -c "import sys; p=sys.argv[1]; s=open(p).read(); s2=s.replace(sys.argv[2], sys.argv[3], 1); assert s2 != s; open(p,'w').write(s2)" $G "$4" "$5"
+  python3 $S/tools/extra_edits10.py $R $S/art/ctl-extra-$1.txt "$3" > /dev/null; rc=$?
+  cp $S/ctl-readme.orig $G; rm $S/ctl-readme.orig
+  got=$([ $rc = 0 ] && echo PASS || echo FAIL)
+  echo "$1: expected $2, got $got: $([ $got = $2 ] && echo CAUGHT || echo MISSED) ($(head -1 $S/art/ctl-extra-$1.txt | cut -c1-200))"
+}
+R1='corpus/gate-tables/README.md=`tests/table_c/probes\.rs`=>`tests/table_c/checks.rs`'
+ex E1 PASS "$R1" '`tests/table_c/probes.rs`' '`tests/table_c/checks.rs`'
+cp $G $S/ctl-readme2.orig; python3 -c "import sys; p=sys.argv[1]; s=open(p).read(); s2=s.replace('**Those last three are derived', '**Those three are derived', 1); assert s2 != s; open(p,'w').write(s2)" $G
+ex E2 FAIL "$R1" '`tests/table_c/probes.rs`' '`tests/table_c/checks.rs`'
+cp $S/ctl-readme2.orig $G; rm $S/ctl-readme2.orig
+ex E3 FAIL 'corpus/gate-tables/README.md=probe=>Probe' 'probe' 'Probe'
+ex E4 FAIL "$R1"
 echo "tree afterwards: [$(git -C $R status --short -- . | tr '\n' ' ')] (expected empty)"

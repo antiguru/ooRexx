@@ -1,0 +1,8 @@
+//! A method row's names and arm: each class-table member's target section,
+//! the names the book displays for it, and the arm each name is asked on.
+
+use std::collections::BTreeMap;
+
+use crate::docs::xml::{decode_predefined, members, split_revision_marker};
+
+use super::{Arm, Book, OPERATOR_PLACEHOLDERS};
