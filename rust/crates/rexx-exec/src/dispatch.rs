@@ -76,7 +76,8 @@ use seam::Cleared;
 pub(crate) mod native;
 
 // `String`'s primitive methods, whose rows are chained into
-// `ObjectModel::build` beside `NATIVE_METHODS` rather than merged into it.
+// `ObjectModel::build` beside `NATIVE_METHODS` rather than merged into it,
+// except the rows `NATIVE_METHODS` itself holds.
 mod string;
 use string::{
     native_length, native_reverse, native_string_make_string, native_string_makearray,

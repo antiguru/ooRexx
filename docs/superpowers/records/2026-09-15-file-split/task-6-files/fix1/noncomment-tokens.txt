@@ -1,0 +1,4 @@
+crates/rexx-exec/src/dispatch.rs: 5104 non-comment tokens at 808c675c3, 5104 now; IDENTICAL; comment spans 864 -> 865
+crates/rexx-exec/src/dispatch/collection.rs: 1032 non-comment tokens at 808c675c3, 1032 now; IDENTICAL; comment spans 82 -> 82
+crates/rexx-exec/src/dispatch/hash.rs: 5269 non-comment tokens at 808c675c3, 5269 now; IDENTICAL; comment spans 295 -> 295
+PASS

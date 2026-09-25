@@ -20,18 +20,18 @@ use super::{INIT, array_size_argument, optional_length_argument, unsigned_index}
 use super::{native_array_at_for, positive_index};
 use rexx_parse::Operator;
 
-// `List`'s primitive methods, chained into `ObjectModel::build` ahead of this
-// module's own.
+// `List`'s primitive methods, chained into `ObjectModel::build` ahead of
+// `Queue`'s.
 pub(super) mod list;
 use super::array::surface::native_array_delete;
 use list::{is_list, list_insert_at, list_state};
 
-// `Queue`'s primitive methods, chained into `ObjectModel::build` ahead of this
-// module's own.
+// `Queue`'s primitive methods, chained into `ObjectModel::build` ahead of
+// `Array`'s.
 pub(super) mod queue;
 
-// `Supplier`'s primitive methods, chained into `ObjectModel::build` after this
-// module's own.
+// `Supplier`'s primitive methods, chained into `ObjectModel::build` after
+// `Array`'s.
 pub(super) mod supplier;
 pub(super) use supplier::new_supplier;
 

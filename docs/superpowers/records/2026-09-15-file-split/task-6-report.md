@@ -494,3 +494,46 @@ agrees.
 test's name is unchanged, and instrument 4 at c14 is identical.
 
 **`Array` under `dispatch/array/` is accepted.**
+
+## Fix round 1
+
+This round addresses the task review
+(`.superpowers/sdd/2026-09-15-file-split/task-6-review.md`), findings I1,
+M1 and M3. It is one commit and changes comments only. The chain the
+comments now describe is `build`'s at `dispatch.rs:903-917`:
+`string`, `hash`, `hash::relation`, `hash::stem`, `collection::list`,
+`collection::queue`, `array::sort`, `array::surface`,
+`collection::supplier`, `rexx_info`.
+
+* **I1**, `collection.rs`. c14 deleted collection.rs's own table, which
+  made all three comments false. Each now names its real neighbour:
+  * `List`: "chained into `ObjectModel::build` ahead of this module's own"
+    now reads "ahead of `Queue`'s".
+  * `Queue`: "ahead of this module's own" now reads "ahead of `Array`'s".
+  * `Supplier`: "after this module's own" now reads "after `Array`'s".
+* **M1**, `dispatch.rs`, the comment on `mod string;`. c5 made it
+  incomplete, and a clause now qualifies it: "whose rows are chained into
+  `ObjectModel::build` beside `NATIVE_METHODS` rather than merged into it,
+  except the rows `NATIVE_METHODS` itself holds."
+* **M3**, `hash.rs`, the doc on `hash.rs`'s table. "beside
+  [`super::collection::list::NATIVE_METHODS`]" now reads "ahead of
+  [`relation::NATIVE_METHODS`]", the slice `build` chains directly after
+  it.
+
+**Checks:**
+* `tools/noncomment_tokens.py` takes each file's text with every comment
+  removed, as `rustlex.py` finds comments, and compares it with the same
+  file at `808c675c3`. All three files are IDENTICAL
+  (`files/fix1/noncomment-tokens.txt`). A control plants one token,
+  changing `pub(super) mod queue` to `pub(crate)`, and the tool reports
+  DIFFER (`files/fix1/noncomment-tokens-control.txt`).
+* `cargo fmt --all --check` exits 0.
+* `cargo clippy -p rexx-exec --all-targets -- -D warnings` exits 0, run
+  with the default target directory and 39G free in `/tmp`.
+* `cargo doc --no-deps -p rexx-exec` gives 2 warning lines. With
+  `--document-private-items` it gives 53, and with `--cfg test` as well
+  52. These are BASE's figures, with 0 located in dispatch files, so the
+  new `relation::NATIVE_METHODS` link resolves.
+
+M2, `files.rs`'s doc, is left for a documentation pass, as the review
+says.
