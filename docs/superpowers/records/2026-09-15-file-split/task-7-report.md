@@ -355,7 +355,23 @@ parallel.
 
 ## Gates
 
-**Second run, over the final code (c8).** To be filled in by its commit.
+**Second run, the gates of record**, over `d000efebe`, this report's
+second commit, whose code is identical to c8. It used the same script
+and procedure, and the tree was unchanged from start to finish
+(`files/gates-final/status.txt`, `test-*.results`,
+`corpus-differential-*.txt`).
+
+| gate | command | result | load average (1, 5, 15 min) |
+| --- | --- | --- | --- |
+| G1 | `cargo fmt --all --check` | exit 0 | 0.79, 3.98, 8.39 before the run |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings`, empty target dir | exit 0 | |
+| G3 | `cargo build --workspace --all-targets --release`, no cap | exit 0 | |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | exit 0; 135 result blocks; 2663 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 15.16, 9.47, 9.85 before (G3's build had just finished); 2.03, 6.52, 8.73 after |
+| G5 | `cargo build --workspace --all-targets` (debug) | exit 0 | |
+| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0; 135 result blocks; 2664 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 2.02, 6.44, 8.70 before; 2.20, 5.52, 7.85 after |
+
+Every figure matches BASE's. The flake passed in both runs, so nothing was
+re-run.
 
 **First run**, over `e104bc0ff` (code identical to c6), before c7 and c8.
 `files/tools/gates.sh` ran it after the commit. The tree did not change
