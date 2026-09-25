@@ -385,8 +385,28 @@ parallel.
 
 ## Gates
 
-See the next section, added after the gates ran over this report's
-commit.
+These ran over `b53917360`, this report's first commit, whose code is
+identical to c14. `files/tools/gates.sh` ran them after the commit. The
+tree did not change from start to finish: `git status --short` was empty
+before and after. The statuses, each read unpiped, are in
+`files/gates/status.txt`. G3 to G6 use the default target directory, so
+the arity suites ran the binary G3 built.
+
+| gate | command | result | load average (1, 5, 15 min) |
+| --- | --- | --- | --- |
+| G1 | `cargo fmt --all --check` | exit 0 | 2.48, 4.57, 4.77 before the run |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings`, empty target dir | exit 0 | |
+| G3 | `cargo build --workspace --all-targets --release`, no cap | exit 0 | |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | exit 0; 135 result blocks; 2663 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 16.07, 9.76, 6.66 before (G3's build had just finished); 3.13, 7.19, 6.64 after |
+| G5 | `cargo build --workspace --all-targets` (debug) | exit 0 | |
+| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 0; 135 result blocks; 2664 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 5.92, 7.70, 6.80 before; 2.20, 6.51, 6.93 after |
+
+Every figure matches BASE's. The counts come from `tools/test_results.py`
+run over each gate's own log (`files/gates/test-release.results`,
+`test-debug.results`). The 604 comes from that log's differential report
+(`files/gates/corpus-differential-*.txt`).
+`introspection_arity::every_unstable_row_is_really_unstable` passed in
+both runs, so nothing was re-run.
 
 ## Concerns
 
