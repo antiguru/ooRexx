@@ -16,6 +16,11 @@ use super::{
     class_receiver, collection, required_string_argument,
 };
 
+use super::{Arity, NativeMethod};
+
+// `Array`'s sort family, chained into `ObjectModel::build`.
+pub(super) mod sort;
+
 /// An array receiver's own slots, borrowed, or the refusal for a receiver that
 /// is not one.
 pub(super) fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<&[Option<ObjRef>], Failure> {

@@ -1,0 +1,14 @@
+dispatch/collection.rs: covered by instruments 1-3
+dispatch/array/sort.rs: covered by instruments 1-3
+crates/rexx-exec/src/dispatch/array.rs: OK inserted lines only
+  +18: 
+  +19: use super::{Arity, NativeMethod};
+  +20: 
+  +21: // `Array`'s sort family, chained into `ObjectModel::build`.
+  +22: pub(super) mod sort;
+crates/rexx-exec/src/dispatch.rs: OK import lists narrowed and lines inserted, nothing else
+  inserted:             .chain(array::sort::NATIVE_METHODS)
+  dropped array::whole_comparison
+crates/rexx-exec/tests/dispatch_seam.rs: OK inserted lines only
+  +218:     "src/dispatch/array/sort.rs",
+PASS

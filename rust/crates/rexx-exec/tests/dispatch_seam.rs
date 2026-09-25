@@ -215,6 +215,7 @@ const CLEARANCE_CONSUMERS: &[&str] = &[
     "src/dispatch/stream.rs",
     "src/dispatch/files.rs",
     "src/dispatch/array.rs",
+    "src/dispatch/array/sort.rs",
     "src/dispatch/buffer.rs",
     "src/dispatch/construct.rs",
     "src/dispatch/class_protocol.rs",

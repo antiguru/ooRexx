@@ -124,7 +124,7 @@ use array::{
     array_slots, array_slots_owned, is_whole_method_argument, native_array_at, native_array_at_for,
     native_array_dimension, native_array_items, native_array_make_string, native_array_new,
     native_array_of, native_array_put, native_array_size, positive_index, request_array,
-    unconverted_array_argument, unsigned_index, whole_comparison,
+    unconverted_array_argument, unsigned_index,
 };
 
 // `MutableBuffer`'s primitive methods, and the argument and byte-search helpers
@@ -908,6 +908,7 @@ impl ObjectModel {
             .chain(hash::stem::NATIVE_METHODS)
             .chain(collection::list::NATIVE_METHODS)
             .chain(collection::queue::NATIVE_METHODS)
+            .chain(array::sort::NATIVE_METHODS)
             .chain(collection::NATIVE_METHODS)
             .chain(collection::supplier::NATIVE_METHODS)
             .chain(rexx_info::NATIVE_METHODS)

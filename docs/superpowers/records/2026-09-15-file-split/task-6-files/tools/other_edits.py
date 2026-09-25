@@ -9,6 +9,9 @@ working tree's:
                       single-line `use` declarations on both sides (rustfmt
                       re-sorts an import the rename moved in the order);
   insert              the working text is HEAD's with lines inserted only.
+  narrow              only names dropped from `use` lists; every other line
+                      identical, in order (`narrow+insert`: whole lines may
+                      also be inserted, and their names are listed);
   imports:OLD=>NEW    only top-level `use`/`mod` declarations (and the `//`
                       comment lines directly above an inserted `mod`) differ:
                       every other line is identical in order (cmp); the
@@ -135,6 +138,32 @@ def imports_rule(head, now, old, new, allowed_comment_edits):
         notes.append(f"FAIL removed {m}"); ok = False
     return ok, notes
 
+def narrow_rule(head, now, allow_insert):
+    from collections import Counter
+    a, ai, an = decl_spans(head)
+    b, bi, bn = decl_spans(now)
+    notes = []
+    ka = [l for k, l in enumerate(a) if k not in ai]
+    kb = [l for k, l in enumerate(b) if k not in bi]
+    ops = difflib.SequenceMatcher(a=ka, b=kb, autojunk=False).get_opcodes()
+    ok = all(t == "equal" or (allow_insert and t == "insert") for t, *_ in ops)
+    for t, i1, i2, j1, j2 in ops:
+        if t == "insert" and allow_insert:
+            for l in kb[j1:j2]:
+                notes.append(f"inserted: {l}")
+        elif t != "equal":
+            ok = False
+            notes.append(f"REST {t} {ka[i1:i2]!r} -> {kb[j1:j2]!r}")
+    ca, cb = Counter(an), Counter(bn)
+    extra = cb - ca
+    if extra and not allow_insert:
+        ok = False
+    for (p, n), c in sorted(extra.items()):
+        notes.append(f"{'added (inserted declaration)' if allow_insert else 'BAD added'} {p}::{n}")
+    for (p, n), c in sorted((ca - cb).items()):
+        notes.append(f"dropped {p}::{n}")
+    return ok, notes
+
 full = lambda r: r if r.startswith("crates/") else "crates/rexx-exec/src/" + r
 unruled = [c for c in changed if c not in {full(r) for r in rules}]
 for c in unruled:
@@ -163,6 +192,12 @@ for rel, rule in rules.items():
         for j, block in ins:
             for k, l in enumerate(block):
                 lines.append(f"  +{j + k + 1}: {l}")
+    elif rule == "narrow" or rule.startswith("narrow+"):
+        # Import lists that lost names and nothing else; `narrow+insert`
+        # also lets whole lines be inserted, as another rule's `insert`.
+        ok, notes = narrow_rule(head, now, rule == "narrow+insert")
+        lines.append(f"{path}: {'OK' if ok else 'FAIL'} import lists narrowed{' and lines inserted' if rule == 'narrow+insert' else ''}, nothing else")
+        lines += ["  " + n for n in notes]
     elif rule.startswith("imports:"):
         spec = rule[len("imports:"):]
         allowed = 0

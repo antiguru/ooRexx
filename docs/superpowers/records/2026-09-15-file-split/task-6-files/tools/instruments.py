@@ -60,6 +60,10 @@ expected_edits = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--ex
 # corrects because the move made it false: its new text, exactly. Each must
 # match one changed line, and is listed.
 expected_lines = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--expect-line=")]
+# A line of the parent outside any unit that this commit deletes on purpose
+# (the header, doc and `];` of a table every row of which moved): its text,
+# exactly, once per deleted line. Each must match one deleted line.
+expected_gone = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--expect-gone=")]
 
 if os.environ.get("SPLIT_DESTS"):
     DESTS = os.environ["SPLIT_DESTS"].split(",")
@@ -191,6 +195,34 @@ def use_block_narrowed(i1, i2, j1, j2):
     before = set().union(*(use_names(u["key"]) for u in a))
     after = set().union(*(use_names(u["key"]) for u in b))
     return sorted(before - after) if after < before else None
+def unit_at(units, line0):
+    hits = [u for u in units if not u["key"].startswith("use ") and u["first"] - 1 <= line0 <= u["last"] - 1]
+    return hits[-1] if hits else None
+
+
+def widened_reflow(i1, i2, j1, j2):
+    """A differing block inside one unmoved unit whose visibility this commit
+    widened, where rustfmt re-wrapped the declaration: the unit's PRE and
+    POST text, the visibility dropped from its declaration line, differ in
+    whitespace only (and the signature's trailing comma). Answers the key."""
+    if i1 == i2 or j1 == j2:
+        return None
+    pre_list = list(pre_units.values())
+    post_list = [u for k, u in post_units.items() if post_units_file[k] == PARENT_RS]
+    a = {id(unit_at(pre_list, expected_at[i])) for i in range(i1, i2)}
+    b = {id(unit_at(post_list, j)) for j in range(j1, j2)}
+    if len(a) != 1 or len(b) != 1:
+        return None
+    pu = unit_at(pre_list, expected_at[i1])
+    qu = unit_at(post_list, j1)
+    if pu is None or qu is None or pu["key"] != qu["key"] or pu["vis"] == qu["vis"]:
+        return None
+    decl = re.compile(r"^(\s*)(pub(\([a-z:_ ]+\))? )?(?=(async |unsafe )?(fn|const|static|struct|enum|type|mod|use|trait) )")
+    pre_text = [decl.sub(r"\1", l, count=1) for l in pre_dispatch[pu["first"] - 1 : pu["last"]]]
+    post_text = [decl.sub(r"\1", l, count=1) for l in actual[qu["first"] - 1 : qu["last"]]]
+    return pu["key"] if squash(pre_text) == squash(post_text) else None
+
+
 actual = read_lines(os.path.join(post_root, PARENT_RS))
 sm = difflib.SequenceMatcher(a=expected, b=actual, autojunk=False)
 equal_blocks = 0
@@ -223,11 +255,19 @@ for tag, i1, i2, j1, j2 in sm.get_opcodes():
             else:
                 failures.append(f"I1a changed unmoved line pre-expected:{i1 + k + 1} post:{j1 + k + 1}: {before!r} -> {after!r}")
                 out1.append(f"  CHANGED {before!r} -> {after!r}")
+    elif widened_reflow(i1, i2, j1, j2):
+        out1.append(f"  REFLOWED (visibility widened) post:{j1 + 1}-{j2}: {widened_reflow(i1, i2, j1, j2)}; whitespace-only once the visibility is dropped, tokens are instrument 2's")
+    elif tag == "delete" and all(l in expected_gone for l in expected[i1:i2]):
+        for l in expected[i1:i2]:
+            expected_gone.remove(l)
+            out1.append(f"  DELETED (declared) pre-expected:{i1 + 1}: {l!r}")
     else:
         failures.append(f"I1a {tag} expected[{i1}:{i2}] actual[{j1}:{j2}]")
         out1.append(f"  {tag.upper()} expected {expected[i1:i2]!r} actual {actual[j1:j2]!r}")
 for text in expected_lines:
     failures.append(f"I1a declared line not found: {text!r}")
+for text in expected_gone:
+    failures.append(f"I1a declared deletion not found: {text!r}")
 out1.append(
     f"  {equal_blocks} equal blocks, {equal_lines} lines, each also compared with cmp; "
     f"{len(expected)} expected lines, {len(actual)} actual lines"
