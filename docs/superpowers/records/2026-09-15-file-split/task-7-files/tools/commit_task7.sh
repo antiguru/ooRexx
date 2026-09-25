@@ -10,7 +10,7 @@ cd $M
 D=docs/superpowers/records/2026-09-15-file-split/task-7-files
 mkdir -p $D/c$N $D/instrument4 $D/tools/item-tool/src
 cp $S/art/c$N-* $D/c$N/; cp $S/c$N/removed.json $D/c$N/removed.json
-for f in move.txt comment-pass.md rules spec.json; do [ -f $S/c$N/$f ] && cp $S/c$N/$f $D/c$N/; done
+for f in move.txt comment-pass.md rules spec.json args keys header; do [ -f $S/c$N/$f ] && cp $S/c$N/$f $D/c$N/; done
 cp $S/art/i4-c$N.meta $S/art/i4-c$N.results $S/art/i4-c$N.compare $D/instrument4/
 [ -f $D/instrument4/i4-base.meta ] || cp $S/art/i4-base.meta $S/art/i4-base.results $D/instrument4/
 cp $S/art/controls-*.txt $S/art/path-pins-*.txt $D/ 2>/dev/null

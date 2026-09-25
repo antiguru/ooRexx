@@ -78,6 +78,22 @@ def drop_qualifiers(tokens):
             out.append(tokens[i])
             i += 1
     return out
+# A moved unit rustfmt re-wrapped so that a list lost or gained its trailing
+# comma (`[a,\n b,\n]` joined into `[a, b]`): with `--expect-reflow=KEY`
+# its whitespace-stripped text and its tokens are compared with every comma
+# directly before a closing `)`, `]` or `}` dropped on both sides, and
+# anything else it changed fails. Rust gives such a comma no meaning.
+expected_reflows = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--expect-reflow=")]
+
+
+def drop_closing_commas(tokens):
+    return [t for i, t in enumerate(tokens) if not (t == "," and i + 1 < len(tokens) and tokens[i + 1] in (")", "]", "}"))]
+
+
+def squash_closing(text_lines):
+    return re.sub(r",([\)\]\}])", r"\1", "".join("\n".join(text_lines).split()))
+
+
 # A line of the parent outside any unit that this commit deletes on purpose
 # (the header, doc and `];` of a table every row of which moved): its text,
 # exactly, once per deleted line. Each must match one deleted line.
@@ -284,6 +300,9 @@ for tag, i1, i2, j1, j2 in sm.get_opcodes():
         out1.append(f"  {tag.upper()} expected {expected[i1:i2]!r} actual {actual[j1:j2]!r}")
 for text in expected_lines:
     failures.append(f"I1a declared line not found: {text!r}")
+for key in expected_reflows:
+    if key not in pre_units:
+        failures.append(f"I1b declared reflow names no unit: {key}")
 for text in expected_gone:
     failures.append(f"I1a declared deletion not found: {text!r}")
 out1.append(
@@ -349,6 +368,9 @@ for key in moved:
     elif squash(pre_text) == squash(post_text):
         reformatted.append(key)
         out1.append(f"  WHITESPACE-ONLY {key} -> {rel}: {msg} ({'; '.join(notes + ['rustfmt reflow, the trailing comma of a signature ignored'])}; tokens are instrument 2's, literal values instrument 3's)")
+    elif key in expected_reflows and squash_closing(pre_text) == squash_closing(post_text):
+        reformatted.append(key)
+        out1.append(f"  WHITESPACE-ONLY (declared reflow) {key} -> {rel}: {msg} (rustfmt reflow; a comma before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)")
     elif key in expected_edits:
         out1.append(f"  DIFFERS (declared edit) {key} -> {rel}: {msg}; the edit:")
         for d in difflib.unified_diff(pre_text, post_text, "before", "after", lineterm="", n=0):
@@ -373,6 +395,9 @@ for k in common:
     elif drop_trailing_commas(pre_units[k]["toks"].split("\x01")) == drop_trailing_commas(post_units[k]["toks"].split("\x01")):
         tok_ok += 1
         out2.append(f"  TRAILING-COMMA-ONLY {k}: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)")
+    elif k in expected_reflows and drop_closing_commas(pre_units[k]["toks"].split("\x01")) == drop_closing_commas(post_units[k]["toks"].split("\x01")):
+        tok_ok += 1
+        out2.append(f"  CLOSING-COMMA-ONLY (declared reflow) {k}: identical once every comma directly before a closing delimiter is dropped on both sides")
     elif k in expected_edits and expected_drops:
         if drop_qualifiers(pre_units[k]["toks"].split("\x01")) == post_units[k]["toks"].split("\x01"):
             tok_ok += 1

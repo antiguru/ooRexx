@@ -1,0 +1,13 @@
+moved units: 23; names searched in backticks: 21
+file tails searched: compile.rs compile/tests.rs ir/compile.rs ir/compile/ ir/compile/tests.rs ir/compile/tests/
+
+(a) comments naming a moved unit: 0
+
+(b) comments naming a touched file: 1
+  crates/rexx-exec/src/run/loops.rs:1364: // (`ir/compile.rs`), and nothing reads the target again, so its
+
+(c) positional words inside the destinations: 4
+  crates/rexx-exec/src/ir/compile/tests.rs:145: /// refusals above are satisfied by a check that refuses every stream
+  crates/rexx-exec/src/ir/compile/tests.rs:271: /// four refusals above are satisfied by a check that refuses every stream
+  crates/rexx-exec/src/ir/compile/tests.rs:298: /// ids are the parser's rather than numbers invented here.
+  crates/rexx-exec/src/ir/compile/tests.rs:318: /// both refusals above are satisfied by a check that refuses every stream

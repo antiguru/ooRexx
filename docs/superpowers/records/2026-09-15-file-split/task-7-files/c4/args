@@ -1,0 +1,4 @@
+ir/compile.rs
+ir/compile/tests.rs
+ir/compile/tests.rs
+--expect-reflow=tests::fn a_trace_op_outside_a_clause_region_is_refused
