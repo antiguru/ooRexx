@@ -1,0 +1,8 @@
+(a) unmoved lines: PRE instruction.rs minus the removed lines, against POST instruction.rs
+  IMPORTS NARROWED post:17-19: ['crate::ast::Address', 'crate::ast::AddressIo', 'crate::ast::OutputOption', 'crate::ast::Redirection']
+  INSERTED post:34: mod address;
+  3 equal blocks, 1953 lines, each also compared with cmp; 1957 expected lines, 1957 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK impl Inst<'a>::fn address -> instruction/address.rs (36 lines; visibility private -> pub(super))
+  4 of 4 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

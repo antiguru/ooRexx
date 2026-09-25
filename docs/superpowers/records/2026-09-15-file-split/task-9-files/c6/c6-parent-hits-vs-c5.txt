@@ -1,0 +1,5 @@
+command: diff <(section (c) of c5-comments.txt, lines in src/instruction.rs, line numbers dropped) <(the same of c6-comments.txt)
+18,19d17
+<   crates/rexx-parse/src/instruction.rs: // The command expression stops at WITH, so what follows is
+<   crates/rexx-parse/src/instruction.rs: // either that keyword or the end of the clause. This can come
+exit 1

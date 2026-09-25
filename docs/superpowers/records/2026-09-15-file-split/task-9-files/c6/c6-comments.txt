@@ -1,0 +1,52 @@
+moved units: 4; names searched in backticks: 4
+file tails searched: address.rs instruction.rs instruction/ instruction/address.rs instruction/address/
+
+(a) comments naming a moved unit: 0
+
+(b) comments naming a touched file: 7
+  crates/rexx-exec/src/run.rs:1164: // (`instruction.rs`'s `message`), so nothing else can arrive;
+  crates/rexx-exec/src/run/indent.rs:279: // through `instruction.rs`'s `if_instruction`) --
+  crates/rexx-exec/src/run/settings.rs:73: /// (`NumericSetting`, `rexx-parse`'s own `instruction.rs::numeric`).
+  crates/rexx-exec/src/run/settings.rs:99: // `rexx-parse`'s own `trace` parser's order (`instruction.rs`'s
+  crates/rexx-exec/src/run/settings.rs:326: // (`instruction.rs::numeric`), and the implicit spelling
+  crates/rexx-exec/src/run/tests/indent.rs:265: // (`instruction.rs`'s `if_instruction` builds both): `target ==
+  crates/rexx-exec/src/run/tests/indent.rs:300: /// `if_instruction` (`rexx-parse`'s `instruction.rs`) gives both `IF`
+
+(c) positional words inside the destinations and the parent: 37
+  crates/rexx-parse/src/instruction.rs:179: // `translateBlock` looks for the THEN itself, before `nextInstruction`
+  crates/rexx-parse/src/instruction.rs:181: // comes ahead of the label and assignment tests rather than inside the
+  crates/rexx-parse/src/instruction.rs:182: // keyword dispatch: measured, `if 1 = 1` followed by `then = 7` is an
+  crates/rexx-parse/src/instruction.rs:187: // follows the colon, so a label spelled THEN becomes the THEN and the
+  crates/rexx-parse/src/instruction.rs:189: // colon off here, leaving nothing that can fail, so the missing-THEN
+  crates/rexx-parse/src/instruction.rs:190: // error fires instead. Both reject `if 1 = 1` followed by
+  crates/rexx-parse/src/instruction.rs:201: // unused here. It is used where there is no offending clause, in
+  crates/rexx-parse/src/instruction.rs:314: /// `requiredEndOfClause`: nothing may follow.
+  crates/rexx-parse/src/instruction.rs:425: // A label may be a literal too, `"here": nop`. Both spellings reach
+  crates/rexx-parse/src/instruction.rs:488: // Anything else means this was not a message instruction after
+  crates/rexx-parse/src/instruction.rs:530: // `nopNew`: nothing may follow.
+  crates/rexx-parse/src/instruction.rs:576: // optional expression to the end of the clause. PUSH and QUEUE
+  crates/rexx-parse/src/instruction.rs:578: // type, which is why they are separate variants here.
+  crates/rexx-parse/src/instruction.rs:607: // `Error_Translation_expose`: nothing may precede an EXPOSE,
+  crates/rexx-parse/src/instruction.rs:678: // `procedureNew`: only `EXPOSE` may follow, and the same error
+  crates/rexx-parse/src/instruction.rs:765: // because a real one is consumed above. `nextInstruction`'s own
+  crates/rexx-parse/src/instruction.rs:769: // an arm above, which `tests::keyword_indices_still_name_their_own_spellings`
+  crates/rexx-parse/src/instruction.rs:872: // test happens after the end-of-clause test.
+  crates/rexx-parse/src/instruction.rs:1041: // These three take a value after the condition name. SYNTAX also
+  crates/rexx-parse/src/instruction.rs:1043: // shape records here.
+  crates/rexx-parse/src/instruction.rs:1068: // `Error_Invalid_subkeyword_raise`. ANY reaches here, because
+  crates/rexx-parse/src/instruction.rs:1270: // `autoExpose()` comes before the list is read, so the five special
+  crates/rexx-parse/src/instruction.rs:1292: /// above it, which are four distinct instruction objects in the C++.
+  crates/rexx-parse/src/instruction.rs:1301: // no blank may sit before it, and none can: a blank is only a
+  crates/rexx-parse/src/instruction.rs:1302: // token when a symbol, a literal, `(` or `[` follows it.
+  crates/rexx-parse/src/instruction.rs:1360: /// above it.
+  crates/rexx-parse/src/instruction.rs:1743: // two disagree: `drop .5` is 31.2 from here while
+  crates/rexx-parse/src/instruction.rs:1824: // Nothing else may follow either option.
+  crates/rexx-parse/src/instruction.rs:1857: // raises before `requiredLogicalExpression`'s own 35.902 or 35.903 can
+  crates/rexx-parse/src/instruction.rs:1866: // grammar it follows, and which instruction class it becomes.
+  crates/rexx-parse/src/instruction.rs:1871: // search, and for one after an `OTHERWISE`.
+  crates/rexx-parse/src/instruction.rs:1902: // already referenced earlier in the body: `addCompound` returns
+  crates/rexx-parse/src/instruction.rs:1903: // the cached retriever before it reaches the calls that would
+  crates/rexx-parse/src/instruction.rs:1904: // capture. Measured, and it is the earlier reference that
+  crates/rexx-parse/src/instruction.rs:1905: // disqualifies the later guard, not the other way round.
+  crates/rexx-parse/src/instruction/address.rs:44: // The command expression stops at WITH, so what follows is
+  crates/rexx-parse/src/instruction/address.rs:45: // either that keyword or the end of the clause. This can come

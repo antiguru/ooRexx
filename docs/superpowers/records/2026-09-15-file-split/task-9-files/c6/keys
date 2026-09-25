@@ -1,0 +1,5 @@
+--impl=impl<'a> Inst<'a> {
++impl Inst<'a>::fn address
+impl Inst<'a>::fn address_with
+impl Inst<'a>::fn output_option
+impl Inst<'a>::fn redirect_target
