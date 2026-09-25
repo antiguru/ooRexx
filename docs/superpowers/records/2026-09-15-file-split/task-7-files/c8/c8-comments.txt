@@ -1,0 +1,9 @@
+moved units: 2; names searched in backticks: 1
+file tails searched: builtin/string.rs builtin/string/ builtin/string/scan_tests.rs builtin/string/scan_tests/ scan_tests.rs string.rs string/scan_tests.rs
+
+(a) comments naming a moved unit: 0
+
+(b) comments naming a touched file: 1
+  corpus/phase-4c.txt:192: # the transcribed table in builtin/string.rs, which is why a witness the
+
+(c) positional words inside the destinations: 0

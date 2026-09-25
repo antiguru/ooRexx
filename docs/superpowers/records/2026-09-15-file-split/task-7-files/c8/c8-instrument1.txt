@@ -1,0 +1,6 @@
+(a) unmoved lines: PRE builtin/string.rs minus the removed lines, against POST builtin/string.rs
+  INSERTED post:1174: mod scan_tests;
+  1 equal blocks, 1173 lines, each also compared with cmp; 1173 expected lines, 1174 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  2 of 2 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only
