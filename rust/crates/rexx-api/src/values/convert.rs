@@ -9,8 +9,7 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The per-code conversions the rows of `TABLE` name: one function for each
-//! `REXX_VALUE_*` code and direction, and the helpers they share.
+//! The per-code conversions the rows of `TABLE` name, and the helpers they share.
 
 use std::ffi::c_int;
 

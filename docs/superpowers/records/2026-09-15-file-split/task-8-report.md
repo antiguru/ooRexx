@@ -348,3 +348,37 @@ three test runs, so nothing was re-run for it.
    was green (Gates).
 3. c1 and c2 carry their `args` files with their commits, so
    `rerun8.sh` reads each commit's own arguments.
+
+## Fix round 1
+
+This round addresses the task review
+(`.superpowers/sdd/2026-09-15-file-split/task-8-review.md`), findings M1
+and M3. It leaves the text above as it was; where that text says
+otherwise, this section corrects it. M2 (`comments7.py`'s word list
+misses positional prose such as "follow", "after" and "ahead of") is
+not fixed here; it goes to Task 9.
+
+* **M1: `values/convert.rs`'s module doc was false.** It said "one
+  function for each `REXX_VALUE_*` code and direction". Several
+  converters serve more than one `TABLE` row (`object_from_native`,
+  `isize_from_native`, `usize_from_native`, `signed_word_to_native`,
+  `unsigned_word_to_native`), and some rows have no `*_from_native`.
+  The doc is now one line, in the reviewer's wording: "The per-code
+  conversions the rows of `TABLE` name, and the helpers they share."
+  Departure 3 and the Comments paragraph above describe the two-line doc
+  c2 added. The edit is to comments only. `tools/noncomment_tokens.py`
+  gives 1478 non-comment tokens before and after, identical, with comment
+  spans going from 93 to 92 (`files/fix1/noncomment-tokens.txt`).
+  `cargo fmt --all --check` exits 0 (`files/fix1/fmt.txt`), and
+  `cargo doc --no-deps -p rexx-api`, public and with
+  `--document-private-items`, has 0 warnings (`files/fix1/doc*.txt`).
+* **M3: "verbatim inside literals" is withdrawn.** "What moved" said
+  c1's `move_tests_mod.py` kept literals verbatim, but it did not. Three
+  string literals in the test module continue a line with `\`, and the
+  tool de-indented their continuation lines by four columns
+  (`invoke/tests.rs:597`, `:646`, `:949`, which were BASE
+  `invoke.rs:789`, `:838`, `:1141`). The tool's own docstring says it
+  does this. The values are unchanged, because Rust skips a continued
+  line's leading whitespace. Instrument 3 found 105 of 105 units decoding
+  to identical literal lists at c1, and the reviewer's own lexer found
+  all 144 string and char literals decoding equal.

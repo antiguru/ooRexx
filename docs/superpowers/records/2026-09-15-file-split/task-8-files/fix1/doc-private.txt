@@ -1,0 +1,4 @@
+ Documenting rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.61s
+   Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-8/t-fix1/doc/rexx_api/index.html
+exit 0

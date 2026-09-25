@@ -1,0 +1,4 @@
+command: python3 tools/noncomment_tokens.py HEAD rust crates/rexx-api/src/values/convert.rs (HEAD 44a55fcac)
+crates/rexx-api/src/values/convert.rs: 1478 non-comment tokens at HEAD, 1478 now; IDENTICAL; comment spans 93 -> 92
+PASS
+exit 0
