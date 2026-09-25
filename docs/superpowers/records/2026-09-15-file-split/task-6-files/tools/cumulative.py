@@ -17,12 +17,26 @@ base_src, final_src, new = sys.argv[1], sys.argv[2], sys.argv[3:]
 DECLARED = set(os.environ.get("SPLIT_DECLARED", "").split("|")) - {""}
 base = {u["key"]: u for u in splitlib.load_units(f"{base_src}/{PARENT_RS}")}
 after, where = {}, {}
+_had = {}
+
+
+def had(rel):
+    if rel not in _had:
+        _had[rel] = {u["key"] for u in splitlib.load_units(f"{base_src}/{rel}")}
+    return _had[rel]
+
 for rel in [PARENT_RS] + new:
     for u in splitlib.load_units(f"{final_src}/{rel}"):
         # A moved test module's items keep their module name as a prefix,
         # as item-tool keys them inline (`tests::`, `object_operand_tests::`).
         k = (os.path.basename(rel)[: -len(".rs")] + "::" if rel.endswith("tests.rs") else "") + u["key"]
         if k.startswith("use ") and rel != PARENT_RS:
+            continue
+        if k not in base:
+            # A destination that existed before holds units of its own.
+            continue
+        if rel != PARENT_RS and os.path.exists(f"{base_src}/{rel}") and k in had(rel):
+            # ... some of them under a key the parent also has.
             continue
         assert k not in after, k
         after[k] = u; where[k] = rel

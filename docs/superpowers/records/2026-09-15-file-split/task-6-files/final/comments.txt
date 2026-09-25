@@ -1,0 +1,65 @@
+files: dispatch.rs dispatch/package.rs dispatch/files.rs dispatch/string.rs dispatch/hash.rs dispatch/collection.rs dispatch/buffer.rs dispatch/library.rs dispatch/native.rs dispatch/array.rs dispatch/tests.rs -- new: dispatch/method_arguments.rs dispatch/hash/stem.rs dispatch/hash/relation.rs dispatch/collection/list.rs dispatch/collection/queue.rs dispatch/collection/supplier.rs dispatch/array/sort.rs dispatch/array/surface.rs dispatch/library/tests.rs dispatch/native/tests.rs
+3200 comment lines at BASE, 3343 after
+lost (8):
+  x1 // `MutableBuffer`'s primitive methods, and the argument parsers and byte-search
+  x1 // helpers the other primitive methods share, chained the same way.
+  x1 //! `MutableBuffer`'s primitive methods, and the method-argument parsers and
+  x1 //! byte-search helpers the other primitive methods share.
+  x1 /// The collection classes' primitive methods, chained into
+  x1 /// [`is_queue`]'s question for the other family.
+  x1 /// `ObjectModel::build` beside [`super::collection::NATIVE_METHODS`].
+  x1 /// `ObjectModel::build`.
+added (151):
+  x30 /*                                                                            */
+  x10 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x10 /* This program and the accompanying materials are made available under       */
+  x10 /* distribution. A copy is also available at the following address:           */
+  x10 /* https://www.oorexx.org/license.html                                        */
+  x10 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x20 /*----------------------------------------------------------------------------*/
+  x1 // The method-argument parsers the primitive methods share.
+  x1 // `Array`'s collection surface, chained into `ObjectModel::build` after its
+  x1 // `Array`'s sort family, chained into `ObjectModel::build`.
+  x1 // `List`'s primitive methods, chained into `ObjectModel::build` ahead of this
+  x1 // `MutableBuffer`'s primitive methods, and the argument and byte-search helpers
+  x1 // `ObjectModel::build` after this module's own.
+  x1 // `Queue`'s primitive methods, chained into `ObjectModel::build` ahead of this
+  x1 // `Relation`'s and `Bag`'s own primitive methods, chained into
+  x1 // `Stem`'s primitive methods, chained into `ObjectModel::build` after this
+  x1 // `Supplier`'s primitive methods, chained into `ObjectModel::build` after this
+  x4 // module's own.
+  x1 // sort family.
+  x1 // the other primitive methods share, chained the same way.
+  x1 //! The method-argument parsers the primitive methods share: the conversions
+  x1 //! `Array`'s collection surface: the methods it shares with the other
+  x1 //! `Array`'s sort family: `sort`, `sortWith` and their stable twins, one
+  x1 //! `List`'s primitive methods: the three pool entries a list is, and the
+  x1 //! `MutableBuffer`'s primitive methods, and the argument and byte-search
+  x1 //! `Queue`'s primitive methods, over the Array-shaped store its parent module
+  x1 //! `Relation`'s and `Bag`'s own primitive methods, over the store their parent
+  x1 //! `Stem`'s primitive methods, and the tail tree that orders a stem's tails the
+  x1 //! `Supplier`'s primitive methods, and the constructor every collection's
+  x1 //! `insert`, `section`, ...), over the Array-shaped store collection.rs keeps.
+  x1 //! `supplier` method builds one with.
+  x1 //! collections (`allItems`, `hasItem`, `supplier`, ...) and its own (`first`,
+  x1 //! helpers the other primitive methods share.
+  x1 //! keeps.
+  x1 //! merge sort over the Array-shaped store.
+  x1 //! methods over them.
+  x1 //! module keeps.
+  x1 //! of `runtime/MethodArguments.hpp`, and the precision they convert at.
+  x1 //! way `CompoundTableElement`'s does.
+  x1 /// [`super::NATIVE_METHODS`].
+  x1 /// [`super::is_queue`]'s question for the other family.
+  x3 /// [`super::super::NATIVE_METHODS`].
+  x1 /// `Array`'s collection-surface methods, chained into `ObjectModel::build`
+  x1 /// `Array`'s sort methods, chained into `ObjectModel::build` ahead of the
+  x1 /// `List`'s primitive methods, chained into `ObjectModel::build` beside
+  x1 /// `ObjectModel::build` beside [`super::NATIVE_METHODS`].
+  x1 /// `ObjectModel::build` beside [`super::collection::list::NATIVE_METHODS`].
+  x1 /// `Queue`'s primitive methods, chained into `ObjectModel::build` beside
+  x1 /// `Relation`'s and `Bag`'s primitive methods, chained into
+  x1 /// `Stem`'s primitive methods, chained into `ObjectModel::build` beside
+  x1 /// `Supplier`'s primitive methods, chained into `ObjectModel::build` beside
+  x1 /// after its sort family.
+  x1 /// rest of `Array`'s collection surface.

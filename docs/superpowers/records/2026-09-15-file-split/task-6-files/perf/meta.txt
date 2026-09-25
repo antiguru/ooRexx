@@ -1,0 +1,6 @@
+load-before  03:28:31 up 17 days,  5:42,  0 users,  load average: 1.64, 2.58, 3.90
+BASE ed8cb3f03 /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-6/base-wt/rust/target/release/rexx-run .text sha256 36972bbaa1d151c143cc84c0cc806a7fb4d0fe22b16a8d31021b794754057e5a  -
+final ddeeb5640 /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-6/wt/rust/target/release/rexx-run .text sha256 c82449392c761d4db0474ef3a53476f9ed1d17f6c479e138ef67b7e5669eb31f  -
+command: tools/perf.sh BASE_BIN FINAL_BIN art/perf/runs 12  (two interleaved rounds; columns: program, then per run: exit status and callgrind summary minus libc.so.6 and ld-linux, in the order base round 1, final round 1, base round 2, final round 2)
+load-after  03:32:17 up 17 days,  5:46,  0 users,  load average: 8.04, 6.67, 5.37
+PERFDONE

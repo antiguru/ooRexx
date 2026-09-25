@@ -1,0 +1,5 @@
+dispatch/collection.rs=instruments
+dispatch/array/sort.rs=instruments
+dispatch/array.rs=insert
+dispatch.rs=narrow+insert
+crates/rexx-exec/tests/dispatch_seam.rs=insert

@@ -1,0 +1,23 @@
+(a) unmoved lines: PRE dispatch/buffer.rs minus the removed lines, against POST dispatch/buffer.rs
+  CHANGED (declared line) post:12: "//! `MutableBuffer`'s primitive methods, and the method-argument parsers and" -> "//! `MutableBuffer`'s primitive methods, and the argument and byte-search"
+  CHANGED (declared line) post:13: '//! byte-search helpers the other primitive methods share.' -> '//! helpers the other primitive methods share.'
+  INSERTED post:15: use super::method_arguments::{
+  INSERTED post:16:     named_pad_argument, named_position_argument, named_string_argument, option_method_argument,
+  INSERTED post:17:     optional_length_argument, optional_named_length_argument, optional_non_negative_argument,
+  INSERTED post:18:     optional_position_argument, optional_string_method_argument, optional_string_or_none_argument,
+  INSERTED post:19:     pad_method_argument, refuse_method_argument, required_length_argument,
+  INSERTED post:20:     required_position_argument, string_method_argument, whole_method_argument,
+  INSERTED post:21: };
+  IMPORTS NARROWED post:25-24: ['super::required_string_named_argument']
+  4 equal blocks, 1868 lines, each also compared with cmp; 1871 expected lines, 1877 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn required_length_argument -> dispatch/method_arguments.rs (13 lines; visibility private -> pub(super))
+  OK fn option_method_argument -> dispatch/method_arguments.rs (27 lines; visibility private -> pub(super))
+  OK fn optional_string_method_argument -> dispatch/method_arguments.rs (16 lines; visibility private -> pub(super))
+  OK fn optional_string_or_none_argument -> dispatch/method_arguments.rs (16 lines; visibility private -> pub(super))
+  OK fn optional_non_negative_argument -> dispatch/method_arguments.rs (17 lines; visibility private -> pub(super))
+  OK fn named_position_argument -> dispatch/method_arguments.rs (16 lines; visibility private -> pub(super))
+  OK fn optional_named_length_argument -> dispatch/method_arguments.rs (16 lines; visibility private -> pub(super))
+  OK fn named_pad_argument -> dispatch/method_arguments.rs (25 lines; visibility private -> pub(super))
+  18 of 18 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

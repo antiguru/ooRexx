@@ -1,0 +1,12 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:108: use package::{native_package_local, native_package_name};
+  2 equal blocks, 3135 lines, each also compared with cmp; 3135 expected lines, 3136 actual lines
+
+(c) destination dispatch/package.rs: PRE against POST, inserted lines only
+  INSERTED post:1033-1063: 31 lines
+  1032 of 1032 PRE lines equal, each block compared with cmp
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn native_package_local -> dispatch/package.rs (14 lines; visibility private -> pub(super))
+  OK fn native_package_name -> dispatch/package.rs (15 lines; visibility private -> pub(super))
+  2 of 2 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

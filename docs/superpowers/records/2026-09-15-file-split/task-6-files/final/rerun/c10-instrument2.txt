@@ -1,0 +1,9 @@
+  TRAILING-COMMA-ONLY fn list_state: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility fn list_state: private -> pub(super) (dispatch/collection/list.rs)
+  visibility fn is_list: private -> pub(super) (dispatch/collection/list.rs)
+  visibility fn list_insert_at: private -> pub(super) (dispatch/collection/list.rs)
+  ONLY-POST use super::{INIT,array_size_argument,optional_length_argument,unsigned_index} (dispatch/collection.rs)
+  ONLY-POST mod list (dispatch/collection.rs)
+  ONLY-POST use list::{is_list,list_insert_at,list_state} (dispatch/collection.rs)
+  ONLY-POST dispatch/collection/list.rs::use super::{Arity,BehaviourId,Body,Cleared,Failure,Interp,Loud,NativeMethod,ObjRef,Raised,array_of,array_of_slots,array_slots,array_slots_owned,array_splice,array_splice_slot,item_argument,new_instance,new_supplier,pool_variable,same_item,} (dispatch/collection/list.rs)
+203 of 203 units present on both sides have identical token streams (65 of them moved); 0 only before, 4 only after

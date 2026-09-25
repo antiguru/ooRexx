@@ -1,0 +1,8 @@
+(a) unmoved lines: PRE dispatch/collection.rs minus the removed lines, against POST dispatch/collection.rs
+  IMPORTS NARROWED post:17-17: ['super::whole_comparison']
+  REFLOWED (visibility widened) post:38-41: fn slots_of; whitespace-only once the visibility is dropped, tokens are instrument 2's
+  VISIBILITY post:86: private -> pub(super): pub(super) fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
+  4 equal blocks, 988 lines, each also compared with cmp; 991 expected lines, 994 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  16 of 16 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

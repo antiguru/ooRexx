@@ -1,0 +1,73 @@
+{
+ "doc": [
+  "`Array`'s collection surface: the methods it shares with the other",
+  "collections (`allItems`, `hasItem`, `supplier`, ...) and its own (`first`,",
+  "`insert`, `section`, ...), over the Array-shaped store collection.rs keeps."
+ ],
+ "uses": [
+  "use super::{Arity, Cleared, Failure, Interp, NativeMethod, ObjRef};"
+ ],
+ "items": [
+  "LINES:214-214",
+  "fn native_array_all_items",
+  "fn native_array_all_indexes",
+  "fn native_array_make_array",
+  "fn native_array_is_empty",
+  "fn native_array_empty",
+  "fn native_array_has_item",
+  "fn native_array_index",
+  "fn native_array_has_index",
+  "fn native_array_remove",
+  "fn native_array_remove_item",
+  "fn native_array_supplier",
+  "fn clear_array_slot",
+  "LINES:414-414",
+  "fn single_dimension_only",
+  "fn array_end",
+  "fn native_array_first",
+  "fn native_array_last",
+  "fn native_array_first_item",
+  "fn native_array_last_item",
+  "fn array_step",
+  "fn native_array_next",
+  "fn native_array_previous",
+  "fn native_array_append",
+  "fn native_array_insert",
+  "fn native_array_delete",
+  "fn native_array_fill",
+  "fn native_array_section",
+  "fn native_array_dimensions",
+  "fn same_class_array",
+  "fn splice_absorbing_slack"
+ ],
+ "rows": [
+  "row NATIVE_METHODS/Array/\"APPEND\"",
+  "row NATIVE_METHODS/Array/\"DELETE\"",
+  "row NATIVE_METHODS/Array/\"DIMENSIONS\"",
+  "row NATIVE_METHODS/Array/\"FILL\"",
+  "row NATIVE_METHODS/Array/\"FIRST\"",
+  "row NATIVE_METHODS/Array/\"FIRSTITEM\"",
+  "row NATIVE_METHODS/Array/\"INSERT\"",
+  "row NATIVE_METHODS/Array/\"LAST\"",
+  "row NATIVE_METHODS/Array/\"LASTITEM\"",
+  "row NATIVE_METHODS/Array/\"NEXT\"",
+  "row NATIVE_METHODS/Array/\"PREVIOUS\"",
+  "row NATIVE_METHODS/Array/\"SECTION\"",
+  "row NATIVE_METHODS/Array/\"ALLINDEXES\"",
+  "row NATIVE_METHODS/Array/\"ALLITEMS\"",
+  "row NATIVE_METHODS/Array/\"EMPTY\"",
+  "row NATIVE_METHODS/Array/\"HASINDEX\"",
+  "row NATIVE_METHODS/Array/\"HASITEM\"",
+  "row NATIVE_METHODS/Array/\"INDEX\"",
+  "row NATIVE_METHODS/Array/\"ISEMPTY\"",
+  "row NATIVE_METHODS/Array/\"MAKEARRAY\"",
+  "row NATIVE_METHODS/Array/\"REMOVE\"",
+  "row NATIVE_METHODS/Array/\"REMOVEITEM\"",
+  "row NATIVE_METHODS/Array/\"SUPPLIER\""
+ ],
+ "table_doc": [
+  "/// `Array`'s collection-surface methods, chained into `ObjectModel::build`",
+  "/// after its sort family."
+ ],
+ "table_header": "pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &["
+}

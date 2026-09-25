@@ -1,0 +1,37 @@
+{
+ "doc": [
+  "`Supplier`'s primitive methods, and the constructor every collection's",
+  "`supplier` method builds one with."
+ ],
+ "uses": [
+  "use super::{Arity, Cleared, Failure, Interp, NativeMethod, ObjRef};"
+ ],
+ "items": [
+  "const SUPPLIER_ITEMS",
+  "const SUPPLIER_INDEXES",
+  "const SUPPLIER_POSITION",
+  "LINES:412-412",
+  "fn new_supplier",
+  "fn store_supplier",
+  "fn supplier_state",
+  "fn supplier_remaining",
+  "fn native_supplier_available",
+  "fn supplier_half",
+  "fn native_supplier_item",
+  "fn native_supplier_index",
+  "fn native_supplier_next",
+  "fn native_supplier_init"
+ ],
+ "rows": [
+  "row NATIVE_METHODS/Supplier/\"AVAILABLE\"",
+  "row NATIVE_METHODS/Supplier/\"INIT\"",
+  "row NATIVE_METHODS/Supplier/\"INDEX\"",
+  "row NATIVE_METHODS/Supplier/\"ITEM\"",
+  "row NATIVE_METHODS/Supplier/\"NEXT\""
+ ],
+ "table_doc": [
+  "/// `Supplier`'s primitive methods, chained into `ObjectModel::build` beside",
+  "/// [`super::NATIVE_METHODS`]."
+ ],
+ "table_header": "pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &["
+}

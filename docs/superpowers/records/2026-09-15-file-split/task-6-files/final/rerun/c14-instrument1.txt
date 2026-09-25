@@ -1,0 +1,24 @@
+(a) unmoved lines: PRE dispatch/collection.rs minus the removed lines, against POST dispatch/collection.rs
+  INSERTED post:26: use super::array::surface::native_array_delete;
+  REFLOWED (visibility widened) post:48-51: fn dimensions_of; whitespace-only once the visibility is dropped, tokens are instrument 2's
+  VISIBILITY post:57: private -> pub(super): pub(super) fn position_in(
+  VISIBILITY post:70: private -> pub(super): pub(super) const QUEUE_ITEMS: &[u8] = b"ITEMS";
+  VISIBILITY post:80: private -> pub(super): pub(super) fn store_scope(interp: &mut Interp) -> ObjRef {
+  REFLOWED (visibility widened) post:134-137: fn ordered_pairs; whitespace-only once the visibility is dropped, tokens are instrument 2's
+  VISIBILITY post:165: private -> pub(super): pub(super) fn last_item(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure> {
+  REFLOWED (visibility widened) post:174-178: fn subscript_object; whitespace-only once the visibility is dropped, tokens are instrument 2's
+  VISIBILITY post:234: private -> pub(super): pub(super) fn occupied(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<usize>, Failure> {
+  REFLOWED (visibility widened) post:260-264: fn queue_bound; whitespace-only once the visibility is dropped, tokens are instrument 2's
+  VISIBILITY post:302: private -> pub(super): pub(super) fn array_splice(
+  VISIBILITY post:341: private -> pub(super): pub(super) fn array_splice_slot(
+  REFLOWED (visibility widened) post:382-386: fn array_grow; whitespace-only once the visibility is dropped, tokens are instrument 2's
+  DELETED (declared) pre:942: ''
+  DELETED (declared) pre:943: "/// The collection classes' primitive methods, chained into"
+  DELETED (declared) pre:944: '/// `ObjectModel::build`.'
+  DELETED (declared) pre:945: 'pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &['
+  DELETED (declared) pre:994: '];'
+  14 equal blocks, 394 lines, each also compared with cmp; 411 expected lines, 425 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn native_array_delete -> dispatch/array/surface.rs (22 lines; visibility private -> pub(incrate:+:dispatch))
+  52 of 52 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

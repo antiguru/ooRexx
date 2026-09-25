@@ -1,0 +1,4 @@
+dispatch/hash.rs=instruments
+dispatch/hash/stem.rs=instruments
+dispatch.rs=insert
+crates/rexx-exec/tests/dispatch_seam.rs=insert

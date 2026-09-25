@@ -1,0 +1,35 @@
+{
+ "doc": [
+  "`Array`'s sort family: `sort`, `sortWith` and their stable twins, one",
+  "merge sort over the Array-shaped store."
+ ],
+ "uses": [
+  "use super::{Arity, Cleared, Failure, Interp, NativeMethod, ObjRef};"
+ ],
+ "items": [
+  "LINES:767-767",
+  "fn dense_items",
+  "enum Order",
+  "fn order_of",
+  "fn merge_sort",
+  "fn sort_range",
+  "fn merge",
+  "fn find",
+  "fn copy_run",
+  "fn write_back",
+  "fn sort_by",
+  "fn native_array_sort",
+  "fn native_array_sort_with"
+ ],
+ "rows": [
+  "row NATIVE_METHODS/Array/\"SORT\"",
+  "row NATIVE_METHODS/Array/\"SORTWITH\"",
+  "row NATIVE_METHODS/Array/\"STABLESORT\"",
+  "row NATIVE_METHODS/Array/\"STABLESORTWITH\""
+ ],
+ "table_doc": [
+  "/// `Array`'s sort methods, chained into `ObjectModel::build` ahead of the",
+  "/// rest of `Array`'s collection surface."
+ ],
+ "table_header": "pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &["
+}

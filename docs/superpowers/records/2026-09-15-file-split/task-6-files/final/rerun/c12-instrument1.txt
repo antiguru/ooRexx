@@ -1,0 +1,12 @@
+(a) unmoved lines: PRE dispatch/collection.rs minus the removed lines, against POST dispatch/collection.rs
+  INSERTED post:31: 
+  INSERTED post:32: // `Supplier`'s primitive methods, chained into `ObjectModel::build` after this
+  INSERTED post:33: // module's own.
+  INSERTED post:34: pub(super) mod supplier;
+  INSERTED post:35: pub(super) use supplier::new_supplier;
+  INSERTED post:36: 
+  2 equal blocks, 1300 lines, each also compared with cmp; 1300 expected lines, 1306 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn new_supplier -> dispatch/collection/supplier.rs (15 lines; visibility pub(super) -> pub(incrate:+:dispatch))
+  18 of 18 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

@@ -1,0 +1,10 @@
+dispatch/collection.rs=instruments
+dispatch/array/surface.rs=instruments
+dispatch/array.rs=insert
+dispatch.rs=subst:\.chain\(collection::NATIVE_METHODS\)=>.chain(array::surface::NATIVE_METHODS)
+dispatch/tests.rs=subst:        \.chain\(collection::NATIVE_METHODS\)\n=>        .chain(collection::list::NATIVE_METHODS)\n        .chain(collection::queue::NATIVE_METHODS)\n        .chain(array::sort::NATIVE_METHODS)\n        .chain(array::surface::NATIVE_METHODS)\n        .chain(collection::supplier::NATIVE_METHODS)\n
+dispatch/collection/list.rs=subst:\[`is_queue`\]=>[`super::is_queue`];;\[`super::NATIVE_METHODS`\]=>[`super::super::NATIVE_METHODS`]
+dispatch/collection/queue.rs=subst:\[`super::NATIVE_METHODS`\]=>[`super::super::NATIVE_METHODS`]
+dispatch/collection/supplier.rs=subst:\[`super::NATIVE_METHODS`\]=>[`super::super::NATIVE_METHODS`]
+dispatch/hash.rs=subst:\[`super::collection::NATIVE_METHODS`\]=>[`super::collection::list::NATIVE_METHODS`]
+crates/rexx-exec/tests/dispatch_seam.rs=insert

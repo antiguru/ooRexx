@@ -1,0 +1,2 @@
+103 of 103 units decode to identical literal lists; 185 decodable literals (string, byte string, char, byte, doc line) on the PRE side; 0 units where the tool's count and the independent lexer's disagree
+whole-file literal multiset, PRE dispatch/collection.rs against POST dispatch/collection.rs + new files:

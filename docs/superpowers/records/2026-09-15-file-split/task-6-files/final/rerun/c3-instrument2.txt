@@ -1,0 +1,4 @@
+  visibility fn native_package_local: private -> pub(super) (dispatch/package.rs)
+  visibility fn native_package_name: private -> pub(super) (dispatch/package.rs)
+  ONLY-POST use package::{native_package_local,native_package_name} (dispatch.rs)
+301 of 301 units present on both sides have identical token streams (2 of them moved); 0 only before, 1 only after

@@ -1,0 +1,69 @@
+{
+ "doc": [
+  "`Stem`'s primitive methods, and the tail tree that orders a stem's tails the",
+  "way `CompoundTableElement`'s does."
+ ],
+ "uses": [
+  "use super::{Arity, Body, Cleared, Failure, Interp, NativeMethod, ObjRef, Raised};"
+ ],
+ "items": [
+  "LINES:1454-1454",
+  "fn stem_tails",
+  "fn stem_read",
+  "fn native_stem_at",
+  "fn native_stem_put",
+  "fn is_stem",
+  "fn stem_refusal",
+  "struct TailNode",
+  "fn tail_order",
+  "fn stem_order",
+  "fn first_tail",
+  "fn move_tail",
+  "fn rebalance",
+  "fn stem_live",
+  "fn native_stem_all_indexes",
+  "fn native_stem_all_items",
+  "fn stem_value",
+  "fn native_stem_request",
+  "fn native_stem_to_directory",
+  "fn native_stem_unknown",
+  "fn native_stem_make_array",
+  "fn native_stem_supplier",
+  "fn native_stem_items",
+  "fn native_stem_is_empty",
+  "fn stem_tail",
+  "fn native_stem_has_index",
+  "fn native_stem_has_item",
+  "fn native_stem_index",
+  "fn stem_write",
+  "fn native_stem_remove",
+  "fn native_stem_remove_item",
+  "fn native_stem_empty"
+ ],
+ "rows": [
+  "row NATIVE_METHODS/Stem/\"AT\"",
+  "row NATIVE_METHODS/Stem/\"[]\"",
+  "row NATIVE_METHODS/Stem/\"PUT\"",
+  "row NATIVE_METHODS/Stem/\"[]=\"",
+  "row NATIVE_METHODS/Stem/\"ITEMS\"",
+  "row NATIVE_METHODS/Stem/\"ALLINDEXES\"",
+  "row NATIVE_METHODS/Stem/\"ALLITEMS\"",
+  "row NATIVE_METHODS/Stem/\"MAKEARRAY\"",
+  "row NATIVE_METHODS/Stem/\"SUPPLIER\"",
+  "row NATIVE_METHODS/Stem/\"ISEMPTY\"",
+  "row NATIVE_METHODS/Stem/\"HASINDEX\"",
+  "row NATIVE_METHODS/Stem/\"HASITEM\"",
+  "row NATIVE_METHODS/Stem/\"INDEX\"",
+  "row NATIVE_METHODS/Stem/\"REMOVE\"",
+  "row NATIVE_METHODS/Stem/\"REMOVEITEM\"",
+  "row NATIVE_METHODS/Stem/\"EMPTY\"",
+  "row NATIVE_METHODS/Stem/\"REQUEST\"",
+  "row NATIVE_METHODS/Stem/\"TODIRECTORY\"",
+  "row NATIVE_METHODS/Stem/\"UNKNOWN\""
+ ],
+ "table_doc": [
+  "/// `Stem`'s primitive methods, chained into `ObjectModel::build` beside",
+  "/// [`super::NATIVE_METHODS`]."
+ ],
+ "table_header": "pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &["
+}

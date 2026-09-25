@@ -1,0 +1,20 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:81: use string::{
+  INSERTED post:82:     native_length, native_reverse, native_string_make_string, native_string_makearray,
+  INSERTED post:83:     native_string_sign, native_string_upper,
+  INSERTED post:84: };
+  2 equal blocks, 2978 lines, each also compared with cmp; 2978 expected lines, 2982 actual lines
+
+(c) destination dispatch/string.rs: PRE against POST, inserted lines only
+  INSERTED post:23-25: 3 lines
+  INSERTED post:1850-1988: 139 lines
+  2222 of 2222 PRE lines equal, each block compared with cmp
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn native_string_sign -> dispatch/string.rs (15 lines; visibility private -> pub(super))
+  OK fn native_string_make_string -> dispatch/string.rs (11 lines; visibility private -> pub(super))
+  OK fn native_string_upper -> dispatch/string.rs (51 lines; visibility private -> pub(super))
+  OK fn native_length -> dispatch/string.rs (10 lines; visibility private -> pub(super))
+  OK fn native_string_makearray -> dispatch/string.rs (35 lines; visibility private -> pub(super))
+  OK fn native_reverse -> dispatch/string.rs (11 lines; visibility private -> pub(super))
+  6 of 6 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

@@ -1,0 +1,14 @@
+(a) unmoved lines: PRE dispatch/collection.rs minus the removed lines, against POST dispatch/collection.rs
+  INSERTED post:19: use super::{INIT, array_size_argument, optional_length_argument, unsigned_index};
+  INSERTED post:21: 
+  INSERTED post:22: // `List`'s primitive methods, chained into `ObjectModel::build` ahead of this
+  INSERTED post:23: // module's own.
+  INSERTED post:24: pub(super) mod list;
+  INSERTED post:25: use list::{is_list, list_insert_at, list_state};
+  3 equal blocks, 1645 lines, each also compared with cmp; 1645 expected lines, 1651 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY fn list_state -> dispatch/collection/list.rs: /tmp/tmp2wgddod3/a /tmp/tmp2wgddod3/b differ: byte 67, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK fn is_list -> dispatch/collection/list.rs (11 lines; visibility private -> pub(super))
+  OK fn list_insert_at -> dispatch/collection/list.rs (13 lines; visibility private -> pub(super))
+  64 of 65 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

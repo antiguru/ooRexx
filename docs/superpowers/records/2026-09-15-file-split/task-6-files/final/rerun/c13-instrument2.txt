@@ -1,0 +1,8 @@
+  TRAILING-COMMA-ONLY fn slots_of: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility fn slots_of: private -> pub(super) (dispatch/collection.rs)
+  visibility fn store_of: private -> pub(super) (dispatch/collection.rs)
+  ONLY-PRE use super::{Arity,ArrayArgument,BehaviourId,Body,Cleared,Decoded,Failure,IndexUse,Interp,Loud,NativeMethod,ObjRef,Raised,array_argument,array_dimensions,array_position,array_slots,array_slots_owned,new_instance,request_array,whole_comparison,}
+  ONLY-POST use super::{Arity,ArrayArgument,BehaviourId,Body,Cleared,Decoded,Failure,IndexUse,Interp,Loud,NativeMethod,ObjRef,Raised,array_argument,array_dimensions,array_position,array_slots,array_slots_owned,new_instance,request_array,} (dispatch/collection.rs)
+  ONLY-POST dispatch/array/sort.rs::use super::collection::{item_argument,slots_of,store_of} (dispatch/array/sort.rs)
+  ONLY-POST dispatch/array/sort.rs::use super::{Arity,Body,Cleared,Failure,Interp,Loud,NativeMethod,ObjRef,Raised,array_slots,whole_comparison,} (dispatch/array/sort.rs)
+103 of 103 units present on both sides have identical token streams (16 of them moved); 1 only before, 3 only after

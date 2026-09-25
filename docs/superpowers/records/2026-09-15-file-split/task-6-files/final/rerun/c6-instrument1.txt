@@ -1,0 +1,41 @@
+(a) unmoved lines: PRE dispatch.rs minus the removed lines, against POST dispatch.rs
+  INSERTED post:98: use hash::{native_hash_at, native_hash_put, native_hash_unknown};
+  2 equal blocks, 2869 lines, each also compared with cmp; 2869 expected lines, 2870 actual lines
+
+(c) destination dispatch/hash.rs: PRE against POST, inserted lines only
+  INSERTED post:15-15: 1 lines
+  INSERTED post:2345-2457: 113 lines
+  2992 of 2992 PRE lines equal, each block compared with cmp
+
+(b) moved units: PRE text against POST text, compared with cmp
+  DIFFERS (declared edit) fn native_hash_at -> dispatch/hash.rs: /tmp/tmpbbn78cxw/a /tmp/tmpbbn78cxw/b differ: byte 942, line 20; the edit:
+    --- before
+    +++ after
+    @@ -20 +20 @@
+    -    ) && hash::owns(interp, receiver)
+    +    ) && owns(interp, receiver)
+    @@ -22 +22 @@
+    -        return hash::store_at(interp, receiver, args);
+    +        return store_at(interp, receiver, args);
+  DIFFERS (declared edit) fn native_hash_put -> dispatch/hash.rs: /tmp/tmp8yhvtbjl/a /tmp/tmp8yhvtbjl/b differ: byte 487, line 13; the edit:
+    --- before
+    +++ after
+    @@ -13 +13 @@
+    -    ) && hash::owns(interp, receiver)
+    +    ) && owns(interp, receiver)
+    @@ -15 +15 @@
+    -        return hash::store_put(interp, receiver, args);
+    +        return store_put(interp, receiver, args);
+  DIFFERS (declared edit) fn native_hash_unknown -> dispatch/hash.rs: /tmp/tmp9vzc93tt/a /tmp/tmp9vzc93tt/b differ: byte 1208, line 28; the edit:
+    --- before
+    +++ after
+    @@ -28 +28 @@
+    -    ) && hash::owns(interp, receiver);
+    +    ) && owns(interp, receiver);
+    @@ -33 +33 @@
+    -            return hash::store_entry_read(interp, receiver, index);
+    +            return store_entry_read(interp, receiver, index);
+    @@ -43 +43 @@
+    -        return hash::store_entry_write(interp, receiver, index, item);
+    +        return store_entry_write(interp, receiver, index, item);
+  1 of 4 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

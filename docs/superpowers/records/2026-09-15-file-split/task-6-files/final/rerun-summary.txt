@@ -1,0 +1,15 @@
+c1 464dbe90f (parent ed8cb3f03): PASS: no failures; outputs identical to the committed ones
+c2 168b0caba (parent 464dbe90f): PASS: no failures; outputs identical to the committed ones
+c3 69816b613 (parent 168b0caba): PASS: no failures; outputs identical to the committed ones
+c4 5f4a421e7 (parent 69816b613): PASS: no failures; outputs identical to the committed ones
+c5 fdc3025db (parent 5f4a421e7): PASS: no failures; outputs identical to the committed ones
+c6 96e2ebb5a (parent fdc3025db): PASS: no failures; outputs identical to the committed ones
+c6 96e2ebb5a (parent fdc3025db): PASS: no failures; outputs DIFFER from the committed ones
+c7 bace8f2f8 (parent 96e2ebb5a): PASS: no failures; outputs identical to the committed ones
+c8 4488f00a6 (parent bace8f2f8): PASS: no failures; outputs identical to the committed ones
+c9 1cf10137a (parent 4488f00a6): PASS: no failures; outputs identical to the committed ones
+c10 dfe5cf4e7 (parent 1cf10137a): PASS: no failures; outputs identical to the committed ones
+c11 fd4f6e3a2 (parent dfe5cf4e7): PASS: no failures; outputs identical to the committed ones
+c12 406a1a2b7 (parent fd4f6e3a2): PASS: no failures; outputs identical to the committed ones
+c13 86a31607a (parent 406a1a2b7): PASS: no failures; outputs identical to the committed ones
+c14 ddeeb5640 (parent 86a31607a): PASS: no failures; outputs identical to the committed ones

@@ -1,0 +1,4 @@
+  DIFFERS (declared edit) tests::fn check_binds
+  DIFFERS (declared edit) tests::fn an_entry_point_resolves_whatever_case_it_is_asked_for
+  ONLY-POST mod tests (dispatch/native.rs)
+38 of 40 units present on both sides have identical token streams (15 of them moved); 0 only before, 1 only after

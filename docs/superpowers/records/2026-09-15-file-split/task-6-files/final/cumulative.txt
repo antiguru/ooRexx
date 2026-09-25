@@ -1,0 +1,77 @@
+command: SPLIT_PARENT_RS=<parent> SPLIT_DECLARED=<keys> python3 tools/cumulative.py <ed8cb3f03 src> <ddeeb5640 src> <files>, both trees from git archive
+== dispatch.rs -> dispatch/package.rs dispatch/files.rs dispatch/string.rs dispatch/hash.rs (declared: fn native_hash_at|fn native_hash_put|fn native_hash_unknown|impl ObjectModel::fn build)
+301 BASE units; where they are now: {'dispatch.rs': 285, 'dispatch/files.rs': 2, 'dispatch/hash.rs': 4, 'dispatch/package.rs': 2, 'dispatch/string.rs': 6}
+differing and declared: ['impl ObjectModel::fn build (dispatch.rs)', 'fn native_hash_at (dispatch/hash.rs)', 'fn native_hash_put (dispatch/hash.rs)', 'fn native_hash_unknown (dispatch/hash.rs)']
+visibility changes: 13
+  fn native_string_sign: private -> pub(super) (dispatch/string.rs)
+  fn native_hash_at: private -> pub(super) (dispatch/hash.rs)
+  fn native_hash_put: private -> pub(super) (dispatch/hash.rs)
+  fn native_hash_unknown: private -> pub(super) (dispatch/hash.rs)
+  fn native_package_local: private -> pub(super) (dispatch/package.rs)
+  fn native_package_name: private -> pub(super) (dispatch/package.rs)
+  fn native_string_make_string: private -> pub(super) (dispatch/string.rs)
+  fn native_string_upper: private -> pub(super) (dispatch/string.rs)
+  fn native_length: private -> pub(super) (dispatch/string.rs)
+  fn native_file_separator: private -> pub(super) (dispatch/files.rs)
+  fn native_file_path_separator: private -> pub(super) (dispatch/files.rs)
+  fn native_string_makearray: private -> pub(super) (dispatch/string.rs)
+  fn native_reverse: private -> pub(super) (dispatch/string.rs)
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+== dispatch/hash.rs -> dispatch/hash/stem.rs dispatch/hash/relation.rs (declared: none)
+228 BASE units; where they are now: {'dispatch/hash.rs': 159, 'dispatch/hash/relation.rs': 19, 'dispatch/hash/stem.rs': 50}
+differing and declared: []
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+== dispatch/collection.rs -> dispatch/collection/list.rs dispatch/collection/queue.rs dispatch/collection/supplier.rs dispatch/array/sort.rs dispatch/array/surface.rs (declared: fn is_list)
+203 BASE units; where they are now: {'dispatch/array/sort.rs': 16, 'dispatch/array/surface.rs': 52, 'dispatch/collection.rs': 28, 'dispatch/collection/list.rs': 65, 'dispatch/collection/queue.rs': 23, 'dispatch/collection/supplier.rs': 18}
+differing and declared: ['fn is_list (dispatch/collection/list.rs)']
+visibility changes: 19
+  fn slots_of: private -> pub(super) (dispatch/collection.rs)
+  fn dimensions_of: private -> pub(super) (dispatch/collection.rs)
+  fn position_in: private -> pub(super) (dispatch/collection.rs)
+  const QUEUE_ITEMS: private -> pub(super) (dispatch/collection.rs)
+  fn store_scope: private -> pub(super) (dispatch/collection.rs)
+  fn store_of: private -> pub(super) (dispatch/collection.rs)
+  fn ordered_pairs: private -> pub(super) (dispatch/collection.rs)
+  fn last_item: private -> pub(super) (dispatch/collection.rs)
+  fn subscript_object: private -> pub(super) (dispatch/collection.rs)
+  fn new_supplier: pub(super) -> pub(incrate:+:dispatch) (dispatch/collection/supplier.rs)
+  fn occupied: private -> pub(super) (dispatch/collection.rs)
+  fn queue_bound: private -> pub(super) (dispatch/collection.rs)
+  fn native_array_delete: private -> pub(incrate:+:dispatch) (dispatch/array/surface.rs)
+  fn array_splice: private -> pub(super) (dispatch/collection.rs)
+  fn array_splice_slot: private -> pub(super) (dispatch/collection.rs)
+  fn array_grow: private -> pub(super) (dispatch/collection.rs)
+  fn list_state: private -> pub(super) (dispatch/collection/list.rs)
+  fn is_list: private -> pub(super) (dispatch/collection/list.rs)
+  fn list_insert_at: private -> pub(super) (dispatch/collection/list.rs)
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+== dispatch/buffer.rs -> dispatch/method_arguments.rs (declared: none)
+167 BASE units; where they are now: {'dispatch/buffer.rs': 148, 'dispatch/method_arguments.rs': 18}
+differing and declared: []
+visibility changes: 8
+  fn required_length_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  fn option_method_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  fn optional_string_method_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  fn optional_string_or_none_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  fn optional_non_negative_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  fn named_position_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  fn optional_named_length_argument: private -> pub(super) (dispatch/method_arguments.rs)
+  fn named_pad_argument: private -> pub(super) (dispatch/method_arguments.rs)
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+== dispatch/library.rs -> dispatch/library/tests.rs (declared: none)
+88 BASE units; where they are now: {'dispatch/library.rs': 61, 'dispatch/library/tests.rs': 27}
+differing and declared: []
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+== dispatch/native.rs -> dispatch/native/tests.rs (declared: tests::fn check_binds|tests::fn an_entry_point_resolves_whatever_case_it_is_asked_for)
+40 BASE units; where they are now: {'dispatch/native.rs': 25, 'dispatch/native/tests.rs': 15}
+differing and declared: ['tests::fn check_binds (dispatch/native/tests.rs)', 'tests::fn an_entry_point_resolves_whatever_case_it_is_asked_for (dispatch/native/tests.rs)']
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0

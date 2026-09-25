@@ -1,0 +1,5 @@
+Intra-doc links in the moved test modules at ddeeb5640, enumerated with
+  /bin/grep -a -n -o '\[`[^]]*`\]' FILE    and    /bin/grep -a -n -o '\]([^)]*)' FILE
+and resolved by tests_links.sh (the #[test] lines stripped, cargo doc with --cfg test --document-private-items): c1-tests-links.txt and c2-tests-links.txt, and at BASE base/tests-links-library.txt and base/tests-links-native.txt, each 0 warnings located in the parent or its directory.
+== dispatch/library/tests.rs: 0 [`..`] links, 0 ](..) links
+== dispatch/native/tests.rs: 0 [`..`] links, 0 ](..) links

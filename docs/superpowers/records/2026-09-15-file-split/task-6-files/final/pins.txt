@@ -1,0 +1,56 @@
+at ddeeb5640
+$ /bin/grep -rn "method_is_protected(\|seam::clear(" crates/rexx-exec/src
+crates/rexx-exec/src/dispatch.rs:60:        if interp.method_is_protected(method)
+crates/rexx-exec/src/dispatch.rs:1739:    fn method_is_protected(&self, method: MethodId) -> bool {
+crates/rexx-exec/src/dispatch.rs:1898:        let cleared = match seam::clear(self, receiver, name, args, resolution.method)? {
+$ /bin/grep -rn "mod seam {" crates/rexx-exec/src
+crates/rexx-exec/src/dispatch.rs:33:mod seam {
+$ /bin/grep -rn 'dispatch/hash' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:207:    "src/dispatch/hash.rs",
+crates/rexx-exec/tests/dispatch_seam.rs:208:    "src/dispatch/hash/relation.rs",
+crates/rexx-exec/tests/dispatch_seam.rs:209:    "src/dispatch/hash/stem.rs",
+$ /bin/grep -rn 'dispatch/collection' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:203:    "src/dispatch/collection.rs",
+crates/rexx-exec/tests/dispatch_seam.rs:204:    "src/dispatch/collection/list.rs",
+crates/rexx-exec/tests/dispatch_seam.rs:205:    "src/dispatch/collection/queue.rs",
+crates/rexx-exec/tests/dispatch_seam.rs:206:    "src/dispatch/collection/supplier.rs",
+$ /bin/grep -rn 'dispatch/buffer' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:220:    "src/dispatch/buffer.rs",
+$ /bin/grep -rn 'dispatch/string' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:202:    "src/dispatch/string.rs",
+$ /bin/grep -rn 'dispatch/package' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:214:    "src/dispatch/package.rs",
+$ /bin/grep -rn 'dispatch/library' crates/*/tests crates/*/src
+$ /bin/grep -rn 'dispatch/native' crates/*/tests crates/*/src
+$ /bin/grep -rn 'dispatch/files' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:216:    "src/dispatch/files.rs",
+$ /bin/grep -rn 'dispatch/method_arguments' crates/*/tests crates/*/src
+$ /bin/grep -rn 'dispatch/array' crates/*/tests crates/*/src
+crates/rexx-exec/tests/dispatch_seam.rs:217:    "src/dispatch/array.rs",
+crates/rexx-exec/tests/dispatch_seam.rs:218:    "src/dispatch/array/sort.rs",
+crates/rexx-exec/tests/dispatch_seam.rs:219:    "src/dispatch/array/surface.rs",
+$ python3 tools/table_headers.py (every native table header under src/dispatch at the final commit)
+dispatch.rs:248: vis=private name=NATIVE_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 627 with '];'
+dispatch.rs:631: vis=private name=NATIVE_CLASS_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 755 with '];'
+dispatch.rs:759: vis=private name=SETUP_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 772 with '];'
+dispatch/array/sort.rs:329: vis=pub(in crate::dispatch) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 339 with '];'
+dispatch/array/surface.rs:563: vis=pub(in crate::dispatch) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 612 with '];'
+dispatch/buffer.rs:29: vis=pub(super) name=NATIVE_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 338 with '];'
+dispatch/collection/list.rs:624: vis=pub(in crate::dispatch) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 662 with '];'
+dispatch/collection/queue.rs:194: vis=pub(in crate::dispatch) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 208 with '];'
+dispatch/collection/supplier.rs:186: vis=pub(in crate::dispatch) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 197 with '];'
+dispatch/construct.rs:24: vis=pub(super) name=NATIVE_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 40 with '];'
+dispatch/context.rs:23: vis=pub(super) name=NATIVE_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 89 with '];'
+dispatch/context.rs:93: vis=pub(super) name=NATIVE_CLASS_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 106 with '];'
+dispatch/executable.rs:22: vis=pub(super) name=NATIVE_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 53 with '];'
+dispatch/hash/relation.rs:257: vis=pub(in crate::dispatch) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 309 with '];'
+dispatch/hash.rs:1981: vis=pub(super) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 2113 with '];'
+dispatch/hash/stem.rs:684: vis=pub(in crate::dispatch) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 719 with '];'
+dispatch/introspection.rs:26: vis=pub(super) name=NATIVE_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 45 with '];'
+dispatch/object_protocol.rs:609: vis=pub(super) name=COLLECTION_STORES header-tokens=const_:&[(&str,&[u8])]=&[ closes at 625 with '];'
+dispatch/package.rs:29: vis=pub(super) name=NATIVE_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 107 with '];'
+dispatch/package.rs:110: vis=pub(super) name=NATIVE_CLASS_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 119 with '];'
+dispatch/rexx_info.rs:21: vis=pub(super) name=NATIVE_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 78 with '];'
+dispatch/stream.rs:414: vis=private name=OPEN_TABLE header-tokens=const_:&[(&[u8],usize,OpenOption)]=&[ closes at 426 with '];'
+dispatch/string.rs:830: vis=private name=BINARY_OPERATORS header-tokens=const_:&[(&str,Operator)]=&[ closes at 862 with '];'
+dispatch/string.rs:1990: vis=pub(super) name=NATIVE_METHODS header-tokens=static_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 2332 with '];'

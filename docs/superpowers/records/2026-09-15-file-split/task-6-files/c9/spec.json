@@ -1,0 +1,37 @@
+{
+ "doc": [
+  "`Relation`'s and `Bag`'s own primitive methods, over the store their parent",
+  "module keeps."
+ ],
+ "uses": [
+  "use super::{Arity, Cleared, Failure, Interp, NativeMethod, ObjRef};"
+ ],
+ "items": [
+  "fn slots_for",
+  "fn native_relation_all_at",
+  "fn native_relation_all_index",
+  "fn native_relation_unique_indexes",
+  "fn native_relation_items",
+  "fn native_relation_remove_all",
+  "fn native_relation_supplier",
+  "fn native_relation_has_item",
+  "fn native_relation_remove_item"
+ ],
+ "rows": [
+  "row NATIVE_METHODS/Relation/\"ALLAT\"",
+  "row NATIVE_METHODS/Relation/\"ALLINDEX\"",
+  "row NATIVE_METHODS/Relation/\"UNIQUEINDEXES\"",
+  "row NATIVE_METHODS/Relation/\"ITEMS\"",
+  "row NATIVE_METHODS/Relation/\"REMOVEALL\"",
+  "row NATIVE_METHODS/Relation/\"SUPPLIER\"",
+  "row NATIVE_METHODS/Relation/\"HASITEM\"",
+  "row NATIVE_METHODS/Relation/\"REMOVEITEM\"",
+  "row NATIVE_METHODS/Bag/\"HASITEM\"",
+  "row NATIVE_METHODS/Bag/\"REMOVEITEM\""
+ ],
+ "table_doc": [
+  "/// `Relation`'s and `Bag`'s primitive methods, chained into",
+  "/// `ObjectModel::build` beside [`super::NATIVE_METHODS`]."
+ ],
+ "table_header": "pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &["
+}

@@ -1,0 +1,9 @@
+  DIFFERS (declared edit) fn native_hash_at
+  visibility fn native_hash_at: private -> pub(super) (dispatch/hash.rs)
+  DIFFERS (declared edit) fn native_hash_put
+  visibility fn native_hash_put: private -> pub(super) (dispatch/hash.rs)
+  DIFFERS (declared edit) fn native_hash_unknown
+  visibility fn native_hash_unknown: private -> pub(super) (dispatch/hash.rs)
+  ONLY-POST use hash::{native_hash_at,native_hash_put,native_hash_unknown} (dispatch.rs)
+  ONLY-POST dispatch/hash.rs::use super::required_string_named_argument (dispatch/hash.rs)
+291 of 294 units present on both sides have identical token streams (4 of them moved); 0 only before, 2 only after

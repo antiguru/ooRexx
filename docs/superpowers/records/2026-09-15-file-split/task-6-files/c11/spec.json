@@ -1,0 +1,42 @@
+{
+ "doc": [
+  "`Queue`'s primitive methods, over the Array-shaped store its parent module",
+  "keeps."
+ ],
+ "uses": [
+  "use super::{Arity, Cleared, Failure, Interp, NativeMethod, ObjRef};"
+ ],
+ "items": [
+  "LINES:1368-1368",
+  "fn native_queue_init",
+  "fn native_queue_queue",
+  "fn native_queue_push",
+  "fn native_queue_peek",
+  "fn native_queue_pull",
+  "fn native_queue_delete",
+  "fn native_queue_put",
+  "fn native_queue_at",
+  "fn native_queue_items",
+  "fn native_queue_size"
+ ],
+ "rows": [
+  "row NATIVE_METHODS/Queue/\"AT\"",
+  "row NATIVE_METHODS/Queue/\"[]\"",
+  "row NATIVE_METHODS/Queue/\"ITEMS\"",
+  "row NATIVE_METHODS/Queue/\"SIZE\"",
+  "row NATIVE_METHODS/Queue/\"INIT\"",
+  "row NATIVE_METHODS/Queue/\"QUEUE\"",
+  "row NATIVE_METHODS/Queue/\"PUSH\"",
+  "row NATIVE_METHODS/Queue/\"PEEK\"",
+  "row NATIVE_METHODS/Queue/\"PULL\"",
+  "row NATIVE_METHODS/Queue/\"DELETE\"",
+  "row NATIVE_METHODS/Queue/\"REMOVE\"",
+  "row NATIVE_METHODS/Queue/\"PUT\"",
+  "row NATIVE_METHODS/Queue/\"[]=\""
+ ],
+ "table_doc": [
+  "/// `Queue`'s primitive methods, chained into `ObjectModel::build` beside",
+  "/// [`super::NATIVE_METHODS`]."
+ ],
+ "table_header": "pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &["
+}

@@ -1,0 +1,5 @@
+  visibility fn new_supplier: pub(super) -> pub(incrate:+:dispatch) (dispatch/collection/supplier.rs)
+  ONLY-POST mod supplier (dispatch/collection.rs)
+  ONLY-POST use supplier::new_supplier (dispatch/collection.rs)
+  ONLY-POST dispatch/collection/supplier.rs::use super::{Arity,ArrayArgument,Cleared,Decoded,Failure,Interp,Loud,NativeMethod,ObjRef,Raised,array_argument,array_slots,new_instance,pool_variable,request_array,} (dispatch/collection/supplier.rs)
+120 of 120 units present on both sides have identical token streams (18 of them moved); 0 only before, 3 only after
