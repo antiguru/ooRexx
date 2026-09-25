@@ -4639,6 +4639,37 @@ listed it among this phase's refusals; it needs from_raw_fd and never
 needed the loader, and the grant it waits on is the one RXAPI and the
 external queues need.
 
+THREE DIVERGENCES THE SURFACE PLAN'S TASK 4 LEAVES, measured 2026-09-25/26
+with a forged extension built against the oracle's headers (NEEDED libc.so.6
+only), each side from a fresh directory, three descriptors separately. The
+forge, its probes and the transcripts are in that task's report
+(docs/superpowers/records/2026-09-14-phase-8-surface/ once the plan closes).
+No library this crate may load shows any of them: the shipped extensions
+that declare an unloader, hostemu and orxinvocation, NEED librexx.so.4, and
+the loadable ones that declare a loader, rxsock and rxunixsys, print nothing.
+  A CALL THROUGH A THREAD CONTEXT WITH NO NATIVE CALL IN FLIGHT. Reachable
+  only from extension code the interpreter did not call, such as a library
+  destructor at the close. Both sides abort at rc 134. The oracle's stderr is
+  "terminate called after throwing an instance of 'NativeActivation*'"; ours
+  is the Rust panic naming the member ("RexxThreadInterface.WholeNumberToObject
+  was called with no native call in flight"), "panic in a function that cannot
+  unwind", and a backtrace. Our stdout also loses the program's SAY lines,
+  which the next entry explains. OWNER: none; a C++ exception's text is not
+  something this crate can print, and matching it would buy nothing a
+  program can act on.
+  THE UNLOADER IS HANDED THE LOADER'S THREAD CONTEXT. The oracle runs
+  termination on an instance it creates for it, so an extension comparing
+  the context its unloader gets with the one its loader got sees two; here
+  there is one per interpreter. OWNER: Phase 9, whose instance API is where a
+  second instance would come from.
+  SAY OUTPUT AND AN EXTENSION'S OWN printf INTERLEAVE DIFFERENTLY. SAY is
+  buffered in the interpreter and written at exit (Phase 7 spec A1,
+  docs/superpowers/specs/2026-09-11-phase-7-streams-platform.md:12), while a
+  C extension writes to file descriptor 1 as it runs, so the extension's
+  lines come first here where the oracle interleaves them. The SAY lines keep
+  their order among themselves, and so do the extension's. OWNER: none; A1 is
+  the decision, and no shipped extension this crate may load writes to stdout.
+
 KNOWN GAPS RECORDED AFTER THE FINAL REVIEW AND THE FIX ROUNDS, each with
 its evidence and its owner, or the reason it has none. Every transcript
 below was re-run on 2026-09-15 in fresh directories, each side its own,
