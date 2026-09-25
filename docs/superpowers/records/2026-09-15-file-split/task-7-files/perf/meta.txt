@@ -1,0 +1,15 @@
+load-before  05:37:19 up 17 days,  7:51,  0 users,  load average: 2.41, 3.37, 4.45
+load-after  05:41:06 up 17 days,  7:54,  0 users,  load average: 6.96, 6.79, 5.72
+binaries: release rexx-run built by tools/perf_builds.sh (and perf_build_c4.sh) from git archive trees; BASE in its own target dir, c4, c5 and c6 in a second one; builds.txt has each binary's .text sha256 (objcopy -O binary --only-section=.text BIN OUT && sha256sum OUT)
+build base 964a6a8db exit 0
+base 964a6a8db .text c82449392c761d4db0474ef3a53476f9ed1d17f6c479e138ef67b7e5669eb31f 2522699 bytes
+build c5 ecd4fc295 exit 0
+c5 ecd4fc295 .text bc09a49f441d7adf5dff6840b0a2de991d77a4608b9abc5c41970cd1a32846ae 2522699 bytes
+build c6 e59418808 exit 0
+c6 e59418808 .text bc09a49f441d7adf5dff6840b0a2de991d77a4608b9abc5c41970cd1a32846ae 2522699 bytes
+finished
+build c4 d31dbed5f exit 0
+c4 d31dbed5f .text c82449392c761d4db0474ef3a53476f9ed1d17f6c479e138ef67b7e5669eb31f 2522699 bytes
+finished-c4
+command: tools/perf.sh bins/rexx-run-base bins/rexx-run-c6 runs 12  (two interleaved rounds; results.txt columns: program, then per run exit status and callgrind summary minus libc.so.6 and ld-linux, in the order base round 1, final round 1, base round 2, final round 2)
+final = e59418808 (c6), the last code commit

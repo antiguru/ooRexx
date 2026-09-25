@@ -1,0 +1,24 @@
+command: objcopy -O binary --only-section=.text rexx-run-{base,c5} ...; cmp -l base c5
+differing bytes: 4058 of 2522699
+first 20 (offset, base octal, c5 octal):
+   2965 255 253
+   3472 123 121
+   3665 222 220
+   3866 311 307
+   4742 145  65
+   6445  17  15
+   8145 154  74
+   8268 236 234
+   8348 116 114
+   8428 376 374
+   8686 374 372
+   9363 212 132
+  10632 333 331
+  11753 153  73
+  11820 322 242
+  11880 166 106
+  16115 252 172
+  16226 127  47
+  16474 357 355
+  16570 377 375
+nm -S -C --defined-only, text symbols, hashes stripped: base vs c5 diff lines: 0

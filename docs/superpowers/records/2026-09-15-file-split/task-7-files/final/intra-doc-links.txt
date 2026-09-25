@@ -1,0 +1,37 @@
+command (from rust/crates/rexx-exec/src at e59418808): /bin/grep -n -a -E '^\s*//[/!].*\[`[^`]+`\]' FILE
+== builtin/numeric/tests.rs: 1 lines
+76:/// [`call`], for the cases whose answer is the bytes and nothing else.
+== builtin/convert/tests.rs: 4 lines
+62:/// [`call_at`] at the default precision.
+67:/// [`call`], for the cases whose answer is the bytes and nothing else.
+73:/// [`answer`] at a chosen precision.
+84:/// [`raised`] at a chosen precision.
+== builtin/datetime/tests.rs: 8 lines
+36:/// [`failure`], without the ASCII assumption -- for the one test whose
+334:/// crate can answer without crashing -- [`Timestamp::year_day`]'s own
+341:/// answer for it is the deliberate divergence [`month_name`]'s own doc
+362:/// in, which [`date_366_is_valid_only_in_a_leap_year`] checks
+384:/// [`date_366_is_valid_only_in_a_leap_year`], which is the one that
+396:/// rather than imported from [`is_leap_year`], because importing it
+454:/// [`every_date_output_letter_is_accepted`], since a single shared
+560:/// [`super::Timestamp::year_day`] already covers separately (a
+== ir/compile/tests.rs: 1 lines
+83:/// half of [`Op::TraceClause`]'s contract that a check for "inside a
+== ir/compile/invariants.rs: 13 lines
+16:/// **Every [`Op::TraceClause`] is the first op of a [`Op::Clause`] region**,
+35:/// **Every [`Op::TraceLiteral`] sits immediately behind the [`Op::Const`] or
+36:/// [`Op::LoadConstant`] whose own register it reads**, which is both halves of
+60:/// **Every [`Op::TraceRead`] sits immediately behind the [`Op::Load`] it
+90:/// **Every [`Op::TraceOperator`] sits immediately behind the [`Op::Arith`] or
+91:/// [`Op::Binary`] it echoes**, reading that op's destination register and
+116:/// **Every [`Op::TracePrefix`] sits immediately behind the [`Op::Prefix`] it
+140:/// **Every [`Op::TraceFunction`] sits immediately behind the [`Op::CallExpr`]
+186:/// **Every [`Op::TraceKeyword`] is immediately followed by the
+187:/// [`Op::LoopHeaderValue`] that files the value it echoes**, reading that op's
+208:/// Every [`Op::Exec`] region holds nothing but its own [`Op::Clause`], the
+209:/// optional [`Op::TraceClause`] between them, and the `Exec` itself.
+229:/// **Every index-bearing op inside a [`Op::Clause`] region names that region's
+== ir/counters.rs: 3 lines
+13://! [`super::drive`] did, which its tests read.
+45:/// Stops the counters recording until [`resume_counters`]. `Interp::
+53:/// The other half of [`suspend_counters`].

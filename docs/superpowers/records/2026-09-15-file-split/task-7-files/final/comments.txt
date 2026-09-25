@@ -1,0 +1,16 @@
+files: builtin/numeric.rs builtin/convert.rs builtin/datetime.rs ir/compile.rs ir/drive.rs ir.rs -- new: builtin/numeric/tests.rs builtin/convert/tests.rs builtin/datetime/tests.rs ir/compile/tests.rs ir/compile/invariants.rs ir/counters.rs
+2596 comment lines at BASE, 2659 after
+lost (1):
+  x1 // `compile::assert_region_ops_name_their_clause` is what
+added (64):
+  x18 /*                                                                            */
+  x6 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x6 /* This program and the accompanying materials are made available under       */
+  x6 /* distribution. A copy is also available at the following address:           */
+  x6 /* https://www.oorexx.org/license.html                                        */
+  x6 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x12 /*----------------------------------------------------------------------------*/
+  x1 // `compile::invariants::assert_region_ops_name_their_clause` is what
+  x1 //! The driver's test-only counters: per-thread counts of what
+  x1 //! The op-stream invariants `compile` asserts over every chunk it builds.
+  x1 //! [`super::drive`] did, which its tests read.

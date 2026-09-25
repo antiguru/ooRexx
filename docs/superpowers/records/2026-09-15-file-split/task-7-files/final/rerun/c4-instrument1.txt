@@ -1,0 +1,7 @@
+(a) unmoved lines: PRE ir/compile.rs minus the removed lines, against POST ir/compile.rs
+  INSERTED post:1993: mod tests;
+  1 equal blocks, 1992 lines, each also compared with cmp; 1992 expected lines, 1993 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY (declared reflow) tests::fn a_trace_op_outside_a_clause_region_is_refused -> ir/compile/tests.rs: /tmp/tmpyvaxc4gt/a /tmp/tmpyvaxc4gt/b differ: byte 1, line 1 (rustfmt reflow; a comma before a closing delimiter ignored; tokens are instrument 2's, literal values instrument 3's)
+  22 of 23 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

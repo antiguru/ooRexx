@@ -1,0 +1,7 @@
+(a) unmoved lines: PRE builtin/convert.rs minus the removed lines, against POST builtin/convert.rs
+  INSERTED post:1011: mod tests;
+  1 equal blocks, 1010 lines, each also compared with cmp; 1010 expected lines, 1011 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY tests::fn raised_at -> builtin/convert/tests.rs: /tmp/tmpq0z1_wiy/a /tmp/tmpq0z1_wiy/b differ: byte 1, line 1 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  36 of 37 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

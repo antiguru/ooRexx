@@ -1,0 +1,31 @@
+(a) unmoved lines: PRE ir/drive.rs minus the removed lines, against POST ir/drive.rs
+  INSERTED post:27: 
+  INSERTED post:28: #[cfg(test)]
+  INSERTED post:29: use super::counters::{
+  INSERTED post:30:     arith_hint_skips, call_site_hits, clause_op_entries, const_builds, count_arith_hint_skip,
+  INSERTED post:31:     count_call_site_hit, count_clause_op_entry, count_const_build, count_load_constant_build,
+  INSERTED post:32:     count_run_chunk_entry, count_trace_op_echo, frame_floor_high_water, load_constant_builds,
+  INSERTED post:33:     record_frame_floor, run_chunk_entries, trace_op_echoes,
+  INSERTED post:34: };
+  INSERTED post:35: #[cfg(test)]
+  INSERTED post:36: pub(crate) use super::counters::{resume_counters, suspend_counters};
+  2 equal blocks, 2406 lines, each also compared with cmp; 2406 expected lines, 2416 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn count_run_chunk_entry -> ir/counters.rs (7 lines; visibility private -> pub(super))
+  OK fn run_chunk_entries -> ir/counters.rs (4 lines; visibility pub(crate) -> pub(super))
+  OK fn count_clause_op_entry -> ir/counters.rs (7 lines; visibility private -> pub(super))
+  OK fn clause_op_entries -> ir/counters.rs (4 lines; visibility pub(crate) -> pub(super))
+  OK fn count_trace_op_echo -> ir/counters.rs (7 lines; visibility private -> pub(super))
+  OK fn trace_op_echoes -> ir/counters.rs (4 lines; visibility pub(crate) -> pub(super))
+  OK fn count_arith_hint_skip -> ir/counters.rs (7 lines; visibility private -> pub(super))
+  OK fn arith_hint_skips -> ir/counters.rs (4 lines; visibility pub(crate) -> pub(super))
+  OK fn count_call_site_hit -> ir/counters.rs (7 lines; visibility private -> pub(super))
+  OK fn call_site_hits -> ir/counters.rs (4 lines; visibility pub(crate) -> pub(super))
+  OK fn count_const_build -> ir/counters.rs (7 lines; visibility private -> pub(super))
+  OK fn const_builds -> ir/counters.rs (4 lines; visibility pub(crate) -> pub(super))
+  OK fn count_load_constant_build -> ir/counters.rs (7 lines; visibility private -> pub(super))
+  OK fn load_constant_builds -> ir/counters.rs (4 lines; visibility pub(crate) -> pub(super))
+  OK fn record_frame_floor -> ir/counters.rs (7 lines; visibility private -> pub(super))
+  OK fn frame_floor_high_water -> ir/counters.rs (4 lines; visibility pub(crate) -> pub(super))
+  28 of 28 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only
