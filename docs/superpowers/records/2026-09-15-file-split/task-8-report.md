@@ -296,7 +296,40 @@ with absolute paths, and only that run is recorded.
 
 ## Gates
 
-(pending: run after this report's first commit, over the committed tree)
+Over `41f32aa24`, this report's first commit, whose `rust/` tree is
+c2's. `tools/gates.sh` ran them after the commit, with the default target
+directory (`rust/target`), so the arity suites ran the binary G3 built.
+The tree did not change from start to finish (`tree-changes 0` before and
+after, `files/gates/status.txt`). Each status was read unpiped. The counts
+come from `tools/test_results.py` over each gate's own log
+(`files/gates/test-*.results`), and the 604 comes from that log's
+differential report (`files/gates/corpus-differential-*.txt`).
+
+| gate | command | result | load average (1, 5, 15 min) |
+| --- | --- | --- | --- |
+| G1 | `cargo fmt --all --check` | exit 0 | 15.30, 76.31, 80.89 before the run |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings`, empty target dir | exit 0 | |
+| G3 | `cargo build --workspace --all-targets --release`, no cap | exit 0 | |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | exit 0; 135 result blocks; 2663 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 48.16, 65.33, 75.72 before; 7.59, 39.71, 62.58 after |
+| G5 | `cargo build --workspace --all-targets` (debug) | exit 0 | |
+| G6, first run | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` (debug) | exit 101; 135 result blocks; 2663 passed, **1 failed**, 4 ignored; `corpus_differential` 604 of 604, STRICT | 7.22, 39.10, 62.26 before; **269.84, 352.70, 275.78** after |
+| G6, rerun | the same command, same commit and target directory (`tools/gate6_rerun.sh`) | exit 0; 135 result blocks; 2664 passed, 0 failed, 4 ignored; `corpus_differential` 604 of 604, STRICT | 7.71, 39.83, 128.52 before; 6.73, 19.84, 93.02 after |
+
+**G6's first run failed on an oracle timeout, in a run that ended at a
+load average of 270 (353 over five minutes).** The one failure was
+`method_bodies::no_row_started_diverging_or_stopped_answering`
+(`files/gates/g6-first-failure.txt`). Its message says that for
+`Directory intersection` and `IdentityTable intersection`, "the oracle did
+not finish: TimedOut". Under the plan's quiet-machine bullet that is
+machine state until a quiet rerun says otherwise. So I waited until the
+one-minute load was under 15 and the five-minute load under 40, and re-ran
+the whole of G6 rather than the one test, since this is not the flake the
+brief allows to be re-run alone. The rerun is green. Compared with the
+first run per test and per result block
+(`files/gates/g6-first-vs-rerun.compare`), the only difference is that
+test and its block. Every figure of G4 and of the G6 rerun matches BASE's.
+`introspection_arity::every_unstable_row_is_really_unstable` passed in all
+three test runs, so nothing was re-run for it.
 
 ## Concerns
 
@@ -308,8 +341,10 @@ with absolute paths, and only that run is recorded.
    * `rexx-api/tests/values.rs` (2114) is out, as ruled.
    * `ffi.rs` (1041) is out, by the plan.
 2. **Machine load.** Load averages ran from 27 to over 100 during the
-   instrument 4 runs and the performance runs, from work outside this
-   sandbox. No test timed out, and every comparison was identical. The
-   gates record their own load below.
+   instrument 4 runs and the performance runs, and above 350 during G6's
+   first run, from work outside this sandbox. No instrument 4 test timed
+   out, and every comparison was identical. G6's first run lost one
+   oracle-backed test to a timeout, and a quiet rerun of the whole gate
+   was green (Gates).
 3. c1 and c2 carry their `args` files with their commits, so
    `rerun8.sh` reads each commit's own arguments.

@@ -1,0 +1,7 @@
+---- no_row_started_diverging_or_stopped_answering stdout ----
+
+thread 'no_row_started_diverging_or_stopped_answering' (673837) panicked at crates/rexx-exec/tests/gate_tables/mod.rs:169:5:
+structural failures, which are red in every mode and are not verdicts `REXX_CORPUS_GATE` could relax:
+  Directory intersection (instance): the oracle did not finish: TimedOut. Whatever it left on its descriptors is where it was interrupted, not an answer to compare
+  IdentityTable intersection (instance): the oracle did not finish: TimedOut. Whatever it left on its descriptors is where it was interrupted, not an answer to compare
+

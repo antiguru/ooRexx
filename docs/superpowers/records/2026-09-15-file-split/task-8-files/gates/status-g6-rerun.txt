@@ -1,0 +1,7 @@
+sha 41f32aa2432614c1952a292c830977e1dcadc0af
+tree-changes 0
+load-before  13:34:28 up 17 days, 15:48,  0 users,  load average: 7.71, 39.83, 128.52
+G6 REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast (debug) exit 0
+load-after  13:40:03 up 17 days, 15:53,  0 users,  load average: 6.73, 19.84, 93.02
+tree-changes-after 0
+finished

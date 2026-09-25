@@ -1,0 +1,11 @@
+tests --- before
+tests +++ after
+tests @@ -822 +822 @@
+tests -tests/method_bodies.rs [method_bodies]	no_row_started_diverging_or_stopped_answering	FAILED
+tests +tests/method_bodies.rs [method_bodies]	no_row_started_diverging_or_stopped_answering	ok
+blocks --- before
+blocks +++ after
+blocks @@ -70 +70 @@
+blocks -tests/method_bodies.rs [method_bodies]	RESULT FAILED passed=22 failed=1 ignored=0 measured=0 filtered=0
+blocks +tests/method_bodies.rs [method_bodies]	RESULT ok passed=23 failed=0 ignored=0 measured=0 filtered=0
+compare exit 1
