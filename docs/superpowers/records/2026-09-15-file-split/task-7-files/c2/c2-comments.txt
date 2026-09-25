@@ -1,0 +1,26 @@
+moved units: 37; names searched in backticks: 31
+file tails searched: builtin/convert.rs builtin/convert/ builtin/convert/tests.rs builtin/convert/tests/ convert.rs convert/tests.rs
+
+(a) comments naming a moved unit: 5
+  crates/rexx-exec/src/builtin/convert.rs:733: // is the ordering `the_call_layer_is_checked_before_the_operation_layer`
+  crates/rexx-exec/src/builtin/convert/tests.rs:62: /// [`call_at`] at the default precision.
+  crates/rexx-exec/src/builtin/convert/tests.rs:67: /// [`call`], for the cases whose answer is the bytes and nothing else.
+  crates/rexx-exec/src/builtin/convert/tests.rs:73: /// [`answer`] at a chosen precision.
+  crates/rexx-exec/src/builtin/convert/tests.rs:84: /// [`raised`] at a chosen precision.
+
+(b) comments naming a touched file: 0
+
+(c) positional words inside the destinations: 13
+  crates/rexx-exec/src/builtin/convert/tests.rs:93: /// The alphabet every case set below draws from: the null string, a byte
+  crates/rexx-exec/src/builtin/convert/tests.rs:94: /// at or above `0x80`, a control byte, a NUL, and the two that separate
+  crates/rexx-exec/src/builtin/convert/tests.rs:135: /// The grouping rule: the first group fixes a residue and every later one
+  crates/rexx-exec/src/builtin/convert/tests.rs:187: /// Whitespace is blank and tab; every other byte below `0x20`, and every
+  crates/rexx-exec/src/builtin/convert/tests.rs:188: /// byte at or above `0x80`, is an invalid digit.
+  crates/rexx-exec/src/builtin/convert/tests.rs:285: /// first is ever used to encode, so they are crossed both ways here --
+  crates/rexx-exec/src/builtin/convert/tests.rs:288: /// here rather than waiting for a witness whose text happens to use it.
+  crates/rexx-exec/src/builtin/convert/tests.rs:553: // A non-zero magnitude below one tenth is never whole, whatever the
+  crates/rexx-exec/src/builtin/convert/tests.rs:628: // Without this line the assertion above is satisfied by a parser that
+  crates/rexx-exec/src/builtin/convert/tests.rs:635: // list directly above it.
+  crates/rexx-exec/src/builtin/convert/tests.rs:928: /// above `0x80` survives to the report where a control byte becomes `?`.
+  crates/rexx-exec/src/builtin/convert/tests.rs:1036: /// Every result is text, so a later `NUMERIC DIGITS` cannot reshape it.
+  crates/rexx-exec/src/builtin/convert/tests.rs:1049: // below cannot be undone: a candidate setting is judged against
