@@ -1,0 +1,4 @@
+token.rs
+token/symbols.rs
+--expect-gone=use std::borrow::Cow;
+--expect-gone=use std::collections::HashMap;

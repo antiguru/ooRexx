@@ -1,228 +1,188 @@
 doc: exit 0; 0 warning lines
-525f0a4ad785576d ./crates.js
+2c0e5944af78045f ./crates.js
 18f2b94d7395d96f ./help.html
 e3b0c44298fc1c14 ./.lock
 2ffb9da858d6dba9 ./rexx_parse/all.html
-71832f6e7ee0217a ./rexx_parse/ast/enum.Access.html
-a3b95e8f04cbe661 ./rexx_parse/ast/enum.AnnotationTarget.html
-db71e2f8810ebac0 ./rexx_parse/ast/enum.AttributeStyle.html
-9c00189d20df912e ./rexx_parse/ast/enum.Call.html
-9fb6d0bdb86db872 ./rexx_parse/ast/enum.CallTarget.html
-c8c0887ccb47e1d8 ./rexx_parse/ast/enum.ConditionOption.html
-c3131d510563f10c ./rexx_parse/ast/enum.ConstantValue.html
-311d74f6b43bee4c ./rexx_parse/ast/enum.ControlExpr.html
-7272cfbdc5fe5630 ./rexx_parse/ast/enum.DirectiveKind.html
-c3431857719eafc0 ./rexx_parse/ast/enum.EndStyle.html
-52dd295ef5486b81 ./rexx_parse/ast/enum.ExprKind.html
-8580cc24e17b4026 ./rexx_parse/ast/enum.GuardOption.html
-512d79f72b2bbe0f ./rexx_parse/ast/enum.InstructionKind.html
-8cd10214e07e227a ./rexx_parse/ast/enum.LoopKind.html
-837c87a23f091691 ./rexx_parse/ast/enum.NumericSetting.html
-52332206b48a12f7 ./rexx_parse/ast/enum.OptionsForm.html
-dda2215767c0681a ./rexx_parse/ast/enum.OutputOption.html
-dba1fe400ca0a131 ./rexx_parse/ast/enum.PackageOption.html
-674ec3f1d1e85c57 ./rexx_parse/ast/enum.ParseSource.html
-74c1168f763415ca ./rexx_parse/ast/enum.PrefixOp.html
-c91584f14ec008d2 ./rexx_parse/ast/enum.Protection.html
-d1bf33501e34d16a ./rexx_parse/ast/enum.Redirection.html
-5825e654e27d0f72 ./rexx_parse/ast/enum.Signal.html
-7c4f3e7b83d2b0c6 ./rexx_parse/ast/enum.Tail.html
-533e5e1773cf0abf ./rexx_parse/ast/enum.Trace.html
-a1cbb67889c4fc92 ./rexx_parse/ast/enum.TriggerKind.html
-5f71dbf8b71dd2c1 ./rexx_parse/ast/enum.Use.html
-dbd509fa01b1e2cc ./rexx_parse/ast/enum.VariableRef.html
-bfca4c4f2e6723e5 ./rexx_parse/ast/fn.compound_parts.html
-4699ae6f614f145c ./rexx_parse/ast/struct.Address.html
-3d847f006e02acb3 ./rexx_parse/ast/struct.AddressIo.html
-9fda91c1d6215954 ./rexx_parse/ast/struct.Annotate.html
-5f9cdbef5c3422e3 ./rexx_parse/ast/struct.Annotation.html
-e068c4a815e25f45 ./rexx_parse/ast/struct.AttributeDirective.html
-fb06acce91b17033 ./rexx_parse/ast/struct.ClassDirective.html
-9e3c491e53dcad47 ./rexx_parse/ast/struct.ClassRef.html
-1f3ed8806ea4c60d ./rexx_parse/ast/struct.CodeBody.html
-47f42e93adac4cd2 ./rexx_parse/ast/struct.ConditionTrap.html
-27033ec53503e685 ./rexx_parse/ast/struct.ConstantDirective.html
-4a1abb07fe550f95 ./rexx_parse/ast/struct.Controlled.html
-74dbd7e648e22d3d ./rexx_parse/ast/struct.Directive.html
-9acbb5c1a5a13d3d ./rexx_parse/ast/struct.EndTarget.html
-2e90bbcf7d4528f6 ./rexx_parse/ast/struct.Expr.html
-5440523f85b6d4a3 ./rexx_parse/ast/struct.ExternalSpec.html
-c14ffd9b3e056997 ./rexx_parse/ast/struct.Forward.html
-5171e1e2741c7ee0 ./rexx_parse/ast/struct.Guard.html
-52f29c68aaa7ef47 ./rexx_parse/ast/struct.Instruction.html
-31866c05b0bff3db ./rexx_parse/ast/struct.LoopConditional.html
-dca4caaf43bbbf87 ./rexx_parse/ast/struct.Loop.html
-dd15c26b3067d0d3 ./rexx_parse/ast/struct.MethodDirective.html
-4279bff1097bbe68 ./rexx_parse/ast/struct.Parse.html
-5c82327be59c1eef ./rexx_parse/ast/struct.ParseTrigger.html
-907b1a536c87cd40 ./rexx_parse/ast/struct.Raise.html
-117f8b0f2f5733cd ./rexx_parse/ast/struct.RaiseResult.html
-70ee96381f01792a ./rexx_parse/ast/struct.Requires.html
-aa1cd0a702942b5c ./rexx_parse/ast/struct.Resource.html
-d7bbe0de7f1b5ccb ./rexx_parse/ast/struct.RoutineDirective.html
-0c20908ee49e87fc ./rexx_parse/ast/struct.UseTarget.html
+STUB -> rexx_parse/constant.MAX_EXPR_DEPTH.html
 ce69910b98b7f641 ./rexx_parse/constant.MAX_EXPR_DEPTH.html
+STUB -> rexx_parse/enum.Access.html
 4d3260548819260c ./rexx_parse/enum.Access.html
+STUB -> rexx_parse/enum.AnnotationTarget.html
 b24fa51cbedf89c8 ./rexx_parse/enum.AnnotationTarget.html
+STUB -> rexx_parse/enum.AttributeStyle.html
 e1cf005793075729 ./rexx_parse/enum.AttributeStyle.html
+STUB -> rexx_parse/enum.Call.html
 47686b165a93663d ./rexx_parse/enum.Call.html
+STUB -> rexx_parse/enum.CallTarget.html
 25486cf003453b2f ./rexx_parse/enum.CallTarget.html
+STUB -> rexx_parse/enum.ConditionOption.html
 3079ccea0471ea18 ./rexx_parse/enum.ConditionOption.html
+STUB -> rexx_parse/enum.ConstantValue.html
 d8c57878e120f97f ./rexx_parse/enum.ConstantValue.html
+STUB -> rexx_parse/enum.ControlExpr.html
 a3db9047b6ab318b ./rexx_parse/enum.ControlExpr.html
+STUB -> rexx_parse/enum.DirectiveKind.html
 3951bb897eb8b237 ./rexx_parse/enum.DirectiveKind.html
+STUB -> rexx_parse/enum.EndStyle.html
 1df07697146dc607 ./rexx_parse/enum.EndStyle.html
+STUB -> rexx_parse/enum.ExprKind.html
 25175f8fe13c0a86 ./rexx_parse/enum.ExprKind.html
+STUB -> rexx_parse/enum.GuardOption.html
 42c13f70a5dba936 ./rexx_parse/enum.GuardOption.html
+STUB -> rexx_parse/enum.InstructionKind.html
 d33052eb29264261 ./rexx_parse/enum.InstructionKind.html
+STUB -> rexx_parse/enum.LoopKind.html
 6050bc312938efd0 ./rexx_parse/enum.LoopKind.html
+STUB -> rexx_parse/enum.NumericSetting.html
 6eca92b8729eff21 ./rexx_parse/enum.NumericSetting.html
+STUB -> rexx_parse/enum.Operator.html
 fd32ae015eb2518b ./rexx_parse/enum.Operator.html
+STUB -> rexx_parse/enum.OptionsForm.html
 fb6d7dcb9cab6172 ./rexx_parse/enum.OptionsForm.html
+STUB -> rexx_parse/enum.OutputOption.html
 ce94344cd743ec8b ./rexx_parse/enum.OutputOption.html
+STUB -> rexx_parse/enum.PackageOption.html
 51e7f28c18c9cb90 ./rexx_parse/enum.PackageOption.html
+STUB -> rexx_parse/enum.ParseSource.html
 9e45798f59db464a ./rexx_parse/enum.ParseSource.html
+STUB -> rexx_parse/enum.PrefixOp.html
 1700227ff601949e ./rexx_parse/enum.PrefixOp.html
+STUB -> rexx_parse/enum.Protection.html
 633c70e44a1c313e ./rexx_parse/enum.Protection.html
+STUB -> rexx_parse/enum.Redirection.html
 50bbd4ae674a114f ./rexx_parse/enum.Redirection.html
+STUB -> rexx_parse/enum.Signal.html
 5476b3a64818e891 ./rexx_parse/enum.Signal.html
+STUB -> rexx_parse/enum.SourceKind.html
 9a040a8b83e6f659 ./rexx_parse/enum.SourceKind.html
+STUB -> rexx_parse/enum.SymbolClass.html
 88ea2fd81b05e12a ./rexx_parse/enum.SymbolClass.html
+STUB -> rexx_parse/enum.Tag.html
 125c34df952444ac ./rexx_parse/enum.Tag.html
+STUB -> rexx_parse/enum.Tail.html
 92e2915169d0df95 ./rexx_parse/enum.Tail.html
+STUB -> rexx_parse/enum.TokenKind.html
 e593bccc6d9d6751 ./rexx_parse/enum.TokenKind.html
+STUB -> rexx_parse/enum.Trace.html
 e4706f81b12eff06 ./rexx_parse/enum.Trace.html
+STUB -> rexx_parse/enum.TriggerKind.html
 4dc1123cc6085827 ./rexx_parse/enum.TriggerKind.html
+STUB -> rexx_parse/enum.Use.html
 80d84bb3b92f7766 ./rexx_parse/enum.Use.html
+STUB -> rexx_parse/enum.VariableRef.html
 6f3c0506163e4872 ./rexx_parse/enum.VariableRef.html
-be12c706ccfda83d ./rexx_parse/expr/constant.MAX_EXPR_DEPTH.html
+STUB -> rexx_parse/fn.compound_parts.html
 81c6f40d6dcff087 ./rexx_parse/fn.compound_parts.html
 663c8b0ddbcc14d1 ./rexx_parse/fn.parse_interpret.html
 62d5923f56bb2b0d ./rexx_parse/fn.parse_lines.html
 528b95339e6e631f ./rexx_parse/fn.parse_program.html
+STUB -> rexx_parse/fn.scan.html
 6f46849ef8e99ebc ./rexx_parse/fn.scan.html
 0cf428d72635b582 ./rexx_parse/index.html
-324469f9e33f444f ./rexx_parse/scanner/fn.scan.html
-0fc363bdd2d72b8d ./rexx_parse/scanner/struct.ResourceBody.html
-68734d77d74198e4 ./rexx_parse/scanner/struct.Scanned.html
-d2b10b954dee4404 ./rexx_parse/selector/struct.Selector.html
 0620a458d532070f ./rexx_parse/sidebar-items.js
-e84c7a008ce53608 ./rexx_parse/source/enum.SourceKind.html
-38e2771d66b85fb9 ./rexx_parse/source/struct.ProgramSource.html
+STUB -> rexx_parse/struct.Address.html
 908193ae0f91d0b8 ./rexx_parse/struct.Address.html
+STUB -> rexx_parse/struct.AddressIo.html
 1767bb41a1d3991c ./rexx_parse/struct.AddressIo.html
+STUB -> rexx_parse/struct.Annotate.html
 8bf7b98d99fb53f9 ./rexx_parse/struct.Annotate.html
+STUB -> rexx_parse/struct.Annotation.html
 d92a19213d223e90 ./rexx_parse/struct.Annotation.html
+STUB -> rexx_parse/struct.AttributeDirective.html
 547b31042f1bfe05 ./rexx_parse/struct.AttributeDirective.html
+STUB -> rexx_parse/struct.ClassDirective.html
 e56c9d615a0fb86c ./rexx_parse/struct.ClassDirective.html
+STUB -> rexx_parse/struct.ClassRef.html
 2c5aabaeeb18ee41 ./rexx_parse/struct.ClassRef.html
+STUB -> rexx_parse/struct.CodeBody.html
 82e74b4d987b32c9 ./rexx_parse/struct.CodeBody.html
+STUB -> rexx_parse/struct.ConditionTrap.html
 4b59ef22cfe35ee2 ./rexx_parse/struct.ConditionTrap.html
+STUB -> rexx_parse/struct.ConstantDirective.html
 c28a970a315c35b2 ./rexx_parse/struct.ConstantDirective.html
+STUB -> rexx_parse/struct.Controlled.html
 52b927215c6e0315 ./rexx_parse/struct.Controlled.html
+STUB -> rexx_parse/struct.Directive.html
 411aab0cea3651c3 ./rexx_parse/struct.Directive.html
+STUB -> rexx_parse/struct.EndTarget.html
 6bdba0d589b14956 ./rexx_parse/struct.EndTarget.html
+STUB -> rexx_parse/struct.Expr.html
 badad8b37fc2677a ./rexx_parse/struct.Expr.html
+STUB -> rexx_parse/struct.ExternalSpec.html
 d2f5346ef991b03f ./rexx_parse/struct.ExternalSpec.html
+STUB -> rexx_parse/struct.Forward.html
 43d11cad93acc09b ./rexx_parse/struct.Forward.html
 2b7c49df2609b7e6 ./rexx_parse/struct.Fragment.html
+STUB -> rexx_parse/struct.Guard.html
 9a433f1d977d9ed6 ./rexx_parse/struct.Guard.html
+STUB -> rexx_parse/struct.Instruction.html
 5626564f2584567e ./rexx_parse/struct.Instruction.html
+STUB -> rexx_parse/struct.KeywordSet.html
 e6d690be2b8a1662 ./rexx_parse/struct.KeywordSet.html
+STUB -> rexx_parse/struct.Keywords.html
 f8df019b45c84ec2 ./rexx_parse/struct.Keywords.html
+STUB -> rexx_parse/struct.LoopConditional.html
 b6f6f17da2e09f00 ./rexx_parse/struct.LoopConditional.html
+STUB -> rexx_parse/struct.Loop.html
 f4aefb55c90242ce ./rexx_parse/struct.Loop.html
+STUB -> rexx_parse/struct.MethodDirective.html
 ee5e6948c0f29ed8 ./rexx_parse/struct.MethodDirective.html
+STUB -> rexx_parse/struct.ParseError.html
 a3c0b7721c381e33 ./rexx_parse/struct.ParseError.html
+STUB -> rexx_parse/struct.Parse.html
 e42196293309ae7f ./rexx_parse/struct.Parse.html
+STUB -> rexx_parse/struct.ParseTrigger.html
 03e102c7e869de57 ./rexx_parse/struct.ParseTrigger.html
 c3f9aab1008a933d ./rexx_parse/struct.Program.html
+STUB -> rexx_parse/struct.ProgramSource.html
 77d84dc782fb87ac ./rexx_parse/struct.ProgramSource.html
+STUB -> rexx_parse/struct.Raise.html
 8b2c6854505bf9d1 ./rexx_parse/struct.Raise.html
+STUB -> rexx_parse/struct.RaiseResult.html
 6e20afb0ba37e063 ./rexx_parse/struct.RaiseResult.html
+STUB -> rexx_parse/struct.Requires.html
 365552cdad61db6f ./rexx_parse/struct.Requires.html
+STUB -> rexx_parse/struct.ResourceBody.html
 2b6cb95dcc1858d6 ./rexx_parse/struct.ResourceBody.html
+STUB -> rexx_parse/struct.Resource.html
 7c97808a45852829 ./rexx_parse/struct.Resource.html
+STUB -> rexx_parse/struct.RoutineDirective.html
 6c3697a66bf07ee1 ./rexx_parse/struct.RoutineDirective.html
+STUB -> rexx_parse/struct.Scanned.html
 db1b0b327d986829 ./rexx_parse/struct.Scanned.html
+STUB -> rexx_parse/struct.Selector.html
 22ed73fe887fa811 ./rexx_parse/struct.Selector.html
+STUB -> rexx_parse/struct.SymbolId.html
 99f7bd629e347f6b ./rexx_parse/struct.SymbolId.html
+STUB -> rexx_parse/struct.SymbolTable.html
 b5f30788b9085096 ./rexx_parse/struct.SymbolTable.html
+STUB -> rexx_parse/struct.Token.html
 ae873434d21e2763 ./rexx_parse/struct.Token.html
+STUB -> rexx_parse/struct.UseTarget.html
 ec10dceb8b765dc5 ./rexx_parse/struct.UseTarget.html
-88a1a2f788436abf ./rexx_parse/token/enum.Operator.html
-95be696885d6588e ./rexx_parse/token/enum.SymbolClass.html
-5996d46b44abaaf3 ./rexx_parse/token/enum.Tag.html
-df7c60eaa67f40a0 ./rexx_parse/token/enum.TokenKind.html
-e4c9c27974402938 ./rexx_parse/token/struct.KeywordSet.html
-bcf944abbdac372a ./rexx_parse/token/struct.Keywords.html
-8a08ec861eac360a ./rexx_parse/token/struct.ParseError.html
-b42bc6f7d97485e1 ./rexx_parse/token/struct.SymbolId.html
-63dd0ce1befb6a3a ./rexx_parse/token/struct.SymbolTable.html
-5bdcdb01838f6ffb ./rexx_parse/token/struct.Token.html
 ff6a3dd4a0493b69 ./scan_check/all.html
 c35757315a276587 ./scan_check/fn.main.html
 9cdfa4abbe7be66b ./scan_check/index.html
 de572c72c88b8711 ./scan_check/sidebar-items.js
-dec7ad2d886dc3ec ./search.index/085782f0ae.js
-1894196fff66745d ./search.index/0ee34ee27a.js
-a6a7661bbf2ab0cc ./search.index/0facd3c71b.js
-186d2deb34830a7a ./search.index/0ff60a1d73.js
-a4ba2b399d509c56 ./search.index/11df8b29b2.js
-d91ba992162c9c84 ./search.index/171f507c67.js
-3b0543b1490a63eb ./search.index/19b79c9114.js
-91aab621e13d1cff ./search.index/24d3224eed.js
-01068ed0ef6823ad ./search.index/2f41dfeea9.js
-74351a64f8042463 ./search.index/34b272759f.js
-b429ab8ef53b9a9b ./search.index/354d84a259.js
-e98459b15f002958 ./search.index/36b0a77b4d.js
-3c55c86c97e70240 ./search.index/3a09d9f02b.js
-0629f07bbd1f2e0b ./search.index/4206d27630.js
-1f97c8ce9a221661 ./search.index/4cb7f087af.js
-97da6051b574fbe2 ./search.index/4da725d903.js
-06295de7972eda0c ./search.index/53dc97d87e.js
-06601633633e1f5c ./search.index/5401f97377.js
-1b5433074d23d7ab ./search.index/546d17ddfa.js
-d83423face7a60df ./search.index/5ac493688f.js
-61193bfc1df092b6 ./search.index/5e5911063a.js
-30ee972b726f3c82 ./search.index/62eb721617.js
-a4ca7e3585583fde ./search.index/6521f502ef.js
-c29d7b97b90df126 ./search.index/664df0d200.js
-89a1095fda52ccb4 ./search.index/6d529b5e54.js
-8c77de3e0830b977 ./search.index/774dd9aa48.js
-12ea966737a70a27 ./search.index/78f7f43772.js
-87b6087772d14096 ./search.index/7a217b275c.js
-3c66556c055739d1 ./search.index/7bab6275d5.js
-36e1edc20d2a8853 ./search.index/alias/62150c532c.js
-62e568c813ad716a ./search.index/crateNames/11860dce46.js
-0c865bfece6992ae ./search.index/desc/1b6a214bc1.js
-8d74e5425c45ec4a ./search.index/entry/b99ec7d719.js
-8b1da6c069624e2b ./search.index/function/3f47363ce2.js
-d642872948940fc4 ./search.index/generic_inverted_index/1b9418e508.js
-f9a04e60da4205a0 ./search.index/name/c3e0a5bdfc.js
-820fe0e89c887a7c ./search.index/normalizedName/7855a33791.js
-8b289441d13bad40 ./search.index/path/cf209cd396.js
-53a48568dd4db2c3 ./search.index/root.js
-4b3004af542d0819 ./search.index/type/aeec678aca.js
 5650976a16e89ebd ./settings.html
-6090070b721c8c46 ./trait.impl/core/clone/trait.Clone.js
-27453cd238e2aad8 ./trait.impl/core/cmp/trait.Eq.js
-8c28f953c2ae5703 ./trait.impl/core/cmp/trait.Ord.js
-137a823c603344e2 ./trait.impl/core/cmp/trait.PartialEq.js
-f0d793544985b552 ./trait.impl/core/cmp/trait.PartialOrd.js
-9ea82a23fb7801ff ./trait.impl/core/default/trait.Default.js
-aa4c213a526df03d ./trait.impl/core/error/trait.Error.js
-275de8fca74d7320 ./trait.impl/core/fmt/trait.Debug.js
-8affa77d04902742 ./trait.impl/core/fmt/trait.Display.js
-e7965e3c1a4c14fd ./trait.impl/core/hash/trait.Hash.js
-da4cf6390cf75475 ./trait.impl/core/marker/trait.Copy.js
-0d2dfc455e61be0e ./trait.impl/core/marker/trait.Freeze.js
-78c77a8a72501793 ./trait.impl/core/marker/trait.Send.js
-1486fc3547bf1044 ./trait.impl/core/marker/trait.StructuralPartialEq.js
-2b371bb496285e99 ./trait.impl/core/marker/trait.Sync.js
-4651343b39fe1c9e ./trait.impl/core/marker/trait.Unpin.js
-b5940e2074a18fdf ./trait.impl/core/marker/trait.UnsafeUnpin.js
-6dccabdbf358013e ./trait.impl/core/ops/deref/trait.Deref.js
-b6c2ed457ccaa374 ./trait.impl/core/ops/drop/trait.Drop.js
-968c0e6743359f92 ./trait.impl/core/panic/unwind_safe/trait.RefUnwindSafe.js
-d7367a9443dc4da6 ./trait.impl/core/panic/unwind_safe/trait.UnwindSafe.js
+7a4d3785bb4892e4 ./trait.impl/core/clone/trait.Clone.js
+217e007867c0622b ./trait.impl/core/cmp/trait.Eq.js
+90159b5ba75e5d47 ./trait.impl/core/cmp/trait.Ord.js
+4c3ca2b6042adf5b ./trait.impl/core/cmp/trait.PartialEq.js
+9d5ddac27120fe6e ./trait.impl/core/cmp/trait.PartialOrd.js
+d8bf3e1dd8543a0c ./trait.impl/core/default/trait.Default.js
+8fd09ffb0ad24e79 ./trait.impl/core/error/trait.Error.js
+824d082289ea2a77 ./trait.impl/core/fmt/trait.Debug.js
+ad9a53143914fe15 ./trait.impl/core/fmt/trait.Display.js
+e8eae02b31d72f7d ./trait.impl/core/hash/trait.Hash.js
+addfe8af8ee22bd3 ./trait.impl/core/marker/trait.Copy.js
+762c5b98cf00dfc6 ./trait.impl/core/marker/trait.Freeze.js
+489968a1473d5194 ./trait.impl/core/marker/trait.Send.js
+a3d69ac1d4a8e9d0 ./trait.impl/core/marker/trait.StructuralPartialEq.js
+445efac0f668f879 ./trait.impl/core/marker/trait.Sync.js
+82789499be7a1b96 ./trait.impl/core/marker/trait.Unpin.js
+4a1827b3d3356eee ./trait.impl/core/marker/trait.UnsafeUnpin.js
+11c6dd3165462639 ./trait.impl/core/ops/deref/trait.Deref.js
+ad55b912e7cf5d39 ./trait.impl/core/ops/drop/trait.Drop.js
+c504e36a788fb999 ./trait.impl/core/panic/unwind_safe/trait.RefUnwindSafe.js
+d364f7487ef536fb ./trait.impl/core/panic/unwind_safe/trait.UnwindSafe.js

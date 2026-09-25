@@ -1,0 +1,7 @@
+  ONLY-PRE use std::borrow::Cow
+  ONLY-PRE use std::collections::HashMap
+  ONLY-POST mod symbols (token.rs)
+  ONLY-POST use symbols::{SymbolId,SymbolTable} (token.rs)
+  ONLY-POST token/symbols.rs::use std::borrow::Cow (token/symbols.rs)
+  ONLY-POST token/symbols.rs::use std::collections::HashMap (token/symbols.rs)
+46 of 46 units present on both sides have identical token streams (7 of them moved); 2 only before, 4 only after

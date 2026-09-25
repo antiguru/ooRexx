@@ -1,0 +1,23 @@
+moved units: 9; names searched in backticks: 7
+file tails searched: symbols.rs token.rs token/ token/symbols.rs token/symbols/
+
+(a) comments naming a moved unit: 6
+  crates/rexx-parse/src/token.rs:156: /// the identity is the `SymbolId` and the occurrence is `Token::span`,
+  crates/rexx-parse/src/token/symbols.rs:12: //! Symbol interning: `SymbolId`, and the `SymbolTable` that hands them out.
+  crates/rexx-parse/src/token/symbols.rs:18: /// same `SymbolId` name the same variable, method or label.
+  crates/rexx-parse/src/token/symbols.rs:23: /// This id as an index into the `SymbolTable` that interned it: **dense,
+  crates/rexx-parse/src/token/symbols.rs:25: /// occupy exactly `0..n` and `SymbolTable::len` is the length a caller
+  crates/rexx-parse/src/token/symbols.rs:33: /// to `Program` so Phase 4 can resolve a `SymbolId` back to text for error
+
+(b) comments naming a touched file: 0
+
+(c) positional words inside the destinations and the parent: 9
+  crates/rexx-parse/src/token.rs:36: /// The byte offset the error is *reported against*, which is the start of
+  crates/rexx-parse/src/token.rs:170: /// A clause terminator: `;`, an uncontinued line end, or end of file.
+  crates/rexx-parse/src/token.rs:188: /// An operator immediately followed by `=`, e.g. `+=`, which the
+  crates/rexx-parse/src/token.rs:244: /// Whether a blank *following* this token can be significant:
+  crates/rexx-parse/src/token.rs:297: /// The pre-interned spelling tables. Built by `scan` before it reads any
+  crates/rexx-parse/src/token.rs:324: // C++ keeps them in ASCII order so it can binary-search them; here the order
+  crates/rexx-parse/src/token.rs:509: /// before it reads any source, so their ids are fixed and every keyword
+  crates/rexx-parse/src/token.rs:519: /// so an expression parser cannot walk off the end of its clause.
+  crates/rexx-parse/src/token.rs:537: /// Index of the next token, or None at the end of the range.

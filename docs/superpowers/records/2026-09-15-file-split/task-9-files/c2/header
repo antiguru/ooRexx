@@ -1,0 +1,4 @@
+//! Symbol interning: `SymbolId`, and the `SymbolTable` that hands them out.
+
+use std::borrow::Cow;
+use std::collections::HashMap;
