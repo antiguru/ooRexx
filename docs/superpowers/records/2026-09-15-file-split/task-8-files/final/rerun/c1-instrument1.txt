@@ -1,0 +1,9 @@
+(a) unmoved lines: PRE invoke.rs minus the removed lines, against POST invoke.rs
+  INSERTED post:201: mod tests;
+  1 equal blocks, 200 lines, each also compared with cmp; 200 expected lines, 201 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY (declared reflow) tests::use crate::ffi::{CALL_CONTEXT,CallContext,MethodContext,Seen,forget_seen,reading_stub,seen} -> invoke/tests.rs: /tmp/tmpq4vltw2p/a /tmp/tmpq4vltw2p/b differ: byte 1, line 1 (rustfmt reflow; a comma before a closing `]` or `}` ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY tests::use crate::load::{NativeMethodEntry,NativeRoutineEntry,ROUTINE_CLASSIC_STYLE,ROUTINE_TYPED_STYLE,stub_entry,stub_routine_entry} -> invoke/tests.rs: /tmp/tmpu4w6iv7h/a /tmp/tmpu4w6iv7h/b differ: byte 114, line 2 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY tests::use crate::values::{ARGUMENT_EXISTS,ARGUMENT_TERMINATOR,Activation,CStringPool,Class,Constants,Conversion,Failure,Host,Numeric,OPTIONAL_ARGUMENT,Raised,code} -> invoke/tests.rs: /tmp/tmp4wibranm/a /tmp/tmp4wibranm/b differ: byte 114, line 2 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  90 of 93 moved units byte-identical (visibility edits listed above), 3 differing in whitespace only

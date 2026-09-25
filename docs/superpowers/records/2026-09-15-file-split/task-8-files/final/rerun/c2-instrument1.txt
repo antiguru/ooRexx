@@ -1,0 +1,73 @@
+(a) unmoved lines: PRE values.rs minus the removed lines, against POST values.rs
+  INSERTED post:26: 
+  INSERTED post:27: mod convert;
+  INSERTED post:28: use convert::{
+  INSERTED post:29:     arglist_to_native, array_to_native, class_to_native, cself_to_native, cstring_from_native,
+  INSERTED post:30:     cstring_to_native, double_from_native, double_to_native, float_from_native, float_to_native,
+  INSERTED post:31:     int_from_native, int_to_native, int8_from_native, int8_to_native, int16_from_native,
+  INSERTED post:32:     int16_to_native, int32_from_native, int32_to_native, int64_from_native, int64_to_native,
+  INSERTED post:33:     isize_from_native, logical_from_native, logical_to_native, mutable_buffer_to_native,
+  INSERTED post:34:     name_to_native, nonnegative_whole_number_to_native, object_from_native, object_to_native,
+  INSERTED post:35:     oself_to_native, pointer_from_native, pointer_string_from_native, pointer_string_to_native,
+  INSERTED post:36:     pointer_to_native, positive_whole_number_to_native, scope_to_native, signed_word_to_native,
+  INSERTED post:37:     stem_to_native, string_object_to_native, string_size_to_native, super_to_native,
+  INSERTED post:38:     uint8_from_native, uint8_to_native, uint16_from_native, uint16_to_native, uint32_from_native,
+  INSERTED post:39:     uint32_to_native, uint64_from_native, uint64_to_native, unsigned_word_to_native,
+  INSERTED post:40:     usize_from_native, variable_reference_to_native, whole_number_to_native,
+  INSERTED post:41: };
+  2 equal blocks, 1352 lines, each also compared with cmp; 1352 expected lines, 1368 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn arglist_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn name_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn scope_to_native -> values/convert.rs (12 lines; visibility private -> pub(super))
+  OK fn cself_to_native -> values/convert.rs (13 lines; visibility private -> pub(super))
+  OK fn oself_to_native -> values/convert.rs (12 lines; visibility private -> pub(super))
+  OK fn super_to_native -> values/convert.rs (12 lines; visibility private -> pub(super))
+  OK fn object_to_native -> values/convert.rs (8 lines; visibility private -> pub(super))
+  OK fn int_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn int8_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn int16_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn int32_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn int64_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn signed_word_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn whole_number_to_native -> values/convert.rs (8 lines; visibility private -> pub(super))
+  OK fn uint8_to_native -> values/convert.rs (8 lines; visibility private -> pub(super))
+  OK fn uint16_to_native -> values/convert.rs (8 lines; visibility private -> pub(super))
+  OK fn uint32_to_native -> values/convert.rs (8 lines; visibility private -> pub(super))
+  OK fn uint64_to_native -> values/convert.rs (10 lines; visibility private -> pub(super))
+  OK fn unsigned_word_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn string_size_to_native -> values/convert.rs (9 lines; visibility private -> pub(super))
+  OK fn positive_whole_number_to_native -> values/convert.rs (13 lines; visibility private -> pub(super))
+  OK fn nonnegative_whole_number_to_native -> values/convert.rs (13 lines; visibility private -> pub(super))
+  OK fn logical_to_native -> values/convert.rs (11 lines; visibility private -> pub(super))
+  OK fn double_to_native -> values/convert.rs (11 lines; visibility private -> pub(super))
+  OK fn float_to_native -> values/convert.rs (16 lines; visibility private -> pub(super))
+  OK fn cstring_to_native -> values/convert.rs (16 lines; visibility private -> pub(super))
+  OK fn string_object_to_native -> values/convert.rs (15 lines; visibility private -> pub(super))
+  OK fn array_to_native -> values/convert.rs (12 lines; visibility private -> pub(super))
+  OK fn stem_to_native -> values/convert.rs (18 lines; visibility private -> pub(super))
+  OK fn class_to_native -> values/convert.rs (8 lines; visibility private -> pub(super))
+  OK fn mutable_buffer_to_native -> values/convert.rs (8 lines; visibility private -> pub(super))
+  OK fn variable_reference_to_native -> values/convert.rs (8 lines; visibility private -> pub(super))
+  OK fn pointer_to_native -> values/convert.rs (14 lines; visibility private -> pub(super))
+  OK fn pointer_string_to_native -> values/convert.rs (11 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY fn object_from_native -> values/convert.rs: /tmp/tmp2fvrc59k/a /tmp/tmp2fvrc59k/b differ: byte 94, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn pointer_from_native -> values/convert.rs: /tmp/tmpwdm9pa4s/a /tmp/tmpwdm9pa4s/b differ: byte 230, line 4 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK fn pointer_string_from_native -> values/convert.rs (12 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY fn int_from_native -> values/convert.rs: /tmp/tmpw_5d_e27/a /tmp/tmpw_5d_e27/b differ: byte 330, line 7 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn int8_from_native -> values/convert.rs: /tmp/tmp3z_9n72x/a /tmp/tmp3z_9n72x/b differ: byte 95, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn int16_from_native -> values/convert.rs: /tmp/tmpb_7vyxaw/a /tmp/tmpb_7vyxaw/b differ: byte 97, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn int32_from_native -> values/convert.rs: /tmp/tmpusq2wjvw/a /tmp/tmpusq2wjvw/b differ: byte 97, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn int64_from_native -> values/convert.rs: /tmp/tmp6klk7hma/a /tmp/tmp6klk7hma/b differ: byte 194, line 4 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn isize_from_native -> values/convert.rs: /tmp/tmp2tb1i93r/a /tmp/tmp2tb1i93r/b differ: byte 154, line 3 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn uint8_from_native -> values/convert.rs: /tmp/tmpdf5albhv/a /tmp/tmpdf5albhv/b differ: byte 97, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn uint16_from_native -> values/convert.rs: /tmp/tmpx7hj_ss0/a /tmp/tmpx7hj_ss0/b differ: byte 99, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn uint32_from_native -> values/convert.rs: /tmp/tmpzxxyrvpg/a /tmp/tmpzxxyrvpg/b differ: byte 99, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn uint64_from_native -> values/convert.rs: /tmp/tmpwbc0hr9g/a /tmp/tmpwbc0hr9g/b differ: byte 99, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn usize_from_native -> values/convert.rs: /tmp/tmpg8gc72ry/a /tmp/tmpg8gc72ry/b differ: byte 151, line 3 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn logical_from_native -> values/convert.rs: /tmp/tmpsian25is/a /tmp/tmpsian25is/b differ: byte 133, line 3 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn double_from_native -> values/convert.rs: /tmp/tmpzw0596he/a /tmp/tmpzw0596he/b differ: byte 97, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn float_from_native -> values/convert.rs: /tmp/tmpmaq4caao/a /tmp/tmpmaq4caao/b differ: byte 127, line 3 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY fn cstring_from_native -> values/convert.rs: /tmp/tmpc6txzljr/a /tmp/tmpc6txzljr/b differ: byte 195, line 4 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  38 of 55 moved units byte-identical (visibility edits listed above), 17 differing in whitespace only

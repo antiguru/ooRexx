@@ -31,7 +31,10 @@ instruments.py exits 1 and reports at least the instruments listed):
   B4. c2: an unmoved line of values.rs (a TABLE row) changes -> I1a
   B5. c2: two moved converters swap their doc comments, so each doc sits
       on the other's item                    -> I1b, I2, I3
-  B6. c2: a byte literal in a moved converter changes -> I1b, I2, I3
+  B6. c2: the `reason = "..."` string inside a moved converter's
+      `#[expect(..)]` attribute changes      -> I1b, I2, I3
+  B9. c2: the string a moved converter passes to `.expect(..)` changes
+                                             -> I1b, I2, I3
   B7. c1 as committed but without its --expect-reflow (the test module's
       `use crate::ffi::{..}`, which rustfmt joined onto one line, dropping
       the comma before `}`)                  -> I1b, I2
@@ -166,7 +169,10 @@ B = {
          "    argument(code::INT, \"int\", Repr::Int, int_to_native, int_from_native),\n",
          "    argument(code::INT, \"int\", Repr::Int, int_to_native, int8_from_native),\n"),
         ("B5 two moved converters swap their doc comments", ["I1b", "I2", "I3"], "values/convert.rs", "SWAPDOC", None),
-        ("B6 a byte literal in a moved converter changes", ["I1b", "I2", "I3"], "values/convert.rs", "LIT2", None),
+        ("B6 a string literal inside a moved converter's attribute changes", ["I1b", "I2", "I3"], "values/convert.rs",
+         "which is the conversion measured\"", "which is the conversion measured.\""),
+        ("B9 a string literal in a moved converter's method-call argument changes", ["I1b", "I2", "I3"], "values/convert.rs",
+         ".expect(\"a c_int is a small integer\")", ".expect(\"a c_int is a small integer.\")"),
     ],
 }
 for n, parent_rs, dests, tests_rs, opts, _ in CASES:
