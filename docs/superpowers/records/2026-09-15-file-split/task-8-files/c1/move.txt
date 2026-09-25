@@ -1,0 +1,1 @@
+moved lines 202-1143 (1-based) of /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-8/pre1/invoke.rs, 942 lines, 0 kept verbatim inside literals; 0 lines after the module stay

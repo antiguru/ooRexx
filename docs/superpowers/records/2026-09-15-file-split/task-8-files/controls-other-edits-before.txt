@@ -1,0 +1,4 @@
+as committed: exit 0 (expected 0); 
+a renamed path reaches another constant: exit 1 (expected 1); crates/rexx-exec/src/dispatch/rexx_info.rs: FAIL 10 occurrences of '\\bparse_template\\b' -> 'version'; HEAD with them replaced DIFFERS from the working text
+an insert-only file changes a line: exit 1 (expected 1); crates/rexx-exec/src/lib.rs: FAIL inserted lines only
+a changed file with no rule: exit 1 (expected 1); FAIL no rule for changed path crates/rexx-exec/src/value.rs

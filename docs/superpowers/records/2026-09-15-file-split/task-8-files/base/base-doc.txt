@@ -1,0 +1,12 @@
+   Compiling memchr v2.8.3
+    Checking rustc-hash v2.1.2
+    Checking cfg-if v1.0.4
+    Checking libloading v0.8.9
+   Compiling quick-xml v0.37.5
+   Compiling rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory)
+    Checking rexx-num v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num)
+    Checking rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+ Documenting rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.90s
+   Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-8/t-check/doc/rexx_api/index.html
+exit 0

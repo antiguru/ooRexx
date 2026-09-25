@@ -1,0 +1,22 @@
+moved units: 92; names searched in backticks: 84
+file tails searched: invoke.rs invoke/ invoke/tests.rs invoke/tests/
+
+(a) comments naming a moved unit: 12
+  crates/rexx-api/src/ffi.rs:756: // SAFETY: the array is `invoke::run`'s, whose element one this signature
+  crates/rexx-api/src/invoke.rs:15: //! `NativeActivation::run` (`interpreter/execution/NativeActivation.cpp:1264-1310`)
+  crates/rexx-api/src/invoke.rs:32: /// Run the native method `entry` against `arguments`.
+  crates/rexx-api/src/invoke.rs:34: /// `context` is the method context the extension is handed. `arguments` is
+  crates/rexx-api/src/invoke.rs:73: /// Run the native routine `entry` against `arguments`, as [`method`] runs a
+  crates/rexx-api/src/invoke/tests.rs:67: /// One parameter more than [`LONGEST`].
+  crates/rexx-api/src/invoke/tests.rs:167: /// What `double_object` was asked for, in order.
+  crates/rexx-api/src/invoke/tests.rs:169: /// Whether `whole_number` runs [`crate::ffi::refusing_stub`] as a
+  crates/rexx-api/src/invoke/tests.rs:174: /// What `arguments` answers.
+  crates/rexx-api/src/invoke/tests.rs:411: /// Run `entry` against `arguments` freshly made strings.
+  crates/rexx-api/src/invoke/tests.rs:441: /// [`run`] for a routine, over a call context no `Contexts` built.
+  crates/rexx-api/src/invoke/tests.rs:786: /// Runs the method `stub` against `arguments` freshly made strings, over
+
+(b) comments naming a touched file: 0
+
+(c) positional words inside the destinations and the parent: 2
+  crates/rexx-api/src/invoke.rs:131: // never held across the call below: the context that call hands the
+  crates/rexx-api/src/invoke/tests.rs:787: /// the contexts a `Contexts` builds, and answers the outcome beside the

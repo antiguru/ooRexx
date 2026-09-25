@@ -1,0 +1,47 @@
+control 1 moved thread_local changes its value (c6 e59418808): exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']: CAUGHT
+  FAILURES:
+  I1b macro thread_local/CLAUSE_OP_ENTRIES: /tmp/tmp72ajbmjy/a /tmp/tmp72ajbmjy/b differ: byte 212, line 5
+  I2 token stream differs: macro thread_local/CLAUSE_OP_ENTRIES
+  I3 literals differ: macro thread_local/CLAUSE_OP_ENTRIES
+control 2 moved thread_local deleted (c6 e59418808): exit 1, expected ['I2'], reported ['I2']: CAUGHT
+  FAILURES:
+  I2 unit vanished: macro thread_local/CALL_SITE_HITS
+control 3 two moved thread_locals swap their statics (c6 e59418808): exit 1, expected ['I1b'], reported ['I1b']: CAUGHT
+  FAILURES:
+  I1b macro thread_local/RUN_CHUNK_ENTRIES: /tmp/tmpd3pbgrb0/a /tmp/tmpd3pbgrb0/b differ: byte 41, line 1
+  I1b macro thread_local/CLAUSE_OP_ENTRIES: /tmp/tmpimrol00l/a /tmp/tmpimrol00l/b differ: byte 41, line 1
+control 4 declared reflow unit changes a token (c4 d31dbed5f): exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']: CAUGHT
+  FAILURES:
+  I1b tests::fn a_trace_op_outside_a_clause_region_is_refused: /tmp/tmp1svjfl93/a /tmp/tmp1svjfl93/b differ: byte 1, line 1
+  I2 token stream differs: tests::fn a_trace_op_outside_a_clause_region_is_refused
+  I3 literals differ: tests::fn a_trace_op_outside_a_clause_region_is_refused
+control 5 the reflow undeclared (c4 d31dbed5f): exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
+  FAILURES:
+  I1b tests::fn a_trace_op_outside_a_clause_region_is_refused: /tmp/tmp8zmlcvy_/a /tmp/tmp8zmlcvy_/b differ: byte 1, line 1
+  I2 token stream differs: tests::fn a_trace_op_outside_a_clause_region_is_refused
+control 6 unmoved compile.rs line changes (c5 ecd4fc295): exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:1641 post:1650: 'fn op_index(ops: &[Op]) -> Result<u32, ChunkTooLarge> {' -> 'fn op_index_(ops: &[Op]) -> Result<u32, ChunkTooLarge> {'
+  I2 unit vanished: fn op_index
+control 7 docsig: a warning moves file: CAUGHT
+  orig:
+  warning: `c` (lib doc) generated 1 warning | -
+  warning: unresolved link to `x` | crates/a.rs
+  moved:
+  warning: `c` (lib doc) generated 1 warning | -
+  warning: unresolved link to `x` | crates/a/b.rs
+  shifted:
+  warning: `c` (lib doc) generated 1 warning | -
+  warning: unresolved link to `x` | crates/a.rs
+control 8 comments7: a qualified mention elsewhere is listed: CAUGHT
+  (a) comments naming a moved unit: 4
+    crates/rexx-exec/src/lib.rs:2054: // `drive::run_chunk_entries` is planted.
+control 9 other_edits: a second edit beside c5's substitution: CAUGHT
+  as committed: exit 0; planted: exit 1
+  crates/rexx-exec/src/ir/drive.rs: FAIL 1 occurrences of '`compile::assert_region_ops_name_their_clause`' -> '`compile::invariants::assert_region_ops_name_their_clause`'; HEAD with them replaced DIFFERS from the working text
+  FAILURES: 1
+control 10 other_edits: an edited line in insert-only ir.rs: CAUGHT
+  as committed: exit 0; planted: exit 1
+  crates/rexx-exec/src/ir.rs: FAIL inserted lines only
+  FAILURES: 1
+10 of 10 controls caught as expected

@@ -1,0 +1,3 @@
+moved lines of invoke.rs: 944 lines, 0 matching the unsafe_sites.rs predicates
+destination invoke/tests.rs: 952 lines, 0 matching
+unsafe: NONE

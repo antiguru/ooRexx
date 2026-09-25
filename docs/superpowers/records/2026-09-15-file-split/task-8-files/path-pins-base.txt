@@ -1,0 +1,11 @@
+== /bin/grep -rn 'crates/rexx-api/src/invoke.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+== /bin/grep -rn 'rexx-api/src/invoke.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+== /bin/grep -rn 'src/invoke.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+== /bin/grep -rn 'invoke.rs' rust/corpus
+== /bin/grep -rn 'crates/rexx-api/src/values.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+== /bin/grep -rn 'rexx-api/src/values.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+== /bin/grep -rn 'src/values.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+== /bin/grep -rn 'values.rs' rust/corpus
+rust/corpus/phase-8.txt:214:# crates/rexx-api/tests/values.rs.
+== /bin/grep -rn 'crates/rexx-api/tests/values.rs' (tests, src, benches, corpus)
+rust/corpus/phase-8.txt:214:# crates/rexx-api/tests/values.rs.

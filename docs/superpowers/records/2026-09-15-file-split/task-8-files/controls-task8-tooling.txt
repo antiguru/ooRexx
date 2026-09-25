@@ -1,0 +1,18 @@
+control A1 --expect-reflow: (x) becomes (x,) in the declared unit: CAUGHT
+  this task's instruments.py: exit 1, reported ['I1b', 'I2']; Task 7's: exit 0, reported []
+  I1b tests::fn a_trace_op_outside_a_clause_region_is_refused: /tmp/tmp6jr22doh/a /tmp/tmp6jr22doh/b differ: byte 1, line 1
+  I2 token stream differs: tests::fn a_trace_op_outside_a_clause_region_is_refused
+control A2 --expect-reflow: Task 7's c4 as committed still passes: CAUGHT
+  exit 0, reported []
+  PASS: no failures
+control A3 comments7: a positional comment in the parent naming no moved unit: CAUGHT
+  this task's comments7.py lists: ['  crates/rexx-exec/src/ir/drive.rs:2353: // Everything below this line is planted, and names no moved unit.'] under ['(c) positional words inside the destinations and the parent: 58']
+  Task 7's lists: [] under ['(c) positional words inside the destinations: 1']
+control A4 unsafe_count: code, comment, moved PRE lines: CAUGHT
+  as committed: unsafe: NONE
+  planted in code: unsafe: FOUND 1
+  planted in a comment: unsafe: NONE
+  planted in PRE's moved lines: unsafe: FOUND 1
+part B c1: no commit yet, skipped
+part B c2: no commit yet, skipped
+4 of 4 controls caught as expected
