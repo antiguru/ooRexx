@@ -1,0 +1,4 @@
+gate_table_c.rs
+table_c/mod.rs,table_c/checks.rs
+--expect-gone=use std::fs;
+--expect-gone=use support::oracle::{CppOutcome, did_not_finish, wrapped_exit_code};

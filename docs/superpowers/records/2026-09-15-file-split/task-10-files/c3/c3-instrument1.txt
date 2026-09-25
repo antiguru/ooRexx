@@ -1,0 +1,33 @@
+(a) unmoved lines: PRE gate_table_c.rs minus the removed lines, against POST gate_table_c.rs
+  DELETED (declared) pre:19: 'use std::fs;'
+  IMPORTS NARROWED post:23-23: ['gate_tables::compare_raw', 'gate_tables::is_loud', 'gate_tables::refused_construct', 'gate_tables::run_gate_probe']
+  DELETED (declared) pre:27: 'use support::oracle::{CppOutcome, did_not_finish, wrapped_exit_code};'
+  INSERTED post:25: use table_c::checks::{
+  INSERTED post:26:     OracleShape, argutil_assertion, check_concept_line_counts, check_documented_edge,
+  INSERTED post:27:     check_edge_endpoints, check_entry_kinds, check_entry_present, check_interpolated_text,
+  INSERTED post:28:     check_oracle_shape, check_probe_text, class_probe_shape, probe_set, run_probe,
+  INSERTED post:29: };
+  IMPORTS NARROWED post:31-31: ['table_c::probes::DOCUMENTED_EDGE_MARKER', 'table_c::probes::ENTRY_MARKER', 'table_c::probes::class_probe_class_questions', 'table_c::probes::class_probe_entry_questions']
+  IMPORTS NARROWED post:35-35: ['table_c::rows::Edge']
+  6 equal blocks, 1030 lines, each also compared with cmp; 1038 expected lines, 1038 actual lines
+
+(c) destination table_c/mod.rs: PRE against POST, inserted lines only
+  INSERTED post:14-14: 1 lines
+  15 of 15 PRE lines equal, each block compared with cmp
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn class_probe_shape -> table_c/checks.rs (8 lines; visibility private -> pub(crate))
+  OK fn check_concept_line_counts -> table_c/checks.rs (20 lines; visibility private -> pub(crate))
+  OK fn check_entry_kinds -> table_c/checks.rs (17 lines; visibility private -> pub(crate))
+  OK fn check_entry_present -> table_c/checks.rs (31 lines; visibility private -> pub(crate))
+  OK enum OracleShape -> table_c/checks.rs (12 lines; visibility private -> pub(crate))
+  OK fn check_oracle_shape -> table_c/checks.rs (25 lines; visibility private -> pub(crate))
+  OK fn check_documented_edge -> table_c/checks.rs (26 lines; visibility private -> pub(crate))
+  OK struct Ran -> table_c/checks.rs (13 lines; visibility private -> pub(crate); field visibility widened: pub(crate) crate_exit, pub(crate) crate_stdout, pub(crate) crate_stderr, pub(crate) crate_loud, pub(crate) crate_refused, pub(crate) oracle_exit, pub(crate) oracle_stdout, pub(crate) oracle_stderr, pub(crate) differs)
+  OK fn run_probe -> table_c/checks.rs (75 lines; visibility private -> pub(crate))
+  OK fn probe_set -> table_c/checks.rs (50 lines; visibility private -> pub(crate))
+  OK fn check_probe_text -> table_c/checks.rs (56 lines; visibility private -> pub(crate))
+  OK fn check_interpolated_text -> table_c/checks.rs (35 lines; visibility private -> pub(crate))
+  WHITESPACE-ONLY fn check_edge_endpoints -> table_c/checks.rs: /tmp/tmpceiz_t16/a /tmp/tmpceiz_t16/b differ: byte 128, line 3 (visibility private -> pub(crate); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  OK fn argutil_assertion -> table_c/checks.rs (46 lines; visibility private -> pub(crate))
+  17 of 18 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

@@ -45,11 +45,11 @@ pub(crate) fn method_probe(class: &str, arm: &str) -> String {
 }
 
 /// The marker a class probe prints the `.environment` entry itself under.
-pub(crate) const ENTRY_MARKER: &str = "entry ";
+pub(super) const ENTRY_MARKER: &str = "entry ";
 
 /// The questions a class wiring row asks that **any** `.environment` entry
 /// answers, whether it is a class object or an instance.
-pub(crate) fn class_probe_entry_questions(name: &str) -> Vec<String> {
+pub(super) fn class_probe_entry_questions(name: &str) -> Vec<String> {
     vec![
         format!("say '{}' .{name}\n", ENTRY_MARKER.trim_end()),
         format!("say 'class-of-entry' .{name}~class~id\n"),
@@ -57,7 +57,7 @@ pub(crate) fn class_probe_entry_questions(name: &str) -> Vec<String> {
 }
 
 /// The questions a class wiring row asks that only a **class object** answers.
-pub(crate) fn class_probe_class_questions(name: &str) -> Vec<String> {
+pub(super) fn class_probe_class_questions(name: &str) -> Vec<String> {
     vec![
         format!("say 'id' .{name}~id\n"),
         format!("say 'class' .{name}~class\n"),
@@ -214,4 +214,4 @@ pub(crate) fn derived_say_lines(text: &str) -> usize {
 
 /// The marker an edge probe's derived text prints its documented-edge answer
 /// under.
-pub(crate) const DOCUMENTED_EDGE_MARKER: &str = "documented-edge ";
+pub(super) const DOCUMENTED_EDGE_MARKER: &str = "documented-edge ";

@@ -1,0 +1,2 @@
+crates/rexx-exec/tests/table_c/probes.rs: OK 1 occurrence(s) of 'pub\\(crate\\) const ENTRY_MARKER' -> 'pub(super) const ENTRY_MARKER'; 1 occurrence(s) of 'pub\\(crate\\) fn class_probe_entry_questions' -> 'pub(super) fn class_probe_entry_questions'; 1 occurrence(s) of 'pub\\(crate\\) fn class_probe_class_questions' -> 'pub(super) fn class_probe_class_questions'; 1 occurrence(s) of 'pub\\(crate\\) const DOCUMENTED_EDGE_MARKER' -> 'pub(super) const DOCUMENTED_EDGE_MARKER'; HEAD with them applied equals the working text; changed
+extra edits: 1 files, all as declared

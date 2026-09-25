@@ -1,0 +1,1 @@
+crates/rexx-exec/tests/table_c/probes.rs=pub\(crate\) const ENTRY_MARKER=>pub(super) const ENTRY_MARKER;;pub\(crate\) fn class_probe_entry_questions=>pub(super) fn class_probe_entry_questions;;pub\(crate\) fn class_probe_class_questions=>pub(super) fn class_probe_class_questions;;pub\(crate\) const DOCUMENTED_EDGE_MARKER=>pub(super) const DOCUMENTED_EDGE_MARKER

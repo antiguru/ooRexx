@@ -1,0 +1,36 @@
+  visibility fn class_probe_shape: private -> pub(crate) (table_c/checks.rs)
+  visibility fn check_concept_line_counts: private -> pub(crate) (table_c/checks.rs)
+  visibility fn check_entry_kinds: private -> pub(crate) (table_c/checks.rs)
+  visibility fn check_entry_present: private -> pub(crate) (table_c/checks.rs)
+  visibility enum OracleShape: private -> pub(crate) (table_c/checks.rs)
+  visibility fn check_oracle_shape: private -> pub(crate) (table_c/checks.rs)
+  visibility fn check_documented_edge: private -> pub(crate) (table_c/checks.rs)
+  FIELD-VISIBILITY-ONLY struct Ran: identical once a field's `pub(super)`/`pub(crate)` is dropped
+  visibility struct Ran: private -> pub(crate) (table_c/checks.rs)
+  visibility fn run_probe: private -> pub(crate) (table_c/checks.rs)
+  visibility fn probe_set: private -> pub(crate) (table_c/checks.rs)
+  visibility fn check_probe_text: private -> pub(crate) (table_c/checks.rs)
+  visibility fn check_interpolated_text: private -> pub(crate) (table_c/checks.rs)
+  TRAILING-COMMA-ONLY fn check_edge_endpoints: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility fn check_edge_endpoints: private -> pub(crate) (table_c/checks.rs)
+  visibility fn argutil_assertion: private -> pub(crate) (table_c/checks.rs)
+  ONLY-PRE use std::fs
+  ONLY-PRE use gate_tables::{CLOSED_PHASES,Descriptors,Report,Structural,Verdict,assert_no_structural_failures,compare_raw,excerpt,is_loud,refused_construct,run_gate_probe,stdout_lines,verdict,verdict_is_gated,verdict_label}
+  ONLY-PRE use support::oracle::{CppOutcome,did_not_finish,wrapped_exit_code}
+  ONLY-PRE use table_c::probes::{CLASS_SUBDIR,CONCEPT_SUBDIR,DOCUMENTED_EDGE_MARKER,EDGE_SUBDIR,ENTRY_MARKER,METHOD_SUBDIR,class_probe,class_probe_class_questions,class_probe_entry_questions,class_probe_text,concept_probe,derived_say_lines,edge_probe,edge_probe_text,method_probe,method_probe_text}
+  ONLY-PRE use table_c::rows::{ClassRow,Construction,Edge,Section,read_classes,read_edges,read_method_rows,read_sections}
+  ONLY-POST use gate_tables::{CLOSED_PHASES,Descriptors,Report,Structural,Verdict,assert_no_structural_failures,excerpt,stdout_lines,verdict,verdict_is_gated,verdict_label} (gate_table_c.rs)
+  ONLY-POST use table_c::checks::{OracleShape,argutil_assertion,check_concept_line_counts,check_documented_edge,check_edge_endpoints,check_entry_kinds,check_entry_present,check_interpolated_text,check_oracle_shape,check_probe_text,class_probe_shape,probe_set,run_probe} (gate_table_c.rs)
+  ONLY-POST use table_c::probes::{CLASS_SUBDIR,CONCEPT_SUBDIR,EDGE_SUBDIR,METHOD_SUBDIR,class_probe,class_probe_text,concept_probe,derived_say_lines,edge_probe,edge_probe_text,method_probe,method_probe_text} (gate_table_c.rs)
+  ONLY-POST use table_c::rows::{ClassRow,Construction,Section,read_classes,read_edges,read_method_rows,read_sections} (gate_table_c.rs)
+  ONLY-POST mod checks (table_c/mod.rs)
+  ONLY-POST table_c/checks.rs::use std::collections::BTreeSet (table_c/checks.rs)
+  ONLY-POST table_c/checks.rs::use std::fs (table_c/checks.rs)
+  ONLY-POST table_c/checks.rs::use std::path::Path (table_c/checks.rs)
+  ONLY-POST table_c/checks.rs::use crate::Concept (table_c/checks.rs)
+  ONLY-POST table_c/checks.rs::use crate::gate_tables::{Descriptors,Structural,compare_raw,excerpt,is_loud,refused_construct,run_gate_probe,stdout_lines} (table_c/checks.rs)
+  ONLY-POST table_c/checks.rs::use crate::support (table_c/checks.rs)
+  ONLY-POST table_c/checks.rs::use crate::support::oracle::{CppOutcome,did_not_finish,wrapped_exit_code} (table_c/checks.rs)
+  ONLY-POST table_c/checks.rs::use super::probes::{DOCUMENTED_EDGE_MARKER,ENTRY_MARKER,class_probe_class_questions,class_probe_entry_questions} (table_c/checks.rs)
+  ONLY-POST table_c/checks.rs::use super::rows::{ClassRow,Construction,Edge,Section} (table_c/checks.rs)
+40 of 40 units present on both sides have identical token streams (18 of them moved); 5 only before, 14 only after

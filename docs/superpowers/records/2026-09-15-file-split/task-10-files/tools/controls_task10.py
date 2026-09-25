@@ -260,6 +260,20 @@ PART_B = {
         ("B6-c2 an existing destination (mod.rs) changes a line", ["I1c"], "table_c/mod.rs",
          first("pub(super) mod rows;", "pub(crate) mod rows;"), same),
     ],
+    3: [
+        ("B1-c3 a moved check's comparison flips", ["I1b", "I2"], "table_c/checks.rs",
+         first("if answer == Some(\"1\") {", "if answer != Some(\"1\") {"), same),
+        ("B2-c3 a moved structural message changes", ["I1b", "I3"], "table_c/checks.rs",
+         first('"a probe program no row names, so nothing runs it"', '"a probe program no row names"'), same),
+        ("B3-c3 a moved check is deleted", ["I2"], "table_c/checks.rs",
+         delete_item("pub(crate) fn check_entry_kinds("), same),
+        ("B4-c3 a member of the moved impl block changes", ["I1b", "I2"], "table_c/checks.rs",
+         first("OracleShape::AllOrNothing(want) => lines == want || lines == 0,", "OracleShape::AllOrNothing(want) => lines == want,"), same),
+        ("B5-c3 an unmoved line of a test changes", ["I1a"], "gate_table_c.rs",
+         first("let named: Vec<&String> = gated.iter().take(20).collect();", "let named: Vec<&String> = gated.iter().take(21).collect();"), same),
+        ("B6-c3 an import dropped beside the declared deletions, undeclared", ["I1a"], "gate_table_c.rs",
+         first("use std::collections::{BTreeMap, BTreeSet};\n", "use std::collections::BTreeMap;\n"), same),
+    ],
 }
 for n, plants in PART_B.items():
     p = pair(n)
