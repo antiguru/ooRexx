@@ -1,0 +1,3 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-9/t-check/doc/rexx_parse/index.html and 1 other file
+files: instruction.rs instruction/loops.rs instruction/tests.rs 
+warnings located in instruction.rs or instruction/: 0

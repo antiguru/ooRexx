@@ -220,6 +220,32 @@ PART_B = {
         ("B5-c4 a second blank line goes where one is declared", ["I1a"], "token.rs",
          first("\nmod cursor;\n", "mod cursor;\n"), same),
     ],
+    5: [
+        ("B1-c5 the string a moved member passes to .expect(..) changes", ["I1b", "I2", "I3"], "instruction/loops.rs",
+         first('.expect("just matched it")', '.expect("just matched it.")'), same),
+        ("B2-c5 a moved member is deleted", ["I2"], "instruction/loops.rs",
+         delete_member("    /// `DO FOREVER`, `DO WHILE` and `DO UNTIL`"), same),
+        ("B3-c5 an unmoved line of the keyword dispatch changes", ["I1a"], "instruction.rs",
+         first("let body = self.create_loop(true)?;", "let body = self.create_loop(false)?;"), same),
+        ("B4-c5 two moved members swap their doc comments", ["I1b", "I2", "I3"], "instruction/loops.rs",
+         swap("    /// `newDoOverLoop` (`InstructionParser.cpp:1432`)", "    /// `newDoWithLoop` (`InstructionParser.cpp:1582`)"), same),
+    ],
+    6: [
+        ("B1-c6 a moved member's body changes a token", ["I1b", "I2"], "instruction/address.rs",
+         first("930 + u16::try_from(stream)", "931 + u16::try_from(stream)"), same),
+        ("B2-c6 a moved member is deleted", ["I2"], "instruction/address.rs",
+         delete_member("    /// `parseRedirectOutputOptions`"), same),
+        ("B3-c6 the widened entry point is renamed", ["I1b", "I2"], "instruction/address.rs",
+         first("pub(super) fn address(", "pub(super) fn address_new("), same),
+    ],
+    7: [
+        ("B1-c7 a moved member's body changes a token", ["I1b", "I2"], "instruction/parse.rs",
+         first("Operator::Plus => TriggerKind::Plus,", "Operator::Plus => TriggerKind::Minus,"), same),
+        ("B2-c7 a moved member is deleted", ["I2"], "instruction/parse.rs",
+         delete_member("    /// `RexxToken::parseOption`"), same),
+        ("B3-c7 a doc line of a moved member changes", ["I1b", "I2", "I3"], "instruction/parse.rs",
+         first("/// The column a `+`, `-`, `=`, `<` or `>` trigger moves to.", "/// The column a `+`, `-`, `=`, `<` or `>` trigger moves to"), same),
+    ],
 }
 pre_mode = sys.argv[1:2] == ["--pre"]
 for n, plants in PART_B.items():

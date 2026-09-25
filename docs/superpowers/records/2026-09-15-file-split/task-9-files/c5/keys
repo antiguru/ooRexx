@@ -1,0 +1,9 @@
+--impl=impl<'a> Inst<'a> {
++impl Inst<'a>::fn create_loop
+impl Inst<'a>::fn plain_loop
+impl Inst<'a>::fn count_loop
+impl Inst<'a>::fn controlled
+impl Inst<'a>::fn do_over
+impl Inst<'a>::fn do_with
+impl Inst<'a>::fn for_and_conditional
+impl Inst<'a>::fn loop_conditional
