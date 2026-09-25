@@ -1,0 +1,37 @@
+moved units: 42; names searched in backticks: 40
+file tails searched: builtin/datetime.rs builtin/datetime/ builtin/datetime/tests.rs builtin/datetime/tests/ datetime.rs datetime/tests.rs
+
+(a) comments naming a moved unit: 8
+  crates/rexx-exec/src/builtin/datetime/tests.rs:36: /// [`failure`], without the ASCII assumption -- for the one test whose
+  crates/rexx-exec/src/builtin/datetime/tests.rs:38: /// would reject outright rather than mangle, so `failure`'s own
+  crates/rexx-exec/src/builtin/datetime/tests.rs:134: /// The property `time_r_resets_relative_to_the_last_reset_not_program_start`
+  crates/rexx-exec/src/builtin/datetime/tests.rs:362: /// in, which [`date_366_is_valid_only_in_a_leap_year`] checks
+  crates/rexx-exec/src/builtin/datetime/tests.rs:384: /// [`date_366_is_valid_only_in_a_leap_year`], which is the one that
+  crates/rexx-exec/src/builtin/datetime/tests.rs:454: /// [`every_date_output_letter_is_accepted`], since a single shared
+  crates/rexx-exec/src/builtin/datetime/tests.rs:670: // one, so the whole check would be carried by `output()`'s own
+  crates/rexx-exec/src/builtin/datetime/tests.rs:825: // `the_empty_option_renders_as_the_empty_string_not_a_placeholder`,
+
+(b) comments naming a touched file: 0
+
+(c) positional words inside the destinations: 21
+  crates/rexx-exec/src/builtin/datetime/tests.rs:64: /// The adjacent success proving the burn above is real and the harness
+  crates/rexx-exec/src/builtin/datetime/tests.rs:94: /// elapsed-time test below produces -- into exactly `N` `f64`s.
+  crates/rexx-exec/src/builtin/datetime/tests.rs:106: /// The first `TIME('R')` a program runs answers `0`; a later one answers
+  crates/rexx-exec/src/builtin/datetime/tests.rs:146: /// unlike the sibling tests above and below, which each need one
+  crates/rexx-exec/src/builtin/datetime/tests.rs:160: /// if `E` reset anything, the third reading below would measure only
+  crates/rexx-exec/src/builtin/datetime/tests.rs:175: // alone and fall far below `e2`. An earlier form asserted
+  crates/rexx-exec/src/builtin/datetime/tests.rs:195: // boundary and is instead consumed later against whichever
+  crates/rexx-exec/src/builtin/datetime/tests.rs:198: // dropping the callee's own second `E` here changes `after` from
+  crates/rexx-exec/src/builtin/datetime/tests.rs:211: // comparable to the burn's own duration. It does not here: the
+  crates/rexx-exec/src/builtin/datetime/tests.rs:293: /// the oracle: both sides answer `20071121` here, not `20070922`.
+  crates/rexx-exec/src/builtin/datetime/tests.rs:339: /// the oracle here at all -- it is a confirmed segfault there (rc 139,
+  crates/rexx-exec/src/builtin/datetime/tests.rs:363: /// separately and correctly instead of assuming one answer here.
+  crates/rexx-exec/src/builtin/datetime/tests.rs:392: /// this test happens to run in is a leap year -- computed here from the
+  crates/rexx-exec/src/builtin/datetime/tests.rs:544: /// instead -- each of the six numbers below is measured directly
+  crates/rexx-exec/src/builtin/datetime/tests.rs:669: // `.ends_with('\n')` alone is vacuous here -- `SAY` always appends
+  crates/rexx-exec/src/builtin/datetime/tests.rs:754: /// test above exercises on the output side.
+  crates/rexx-exec/src/builtin/datetime/tests.rs:783: // 2022'` disagrees only with the *explicit* `-` separator above --
+  crates/rexx-exec/src/builtin/datetime/tests.rs:802: /// shared brief's own Task 3 defect, checked directly here rather than
+  crates/rexx-exec/src/builtin/datetime/tests.rs:806: /// every byte below `0x20` (other than tab/newline/CR) into `?` --
+  crates/rexx-exec/src/builtin/datetime/tests.rs:826: // above -- completing this alphabet's three required members (a byte
+  crates/rexx-exec/src/builtin/datetime/tests.rs:832: /// later clause makes, under `run_program_collect_every_alloc` (the
