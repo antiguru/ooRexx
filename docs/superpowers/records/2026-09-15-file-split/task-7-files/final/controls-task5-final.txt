@@ -1,6 +1,6 @@
 control 1 re-wrapped unit changes a token (c2 711ba036f): exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
   FAILURES:
-  I1b tests::fn line_at_answers_what_line_of_answers_at_every_index: /tmp/tmp56shmwyb/a /tmp/tmp56shmwyb/b differ: byte 1, line 1
+  I1b tests::fn line_at_answers_what_line_of_answers_at_every_index: /tmp/tmpfzwo8mc2/a /tmp/tmpfzwo8mc2/b differ: byte 1, line 1
   I2 token stream differs: tests::fn line_at_answers_what_line_of_answers_at_every_index
   I3 literals differ: tests::fn line_at_answers_what_line_of_answers_at_every_index
 control 2 moved test vanishes from the child (c5 838c11687): exit 1, expected ['I2'], reported ['I2']: CAUGHT
@@ -11,11 +11,11 @@ control 3 space inside a moved test's literal (c5 838c11687): exit 1, expected [
   I3 literals differ: object_operand_tests::fn an_operator_sent_to_an_object_is_loud
 control 4 undeclared test changes a token (c4 c9e6cf3ef): exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
   FAILURES:
-  I1b tests::fn eval_text: /tmp/tmpbgbeu_bo/a /tmp/tmpbgbeu_bo/b differ: byte 247, line 4
+  I1b tests::fn eval_text: /tmp/tmp7ktxymxl/a /tmp/tmp7ktxymxl/b differ: byte 247, line 4
   I2 token stream differs: tests::fn eval_text
 control 5 moved const changes its literal (c7 facf866a4): exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']: CAUGHT
   FAILURES:
-  I1b const PLATFORM: /tmp/tmpdl8pj72n/a /tmp/tmpdl8pj72n/b differ: byte 101, line 2
+  I1b const PLATFORM: /tmp/tmpmj0quoth/a /tmp/tmpmj0quoth/b differ: byte 101, line 2
   I2 token stream differs: const PLATFORM
   I3 literals differ: const PLATFORM
 control 6 unmoved list static changes a name (c9 fe7b204ff): exit 1, expected ['I1a', 'I2', 'I3'], reported ['I1a', 'I2', 'I3']: CAUGHT
@@ -25,7 +25,7 @@ control 6 unmoved list static changes a name (c9 fe7b204ff): exit 1, expected ['
   I3 literals differ: static ORACLE_LOCAL
 control 7 moved member changes a token (c9 fe7b204ff): exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
   FAILURES:
-  I1b impl Interp::fn bump_route_generation: /tmp/tmp2i58ti2l/a /tmp/tmp2i58ti2l/b differ: byte 218, line 4
+  I1b impl Interp::fn bump_route_generation: /tmp/tmp1_dxfx2m/a /tmp/tmp1_dxfx2m/b differ: byte 218, line 4
   I2 token stream differs: impl Interp::fn bump_route_generation
   I3 literals differ: impl Interp::fn bump_route_generation
 7 of 7 controls caught as expected

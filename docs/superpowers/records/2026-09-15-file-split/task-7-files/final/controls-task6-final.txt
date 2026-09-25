@@ -1,6 +1,6 @@
 control 1 moved const row changes its arity (c8 4488f00a6): exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']: CAUGHT
   FAILURES:
-  I1b row NATIVE_METHODS/Stem/"ITEMS": /tmp/tmpodsc5jfi/a /tmp/tmpodsc5jfi/b differ: byte 36, line 1
+  I1b row NATIVE_METHODS/Stem/"ITEMS": /tmp/tmpf1auspbq/a /tmp/tmpf1auspbq/b differ: byte 36, line 1
   I2 token stream differs: row NATIVE_METHODS/Stem/"ITEMS"
   I3 literals differ: row NATIVE_METHODS/Stem/"ITEMS"
 control 2 moved row dropped (c8 4488f00a6): exit 1, expected ['I2'], reported ['I2']: CAUGHT

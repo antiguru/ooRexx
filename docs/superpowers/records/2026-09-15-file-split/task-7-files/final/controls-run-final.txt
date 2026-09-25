@@ -6,11 +6,11 @@ control 2 space inside a macro argument's string: exit 1, expected ['I3'], repor
   I3 literals differ: impl HeaderPlan::fn push
 control 3 token change: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
   FAILURES:
-  I1b impl HeaderPlan::fn push: /tmp/tmpdbieo23x/a /tmp/tmpdbieo23x/b differ: byte 267, line 7
+  I1b impl HeaderPlan::fn push: /tmp/tmpwewf36pt/a /tmp/tmpwewf36pt/b differ: byte 267, line 7
   I2 token stream differs: impl HeaderPlan::fn push
   I3 literals differ: impl HeaderPlan::fn push
 control 4 token change beside a re-wrapped signature's comma: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
   FAILURES:
-  I1b fn numeric_less: /tmp/tmpja8tn34e/a /tmp/tmpja8tn34e/b differ: byte 473, line 8
+  I1b fn numeric_less: /tmp/tmpl4vxk2au/a /tmp/tmpl4vxk2au/b differ: byte 473, line 8
   I2 token stream differs: fn numeric_less
 4 of 4 controls caught as expected

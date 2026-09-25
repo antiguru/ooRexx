@@ -3,6 +3,6 @@
   1 equal blocks, 602 lines, each also compared with cmp; 602 expected lines, 603 actual lines
 
 (b) moved units: PRE text against POST text, compared with cmp
-  WHITESPACE-ONLY tests::fn raised_at -> builtin/numeric/tests.rs: /tmp/tmpbtpzsn4j/a /tmp/tmpbtpzsn4j/b differ: byte 1, line 1 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
-  WHITESPACE-ONLY tests::fn expp_zero_suppresses_exponential_and_beats_expt_zero -> builtin/numeric/tests.rs: /tmp/tmpnbvu2ryb/a /tmp/tmpnbvu2ryb/b differ: byte 1, line 1 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY tests::fn raised_at -> builtin/numeric/tests.rs: /tmp/tmpm6s80ph7/a /tmp/tmpm6s80ph7/b differ: byte 1, line 1 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  WHITESPACE-ONLY tests::fn expp_zero_suppresses_exponential_and_beats_expt_zero -> builtin/numeric/tests.rs: /tmp/tmpbds7amu2/a /tmp/tmpbds7amu2/b differ: byte 1, line 1 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
   31 of 33 moved units byte-identical (visibility edits listed above), 2 differing in whitespace only

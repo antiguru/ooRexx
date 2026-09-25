@@ -1,7 +1,10 @@
 # Task 7 report: `rexx-exec/src/builtin/*` and `ir/*` over the limit
 
-BASE `964a6a8db`. There are six code commits, then this report's commit,
-then the gate results. Every artifact cited is under
+BASE `964a6a8db`. There are eight code commits. c1 to c6 came first, then
+this report's first commit (`e104bc0ff`) and a first gate run
+(`1a12e0059`). c7 and c8 followed team-lead's ruling on `string.rs`
+(Departure 1), then this revision of the report and the second gate
+run, whose results are below. Every artifact cited is under
 `docs/superpowers/records/2026-09-15-file-split/task-7-files/` (`files/`
 below). The tooling is Task 6's, adapted, in `files/tools/`.
 
@@ -15,9 +18,12 @@ below). The tooling is Task 6's, adapted, in `files/tools/`.
 | c4 | `d31dbed5f` | `compile.rs`'s test module | `ir/compile.rs` to `ir/compile/tests.rs` |
 | c5 | `ecd4fc295` | the op-stream `assert_*` checks | `ir/compile.rs` to `ir/compile/invariants.rs` |
 | c6 | `e59418808` | the driver's `#[cfg(test)]` counters | `ir/drive.rs` to `ir/counters.rs` |
+| c7 | `de1bfa3f4` | `string.rs`'s `mod tests` | `builtin/string.rs` to `builtin/string/tests.rs` |
+| c8 | `7c8f9aa3b` | `string.rs`'s `mod scan_tests` | `builtin/string.rs` to `builtin/string/scan_tests.rs` |
 
 The order follows the brief: tests-only moves first (c1 to c4), then the
-leaf with one production caller (c5), then the counters (c6). Each commit
+leaf with one production caller (c5), then the counters (c6); c7 and c8,
+tests-only, came after the ruling. Each commit
 message says `git blame -w -C -C -C` recovers the moved lines.
 
 Line counts use the plan's `find crates -name '*.rs' | xargs wc -l`:
@@ -27,17 +33,19 @@ Line counts use the plan's `find crates -name '*.rs' | xargs wc -l`:
 | `builtin/numeric.rs` | 1330 | 603 |
 | `builtin/convert.rs` | 2092 | 1011 |
 | `builtin/datetime.rs` | 2001 | 1165 |
-| `builtin/string.rs` | 2084 | 2084 (not split; see Departure 1) |
+| `builtin/string.rs` | 2084 | 1174 |
 | `ir/compile.rs` | 2409 | 1722 |
 | `ir/drive.rs` | 2590 | 2416 |
 | new: `numeric/tests.rs`, `convert/tests.rs`, `datetime/tests.rs` | | 732, 1087, 848 |
+| new: `string/tests.rs`, `string/scan_tests.rs` | | 893, 36 |
 | new: `compile/tests.rs`, `compile/invariants.rs` | | 423, 294 |
 | new: `ir/counters.rs` | | 197 |
 
 ## Where things went, and why
 
-* **The three `builtin/` test modules and `compile.rs`'s** each became
-  `mod tests;` and a file of their own under the parent's directory,
+* **The four `builtin/` files' test modules and `compile.rs`'s** each
+  became `mod tests;` (`string.rs`'s second, `mod scan_tests;`) and a file
+  of their own under the parent's directory,
   with `move_tests_mod.py` (de-indent, verbatim inside literals). The
   module path is unchanged, so every `super::` path inside them still
   resolves and no test's fully qualified name changes.
@@ -103,12 +111,14 @@ existing path (`ir::drive::suspend_counters`) must keep working. Clippy
   * `tests/builtin_status.rs:494`, "The names `src/builtin/string.rs`
     runs", and `corpus/oracle-crashes.txt:78`, "`find_forward`'s own doc
     comment in `rust/crates/rexx-exec/src/builtin/string.rs`": both still
-    true, since `string.rs` did not change at all (`find_forward` at
-    `string.rs:86`, its dispatch table in the same file).
+    true, since no production code in `string.rs` moved (`find_forward`
+    at `string.rs:86`, its dispatch table in the same file).
   * `corpus/phase-4c.txt:192`, "it is the transcribed table in
     builtin/string.rs": the test it means is
     `builtin::string::tests::the_padding_builtins_answer_the_oracles_own_bytes`,
-    in `string.rs`'s inline `mod tests`. This is Departure 1.
+    which was in `string.rs`'s inline `mod tests` and after c7 is at
+    `builtin/string/tests.rs:63`. Departure 1 gives the ruling and the
+    reading under which the sentence stays true.
   * `corpus/lang/string_extremes.rex:14` (and its copy in
     `rexx-parse/tests/sourceline_oracle/`), "`integer_object`'s doc in
     builtin/numeric.rs": `integer_object` is production code and stayed
@@ -122,23 +132,28 @@ existing path (`ir::drive::suspend_counters`) must keep working. Clippy
 
 ## Departures from the brief
 
-1. **`builtin/string.rs` is not split.** Before moving anything I found the
-   third path pin above, which the brief does not list. `phase-4c.txt`
-   (read-only) says the one test that removing the POS overrun reddens
-   "is the transcribed table in builtin/string.rs". That test lives in
-   `string.rs`'s `mod tests`, so after the move it would be in
-   `builtin/string/tests.rs`. The sentence would then be true only if
-   "the table transcribed in builtin/string.rs" is read as `find_forward`'s
-   doc, not as the test. I asked team-lead to choose: (a) move `mod tests`
-   anyway and record that reading, or (b) leave it in place. No ruling came
-   while numeric, convert and datetime went through, so I took the
-   conservative option, as the dispatch told me to. I moved nothing in
-   `string.rs`, which is narrower than the (b) I first offered (move only
-   `scan_tests`): `scan_tests` alone is 28 lines, would leave the file over
-   the trigger, and would split its tests across two places. I told
-   team-lead this. If the ruling is (a), the two test modules are two more
-   tests-only commits with this tooling (`tools/tmove7.sh`,
-   `tools/prod7.sh`).
+1. **`builtin/string.rs` waited for a ruling, then moved (c7, c8).**
+   Before moving anything I found the third path pin above, which the brief
+   does not list. `corpus/phase-4c.txt:192` (read-only) says: "measured,
+   removing the overrun reddens one test in the workspace and it is the
+   transcribed table in builtin/string.rs". That test,
+   `builtin::string::tests::the_padding_builtins_answer_the_oracles_own_bytes`,
+   was in `string.rs`'s `mod tests`. I asked team-lead to choose: (a) move
+   `mod tests` anyway and record the reading, or (b) leave it. No ruling had
+   come by the time c1 to c6 and the first gate run were done, so the first
+   version of this report left `string.rs` whole. The ruling was then (a):
+   `phase-4c.txt` is a dated measurement record, and the file is not
+   edited. **The reading under which the sentence stays true**: "the
+   transcribed table in builtin/string.rs" is the oracle table that
+   `find_forward`'s doc (and the padding builtins' docs) transcribe, and
+   those stay in `string.rs`. The test that runs it through `dispatch` keeps
+   its fully qualified name, which is how a reader finds it. Its new file
+   is `builtin/string/tests.rs` (line 63). The test's own doc, "The oracle
+   transcripts each of these lines came from are in the function's own doc
+   comment", is plain prose with no intra-doc link. The docs it points to
+   did not move, and `tests_links.sh` finds no warning in `string.rs` or
+   `string/` before or after (`files/c7/c7-tests-links.txt`). c8 moved
+   `mod scan_tests` the same way, as the ruling asked.
 2. **Declared reflow in c4.** In
    `a_trace_op_outside_a_clause_region_is_refused`, the de-indent gave
    rustfmt room to join a two-element array onto one line, and it dropped
@@ -157,7 +172,7 @@ existing path (`ir::drive::suspend_counters`) must keep working. Clippy
    checks it as a `subst` rule (`files/c5/rules`). The line is a comment
    in the op loop's arm for `Op::Clause`; a comment does not reach codegen.
 4. **Inserted lines in parents** (instrument 1 lists each): `mod tests;`
-   (c1 to c4); `mod invariants;` and its `use` (c5, `compile.rs`); the two
+   (c1 to c4, c7), `mod scan_tests;` (c8); `mod invariants;` and its `use` (c5, `compile.rs`); the two
    `#[cfg(test)]` imports (c6, `drive.rs`); and
    `#[cfg(test)] mod counters;` (c6, `ir.rs`, an `insert` rule).
 
@@ -180,6 +195,8 @@ columns were identical, the test-module doc run built (`Generated`), and
 | c4 | 1992 equal, 1 inserted | 22 of 23, 1 declared reflow | 72 of 72 (1 declared) | 72 of 72; 226; 0 | identical | 1.22 3.83 4.85 / 2.63 5.01 5.13 |
 | c5 | 1713 equal, 9 inserted | 9 of 9 (vis) | 50 of 50 | 50 of 50; 143; 0 | identical | 2.30 3.89 4.69 / 2.77 5.11 5.14 |
 | c6 | 2406 equal, 10 inserted | 28 of 28 (16 vis) | 67 of 67 | 67 of 67; 219; 0 | identical | 3.19 4.61 4.95 / 2.35 5.05 5.20 |
+| c7 | 1199 equal, 1 inserted | 25 of 26, 1 reflowed | 96 of 96 | 96 of 96; 1504; 0 | identical | 4.29 4.49 5.73 / 3.68 19.42 15.56 |
+| c8 | 1173 equal, 1 inserted | 2 of 2 | 71 of 71 | 71 of 71; 144; 0 | identical | 2.91 17.01 14.93 / 3.89 6.63 10.04 |
 
 "Reflowed" is `WHITESPACE-ONLY` in instrument 1 (b): rustfmt re-wrapped a
 signature or a closure once the de-indent gave it four more columns. In
@@ -187,7 +204,9 @@ c1 and c2 one signature per file also lost its trailing comma, which
 instrument 2 reports as `TRAILING-COMMA-ONLY` (Task 2's relaxation).
 Instrument 4 gave 1582 test lines in 50 result blocks at BASE and at every
 commit, compared per result block and per test
-(`files/instrument4/`). The flake did not fire. c1 to c4 changed no file
+(`files/instrument4/`). The flake did not fire. The 5- and 15-minute
+loads around c7 and c8 were high from other work on the machine; the
+results were identical all the same. c1 to c4, c7 and c8 changed no file
 outside their parent and destination (`files/c<N>/c<N>-other-edits.diff`
 is empty). c5 (`drive.rs`) and c6 (`ir.rs`) changed one other file each,
 under a rule `other_edits.py` checked (`files/c<N>/c<N>-other-edits-check.txt`).
@@ -257,16 +276,16 @@ time. This task's own controls, `tools/controls_task7.py`, gave 10 of 10
 
 **Re-run with the final tooling** on every commit pair, from `git archive`
 trees (`tools/rerun7.sh`, arguments from each commit's `files/c<N>/args`,
-output in `files/final/rerun-summary.txt`): every verdict is PASS, and every
+output in `files/final/rerun-summary.txt`), c1 to c8: every verdict is PASS, and every
 output is identical to the committed one.
 
 **Cumulative** (`files/final/cumulative.txt`): for each parent, every BASE
-unit is present exactly once at `e59418808`, in the parent or a
+unit is present exactly once at `7c8f9aa3b`, in the parent or a
 destination. Each is identical modulo visibility, or is c4's one declared
-reflow. **Comments** (`files/final/comments.txt`, BASE's six touched
-files against the same files plus the six new ones at `e59418808`): one
+reflow. **Comments** (`files/final/comments.txt`, BASE's seven touched
+files against the same files plus the eight new ones at `7c8f9aa3b`): one
 comment line was lost, the `drive.rs` line Departure 3 corrects. What
-was added is the six license headers, the two new module docs and the
+was added is the eight license headers, the two new module docs and the
 corrected line. The new test files have no module doc, as in Task 6.
 
 **`cargo doc --no-deps -p rexx-exec`**: 2 warning lines at every commit;
@@ -278,7 +297,7 @@ covers `counters.rs`, whose three intra-doc links resolve. For the moved
 test modules, `tests_links.sh` (the `#[test]` lines stripped, private
 items and `--cfg test`) gives BASE's result at every commit
 (`files/base/base-tests-links-*.txt` against `files/c<N>/c<N>-tests-links.txt`):
-nothing in `numeric`, `convert` or `compile`'s test code, and in
+nothing in `numeric`, `convert`, `string` or `compile`'s test code, and in
 `datetime`'s the one BASE warning, `unresolved link to month_name`, at
 `datetime.rs:1493` before and `datetime/tests.rs:341` after, the same
 line of text. The intra-doc links in the moved code are enumerated in
@@ -289,8 +308,9 @@ line of text. The intra-doc links in the moved code are enumerated in
 The measure is callgrind's `summary:` minus `libc.so.6` and `ld-linux`, in
 two interleaved rounds. Every binary was built by `tools/perf_builds.sh`
 from a `git archive` of the whole repository. BASE had its own target
-directory. c4, c5 and c6 were built in turn in a second target directory
-(`files/perf/meta.txt`, `builds.txt`). The `.text` sha256 hashes are:
+directory. c4, c5, c6 and later c8 were built in turn in a second target
+directory (`files/perf/meta.txt`, `builds.txt`). The `.text` sha256 hashes
+are:
 
 | revision | `.text` sha256 | bytes |
 | --- | --- | --- |
@@ -298,6 +318,7 @@ directory. c4, c5 and c6 were built in turn in a second target directory
 | c4 `d31dbed5f` | `c8244939...`, BASE's | 2522699 |
 | c5 `ecd4fc295` | `bc09a49f...` | 2522699 |
 | c6 `e59418808` | `bc09a49f...`, c5's | 2522699 |
+| c8 `7c8f9aa3b`, final | `bc09a49f...`, c6's | 2522699 |
 
 **c6, the driver commit, does not change the release `.text`**, as the
 brief expected: its hash is c5's. The only commit that changes `.text` is
@@ -307,6 +328,11 @@ c5 (`files/perf/nm-base.txt`, `nm-c5.txt`, `text-diff-base-c5.txt`). The
 differing bytes are small displacements (for example 255 to 253), which
 is consistent with the assert panics' location data moving to a new file
 name in read-only data. I did not bisect further: nothing moved.
+
+The callgrind runs below compare BASE with c6, measured before c7 and c8
+existed. The final commit's `.text` is c6's byte for byte (c7 and c8 move
+test code only), so the figures stand for the final commit. The c8
+binary was built to check that, and was not run again.
 
 | program | BASE round 1 | BASE round 2 | final round 1 | final round 2 | change |
 | --- | --- | --- | --- | --- | --- |
@@ -329,12 +355,14 @@ parallel.
 
 ## Gates
 
-These ran over `e104bc0ff`, this report's first commit, whose code is
-identical to c6. `files/tools/gates.sh` ran them after the commit. The
-tree did not change from start to finish: `git status --short` was empty
-before and after. The statuses, each read unpiped, are in
-`files/gates/status.txt`. G3 to G6 use the default target directory, so
-the arity suites ran the binary G3 built.
+**Second run, over the final code (c8).** To be filled in by its commit.
+
+**First run**, over `e104bc0ff` (code identical to c6), before c7 and c8.
+`files/tools/gates.sh` ran it after the commit. The tree did not change
+from start to finish: `git status --short` was empty before and after.
+The statuses, each read unpiped, are in `files/gates/status.txt`. G3 to
+G6 use the default target directory, so the arity suites ran the binary
+G3 built.
 
 | gate | command | result | load average (1, 5, 15 min) |
 | --- | --- | --- | --- |
@@ -354,18 +382,16 @@ both runs, so nothing was re-run.
 
 ## Concerns
 
-1. **`builtin/string.rs` awaits a ruling** (Departure 1). It is 2084 lines
-   and unsplit.
-2. **Files still over the trigger** after this task: `ir/drive.rs` (2416)
+1. **Files still over the trigger** after this task: `ir/drive.rs` (2416)
    is the op loop, one `match`, which the ruling does not cut.
    `ir/compile.rs` (1722) is the one compile pass and its emit helpers.
-   `builtin/datetime.rs` (1165) and `builtin/convert.rs` (1011) are each
-   one family of builtins. `builtin/convert/tests.rs` (1087) is one set of
-   test cases for that family. `ir/golden_tests.rs` (1637) is out by
-   ruling.
-3. `ir/counters.rs` keeps each item's own `#[cfg(test)]`, which is now
+   `builtin/string.rs` (1174), `builtin/datetime.rs` (1165) and
+   `builtin/convert.rs` (1011) are each one family of builtins.
+   `builtin/convert/tests.rs` (1087) is one set of test cases for that
+   family. `ir/golden_tests.rs` (1637) is out by ruling.
+2. `ir/counters.rs` keeps each item's own `#[cfg(test)]`, which is now
    redundant under the module's. Removing them would not be a pure move,
    and clippy does not flag them.
-4. The `args` files of c1 to c3 (each commit's instrument arguments, which
-   `rerun7.sh` reads) are committed with this report and not with their
+3. The `args` files of c1 to c3 (each commit's instrument arguments, which
+   `rerun7.sh` reads) are committed with the reports and not with their
    commits. From c4 on, each commit carried its own.

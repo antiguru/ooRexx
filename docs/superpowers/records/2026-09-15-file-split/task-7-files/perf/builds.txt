@@ -8,3 +8,6 @@ finished
 build c4 d31dbed5f exit 0
 c4 d31dbed5f .text c82449392c761d4db0474ef3a53476f9ed1d17f6c479e138ef67b7e5669eb31f 2522699 bytes
 finished-c4
+build c8 7c8f9aa3b exit 0
+c8 7c8f9aa3b .text bc09a49f441d7adf5dff6840b0a2de991d77a4608b9abc5c41970cd1a32846ae 2522699 bytes
+finished-c8

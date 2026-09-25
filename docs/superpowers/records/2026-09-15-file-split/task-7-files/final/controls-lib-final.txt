@@ -3,7 +3,7 @@ control 1 verbatim literal line gains a space: exit 1, expected ['I3'], reported
   I3 literals differ: tests::const EVERY_BODY
 control 2 de-indented line changes a literal: exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']: CAUGHT
   FAILURES:
-  I1b tests::const TEST_PATH: /tmp/tmphpn8j8fr/a /tmp/tmphpn8j8fr/b differ: byte 115, line 2
+  I1b tests::const TEST_PATH: /tmp/tmp6dptl0jw/a /tmp/tmp6dptl0jw/b differ: byte 115, line 2
   I2 token stream differs: tests::const TEST_PATH
   I3 literals differ: tests::const TEST_PATH
 control 3 parent import gains a name: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
@@ -12,11 +12,11 @@ control 3 parent import gains a name: exit 1, expected ['I1a'], reported ['I1a']
 3 of 3 controls caught as expected
 control 5 field type changes beside a widened field visibility: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
   FAILURES:
-  I1b struct FileClasses: /tmp/tmp9e5go9yg/a /tmp/tmp9e5go9yg/b differ: byte 310, line 6
+  I1b struct FileClasses: /tmp/tmpjolqs_le/a /tmp/tmpjolqs_le/b differ: byte 310, line 6
   I2 token stream differs: struct FileClasses
 control 6 a widened field is renamed: exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']: CAUGHT
   FAILURES:
-  I1b struct MissingTarget: /tmp/tmpwi_hkr6k/a /tmp/tmpwi_hkr6k/b differ: byte 193, line 5
+  I1b struct MissingTarget: /tmp/tmpbtlaw8jn/a /tmp/tmpbtlaw8jn/b differ: byte 193, line 5
   I2 token stream differs: struct MissingTarget
 2 of 2 controls caught as expected
 control 7 a narrowed parent import also changes a path: exit 1, expected ['I1a'], reported ['I1a']: CAUGHT

@@ -16,6 +16,12 @@ differing and declared: []
 visibility changes: 0
 PASS: every BASE unit is present after, identical or a declared edit
 exit 0
+== builtin/string.rs -> builtin/string/tests.rs builtin/string/scan_tests.rs
+96 BASE units; where they are now: {'builtin/string.rs': 68, 'builtin/string/scan_tests.rs': 2, 'builtin/string/tests.rs': 26}
+differing and declared: []
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
 == ir/compile.rs -> ir/compile/tests.rs ir/compile/invariants.rs
 72 BASE units; where they are now: {'ir/compile.rs': 40, 'ir/compile/invariants.rs': 9, 'ir/compile/tests.rs': 23}
 differing and declared: ['tests::fn a_trace_op_outside_a_clause_region_is_refused (ir/compile/tests.rs)']
