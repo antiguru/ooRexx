@@ -1,0 +1,6 @@
+ir/compile/invariants.rs:60-62: ['echoes']: [('immediately', '')]
+ir/compile/invariants.rs:90-92: ['echoes']: [('immediately', '')]
+ir/compile/invariants.rs:116-117: ['echoes']: [('immediately', '')]
+ir/compile/invariants.rs:140-142: ['echoes']: [('immediately', '')]
+ir/compile/invariants.rs:186-188: ['echoes']: [('immediately', '')]
+done

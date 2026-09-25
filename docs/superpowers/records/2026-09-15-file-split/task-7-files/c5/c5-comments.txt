@@ -1,0 +1,16 @@
+moved units: 9; names searched in backticks: 9
+file tails searched: compile.rs compile/invariants.rs invariants.rs ir/compile.rs ir/compile/ ir/compile/invariants.rs ir/compile/invariants/
+
+(a) comments naming a moved unit: 1
+  crates/rexx-exec/src/ir/drive.rs:568: // `compile::invariants::assert_region_ops_name_their_clause` is what
+
+(b) comments naming a touched file: 1
+  crates/rexx-exec/src/run/loops.rs:1364: // (`ir/compile.rs`), and nothing reads the target again, so its
+
+(c) positional words inside the destinations: 6
+  crates/rexx-exec/src/ir/compile/invariants.rs:35: /// **Every [`Op::TraceLiteral`] sits immediately behind the [`Op::Const`] or
+  crates/rexx-exec/src/ir/compile/invariants.rs:60: /// **Every [`Op::TraceRead`] sits immediately behind the [`Op::Load`] it
+  crates/rexx-exec/src/ir/compile/invariants.rs:90: /// **Every [`Op::TraceOperator`] sits immediately behind the [`Op::Arith`] or
+  crates/rexx-exec/src/ir/compile/invariants.rs:116: /// **Every [`Op::TracePrefix`] sits immediately behind the [`Op::Prefix`] it
+  crates/rexx-exec/src/ir/compile/invariants.rs:140: /// **Every [`Op::TraceFunction`] sits immediately behind the [`Op::CallExpr`]
+  crates/rexx-exec/src/ir/compile/invariants.rs:186: /// **Every [`Op::TraceKeyword`] is immediately followed by the

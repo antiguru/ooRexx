@@ -1,0 +1,3 @@
+crates/rexx-exec/src/ir/compile.rs=instruments
+crates/rexx-exec/src/ir/compile/invariants.rs=instruments
+crates/rexx-exec/src/ir/drive.rs=subst:`compile::assert_region_ops_name_their_clause`=>`compile::invariants::assert_region_ops_name_their_clause`

@@ -1,0 +1,13 @@
+  visibility fn assert_trace_ops_open_a_clause_region: private -> pub(super) (ir/compile/invariants.rs)
+  visibility fn assert_literal_echoes_follow_their_load: private -> pub(super) (ir/compile/invariants.rs)
+  visibility fn assert_read_echoes_follow_their_load: private -> pub(super) (ir/compile/invariants.rs)
+  visibility fn assert_operator_echoes_follow_their_op: private -> pub(super) (ir/compile/invariants.rs)
+  visibility fn assert_prefix_echoes_follow_their_op: private -> pub(super) (ir/compile/invariants.rs)
+  visibility fn assert_call_echoes_follow_their_op: private -> pub(super) (ir/compile/invariants.rs)
+  visibility fn assert_keyword_echoes_precede_their_value: private -> pub(super) (ir/compile/invariants.rs)
+  visibility fn assert_exec_regions_hold_nothing_else: private -> pub(super) (ir/compile/invariants.rs)
+  visibility fn assert_region_ops_name_their_clause: private -> pub(super) (ir/compile/invariants.rs)
+  ONLY-POST mod invariants (ir/compile.rs)
+  ONLY-POST use invariants::{assert_call_echoes_follow_their_op,assert_exec_regions_hold_nothing_else,assert_keyword_echoes_precede_their_value,assert_literal_echoes_follow_their_load,assert_operator_echoes_follow_their_op,assert_prefix_echoes_follow_their_op,assert_read_echoes_follow_their_load,assert_region_ops_name_their_clause,assert_trace_ops_open_a_clause_region,} (ir/compile.rs)
+  ONLY-POST ir/compile/invariants.rs::use super::super::Op (ir/compile/invariants.rs)
+50 of 50 units present on both sides have identical token streams (9 of them moved); 0 only before, 3 only after

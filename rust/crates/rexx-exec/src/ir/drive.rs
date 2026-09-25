@@ -565,7 +565,7 @@ impl Interp {
                     // rather than each resolving its own `index` against the
                     // body, which is a bounds-checked lookup of the same
                     // instruction per op that would do it.
-                    // `compile::assert_region_ops_name_their_clause` is what
+                    // `compile::invariants::assert_region_ops_name_their_clause` is what
                     // makes the two the same instruction by checking rather
                     // than by assuming, and [`debug_assert_names_the_clause`]
                     // is the same check per op in debug.
