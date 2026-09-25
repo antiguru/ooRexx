@@ -411,3 +411,56 @@ both runs, so nothing was re-run.
 3. The `args` files of c1 to c3 (each commit's instrument arguments, which
    `rerun7.sh` reads) are committed with the reports and not with their
    commits. From c4 on, each commit carried its own.
+
+## Fix round 1
+
+This round addresses the task review
+(`.superpowers/sdd/2026-09-15-file-split/task-7-review.md`), findings I1,
+I2 and M2. It changes this report only, and leaves the text above as it
+was. Where that text says otherwise, this section corrects it.
+
+* **I1: the `phase-4c.txt:192` test was misnamed.** The test the sentence
+  measured is `builtin::string::tests::the_searching_builtins_answer_the_oracles_own_bytes`,
+  at `builtin/string/tests.rs:171`. It is not the padding test at
+  `:63` that Pinned items and Departure 1 name. The searching test holds
+  the POS window rows. The evidence is the reviewer's, not mine. review-7
+  changed `if !saw_first {` to `if !saw_first || true {` in `find_forward`
+  (`builtin/string.rs:129`), which removes the overrun, and ran the
+  crate's library tests on an archive of `7c8f9aa3b`. Of the string tests,
+  exactly that one went red, panicking at `string/tests.rs:192`. The
+  review attributes the run's other failures to the archive lacking
+  `build/`. The ruling, (a), is unaffected.
+* **I2: three pins were stale at BASE, and the report called them
+  true.** `find_forward`'s doc has been two lines (`string.rs:83-84`) since
+  `ac15d1042`, an ancestor of BASE. That commit cut a 40-line doc
+  (`git show ac15d1042^:rust/crates/rexx-exec/src/builtin/string.rs | grep -B40 'fn find_forward' | grep -c '///'`
+  gives 40). The doc no longer describes the overrun and transcribes no
+  oracle output, so these are **unchanged by the move, stale since
+  `ac15d1042`**, not "still true":
+  * `corpus/oracle-crashes.txt:78`, "`find_forward`'s own doc comment ...
+    for the full mechanism";
+  * `builtin/string.rs:123`, "The overrun the doc above describes";
+  * `builtin/string/tests.rs:185` (at `string.rs` inside `mod tests`
+    before c7), "`find_forward`'s own doc explains and transcribes the
+    oracle for".
+
+  Departure 1's reading is restated accordingly. The test the sentence
+  names is found by its fully qualified name, which the move did not
+  change, and it is now in `builtin/string/tests.rs`. The transcription
+  that "the transcribed table in builtin/string.rs" referred to no longer
+  exists in any file, at BASE or after. So the sentence's file reference
+  was already stale before this task, and c7 did not make it more so. The
+  earlier reading, that the table stays in `string.rs`, rests on a doc
+  that is not there and is withdrawn. Restoring the doc is a separate
+  defect, which the review queues: the corpus file is read-only, so the
+  fix is in `string.rs`.
+* **M2: `--expect-reflow` checks less than Departure 2 says.** It drops
+  every comma before a closing delimiter on both sides, so it would also
+  accept `(x)` becoming `(x,)`, a parenthesised expression turned into a
+  1-tuple, inside the declared unit (the reviewer's control `ctl-paren`
+  passes with the flag). "Fails on anything else" is withdrawn. For c4's
+  one declared unit, `a_trace_op_outside_a_clause_region_is_refused`, the
+  only token difference was checked by reading, BASE `compile.rs:2087-2092`
+  against `compile/tests.rs:105-107`: it is the `,` before `]`. The
+  reviewer made the same comparison. Controls 4 and 5 still hold as
+  stated: a token change fails, and so does the flag's absence.
