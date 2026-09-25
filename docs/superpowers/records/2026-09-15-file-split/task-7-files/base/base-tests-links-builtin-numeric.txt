@@ -1,0 +1,16 @@
+doc exit:    Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-7/t-check/doc/rexx_exec/index.html and 2 other files
+files: builtin/numeric.rs 
+warnings located in builtin/numeric.rs or builtin/numeric/: 2
+warning: unresolved link to `wins`
+   --> crates/rexx-exec/src/builtin/numeric.rs:291:11
+    |
+291 |     /// [`wins`] as a `rexx-num` predicate, for the general path, where the
+    |           ^^^^ no item named `wins` in scope
+    |
+--
+warning: `format` is both a function and a macro
+   --> crates/rexx-exec/src/builtin/numeric.rs:215:7
+    |
+215 | /// [`format`]'s answer once its target and its four widths are in hand, shared
+    |       ^^^^^^ ambiguous link
+    |

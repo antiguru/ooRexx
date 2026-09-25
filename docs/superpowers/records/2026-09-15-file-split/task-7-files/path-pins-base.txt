@@ -1,0 +1,18 @@
+### grep -rn 'builtin/numeric.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+rust/crates/rexx-parse/tests/sourceline_oracle/string_extremes.txt:15: * out on purpose; `integer_object`'s doc in builtin/numeric.rs records what
+### grep -rn 'numeric.rs' rust/corpus
+rust/corpus/lang/string_extremes.rex:14: * out on purpose; `integer_object`'s doc in builtin/numeric.rs records what
+### grep -rn 'builtin/convert.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+### grep -rn 'convert.rs' rust/corpus
+### grep -rn 'builtin/datetime.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+### grep -rn 'datetime.rs' rust/corpus
+### grep -rn 'builtin/string.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+rust/crates/rexx-exec/tests/builtin_status.rs:494:/// The names `src/builtin/string.rs` runs, which must every one read
+### grep -rn 'string.rs' rust/corpus
+rust/corpus/oracle-crashes.txt:78:`rust/crates/rexx-exec/src/builtin/string.rs` for the full mechanism).
+rust/corpus/phase-4c.txt:192:# the transcribed table in builtin/string.rs, which is why a witness the
+### grep -rn 'ir/compile.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+rust/crates/rexx-exec/src/run/loops.rs:1364:        // (`ir/compile.rs`), and nothing reads the target again, so its
+### grep -rn 'compile.rs' rust/corpus
+### grep -rn 'ir/drive.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+### grep -rn 'drive.rs' rust/corpus

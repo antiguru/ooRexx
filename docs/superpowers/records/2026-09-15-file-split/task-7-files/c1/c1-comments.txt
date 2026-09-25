@@ -1,0 +1,17 @@
+moved units: 33; names searched in backticks: 28
+file tails searched: builtin/numeric.rs builtin/numeric/ builtin/numeric/tests.rs builtin/numeric/tests/ numeric.rs numeric/tests.rs
+
+(a) comments naming a moved unit: 1
+  crates/rexx-exec/src/builtin/numeric/tests.rs:76: /// [`call`], for the cases whose answer is the bytes and nothing else.
+
+(b) comments naming a touched file: 1
+  corpus/lang/string_extremes.rex:14: * out on purpose; `integer_object`'s doc in builtin/numeric.rs records what
+
+(c) positional words inside the destinations: 7
+  crates/rexx-exec/src/builtin/numeric/tests.rs:20: /// program it activates is a `NOP`: nothing here executes an instruction,
+  crates/rexx-exec/src/builtin/numeric/tests.rs:312: // suppresses exponential form in the *result* and not here.
+  crates/rexx-exec/src/builtin/numeric/tests.rs:456: // and only a *later* read at a wider precision can see that.**
+  crates/rexx-exec/src/builtin/numeric/tests.rs:485: /// pair at the call, and the two that answer *text* have nothing a later
+  crates/rexx-exec/src/builtin/numeric/tests.rs:511: // answers, which is what makes the four above evidence of capture
+  crates/rexx-exec/src/builtin/numeric/tests.rs:601: /// A seeded stream continues across later *unseeded* calls, and it is
+  crates/rexx-exec/src/builtin/numeric/tests.rs:688: // the oracle draws. The two calls below differ *only* in `expt`,
