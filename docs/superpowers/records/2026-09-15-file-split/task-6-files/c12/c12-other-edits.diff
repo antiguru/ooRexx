@@ -1,0 +1,24 @@
+diff --git i/rust/crates/rexx-exec/src/dispatch.rs w/rust/crates/rexx-exec/src/dispatch.rs
+index 0d50515f4..6333851a7 100644
+--- i/rust/crates/rexx-exec/src/dispatch.rs
++++ w/rust/crates/rexx-exec/src/dispatch.rs
+@@ -909,6 +909,7 @@ impl ObjectModel {
+             .chain(collection::list::NATIVE_METHODS)
+             .chain(collection::queue::NATIVE_METHODS)
+             .chain(collection::NATIVE_METHODS)
++            .chain(collection::supplier::NATIVE_METHODS)
+             .chain(rexx_info::NATIVE_METHODS)
+             .chain(executable::NATIVE_METHODS)
+             .chain(introspection::NATIVE_METHODS)
+diff --git i/rust/crates/rexx-exec/tests/dispatch_seam.rs w/rust/crates/rexx-exec/tests/dispatch_seam.rs
+index 551913e2f..869d1954c 100644
+--- i/rust/crates/rexx-exec/tests/dispatch_seam.rs
++++ w/rust/crates/rexx-exec/tests/dispatch_seam.rs
+@@ -203,6 +203,7 @@ const CLEARANCE_CONSUMERS: &[&str] = &[
+     "src/dispatch/collection.rs",
+     "src/dispatch/collection/list.rs",
+     "src/dispatch/collection/queue.rs",
++    "src/dispatch/collection/supplier.rs",
+     "src/dispatch/hash.rs",
+     "src/dispatch/hash/relation.rs",
+     "src/dispatch/hash/stem.rs",

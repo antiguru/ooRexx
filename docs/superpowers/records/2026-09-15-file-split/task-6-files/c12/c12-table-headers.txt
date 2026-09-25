@@ -1,0 +1,6 @@
+command: python3 tools/table_headers.py FILE... over pre12 (the parent commit) and over the working tree
+== before
+dispatch/collection.rs:1405: vis=pub(super) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 1473 with '];'
+== after
+dispatch/collection.rs:1248: vis=pub(super) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 1306 with '];'
+dispatch/collection/supplier.rs:186: vis=pub(in crate::dispatch) name=NATIVE_METHODS header-tokens=const_:&[(&str,&str,Arity,NativeMethod)]=&[ closes at 197 with '];'
