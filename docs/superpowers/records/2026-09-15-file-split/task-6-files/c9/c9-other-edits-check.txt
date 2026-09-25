@@ -1,0 +1,7 @@
+dispatch/hash.rs: covered by instruments 1-3
+dispatch/hash/relation.rs: covered by instruments 1-3
+crates/rexx-exec/src/dispatch.rs: OK inserted lines only
+  +907:             .chain(hash::relation::NATIVE_METHODS)
+crates/rexx-exec/tests/dispatch_seam.rs: OK inserted lines only
+  +205:     "src/dispatch/hash/relation.rs",
+PASS
