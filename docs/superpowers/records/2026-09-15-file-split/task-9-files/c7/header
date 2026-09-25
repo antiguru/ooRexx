@@ -1,0 +1,13 @@
+//! `PARSE`, `ARG` and `PULL`: the options, the source and the template.
+
+use crate::ast::{Expr, Parse, ParseSource, ParseTrigger, TriggerKind};
+use crate::expr::{
+    Terminators, need_variable, parse_paren_expression, parse_variable_or_message_term,
+    symbol_kind,
+};
+use crate::token::{Operator, ParseError, SymbolClass, Tag, Token, TokenKind};
+
+use super::{
+    Inst, POPT_ARG, POPT_CASELESS, POPT_LINEIN, POPT_LOWER, POPT_PULL, POPT_SOURCE, POPT_UPPER,
+    POPT_VALUE, POPT_VAR, POPT_VERSION, SUB_WITH,
+};

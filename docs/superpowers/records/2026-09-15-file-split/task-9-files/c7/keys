@@ -1,0 +1,5 @@
+--impl=impl<'a> Inst<'a> {
++impl Inst<'a>::fn parse_instruction_body
+impl Inst<'a>::fn parse_option
+impl Inst<'a>::fn parse_template
+impl Inst<'a>::fn trigger_position

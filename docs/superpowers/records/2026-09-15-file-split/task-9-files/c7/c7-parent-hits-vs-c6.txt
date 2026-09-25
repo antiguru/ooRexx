@@ -1,0 +1,2 @@
+command: diff <(section (c) of c6-comments.txt, lines in src/instruction.rs, line numbers dropped) <(the same of c7-comments.txt)
+exit 0
