@@ -294,6 +294,9 @@ pub(super) fn native_load_external(
             crate::LibraryLoad::Missing => None,
             // Measured, oracle rc 158: 98.982 on the first ask, as
             // `Package~loadLibrary` raises it.
+            crate::LibraryLoad::Version => {
+                return Err(Raised::library_version(&library).into());
+            }
             crate::LibraryLoad::Raised(failure) => return Err(failure),
         }
     };

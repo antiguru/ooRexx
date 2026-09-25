@@ -1767,9 +1767,11 @@ pub(crate) enum LibraryLoad {
     /// answers false for both, because `getPackageTable` returns null for each
     /// (`:204`, `:216`), and its callers cannot tell them apart.
     Missing,
-    /// This ask raised: the package entry asks for a newer interpreter than
-    /// this one, or its loader raised. The library is held, and every later
-    /// ask answers it loaded.
+    /// The package entry asks for a newer interpreter than this one. This ask
+    /// raises; the library is held, and every later ask answers it loaded.
+    Version,
+    /// The package loader raised or refused. This ask raises the failure; the
+    /// library is held, and every later ask answers it loaded.
     Raised(Failure),
 }
 
@@ -3175,16 +3177,7 @@ fn execute(
     // whatever the program's own outcome was. Measured, oracle: a program
     // whose main body raises 42.3 still prints its class `UNINIT` and exits
     // 214, and one ending `exit 7` prints it and exits 7.
-    for loud in interp.run_termination_uninits() {
-        interp
-            .trace
-            .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
-        exit_code = NOT_IMPLEMENTED_EXIT;
-    }
-
-    // `PackageManager::unload`, which `Interpreter::terminateInterpreter`
-    // reaches after `lastChanceUninit` (`runtime/Interpreter.cpp:279-281`).
-    if let Some(loud) = interp.run_package_unloaders() {
+    for loud in interp.terminate() {
         interp
             .trace
             .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());

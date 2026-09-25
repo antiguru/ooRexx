@@ -208,13 +208,22 @@ impl Interp {
             .map(|_| ())
     }
 
+    /// `Interpreter::terminateInterpreter`'s two steps that run extension or
+    /// Rexx code (`runtime/Interpreter.cpp:279-281`): the last-chance
+    /// `UNINIT`s, then the package unloaders. Answers the refusals they met.
+    pub(crate) fn terminate(&mut self) -> Vec<Loud> {
+        let mut refused = self.run_termination_uninits();
+        refused.extend(self.run_package_unloaders());
+        refused
+    }
+
     /// `PackageManager::unload` (`interpreter/package/PackageManager.cpp:642-650`):
     /// each held library's unloader, in the order the oracle's table walks
     /// them, answering the refusal that ended the walk if one did.
     ///
     /// Measured, oracle: a condition raised inside an unloader ends the walk,
     /// reports nothing and leaves the exit status alone. A refusal ends it too.
-    pub(crate) fn run_package_unloaders(&mut self) -> Option<Loud> {
+    fn run_package_unloaders(&mut self) -> Option<Loud> {
         for (_, library) in self.libraries.in_unload_order() {
             match self.run_package_hook(&library, Hook::Unloader) {
                 Ok(()) => {}

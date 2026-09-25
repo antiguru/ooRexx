@@ -18,7 +18,7 @@ use crate::ffi::{CallContext, Contexts, MethodContext, ThreadContext};
 use crate::invoke::MAX_NATIVE_ARGUMENTS;
 use crate::layout::{
     PackageHook, RexxCallContext_, RexxMethodContext_, RexxMethodEntry, RexxPackageEntry,
-    RexxRoutineEntry, ValueDescriptor, ValueUnion,
+    RexxRoutineEntry, RexxThreadContext_, ValueDescriptor, ValueUnion,
 };
 use crate::values::{ARGUMENT_TERMINATOR, ResultRead, Written};
 use std::ffi::{CStr, c_char, c_int, c_void};
@@ -206,6 +206,36 @@ pub(crate) fn stub_routine_entry(
         name: name.to_vec(),
         entry_point: stub as *mut c_void,
     }
+}
+
+/// A library read from an in-memory package entry that declares `loader` and
+/// `unloader` and nothing else, over the running image, for a test that
+/// drives the interpreter's own load and termination paths without a shared
+/// object.
+///
+/// The hooks are safe functions, so running one is sound whatever it is.
+#[doc(hidden)]
+#[cfg(unix)]
+#[must_use]
+pub fn hooks_only(
+    loader: Option<extern "C" fn(*mut RexxThreadContext_)>,
+    unloader: Option<extern "C" fn(*mut RexxThreadContext_)>,
+) -> Library {
+    let entry = RexxPackageEntry {
+        size: 0,
+        api_version: 0,
+        required_version: 0,
+        package_name: std::ptr::null(),
+        package_version: std::ptr::null(),
+        loader: loader.map(|hook| hook as PackageHook),
+        unloader: unloader.map(|hook| hook as PackageHook),
+        routines: std::ptr::null_mut(),
+        methods: std::ptr::null_mut(),
+    };
+    // SAFETY: the entry names no table and no string.
+    unsafe { library_of(&entry, libloading::os::unix::Library::this().into(), "") }
+        .expect("an entry asking for no version is accepted")
+        .expect("an entry is a package")
 }
 
 /// A library with no tables whose package entry declares `loader` and

@@ -1950,7 +1950,7 @@ impl Interp {
             Err(mut refused) => {
                 refused.library.keep_thread_context(&self.thread);
                 self.libraries.hold(name, Rc::from(refused.library));
-                LibraryLoad::Raised(Raised::library_version(name).into())
+                LibraryLoad::Version
             }
         }
     }
@@ -2024,6 +2024,7 @@ impl Interp {
         match self.resolve_library(name) {
             LibraryLoad::Loaded(library) => Ok(library),
             LibraryLoad::Missing => Err(Raised::library_not_loaded(name).into()),
+            LibraryLoad::Version => Err(Raised::library_version(name).into()),
             LibraryLoad::Raised(failure) => Err(failure),
         }
     }

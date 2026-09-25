@@ -158,7 +158,7 @@ fn a_version_refused_library_raises_once_and_is_held() {
     };
     assert!(matches!(
         interp.settle_library(b"forgever", Err(refused)),
-        LibraryLoad::Raised(_)
+        LibraryLoad::Version
     ));
     // No `forgever` is on any search path, so an ask that opened again
     // would answer `Missing`.
@@ -672,4 +672,45 @@ fn unloaders_run_in_the_oracles_table_order() {
         });
     });
     assert!(cases > 0, "{UNLOAD_ORDER_CASES} ran no case");
+}
+
+thread_local! {
+    /// Which recording hook ran, in order, and whether it was handed a
+    /// thread context.
+    static HOOKS_RAN: std::cell::RefCell<Vec<(&'static str, bool)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+extern "C" fn recording_loader(thread: *mut rexx_api::layout::RexxThreadContext_) {
+    HOOKS_RAN.with(|ran| ran.borrow_mut().push(("loader", !thread.is_null())));
+}
+
+extern "C" fn recording_unloader(thread: *mut rexx_api::layout::RexxThreadContext_) {
+    HOOKS_RAN.with(|ran| ran.borrow_mut().push(("unloader", !thread.is_null())));
+}
+
+/// **The interpreter runs a library's loader when the library loads and its
+/// unloader when it terminates**, each handed a thread context, through the
+/// same paths an opened shared object takes. No library this tree may load
+/// declares a hook that does anything observable, so the entry is in memory.
+#[test]
+fn a_loaded_librarys_loader_and_unloader_run() {
+    HOOKS_RAN.with(|ran| ran.borrow_mut().clear());
+    let mut interp = Interp::new();
+    let library = rexx_api::load::hooks_only(Some(recording_loader), Some(recording_unloader));
+    assert!(matches!(
+        interp.settle_library(b"hooked", Ok(Some(library))),
+        LibraryLoad::Loaded(_)
+    ));
+    assert_eq!(
+        HOOKS_RAN.with(|ran| ran.borrow().clone()),
+        vec![("loader", true)],
+        "loading ran no loader"
+    );
+    assert!(interp.terminate().is_empty());
+    assert_eq!(
+        HOOKS_RAN.with(|ran| ran.borrow().clone()),
+        vec![("loader", true), ("unloader", true)],
+        "terminating ran no unloader"
+    );
 }
