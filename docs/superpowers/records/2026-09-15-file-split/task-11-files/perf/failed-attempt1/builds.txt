@@ -1,0 +1,12 @@
+build 7485ff6d5 7485ff6d5 load-before 4.80 5.08 2.58 6/1514 3684271 df tmpfs            63G  9.8G   53G  16% /tmp
+build d6dd60d90 d6dd60d90 load-before 4.80 5.08 2.58 5/1515 3684297 df tmpfs            63G  9.9G   53G  16% /tmp
+build 7485ff6d5 7485ff6d5 exit 101
+build 7485ff6d5 Compiling rexx-exec: 
+7485ff6d5 7485ff6d5 .text   bytes
+build 7485ff6d5 load-after 4.80 5.08 2.58 9/1533 3684637
+build 7485ff6d5 done
+build d6dd60d90 d6dd60d90 exit 101
+build d6dd60d90 Compiling rexx-exec: 
+d6dd60d90 d6dd60d90 .text   bytes
+build d6dd60d90 load-after 4.80 5.08 2.58 6/1511 3684647
+build d6dd60d90 done

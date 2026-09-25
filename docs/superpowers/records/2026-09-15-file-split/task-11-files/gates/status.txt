@@ -1,0 +1,16 @@
+sha 91f6afabab775d7f66dfa151daf35ebd20ac2f2c
+tree-changes 0
+load-before  19:10:21 up 17 days, 21:24,  0 users,  load average: 6.00, 8.16, 12.70
+df tmpfs            63G  9.9G   53G  16% /tmp
+G1 fmt exit 0
+G2 clippy (empty target dir) exit 0
+G3 build --all-targets --release exit 0
+quiet-before-G4  19:10:33 up 17 days, 21:24,  0 users,  load average: 5.04, 7.84, 12.52
+G4 REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast exit 0
+load-after-G4  19:15:50 up 17 days, 21:29,  0 users,  load average: 4.72, 6.39, 10.67
+G5 build --all-targets (debug) exit 0
+quiet-before-G6  19:15:50 up 17 days, 21:29,  0 users,  load average: 4.72, 6.39, 10.67
+G6 REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast (debug) exit 101
+load-after  19:20:37 up 17 days, 21:34,  0 users,  load average: 3.90, 6.72, 9.91
+tree-changes-after 0
+finished

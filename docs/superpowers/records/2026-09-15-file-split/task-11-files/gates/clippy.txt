@@ -1,0 +1,75 @@
+   Compiling memchr v2.8.3
+   Compiling proc-macro2 v1.0.107
+    Checking cfg-if v1.0.4
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling autocfg v1.5.1
+   Compiling crossbeam-utils v0.8.21
+   Compiling crossbeam-epoch v0.9.20
+    Checking either v1.16.0
+   Compiling rayon-core v1.13.0
+    Checking rustc-hash v2.1.2
+    Checking rexx-extract v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract)
+   Compiling rexx-classes v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes)
+   Compiling serde_core v1.0.229
+   Compiling zerocopy v0.8.52
+   Compiling serde v1.0.229
+   Compiling find-msvc-tools v0.1.9
+   Compiling zmij v1.0.23
+   Compiling shlex v2.0.1
+   Compiling serde_json v1.0.151
+   Compiling rexx-lib v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-lib)
+   Compiling libc v0.2.186
+    Checking plotters-backend v0.3.7
+    Checking ciborium-io v0.2.2
+   Compiling rustix v1.1.4
+    Checking clap_lex v1.1.0
+    Checking anstyle v1.0.14
+    Checking itoa v1.0.18
+    Checking regex-syntax v0.8.11
+    Checking cast v0.3.0
+    Checking linux-raw-sys v0.12.1
+    Checking bitflags v2.13.1
+    Checking same-file v1.0.6
+    Checking libloading v0.8.9
+    Checking iana-time-zone v0.1.65
+    Checking anes v0.1.6
+    Checking oorandom v11.1.0
+   Compiling cc v1.3.0
+    Checking itertools v0.13.0
+    Checking walkdir v2.5.0
+   Compiling thiserror v1.0.69
+    Checking rexx-oracle v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle)
+    Checking plotters-svg v0.3.7
+    Checking clap_builder v4.6.2
+   Compiling num-traits v0.2.19
+    Checking rexx-bench v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench)
+   Compiling quick-xml v0.37.5
+    Checking crossbeam-deque v0.8.6
+   Compiling syn v2.0.119
+   Compiling syn v3.0.2
+    Checking plotters v0.3.7
+    Checking chrono v0.4.45
+    Checking regex-automata v0.4.14
+   Compiling rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory)
+    Checking rayon v1.12.0
+   Compiling alloca v0.4.0
+    Checking page_size v0.6.0
+    Checking criterion-plot v0.8.2
+    Checking rexx-num v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num)
+    Checking clap v4.6.2
+    Checking rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+    Checking rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
+    Checking rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+    Checking regex v1.12.4
+   Compiling serde_derive v1.0.229
+    Checking rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+   Compiling zerocopy-derive v0.8.52
+   Compiling thiserror-impl v1.0.69
+    Checking datadriven v0.9.0
+    Checking tinytemplate v1.1.0
+    Checking half v2.7.1
+    Checking ciborium-ll v0.2.2
+    Checking ciborium v0.2.2
+    Checking criterion v0.8.2
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.25s

@@ -1,0 +1,12 @@
+# per-task "change" column as printed in each task report's Performance table (percent); - = axis not measured; void per the ledger's Task 9 ruling
+task	status	rexxcps	nop	assign	emptyloop	varlookup	arith	compound	dispatch	strings	startup	parse
+10a	skipped	-	-	-	-	-	-	-	-	-	-	-
+2	valid	-0.00006	-	-	-	-0.00004	-0.00007	-0.00003	+0.00000	-0.00002	-	-
+3b	valid	-0.00001	-0.00002	-0.00001	-0.00000	+0.00001	-0.00004	-0.00003	+0.00002	-0.00004	-	-
+4	valid	+0.00002	+0.00002	-0.00004	+0.00008	-0.00001	+0.00003	-0.00006	-0.00000	-0.00002	-	-
+5	valid	-0.00004	-0.00002	-0.00000	-0.00002	-0.00001	-0.00001	+0.00004	-0.00004	-0.00001	-	-
+6	valid	+0.00067	+0.00008	+0.00005	-0.00003	+0.00000	-0.00001	+0.00000	-0.04881	-0.28670	-	-
+7	void	-0.00004	+0.00002	+0.00000	+0.00004	+0.00001	+0.00001	+0.00003	+0.00000	-0.00000	-	-
+8	void	+0.00000	+0.00009	-	-	-	-	-	+0.00001	-	-	-
+9	valid	+0.00003	-0.00001	-	-	-	-	-	-	-	+0.00917	-0.00006
+10	text-equal	-	-	-	-	-	-	-	-	-	-	-

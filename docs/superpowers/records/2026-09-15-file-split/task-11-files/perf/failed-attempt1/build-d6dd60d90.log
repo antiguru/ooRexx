@@ -1,0 +1,24 @@
+   Compiling memchr v2.8.3
+   Compiling autocfg v1.5.1
+   Compiling rustc-hash v2.1.2
+   Compiling rustix v1.1.4
+   Compiling cfg-if v1.0.4
+   Compiling rexx-lib v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-11b/trees/d6dd60d90/rust/crates/rexx-lib)
+   Compiling rexx-classes v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-11b/trees/d6dd60d90/rust/crates/rexx-classes)
+   Compiling iana-time-zone v0.1.65
+   Compiling linux-raw-sys v0.12.1
+   Compiling bitflags v2.13.1
+   Compiling libloading v0.8.9
+error: failed to run custom build command for `rexx-lib v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-11b/trees/d6dd60d90/rust/crates/rexx-lib)`
+
+Caused by:
+  process didn't exit successfully: `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-11b/target-d6dd60d90/release/build/rexx-lib-68b43c2d16f509b2/build-script-build` (exit status: 101)
+  --- stdout
+  cargo::rerun-if-changed=../../../interpreter/RexxClasses/CoreClasses.orx
+
+  --- stderr
+
+  thread 'main' (3684592) panicked at crates/rexx-lib/build.rs:45:52:
+  cannot read ../../../interpreter/RexxClasses/CoreClasses.orx: No such file or directory (os error 2)
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+warning: build failed, waiting for other jobs to finish...

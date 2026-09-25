@@ -1,0 +1,7 @@
+----- REXXCPS 2.2 -- Measuring REXX clauses/second -----
+ REXX version is: REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+       System is: LINUX
+        Averaged: 200 x 100 iterations of 1000 clauses
+
+     Performance: 193174 REXX clauses per second
+
