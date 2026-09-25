@@ -1,0 +1,4 @@
+C1: expected differs, manifest differs: CAUGHT (2 lines differ; doc: exit 0; 0 warning lines)
+C2: expected differs, manifest differs: CAUGHT (4 lines differ; doc: exit 0; 2 warning lines)
+C3: expected differs, manifest differs: CAUGHT (36 lines differ; doc: exit 0; 0 warning lines)
+C4: expected same, manifest same: CAUGHT (0 lines differ; doc: exit 0; 0 warning lines)

@@ -1,0 +1,8 @@
+(a) unmoved lines: PRE instruction.rs minus the removed lines, against POST instruction.rs
+  IMPORTS NARROWED post:18-19: ['crate::ast::Parse', 'crate::ast::ParseTrigger', 'crate::ast::TriggerKind']
+  INSERTED post:36: mod parse;
+  3 equal blocks, 1730 lines, each also compared with cmp; 1732 expected lines, 1733 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK impl Inst<'a>::fn parse_instruction_body -> instruction/parse.rs (78 lines; visibility private -> pub(super))
+  4 of 4 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

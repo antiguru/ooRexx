@@ -1,0 +1,26 @@
+task2 exit 0 5 of 5 controls caught as expected
+run exit 0 4 of 4 controls caught as expected
+lib c1 exit 0
+lib c3 exit 0
+lib c5 exit 0
+lib seal exit 0
+lib total caught: 8, missed: 0
+task5 exit 0 7 of 7 controls caught as expected
+task6 exit 0 8 of 8 controls caught as expected
+other-edits (task5) 4 runs:
+  as committed: exit 0 (expected 0); 
+  a renamed path reaches another constant: exit 1 (expected 1); crates/rexx-exec/src/dispatch/rexx_info.rs: FAIL 10 occurrences of '\\bparse_template\\b' -> 'version'; HEAD with them replaced DIFFERS from the working text
+  an insert-only file changes a line: exit 1 (expected 1); crates/rexx-exec/src/lib.rs: FAIL inserted lines only
+  a changed file with no rule: exit 1 (expected 1); FAIL no rule for changed path crates/rexx-exec/src/value.rs
+other-edits (task6):
+  c7 as committed: exit 0 (expected 0); 
+  c7 a name moves to a module other than the declared one: exit 1 (expected 1);   BAD usize_or_refuse: ['buffer'] -> ['string']
+  c7 a third comment line edited beside the two declared: exit 1 (expected 1);   FAIL 3 comment lines removed or edited, 2 declared
+  c13 as committed: exit 0 (expected 0); 
+  c13 a code line changes beside the narrowing: exit 1 (expected 1); crates/rexx-exec/src/dispatch.rs: FAIL import lists narrowed and lines inserted, nothing else
+  c14 as committed: exit 0 (expected 0); 
+  c14 a second edit in a file with two declared substitutions: exit 1 (expected 1); crates/rexx-exec/src/dispatch/collection/list.rs: FAIL 1 occurrences of '\\[`is_queue`\\]' -> '[`super::is_queue`]'; 1 occurrences of '\\[`super::NATIVE_METHODS`\\]' -> '[`super::super::NATIVE_METHODS`]'; HEAD with them replaced DIFFERS from the working text
+  c14 the test's chain names a slice twice: exit 1 (expected 1); crates/rexx-exec/src/dispatch/tests.rs: FAIL 1 occurrences of '        \\.chain\\(collection::NATIVE_METHODS\\)\\n' -> '        .chain(collection::list::NATIVE_METHODS)\n        .chain(collection::queue::NATIVE_METHODS)\n        .chain(array::sort::NATIVE_METHODS)\n        .chain(array::surface::NATIVE_METHODS)\n        .chain(collection::supplier::NATIVE_METHODS)\n'; HEAD with them replaced DIFFERS from the working text
+task7 exit 0 10 of 10 controls caught as expected
+task8 exit 0 15 of 15 controls caught as expected
+task9 exit 1 AssertionError: ('"ARG", "CASELESS", "LINEIN"', '"ARG", "LINEIN", "CASELESS"')

@@ -1,0 +1,8 @@
+rexxcps round 1 stdout DIFFERS: 6c6 <      Performance: 201076 REXX clauses per second --- >      Performance: 200954 REXX clauses per second 
+rexxcps round 2 stdout DIFFERS: 6c6 <      Performance: 199502 REXX clauses per second --- >      Performance: 197942 REXX clauses per second 
+nop round 1 stdout identical
+nop round 2 stdout identical
+startup round 1 stdout identical
+startup round 2 stdout identical
+parse round 1 stdout identical
+parse round 2 stdout identical

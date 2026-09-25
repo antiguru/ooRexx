@@ -1,0 +1,19 @@
+== block.rs -> block/references.rs
+49 BASE units; where they are now: {'block.rs': 42, 'block/references.rs': 6}
+differing and declared: []
+visibility changes: 1
+  fn for_each_variable_name: private -> pub(super) (block/references.rs)
+PASS: every BASE unit is present after, identical or a declared edit
+== token.rs -> token/symbols.rs token/keywords.rs token/cursor.rs
+48 BASE units; where they are now: {'token.rs': 12, 'token/cursor.rs': 10, 'token/keywords.rs': 13, 'token/symbols.rs': 7}
+differing and declared: []
+visibility changes: 0
+PASS: every BASE unit is present after, identical or a declared edit
+== instruction.rs -> instruction/loops.rs instruction/address.rs instruction/parse.rs
+182 BASE units; where they are now: {'instruction.rs': 165, 'instruction/address.rs': 4, 'instruction/loops.rs': 8, 'instruction/parse.rs': 4}
+differing and declared: []
+visibility changes: 3
+  impl Inst<'a>::fn create_loop: private -> pub(super) (instruction/loops.rs)
+  impl Inst<'a>::fn address: private -> pub(super) (instruction/address.rs)
+  impl Inst<'a>::fn parse_instruction_body: private -> pub(super) (instruction/parse.rs)
+PASS: every BASE unit is present after, identical or a declared edit

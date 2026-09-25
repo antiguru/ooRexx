@@ -1,0 +1,9 @@
+(a) unmoved lines: PRE instruction.rs minus the removed lines, against POST instruction.rs
+  IMPORTS NARROWED post:17-20: ['crate::ast::ControlExpr', 'crate::ast::Controlled', 'crate::ast::Loop', 'crate::ast::LoopConditional', 'crate::ast::LoopKind']
+  INSERTED post:34: 
+  INSERTED post:35: mod loops;
+  3 equal blocks, 2112 lines, each also compared with cmp; 2116 expected lines, 2118 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK impl Inst<'a>::fn create_loop -> instruction/loops.rs (120 lines; visibility private -> pub(super))
+  8 of 8 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

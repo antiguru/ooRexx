@@ -1,0 +1,9 @@
+  visibility impl Inst<'a>::fn parse_instruction_body: private -> pub(super) (instruction/parse.rs)
+  ONLY-PRE use crate::ast::{Call,ConditionTrap,Expr,ExprKind,Forward,Guard,Instruction,InstructionKind,NumericSetting,Parse,ParseSource,ParseTrigger,Raise,RaiseResult,Signal,Tail,Trace,TriggerKind,Use,UseTarget,VariableRef,compound_parts}
+  ONLY-POST use crate::ast::{Call,ConditionTrap,Expr,ExprKind,Forward,Guard,Instruction,InstructionKind,NumericSetting,ParseSource,Raise,RaiseResult,Signal,Tail,Trace,Use,UseTarget,VariableRef,compound_parts} (instruction.rs)
+  ONLY-POST mod parse (instruction.rs)
+  ONLY-POST instruction/parse.rs::use crate::ast::{Expr,Parse,ParseSource,ParseTrigger,TriggerKind} (instruction/parse.rs)
+  ONLY-POST instruction/parse.rs::use crate::expr::{Terminators,need_variable,parse_paren_expression,parse_variable_or_message_term,symbol_kind} (instruction/parse.rs)
+  ONLY-POST instruction/parse.rs::use crate::token::{Operator,ParseError,SymbolClass,Tag,Token,TokenKind} (instruction/parse.rs)
+  ONLY-POST instruction/parse.rs::use super::{Inst,POPT_ARG,POPT_CASELESS,POPT_LINEIN,POPT_LOWER,POPT_PULL,POPT_SOURCE,POPT_UPPER,POPT_VALUE,POPT_VAR,POPT_VERSION,SUB_WITH} (instruction/parse.rs)
+171 of 171 units present on both sides have identical token streams (4 of them moved); 1 only before, 6 only after

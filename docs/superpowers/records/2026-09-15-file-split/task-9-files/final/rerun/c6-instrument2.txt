@@ -1,0 +1,9 @@
+  visibility impl Inst<'a>::fn address: private -> pub(super) (instruction/address.rs)
+  ONLY-PRE use crate::ast::{Address,AddressIo,Call,ConditionTrap,Expr,ExprKind,Forward,Guard,Instruction,InstructionKind,NumericSetting,OutputOption,Parse,ParseSource,ParseTrigger,Raise,RaiseResult,Redirection,Signal,Tail,Trace,TriggerKind,Use,UseTarget,VariableRef,compound_parts}
+  ONLY-POST use crate::ast::{Call,ConditionTrap,Expr,ExprKind,Forward,Guard,Instruction,InstructionKind,NumericSetting,Parse,ParseSource,ParseTrigger,Raise,RaiseResult,Signal,Tail,Trace,TriggerKind,Use,UseTarget,VariableRef,compound_parts} (instruction.rs)
+  ONLY-POST mod address (instruction.rs)
+  ONLY-POST instruction/address.rs::use crate::ast::{Address,AddressIo,OutputOption,Redirection} (instruction/address.rs)
+  ONLY-POST instruction/address.rs::use crate::expr::{Terminators,parse_constant_expression} (instruction/address.rs)
+  ONLY-POST instruction/address.rs::use crate::token::{ParseError,SymbolClass,Tag,TokenKind} (instruction/address.rs)
+  ONLY-POST instruction/address.rs::use super::{Inst,SUB_APPEND,SUB_ERROR,SUB_INPUT,SUB_NORMAL,SUB_OUTPUT,SUB_REPLACE,SUB_STEM,SUB_STREAM,SUB_USING,SUB_VALUE,SUB_WITH} (instruction/address.rs)
+174 of 174 units present on both sides have identical token streams (4 of them moved); 1 only before, 6 only after

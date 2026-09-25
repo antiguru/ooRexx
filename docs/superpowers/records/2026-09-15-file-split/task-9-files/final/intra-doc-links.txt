@@ -1,0 +1,2 @@
+command: /bin/grep -a -n -E '//[/!].*\[`?[A-Za-z_:]+`?\](\(|[^(]|$)' over the new files: every intra-doc link (a bracketed name in a doc comment)
+exit 1 (1 = no match)

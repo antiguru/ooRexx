@@ -1,0 +1,9 @@
+  visibility impl Inst<'a>::fn create_loop: private -> pub(super) (instruction/loops.rs)
+  ONLY-PRE use crate::ast::{Address,AddressIo,Call,ConditionTrap,ControlExpr,Controlled,Expr,ExprKind,Forward,Guard,Instruction,InstructionKind,Loop,LoopConditional,LoopKind,NumericSetting,OutputOption,Parse,ParseSource,ParseTrigger,Raise,RaiseResult,Redirection,Signal,Tail,Trace,TriggerKind,Use,UseTarget,VariableRef,compound_parts}
+  ONLY-POST use crate::ast::{Address,AddressIo,Call,ConditionTrap,Expr,ExprKind,Forward,Guard,Instruction,InstructionKind,NumericSetting,OutputOption,Parse,ParseSource,ParseTrigger,Raise,RaiseResult,Redirection,Signal,Tail,Trace,TriggerKind,Use,UseTarget,VariableRef,compound_parts} (instruction.rs)
+  ONLY-POST mod loops (instruction.rs)
+  ONLY-POST instruction/loops.rs::use crate::ast::{ControlExpr,Controlled,Expr,Loop,LoopConditional,LoopKind} (instruction/loops.rs)
+  ONLY-POST instruction/loops.rs::use crate::expr::{Terminators,need_variable} (instruction/loops.rs)
+  ONLY-POST instruction/loops.rs::use crate::token::{Operator,ParseError,SymbolId,Tag,Token,TokenKind} (instruction/loops.rs)
+  ONLY-POST instruction/loops.rs::use super::{Inst,SUB_BY,SUB_COUNTER,SUB_FOR,SUB_FOREVER,SUB_INDEX,SUB_ITEM,SUB_LABEL,SUB_OVER,SUB_TO,SUB_UNTIL,SUB_WHILE,SUB_WITH,UNREACHABLE_SWITCH} (instruction/loops.rs)
+181 of 181 units present on both sides have identical token streams (8 of them moved); 1 only before, 6 only after

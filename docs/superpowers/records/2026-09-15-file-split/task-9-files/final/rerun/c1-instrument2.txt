@@ -1,0 +1,8 @@
+  visibility fn for_each_variable_name: private -> pub(super) (block/references.rs)
+  ONLY-PRE use crate::ast::{Call,CodeBody,EndStyle,EndTarget,Expr,ExprKind,Instruction,InstructionKind,LoopKind,ParseSource,Redirection,Signal,Trace,Use,VariableRef}
+  ONLY-POST use crate::ast::{CodeBody,EndStyle,EndTarget,Instruction,InstructionKind,LoopKind} (block.rs)
+  ONLY-POST mod references (block.rs)
+  ONLY-POST use references::for_each_variable_name (block.rs)
+  ONLY-POST block/references.rs::use crate::ast::{Call,Expr,ExprKind,Instruction,InstructionKind,LoopKind,ParseSource,Redirection,Signal,Trace,Use,VariableRef} (block/references.rs)
+  ONLY-POST block/references.rs::use crate::token::{SymbolId,SymbolTable} (block/references.rs)
+48 of 48 units present on both sides have identical token streams (6 of them moved); 1 only before, 5 only after

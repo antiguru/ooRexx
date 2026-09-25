@@ -10,7 +10,13 @@ M=/home/moritz/dev/repos/ooRexx-rust-rewrite
 O=$S/art/perf; mkdir -p $O/bins
 build() { # tag commit target
   T=$S/trees/full-$2; [ -d $T ] || { mkdir -p $T; git -C $M archive $2 | tar -x -C $T; }
-  (cd $T/rust && CARGO_TARGET_DIR=$3 cargo build --release -p rexx-exec --bin rexx-run > $O/build-$1.log 2>&1); echo "build $1 $2 exit $?" >> $O/builds.txt
+  # `git archive` stamps every file with the commit's time, which is older
+  # than the previous build's outputs in a shared target dir, so cargo would
+  # call the new sources fresh and relink nothing (the first run of this
+  # script did exactly that: c2 to c7 "Finished in 0.03s"). Every file is
+  # stamped now, and the build must show rexx-parse compiled.
+  find $T/rust -type f -exec touch {} +
+  (cd $T/rust && CARGO_TARGET_DIR=$3 cargo build --release -p rexx-exec --bin rexx-run > $O/build-$1.log 2>&1); echo "build $1 $2 exit $?; rexx-parse compiled: $(/bin/grep -a -c 'Compiling rexx-parse' $O/build-$1.log)" >> $O/builds.txt
   cp $3/release/rexx-run $O/bins/rexx-run-$1
   objcopy -O binary --only-section=.text $O/bins/rexx-run-$1 $O/bins/text-$1 && echo "$1 $2 .text $(sha256sum $O/bins/text-$1 | cut -c1-64) $(stat -c %s $O/bins/text-$1) bytes" >> $O/builds.txt
   rm $O/bins/text-$1

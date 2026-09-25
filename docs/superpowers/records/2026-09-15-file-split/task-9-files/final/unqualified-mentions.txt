@@ -1,0 +1,11 @@
+command: /bin/grep -rn -E '//.*`(for_each_variable_name|visit_opt|visit_list|visit_slot|visit_refs|visit_expr|create_loop|plain_loop|count_loop|controlled|do_over|do_with|for_and_conditional|loop_conditional|address|address_with|output_option|redirect_target|parse_instruction_body|parse_option|parse_template|trigger_position)(`|\()' rust/crates --include=*.rs, outside the files the names moved into: every comment naming a moved function unqualified
+crates/rexx-exec/src/lib.rs:2227:    /// `address` is the environment pair the body starts with, `None` for one
+crates/rexx-exec/src/run.rs:1054:            // `parse_instruction_body` takes the implied source and sets
+crates/rexx-exec/src/run/loops.rs:375:        // `count_loop`'s own parser always calls `opt_expr`, which can answer
+crates/rexx-exec/src/run/loops.rs:378:        // `create_loop`'s own `at_end()` check catches a bare `DO` first and
+crates/rexx-exec/src/run/loops.rs:759:            // can never be present (`create_loop`'s own parser only reaches
+crates/rexx-exec/src/parse_template.rs:707:        // representable from a program that parsed -- `parse_template`
+crates/rexx-exec/src/dispatch/tests.rs:198:/// A `.Pointer` over `address`, minted the way the API's `NewPointer`
+crates/rexx-parse/src/block/tests.rs:476:        // which is why `visit_refs` handles both `VariableRef` variants.
+crates/rexx-parse/src/instruction/tests.rs:1949:    // `for_and_conditional` parses a DO OVER's FOR count with TERM_CONTROL,
+crates/rexx-core/src/body.rs:730:    /// A `.Pointer` over `address`, an instance of `class` with no variables

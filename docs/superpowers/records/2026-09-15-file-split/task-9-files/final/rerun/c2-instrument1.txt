@@ -1,0 +1,11 @@
+(a) unmoved lines: PRE token.rs minus the removed lines, against POST token.rs
+  DELETED (declared) pre:15: 'use std::borrow::Cow;'
+  DELETED (declared) pre:17: 'use std::collections::HashMap;'
+  INSERTED post:21: 
+  INSERTED post:22: mod symbols;
+  INSERTED post:23: 
+  INSERTED post:24: pub use symbols::{SymbolId, SymbolTable};
+  4 equal blocks, 581 lines, each also compared with cmp; 583 expected lines, 585 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  7 of 7 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

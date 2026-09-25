@@ -1,0 +1,217 @@
+control A-before (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-before: the converters come before the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-after (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-after: the converters come after the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-ahead (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-ahead: the table sits ahead of the converters.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-behind (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-behind: the converters sit behind the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-follow (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-follow: the converters follow the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-follows (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-follows: the table follows the codes.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-followed (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-followed: the codes are followed by the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-precede (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-precede: the codes precede the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-precedes (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-precedes: the table precedes the converters.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-end of (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-end_of: the converters sit at the end of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-top of (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-top_of: the codes sit at the top of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-bottom of (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-bottom_of: the converters sit at the bottom of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-start of (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-start_of: the codes sit at the start of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-none (parent): CAUGHT
+  this task's comments7.py (c): [] under ['(c) positional words inside the destinations and the parent: 15']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-before (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-before: the converters come before the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-after (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-after: the converters come after the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-ahead (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-ahead: the table sits ahead of the converters.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-behind (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-behind: the converters sit behind the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-follow (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-follow: the converters follow the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-follows (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-follows: the table follows the codes.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-followed (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-followed: the codes are followed by the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-precede (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-precede: the codes precede the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-precedes (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-precedes: the table precedes the converters.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-end of (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-end_of: the converters sit at the end of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-top of (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-top_of: the codes sit at the top of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-bottom of (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-bottom_of: the converters sit at the bottom of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-start of (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-start_of: the codes sit at the start of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-none (destination): CAUGHT
+  this task's comments7.py (c): [] under ['(c) positional words inside the destinations and the parent: 15']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-positional: positional.py lists a planted `follow` naming a moved unit: CAUGHT
+  this task's positional.py: ["values.rs:1297-1311: ['int8_from_native']: [('follow', '')]"]
+  Task 8's: [] (ran: ['done'])
+control B c1 as committed passes (f3664efd4): CAUGHT
+  exit 0, reported []
+control B1-c1 a moved fn's body changes a token (f3664efd4): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b fn for_each_variable_name: /tmp/tmprb2deas5/a /tmp/tmprb2deas5/b differ: byte 306, line 9
+  I2 token stream differs: fn for_each_variable_name
+control B2-c1 a moved helper is deleted (f3664efd4): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: fn visit_slot
+control B3-c1 an unmoved line of block.rs changes (f3664efd4): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a changed unmoved line pre-expected:255 post:255: '            self.referenced.insert(Box::from(name.as_bytes()));' -> '            self.referenced.insert(Box::from(name.as_bytes() ));'
+control B4-c1 two moved helpers swap their doc comments (f3664efd4): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn visit_slot: /tmp/tmpp4f_y38m/a /tmp/tmpp4f_y38m/b differ: byte 5, line 1
+  I1b fn visit_expr: /tmp/tmp57b5ey72/a /tmp/tmp57b5ey72/b differ: byte 5, line 1
+  I2 token stream differs: fn visit_slot
+  I2 token stream differs: fn visit_expr
+  I3 literals differ: fn visit_slot
+  I3 literals differ: fn visit_expr
+control B c2 as committed passes (6eb85a36a): CAUGHT
+  exit 0, reported []
+control B1-c2 the string a moved method passes to .expect(..) changes (6eb85a36a): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b impl SymbolTable::fn intern: /tmp/tmpibn_yd2i/a /tmp/tmpibn_yd2i/b differ: byte 909, line 17
+  I2 token stream differs: impl SymbolTable::fn intern
+  I3 literals differ: impl SymbolTable::fn intern
+control B2-c2 a moved impl block loses a member (6eb85a36a): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: impl SymbolTable::fn len
+control B3-c2 a removed import is not declared gone (6eb85a36a): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a delete expected[14:15] actual[14:14]
+control B c3 as committed passes (5c9406d50): CAUGHT
+  exit 0, reported []
+control B1-c3 a moved keyword table's entry changes (5c9406d50): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b const SUB_KEYWORDS: /tmp/tmpbv18gifm/a /tmp/tmpbv18gifm/b differ: byte 46, line 2
+  I2 token stream differs: const SUB_KEYWORDS
+  I3 literals differ: const SUB_KEYWORDS
+control B2-c3 two entries of a moved table swap places (5c9406d50): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b const PARSE_OPTIONS: /tmp/tmpf9hsc0ij/a /tmp/tmpf9hsc0ij/b differ: byte 49, line 2
+  I2 token stream differs: const PARSE_OPTIONS
+  I3 literals differ: const PARSE_OPTIONS
+control B3-c3 a moved table is deleted (5c9406d50): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: const DIRECTIVES
+control B c4 as committed passes (4b7db8f03): CAUGHT
+  exit 0, reported []
+control B1-c4 a moved cursor method's body changes a token (4b7db8f03): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2', 'I3']
+  I1b impl TokenCursor::fn advance: /tmp/tmp0wk8pgjt/a /tmp/tmp0wk8pgjt/b differ: byte 341, line 6
+  I2 token stream differs: impl TokenCursor::fn advance
+  I3 literals differ: impl TokenCursor::fn advance
+control B2-c4 two moved methods swap their doc comments (4b7db8f03): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b impl TokenCursor::fn advance_real: /tmp/tmpxfjm4560/a /tmp/tmpxfjm4560/b differ: byte 9, line 1
+  I1b impl TokenCursor::fn end: /tmp/tmp_m4t12kh/a /tmp/tmp_m4t12kh/b differ: byte 9, line 1
+  I2 token stream differs: impl TokenCursor::fn advance_real
+  I2 token stream differs: impl TokenCursor::fn end
+  I3 literals differ: impl TokenCursor::fn advance_real
+  I3 literals differ: impl TokenCursor::fn end
+control B3-c4 the declared blank line is not declared (4b7db8f03): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a replace expected[17:21] actual[16:17]
+  I1a declared deletion not found: 'use crate::ProgramSource;'
+  I1a declared deletion not found: 'use crate::scanner::ResourceBody;'
+  I1a declared deletion not found: 'use crate::selector::SelectorTable;'
+control B4-c4 an undeclared unmoved line goes beside the declared ones (4b7db8f03): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a delete expected[14:16] actual[14:14]
+  I1a declared deletion not found: 'use std::cell::RefCell;'
+control B5-c4 a second blank line goes where one is declared (4b7db8f03): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a replace expected[16:21] actual[15:16]
+  I1a declared deletion not found: 'use crate::ProgramSource;'
+  I1a declared deletion not found: 'use crate::scanner::ResourceBody;'
+  I1a declared deletion not found: 'use crate::selector::SelectorTable;'
+  I1a declared deletion not found: ''
+control B c5 as committed passes (ee6b0b1ba): CAUGHT
+  exit 0, reported []
+control B1-c5 the string a moved member passes to .expect(..) changes (ee6b0b1ba): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b impl Inst<'a>::fn create_loop: /tmp/tmp4bypzh9s/a /tmp/tmp4bypzh9s/b differ: byte 1427, line 29
+  I2 token stream differs: impl Inst<'a>::fn create_loop
+  I3 literals differ: impl Inst<'a>::fn create_loop
+control B2-c5 a moved member is deleted (ee6b0b1ba): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: impl Inst<'a>::fn plain_loop
+control B3-c5 an unmoved line of the keyword dispatch changes (ee6b0b1ba): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2']
+  I1a changed unmoved line pre-expected:570 post:572: '                let body = self.create_loop(true)?;' -> '                let body = self.create_loop(false)?;'
+  I2 token stream differs: impl Inst<'a>::fn keyword
+control B4-c5 two moved members swap their doc comments (ee6b0b1ba): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b impl Inst<'a>::fn do_over: /tmp/tmpyw_xfgae/a /tmp/tmpyw_xfgae/b differ: byte 15, line 1
+  I1b impl Inst<'a>::fn do_with: /tmp/tmpyjyhftw6/a /tmp/tmpyjyhftw6/b differ: byte 15, line 1
+  I2 token stream differs: impl Inst<'a>::fn do_over
+  I2 token stream differs: impl Inst<'a>::fn do_with
+  I3 literals differ: impl Inst<'a>::fn do_over
+  I3 literals differ: impl Inst<'a>::fn do_with
+control B c6 as committed passes (5833f4a03): CAUGHT
+  exit 0, reported []
+control B1-c6 a moved member's body changes a token (5833f4a03): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2', 'I3']
+  I1b impl Inst<'a>::fn address_with: /tmp/tmpkrp0cmhq/a /tmp/tmpkrp0cmhq/b differ: byte 1272, line 26
+  I2 token stream differs: impl Inst<'a>::fn address_with
+  I3 literals differ: impl Inst<'a>::fn address_with
+control B2-c6 a moved member is deleted (5833f4a03): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: impl Inst<'a>::fn output_option
+control B3-c6 the widened entry point is renamed (5833f4a03): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: impl Inst<'a>::fn address
+control B c7 as committed passes (393b94fac): CAUGHT
+  exit 0, reported []
+control B1-c7 a moved member's body changes a token (393b94fac): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b impl Inst<'a>::fn parse_template: /tmp/tmpspnci32_/a /tmp/tmpspnci32_/b differ: byte 1499, line 37
+  I2 token stream differs: impl Inst<'a>::fn parse_template
+control B2-c7 a moved member is deleted (393b94fac): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: impl Inst<'a>::fn parse_option
+control B3-c7 a doc line of a moved member changes (393b94fac): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b impl Inst<'a>::fn trigger_position: /tmp/tmpfr6xkgqu/a /tmp/tmpfr6xkgqu/b differ: byte 64, line 1
+  I2 token stream differs: impl Inst<'a>::fn trigger_position
+  I3 literals differ: impl Inst<'a>::fn trigger_position
+61 of 61 controls caught as expected

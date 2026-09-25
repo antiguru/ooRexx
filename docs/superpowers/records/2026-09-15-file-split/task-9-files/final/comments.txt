@@ -1,0 +1,42 @@
+== block.rs -> block/references.rs
+217 comment lines in BASE block.rs, 228 after
+lost (0):
+added (11):
+  x3 /*                                                                            */
+  x1 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x1 /* This program and the accompanying materials are made available under       */
+  x1 /* distribution. A copy is also available at the following address:           */
+  x1 /* https://www.oorexx.org/license.html                                        */
+  x1 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x2 /*----------------------------------------------------------------------------*/
+  x1 //! Every variable reference an instruction makes, by name.
+== token.rs -> token/symbols.rs token/keywords.rs token/cursor.rs
+126 comment lines in BASE token.rs, 160 after
+lost (0):
+added (34):
+  x9 /*                                                                            */
+  x3 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x3 /* This program and the accompanying materials are made available under       */
+  x3 /* distribution. A copy is also available at the following address:           */
+  x3 /* https://www.oorexx.org/license.html                                        */
+  x3 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x6 /*----------------------------------------------------------------------------*/
+  x1 //! Symbol interning: `SymbolId`, and the `SymbolTable` that hands them out.
+  x1 //! The context every `parse_*` function is handed, and the cursor over one
+  x1 //! The pre-interned keyword tables.
+  x1 //! clause's tokens.
+== instruction.rs -> instruction/loops.rs instruction/address.rs instruction/parse.rs
+478 comment lines in BASE instruction.rs, 512 after
+lost (0):
+added (34):
+  x9 /*                                                                            */
+  x3 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x3 /* This program and the accompanying materials are made available under       */
+  x3 /* distribution. A copy is also available at the following address:           */
+  x3 /* https://www.oorexx.org/license.html                                        */
+  x3 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x6 /*----------------------------------------------------------------------------*/
+  x1 //! The loop header of `DO` and `LOOP`: `createLoop` and the loop forms it
+  x1 //! `ADDRESS` and the redirections of its `WITH` clause.
+  x1 //! `PARSE`, `ARG` and `PULL`: the options, the source and the template.
+  x1 //! builds.
