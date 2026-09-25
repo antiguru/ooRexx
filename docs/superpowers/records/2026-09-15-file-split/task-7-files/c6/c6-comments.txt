@@ -1,0 +1,12 @@
+moved units: 28; names searched in backticks: 28
+file tails searched: counters.rs drive.rs ir/counters.rs ir/counters/ ir/drive.rs ir/drive/
+
+(a) comments naming a moved unit: 3
+  crates/rexx-exec/src/ir/counters.rs:45: /// Stops the counters recording until [`resume_counters`]. `Interp::
+  crates/rexx-exec/src/ir/counters.rs:53: /// The other half of [`suspend_counters`].
+  crates/rexx-exec/src/ir/counters.rs:159: // The same for [`super::Op::LoadConstant`]; see `CONST_BUILDS` for why the two
+
+(b) comments naming a touched file: 0
+
+(c) positional words inside the destinations: 1
+  crates/rexx-exec/src/ir/counters.rs:34: // Whether the counters above and below are recording.

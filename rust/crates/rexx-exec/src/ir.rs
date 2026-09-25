@@ -26,6 +26,8 @@ use crate::run::{
 use crate::trace::ChunkTrace;
 
 mod compile;
+#[cfg(test)]
+mod counters;
 pub(crate) mod drive;
 pub(crate) mod trace_flow;
 mod valid;

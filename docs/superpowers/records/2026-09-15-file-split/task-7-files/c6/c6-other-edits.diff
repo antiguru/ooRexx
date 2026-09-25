@@ -1,0 +1,13 @@
+diff --git i/rust/crates/rexx-exec/src/ir.rs w/rust/crates/rexx-exec/src/ir.rs
+index f8e7b2983..9f4b278d2 100644
+--- i/rust/crates/rexx-exec/src/ir.rs
++++ w/rust/crates/rexx-exec/src/ir.rs
+@@ -26,6 +26,8 @@ use crate::run::{
+ use crate::trace::ChunkTrace;
+ 
+ mod compile;
++#[cfg(test)]
++mod counters;
+ pub(crate) mod drive;
+ pub(crate) mod trace_flow;
+ mod valid;
