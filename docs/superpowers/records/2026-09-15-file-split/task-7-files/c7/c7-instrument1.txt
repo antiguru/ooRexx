@@ -1,0 +1,7 @@
+(a) unmoved lines: PRE builtin/string.rs minus the removed lines, against POST builtin/string.rs
+  INSERTED post:1171: mod tests;
+  2 equal blocks, 1199 lines, each also compared with cmp; 1199 expected lines, 1200 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  WHITESPACE-ONLY tests::fn the_two_argument_families_exit_differently -> builtin/string/tests.rs: /tmp/tmpx67xskhm/a /tmp/tmpx67xskhm/b differ: byte 1, line 1 (rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  25 of 26 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

@@ -1,0 +1,1 @@
+moved lines 1172-2054 (1-based) of /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-7/pre7/builtin/string.rs, 883 lines, 0 kept verbatim inside literals; 29 lines after the module stay

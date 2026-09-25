@@ -1,0 +1,17 @@
+moved units: 26; names searched in backticks: 22
+file tails searched: builtin/string.rs builtin/string/ builtin/string/tests.rs builtin/string/tests/ string.rs string/tests.rs
+
+(a) comments naming a moved unit: 2
+  crates/rexx-exec/src/builtin/string/tests.rs:29: /// [`call`], answering the handle as well as the bytes, for the one
+  crates/rexx-exec/src/builtin/string/tests.rs:44: /// `call`, for the cases whose answer is the bytes and nothing else.
+
+(b) comments naming a touched file: 1
+  corpus/phase-4c.txt:192: # the transcribed table in builtin/string.rs, which is why a witness the
+
+(c) positional words inside the destinations: 6
+  crates/rexx-exec/src/builtin/string/tests.rs:208: // licensed by Moritz 2026-08-14: the overrun above can land one byte
+  crates/rexx-exec/src/builtin/string/tests.rs:211: // oracle's own answer here is 2, not this crate's 0. Pinned so a
+  crates/rexx-exec/src/builtin/string/tests.rs:238: // The pair that rules out `find_forward`'s rescan here: a decoy
+  crates/rexx-exec/src/builtin/string/tests.rs:709: /// The condition every 93.9xx here carries is rc 163, not the 40.x
+  crates/rexx-exec/src/builtin/string/tests.rs:764: // without them this rule would be "every byte below 0x20".
+  crates/rexx-exec/src/builtin/string/tests.rs:806: /// A raiser this module owns renders through the catalogue, so a wrong
