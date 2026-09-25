@@ -904,6 +904,7 @@ impl ObjectModel {
             .chain(construct::NATIVE_METHODS)
             .chain(string::NATIVE_METHODS)
             .chain(hash::NATIVE_METHODS)
+            .chain(hash::stem::NATIVE_METHODS)
             .chain(collection::NATIVE_METHODS)
             .chain(rexx_info::NATIVE_METHODS)
             .chain(executable::NATIVE_METHODS)

@@ -1,0 +1,4 @@
+  ONLY-POST use super::collection (dispatch/hash.rs)
+  ONLY-POST mod stem (dispatch/hash.rs)
+  ONLY-POST dispatch/hash/stem.rs::use super::{Arity,Body,Cleared,Failure,Interp,NativeMethod,ObjRef,Raised,insert,new_instance,not_this_task,required_string_argument,unconverted_array_argument,} (dispatch/hash/stem.rs)
+233 of 233 units present on both sides have identical token streams (50 of them moved); 0 only before, 3 only after

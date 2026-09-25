@@ -1,0 +1,10 @@
+(a) unmoved lines: PRE dispatch/hash.rs minus the removed lines, against POST dispatch/hash.rs
+  INSERTED post:15: use super::collection;
+  INSERTED post:21: 
+  INSERTED post:22: // `Stem`'s primitive methods, chained into `ObjectModel::build` after this
+  INSERTED post:23: // module's own.
+  INSERTED post:24: pub(super) mod stem;
+  3 equal blocks, 2410 lines, each also compared with cmp; 2410 expected lines, 2415 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  50 of 50 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

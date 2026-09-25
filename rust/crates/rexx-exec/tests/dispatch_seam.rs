@@ -202,6 +202,7 @@ const CLEARANCE_CONSUMERS: &[&str] = &[
     "src/dispatch/string.rs",
     "src/dispatch/collection.rs",
     "src/dispatch/hash.rs",
+    "src/dispatch/hash/stem.rs",
     "src/dispatch/rexx_info.rs",
     "src/dispatch/executable.rs",
     "src/dispatch/introspection.rs",
