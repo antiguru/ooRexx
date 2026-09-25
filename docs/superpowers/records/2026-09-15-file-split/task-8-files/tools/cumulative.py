@@ -15,7 +15,16 @@ from splitlib import drop_trailing_commas
 
 base_src, final_src, new = sys.argv[1], sys.argv[2], sys.argv[3:]
 DECLARED = set(os.environ.get("SPLIT_DECLARED", "").split("|")) - {""}
-base = {u["key"]: u for u in splitlib.load_units(f"{base_src}/{PARENT_RS}")}
+import re
+
+
+def use_key(k):
+    # instruments.py's `use_key`: an import list rustfmt joined onto one line
+    # loses the comma before its `}`, and the key is its tokens.
+    return re.sub(r",\}", "}", k) if re.match(r"^(\w+::)*use ", k) else k
+
+
+base = {use_key(u["key"]): u for u in splitlib.load_units(f"{base_src}/{PARENT_RS}")}
 after, where = {}, {}
 _had = {}
 
@@ -29,7 +38,7 @@ for rel in [PARENT_RS] + new:
     for u in splitlib.load_units(f"{final_src}/{rel}"):
         # A moved test module's items keep their module name as a prefix,
         # as item-tool keys them inline (`tests::`, `object_operand_tests::`).
-        k = (os.path.basename(rel)[: -len(".rs")] + "::" if rel.endswith("tests.rs") else "") + u["key"]
+        k = use_key((os.path.basename(rel)[: -len(".rs")] + "::" if rel.endswith("tests.rs") else "") + u["key"])
         if k.startswith("use ") and rel != PARENT_RS:
             continue
         if k not in base:

@@ -1,0 +1,15 @@
+moved units: 56; names searched in backticks: 55
+file tails searched: convert.rs values.rs values/ values/convert.rs values/convert/
+
+(a) comments naming a moved unit: 0
+
+(b) comments naming a touched file: 0
+
+(c) positional words inside the destinations and the parent: 7
+  crates/rexx-api/src/values.rs:368: /// is stripped here, because what the descriptor carries is the type the
+  crates/rexx-api/src/values.rs:416: /// is what makes that hold here; the bytes are read again only when the
+  crates/rexx-api/src/values.rs:474: /// `.nil` is the `None` here.
+  crates/rexx-api/src/values.rs:595: /// The scope above the running method's in its receiver, `.nil` above the
+  crates/rexx-api/src/values.rs:624: /// The table lives behind the host rather than beside it (ruling 19,
+  crates/rexx-api/src/values/convert.rs:368: // had to create. Minting a handle is registering it, so here every one is
+  crates/rexx-api/src/values/convert.rs:517: /// here rather than through the host: a `c_int` is a tagged value, and asking
