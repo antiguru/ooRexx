@@ -1,0 +1,7 @@
+token.rs
+token/cursor.rs
+--expect-gone=use std::cell::RefCell;
+--expect-gone=use crate::ProgramSource;
+--expect-gone=use crate::scanner::ResourceBody;
+--expect-gone=use crate::selector::SelectorTable;
+--expect-gone=

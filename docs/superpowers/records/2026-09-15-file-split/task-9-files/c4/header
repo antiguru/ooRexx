@@ -1,0 +1,11 @@
+//! The context every `parse_*` function is handed, and the cursor over one
+//! clause's tokens.
+
+use std::cell::RefCell;
+use std::ops::Range;
+
+use crate::ProgramSource;
+use crate::scanner::ResourceBody;
+use crate::selector::SelectorTable;
+
+use super::{Keywords, SymbolTable, Tag, Token};

@@ -273,6 +273,13 @@ def widened_reflow(i1, i2, j1, j2):
     return pu["key"] if squash(pre_text) == squash(post_text) else None
 
 
+def declared_gone(lines):
+    """Whether every line of a block is a declared deletion, counted as a
+    multiset against what --expect-gone still holds."""
+    from collections import Counter
+    return not (Counter(lines) - Counter(expected_gone))
+
+
 actual = read_lines(os.path.join(post_root, PARENT_RS))
 sm = difflib.SequenceMatcher(a=expected, b=actual, autojunk=False)
 equal_blocks = 0
@@ -290,6 +297,18 @@ for tag, i1, i2, j1, j2 in sm.get_opcodes():
             out1.append(f"  INSERTED post:{j + 1}: {actual[j]}")
     elif use_block_narrowed(i1, i2, j1, j2):
         out1.append(f"  IMPORTS NARROWED post:{j1 + 1}-{j2}: {use_block_narrowed(i1, i2, j1, j2)}")
+    elif tag == "replace" and declared_gone(expected[i1:i2]):
+        # Declared deletions that difflib paired with inserted lines (two
+        # import groups collapsing into one lose the blank line between
+        # them, so the deleted group and the new `mod` line align): each
+        # PRE line is consumed from --expect-gone exactly as a "delete"
+        # block's would be, and each POST line is an insertion, which an
+        # "insert" block admits anyway.
+        for k, l in enumerate(expected[i1:i2]):
+            expected_gone.remove(l)
+            out1.append(f"  DELETED (declared) pre:{expected_at[i1 + k] + 1}: {l!r}")
+        for j in range(j1, j2):
+            out1.append(f"  INSERTED post:{j + 1}: {actual[j]}")
     elif tag == "replace" and (i2 - i1) == (j2 - j1):
         for k in range(i2 - i1):
             before, after = expected[i1 + k], actual[j1 + k]

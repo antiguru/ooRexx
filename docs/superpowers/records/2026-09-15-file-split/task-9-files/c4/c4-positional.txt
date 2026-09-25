@@ -1,0 +1,4 @@
+token.rs:35-37: ['start']: [('start of', '')]
+token.rs:169-169: ['end']: [('end of', '')]
+token/cursor.rs:39-42: ['spelling']: [('before', '')]
+done

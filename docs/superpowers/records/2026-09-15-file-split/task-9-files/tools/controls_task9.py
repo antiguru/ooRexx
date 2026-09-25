@@ -21,7 +21,9 @@ Part B, instruments 1-3 on this task's own commits (a control passes when
 instruments.py exits 1 and reports at least the instruments listed); see
 PART_B below.
 
-usage: controls_task9.py
+usage: controls_task9.py            (part A, and part B on every commit that exists)
+       controls_task9.py --pre N    (part A, and part B for commit N over pre<N>/ and
+                                     the working tree, before N is committed)
 """
 import os, re, shutil, subprocess, sys
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -163,42 +165,98 @@ def delete_fn(doc_start):
     return f
 
 
-# (n, parent, destinations, instrument options, plants); a plant is
-# (name, instruments expected, file, text -> planted text).
-PART_B = [
-    (1, "block.rs", "block/references.rs", [], [
+# {n: plants}; a plant is (name, instruments expected, file or None,
+# text -> planted text, options -> options). The parent, destinations and
+# instrument options are the commit's own (its `args` file).
+def drop_line(line):
+    return lambda s: s.replace(line + "\n", "", 1) if line + "\n" in s else s
+
+
+def delete_member(doc_start):
+    def f(s):
+        a = s.index(doc_start)
+        b = s.index("\n    }\n", a) + 7
+        return s[:a] + s[b + 1:]
+    return f
+
+
+same = lambda o: o
+PART_B = {
+    1: [
         ("B1-c1 a moved fn's body changes a token", ["I1b", "I2"], "block/references.rs",
-         first("visit_expr(target, symbols, f);", "visit_expr(value, symbols, f);")),
+         first("visit_expr(target, symbols, f);", "visit_expr(value, symbols, f);"), same),
         ("B2-c1 a moved helper is deleted", ["I2"], "block/references.rs",
-         delete_fn("/// A bare variable slot")),
+         delete_fn("/// A bare variable slot"), same),
         ("B3-c1 an unmoved line of block.rs changes", ["I1a"], "block.rs",
-         first("self.referenced.insert(Box::from(name.as_bytes()));", "self.referenced.insert(Box::from(name.as_bytes() ));")),
+         first("self.referenced.insert(Box::from(name.as_bytes()));", "self.referenced.insert(Box::from(name.as_bytes() ));"), same),
         ("B4-c1 two moved helpers swap their doc comments", ["I1b", "I2", "I3"], "block/references.rs",
-         swap("/// A bare variable slot, which is a name and not an expression.", "/// Calls `f` with the name of every variable reference in one expression.")),
-    ]),
-]
-for n, parent_rs, dests, opts, plants in PART_B:
-    c = commit(9, n, BASE)
-    if c is None:
-        print(f"part B c{n}: no commit yet, skipped")
-        continue
-    pre_t, post_t = tree(parent(c), "rust/crates/rexx-parse/src"), tree(c, "rust/crates/rexx-parse/src")
-    removed = f"{REC}/task-9-files/c{n}/removed.json"
+         swap("/// A bare variable slot, which is a name and not an expression.", "/// Calls `f` with the name of every variable reference in one expression."), same),
+    ],
+    2: [
+        ("B1-c2 the string a moved method passes to .expect(..) changes", ["I1b", "I2", "I3"], "token/symbols.rs",
+         first('.expect("symbols fit u32")', '.expect("symbols fit in u32")'), same),
+        ("B2-c2 a moved impl block loses a member", ["I2"], "token/symbols.rs",
+         delete_member("    /// How many distinct symbols are interned."), same),
+        ("B3-c2 a removed import is not declared gone", ["I1a"], None, None,
+         lambda o: [x for x in o if x != "--expect-gone=use std::borrow::Cow;"]),
+    ],
+    3: [
+        ("B1-c3 a moved keyword table's entry changes", ["I1b", "I2", "I3"], "token/keywords.rs",
+         first('    "ADDITIONAL",\n', '    "ADDITONAL",\n'), same),
+        ("B2-c3 two entries of a moved table swap places", ["I1b", "I2", "I3"], "token/keywords.rs",
+         first('"ARG", "CASELESS", "LINEIN"', '"ARG", "LINEIN", "CASELESS"'), same),
+        ("B3-c3 a moved table is deleted", ["I2"], "token/keywords.rs",
+         lambda s: s[: s.index("const DIRECTIVES")] + s[s.index("];\n", s.index("const DIRECTIVES")) + 4:], same),
+    ],
+    4: [
+        ("B1-c4 a moved cursor method's body changes a token", ["I1b", "I2"], "token/cursor.rs",
+         first("self.pos += 1;", "self.pos += 2;"), same),
+        ("B2-c4 two moved methods swap their doc comments", ["I1b", "I2", "I3"], "token/cursor.rs",
+         swap("/// One past the last token index this cursor may visit.", "/// `nextReal`: the next token that is not a blank, consumed."), same),
+        ("B3-c4 the declared blank line is not declared", ["I1a"], None, None,
+         lambda o: [x for x in o if x != "--expect-gone="]),
+        ("B4-c4 an undeclared unmoved line goes beside the declared ones", ["I1a"], "token.rs",
+         drop_line("use std::ops::Range;"), same),
+        ("B5-c4 a second blank line goes where one is declared", ["I1a"], "token.rs",
+         first("\nmod cursor;\n", "mod cursor;\n"), same),
+    ],
+}
+pre_mode = sys.argv[1:2] == ["--pre"]
+for n, plants in PART_B.items():
+    if pre_mode:
+        # Before commit n exists: PRE is pre<n>/, POST the working tree.
+        if n != int(sys.argv[2]):
+            continue
+        c = "working tree"
+        pre_t, post_t = f"{S}/pre{n}", f"{M}/rust/crates/rexx-parse/src"
+        removed, args_f = f"{S}/c{n}/removed.json", f"{S}/c{n}/args"
+    else:
+        c = commit(9, n, BASE)
+        if c is None:
+            print(f"part B c{n}: no commit yet, skipped")
+            continue
+        pre_t, post_t = tree(parent(c), "rust/crates/rexx-parse/src"), tree(c, "rust/crates/rexx-parse/src")
+        removed, args_f = f"{REC}/task-9-files/c{n}/removed.json", f"{REC}/task-9-files/c{n}/args"
+    a = open(args_f).read().split("\n")[:-1]
+    parent_rs, dests, opts = a[0], a[1], a[2:]
     env = dict(os.environ, SPLIT_CRATE="rexx-parse", SPLIT_PARENT=parent_rs[:-3], SPLIT_PARENT_RS=parent_rs, SPLIT_DESTS=dests, SPLIT_TESTS_RS="none")
     rc, tags, out = instruments(here, pre_t, post_t, removed, env, opts)
-    report(f"B c{n} as committed passes", rc == 0, f"exit {rc}, reported {tags}")
-    for name, expect, rel, fn in plants:
+    report(f"B c{n} as committed passes ({c})", rc == 0, f"exit {rc}, reported {tags}")
+    for name, expect, rel, fn, optfn in plants:
         d = f"{work}/b-c{n}-{name.split()[0]}"
         shutil.rmtree(d, ignore_errors=True)
         shutil.copytree(post_t, d)
-        p = os.path.join(d, rel)
-        s = open(p).read()
-        s2 = fn(s)
-        assert s2 != s, name
-        open(p, "w").write(s2)
-        rc, tags, out = instruments(here, pre_t, d, removed, env, opts)
+        if rel is not None:
+            p = os.path.join(d, rel)
+            s = open(p).read()
+            s2 = fn(s)
+            assert s2 != s, name
+            open(p, "w").write(s2)
+        o2 = optfn(opts)
+        assert rel is not None or o2 != opts, name
+        rc, tags, out = instruments(here, pre_t, d, removed, env, o2)
         ok = rc == 1 and set(expect) <= set(tags)
-        report(f"{name} (c{n} {c})", ok, f"exit {rc}, expected {expect}, reported {tags}\n" + "\n".join(l for l in out.splitlines() if l[:2] in ("I1", "I2", "I3"))[:3000])
+        report(f"{name} ({c})", ok, f"exit {rc}, expected {expect}, reported {tags}\n" + "\n".join(l for l in out.splitlines() if l[:2] in ("I1", "I2", "I3"))[:3000])
 
 print(f"{total - missed} of {total} controls caught as expected")
 sys.exit(1 if missed else 0)
