@@ -22,6 +22,7 @@ use rexx_api::layout::{
     RexxInstance_, RexxInstanceInterface, RexxMethodContext_, RexxMethodEntry, RexxPackageEntry,
     RexxRoutineEntry, RexxThreadContext_, RexxThreadInterface, ValueDescriptor,
 };
+use std::collections::BTreeSet;
 use std::mem::{align_of, offset_of, size_of};
 use std::path::PathBuf;
 
@@ -447,4 +448,622 @@ fn a_table_outside_the_slice_refuses_where_it_would_be_handed_out() {
             .map_or_else(String::new, Clone::clone);
         assert_eq!(message, format!("{name} is not implemented (Phase 8)"));
     }
+}
+
+/// The Rust type the header's C type `c` is, as `std::any::type_name` spells
+/// it once module paths are dropped.
+fn rust_type(c: &str) -> String {
+    let mut stars = c.matches('*').count();
+    let words: Vec<&str> = c
+        .split(|ch: char| ch == '*' || ch.is_whitespace())
+        .filter(|word| !word.is_empty())
+        .collect();
+    let mut rust = match words.as_slice() {
+        ["const", "char"] => {
+            stars -= 1;
+            "*const i8".to_string()
+        }
+        [name] => match *name {
+            "void" => String::new(),
+            "CSTRING" => "*const i8".to_string(),
+            "POINTER" | "REXXPFN" => "*mut c_void".to_string(),
+            "size_t" | "stringsize_t" | "logical_t" | "uintptr_t" => "usize".to_string(),
+            "wholenumber_t" | "intptr_t" => "isize".to_string(),
+            "int" | "int32_t" => "i32".to_string(),
+            "uint32_t" => "u32".to_string(),
+            "int64_t" => "i64".to_string(),
+            "uint64_t" => "u64".to_string(),
+            "double" => "f64".to_string(),
+            "float" => "f32".to_string(),
+            "RexxCondition" | "ValueDescriptor" | "RexxPackageEntry" => (*name).to_string(),
+            "RexxInstance" => "RexxInstance_".to_string(),
+            name if name.starts_with("Rexx") && name.ends_with("Context") => format!("{name}_"),
+            name if name.starts_with("Rexx")
+                && (name.ends_with("Object") || name.ends_with("ObjectPtr")) =>
+            {
+                format!("*mut {name}_")
+            }
+            other => panic!("{c}: {other} is not a type this test knows"),
+        },
+        _ => panic!("{c}: not a type this test knows"),
+    };
+    for _ in 0..stars {
+        rust = format!("*mut {rust}");
+    }
+    rust
+}
+
+/// `c` without the parameter name the header gives some arguments, which is
+/// a trailing word after a complete type.
+fn without_parameter_name(c: &str) -> &str {
+    let c = c.trim();
+    match c.rsplit_once(' ') {
+        Some((head, name))
+            if !name.contains('*') && head != "const" && !head.trim_end().ends_with("const") =>
+        {
+            head.trim_end()
+        }
+        _ => c,
+    }
+}
+
+/// Each member's type as the header declares it, in the spelling
+/// [`rust_type`] gives.
+fn header_types(header: &str, name: &str) -> Vec<(String, String)> {
+    let lines: Vec<&str> = header.lines().collect();
+    let close = format!("}} {name};");
+    let end = lines
+        .iter()
+        .position(|line| line.trim() == close)
+        .expect("the struct closes");
+    let start = lines[..end]
+        .iter()
+        .rposition(|line| line.trim() == "typedef struct")
+        .expect("the struct opens");
+    let mut found = Vec::new();
+    for line in &lines[start + 1..end] {
+        let code = code_of(line).trim();
+        if code.is_empty() || code == "{" {
+            continue;
+        }
+        let declaration = code.strip_suffix(';').expect("a member declaration");
+        if let Some(at) = declaration.find("(RexxEntry") {
+            let returns = rust_type(&declaration[..at]);
+            let rest = &declaration[at + "(RexxEntry".len()..];
+            let close = rest.find(')').expect("the pointer declarator closes");
+            let member = rest[..close]
+                .trim()
+                .trim_start_matches('*')
+                .trim()
+                .to_string();
+            let arguments = rest[close + 1..]
+                .trim()
+                .strip_prefix('(')
+                .and_then(|a| a.strip_suffix(')'))
+                .expect("a parameter list");
+            let arguments: Vec<String> = arguments
+                .split(',')
+                .map(|argument| rust_type(without_parameter_name(argument)))
+                .collect();
+            let tail = if returns.is_empty() {
+                String::new()
+            } else {
+                format!(" -> {returns}")
+            };
+            found.push((
+                member,
+                format!("unsafe extern \"C\" fn({}){tail}", arguments.join(", ")),
+            ));
+        } else {
+            let member = trailing_name(declaration);
+            let ty = declaration[..declaration.len() - member.len()].trim();
+            found.push((member, rust_type(ty)));
+        }
+    }
+    found
+}
+
+/// `type_name`'s spelling with every module path dropped.
+fn unqualified(type_name: &str) -> String {
+    let mut out = String::new();
+    let mut word = String::new();
+    let mut chars = type_name.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            word.push(ch);
+        } else if ch == ':' && chars.peek() == Some(&':') {
+            chars.next();
+            word.clear();
+        } else {
+            out.push_str(&word);
+            word.clear();
+            out.push(ch);
+        }
+    }
+    out.push_str(&word);
+    out
+}
+
+/// **Every member's type is the header's**, arguments and result, not only
+/// its name: a slot declared with the wrong width or one argument short
+/// would link and be called with the header's arguments.
+#[test]
+fn every_member_has_the_type_the_header_declares() {
+    let header = header();
+    for (name, fields, types) in [
+        (
+            "RexxInstanceInterface",
+            RexxInstanceInterface::FIELDS,
+            RexxInstanceInterface::member_types(),
+        ),
+        (
+            "RexxThreadInterface",
+            RexxThreadInterface::FIELDS,
+            RexxThreadInterface::member_types(),
+        ),
+        (
+            "MethodContextInterface",
+            MethodContextInterface::FIELDS,
+            MethodContextInterface::member_types(),
+        ),
+        (
+            "CallContextInterface",
+            CallContextInterface::FIELDS,
+            CallContextInterface::member_types(),
+        ),
+        (
+            "ExitContextInterface",
+            ExitContextInterface::FIELDS,
+            ExitContextInterface::member_types(),
+        ),
+        (
+            "IORedirectorInterface",
+            IORedirectorInterface::FIELDS,
+            IORedirectorInterface::member_types(),
+        ),
+    ] {
+        let ours: Vec<(String, String)> = fields
+            .iter()
+            .zip(types)
+            .map(|(field, ty)| ((*field).to_string(), unqualified(ty)))
+            .collect();
+        assert_eq!(ours, header_types(&header, name), "{name}");
+    }
+}
+
+/// The negative control for the comparison above: the spellings it compares
+/// are the ones a wrong member would change.
+#[test]
+fn the_type_comparison_sees_a_width_and_an_argument() {
+    assert_eq!(
+        rust_type("RexxThreadContext **"),
+        "*mut *mut RexxThreadContext_"
+    );
+    assert_eq!(rust_type(without_parameter_name("size_t count")), "usize");
+    assert_eq!(without_parameter_name("CSTRING *"), "CSTRING *");
+    assert_ne!(rust_type("int32_t"), rust_type("int64_t"));
+    assert_eq!(
+        unqualified(std::any::type_name::<
+            unsafe extern "C" fn(*mut RexxThreadContext_, i32) -> rexx_api::layout::RexxObjectPtr,
+        >()),
+        "unsafe extern \"C\" fn(*mut RexxThreadContext_, i32) -> *mut RexxObjectPtr_"
+    );
+    let thread = header_types(&header(), "RexxThreadInterface");
+    let (_, append) = thread
+        .iter()
+        .find(|(member, _)| member == "ArrayAppendString")
+        .expect("the header declares ArrayAppendString");
+    assert_eq!(
+        append,
+        "unsafe extern \"C\" fn(*mut RexxThreadContext_, *mut RexxArrayObject_, *const i8, usize) -> usize"
+    );
+}
+
+/// For each table something hands an extension, the members whose address is
+/// still the refusing stub's, as `Table.Member`.
+fn refusing_members() -> BTreeSet<String> {
+    let header = header();
+    let mut refusing = BTreeSet::new();
+    for (name, populated, stubs) in [
+        (
+            "RexxInstanceInterface",
+            rexx_api::ffi::INSTANCE.addresses(),
+            RexxInstanceInterface::REFUSING.addresses(),
+        ),
+        (
+            "RexxThreadInterface",
+            rexx_api::ffi::THREAD.addresses(),
+            RexxThreadInterface::REFUSING.addresses(),
+        ),
+        (
+            "MethodContextInterface",
+            rexx_api::ffi::METHOD_CONTEXT.addresses(),
+            MethodContextInterface::REFUSING.addresses(),
+        ),
+        (
+            "CallContextInterface",
+            rexx_api::ffi::CALL_CONTEXT.addresses(),
+            CallContextInterface::REFUSING.addresses(),
+        ),
+    ] {
+        let functions: Vec<String> = declarations_of(&header, name)
+            .into_iter()
+            .filter(|(_, returns)| returns.is_some())
+            .map(|(member, _)| member)
+            .collect();
+        let named: Vec<String> = populated.iter().map(|(m, _)| (*m).to_string()).collect();
+        assert_eq!(named, functions, "{name}'s function members");
+        for ((member, ours), (_, stub)) in populated.iter().zip(&stubs) {
+            if ours == stub {
+                refusing.insert(format!("{name}.{member}"));
+            }
+        }
+    }
+    refusing
+}
+
+/// **No stub remains that a populated table should have replaced**: the
+/// members still refusing are exactly the ones `REFUSING_MEMBERS` names with
+/// their owner, derived from the header's members rather than from a list.
+#[test]
+fn a_populated_table_refuses_exactly_the_members_it_names() {
+    let listed: BTreeSet<String> = rexx_api::layout::REFUSING_MEMBERS
+        .iter()
+        .map(|(member, _)| (*member).to_string())
+        .collect();
+    assert_eq!(
+        listed.len(),
+        rexx_api::layout::REFUSING_MEMBERS.len(),
+        "a member is listed twice"
+    );
+    assert_eq!(refusing_members(), listed);
+}
+
+/// The negative control for the comparison above: a refusing table compared
+/// with itself refuses everything, and a filled member differs from its stub.
+#[test]
+fn the_refusal_comparison_tells_a_filled_member_from_a_stub() {
+    let stubs = RexxThreadInterface::REFUSING.addresses();
+    assert!(
+        stubs
+            .iter()
+            .zip(RexxThreadInterface::REFUSING.addresses())
+            .all(|(ours, theirs)| ours.1 == theirs.1)
+    );
+    let filled = rexx_api::ffi::THREAD.addresses();
+    let (_, stub) = stubs
+        .iter()
+        .find(|(member, _)| *member == "WholeNumberToObject")
+        .expect("the thread table has WholeNumberToObject");
+    let (_, ours) = filled
+        .iter()
+        .find(|(member, _)| *member == "WholeNumberToObject")
+        .expect("the thread table has WholeNumberToObject");
+    assert_ne!(stub, ours);
+}
+
+/// The C++ wrapper struct an interface table's members are called through,
+/// and that table.
+const WRAPPERS: [(&str, &str); 4] = [
+    ("RexxInstance_", "RexxInstanceInterface"),
+    ("RexxThreadContext_", "RexxThreadInterface"),
+    ("RexxMethodContext_", "MethodContextInterface"),
+    ("RexxCallContext_", "CallContextInterface"),
+];
+
+/// Each inline method `wrapper` defines in the header, with the method's
+/// body.
+fn inline_methods(header: &str, wrapper: &str) -> Vec<(String, String)> {
+    let lines: Vec<&str> = header.lines().collect();
+    let open = format!("struct {wrapper}");
+    let start = lines
+        .iter()
+        .position(|line| line.trim() == open)
+        .unwrap_or_else(|| panic!("{wrapper} is not defined in the header"));
+    let end = start
+        + lines[start..]
+            .iter()
+            .position(|line| line.trim() == "};")
+            .expect("the struct closes");
+    let mut found = Vec::new();
+    let mut at = start + 1;
+    while at < end {
+        let line = code_of(lines[at]).trim();
+        if line.ends_with(')') && lines.get(at + 1).is_some_and(|next| next.trim() == "{") {
+            let head = &line[..line.find('(').expect("a parameter list")];
+            let name = trailing_name(head.trim_end());
+            let close = at
+                + 2
+                + lines[at + 2..end]
+                    .iter()
+                    .position(|next| next.trim() == "}")
+                    .expect("the method closes");
+            found.push((name, lines[at + 2..close].join("\n")));
+            at = close + 1;
+        } else {
+            at += 1;
+        }
+    }
+    found
+}
+
+/// Every table member the inline method `name` reaches, through any wrapper
+/// that defines it, following one wrapper method calling another.
+fn members_reached(header: &str, name: &str) -> BTreeSet<String> {
+    let mut reached = BTreeSet::new();
+    for (wrapper, _) in WRAPPERS {
+        reached.extend(members_reached_in(header, wrapper, name));
+    }
+    reached
+}
+
+fn members_reached_in(header: &str, wrapper: &str, name: &str) -> BTreeSet<String> {
+    let table = |struct_name: &str| {
+        WRAPPERS
+            .iter()
+            .find(|(w, _)| *w == struct_name)
+            .map(|(_, t)| *t)
+            .expect("a known wrapper")
+    };
+    let mut reached = BTreeSet::new();
+    for (method, body) in inline_methods(header, wrapper) {
+        if method != name {
+            continue;
+        }
+        for (prefix, owner) in [
+            ("threadContext->functions->", "RexxThreadContext_"),
+            ("instance->functions->", "RexxInstance_"),
+            ("functions->", wrapper),
+        ] {
+            for (at, _) in body.match_indices(prefix) {
+                if prefix == "functions->"
+                    && (body[..at].ends_with("threadContext->")
+                        || body[..at].ends_with("instance->"))
+                {
+                    continue;
+                }
+                let member = identifier_at(&body[at + prefix.len()..]);
+                reached.insert(format!("{}.{member}", table(owner)));
+            }
+        }
+        for (receiver, owner) in [
+            ("threadContext->", "RexxThreadContext_"),
+            ("instance->", "RexxInstance_"),
+        ] {
+            for (at, _) in body.match_indices(receiver) {
+                let rest = &body[at + receiver.len()..];
+                let called = identifier_at(rest);
+                if rest[called.len()..].trim_start().starts_with('(') {
+                    reached.extend(members_reached_in(header, owner, &called));
+                }
+            }
+        }
+    }
+    reached
+}
+
+/// The identifier `text` starts with.
+fn identifier_at(text: &str) -> String {
+    text.chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect()
+}
+
+/// The table members the oracle's `METHOD`, `CONVERSION` and `FUNCTION`
+/// extensions call, through the header's inline wrappers.
+fn members_the_test_extensions_call() -> BTreeSet<String> {
+    let header = header();
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../testbinaries");
+    let mut called = BTreeSet::new();
+    for file in ["orxmethod.cpp", "orxfunction.cpp"] {
+        let path = root.join(file);
+        let source =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        for (at, _) in source.match_indices("->") {
+            let name = identifier_at(&source[at + 2..]);
+            if source[at + 2 + name.len()..].trim_start().starts_with('(') {
+                called.insert(name);
+            }
+        }
+    }
+    called
+        .iter()
+        .flat_map(|name| members_reached(&header, name))
+        .collect()
+}
+
+/// The derivation above reads wrappers that call other wrappers: `True()` in
+/// a method context reaches the thread table's data member, and
+/// `InterpreterVersion()` reaches the instance table through two wrappers.
+#[test]
+fn the_wrapper_scan_follows_one_wrapper_into_another() {
+    let header = header();
+    assert_eq!(
+        members_reached_in(&header, "RexxMethodContext_", "InterpreterVersion"),
+        BTreeSet::from(["RexxInstanceInterface.InterpreterVersion".to_string()])
+    );
+    assert_eq!(
+        members_reached_in(&header, "RexxMethodContext_", "GetArguments"),
+        BTreeSet::from(["MethodContextInterface.GetArguments".to_string()])
+    );
+    assert_eq!(
+        members_reached_in(&header, "RexxCallContext_", "String"),
+        BTreeSet::from([
+            "RexxThreadInterface.NewString".to_string(),
+            "RexxThreadInterface.NewStringFromAsciiz".to_string()
+        ])
+    );
+    let reached = members_the_test_extensions_call();
+    assert!(reached.contains("RexxInstanceInterface.AttachThread"));
+    assert!(reached.contains("RexxThreadInterface.RexxTrue"));
+    assert!(!reached.contains("RexxThreadInterface.HaltThread"));
+}
+
+/// **What the test extensions call is filled first**: every member they reach
+/// that still refuses is one this list names, each with the reason it is not
+/// filled here.
+#[test]
+fn the_test_extensions_reach_only_members_that_answer() {
+    const STILL_REFUSING: &[&str] = &[
+        "CallContextInterface.DropContextVariable",
+        "CallContextInterface.FindContextClass",
+        "CallContextInterface.GetAllContextVariables",
+        "CallContextInterface.GetArgument",
+        "CallContextInterface.GetArguments",
+        "CallContextInterface.GetContextVariable",
+        "CallContextInterface.GetRoutine",
+        "CallContextInterface.GetRoutineName",
+        "CallContextInterface.ResolveStemVariable",
+        "CallContextInterface.SetContextVariable",
+        "CallContextInterface.ThrowCondition",
+        "CallContextInterface.ThrowException",
+        "CallContextInterface.ThrowException0",
+        "CallContextInterface.ThrowException1",
+        "CallContextInterface.ThrowException2",
+        "MethodContextInterface.AllocateObjectMemory",
+        "MethodContextInterface.FindContextClass",
+        "MethodContextInterface.ForwardMessage",
+        "MethodContextInterface.FreeObjectMemory",
+        "MethodContextInterface.GetArgument",
+        "MethodContextInterface.GetArguments",
+        "MethodContextInterface.GetMessageName",
+        "MethodContextInterface.GetMethod",
+        "MethodContextInterface.GetObjectVariable",
+        "MethodContextInterface.GetObjectVariableReference",
+        "MethodContextInterface.GetScope",
+        "MethodContextInterface.GetSelf",
+        "MethodContextInterface.GetSuper",
+        "MethodContextInterface.ReallocateObjectMemory",
+        "MethodContextInterface.SetGuardOff",
+        "MethodContextInterface.SetGuardOffWhenUpdated",
+        "MethodContextInterface.SetGuardOn",
+        "MethodContextInterface.SetGuardOnWhenUpdated",
+        "MethodContextInterface.ThrowCondition",
+        "MethodContextInterface.ThrowException",
+        "MethodContextInterface.ThrowException0",
+        "MethodContextInterface.ThrowException1",
+        "MethodContextInterface.ThrowException2",
+        "RexxInstanceInterface.AddCommandEnvironment",
+        "RexxInstanceInterface.AttachThread",
+        "RexxThreadInterface.ArrayAppend",
+        "RexxThreadInterface.ArrayAppendString",
+        "RexxThreadInterface.ArrayAt",
+        "RexxThreadInterface.ArrayDimension",
+        "RexxThreadInterface.ArrayItems",
+        "RexxThreadInterface.ArrayOfFour",
+        "RexxThreadInterface.ArrayOfOne",
+        "RexxThreadInterface.ArrayOfThree",
+        "RexxThreadInterface.ArrayOfTwo",
+        "RexxThreadInterface.ArrayPut",
+        "RexxThreadInterface.ArraySize",
+        "RexxThreadInterface.BufferData",
+        "RexxThreadInterface.CallProgram",
+        "RexxThreadInterface.CallRoutine",
+        "RexxThreadInterface.DetachThread",
+        "RexxThreadInterface.DirectoryAt",
+        "RexxThreadInterface.DirectoryPut",
+        "RexxThreadInterface.DirectoryRemove",
+        "RexxThreadInterface.DoubleToObject",
+        "RexxThreadInterface.DropStemArrayElement",
+        "RexxThreadInterface.DropStemElement",
+        "RexxThreadInterface.FindClass",
+        "RexxThreadInterface.FindPackageClass",
+        "RexxThreadInterface.GetAllStemElements",
+        "RexxThreadInterface.GetInterpreterInstance",
+        "RexxThreadInterface.GetMethodPackage",
+        "RexxThreadInterface.GetPackageClasses",
+        "RexxThreadInterface.GetPackageMethods",
+        "RexxThreadInterface.GetPackagePublicClasses",
+        "RexxThreadInterface.GetPackagePublicRoutines",
+        "RexxThreadInterface.GetPackageRoutines",
+        "RexxThreadInterface.GetRoutinePackage",
+        "RexxThreadInterface.GetStemArrayElement",
+        "RexxThreadInterface.GetStemElement",
+        "RexxThreadInterface.GetStemValue",
+        "RexxThreadInterface.HasMethod",
+        "RexxThreadInterface.Int32ToObject",
+        "RexxThreadInterface.Int64ToObject",
+        "RexxThreadInterface.IntptrToObject",
+        "RexxThreadInterface.IsArray",
+        "RexxThreadInterface.IsBuffer",
+        "RexxThreadInterface.IsDirectory",
+        "RexxThreadInterface.IsInstanceOf",
+        "RexxThreadInterface.IsMethod",
+        "RexxThreadInterface.IsMutableBuffer",
+        "RexxThreadInterface.IsRoutine",
+        "RexxThreadInterface.IsStem",
+        "RexxThreadInterface.IsString",
+        "RexxThreadInterface.IsStringTable",
+        "RexxThreadInterface.IsVariableReference",
+        "RexxThreadInterface.LoadPackage",
+        "RexxThreadInterface.LoadPackageFromData",
+        "RexxThreadInterface.LogicalToObject",
+        "RexxThreadInterface.MutableBufferCapacity",
+        "RexxThreadInterface.MutableBufferData",
+        "RexxThreadInterface.MutableBufferLength",
+        "RexxThreadInterface.NewArray",
+        "RexxThreadInterface.NewBuffer",
+        "RexxThreadInterface.NewDirectory",
+        "RexxThreadInterface.NewMethod",
+        "RexxThreadInterface.NewMutableBuffer",
+        "RexxThreadInterface.NewRoutine",
+        "RexxThreadInterface.NewStem",
+        "RexxThreadInterface.NewString",
+        "RexxThreadInterface.NewStringFromAsciiz",
+        "RexxThreadInterface.NewStringTable",
+        "RexxThreadInterface.NewSupplier",
+        "RexxThreadInterface.ObjectToCSelf",
+        "RexxThreadInterface.ObjectToCSelfScoped",
+        "RexxThreadInterface.ObjectToDouble",
+        "RexxThreadInterface.ObjectToInt32",
+        "RexxThreadInterface.ObjectToInt64",
+        "RexxThreadInterface.ObjectToIntptr",
+        "RexxThreadInterface.ObjectToLogical",
+        "RexxThreadInterface.ObjectToString",
+        "RexxThreadInterface.ObjectToStringSize",
+        "RexxThreadInterface.ObjectToStringValue",
+        "RexxThreadInterface.ObjectToUintptr",
+        "RexxThreadInterface.ObjectToUnsignedInt32",
+        "RexxThreadInterface.ObjectToUnsignedInt64",
+        "RexxThreadInterface.ObjectToValue",
+        "RexxThreadInterface.ObjectToWholeNumber",
+        "RexxThreadInterface.RaiseCondition",
+        "RexxThreadInterface.RaiseException",
+        "RexxThreadInterface.RaiseException1",
+        "RexxThreadInterface.RaiseException2",
+        "RexxThreadInterface.SendMessage",
+        "RexxThreadInterface.SendMessage0",
+        "RexxThreadInterface.SendMessage1",
+        "RexxThreadInterface.SendMessage2",
+        "RexxThreadInterface.SendMessageScoped",
+        "RexxThreadInterface.SetMutableBufferCapacity",
+        "RexxThreadInterface.SetMutableBufferLength",
+        "RexxThreadInterface.SetStemArrayElement",
+        "RexxThreadInterface.SetStemElement",
+        "RexxThreadInterface.SetVariableReferenceValue",
+        "RexxThreadInterface.StringGet",
+        "RexxThreadInterface.StringLower",
+        "RexxThreadInterface.StringSizeToObject",
+        "RexxThreadInterface.StringTableAt",
+        "RexxThreadInterface.StringTablePut",
+        "RexxThreadInterface.StringTableRemove",
+        "RexxThreadInterface.StringUpper",
+        "RexxThreadInterface.SupplierAvailable",
+        "RexxThreadInterface.SupplierIndex",
+        "RexxThreadInterface.SupplierItem",
+        "RexxThreadInterface.SupplierNext",
+        "RexxThreadInterface.UintptrToObject",
+        "RexxThreadInterface.UnsignedInt32ToObject",
+        "RexxThreadInterface.UnsignedInt64ToObject",
+        "RexxThreadInterface.ValueToObject",
+        "RexxThreadInterface.VariableReferenceName",
+        "RexxThreadInterface.VariableReferenceValue",
+    ];
+    let refusing = refusing_members();
+    let reached: BTreeSet<String> = members_the_test_extensions_call()
+        .into_iter()
+        .filter(|member| refusing.contains(member))
+        .collect();
+    let expected: BTreeSet<String> = STILL_REFUSING.iter().map(|m| (*m).to_string()).collect();
+    assert_eq!(reached, expected);
 }

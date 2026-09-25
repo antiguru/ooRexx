@@ -373,13 +373,217 @@ pub struct Owned<C, T> {
     pub owner: *mut T,
 }
 
+/// Each member a populated table still refuses, as `Table.Member`, with the
+/// phase its refusal names.
+pub const REFUSING_MEMBERS: &[(&str, &str)] = &[
+    ("RexxInstanceInterface.Terminate", "Phase 8"),
+    ("RexxInstanceInterface.AttachThread", "Phase 8"),
+    ("RexxInstanceInterface.Halt", "Phase 8"),
+    ("RexxInstanceInterface.SetTrace", "Phase 8"),
+    ("RexxInstanceInterface.AddCommandEnvironment", "Phase 8"),
+    ("RexxThreadInterface.DetachThread", "Phase 8"),
+    ("RexxThreadInterface.HaltThread", "Phase 8"),
+    ("RexxThreadInterface.SetThreadTrace", "Phase 8"),
+    ("RexxThreadInterface.RequestGlobalReference", "Phase 8"),
+    ("RexxThreadInterface.ReleaseGlobalReference", "Phase 8"),
+    ("RexxThreadInterface.ReleaseLocalReference", "Phase 8"),
+    ("RexxThreadInterface.SendMessage", "Phase 8"),
+    ("RexxThreadInterface.SendMessage0", "Phase 8"),
+    ("RexxThreadInterface.SendMessage1", "Phase 8"),
+    ("RexxThreadInterface.SendMessage2", "Phase 8"),
+    ("RexxThreadInterface.GetLocalEnvironment", "Phase 8"),
+    ("RexxThreadInterface.GetGlobalEnvironment", "Phase 8"),
+    ("RexxThreadInterface.IsInstanceOf", "Phase 8"),
+    ("RexxThreadInterface.IsOfType", "Phase 8"),
+    ("RexxThreadInterface.HasMethod", "Phase 8"),
+    ("RexxThreadInterface.LoadPackage", "Phase 8"),
+    ("RexxThreadInterface.LoadPackageFromData", "Phase 8"),
+    ("RexxThreadInterface.LoadLibrary", "Phase 8"),
+    ("RexxThreadInterface.RegisterLibrary", "Phase 8"),
+    ("RexxThreadInterface.FindClass", "Phase 8"),
+    ("RexxThreadInterface.FindPackageClass", "Phase 8"),
+    ("RexxThreadInterface.GetPackageRoutines", "Phase 8"),
+    ("RexxThreadInterface.GetPackagePublicRoutines", "Phase 8"),
+    ("RexxThreadInterface.GetPackageClasses", "Phase 8"),
+    ("RexxThreadInterface.GetPackagePublicClasses", "Phase 8"),
+    ("RexxThreadInterface.GetPackageMethods", "Phase 8"),
+    ("RexxThreadInterface.CallRoutine", "Phase 8"),
+    ("RexxThreadInterface.CallProgram", "Phase 8"),
+    ("RexxThreadInterface.NewMethod", "Phase 8"),
+    ("RexxThreadInterface.NewRoutine", "Phase 8"),
+    ("RexxThreadInterface.IsRoutine", "Phase 8"),
+    ("RexxThreadInterface.IsMethod", "Phase 8"),
+    ("RexxThreadInterface.GetRoutinePackage", "Phase 8"),
+    ("RexxThreadInterface.GetMethodPackage", "Phase 8"),
+    ("RexxThreadInterface.ObjectToCSelf", "Phase 8"),
+    ("RexxThreadInterface.UintptrToObject", "Phase 8"),
+    ("RexxThreadInterface.IntptrToObject", "Phase 8"),
+    ("RexxThreadInterface.ValueToObject", "Phase 8"),
+    ("RexxThreadInterface.ValuesToObject", "Phase 8"),
+    ("RexxThreadInterface.ObjectToValue", "Phase 8"),
+    ("RexxThreadInterface.StringSizeToObject", "Phase 8"),
+    ("RexxThreadInterface.ObjectToWholeNumber", "Phase 8"),
+    ("RexxThreadInterface.ObjectToStringSize", "Phase 8"),
+    ("RexxThreadInterface.Int64ToObject", "Phase 8"),
+    ("RexxThreadInterface.UnsignedInt64ToObject", "Phase 8"),
+    ("RexxThreadInterface.ObjectToInt64", "Phase 8"),
+    ("RexxThreadInterface.ObjectToUnsignedInt64", "Phase 8"),
+    ("RexxThreadInterface.Int32ToObject", "Phase 8"),
+    ("RexxThreadInterface.UnsignedInt32ToObject", "Phase 8"),
+    ("RexxThreadInterface.ObjectToInt32", "Phase 8"),
+    ("RexxThreadInterface.ObjectToUnsignedInt32", "Phase 8"),
+    ("RexxThreadInterface.ObjectToUintptr", "Phase 8"),
+    ("RexxThreadInterface.ObjectToIntptr", "Phase 8"),
+    ("RexxThreadInterface.ObjectToLogical", "Phase 8"),
+    ("RexxThreadInterface.LogicalToObject", "Phase 8"),
+    ("RexxThreadInterface.DoubleToObject", "Phase 8"),
+    ("RexxThreadInterface.ObjectToDouble", "Phase 8"),
+    ("RexxThreadInterface.ObjectToString", "Phase 8"),
+    ("RexxThreadInterface.ObjectToStringValue", "Phase 8"),
+    ("RexxThreadInterface.StringGet", "Phase 8"),
+    ("RexxThreadInterface.NewString", "Phase 8"),
+    ("RexxThreadInterface.NewStringFromAsciiz", "Phase 8"),
+    ("RexxThreadInterface.StringUpper", "Phase 8"),
+    ("RexxThreadInterface.StringLower", "Phase 8"),
+    ("RexxThreadInterface.IsString", "Phase 8"),
+    ("RexxThreadInterface.NewBufferString", "Phase 8"),
+    ("RexxThreadInterface.BufferStringLength", "Phase 8"),
+    ("RexxThreadInterface.BufferStringData", "Phase 8"),
+    ("RexxThreadInterface.FinishBufferString", "Phase 8"),
+    ("RexxThreadInterface.DirectoryPut", "Phase 8"),
+    ("RexxThreadInterface.DirectoryAt", "Phase 8"),
+    ("RexxThreadInterface.DirectoryRemove", "Phase 8"),
+    ("RexxThreadInterface.NewDirectory", "Phase 8"),
+    ("RexxThreadInterface.IsDirectory", "Phase 8"),
+    ("RexxThreadInterface.ArrayAt", "Phase 8"),
+    ("RexxThreadInterface.ArrayPut", "Phase 8"),
+    ("RexxThreadInterface.ArrayAppend", "Phase 8"),
+    ("RexxThreadInterface.ArrayAppendString", "Phase 8"),
+    ("RexxThreadInterface.ArraySize", "Phase 8"),
+    ("RexxThreadInterface.ArrayItems", "Phase 8"),
+    ("RexxThreadInterface.ArrayDimension", "Phase 8"),
+    ("RexxThreadInterface.NewArray", "Phase 8"),
+    ("RexxThreadInterface.ArrayOfOne", "Phase 8"),
+    ("RexxThreadInterface.ArrayOfTwo", "Phase 8"),
+    ("RexxThreadInterface.ArrayOfThree", "Phase 8"),
+    ("RexxThreadInterface.ArrayOfFour", "Phase 8"),
+    ("RexxThreadInterface.IsArray", "Phase 8"),
+    ("RexxThreadInterface.BufferData", "Phase 8"),
+    ("RexxThreadInterface.BufferLength", "Phase 8"),
+    ("RexxThreadInterface.NewBuffer", "Phase 8"),
+    ("RexxThreadInterface.IsBuffer", "Phase 8"),
+    ("RexxThreadInterface.PointerValue", "Phase 8"),
+    ("RexxThreadInterface.IsPointer", "Phase 8"),
+    ("RexxThreadInterface.SupplierItem", "Phase 8"),
+    ("RexxThreadInterface.SupplierIndex", "Phase 8"),
+    ("RexxThreadInterface.SupplierAvailable", "Phase 8"),
+    ("RexxThreadInterface.SupplierNext", "Phase 8"),
+    ("RexxThreadInterface.NewSupplier", "Phase 8"),
+    ("RexxThreadInterface.NewStem", "Phase 8"),
+    ("RexxThreadInterface.SetStemElement", "Phase 8"),
+    ("RexxThreadInterface.GetStemElement", "Phase 8"),
+    ("RexxThreadInterface.DropStemElement", "Phase 8"),
+    ("RexxThreadInterface.SetStemArrayElement", "Phase 8"),
+    ("RexxThreadInterface.GetStemArrayElement", "Phase 8"),
+    ("RexxThreadInterface.DropStemArrayElement", "Phase 8"),
+    ("RexxThreadInterface.GetAllStemElements", "Phase 8"),
+    ("RexxThreadInterface.GetStemValue", "Phase 8"),
+    ("RexxThreadInterface.IsStem", "Phase 8"),
+    ("RexxThreadInterface.RaiseException1", "Phase 8"),
+    ("RexxThreadInterface.RaiseException2", "Phase 8"),
+    ("RexxThreadInterface.RaiseException", "Phase 8"),
+    ("RexxThreadInterface.RaiseCondition", "Phase 8"),
+    ("RexxThreadInterface.CheckCondition", "Phase 8"),
+    ("RexxThreadInterface.GetConditionInfo", "Phase 8"),
+    ("RexxThreadInterface.DecodeConditionInfo", "Phase 8"),
+    ("RexxThreadInterface.ClearCondition", "Phase 8"),
+    ("RexxThreadInterface.ObjectToCSelfScoped", "Phase 8"),
+    ("RexxThreadInterface.DisplayCondition", "Phase 8"),
+    ("RexxThreadInterface.MutableBufferData", "Phase 8"),
+    ("RexxThreadInterface.MutableBufferLength", "Phase 8"),
+    ("RexxThreadInterface.SetMutableBufferLength", "Phase 8"),
+    ("RexxThreadInterface.NewMutableBuffer", "Phase 8"),
+    ("RexxThreadInterface.IsMutableBuffer", "Phase 8"),
+    ("RexxThreadInterface.MutableBufferCapacity", "Phase 8"),
+    ("RexxThreadInterface.SetMutableBufferCapacity", "Phase 8"),
+    ("RexxThreadInterface.VariableReferenceName", "Phase 8"),
+    ("RexxThreadInterface.VariableReferenceValue", "Phase 8"),
+    ("RexxThreadInterface.SetVariableReferenceValue", "Phase 8"),
+    ("RexxThreadInterface.IsVariableReference", "Phase 8"),
+    ("RexxThreadInterface.StringTablePut", "Phase 8"),
+    ("RexxThreadInterface.StringTableAt", "Phase 8"),
+    ("RexxThreadInterface.StringTableRemove", "Phase 8"),
+    ("RexxThreadInterface.NewStringTable", "Phase 8"),
+    ("RexxThreadInterface.IsStringTable", "Phase 8"),
+    ("RexxThreadInterface.SendMessageScoped", "Phase 8"),
+    ("RexxThreadInterface.GetInterpreterInstance", "Phase 8"),
+    ("MethodContextInterface.GetArguments", "Phase 8"),
+    ("MethodContextInterface.GetArgument", "Phase 8"),
+    ("MethodContextInterface.GetMessageName", "Phase 8"),
+    ("MethodContextInterface.GetMethod", "Phase 8"),
+    ("MethodContextInterface.GetSelf", "Phase 8"),
+    ("MethodContextInterface.GetSuper", "Phase 8"),
+    ("MethodContextInterface.GetScope", "Phase 8"),
+    ("MethodContextInterface.GetObjectVariable", "Phase 8"),
+    ("MethodContextInterface.ForwardMessage", "Phase 8"),
+    ("MethodContextInterface.SetGuardOn", "Phase 8"),
+    ("MethodContextInterface.SetGuardOff", "Phase 8"),
+    ("MethodContextInterface.FindContextClass", "Phase 8"),
+    ("MethodContextInterface.GetCSelf", "Phase 8"),
+    ("MethodContextInterface.AllocateObjectMemory", "Phase 8"),
+    ("MethodContextInterface.FreeObjectMemory", "Phase 8"),
+    ("MethodContextInterface.ReallocateObjectMemory", "Phase 8"),
+    (
+        "MethodContextInterface.GetObjectVariableReference",
+        "Phase 8",
+    ),
+    ("MethodContextInterface.SetGuardOnWhenUpdated", "Phase 8"),
+    ("MethodContextInterface.SetGuardOffWhenUpdated", "Phase 8"),
+    ("MethodContextInterface.ThrowException0", "Phase 8"),
+    ("MethodContextInterface.ThrowException1", "Phase 8"),
+    ("MethodContextInterface.ThrowException2", "Phase 8"),
+    ("MethodContextInterface.ThrowException", "Phase 8"),
+    ("MethodContextInterface.ThrowCondition", "Phase 8"),
+    ("CallContextInterface.GetArguments", "Phase 8"),
+    ("CallContextInterface.GetArgument", "Phase 8"),
+    ("CallContextInterface.GetRoutineName", "Phase 8"),
+    ("CallContextInterface.GetRoutine", "Phase 8"),
+    ("CallContextInterface.SetContextVariable", "Phase 8"),
+    ("CallContextInterface.GetContextVariable", "Phase 8"),
+    ("CallContextInterface.DropContextVariable", "Phase 8"),
+    ("CallContextInterface.GetAllContextVariables", "Phase 8"),
+    ("CallContextInterface.ResolveStemVariable", "Phase 8"),
+    ("CallContextInterface.InvalidRoutine", "Phase 8"),
+    ("CallContextInterface.GetCallerContext", "Phase 8"),
+    ("CallContextInterface.FindContextClass", "Phase 8"),
+    (
+        "CallContextInterface.GetContextVariableReference",
+        "Phase 8",
+    ),
+    ("CallContextInterface.ThrowException0", "Phase 8"),
+    ("CallContextInterface.ThrowException1", "Phase 8"),
+    ("CallContextInterface.ThrowException2", "Phase 8"),
+    ("CallContextInterface.ThrowException", "Phase 8"),
+    ("CallContextInterface.ThrowCondition", "Phase 8"),
+];
+
+/// The phase a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and
+/// Phase 8 for a member of a table no task has populated.
+#[must_use]
+pub fn refusal_owner(entry: &str) -> &'static str {
+    REFUSING_MEMBERS
+        .iter()
+        .find(|(member, _)| *member == entry)
+        .map_or("Phase 8", |(_, owner)| owner)
+}
+
 /// Abandon the process, naming the entry the caller reached.
 ///
 /// # Panics
 /// Always. The stubs below call it, and each is an `extern "C"` frame, so the
 /// panic aborts rather than unwinding into the extension's stack.
 fn abort(entry: &str) -> ! {
-    panic!("{entry} is not implemented (Phase 8)");
+    panic!("{entry} is not implemented ({})", refusal_owner(entry));
 }
 
 thread_local! {
@@ -490,6 +694,16 @@ macro_rules! entry_stub {
     }};
 }
 
+/// A function member's address, `None` for a data member.
+macro_rules! entry_address {
+    ($member:expr, value $ty:ty = $value:expr) => {
+        None
+    };
+    ($member:expr, $($kind:tt)*) => {
+        Some($member as usize)
+    };
+}
+
 /// Whether one interface member is marked `aborts`.
 macro_rules! entry_aborts {
     (aborts $($rest:tt)*) => {
@@ -520,6 +734,21 @@ macro_rules! interface {
             /// For each of [`Self::FIELDS`], whether its refusing stub aborts
             /// rather than records and returns.
             pub const ABORTS: &'static [bool] = &[$(entry_aborts!($($kind)*)),*];
+
+            /// For each of [`Self::FIELDS`], the Rust type of the member.
+            #[must_use]
+            pub fn member_types() -> Vec<&'static str> {
+                vec![$(std::any::type_name::<entry_type!($($kind)*)>()),*]
+            }
+
+            /// For each function member, its name and the address it holds.
+            #[must_use]
+            pub fn addresses(&self) -> Vec<(&'static str, usize)> {
+                [$( (stringify!($field), entry_address!(self.$field, $($kind)*)) ),*]
+                    .into_iter()
+                    .filter_map(|(name, address)| Some((name, address?)))
+                    .collect()
+            }
         }
     };
     (@refusing $Name:ident { $($field:ident : { $($kind:tt)* }),* $(,)? }) => {

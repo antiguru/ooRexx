@@ -373,7 +373,16 @@ impl Interp {
                 }
                 .into();
             }
-            Refused::UnfilledSlot { .. } | Refused::StaleHandle | Refused::Raised => {
+            Refused::UnfilledSlot { entry } => {
+                return Loud {
+                    message: crate::owned_message(
+                        &format!("{refused}"),
+                        Some(rexx_api::layout::refusal_owner(entry)),
+                    ),
+                }
+                .into();
+            }
+            Refused::StaleHandle | Refused::Raised => {
                 return Loud {
                     message: crate::owned_message(&format!("{refused}"), Some("Phase 8")),
                 }

@@ -147,6 +147,21 @@ pub static INSTANCE: RexxInstanceInterface = {
     table
 };
 
+/// The thread table each [`ThreadContext`] copies
+/// (`Activity::threadContextFunctions`,
+/// `interpreter/api/ThreadContextStubs.cpp:2098`), its data members null until
+/// the first [`ThreadContext::enter`] writes them.
+pub const THREAD: RexxThreadInterface = {
+    let mut table = RexxThreadInterface::REFUSING;
+    table.WholeNumberToObject = whole_number_to_object;
+    table.StringData = string_data;
+    table.StringLength = string_length;
+    table.NewPointer = new_pointer;
+    table.DoubleToObjectWithPrecision = double_to_object_with_precision;
+    table.RaiseException0 = raise_exception0;
+    table
+};
+
 /// The method context a stub is handed: a pointer to the public struct at the
 /// head of an `Owned` wrapper, derived from the whole wrapper, and borrowed
 /// from that wrapper for as long as it is used.
@@ -243,13 +258,6 @@ impl ThreadContext {
     /// A thread context with no native call in flight.
     #[must_use]
     pub fn new() -> ThreadContext {
-        let mut table = RexxThreadInterface::REFUSING;
-        table.WholeNumberToObject = whole_number_to_object;
-        table.StringData = string_data;
-        table.StringLength = string_length;
-        table.NewPointer = new_pointer;
-        table.DoubleToObjectWithPrecision = double_to_object_with_precision;
-        table.RaiseException0 = raise_exception0;
         let raw = Box::into_raw(Box::new(Thread {
             thread: Owned {
                 context: RexxThreadContext_ {
@@ -265,7 +273,7 @@ impl ThreadContext {
                 },
                 owner: std::ptr::null_mut(),
             },
-            table,
+            table: THREAD,
             innermost: Innermost(Cell::new(std::ptr::null())),
         }));
         // SAFETY: `raw` is the allocation just made and nothing else addresses
