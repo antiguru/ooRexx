@@ -1,0 +1,18 @@
+moved units: 13; names searched in backticks: 12
+file tails searched: keywords.rs token.rs token/ token/keywords.rs token/keywords/
+
+(a) comments naming a moved unit: 1
+  crates/rexx-parse/src/token/keywords.rs:76: // is load-bearing for a different reason, since `index_of` returns a position
+
+(b) comments naming a touched file: 0
+
+(c) positional words inside the destinations and the parent: 9
+  crates/rexx-parse/src/token.rs:38: /// The byte offset the error is *reported against*, which is the start of
+  crates/rexx-parse/src/token.rs:172: /// A clause terminator: `;`, an uncontinued line end, or end of file.
+  crates/rexx-parse/src/token.rs:190: /// An operator immediately followed by `=`, e.g. `+=`, which the
+  crates/rexx-parse/src/token.rs:246: /// Whether a blank *following* this token can be significant:
+  crates/rexx-parse/src/token.rs:283: /// before it reads any source, so their ids are fixed and every keyword
+  crates/rexx-parse/src/token.rs:293: /// so an expression parser cannot walk off the end of its clause.
+  crates/rexx-parse/src/token.rs:311: /// Index of the next token, or None at the end of the range.
+  crates/rexx-parse/src/token/keywords.rs:48: /// The pre-interned spelling tables. Built by `scan` before it reads any
+  crates/rexx-parse/src/token/keywords.rs:75: // C++ keeps them in ASCII order so it can binary-search them; here the order

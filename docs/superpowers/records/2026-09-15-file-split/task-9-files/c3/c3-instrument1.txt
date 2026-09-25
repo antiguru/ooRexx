@@ -1,0 +1,7 @@
+(a) unmoved lines: PRE token.rs minus the removed lines, against POST token.rs
+  INSERTED post:22: mod keywords;
+  INSERTED post:25: pub use keywords::{KeywordSet, Keywords};
+  3 equal blocks, 357 lines, each also compared with cmp; 357 expected lines, 359 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  13 of 13 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

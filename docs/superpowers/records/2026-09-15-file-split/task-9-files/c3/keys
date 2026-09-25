@@ -1,0 +1,11 @@
+struct KeywordSet
+BLOCK:impl KeywordSet
+struct Keywords
+BLOCK:impl Keywords
+LINES:323-326
+const INSTRUCTIONS
+const SUB_KEYWORDS
+const CONDITIONS
+const PARSE_OPTIONS
+const DIRECTIVES
+const SUB_DIRECTIVES

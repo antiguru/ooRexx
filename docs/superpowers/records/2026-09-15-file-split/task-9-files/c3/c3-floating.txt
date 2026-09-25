@@ -1,0 +1,8 @@
+command: cmp <(sed -n 323,326p pre3/token.rs) <(sed -n 74,77p token/keywords.rs), the comment outside any unit moved with LINES:323-326
+$
+// The six tables, copied from `KeywordConstants.cpp` without reordering. The$
+// C++ keeps them in ASCII order so it can binary-search them; here the order$
+// is load-bearing for a different reason, since `index_of` returns a position$
+// that the caller maps to its own enum.$
+$
+cmp: identical
