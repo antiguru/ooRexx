@@ -1,0 +1,7 @@
+dispatch/collection.rs: covered by instruments 1-3
+dispatch/collection/list.rs: covered by instruments 1-3
+crates/rexx-exec/src/dispatch.rs: OK inserted lines only
+  +909:             .chain(collection::list::NATIVE_METHODS)
+crates/rexx-exec/tests/dispatch_seam.rs: OK inserted lines only
+  +204:     "src/dispatch/collection/list.rs",
+PASS
