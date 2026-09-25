@@ -1,0 +1,60 @@
+   Compiling num-traits v0.2.19
+    Checking either v1.16.0
+   Compiling serde_core v1.0.229
+   Compiling syn v2.0.119
+   Compiling zerocopy v0.8.52
+   Compiling syn v3.0.2
+   Compiling serde v1.0.229
+   Compiling shlex v2.0.1
+   Compiling zmij v1.0.23
+    Checking rayon v1.12.0
+   Compiling find-msvc-tools v0.1.9
+   Compiling libc v0.2.186
+   Compiling serde_json v1.0.151
+   Compiling cc v1.3.0
+    Checking regex-syntax v0.8.11
+    Checking anstyle v1.0.14
+    Checking clap_lex v1.1.0
+    Checking ciborium-io v0.2.2
+    Checking itoa v1.0.18
+    Checking memchr v2.8.3
+    Checking plotters-backend v0.3.7
+    Checking plotters-svg v0.3.7
+    Checking clap_builder v4.6.2
+    Checking regex-automata v0.4.14
+   Compiling alloca v0.4.0
+    Checking itertools v0.13.0
+    Checking same-file v1.0.6
+    Checking cast v0.3.0
+    Checking walkdir v2.5.0
+    Checking page_size v0.6.0
+    Checking chrono v0.4.45
+    Checking plotters v0.3.7
+   Compiling serde_derive v1.0.229
+    Checking clap v4.6.2
+    Checking anes v0.1.6
+    Checking oorandom v11.1.0
+    Checking rexx-oracle v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle)
+    Checking regex v1.12.4
+    Checking rexx-lib v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-lib)
+    Checking rexx-bench v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench)
+    Checking rexx-classes v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes)
+    Checking rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Checking criterion-plot v0.8.2
+    Checking rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+    Checking rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
+    Checking rexx-num v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num)
+    Checking rexx-extract v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract)
+   Compiling zerocopy-derive v0.8.52
+   Compiling thiserror-impl v1.0.69
+    Checking rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory)
+    Checking thiserror v1.0.69
+    Checking datadriven v0.9.0
+    Checking tinytemplate v1.1.0
+    Checking half v2.7.1
+    Checking ciborium-ll v0.2.2
+    Checking ciborium v0.2.2
+    Checking criterion v0.8.2
+    Checking rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.27s
+clippy 0

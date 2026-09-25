@@ -1,0 +1,7 @@
+//! The committed row sets gate table C reads, from `corpus/docs/`.
+
+use std::fs;
+
+use rexx_extract::docs::classes::NO_PROGRAM;
+
+use crate::corpus_dir;

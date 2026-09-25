@@ -1,0 +1,25 @@
+moved units: 13; names searched in backticks: 11
+file tails searched: gate_table_c.rs gate_table_c/ mod.rs rows.rs table_c/mod.rs table_c/mod/ table_c/rows.rs table_c/rows/
+
+(a) comments naming a moved unit: 0
+
+(b) comments naming a touched file: 6
+  crates/rexx-exec/tests/support/mod.rs:12: //! This file stays `mod.rs`, not `support.rs`, because `tests/` is Cargo's
+  crates/rexx-parse/tests/gate_walk/mod.rs:12: //! This file stays `mod.rs`, not `gate_walk.rs`, because `tests/` is Cargo's
+  corpus/phase-5c.txt:11: # still landing this file could not exist: gate_table_c.rs's
+  corpus/docs/class-set.txt:29: # book's own syntax for obtaining an instance. gate_table_c.rs derives the
+  corpus/docs/class-set.txt:38: # which gate_table_c.rs reads instead of one constant over every method row.
+  corpus/gate-tables/README.md:95: **Those last three are derived, text and all.** `gate_table_c.rs`'s
+
+(c) positional words inside the destinations and the parent: 11
+  crates/rexx-exec/tests/gate_table_c.rs:400: /// Every class row's `entry` column is a value this file knows how to read.
+  crates/rexx-exec/tests/gate_table_c.rs:749: // row happens to depend on it, rather than here.
+  crates/rexx-exec/tests/gate_table_c.rs:815: // the orphan half of the check below -- present in the directory,
+  crates/rexx-exec/tests/gate_table_c.rs:857: // **Returning quietly here is only right for one of the ways this
+  crates/rexx-exec/tests/gate_table_c.rs:1018: /// The `ArgUtil` assertion, carried here as a wiring row.
+  crates/rexx-exec/tests/gate_table_c.rs:1084: // none of them would leave the filters below iterating the concept and
+  crates/rexx-exec/tests/gate_table_c.rs:1164: // directory, before anything runs.
+  crates/rexx-exec/tests/gate_table_c.rs:1390: // every `say` below it is reached too, and a group whose oracle
+  crates/rexx-exec/tests/gate_table_c.rs:1613: // Said here, in the summary a reader meets the counts in, rather than
+  crates/rexx-exec/tests/gate_table_c.rs:1616: // raised before reaching them, so they are `unanswered` above rather than
+  crates/rexx-exec/tests/table_c/rows.rs:74: /// carries below its readbacks for an expression that reads one.

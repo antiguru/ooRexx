@@ -1,0 +1,208 @@
+at 8a1c43696
+== /bin/grep -rn 'tests/gate_table_c.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+rust/crates/rexx-exec/tests/gate_table_c.rs:512:         \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+rust/crates/rexx-exec/tests/gate_table_c.rs:615:         \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+rust/crates/rexx-exec/tests/gate_table_c.rs:663:             \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+rust/crates/rexx-exec/tests/gate_table_c.rs:682:                 \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
+rust/crates/rexx-exec/tests/gate_table_c.rs:692:             \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
+== /bin/grep -rn 'tests/gate_table_c.rs' rust/corpus docs/superpowers/plans (count, then non-plan lines)
+219
+rust/corpus/gate-tables/classes/eventsemaphore.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/mutexsemaphore.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/class.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/alarmnotification.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/buffer.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/properties.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/setcollection.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/table.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/stackframe.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/orderable.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/file.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/set.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/variablereference.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/rexxcontext.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/stem.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/mapcollection.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/outputstream.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/traceobject.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/monitor.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/descendingcomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/mutablebuffer.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/streamsupplier.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/message.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/validate.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/object.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/rexxinfo.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/rexxqueue.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/circularqueue.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/invertingcomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/routine.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/identitytable.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/ticker.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/string.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/datetime.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/relation.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/list.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/orderedcollection.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/weakreference.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/comparable.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/package.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/alarm.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/caselesscomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/caselessdescendingcomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/comparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/singleton.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/pointer.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/stream.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/inputoutputstream.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/collection.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/timespan.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/argutil.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/stringtable.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/messagenotification.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/queue.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/supplier.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/array.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/method.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/columncomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/numericcomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/bag.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/directory.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/caselesscolumncomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/inputstream.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/caselessdescendingcomparator__comparator.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/stringtable__mapcollection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/invertingcomparator__comparator.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/bag__mapcollection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/ticker__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/orderedcollection__collection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/datetime__comparable.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/setcollection__collection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/outputstream__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/class__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/mutablebuffer__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/comparator__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/properties__directory.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/queue__orderedcollection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/array__orderedcollection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/package__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/inputoutputstream__inputstream.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+== /bin/grep -rn 'gate_table_c' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+rust/crates/rexx-exec/tests/gate_table_c.rs:512:         \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+rust/crates/rexx-exec/tests/gate_table_c.rs:615:         \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+rust/crates/rexx-exec/tests/gate_table_c.rs:663:             \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+rust/crates/rexx-exec/tests/gate_table_c.rs:682:                 \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
+rust/crates/rexx-exec/tests/gate_table_c.rs:692:             \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
+rust/crates/rexx-exec/tests/gate_table_c.rs:1047:                 gate_table_c.rs is the definition of this program, so a difference means \
+rust/crates/rexx-extract/src/docs/classes.rs:1057:             gate_table_c.rs derives the instance-arm probe from this field, so \
+rust/crates/rexx-extract/src/docs/classes.rs:1070:             `agree`, which gate_table_c.rs reads instead of one constant over \
+== /bin/grep -rn 'gate_table_c' rust/corpus docs/superpowers/plans (count, then non-plan lines)
+233
+rust/corpus/phase-5c.txt:11:# still landing this file could not exist: gate_table_c.rs's
+rust/corpus/docs/class-set.txt:29:# book's own syntax for obtaining an instance. gate_table_c.rs derives the
+rust/corpus/docs/class-set.txt:38:# which gate_table_c.rs reads instead of one constant over every method row.
+rust/corpus/gate-tables/classes/eventsemaphore.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/mutexsemaphore.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/class.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/alarmnotification.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/buffer.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/properties.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/setcollection.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/table.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/stackframe.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/orderable.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/file.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/set.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/variablereference.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/rexxcontext.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/stem.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/mapcollection.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/outputstream.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/traceobject.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/monitor.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/descendingcomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/mutablebuffer.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/streamsupplier.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/message.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/validate.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/object.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/rexxinfo.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/rexxqueue.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/circularqueue.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/invertingcomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/routine.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/identitytable.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/ticker.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/string.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/datetime.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/relation.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/list.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/orderedcollection.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/weakreference.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/comparable.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/package.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/alarm.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/caselesscomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/caselessdescendingcomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/comparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/singleton.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/pointer.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/stream.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/inputoutputstream.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/collection.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/timespan.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/argutil.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/stringtable.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/messagenotification.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/queue.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/supplier.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/array.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/method.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/columncomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/numericcomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/bag.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/directory.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/caselesscolumncomparator.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/classes/inputstream.rex:6:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/caselessdescendingcomparator__comparator.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/stringtable__mapcollection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/invertingcomparator__comparator.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/bag__mapcollection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/ticker__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/orderedcollection__collection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/datetime__comparable.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/setcollection__collection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/outputstream__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/class__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/mutablebuffer__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/comparator__object.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/properties__directory.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+rust/corpus/gate-tables/hierarchy/queue__orderedcollection.rex:5:   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+== /bin/grep -rn 'src/docs/classes.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+rust/crates/rexx-extract/src/docs/classes.rs:1080:        "module is `src/docs/classes.rs`. Re-derived and compared in both".into(),
+rust/crates/rexx-extract/src/docs/classes.rs:1142:        "module is `src/docs/classes.rs`. Re-derived and compared in both".into(),
+== /bin/grep -rn 'src/docs/classes.rs' rust/corpus docs/superpowers/plans (count, then non-plan lines)
+7
+rust/corpus/docs/class-set.txt:46:# module is `src/docs/classes.rs`. Re-derived and compared in both
+rust/corpus/docs/class-methods.txt:53:# module is `src/docs/classes.rs`. Re-derived and compared in both
+== /bin/grep -rn 'docs/classes.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+rust/crates/rexx-extract/src/docs/classes.rs:1080:        "module is `src/docs/classes.rs`. Re-derived and compared in both".into(),
+rust/crates/rexx-extract/src/docs/classes.rs:1142:        "module is `src/docs/classes.rs`. Re-derived and compared in both".into(),
+== /bin/grep -rn 'docs/classes.rs' rust/corpus docs/superpowers/plans (count, then non-plan lines)
+7
+rust/corpus/docs/class-set.txt:46:# module is `src/docs/classes.rs`. Re-derived and compared in both
+rust/corpus/docs/class-methods.txt:53:# module is `src/docs/classes.rs`. Re-derived and compared in both
+== /bin/grep -rn 'classes.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+rust/crates/rexx-classes/tests/native_classes_wiring.rs:163:/// Checklist token -> block name, for the entries `native_classes.rs`'s
+rust/crates/rexx-classes/tests/native_classes_wiring.rs:182:/// (`native_classes.rs`'s own internal test) checks from the other side.
+rust/crates/rexx-classes/tests/native_classes_wiring.rs:1505:             pre-prologue native set -- if this now fails, native_classes.rs \
+rust/crates/rexx-classes/tests/native_classes_wiring.rs:1751:/// it does not claim to. `native_classes.rs`'s own internal unit tests
+rust/crates/rexx-classes/tests/native_classes_wiring.rs:1794:                // `native_classes.rs`'s own internal test, since it is the
+rust/crates/rexx-exec/tests/unreachable_classes.rs:92:             \x20  crates/rexx-exec/tests/unreachable_classes.rs on every run. */\n\
+rust/crates/rexx-classes/src/native_classes.rs:21:include!(concat!(env!("OUT_DIR"), "/setup_classes.rs"));
+rust/crates/rexx-extract/src/docs/classes.rs:1080:        "module is `src/docs/classes.rs`. Re-derived and compared in both".into(),
+rust/crates/rexx-extract/src/docs/classes.rs:1142:        "module is `src/docs/classes.rs`. Re-derived and compared in both".into(),
+== /bin/grep -rn 'classes.rs' rust/corpus docs/superpowers/plans (count, then non-plan lines)
+21
+rust/corpus/docs/class-set.txt:46:# module is `src/docs/classes.rs`. Re-derived and compared in both
+rust/corpus/docs/class-methods.txt:53:# module is `src/docs/classes.rs`. Re-derived and compared in both

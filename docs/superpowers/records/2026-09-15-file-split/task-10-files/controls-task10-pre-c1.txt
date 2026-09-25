@@ -1,0 +1,49 @@
+control T1 strip_field_vis drops a field's visibility after its attributes and nowhere else: CAUGHT
+  every case as expected: doc-commented field; two attributes before a field; a `]` closing an index; an attribute after `;`
+control T2 Task 9's instruments miss the doc-commented field this task's admit (c1, working tree): CAUGHT
+  Task 9's: exit 1, ['I2 token stream differs: struct ClassRow']
+  this task's: exit 0, []
+control T3 a widened doc-commented field whose doc also changed (c1, working tree): CAUGHT
+  exit 1, expected I1b and I3, reported ['I1b', 'I2', 'I3']
+control T4 comments10.py lists a planted comment in a tests/ parent; Task 9's comments7.py does not: CAUGHT
+  comments10.py: ['  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.', '  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.'] (exit 0)
+  comments7.py: [] (exit 1; subprocess.CalledProcessError: Command '['/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/tools/item-tool/target/release/item-tool', '/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t4/crates/rexx-exec/src/table_c/mod.rs']' returned non-zero exit status 101.)
+control T5 move_items10.py widens exactly the declared declarations and fields: CAUGHT
+  exit 0; Edge True, read_edges True, read_table verbatim True, the child's units verbatim in BASE once the widening is removed True
+  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t5/t5child/c.rs: 3 units (2 widened), 45 parent lines removed
+control B c1 as committed passes (working tree): CAUGHT
+  exit 0, reported []
+control B1-c1 a moved fn's body changes a token (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2', 'I3']
+  I1b fn read_classes: /tmp/tmpq_bkwowx/a /tmp/tmpq_bkwowx/b differ: byte 251, line 8
+  I2 token stream differs: fn read_classes
+  I3 literals differ: fn read_classes
+control B2-c1 a moved panic message changes (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn read_table: /tmp/tmpbkrjsf5d/a /tmp/tmpbkrjsf5d/b differ: byte 270, line 5
+  I2 token stream differs: fn read_table
+  I3 literals differ: fn read_table
+control B3-c1 a moved row reader is deleted (working tree): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: fn read_edges
+control B4-c1 an unmoved line of gate_table_c.rs changes (working tree): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2', 'I3']
+  I1a changed unmoved line pre-expected:270 post:274: 'const WIRING_PHASE: &str = "5a";' -> 'const WIRING_PHASE: &str = "5b";'
+  I2 token stream differs: const WIRING_PHASE
+  I3 literals differ: const WIRING_PHASE
+control B5-c1 two moved row types swap their doc comments (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b struct Section: /tmp/tmpgrxv6eau/a /tmp/tmpgrxv6eau/b differ: byte 9, line 1
+  I1b struct Edge: /tmp/tmp_bfl0n4w/a /tmp/tmp_bfl0n4w/b differ: byte 9, line 1
+  I2 token stream differs: struct Section
+  I2 token stream differs: struct Edge
+  I3 literals differ: struct Section
+  I3 literals differ: struct Edge
+control B6-c1 the removed import left undeclared (working tree): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a delete expected[25:26] actual[26:26]
+control B7-c1 two fields of a moved struct swap (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b struct Edge: /tmp/tmp42lsranu/a /tmp/tmp42lsranu/b differ: byte 82, line 3
+  I2 token stream differs: struct Edge
+13 of 13 controls caught as expected
