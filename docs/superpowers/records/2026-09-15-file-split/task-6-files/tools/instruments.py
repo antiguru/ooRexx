@@ -60,6 +60,24 @@ expected_edits = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--ex
 # corrects because the move made it false: its new text, exactly. Each must
 # match one changed line, and is listed.
 expected_lines = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--expect-line=")]
+# What a declared edit is, where it is only dropped path qualifiers: with
+# `--expect-drop=hash::`, a declared unit must equal its PRE tokens with every
+# `hash::` qualifier removed, and anything else it changed fails.
+expected_drops = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("--expect-drop=")]
+
+
+def drop_qualifiers(tokens):
+    out, i = [], 0
+    while i < len(tokens):
+        for q in expected_drops:
+            name = q[:-2]
+            if tokens[i : i + 3] == [name, ":+", ":"] and (not out or out[-1] not in (":", ":+")):
+                i += 3
+                break
+        else:
+            out.append(tokens[i])
+            i += 1
+    return out
 # A line of the parent outside any unit that this commit deletes on purpose
 # (the header, doc and `];` of a table every row of which moved): its text,
 # exactly, once per deleted line. Each must match one deleted line.
@@ -258,9 +276,9 @@ for tag, i1, i2, j1, j2 in sm.get_opcodes():
     elif widened_reflow(i1, i2, j1, j2):
         out1.append(f"  REFLOWED (visibility widened) post:{j1 + 1}-{j2}: {widened_reflow(i1, i2, j1, j2)}; whitespace-only once the visibility is dropped, tokens are instrument 2's")
     elif tag == "delete" and all(l in expected_gone for l in expected[i1:i2]):
-        for l in expected[i1:i2]:
+        for k, l in enumerate(expected[i1:i2]):
             expected_gone.remove(l)
-            out1.append(f"  DELETED (declared) pre-expected:{i1 + 1}: {l!r}")
+            out1.append(f"  DELETED (declared) pre:{expected_at[i1 + k] + 1}: {l!r}")
     else:
         failures.append(f"I1a {tag} expected[{i1}:{i2}] actual[{j1}:{j2}]")
         out1.append(f"  {tag.upper()} expected {expected[i1:i2]!r} actual {actual[j1:j2]!r}")
@@ -355,6 +373,13 @@ for k in common:
     elif drop_trailing_commas(pre_units[k]["toks"].split("\x01")) == drop_trailing_commas(post_units[k]["toks"].split("\x01")):
         tok_ok += 1
         out2.append(f"  TRAILING-COMMA-ONLY {k}: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)")
+    elif k in expected_edits and expected_drops:
+        if drop_qualifiers(pre_units[k]["toks"].split("\x01")) == post_units[k]["toks"].split("\x01"):
+            tok_ok += 1
+            out2.append(f"  DECLARED EDIT {k}: identical once {expected_drops} qualifiers are dropped from the PRE tokens, and nothing else differs")
+        else:
+            failures.append(f"I2 declared edit is more than dropped {expected_drops} qualifiers: {k}")
+            out2.append(f"  DIFFERS beyond the declared edit {k}")
     elif k in expected_edits:
         out2.append(f"  DIFFERS (declared edit) {k}")
     else:

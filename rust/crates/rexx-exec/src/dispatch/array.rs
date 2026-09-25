@@ -16,10 +16,15 @@ use super::{
     class_receiver, collection, required_string_argument,
 };
 
+use super::new_instance;
 use super::{Arity, NativeMethod};
 
 // `Array`'s sort family, chained into `ObjectModel::build`.
 pub(super) mod sort;
+
+// `Array`'s collection surface, chained into `ObjectModel::build` after its
+// sort family.
+pub(super) mod surface;
 
 /// An array receiver's own slots, borrowed, or the refusal for a receiver that
 /// is not one.

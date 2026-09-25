@@ -182,7 +182,7 @@ fn native_supplier_init(
 }
 
 /// `Supplier`'s primitive methods, chained into `ObjectModel::build` beside
-/// [`super::NATIVE_METHODS`].
+/// [`super::super::NATIVE_METHODS`].
 pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
         "Supplier",

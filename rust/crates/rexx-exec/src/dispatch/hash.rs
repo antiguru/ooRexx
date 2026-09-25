@@ -1977,7 +1977,7 @@ pub(super) fn native_set_of(
 }
 
 /// The mapped collections' primitive methods, chained into
-/// `ObjectModel::build` beside [`super::collection::NATIVE_METHODS`].
+/// `ObjectModel::build` beside [`super::collection::list::NATIVE_METHODS`].
 pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
         "Table",

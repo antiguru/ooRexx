@@ -120,7 +120,11 @@ fn an_unimplemented_method_is_loud_where_an_unknown_one_is_a_condition() {
         .iter()
         .chain(string::NATIVE_METHODS)
         .chain(hash::NATIVE_METHODS)
-        .chain(collection::NATIVE_METHODS)
+        .chain(collection::list::NATIVE_METHODS)
+        .chain(collection::queue::NATIVE_METHODS)
+        .chain(array::sort::NATIVE_METHODS)
+        .chain(array::surface::NATIVE_METHODS)
+        .chain(collection::supplier::NATIVE_METHODS)
         .filter(|(class, ..)| *class == "String")
         .map(|(_, method, ..)| *method)
         .collect();

@@ -18,6 +18,9 @@ CARGO_TARGET_DIR=$S/t-check cargo clippy -j 8 -p rexx-exec --all-targets -- -D w
 python3 $S/tools/instruments.py $S/pre$N $R/crates/rexx-exec/src $S/c$N/removed.json $S/art/c$N $TESTS "$@"
 python3 $S/tools/positional.py $S/pre$N $R/crates/rexx-exec/src > $S/art/c$N-positional.txt
 $S/tools/docs.sh $R $S/t-check $S/art/c$N
+same=1; for k in doc doc-private doc-cfgtest; do [ "$(/bin/grep -a -c '^warning' $S/art/c$N-$k.txt)" = "$(/bin/grep -a -c '^warning' $S/art/base/base-$k.txt)" ] || same=0; done
+d=$(/bin/grep -a -h -- '--> crates/rexx-exec/src/dispatch' $S/art/c$N-doc*.txt | wc -l)
+echo "docs: warning counts $([ $same = 1 ] && echo same as || echo DIFFER from) BASE's; $d located in dispatch files"
 $S/tools/refusal_refresh.sh $R $S/t-check $S/art/c$N-refusal-sites.txt | sed -n 1,2p
 rm -f $S/art/c$N-refusal-sites.txt.log
 $S/tools/tests_links.sh $R $S/t-check $S/art/c$N-tests-links.txt | sed -n 3p

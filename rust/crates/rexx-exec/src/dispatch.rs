@@ -909,7 +909,7 @@ impl ObjectModel {
             .chain(collection::list::NATIVE_METHODS)
             .chain(collection::queue::NATIVE_METHODS)
             .chain(array::sort::NATIVE_METHODS)
-            .chain(collection::NATIVE_METHODS)
+            .chain(array::surface::NATIVE_METHODS)
             .chain(collection::supplier::NATIVE_METHODS)
             .chain(rexx_info::NATIVE_METHODS)
             .chain(executable::NATIVE_METHODS)

@@ -1,0 +1,124 @@
+diff --git i/rust/crates/rexx-exec/src/dispatch.rs w/rust/crates/rexx-exec/src/dispatch.rs
+index 9550ab39d..f31e83de8 100644
+--- i/rust/crates/rexx-exec/src/dispatch.rs
++++ w/rust/crates/rexx-exec/src/dispatch.rs
+@@ -909,7 +909,7 @@ impl ObjectModel {
+             .chain(collection::list::NATIVE_METHODS)
+             .chain(collection::queue::NATIVE_METHODS)
+             .chain(array::sort::NATIVE_METHODS)
+-            .chain(collection::NATIVE_METHODS)
++            .chain(array::surface::NATIVE_METHODS)
+             .chain(collection::supplier::NATIVE_METHODS)
+             .chain(rexx_info::NATIVE_METHODS)
+             .chain(executable::NATIVE_METHODS)
+diff --git i/rust/crates/rexx-exec/src/dispatch/array.rs w/rust/crates/rexx-exec/src/dispatch/array.rs
+index 3c4aa14b1..3f404855a 100644
+--- i/rust/crates/rexx-exec/src/dispatch/array.rs
++++ w/rust/crates/rexx-exec/src/dispatch/array.rs
+@@ -16,11 +16,16 @@ use super::{
+     class_receiver, collection, required_string_argument,
+ };
+ 
++use super::new_instance;
+ use super::{Arity, NativeMethod};
+ 
+ // `Array`'s sort family, chained into `ObjectModel::build`.
+ pub(super) mod sort;
+ 
++// `Array`'s collection surface, chained into `ObjectModel::build` after its
++// sort family.
++pub(super) mod surface;
++
+ /// An array receiver's own slots, borrowed, or the refusal for a receiver that
+ /// is not one.
+ pub(super) fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<&[Option<ObjRef>], Failure> {
+diff --git i/rust/crates/rexx-exec/src/dispatch/collection/list.rs w/rust/crates/rexx-exec/src/dispatch/collection/list.rs
+index 756f684e1..8d0bc64d1 100644
+--- i/rust/crates/rexx-exec/src/dispatch/collection/list.rs
++++ w/rust/crates/rexx-exec/src/dispatch/collection/list.rs
+@@ -78,7 +78,7 @@ pub(super) fn list_state(
+ }
+ 
+ /// Whether `receiver` is a `List` or something deriving from one --
+-/// [`is_queue`]'s question for the other family.
++/// [`super::is_queue`]'s question for the other family.
+ pub(super) fn is_list(interp: &mut Interp, receiver: ObjRef) -> bool {
+     let Some(class) = interp.class_of_value(receiver) else {
+         return false;
+@@ -620,7 +620,7 @@ fn native_list_make_array(
+ }
+ 
+ /// `List`'s primitive methods, chained into `ObjectModel::build` beside
+-/// [`super::NATIVE_METHODS`].
++/// [`super::super::NATIVE_METHODS`].
+ pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+     ("List", "INIT", Arity::Fixed(1), native_list_init),
+     ("List", "APPEND", Arity::Fixed(1), native_list_append),
+diff --git i/rust/crates/rexx-exec/src/dispatch/collection/queue.rs w/rust/crates/rexx-exec/src/dispatch/collection/queue.rs
+index d73eeb91a..cf48575e6 100644
+--- i/rust/crates/rexx-exec/src/dispatch/collection/queue.rs
++++ w/rust/crates/rexx-exec/src/dispatch/collection/queue.rs
+@@ -190,7 +190,7 @@ fn native_queue_size(
+ }
+ 
+ /// `Queue`'s primitive methods, chained into `ObjectModel::build` beside
+-/// [`super::NATIVE_METHODS`].
++/// [`super::super::NATIVE_METHODS`].
+ pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+     ("Queue", "AT", Arity::Counted, native_queue_at),
+     ("Queue", "[]", Arity::Counted, native_queue_at),
+diff --git i/rust/crates/rexx-exec/src/dispatch/collection/supplier.rs w/rust/crates/rexx-exec/src/dispatch/collection/supplier.rs
+index 22a57a920..7d80333a0 100644
+--- i/rust/crates/rexx-exec/src/dispatch/collection/supplier.rs
++++ w/rust/crates/rexx-exec/src/dispatch/collection/supplier.rs
+@@ -182,7 +182,7 @@ fn native_supplier_init(
+ }
+ 
+ /// `Supplier`'s primitive methods, chained into `ObjectModel::build` beside
+-/// [`super::NATIVE_METHODS`].
++/// [`super::super::NATIVE_METHODS`].
+ pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+     (
+         "Supplier",
+diff --git i/rust/crates/rexx-exec/src/dispatch/hash.rs w/rust/crates/rexx-exec/src/dispatch/hash.rs
+index 0368d431e..daa58438c 100644
+--- i/rust/crates/rexx-exec/src/dispatch/hash.rs
++++ w/rust/crates/rexx-exec/src/dispatch/hash.rs
+@@ -1977,7 +1977,7 @@ pub(super) fn native_set_of(
+ }
+ 
+ /// The mapped collections' primitive methods, chained into
+-/// `ObjectModel::build` beside [`super::collection::NATIVE_METHODS`].
++/// `ObjectModel::build` beside [`super::collection::list::NATIVE_METHODS`].
+ pub(super) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+     (
+         "Table",
+diff --git i/rust/crates/rexx-exec/src/dispatch/tests.rs w/rust/crates/rexx-exec/src/dispatch/tests.rs
+index 15572a5b9..daafc22f0 100644
+--- i/rust/crates/rexx-exec/src/dispatch/tests.rs
++++ w/rust/crates/rexx-exec/src/dispatch/tests.rs
+@@ -120,7 +120,11 @@ fn an_unimplemented_method_is_loud_where_an_unknown_one_is_a_condition() {
+         .iter()
+         .chain(string::NATIVE_METHODS)
+         .chain(hash::NATIVE_METHODS)
+-        .chain(collection::NATIVE_METHODS)
++        .chain(collection::list::NATIVE_METHODS)
++        .chain(collection::queue::NATIVE_METHODS)
++        .chain(array::sort::NATIVE_METHODS)
++        .chain(array::surface::NATIVE_METHODS)
++        .chain(collection::supplier::NATIVE_METHODS)
+         .filter(|(class, ..)| *class == "String")
+         .map(|(_, method, ..)| *method)
+         .collect();
+diff --git i/rust/crates/rexx-exec/tests/dispatch_seam.rs w/rust/crates/rexx-exec/tests/dispatch_seam.rs
+index b5313fa95..3a22dafe4 100644
+--- i/rust/crates/rexx-exec/tests/dispatch_seam.rs
++++ w/rust/crates/rexx-exec/tests/dispatch_seam.rs
+@@ -216,6 +216,7 @@ const CLEARANCE_CONSUMERS: &[&str] = &[
+     "src/dispatch/files.rs",
+     "src/dispatch/array.rs",
+     "src/dispatch/array/sort.rs",
++    "src/dispatch/array/surface.rs",
+     "src/dispatch/buffer.rs",
+     "src/dispatch/construct.rs",
+     "src/dispatch/class_protocol.rs",

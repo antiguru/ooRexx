@@ -3,7 +3,9 @@ against the one rule declared for that file, comparing HEAD's text with the
 working tree's:
 
   subst:REGEX=>REPL   HEAD's text with REGEX replaced by REPL, everywhere,
-                      equals the working text byte for byte (cmp);
+                      equals the working text byte for byte (cmp); several
+                      substitutions, applied in order, are joined with `;;`,
+                      and `\\n` in a REPL is a newline;
   substsort:REGEX=>REPL
                       the same, after sorting each run of consecutive
                       single-line `use` declarations on both sides (rustfmt
@@ -176,13 +178,19 @@ for rel, rule in rules.items():
     head = subprocess.run(["git", "-C", rust, "show", f"HEAD:rust/{path}"], capture_output=True, text=True, check=True).stdout
     now = open(f"{rust}/{path}").read()
     if rule.startswith(("subst:", "substsort:")):
-        pat, repl = rule.split(":", 1)[1].split("=>", 1)
-        n = len(re.findall(pat, head))
-        a, b = re.sub(pat, repl, head), now
+        # Several substitutions, applied in order, are joined with `;;`.
+        a, b, ok, desc = head, now, True, []
+        for part in rule.split(":", 1)[1].split(";;"):
+            pat, repl = part.split("=>", 1)
+            repl = repl.replace("\\n", "\n")
+            n = len(re.findall(pat, a))
+            ok = ok and n > 0
+            desc.append(f"{n} occurrences of {pat!r} -> {repl!r}")
+            a = re.sub(pat, repl, a)
         if rule.startswith("substsort:"):
             a, b = sort_use_runs(a), sort_use_runs(b)
-        ok = n > 0 and a == b
-        lines.append(f"{path}: {'OK' if ok else 'FAIL'} {n} occurrences of {pat!r} -> {repl!r}; HEAD with them replaced {'equals' if ok else 'DIFFERS from'} the working text")
+        ok = ok and a == b
+        lines.append(f"{path}: {'OK' if ok else 'FAIL'} {'; '.join(desc)}; HEAD with them replaced {'equals' if ok else 'DIFFERS from'} the working text")
     elif rule == "insert":
         a, b = head.split("\n"), now.split("\n")
         ops = difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes()

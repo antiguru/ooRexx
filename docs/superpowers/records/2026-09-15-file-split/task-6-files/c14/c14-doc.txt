@@ -1,0 +1,15 @@
+ Documenting rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Checking rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+warning: public documentation for `chunks_refused` links to private item `Loud::chunk_refused`
+   --> crates/rexx-exec/src/lib.rs:207:11
+    |
+207 |     /// [`Loud::chunk_refused`]; there is no second engine to run it.
+    |           ^^^^^^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+    = note: `#[warn(rustdoc::private_intra_doc_links)]` on by default
+
+warning: `rexx-exec` (lib doc) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.82s
+   Generated /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-6/t-check/doc/rexx_exec/index.html and 2 other files
+exit 0

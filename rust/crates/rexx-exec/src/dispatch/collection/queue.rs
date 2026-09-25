@@ -190,7 +190,7 @@ fn native_queue_size(
 }
 
 /// `Queue`'s primitive methods, chained into `ObjectModel::build` beside
-/// [`super::NATIVE_METHODS`].
+/// [`super::super::NATIVE_METHODS`].
 pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Queue", "AT", Arity::Counted, native_queue_at),
     ("Queue", "[]", Arity::Counted, native_queue_at),

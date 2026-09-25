@@ -78,7 +78,7 @@ pub(super) fn list_state(
 }
 
 /// Whether `receiver` is a `List` or something deriving from one --
-/// [`is_queue`]'s question for the other family.
+/// [`super::is_queue`]'s question for the other family.
 pub(super) fn is_list(interp: &mut Interp, receiver: ObjRef) -> bool {
     let Some(class) = interp.class_of_value(receiver) else {
         return false;
@@ -620,7 +620,7 @@ fn native_list_make_array(
 }
 
 /// `List`'s primitive methods, chained into `ObjectModel::build` beside
-/// [`super::NATIVE_METHODS`].
+/// [`super::super::NATIVE_METHODS`].
 pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("List", "INIT", Arity::Fixed(1), native_list_init),
     ("List", "APPEND", Arity::Fixed(1), native_list_append),

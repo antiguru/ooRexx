@@ -1,0 +1,17 @@
+dispatch/collection.rs: covered by instruments 1-3
+dispatch/array/surface.rs: covered by instruments 1-3
+crates/rexx-exec/src/dispatch/array.rs: OK inserted lines only
+  +19: use super::new_instance;
+  +24: 
+  +25: // `Array`'s collection surface, chained into `ObjectModel::build` after its
+  +26: // sort family.
+  +27: pub(super) mod surface;
+crates/rexx-exec/src/dispatch.rs: OK 1 occurrences of '\\.chain\\(collection::NATIVE_METHODS\\)' -> '.chain(array::surface::NATIVE_METHODS)'; HEAD with them replaced equals the working text
+crates/rexx-exec/src/dispatch/tests.rs: OK 1 occurrences of '        \\.chain\\(collection::NATIVE_METHODS\\)\\n' -> '        .chain(collection::list::NATIVE_METHODS)\n        .chain(collection::queue::NATIVE_METHODS)\n        .chain(array::sort::NATIVE_METHODS)\n        .chain(array::surface::NATIVE_METHODS)\n        .chain(collection::supplier::NATIVE_METHODS)\n'; HEAD with them replaced equals the working text
+crates/rexx-exec/src/dispatch/collection/list.rs: OK 1 occurrences of '\\[`is_queue`\\]' -> '[`super::is_queue`]'; 1 occurrences of '\\[`super::NATIVE_METHODS`\\]' -> '[`super::super::NATIVE_METHODS`]'; HEAD with them replaced equals the working text
+crates/rexx-exec/src/dispatch/collection/queue.rs: OK 1 occurrences of '\\[`super::NATIVE_METHODS`\\]' -> '[`super::super::NATIVE_METHODS`]'; HEAD with them replaced equals the working text
+crates/rexx-exec/src/dispatch/collection/supplier.rs: OK 1 occurrences of '\\[`super::NATIVE_METHODS`\\]' -> '[`super::super::NATIVE_METHODS`]'; HEAD with them replaced equals the working text
+crates/rexx-exec/src/dispatch/hash.rs: OK 1 occurrences of '\\[`super::collection::NATIVE_METHODS`\\]' -> '[`super::collection::list::NATIVE_METHODS`]'; HEAD with them replaced equals the working text
+crates/rexx-exec/tests/dispatch_seam.rs: OK inserted lines only
+  +219:     "src/dispatch/array/surface.rs",
+PASS
