@@ -1,0 +1,7 @@
+  visibility fn unconstructible_index: private -> pub(super) (docs/classes/coverage.rs)
+  visibility fn coverage_of: private -> pub(super) (docs/classes/coverage.rs)
+  ONLY-POST mod coverage (docs/classes.rs)
+  ONLY-POST use coverage::{coverage_of,unconstructible_index} (docs/classes.rs)
+  ONLY-POST docs/classes/coverage.rs::use std::collections::BTreeMap (docs/classes/coverage.rs)
+  ONLY-POST docs/classes/coverage.rs::use super::{Book,CONSTRUCTION,CONSTRUCTION_DIRECTIVES,CONSTRUCTION_PROGRAMS,Coverage,Route,Status,UNCONSTRUCTIBLE,UNCONSTRUCTIBLE_BOOK} (docs/classes/coverage.rs)
+156 of 156 units present on both sides have identical token streams (4 of them moved); 0 only before, 4 only after

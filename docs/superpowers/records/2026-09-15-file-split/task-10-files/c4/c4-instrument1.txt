@@ -1,0 +1,10 @@
+(a) unmoved lines: PRE docs/classes.rs minus the removed lines, against POST docs/classes.rs
+  INSERTED post:21: 
+  INSERTED post:22: mod coverage;
+  INSERTED post:23: use coverage::{coverage_of, unconstructible_index};
+  2 equal blocks, 1195 lines, each also compared with cmp; 1195 expected lines, 1198 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn unconstructible_index -> docs/classes/coverage.rs (27 lines; visibility private -> pub(super))
+  OK fn coverage_of -> docs/classes/coverage.rs (95 lines; visibility private -> pub(super))
+  4 of 4 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

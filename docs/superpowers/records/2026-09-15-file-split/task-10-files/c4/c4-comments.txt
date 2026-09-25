@@ -1,0 +1,21 @@
+moved units: 4; names searched in backticks: 4
+file tails searched: classes.rs classes/coverage.rs coverage.rs docs/classes.rs docs/classes/ docs/classes/coverage.rs docs/classes/coverage/
+
+(a) comments naming a moved unit: 0
+
+(b) comments naming a touched file: 8
+  crates/rexx-exec/tests/collect_stress.rs:31: /// same corpus program. Duplicated from `corpus.rs`/`coverage.rs` rather
+  crates/rexx-exec/tests/loud.rs:130: /// `coverage.rs` has the exhaustive version this file does not need.
+  crates/rexx-exec/tests/owners.rs:12: //! The single owner table `coverage.rs` (criterion 1, parse coverage) and
+  crates/rexx-exec/tests/owners.rs:291: /// (`coverage.rs`) exists to catch.
+  crates/rexx-exec/tests/owners.rs:510: /// The regression guard for item I36 itself: `coverage.rs` and `loud.rs`
+  crates/rexx-exec/tests/owners.rs:541: // same change, or one of the tests above (or in `coverage.rs`/`loud.rs`)
+  corpus/phase-5b.txt:11: # (SUBSET_FILES in corpus.rs, coverage.rs, collect_stress.rs and ir_recorded.rs;
+  corpus/phase-5b.txt:13: # EXPECTED_SUBSET_5A in coverage.rs) and added no corpus program of its own.
+
+(c) positional words inside the destinations and the parent: 5
+  crates/rexx-extract/src/docs/classes.rs:39: /// carries the reason beside the hierarchy list.
+  crates/rexx-extract/src/docs/classes.rs:84: /// instance arm binds `o` to, and the directive the probe carries below its
+  crates/rexx-extract/src/docs/classes.rs:236: /// The directive a committed construction program needs below the probe's
+  crates/rexx-extract/src/docs/classes.rs:601: // table's `xrefstyle` displays instead, following the
+  crates/rexx-extract/src/docs/classes.rs:635: /// Text after the `<xref/>`, where a group heading spells out its

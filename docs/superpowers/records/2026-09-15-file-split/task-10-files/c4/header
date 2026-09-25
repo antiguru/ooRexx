@@ -1,0 +1,9 @@
+//! A class row's coverage: the construction measurements, read together
+//! with the reference's own sentences saying a class cannot be constructed.
+
+use std::collections::BTreeMap;
+
+use super::{
+    Book, CONSTRUCTION, CONSTRUCTION_DIRECTIVES, CONSTRUCTION_PROGRAMS, Coverage, Route, Status,
+    UNCONSTRUCTIBLE, UNCONSTRUCTIBLE_BOOK,
+};

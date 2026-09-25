@@ -1,0 +1,40 @@
+control T1 strip_field_vis drops a field's visibility after its attributes and nowhere else: CAUGHT
+  every case as expected: doc-commented field; two attributes before a field; a `]` closing an index; an attribute after `;`
+control T2 Task 9's instruments miss the doc-commented field this task's admit (c1, f61c596a5): CAUGHT
+  Task 9's: exit 1, ['I2 token stream differs: struct ClassRow']
+  this task's: exit 0, []
+control T3 a widened doc-commented field whose doc also changed (c1, f61c596a5): CAUGHT
+  exit 1, expected I1b and I3, reported ['I1b', 'I2', 'I3']
+control T4 comments10.py lists a planted comment in a tests/ parent; Task 9's comments7.py does not: CAUGHT
+  comments10.py: ['  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.', '  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.'] (exit 0)
+  comments7.py: [] (exit 1; subprocess.CalledProcessError: Command '['/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/tools/item-tool/target/release/item-tool', '/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t4/crates/rexx-exec/src/table_c/mod.rs']' returned non-zero exit status 101.)
+control T5 move_items10.py widens exactly the declared declarations and fields: CAUGHT
+  exit 0; Edge True, read_edges True, read_table verbatim True, the child's units verbatim in BASE once the widening is removed True
+  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t5/t5child/c.rs: 3 units (2 widened), 45 parent lines removed
+control B c4 as committed passes (working tree): CAUGHT
+  exit 0, reported []
+control B1-c4 a moved assertion's condition flips (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b fn coverage_of: /tmp/tmpss0s2qpu/a /tmp/tmpss0s2qpu/b differ: byte 698, line 20
+  I2 token stream differs: fn coverage_of
+control B2-c4 a moved reason sentence changes (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn coverage_of: /tmp/tmppw1mmk85/a /tmp/tmppw1mmk85/b differ: byte 3113, line 81
+  I2 token stream differs: fn coverage_of
+  I3 literals differ: fn coverage_of
+control B3-c4 a moved helper is deleted (working tree): CAUGHT
+  exit 1, expected ['I2'], reported ['I1b', 'I2', 'I3']
+  I1b fn collapse: /tmp/tmpli6fve5f/a /tmp/tmpli6fve5f/b differ: byte 1, line 1
+  I2 token stream differs: fn collapse
+  I2 unit vanished: fn strip_tags
+  I3 literals differ: fn collapse
+control B4-c4 an unmoved table row of classes.rs changes (working tree): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2']
+  I1a changed unmoved line pre-expected:126 post:129: '    ("ALARM", "93.901"),' -> '    ("ALARM", "93.902"),'
+  I2 unit vanished: row CONSTRUCTION/ALARM/"93.901"
+control B5-c4 a moved doc loses its intra-doc link (working tree): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn unconstructible_index: /tmp/tmpketlnx0p/a /tmp/tmpketlnx0p/b differ: byte 19, line 1
+  I2 token stream differs: fn unconstructible_index
+  I3 literals differ: fn unconstructible_index
+11 of 11 controls caught as expected

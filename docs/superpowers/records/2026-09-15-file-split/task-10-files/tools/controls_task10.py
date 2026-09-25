@@ -274,6 +274,18 @@ PART_B = {
         ("B6-c3 an import dropped beside the declared deletions, undeclared", ["I1a"], "gate_table_c.rs",
          first("use std::collections::{BTreeMap, BTreeSet};\n", "use std::collections::BTreeMap;\n"), same),
     ],
+    4: [
+        ("B1-c4 a moved assertion's condition flips", ["I1b", "I2"], "docs/classes/coverage.rs",
+         first('program.is_none() || construction != Some("new"),', 'program.is_none() || construction == Some("new"),'), same),
+        ("B2-c4 a moved reason sentence changes", ["I1b", "I3"], "docs/classes/coverage.rs",
+         first('"a bare ~new constructs an instance on the oracle".into()', '"a bare ~new constructs an instance on the oracle.".into()'), same),
+        ("B3-c4 a moved helper is deleted", ["I2"], "docs/classes/coverage.rs",
+         delete_item("fn strip_tags("), same),
+        ("B4-c4 an unmoved table row of classes.rs changes", ["I1a"], "docs/classes.rs",
+         first('("ALARM", "93.901"),', '("ALARM", "93.902"),'), same),
+        ("B5-c4 a moved doc loses its intra-doc link", ["I1b", "I3"], "docs/classes/coverage.rs",
+         first("/// Re-reads each [`UNCONSTRUCTIBLE`] quotation", "/// Re-reads each `UNCONSTRUCTIBLE` quotation"), same),
+    ],
 }
 for n, plants in PART_B.items():
     p = pair(n)
