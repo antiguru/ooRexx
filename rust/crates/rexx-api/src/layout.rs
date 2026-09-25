@@ -416,33 +416,9 @@ pub const REFUSING_MEMBERS: &[(&str, &str)] = &[
     ("RexxThreadInterface.GetRoutinePackage", "Phase 8"),
     ("RexxThreadInterface.GetMethodPackage", "Phase 8"),
     ("RexxThreadInterface.ObjectToCSelf", "Phase 8"),
-    ("RexxThreadInterface.UintptrToObject", "Phase 8"),
-    ("RexxThreadInterface.IntptrToObject", "Phase 8"),
-    ("RexxThreadInterface.ValueToObject", "Phase 8"),
-    ("RexxThreadInterface.ValuesToObject", "Phase 8"),
-    ("RexxThreadInterface.ObjectToValue", "Phase 8"),
-    ("RexxThreadInterface.StringSizeToObject", "Phase 8"),
-    ("RexxThreadInterface.ObjectToWholeNumber", "Phase 8"),
-    ("RexxThreadInterface.ObjectToStringSize", "Phase 8"),
-    ("RexxThreadInterface.Int64ToObject", "Phase 8"),
-    ("RexxThreadInterface.UnsignedInt64ToObject", "Phase 8"),
-    ("RexxThreadInterface.ObjectToInt64", "Phase 8"),
-    ("RexxThreadInterface.ObjectToUnsignedInt64", "Phase 8"),
-    ("RexxThreadInterface.Int32ToObject", "Phase 8"),
-    ("RexxThreadInterface.UnsignedInt32ToObject", "Phase 8"),
-    ("RexxThreadInterface.ObjectToInt32", "Phase 8"),
-    ("RexxThreadInterface.ObjectToUnsignedInt32", "Phase 8"),
-    ("RexxThreadInterface.ObjectToUintptr", "Phase 8"),
-    ("RexxThreadInterface.ObjectToIntptr", "Phase 8"),
-    ("RexxThreadInterface.ObjectToLogical", "Phase 8"),
-    ("RexxThreadInterface.LogicalToObject", "Phase 8"),
-    ("RexxThreadInterface.DoubleToObject", "Phase 8"),
-    ("RexxThreadInterface.ObjectToDouble", "Phase 8"),
     ("RexxThreadInterface.ObjectToString", "Phase 8"),
     ("RexxThreadInterface.ObjectToStringValue", "Phase 8"),
     ("RexxThreadInterface.StringGet", "Phase 8"),
-    ("RexxThreadInterface.NewString", "Phase 8"),
-    ("RexxThreadInterface.NewStringFromAsciiz", "Phase 8"),
     ("RexxThreadInterface.StringUpper", "Phase 8"),
     ("RexxThreadInterface.StringLower", "Phase 8"),
     ("RexxThreadInterface.IsString", "Phase 8"),
@@ -600,7 +576,7 @@ thread_local! {
 }
 
 /// Records that the running call reached `entry`, keeping an earlier record.
-fn refuse(entry: &'static str) {
+pub(crate) fn refuse(entry: &'static str) {
     if REFUSED.get().is_none() {
         REFUSED.set(Some(entry));
     }

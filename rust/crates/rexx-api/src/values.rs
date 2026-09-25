@@ -21,6 +21,7 @@ use std::ffi::{c_char, c_int};
 
 use rexx_core::ObjRef;
 
+use crate::callbacks::Surface;
 use crate::handles::Table;
 use crate::layout::{CSTRING, POINTER, RexxObjectPtr, ValueDescriptor, ValueUnion};
 
@@ -628,6 +629,12 @@ pub trait Host {
     /// both serves the context and owns the save list
     /// (`interpreter/execution/NativeActivation.hpp:232`).
     fn locals(&mut self) -> &mut Table;
+
+    /// What the callback tables reach beyond the conversions, or `None` for a
+    /// host that serves only the conversions, whose callbacks then refuse.
+    fn surface(&mut self) -> Option<&mut dyn Surface> {
+        None
+    }
 }
 
 /// The `NUMERIC` settings a call context reports.
@@ -1204,6 +1211,12 @@ pub fn result_read(declared: u16) -> Option<ResultRead> {
         Back::Member(_) => Some(ResultRead::Member(row.repr)),
         Back::Text(_) => Some(ResultRead::Text),
     }
+}
+
+/// Where the code in `declared` takes its value from, or `None` for a code
+/// the table does not know.
+pub fn source(declared: u16) -> Option<Source> {
+    row(argument_type(declared)).map(|row| row.source)
 }
 
 /// Whether the code in `declared` takes its value from the argument list.

@@ -761,7 +761,7 @@ fn a_stub_reaches_the_instance_through_the_thread_context() {
 
 /// **A call that reached an unwritten member refuses naming it, and a
 /// native call nested inside it keeps its own record.** The outer stub
-/// reaches `NewStringFromAsciiz`, then a member whose host runs a native
+/// reaches `ValuesToObject`, then a member whose host runs a native
 /// call reaching `HaltThread`, then raises a condition; the outer call
 /// answers its own first member and not the inner one, the inner call
 /// answers its own, and the refusal forgets the condition raised after it.
@@ -784,7 +784,7 @@ fn a_refused_member_is_the_calls_answer_and_a_nested_call_keeps_its_own() {
     assert_eq!(
         outcome,
         Err(Failure::UnfilledSlot {
-            entry: "RexxThreadInterface.NewStringFromAsciiz"
+            entry: "RexxThreadInterface.ValuesToObject"
         })
     );
     assert_eq!(
@@ -1110,7 +1110,7 @@ fn a_hook_that_reaches_an_unwritten_member_is_refused() {
         run_hook(&thread, &library, Hook::Loader),
         (
             Err(Failure::UnfilledSlot {
-                entry: "RexxThreadInterface.NewStringFromAsciiz"
+                entry: "RexxThreadInterface.ValuesToObject"
             }),
             None
         )

@@ -1,0 +1,79 @@
+/* The thread table's number, logical, double and string constructors and
+   their converse readers, through orxmethod's methods that call each one and
+   its inline alias. */
+t = .T~new
+say 'w2o' t~w2o(12) t~w2o(-5) t~w2o('999999999999999999') t~w2o('-999999999999999999') t~w2oA(7)
+say 's2o' t~s2o(0) t~s2o('999999999999999999') t~s2oA(3)
+say 'i642o' t~i642o('-9223372036854775808') t~i642o('9223372036854775807') t~i642oA(1)
+say 'u642o' t~u642o('18446744073709551615') t~u642oA(1)
+say 'i322o' t~i322o('-2147483648') t~i322oA(5) 'u322o' t~u322o('4294967295') t~u322oA(5)
+say 'ip2o' t~ip2o('-9223372036854775808') t~ip2oA(2) 'up2o' t~up2o('18446744073709551615') t~up2oA(2)
+say 'l2o' t~l2o(1) t~l2o(0) t~l2oA(1)
+say 'd2o' t~d2o(1.5) t~d2o(1/3) t~d2oA(2/3) t~d2op(1/3, 4) t~d2op(1/3, 30)
+numeric digits 5
+say 'd2o5' t~d2o(1/3) t~d2oA(123456789)
+numeric digits 20
+say 'd2o20' t~d2o(1/3) t~d2oA(123456789)
+numeric digits
+say (t~w2o(12))~class t~i642o(2**62)~class
+say 'o2w' t~o2w(12) t~o2w('999999999999999999') t~o2w(' -7 ') t~o2w('1E3') t~o2w(3.0) t~o2wA(4)
+say 'o2s' t~o2s(0) t~o2s('999999999999999999') t~o2sA('5')
+say 'o2i64' t~o2i64('-9223372036854775808') t~o2i64('9223372036854775807') t~o2i64A(9)
+say 'o2u64' t~o2u64('18446744073709551615') t~o2u64A(9)
+say 'o2i32' t~o2i32('-2147483648') t~o2i32A(9) 'o2u32' t~o2u32('4294967295') t~o2u32A(1)
+say 'o2ip' t~o2ip('-9223372036854775808') t~o2ipA(1) 'o2up' t~o2up('18446744073709551615') t~o2upA(1)
+say 'o2l' t~o2l(1) t~o2l(0) t~o2l(.true) t~o2lA('1')
+say 'o2d' t~o2d(1.5) t~o2d('1e-5') t~o2d('nan') t~o2dA(2)
+say 'str' t~asciiz('hello') t~asciizalt('x') t~ns('abcdef', 3) t~newalt('abc', 0) '['t~c2o('')']'
+say 'o2v' t~o2v(12, 12) t~o2v('abc', 11) t~o2v('abc', 15) t~o2v(2.5, 14) t~o2v(1, 30) -
+  t~o2v('0x10', 35) t~o2v(-3, 13) t~o2v(3, 18) t~o2v(200, 24) t~o2v(-100, 20) t~o2v('x', 17)
+numeric digits 20
+say 'o2v20' t~o2v(1/3, 14) t~o2v(1/3, 19)
+::class T
+::method w2o external "LIBRARY orxmethod TestWholeNumberToObject"
+::method w2oA external "LIBRARY orxmethod TestWholeNumberToObjectAlt"
+::method s2o external "LIBRARY orxmethod TestStringSizeToObject"
+::method s2oA external "LIBRARY orxmethod TestStringSizeToObjectAlt"
+::method i642o external "LIBRARY orxmethod TestInt64ToObject"
+::method i642oA external "LIBRARY orxmethod TestInt64ToObjectAlt"
+::method u642o external "LIBRARY orxmethod TestUnsignedInt64ToObject"
+::method u642oA external "LIBRARY orxmethod TestUnsignedInt64ToObjectAlt"
+::method i322o external "LIBRARY orxmethod TestInt32ToObject"
+::method i322oA external "LIBRARY orxmethod TestInt32ToObjectAlt"
+::method u322o external "LIBRARY orxmethod TestUnsignedInt32ToObject"
+::method u322oA external "LIBRARY orxmethod TestUnsignedInt32ToObjectAlt"
+::method ip2o external "LIBRARY orxmethod TestIntptrToObject"
+::method ip2oA external "LIBRARY orxmethod TestIntptrToObjectAlt"
+::method up2o external "LIBRARY orxmethod TestUintptrToObject"
+::method up2oA external "LIBRARY orxmethod TestUintptrToObjectAlt"
+::method l2o external "LIBRARY orxmethod TestLogicalToObject"
+::method l2oA external "LIBRARY orxmethod TestLogicalToObjectAlt"
+::method d2o external "LIBRARY orxmethod TestDoubleToObject"
+::method d2oA external "LIBRARY orxmethod TestDoubleToObjectAlt"
+::method d2op external "LIBRARY orxmethod TestDoubleToObjectWithPrecision"
+::method o2w external "LIBRARY orxmethod TestObjectToWholeNumber"
+::method o2wA external "LIBRARY orxmethod TestObjectToWholeNumberAlt"
+::method o2s external "LIBRARY orxmethod TestObjectToStringSize"
+::method o2sA external "LIBRARY orxmethod TestObjectToStringSizeAlt"
+::method o2i64 external "LIBRARY orxmethod TestObjectToInt64"
+::method o2i64A external "LIBRARY orxmethod TestObjectToInt64Alt"
+::method o2u64 external "LIBRARY orxmethod TestObjectToUnsignedInt64"
+::method o2u64A external "LIBRARY orxmethod TestObjectToUnsignedInt64Alt"
+::method o2i32 external "LIBRARY orxmethod TestObjectToInt32"
+::method o2i32A external "LIBRARY orxmethod TestObjectToInt32Alt"
+::method o2u32 external "LIBRARY orxmethod TestObjectToUnsignedInt32"
+::method o2u32A external "LIBRARY orxmethod TestObjectToUnsignedInt32Alt"
+::method o2ip external "LIBRARY orxmethod TestObjectToIntptr"
+::method o2ipA external "LIBRARY orxmethod TestObjectToIntptrAlt"
+::method o2up external "LIBRARY orxmethod TestObjectToUintptr"
+::method o2upA external "LIBRARY orxmethod TestObjectToUintptrAlt"
+::method o2l external "LIBRARY orxmethod TestObjectToLogical"
+::method o2lA external "LIBRARY orxmethod TestObjectToLogicalAlt"
+::method o2d external "LIBRARY orxmethod TestObjectToDouble"
+::method o2dA external "LIBRARY orxmethod TestObjectToDoubleAlt"
+::method asciiz external "LIBRARY orxmethod TestNewStringFromAsciiz"
+::method asciizalt external "LIBRARY orxmethod TestNewStringFromAsciizAlt"
+::method ns external "LIBRARY orxmethod TestNewString"
+::method newalt external "LIBRARY orxmethod TestNewStringAlt"
+::method c2o external "LIBRARY orxmethod TestCStringToObject"
+::method o2v external "LIBRARY orxmethod TestObjectToValue"

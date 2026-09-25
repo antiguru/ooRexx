@@ -21,12 +21,12 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 
 use crate::layout::{
-    CSTRING, CallContextInterface, MethodContextInterface, Owned, POINTER, RexxCallContext_,
-    RexxInstance_, RexxInstanceInterface, RexxMethodContext_, RexxObjectPtr, RexxPointerObject,
-    RexxStringObject, RexxThreadContext_, RexxThreadInterface, ValueDescriptor, logical_t,
-    stringsize_t, wholenumber_t,
+    CSTRING, CallContextInterface, MethodContextInterface, Owned, POINTER, RexxArrayObject,
+    RexxCallContext_, RexxInstance_, RexxInstanceInterface, RexxMethodContext_, RexxObjectPtr,
+    RexxPointerObject, RexxStringObject, RexxThreadContext_, RexxThreadInterface, ValueDescriptor,
+    logical_t, stringsize_t, wholenumber_t,
 };
-use crate::values::{Activation, Repr, Value};
+use crate::values::{Activation, Converted, MAX_WHOLENUMBER, Repr, Value};
 
 /// The state that owns the context `context` addresses.
 ///
@@ -159,6 +159,30 @@ pub const THREAD: RexxThreadInterface = {
     table.NewPointer = new_pointer;
     table.DoubleToObjectWithPrecision = double_to_object_with_precision;
     table.RaiseException0 = raise_exception0;
+    table.UintptrToObject = uintptr_to_object;
+    table.IntptrToObject = intptr_to_object;
+    table.StringSizeToObject = string_size_to_object;
+    table.Int64ToObject = int64_to_object;
+    table.UnsignedInt64ToObject = unsigned_int64_to_object;
+    table.Int32ToObject = int32_to_object;
+    table.UnsignedInt32ToObject = unsigned_int32_to_object;
+    table.ObjectToWholeNumber = object_to_whole_number;
+    table.ObjectToStringSize = object_to_string_size;
+    table.ObjectToInt64 = object_to_int64;
+    table.ObjectToUnsignedInt64 = object_to_unsigned_int64;
+    table.ObjectToInt32 = object_to_int32;
+    table.ObjectToUnsignedInt32 = object_to_unsigned_int32;
+    table.ObjectToUintptr = object_to_uintptr;
+    table.ObjectToIntptr = object_to_intptr;
+    table.ObjectToLogical = object_to_logical;
+    table.LogicalToObject = logical_to_object;
+    table.DoubleToObject = double_to_object;
+    table.ObjectToDouble = object_to_double;
+    table.NewString = new_string;
+    table.NewStringFromAsciiz = new_string_from_asciiz;
+    table.ValueToObject = value_to_object;
+    table.ValuesToObject = values_to_object;
+    table.ObjectToValue = object_to_value;
     table
 };
 
@@ -634,6 +658,393 @@ unsafe extern "C" fn raise_exception0(context: *mut RexxThreadContext_, number: 
     unsafe { innermost_activation(context, "RaiseException0") }.raise(number);
 }
 
+/// Writes `value` through `out` and answers true, or answers false for no
+/// value. A null `out` is not written.
+///
+/// # Safety
+/// A non-null `out` is valid for a write of `T`.
+unsafe fn answer_through<T>(out: *mut T, value: Option<T>) -> logical_t {
+    let Some(value) = value else {
+        return 0;
+    };
+    if !out.is_null() {
+        // SAFETY: the caller guarantees a non-null `out` is writable.
+        unsafe { out.write(value) };
+    }
+    1
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn uintptr_to_object(
+    context: *mut RexxThreadContext_,
+    value: usize,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "UintptrToObject") }.unsigned_object(value as u64)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn intptr_to_object(
+    context: *mut RexxThreadContext_,
+    value: isize,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "IntptrToObject") }.signed_object(value as i64)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn string_size_to_object(
+    context: *mut RexxThreadContext_,
+    value: stringsize_t,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "StringSizeToObject") }.unsigned_object(value as u64)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn int64_to_object(
+    context: *mut RexxThreadContext_,
+    value: i64,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "Int64ToObject") }.signed_object(value)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn unsigned_int64_to_object(
+    context: *mut RexxThreadContext_,
+    value: u64,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "UnsignedInt64ToObject") }.unsigned_object(value)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn int32_to_object(
+    context: *mut RexxThreadContext_,
+    value: i32,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "Int32ToObject") }.signed_object(i64::from(value))
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn unsigned_int32_to_object(
+    context: *mut RexxThreadContext_,
+    value: u32,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "UnsignedInt32ToObject") }
+        .unsigned_object(u64::from(value))
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], and a non-null `result` is valid for a
+/// write.
+unsafe extern "C" fn object_to_whole_number(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut wholenumber_t,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToWholeNumber") }.signed_value(
+        object,
+        -MAX_WHOLENUMBER,
+        MAX_WHOLENUMBER,
+    );
+    // SAFETY: the caller guarantees `result`; the value is within the range.
+    unsafe { answer_through(result, found.map(|number| number as isize)) }
+}
+
+/// # Safety
+/// As [`object_to_whole_number`].
+unsafe extern "C" fn object_to_string_size(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut stringsize_t,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToStringSize") }
+        .unsigned_value(object, MAX_WHOLENUMBER.unsigned_abs());
+    // SAFETY: the caller guarantees `result`; the value is within the range.
+    unsafe { answer_through(result, found.map(|number| number as usize)) }
+}
+
+/// # Safety
+/// As [`object_to_whole_number`].
+unsafe extern "C" fn object_to_int64(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut i64,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToInt64") }.signed_value(
+        object,
+        i64::MIN,
+        i64::MAX,
+    );
+    // SAFETY: the caller guarantees `result`.
+    unsafe { answer_through(result, found) }
+}
+
+/// # Safety
+/// As [`object_to_whole_number`].
+unsafe extern "C" fn object_to_unsigned_int64(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut u64,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToUnsignedInt64") }
+        .unsigned_value(object, u64::MAX);
+    // SAFETY: the caller guarantees `result`.
+    unsafe { answer_through(result, found) }
+}
+
+/// # Safety
+/// As [`object_to_whole_number`].
+unsafe extern "C" fn object_to_int32(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut i32,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToInt32") }.signed_value(
+        object,
+        i64::from(i32::MIN),
+        i64::from(i32::MAX),
+    );
+    // SAFETY: the caller guarantees `result`; the value is within the range.
+    unsafe { answer_through(result, found.map(|number| number as i32)) }
+}
+
+/// # Safety
+/// As [`object_to_whole_number`].
+unsafe extern "C" fn object_to_unsigned_int32(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut u32,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToUnsignedInt32") }
+        .unsigned_value(object, u64::from(u32::MAX));
+    // SAFETY: the caller guarantees `result`; the value is within the range.
+    unsafe { answer_through(result, found.map(|number| number as u32)) }
+}
+
+/// # Safety
+/// As [`object_to_whole_number`].
+unsafe extern "C" fn object_to_uintptr(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut usize,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToUintptr") }
+        .unsigned_value(object, u64::MAX);
+    // SAFETY: the caller guarantees `result`; a pointer is 64 bits.
+    unsafe { answer_through(result, found.map(|number| number as usize)) }
+}
+
+/// # Safety
+/// As [`object_to_whole_number`].
+unsafe extern "C" fn object_to_intptr(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut isize,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToIntptr") }.signed_value(
+        object,
+        i64::MIN,
+        i64::MAX,
+    );
+    // SAFETY: the caller guarantees `result`; a pointer is 64 bits.
+    unsafe { answer_through(result, found.map(|number| number as isize)) }
+}
+
+/// # Safety
+/// As [`object_to_whole_number`].
+unsafe extern "C" fn object_to_logical(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut logical_t,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToLogical") }.logical_value(object);
+    // SAFETY: the caller guarantees `result`.
+    unsafe { answer_through(result, found.map(logical_t::from)) }
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn logical_to_object(
+    context: *mut RexxThreadContext_,
+    value: logical_t,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "LogicalToObject") }.logical_object(value != 0)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn double_to_object(
+    context: *mut RexxThreadContext_,
+    value: f64,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "DoubleToObject") }.double_default_object(value)
+}
+
+/// # Safety
+/// As [`object_to_whole_number`].
+unsafe extern "C" fn object_to_double(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    result: *mut f64,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let found = unsafe { innermost_activation(context, "ObjectToDouble") }.double_value(object);
+    // SAFETY: the caller guarantees `result`.
+    unsafe { answer_through(result, found) }
+}
+
+/// The bytes `length` long at `data`, or `None` for a null `data` with a
+/// length.
+///
+/// # Safety
+/// A non-null `data` is valid for reads of `length` bytes.
+unsafe fn bytes_of<'a>(data: CSTRING, length: usize) -> Option<&'a [u8]> {
+    if data.is_null() {
+        return (length == 0).then_some(&[]);
+    }
+    // SAFETY: the caller guarantees the range is readable.
+    Some(unsafe { std::slice::from_raw_parts(data.cast::<u8>(), length) })
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], and a non-null `data` is valid for reads
+/// of `length` bytes.
+unsafe extern "C" fn new_string(
+    context: *mut RexxThreadContext_,
+    data: CSTRING,
+    length: usize,
+) -> RexxStringObject {
+    // SAFETY: as `whole_number_to_object`.
+    let activation = unsafe { innermost_activation(context, "NewString") };
+    // SAFETY: the caller guarantees the range.
+    match unsafe { bytes_of(data, length) } {
+        Some(bytes) => activation.string_object(bytes).cast(),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], and a non-null `text` is NUL-terminated.
+unsafe extern "C" fn new_string_from_asciiz(
+    context: *mut RexxThreadContext_,
+    text: CSTRING,
+) -> RexxStringObject {
+    // SAFETY: as `whole_number_to_object`.
+    let activation = unsafe { innermost_activation(context, "NewStringFromAsciiz") };
+    // SAFETY: the caller guarantees the terminator.
+    match unsafe { name_of(text) } {
+        Some(bytes) => activation.string_object(bytes).cast(),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// The code a descriptor declares, its value read as that code's member,
+/// and the bytes a `CSTRING` value points at.
+///
+/// # Safety
+/// `descriptor` is valid for reads, and the member its type names was
+/// written; a `CSTRING` value that is not null is NUL-terminated.
+unsafe fn described(descriptor: *const ValueDescriptor) -> (u16, Value, Option<Vec<u8>>) {
+    // SAFETY: the caller guarantees the read.
+    let descriptor = unsafe { &*descriptor };
+    let declared = descriptor.r#type;
+    let Some(repr) = crate::values::repr(declared) else {
+        return (declared, Value::Omitted, None);
+    };
+    // SAFETY: the caller guarantees the member `repr` names was written.
+    let value = unsafe { value_of(descriptor, repr) };
+    let text = match value {
+        // SAFETY: the caller guarantees the terminator.
+        Value::CString(text) => unsafe { name_of(text) }.map(<[u8]>::to_vec),
+        _ => None,
+    };
+    (declared, value, text)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], and a non-null `descriptor` is as
+/// [`described`] asks.
+unsafe extern "C" fn value_to_object(
+    context: *mut RexxThreadContext_,
+    descriptor: *mut ValueDescriptor,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    let activation = unsafe { innermost_activation(context, "ValueToObject") };
+    if descriptor.is_null() {
+        return std::ptr::null_mut();
+    }
+    // SAFETY: the caller guarantees the descriptor.
+    let (declared, value, text) = unsafe { described(descriptor) };
+    activation.value_to_object(declared, value, text.as_deref())
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], and a non-null `descriptors` is `count`
+/// descriptors, each as [`described`] asks.
+unsafe extern "C" fn values_to_object(
+    context: *mut RexxThreadContext_,
+    descriptors: *mut ValueDescriptor,
+    count: usize,
+) -> RexxArrayObject {
+    // SAFETY: as `whole_number_to_object`.
+    let activation = unsafe { innermost_activation(context, "ValuesToObject") };
+    if descriptors.is_null() && count != 0 {
+        return std::ptr::null_mut();
+    }
+    let described: Vec<(u16, Value, Option<Vec<u8>>)> = (0..count)
+        // SAFETY: the caller guarantees `count` descriptors.
+        .map(|at| unsafe { described(descriptors.add(at)) })
+        .collect();
+    activation.values_to_object(&described).cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], and a non-null `descriptor` is valid for
+/// reads and writes.
+unsafe extern "C" fn object_to_value(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    descriptor: *mut ValueDescriptor,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    let activation = unsafe { innermost_activation(context, "ObjectToValue") };
+    if descriptor.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller guarantees the descriptor.
+    let declared = unsafe { (*descriptor).r#type };
+    let Some(value) = activation.object_to_value(object, declared) else {
+        return 0;
+    };
+    let written = crate::values::descriptor(declared, Converted { value, flags: 0 });
+    // SAFETY: the caller guarantees the write; only the value word changes.
+    unsafe { (*descriptor).value = written.value };
+    1
+}
+
 /// What a stub read through the context, which is the channel
 /// `argumentExists` uses (`api/oorexxapi.h:4276`).
 #[cfg(test)]
@@ -845,7 +1256,8 @@ pub(crate) extern "C" fn refusing_stub(
     std::ptr::null_mut()
 }
 
-/// A method stub that reaches `NewStringFromAsciiz`, which nothing fills, then
+/// A method stub that reaches `ValuesToObject`, which a host with no
+/// [`crate::callbacks::Surface`] refuses, then
 /// `WholeNumberToObject`, which the host a nesting test builds answers by
 /// running a native call of its own, then raises [`STUB_CONDITION`].
 #[cfg(test)]
@@ -860,7 +1272,7 @@ pub(crate) extern "C" fn nesting_stub(
     unsafe {
         let thread = (*context).threadContext;
         let table = &*(*thread).functions;
-        (table.NewStringFromAsciiz)(thread, c"units".as_ptr());
+        (table.ValuesToObject)(thread, std::ptr::null_mut(), 0);
         (table.WholeNumberToObject)(thread, 3);
         (table.RaiseException0)(thread, STUB_CONDITION);
     }
@@ -1115,27 +1527,151 @@ pub(crate) extern "C" fn raising_hook(thread: *mut RexxThreadContext_) {
     unsafe { ((*(*thread).functions).RaiseException0)(thread, STUB_CONDITION) };
 }
 
-/// A package hook that reaches `NewStringFromAsciiz`, which nothing fills,
-/// and then raises [`STUB_CONDITION`].
+/// A package hook that reaches `ValuesToObject`, which a host with no
+/// [`crate::callbacks::Surface`] refuses, and then raises [`STUB_CONDITION`].
 #[cfg(test)]
 pub(crate) extern "C" fn refusing_hook(thread: *mut RexxThreadContext_) {
     HOOKED.set(thread);
     // SAFETY: as `raising_hook`; the name is a literal.
     unsafe {
         let table = &*(*thread).functions;
-        (table.NewStringFromAsciiz)(thread, c"units".as_ptr());
+        (table.ValuesToObject)(thread, std::ptr::null_mut(), 0);
         (table.RaiseException0)(thread, STUB_CONDITION);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{owner_of, value_of};
+    use super::{ThreadContext, owner_of, value_of};
+    use crate::callbacks::fake::FakeHost;
     use crate::layout::{
         Owned, RexxCallContext_, RexxMethodContext_, RexxThreadContext_, RexxThreadInterface,
-        recording_refusals,
+        ValueDescriptor, ValueUnion, recording_refusals,
     };
-    use crate::values::{Converted, Repr, Value, code, descriptor, repr, rows};
+    use crate::values::{
+        self, CStringPool, Conversion, Converted, Repr, Value, code, descriptor, repr, rows,
+    };
+
+    /// Runs `body` with the thread context and table of a native call `host`
+    /// serves, recording the first member it refused.
+    fn with_thread<R>(
+        host: &mut FakeHost,
+        body: impl FnOnce(*mut RexxThreadContext_, &RexxThreadInterface) -> R,
+    ) -> (R, Option<&'static str>) {
+        let mut strings = CStringPool::new();
+        let activation = values::Activation::new(Conversion {
+            host,
+            strings: &mut strings,
+        });
+        ThreadContext::new().enter(&activation, |contexts| {
+            let context = contexts.method().as_ptr();
+            // SAFETY: `context` is the one this `Contexts` built, which links
+            // the thread context and its table.
+            let (thread, table) = unsafe {
+                let thread = (*context).threadContext;
+                (thread, &*(*thread).functions)
+            };
+            recording_refusals(|| body(thread, table))
+        })
+    }
+
+    /// A descriptor of `code` over `value`.
+    fn described(code: u16, value: ValueUnion) -> ValueDescriptor {
+        ValueDescriptor {
+            value,
+            r#type: code,
+            flags: 0,
+        }
+    }
+
+    /// **The construction members answer through the thread table**: a
+    /// string from a length and from a terminator, a number read into a
+    /// caller's variable, a descriptor's value as an object and an object as
+    /// a descriptor's value, and an array of descriptors.
+    #[test]
+    fn the_construction_members_answer_through_the_thread_table() {
+        let mut host = FakeHost::new();
+        let seven = host.text(b"7");
+        let seven = host.locals.register(seven);
+        let letters = host.text(b"abc");
+        let letters = host.locals.register(letters);
+        let (answers, refused) = with_thread(&mut host, |thread, table| {
+            let mut number = 0i32;
+            let mut hello = described(
+                code::CSTRING,
+                ValueUnion {
+                    value_CSTRING: c"hello".as_ptr(),
+                },
+            );
+            let mut int = described(code::INT, ValueUnion { value_int64_t: 0 });
+            let mut refused = described(code::INT, ValueUnion { value_int64_t: 0 });
+            let mut pair = [
+                described(code::INT, ValueUnion { value_int: 5 }),
+                described(
+                    code::CSTRING,
+                    ValueUnion {
+                        value_CSTRING: c"q".as_ptr(),
+                    },
+                ),
+            ];
+            // SAFETY: every pointer is to a live local or a literal, and each
+            // descriptor's member is the one its code names.
+            unsafe {
+                let string = (table.NewString)(thread, c"abcdef".as_ptr(), 3);
+                let asciiz = (table.NewStringFromAsciiz)(thread, c"xyz".as_ptr());
+                let fits = (table.ObjectToInt32)(thread, seven, &raw mut number);
+                let value = (table.ValueToObject)(thread, &raw mut hello);
+                let converted = (table.ObjectToValue)(thread, seven, &raw mut int);
+                let rejected = (table.ObjectToValue)(thread, letters, &raw mut refused);
+                let array = (table.ValuesToObject)(thread, pair.as_mut_ptr(), 2);
+                (
+                    string,
+                    asciiz,
+                    (fits, number),
+                    value,
+                    (converted, int.value.value_int),
+                    rejected,
+                    array,
+                )
+            }
+        });
+        assert_eq!(refused, None);
+        let (string, asciiz, number, value, int, rejected, array) = answers;
+        let bytes = |host: &FakeHost, handle| host.bytes(host.locals.resolve(handle)?);
+        assert_eq!(bytes(&host, string.cast()), Some(b"abc".to_vec()));
+        assert_eq!(bytes(&host, asciiz.cast()), Some(b"xyz".to_vec()));
+        assert_eq!(number, (1, 7));
+        assert_eq!(bytes(&host, value), Some(b"hello".to_vec()));
+        assert_eq!(int, (1, 7));
+        assert_eq!(rejected, 0);
+        assert_eq!(
+            host.cleared, 1,
+            "the refused conversion's condition was kept"
+        );
+        let items = host
+            .items(
+                host.locals
+                    .resolve(array.cast())
+                    .expect("the array is registered"),
+            )
+            .expect("an array");
+        let items: Vec<Option<Vec<u8>>> = items.into_iter().map(|item| host.bytes(item?)).collect();
+        assert_eq!(items, [Some(b"5".to_vec()), Some(b"q".to_vec())]);
+    }
+
+    /// A member that needs the host's surface refuses on a host with none,
+    /// naming itself.
+    #[test]
+    fn a_surface_member_on_a_host_without_one_refuses() {
+        let mut host = FakeHost::new();
+        host.serves = false;
+        let (array, refused) = with_thread(&mut host, |thread, table| {
+            // SAFETY: an empty list reads no descriptor.
+            unsafe { (table.ValuesToObject)(thread, std::ptr::null_mut(), 0) }
+        });
+        assert!(array.is_null());
+        assert_eq!(refused, Some("RexxThreadInterface.ValuesToObject"));
+    }
 
     /// The variable this test sets on the child it spawns, so that the child
     /// reaches the stub and this process does not.

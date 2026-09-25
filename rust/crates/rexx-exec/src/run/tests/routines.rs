@@ -784,10 +784,9 @@ fn an_extension_reading_the_instance_reaches_its_table() {
 /// **An extension that reaches an interface member this crate has not written
 /// refuses loudly, naming the member, and the program's earlier output is
 /// kept.** Measured, oracle: `RxCalcSin(30, 3, 'X')` is 88.916 at rc 168; its
-/// units check builds the message with `context->String`, which is
-/// `NewStringFromAsciiz`, and the crate aborted there at rc 134 with `before`
-/// lost. The test loads this worktree's own `build/lib/librxmath.so`; the
-/// measurements used the oracle checkout's.
+/// units check builds the message's substitutions with `ArrayOfThree`
+/// (`extensions/rxmath/rxmath.cpp:178`). The test loads this worktree's own
+/// `build/lib/librxmath.so`; the measurements used the oracle checkout's.
 #[test]
 fn an_extension_reaching_an_unwritten_member_refuses_loudly() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -808,7 +807,7 @@ fn an_extension_reaching_an_unwritten_member_refuses_loudly() {
     assert_eq!(outcome.stdout, b"before\n");
     assert_eq!(
         String::from_utf8_lossy(&outcome.stderr),
-        "rexx-exec: RexxThreadInterface.NewStringFromAsciiz is not implemented (Phase 8)\n"
+        "rexx-exec: RexxThreadInterface.ArrayOfThree is not implemented (Phase 8)\n"
     );
 }
 

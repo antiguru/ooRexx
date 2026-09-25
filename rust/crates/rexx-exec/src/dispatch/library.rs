@@ -256,7 +256,10 @@ impl Interp {
             Err(Refused::Raised) => {
                 Err(raised.expect("a host answering Raised holds the condition it raised"))
             }
-            Ok(value) => Ok(value),
+            // A condition a callback raised and the extension did not clear
+            // is raised once the call returns, whatever it answered
+            // (`NativeActivation::checkConditions`, `:1787`).
+            Ok(value) => raised.map_or(Ok(value), Err),
             Err(refused) => Err(self.refusal(refused, packaged, method)),
         }
     }
@@ -696,6 +699,10 @@ impl Host for Interp {
             .expect("a native activation is running")
             .locals
     }
+
+    fn surface(&mut self) -> Option<&mut dyn rexx_api::callbacks::Surface> {
+        Some(self)
+    }
 }
 
 impl Interp {
@@ -754,7 +761,6 @@ impl Interp {
     ///
     /// # Panics
     /// As [`Interp::native_frame`].
-    #[cfg(test)]
     fn native_frame_mut(&mut self) -> &mut NativeFrame {
         self.native_handles
             .last_mut()
@@ -852,5 +858,6 @@ fn percent_g(value: f64, significant: usize) -> String {
     format!("{sign}0.{zeros}{}", digits.trim_end_matches('0'))
 }
 
+mod surface;
 #[cfg(test)]
 mod tests;

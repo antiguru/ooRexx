@@ -232,3 +232,8 @@ lang/library_native_refusal_stem_routine.rex
 # the object is built, so a SYNTAX condition's MESSAGE and ERRORTEXT read back
 # after the collections an ordinary run makes.
 lang/condition_object_entries_rooted.rex
+
+# Surface Task 5: the thread table's number, logical, double and string
+# constructors, their converse readers and ObjectToValue, through orxmethod's
+# methods that call each and its inline alias.
+lang/library_callback_numbers.rex

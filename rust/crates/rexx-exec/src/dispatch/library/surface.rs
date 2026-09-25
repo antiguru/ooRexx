@@ -9,12 +9,25 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The C ABI boundary: inbound entry points and outbound library loading.
+//! The [`Surface`] an extension's callbacks reach this interpreter through.
 
-pub mod callbacks;
-pub mod ffi;
-pub mod handles;
-pub mod invoke;
-pub mod layout;
-pub mod load;
-pub mod values;
+use rexx_api::callbacks::Surface;
+use rexx_core::{BehaviourId, Body, ObjRef};
+
+use crate::Interp;
+
+impl Surface for Interp {
+    fn clear_condition(&mut self) {
+        self.native_frame_mut().raised = None;
+    }
+
+    fn new_array(&mut self, items: &[Option<ObjRef>]) -> ObjRef {
+        self.alloc_with(
+            BehaviourId::ARRAY,
+            Body::Array {
+                dimensions: None,
+                slots: items.to_vec(),
+            },
+        )
+    }
+}
