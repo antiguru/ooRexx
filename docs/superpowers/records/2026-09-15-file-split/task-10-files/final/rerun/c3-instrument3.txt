@@ -1,0 +1,2 @@
+40 of 40 units decode to identical literal lists; 291 decodable literals (string, byte string, char, byte, doc line) on the PRE side; 0 units where the tool's count and the independent lexer's disagree
+whole-file literal multiset, PRE gate_table_c.rs against POST gate_table_c.rs + new files:

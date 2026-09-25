@@ -1,0 +1,162 @@
+control T1 strip_field_vis drops a field's visibility after its attributes and nowhere else: CAUGHT
+  every case as expected: doc-commented field; two attributes before a field; a `]` closing an index; an attribute after `;`
+control T2 Task 9's instruments miss the doc-commented field this task's admit (c1, f61c596a5): CAUGHT
+  Task 9's: exit 1, ['I2 token stream differs: struct ClassRow']
+  this task's: exit 0, []
+control T3 a widened doc-commented field whose doc also changed (c1, f61c596a5): CAUGHT
+  exit 1, expected I1b and I3, reported ['I1b', 'I2', 'I3']
+control T4 comments10.py lists a planted comment in a tests/ parent; Task 9's comments7.py does not: CAUGHT
+  comments10.py: ['  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.', '  crates/rexx-exec/tests/gate_table_c.rs:33: // Planted: `read_sections` sits above the tests.'] (exit 0)
+  comments7.py: [] (exit 1; subprocess.CalledProcessError: Command '['/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/tools/item-tool/target/release/item-tool', '/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t4/crates/rexx-exec/src/table_c/mod.rs']' returned non-zero exit status 101.)
+control T5 move_items10.py widens exactly the declared declarations and fields: CAUGHT
+  exit 0; Edge True, read_edges True, read_table verbatim True, the child's units verbatim in BASE once the widening is removed True
+  /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/file-split-10/ctl-work/task10/t5/t5child/c.rs: 3 units (2 widened), 45 parent lines removed
+control B c1 as committed passes (f61c596a5): CAUGHT
+  exit 0, reported []
+control B1-c1 a moved fn's body changes a token (f61c596a5): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2', 'I3']
+  I1b fn read_classes: /tmp/tmpq0itwa2h/a /tmp/tmpq0itwa2h/b differ: byte 251, line 8
+  I2 token stream differs: fn read_classes
+  I3 literals differ: fn read_classes
+control B2-c1 a moved panic message changes (f61c596a5): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn read_table: /tmp/tmp0peqdx2d/a /tmp/tmp0peqdx2d/b differ: byte 270, line 5
+  I2 token stream differs: fn read_table
+  I3 literals differ: fn read_table
+control B3-c1 a moved row reader is deleted (f61c596a5): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: fn read_edges
+control B4-c1 an unmoved line of gate_table_c.rs changes (f61c596a5): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2', 'I3']
+  I1a changed unmoved line pre-expected:270 post:274: 'const WIRING_PHASE: &str = "5a";' -> 'const WIRING_PHASE: &str = "5b";'
+  I2 token stream differs: const WIRING_PHASE
+  I3 literals differ: const WIRING_PHASE
+control B5-c1 two moved row types swap their doc comments (f61c596a5): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b struct Section: /tmp/tmpjpu6b6gr/a /tmp/tmpjpu6b6gr/b differ: byte 9, line 1
+  I1b struct Edge: /tmp/tmpycojd1dx/a /tmp/tmpycojd1dx/b differ: byte 9, line 1
+  I2 token stream differs: struct Section
+  I2 token stream differs: struct Edge
+  I3 literals differ: struct Section
+  I3 literals differ: struct Edge
+control B6-c1 the removed import left undeclared (f61c596a5): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a delete expected[25:26] actual[26:26]
+control B7-c1 two fields of a moved struct swap (f61c596a5): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b struct Edge: /tmp/tmpe7jvb7et/a /tmp/tmpe7jvb7et/b differ: byte 82, line 3
+  I2 token stream differs: struct Edge
+control B c2 as committed passes (ec22e0ed1): CAUGHT
+  exit 0, reported []
+control B1-c2 a moved probe line's literal changes (ec22e0ed1): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn edge_probe_text: /tmp/tmpm4zb9_yy/a /tmp/tmpm4zb9_yy/b differ: byte 806, line 14
+  I2 token stream differs: fn edge_probe_text
+  I3 literals differ: fn edge_probe_text
+control B2-c2 a space inside a continued literal, seen by instrument 3 alone (ec22e0ed1): CAUGHT
+  exit 1, expected ['I3'], reported ['I3']
+  I3 literals differ: fn class_probe_text
+control B3-c2 a moved helper is deleted (ec22e0ed1): CAUGHT
+  exit 1, expected ['I2'], reported ['I1b', 'I2', 'I3']
+  I1b const DOCUMENTED_EDGE_MARKER: /tmp/tmpq_97cw2c/a /tmp/tmpq_97cw2c/b differ: byte 5, line 1
+  I2 token stream differs: const DOCUMENTED_EDGE_MARKER
+  I2 unit vanished: fn derived_say_lines
+  I3 literals differ: const DOCUMENTED_EDGE_MARKER
+control B4-c2 two moved constants swap their values (ec22e0ed1): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b const CLASS_SUBDIR: /tmp/tmpdkt4j69b/a /tmp/tmpdkt4j69b/b differ: byte 41, line 1
+  I1b const EDGE_SUBDIR: /tmp/tmpe8uccjgb/a /tmp/tmpe8uccjgb/b differ: byte 40, line 1
+  I2 token stream differs: const CLASS_SUBDIR
+  I2 token stream differs: const EDGE_SUBDIR
+  I3 literals differ: const CLASS_SUBDIR
+  I3 literals differ: const EDGE_SUBDIR
+control B5-c2 an unmoved line of gate_table_c.rs changes (ec22e0ed1): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2', 'I3']
+  I1a changed unmoved line pre-expected:279 post:285: 'const INSTANCE_ARM: &str = "instance";' -> 'const INSTANCE_ARM: &str = "instances";'
+  I2 token stream differs: const INSTANCE_ARM
+  I3 literals differ: const INSTANCE_ARM
+control B6-c2 an existing destination (mod.rs) changes a line (ec22e0ed1): CAUGHT
+  exit 1, expected ['I1c'], reported ['I1c']
+  I1c table_c/mod.rs replace pre[13:14] post[13:15]
+control B c3 as committed passes (d65b1a843): CAUGHT
+  exit 0, reported []
+control B1-c3 a moved check's comparison flips (d65b1a843): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b fn check_documented_edge: /tmp/tmpdhdc3rkj/a /tmp/tmpdhdc3rkj/b differ: byte 403, line 13
+  I2 token stream differs: fn check_documented_edge
+control B2-c3 a moved structural message changes (d65b1a843): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn probe_set: /tmp/tmpelyi5z14/a /tmp/tmpelyi5z14/b differ: byte 2104, line 46
+  I2 token stream differs: fn probe_set
+  I3 literals differ: fn probe_set
+control B3-c3 a moved check is deleted (d65b1a843): CAUGHT
+  exit 1, expected ['I2'], reported ['I1b', 'I2', 'I3']
+  I1b fn check_entry_present: /tmp/tmpcyocrorn/a /tmp/tmpcyocrorn/b differ: byte 5, line 1
+  I2 token stream differs: fn check_entry_present
+  I2 unit vanished: fn check_entry_kinds
+  I3 literals differ: fn check_entry_present
+control B4-c3 a member of the moved impl block changes (d65b1a843): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2', 'I3']
+  I1b impl OracleShape::fn admits: /tmp/tmpxpl28ao_/a /tmp/tmpxpl28ao_/b differ: byte 237, line 5
+  I2 token stream differs: impl OracleShape::fn admits
+  I3 literals differ: impl OracleShape::fn admits
+control B5-c3 an unmoved line of a test changes (d65b1a843): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2', 'I3']
+  I1a changed unmoved line pre-expected:963 post:963: '    let named: Vec<&String> = gated.iter().take(20).collect();' -> '    let named: Vec<&String> = gated.iter().take(21).collect();'
+  I2 token stream differs: fn concept_and_class_gate_table
+  I3 literals differ: fn concept_and_class_gate_table
+control B6-c3 an import dropped beside the declared deletions, undeclared (d65b1a843): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a declared deletion not found: 'use std::fs;'
+control B c4 as committed passes (234125c70): CAUGHT
+  exit 0, reported []
+control B1-c4 a moved assertion's condition flips (234125c70): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b fn coverage_of: /tmp/tmpipvsca2f/a /tmp/tmpipvsca2f/b differ: byte 698, line 20
+  I2 token stream differs: fn coverage_of
+control B2-c4 a moved reason sentence changes (234125c70): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn coverage_of: /tmp/tmppjrsbkaw/a /tmp/tmppjrsbkaw/b differ: byte 3113, line 81
+  I2 token stream differs: fn coverage_of
+  I3 literals differ: fn coverage_of
+control B3-c4 a moved helper is deleted (234125c70): CAUGHT
+  exit 1, expected ['I2'], reported ['I1b', 'I2', 'I3']
+  I1b fn collapse: /tmp/tmpxkvf5ip8/a /tmp/tmpxkvf5ip8/b differ: byte 1, line 1
+  I2 token stream differs: fn collapse
+  I2 unit vanished: fn strip_tags
+  I3 literals differ: fn collapse
+control B4-c4 an unmoved table row of classes.rs changes (234125c70): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2']
+  I1a changed unmoved line pre-expected:126 post:129: '    ("ALARM", "93.901"),' -> '    ("ALARM", "93.902"),'
+  I2 unit vanished: row CONSTRUCTION/ALARM/"93.901"
+control B5-c4 a moved doc loses its intra-doc link (234125c70): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn unconstructible_index: /tmp/tmpubgd4n9z/a /tmp/tmpubgd4n9z/b differ: byte 19, line 1
+  I2 token stream differs: fn unconstructible_index
+  I3 literals differ: fn unconstructible_index
+control B c5 as committed passes (4118a425c): CAUGHT
+  exit 0, reported []
+control B1-c5 a moved arm table entry changes (4118a425c): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b const TITLE_PARENTHETICALS: /tmp/tmp47wicgve/a /tmp/tmp47wicgve/b differ: byte 271, line 6
+  I2 token stream differs: const TITLE_PARENTHETICALS
+control B2-c5 a moved template row's text changes (4118a425c): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: row TEMPLATE_MEMBERS/mthTimeSpanInit/"template:new (Inherited Class Method)"
+control B3-c5 a moved table row is deleted (4118a425c): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: row TEMPLATE_MEMBERS/mthRexxQueueNew/"template:new (Inherited Class Method)"
+control B4-c5 a moved field's doc changes (4118a425c): CAUGHT
+  exit 1, expected ['I1b', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b struct Listed: /tmp/tmpjk5ky840/a /tmp/tmpjk5ky840/b differ: byte 113, line 3
+  I2 token stream differs: struct Listed
+  I3 literals differ: struct Listed
+control B5-c5 an unmoved placeholder the moved names_of reads changes (4118a425c): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2', 'I3']
+  I1a changed unmoved line pre-expected:325 post:324: 'const OPERATOR_PLACEHOLDERS: &[(&str, &str)] = &[("(abuttal)", ""), ("(blank)", " ")];' -> 'const OPERATOR_PLACEHOLDERS: &[(&str, &str)] = &[("(abuttal)", ""), ("(blank)", "  ")];'
+  I2 unit vanished: row OPERATOR_PLACEHOLDERS/(blank)/" "
+  I3 literals differ: row OPERATOR_PLACEHOLDERS/(abuttal)/""
+control B6-c5 a name dropped from the narrowed import is put back as another (4118a425c): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a']
+  I1a replace expected[16:20] actual[16:17]
+40 of 40 controls caught as expected

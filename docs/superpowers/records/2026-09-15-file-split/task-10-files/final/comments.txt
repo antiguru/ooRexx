@@ -1,0 +1,35 @@
+== gate_table_c.rs -> table_c/mod.rs table_c/rows.rs table_c/probes.rs table_c/checks.rs
+194 comment lines in BASE gate_table_c.rs, 241 after
+lost (0):
+added (47):
+  x12 /*                                                                            */
+  x4 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x4 /* This program and the accompanying materials are made available under       */
+  x4 /* distribution. A copy is also available at the following address:           */
+  x4 /* https://www.oorexx.org/license.html                                        */
+  x4 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x8 /*----------------------------------------------------------------------------*/
+  x1 //! The committed row sets gate table C reads, from `corpus/docs/`.
+  x1 //! The helpers gate table C's tests are built from.
+  x1 //! The probe programs gate table C derives from its rows: where each
+  x1 //! The structural checks gate table C runs: its row sets checked against
+  x1 //! each other and against the probe directories, a row's probe run on both
+  x1 //! family's programs live, and the text each row's program holds.
+  x1 //! sides, and the oracle's answer checked for the shape its row asks for.
+exit 0
+== docs/classes.rs -> docs/classes/coverage.rs docs/classes/methods.rs
+162 comment lines in BASE docs/classes.rs, 186 after
+lost (0):
+added (24):
+  x6 /*                                                                            */
+  x2 /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+  x2 /* This program and the accompanying materials are made available under       */
+  x2 /* distribution. A copy is also available at the following address:           */
+  x2 /* https://www.oorexx.org/license.html                                        */
+  x2 /* the terms of the Common Public License v1.0 which accompanies this         */
+  x4 /*----------------------------------------------------------------------------*/
+  x1 //! A class row's coverage: the construction measurements, read together
+  x1 //! A method row's names and arm: each class-table member's target section,
+  x1 //! the names the book displays for it, and the arm each name is asked on.
+  x1 //! with the reference's own sentences saying a class cannot be constructed.
+exit 0

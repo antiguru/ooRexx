@@ -1,0 +1,21 @@
+  FIELD-VISIBILITY-ONLY struct Section: identical once a field's `pub(super)`/`pub(crate)` is dropped
+  visibility struct Section: private -> pub(crate) (table_c/rows.rs)
+  visibility fn read_sections: private -> pub(crate) (table_c/rows.rs)
+  visibility enum Construction: private -> pub(crate) (table_c/rows.rs)
+  FIELD-VISIBILITY-ONLY struct ClassRow: identical once a field's `pub(super)`/`pub(crate)` is dropped
+  visibility struct ClassRow: private -> pub(crate) (table_c/rows.rs)
+  visibility fn read_classes: private -> pub(crate) (table_c/rows.rs)
+  FIELD-VISIBILITY-ONLY struct Edge: identical once a field's `pub(super)`/`pub(crate)` is dropped
+  visibility struct Edge: private -> pub(crate) (table_c/rows.rs)
+  visibility fn read_edges: private -> pub(crate) (table_c/rows.rs)
+  FIELD-VISIBILITY-ONLY struct MethodRow: identical once a field's `pub(super)`/`pub(crate)` is dropped
+  visibility struct MethodRow: private -> pub(crate) (table_c/rows.rs)
+  visibility fn read_method_rows: private -> pub(crate) (table_c/rows.rs)
+  ONLY-PRE use rexx_extract::docs::classes::NO_PROGRAM
+  ONLY-POST mod table_c (gate_table_c.rs)
+  ONLY-POST use table_c::rows::{ClassRow,Construction,Edge,Section,read_classes,read_edges,read_method_rows,read_sections} (gate_table_c.rs)
+  ONLY-POST mod rows (table_c/mod.rs)
+  ONLY-POST table_c/rows.rs::use std::fs (table_c/rows.rs)
+  ONLY-POST table_c/rows.rs::use rexx_extract::docs::classes::NO_PROGRAM (table_c/rows.rs)
+  ONLY-POST table_c/rows.rs::use crate::corpus_dir (table_c/rows.rs)
+70 of 70 units present on both sides have identical token streams (11 of them moved); 1 only before, 6 only after

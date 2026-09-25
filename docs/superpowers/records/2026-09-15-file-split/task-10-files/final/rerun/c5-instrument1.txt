@@ -1,0 +1,13 @@
+(a) unmoved lines: PRE docs/classes.rs minus the removed lines, against POST docs/classes.rs
+  IMPORTS NARROWED post:17-17: ['crate::docs::xml::decode_predefined', 'crate::docs::xml::members', 'crate::docs::xml::split_revision_marker']
+  INSERTED post:21: mod methods;
+  INSERTED post:22: use methods::{Listed, displayed_names, listed_members, method_sections, names_of};
+  3 equal blocks, 997 lines, each also compared with cmp; 1001 expected lines, 1000 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn method_sections -> docs/classes/methods.rs (25 lines; visibility private -> pub(super))
+  OK struct Listed -> docs/classes/methods.rs (16 lines; visibility private -> pub(super); field visibility widened: pub(super) target, pub(super) xrefstyle, pub(super) trailing, pub(super) source, pub(super) line)
+  OK fn listed_members -> docs/classes/methods.rs (13 lines; visibility private -> pub(super))
+  OK fn displayed_names -> docs/classes/methods.rs (29 lines; visibility private -> pub(super))
+  WHITESPACE-ONLY fn names_of -> docs/classes/methods.rs: /tmp/tmp500tl0qf/a /tmp/tmp500tl0qf/b differ: byte 89, line 2 (visibility private -> pub(super); rustfmt reflow, the trailing comma of a signature ignored; tokens are instrument 2's, literal values instrument 3's)
+  13 of 14 moved units byte-identical (visibility edits listed above), 1 differing in whitespace only

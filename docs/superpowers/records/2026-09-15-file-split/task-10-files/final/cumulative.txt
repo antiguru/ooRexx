@@ -1,0 +1,56 @@
+71 BASE units; where they are now: {'gate_table_c.rs': 21, 'table_c/checks.rs': 18, 'table_c/probes.rs': 17, 'table_c/rows.rs': 11}
+differing and declared: []
+visibility changes: 39
+  const CONCEPT_SUBDIR: private -> pub(crate) (table_c/probes.rs)
+  const CLASS_SUBDIR: private -> pub(crate) (table_c/probes.rs)
+  const EDGE_SUBDIR: private -> pub(crate) (table_c/probes.rs)
+  const METHOD_SUBDIR: private -> pub(crate) (table_c/probes.rs)
+  struct Section: private -> pub(crate) (table_c/rows.rs)
+  fn read_sections: private -> pub(crate) (table_c/rows.rs)
+  enum Construction: private -> pub(crate) (table_c/rows.rs)
+  struct ClassRow: private -> pub(crate) (table_c/rows.rs)
+  fn read_classes: private -> pub(crate) (table_c/rows.rs)
+  struct Edge: private -> pub(crate) (table_c/rows.rs)
+  fn read_edges: private -> pub(crate) (table_c/rows.rs)
+  struct MethodRow: private -> pub(crate) (table_c/rows.rs)
+  fn read_method_rows: private -> pub(crate) (table_c/rows.rs)
+  fn concept_probe: private -> pub(crate) (table_c/probes.rs)
+  fn class_probe: private -> pub(crate) (table_c/probes.rs)
+  fn edge_probe: private -> pub(crate) (table_c/probes.rs)
+  fn method_probe: private -> pub(crate) (table_c/probes.rs)
+  const ENTRY_MARKER: private -> pub(super) (table_c/probes.rs)
+  fn class_probe_entry_questions: private -> pub(super) (table_c/probes.rs)
+  fn class_probe_class_questions: private -> pub(super) (table_c/probes.rs)
+  fn class_probe_text: private -> pub(crate) (table_c/probes.rs)
+  fn class_probe_shape: private -> pub(crate) (table_c/checks.rs)
+  fn check_concept_line_counts: private -> pub(crate) (table_c/checks.rs)
+  fn check_entry_kinds: private -> pub(crate) (table_c/checks.rs)
+  fn check_entry_present: private -> pub(crate) (table_c/checks.rs)
+  fn edge_probe_text: private -> pub(crate) (table_c/probes.rs)
+  fn method_probe_text: private -> pub(crate) (table_c/probes.rs)
+  enum OracleShape: private -> pub(crate) (table_c/checks.rs)
+  fn derived_say_lines: private -> pub(crate) (table_c/probes.rs)
+  fn check_oracle_shape: private -> pub(crate) (table_c/checks.rs)
+  const DOCUMENTED_EDGE_MARKER: private -> pub(super) (table_c/probes.rs)
+  fn check_documented_edge: private -> pub(crate) (table_c/checks.rs)
+  struct Ran: private -> pub(crate) (table_c/checks.rs)
+  fn run_probe: private -> pub(crate) (table_c/checks.rs)
+  fn probe_set: private -> pub(crate) (table_c/checks.rs)
+  fn check_probe_text: private -> pub(crate) (table_c/checks.rs)
+  fn check_interpolated_text: private -> pub(crate) (table_c/checks.rs)
+  fn check_edge_endpoints: private -> pub(crate) (table_c/checks.rs)
+  fn argutil_assertion: private -> pub(crate) (table_c/checks.rs)
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0
+156 BASE units; where they are now: {'docs/classes.rs': 137, 'docs/classes/coverage.rs': 4, 'docs/classes/methods.rs': 14}
+differing and declared: []
+visibility changes: 7
+  fn unconstructible_index: private -> pub(super) (docs/classes/coverage.rs)
+  fn coverage_of: private -> pub(super) (docs/classes/coverage.rs)
+  fn method_sections: private -> pub(super) (docs/classes/methods.rs)
+  struct Listed: private -> pub(super) (docs/classes/methods.rs)
+  fn listed_members: private -> pub(super) (docs/classes/methods.rs)
+  fn displayed_names: private -> pub(super) (docs/classes/methods.rs)
+  fn names_of: private -> pub(super) (docs/classes/methods.rs)
+PASS: every BASE unit is present after, identical or a declared edit
+exit 0

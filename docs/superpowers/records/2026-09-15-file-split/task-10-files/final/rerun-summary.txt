@@ -1,0 +1,5 @@
+c1 f61c596a5 (parent 8a1c43696, rexx-exec/tests): PASS: no failures; outputs identical to the committed ones
+c2 ec22e0ed1 (parent f61c596a5, rexx-exec/tests): PASS: no failures; outputs identical to the committed ones
+c3 d65b1a843 (parent ec22e0ed1, rexx-exec/tests): PASS: no failures; outputs identical to the committed ones
+c4 234125c70 (parent d65b1a843, rexx-extract/src): PASS: no failures; outputs identical to the committed ones
+c5 4118a425c (parent 234125c70, rexx-extract/src): PASS: no failures; outputs identical to the committed ones

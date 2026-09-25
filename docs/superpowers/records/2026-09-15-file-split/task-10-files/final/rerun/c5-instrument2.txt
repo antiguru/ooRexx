@@ -1,0 +1,15 @@
+  visibility fn method_sections: private -> pub(super) (docs/classes/methods.rs)
+  FIELD-VISIBILITY-ONLY struct Listed: identical once a field's `pub(super)`/`pub(crate)` is dropped
+  visibility struct Listed: private -> pub(super) (docs/classes/methods.rs)
+  visibility fn listed_members: private -> pub(super) (docs/classes/methods.rs)
+  visibility fn displayed_names: private -> pub(super) (docs/classes/methods.rs)
+  TRAILING-COMMA-ONLY fn names_of: identical once the comma before the `)` closing its signature's parameter list is dropped (rustfmt's vertical layout)
+  visibility fn names_of: private -> pub(super) (docs/classes/methods.rs)
+  ONLY-PRE use crate::docs::xml::{Section,blank_comments,decode_predefined,line_of,members,sections,split_revision_marker,xincludes}
+  ONLY-POST use crate::docs::xml::{Section,blank_comments,line_of,sections,xincludes} (docs/classes.rs)
+  ONLY-POST mod methods (docs/classes.rs)
+  ONLY-POST use methods::{Listed,displayed_names,listed_members,method_sections,names_of} (docs/classes.rs)
+  ONLY-POST docs/classes/methods.rs::use std::collections::BTreeMap (docs/classes/methods.rs)
+  ONLY-POST docs/classes/methods.rs::use crate::docs::xml::{decode_predefined,members,split_revision_marker} (docs/classes/methods.rs)
+  ONLY-POST docs/classes/methods.rs::use super::{Arm,Book,OPERATOR_PLACEHOLDERS} (docs/classes/methods.rs)
+153 of 153 units present on both sides have identical token streams (14 of them moved); 1 only before, 6 only after

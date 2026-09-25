@@ -1,0 +1,4 @@
+command (from rust/crates): /bin/grep -a -n -E '//[/!].*\[`?[A-Za-z_:]+`?\](\(|[^(]|$)' rexx-exec/tests/table_c/mod.rs rexx-exec/tests/table_c/rows.rs rexx-exec/tests/table_c/probes.rs rexx-exec/tests/table_c/checks.rs rexx-extract/src/docs/classes/coverage.rs rexx-extract/src/docs/classes/methods.rs
+rexx-exec/tests/table_c/checks.rs:42:/// The `entry` values [`class_probe_shape`] and [`check_edge_endpoints`] know
+rexx-extract/src/docs/classes/coverage.rs:22:/// Re-reads each [`UNCONSTRUCTIBLE`] quotation at the lines it cites, so a
+exit 0 (1 = no match)

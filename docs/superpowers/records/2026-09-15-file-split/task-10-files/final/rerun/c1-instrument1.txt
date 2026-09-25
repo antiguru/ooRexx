@@ -1,0 +1,20 @@
+(a) unmoved lines: PRE gate_table_c.rs minus the removed lines, against POST gate_table_c.rs
+  INSERTED post:16: mod table_c;
+  DELETED (declared) pre:26: 'use rexx_extract::docs::classes::NO_PROGRAM;'
+  INSERTED post:28: use table_c::rows::{
+  INSERTED post:29:     ClassRow, Construction, Edge, Section, read_classes, read_edges, read_method_rows,
+  INSERTED post:30:     read_sections,
+  INSERTED post:31: };
+  4 equal blocks, 1727 lines, each also compared with cmp; 1728 expected lines, 1732 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK struct Section -> table_c/rows.rs (8 lines; visibility private -> pub(crate); field visibility widened: pub(crate) id, pub(crate) depth, pub(crate) line, pub(crate) parent, pub(crate) title)
+  OK fn read_sections -> table_c/rows.rs (12 lines; visibility private -> pub(crate))
+  OK enum Construction -> table_c/rows.rs (14 lines; visibility private -> pub(crate))
+  OK struct ClassRow -> table_c/rows.rs (12 lines; visibility private -> pub(crate); field visibility widened: pub(crate) name, pub(crate) entry, pub(crate) cite, pub(crate) status, pub(crate) reason, pub(crate) construction, pub(crate) owner)
+  OK fn read_classes -> table_c/rows.rs (14 lines; visibility private -> pub(crate))
+  OK struct Edge -> table_c/rows.rs (6 lines; visibility private -> pub(crate); field visibility widened: pub(crate) child, pub(crate) parent, pub(crate) line)
+  OK fn read_edges -> table_c/rows.rs (10 lines; visibility private -> pub(crate))
+  OK struct MethodRow -> table_c/rows.rs (8 lines; visibility private -> pub(crate); field visibility widened: pub(crate) class, pub(crate) method, pub(crate) arm, pub(crate) status, pub(crate) origin)
+  OK fn read_method_rows -> table_c/rows.rs (12 lines; visibility private -> pub(crate))
+  11 of 11 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

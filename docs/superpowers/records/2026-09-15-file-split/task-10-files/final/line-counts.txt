@@ -1,0 +1,13 @@
+command (from rust/): find crates -name '*.rs' | xargs wc -l, the files this task touched, at BASE and at 4118a425c
+== full-8a1c43696
+   1890 crates/rexx-exec/tests/gate_table_c.rs
+   1338 crates/rexx-extract/src/docs/classes.rs
+== final-4118a425c
+   1038 crates/rexx-exec/tests/gate_table_c.rs
+   1000 crates/rexx-extract/src/docs/classes.rs
+    221 crates/rexx-extract/src/docs/classes/methods.rs
+    163 crates/rexx-extract/src/docs/classes/coverage.rs
+    180 crates/rexx-exec/tests/table_c/rows.rs
+    217 crates/rexx-exec/tests/table_c/probes.rs
+     16 crates/rexx-exec/tests/table_c/mod.rs
+    532 crates/rexx-exec/tests/table_c/checks.rs

@@ -1,0 +1,32 @@
+control 1 moved const row changes its arity (c8 4488f00a6): exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']: CAUGHT
+  FAILURES:
+  I1b row NATIVE_METHODS/Stem/"ITEMS": /tmp/tmpjex6x5de/a /tmp/tmpjex6x5de/b differ: byte 36, line 1
+  I2 token stream differs: row NATIVE_METHODS/Stem/"ITEMS"
+  I3 literals differ: row NATIVE_METHODS/Stem/"ITEMS"
+control 2 moved row dropped (c8 4488f00a6): exit 1, expected ['I2'], reported ['I2']: CAUGHT
+  FAILURES:
+  I2 unit vanished: row NATIVE_METHODS/Stem/"ITEMS"
+control 3 unmoved const row repointed (c9 1cf10137a): exit 1, expected ['I1a', 'I2'], reported ['I1a', 'I2']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:1991 post:1995: '    ("Table", "ITEMS", Arity::Fixed(0), native_hash_items),' -> '    ("Table", "ITEMS", Arity::Fixed(0), native_hash_empty),'
+  I2 token stream differs: row NATIVE_METHODS/Table/"ITEMS"
+control 4 declared doc line carries more (c7 bace8f2f8): exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:13 post:13: '//! byte-search helpers the other primitive methods share.' -> '//! helpers the other primitive methods all share.'
+  I1a declared line not found: '//! helpers the other primitive methods share.'
+control 5 widened reflowed unit changes a token (c13 86a31607a): exit 1, expected ['I1a', 'I2'], reported ['I1a', 'I2']: CAUGHT
+  FAILURES:
+  I1a replace expected[37:38] actual[37:41]
+  I1a changed unmoved line pre-expected:40 post:43: '    array_slots_owned(interp, store)' -> '    array_slots_owned(interp, receiver)'
+  I2 token stream differs: fn slots_of
+control 6 undeclared deletion beside the declared ones (c14 ddeeb5640): exit 1, expected ['I1a'], reported ['I1a']: CAUGHT
+  FAILURES:
+  I1a delete expected[82:83] actual[86:86]
+control 7 declared unit changes beyond the qualifiers (c6 96e2ebb5a): exit 1, expected ['I2'], reported ['I2']: CAUGHT
+  FAILURES:
+  I2 declared edit is more than dropped ['hash::'] qualifiers: fn native_hash_at
+control 8 unmoved dispatch.rs line changes (c6 96e2ebb5a): exit 1, expected ['I1a', 'I2'], reported ['I1a', 'I2']: CAUGHT
+  FAILURES:
+  I1a changed unmoved line pre-expected:207 post:208: 'fn put_native(natives: &mut Vec<Option<NativeEntry>>, method: MethodId, entry: NativeEntry) {' -> 'fn put_native_(natives: &mut Vec<Option<NativeEntry>>, method: MethodId, entry: NativeEntry) {'
+  I2 unit vanished: fn put_native
+8 of 8 controls caught as expected
