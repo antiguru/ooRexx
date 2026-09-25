@@ -30,6 +30,4 @@ diff $S/art/base/base-docapi.txt $S/art/c$N-docapi.txt > $S/art/c$N-docapi-diff.
 $S/tools/refusal_refresh.sh $R $S/t-check $S/art/c$N-refusal-sites.txt | sed -n 1,2p
 rm -f $S/art/c$N-refusal-sites.txt.log
 $S/tools/tests_links.sh $R $S/t-check $S/art/c$N-tests-links.txt | sed -n 3p
-EXCL=":!crates/rexx-parse/src/$SPLIT_PARENT_RS"; for d in ${SPLIT_DESTS//,/ }; do EXCL="$EXCL :!crates/rexx-parse/src/$d"; done
-git -C $R diff -- . $EXCL ':!corpus/refusal-sites.tsv' > $S/art/c$N-other-edits.diff
-echo "other edits: $(/bin/grep -a -c '^diff --git' $S/art/c$N-other-edits.diff) files"
+$S/tools/other_edits9.sh $N $SPLIT_PARENT_RS $SPLIT_DESTS

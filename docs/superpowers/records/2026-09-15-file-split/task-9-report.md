@@ -422,3 +422,79 @@ both test gates.
 4. `comments7.py`'s (a) scope misses unqualified mentions outside the
    parent and destinations; the by-hand sweep is recorded, but the tool
    was not changed.
+
+## Fix round 1
+
+This round addresses the task review
+(`.superpowers/sdd/2026-09-15-file-split/task-9-review.md`): I1, and the
+report corrections M1 to M3. It leaves the text above as it was; where
+that text says otherwise, this section corrects it. Artifacts are in
+`files/fix1/`.
+
+* **I1: c4 committed four instrument outputs into the crate.**
+  `rust/crates/rexx-parse/src-out-{instrument1,instrument2,instrument3,verdict}.txt`
+  came from `controls_task9.py --pre 4`, which I ran on the working tree
+  before committing c4. Its `instruments()` helper wrote the "as committed"
+  run's output to `POST + "-out"`, and in `--pre` mode POST is the main
+  checkout's `src`. `snap.sh` then took the four untracked files into the
+  snapshot. The other-edits check (`git diff`) cannot see untracked files,
+  and the tree-hash guard matched because instrument 4 ran on the same
+  tree. `cae8c216d` removes exactly those four files. The "no file outside
+  the parent and destination changed" line under The instruments was false
+  for c4.
+  The tooling is fixed in two places:
+  * `controls_task9.py` writes every instruments output under its work
+    directory in the scratchpad, and asserts the path is outside the
+    repository.
+  * The other-edits check is now `tools/other_edits9.sh`, called by
+    `checks9.sh`. Besides the tracked diff, it lists
+    `git ls-files --others --exclude-standard -- rust` outside the parent
+    and destinations, and prints `untracked: N files`. `verify9.sh`
+    refuses a commit unless that is 0.
+
+  The controls are `tools/controls_untracked.sh`, run on the main checkout
+  at `cae8c216d` with c7's parent and destination, each plant removed by
+  path afterwards (`files/fix1/controls-untracked-fix1.txt`):
+  * U0: on the clean tree, `untracked: 0`, and the check passes.
+  * U1: an untracked `rust/crates/rexx-parse/src-out-verdict.txt` gives
+    `untracked: 1`, and the check fails.
+  * U2: an untracked `src/instruction/planted.rs` that is not a
+    destination gives `untracked: 1`, and the check fails.
+  * U3: the fixed `controls_task9.py --pre 7` (33 of 33 caught,
+    `files/fix1/ctl-pre7.txt`) leaves `git status` under `rust/` empty.
+  * U4: after U1 to U3, the check passes again.
+  * U5: the committed pre-fix `controls_task9.py --pre 7`
+    (`git show 9067e1fca:.../tools/controls_task9.py`, run once from the
+    scratchpad) reproduces I1, leaving the same four `src-out-*.txt`
+    untracked. The new check reports `untracked: 4` and fails. The four
+    were then removed by path (`files/fix1/ctl-pre7-before-fix1.txt`).
+
+  The controller has checked that no other non-`.rs` file under `rust/`
+  was added by this plan.
+  Checks at `cae8c216d`, as the round asks (`files/fix1/status.txt`):
+  `cargo build --workspace` exits 0. `cargo test --release -p rexx-parse`
+  exits 0, with 13 result blocks and 409 passed, 0 failed, 0 ignored.
+  Every test line and block summary is also in c7's instrument 4 results
+  (`files/fix1/test.results`, 0 of 422 lines missing). Load was 9.55 11.83
+  16.19 before and 9.47 11.74 16.11 after.
+* **M1: the `.text` change at c2 to c5 is attributed** (Concern 3 left it
+  open). The explanation is the reviewer's, measured by them, not by me.
+  The moved code carries panic `Location`s whose file-name strings are
+  now the new files' names. `.rodata` grows from 0x565b0 to 0x56608
+  bytes (+0x58), and `.text` starts 0x50 later. `objdump -d` of BASE and
+  c7, with addresses, hex immediates and symbol names masked, is
+  identical. So the instruction stream is unchanged; only RIP-relative
+  displacements moved. c6 and c7 change nothing because their moved code
+  adds no new path string.
+* **M2: "reads only `ast`" was wrong.** It appears under What moved
+  (`block.rs`). The walker also imports
+  `crate::token::{SymbolId, SymbolTable}` (`block/references.rs:18`; the
+  review cites `:17`, the closing line of the `ast` import above it). It
+  reads the AST and resolves symbol ids to names; the rest of the
+  sentence stands.
+* **M3: `block/references.rs:190` and `:197` name a function that does
+  not exist, `for_each_variable_in_expr`.** Both docs said the same in
+  `block.rs` at BASE (`block.rs:769`, `:776`), so the move did not make
+  them false.
+  They are left for a later comment fix, since this plan changes no
+  comment the move did not falsify.

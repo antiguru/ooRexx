@@ -1,0 +1,422 @@
+doc-tests rexx_parse	RESULT ok passed=0 failed=0 ignored=0 measured=0 filtered=0
+tests/deep.rs [deep]	RESULT ok passed=6 failed=0 ignored=0 measured=0 filtered=0
+tests/errors.rs [errors]	RESULT ok passed=32 failed=0 ignored=0 measured=0 filtered=0
+tests/program.rs [program]	RESULT ok passed=28 failed=0 ignored=0 measured=0 filtered=0
+tests/samples.rs [samples]	RESULT ok passed=1 failed=0 ignored=0 measured=0 filtered=0
+tests/scanner.rs [scanner]	RESULT ok passed=35 failed=0 ignored=0 measured=0 filtered=0
+tests/sourceline.rs [sourceline]	RESULT ok passed=25 failed=0 ignored=0 measured=0 filtered=0
+tests/sourceline_oracle.rs [sourceline_oracle]	RESULT ok passed=1 failed=0 ignored=0 measured=0 filtered=0
+tests/tiling.rs [tiling]	RESULT ok passed=12 failed=0 ignored=0 measured=0 filtered=0
+tests/tokens.rs [tokens]	RESULT ok passed=9 failed=0 ignored=0 measured=0 filtered=0
+tests/variants.rs [variants]	RESULT ok passed=1 failed=0 ignored=0 measured=0 filtered=0
+unittests src/bin/scan-check.rs [scan_check]	RESULT ok passed=0 failed=0 ignored=0 measured=0 filtered=0
+unittests src/lib.rs [rexx_parse]	RESULT ok passed=259 failed=0 ignored=0 measured=0 filtered=0
+tests/deep.rs [deep]	a_call_nesting_past_the_native_cliff_raises_11_1_instead_of_aborting	ok
+tests/deep.rs [deep]	a_chain_past_the_pre_fix_cliff_parses_and_drops	ok
+tests/deep.rs [deep]	a_paren_nesting_past_the_native_cliff_raises_11_1_instead_of_aborting	ok
+tests/deep.rs [deep]	a_shallow_paren_nesting_still_parses_on_a_default_stack_thread	ok
+tests/deep.rs [deep]	parens_and_calls_share_one_budget_rather_than_one_each	ok
+tests/deep.rs [deep]	the_depth_the_oracle_still_answers_also_parses_and_drops	ok
+tests/errors.rs [errors]	a_doubled_backslash_does_not_swallow_the_byte_after_it	ok
+tests/errors.rs [errors]	a_rejection_that_is_not_a_translation_error_is_accepted	ok
+tests/errors.rs [errors]	a_then_label_is_a_missing_then_here_and_a_bad_expression_there	ok
+tests/errors.rs [errors]	a_when_label_is_a_missing_then_here_and_a_bad_expression_there	ok
+tests/errors.rs [errors]	an_interpret_error_with_a_substitution_renders_the_condition_objects_errortext	ok
+tests/errors.rs [errors]	an_interpret_error_with_no_substitution_renders_the_condition_objects_message	ok
+tests/errors.rs [errors]	an_interpret_fragment_that_is_legal_is_still_accepted	ok
+tests/errors.rs [errors]	both_bootstrap_files_parse	ok
+tests/errors.rs [errors]	every_error_the_corpus_raises_renders_a_non_empty_message	ok
+tests/errors.rs [errors]	every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_way	ok
+tests/errors.rs [errors]	every_program_the_oracle_translates_this_parser_accepts	ok
+tests/errors.rs [errors]	every_recorded_line_is_a_line_its_program_has	ok
+tests/errors.rs [errors]	every_sample_program_parses	ok
+tests/errors.rs [errors]	no_corpus_program_appears_twice	ok
+tests/errors.rs [errors]	no_corpus_row_holds_the_eager_scan_shape	ok
+tests/errors.rs [errors]	no_message_the_corpus_raises_holds_an_unfilled_substitution	ok
+tests/errors.rs [errors]	the_corpus_escaping_decodes_an_empty_field_to_no_bytes	ok
+tests/errors.rs [errors]	the_corpus_escaping_decodes_every_escape_the_format_defines	ok
+tests/errors.rs [errors]	the_corpus_escaping_leaves_an_unescaped_program_alone	ok
+tests/errors.rs [errors]	the_corpus_holds_at_least_the_rows_it_was_measured_with	ok
+tests/errors.rs [errors]	the_eager_scan_deviation_needs_both_errors_to_appear	ok
+tests/errors.rs [errors]	the_eager_scan_deviation_still_deviates	ok
+tests/errors.rs [errors]	the_gates_own_placeholder_check_finds_a_placeholder	ok
+tests/errors.rs [errors]	the_gates_own_placeholder_check_rejects_text_with_no_placeholder	ok
+tests/errors.rs [errors]	the_gates_own_placeholder_check_scans_past_a_bare_ampersand	ok
+tests/errors.rs [errors]	the_hex_escape_reaches_both_ends_of_the_byte_range	ok
+tests/errors.rs [errors]	the_interpret_only_errors_match_the_condition_objects_own_code	ok
+tests/errors.rs [errors]	the_label_colon_rule_covers_exactly_the_two_corpus_rows_it_was_written_for	ok
+tests/errors.rs [errors]	the_label_colon_rule_does_not_fire_for_a_near_miss	ok
+tests/errors.rs [errors]	the_label_colon_rule_fires_for_the_pair_it_was_written_for	ok
+tests/errors.rs [errors]	the_line_check_sees_more_than_one_line_convention	ok
+tests/errors.rs [errors]	the_reported_line_matches_the_oracles_main_message	ok
+tests/program.rs [program]	a_body_directives_body_is_validated_not_merely_skipped_missing_then	ok
+tests/program.rs [program]	a_body_directives_body_is_validated_not_merely_skipped_unmatched_paren	ok
+tests/program.rs [program]	a_constant_directives_own_body_check_still_wins_over_the_generic_one	ok
+tests/program.rs [program]	a_ctrl_z_inside_an_element_does_not_truncate_the_source	ok
+tests/program.rs [program]	a_directives_clause_span_indexes_the_programs_own_source	ok
+tests/program.rs [program]	a_duplicate_label_keeps_the_first_occurrence_not_the_last	ok
+tests/program.rs [program]	a_fragments_symbol_table_is_its_own_not_shared_across_calls	ok
+tests/program.rs [program]	a_label_inside_a_directive_body_is_not_in_the_programs_own_label_map	ok
+tests/program.rs [program]	a_label_may_hold_bytes_that_are_not_valid_utf8	ok
+tests/program.rs [program]	a_literal_label_is_keyed_by_its_exact_bytes	ok
+tests/program.rs [program]	a_method_directives_body_is_recognised_and_consumed	ok
+tests/program.rs [program]	a_program_with_directives_separates_them_from_instructions	ok
+tests/program.rs [program]	a_program_with_no_directives_has_an_empty_directive_list	ok
+tests/program.rs [program]	a_program_with_no_main_instructions_starts_directly_with_a_directive	ok
+tests/program.rs [program]	a_shebang_first_element_is_skipped	ok
+tests/program.rs [program]	a_symbol_label_is_keyed_by_its_upcased_spelling	ok
+tests/program.rs [program]	a_terminator_inside_an_element_is_a_character_and_not_a_line_break	ok
+tests/program.rs [program]	a_trailing_instruction_after_a_body_directive_joins_its_body	ok
+tests/program.rs [program]	an_attribute_directives_body_is_recognised_and_consumed	ok
+tests/program.rs [program]	an_empty_element_list_is_a_source_with_no_lines	ok
+tests/program.rs [program]	every_corpus_lang_program_parses	ok
+tests/program.rs [program]	interpret_accepts_ordinary_text_with_no_directive_and_no_label	ok
+tests/program.rs [program]	interpret_rejects_a_directive_with_99_914	ok
+tests/program.rs [program]	interpret_rejects_a_label_with_47_1	ok
+tests/program.rs [program]	parse_lines_accepts_what_an_interpret_refuses	ok
+tests/program.rs [program]	the_corpus_exercises_at_least_one_directive_with_a_body	ok
+tests/program.rs [program]	trailing_code_after_a_bodiless_directive_is_99_916_for_every_kind_that_never_has_a_body	ok
+tests/program.rs [program]	two_body_directives_in_a_row_each_get_their_own_body	ok
+tests/samples.rs [samples]	every_sample_rex_file_parses	ok
+tests/scanner.rs [scanner]	a_blank_before_an_operator_is_discarded	ok
+tests/scanner.rs [scanner]	a_clause_terminator_is_emitted_once_however_the_clause_ends	ok
+tests/scanner.rs [scanner]	a_closing_paren_also_makes_a_following_blank_significant	ok
+tests/scanner.rs [scanner]	a_comment_separates_tokens_without_inserting_a_blank	ok
+tests/scanner.rs [scanner]	a_continuation_becomes_a_significant_blank	ok
+tests/scanner.rs [scanner]	a_continuation_between_an_operators_two_halves_does_not_split_it_either	ok
+tests/scanner.rs [scanner]	a_continuation_onto_an_empty_line_ends_the_clause	ok
+tests/scanner.rs [scanner]	a_continuation_with_no_next_line_is_simply_consumed	ok
+tests/scanner.rs [scanner]	a_ctrl_z_ends_the_program_before_the_scanner_sees_it	ok
+tests/scanner.rs [scanner]	a_double_colon_is_one_token_and_a_single_colon_is_another	ok
+tests/scanner.rs [scanner]	a_hex_marker_must_not_be_the_start_of_a_longer_symbol	ok
+tests/scanner.rs [scanner]	a_literals_value_is_decoded_rather_than_sliced	ok
+tests/scanner.rs [scanner]	a_resource_body_is_copied_verbatim_rather_than_scanned	ok
+tests/scanner.rs [scanner]	a_resource_end_marker_is_a_prefix_match_on_the_upcased_value	ok
+tests/scanner.rs [scanner]	a_semicolon_still_separates_interpret_clauses	ok
+tests/scanner.rs [scanner]	a_shebang_line_is_skipped_by_the_scanner_but_kept_by_the_line_index	ok
+tests/scanner.rs [scanner]	a_significant_blank_needs_both_sides	ok
+tests/scanner.rs [scanner]	a_symbol_is_classified_by_its_shape	ok
+tests/scanner.rs [scanner]	a_tab_is_a_blank	ok
+tests/scanner.rs [scanner]	an_exponent_sign_joins_the_symbol_only_when_digits_follow	ok
+tests/scanner.rs [scanner]	an_interpret_does_not_skip_a_shebang_line	ok
+tests/scanner.rs [scanner]	an_operator_followed_by_equals_is_an_assignment_shortcut	ok
+tests/scanner.rs [scanner]	blanks_and_comments_between_an_operators_two_halves_do_not_split_it	ok
+tests/scanner.rs [scanner]	block_comments_nest	ok
+tests/scanner.rs [scanner]	double_dash_starts_a_line_comment_but_minus_does_not	ok
+tests/scanner.rs [scanner]	doubled_quotes_are_one_quote	ok
+tests/scanner.rs [scanner]	every_error_the_scanner_raises_matches_the_interpreters_number_and_line	ok
+tests/scanner.rs [scanner]	every_token_span_lies_inside_the_source_and_is_ordered	ok
+tests/scanner.rs [scanner]	hex_and_binary_literals_pack_down_to_bytes	ok
+tests/scanner.rs [scanner]	interpret_text_is_one_line_so_a_line_terminator_in_it_is_an_invalid_character	ok
+tests/scanner.rs [scanner]	one_symbol_has_one_id_and_as_many_spans_as_occurrences	ok
+tests/scanner.rs [scanner]	scan_always_answers_with_tokens_or_an_error_number	ok
+tests/scanner.rs [scanner]	spans_stay_absolute_across_every_line_terminator	ok
+tests/scanner.rs [scanner]	the_alternative_logical_not_bytes_are_accepted	ok
+tests/scanner.rs [scanner]	the_comparison_operators_scan_to_their_own_kinds	ok
+tests/sourceline.rs [sourceline]	a_continued_clause_joins_without_its_terminator	ok
+tests/sourceline.rs [sourceline]	a_continued_clause_span_contains_the_terminator_it_joins_out	ok
+tests/sourceline.rs [sourceline]	a_crlf_continuation_drops_both_terminator_bytes	ok
+tests/sourceline.rs [sourceline]	a_source_of_only_terminators_is_all_empty_lines	ok
+tests/sourceline.rs [sourceline]	crlf_pair_is_one_terminator_but_lone_cr_ends_a_line_on_its_own	ok
+tests/sourceline.rs [sourceline]	crlf_terminators_are_excluded_from_line_content	ok
+tests/sourceline.rs [sourceline]	ctrl_z_truncates_the_source_including_a_partial_line	ok
+tests/sourceline.rs [sourceline]	empty_source_has_no_lines	ok
+tests/sourceline.rs [sourceline]	final_line_without_trailing_newline_still_counts	ok
+tests/sourceline.rs [sourceline]	interpret_fragment_clauses_reconstruct_too	ok
+tests/sourceline.rs [sourceline]	interpret_text_is_one_line_from_end_to_end	ok
+tests/sourceline.rs [sourceline]	join_span_borrows_on_one_line_and_agrees_with_span_bytes_about_none	ok
+tests/sourceline.rs [sourceline]	lf_then_cr_is_two_terminators_producing_an_empty_line	ok
+tests/sourceline.rs [sourceline]	line_of_holds_at_terminators_at_the_end_and_on_an_empty_source	ok
+tests/sourceline.rs [sourceline]	line_of_is_one_based	ok
+tests/sourceline.rs [sourceline]	line_span_indexes_the_same_bytes_line_returns	ok
+tests/sourceline.rs [sourceline]	probe_a_keeps_semicolons_and_end_is_its_own_clause	ok
+tests/sourceline.rs [sourceline]	probe_b_traces_a_label_with_its_colon	ok
+tests/sourceline.rs [sourceline]	probe_g_an_else_arm_continues_like_any_other_clause	ok
+tests/sourceline.rs [sourceline]	probe_h_an_otherwise_arm_continues_like_any_other_clause	ok
+tests/sourceline.rs [sourceline]	probe_i_a_three_fragment_continuation_drops_every_terminator	ok
+tests/sourceline.rs [sourceline]	probe_j_a_multi_label_clause_is_one_clause_per_label	ok
+tests/sourceline.rs [sourceline]	source_may_hold_bytes_that_are_not_utf8	ok
+tests/sourceline.rs [sourceline]	sourceline_returns_lines_without_terminators	ok
+tests/sourceline.rs [sourceline]	trace_output_rex_reconstructs_every_traced_line	ok
+tests/sourceline_oracle.rs [sourceline_oracle]	sourceline_matches_the_interpreter_for_every_corpus_program	ok
+tests/tiling.rs [tiling]	every_corpus_program_tiles	ok
+tests/tiling.rs [tiling]	the_containment_checker_rejects_a_child_escaping_its_parent	ok
+tests/tiling.rs [tiling]	the_prefix_checker_rejects_an_operator_with_nothing_in_front	ok
+tests/tiling.rs [tiling]	the_resource_span_is_total_over_the_markers_the_parser_produces	ok
+tests/tiling.rs [tiling]	the_tightness_checker_rejects_a_mis_nested_operand	ok
+tests/tiling.rs [tiling]	the_tightness_checker_rejects_a_missing_operator	ok
+tests/tiling.rs [tiling]	the_tightness_checker_rejects_overlapping_operands	ok
+tests/tiling.rs [tiling]	the_tiling_checker_permits_comments_and_continuations_between_clauses	ok
+tests/tiling.rs [tiling]	the_tiling_checker_rejects_a_dropped_clause	ok
+tests/tiling.rs [tiling]	the_tiling_checker_rejects_an_interstitial_semicolon	ok
+tests/tiling.rs [tiling]	the_tiling_checker_rejects_bytes_after_the_last_clause	ok
+tests/tiling.rs [tiling]	the_tiling_checker_rejects_overlapping_clause_spans	ok
+tests/tokens.rs [tokens]	a_compound_tail_is_part_of_the_one_symbol	ok
+tests/tokens.rs [tokens]	a_symbols_name_is_the_upcased_spelling_not_the_source_spelling	ok
+tests/tokens.rs [tokens]	a_tag_drops_the_payload_but_not_the_class	ok
+tests/tokens.rs [tokens]	blank_significance_depends_on_the_class_of_the_token_before_it	ok
+tests/tokens.rs [tokens]	distinct_spellings_get_distinct_ids_in_first_seen_order	ok
+tests/tokens.rs [tokens]	interning_a_keyword_from_source_reuses_the_pre_interned_id	ok
+tests/tokens.rs [tokens]	keyword_tables_keep_the_cpp_table_order	ok
+tests/tokens.rs [tokens]	one_spelling_in_two_tables_keeps_each_tables_own_index	ok
+tests/tokens.rs [tokens]	spellings_differing_only_in_case_are_one_symbol	ok
+tests/variants.rs [variants]	every_variant_is_constructed_by_the_corpus_and_samples	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::a_binary_nodes_span_runs_from_its_left_operand_to_its_right	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::a_compound_name_splits_at_the_first_period_and_keeps_it_on_the_stem	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::a_nodes_span_is_widened_to_cover_every_child	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::a_prefix_extent_that_omits_its_operand_is_widened_to_include_it	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::a_shape_distinguishes_the_four_variable_forms	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::a_shape_quotes_a_message_name_so_a_blank_in_one_cannot_hide	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::a_shape_renders_a_literal_and_a_constant_differently	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::a_shape_renders_an_omitted_argument_unlike_any_variable	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::a_tail_piece_that_cannot_be_a_variable_name_is_a_constant	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::an_omitted_argument_is_no_child_and_widens_nothing	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::children_are_visited_in_source_order	ok
+unittests src/lib.rs [rexx_parse]	ast::tests::the_first_period_ends_the_stem_however_many_follow	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_block_and_its_end_point_at_each_other	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_block_cannot_be_closed_across_a_directive	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_block_inside_a_then_still_completes_the_pending_branch	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_compound_feeds_a_guard_only_on_its_first_reference_in_the_body	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_compound_guard_reference_contributes_its_stem_and_its_tail_pieces	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_dangling_else_binds_to_the_inner_if	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_directive_body_is_assembled_and_kept	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_duplicated_label_keeps_the_first	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_guard_when_expression_must_name_an_exposed_variable	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_label_inside_a_block_picks_its_number_from_the_block_kind	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_label_is_allowed_after_a_finished_then_unless_an_else_follows	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_matching_or_omitted_end_name_is_accepted	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_mismatched_end_name_picks_its_number_from_what_it_failed_to_close	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_non_when_directly_inside_a_select_is_7_2	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_select_with_no_when_is_7_1_reported_against_the_select	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_then_or_else_with_nothing_after_it_is_14_3_or_14_4	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_when_outside_a_select_is_9_1	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_when_that_is_another_whens_then_instruction_is_never_added_to_the_select	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_whens_false_path_is_the_next_when_and_its_exit_is_past_the_end	ok
+unittests src/lib.rs [rexx_parse]	block::tests::a_whens_false_path_is_the_otherwise_when_there_is_one	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_else_branch_that_is_a_block_ends_at_its_own_end	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_else_with_no_then_above_it_is_8_2	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_end_closing_a_then_or_an_else_is_also_10_1	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_end_on_an_otherwise_closes_the_select_behind_it	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_end_with_no_open_block_is_10_1	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_external_routine_has_no_body_to_assemble	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_if_at_the_end_of_a_body_has_no_false_target	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_if_with_an_else_sends_its_false_path_to_the_else	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_if_with_no_else_skips_to_the_instruction_after_its_branch	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_otherwise_outside_a_select_is_9_2	ok
+unittests src/lib.rs [rexx_parse]	block::tests::an_unclosed_block_picks_its_number_from_the_block_kind	ok
+unittests src/lib.rs [rexx_parse]	block::tests::each_body_gets_its_own_must_be_first_check	ok
+unittests src/lib.rs [rexx_parse]	block::tests::each_body_keeps_its_own_label_table	ok
+unittests src/lib.rs [rexx_parse]	block::tests::expose_and_use_local_must_be_the_first_instruction_of_their_body	ok
+unittests src/lib.rs [rexx_parse]	block::tests::only_a_variable_slot_feeds_the_compound_cache	ok
+unittests src/lib.rs [rexx_parse]	block::tests::the_end_style_follows_the_block_it_closed	ok
+unittests src/lib.rs [rexx_parse]	block::tests::the_indirect_expose_form_does_not_expose_the_name	ok
+unittests src/lib.rs [rexx_parse]	block::tests::the_last_instruction_is_what_an_unclosed_block_is_reported_against	ok
+unittests src/lib.rs [rexx_parse]	block::tests::the_shapes_the_oracle_accepts_are_accepted	ok
+unittests src/lib.rs [rexx_parse]	block::tests::use_local_inverts_the_exposure_rule_and_seeds_five_names	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_clause_holds_every_token_between_its_terminators	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_clause_span_includes_its_terminating_semicolon	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_colon_after_the_first_token_is_not_a_label	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_colon_makes_a_label_clause	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_double_colon_is_not_a_label	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_label_clause_ends_at_the_colon_even_when_a_semicolon_follows	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_label_span_includes_its_colon	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_line_end_terminator_carries_the_rest_of_the_line_into_the_span	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_literal_or_a_constant_symbol_labels_a_clause_too	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_multi_line_clause_spans_from_its_first_token_to_the_last_line_end	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_program_with_nothing_to_run_has_no_clauses	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_semicolon_ends_the_span_and_a_blank_before_it_does_not	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_terminator_belongs_to_no_clause_token_range	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::a_trailing_comma_continues_the_clause	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::an_unterminated_token_slice_ends_the_clause_at_its_last_token	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::consecutive_labels_each_become_their_own_clause	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::end_of_file_terminates_the_last_clause_without_a_newline	ok
+unittests src/lib.rs [rexx_parse]	clause::tests::repeated_semicolons_produce_one_clause_each_not_an_empty_one	ok
+unittests src/lib.rs [rexx_parse]	convert::tests::a_non_utf8_operand_is_not_a_number	ok
+unittests src/lib.rs [rexx_parse]	convert::tests::a_trace_setting_is_any_number_of_question_marks_and_one_letter	ok
+unittests src/lib.rs [rexx_parse]	convert::tests::the_number_rules_are_reached_and_not_reimplemented	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::a_body_error_is_reported_against_the_body_and_not_the_directive	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::a_clause_that_is_not_a_directive_and_a_directive_that_is_not_known	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::a_constant_takes_a_name_a_value_or_an_expression	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::a_directive_spans_its_own_clause	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::a_resource_carries_its_body_verbatim	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::an_annotation_is_a_target_and_a_list_of_symbol_value_pairs	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::an_attribute_name_must_be_a_variable_name	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::an_external_specification_is_one_keyword_and_one_or_two_names	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::attribute_asks_whether_a_body_follows_only_for_get_and_set	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::class_carries_its_options_and_rejects_a_second_of_each	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::core_classes_parses	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::directive_indices_still_name_their_own_spellings	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::every_directive_keyword_reaches_its_node	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::every_package_option_reaches_its_own_variant	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::every_sub_directive_is_reachable_and_every_one_is_refusable	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::method_carries_its_options_and_decides_whether_a_body_follows	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::requires_takes_a_name_and_one_of_two_mutually_exclusive_options	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::routine_takes_an_access_option_and_an_external_specification	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::sub_directive_indices_still_name_their_own_spellings	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::the_directive_tables_are_nine_and_forty_entries	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::the_external_decode_happens_where_each_shape_does_it	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::the_five_shared_spellings_mean_different_things_by_position	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::the_name_check_happens_where_each_shape_does_it	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::the_options_arguments_are_gated_the_way_the_oracle_gates_them	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::the_other_shipped_packages_parse	ok
+unittests src/lib.rs [rexx_parse]	directive::tests::the_sub_keyword_indices_used_here_name_their_own_spellings	ok
+unittests src/lib.rs [rexx_parse]	error::tests::a_byte_on_a_terminator_belongs_to_the_line_that_terminator_ends	ok
+unittests src/lib.rs [rexx_parse]	error::tests::a_byte_past_the_end_clamps_to_the_last_line	ok
+unittests src/lib.rs [rexx_parse]	error::tests::a_second_sub_message_that_needs_no_substitution_is_also_the_message	ok
+unittests src/lib.rs [rexx_parse]	error::tests::a_sub_message_that_needs_no_substitution_is_the_message	ok
+unittests src/lib.rs [rexx_parse]	error::tests::a_sub_message_that_would_substitute_a_line_falls_back_to_the_majors_text	ok
+unittests src/lib.rs [rexx_parse]	error::tests::a_sub_message_that_would_substitute_a_token_falls_back_to_the_majors_text	ok
+unittests src/lib.rs [rexx_parse]	error::tests::display_does_not_zero_pad_a_three_digit_sub_number	ok
+unittests src/lib.rs [rexx_parse]	error::tests::display_names_the_number_the_sub_number_and_the_message	ok
+unittests src/lib.rs [rexx_parse]	error::tests::every_major_in_the_table_has_a_sub_zero_row_to_fall_back_to	ok
+unittests src/lib.rs [rexx_parse]	error::tests::no_message_the_parser_can_produce_holds_a_placeholder	ok
+unittests src/lib.rs [rexx_parse]	error::tests::only_a_runtime_major_has_a_substitution_in_its_own_text	ok
+unittests src/lib.rs [rexx_parse]	error::tests::the_one_substitution_this_phase_will_not_produce_falls_back_too	ok
+unittests src/lib.rs [rexx_parse]	error::tests::the_placeholder_test_does_not_stop_at_the_first_ampersand	ok
+unittests src/lib.rs [rexx_parse]	error::tests::the_placeholder_test_finds_a_digit_after_the_ampersand	ok
+unittests src/lib.rs [rexx_parse]	error::tests::the_placeholder_test_ignores_an_ampersand_with_nothing_fillable_after_it	ok
+unittests src/lib.rs [rexx_parse]	error::tests::the_reported_line_is_the_line_the_clause_byte_sits_on	ok
+unittests src/lib.rs [rexx_parse]	expr::differential::every_generated_expression_evaluates_to_what_the_interpreter_evaluated	ok
+unittests src/lib.rs [rexx_parse]	expr::differential::the_evaluator_is_wired_to_the_operators_it_claims	ok
+unittests src/lib.rs [rexx_parse]	expr::differential::the_evaluator_reports_the_forms_it_does_not_implement	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_blank_before_a_parenthesis_makes_a_concatenation_not_a_call	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_bracket_reference_is_the_bracket_message	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_call_name_from_a_literal_is_used_exactly_as_written	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_call_span_reaches_its_closing_parenthesis	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_cascade_can_follow_a_variable_reference	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_cascade_is_one_term_and_reads_left_to_right	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_colon_after_a_message_name_is_a_superclass_override	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_comma_in_a_conditional_builds_a_logical_and	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_control_keyword_ends_a_control_expression_but_not_a_plain_one	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_keyword_spelling_is_an_ordinary_variable_in_an_expression	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_keyword_terminator_only_counts_as_a_simple_variable	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_leading_period_makes_an_environment_symbol	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_leaf_span_is_exactly_its_token	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_message_name_is_upcased_whether_it_came_from_a_symbol_or_a_literal	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_nodes_span_covers_its_own_tokens_and_not_the_parentheses_around_them	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_numeric_symbol_keeps_its_upcased_spelling_as_its_value	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_prefix_angle_bracket_takes_a_variable_reference	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_prefix_operator_binds_looser_than_a_message_cascade	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_single_parenthesised_expression_is_not_a_list	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_stem_keeps_its_trailing_period_and_a_compound_splits_into_tails	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_symbol_before_a_colon_is_a_namespace_qualifier	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::a_terminator_set_is_dropped_inside_parentheses	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::addition_binds_tighter_than_concatenation	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::adjacent_terms_abut_and_separated_ones_concatenate_with_a_blank	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::an_empty_required_expression_raises_the_sub_number_the_caller_supplied	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::and_binds_tighter_than_or	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::calls_nest	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::comparison_binds_tighter_than_and	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::comparison_is_left_associative	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::concatenation_binds_tighter_than_comparison	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::concatenation_is_left_associative_though_no_value_can_show_it	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::division_is_left_associative	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::every_comparison_operator_parses_at_the_comparison_level	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::every_element_of_a_logical_list_is_required_including_the_first	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::every_node_in_a_dense_expression_contains_its_operands	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::multiplication_binds_tighter_than_addition	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::one_method_name_is_one_selector_across_a_whole_program	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::only_a_parenthesis_abutted_to_a_message_name_is_an_argument_list	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::operators_sharing_the_multiplicative_level_associate_left	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::or_and_xor_share_one_level_and_associate_left	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::power_binds_tighter_than_multiplication	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::power_is_left_associative_unlike_most_languages	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::prefix_minus_binds_tighter_than_power	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::prefix_not_applies_before_a_comparison	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::prefix_not_binds_tighter_than_power	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::prefix_operators_chain	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::sub_keyword_indices_still_name_the_right_spellings	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::subtraction_is_left_associative	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::the_bracket_form_and_the_written_name_are_one_selector	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::the_error_corpus_reports_the_interpreters_numbers	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::the_keyword_gate_is_what_admits_a_keyword_terminator	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::the_precedence_table_matches_the_cpp_level_for_level	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::three_inputs_that_look_like_errors_and_are_not	ok
+unittests src/lib.rs [rexx_parse]	expr::tests::trailing_omitted_arguments_are_dropped_but_list_elements_are_kept	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_bare_then_is_8_1	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_duplicated_loop_keyword_is_27_902	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_keyword_survives_the_message_term_trial	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_keyword_with_no_equals_after_it_is_the_keyword	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_label_after_an_if_is_rejected_by_the_label_guard	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_label_clause_is_a_label	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_label_in_interpret_text_is_47_1	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_loop_control_variable_must_be_a_variable	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_loop_takes_at_most_one_conditional	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_missing_then_is_reported_on_the_offending_clauses_line	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_redirection_target_is_a_constant_expression_not_an_expression	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_repeated_label_keyword_becomes_the_count_expression	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_second_token_of_equals_is_an_assignment_whatever_the_first_spells	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_simple_do_may_not_have_a_counter	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_strict_equals_in_the_assignment_position_is_rejected	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_template_with_no_variables_after_its_last_trigger_gets_no_end_trigger	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_term_with_a_message_applied_is_a_message_instruction	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_term_with_no_message_applied_is_a_command	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_then_at_the_end_of_a_line_still_loses_its_trailing_blanks	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_then_on_the_same_line_makes_three_clauses_with_a_gap	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_trigger_position_may_not_be_a_variable	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_user_condition_carries_its_composed_name	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_when_inside_select_case_builds_a_value_list_not_an_and	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::a_when_picks_its_grammar_from_the_enclosing_select	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::address_with_rejects_what_the_oracle_rejects	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::an_assignment_target_must_be_a_variable	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::an_empty_assignment_right_hand_side_is_35_918	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::an_empty_if_condition_is_35_929	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::an_empty_loop_conditional_is_the_logical_list_error_not_the_per_keyword_one	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::an_empty_variable_list_names_its_own_instruction	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::an_if_clause_ends_at_the_start_of_its_terminator_either_way	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::an_if_with_no_then_is_18_1_and_a_when_is_18_2	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::an_indirect_variable_reference_must_be_closed	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::an_unusable_template_token_is_38_1	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::bare_do_is_a_block_and_bare_loop_is_forever	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::call_on_accepts_fewer_conditions_than_signal_on	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::call_rejects_a_target_that_is_neither_symbol_literal_nor_paren	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::do_forever_allows_only_a_conditional_after_it	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::do_with_requires_over_after_its_variables	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::drop_and_expose_take_both_variable_spellings	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::else_and_otherwise_parse_nothing	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::else_and_otherwise_trim_the_rest_of_their_line	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::end_takes_an_optional_name_and_nothing_else	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_address_form_reaches_its_own_fields	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_call_form_reaches_its_own_variant	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_forward_option_is_accepted_once	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_keyword_reaches_its_instruction_node	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_loop_form_reaches_its_own_shape	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_numeric_form_reaches_its_own_setting	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_parse_source_reaches_its_own_variant	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_redirection_target_reaches_its_own_variant	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_signal_form_reaches_its_own_variant	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_template_trigger_reaches_its_own_kind	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_trace_form_reaches_its_own_variant	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::every_use_arg_form_reaches_its_own_shape	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::expose_is_rejected_inside_interpret	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::guard_takes_on_or_off_and_an_optional_when	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::keyword_indices_still_name_their_own_spellings	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::label_and_counter_names_must_be_symbols	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::leave_and_iterate_name_their_own_errors	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::leave_and_iterate_parse_bare	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::nop_takes_nothing	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::numeric_rejects_what_the_oracle_rejects	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::over_is_tested_before_with_so_a_variable_may_be_named_with	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::parse_rejects_an_unknown_or_missing_source	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::procedure_takes_only_expose	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::raise_accepts_its_conditions_and_rejects_any	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::say_push_and_queue_take_an_optional_expression	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::select_rejects_a_non_keyword_after_its_label	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::select_rejects_anything_that_is_not_label_or_case	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::select_takes_an_optional_label_and_an_optional_case	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_corpus_programs_parse	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_expression_only_instructions_take_what_they_take	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_interpret_only_rejections_come_from_the_source_kind	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_keyword_as_variable_corpus_parses_every_keyword_as_a_variable	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_loop_grammars_unreachable_switch_is_reachable_after_all	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_on_form_takes_a_name_override_and_the_off_form_takes_nothing	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_order_of_a_controlled_loops_keywords_is_the_order_written	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_parse_options_are_recognised_once_each	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_trace_number_gate_is_exactly_the_oracles	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::the_two_variable_gates_disagree_and_both_are_reproduced	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::trace_rejects_what_the_oracle_rejects	ok
+unittests src/lib.rs [rexx_parse]	instruction::tests::use_arg_rejects_what_the_oracle_rejects	ok
+unittests src/lib.rs [rexx_parse]	selector::tests::one_spelling_interns_to_one_allocation_and_two_spellings_do_not	ok
+unittests src/lib.rs [rexx_parse]	selector::tests::two_pools_agree_by_value_and_not_by_identity	ok
+unittests src/lib.rs [rexx_parse]	token::tests::a_cursor_visits_only_its_own_range	ok
+unittests src/lib.rs [rexx_parse]	token::tests::symbol_ids_are_dense_and_zero_based	ok

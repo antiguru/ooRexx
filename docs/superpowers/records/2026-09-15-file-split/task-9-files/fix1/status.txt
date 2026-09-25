@@ -1,0 +1,5 @@
+sha cae8c216d
+load-before 9.55 11.83 16.19 7/5132 2229345
+cargo build --workspace exit 0
+cargo test --release -p rexx-parse exit 0
+load-after 9.47 11.74 16.11 11/5088 2230202

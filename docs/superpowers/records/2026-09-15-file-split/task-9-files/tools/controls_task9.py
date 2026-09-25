@@ -79,7 +79,13 @@ def plant(src, dst, rel, old, new):
 
 
 def instruments(tool_dir, pre, post, removed, env, extra):
-    r = subprocess.run([sys.executable, os.path.join(tool_dir, "instruments.py"), pre, post, removed, post + "-out"] + extra, capture_output=True, text=True, env=dict(env, ITEM_TOOL=ITEM_TOOL))
+    # The output prefix is in the work directory, never beside POST: in
+    # --pre mode POST is the main checkout's src, and `post + "-out"` put
+    # four files into rust/crates/rexx-parse/ that c4 then committed
+    # (Task 9 review, I1).
+    out = os.path.join(work, "out-" + post.strip("/").replace("/", "_")[-80:])
+    assert not os.path.realpath(out).startswith(os.path.realpath(M) + "/"), out
+    r = subprocess.run([sys.executable, os.path.join(tool_dir, "instruments.py"), pre, post, removed, out] + extra, capture_output=True, text=True, env=dict(env, ITEM_TOOL=ITEM_TOOL))
     tags = sorted({l.split(" ")[0] for l in r.stdout.splitlines() if l[:2] in ("I1", "I2", "I3")})
     return r.returncode, tags, (r.stdout + r.stderr).strip()
 

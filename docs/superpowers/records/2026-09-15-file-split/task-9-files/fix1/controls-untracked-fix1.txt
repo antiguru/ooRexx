@@ -1,0 +1,6 @@
+U0 clean tree (expected PASS): other edits: 0 files;untracked: 0 files; verify9 would PASS
+U1 untracked src-out-verdict.txt (expected FAIL): other edits: 0 files;untracked: 1 files; verify9 would FAIL
+U2 untracked src/instruction/planted.rs (expected FAIL): other edits: 0 files;untracked: 1 files; verify9 would FAIL
+U3 controls_task9.py --pre 7: 33 of 33 controls caught as expected; git status under rust/ afterwards: [] (expected empty)
+U4 after the controls: other edits: 0 files;untracked: 0 files; verify9 would PASS
+U5 the committed (pre-fix) controls_task9.py --pre 7: 33 of 33 controls caught as expected; git status under rust/ afterwards: [?? crates/rexx-parse/src-out-instrument1.txt ?? crates/rexx-parse/src-out-instrument2.txt ?? crates/rexx-parse/src-out-instrument3.txt ?? crates/rexx-parse/src-out-verdict.txt ]; the new check: other edits: 0 files;untracked: 4 files; verify9 would FAIL
