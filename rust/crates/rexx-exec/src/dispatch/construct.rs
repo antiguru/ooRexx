@@ -9,8 +9,8 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The native constructors -- each primitive class's own `~new` and a
-//! collection's `~init` -- and `Pointer`'s and `WeakReference`'s methods.
+//! The native `~new` methods no class's own module holds, the capacity
+//! `~init`, and `Pointer`'s and `WeakReference`'s methods.
 
 use super::{
     Arity, Body, Cleared, Failure, INIT, Interp, Loud, NativeMethod, ObjRef, Package, Raised,

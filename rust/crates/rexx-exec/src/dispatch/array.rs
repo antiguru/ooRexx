@@ -276,7 +276,7 @@ pub(super) fn unsigned_index(interp: &mut Interp, value: ObjRef) -> Option<usize
 /// comparators make on what the Rexx method answered
 /// (`classes/ArrayClass.cpp:2907`, `classes/ObjectClass.cpp:243`), at
 /// `Numerics::DEFAULT_DIGITS` rather than at the subscript precision.
-pub(super) fn whole_comparison(interp: &mut Interp, value: ObjRef) -> Option<i64> {
+fn whole_comparison(interp: &mut Interp, value: ObjRef) -> Option<i64> {
     let digits = rexx_num::DEFAULT_DIGITS as usize;
     if let Decoded::SmallInt(small) = value.decode() {
         return rexx_num::whole_i64(small, digits);

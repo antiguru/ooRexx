@@ -608,7 +608,7 @@ fn class_factory(
 /// The metaclass a class factory builds from: the second argument, or the
 /// receiver's own where the send omits it (`classes/ClassClass.cpp:1566`-
 /// `:1569`).
-pub(super) fn factory_metaclass(
+fn factory_metaclass(
     interp: &mut Interp,
     class: ObjRef,
     args: &[Option<ObjRef>],
