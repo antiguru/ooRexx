@@ -1,0 +1,6 @@
++fn for_each_variable_name
+fn visit_opt
+fn visit_list
+fn visit_slot
+fn visit_refs
+fn visit_expr

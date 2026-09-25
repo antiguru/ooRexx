@@ -1,0 +1,21 @@
+at 72f2bc3d8
+== /bin/grep -rn 'src/token.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+== /bin/grep -rn 'token.rs' rust/corpus
+== /bin/grep -rn 'src/instruction.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+== /bin/grep -rn 'instruction.rs' rust/corpus
+== /bin/grep -rn 'src/block.rs' rust/crates/*/tests rust/crates/*/src rust/crates/*/benches
+== /bin/grep -rn 'block.rs' rust/corpus
+corpus/keyword-exempt.txt:56:#       further. Which names are still blockers is the derived half of this
+== wider: /bin/grep -rn -E '(token|instruction|block)(\.rs|/)' over rust/crates/*/{tests,src,benches,examples} and rust/corpus, excluding target
+crates/rexx-parse/tests/program.rs:2://! compose the scanner, the clause splitter, and the instruction/directive
+crates/rexx-exec/src/run.rs:721:            // branch" -- confirmed by tracing `block.rs` by hand, it is the
+crates/rexx-exec/src/run.rs:1164:            // (`instruction.rs`'s `message`), so nothing else can arrive;
+crates/rexx-exec/src/run/settings.rs:73:    /// (`NumericSetting`, `rexx-parse`'s own `instruction.rs::numeric`).
+crates/rexx-exec/src/run/settings.rs:99:            // `rexx-parse`'s own `trace` parser's order (`instruction.rs`'s
+crates/rexx-exec/src/run/settings.rs:326:                // (`instruction.rs::numeric`), and the implicit spelling
+crates/rexx-exec/src/run/indent.rs:279:                        // through `instruction.rs`'s `if_instruction`) --
+crates/rexx-exec/src/run/tests/indent.rs:265:    // (`instruction.rs`'s `if_instruction` builds both): `target ==
+crates/rexx-exec/src/run/tests/indent.rs:300:/// `if_instruction` (`rexx-parse`'s `instruction.rs`) gives both `IF`
+crates/rexx-exec/src/run/tests/branch.rs:81:/// The `ast.rs`/`block.rs`-derived discriminating case: an `IF`/`ELSE
+corpus/errors/parse-errors.tsv:53:# src/instruction/tests.rs, src/directive/tests.rs and src/block/tests.rs were
+corpus/gate-tables/README.md:106:`crates/rexx-parse/src/instruction/tests.rs`, which is what it was reached as

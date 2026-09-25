@@ -1,0 +1,7 @@
+//! Every variable reference an instruction makes, by name.
+
+use crate::ast::{
+    Call, Expr, ExprKind, Instruction, InstructionKind, LoopKind, ParseSource, Redirection,
+    Signal, Trace, Use, VariableRef,
+};
+use crate::token::{SymbolId, SymbolTable};

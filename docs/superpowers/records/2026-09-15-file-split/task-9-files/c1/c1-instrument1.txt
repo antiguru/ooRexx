@@ -1,0 +1,10 @@
+(a) unmoved lines: PRE block.rs minus the removed lines, against POST block.rs
+  IMPORTS NARROWED post:16-16: ['crate::ast::Call', 'crate::ast::Expr', 'crate::ast::ExprKind', 'crate::ast::ParseSource', 'crate::ast::Redirection', 'crate::ast::Signal', 'crate::ast::Trace', 'crate::ast::Use', 'crate::ast::VariableRef']
+  INSERTED post:20: 
+  INSERTED post:21: mod references;
+  INSERTED post:22: use references::for_each_variable_name;
+  3 equal blocks, 803 lines, each also compared with cmp; 807 expected lines, 807 actual lines
+
+(b) moved units: PRE text against POST text, compared with cmp
+  OK fn for_each_variable_name -> block/references.rs (169 lines; visibility private -> pub(super))
+  6 of 6 moved units byte-identical (visibility edits listed above), 0 differing in whitespace only

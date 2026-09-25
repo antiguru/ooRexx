@@ -1,0 +1,88 @@
+control A-before (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-before: the converters come before the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-after (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-after: the converters come after the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-ahead (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-ahead: the table sits ahead of the converters.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-behind (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-behind: the converters sit behind the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-follow (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-follow: the converters follow the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-follows (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-follows: the table follows the codes.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-followed (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-followed: the codes are followed by the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-precede (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-precede: the codes precede the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-precedes (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-precedes: the table precedes the converters.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-end of (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-end_of: the converters sit at the end of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-top of (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-top_of: the codes sit at the top of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-bottom of (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-bottom_of: the converters sit at the bottom of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-start of (parent): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values.rs:1311: // Planted-parent-start_of: the codes sit at the start of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-none (parent): CAUGHT
+  this task's comments7.py (c): [] under ['(c) positional words inside the destinations and the parent: 15']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-before (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-before: the converters come before the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-after (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-after: the converters come after the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-ahead (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-ahead: the table sits ahead of the converters.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-behind (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-behind: the converters sit behind the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-follow (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-follow: the converters follow the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-follows (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-follows: the table follows the codes.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-followed (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-followed: the codes are followed by the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-precede (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-precede: the codes precede the table.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-precedes (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-precedes: the table precedes the converters.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-end of (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-end_of: the converters sit at the end of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-top of (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-top_of: the codes sit at the top of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-bottom of (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-bottom_of: the converters sit at the bottom of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-start of (destination): CAUGHT
+  this task's comments7.py (c): ['  crates/rexx-api/src/values/convert.rs:535: // Planted-destination-start_of: the codes sit at the start of the list.'] under ['(c) positional words inside the destinations and the parent: 16']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-none (destination): CAUGHT
+  this task's comments7.py (c): [] under ['(c) positional words inside the destinations and the parent: 15']
+  Task 8's (c): [] under ['(c) positional words inside the destinations and the parent: 7']
+control A-positional: positional.py lists a planted `follow` naming a moved unit: CAUGHT
+  this task's positional.py: ["values.rs:1297-1311: ['int8_from_native']: [('follow', '')]"]
+  Task 8's: [] (ran: ['done'])
+29 of 29 controls caught as expected

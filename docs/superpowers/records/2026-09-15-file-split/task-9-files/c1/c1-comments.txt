@@ -1,0 +1,40 @@
+moved units: 6; names searched in backticks: 6
+file tails searched: block.rs block/ block/references.rs block/references/ references.rs
+
+(a) comments naming a moved unit: 0
+
+(b) comments naming a touched file: 2
+  crates/rexx-exec/src/run.rs:721: // branch" -- confirmed by tracing `block.rs` by hand, it is the
+  crates/rexx-exec/src/run/tests/branch.rs:81: /// The `ast.rs`/`block.rs`-derived discriminating case: an `IF`/`ELSE
+
+(c) positional words inside the destinations and the parent: 30
+  crates/rexx-parse/src/block.rs:28: /// `KEYWORD_FIRST`: the dummy instruction at the bottom of the stack, which
+  crates/rexx-parse/src/block.rs:45: /// may still follow.
+  crates/rexx-parse/src/block.rs:77: /// two branch-end markers, neither of which is an instruction here.
+  crates/rexx-parse/src/block.rs:126: /// observable from here.
+  crates/rexx-parse/src/block.rs:137: // the bottom of the stack and also what "everything is closed"
+  crates/rexx-parse/src/block.rs:246: // Registered here rather than during the parse, so that an instruction
+  crates/rexx-parse/src/block.rs:249: // clause the only reference that could precede the guard expression is
+  crates/rexx-parse/src/block.rs:251: // and a later duplicate is a no-op on a set. Measured:
+  crates/rexx-parse/src/block.rs:262: /// `ELSE` from following it (`LanguageParser.cpp:1430`).
+  crates/rexx-parse/src/block.rs:270: /// Where control resumes after everything added so far, which is the C++'s
+  crates/rexx-parse/src/block.rs:353: /// `blockError` (`LanguageParser.cpp:4180`): an unclosed block at the end of
+  crates/rexx-parse/src/block.rs:362: // `Error_Incomplete_do_then`. Reached here rather than at the C++'s
+  crates/rexx-parse/src/block.rs:363: // own check, which fires from the failed `nextClause()` right after
+  crates/rexx-parse/src/block.rs:368: // at end of file reports line 5 and substitutes line 3.
+  crates/rexx-parse/src/block.rs:453: // Cloned rather than taken. The C++ drops its `whenList` here,
+  crates/rexx-parse/src/block.rs:474: // SELECT, so every WHEN resumes after the END.
+  crates/rexx-parse/src/block.rs:522: // The C++ has two more specific numbers here, `Error_Unexpected_end_then`
+  crates/rexx-parse/src/block.rs:527: // before this switch, and `flushControl` cannot return with `ELSE`,
+  crates/rexx-parse/src/block.rs:533: // An END on an OTHERWISE really closes the SELECT behind it.
+  crates/rexx-parse/src/block.rs:553: /// Turns every jump target that points one past the end of the chain into
+  crates/rexx-parse/src/block.rs:612: /// `isControl()`: whether the instruction joins the chain immediately instead of
+  crates/rexx-parse/src/block.rs:619: /// first `::` directive clause or the end of the source.
+  crates/rexx-parse/src/block.rs:648: // End of the body with an IF or WHEN whose THEN never arrived.
+  crates/rexx-parse/src/block.rs:668: // itself inside the IF arm and goes straight back to the top of the
+  crates/rexx-parse/src/block.rs:670: // SELECT-membership check below would be rejected as a non-WHEN inside a
+  crates/rexx-parse/src/block.rs:698: // Held rather than moved, because an ELSE is added further down: it takes
+  crates/rexx-parse/src/block.rs:699: // no part in step 1 below, so the checks between here and there see the
+  crates/rexx-parse/src/block.rs:714: // an ELSE is added by its own arm below.
+  crates/rexx-parse/src/block.rs:761: // No label may sit immediately in front of an ELSE. The C++ has no
+  crates/rexx-parse/src/block.rs:762: // label name to hand here and substitutes the string "ELSE", which

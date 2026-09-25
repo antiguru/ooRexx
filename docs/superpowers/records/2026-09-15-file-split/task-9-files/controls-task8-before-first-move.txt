@@ -1,0 +1,61 @@
+control A1 --expect-reflow: (x) becomes (x,) in the declared unit: CAUGHT
+  this task's instruments.py: exit 1, reported ['I1b', 'I2']; Task 7's: exit 0, reported []
+  I1b tests::fn a_trace_op_outside_a_clause_region_is_refused: /tmp/tmpq99hujm9/a /tmp/tmpq99hujm9/b differ: byte 1, line 1
+  I2 token stream differs: tests::fn a_trace_op_outside_a_clause_region_is_refused
+control A2 --expect-reflow: Task 7's c4 as committed still passes: CAUGHT
+  exit 0, reported []
+  PASS: no failures
+control A3 comments7: a positional comment in the parent naming no moved unit: CAUGHT
+  this task's comments7.py lists: ['  crates/rexx-exec/src/ir/drive.rs:2353: // Everything below this line is planted, and names no moved unit.'] under ['(c) positional words inside the destinations and the parent: 99']
+  Task 7's lists: [] under ['(c) positional words inside the destinations: 1']
+control A4 unsafe_count: code, comment, moved PRE lines: CAUGHT
+  as committed: unsafe: NONE
+  planted in code: unsafe: FOUND 1
+  planted in a comment: unsafe: NONE
+  planted in PRE's moved lines: unsafe: FOUND 1
+control B c1 as committed passes: CAUGHT
+  exit 0, reported []
+control B1 a literal inside a moved test's macro arguments (c1 60c4f2b15): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b tests::fn a_stub_reaches_its_activation_through_the_context_it_was_handed: /tmp/tmpnl5_2k5y/a /tmp/tmpnl5_2k5y/b differ: byte 966, line 19
+  I2 token stream differs: tests::fn a_stub_reaches_its_activation_through_the_context_it_was_handed
+  I3 literals differ: tests::fn a_stub_reaches_its_activation_through_the_context_it_was_handed
+control B7 c1 without its declared reflow (c1 60c4f2b15): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b tests::use crate::ffi::{CALL_CONTEXT,CallContext,MethodContext,Seen,forget_seen,reading_stub,seen}: /tmp/tmpun4iqo_4/a /tmp/tmpun4iqo_4/b differ: byte 1, line 1
+  I2 token stream differs: tests::use crate::ffi::{CALL_CONTEXT,CallContext,MethodContext,Seen,forget_seen,reading_stub,seen}
+control B8 the reflowed import also loses a name (c1 60c4f2b15): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: tests::use crate::ffi::{CALL_CONTEXT,CallContext,MethodContext,Seen,forget_seen,reading_stub,seen}
+control B c2 as committed passes: CAUGHT
+  exit 0, reported []
+control B2 a moved converter's body changes a token (c2 526f14761): CAUGHT
+  exit 1, expected ['I1b', 'I2'], reported ['I1b', 'I2']
+  I1b fn int8_to_native: /tmp/tmpu180tgiz/a /tmp/tmpu180tgiz/b differ: byte 233, line 7
+  I2 token stream differs: fn int8_to_native
+control B3 a moved converter is deleted (c2 526f14761): CAUGHT
+  exit 1, expected ['I2'], reported ['I2']
+  I2 unit vanished: fn int16_to_native
+control B4 an unmoved TABLE row of values.rs changes (c2 526f14761): CAUGHT
+  exit 1, expected ['I1a'], reported ['I1a', 'I2']
+  I1a changed unmoved line pre-expected:957 post:973: '    argument(code::INT, "int", Repr::Int, int_to_native, int_from_native),' -> '    argument(code::INT, "int", Repr::Int, int_to_native, int8_from_native),'
+  I2 token stream differs: static TABLE
+control B5 two moved converters swap their doc comments (c2 526f14761): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn int8_to_native: /tmp/tmphz_kdher/a /tmp/tmphz_kdher/b differ: byte 20, line 1
+  I1b fn int16_to_native: /tmp/tmpgqg9hqfv/a /tmp/tmpgqg9hqfv/b differ: byte 20, line 1
+  I2 token stream differs: fn int8_to_native
+  I2 token stream differs: fn int16_to_native
+  I3 literals differ: fn int8_to_native
+  I3 literals differ: fn int16_to_native
+control B6 a string literal inside a moved converter's attribute changes (c2 526f14761): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn float_to_native: /tmp/tmpua_4o3xa/a /tmp/tmpua_4o3xa/b differ: byte 312, line 9
+  I2 token stream differs: fn float_to_native
+  I3 literals differ: fn float_to_native
+control B9 a string literal in a moved converter's method-call argument changes (c2 526f14761): CAUGHT
+  exit 1, expected ['I1b', 'I2', 'I3'], reported ['I1b', 'I2', 'I3']
+  I1b fn int_from_native: /tmp/tmp1i6evf9x/a /tmp/tmp1i6evf9x/b differ: byte 330, line 7
+  I2 token stream differs: fn int_from_native
+  I3 literals differ: fn int_from_native
+15 of 15 controls caught as expected
