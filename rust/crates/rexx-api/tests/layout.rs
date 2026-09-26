@@ -910,9 +910,6 @@ fn the_test_extensions_reach_only_members_that_answer() {
         "CallContextInterface.ThrowException0",
         "CallContextInterface.ThrowException1",
         "CallContextInterface.ThrowException2",
-        "MethodContextInterface.AllocateObjectMemory",
-        "MethodContextInterface.FreeObjectMemory",
-        "MethodContextInterface.ReallocateObjectMemory",
         "MethodContextInterface.SetGuardOffWhenUpdated",
         "MethodContextInterface.SetGuardOnWhenUpdated",
         "MethodContextInterface.ThrowCondition",
@@ -921,9 +918,6 @@ fn the_test_extensions_reach_only_members_that_answer() {
         "MethodContextInterface.ThrowException1",
         "MethodContextInterface.ThrowException2",
         "RexxInstanceInterface.AddCommandEnvironment",
-        "RexxInstanceInterface.AttachThread",
-        "RexxThreadInterface.DetachThread",
-        "RexxThreadInterface.GetInterpreterInstance",
     ];
     let refusing = refusing_members();
     let reached: BTreeSet<String> = members_the_test_extensions_call()

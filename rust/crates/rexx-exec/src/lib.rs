@@ -1289,6 +1289,10 @@ struct Interp {
     /// Frames popped off [`Interp::native_handles`] with the buffers that held
     /// objects cleared, whose allocations the next native call reuses.
     native_spares: Vec<NativeFrame>,
+    /// Every object an extension made a global reference, which a handle to
+    /// it resolves to from any native call for as long as the interpreter
+    /// runs (`InterpreterInstance::addGlobalReference`).
+    global_references: rexx_api::handles::Table,
     /// Every native library a name has loaded, by the name it was resolved
     /// under -- `PackageManager::packages`
     /// (`interpreter/package/PackageManager.cpp:229-248`). A miss is not held,
@@ -1981,6 +1985,7 @@ impl Interp {
             routine_generation: 0,
             native_handles: Vec::new(),
             native_spares: Vec::new(),
+            global_references: rexx_api::handles::Table::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
@@ -2631,6 +2636,7 @@ impl Interp {
             // overwrites the handle fields before anything reads them, so a
             // spare names nothing to root.
             native_spares: _,
+            global_references,
             special_methods: _,
             out: _,
             trace: _,
@@ -2712,6 +2718,7 @@ impl Interp {
         // condition object that will hold it.
         out.extend(*pending_additional);
         out.extend(*pending_result);
+        out.extend(global_references.roots());
         // Everything a native call has been handed, and the receiver it is
         // writing object variables through. Held here rather than by the
         // collector's other routes because an extension's handle is the only

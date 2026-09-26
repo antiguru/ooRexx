@@ -181,6 +181,30 @@ pub trait Surface {
     /// `CallProgramDispatcher::run`: the program the name resolves to
     /// globally, run with `arguments`, answering its result.
     fn call_program(&mut self, name: &[u8], arguments: &[Option<ObjRef>]) -> Option<ObjRef>;
+
+    /// Holds `object` as a global reference, which [`crate::values::Host::resolve`]
+    /// then answers from any native call for as long as the interpreter runs.
+    fn global_reference(&mut self, object: ObjRef);
+
+    /// `RexxObject::allocateObjectMemory`: bytes the running method's
+    /// receiver keeps until they are freed.
+    fn allocate_object_memory(&mut self, size: usize) -> Option<POINTER>;
+
+    /// `RexxObject::freeObjectMemory`.
+    fn free_object_memory(&mut self, pointer: POINTER);
+
+    /// `RexxObject::reallocateObjectMemory`: the same bytes where `size` is
+    /// no larger, a copy in a larger allocation otherwise, and `None` for an
+    /// address the receiver did not allocate.
+    fn reallocate_object_memory(&mut self, pointer: POINTER, size: usize) -> Option<POINTER>;
+
+    /// `PackageManager::registerPackage`: holds the library under `name`
+    /// unless one is held there already, answering whether it did.
+    fn register_library(
+        &mut self,
+        name: &[u8],
+        library: Result<Option<crate::load::Library>, crate::load::Refused>,
+    ) -> bool;
 }
 
 /// `Error_Incorrect_method_positive` (`api/oorexxerrors.h`), which `ArrayAt`
@@ -230,7 +254,7 @@ impl Activation<'_> {
 
     /// The object `handle` names in this activation, or `None`.
     fn resolve(&self, handle: RexxObjectPtr) -> Option<ObjRef> {
-        self.conversion().host.locals().resolve(handle)
+        self.conversion().host.resolve(handle)
     }
 
     /// `object` registered as a local reference.
@@ -1593,6 +1617,83 @@ impl Activation<'_> {
             b"NEW",
             &[Argument::Text(name), Argument::Handle(array)],
         )
+    }
+
+    /// `RequestGlobalReference` and `ReleaseGlobalReference`, the same
+    /// handle answered. The oracle's release adds a reference as its request
+    /// does (`interpreter/runtime/InterpreterInstance.cpp:678`), so a released
+    /// handle stays good: measured through the forged extension.
+    pub fn global_reference(&self, slot: &'static str, handle: RexxObjectPtr) -> RexxObjectPtr {
+        let Some(object) = self.resolve(handle) else {
+            return std::ptr::null_mut();
+        };
+        self.with_surface(slot, std::ptr::null_mut(), |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .global_reference(object);
+            handle
+        })
+    }
+
+    /// `ReleaseLocalReference`: a handle this call does not hold locally is
+    /// ignored, and a global reference to the same object stays.
+    pub fn release_local_reference(&self, handle: RexxObjectPtr) {
+        self.conversion().host.locals().remove(handle);
+    }
+
+    /// `AllocateObjectMemory`.
+    pub fn allocate_object_memory(&self, size: usize) -> POINTER {
+        self.with_surface(
+            "MethodContextInterface.AllocateObjectMemory",
+            std::ptr::null_mut(),
+            |cx| {
+                cx.host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .allocate_object_memory(size)
+                    .unwrap_or(std::ptr::null_mut())
+            },
+        )
+    }
+
+    /// `FreeObjectMemory`.
+    pub fn free_object_memory(&self, pointer: POINTER) {
+        self.with_surface("MethodContextInterface.FreeObjectMemory", (), |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .free_object_memory(pointer);
+        });
+    }
+
+    /// `ReallocateObjectMemory`.
+    pub fn reallocate_object_memory(&self, pointer: POINTER, size: usize) -> POINTER {
+        self.with_surface(
+            "MethodContextInterface.ReallocateObjectMemory",
+            std::ptr::null_mut(),
+            |cx| {
+                cx.host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .reallocate_object_memory(pointer, size)
+                    .unwrap_or(std::ptr::null_mut())
+            },
+        )
+    }
+
+    /// `RegisterLibrary`.
+    pub fn register_library(
+        &self,
+        name: &[u8],
+        library: Result<Option<crate::load::Library>, crate::load::Refused>,
+    ) -> bool {
+        self.with_surface("RexxThreadInterface.RegisterLibrary", false, |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .register_library(name, library)
+        })
     }
 
     /// `ObjectToValue`: `handle` converted as `declared` asks, or `None`

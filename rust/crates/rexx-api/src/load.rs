@@ -805,6 +805,28 @@ fn package_of(handle: libloading::Library, name: &str) -> Result<Option<Library>
     unsafe { library_of(&*entry, handle, name) }
 }
 
+/// The library a package entry an extension registers describes
+/// (`PackageManager::registerPackage`), its code in whatever this process
+/// already has mapped, or `None` for a null entry.
+///
+/// # Errors
+/// [`Refused`] where the entry asks for a newer interpreter than this one.
+///
+/// # Safety
+/// A non-null `entry` is a `RexxPackageEntry` as [`library_of`] asks, in
+/// memory that stays mapped for as long as the process runs.
+pub unsafe fn registered(
+    entry: *const RexxPackageEntry,
+    name: &str,
+) -> Result<Option<Library>, Refused> {
+    if entry.is_null() {
+        return Ok(None);
+    }
+    // SAFETY: the caller guarantees the entry, its tables and its strings,
+    // and the running image's handle keeps them mapped.
+    unsafe { library_of(&*entry, libloading::os::unix::Library::this().into(), name) }
+}
+
 /// The library `entry` describes, refused where its version check refuses.
 ///
 /// # Safety

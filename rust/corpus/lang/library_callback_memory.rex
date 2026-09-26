@@ -1,0 +1,32 @@
+/* An extension's object memory, and a nested AttachThread on the calling thread. */
+t = .T~new
+p = t~alloc(16)
+say p~class
+t~setmem(p, 'hello')
+say t~getmem(p)
+p2 = t~realloc(p, 8)
+say (p2~string == p~string) t~getmem(p2)
+p3 = t~realloc(p, 64)
+say (p3~string == p~string) t~getmem(p3)
+t~free(p3)
+say 'freed'
+say (t~realloc(p3, 128) == .nil)
+t2 = .T~new
+q = t2~alloc(4)
+t2~setmem(q, 'abc')
+say t2~getmem(q)
+signal on syntax
+call TestNestedAttach .array~of(1, 2)
+say 'not raised'
+exit
+syntax:
+  say 'raised' condition('o')~code condition('o')~message
+  say 'result' var('result')
+  exit
+::requires 'orxfunction' LIBRARY
+::class T
+::method alloc external "LIBRARY orxmethod TestAllocateObjectMemory"
+::method free external "LIBRARY orxmethod TestFreeObjectMemory"
+::method realloc external "LIBRARY orxmethod TestReallocateObjectMemory"
+::method setmem external "LIBRARY orxmethod TestSetObjectMemory"
+::method getmem external "LIBRARY orxmethod TestGetObjectMemory"

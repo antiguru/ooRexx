@@ -492,9 +492,106 @@ impl Surface for Interp {
         let answered = self.run_routine_as_program(installed, arguments.to_vec());
         self.held(answered).flatten()
     }
+
+    fn global_reference(&mut self, object: ObjRef) {
+        self.global_references.register(object);
+    }
+
+    fn allocate_object_memory(&mut self, size: usize) -> Option<POINTER> {
+        let buffer = Surface::new_buffer(self, size);
+        let mut table = self.object_memory()?;
+        table.push(Some(buffer));
+        self.set_object_memory(table)?;
+        self.native_state_mut(buffer)?.data_address()
+    }
+
+    fn free_object_memory(&mut self, pointer: POINTER) {
+        let Some(mut table) = self.object_memory() else {
+            return;
+        };
+        table.retain(|buffer| {
+            buffer.and_then(|buffer| self.buffer_address(buffer)) != Some(pointer)
+        });
+        self.set_object_memory(table);
+    }
+
+    fn reallocate_object_memory(&mut self, pointer: POINTER, size: usize) -> Option<POINTER> {
+        let table = self.object_memory()?;
+        let old = table
+            .iter()
+            .flatten()
+            .copied()
+            .find(|buffer| self.buffer_address(*buffer) == Some(pointer))?;
+        let bytes = self.native_state_mut(old)?.data()?.to_vec();
+        if size <= bytes.len() {
+            return Some(pointer);
+        }
+        let grown = Surface::allocate_object_memory(self, size)?;
+        let buffer = self.object_memory()?.last().copied().flatten()?;
+        if let Some(NativeState::Data(data)) = self.native_state_mut(buffer) {
+            data[..bytes.len()].copy_from_slice(&bytes);
+        }
+        Surface::free_object_memory(self, pointer);
+        Some(grown)
+    }
+
+    fn register_library(
+        &mut self,
+        name: &[u8],
+        library: Result<Option<rexx_api::load::Library>, rexx_api::load::Refused>,
+    ) -> bool {
+        if self.libraries.get(name).is_some() {
+            return false;
+        }
+        match self.settle_library(name, library) {
+            crate::LibraryLoad::Loaded(_) => true,
+            crate::LibraryLoad::Missing => false,
+            crate::LibraryLoad::Version => {
+                let raised = Raised::library_version(name);
+                self.hold_native_condition(raised.into());
+                false
+            }
+            crate::LibraryLoad::Raised(failure) => {
+                self.hold_native_condition(failure);
+                false
+            }
+        }
+    }
 }
 
 impl Interp {
+    /// The buffers the running method's receiver keeps for
+    /// `AllocateObjectMemory`, which the oracle keeps in the receiver's
+    /// `Object`-scope pool under the empty name (`classes/ObjectClass.cpp:2994`),
+    /// or `None` outside a method.
+    fn object_memory(&mut self) -> Option<Vec<Option<ObjRef>>> {
+        let frame = self.native_frame();
+        if !frame.method {
+            return None;
+        }
+        let owner = frame.owner;
+        let scope = self.classes().lookup("Object")?;
+        match self.pools_of(owner).and_then(|pools| pools.get(scope, b"")) {
+            Some(table) => self.array_slots_of(table),
+            None => Some(Vec::new()),
+        }
+    }
+
+    /// Replaces [`Interp::object_memory`]'s buffers.
+    fn set_object_memory(&mut self, buffers: Vec<Option<ObjRef>>) -> Option<()> {
+        let owner = self.native_frame().owner;
+        let scope = self.classes().lookup("Object")?;
+        let table = Surface::new_array(self, &buffers);
+        self.roots.push_temp(table);
+        self.set_pool_variable(owner, scope, b"", table);
+        Some(())
+    }
+
+    /// The address of a `Buffer`'s bytes.
+    fn buffer_address(&mut self, buffer: ObjRef) -> Option<POINTER> {
+        self.native_state_mut(buffer)?.data_address()
+    }
+
     /// The value `result` carries, or `None` with its condition held on the
     /// running native call.
     fn held<T>(&mut self, result: Result<T, Failure>) -> Option<T> {

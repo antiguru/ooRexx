@@ -24,8 +24,8 @@ use crate::layout::{
     CSTRING, CallContextInterface, MethodContextInterface, Owned, POINTER, RexxArrayObject,
     RexxBufferObject, RexxBufferStringObject, RexxCallContext_, RexxCondition, RexxDirectoryObject,
     RexxInstance_, RexxInstanceInterface, RexxMethodContext_, RexxMutableBufferObject,
-    RexxObjectPtr, RexxPointerObject, RexxStringObject, RexxThreadContext_, RexxThreadInterface,
-    ValueDescriptor, logical_t, stringsize_t, wholenumber_t,
+    RexxObjectPtr, RexxPackageEntry, RexxPointerObject, RexxStringObject, RexxThreadContext_,
+    RexxThreadInterface, ValueDescriptor, logical_t, stringsize_t, wholenumber_t,
 };
 use crate::values::{Activation, Converted, MAX_WHOLENUMBER, Repr, Value};
 
@@ -136,6 +136,9 @@ pub static METHOD_CONTEXT: MethodContextInterface = {
     table.GetScope = messages::get_scope;
     table.ForwardMessage = messages::forward_message;
     table.FindContextClass = messages::method_find_context_class;
+    table.AllocateObjectMemory = allocate_object_memory;
+    table.FreeObjectMemory = free_object_memory;
+    table.ReallocateObjectMemory = reallocate_object_memory;
     table
 };
 
@@ -172,6 +175,7 @@ pub static INSTANCE: RexxInstanceInterface = {
     let mut table = RexxInstanceInterface::REFUSING;
     table.InterpreterVersion = interpreter_version;
     table.LanguageLevel = language_level;
+    table.AttachThread = attach_thread;
     table
 };
 
@@ -315,6 +319,12 @@ pub const THREAD: RexxThreadInterface = {
     table.CallProgram = packages::call_program;
     table.NewMethod = packages::new_method;
     table.NewRoutine = packages::new_routine;
+    table.RequestGlobalReference = request_global_reference;
+    table.ReleaseGlobalReference = release_global_reference;
+    table.ReleaseLocalReference = release_local_reference;
+    table.RegisterLibrary = register_library;
+    table.GetInterpreterInstance = get_interpreter_instance;
+    table.DetachThread = detach_thread;
     table
 };
 
@@ -401,6 +411,9 @@ struct Thread {
     instance: Owned<RexxInstance_, Innermost>,
     table: RexxThreadInterface,
     innermost: Innermost,
+    /// The thread the interpreter runs on, which is the only one an
+    /// extension may attach to it.
+    home: std::thread::ThreadId,
 }
 
 /// The activation of the innermost native call in flight, null where none is.
@@ -431,6 +444,7 @@ impl ThreadContext {
             },
             table: THREAD,
             innermost: Innermost(Cell::new(std::ptr::null())),
+            home: std::thread::current().id(),
         }));
         // SAFETY: `raw` is the allocation just made and nothing else addresses
         // it yet. Every link is taken from `raw` itself, so its provenance is
@@ -3046,6 +3060,149 @@ mod packages {
             .new_executable("RexxThreadInterface.NewRoutine", "Routine", name, source)
             .cast()
     }
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn request_global_reference(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) -> RexxObjectPtr {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "RequestGlobalReference") }
+        .global_reference("RexxThreadInterface.RequestGlobalReference", object)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn release_global_reference(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "ReleaseGlobalReference") }
+        .global_reference("RexxThreadInterface.ReleaseGlobalReference", object);
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn release_local_reference(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "ReleaseLocalReference") }
+        .release_local_reference(object);
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], a non-null `name` is NUL-terminated, and a
+/// non-null `entry` is as [`crate::load::registered`] asks.
+unsafe extern "C" fn register_library(
+    context: *mut RexxThreadContext_,
+    name: CSTRING,
+    entry: *mut RexxPackageEntry,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`; the caller guarantees `name`.
+    let (activation, name) = unsafe {
+        (
+            innermost_activation(context, "RegisterLibrary"),
+            name_of(name),
+        )
+    };
+    let Some(name) = name else {
+        return 0;
+    };
+    // SAFETY: the caller guarantees the entry.
+    let library = unsafe { crate::load::registered(entry, &String::from_utf8_lossy(name)) };
+    logical_t::from(activation.register_library(name, library))
+}
+
+/// # Safety
+/// `context` is a thread context a live [`ThreadContext`] handed out.
+unsafe extern "C" fn get_interpreter_instance(
+    context: *mut RexxThreadContext_,
+) -> *mut RexxInstance_ {
+    // SAFETY: the caller guarantees the context, whose `instance` field its
+    // `ThreadContext` wrote.
+    unsafe { (*context).instance }
+}
+
+/// `AttachThread` from the thread the interpreter runs on while a native
+/// call is in flight: that thread is attached already, so the context it
+/// answers is the one the running call has.
+///
+/// # Panics
+/// Called from another thread, or with no native call in flight, which is
+/// embedding.
+///
+/// # Safety
+/// `instance` is an instance a live [`ThreadContext`] links, and a non-null
+/// `attached` is valid for a write.
+unsafe extern "C" fn attach_thread(
+    instance: *mut RexxInstance_,
+    attached: *mut *mut RexxThreadContext_,
+) -> logical_t {
+    // SAFETY: the caller guarantees `instance` is the `instance` field of a
+    // live `Thread`, and it was taken from that whole allocation, so stepping
+    // back to the allocation's start stays inside its provenance.
+    let thread = unsafe {
+        instance
+            .cast::<u8>()
+            .sub(std::mem::offset_of!(Thread, instance))
+            .cast::<Thread>()
+    };
+    // SAFETY: as above; only the id and the innermost cell are read.
+    let (home, idle) = unsafe { ((*thread).home, (*thread).innermost.0.get().is_null()) };
+    assert!(
+        home == std::thread::current().id() && !idle,
+        "RexxInstanceInterface.AttachThread is not implemented (Phase 9)"
+    );
+    if !attached.is_null() {
+        // SAFETY: the caller guarantees the write; the context is the
+        // allocation's own `thread` field.
+        unsafe { attached.write((&raw mut (*thread).thread).cast()) };
+    }
+    1
+}
+
+/// `DetachThread` of the context [`attach_thread`] answered, which the
+/// running call still holds, so nothing is released.
+///
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn detach_thread(context: *mut RexxThreadContext_) {
+    // SAFETY: as `whole_number_to_object`; the call aborts where no native
+    // call is in flight.
+    unsafe { innermost_activation(context, "DetachThread") };
+}
+
+/// # Safety
+/// As [`set_object_variable`].
+unsafe extern "C" fn allocate_object_memory(
+    context: *mut RexxMethodContext_,
+    size: usize,
+) -> POINTER {
+    // SAFETY: as `set_object_variable`.
+    unsafe { activation_of(context) }.allocate_object_memory(size)
+}
+
+/// # Safety
+/// As [`set_object_variable`].
+unsafe extern "C" fn free_object_memory(context: *mut RexxMethodContext_, pointer: POINTER) {
+    // SAFETY: as `set_object_variable`.
+    unsafe { activation_of(context) }.free_object_memory(pointer);
+}
+
+/// # Safety
+/// As [`set_object_variable`].
+unsafe extern "C" fn reallocate_object_memory(
+    context: *mut RexxMethodContext_,
+    pointer: POINTER,
+    size: usize,
+) -> POINTER {
+    // SAFETY: as `set_object_variable`.
+    unsafe { activation_of(context) }.reallocate_object_memory(pointer, size)
 }
 
 /// What a stub read through the context, which is the channel

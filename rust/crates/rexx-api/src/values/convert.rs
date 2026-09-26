@@ -480,7 +480,6 @@ pub(super) fn object_from_native(
         return Ok(None);
     }
     cx.host
-        .locals()
         .resolve(handle)
         .map(Some)
         .ok_or(Failure::StaleHandle)

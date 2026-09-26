@@ -44,6 +44,8 @@ pub(crate) struct FakeHost {
     /// The calling activation's variables, by name as the extension spelled
     /// it.
     pub(crate) variables: Vec<(Vec<u8>, ObjRef)>,
+    /// Every object [`Surface::global_reference`] was asked to hold.
+    pub(crate) globals: Vec<ObjRef>,
 }
 
 /// A condition a [`FakeHost`] holds.
@@ -65,6 +67,7 @@ impl FakeHost {
             entries: Vec::new(),
             displayed: 0,
             variables: Vec::new(),
+            globals: Vec::new(),
         }
     }
 
@@ -447,6 +450,28 @@ impl Surface for FakeHost {
 
     fn call_program(&mut self, _name: &[u8], _arguments: &[Option<ObjRef>]) -> Option<ObjRef> {
         None
+    }
+
+    fn global_reference(&mut self, object: ObjRef) {
+        self.globals.push(object);
+    }
+
+    fn allocate_object_memory(&mut self, _size: usize) -> Option<POINTER> {
+        None
+    }
+
+    fn free_object_memory(&mut self, _pointer: POINTER) {}
+
+    fn reallocate_object_memory(&mut self, _pointer: POINTER, _size: usize) -> Option<POINTER> {
+        None
+    }
+
+    fn register_library(
+        &mut self,
+        _name: &[u8],
+        _library: Result<Option<crate::load::Library>, crate::load::Refused>,
+    ) -> bool {
+        false
     }
 }
 

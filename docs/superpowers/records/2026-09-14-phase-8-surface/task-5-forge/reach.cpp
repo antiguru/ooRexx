@@ -186,6 +186,75 @@ RexxRoutine1(logical_t, LoadLib, CSTRING, name)
     return context->LoadLibrary(name);
 }
 
+// A global reference kept across calls, then released, then used again.
+static RexxObjectPtr kept = NULLOBJECT;
+
+RexxRoutine1(int, Keep, RexxObjectPtr, o)
+{
+    kept = context->RequestGlobalReference(o);
+    return kept == o;
+}
+
+RexxRoutine0(RexxObjectPtr, Kept)
+{
+    return kept == NULLOBJECT ? context->String("none") : kept;
+}
+
+RexxRoutine0(int, Release)
+{
+    context->ReleaseGlobalReference(kept);
+    return 1;
+}
+
+// A local reference released, then read again through a global one.
+RexxRoutine1(RexxObjectPtr, LocalRelease, RexxObjectPtr, o)
+{
+    RexxObjectPtr g = context->RequestGlobalReference(o);
+    context->ReleaseLocalReference(o);
+    return g;
+}
+
+// A package entry registered under a name, and its routine then called.
+RexxRoutine1(RexxStringObject, Registered, CSTRING, text)
+{
+    return context->String(text);
+}
+
+static RexxRoutineEntry registered_routines[] = {
+    REXX_TYPED_ROUTINE(RegisteredEcho, Registered),
+    REXX_LAST_ROUTINE()
+};
+
+static RexxPackageEntry registered_entry = {
+    STANDARD_PACKAGE_HEADER
+    REXX_INTERPRETER_4_0_0,
+    "registered",
+    "1.0",
+    NULL,
+    NULL,
+    registered_routines,
+    NULL
+};
+
+RexxRoutine1(int, Register, CSTRING, name)
+{
+    return (int)context->RegisterLibrary(name, &registered_entry);
+}
+
+// The instance a thread context links, and a nested attach.
+RexxRoutine1(RexxStringObject, Nested, RexxObjectPtr, o)
+{
+    RexxInstance *instance = context->GetInterpreterInstance();
+    RexxThreadContext *attached = NULL;
+    logical_t ok = instance->AttachThread(&attached);
+    RexxObjectPtr r = attached->SendMessage0(o, "STRING");
+    attached->DetachThread();
+    char buffer[128];
+    snprintf(buffer, sizeof(buffer), "%d %d %d [%s]", (int)ok, instance == context->threadContext->instance,
+        attached != NULL, context->CString(r));
+    return context->String(buffer);
+}
+
 RexxMethodEntry methods[] = {
     REXX_METHOD(FwdTo, FwdTo),
     REXX_METHOD(CSelfRead, CSelfRead),
@@ -194,6 +263,12 @@ RexxMethodEntry methods[] = {
 
 RexxRoutineEntry routines[] = {
     REXX_TYPED_ROUTINE(BufStr, BufStr),
+    REXX_TYPED_ROUTINE(Keep, Keep),
+    REXX_TYPED_ROUTINE(Kept, Kept),
+    REXX_TYPED_ROUTINE(Release, Release),
+    REXX_TYPED_ROUTINE(LocalRelease, LocalRelease),
+    REXX_TYPED_ROUTINE(Register, Register),
+    REXX_TYPED_ROUTINE(Nested, Nested),
     REXX_TYPED_ROUTINE(LoadLib, LoadLib),
     REXX_TYPED_ROUTINE(Env, Env),
     REXX_TYPED_ROUTINE(CallerCtx, CallerCtx),

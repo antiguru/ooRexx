@@ -779,6 +779,12 @@ impl Host for Interp {
             .locals
     }
 
+    fn resolve(&mut self, handle: rexx_api::layout::RexxObjectPtr) -> Option<ObjRef> {
+        self.locals()
+            .resolve(handle)
+            .or_else(|| self.global_references.resolve(handle))
+    }
+
     fn surface(&mut self) -> Option<&mut dyn rexx_api::callbacks::Surface> {
         Some(self)
     }

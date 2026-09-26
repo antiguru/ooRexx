@@ -666,6 +666,13 @@ pub trait Host {
     /// (`interpreter/execution/NativeActivation.hpp:232`).
     fn locals(&mut self) -> &mut Table;
 
+    /// The object `handle` names for the running native call: one of its
+    /// local references, or for a host that keeps them, a global reference,
+    /// which is the same handle for the same object.
+    fn resolve(&mut self, handle: RexxObjectPtr) -> Option<ObjRef> {
+        self.locals().resolve(handle)
+    }
+
     /// What the callback tables reach beyond the conversions, or `None` for a
     /// host that serves only the conversions, whose callbacks then refuse.
     fn surface(&mut self) -> Option<&mut dyn Surface> {
@@ -752,7 +759,7 @@ impl<'a> Activation<'a> {
     /// `OREF_NULL` the oracle would store (D5).
     pub fn set_object_variable(&self, name: &[u8], value: RexxObjectPtr) {
         let mut cx = self.conversion();
-        let object = cx.host.locals().resolve(value);
+        let object = cx.host.resolve(value);
         cx.host.set_object_variable(name, object);
     }
 
@@ -795,7 +802,7 @@ impl<'a> Activation<'a> {
     /// with no bytes, which is the `NULL` the stub answers on an exception.
     pub fn string_data(&self, handle: RexxObjectPtr) -> CSTRING {
         let mut cx = self.conversion();
-        let Some(object) = cx.host.locals().resolve(handle) else {
+        let Some(object) = cx.host.resolve(handle) else {
             return std::ptr::null();
         };
         let Some(bytes) = cx.host.string_bytes(object) else {
@@ -809,7 +816,7 @@ impl<'a> Activation<'a> {
     /// null pointer.
     pub fn string_length(&self, handle: RexxObjectPtr) -> usize {
         let mut cx = self.conversion();
-        let Some(object) = cx.host.locals().resolve(handle) else {
+        let Some(object) = cx.host.resolve(handle) else {
             return 0;
         };
         cx.host.string_bytes(object).map_or(0, |bytes| bytes.len())
