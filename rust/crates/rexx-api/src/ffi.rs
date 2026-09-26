@@ -21,12 +21,15 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 
 use crate::layout::{
-    CSTRING, CallContextInterface, MethodContextInterface, Owned, POINTER, RexxArrayObject,
-    RexxBufferObject, RexxBufferStringObject, RexxCallContext_, RexxCondition, RexxDirectoryObject,
-    RexxInstance_, RexxInstanceInterface, RexxMethodContext_, RexxMutableBufferObject,
-    RexxObjectPtr, RexxPackageEntry, RexxPointerObject, RexxStringObject, RexxThreadContext_,
-    RexxThreadInterface, ValueDescriptor, logical_t, stringsize_t, wholenumber_t,
+    CSTRING, CallContextInterface, ExitContextInterface, IORedirectorInterface,
+    MethodContextInterface, Owned, POINTER, REXXPFN, RexxArrayObject, RexxBufferObject,
+    RexxBufferStringObject, RexxCallContext_, RexxCondition, RexxDirectoryObject, RexxExitContext_,
+    RexxIORedirectorContext_, RexxInstance_, RexxInstanceInterface, RexxMethodContext_,
+    RexxMutableBufferObject, RexxObjectPtr, RexxPackageEntry, RexxPointerObject, RexxStringObject,
+    RexxThreadContext_, RexxThreadInterface, ValueDescriptor, logical_t, stringsize_t,
+    wholenumber_t,
 };
+use crate::redirect::Redirector;
 use crate::values::{Activation, Converted, MAX_WHOLENUMBER, Repr, Value};
 
 /// The state that owns the context `context` addresses.
@@ -161,19 +164,62 @@ pub static CALL_CONTEXT: CallContextInterface = {
     table.GetContextDigits = get_context_digits;
     table.GetContextFuzz = get_context_fuzz;
     table.GetContextForm = get_context_form;
-    table.GetContextVariable = variables::get_context_variable;
-    table.SetContextVariable = variables::set_context_variable;
-    table.DropContextVariable = variables::drop_context_variable;
-    table.GetAllContextVariables = variables::get_all_context_variables;
+    table.GetContextVariable = variables::get_context_variable::<RexxCallContext_>;
+    table.SetContextVariable = variables::set_context_variable::<RexxCallContext_>;
+    table.DropContextVariable = variables::drop_context_variable::<RexxCallContext_>;
+    table.GetAllContextVariables = variables::get_all_context_variables::<RexxCallContext_>;
     table.ResolveStemVariable = variables::resolve_stem_variable;
-    table.GetContextVariableReference = variables::get_context_variable_reference;
+    table.GetContextVariableReference =
+        variables::get_context_variable_reference::<RexxCallContext_>;
     table.GetArguments = messages::call_arguments;
     table.GetArgument = messages::call_argument;
     table.GetRoutineName = messages::routine_name;
     table.GetRoutine = messages::current_routine;
-    table.GetCallerContext = messages::caller_context;
+    table.GetCallerContext = messages::caller_context::<RexxCallContext_>;
     table.FindContextClass = messages::call_find_context_class;
     table.InvalidRoutine = messages::invalid_routine;
+    table
+};
+
+/// The exit-context table a command handler is handed
+/// (`Activity::exitContextFunctions`,
+/// `interpreter/api/CallContextStubs.cpp:708`), at one address for the process
+/// as [`METHOD_CONTEXT`] is. Its variable members reach the activation that
+/// issued the command, as a call context's reach its caller.
+pub static EXIT_CONTEXT: ExitContextInterface = {
+    let mut table = ExitContextInterface::REFUSING;
+    table.SetContextVariable = variables::set_context_variable::<RexxExitContext_>;
+    table.GetContextVariable = variables::get_context_variable::<RexxExitContext_>;
+    table.DropContextVariable = variables::drop_context_variable::<RexxExitContext_>;
+    table.GetAllContextVariables = variables::get_all_context_variables::<RexxExitContext_>;
+    table.GetCallerContext = messages::caller_context::<RexxExitContext_>;
+    table.GetContextVariableReference =
+        variables::get_context_variable_reference::<RexxExitContext_>;
+    table.ThrowException0 = throw_exception0::<RexxExitContext_>;
+    table.ThrowException1 = throw_exception1::<RexxExitContext_>;
+    table.ThrowException2 = throw_exception2::<RexxExitContext_>;
+    table.ThrowException = throw_exception::<RexxExitContext_>;
+    table.ThrowCondition = throw_condition::<RexxExitContext_>;
+    table
+};
+
+/// The I/O-redirector table a redirecting command handler is handed
+/// (`Activity::ioRedirectorContextFunctions`,
+/// `interpreter/api/CallContextStubs.cpp:729`), at one address for the
+/// process as [`METHOD_CONTEXT`] is.
+pub static IO_REDIRECTOR: IORedirectorInterface = {
+    let mut table = IORedirectorInterface::REFUSING;
+    table.ReadInput = redirector::read_input;
+    table.ReadInputBuffer = redirector::read_input_buffer;
+    table.WriteOutput = redirector::write_output;
+    table.WriteError = redirector::write_error;
+    table.WriteOutputBuffer = redirector::write_output_buffer;
+    table.WriteErrorBuffer = redirector::write_error_buffer;
+    table.IsInputRedirected = redirector::is_input_redirected;
+    table.IsOutputRedirected = redirector::is_output_redirected;
+    table.IsErrorRedirected = redirector::is_error_redirected;
+    table.AreOutputAndErrorSameTarget = redirector::are_output_and_error_same_target;
+    table.IsRedirectionRequested = redirector::is_redirection_requested;
     table
 };
 
@@ -186,6 +232,7 @@ pub static INSTANCE: RexxInstanceInterface = {
     table.InterpreterVersion = interpreter_version;
     table.LanguageLevel = language_level;
     table.AttachThread = attach_thread;
+    table.AddCommandEnvironment = add_command_environment;
     table
 };
 
@@ -386,6 +433,47 @@ impl CallContext<'_> {
     }
 }
 
+/// The exit context a command handler is handed, shaped as [`MethodContext`].
+pub struct ExitContext<'a> {
+    pointer: *mut RexxExitContext_,
+    wrapper: PhantomData<&'a mut RexxExitContext_>,
+}
+
+impl ExitContext<'_> {
+    /// The address the handler is handed.
+    pub(crate) fn as_ptr(&self) -> *mut RexxExitContext_ {
+        self.pointer
+    }
+}
+
+/// The I/O-redirector context a redirecting command handler is handed, over
+/// the command's [`Redirector`], which it borrows for its lifetime.
+pub struct RedirectorContext<'a> {
+    owned: Owned<RexxIORedirectorContext_, Redirector>,
+    redirector: PhantomData<&'a Redirector>,
+}
+
+impl<'a> RedirectorContext<'a> {
+    /// The context over `redirector`.
+    pub(crate) fn new(redirector: &'a Redirector) -> RedirectorContext<'a> {
+        RedirectorContext {
+            owned: Owned {
+                context: RexxIORedirectorContext_ {
+                    functions: std::ptr::from_ref(&IO_REDIRECTOR).cast_mut(),
+                },
+                owner: std::ptr::from_ref(redirector).cast_mut(),
+            },
+            redirector: PhantomData,
+        }
+    }
+
+    /// The address the handler is handed, taken from the whole wrapper as
+    /// [`Contexts::method`] takes its own.
+    pub(crate) fn as_ptr(&mut self) -> *mut RexxIORedirectorContext_ {
+        (&raw mut self.owned).cast::<RexxIORedirectorContext_>()
+    }
+}
+
 /// The thread context an extension is handed, which it may keep for as long as
 /// the interpreter runs: the oracle's belongs to the activity
 /// (`interpreter/concurrency/ActivationApiContexts.hpp:64-68`), and
@@ -537,6 +625,14 @@ impl ThreadContext {
                 },
                 owner: std::ptr::from_ref(activation).cast_mut(),
             },
+            exit: Owned {
+                context: RexxExitContext_ {
+                    threadContext: std::ptr::null_mut(),
+                    functions: std::ptr::null_mut(),
+                    arguments: std::ptr::null_mut(),
+                },
+                owner: std::ptr::from_ref(activation).cast_mut(),
+            },
             activation: PhantomData,
         };
         body(&mut contexts)
@@ -579,13 +675,14 @@ impl Drop for Entered<'_> {
     }
 }
 
-/// The method and call contexts one native call hands an extension, each
-/// linking the interpreter's [`ThreadContext`]. Built only by
+/// The method, call and exit contexts one native call hands an extension,
+/// each linking the interpreter's [`ThreadContext`]. Built only by
 /// [`ThreadContext::enter`], for the length of the call.
 pub struct Contexts<'a, 'h> {
     thread: *mut RexxThreadContext_,
     method: Owned<RexxMethodContext_, Activation<'h>>,
     call: Owned<RexxCallContext_, Activation<'h>>,
+    exit: Owned<RexxExitContext_, Activation<'h>>,
     /// Ties this wrapper to the activation its contexts address, so that no
     /// context it hands out can outlive the state behind it.
     activation: PhantomData<&'a Activation<'h>>,
@@ -618,13 +715,24 @@ impl Contexts<'_, '_> {
         }
     }
 
+    /// The exit context, linked as [`Contexts::method`] links the method
+    /// context.
+    pub fn exit(&mut self) -> ExitContext<'_> {
+        self.exit.context.threadContext = self.thread;
+        self.exit.context.functions = std::ptr::from_ref(&EXIT_CONTEXT).cast_mut();
+        ExitContext {
+            pointer: (&raw mut self.exit).cast::<RexxExitContext_>(),
+            wrapper: PhantomData,
+        }
+    }
+
     /// The thread context a package loader or unloader is handed.
     pub(crate) fn thread(&self) -> *mut RexxThreadContext_ {
         self.thread
     }
 }
 
-/// A method or call context, which links its thread context first.
+/// A method, call or exit context, which links its thread context first.
 trait CallLinked {
     /// The `ThrowException0`, `1` and `2` members' names in this context's
     /// table, as a refusal records them.
@@ -661,6 +769,35 @@ impl CallLinked for RexxCallContext_ {
         // SAFETY: the caller guarantees `context` is live.
         unsafe { (*context).threadContext }
     }
+}
+
+impl CallLinked for RexxExitContext_ {
+    const THROW: [&'static str; 3] = [
+        "ExitContextInterface.ThrowException0",
+        "ExitContextInterface.ThrowException1",
+        "ExitContextInterface.ThrowException2",
+    ];
+
+    unsafe fn thread_of(context: *mut Self) -> *mut RexxThreadContext_ {
+        // SAFETY: the caller guarantees `context` is live.
+        unsafe { (*context).threadContext }
+    }
+}
+
+/// A call or exit context, whose variable members reach the calling
+/// activation's variables.
+trait ContextVariables: CallLinked {
+    /// The `GetContextVariableReference` member's name in this context's
+    /// table, as a refusal records it.
+    const REFERENCE: &'static str;
+}
+
+impl ContextVariables for RexxCallContext_ {
+    const REFERENCE: &'static str = "CallContextInterface.GetContextVariableReference";
+}
+
+impl ContextVariables for RexxExitContext_ {
+    const REFERENCE: &'static str = "ExitContextInterface.GetContextVariableReference";
 }
 
 /// The activation a method or call context addresses, or, while a call
@@ -2425,7 +2562,7 @@ mod collections {
 /// context, the running method's object variables through a method context,
 /// and a `VariableReference` through the thread table.
 mod variables {
-    use super::{activation_of, innermost_activation, name_of};
+    use super::{ContextVariables, activation_of, innermost_activation, name_of};
     use crate::layout::{
         CSTRING, RexxCallContext_, RexxDirectoryObject, RexxMethodContext_, RexxObjectPtr,
         RexxStemObject, RexxStringObject, RexxThreadContext_, RexxVariableReferenceObject,
@@ -2433,11 +2570,11 @@ mod variables {
     };
 
     /// # Safety
-    /// `context` is a call context a [`super::Contexts`] handed out, used
-    /// during the call it was handed to, and a non-null `name` is
+    /// `context` is a call or exit context a [`super::Contexts`] handed out,
+    /// used during the call it was handed to, and a non-null `name` is
     /// NUL-terminated.
-    pub(super) unsafe extern "C" fn get_context_variable(
-        context: *mut RexxCallContext_,
+    pub(super) unsafe extern "C" fn get_context_variable<C: ContextVariables>(
+        context: *mut C,
         name: CSTRING,
     ) -> RexxObjectPtr {
         // SAFETY: the caller guarantees the context and the name.
@@ -2449,8 +2586,8 @@ mod variables {
 
     /// # Safety
     /// As [`get_context_variable`].
-    pub(super) unsafe extern "C" fn set_context_variable(
-        context: *mut RexxCallContext_,
+    pub(super) unsafe extern "C" fn set_context_variable<C: ContextVariables>(
+        context: *mut C,
         name: CSTRING,
         value: RexxObjectPtr,
     ) {
@@ -2463,8 +2600,8 @@ mod variables {
 
     /// # Safety
     /// As [`get_context_variable`].
-    pub(super) unsafe extern "C" fn drop_context_variable(
-        context: *mut RexxCallContext_,
+    pub(super) unsafe extern "C" fn drop_context_variable<C: ContextVariables>(
+        context: *mut C,
         name: CSTRING,
     ) {
         // SAFETY: as `get_context_variable`.
@@ -2476,8 +2613,8 @@ mod variables {
 
     /// # Safety
     /// As [`get_context_variable`].
-    pub(super) unsafe extern "C" fn get_all_context_variables(
-        context: *mut RexxCallContext_,
+    pub(super) unsafe extern "C" fn get_all_context_variables<C: ContextVariables>(
+        context: *mut C,
     ) -> RexxDirectoryObject {
         // SAFETY: as `get_context_variable`.
         unsafe { activation_of(context) }.context_variables().cast()
@@ -2497,19 +2634,15 @@ mod variables {
 
     /// # Safety
     /// As [`get_context_variable`].
-    pub(super) unsafe extern "C" fn get_context_variable_reference(
-        context: *mut RexxCallContext_,
+    pub(super) unsafe extern "C" fn get_context_variable_reference<C: ContextVariables>(
+        context: *mut C,
         name: CSTRING,
     ) -> RexxVariableReferenceObject {
         // SAFETY: as `get_context_variable`.
         let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
         name.map_or(std::ptr::null_mut(), |name| {
             activation
-                .variable_reference(
-                    "CallContextInterface.GetContextVariableReference",
-                    name,
-                    false,
-                )
+                .variable_reference(C::REFERENCE, name, false)
                 .cast()
         })
     }
@@ -2616,7 +2749,7 @@ mod variables {
 /// The members that send messages, find classes and describe the running
 /// call: the thread table's, and the method and call contexts' own.
 mod messages {
-    use super::{activation_of, innermost_activation, name_of};
+    use super::{CallLinked, activation_of, innermost_activation, name_of};
     use crate::callbacks::MethodObject;
     use crate::layout::{
         CSTRING, RexxArrayObject, RexxCallContext_, RexxClassObject, RexxDirectoryObject,
@@ -2998,9 +3131,10 @@ mod messages {
     }
 
     /// # Safety
-    /// As [`super::get_context_digits`].
-    pub(super) unsafe extern "C" fn caller_context(
-        context: *mut RexxCallContext_,
+    /// `context` is a call or exit context a [`super::Contexts`] handed out,
+    /// used during the call it was handed to.
+    pub(super) unsafe extern "C" fn caller_context<C: CallLinked>(
+        context: *mut C,
     ) -> RexxObjectPtr {
         // SAFETY: as `get_context_digits`.
         unsafe { activation_of(context) }.caller_context()
@@ -3346,6 +3480,239 @@ unsafe extern "C" fn attach_thread(
         unsafe { attached.write((&raw mut (*thread).thread).cast()) };
     }
     1
+}
+
+/// `AddCommandEnvironment` (`interpreter/api/InterpreterInstanceStubs.cpp:89-101`):
+/// `handler` becomes the handler of the environment `name`, replacing the one
+/// that name had, built-in ones included. A type the header does not define,
+/// a null name or a null handler registers nothing.
+///
+/// # Panics
+/// Called from another thread, which is embedding, or with no native call in
+/// flight.
+///
+/// # Safety
+/// `instance` is an instance a live [`ThreadContext`] links, a non-null
+/// `name` is NUL-terminated, and a non-null `handler` is a function of the
+/// type `kind` names.
+unsafe extern "C" fn add_command_environment(
+    instance: *mut RexxInstance_,
+    name: CSTRING,
+    handler: REXXPFN,
+    kind: std::ffi::c_int,
+) {
+    // SAFETY: as in `attach_thread`.
+    let thread = unsafe {
+        instance
+            .cast::<u8>()
+            .sub(std::mem::offset_of!(Thread, instance))
+            .cast::<Thread>()
+    };
+    // SAFETY: as in `attach_thread`.
+    let home = unsafe { (*thread).home };
+    assert!(
+        home == std::thread::current().id(),
+        "RexxInstanceInterface.AddCommandEnvironment from another thread is not implemented (Phase 9)"
+    );
+    // SAFETY: as in `attach_thread`; the context is the allocation's own
+    // `thread` field.
+    let activation = unsafe {
+        innermost_activation((&raw mut (*thread).thread).cast(), "AddCommandEnvironment")
+    };
+    // SAFETY: the caller guarantees the terminator.
+    let (Some(name), Some(handler)) = (
+        unsafe { name_of(name) },
+        crate::load::CommandHandler::new(handler, kind),
+    ) else {
+        return;
+    };
+    activation.add_command_environment(name, handler);
+}
+
+/// The members a redirecting command handler reads and writes its streams
+/// through (`interpreter/api/CallContextStubs.cpp:428-670`).
+mod redirector {
+    use super::{Redirector, bytes_of, owner_of};
+    use crate::layout::{CSTRING, RexxIORedirectorContext_, logical_t};
+
+    /// The redirector `context` is over.
+    ///
+    /// # Safety
+    /// `context` is a redirector context a [`super::RedirectorContext`]
+    /// handed out, used during the call it was handed to.
+    unsafe fn redirector_of<'a>(context: *mut RexxIORedirectorContext_) -> &'a Redirector {
+        // SAFETY: the caller guarantees the wrapper, whose `owner` is the
+        // `&Redirector` it borrows for its lifetime; the reference is shared,
+        // and every write goes through the redirector's own cells.
+        unsafe { &*owner_of::<RexxIORedirectorContext_, Redirector>(context) }
+    }
+
+    /// Writes an answer through the two out-parameters, each where it is not
+    /// null.
+    ///
+    /// # Safety
+    /// A non-null `data` or `length` is valid for a write.
+    unsafe fn answer(data: *mut CSTRING, length: *mut usize, read: Option<(*const u8, usize)>) {
+        let (pointer, count) = read.unwrap_or((std::ptr::null(), 0));
+        if !data.is_null() {
+            // SAFETY: the caller guarantees the write.
+            unsafe { data.write(pointer.cast()) };
+        }
+        if !length.is_null() {
+            // SAFETY: the caller guarantees the write.
+            unsafe { length.write(count) };
+        }
+    }
+
+    /// `ReadInput`: the next line, null past the last or with no input. The
+    /// bytes live until the command's handler returns.
+    ///
+    /// # Safety
+    /// As [`redirector_of`], and each non-null out-parameter is valid for a
+    /// write.
+    pub(super) unsafe extern "C" fn read_input(
+        context: *mut RexxIORedirectorContext_,
+        data: *mut CSTRING,
+        length: *mut usize,
+    ) {
+        // SAFETY: the caller guarantees the context and the writes.
+        unsafe { answer(data, length, redirector_of(context).read_line()) };
+    }
+
+    /// `ReadInputBuffer`: every line not yet read as one buffer.
+    ///
+    /// # Safety
+    /// As [`read_input`].
+    pub(super) unsafe extern "C" fn read_input_buffer(
+        context: *mut RexxIORedirectorContext_,
+        data: *mut CSTRING,
+        length: *mut usize,
+    ) {
+        // SAFETY: the caller guarantees the context and the writes.
+        unsafe { answer(data, length, redirector_of(context).read_buffer()) };
+    }
+
+    /// One of the four write members.
+    ///
+    /// # Safety
+    /// As [`redirector_of`], and a non-null `data` is valid for reads of
+    /// `length` bytes.
+    unsafe fn write(
+        context: *mut RexxIORedirectorContext_,
+        error: bool,
+        buffered: bool,
+        data: CSTRING,
+        length: usize,
+    ) {
+        // SAFETY: the caller guarantees the context and the range.
+        let (redirector, Some(bytes)) = (unsafe { redirector_of(context) }, unsafe {
+            bytes_of(data, length)
+        }) else {
+            return;
+        };
+        if buffered {
+            redirector.write_buffer(error, bytes);
+        } else {
+            redirector.write(error, bytes);
+        }
+    }
+
+    /// `WriteOutput`: one output line.
+    ///
+    /// # Safety
+    /// As [`write`].
+    pub(super) unsafe extern "C" fn write_output(
+        context: *mut RexxIORedirectorContext_,
+        data: CSTRING,
+        length: usize,
+    ) {
+        // SAFETY: as `write`.
+        unsafe { write(context, false, false, data, length) };
+    }
+
+    /// `WriteError`: one error line.
+    ///
+    /// # Safety
+    /// As [`write`].
+    pub(super) unsafe extern "C" fn write_error(
+        context: *mut RexxIORedirectorContext_,
+        data: CSTRING,
+        length: usize,
+    ) {
+        // SAFETY: as `write`.
+        unsafe { write(context, true, false, data, length) };
+    }
+
+    /// `WriteOutputBuffer`: output bytes, split into lines.
+    ///
+    /// # Safety
+    /// As [`write`].
+    pub(super) unsafe extern "C" fn write_output_buffer(
+        context: *mut RexxIORedirectorContext_,
+        data: CSTRING,
+        length: usize,
+    ) {
+        // SAFETY: as `write`.
+        unsafe { write(context, false, true, data, length) };
+    }
+
+    /// `WriteErrorBuffer`: error bytes, split into lines.
+    ///
+    /// # Safety
+    /// As [`write`].
+    pub(super) unsafe extern "C" fn write_error_buffer(
+        context: *mut RexxIORedirectorContext_,
+        data: CSTRING,
+        length: usize,
+    ) {
+        // SAFETY: as `write`.
+        unsafe { write(context, true, true, data, length) };
+    }
+
+    /// # Safety
+    /// As [`redirector_of`].
+    pub(super) unsafe extern "C" fn is_input_redirected(
+        context: *mut RexxIORedirectorContext_,
+    ) -> logical_t {
+        // SAFETY: as `redirector_of`.
+        logical_t::from(unsafe { redirector_of(context) }.redirects_input())
+    }
+
+    /// # Safety
+    /// As [`redirector_of`].
+    pub(super) unsafe extern "C" fn is_output_redirected(
+        context: *mut RexxIORedirectorContext_,
+    ) -> logical_t {
+        // SAFETY: as `redirector_of`.
+        logical_t::from(unsafe { redirector_of(context) }.redirects_output())
+    }
+
+    /// # Safety
+    /// As [`redirector_of`].
+    pub(super) unsafe extern "C" fn is_error_redirected(
+        context: *mut RexxIORedirectorContext_,
+    ) -> logical_t {
+        // SAFETY: as `redirector_of`.
+        logical_t::from(unsafe { redirector_of(context) }.redirects_error())
+    }
+
+    /// # Safety
+    /// As [`redirector_of`].
+    pub(super) unsafe extern "C" fn are_output_and_error_same_target(
+        context: *mut RexxIORedirectorContext_,
+    ) -> logical_t {
+        // SAFETY: as `redirector_of`.
+        logical_t::from(unsafe { redirector_of(context) }.same_target())
+    }
+
+    /// # Safety
+    /// As [`redirector_of`].
+    pub(super) unsafe extern "C" fn is_redirection_requested(
+        context: *mut RexxIORedirectorContext_,
+    ) -> logical_t {
+        // SAFETY: as `redirector_of`.
+        logical_t::from(unsafe { redirector_of(context) }.requested())
+    }
 }
 
 /// `DetachThread` of the context [`attach_thread`] answered, which the
@@ -3973,14 +4340,16 @@ pub(crate) extern "C-unwind" fn refusing_hook(thread: *mut RexxThreadContext_) {
 #[cfg(test)]
 mod tests {
     use super::{ThreadContext, owner_of, value_of};
-    use crate::callbacks::fake::FakeHost;
+    use crate::callbacks::fake::{FakeHost, Held};
     use crate::layout::{
-        Owned, RexxCallContext_, RexxMethodContext_, RexxObjectPtr_, RexxThreadContext_,
-        RexxThreadInterface, ValueDescriptor, ValueUnion, recording_refusals,
+        CSTRING, Owned, RexxCallContext_, RexxExitContext_, RexxIORedirectorContext_,
+        RexxMethodContext_, RexxObjectPtr, RexxObjectPtr_, RexxStringObject, RexxThreadContext_,
+        RexxThreadInterface, ValueDescriptor, ValueUnion, logical_t, recording_refusals,
     };
     use crate::values::{
         self, CStringPool, Conversion, Converted, Repr, Value, code, descriptor, repr, rows,
     };
+    use rexx_core::ObjRef;
 
     /// Runs `body` with the thread context and table of a native call `host`
     /// serves, recording the first member it refused.
@@ -4849,5 +5218,202 @@ mod tests {
             (&raw mut call).cast::<u8>(),
             (&raw mut call.context).cast::<u8>()
         );
+    }
+
+    /// A direct handler that binds `CMD` to its command in the caller's
+    /// variables and reads it back through its exit context, answering its
+    /// address, or null where the read-back missed.
+    unsafe extern "C-unwind" fn binding_handler(
+        context: *mut RexxExitContext_,
+        address: RexxStringObject,
+        command: RexxStringObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: the handler is called with a live exit context, whose
+        // table is `EXIT_CONTEXT`, and the name is a literal.
+        unsafe {
+            let table = &*(*context).functions;
+            (table.SetContextVariable)(context, c"CMD".as_ptr(), command.cast());
+            let read = (table.GetContextVariable)(context, c"CMD".as_ptr());
+            (table.DropContextVariable)(context, c"NONE".as_ptr());
+            let caller = (table.GetCallerContext)(context);
+            let all = (table.GetAllContextVariables)(context);
+            let reference = (table.GetContextVariableReference)(context, c"CMD".as_ptr());
+            if read == command.cast() && caller.is_null() && all.is_null() && reference.is_null() {
+                address.cast()
+            } else {
+                std::ptr::null_mut()
+            }
+        }
+    }
+
+    /// A direct handler that leaves by `ThrowException0`.
+    unsafe extern "C-unwind" fn throwing_handler(
+        context: *mut RexxExitContext_,
+        _address: RexxStringObject,
+        _command: RexxStringObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `binding_handler`.
+        unsafe { ((*(*context).functions).ThrowException0)(context, 40_001) };
+        unreachable!("a Throw member returned")
+    }
+
+    /// A redirecting handler that copies each input line to the output and,
+    /// buffered with a `\r\n` split across two buffers, to the error stream,
+    /// then answers its redirector's flags as a string.
+    unsafe extern "C-unwind" fn copying_handler(
+        context: *mut RexxExitContext_,
+        _address: RexxStringObject,
+        _command: RexxStringObject,
+        io: *mut RexxIORedirectorContext_,
+    ) -> RexxObjectPtr {
+        // SAFETY: the handler is called with live exit and redirector
+        // contexts; each data pointer is the redirector's own, read for the
+        // length it answered.
+        unsafe {
+            let table = &*(*io).functions;
+            let mut data: CSTRING = std::ptr::null();
+            let mut length = 0;
+            (table.ReadInput)(io, &raw mut data, &raw mut length);
+            while !data.is_null() {
+                (table.WriteOutput)(io, data, length);
+                (table.WriteErrorBuffer)(io, data, length);
+                (table.WriteErrorBuffer)(io, c"\r".as_ptr(), 1);
+                (table.WriteErrorBuffer)(io, c"\n".as_ptr(), 1);
+                (table.ReadInput)(io, &raw mut data, &raw mut length);
+            }
+            (table.ReadInputBuffer)(io, &raw mut data, &raw mut length);
+            let buffered = !data.is_null() && length == 0;
+            (table.WriteOutputBuffer)(io, c"tail".as_ptr(), 4);
+            let flags = [
+                (table.IsRedirectionRequested)(io),
+                (table.IsInputRedirected)(io),
+                (table.IsOutputRedirected)(io),
+                (table.IsErrorRedirected)(io),
+                (table.AreOutputAndErrorSameTarget)(io),
+                logical_t::from(buffered),
+            ];
+            let text: Vec<u8> = flags
+                .iter()
+                .map(|flag| b'0' + u8::from(*flag != 0))
+                .collect();
+            let thread = (*context).threadContext;
+            ((*(*thread).functions).NewString)(thread, text.as_ptr().cast(), text.len()).cast()
+        }
+    }
+
+    /// Runs `handler` for `command` issued to `address` as the interpreter
+    /// does, with `redirector`.
+    fn run_handler(
+        host: &mut FakeHost,
+        handler: &crate::load::CommandHandler,
+        redirector: &crate::redirect::Redirector,
+    ) -> (
+        Result<Option<ObjRef>, crate::values::Failure>,
+        ObjRef,
+        ObjRef,
+    ) {
+        let address = host.text(b"ENV");
+        let command = host.text(b"a command");
+        let mut strings = CStringPool::new();
+        let activation = values::Activation::new(Conversion {
+            host,
+            strings: &mut strings,
+        });
+        let answered = ThreadContext::new().enter(&activation, |contexts| {
+            crate::invoke::command(handler, contexts, &activation, address, command, redirector)
+        });
+        (answered, address, command)
+    }
+
+    /// **`AddCommandEnvironment` hands the host each handler of a type the
+    /// header defines**, under the name the extension spelled, and nothing for
+    /// any other type or a null handler.
+    #[test]
+    fn a_command_environment_registers_a_handler_of_either_type() {
+        let mut host = FakeHost::new();
+        let ((), refused) = with_thread(&mut host, |thread, _| {
+            let direct = binding_handler as *mut std::ffi::c_void;
+            let redirecting = copying_handler as *mut std::ffi::c_void;
+            // SAFETY: the thread context links its instance, whose table is
+            // `INSTANCE`; each name is a literal and each handler has the type
+            // its kind names.
+            unsafe {
+                let instance = (*thread).instance;
+                let add = (*(*instance).functions).AddCommandEnvironment;
+                add(instance, c"Direct".as_ptr(), direct, 1);
+                add(instance, c"io".as_ptr(), redirecting, 2);
+                add(instance, c"odd".as_ptr(), direct, 3);
+                add(instance, c"none".as_ptr(), std::ptr::null_mut(), 1);
+            }
+        });
+        assert_eq!(refused, None);
+        let registered: Vec<(&[u8], bool)> = host
+            .handlers
+            .iter()
+            .map(|(name, handler)| (name.as_slice(), handler.redirects()))
+            .collect();
+        assert_eq!(
+            registered,
+            [(b"Direct".as_slice(), false), (b"io".as_slice(), true)]
+        );
+    }
+
+    /// **A direct handler reaches the caller's variables through its exit
+    /// context**, and what it returns is the command's answer.
+    #[test]
+    fn a_direct_handler_binds_the_callers_variable_and_answers() {
+        let mut host = FakeHost::new();
+        let handler = crate::load::CommandHandler::direct(binding_handler);
+        let (answered, address, command) = run_handler(
+            &mut host,
+            &handler,
+            &crate::redirect::Redirector::unrequested(),
+        );
+        assert_eq!(answered.expect("the handler answers"), Some(address));
+        assert_eq!(host.variables, [(b"CMD".to_vec(), command)]);
+    }
+
+    /// **A `Throw` member leaves the handler with its condition held**, and
+    /// the handler answers nothing.
+    #[test]
+    fn an_exit_context_throw_leaves_the_handler() {
+        let mut host = FakeHost::new();
+        let handler = crate::load::CommandHandler::direct(throwing_handler);
+        let (answered, _, _) = run_handler(
+            &mut host,
+            &handler,
+            &crate::redirect::Redirector::unrequested(),
+        );
+        assert_eq!(answered.expect("the handler answers"), None);
+        assert_eq!(host.held, Some(Held::Syntax(40_001, None)));
+    }
+
+    /// **A redirecting handler reads each input line and writes each
+    /// stream**, a line and a buffer, and sees the flags its redirector
+    /// holds.
+    #[test]
+    fn a_redirecting_handler_reads_and_writes_each_stream() {
+        let mut host = FakeHost::new();
+        let handler = crate::load::CommandHandler::redirecting(copying_handler);
+        let redirector = crate::redirect::Redirector::new(
+            Some(vec![b"one".to_vec(), Vec::new(), b"three".to_vec()]),
+            true,
+            true,
+            false,
+        );
+        let (answered, _, _) = run_handler(&mut host, &handler, &redirector);
+        let flags = answered.expect("the handler answers").expect("a string");
+        assert_eq!(host.bytes(flags).as_deref(), Some(b"111101".as_slice()));
+        let (output, error) = redirector.finish();
+        assert_eq!(
+            output,
+            [
+                b"one".to_vec(),
+                Vec::new(),
+                b"three".to_vec(),
+                b"tail".to_vec()
+            ]
+        );
+        assert_eq!(error, [b"one".to_vec(), Vec::new(), b"three".to_vec()]);
     }
 }

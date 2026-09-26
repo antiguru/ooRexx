@@ -1316,6 +1316,10 @@ struct Interp {
     /// a library whose version check refused is, because that check raises
     /// between the `put` and the `remove`.
     libraries: Libraries,
+    /// The command handlers extensions registered, by upper-cased environment
+    /// name (`InterpreterInstance::commandHandlers`). Emptied at the first
+    /// library close, since nothing ties a handler's code to its library.
+    command_handlers: HashMap<Box<[u8]>, Rc<rexx_api::load::CommandHandler>>,
     /// The thread context every native call and package hook is handed,
     /// which an extension may keep for as long as this interpreter runs.
     thread: rexx_api::ffi::ThreadContext,
@@ -1431,6 +1435,11 @@ struct Interp {
     /// raise until the condition object is built, as
     /// [`Interp::pending_additional`] is.
     pending_result: Option<ObjRef>,
+    /// The `RC` a condition a registered command handler raised carries, held
+    /// as [`Interp::pending_additional`] is: an object where the entry's value
+    /// is not a rendering of the command's code, `.nil` for an entry present
+    /// with no value.
+    pending_rc: Option<ObjRef>,
     /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
     /// `case` text, or `None` inside a plain `SELECT` (or before any
     /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
@@ -2005,6 +2014,7 @@ impl Interp {
             native_handles: Vec::new(),
             native_spares: Vec::new(),
             global_references: rexx_api::handles::Table::new(),
+            command_handlers: HashMap::new(),
             kept_strings: std::collections::HashMap::new(),
             kept_names: std::collections::HashMap::new(),
             kept_holders: std::collections::HashMap::new(),
@@ -2022,6 +2032,7 @@ impl Interp {
             active_condition: None,
             pending_additional: None,
             pending_result: None,
+            pending_rc: None,
             next_activation_id: 0,
             next_invocation: 0,
             current_case_text: None,
@@ -2661,6 +2672,8 @@ impl Interp {
             // spare names nothing to root.
             native_spares: _,
             global_references,
+            // Entry points, not objects.
+            command_handlers: _,
             // Copies keyed by object, dropped with it rather than keeping it.
             kept_strings: _,
             kept_names: _,
@@ -2682,6 +2695,7 @@ impl Interp {
             active_condition: _,
             pending_additional,
             pending_result,
+            pending_rc,
             current_case_text: _,
             indent_offset: _,
             activation_indent: _,
@@ -2748,6 +2762,7 @@ impl Interp {
         // condition object that will hold it.
         out.extend(*pending_additional);
         out.extend(*pending_result);
+        out.extend(*pending_rc);
         out.extend(global_references.roots());
         // Everything a native call has been handed, and the receiver it is
         // writing object variables through. Held here rather than by the

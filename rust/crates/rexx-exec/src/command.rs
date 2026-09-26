@@ -18,10 +18,14 @@ use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::ExitStatusExt;
 use std::process::Stdio;
+use std::rc::Rc;
 
 use rexx_parse::{AddressIo, Expr, Instruction, ProgramSource};
 
 use rexx_core::ObjRef;
+
+use rexx_api::load::CommandHandler;
+use rexx_api::redirect::Redirector;
 
 use crate::error::{Failure, Raised};
 use crate::redirect::IoContext;
@@ -91,10 +95,23 @@ pub(crate) struct CommandOutcome {
     /// condition carries.
     pub(crate) rc: i32,
     pub(crate) status: ReturnStatus,
-    /// A security manager's own `RC` entry, which is assigned to `RC`
-    /// verbatim and rendered by the trace line. `None` for a command that
-    /// actually ran, whose code is [`CommandOutcome::rc`].
+    /// The object a security manager or a registered handler supplied,
+    /// which is assigned to `RC` verbatim and rendered by the trace line.
+    /// `None` for a command a shell ran, whose code is
+    /// [`CommandOutcome::rc`].
     pub(crate) supplied: Option<Supplied>,
+    /// The condition a registered handler raised, which the command raises
+    /// in place of the one its status would.
+    pub(crate) condition: Option<Box<HandlerCondition>>,
+}
+
+/// A condition a registered handler raised through its thread context, as
+/// `RexxActivation::command` finds it (`execution/RexxActivation.cpp`).
+pub(crate) struct HandlerCondition {
+    pub(crate) name: Vec<u8>,
+    pub(crate) description: Option<Vec<u8>>,
+    pub(crate) additional: Option<ObjRef>,
+    pub(crate) result: Option<ObjRef>,
 }
 
 /// The `RC` a security manager set, as both halves are needed: the object
@@ -117,6 +134,7 @@ impl CommandOutcome {
             rc,
             status,
             supplied: None,
+            condition: None,
         }
     }
 }
@@ -383,6 +401,16 @@ fn exit_code(status: std::process::ExitStatus) -> i32 {
     }
 }
 
+/// The `SYNTAX` error `::OPTIONS ERROR|FAILURE SYNTAX` makes of `condition`,
+/// 98.971 for `FAILURE` and 98.970 for `ERROR`.
+fn escalated(condition: &str, description: &[u8], rc: &[u8]) -> Raised {
+    if condition == "FAILURE" {
+        Raised::failure_syntax(description, rc)
+    } else {
+        Raised::error_syntax(description, rc)
+    }
+}
+
 /// What one child left behind: its return code and each stream it wrote.
 struct Spawned {
     rc: i32,
@@ -433,7 +461,7 @@ fn spawn(
         builder.env(OsStr::from_bytes(name), OsStr::from_bytes(value));
     }
     builder.current_dir(interp.cwd_text());
-    let input = io.and_then(|context| context.input.as_deref());
+    let input = io.and_then(IoContext::input_bytes);
     if input.is_some() {
         builder.stdin(Stdio::piped());
     }
@@ -471,7 +499,7 @@ fn spawn(
     let stderr = running.stderr.take();
     let mut out = Vec::new();
     let err = std::thread::scope(|scope| {
-        if let (Some(mut stdin), Some(bytes)) = (stdin, input) {
+        if let (Some(mut stdin), Some(bytes)) = (stdin, input.as_deref()) {
             // A write error is dropped: a child exiting before it reads its
             // input gives `EPIPE`, which the oracle's own writer ignores.
             scope.spawn(move || {
@@ -514,7 +542,9 @@ impl Interp {
     /// Runs one already-evaluated command string against the `ADDRESS`
     /// environment in force, answering its return code and status.
     ///
-    /// An environment no handler is registered for runs nothing and answers
+    /// A handler an extension registered answers first, a built-in name's
+    /// included, as `InterpreterInstance::resolveCommandHandler` finds it. An
+    /// environment no handler is registered for runs nothing and answers
     /// [`NOT_REGISTERED`] with a `FAILURE` -- measured, the command is
     /// evaluated and never executed.
     pub(crate) fn run_command(
@@ -523,11 +553,19 @@ impl Interp {
         command: &[u8],
         io: Option<&IoContext>,
     ) -> Result<CommandOutcome, Failure> {
+        let registered = self
+            .command_handlers
+            .get(environment.to_ascii_uppercase().as_slice())
+            .map(Rc::clone);
+        if let Some(handler) = registered {
+            return self.run_registered_command(&handler, environment, command, io);
+        }
         let Some(handler) = handler_for(environment) else {
             return Ok(CommandOutcome {
                 rc: NOT_REGISTERED,
                 status: ReturnStatus::Failure,
                 supplied: None,
+                condition: None,
             });
         };
         // `PATH` names no shell, so a `cd` under it is a program to find
@@ -557,6 +595,71 @@ impl Interp {
             self.write_err(&spawned.err);
         }
         Ok(CommandOutcome::of(spawned.rc))
+    }
+
+    /// `CommandHandler::call` (`concurrency/CommandHandler.cpp:98-151`) for a
+    /// handler an extension registered: a direct one refuses any redirection
+    /// with 98.921, and a redirecting one reads and writes through `io`,
+    /// whose lines reach their targets once it returns, a `SYNTAX` it raised
+    /// notwithstanding.
+    ///
+    /// `RC` is the object the handler returned, or `.false` for none, and
+    /// the status is `Normal` unless it raised `ERROR` or `FAILURE`.
+    fn run_registered_command(
+        &mut self,
+        handler: &CommandHandler,
+        environment: &[u8],
+        command: &[u8],
+        io: Option<&IoContext>,
+    ) -> Result<CommandOutcome, Failure> {
+        if io.is_some() && !handler.redirects() {
+            return Err(Raised::redirection_not_supported(environment).into());
+        }
+        let redirector = io.map_or_else(Redirector::unrequested, IoContext::redirector);
+        let handled = self.run_command_handler(handler, environment, command, &redirector)?;
+        if let Some(context) = io {
+            let (out, err) = redirector.finish();
+            context.finish_lines(self, &out, &err)?;
+        }
+        let condition = match handled.raised {
+            None => None,
+            Some(Failure::Raised(held)) if !held.condition.eq_ignore_ascii_case("SYNTAX") => {
+                Some(Box::new(HandlerCondition {
+                    name: held.condition.to_ascii_uppercase().into_bytes(),
+                    description: held.description,
+                    additional: handled.additional,
+                    result: handled.result,
+                }))
+            }
+            Some(raised) => {
+                if handled.additional.is_some() {
+                    self.pending_additional = handled.additional;
+                }
+                return Err(raised);
+            }
+        };
+        // `RexxActivation::command`: the condition's `RESULT` stands in for
+        // its missing `RC`, and then for the handler's answer.
+        let object = match condition.as_ref().and_then(|held| held.result) {
+            Some(result) => result,
+            None => match handled.value {
+                Some(value) => value,
+                None => self.counted(0),
+            },
+        };
+        self.roots.push_temp(object);
+        let text = self.string_value_text(object);
+        let status = match condition.as_ref().map(|held| held.name.as_slice()) {
+            Some(b"FAILURE") => ReturnStatus::Failure,
+            Some(b"ERROR") => ReturnStatus::Error,
+            _ => ReturnStatus::Normal,
+        };
+        Ok(CommandOutcome {
+            rc: whole_value(&text).unwrap_or(0),
+            status,
+            supplied: Some(Supplied { object, text }),
+            condition,
+        })
     }
 
     /// The security manager's `COMMAND` checkpoint, and then the command
@@ -603,6 +706,7 @@ impl Interp {
                 rc: 0,
                 status,
                 supplied: None,
+                condition: None,
             });
         };
         self.roots.push_temp(object);
@@ -613,6 +717,7 @@ impl Interp {
             rc,
             status,
             supplied: Some(Supplied { object, text }),
+            condition: None,
         })
     }
 
@@ -693,12 +798,11 @@ impl Interp {
         if let Some(condition) = outcome.status.condition()
             && self.condition_raises_syntax(condition.as_bytes())
         {
-            let raised = if condition == "FAILURE" {
-                Raised::failure_syntax(&command, outcome.rc)
-            } else {
-                Raised::error_syntax(&command, outcome.rc)
-            };
-            return Err(raised.into());
+            return Err(match &outcome.condition {
+                Some(held) => self.escalated(held, condition),
+                None => escalated(condition, &command, &outcome.rc.to_string().into_bytes()),
+            }
+            .into());
         }
 
         // `RC` before anything else, which is where the C++ puts it too
@@ -741,10 +845,88 @@ impl Interp {
         }
         self.activation_mut().rs = Some(outcome.status.code());
 
-        if let Some(condition) = outcome.status.condition() {
-            self.raise_command_condition(condition, &command, outcome.rc)?;
+        match &outcome.condition {
+            Some(held) => {
+                let name = held.name.clone();
+                self.raise_handler_condition(held, &name)?;
+            }
+            None => {
+                if let Some(condition) = outcome.status.condition() {
+                    self.raise_command_condition(condition, &command, outcome.rc)?;
+                }
+            }
         }
         Ok(Flow::Next)
+    }
+
+    /// The `SYNTAX` error `::OPTIONS ERROR|FAILURE SYNTAX` makes of a
+    /// handler's condition, whose substitutions are its description and
+    /// `RESULT` (`Activity::raiseCondition`, `concurrency/Activity.cpp:596-610`).
+    fn escalated(&mut self, held: &HandlerCondition, condition: &str) -> Raised {
+        let rc = held
+            .result
+            .map(|result| self.string_value_text(result))
+            .unwrap_or_default();
+        escalated(condition, held.description.as_deref().unwrap_or(b""), &rc)
+    }
+
+    /// Offers a condition a registered handler raised to the traps in force
+    /// as `RexxActivation::command` does: under its own name and with the
+    /// handler's description, `ADDITIONAL` and `RESULT`, its `RESULT` also
+    /// its `RC`, which an `ERROR` or `FAILURE` carries even with no `RESULT`.
+    /// An untrapped `FAILURE` is re-raised as `ERROR`; any other untrapped
+    /// condition is silent.
+    fn raise_handler_condition(
+        &mut self,
+        held: &HandlerCondition,
+        name: &[u8],
+    ) -> Result<(), Failure> {
+        let command_status = matches!(name, b"ERROR" | b"FAILURE");
+        if command_status && self.condition_raises_syntax(name) {
+            let condition = if name == b"FAILURE" {
+                "FAILURE"
+            } else {
+                "ERROR"
+            };
+            return Err(self.escalated(held, condition).into());
+        }
+        let raised = Raised {
+            description: held.description.clone(),
+            ..Raised::condition(std::borrow::Cow::Owned(
+                String::from_utf8_lossy(name).into_owned(),
+            ))
+        };
+        let rc = match held.result {
+            Some(result) => Some(result),
+            None if command_status => Some(ObjRef::NIL),
+            None => None,
+        };
+        match self.trap_for(name) {
+            Some(trap) if trap.call => {
+                self.pending_rc = rc;
+                self.pending_additional = held.additional;
+                self.pending_result = held.result;
+                let object = self.build_condition_object(&raised, Some(true))?;
+                self.pending_traps.push_back(crate::PendingTrap {
+                    condition: name.into(),
+                    rc: None,
+                    description: held.description.clone(),
+                    object: Some(object),
+                    activation: self.activation().id,
+                    queued_during_delivery: false,
+                    fragment_depth: self.fragment_depth,
+                });
+                Ok(())
+            }
+            Some(_) => {
+                self.pending_rc = rc;
+                self.pending_additional = held.additional;
+                self.pending_result = held.result;
+                Err(raised.into())
+            }
+            None if name == b"FAILURE" => self.raise_handler_condition(held, b"ERROR"),
+            None => Ok(()),
+        }
     }
 
     /// Offers `ERROR` or `FAILURE` to the traps in force.
@@ -767,12 +949,7 @@ impl Interp {
         // handler and exits 0. The reraise below re-enters here, which is the
         // C++'s second check after a FAILURE becomes an ERROR.
         if self.condition_raises_syntax(condition.as_bytes()) {
-            let raised = if condition == "FAILURE" {
-                Raised::failure_syntax(command, rc)
-            } else {
-                Raised::error_syntax(command, rc)
-            };
-            return Err(raised.into());
+            return Err(escalated(condition, command, &rc.to_string().into_bytes()).into());
         }
         let rendered = rc.to_string().into_bytes();
         // One `Raised` for both branches. `result` beside `rc` is what parts

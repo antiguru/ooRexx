@@ -133,7 +133,10 @@ impl Interp {
         self.roots.push_temp(traceback);
         entries.push((key::TRACEBACK, traceback));
 
-        if let Some(rc) = raised.rc.as_deref() {
+        if let Some(rc) = self.pending_rc.take() {
+            self.roots.push_temp(rc);
+            entries.push((key::RC, rc));
+        } else if let Some(rc) = raised.rc.as_deref() {
             let rc = self.text(rc);
             self.roots.push_temp(rc);
             entries.push((key::RC, rc));

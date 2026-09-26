@@ -1560,18 +1560,26 @@ impl Raised {
     }
 
     /// 98.970, what `::OPTIONS ERROR SYNTAX` turns a command's `ERROR` into
-    /// (`RexxActivation::command`). The catalogue quotes `&1` itself, so
-    /// `command` is the string as the program wrote it and nothing more --
-    /// measured, `External command "sh -c 'exit 3'" ended with return code 3.`
-    /// at rc 158.
-    pub(crate) fn error_syntax(command: &[u8], rc: i32) -> Raised {
-        Raised::syntax(98, 970, vec![command.to_vec(), rc.to_string().into_bytes()])
+    /// (`RexxActivation::command`): the condition's `DESCRIPTION` and `RC`.
+    /// The catalogue quotes `&1` itself, so a command's description is the
+    /// string as the program wrote it and nothing more -- measured,
+    /// `External command "sh -c 'exit 3'" ended with return code 3.` at rc
+    /// 158.
+    pub(crate) fn error_syntax(description: &[u8], rc: &[u8]) -> Raised {
+        Raised::syntax(98, 970, vec![description.to_vec(), rc.to_vec()])
     }
 
     /// 98.971, the same for `FAILURE`, whose wording is "failed with" where
     /// [`Raised::error_syntax`]'s is "ended with".
-    pub(crate) fn failure_syntax(command: &[u8], rc: i32) -> Raised {
-        Raised::syntax(98, 971, vec![command.to_vec(), rc.to_string().into_bytes()])
+    pub(crate) fn failure_syntax(description: &[u8], rc: &[u8]) -> Raised {
+        Raised::syntax(98, 971, vec![description.to_vec(), rc.to_vec()])
+    }
+
+    /// 98.921: `ADDRESS ... WITH` to an environment whose handler does not
+    /// redirect (`CommandHandler::call`, `concurrency/CommandHandler.cpp:98`).
+    /// The substitution is the environment name as the program gave it.
+    pub(crate) fn redirection_not_supported(environment: &[u8]) -> Raised {
+        Raised::syntax(98, 921, vec![environment.to_vec()])
     }
 
     /// 98.974, what `::OPTIONS NOTREADY SYNTAX` turns an untrapped NOTREADY

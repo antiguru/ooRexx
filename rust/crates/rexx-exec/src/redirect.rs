@@ -49,11 +49,11 @@ impl Stream {
 
 /// One command's resolved redirection.
 pub(crate) struct IoContext {
-    /// Everything the child reads on standard input, gathered **before it
-    /// starts**. `readInputBuffered` does the same, and that is what lets one
-    /// object be a command's input and its output at once: the doc's `sort`
-    /// example reads the array before the target empties it.
-    pub(crate) input: Option<Vec<u8>>,
+    /// Every line the command reads, gathered **before it starts**.
+    /// `readInputBuffered` does the same, and that is what lets one object be
+    /// a command's input and its output at once: the doc's `sort` example
+    /// reads the array before the target empties it.
+    input: Option<Vec<Vec<u8>>>,
     output: Option<Target>,
     error: Option<Target>,
 }
@@ -125,6 +125,29 @@ impl Target {
 }
 
 impl IoContext {
+    /// What a child reads on standard input: every line with its terminator,
+    /// the last one included -- measured, `'cat -A' with input using 'x'`
+    /// prints `x$`.
+    pub(crate) fn input_bytes(&self) -> Option<Vec<u8>> {
+        let lines = self.input.as_ref()?;
+        let mut buffer = Vec::new();
+        for line in lines {
+            buffer.extend_from_slice(line);
+            buffer.push(b'\n');
+        }
+        Some(buffer)
+    }
+
+    /// The streams a redirecting command handler reads and writes.
+    pub(crate) fn redirector(&self) -> rexx_api::redirect::Redirector {
+        rexx_api::redirect::Redirector::new(
+            self.input.clone(),
+            self.output.is_some(),
+            self.error.is_some(),
+            self.shares_one_target(),
+        )
+    }
+
     pub(crate) fn redirects_output(&self) -> bool {
         self.output.is_some()
     }
@@ -155,19 +178,28 @@ impl IoContext {
         out: &[u8],
         err: &[u8],
     ) -> Result<(), Failure> {
+        self.finish_lines(interp, &split_lines(out), &split_lines(err))
+    }
+
+    /// Hands each redirected stream's lines to its target. Under
+    /// [`IoContext::shares_one_target`] every line is in `out`.
+    pub(crate) fn finish_lines(
+        &self,
+        interp: &mut Interp,
+        out: &[Vec<u8>],
+        err: &[Vec<u8>],
+    ) -> Result<(), Failure> {
         if let Some(target) = &self.output {
-            let lines = split_lines(out);
-            interp.write_target(target, &lines)?;
+            interp.write_target(target, out)?;
         }
         // **One object for both streams is written once.** Everything the
-        // child produced came down the output pipe and `err` is empty, so a
-        // second write here would replace what the first one just landed.
+        // command produced is in `out` and `err` is empty, so a second write
+        // here would replace what the first one just landed.
         if self.shares_one_target() {
             return Ok(());
         }
         if let Some(target) = &self.error {
-            let lines = split_lines(err);
-            interp.write_target(target, &lines)?;
+            interp.write_target(target, err)?;
         }
         Ok(())
     }
@@ -295,7 +327,7 @@ impl Interp {
             global.map(|io| (&io.error, io.error_option)),
         );
         let input = match input {
-            Some((source, _)) => Some(self.input_buffer(code, source)?),
+            Some((source, _)) => Some(self.input_lines(code, source)?),
             None => None,
         };
         let output = match output {
@@ -317,11 +349,12 @@ impl Interp {
         }))
     }
 
-    /// Everything a redirected standard input is fed, as one buffer.
-    ///
-    /// Every line carries a terminator, the last one included -- measured,
-    /// `'cat -A' with input using 'x'` prints `x$`.
-    fn input_buffer(&mut self, code: &Code<'_>, source: &Redirection) -> Result<Vec<u8>, Failure> {
+    /// Every line a redirected input reads.
+    fn input_lines(
+        &mut self,
+        code: &Code<'_>,
+        source: &Redirection,
+    ) -> Result<Vec<Vec<u8>>, Failure> {
         let lines = match source {
             // `merge` answers `None` for both, so neither reaches here.
             Redirection::Default | Redirection::Normal => Vec::new(),
@@ -344,12 +377,7 @@ impl Interp {
                 lines
             }
         };
-        let mut buffer = Vec::new();
-        for line in lines {
-            buffer.extend_from_slice(&line);
-            buffer.push(b'\n');
-        }
-        Ok(buffer)
+        Ok(lines)
     }
 
     /// A stem read as input: `stem.1` through `stem.<stem.0>`.

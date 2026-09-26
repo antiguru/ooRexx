@@ -17,9 +17,12 @@
 
 use rexx_core::ObjRef;
 
-use crate::ffi::{CallContext, Contexts, MethodContext};
+use crate::ffi::{CallContext, Contexts, MethodContext, RedirectorContext};
 use crate::layout::ValueDescriptor;
-use crate::load::{Hook, Library, NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE};
+use crate::load::{
+    CommandHandler, Hook, Library, NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE,
+};
+use crate::redirect::Redirector;
 use crate::values::{
     self, ARGUMENT_TERMINATOR, Activation, Converted, Failure, ResultRead, Value, Written,
 };
@@ -117,6 +120,44 @@ pub fn hook(
         return Err(Failure::UnfilledSlot { entry });
     }
     Ok(())
+}
+
+/// Run the command handler `handler` for `command`, issued to the environment
+/// `address`, with the exit context `contexts` links and, for a redirecting
+/// handler, `redirector` (`ContextCommandHandlerDispatcher::run` and its
+/// redirecting sibling, `interpreter/concurrency/CommandHandler.cpp:231-295`).
+///
+/// The answer is the object the handler returned, `None` for a null or a
+/// handle this call does not hold. A condition it raised, a `Throw` member's
+/// included, is left on `cx`, as [`method`] leaves one.
+///
+/// # Errors
+/// [`Failure::UnfilledSlot`] for the first interface member the handler
+/// reached that this phase has not written, which also forgets any condition
+/// it raised.
+pub fn command(
+    handler: &CommandHandler,
+    contexts: &mut Contexts<'_, '_>,
+    cx: &Activation<'_>,
+    address: ObjRef,
+    command: ObjRef,
+    redirector: &Redirector,
+) -> Result<Option<ObjRef>, Failure> {
+    let (address, command) = {
+        let mut conversion = cx.conversion();
+        let locals = conversion.host.locals();
+        (locals.register(address), locals.register(command))
+    };
+    let exit = contexts.exit();
+    let mut io = RedirectorContext::new(redirector);
+    let (answered, refused) = crate::layout::recording_refusals(|| {
+        handler.call(&exit, address.cast(), command.cast(), &mut io)
+    });
+    if let Some(entry) = refused {
+        cx.clear_pending();
+        return Err(Failure::UnfilledSlot { entry });
+    }
+    Ok(cx.conversion().host.resolve(answered))
 }
 
 /// The half of the protocol both calls share once the signature is in hand:

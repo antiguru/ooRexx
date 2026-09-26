@@ -284,3 +284,10 @@ lang/library_callback_stems.rex
 lang/library_callback_raise_codes.rex
 lang/library_callback_precision.rex
 lang/library_callback_class_search.rex
+
+# Surface Task 6: AddCommandEnvironment through orxfunction's
+# TestAddCommandEnvironment -- a direct handler, a redirecting one reporting
+# which streams are redirected, and the I/O handler's predicates -- and that
+# handler reading and writing each stream through the redirector context.
+lang/library_command_environments.rex
+lang/library_command_redirect.rex

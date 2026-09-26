@@ -583,6 +583,13 @@ impl Surface for Interp {
             }
         }
     }
+
+    fn add_command_handler(&mut self, name: &[u8], handler: rexx_api::load::CommandHandler) {
+        self.command_handlers.insert(
+            name.to_ascii_uppercase().into_boxed_slice(),
+            std::rc::Rc::new(handler),
+        );
+    }
 }
 
 impl Interp {

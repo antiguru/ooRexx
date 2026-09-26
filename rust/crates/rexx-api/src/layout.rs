@@ -379,7 +379,6 @@ pub const REFUSING_MEMBERS: &[(&str, &str)] = &[
     ("RexxInstanceInterface.Terminate", "Phase 9"),
     ("RexxInstanceInterface.Halt", "Phase 9"),
     ("RexxInstanceInterface.SetTrace", "Phase 9"),
-    ("RexxInstanceInterface.AddCommandEnvironment", "Phase 8"),
     ("RexxThreadInterface.HaltThread", "Phase 9"),
     ("RexxThreadInterface.SetThreadTrace", "Phase 9"),
     ("MethodContextInterface.SetGuardOnWhenUpdated", "Phase 6"),
@@ -387,7 +386,7 @@ pub const REFUSING_MEMBERS: &[(&str, &str)] = &[
 ];
 
 /// The phase a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and
-/// Phase 8 for a member of a table no task has populated.
+/// Phase 8 for a member no row names.
 #[must_use]
 pub fn refusal_owner(entry: &str) -> &'static str {
     REFUSING_MEMBERS
@@ -624,9 +623,6 @@ macro_rules! interface {
         interface!(@shape $(#[$meta])* $Name { $($body)* });
         interface!(@refusing $Name { $($body)* });
     };
-    ($(#[$meta:meta])* $Name:ident, unpopulated { $($body:tt)* }) => {
-        interface!(@shape $(#[$meta])* $Name { $($body)* });
-    };
 }
 
 interface! {
@@ -861,7 +857,7 @@ interface! {
 
 interface! {
     /// `ExitContextInterface` (`api/oorexxapi.h:749-763`).
-    ExitContextInterface, unpopulated {
+    ExitContextInterface, populated {
         interfaceVersion: { value wholenumber_t = EXIT_INTERFACE_VERSION },
         SetContextVariable: { call(*mut RexxExitContext_, CSTRING, RexxObjectPtr) },
         GetContextVariable: { call(*mut RexxExitContext_, CSTRING) -> RexxObjectPtr },
@@ -879,7 +875,7 @@ interface! {
 
 interface! {
     /// `IORedirectorInterface` (`api/oorexxapi.h:769-784`).
-    IORedirectorInterface, unpopulated {
+    IORedirectorInterface, populated {
         interfaceVersion: { value wholenumber_t = REDIRECT_INTERFACE_VERSION },
         ReadInput: { call(*mut RexxIORedirectorContext_, *mut CSTRING, *mut usize) },
         ReadInputBuffer: { call(*mut RexxIORedirectorContext_, *mut CSTRING, *mut usize) },
@@ -903,22 +899,3 @@ pub static METHOD_CONTEXT_INTERFACE: MethodContextInterface = MethodContextInter
 // objects exist (`interpreter/concurrency/Activity.cpp:1844-1849`). Whatever
 // hands out a thread context owns the table, which is also what keeps this
 // phase from mutating a global.
-
-/// The exit-context interface, which nothing reaches yet: what a method or call
-/// context addresses is the thread table, its instance and its own context
-/// table.
-///
-/// # Panics
-/// Always.
-pub fn exit_context_interface() -> ExitContextInterface {
-    abort("ExitContextInterface");
-}
-
-/// The I/O-redirector interface, unreached for the reason
-/// [`exit_context_interface`] gives.
-///
-/// # Panics
-/// Always.
-pub fn io_redirector_interface() -> IORedirectorInterface {
-    abort("IORedirectorInterface");
-}

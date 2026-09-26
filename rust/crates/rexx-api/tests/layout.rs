@@ -164,6 +164,16 @@ fn a_refusing_member_aborts_exactly_where_no_return_is_safe() {
             CallContextInterface::FIELDS,
             CallContextInterface::ABORTS,
         ),
+        (
+            "ExitContextInterface",
+            ExitContextInterface::FIELDS,
+            ExitContextInterface::ABORTS,
+        ),
+        (
+            "IORedirectorInterface",
+            IORedirectorInterface::FIELDS,
+            IORedirectorInterface::ABORTS,
+        ),
     ] {
         let expected: Vec<bool> = declarations_of(&header, name)
             .into_iter()
@@ -291,6 +301,14 @@ fn the_populated_tables_carry_the_interface_version() {
     assert_eq!(
         rexx_api::ffi::INSTANCE.interfaceVersion,
         rexx_api::layout::INSTANCE_INTERFACE_VERSION
+    );
+    assert_eq!(
+        rexx_api::ffi::EXIT_CONTEXT.interfaceVersion,
+        rexx_api::layout::EXIT_INTERFACE_VERSION
+    );
+    assert_eq!(
+        rexx_api::ffi::IO_REDIRECTOR.interfaceVersion,
+        rexx_api::layout::REDIRECT_INTERFACE_VERSION
     );
 }
 
@@ -425,29 +443,11 @@ fn a_wrapper_puts_the_public_context_first() {
         offset_of!(Owned<RexxExitContext_, u8>, owner),
         size_of::<RexxExitContext_>()
     );
-}
-
-/// The tables outside the L2 slice are declared and nothing builds one, so
-/// the site that would hand one out has to say so rather than answer.
-#[test]
-fn a_table_outside_the_slice_refuses_where_it_would_be_handed_out() {
-    for (name, hand_out) in [
-        (
-            "ExitContextInterface",
-            (|| {
-                rexx_api::layout::exit_context_interface();
-            }) as fn(),
-        ),
-        ("IORedirectorInterface", || {
-            rexx_api::layout::io_redirector_interface();
-        }),
-    ] {
-        let raised = std::panic::catch_unwind(hand_out).expect_err(&format!("{name} answered"));
-        let message = raised
-            .downcast_ref::<String>()
-            .map_or_else(String::new, Clone::clone);
-        assert_eq!(message, format!("{name} is not implemented (Phase 8)"));
-    }
+    assert_eq!(offset_of!(Owned<RexxIORedirectorContext_, u8>, context), 0);
+    assert_eq!(
+        offset_of!(Owned<RexxIORedirectorContext_, u8>, owner),
+        size_of::<RexxIORedirectorContext_>()
+    );
 }
 
 /// The Rust type the header's C type `c` is, as `std::any::type_name` spells
@@ -715,6 +715,16 @@ fn refusing_members() -> BTreeSet<String> {
             rexx_api::ffi::CALL_CONTEXT.addresses(),
             CallContextInterface::REFUSING.addresses(),
         ),
+        (
+            "ExitContextInterface",
+            rexx_api::ffi::EXIT_CONTEXT.addresses(),
+            ExitContextInterface::REFUSING.addresses(),
+        ),
+        (
+            "IORedirectorInterface",
+            rexx_api::ffi::IO_REDIRECTOR.addresses(),
+            IORedirectorInterface::REFUSING.addresses(),
+        ),
     ] {
         let functions: Vec<String> = declarations_of(&header, name)
             .into_iter()
@@ -774,11 +784,13 @@ fn the_refusal_comparison_tells_a_filled_member_from_a_stub() {
 
 /// The C++ wrapper struct an interface table's members are called through,
 /// and that table.
-const WRAPPERS: [(&str, &str); 4] = [
+const WRAPPERS: [(&str, &str); 6] = [
     ("RexxInstance_", "RexxInstanceInterface"),
     ("RexxThreadContext_", "RexxThreadInterface"),
     ("RexxMethodContext_", "MethodContextInterface"),
     ("RexxCallContext_", "CallContextInterface"),
+    ("RexxExitContext_", "ExitContextInterface"),
+    ("RexxIORedirectorContext_", "IORedirectorInterface"),
 ];
 
 /// Each inline method `wrapper` defines in the header, with the method's
@@ -927,6 +939,8 @@ fn the_wrapper_scan_follows_one_wrapper_into_another() {
     assert!(reached.contains("RexxInstanceInterface.AttachThread"));
     assert!(reached.contains("RexxThreadInterface.RexxTrue"));
     assert!(!reached.contains("RexxThreadInterface.HaltThread"));
+    assert!(reached.contains("RexxInstanceInterface.AddCommandEnvironment"));
+    assert!(reached.contains("IORedirectorInterface.WriteErrorBuffer"));
 }
 
 /// **What the test extensions call is filled first**: every member they reach
@@ -937,7 +951,6 @@ fn the_test_extensions_reach_only_members_that_answer() {
     const STILL_REFUSING: &[&str] = &[
         "MethodContextInterface.SetGuardOffWhenUpdated",
         "MethodContextInterface.SetGuardOnWhenUpdated",
-        "RexxInstanceInterface.AddCommandEnvironment",
     ];
     let refusing = refusing_members();
     let reached: BTreeSet<String> = members_the_test_extensions_call()

@@ -857,3 +857,28 @@ fn handle_carried_copies_are_pruned_without_a_collection() {
         interp.kept_strings.len()
     );
 }
+
+/// **A handler a library registers answers commands to its environment until
+/// the first library closes**, which empties the table: nothing ties a
+/// handler's code to the library that registered it.
+#[test]
+fn a_registered_handler_answers_until_a_library_closes() {
+    let mut interp = Interp::new();
+    assert!(matches!(
+        interp.settle_library(
+            b"registering",
+            Ok(Some(rexx_api::load::registering_library()))
+        ),
+        LibraryLoad::Loaded(_)
+    ));
+    let outcome = interp
+        .run_command(b"Tested", b"a command", None)
+        .unwrap_or_else(|_| panic!("the handler answers"));
+    let answered = outcome.supplied.map(|supplied| supplied.text);
+    assert_eq!(answered.as_deref(), Some(b"a command".as_slice()));
+    assert!(interp.terminate().is_empty());
+    assert!(
+        interp.command_handlers.is_empty(),
+        "closing a library left a handler registered"
+    );
+}

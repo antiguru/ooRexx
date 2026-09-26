@@ -14,11 +14,14 @@
 
 //! The outbound FFI boundary: loading a library and resolving symbols.
 
-use crate::ffi::{CallContext, Contexts, MethodContext, ThreadContext};
+use crate::ffi::{
+    CallContext, Contexts, ExitContext, MethodContext, RedirectorContext, ThreadContext,
+};
 use crate::invoke::MAX_NATIVE_ARGUMENTS;
 use crate::layout::{
-    PackageHook, RexxCallContext_, RexxMethodContext_, RexxMethodEntry, RexxPackageEntry,
-    RexxRoutineEntry, RexxThreadContext_, ValueDescriptor, ValueUnion,
+    PackageHook, RexxCallContext_, RexxExitContext_, RexxIORedirectorContext_, RexxMethodContext_,
+    RexxMethodEntry, RexxObjectPtr, RexxPackageEntry, RexxRoutineEntry, RexxStringObject,
+    RexxThreadContext_, ValueDescriptor, ValueUnion,
 };
 use crate::values::{ARGUMENT_TERMINATOR, ResultRead, Written};
 use std::cell::{Cell, RefCell};
@@ -311,6 +314,60 @@ pub fn hooks_only(
         .expect("an entry is a package")
 }
 
+/// A library read from an in-memory package entry whose loader registers a
+/// direct command handler for the environment `TESTED` that answers its
+/// command, for a test that drives the interpreter's handler table without a
+/// shared object.
+#[doc(hidden)]
+#[cfg(unix)]
+#[must_use]
+pub fn registering_library() -> Library {
+    let entry = RexxPackageEntry {
+        size: 0,
+        api_version: 0,
+        required_version: 0,
+        package_name: std::ptr::null(),
+        package_version: std::ptr::null(),
+        loader: Some(register_tested_handler),
+        unloader: None,
+        routines: std::ptr::null_mut(),
+        methods: std::ptr::null_mut(),
+    };
+    // SAFETY: the entry names no table and no string, and its loader is a
+    // `RexxPackageLoader`.
+    unsafe { library_of(&entry, libloading::os::unix::Library::this().into(), "") }
+        .expect("an entry asking for no version is accepted")
+        .expect("an entry is a package")
+}
+
+/// [`registering_library`]'s loader.
+///
+/// # Safety
+/// `thread` is a thread context a live `ThreadContext` handed out, with a
+/// native call in flight.
+unsafe extern "C-unwind" fn register_tested_handler(thread: *mut RexxThreadContext_) {
+    /// Answers its command.
+    unsafe extern "C-unwind" fn answering(
+        _context: *mut RexxExitContext_,
+        _address: RexxStringObject,
+        command: RexxStringObject,
+    ) -> RexxObjectPtr {
+        command.cast()
+    }
+    // SAFETY: the caller guarantees the thread context, which links its
+    // instance and that instance's table; the name is a literal and the
+    // handler has the direct type.
+    unsafe {
+        let instance = (*thread).instance;
+        ((*(*instance).functions).AddCommandEnvironment)(
+            instance,
+            c"TESTED".as_ptr(),
+            answering as *mut c_void,
+            DIRECT_COMMAND_ENVIRONMENT,
+        );
+    }
+}
+
 /// A library with no tables whose package entry declares `loader` and
 /// `unloader`, for a caller that needs hooks without a shared object.
 #[cfg(test)]
@@ -399,6 +456,123 @@ impl NativeRoutineEntry {
         // (`api/oorexxapi.h:205`), whose C signature is `NativeRoutine`'s,
         // under the same D5 argument as `NativeMethodEntry::stub`.
         Some(unsafe { std::mem::transmute::<*mut c_void, NativeRoutine>(self.entry_point) })
+    }
+}
+
+/// `DIRECT_COMMAND_ENVIRONMENT` (`api/oorexxapi.h:479`).
+pub const DIRECT_COMMAND_ENVIRONMENT: c_int = 1;
+
+/// `REDIRECTING_COMMAND_ENVIRONMENT` (`api/oorexxapi.h:480`).
+pub const REDIRECTING_COMMAND_ENVIRONMENT: c_int = 2;
+
+/// `RexxContextCommandHandler` (`api/oorexxapi.h:425`). It may unwind as a
+/// [`Stub`] may.
+type DirectHandler = unsafe extern "C-unwind" fn(
+    *mut RexxExitContext_,
+    RexxStringObject,
+    RexxStringObject,
+) -> RexxObjectPtr;
+
+/// `RexxRedirectingCommandHandler` (`api/oorexxapi.h:428`).
+type RedirectingHandler = unsafe extern "C-unwind" fn(
+    *mut RexxExitContext_,
+    RexxStringObject,
+    RexxStringObject,
+    *mut RexxIORedirectorContext_,
+) -> RexxObjectPtr;
+
+/// A command handler an extension registered through `AddCommandEnvironment`
+/// (`interpreter/runtime/InterpreterInstance.cpp:913-917`).
+///
+/// Nothing ties the address to a mapping, so the interpreter that holds one
+/// must drop it before it closes any library; neither `Clone` nor holder of
+/// a public address, for that reason.
+#[derive(Debug)]
+pub struct CommandHandler {
+    entry_point: *mut c_void,
+    redirecting: bool,
+}
+
+impl CommandHandler {
+    /// The handler at `entry_point`, of the environment type `kind`, or
+    /// `None` for a null address or a type the header does not define, which
+    /// `AddCommandEnvironment` registers nothing for
+    /// (`interpreter/api/InterpreterInstanceStubs.cpp:93-100`).
+    pub(crate) fn new(entry_point: *mut c_void, kind: c_int) -> Option<CommandHandler> {
+        if entry_point.is_null() {
+            return None;
+        }
+        let redirecting = match kind {
+            DIRECT_COMMAND_ENVIRONMENT => false,
+            REDIRECTING_COMMAND_ENVIRONMENT => true,
+            _ => return None,
+        };
+        Some(CommandHandler {
+            entry_point,
+            redirecting,
+        })
+    }
+
+    /// Whether the handler takes an I/O redirector context.
+    #[must_use]
+    pub fn redirects(&self) -> bool {
+        self.redirecting
+    }
+
+    /// Calls the handler with `address` and `command`, handing a redirecting
+    /// one `redirector`, and answers what it returned, null where a `Throw`
+    /// member left it.
+    pub(crate) fn call(
+        &self,
+        exit: &ExitContext<'_>,
+        address: RexxStringObject,
+        command: RexxStringObject,
+        redirector: &mut RedirectorContext<'_>,
+    ) -> RexxObjectPtr {
+        let exit = exit.as_ptr();
+        let io = redirector.as_ptr();
+        // SAFETY: the address is one an extension registered as this kind of
+        // handler, whose C signature the header declares (D5), as
+        // `NativeMethodEntry::stub` argues for a table row. It is still
+        // mapped: the only holder is the interpreter's handler table, which
+        // it clears before its first library close
+        // (`rexx-exec`'s `Interp::run_package_unloaders`), and a library
+        // closes nowhere else while the interpreter runs. Both contexts are
+        // live for the borrows above.
+        let called = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            if self.redirecting {
+                let handler =
+                    std::mem::transmute::<*mut c_void, RedirectingHandler>(self.entry_point);
+                handler(exit, address, command, io)
+            } else {
+                let handler = std::mem::transmute::<*mut c_void, DirectHandler>(self.entry_point);
+                handler(exit, address, command)
+            }
+        }));
+        match called {
+            Ok(answered) => answered,
+            // A `Throw` member recorded its condition, as in `call_stub`.
+            Err(payload) if payload.is::<crate::ffi::Thrown>() => std::ptr::null_mut(),
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
+
+    /// A handler over `function`, for a test of the call.
+    #[cfg(test)]
+    pub(crate) fn direct(function: DirectHandler) -> CommandHandler {
+        CommandHandler {
+            entry_point: function as *mut c_void,
+            redirecting: false,
+        }
+    }
+
+    /// A redirecting handler over `function`, for a test of the call.
+    #[cfg(test)]
+    pub(crate) fn redirecting(function: RedirectingHandler) -> CommandHandler {
+        CommandHandler {
+            entry_point: function as *mut c_void,
+            redirecting: true,
+        }
     }
 }
 

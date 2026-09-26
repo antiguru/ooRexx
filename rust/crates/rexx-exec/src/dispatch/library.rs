@@ -23,7 +23,8 @@ use std::rc::Rc;
 use rexx_api::handles::Table;
 use rexx_api::invoke;
 use rexx_api::layout::POINTER;
-use rexx_api::load::{Hook, Library};
+use rexx_api::load::{CommandHandler, Hook, Library};
+use rexx_api::redirect::Redirector;
 use rexx_api::values::{
     Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, Host, Numeric,
     Raised as Condition,
@@ -212,6 +213,62 @@ impl Interp {
             .map(|_| ())
     }
 
+    /// Runs the registered command handler `handler` for `command`, issued to
+    /// `environment`, in a native frame of its own, as `Activity::run` runs a
+    /// `ContextCommandHandlerDispatcher` (`concurrency/CommandHandler.cpp:231-241`).
+    ///
+    /// # Errors
+    /// A condition a string conversion raised, and [`Loud`] for an interface
+    /// member the handler reached that this phase has not written. A
+    /// condition the handler raised is answered, not returned as an error.
+    pub(crate) fn run_command_handler(
+        &mut self,
+        handler: &CommandHandler,
+        environment: &[u8],
+        command: &[u8],
+        redirector: &Redirector,
+    ) -> Result<HandledCommand, Failure> {
+        let address = self.text(environment);
+        self.roots.push_temp(address);
+        let issued = self.text(command);
+        self.roots.push_temp(issued);
+        self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+        let mut strings = CStringPool::new();
+        let thread = self.thread.clone();
+        let (answered, pending) = {
+            let activation = Activation::new(Conversion {
+                host: self,
+                strings: &mut strings,
+            });
+            let answered = thread.enter(&activation, |contexts| {
+                invoke::command(handler, contexts, &activation, address, issued, redirector)
+            });
+            (answered, activation.pending())
+        };
+        let popped = self.pop_native_frame();
+        if let Some(number) = pending {
+            return Err(condition_of(number));
+        }
+        let value = match answered {
+            Ok(value) => value,
+            Err(Refused::Raised) => {
+                return Err(popped
+                    .raised
+                    .expect("a host answering Raised holds the condition it raised"));
+            }
+            Err(refused) => return Err(self.refusal(refused, true, false)),
+        };
+        if let Some(value) = value {
+            self.roots.push_temp(value);
+        }
+        Ok(HandledCommand {
+            value,
+            raised: popped.raised,
+            additional: popped.additional,
+            result: popped.result,
+        })
+    }
+
     /// `Interpreter::terminateInterpreter`'s two steps that run extension or
     /// Rexx code (`runtime/Interpreter.cpp:279-281`): the last-chance
     /// `UNINIT`s, then the package unloaders. Answers the refusals they met.
@@ -234,7 +291,11 @@ impl Interp {
         for (_, library) in self.libraries.in_unload_order() {
             match self.run_package_hook(&library, Hook::Unloader) {
                 Ok(()) => {
-                    library.close();
+                    // A registered handler's code may be in this library, and
+                    // nothing ties the two together.
+                    if library.close() {
+                        self.command_handlers.clear();
+                    }
                 }
                 Err(Failure::Loud(loud)) => return Some(*loud),
                 Err(_) => return None,
@@ -504,6 +565,15 @@ impl Interp {
 }
 
 /// What [`Interp::pop_native_frame`] answers.
+/// What a registered command handler left once its frame is off the stack:
+/// the object it returned and the condition it raised, each rooted as a temp.
+pub(crate) struct HandledCommand {
+    pub(crate) value: Option<ObjRef>,
+    pub(crate) raised: Option<Failure>,
+    pub(crate) additional: Option<ObjRef>,
+    pub(crate) result: Option<ObjRef>,
+}
+
 struct Popped {
     raised: Option<Failure>,
     method: bool,

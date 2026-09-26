@@ -56,6 +56,8 @@ pub(crate) struct FakeHost {
     /// The buffer [`Host::cself`] and [`Surface::object_cself`] answer the
     /// bytes of.
     pub(crate) cself: Option<ObjRef>,
+    /// The command handlers registered, by name as the extension spelled it.
+    pub(crate) handlers: Vec<(Vec<u8>, crate::load::CommandHandler)>,
 }
 
 /// A condition a [`FakeHost`] holds.
@@ -82,6 +84,7 @@ impl FakeHost {
             object_variables: Vec::new(),
             memory: Vec::new(),
             cself: None,
+            handlers: Vec::new(),
         }
     }
 
@@ -533,6 +536,10 @@ impl Surface for FakeHost {
         _library: Result<Option<crate::load::Library>, crate::load::Refused>,
     ) -> bool {
         false
+    }
+
+    fn add_command_handler(&mut self, name: &[u8], handler: crate::load::CommandHandler) {
+        self.handlers.push((name.to_vec(), handler));
     }
 }
 

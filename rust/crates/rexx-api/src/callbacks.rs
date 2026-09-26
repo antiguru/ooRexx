@@ -206,6 +206,11 @@ pub trait Surface {
         name: &[u8],
         library: Result<Option<crate::load::Library>, crate::load::Refused>,
     ) -> bool;
+
+    /// `InterpreterInstance::addCommandHandler`: `handler` answers commands
+    /// to the environment `name`, upper-cased, replacing the handler that
+    /// name had.
+    fn add_command_handler(&mut self, name: &[u8], handler: crate::load::CommandHandler);
 }
 
 /// `Error_Incorrect_method_positive` (`api/oorexxerrors.h`), which `ArrayAt`
@@ -1716,6 +1721,16 @@ impl Activation<'_> {
                 .expect("checked by with_surface")
                 .register_library(name, library)
         })
+    }
+
+    /// `AddCommandEnvironment`.
+    pub fn add_command_environment(&self, name: &[u8], handler: crate::load::CommandHandler) {
+        self.with_surface("RexxInstanceInterface.AddCommandEnvironment", (), |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .add_command_handler(name, handler);
+        });
     }
 
     /// `ObjectToValue`: `handle` converted as `declared` asks, or `None`
