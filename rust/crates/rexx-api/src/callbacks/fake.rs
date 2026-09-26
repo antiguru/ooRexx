@@ -348,11 +348,8 @@ impl Surface for FakeHost {
 
     fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)> {
         let state = self.state(buffer)?.buffer_mut()?;
-        Some((
-            state.bytes.as_mut_ptr().cast(),
-            state.bytes.len(),
-            state.capacity,
-        ))
+        let (address, capacity) = state.writable();
+        Some((address.cast(), state.bytes.len(), capacity))
     }
 
     fn set_mutable_buffer_length(&mut self, buffer: ObjRef, length: usize) -> Option<usize> {
@@ -367,7 +364,7 @@ impl Surface for FakeHost {
         if capacity > state.capacity {
             state.ensure_capacity(capacity - state.capacity).ok()?;
         }
-        Some(state.bytes.as_mut_ptr().cast())
+        Some(state.writable().0.cast())
     }
 
     fn object_cself(&mut self, _object: ObjRef, _scope: Option<ObjRef>) -> Option<POINTER> {
@@ -486,6 +483,12 @@ impl FakeHost {
             own: None,
             native: Some(Box::new(state)),
         })
+    }
+
+    /// A copy of `object`, as `Object~copy` makes one: its body cloned.
+    pub(crate) fn copy(&mut self, object: ObjRef) -> Option<ObjRef> {
+        let body = self.heap.get(object)?.body.clone();
+        Some(self.heap.alloc(body))
     }
 
     /// The state an instance carries.

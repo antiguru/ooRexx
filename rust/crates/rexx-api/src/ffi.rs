@@ -3963,6 +3963,33 @@ mod tests {
         );
     }
 
+    /// **A copied mutable buffer's bytes are writable up to the capacity it
+    /// answers**, though the copy's contents were cloned at their length.
+    #[test]
+    fn a_copied_mutable_buffer_is_writable_to_its_capacity() {
+        let mut host = FakeHost::new();
+        let original = crate::callbacks::Surface::new_mutable_buffer(&mut host, 64);
+        crate::callbacks::Surface::set_mutable_buffer_length(&mut host, original, 3);
+        let copy = host.copy(original).expect("an object");
+        let copy = host.locals.register(copy);
+        let (capacity, refused) = with_thread(&mut host, |thread, table| {
+            // SAFETY: `copy` is registered, and the address is written only
+            // up to the capacity answered with it.
+            unsafe {
+                let data = (table.MutableBufferData)(thread, copy.cast()).cast::<u8>();
+                let capacity = (table.MutableBufferCapacity)(thread, copy.cast());
+                data.write_bytes(b'z', capacity);
+                capacity
+            }
+        });
+        assert_eq!((capacity, refused), (64, None));
+        let copy = host.locals.resolve(copy).expect("registered");
+        let state = host.state(copy).expect("a mutable buffer");
+        let contents = state.buffer().expect("a mutable buffer");
+        assert!(contents.bytes.capacity() >= contents.capacity);
+        assert_eq!(contents.bytes, b"zzz");
+    }
+
     /// A member that needs the host's surface refuses on a host with none,
     /// naming itself.
     #[test]

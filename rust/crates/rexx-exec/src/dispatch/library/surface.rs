@@ -212,7 +212,10 @@ impl Surface for Interp {
         let mut bytes = Vec::new();
         // An allocation this large fails here as `new_buffer` fails in the
         // oracle; the empty buffer is what a failed reservation leaves.
-        let _ = bytes.try_reserve_exact(capacity);
+        let capacity = match bytes.try_reserve_exact(capacity) {
+            Ok(()) => capacity,
+            Err(_) => 0,
+        };
         self.native_state_instance(
             "MutableBuffer",
             NativeState::Buffer(BufferState {
@@ -225,11 +228,8 @@ impl Surface for Interp {
 
     fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)> {
         let state = self.buffer_mut(buffer)?;
-        Some((
-            state.bytes.as_mut_ptr().cast(),
-            state.bytes.len(),
-            state.capacity,
-        ))
+        let (address, capacity) = state.writable();
+        Some((address.cast(), state.bytes.len(), capacity))
     }
 
     fn set_mutable_buffer_length(&mut self, buffer: ObjRef, length: usize) -> Option<usize> {
@@ -250,7 +250,7 @@ impl Surface for Interp {
             let added = capacity - state.capacity;
             let _ = state.ensure_capacity(added);
         }
-        Some(state.bytes.as_mut_ptr().cast())
+        Some(state.writable().0.cast())
     }
 
     fn object_cself(&mut self, object: ObjRef, scope: Option<ObjRef>) -> Option<POINTER> {

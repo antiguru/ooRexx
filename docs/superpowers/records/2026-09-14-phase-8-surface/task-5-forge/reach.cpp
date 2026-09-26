@@ -1,6 +1,9 @@
 // Routines that call the table members no shipped test extension reaches,
 // built against the frozen api/ headers and loaded by name from a probe.
 #include "oorexxapi.h"
+#include <malloc.h>
+#include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -255,9 +258,145 @@ RexxRoutine1(RexxStringObject, Nested, RexxObjectPtr, o)
     return context->String(buffer);
 }
 
+// A MutableBuffer's length, capacity, and whether MutableBufferData's
+// allocation holds the capacity.
+RexxRoutine1(RexxStringObject, MBInfo, RexxMutableBufferObject, b)
+{
+    char *data = (char *)context->MutableBufferData(b);
+    size_t len = context->MutableBufferLength(b);
+    size_t cap = context->MutableBufferCapacity(b);
+    char buffer[128];
+    snprintf(buffer, sizeof(buffer), "len=%zu cap=%zu usable_ge_cap=%d", len, cap,
+        malloc_usable_size(data) >= cap ? 1 : 0);
+    return context->String(buffer);
+}
+
+// Writes the whole capacity MutableBufferCapacity reports.
+RexxRoutine1(size_t, MBFill, RexxMutableBufferObject, b)
+{
+    char *data = (char *)context->MutableBufferData(b);
+    size_t cap = context->MutableBufferCapacity(b);
+    memset(data, 'z', cap);
+    return context->SetMutableBufferLength(b, cap);
+}
+
+// StringData of a globally referenced string, kept across calls.
+static RexxObjectPtr keptString = NULLOBJECT;
+static const char *keptData = NULL;
+
+RexxRoutine1(int, KeepStr, RexxStringObject, s)
+{
+    keptString = context->RequestGlobalReference(s);
+    keptData = context->StringData((RexxStringObject)keptString);
+    return 1;
+}
+
+RexxRoutine0(RexxStringObject, ReadKept)
+{
+    const char *now = context->StringData((RexxStringObject)keptString);
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer), "same_address=%d kept=[%.20s]", now == keptData, keptData);
+    return context->String(buffer);
+}
+
+// The outer call context, used from a call nested inside it.
+static RexxCallContext *outer = NULL;
+
+RexxRoutine1(RexxObjectPtr, Outer, RexxObjectPtr, o)
+{
+    outer = context;
+    return context->SendMessage0(o, "RUN");
+}
+
+RexxRoutine0(RexxStringObject, UseOuter)
+{
+    CSTRING name = outer->GetRoutineName();
+    return context->String(name);
+}
+
+// AttachThread from a thread the extension starts.
+static void *attacher(void *arg)
+{
+    RexxInstance *instance = (RexxInstance *)arg;
+    RexxThreadContext *attached = NULL;
+    logical_t ok = instance->AttachThread(&attached);
+    if (ok) attached->DetachThread();
+    return (void *)(intptr_t)ok;
+}
+
+RexxRoutine0(int, ForeignAttach)
+{
+    pthread_t t;
+    pthread_create(&t, NULL, attacher, context->GetInterpreterInstance());
+    void *r;
+    pthread_join(t, &r);
+    return (int)(intptr_t)r;
+}
+
+// Two zero-size object allocations, one freed, the other reallocated.
+RexxMethod0(RexxStringObject, ZeroAlloc)
+{
+    void *p1 = context->AllocateObjectMemory(0);
+    void *p2 = context->AllocateObjectMemory(0);
+    context->FreeObjectMemory(p1);
+    void *p3 = context->ReallocateObjectMemory(p2, 16);
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "distinct=%d realloc_null=%d", p1 != p2, p3 == NULL);
+    return context->String(buffer);
+}
+
+// Prints from its destructor, so an unwind through the frame shows.
+struct Noisy
+{
+    const char *name;
+    ~Noisy() { fprintf(stdout, "destructor %s\n", name); fflush(stdout); }
+};
+
+// Each Throw member of the call context, with a local whose destructor
+// prints, then code the oracle never runs.
+RexxRoutine2(int, Throw, CSTRING, which, OPTIONAL_RexxObjectPtr, sub)
+{
+    Noisy local = {which};
+    if (!strcmp(which, "0")) context->ThrowException0(40001);
+    else if (!strcmp(which, "1")) context->ThrowException1(40003, sub);
+    else if (!strcmp(which, "2")) context->ThrowException2(40005, sub, sub);
+    else if (!strcmp(which, "A")) context->ThrowException(93900, context->ArrayOfOne(sub));
+    else context->ThrowCondition(which, context->String("desc"), sub, context->String("res"));
+    fprintf(stdout, "AFTER-THROW-RAN\n");
+    fflush(stdout);
+    return 7;
+}
+
+// The same through the method context.
+RexxMethod2(int, MThrow, CSTRING, which, OPTIONAL_RexxObjectPtr, sub)
+{
+    Noisy local = {which};
+    if (!strcmp(which, "0")) context->ThrowException0(40001);
+    else if (!strcmp(which, "1")) context->ThrowException1(40003, sub);
+    else if (!strcmp(which, "2")) context->ThrowException2(40005, sub, sub);
+    else if (!strcmp(which, "A")) context->ThrowException(93900, context->ArrayOfOne(sub));
+    else context->ThrowCondition(which, context->String("desc"), sub, context->String("res"));
+    fprintf(stdout, "AFTER-THROW-RAN\n");
+    fflush(stdout);
+    return 7;
+}
+
+// A Throw inside a nested send: the inner extension unwinds to its own
+// boundary, and the outer call sees the condition as a raised send.
+RexxRoutine1(RexxObjectPtr, SendThrow, RexxObjectPtr, o)
+{
+    Noisy local = {"outer"};
+    RexxObjectPtr r = context->SendMessage0(o, "RUN");
+    fprintf(stdout, "outer continues checked=%d\n", (int)context->CheckCondition());
+    fflush(stdout);
+    return r == NULLOBJECT ? context->String("null") : r;
+}
+
 RexxMethodEntry methods[] = {
     REXX_METHOD(FwdTo, FwdTo),
     REXX_METHOD(CSelfRead, CSelfRead),
+    REXX_METHOD(ZeroAlloc, ZeroAlloc),
+    REXX_METHOD(MThrow, MThrow),
     REXX_LAST_METHOD()
 };
 
@@ -286,6 +425,15 @@ RexxRoutineEntry routines[] = {
     REXX_TYPED_ROUTINE(CondDisplay, CondDisplay),
     REXX_TYPED_ROUTINE(CondUser, CondUser),
     REXX_TYPED_ROUTINE(CondNone, CondNone),
+    REXX_TYPED_ROUTINE(MBInfo, MBInfo),
+    REXX_TYPED_ROUTINE(MBFill, MBFill),
+    REXX_TYPED_ROUTINE(KeepStr, KeepStr),
+    REXX_TYPED_ROUTINE(ReadKept, ReadKept),
+    REXX_TYPED_ROUTINE(Outer, Outer),
+    REXX_TYPED_ROUTINE(UseOuter, UseOuter),
+    REXX_TYPED_ROUTINE(ForeignAttach, ForeignAttach),
+    REXX_TYPED_ROUTINE(Throw, Throw),
+    REXX_TYPED_ROUTINE(SendThrow, SendThrow),
     REXX_LAST_ROUTINE()
 };
 

@@ -408,11 +408,28 @@ impl BufferState {
     pub fn ensure_capacity(&mut self, added: usize) -> Result<(), TryReserveError> {
         let needed = self.bytes.len().saturating_add(added);
         if needed > self.capacity {
-            self.capacity = needed.max(self.capacity.saturating_mul(2));
-            self.bytes
-                .try_reserve_exact(self.capacity - self.bytes.len())?;
+            let capacity = needed.max(self.capacity.saturating_mul(2));
+            self.bytes.try_reserve_exact(capacity - self.bytes.len())?;
+            self.capacity = capacity;
         }
         Ok(())
+    }
+
+    /// The bytes' address, writable up to the capacity answered with it.
+    ///
+    /// A copy's `Vec` holds only its length, so the allocation is grown to
+    /// the capacity here; where that fails the capacity drops to what the
+    /// allocation holds.
+    pub fn writable(&mut self) -> (*mut u8, usize) {
+        if self.bytes.capacity() < self.capacity
+            && self
+                .bytes
+                .try_reserve_exact(self.capacity.saturating_sub(self.bytes.len()))
+                .is_err()
+        {
+            self.capacity = self.bytes.capacity();
+        }
+        (self.bytes.as_mut_ptr(), self.capacity)
     }
 
     /// `MutableBuffer::setBufferSize`: zero empties the contents and takes

@@ -94,8 +94,9 @@ pub trait Surface {
     /// `new MutableBuffer(length, length)`, empty.
     fn new_mutable_buffer(&mut self, capacity: usize) -> ObjRef;
 
-    /// The address of a `MutableBuffer`'s bytes, its length and its capacity,
-    /// or `None` for an object that is not one.
+    /// The address of a `MutableBuffer`'s bytes, writable up to the capacity
+    /// answered, its length and its capacity, or `None` for an object that is
+    /// not one.
     fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)>;
 
     /// `MutableBuffer::setDataLength`, answering the length set.
