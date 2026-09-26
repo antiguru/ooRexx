@@ -170,6 +170,15 @@ pub enum NativeState {
 }
 
 impl NativeState {
+    /// A `Buffer`'s `length` zero bytes, at an address no other buffer
+    /// shares, which an empty `Vec` would not give: the oracle's empty buffer
+    /// is an object of its own.
+    pub fn zeroed(length: usize) -> NativeState {
+        let mut bytes = Vec::with_capacity(length.max(1));
+        bytes.resize(length, 0);
+        NativeState::Data(bytes)
+    }
+
     /// The buffer this state holds, or `None` for state of another kind.
     pub fn buffer(&self) -> Option<&BufferState> {
         match self {

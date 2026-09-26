@@ -768,6 +768,12 @@ impl<'a> Activation<'a> {
         self.conversion.borrow_mut()
     }
 
+    /// Whether the conversion state is held, which is a call nested inside
+    /// this one running through it.
+    pub fn is_busy(&self) -> bool {
+        self.conversion.try_borrow_mut().is_err()
+    }
+
     /// `RaiseException0` (`interpreter/api/ThreadContextStubs.cpp:1863`):
     /// records the condition and returns, leaving the extension to run on.
     /// A second raise overwrites the first, as `setConditionInfo`

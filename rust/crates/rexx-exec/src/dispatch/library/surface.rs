@@ -200,7 +200,7 @@ impl Surface for Interp {
     }
 
     fn new_buffer(&mut self, length: usize) -> ObjRef {
-        self.native_state_instance("Buffer", NativeState::Data(vec![0; length]))
+        self.native_state_instance("Buffer", NativeState::zeroed(length))
     }
 
     fn buffer_data(&mut self, buffer: ObjRef) -> Option<(POINTER, usize)> {

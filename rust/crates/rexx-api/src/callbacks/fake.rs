@@ -329,7 +329,7 @@ impl Surface for FakeHost {
     }
 
     fn new_buffer(&mut self, length: usize) -> ObjRef {
-        self.native(NativeState::Data(vec![0; length]))
+        self.native(NativeState::zeroed(length))
     }
 
     fn buffer_data(&mut self, buffer: ObjRef) -> Option<(POINTER, usize)> {

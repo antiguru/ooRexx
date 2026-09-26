@@ -614,19 +614,50 @@ impl Contexts<'_, '_> {
     }
 }
 
-/// The activation a method or call context addresses.
+/// A method or call context, which links its thread context first.
+trait CallLinked {
+    /// The thread context `context` links.
+    ///
+    /// # Safety
+    /// `context` is a live context of this type.
+    unsafe fn thread_of(context: *mut Self) -> *mut RexxThreadContext_;
+}
+
+impl CallLinked for RexxMethodContext_ {
+    unsafe fn thread_of(context: *mut Self) -> *mut RexxThreadContext_ {
+        // SAFETY: the caller guarantees `context` is live.
+        unsafe { (*context).threadContext }
+    }
+}
+
+impl CallLinked for RexxCallContext_ {
+    unsafe fn thread_of(context: *mut Self) -> *mut RexxThreadContext_ {
+        // SAFETY: the caller guarantees `context` is live.
+        unsafe { (*context).threadContext }
+    }
+}
+
+/// The activation a method or call context addresses, or, while a call
+/// nested inside that one holds its conversion state, the innermost
+/// activation, which is the one the oracle's non-blocking members answer
+/// for (`ApiContext(RexxCallContext *, bool)`, `interpreter/api/ContextApi.hpp:135`).
 ///
 /// # Safety
 /// `context` is a method or call context a [`Contexts`] handed out, used
-/// during the call it was handed to, and no caller holds its conversion state
-/// for the duration of the call this reference is used in.
-unsafe fn activation_of<'a, C>(context: *mut C) -> &'a Activation<'a> {
+/// during the call it was handed to, whose thread context link was written.
+unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> &'a Activation<'a> {
     // SAFETY: the caller guarantees `context` came from a live `Contexts`,
     // whose wrappers `ThreadContext::enter` built with `owner` pointing at the
     // `&'a Activation` it was given. That reference is shared, so forming
     // another one here aliases nothing: every write past it goes through the
     // activation's own cells.
-    unsafe { &*owner_of::<C, Activation<'a>>(context) }
+    let own = unsafe { &*owner_of::<C, Activation<'a>>(context) };
+    if !own.is_busy() {
+        return own;
+    }
+    // SAFETY: the caller guarantees the link to a live thread context, and a
+    // held conversion means a call is in flight on it.
+    unsafe { innermost_activation(C::thread_of(context), "nested call") }
 }
 
 /// The activation of the innermost native call in flight, reached through a
@@ -642,8 +673,8 @@ unsafe fn activation_of<'a, C>(context: *mut C) -> &'a Activation<'a> {
 ///
 /// # Safety
 /// `context` is a thread context a [`ThreadContext`] handed out, some clone
-/// of which is alive, and no caller holds the innermost call's conversion
-/// state for the duration of the call this reference is used in.
+/// of which is alive. A caller holding the innermost call's conversion state
+/// is caught by its `RefCell`, a panic.
 unsafe fn innermost_activation<'a>(
     context: *mut RexxThreadContext_,
     slot: &str,
@@ -3152,12 +3183,15 @@ unsafe extern "C" fn attach_thread(
             .sub(std::mem::offset_of!(Thread, instance))
             .cast::<Thread>()
     };
-    // SAFETY: as above; only the id and the innermost cell are read.
-    let (home, idle) = unsafe { ((*thread).home, (*thread).innermost.0.get().is_null()) };
-    assert!(
-        home == std::thread::current().id() && !idle,
-        "RexxInstanceInterface.AttachThread is not implemented (Phase 9)"
-    );
+    let refused = "RexxInstanceInterface.AttachThread is not implemented (Phase 9)";
+    // SAFETY: as above; `home` is written only when the thread is made, so
+    // any thread may read it.
+    let home = unsafe { (*thread).home };
+    assert!(home == std::thread::current().id(), "{refused}");
+    // SAFETY: as above, and this is the home thread, the only one that
+    // touches the innermost cell.
+    let idle = unsafe { (*thread).innermost.0.get().is_null() };
+    assert!(!idle, "{refused}");
     if !attached.is_null() {
         // SAFETY: the caller guarantees the write; the context is the
         // allocation's own `thread` field.
