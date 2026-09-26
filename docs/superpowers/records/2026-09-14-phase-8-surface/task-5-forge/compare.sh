@@ -2,6 +2,7 @@
 # cmp.sh PROG... : run each on the oracle and the crate from fresh empty dirs; report three-descriptor agreement
 S=/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/surface-5
 B=/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/target/release/rexx-run
+( cd /home/moritz/dev/repos/ooRexx-rust-rewrite/rust && cargo build --release --bin rexx-run -q ) || exit 1
 for P in "$@"; do
   P=$(readlink -f $P); n=$(basename $P .rex)
   for side in oracle crate; do

@@ -22,9 +22,10 @@ use std::rc::Rc;
 
 use crate::layout::{
     CSTRING, CallContextInterface, MethodContextInterface, Owned, POINTER, RexxArrayObject,
-    RexxCallContext_, RexxCondition, RexxDirectoryObject, RexxInstance_, RexxInstanceInterface,
-    RexxMethodContext_, RexxObjectPtr, RexxPointerObject, RexxStringObject, RexxThreadContext_,
-    RexxThreadInterface, ValueDescriptor, logical_t, stringsize_t, wholenumber_t,
+    RexxBufferObject, RexxBufferStringObject, RexxCallContext_, RexxCondition, RexxDirectoryObject,
+    RexxInstance_, RexxInstanceInterface, RexxMethodContext_, RexxMutableBufferObject,
+    RexxObjectPtr, RexxPointerObject, RexxStringObject, RexxThreadContext_, RexxThreadInterface,
+    ValueDescriptor, logical_t, stringsize_t, wholenumber_t,
 };
 use crate::values::{Activation, Converted, MAX_WHOLENUMBER, Repr, Value};
 
@@ -121,6 +122,7 @@ pub static METHOD_CONTEXT: MethodContextInterface = {
     let mut table = MethodContextInterface::REFUSING;
     table.SetObjectVariable = set_object_variable;
     table.DropObjectVariable = drop_object_variable;
+    table.GetCSelf = get_cself;
     table
 };
 
@@ -192,6 +194,31 @@ pub const THREAD: RexxThreadInterface = {
     table.GetConditionInfo = get_condition_info;
     table.DisplayCondition = display_condition;
     table.DecodeConditionInfo = decode_condition_info;
+    table.ObjectToString = object_to_string;
+    table.ObjectToStringValue = object_to_string_value;
+    table.StringGet = string_get;
+    table.StringUpper = string_upper;
+    table.StringLower = string_lower;
+    table.IsString = is_string;
+    table.NewBufferString = new_buffer_string;
+    table.BufferStringLength = buffer_string_length;
+    table.BufferStringData = buffer_string_data;
+    table.FinishBufferString = finish_buffer_string;
+    table.NewBuffer = new_buffer;
+    table.BufferData = buffer_data;
+    table.BufferLength = buffer_length;
+    table.IsBuffer = is_buffer;
+    table.PointerValue = pointer_value;
+    table.IsPointer = is_pointer;
+    table.NewMutableBuffer = new_mutable_buffer;
+    table.MutableBufferData = mutable_buffer_data;
+    table.MutableBufferLength = mutable_buffer_length;
+    table.MutableBufferCapacity = mutable_buffer_capacity;
+    table.SetMutableBufferLength = set_mutable_buffer_length;
+    table.SetMutableBufferCapacity = set_mutable_buffer_capacity;
+    table.IsMutableBuffer = is_mutable_buffer;
+    table.ObjectToCSelf = object_to_cself;
+    table.ObjectToCSelfScoped = object_to_cself_scoped;
     table
 };
 
@@ -1185,6 +1212,333 @@ unsafe extern "C" fn object_to_value(
     1
 }
 
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn object_to_string(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) -> RexxStringObject {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "ObjectToString") }
+        .object_to_string(object)
+        .cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn object_to_string_value(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) -> CSTRING {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "ObjectToStringValue") }.object_to_string_value(object)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], and a non-null `buffer` is valid for
+/// writes of `length` bytes.
+unsafe extern "C" fn string_get(
+    context: *mut RexxThreadContext_,
+    string: RexxStringObject,
+    offset: usize,
+    buffer: POINTER,
+    length: usize,
+) -> usize {
+    // SAFETY: as `whole_number_to_object`.
+    let activation = unsafe { innermost_activation(context, "StringGet") };
+    let Some(bytes) = activation.string_bytes(string.cast()) else {
+        return 0;
+    };
+    // `RexxString::copyData` (`interpreter/classes/StringClass.cpp:599`),
+    // whose start is one-based.
+    let start = offset.wrapping_sub(1);
+    if start >= bytes.len() || buffer.is_null() {
+        return 0;
+    }
+    let copied = length.min(bytes.len() - start);
+    // SAFETY: the caller guarantees `length` writable bytes, and `copied` is
+    // no more than that.
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes[start..].as_ptr(), buffer.cast::<u8>(), copied);
+    }
+    copied
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn string_upper(
+    context: *mut RexxThreadContext_,
+    string: RexxStringObject,
+) -> RexxStringObject {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "StringUpper") }
+        .string_case(string.cast(), true)
+        .cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn string_lower(
+    context: *mut RexxThreadContext_,
+    string: RexxStringObject,
+) -> RexxStringObject {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "StringLower") }
+        .string_case(string.cast(), false)
+        .cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn is_string(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    logical_t::from(unsafe { innermost_activation(context, "IsString") }.is_string(object))
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn new_buffer_string(
+    context: *mut RexxThreadContext_,
+    length: usize,
+) -> RexxBufferStringObject {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "NewBufferString") }
+        .new_buffer_string(length)
+        .cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn buffer_string_length(
+    context: *mut RexxThreadContext_,
+    string: RexxBufferStringObject,
+) -> usize {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "BufferStringLength") }
+        .buffer_string_length(string.cast())
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn buffer_string_data(
+    context: *mut RexxThreadContext_,
+    string: RexxBufferStringObject,
+) -> POINTER {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "BufferStringData") }.buffer_string_data(string.cast())
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn finish_buffer_string(
+    context: *mut RexxThreadContext_,
+    string: RexxBufferStringObject,
+    length: usize,
+) -> RexxStringObject {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "FinishBufferString") }
+        .finish_buffer_string(string.cast(), length)
+        .cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn new_buffer(
+    context: *mut RexxThreadContext_,
+    length: usize,
+) -> RexxBufferObject {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "NewBuffer") }
+        .new_buffer(length)
+        .cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn buffer_data(
+    context: *mut RexxThreadContext_,
+    buffer: RexxBufferObject,
+) -> POINTER {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "BufferData") }
+        .buffer_data("RexxThreadInterface.BufferData", buffer.cast())
+        .map_or(std::ptr::null_mut(), |(address, _)| address)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn buffer_length(
+    context: *mut RexxThreadContext_,
+    buffer: RexxBufferObject,
+) -> usize {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "BufferLength") }
+        .buffer_data("RexxThreadInterface.BufferLength", buffer.cast())
+        .map_or(0, |(_, length)| length)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn is_buffer(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    logical_t::from(
+        unsafe { innermost_activation(context, "IsBuffer") }.is_of_class(
+            "RexxThreadInterface.IsBuffer",
+            object,
+            "Buffer",
+        ),
+    )
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn pointer_value(
+    context: *mut RexxThreadContext_,
+    pointer: RexxPointerObject,
+) -> POINTER {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "PointerValue") }.pointer_value(pointer.cast())
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn is_pointer(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    logical_t::from(
+        unsafe { innermost_activation(context, "IsPointer") }.is_of_class(
+            "RexxThreadInterface.IsPointer",
+            object,
+            "Pointer",
+        ),
+    )
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn new_mutable_buffer(
+    context: *mut RexxThreadContext_,
+    capacity: usize,
+) -> RexxMutableBufferObject {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "NewMutableBuffer") }
+        .new_mutable_buffer(capacity)
+        .cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn mutable_buffer_data(
+    context: *mut RexxThreadContext_,
+    buffer: RexxMutableBufferObject,
+) -> POINTER {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "MutableBufferData") }
+        .mutable_buffer("RexxThreadInterface.MutableBufferData", buffer.cast())
+        .map_or(std::ptr::null_mut(), |(address, _, _)| address)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn mutable_buffer_length(
+    context: *mut RexxThreadContext_,
+    buffer: RexxMutableBufferObject,
+) -> usize {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "MutableBufferLength") }
+        .mutable_buffer("RexxThreadInterface.MutableBufferLength", buffer.cast())
+        .map_or(0, |(_, length, _)| length)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn mutable_buffer_capacity(
+    context: *mut RexxThreadContext_,
+    buffer: RexxMutableBufferObject,
+) -> usize {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "MutableBufferCapacity") }
+        .mutable_buffer("RexxThreadInterface.MutableBufferCapacity", buffer.cast())
+        .map_or(0, |(_, _, capacity)| capacity)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn set_mutable_buffer_length(
+    context: *mut RexxThreadContext_,
+    buffer: RexxMutableBufferObject,
+    length: usize,
+) -> usize {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "SetMutableBufferLength") }
+        .set_mutable_buffer_length(buffer.cast(), length)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn set_mutable_buffer_capacity(
+    context: *mut RexxThreadContext_,
+    buffer: RexxMutableBufferObject,
+    capacity: usize,
+) -> POINTER {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "SetMutableBufferCapacity") }
+        .set_mutable_buffer_capacity(buffer.cast(), capacity)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn is_mutable_buffer(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    logical_t::from(
+        unsafe { innermost_activation(context, "IsMutableBuffer") }.is_of_class(
+            "RexxThreadInterface.IsMutableBuffer",
+            object,
+            "MutableBuffer",
+        ),
+    )
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn object_to_cself(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+) -> POINTER {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "ObjectToCSelf") }.object_cself(object, None)
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn object_to_cself_scoped(
+    context: *mut RexxThreadContext_,
+    object: RexxObjectPtr,
+    scope: RexxObjectPtr,
+) -> POINTER {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "ObjectToCSelfScoped") }
+        .object_cself(object, Some(scope))
+}
+
+/// # Safety
+/// As [`set_object_variable`].
+unsafe extern "C" fn get_cself(context: *mut RexxMethodContext_) -> POINTER {
+    // SAFETY: as `set_object_variable`.
+    unsafe { activation_of(context) }.cself()
+}
+
 /// What a stub read through the context, which is the channel
 /// `argumentExists` uses (`api/oorexxapi.h:4276`).
 #[cfg(test)]
@@ -1890,6 +2244,57 @@ mod tests {
             .map(|item| host.bytes(item?))
             .collect();
         assert_eq!(items, [Some(b"first".to_vec()), Some(b"second".to_vec())]);
+    }
+
+    /// **The string and buffer members copy out and write through the
+    /// addresses they answer**: a string's bytes from an offset, a buffer
+    /// string finished shorter than it was made, a buffer's bytes, and a
+    /// mutable buffer grown, lengthened and read back.
+    #[test]
+    fn the_string_and_buffer_members_copy_and_write_through_their_addresses() {
+        let mut host = FakeHost::new();
+        let source = host.text(b"abcdef");
+        let source = host.locals.register(source);
+        let ((copied, window, finished, buffer, grown), refused) =
+            with_thread(&mut host, |thread, table| {
+                let mut window = [0u8; 4];
+                // SAFETY: every handle is registered or answered by the table,
+                // each address written is one the table answered for at least
+                // the bytes written, and `window` has room for four.
+                unsafe {
+                    let copied =
+                        (table.StringGet)(thread, source.cast(), 3, window.as_mut_ptr().cast(), 4);
+                    let string = (table.NewBufferString)(thread, 5);
+                    let data = (table.BufferStringData)(thread, string).cast::<u8>();
+                    std::ptr::copy_nonoverlapping(b"xyz".as_ptr(), data, 3);
+                    let finished = (table.FinishBufferString)(thread, string, 3);
+                    let buffer = (table.NewBuffer)(thread, 4);
+                    (table.BufferData)(thread, buffer)
+                        .cast::<u8>()
+                        .write_bytes(7, (table.BufferLength)(thread, buffer));
+                    let grown = (table.NewMutableBuffer)(thread, 2);
+                    // `ensureCapacity` is asked for the difference over the
+                    // capacity, six, which over an empty buffer is six.
+                    let data = (table.SetMutableBufferCapacity)(thread, grown, 8).cast::<u8>();
+                    (table.SetMutableBufferLength)(thread, grown, 6);
+                    std::ptr::copy_nonoverlapping(b"mutabl".as_ptr(), data, 6);
+                    (copied, window, finished, buffer, grown)
+                }
+            });
+        assert_eq!(refused, None);
+        assert_eq!((copied, &window), (4, b"cdef"));
+        let finished = host.locals.resolve(finished.cast()).expect("registered");
+        assert_eq!(host.bytes(finished), Some(b"xyz".to_vec()));
+        let buffer = host.locals.resolve(buffer.cast()).expect("registered");
+        let state = host.state(buffer).expect("a buffer");
+        assert_eq!(state.data(), Some(&[7u8; 4][..]));
+        let grown = host.locals.resolve(grown.cast()).expect("registered");
+        let state = host.state(grown).expect("a mutable buffer");
+        let contents = state.buffer().expect("a mutable buffer");
+        assert_eq!(
+            (contents.bytes.as_slice(), contents.capacity),
+            (&b"mutabl"[..], 6)
+        );
     }
 
     /// A member that needs the host's surface refuses on a host with none,

@@ -1,0 +1,50 @@
+count 49
+/* The thread table's string, buffer and mutable buffer members through
+   orxmethod's methods: a string value as an object and as a C string, a
+   string's bytes from an offset, its case, whether an object is a String,
+   a Buffer as a method's CSELF, and a MutableBuffer's length, capacity and
+   bytes written through the address the capacity call answers. */
+t = .T~new
+say t~o2s('abc') t~o2s(12) t~o2s(1/3) '['t~o2s(.array~of(1,2))']' t~o2s(.object~new) t~o2s(.nil)
+say t~o2c('abc') t~o2c(1/3) t~o2c(.object~new)
+say t~len('abcd') t~len('') '['t~data('xyz')']' '['t~data('')']'
+say '['t~data(1/3)']' t~len(1/3) t~get(2/3, 1, 4) t~up(1/3)
+say t~get('abcdef', 2, 3) t~get('abcdef', 5, 2) t~get('abcdef', 1, 6)
+say t~up('abc') t~up('ABC') t~up('a1b') t~low('ABC') t~low('abc') t~low('A.b')
+say t~is('abc') t~is(12) t~is('12') t~is(1+1) t~is(1/3) t~is(2**70) t~is(.array~new) -
+  t~is(.nil) t~is(.string~new('x')) t~is(3.5) t~is(10000000000)
+m = t~nmb(10)
+say m~class m~length t~mbl(m) t~mbc(m)
+say t~smbl(m, 4) t~mbl(m) '['m~string~c2x']'
+say t~smbl(m, 20) t~mbl(m)
+say t~smbc(m, 30) t~mbc(m) t~smbc(m, 5) t~mbc(m)
+m2 = t~setv(m, 'hello there')
+say (m2 == m) m~string t~mbl(m) t~mbc(m) t~getv(m)
+m3 = .mutablebuffer~new('xyz', 2)
+say t~getv(m3) t~mbl(m3) t~mbc(m3) t~setv(m3, 'a longer value than two')~string t~mbc(m3)
+say t~ismb(m) t~ismb('x') t~ismb(.mutablebuffer~new)
+say 'grow' t~smbc(t~nmb(10), 15) t~smbc(t~nmb(4), 5) t~smbc(t~nmb(4), 9)
+b = .BufferTester~new(42)
+say b~value b~value2 t~isb(b) t~isb('x')
+::class T
+::method o2s external "LIBRARY orxmethod TestObjectToString"
+::method o2c external "LIBRARY orxmethod TestObjectToCString"
+::method len external "LIBRARY orxmethod TestStringLength"
+::method data external "LIBRARY orxmethod TestStringData"
+::method get external "LIBRARY orxmethod TestStringGet"
+::method up external "LIBRARY orxmethod TestStringUpper"
+::method low external "LIBRARY orxmethod TestStringLower"
+::method is external "LIBRARY orxmethod TestIsString"
+::method nmb external "LIBRARY orxmethod TestNewMutableBuffer"
+::method ismb external "LIBRARY orxmethod TestIsMutableBuffer"
+::method mbl external "LIBRARY orxmethod TestMutableBufferLength"
+::method smbl external "LIBRARY orxmethod TestSetMutableBufferLength"
+::method mbc external "LIBRARY orxmethod TestMutableBufferCapacity"
+::method smbc external "LIBRARY orxmethod TestSetMutableBufferCapacity"
+::method setv external "LIBRARY orxmethod TestSetMutableBufferValue"
+::method getv external "LIBRARY orxmethod TestGetMutableBufferValue"
+::method isb external "LIBRARY orxmethod TestIsBuffer"
+::class BufferTester
+::method Init EXTERNAL "LIBRARY orxmethod TestBufferInit"
+::method value EXTERNAL "LIBRARY orxmethod TestBufferCSelf"
+::method value2 EXTERNAL "LIBRARY orxmethod TestBufferObjectToCSelf"

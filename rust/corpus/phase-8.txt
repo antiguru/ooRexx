@@ -242,3 +242,8 @@ lang/library_callback_numbers.rex
 # caller traps with each one's substitutions, and RaiseCondition's RESULT,
 # through orxmethod's methods that run on after the raise.
 lang/library_callback_conditions.rex
+
+# Surface Task 5: the thread table's string, buffer, mutable buffer and
+# CSELF members through orxmethod's methods, a number's string value handed
+# to StringData among them.
+lang/library_callback_strings.rex

@@ -497,22 +497,31 @@ impl Host for Interp {
         }
         match &self.heap.get(object)?.body {
             Body::Text { bytes, .. } => Some(Cow::Borrowed(bytes.as_slice())),
-            Body::Num { text, .. } => text.as_deref().map(Cow::Borrowed),
+            // Rendered as `num_rendering` renders it, without the cache, which
+            // a shared borrow cannot fill.
+            Body::Num {
+                value,
+                created_digits,
+                created_form,
+                text,
+            } => Some(match text {
+                Some(text) => Cow::Borrowed(text.as_slice()),
+                None => Cow::Owned(
+                    value
+                        .format_form(u64::from(*created_digits), *created_form)
+                        .into_bytes(),
+                ),
+            }),
             _ => None,
         }
     }
 
     fn cself(&mut self) -> Option<POINTER> {
         let frame = self.native_handles.last()?;
-        let (owner, scope) = (frame.owner, frame.scope);
-        let held = self.pools_of(owner)?.get(scope, b"CSELF")?;
-        match &self.heap.get(held)?.body {
-            Body::Instance {
-                native: Some(state),
-                ..
-            } => state.pointer(),
-            _ => None,
-        }
+        let (receiver, scope) = (frame.receiver, frame.scope);
+        // `NativeActivation::cself` (`execution/NativeActivation.cpp:2091`):
+        // the receiver's, from the running method's scope upwards.
+        rexx_api::callbacks::Surface::object_cself(self, receiver, Some(scope))
     }
 
     fn constants(&mut self) -> Constants<ObjRef> {

@@ -391,6 +391,10 @@ pub struct CStringPool {
     /// Each copy with the object it was made for, `None` for a copy
     /// [`CStringPool::intern`] made, which is keyed by nothing.
     entries: Vec<(Option<ObjRef>, Box<[u8]>)>,
+    /// The bytes an extension writes a buffer string's value into, by string.
+    /// A vector's elements are addressed through its own pointer, so moving
+    /// the vector as this list grows does not move them.
+    writable: Vec<(ObjRef, Vec<u8>)>,
 }
 
 impl CStringPool {
@@ -452,6 +456,38 @@ impl CStringPool {
     /// Drops every copy, which is what the end of a call does.
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.writable.clear();
+    }
+
+    /// Makes `length` zero bytes the extension writes `string`'s value into.
+    pub fn writable(&mut self, string: ObjRef, length: usize) {
+        self.writable.push((string, vec![0; length]));
+    }
+
+    /// The length [`CStringPool::writable`] made `string`'s bytes at.
+    pub fn writable_length(&self, string: ObjRef) -> Option<usize> {
+        self.writable
+            .iter()
+            .find(|(key, _)| *key == string)
+            .map(|(_, bytes)| bytes.len())
+    }
+
+    /// The address of `string`'s writable bytes, valid until the pool is
+    /// cleared.
+    pub fn writable_address(&mut self, string: ObjRef) -> Option<POINTER> {
+        self.writable
+            .iter_mut()
+            .find(|(key, _)| *key == string)
+            .map(|(_, bytes)| bytes.as_mut_ptr().cast())
+    }
+
+    /// The first `length` bytes written for `string`, at most as many as
+    /// were made, which becomes the area's length. The area stays where it
+    /// is until the pool is cleared.
+    pub fn written(&mut self, string: ObjRef, length: usize) -> Option<Vec<u8>> {
+        let (_, bytes) = self.writable.iter_mut().find(|(key, _)| *key == string)?;
+        bytes.truncate(length);
+        Some(bytes.clone())
     }
 
     pub fn len(&self) -> usize {

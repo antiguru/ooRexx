@@ -22,7 +22,7 @@ use rexx_core::ObjRef;
 #[cfg(test)]
 pub(crate) mod fake;
 
-use crate::layout::{RexxObjectPtr, refuse};
+use crate::layout::{CSTRING, POINTER, RexxObjectPtr, refuse};
 use crate::values::{
     self, ARGUMENT_TERMINATOR, Activation, Conversion, Source, Value, is_optional,
 };
@@ -65,6 +65,49 @@ pub trait Surface {
 
     /// The entry `name` of the directory `directory`, or `None`.
     fn directory_entry(&mut self, directory: ObjRef, name: &[u8]) -> Option<ObjRef>;
+
+    /// `requestString`: `object`'s string value as a string object, or
+    /// `None` where the conversion raised a condition, which the host holds.
+    fn request_string(&mut self, object: ObjRef) -> Option<ObjRef>;
+
+    /// Whether `object`'s class is exactly the class `id` names, which is
+    /// `isOfClass`.
+    fn is_of_class(&mut self, object: ObjRef, id: &str) -> bool;
+
+    /// `isString`: an instance of `String` that is not a number.
+    fn is_string(&mut self, object: ObjRef) -> bool;
+
+    /// `raw_string`: a string of `length` zero bytes, which
+    /// [`Surface::finish_string`] fills.
+    fn new_raw_string(&mut self, length: usize) -> ObjRef;
+
+    /// Replaces the bytes of a string [`Surface::new_raw_string`] made.
+    fn finish_string(&mut self, string: ObjRef, bytes: &[u8]);
+
+    /// A `Buffer` of `length` zero bytes.
+    fn new_buffer(&mut self, length: usize) -> ObjRef;
+
+    /// The address of a `Buffer`'s bytes and their length, or `None` for an
+    /// object that is not one.
+    fn buffer_data(&mut self, buffer: ObjRef) -> Option<(POINTER, usize)>;
+
+    /// `new MutableBuffer(length, length)`, empty.
+    fn new_mutable_buffer(&mut self, capacity: usize) -> ObjRef;
+
+    /// The address of a `MutableBuffer`'s bytes, its length and its capacity,
+    /// or `None` for an object that is not one.
+    fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)>;
+
+    /// `MutableBuffer::setDataLength`, answering the length set.
+    fn set_mutable_buffer_length(&mut self, buffer: ObjRef, length: usize) -> Option<usize>;
+
+    /// `MutableBuffer::setCapacity`, answering the address of the bytes.
+    fn set_mutable_buffer_capacity(&mut self, buffer: ObjRef, capacity: usize) -> Option<POINTER>;
+
+    /// `RexxObject::getCSelf`: the `.Pointer` or `Buffer` an object's `CSELF`
+    /// variable holds, unwrapped. `scope` starts the search at that scope and
+    /// walks its super scopes; `None` searches every pool, newest first.
+    fn object_cself(&mut self, object: ObjRef, scope: Option<ObjRef>) -> Option<POINTER>;
 }
 
 /// What `DecodeConditionInfo` writes into a `RexxCondition`
@@ -384,6 +427,311 @@ impl Activation<'_> {
                 ..decoded
             })
         })
+    }
+
+    /// Runs `serve` against the host's [`Surface`] and the object `handle`
+    /// names, answering `refused` for a handle this activation does not
+    /// hold, or recording `slot` as refused where the host has no surface.
+    fn with_object<R>(
+        &self,
+        slot: &'static str,
+        handle: RexxObjectPtr,
+        refused: R,
+        serve: impl FnOnce(&mut Conversion<'_>, ObjRef) -> R,
+    ) -> R {
+        let Some(object) = self.resolve(handle) else {
+            return refused;
+        };
+        self.with_surface(slot, refused, |cx| serve(cx, object))
+    }
+
+    /// `ObjectToString`.
+    pub fn object_to_string(&self, handle: RexxObjectPtr) -> RexxObjectPtr {
+        self.with_object(
+            "RexxThreadInterface.ObjectToString",
+            handle,
+            std::ptr::null_mut(),
+            |cx, object| {
+                let surface = cx.host.surface().expect("checked by with_surface");
+                match surface.request_string(object) {
+                    Some(string) => cx.host.locals().register(string),
+                    None => std::ptr::null_mut(),
+                }
+            },
+        )
+    }
+
+    /// `ObjectToStringValue`: the string value's bytes, at one address per
+    /// string for the length of the call.
+    pub fn object_to_string_value(&self, handle: RexxObjectPtr) -> CSTRING {
+        self.with_object(
+            "RexxThreadInterface.ObjectToStringValue",
+            handle,
+            std::ptr::null(),
+            |cx, object| {
+                let surface = cx.host.surface().expect("checked by with_surface");
+                let Some(string) = surface.request_string(object) else {
+                    return std::ptr::null();
+                };
+                cx.host.locals().register(string);
+                let bytes = cx.host.string_value_text(string);
+                cx.strings.intern_for(string, &bytes)
+            },
+        )
+    }
+
+    /// A string object's bytes, or `None` for a handle this activation does
+    /// not hold or an object that is not a string.
+    pub fn string_bytes(&self, handle: RexxObjectPtr) -> Option<Vec<u8>> {
+        let object = self.resolve(handle)?;
+        let cx = self.conversion();
+        cx.host
+            .string_bytes(object)
+            .map(std::borrow::Cow::into_owned)
+    }
+
+    /// `StringUpper` and `StringLower`: the string itself where the case
+    /// changes nothing, as `RexxString::upper` answers `this`.
+    pub fn string_case(&self, handle: RexxObjectPtr, upper: bool) -> RexxObjectPtr {
+        let Some(bytes) = self.string_bytes(handle) else {
+            return std::ptr::null_mut();
+        };
+        let changed = if upper {
+            bytes.to_ascii_uppercase()
+        } else {
+            bytes.to_ascii_lowercase()
+        };
+        if changed == bytes {
+            return handle;
+        }
+        self.string_object(&changed)
+    }
+
+    /// `IsString`.
+    pub fn is_string(&self, handle: RexxObjectPtr) -> bool {
+        self.with_object(
+            "RexxThreadInterface.IsString",
+            handle,
+            false,
+            |cx, object| {
+                cx.host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .is_string(object)
+            },
+        )
+    }
+
+    /// `IsDirectory`, `IsStringTable`, `IsArray`, `IsStem`, `IsBuffer`,
+    /// `IsPointer`, `IsMutableBuffer` and `IsVariableReference`: whether the
+    /// object is an instance of exactly the class `id` names.
+    pub fn is_of_class(&self, slot: &'static str, handle: RexxObjectPtr, id: &str) -> bool {
+        self.with_object(slot, handle, false, |cx, object| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .is_of_class(object, id)
+        })
+    }
+
+    /// `NewBufferString`: a string object to be written through
+    /// [`Activation::buffer_string_data`] and then finished.
+    pub fn new_buffer_string(&self, length: usize) -> RexxObjectPtr {
+        self.with_surface(
+            "RexxThreadInterface.NewBufferString",
+            std::ptr::null_mut(),
+            |cx| {
+                let string = cx
+                    .host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .new_raw_string(length);
+                cx.strings.writable(string, length);
+                cx.host.locals().register(string)
+            },
+        )
+    }
+
+    /// `BufferStringLength`: the length the string was made at.
+    pub fn buffer_string_length(&self, handle: RexxObjectPtr) -> usize {
+        let Some(object) = self.resolve(handle) else {
+            return 0;
+        };
+        let cx = self.conversion();
+        match cx.strings.writable_length(object) {
+            Some(length) => length,
+            None => cx.host.string_bytes(object).map_or(0, |bytes| bytes.len()),
+        }
+    }
+
+    /// `BufferStringData`: the address the extension writes the string's
+    /// bytes through, valid until the call ends.
+    pub fn buffer_string_data(&self, handle: RexxObjectPtr) -> POINTER {
+        let Some(object) = self.resolve(handle) else {
+            return std::ptr::null_mut();
+        };
+        let mut cx = self.conversion();
+        cx.strings
+            .writable_address(object)
+            .unwrap_or(std::ptr::null_mut())
+    }
+
+    /// `FinishBufferString`: the first `length` bytes written become the
+    /// string's value, and the answer is the same string.
+    pub fn finish_buffer_string(&self, handle: RexxObjectPtr, length: usize) -> RexxObjectPtr {
+        let Some(object) = self.resolve(handle) else {
+            return std::ptr::null_mut();
+        };
+        self.with_surface(
+            "RexxThreadInterface.FinishBufferString",
+            std::ptr::null_mut(),
+            |cx| {
+                let Some(written) = cx.strings.written(object, length) else {
+                    return handle;
+                };
+                cx.host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .finish_string(object, &written);
+                handle
+            },
+        )
+    }
+
+    /// `NewBuffer`.
+    pub fn new_buffer(&self, length: usize) -> RexxObjectPtr {
+        self.with_surface(
+            "RexxThreadInterface.NewBuffer",
+            std::ptr::null_mut(),
+            |cx| {
+                let buffer = cx
+                    .host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .new_buffer(length);
+                cx.host.locals().register(buffer)
+            },
+        )
+    }
+
+    /// `BufferData` and `BufferLength`.
+    pub fn buffer_data(
+        &self,
+        slot: &'static str,
+        handle: RexxObjectPtr,
+    ) -> Option<(POINTER, usize)> {
+        self.with_object(slot, handle, None, |cx, object| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .buffer_data(object)
+        })
+    }
+
+    /// `NewMutableBuffer`.
+    pub fn new_mutable_buffer(&self, capacity: usize) -> RexxObjectPtr {
+        self.with_surface(
+            "RexxThreadInterface.NewMutableBuffer",
+            std::ptr::null_mut(),
+            |cx| {
+                let buffer = cx
+                    .host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .new_mutable_buffer(capacity);
+                cx.host.locals().register(buffer)
+            },
+        )
+    }
+
+    /// `MutableBufferData`, `MutableBufferLength` and `MutableBufferCapacity`.
+    pub fn mutable_buffer(
+        &self,
+        slot: &'static str,
+        handle: RexxObjectPtr,
+    ) -> Option<(POINTER, usize, usize)> {
+        self.with_object(slot, handle, None, |cx, object| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .mutable_buffer(object)
+        })
+    }
+
+    /// `SetMutableBufferLength`.
+    pub fn set_mutable_buffer_length(&self, handle: RexxObjectPtr, length: usize) -> usize {
+        self.with_object(
+            "RexxThreadInterface.SetMutableBufferLength",
+            handle,
+            0,
+            |cx, object| {
+                cx.host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .set_mutable_buffer_length(object, length)
+                    .unwrap_or(0)
+            },
+        )
+    }
+
+    /// `SetMutableBufferCapacity`.
+    pub fn set_mutable_buffer_capacity(&self, handle: RexxObjectPtr, capacity: usize) -> POINTER {
+        self.with_object(
+            "RexxThreadInterface.SetMutableBufferCapacity",
+            handle,
+            std::ptr::null_mut(),
+            |cx, object| {
+                cx.host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .set_mutable_buffer_capacity(object, capacity)
+                    .unwrap_or(std::ptr::null_mut())
+            },
+        )
+    }
+
+    /// `GetCSelf`: the running method's `CSELF`, null outside a method.
+    pub fn cself(&self) -> POINTER {
+        let mut cx = self.conversion();
+        if !cx.host.is_method() {
+            return std::ptr::null_mut();
+        }
+        cx.host.cself().unwrap_or(std::ptr::null_mut())
+    }
+
+    /// `ObjectToCSelf` and `ObjectToCSelfScoped`.
+    pub fn object_cself(&self, handle: RexxObjectPtr, scope: Option<RexxObjectPtr>) -> POINTER {
+        let slot = if scope.is_some() {
+            "RexxThreadInterface.ObjectToCSelfScoped"
+        } else {
+            "RexxThreadInterface.ObjectToCSelf"
+        };
+        let scope = match scope {
+            Some(handle) => match self.resolve(handle) {
+                Some(scope) => Some(scope),
+                None => return std::ptr::null_mut(),
+            },
+            None => None,
+        };
+        self.with_object(slot, handle, std::ptr::null_mut(), |cx, object| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .object_cself(object, scope)
+                .unwrap_or(std::ptr::null_mut())
+        })
+    }
+
+    /// `PointerValue`: the address a `.Pointer` holds, null for anything
+    /// else.
+    pub fn pointer_value(&self, handle: RexxObjectPtr) -> POINTER {
+        let Some(object) = self.resolve(handle) else {
+            return std::ptr::null_mut();
+        };
+        self.conversion()
+            .host
+            .pointer_value(object)
+            .unwrap_or(std::ptr::null_mut())
     }
 
     /// `ObjectToValue`: `handle` converted as `declared` asks, or `None`

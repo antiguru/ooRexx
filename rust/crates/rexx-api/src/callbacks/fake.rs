@@ -14,7 +14,9 @@
 
 use std::borrow::Cow;
 
-use rexx_core::{Body, Bytes, Decoded, Heap, ObjRef};
+use rexx_core::{
+    BehaviourHandle, Body, BufferState, Bytes, Decoded, Heap, NativeState, ObjRef, ScopePools,
+};
 
 use super::Surface;
 use crate::handles::Table;
@@ -291,5 +293,102 @@ impl Surface for FakeHost {
             .iter()
             .find(|(held, key, _)| *held == directory && key == name)
             .map(|(_, _, value)| *value)
+    }
+
+    fn request_string(&mut self, object: ObjRef) -> Option<ObjRef> {
+        Some(object)
+    }
+
+    fn is_of_class(&mut self, _object: ObjRef, _id: &str) -> bool {
+        false
+    }
+
+    fn is_string(&mut self, object: ObjRef) -> bool {
+        matches!(
+            self.heap.get(object).map(|held| &held.body),
+            Some(Body::Text { .. })
+        )
+    }
+
+    fn new_raw_string(&mut self, length: usize) -> ObjRef {
+        self.text(&vec![0; length])
+    }
+
+    fn finish_string(&mut self, string: ObjRef, written: &[u8]) {
+        if let Some(Body::Text { bytes, .. }) = self.heap.get_mut(string).map(|held| &mut held.body)
+        {
+            *bytes = Bytes::from_slice(written);
+        }
+    }
+
+    fn new_buffer(&mut self, length: usize) -> ObjRef {
+        self.native(NativeState::Data(vec![0; length]))
+    }
+
+    fn buffer_data(&mut self, buffer: ObjRef) -> Option<(POINTER, usize)> {
+        let state = self.state(buffer)?;
+        let length = state.data()?.len();
+        Some((state.data_address()?, length))
+    }
+
+    fn new_mutable_buffer(&mut self, capacity: usize) -> ObjRef {
+        self.native(NativeState::Buffer(BufferState {
+            bytes: Vec::with_capacity(capacity),
+            capacity,
+            default_size: capacity,
+        }))
+    }
+
+    fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)> {
+        let state = self.state(buffer)?.buffer_mut()?;
+        Some((
+            state.bytes.as_mut_ptr().cast(),
+            state.bytes.len(),
+            state.capacity,
+        ))
+    }
+
+    fn set_mutable_buffer_length(&mut self, buffer: ObjRef, length: usize) -> Option<usize> {
+        let state = self.state(buffer)?.buffer_mut()?;
+        let length = length.min(state.capacity);
+        state.bytes.resize(length, 0);
+        Some(length)
+    }
+
+    fn set_mutable_buffer_capacity(&mut self, buffer: ObjRef, capacity: usize) -> Option<POINTER> {
+        let state = self.state(buffer)?.buffer_mut()?;
+        if capacity > state.capacity {
+            state.ensure_capacity(capacity - state.capacity).ok()?;
+        }
+        Some(state.bytes.as_mut_ptr().cast())
+    }
+
+    fn object_cself(&mut self, _object: ObjRef, _scope: Option<ObjRef>) -> Option<POINTER> {
+        None
+    }
+}
+
+impl FakeHost {
+    /// An instance carrying `state`.
+    fn native(&mut self, state: NativeState) -> ObjRef {
+        self.heap.alloc(Body::Instance {
+            class: ObjRef::NIL,
+            behaviour: BehaviourHandle::new(0),
+            name: None,
+            pools: ScopePools::new(),
+            own: None,
+            native: Some(Box::new(state)),
+        })
+    }
+
+    /// The state an instance carries.
+    pub(crate) fn state(&mut self, object: ObjRef) -> Option<&mut NativeState> {
+        match &mut self.heap.get_mut(object)?.body {
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => Some(state),
+            _ => None,
+        }
     }
 }

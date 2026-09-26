@@ -163,6 +163,10 @@ pub enum NativeState {
     /// address rendered, so it answers for the reader
     /// [`NativeState::Buffer`] answers for.
     Pointer(*mut std::ffi::c_void),
+    /// A `Buffer`'s bytes (`interpreter/classes/BufferClass.hpp`), which an
+    /// extension writes through the address `BufferData` handed it for as long
+    /// as the object lives, so the vector is never resized.
+    Data(Vec<u8>),
 }
 
 impl NativeState {
@@ -170,7 +174,7 @@ impl NativeState {
     pub fn buffer(&self) -> Option<&BufferState> {
         match self {
             NativeState::Buffer(state) => Some(state),
-            NativeState::Stream(_) | NativeState::Pointer(_) => None,
+            NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
         }
     }
 
@@ -178,7 +182,7 @@ impl NativeState {
     pub fn buffer_mut(&mut self) -> Option<&mut BufferState> {
         match self {
             NativeState::Buffer(state) => Some(state),
-            NativeState::Stream(_) | NativeState::Pointer(_) => None,
+            NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
         }
     }
 
@@ -186,7 +190,7 @@ impl NativeState {
     pub fn stream(&self) -> Option<&StreamState> {
         match self {
             NativeState::Stream(state) => Some(state),
-            NativeState::Buffer(_) | NativeState::Pointer(_) => None,
+            NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
         }
     }
 
@@ -195,7 +199,7 @@ impl NativeState {
     pub fn stream_mut(&mut self) -> Option<&mut StreamState> {
         match self {
             NativeState::Stream(state) => Some(state),
-            NativeState::Buffer(_) | NativeState::Pointer(_) => None,
+            NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
         }
     }
 
@@ -206,7 +210,24 @@ impl NativeState {
     pub fn pointer(&self) -> Option<*mut std::ffi::c_void> {
         match self {
             NativeState::Pointer(address) => Some(*address),
-            NativeState::Buffer(_) | NativeState::Stream(_) => None,
+            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Data(_) => None,
+        }
+    }
+
+    /// A `Buffer`'s bytes, or `None` for state of another kind.
+    pub fn data(&self) -> Option<&[u8]> {
+        match self {
+            NativeState::Data(bytes) => Some(bytes),
+            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Pointer(_) => None,
+        }
+    }
+
+    /// The address of a `Buffer`'s first byte, which stays valid while the
+    /// object does, or `None` for state of another kind.
+    pub fn data_address(&mut self) -> Option<*mut std::ffi::c_void> {
+        match self {
+            NativeState::Data(bytes) => Some(bytes.as_mut_ptr().cast()),
+            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Pointer(_) => None,
         }
     }
 
@@ -221,7 +242,7 @@ impl NativeState {
     pub fn renders_its_own_string_value(&self) -> bool {
         match self {
             NativeState::Buffer(_) | NativeState::Pointer(_) => true,
-            NativeState::Stream(_) => false,
+            NativeState::Stream(_) | NativeState::Data(_) => false,
         }
     }
 }
@@ -470,6 +491,17 @@ impl ScopePools {
             return;
         };
         self.pools[index].1.retain(|(bound, _)| **bound != *name);
+    }
+
+    /// The value `name` holds in the pool created last that binds it, which
+    /// is `RexxObject::getObjectVariable`'s walk: the oracle chains each new
+    /// dictionary at the head of the list (`ObjectClass.cpp:2504`).
+    pub fn find(&self, name: &[u8]) -> Option<ObjRef> {
+        self.pools.iter().rev().find_map(|(_, pool)| {
+            pool.iter()
+                .find(|(bound, _)| **bound == *name)
+                .map(|(_, value)| *value)
+        })
     }
 
     /// Every name `scope`'s pool binds, with its value, in binding order.

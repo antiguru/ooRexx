@@ -84,7 +84,64 @@ RexxRoutine2(int, RaiseKept, size_t, n, OPTIONAL_RexxObjectPtr, sub)
     return 7;
 }
 
+// A buffer string filled through its data address and finished shorter.
+RexxRoutine1(RexxStringObject, BufStr, CSTRING, text)
+{
+    size_t length = strlen(text);
+    RexxBufferStringObject s = context->NewBufferString(length + 3);
+    size_t made = context->BufferStringLength(s);
+    char *data = (char *)context->BufferStringData(s);
+    memcpy(data, text, length);
+    RexxStringObject done = context->FinishBufferString(s, length);
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer), "%zu %zu %d [%.*s]", made, context->BufferStringLength(s), done == (RexxStringObject)s,
+        (int)context->StringLength(done), context->StringData(done));
+    return context->String(buffer);
+}
+
+// A buffer's length and whether it reads as one.
+RexxRoutine1(RexxStringObject, BufLen, size_t, n)
+{
+    RexxBufferObject b = context->NewBuffer(n);
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "%zu %d %d", context->BufferLength(b), (int)context->IsBuffer(b), (int)context->IsBuffer(context->String("x")));
+    return context->String(buffer);
+}
+
+// A pointer's value round-tripped through NewPointer.
+RexxRoutine1(RexxStringObject, PtrValue, RexxObjectPtr, p)
+{
+    char buffer[64];
+    POINTER v = context->IsPointer(p) ? context->PointerValue((RexxPointerObject)p) : NULL;
+    RexxPointerObject again = context->NewPointer(v);
+    snprintf(buffer, sizeof(buffer), "%d %d %d", (int)context->IsPointer(p), (int)(context->PointerValue(again) == v), (int)context->IsPointer(again));
+    return context->String(buffer);
+}
+
+// The running method's CSELF, read as the int a Buffer holds.
+RexxMethod0(int, CSelfRead)
+{
+    int *p = (int *)context->GetCSelf();
+    return p == NULL ? -1 : *p;
+}
+
+// An object's CSELF from a given scope upwards.
+RexxRoutine2(int, ScopedRead, RexxObjectPtr, o, RexxObjectPtr, scope)
+{
+    int *p = (int *)context->threadContext->functions->ObjectToCSelfScoped(context->threadContext, o, scope);
+    return p == NULL ? -1 : *p;
+}
+
+RexxMethodEntry methods[] = {
+    REXX_METHOD(CSelfRead, CSelfRead),
+    REXX_LAST_METHOD()
+};
+
 RexxRoutineEntry routines[] = {
+    REXX_TYPED_ROUTINE(BufStr, BufStr),
+    REXX_TYPED_ROUTINE(BufLen, BufLen),
+    REXX_TYPED_ROUTINE(PtrValue, PtrValue),
+    REXX_TYPED_ROUTINE(ScopedRead, ScopedRead),
     REXX_TYPED_ROUTINE(RaiseKept, RaiseKept),
     REXX_TYPED_ROUTINE(CondInfo, CondInfo),
     REXX_TYPED_ROUTINE(CondCheck, CondCheck),
@@ -103,7 +160,7 @@ RexxPackageEntry reach_package_entry = {
     NULL,
     NULL,
     routines,
-    NULL
+    methods
 };
 
 OOREXX_GET_PACKAGE(reach);

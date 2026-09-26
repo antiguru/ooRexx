@@ -14,7 +14,8 @@
 use std::borrow::Cow;
 
 use rexx_api::callbacks::Surface;
-use rexx_core::{BehaviourId, Body, ObjRef};
+use rexx_api::layout::POINTER;
+use rexx_core::{BehaviourId, Body, BufferState, Bytes, Decoded, NativeState, ObjRef, ScopePools};
 
 use crate::error::{Raised, displayable};
 use crate::{Failure, Interp};
@@ -128,6 +129,193 @@ impl Surface for Interp {
 
     fn directory_entry(&mut self, directory: ObjRef, name: &[u8]) -> Option<ObjRef> {
         self.condition_entry(directory, name)
+    }
+
+    fn request_string(&mut self, object: ObjRef) -> Option<ObjRef> {
+        let string = match self.required_string_value(object) {
+            Ok(string) => string,
+            Err(failure) => {
+                self.hold_native_condition(failure);
+                return None;
+            }
+        };
+        if self.string_bytes_of(string) {
+            return Some(string);
+        }
+        let bytes = self.to_text(string).into_owned();
+        let string = self.text(&bytes);
+        self.roots.push_temp(string);
+        Some(string)
+    }
+
+    fn is_of_class(&mut self, object: ObjRef, id: &str) -> bool {
+        let Some(class) = self.classes().lookup(id) else {
+            return false;
+        };
+        self.class_of_value(object) == Some(class)
+    }
+
+    fn is_string(&mut self, object: ObjRef) -> bool {
+        // A number is a `RexxInteger` or a `NumberString` in the oracle, which
+        // `isString` does not count: measured, `IsString(1+1)` is `0` where
+        // `IsString('abc')` is `1`.
+        let text = match object.decode() {
+            Decoded::Text(_) => true,
+            Decoded::Heap { .. } => matches!(
+                self.heap.get(object).map(|held| &held.body),
+                Some(Body::Text { .. })
+            ),
+            _ => false,
+        };
+        text && self.is_of_class(object, "String")
+    }
+
+    fn new_raw_string(&mut self, length: usize) -> ObjRef {
+        let string = self.alloc_with(
+            BehaviourId::STRING,
+            Body::Text {
+                bytes: Bytes::from_slice(&vec![0; length]),
+                num: None,
+            },
+        );
+        self.roots.push_temp(string);
+        string
+    }
+
+    fn finish_string(&mut self, string: ObjRef, written: &[u8]) {
+        if let Some(Body::Text { bytes, num }) =
+            self.heap.get_mut(string).map(|held| &mut held.body)
+        {
+            *bytes = Bytes::from_slice(written);
+            *num = None;
+        }
+    }
+
+    fn new_buffer(&mut self, length: usize) -> ObjRef {
+        self.native_state_instance("Buffer", NativeState::Data(vec![0; length]))
+    }
+
+    fn buffer_data(&mut self, buffer: ObjRef) -> Option<(POINTER, usize)> {
+        let state = self.native_state_mut(buffer)?;
+        let length = state.data()?.len();
+        Some((state.data_address()?, length))
+    }
+
+    fn new_mutable_buffer(&mut self, capacity: usize) -> ObjRef {
+        let mut bytes = Vec::new();
+        // An allocation this large fails here as `new_buffer` fails in the
+        // oracle; the empty buffer is what a failed reservation leaves.
+        let _ = bytes.try_reserve_exact(capacity);
+        self.native_state_instance(
+            "MutableBuffer",
+            NativeState::Buffer(BufferState {
+                bytes,
+                capacity,
+                default_size: capacity,
+            }),
+        )
+    }
+
+    fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)> {
+        let state = self.buffer_mut(buffer)?;
+        Some((
+            state.bytes.as_mut_ptr().cast(),
+            state.bytes.len(),
+            state.capacity,
+        ))
+    }
+
+    fn set_mutable_buffer_length(&mut self, buffer: ObjRef, length: usize) -> Option<usize> {
+        let state = self.buffer_mut(buffer)?;
+        // `MutableBuffer::setDataLength`
+        // (`interpreter/classes/MutableBufferClass.cpp:264`): capped at the
+        // capacity, and padded with NULs where it grows.
+        let length = length.min(state.capacity);
+        state.bytes.resize(length, 0);
+        Some(length)
+    }
+
+    fn set_mutable_buffer_capacity(&mut self, buffer: ObjRef, capacity: usize) -> Option<POINTER> {
+        let state = self.buffer_mut(buffer)?;
+        // `MutableBuffer::setCapacity` (`:292`), which asks `ensureCapacity`
+        // for the difference over the capacity and not over the length.
+        if capacity > state.capacity {
+            let added = capacity - state.capacity;
+            let _ = state.ensure_capacity(added);
+        }
+        Some(state.bytes.as_mut_ptr().cast())
+    }
+
+    fn object_cself(&mut self, object: ObjRef, scope: Option<ObjRef>) -> Option<POINTER> {
+        let owner = self.pool_owner(object).ok()?;
+        let held = match scope {
+            None => self.pools_of(owner)?.find(b"CSELF"),
+            Some(mut scope) => loop {
+                if scope == ObjRef::NIL {
+                    break None;
+                }
+                if let Some(held) = self
+                    .pools_of(owner)
+                    .and_then(|pools| pools.get(scope, b"CSELF"))
+                {
+                    break Some(held);
+                }
+                scope = self.super_scope_of(object, scope)?;
+            },
+        }?;
+        let state = self.native_state_mut(held)?;
+        state.pointer().or_else(|| state.data_address())
+    }
+}
+
+impl Interp {
+    /// Whether `string` is a string's own value, which a tagged integer, an
+    /// inline string and a string or number body are.
+    fn string_bytes_of(&self, string: ObjRef) -> bool {
+        match string.decode() {
+            Decoded::SmallInt(_) | Decoded::Text(_) => true,
+            Decoded::Heap { .. } => matches!(
+                self.heap.get(string).map(|held| &held.body),
+                Some(Body::Text { .. } | Body::Num { .. })
+            ),
+            _ => false,
+        }
+    }
+
+    /// An instance of the native class `id` carrying `state`, made as the
+    /// C++ constructors make one, with no `INIT` sent.
+    fn native_state_instance(&mut self, id: &str, state: NativeState) -> ObjRef {
+        let class = self
+            .classes()
+            .lookup(id)
+            .unwrap_or_else(|| unreachable!("{id} is a native class"));
+        let behaviour = self.classes().instance_behaviour_handle(class);
+        let object = self.alloc_with(
+            BehaviourId::OBJECT,
+            Body::Instance {
+                class,
+                behaviour,
+                name: None,
+                pools: ScopePools::new(),
+                own: None,
+                native: Some(Box::new(state)),
+            },
+        );
+        self.roots.push_temp(object);
+        // As `new_instance` arms it for every instance.
+        self.reqstr_armed = true;
+        object
+    }
+
+    /// The native state `object` carries, for a caller that writes it.
+    pub(super) fn native_state_mut(&mut self, object: ObjRef) -> Option<&mut NativeState> {
+        match &mut self.heap.get_mut(object)?.body {
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => Some(state),
+            _ => None,
+        }
     }
 }
 
