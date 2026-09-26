@@ -1295,15 +1295,20 @@ struct Interp {
     global_references: rexx_api::handles::Table,
     /// The terminated copies `StringData` and its kin answered, by the object
     /// they copy. Not roots: a collection drops the copy of an object it
-    /// frees, and a handle-carried value, which no collection frees, keeps
-    /// its copy as [`Interp::kept_holders`] says.
+    /// frees, and of a handle-carried value, which no collection frees, that
+    /// no call in flight ([`Interp::kept_holders`]) and no global reference
+    /// holds.
     kept_strings: std::collections::HashMap<ObjRef, Box<[u8]>>,
     /// The terminated copies of message and routine names answered, by name.
     kept_names: std::collections::HashMap<Box<[u8]>, Box<[u8]>>,
     /// For each handle-carried value in [`Interp::kept_strings`], how many
-    /// native calls in flight asked for its copy. The copy goes when the
-    /// last of them ends and no global reference holds the value.
+    /// native calls in flight asked for its copy.
     kept_holders: std::collections::HashMap<ObjRef, usize>,
+    /// How many of [`Interp::kept_strings`]' copies are of handle-carried
+    /// values, and the count past which they are pruned without waiting for
+    /// a collection.
+    kept_carried: usize,
+    kept_carried_limit: usize,
     /// Every native library a name has loaded, by the name it was resolved
     /// under -- `PackageManager::packages`
     /// (`interpreter/package/PackageManager.cpp:229-248`). A miss is not held,
@@ -2003,6 +2008,8 @@ impl Interp {
             kept_strings: std::collections::HashMap::new(),
             kept_names: std::collections::HashMap::new(),
             kept_holders: std::collections::HashMap::new(),
+            kept_carried: 0,
+            kept_carried_limit: 4096,
             special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
@@ -2658,6 +2665,8 @@ impl Interp {
             kept_strings: _,
             kept_names: _,
             kept_holders: _,
+            kept_carried: _,
+            kept_carried_limit: _,
             special_methods: _,
             out: _,
             trace: _,
@@ -2837,6 +2846,7 @@ impl Interp {
             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
                 || heap.get(*object).is_some()
         });
+        self.drop_loose_kept_strings();
         // A sweep can free a class the registry named, which unlinks its row
         // and leaves any `.NAME` answer derived from it naming nothing.
         self.invalidate_rexx_class_cache();

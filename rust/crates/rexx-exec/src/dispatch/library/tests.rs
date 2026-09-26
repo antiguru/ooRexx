@@ -806,11 +806,11 @@ fn a_kept_c_string_lives_and_dies_with_its_string() {
     assert_eq!(&bytes[..], b"a string held by a global reference\0");
 }
 
-/// **A handle-carried value's kept `CSTRING` lasts as long as the calls
-/// that asked for it**, and past them only while a global reference holds
-/// the value.
+/// **A handle-carried value's kept `CSTRING` outlives the calls that asked
+/// for it until the next collection**, which drops it unless a call in
+/// flight or a global reference still holds the value.
 #[test]
-fn a_handle_carried_values_copy_ends_with_its_last_call() {
+fn a_handle_carried_values_copy_lasts_until_a_collection() {
     use rexx_api::values::Host;
     use rexx_core::ObjRef;
     let mut interp = Interp::new();
@@ -818,16 +818,42 @@ fn a_handle_carried_values_copy_ends_with_its_last_call() {
     let held = ObjRef::small_int(42).expect("a small integer");
     interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
     interp.kept_c_string(loose, b"41");
-    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
-    interp.kept_c_string(loose, b"41");
     interp.kept_c_string(held, b"42");
     interp.global_references.register(held);
+    interp.collect_now();
+    assert!(
+        interp.kept_strings.contains_key(&loose),
+        "a collection during the call dropped the copy it still uses"
+    );
     interp.pop_native_frame();
     assert!(
         interp.kept_strings.contains_key(&loose),
-        "the outer call still holds it"
+        "the call's end dropped the copy"
     );
-    interp.pop_native_frame();
+    interp.collect_now();
     assert!(!interp.kept_strings.contains_key(&loose));
     assert!(interp.kept_strings.contains_key(&held));
+}
+
+/// **Copies of handle-carried values stay bounded without a collection**:
+/// calls that each ask for a new one, and allocate nothing, leave at most
+/// the prune's bound behind.
+#[test]
+fn handle_carried_copies_are_pruned_without_a_collection() {
+    use rexx_api::values::Host;
+    use rexx_core::ObjRef;
+    let mut interp = Interp::new();
+    let collections = interp.heap.collections_performed();
+    for value in 0..20_000 {
+        let object = ObjRef::small_int(value).expect("a small integer");
+        interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+        interp.kept_c_string(object, value.to_string().as_bytes());
+        interp.pop_native_frame();
+    }
+    assert_eq!(interp.heap.collections_performed(), collections);
+    assert!(
+        interp.kept_strings.len() <= 4097,
+        "{}",
+        interp.kept_strings.len()
+    );
 }

@@ -381,9 +381,28 @@ impl Interp {
         answer
     }
 
-    /// One native call's end for a handle-carried value's kept copy: the
-    /// copy goes with the last call holding it, unless a global reference
-    /// holds the value.
+    /// Drops the kept copy of every handle-carried value no call in flight
+    /// and no global reference holds, as a collection does. These copies
+    /// grow without the heap growing, so a run of calls that allocates
+    /// nothing would otherwise never meet a collection; this runs whenever
+    /// their number passes twice what the last pass left, and 4096.
+    pub(crate) fn drop_loose_kept_strings(&mut self) {
+        let (holders, globals) = (&self.kept_holders, &self.global_references);
+        self.kept_strings.retain(|object, _| {
+            matches!(object.decode(), rexx_core::Decoded::Heap { .. })
+                || holders.contains_key(object)
+                || globals.holds(*object)
+        });
+        self.kept_carried = self
+            .kept_strings
+            .keys()
+            .filter(|object| !matches!(object.decode(), rexx_core::Decoded::Heap { .. }))
+            .count();
+        self.kept_carried_limit = (self.kept_carried * 2).max(4096);
+    }
+
+    /// One native call's end for a handle-carried value's kept copy, which
+    /// the next collection may then drop.
     fn release_kept(&mut self, object: ObjRef) {
         let std::collections::hash_map::Entry::Occupied(mut holders) =
             self.kept_holders.entry(object)
@@ -391,12 +410,8 @@ impl Interp {
             return;
         };
         *holders.get_mut() -= 1;
-        if *holders.get() > 0 {
-            return;
-        }
-        holders.remove();
-        if !self.global_references.holds(object) {
-            self.kept_strings.remove(&object);
+        if *holders.get() == 0 {
+            holders.remove();
         }
     }
 
@@ -834,6 +849,12 @@ impl Host for Interp {
             let frame = self.native_handles.last_mut()?;
             if frame.kept.insert(object) {
                 *self.kept_holders.entry(object).or_default() += 1;
+            }
+            if !self.kept_strings.contains_key(&object) {
+                self.kept_carried += 1;
+                if self.kept_carried > self.kept_carried_limit {
+                    self.drop_loose_kept_strings();
+                }
             }
         }
         let kept = self
