@@ -690,11 +690,11 @@ thread_local! {
         const { std::cell::RefCell::new(Vec::new()) };
 }
 
-extern "C" fn recording_loader(thread: *mut rexx_api::layout::RexxThreadContext_) {
+extern "C-unwind" fn recording_loader(thread: *mut rexx_api::layout::RexxThreadContext_) {
     HOOKS_RAN.with(|ran| ran.borrow_mut().push(("loader", !thread.is_null())));
 }
 
-extern "C" fn recording_unloader(thread: *mut rexx_api::layout::RexxThreadContext_) {
+extern "C-unwind" fn recording_unloader(thread: *mut rexx_api::layout::RexxThreadContext_) {
     HOOKS_RAN.with(|ran| ran.borrow_mut().push(("unloader", !thread.is_null())));
 }
 
@@ -732,11 +732,11 @@ fn a_loaded_librarys_loader_and_unloader_run() {
 /// whichever thread ran them.
 static PROGRAM_HOOKS: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
 
-extern "C" fn program_loader(_thread: *mut rexx_api::layout::RexxThreadContext_) {
+extern "C-unwind" fn program_loader(_thread: *mut rexx_api::layout::RexxThreadContext_) {
     PROGRAM_HOOKS.lock().expect("unpoisoned").push("loader");
 }
 
-extern "C" fn program_unloader(_thread: *mut rexx_api::layout::RexxThreadContext_) {
+extern "C-unwind" fn program_unloader(_thread: *mut rexx_api::layout::RexxThreadContext_) {
     PROGRAM_HOOKS.lock().expect("unpoisoned").push("unloader");
 }
 

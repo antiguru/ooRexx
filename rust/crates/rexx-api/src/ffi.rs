@@ -3058,14 +3058,23 @@ mod packages {
 
     /// # Safety
     /// As [`load_package`].
-    pub(super) unsafe extern "C" fn load_library(
+    ///
+    /// A loader left by a `Throw` leaves the calling extension too, as the
+    /// oracle's does, once the load has settled.
+    pub(super) unsafe extern "C-unwind" fn load_library(
         context: *mut RexxThreadContext_,
         name: CSTRING,
     ) -> logical_t {
         // SAFETY: as `load_package`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "LoadLibrary"), name_of(name)) };
-        logical_t::from(name.is_some_and(|name| activation.load_library(name)))
+        let (loaded, threw) = crate::load::noting_hook_throws(|| {
+            name.is_some_and(|name| activation.load_library(name))
+        });
+        if threw {
+            super::unwind();
+        }
+        logical_t::from(loaded)
     }
 
     /// The package members that each answer one message of the package.
@@ -3244,10 +3253,13 @@ unsafe extern "C" fn release_local_reference(
         .release_local_reference(object);
 }
 
+/// `RegisterLibrary`. A loader left by a `Throw` leaves the calling extension
+/// too, as `LoadLibrary`'s does.
+///
 /// # Safety
 /// As [`whole_number_to_object`], a non-null `name` is NUL-terminated, and a
 /// non-null `entry` is as [`crate::load::registered`] asks.
-unsafe extern "C" fn register_library(
+unsafe extern "C-unwind" fn register_library(
     context: *mut RexxThreadContext_,
     name: CSTRING,
     entry: *mut RexxPackageEntry,
@@ -3264,7 +3276,12 @@ unsafe extern "C" fn register_library(
     };
     // SAFETY: the caller guarantees the entry.
     let library = unsafe { crate::load::registered(entry, &String::from_utf8_lossy(name)) };
-    logical_t::from(activation.register_library(name, library))
+    let (registered, threw) =
+        crate::load::noting_hook_throws(|| activation.register_library(name, library));
+    if threw {
+        unwind();
+    }
+    logical_t::from(registered)
 }
 
 /// # Safety
@@ -3921,7 +3938,7 @@ pub(crate) fn hooked() -> *mut RexxThreadContext_ {
 /// A package hook that keeps the thread context it is handed and raises
 /// [`STUB_CONDITION`] through it.
 #[cfg(test)]
-pub(crate) extern "C" fn raising_hook(thread: *mut RexxThreadContext_) {
+pub(crate) extern "C-unwind" fn raising_hook(thread: *mut RexxThreadContext_) {
     HOOKED.set(thread);
     // SAFETY: `thread` is the context `invoke::hook` handed this call.
     unsafe { ((*(*thread).functions).RaiseException0)(thread, STUB_CONDITION) };
@@ -3930,7 +3947,7 @@ pub(crate) extern "C" fn raising_hook(thread: *mut RexxThreadContext_) {
 /// A package hook that reaches `ValuesToObject`, which a host with no
 /// [`crate::callbacks::Surface`] refuses, and then raises [`STUB_CONDITION`].
 #[cfg(test)]
-pub(crate) extern "C" fn refusing_hook(thread: *mut RexxThreadContext_) {
+pub(crate) extern "C-unwind" fn refusing_hook(thread: *mut RexxThreadContext_) {
     HOOKED.set(thread);
     // SAFETY: as `raising_hook`; the name is a literal.
     unsafe {

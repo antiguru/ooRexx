@@ -276,7 +276,7 @@ pub struct ValueDescriptor {
 }
 
 /// `RexxPackageLoader` and `RexxPackageUnloader` (`api/oorexxapi.h:257-258`).
-pub type PackageHook = unsafe extern "C" fn(*mut RexxThreadContext_);
+pub type PackageHook = unsafe extern "C-unwind" fn(*mut RexxThreadContext_);
 
 /// `RexxRoutineEntry` (`api/oorexxapi.h:190-198`).
 #[repr(C)]
@@ -473,6 +473,9 @@ macro_rules! entry_type {
     (unwinds call($($arg:ty),*)) => {
         unsafe extern "C-unwind" fn($($arg),*)
     };
+    (unwinds call($($arg:ty),*) -> $ret:ty) => {
+        unsafe extern "C-unwind" fn($($arg),*) -> $ret
+    };
     ($(aborts)? call($($arg:ty),*)) => {
         unsafe extern "C" fn($($arg),*)
     };
@@ -517,6 +520,13 @@ macro_rules! entry_stub {
         }
         stub
     }};
+    ($entry:expr, unwinds call($($arg:ty),*) -> $ret:ty) => {{
+        extern "C-unwind" fn stub($(_: $arg),*) -> $ret {
+            refuse($entry);
+            <$ret as RefusedValue>::REFUSED
+        }
+        stub
+    }};
     ($entry:expr, aborts call($($arg:ty),*)) => {{
         extern "C" fn stub($(_: $arg),*) {
             abort($entry)
@@ -546,6 +556,9 @@ macro_rules! entry_address {
 macro_rules! entry_aborts {
     (aborts $($rest:tt)*) => {
         true
+    };
+    (unwinds call($($arg:ty),*) -> $ret:ty) => {
+        false
     };
     (unwinds $($rest:tt)*) => {
         true
@@ -651,8 +664,8 @@ interface! {
         HasMethod: { call(*mut RexxThreadContext_, RexxObjectPtr, CSTRING) -> logical_t },
         LoadPackage: { call(*mut RexxThreadContext_, CSTRING) -> RexxPackageObject },
         LoadPackageFromData: { call(*mut RexxThreadContext_, CSTRING, CSTRING, usize) -> RexxPackageObject },
-        LoadLibrary: { call(*mut RexxThreadContext_, CSTRING) -> logical_t },
-        RegisterLibrary: { call(*mut RexxThreadContext_, CSTRING, *mut RexxPackageEntry) -> logical_t },
+        LoadLibrary: { unwinds call(*mut RexxThreadContext_, CSTRING) -> logical_t },
+        RegisterLibrary: { unwinds call(*mut RexxThreadContext_, CSTRING, *mut RexxPackageEntry) -> logical_t },
         FindClass: { call(*mut RexxThreadContext_, CSTRING) -> RexxClassObject },
         FindPackageClass: { call(*mut RexxThreadContext_, RexxPackageObject, CSTRING) -> RexxClassObject },
         GetPackageRoutines: { call(*mut RexxThreadContext_, RexxPackageObject) -> RexxDirectoryObject },

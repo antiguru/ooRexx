@@ -510,10 +510,12 @@ fn without_parameter_name(c: &str) -> &str {
 /// The ABI a member is declared with here. The header states only
 /// `RexxEntry`, the C convention; the `Throw` members leave the extension by
 /// C++ `throw` (`interpreter/api/CallContextStubs.cpp:207-213`), which is an
-/// unwind through its frames, so here they are `C-unwind`. Arguments and
-/// result are the header's either way.
+/// unwind through its frames, and one thrown in a library's loader leaves
+/// through the `LoadLibrary` or `RegisterLibrary` that ran the loader, so
+/// here all of them are `C-unwind`. Arguments and result are the header's
+/// either way.
 fn abi_of(member: &str) -> &'static str {
-    if member.starts_with("Throw") {
+    if member.starts_with("Throw") || member == "LoadLibrary" || member == "RegisterLibrary" {
         "C-unwind"
     } else {
         "C"

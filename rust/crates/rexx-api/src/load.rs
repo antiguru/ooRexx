@@ -291,8 +291,8 @@ pub(crate) fn stub_routine_entry(
 #[cfg(unix)]
 #[must_use]
 pub fn hooks_only(
-    loader: Option<extern "C" fn(*mut RexxThreadContext_)>,
-    unloader: Option<extern "C" fn(*mut RexxThreadContext_)>,
+    loader: Option<extern "C-unwind" fn(*mut RexxThreadContext_)>,
+    unloader: Option<extern "C-unwind" fn(*mut RexxThreadContext_)>,
 ) -> Library {
     let entry = RexxPackageEntry {
         size: 0,
@@ -501,6 +501,22 @@ unsafe fn call_stub<C>(
     })
 }
 
+thread_local! {
+    /// Whether a package hook run since the flag was last cleared was left
+    /// by a `Throw`.
+    static HOOK_THREW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `load`, which may run package hooks, and answers what it answered
+/// with whether one of them was left by a `Throw`, restoring the flag in
+/// force before.
+pub(crate) fn noting_hook_throws<R>(load: impl FnOnce() -> R) -> (R, bool) {
+    let outer = HOOK_THREW.replace(false);
+    let answered = load();
+    let threw = HOOK_THREW.replace(outer);
+    (answered, threw)
+}
+
 /// Which of a package entry's hooks to run.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Hook {
@@ -586,7 +602,20 @@ impl Library {
         // (`api/oorexxapi.h:257-258`), in a mapping that is open and that a
         // close leaves open while this call is held; the thread context is
         // the one `contexts` links, live for the call.
-        self.mapping.hold(|| unsafe { function(contexts.thread()) });
+        let ran = self.mapping.hold(|| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                function(contexts.thread())
+            }))
+        });
+        // A `Throw` on a call context the hook reached leaves the hook as it
+        // leaves a stub, with its condition recorded; the member that ran
+        // the hook is told, because the oracle's unwind does not stop here.
+        if let Err(payload) = ran {
+            if !payload.is::<crate::ffi::Thrown>() {
+                std::panic::resume_unwind(payload);
+            }
+            HOOK_THREW.set(true);
+        }
     }
 
     /// `SysLibrary::unload`: closes the library, after which none of its rows
@@ -977,7 +1006,7 @@ mod tests {
     use super::{CURRENT_INTERPRETER_VERSION, Hook, Library, NativeRoutineEntry, library_of};
     use crate::layout::{RexxPackageEntry, RexxThreadContext_};
 
-    extern "C" fn ignoring_hook(_thread: *mut RexxThreadContext_) {}
+    extern "C-unwind" fn ignoring_hook(_thread: *mut RexxThreadContext_) {}
 
     /// A package entry with no tables asking for `required`, declaring both
     /// hooks.
