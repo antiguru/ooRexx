@@ -1,14 +1,16 @@
 /* The thread table's message members, and the method and call contexts'
    own: a send with an argument array and with fixed arguments, from a
    given scope, forwarded, and the running call's arguments, name, method,
-   receiver, scope and class search, through orxmethod and orxfunction. */
+   receiver, scope and class search, through orxmethod and orxfunction. The
+   name a send carries reaches the program upper-cased. */
 t = .T~new
 say t~send('abc', 'left', .array~of(2)) t~send('abc', 'LENGTH', .array~new) t~send0('abc', 'reverse') t~send1('abc', 'pos', 'b') t~send2('abcabc', 'pos', 'c', 4)
 say t~send(.array~of(1,,3), 'items', .array~new) t~send('xyz', 'substr', .array~of(2))
 say t~scoped(.sub~new, 'who', .base, .array~new) t~scoped(.sub~new, 'who', .sub, .array~new) t~send0(.sub~new, 'who')
 signal on syntax name s1
 say t~send0('abc', 'nosuchmethod')
-s1: say 'nomethod' condition('o')~code
+s1: say 'nomethod' condition('o')~code condition('o')~message
+say t~send0(.u~new, 'foo') '|' t~send0(.u~new, 'whoami') '|' t~send1(.u~new, 'fOo', 1)
 say t~isinst('abc', .string) t~isinst(.sub~new, .base) t~isinst(.sub~new, .array) t~hasm('abc', 'left') t~hasm('abc', 'LEFT') t~hasm('abc', 'nope')
 say t~args~items t~args(1,,3)~size t~args(1,,3)~items t~arg(2, 'x', 'y') t~arg(3,,'z')
 signal on syntax name s2
@@ -24,6 +26,12 @@ say t~fwd('hello', 'left', .string, .array~of(2)) t~fwd(.sub~new, 'who', .base, 
 say TestGetRoutineName() TestGetArguments(1,2)~items TestGetArgument(2, 'q') TestGetRoutine()~class TestFindContextClass('T')
 exit
 ::requires 'orxfunction' LIBRARY
+::class u
+::method unknown
+  use arg name, args
+  return 'unknown got' name
+::method whoami
+  return .context~name
 ::class base
 ::method who
   return 'base'
