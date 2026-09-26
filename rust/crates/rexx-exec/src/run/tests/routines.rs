@@ -781,14 +781,14 @@ fn an_extension_reading_the_instance_reaches_its_table() {
     assert_eq!(outcome.stdout, b"before\n328448\n");
 }
 
-/// **An extension that reaches an interface member this crate has not written
-/// refuses loudly, naming the member, and the program's earlier output is
-/// kept.** Measured, oracle: `RxCalcSin(30, 3, 'X')` is 88.916 at rc 168; its
-/// units check builds the message's substitutions with `ArrayOfThree`
-/// (`extensions/rxmath/rxmath.cpp:178`). The test loads this worktree's own
+/// **An extension's own raise, built from an array of substitutions, is the
+/// call's condition, and the program's earlier output is kept.** Measured,
+/// oracle: `RxCalcSin(30, 3, 'X')` is 88.916 at rc 168, its units check
+/// raising through `RaiseException` over `ArrayOfThree`
+/// (`extensions/rxmath/rxmath.cpp:177`). The test loads this worktree's own
 /// `build/lib/librxmath.so`; the measurements used the oracle checkout's.
 #[test]
-fn an_extension_reaching_an_unwritten_member_refuses_loudly() {
+fn an_extensions_raise_with_substitutions_is_the_calls_condition() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
@@ -803,11 +803,13 @@ fn an_extension_reaching_an_unwritten_member_refuses_loudly() {
             .to_vec(),
         invocation,
     );
-    assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
+    assert_eq!(outcome.exit_code, 168);
     assert_eq!(outcome.stdout, b"before\n");
     assert_eq!(
         String::from_utf8_lossy(&outcome.stderr),
-        "rexx-exec: RexxThreadInterface.ArrayOfThree is not implemented (Phase 8)\n"
+        "       *-* Compiled routine \"RXCALCSIN\".\n     2 *-* say RxCalcSin(30, 3, 'X')\n\
+         Error 88 running /tmp/unwritten.rex line 2:  Invalid argument.\n\
+         Error 88.916:  Argument 3 must be one of D, R, or G; found \"X\".\n"
     );
 }
 

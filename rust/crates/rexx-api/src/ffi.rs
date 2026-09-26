@@ -219,6 +219,44 @@ pub const THREAD: RexxThreadInterface = {
     table.IsMutableBuffer = is_mutable_buffer;
     table.ObjectToCSelf = object_to_cself;
     table.ObjectToCSelfScoped = object_to_cself_scoped;
+    table.DirectoryPut = collections::directory_put;
+    table.DirectoryAt = collections::directory_at;
+    table.DirectoryRemove = collections::directory_remove;
+    table.NewDirectory = collections::new_directory;
+    table.IsDirectory = collections::is_directory;
+    table.StringTablePut = collections::string_table_put;
+    table.StringTableAt = collections::string_table_at;
+    table.StringTableRemove = collections::string_table_remove;
+    table.NewStringTable = collections::new_string_table;
+    table.IsStringTable = collections::is_string_table;
+    table.ArrayAt = collections::array_at;
+    table.ArrayPut = collections::array_put;
+    table.ArrayAppend = collections::array_append;
+    table.ArrayAppendString = collections::array_append_string;
+    table.ArraySize = collections::array_size;
+    table.ArrayItems = collections::array_items;
+    table.ArrayDimension = collections::array_dimension;
+    table.NewArray = collections::new_array;
+    table.ArrayOfOne = collections::array_of_one;
+    table.ArrayOfTwo = collections::array_of_two;
+    table.ArrayOfThree = collections::array_of_three;
+    table.ArrayOfFour = collections::array_of_four;
+    table.IsArray = collections::is_array;
+    table.SupplierItem = collections::supplier_item;
+    table.SupplierIndex = collections::supplier_index;
+    table.SupplierAvailable = collections::supplier_available;
+    table.SupplierNext = collections::supplier_next;
+    table.NewSupplier = collections::new_supplier;
+    table.NewStem = collections::new_stem;
+    table.SetStemElement = collections::set_stem_element;
+    table.GetStemElement = collections::get_stem_element;
+    table.DropStemElement = collections::drop_stem_element;
+    table.SetStemArrayElement = collections::set_stem_array_element;
+    table.GetStemArrayElement = collections::get_stem_array_element;
+    table.DropStemArrayElement = collections::drop_stem_array_element;
+    table.GetAllStemElements = collections::get_all_stem_elements;
+    table.GetStemValue = collections::get_stem_value;
+    table.IsStem = collections::is_stem;
     table
 };
 
@@ -1537,6 +1575,609 @@ unsafe extern "C" fn object_to_cself_scoped(
 unsafe extern "C" fn get_cself(context: *mut RexxMethodContext_) -> POINTER {
     // SAFETY: as `set_object_variable`.
     unsafe { activation_of(context) }.cself()
+}
+
+/// The thread-table members over a collection, each of whose bodies is one
+/// callback on the innermost activation; `name` arguments are
+/// NUL-terminated strings the caller keeps for the call.
+mod collections {
+    use super::{innermost_activation, name_of};
+    use crate::callbacks::Argument;
+    use crate::layout::{
+        CSTRING, RexxArrayObject, RexxDirectoryObject, RexxObjectPtr, RexxStemObject,
+        RexxStringTableObject, RexxSupplierObject, RexxThreadContext_, logical_t,
+    };
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`], and a non-null `name` is
+    /// NUL-terminated.
+    pub(super) unsafe extern "C" fn directory_put(
+        context: *mut RexxThreadContext_,
+        table: RexxDirectoryObject,
+        item: RexxObjectPtr,
+        name: CSTRING,
+    ) {
+        // SAFETY: as `whole_number_to_object`; the caller guarantees `name`.
+        let (activation, name) = unsafe {
+            (
+                innermost_activation(context, "DirectoryPut"),
+                name_of(name).unwrap_or_default(),
+            )
+        };
+        activation.table_put("RexxThreadInterface.DirectoryPut", table.cast(), item, name);
+    }
+
+    /// # Safety
+    /// As [`directory_put`].
+    pub(super) unsafe extern "C" fn directory_at(
+        context: *mut RexxThreadContext_,
+        table: RexxDirectoryObject,
+        name: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `directory_put`.
+        let (activation, name) = unsafe {
+            (
+                innermost_activation(context, "DirectoryAt"),
+                name_of(name).unwrap_or_default(),
+            )
+        };
+        activation.table_at("RexxThreadInterface.DirectoryAt", table.cast(), name)
+    }
+
+    /// # Safety
+    /// As [`directory_put`].
+    pub(super) unsafe extern "C" fn directory_remove(
+        context: *mut RexxThreadContext_,
+        table: RexxDirectoryObject,
+        name: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `directory_put`.
+        let (activation, name) = unsafe {
+            (
+                innermost_activation(context, "DirectoryRemove"),
+                name_of(name).unwrap_or_default(),
+            )
+        };
+        activation.table_remove("RexxThreadInterface.DirectoryRemove", table.cast(), name)
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn new_directory(
+        context: *mut RexxThreadContext_,
+    ) -> RexxDirectoryObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "NewDirectory") }
+            .new_instance_of("RexxThreadInterface.NewDirectory", "Directory", &[])
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn is_directory(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+    ) -> logical_t {
+        // SAFETY: as `whole_number_to_object`.
+        logical_t::from(
+            unsafe { innermost_activation(context, "IsDirectory") }.is_of_class(
+                "RexxThreadInterface.IsDirectory",
+                object,
+                "Directory",
+            ),
+        )
+    }
+
+    /// # Safety
+    /// As [`directory_put`].
+    pub(super) unsafe extern "C" fn string_table_put(
+        context: *mut RexxThreadContext_,
+        table: RexxStringTableObject,
+        item: RexxObjectPtr,
+        name: CSTRING,
+    ) {
+        // SAFETY: as `directory_put`.
+        let (activation, name) = unsafe {
+            (
+                innermost_activation(context, "StringTablePut"),
+                name_of(name).unwrap_or_default(),
+            )
+        };
+        activation.table_put(
+            "RexxThreadInterface.StringTablePut",
+            table.cast(),
+            item,
+            name,
+        );
+    }
+
+    /// # Safety
+    /// As [`directory_put`].
+    pub(super) unsafe extern "C" fn string_table_at(
+        context: *mut RexxThreadContext_,
+        table: RexxStringTableObject,
+        name: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `directory_put`.
+        let (activation, name) = unsafe {
+            (
+                innermost_activation(context, "StringTableAt"),
+                name_of(name).unwrap_or_default(),
+            )
+        };
+        activation.table_at("RexxThreadInterface.StringTableAt", table.cast(), name)
+    }
+
+    /// # Safety
+    /// As [`directory_put`].
+    pub(super) unsafe extern "C" fn string_table_remove(
+        context: *mut RexxThreadContext_,
+        table: RexxStringTableObject,
+        name: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `directory_put`.
+        let (activation, name) = unsafe {
+            (
+                innermost_activation(context, "StringTableRemove"),
+                name_of(name).unwrap_or_default(),
+            )
+        };
+        activation.table_remove("RexxThreadInterface.StringTableRemove", table.cast(), name)
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn new_string_table(
+        context: *mut RexxThreadContext_,
+    ) -> RexxStringTableObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "NewStringTable") }
+            .new_instance_of("RexxThreadInterface.NewStringTable", "StringTable", &[])
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn is_string_table(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+    ) -> logical_t {
+        // SAFETY: as `whole_number_to_object`.
+        logical_t::from(
+            unsafe { innermost_activation(context, "IsStringTable") }.is_of_class(
+                "RexxThreadInterface.IsStringTable",
+                object,
+                "StringTable",
+            ),
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_at(
+        context: *mut RexxThreadContext_,
+        array: RexxArrayObject,
+        index: usize,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArrayAt") }.array_at(array.cast(), index)
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_put(
+        context: *mut RexxThreadContext_,
+        array: RexxArrayObject,
+        item: RexxObjectPtr,
+        index: usize,
+    ) {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArrayPut") }.array_put(array.cast(), item, index);
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_append(
+        context: *mut RexxThreadContext_,
+        array: RexxArrayObject,
+        item: RexxObjectPtr,
+    ) -> usize {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArrayAppend") }.array_append(
+            "RexxThreadInterface.ArrayAppend",
+            array.cast(),
+            Argument::Handle(item),
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`], and a non-null `data` is valid
+    /// for reads of `length` bytes.
+    pub(super) unsafe extern "C" fn array_append_string(
+        context: *mut RexxThreadContext_,
+        array: RexxArrayObject,
+        data: CSTRING,
+        length: usize,
+    ) -> usize {
+        // SAFETY: as `whole_number_to_object`.
+        let activation = unsafe { innermost_activation(context, "ArrayAppendString") };
+        // SAFETY: the caller guarantees the range.
+        let Some(bytes) = (unsafe { super::bytes_of(data, length) }) else {
+            return 0;
+        };
+        activation.array_append(
+            "RexxThreadInterface.ArrayAppendString",
+            array.cast(),
+            Argument::Text(bytes),
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_size(
+        context: *mut RexxThreadContext_,
+        array: RexxArrayObject,
+    ) -> usize {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArraySize") }.array_count(
+            "RexxThreadInterface.ArraySize",
+            array.cast(),
+            b"SIZE",
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_items(
+        context: *mut RexxThreadContext_,
+        array: RexxArrayObject,
+    ) -> usize {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArrayItems") }.array_count(
+            "RexxThreadInterface.ArrayItems",
+            array.cast(),
+            b"ITEMS",
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_dimension(
+        context: *mut RexxThreadContext_,
+        array: RexxArrayObject,
+    ) -> usize {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArrayDimension") }.array_count(
+            "RexxThreadInterface.ArrayDimension",
+            array.cast(),
+            b"DIMENSION",
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn new_array(
+        context: *mut RexxThreadContext_,
+        size: usize,
+    ) -> RexxArrayObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "NewArray") }
+            .new_array_sized(size)
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_of_one(
+        context: *mut RexxThreadContext_,
+        first: RexxObjectPtr,
+    ) -> RexxArrayObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArrayOfOne") }
+            .array_of("RexxThreadInterface.ArrayOfOne", &[first])
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_of_two(
+        context: *mut RexxThreadContext_,
+        first: RexxObjectPtr,
+        second: RexxObjectPtr,
+    ) -> RexxArrayObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArrayOfTwo") }
+            .array_of("RexxThreadInterface.ArrayOfTwo", &[first, second])
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_of_three(
+        context: *mut RexxThreadContext_,
+        first: RexxObjectPtr,
+        second: RexxObjectPtr,
+        third: RexxObjectPtr,
+    ) -> RexxArrayObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArrayOfThree") }
+            .array_of("RexxThreadInterface.ArrayOfThree", &[first, second, third])
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn array_of_four(
+        context: *mut RexxThreadContext_,
+        first: RexxObjectPtr,
+        second: RexxObjectPtr,
+        third: RexxObjectPtr,
+        fourth: RexxObjectPtr,
+    ) -> RexxArrayObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "ArrayOfFour") }
+            .array_of(
+                "RexxThreadInterface.ArrayOfFour",
+                &[first, second, third, fourth],
+            )
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn is_array(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+    ) -> logical_t {
+        // SAFETY: as `whole_number_to_object`.
+        logical_t::from(
+            unsafe { innermost_activation(context, "IsArray") }.is_of_class(
+                "RexxThreadInterface.IsArray",
+                object,
+                "Array",
+            ),
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn supplier_item(
+        context: *mut RexxThreadContext_,
+        supplier: RexxSupplierObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "SupplierItem") }.supplier_object(
+            "RexxThreadInterface.SupplierItem",
+            supplier.cast(),
+            b"ITEM",
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn supplier_index(
+        context: *mut RexxThreadContext_,
+        supplier: RexxSupplierObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "SupplierIndex") }.supplier_object(
+            "RexxThreadInterface.SupplierIndex",
+            supplier.cast(),
+            b"INDEX",
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn supplier_available(
+        context: *mut RexxThreadContext_,
+        supplier: RexxSupplierObject,
+    ) -> logical_t {
+        // SAFETY: as `whole_number_to_object`.
+        logical_t::from(
+            unsafe { innermost_activation(context, "SupplierAvailable") }
+                .supplier_available(supplier.cast()),
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn supplier_next(
+        context: *mut RexxThreadContext_,
+        supplier: RexxSupplierObject,
+    ) {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "SupplierNext") }.supplier_next(supplier.cast());
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn new_supplier(
+        context: *mut RexxThreadContext_,
+        values: RexxArrayObject,
+        names: RexxArrayObject,
+    ) -> RexxSupplierObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "NewSupplier") }
+            .new_supplier(values.cast(), names.cast())
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`directory_put`].
+    pub(super) unsafe extern "C" fn new_stem(
+        context: *mut RexxThreadContext_,
+        name: CSTRING,
+    ) -> RexxStemObject {
+        // SAFETY: as `directory_put`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "NewStem"), name_of(name)) };
+        let arguments: &[Argument<'_>] = match &name {
+            Some(name) => &[Argument::Text(name)],
+            None => &[],
+        };
+        activation
+            .new_instance_of("RexxThreadInterface.NewStem", "Stem", arguments)
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`directory_put`].
+    pub(super) unsafe extern "C" fn set_stem_element(
+        context: *mut RexxThreadContext_,
+        stem: RexxStemObject,
+        tail: CSTRING,
+        value: RexxObjectPtr,
+    ) {
+        // SAFETY: as `directory_put`.
+        let (activation, tail) = unsafe {
+            (
+                innermost_activation(context, "SetStemElement"),
+                name_of(tail).unwrap_or_default(),
+            )
+        };
+        activation.stem_set(
+            "RexxThreadInterface.SetStemElement",
+            stem.cast(),
+            Argument::Text(tail),
+            value,
+        );
+    }
+
+    /// # Safety
+    /// As [`directory_put`].
+    pub(super) unsafe extern "C" fn get_stem_element(
+        context: *mut RexxThreadContext_,
+        stem: RexxStemObject,
+        tail: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `directory_put`.
+        let (activation, tail) = unsafe {
+            (
+                innermost_activation(context, "GetStemElement"),
+                name_of(tail).unwrap_or_default(),
+            )
+        };
+        activation.stem_get(
+            "RexxThreadInterface.GetStemElement",
+            stem.cast(),
+            Argument::Text(tail),
+        )
+    }
+
+    /// # Safety
+    /// As [`directory_put`].
+    pub(super) unsafe extern "C" fn drop_stem_element(
+        context: *mut RexxThreadContext_,
+        stem: RexxStemObject,
+        tail: CSTRING,
+    ) {
+        // SAFETY: as `directory_put`.
+        let (activation, tail) = unsafe {
+            (
+                innermost_activation(context, "DropStemElement"),
+                name_of(tail).unwrap_or_default(),
+            )
+        };
+        activation.stem_drop(
+            "RexxThreadInterface.DropStemElement",
+            stem.cast(),
+            Argument::Text(tail),
+        );
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn set_stem_array_element(
+        context: *mut RexxThreadContext_,
+        stem: RexxStemObject,
+        index: usize,
+        value: RexxObjectPtr,
+    ) {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "SetStemArrayElement") }.stem_set(
+            "RexxThreadInterface.SetStemArrayElement",
+            stem.cast(),
+            Argument::Number(index),
+            value,
+        );
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn get_stem_array_element(
+        context: *mut RexxThreadContext_,
+        stem: RexxStemObject,
+        index: usize,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "GetStemArrayElement") }.stem_get(
+            "RexxThreadInterface.GetStemArrayElement",
+            stem.cast(),
+            Argument::Number(index),
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn drop_stem_array_element(
+        context: *mut RexxThreadContext_,
+        stem: RexxStemObject,
+        index: usize,
+    ) {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "DropStemArrayElement") }.stem_drop(
+            "RexxThreadInterface.DropStemArrayElement",
+            stem.cast(),
+            Argument::Number(index),
+        );
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn get_all_stem_elements(
+        context: *mut RexxThreadContext_,
+        stem: RexxStemObject,
+    ) -> RexxDirectoryObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "GetAllStemElements") }
+            .stem_whole(
+                "RexxThreadInterface.GetAllStemElements",
+                stem.cast(),
+                b"TODIRECTORY",
+            )
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn get_stem_value(
+        context: *mut RexxThreadContext_,
+        stem: RexxStemObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "GetStemValue") }.stem_whole(
+            "RexxThreadInterface.GetStemValue",
+            stem.cast(),
+            b"[]",
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn is_stem(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+    ) -> logical_t {
+        // SAFETY: as `whole_number_to_object`.
+        logical_t::from(
+            unsafe { innermost_activation(context, "IsStem") }.is_of_class(
+                "RexxThreadInterface.IsStem",
+                object,
+                "Stem",
+            ),
+        )
+    }
 }
 
 /// What a stub read through the context, which is the channel

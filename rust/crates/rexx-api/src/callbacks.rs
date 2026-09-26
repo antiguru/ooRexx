@@ -108,7 +108,24 @@ pub trait Surface {
     /// variable holds, unwrapped. `scope` starts the search at that scope and
     /// walks its super scopes; `None` searches every pool, newest first.
     fn object_cself(&mut self, object: ObjRef, scope: Option<ObjRef>) -> Option<POINTER>;
+
+    /// Sends `name` to `receiver`, answering what it answered, or `Err`
+    /// where it raised a condition, which the host holds.
+    #[allow(clippy::result_unit_err)]
+    fn send(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+        arguments: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, ()>;
+
+    /// The built-in class `id` names.
+    fn class_object(&mut self, id: &str) -> Option<ObjRef>;
 }
+
+/// `Error_Incorrect_method_positive` (`api/oorexxerrors.h`), which `ArrayAt`
+/// and `ArrayPut` raise for an index of zero.
+const INCORRECT_METHOD_POSITIVE: usize = 93_907;
 
 /// What `DecodeConditionInfo` writes into a `RexxCondition`
 /// (`Interpreter::decodeConditionData`, `interpreter/runtime/Interpreter.cpp:541`).
@@ -734,6 +751,342 @@ impl Activation<'_> {
             .unwrap_or(std::ptr::null_mut())
     }
 
+    /// Sends `name` to the object `receiver` names with `arguments`, the
+    /// objects handles and strings name, answering the object it answered,
+    /// or `None` where it answered nothing or raised.
+    fn send_to(
+        &self,
+        slot: &'static str,
+        receiver: Option<ObjRef>,
+        name: &[u8],
+        arguments: &[Argument<'_>],
+    ) -> Option<ObjRef> {
+        let receiver = receiver?;
+        let mut objects = Vec::with_capacity(arguments.len());
+        for argument in arguments {
+            objects.push(match argument {
+                Argument::Handle(handle) => self.resolve(*handle),
+                Argument::Text(bytes) => {
+                    let mut cx = self.conversion();
+                    let string = cx.host.new_string(bytes);
+                    cx.host.locals().register(string);
+                    Some(string)
+                }
+                Argument::Number(number) => {
+                    let mut cx = self.conversion();
+                    let value = isize::try_from(*number).unwrap_or(isize::MAX);
+                    let object = cx.host.whole_number(value);
+                    cx.host.locals().register(object);
+                    Some(object)
+                }
+            });
+        }
+        self.with_surface(slot, None, |cx| {
+            let answer = cx
+                .host
+                .surface()
+                .expect("checked by with_surface")
+                .send(receiver, name, &objects)
+                .ok()
+                .flatten()?;
+            cx.host.locals().register(answer);
+            Some(answer)
+        })
+    }
+
+    /// [`Activation::send_to`] answering a handle, null for nothing.
+    fn send_for_handle(
+        &self,
+        slot: &'static str,
+        receiver: Option<ObjRef>,
+        name: &[u8],
+        arguments: &[Argument<'_>],
+    ) -> RexxObjectPtr {
+        match self.send_to(slot, receiver, name, arguments) {
+            Some(object) => self.register(object),
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    /// [`Activation::send_to`] answering a whole number, zero for nothing.
+    fn send_for_count(
+        &self,
+        slot: &'static str,
+        receiver: Option<ObjRef>,
+        name: &[u8],
+        arguments: &[Argument<'_>],
+    ) -> usize {
+        let Some(answer) = self.send_to(slot, receiver, name, arguments) else {
+            return 0;
+        };
+        let found = self.conversion().host.unsigned_integer(answer, u64::MAX);
+        found
+            .ok()
+            .flatten()
+            .and_then(|count| usize::try_from(count).ok())
+            .unwrap_or(0)
+    }
+
+    /// [`Activation::send_to`] answering its truth value, false for nothing.
+    fn send_for_truth(
+        &self,
+        slot: &'static str,
+        receiver: Option<ObjRef>,
+        name: &[u8],
+        arguments: &[Argument<'_>],
+    ) -> bool {
+        let Some(answer) = self.send_to(slot, receiver, name, arguments) else {
+            return false;
+        };
+        let found = self.conversion().host.logical(answer);
+        matches!(found, Ok(Ok(true)))
+    }
+
+    /// The built-in class `id` names.
+    fn class(&self, slot: &'static str, id: &str) -> Option<ObjRef> {
+        self.with_surface(slot, None, |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .class_object(id)
+        })
+    }
+
+    /// The item a collection holds at `index`, or `None` where it holds none,
+    /// which the oracle's `get` answers as `OREF_NULL` where the message
+    /// answers `.nil`.
+    fn item_at(
+        &self,
+        slot: &'static str,
+        collection: RexxObjectPtr,
+        index: Argument<'_>,
+    ) -> RexxObjectPtr {
+        let collection = self.resolve(collection);
+        if !self.send_for_truth(slot, collection, b"HASINDEX", &[index]) {
+            return std::ptr::null_mut();
+        }
+        self.send_for_handle(slot, collection, b"AT", &[index])
+    }
+
+    /// The item a collection removes from `index`, null where it held none.
+    fn item_removed(
+        &self,
+        slot: &'static str,
+        collection: RexxObjectPtr,
+        index: Argument<'_>,
+    ) -> RexxObjectPtr {
+        let collection = self.resolve(collection);
+        if !self.send_for_truth(slot, collection, b"HASINDEX", &[index]) {
+            return std::ptr::null_mut();
+        }
+        self.send_for_handle(slot, collection, b"REMOVE", &[index])
+    }
+
+    /// Holds `Error_Incorrect_method_positive` for the argument at `position`.
+    fn raise_not_positive(&self, slot: &'static str, position: usize) {
+        let position = {
+            let mut cx = self.conversion();
+            let object = cx.host.whole_number(isize::try_from(position).unwrap_or(0));
+            cx.host.locals().register(object)
+        };
+        self.raise_with(slot, INCORRECT_METHOD_POSITIVE, &[position]);
+    }
+
+    /// `ArrayAt`: `safeGet`, null beyond the array's size.
+    pub fn array_at(&self, array: RexxObjectPtr, index: usize) -> RexxObjectPtr {
+        const SLOT: &str = "RexxThreadInterface.ArrayAt";
+        if index == 0 {
+            self.raise_not_positive(SLOT, 1);
+            return std::ptr::null_mut();
+        }
+        self.item_at(SLOT, array, Argument::Number(index))
+    }
+
+    /// `ArrayPut`.
+    pub fn array_put(&self, array: RexxObjectPtr, item: RexxObjectPtr, index: usize) {
+        const SLOT: &str = "RexxThreadInterface.ArrayPut";
+        if index == 0 {
+            self.raise_not_positive(SLOT, 2);
+            return;
+        }
+        let array = self.resolve(array);
+        self.send_to(
+            SLOT,
+            array,
+            b"PUT",
+            &[Argument::Handle(item), Argument::Number(index)],
+        );
+    }
+
+    /// `ArrayAppend` and `ArrayAppendString`: the index the item landed at.
+    pub fn array_append(
+        &self,
+        slot: &'static str,
+        array: RexxObjectPtr,
+        item: Argument<'_>,
+    ) -> usize {
+        let array = self.resolve(array);
+        self.send_for_count(slot, array, b"APPEND", &[item])
+    }
+
+    /// `ArraySize`, `ArrayItems` and `ArrayDimension`: what `SIZE`, `ITEMS`
+    /// and `DIMENSION` answer.
+    pub fn array_count(&self, slot: &'static str, array: RexxObjectPtr, name: &[u8]) -> usize {
+        let array = self.resolve(array);
+        self.send_for_count(slot, array, name, &[])
+    }
+
+    /// `NewArray`: an array of that size and no items.
+    pub fn new_array_sized(&self, size: usize) -> RexxObjectPtr {
+        const SLOT: &str = "RexxThreadInterface.NewArray";
+        let class = self.class(SLOT, "Array");
+        self.send_for_handle(SLOT, class, b"NEW", &[Argument::Number(size)])
+    }
+
+    /// `ArrayOfOne` to `ArrayOfFour`: a null handle an empty slot.
+    pub fn array_of(&self, slot: &'static str, items: &[RexxObjectPtr]) -> RexxObjectPtr {
+        let items: Vec<Option<ObjRef>> = items.iter().map(|item| self.resolve(*item)).collect();
+        self.with_surface(slot, std::ptr::null_mut(), |cx| {
+            let array = cx
+                .host
+                .surface()
+                .expect("checked by with_surface")
+                .new_array(&items);
+            cx.host.locals().register(array)
+        })
+    }
+
+    /// `NewDirectory`, `NewStringTable` and `NewStem`'s nameless form: the
+    /// class's `NEW` with `arguments`.
+    pub fn new_instance_of(
+        &self,
+        slot: &'static str,
+        id: &str,
+        arguments: &[Argument<'_>],
+    ) -> RexxObjectPtr {
+        let class = self.class(slot, id);
+        self.send_for_handle(slot, class, b"NEW", arguments)
+    }
+
+    /// `DirectoryPut` and `StringTablePut`.
+    pub fn table_put(
+        &self,
+        slot: &'static str,
+        table: RexxObjectPtr,
+        item: RexxObjectPtr,
+        index: &[u8],
+    ) {
+        let table = self.resolve(table);
+        self.send_to(
+            slot,
+            table,
+            b"PUT",
+            &[Argument::Handle(item), Argument::Text(index)],
+        );
+    }
+
+    /// `DirectoryAt` and `StringTableAt`.
+    pub fn table_at(
+        &self,
+        slot: &'static str,
+        table: RexxObjectPtr,
+        index: &[u8],
+    ) -> RexxObjectPtr {
+        self.item_at(slot, table, Argument::Text(index))
+    }
+
+    /// `DirectoryRemove` and `StringTableRemove`.
+    pub fn table_remove(
+        &self,
+        slot: &'static str,
+        table: RexxObjectPtr,
+        index: &[u8],
+    ) -> RexxObjectPtr {
+        self.item_removed(slot, table, Argument::Text(index))
+    }
+
+    /// `SupplierItem` and `SupplierIndex`.
+    pub fn supplier_object(
+        &self,
+        slot: &'static str,
+        supplier: RexxObjectPtr,
+        name: &[u8],
+    ) -> RexxObjectPtr {
+        let supplier = self.resolve(supplier);
+        self.send_for_handle(slot, supplier, name, &[])
+    }
+
+    /// `SupplierAvailable`.
+    pub fn supplier_available(&self, supplier: RexxObjectPtr) -> bool {
+        let supplier = self.resolve(supplier);
+        self.send_for_truth(
+            "RexxThreadInterface.SupplierAvailable",
+            supplier,
+            b"AVAILABLE",
+            &[],
+        )
+    }
+
+    /// `SupplierNext`.
+    pub fn supplier_next(&self, supplier: RexxObjectPtr) {
+        let supplier = self.resolve(supplier);
+        self.send_to("RexxThreadInterface.SupplierNext", supplier, b"NEXT", &[]);
+    }
+
+    /// `NewSupplier`.
+    pub fn new_supplier(&self, values: RexxObjectPtr, names: RexxObjectPtr) -> RexxObjectPtr {
+        const SLOT: &str = "RexxThreadInterface.NewSupplier";
+        let class = self.class(SLOT, "Supplier");
+        self.send_for_handle(
+            SLOT,
+            class,
+            b"NEW",
+            &[Argument::Handle(values), Argument::Handle(names)],
+        )
+    }
+
+    /// `SetStemElement` and `SetStemArrayElement`: `tail` as written, which a
+    /// compound variable's tail is not upper-cased from.
+    pub fn stem_set(
+        &self,
+        slot: &'static str,
+        stem: RexxObjectPtr,
+        tail: Argument<'_>,
+        value: RexxObjectPtr,
+    ) {
+        let stem = self.resolve(stem);
+        self.send_to(slot, stem, b"[]=", &[Argument::Handle(value), tail]);
+    }
+
+    /// `GetStemElement` and `GetStemArrayElement`: null for a tail the stem
+    /// holds no value for.
+    pub fn stem_get(
+        &self,
+        slot: &'static str,
+        stem: RexxObjectPtr,
+        tail: Argument<'_>,
+    ) -> RexxObjectPtr {
+        self.item_at(slot, stem, tail)
+    }
+
+    /// `DropStemElement` and `DropStemArrayElement`.
+    pub fn stem_drop(&self, slot: &'static str, stem: RexxObjectPtr, tail: Argument<'_>) {
+        let stem = self.resolve(stem);
+        self.send_to(slot, stem, b"REMOVE", &[tail]);
+    }
+
+    /// `GetAllStemElements` and `GetStemValue`: `TODIRECTORY` and the value
+    /// `[]` answers with no tail.
+    pub fn stem_whole(
+        &self,
+        slot: &'static str,
+        stem: RexxObjectPtr,
+        name: &[u8],
+    ) -> RexxObjectPtr {
+        let stem = self.resolve(stem);
+        self.send_for_handle(slot, stem, name, &[])
+    }
+
     /// `ObjectToValue`: `handle` converted as `declared` asks, or `None`
     /// where it does not convert, with any condition the conversion raised
     /// forgotten (`interpreter/api/ThreadContextStubs.cpp:730`).
@@ -776,4 +1129,15 @@ fn message_number(text: &[u8]) -> isize {
         }
         _ => 0,
     }
+}
+
+/// One argument of a message a callback sends on the extension's behalf.
+#[derive(Clone, Copy, Debug)]
+pub enum Argument<'a> {
+    /// An object the extension passed, a null handle an omitted argument.
+    Handle(RexxObjectPtr),
+    /// A string made from the extension's bytes.
+    Text(&'a [u8]),
+    /// A whole number.
+    Number(usize),
 }

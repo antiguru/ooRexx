@@ -266,6 +266,31 @@ impl Surface for Interp {
         let state = self.native_state_mut(held)?;
         state.pointer().or_else(|| state.data_address())
     }
+
+    fn send(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+        arguments: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, ()> {
+        let caller = self.caller();
+        match self.send_message(receiver, name, None, arguments, caller) {
+            Ok(answer) => {
+                if let Some(answer) = answer {
+                    self.roots.push_temp(answer);
+                }
+                Ok(answer)
+            }
+            Err(failure) => {
+                self.hold_native_condition(failure);
+                Err(())
+            }
+        }
+    }
+
+    fn class_object(&mut self, id: &str) -> Option<ObjRef> {
+        self.classes().lookup(id)
+    }
 }
 
 impl Interp {

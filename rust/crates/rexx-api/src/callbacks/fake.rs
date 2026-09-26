@@ -366,6 +366,19 @@ impl Surface for FakeHost {
     fn object_cself(&mut self, _object: ObjRef, _scope: Option<ObjRef>) -> Option<POINTER> {
         None
     }
+
+    fn send(
+        &mut self,
+        _receiver: ObjRef,
+        _name: &[u8],
+        _arguments: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, ()> {
+        Err(())
+    }
+
+    fn class_object(&mut self, _id: &str) -> Option<ObjRef> {
+        None
+    }
 }
 
 impl FakeHost {
