@@ -121,6 +121,28 @@ pub trait Surface {
 
     /// The built-in class `id` names.
     fn class_object(&mut self, id: &str) -> Option<ObjRef>;
+
+    /// The value of the calling activation's variable `name`, spelled as a
+    /// program would spell it, or `None` where it has none or `name` is not
+    /// a variable's name; a constant symbol is its own value.
+    fn context_variable(&mut self, name: &[u8]) -> Option<ObjRef>;
+
+    /// Assigns the calling activation's variable `name`.
+    fn set_context_variable(&mut self, name: &[u8], value: ObjRef);
+
+    /// Drops the calling activation's variable `name`.
+    fn drop_context_variable(&mut self, name: &[u8]);
+
+    /// A `Directory` of the calling activation's variables.
+    fn context_variables(&mut self) -> Option<ObjRef>;
+
+    /// The value of the running method's object variable `name`, or `None`.
+    fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef>;
+
+    /// A `VariableReference` to the simple or stem variable `name`: the
+    /// running method's object variable where `object` is set, the calling
+    /// activation's otherwise.
+    fn variable_reference(&mut self, name: &[u8], object: bool) -> Option<ObjRef>;
 }
 
 /// `Error_Incorrect_method_positive` (`api/oorexxerrors.h`), which `ArrayAt`
@@ -1085,6 +1107,117 @@ impl Activation<'_> {
     ) -> RexxObjectPtr {
         let stem = self.resolve(stem);
         self.send_for_handle(slot, stem, name, &[])
+    }
+
+    /// Runs `serve` against the host's surface, answering its object as a
+    /// handle, null for none.
+    fn surface_handle(
+        &self,
+        slot: &'static str,
+        serve: impl FnOnce(&mut dyn Surface) -> Option<ObjRef>,
+    ) -> RexxObjectPtr {
+        self.with_surface(slot, std::ptr::null_mut(), |cx| {
+            match serve(cx.host.surface().expect("checked by with_surface")) {
+                Some(object) => cx.host.locals().register(object),
+                None => std::ptr::null_mut(),
+            }
+        })
+    }
+
+    /// `GetContextVariable`.
+    pub fn context_variable(&self, name: &[u8]) -> RexxObjectPtr {
+        self.surface_handle("CallContextInterface.GetContextVariable", |surface| {
+            surface.context_variable(name)
+        })
+    }
+
+    /// `SetContextVariable`: a handle this activation does not hold assigns
+    /// nothing.
+    pub fn set_context_variable(&self, name: &[u8], value: RexxObjectPtr) {
+        let Some(value) = self.resolve(value) else {
+            return;
+        };
+        self.with_surface("CallContextInterface.SetContextVariable", (), |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .set_context_variable(name, value);
+        });
+    }
+
+    /// `DropContextVariable`.
+    pub fn drop_context_variable(&self, name: &[u8]) {
+        self.with_surface("CallContextInterface.DropContextVariable", (), |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .drop_context_variable(name);
+        });
+    }
+
+    /// `GetAllContextVariables`.
+    pub fn context_variables(&self) -> RexxObjectPtr {
+        self.surface_handle("CallContextInterface.GetAllContextVariables", |surface| {
+            surface.context_variables()
+        })
+    }
+
+    /// `GetObjectVariable`.
+    pub fn object_variable(&self, name: &[u8]) -> RexxObjectPtr {
+        self.surface_handle("MethodContextInterface.GetObjectVariable", |surface| {
+            surface.object_variable(name)
+        })
+    }
+
+    /// `GetObjectVariableReference` and `GetContextVariableReference`.
+    pub fn variable_reference(
+        &self,
+        slot: &'static str,
+        name: &[u8],
+        object: bool,
+    ) -> RexxObjectPtr {
+        self.surface_handle(slot, |surface| surface.variable_reference(name, object))
+    }
+
+    /// `ResolveStemVariable`: a stem, or the stem the calling activation
+    /// holds under the name the object's string value spells.
+    pub fn resolve_stem(&self, handle: RexxObjectPtr) -> RexxObjectPtr {
+        let Some(object) = self.resolve(handle) else {
+            return std::ptr::null_mut();
+        };
+        let mut cx = self.conversion();
+        let stem = if cx.host.is_stem(object) {
+            Some(object)
+        } else {
+            cx.host.context_stem(object).ok().flatten()
+        };
+        match stem {
+            Some(stem) => cx.host.locals().register(stem),
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    /// `VariableReferenceName` and `VariableReferenceValue`: what the
+    /// reference answers `NAME` and `VALUE`.
+    pub fn reference_answer(
+        &self,
+        slot: &'static str,
+        reference: RexxObjectPtr,
+        name: &[u8],
+    ) -> RexxObjectPtr {
+        let reference = self.resolve(reference);
+        self.send_for_handle(slot, reference, name, &[])
+    }
+
+    /// `SetVariableReferenceValue`.
+    pub fn set_reference_value(&self, reference: RexxObjectPtr, value: RexxObjectPtr) {
+        let reference = self.resolve(reference);
+        self.send_to(
+            "RexxThreadInterface.SetVariableReferenceValue",
+            reference,
+            b"VALUE=",
+            &[Argument::Handle(value)],
+        );
     }
 
     /// `ObjectToValue`: `handle` converted as `declared` asks, or `None`

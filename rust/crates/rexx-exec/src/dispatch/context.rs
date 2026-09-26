@@ -331,6 +331,12 @@ fn context_variables(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let depth = depth_of(interp, receiver)?;
+    local_variables(interp, depth).map(Some)
+}
+
+/// `RexxActivation::getAllLocalVariables`: a `Directory` of every variable
+/// the activation at `depth` has set, a stem under its name with the period.
+pub(crate) fn local_variables(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
     let mut entries = Vec::new();
     {
         let activation = interp
@@ -348,7 +354,7 @@ fn context_variables(
             }
         }
     }
-    hash::directory_of(interp, entries).map(Some)
+    hash::directory_of(interp, entries)
 }
 
 /// `RexxContext::getExecutable`: `activation->getExecutable()`, the `Method`

@@ -251,3 +251,8 @@ lang/library_callback_strings.rex
 # Surface Task 5: the thread table's array, directory, string table, stem
 # and supplier members through orxmethod's methods.
 lang/library_callback_collections.rex
+
+# Surface Task 5: the call context's variable members over the caller's
+# variables, the method context's object variables and guards, and a
+# VariableReference through the thread table.
+lang/library_callback_variables.rex

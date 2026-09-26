@@ -132,6 +132,13 @@ RexxRoutine2(int, ScopedRead, RexxObjectPtr, o, RexxObjectPtr, scope)
     return p == NULL ? -1 : *p;
 }
 
+// A reference to the calling activation's variable.
+RexxRoutine1(RexxObjectPtr, CtxRef, CSTRING, name)
+{
+    RexxObjectPtr r = (RexxObjectPtr)context->GetContextVariableReference(name);
+    return r == NULLOBJECT ? context->String("none") : r;
+}
+
 RexxMethodEntry methods[] = {
     REXX_METHOD(CSelfRead, CSelfRead),
     REXX_LAST_METHOD()
@@ -139,6 +146,7 @@ RexxMethodEntry methods[] = {
 
 RexxRoutineEntry routines[] = {
     REXX_TYPED_ROUTINE(BufStr, BufStr),
+    REXX_TYPED_ROUTINE(CtxRef, CtxRef),
     REXX_TYPED_ROUTINE(BufLen, BufLen),
     REXX_TYPED_ROUTINE(PtrValue, PtrValue),
     REXX_TYPED_ROUTINE(ScopedRead, ScopedRead),

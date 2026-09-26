@@ -905,16 +905,11 @@ fn the_wrapper_scan_follows_one_wrapper_into_another() {
 #[test]
 fn the_test_extensions_reach_only_members_that_answer() {
     const STILL_REFUSING: &[&str] = &[
-        "CallContextInterface.DropContextVariable",
         "CallContextInterface.FindContextClass",
-        "CallContextInterface.GetAllContextVariables",
         "CallContextInterface.GetArgument",
         "CallContextInterface.GetArguments",
-        "CallContextInterface.GetContextVariable",
         "CallContextInterface.GetRoutine",
         "CallContextInterface.GetRoutineName",
-        "CallContextInterface.ResolveStemVariable",
-        "CallContextInterface.SetContextVariable",
         "CallContextInterface.ThrowCondition",
         "CallContextInterface.ThrowException",
         "CallContextInterface.ThrowException0",
@@ -928,15 +923,11 @@ fn the_test_extensions_reach_only_members_that_answer() {
         "MethodContextInterface.GetArguments",
         "MethodContextInterface.GetMessageName",
         "MethodContextInterface.GetMethod",
-        "MethodContextInterface.GetObjectVariable",
-        "MethodContextInterface.GetObjectVariableReference",
         "MethodContextInterface.GetScope",
         "MethodContextInterface.GetSelf",
         "MethodContextInterface.GetSuper",
         "MethodContextInterface.ReallocateObjectMemory",
-        "MethodContextInterface.SetGuardOff",
         "MethodContextInterface.SetGuardOffWhenUpdated",
-        "MethodContextInterface.SetGuardOn",
         "MethodContextInterface.SetGuardOnWhenUpdated",
         "MethodContextInterface.ThrowCondition",
         "MethodContextInterface.ThrowException",
@@ -962,7 +953,6 @@ fn the_test_extensions_reach_only_members_that_answer() {
         "RexxThreadInterface.IsInstanceOf",
         "RexxThreadInterface.IsMethod",
         "RexxThreadInterface.IsRoutine",
-        "RexxThreadInterface.IsVariableReference",
         "RexxThreadInterface.LoadPackage",
         "RexxThreadInterface.LoadPackageFromData",
         "RexxThreadInterface.NewMethod",
@@ -972,9 +962,6 @@ fn the_test_extensions_reach_only_members_that_answer() {
         "RexxThreadInterface.SendMessage1",
         "RexxThreadInterface.SendMessage2",
         "RexxThreadInterface.SendMessageScoped",
-        "RexxThreadInterface.SetVariableReferenceValue",
-        "RexxThreadInterface.VariableReferenceName",
-        "RexxThreadInterface.VariableReferenceValue",
     ];
     let refusing = refusing_members();
     let reached: BTreeSet<String> = members_the_test_extensions_call()

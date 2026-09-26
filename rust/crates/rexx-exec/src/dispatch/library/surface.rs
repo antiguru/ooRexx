@@ -15,7 +15,13 @@ use std::borrow::Cow;
 
 use rexx_api::callbacks::Surface;
 use rexx_api::layout::POINTER;
-use rexx_core::{BehaviourId, Body, BufferState, Bytes, Decoded, NativeState, ObjRef, ScopePools};
+use rexx_core::{
+    BehaviourId, Body, BufferState, Bytes, Decoded, NativeState, ObjRef, ScopePools, VarRef,
+    VarRefHome,
+};
+
+use crate::Novalue;
+use crate::builtin::datatype::{SymbolKind, classify};
 
 use crate::error::{Raised, displayable};
 use crate::{Failure, Interp};
@@ -290,6 +296,128 @@ impl Surface for Interp {
 
     fn class_object(&mut self, id: &str) -> Option<ObjRef> {
         self.classes().lookup(id)
+    }
+
+    fn context_variable(&mut self, name: &[u8]) -> Option<ObjRef> {
+        let upper = name.to_ascii_uppercase();
+        match classify(&upper) {
+            SymbolKind::Bad => None,
+            // `isString(retriever)`: a constant symbol is its own value.
+            SymbolKind::Numeric | SymbolKind::Literal => Some(self.text(&upper)),
+            SymbolKind::LiteralDot => self.dot_variable(&upper).ok(),
+            SymbolKind::Name => {
+                let slot = self.slot_of(&upper);
+                let frame = self.activation().frame;
+                self.variable(frame, slot)
+            }
+            SymbolKind::Stem => Some(self.read_stem(&upper)),
+            SymbolKind::CompoundName => {
+                let (stem, key) = self.compound_parts(&upper);
+                match self.stem_get(&stem, &key) {
+                    (value, Novalue::Set) => Some(value),
+                    _ => None,
+                }
+            }
+        }
+    }
+
+    fn set_context_variable(&mut self, name: &[u8], value: ObjRef) {
+        let upper = name.to_ascii_uppercase();
+        match classify(&upper) {
+            SymbolKind::Name => {
+                let slot = self.slot_of(&upper);
+                let frame = self.activation().frame;
+                self.set_variable(frame, slot, value);
+            }
+            SymbolKind::Stem => self.stem_assign(&upper, value),
+            SymbolKind::CompoundName => {
+                let (stem, key) = self.compound_parts(&upper);
+                self.stem_set(&stem, &key, value);
+            }
+            _ => {}
+        }
+    }
+
+    fn drop_context_variable(&mut self, name: &[u8]) {
+        let upper = name.to_ascii_uppercase();
+        match classify(&upper) {
+            SymbolKind::Name => {
+                let slot = self.slot_of(&upper);
+                let frame = self.activation().frame;
+                self.clear_variable(frame, slot);
+            }
+            SymbolKind::Stem => self.stem_drop(&upper),
+            SymbolKind::CompoundName => {
+                let (stem, key) = self.compound_parts(&upper);
+                self.stem_drop_tail(&stem, &key);
+            }
+            _ => {}
+        }
+    }
+
+    fn context_variables(&mut self) -> Option<ObjRef> {
+        match crate::dispatch::context::local_variables(self, 0) {
+            Ok(directory) => Some(directory),
+            Err(failure) => {
+                self.hold_native_condition(failure);
+                None
+            }
+        }
+    }
+
+    fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef> {
+        let frame = self.native_frame();
+        let (owner, scope) = (frame.owner, frame.scope);
+        let name = super::pool_variable_name(name)?;
+        self.pools_of(owner)?.get(scope, &name)
+    }
+
+    fn variable_reference(&mut self, name: &[u8], object: bool) -> Option<ObjRef> {
+        let upper = name.to_ascii_uppercase();
+        if !matches!(classify(&upper), SymbolKind::Name | SymbolKind::Stem) {
+            return None;
+        }
+        let home = if object {
+            let frame = self.native_frame();
+            VarRefHome::Instance {
+                owner: frame.owner,
+                scope: frame.scope,
+            }
+        } else {
+            let slot = self.slot_of(&upper);
+            let frame = self.activation().frame;
+            match self.exposure(frame, slot) {
+                Some(var) => VarRefHome::Instance {
+                    owner: var.owner,
+                    scope: var.scope,
+                },
+                None => VarRefHome::Cell(self.roots.promote(frame, slot)),
+            }
+        };
+        let reference = self.alloc_with(
+            BehaviourId::OBJECT,
+            Body::VarRef(Box::new(VarRef {
+                name: upper.into(),
+                home,
+            })),
+        );
+        self.roots.push_temp(reference);
+        Some(reference)
+    }
+}
+
+impl Interp {
+    /// A compound name's stem, with its period, and its tail resolved as
+    /// `VALUE` resolves one: each piece that is a symbol replaced by the
+    /// variable's value.
+    fn compound_parts(&mut self, upper: &[u8]) -> (Vec<u8>, Vec<u8>) {
+        let dot = upper
+            .iter()
+            .position(|&byte| byte == b'.')
+            .expect("a compound name has a period");
+        let stem = upper[..=dot].to_vec();
+        let key = crate::builtin::datatype::resolve_compound_key(self, &upper[dot + 1..]);
+        (stem, key)
     }
 }
 

@@ -277,7 +277,7 @@ fn slot_has_value(interp: &mut Interp, name: &[u8]) -> bool {
 /// on every remaining period and resolves each piece into `stem_get`/
 /// `stem_set`'s joined key, substituting a variable's *current* value for
 /// any piece that is not itself a literal.
-fn resolve_compound_key(interp: &mut Interp, tail_source: &[u8]) -> Vec<u8> {
+pub(crate) fn resolve_compound_key(interp: &mut Interp, tail_source: &[u8]) -> Vec<u8> {
     let mut key = Vec::new();
     for (index, piece) in tail_source.split(|&byte| byte == b'.').enumerate() {
         if index > 0 {

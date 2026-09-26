@@ -123,6 +123,10 @@ pub static METHOD_CONTEXT: MethodContextInterface = {
     table.SetObjectVariable = set_object_variable;
     table.DropObjectVariable = drop_object_variable;
     table.GetCSelf = get_cself;
+    table.GetObjectVariable = variables::get_object_variable;
+    table.GetObjectVariableReference = variables::get_object_variable_reference;
+    table.SetGuardOn = variables::set_guard;
+    table.SetGuardOff = variables::set_guard;
     table
 };
 
@@ -135,6 +139,12 @@ pub static CALL_CONTEXT: CallContextInterface = {
     table.GetContextDigits = get_context_digits;
     table.GetContextFuzz = get_context_fuzz;
     table.GetContextForm = get_context_form;
+    table.GetContextVariable = variables::get_context_variable;
+    table.SetContextVariable = variables::set_context_variable;
+    table.DropContextVariable = variables::drop_context_variable;
+    table.GetAllContextVariables = variables::get_all_context_variables;
+    table.ResolveStemVariable = variables::resolve_stem_variable;
+    table.GetContextVariableReference = variables::get_context_variable_reference;
     table
 };
 
@@ -257,6 +267,10 @@ pub const THREAD: RexxThreadInterface = {
     table.GetAllStemElements = collections::get_all_stem_elements;
     table.GetStemValue = collections::get_stem_value;
     table.IsStem = collections::is_stem;
+    table.VariableReferenceName = variables::variable_reference_name;
+    table.VariableReferenceValue = variables::variable_reference_value;
+    table.SetVariableReferenceValue = variables::set_variable_reference_value;
+    table.IsVariableReference = variables::is_variable_reference;
     table
 };
 
@@ -2175,6 +2189,198 @@ mod collections {
                 "RexxThreadInterface.IsStem",
                 object,
                 "Stem",
+            ),
+        )
+    }
+}
+
+/// The members over variables: the calling activation's through a call
+/// context, the running method's object variables through a method context,
+/// and a `VariableReference` through the thread table.
+mod variables {
+    use super::{activation_of, innermost_activation, name_of};
+    use crate::layout::{
+        CSTRING, RexxCallContext_, RexxDirectoryObject, RexxMethodContext_, RexxObjectPtr,
+        RexxStemObject, RexxStringObject, RexxThreadContext_, RexxVariableReferenceObject,
+        logical_t,
+    };
+
+    /// # Safety
+    /// `context` is a call context a [`super::Contexts`] handed out, used
+    /// during the call it was handed to, and a non-null `name` is
+    /// NUL-terminated.
+    pub(super) unsafe extern "C" fn get_context_variable(
+        context: *mut RexxCallContext_,
+        name: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: the caller guarantees the context and the name.
+        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation.context_variable(name)
+        })
+    }
+
+    /// # Safety
+    /// As [`get_context_variable`].
+    pub(super) unsafe extern "C" fn set_context_variable(
+        context: *mut RexxCallContext_,
+        name: CSTRING,
+        value: RexxObjectPtr,
+    ) {
+        // SAFETY: as `get_context_variable`.
+        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        if let Some(name) = name {
+            activation.set_context_variable(name, value);
+        }
+    }
+
+    /// # Safety
+    /// As [`get_context_variable`].
+    pub(super) unsafe extern "C" fn drop_context_variable(
+        context: *mut RexxCallContext_,
+        name: CSTRING,
+    ) {
+        // SAFETY: as `get_context_variable`.
+        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        if let Some(name) = name {
+            activation.drop_context_variable(name);
+        }
+    }
+
+    /// # Safety
+    /// As [`get_context_variable`].
+    pub(super) unsafe extern "C" fn get_all_context_variables(
+        context: *mut RexxCallContext_,
+    ) -> RexxDirectoryObject {
+        // SAFETY: as `get_context_variable`.
+        unsafe { activation_of(context) }.context_variables().cast()
+    }
+
+    /// # Safety
+    /// As [`get_context_variable`].
+    pub(super) unsafe extern "C" fn resolve_stem_variable(
+        context: *mut RexxCallContext_,
+        object: RexxObjectPtr,
+    ) -> RexxStemObject {
+        // SAFETY: as `get_context_variable`.
+        unsafe { activation_of(context) }
+            .resolve_stem(object)
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`get_context_variable`].
+    pub(super) unsafe extern "C" fn get_context_variable_reference(
+        context: *mut RexxCallContext_,
+        name: CSTRING,
+    ) -> RexxVariableReferenceObject {
+        // SAFETY: as `get_context_variable`.
+        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation
+                .variable_reference(
+                    "CallContextInterface.GetContextVariableReference",
+                    name,
+                    false,
+                )
+                .cast()
+        })
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn get_object_variable(
+        context: *mut RexxMethodContext_,
+        name: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `set_object_variable`.
+        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation.object_variable(name)
+        })
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn get_object_variable_reference(
+        context: *mut RexxMethodContext_,
+        name: CSTRING,
+    ) -> RexxVariableReferenceObject {
+        // SAFETY: as `set_object_variable`.
+        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation
+                .variable_reference(
+                    "MethodContextInterface.GetObjectVariableReference",
+                    name,
+                    true,
+                )
+                .cast()
+        })
+    }
+
+    /// `SetGuardOn` and `SetGuardOff`, which do what this interpreter's own
+    /// `GUARD ON` and `GUARD OFF` do with no other activity to exclude:
+    /// nothing a program can see.
+    ///
+    /// # Safety
+    /// As [`super::set_object_variable`]; the context is not read.
+    pub(super) unsafe extern "C" fn set_guard(_context: *mut RexxMethodContext_) {}
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn variable_reference_name(
+        context: *mut RexxThreadContext_,
+        reference: RexxVariableReferenceObject,
+    ) -> RexxStringObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "VariableReferenceName") }
+            .reference_answer(
+                "RexxThreadInterface.VariableReferenceName",
+                reference.cast(),
+                b"NAME",
+            )
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn variable_reference_value(
+        context: *mut RexxThreadContext_,
+        reference: RexxVariableReferenceObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "VariableReferenceValue") }.reference_answer(
+            "RexxThreadInterface.VariableReferenceValue",
+            reference.cast(),
+            b"VALUE",
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn set_variable_reference_value(
+        context: *mut RexxThreadContext_,
+        reference: RexxVariableReferenceObject,
+        value: RexxObjectPtr,
+    ) {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "SetVariableReferenceValue") }
+            .set_reference_value(reference.cast(), value);
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn is_variable_reference(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+    ) -> logical_t {
+        // SAFETY: as `whole_number_to_object`.
+        logical_t::from(
+            unsafe { innermost_activation(context, "IsVariableReference") }.is_of_class(
+                "RexxThreadInterface.IsVariableReference",
+                object,
+                "VariableReference",
             ),
         )
     }

@@ -1,0 +1,78 @@
+count 77
+/* The call context's variable members over the caller's variables, the
+   method context's object variable members, a VariableReference read and
+   written through the thread table, and SetGuardOn and SetGuardOff, through
+   orxfunction's routines and orxmethod's methods. */
+call TestSetContextVariable 'abc', 5
+say abc
+call TestSetContextVariable 'Low', 'x'
+say low
+call TestSetContextVariable 'st.', 'dflt'
+say st.1 st.zz
+i = 7
+call TestSetContextVariable 'st.i', 'seven'
+say st.7 st.i
+call TestSetContextVariable 'st.i.j', 'twodim'
+say st.7.j
+say TestGetContextVariable('abc') TestGetContextVariable('ABC') TestGetContextVariable('st.i') TestGetContextVariable('st.7')
+s = TestGetContextVariable('st.'); say s~class s[7]
+signal on syntax name s1
+say TestGetContextVariable('unsetvar')
+s1: say 'unset' condition('o')~code
+signal on syntax name s2
+say TestGetContextVariable('1abc')
+s2: say 'bad' condition('o')~code
+call TestSetContextVariable '1abc', 5
+call TestSetContextVariable 'a b', 5
+call TestDropContextVariable 'abc'
+say abc
+call TestDropContextVariable 'st.i'
+say st.7 st.1
+call TestDropContextVariable 'st.'
+say st.1
+d = TestGetAllContextVariables()
+say d~class
+say d['I'] d['LOW'] d['ST.']~class d['ABC'] d~items
+x. = 'q'; x.1 = 'r'
+say TestResolveStemVariable('x.')[1] TestResolveStemVariable('x')[2] TestResolveStemVariable(x.)[1]
+signal on syntax name s3
+say TestResolveStemVariable('1bad')
+s3: say 'resolve' condition('o')~code
+o = .V~new
+say o~setv('abc', 'x1') o~getv('abc') o~getv('ABC') o~getornil('abc') o~getornil('zz')
+signal on syntax name s4
+say o~getv('zz')
+s4: say 'unset' condition('o')~code
+say o~show
+r = o~ref('abc'); say r~class r~name r~value o~isref(r) o~isref('x') o~refname(r) o~refvalue(r)
+o~setref(r, 'newval'); say o~show o~refvalue(r)
+o~ref('1bad'); say var('result'); o~ref('a.b'); say var('result')
+o~guardon('g1', 'v1'); o~guardoff('g2', 'v2'); say o~show2
+b = .BT~new(3)
+say b~getbuffer~class
+exit
+::requires 'orxfunction' LIBRARY
+::class V
+::method setv external "LIBRARY orxmethod TestSetObjectVariable"
+::method getv external "LIBRARY orxmethod TestGetObjectVariable"
+::method getornil external "LIBRARY orxmethod TestGetObjectVariableOrNil"
+::method ref external "LIBRARY orxmethod TestGetObjectVariableReference"
+::method isref external "LIBRARY orxmethod TestIsVariableReference"
+::method setref external "LIBRARY orxmethod TestSetVariableReferenceValue"
+::method refname external "LIBRARY orxmethod TestVariableReferenceName"
+::method refvalue external "LIBRARY orxmethod TestVariableReferenceValue"
+::method guardon external "LIBRARY orxmethod TestSetGuardOn"
+::method guardoff external "LIBRARY orxmethod TestSetGuardOff"
+::method guard external "LIBRARY orxmethod TestSetGuard"
+::method show
+  expose abc
+  return abc
+::method show2
+  expose g1 g2
+  return g1 g2
+::method show3
+  expose g3 g4
+  return g3 g4
+::class BT
+::method init external "LIBRARY orxmethod TestBufferInit"
+::method getbuffer external "LIBRARY orxmethod TestGetBuffer"

@@ -41,6 +41,9 @@ pub(crate) struct FakeHost {
     pub(crate) entries: Vec<(ObjRef, Vec<u8>, ObjRef)>,
     /// What [`Surface::display_condition`] answers.
     pub(crate) displayed: isize,
+    /// The calling activation's variables, by name as the extension spelled
+    /// it.
+    pub(crate) variables: Vec<(Vec<u8>, ObjRef)>,
 }
 
 /// A condition a [`FakeHost`] holds.
@@ -61,6 +64,7 @@ impl FakeHost {
             condition: ObjRef::NIL,
             entries: Vec::new(),
             displayed: 0,
+            variables: Vec::new(),
         }
     }
 
@@ -377,6 +381,34 @@ impl Surface for FakeHost {
     }
 
     fn class_object(&mut self, _id: &str) -> Option<ObjRef> {
+        None
+    }
+
+    fn context_variable(&mut self, name: &[u8]) -> Option<ObjRef> {
+        self.variables
+            .iter()
+            .find(|(bound, _)| bound.as_slice() == name)
+            .map(|(_, value)| *value)
+    }
+
+    fn set_context_variable(&mut self, name: &[u8], value: ObjRef) {
+        self.drop_context_variable(name);
+        self.variables.push((name.to_vec(), value));
+    }
+
+    fn drop_context_variable(&mut self, name: &[u8]) {
+        self.variables.retain(|(bound, _)| bound.as_slice() != name);
+    }
+
+    fn context_variables(&mut self) -> Option<ObjRef> {
+        None
+    }
+
+    fn object_variable(&mut self, _name: &[u8]) -> Option<ObjRef> {
+        None
+    }
+
+    fn variable_reference(&mut self, _name: &[u8], _object: bool) -> Option<ObjRef> {
         None
     }
 }
