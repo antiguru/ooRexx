@@ -1293,6 +1293,13 @@ struct Interp {
     /// it resolves to from any native call for as long as the interpreter
     /// runs (`InterpreterInstance::addGlobalReference`).
     global_references: rexx_api::handles::Table,
+    /// The terminated copies `StringData` and its kin answered, by the object
+    /// they copy. Not roots: a collection drops the copy of an object it
+    /// frees, and a handle-carried value, which no collection frees, keeps
+    /// its copy for the interpreter's lifetime.
+    kept_strings: std::collections::HashMap<ObjRef, Box<[u8]>>,
+    /// The terminated copies of message and routine names answered, by name.
+    kept_names: std::collections::HashMap<Box<[u8]>, Box<[u8]>>,
     /// Every native library a name has loaded, by the name it was resolved
     /// under -- `PackageManager::packages`
     /// (`interpreter/package/PackageManager.cpp:229-248`). A miss is not held,
@@ -1986,6 +1993,8 @@ impl Interp {
             native_handles: Vec::new(),
             native_spares: Vec::new(),
             global_references: rexx_api::handles::Table::new(),
+            kept_strings: std::collections::HashMap::new(),
+            kept_names: std::collections::HashMap::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
@@ -2637,6 +2646,9 @@ impl Interp {
             // spare names nothing to root.
             native_spares: _,
             global_references,
+            // Copies keyed by object, dropped with it rather than keeping it.
+            kept_strings: _,
+            kept_names: _,
             special_methods: _,
             out: _,
             trace: _,
@@ -2811,6 +2823,11 @@ impl Interp {
         }
         let stats = self.heap.collect(&self.roots);
         self.roots.pop_frame(frame);
+        let heap = &self.heap;
+        self.kept_strings.retain(|object, _| {
+            !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
+                || heap.get(*object).is_some()
+        });
         // A sweep can free a class the registry named, which unlinks its row
         // and leaves any `.NAME` answer derived from it naming nothing.
         self.invalidate_rexx_class_cache();

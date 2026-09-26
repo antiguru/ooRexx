@@ -34,7 +34,7 @@ pub(super) fn name_to_native(
     _position: usize,
 ) -> Result<Value, Failure> {
     let name = cx.host.message_name();
-    Ok(Value::CString(cx.strings.intern(&name)))
+    Ok(Value::CString(cx.c_string_name(&name)))
 }
 
 /// `REXX_VALUE_SCOPE` (`NativeActivation.cpp:266`).
@@ -349,8 +349,9 @@ pub(super) fn cstring_to_native(
     let bytes = cx
         .host
         .string_bytes(string)
-        .ok_or(Failure::NoStringValue { position })?;
-    Ok(Value::CString(cx.strings.intern(&bytes)))
+        .ok_or(Failure::NoStringValue { position })?
+        .into_owned();
+    Ok(Value::CString(cx.c_string_for(string, &bytes)))
 }
 
 /// `REXX_VALUE_RexxStringObject` (`NativeActivation.cpp:473`).

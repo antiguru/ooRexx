@@ -196,6 +196,7 @@ impl Surface for Interp {
             *bytes = Bytes::from_slice(written);
             *num = None;
         }
+        self.kept_strings.remove(&string);
     }
 
     fn new_buffer(&mut self, length: usize) -> ObjRef {

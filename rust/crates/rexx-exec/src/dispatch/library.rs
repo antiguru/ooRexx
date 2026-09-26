@@ -788,6 +788,22 @@ impl Host for Interp {
     fn surface(&mut self) -> Option<&mut dyn rexx_api::callbacks::Surface> {
         Some(self)
     }
+
+    fn kept_c_string(&mut self, object: ObjRef, bytes: &[u8]) -> Option<rexx_api::layout::CSTRING> {
+        let kept = self
+            .kept_strings
+            .entry(object)
+            .or_insert_with(|| terminated(bytes));
+        Some(kept.as_ptr().cast())
+    }
+
+    fn kept_name(&mut self, name: &[u8]) -> Option<rexx_api::layout::CSTRING> {
+        let kept = self
+            .kept_names
+            .entry(name.into())
+            .or_insert_with(|| terminated(name));
+        Some(kept.as_ptr().cast())
+    }
 }
 
 impl Interp {
@@ -946,3 +962,11 @@ fn percent_g(value: f64, significant: usize) -> String {
 mod surface;
 #[cfg(test)]
 mod tests;
+
+/// `bytes` with a NUL after them.
+fn terminated(bytes: &[u8]) -> Box<[u8]> {
+    let mut owned = Vec::with_capacity(bytes.len() + 1);
+    owned.extend_from_slice(bytes);
+    owned.push(0);
+    owned.into_boxed_slice()
+}

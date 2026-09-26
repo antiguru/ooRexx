@@ -678,6 +678,19 @@ pub trait Host {
     fn surface(&mut self) -> Option<&mut dyn Surface> {
         None
     }
+
+    /// A terminated copy of `bytes`, `object`'s value, at one address that
+    /// lasts as long as `object` does, or `None` for a host that keeps no such
+    /// copies, whose calls then answer the call's pool.
+    fn kept_c_string(&mut self, _object: ObjRef, _bytes: &[u8]) -> Option<CSTRING> {
+        None
+    }
+
+    /// A terminated copy of a message or routine name at one address for the
+    /// host's lifetime, or `None` as for [`Host::kept_c_string`].
+    fn kept_name(&mut self, _name: &[u8]) -> Option<CSTRING> {
+        None
+    }
 }
 
 /// The `NUMERIC` settings a call context reports.
@@ -703,6 +716,26 @@ pub struct Constants<T> {
 pub struct Conversion<'a> {
     pub host: &'a mut dyn Host,
     pub strings: &'a mut CStringPool,
+}
+
+impl Conversion<'_> {
+    /// `object`'s `bytes` as a `CSTRING`: the host's kept copy where it keeps
+    /// one, else one address per object for the call.
+    pub fn c_string_for(&mut self, object: ObjRef, bytes: &[u8]) -> CSTRING {
+        match self.host.kept_c_string(object, bytes) {
+            Some(kept) => kept,
+            None => self.strings.intern_for(object, bytes),
+        }
+    }
+
+    /// A message or routine name as a `CSTRING`, kept as by
+    /// [`Host::kept_name`] or else for the call.
+    pub fn c_string_name(&mut self, name: &[u8]) -> CSTRING {
+        match self.host.kept_name(name) {
+            Some(kept) => kept,
+            None => self.strings.intern(name),
+        }
+    }
 }
 
 /// One native call's whole interpreter-facing state: what the conversions
@@ -797,8 +830,8 @@ impl<'a> Activation<'a> {
         cx.host.locals().register(object)
     }
 
-    /// `StringData`: one address per object for as long as the call lasts, or
-    /// a null pointer for a handle this activation does not hold or an object
+    /// `StringData`: one address per object, kept as by
+    /// [`Conversion::c_string_for`], or a null pointer for a handle this activation does not hold or an object
     /// with no bytes, which is the `NULL` the stub answers on an exception.
     pub fn string_data(&self, handle: RexxObjectPtr) -> CSTRING {
         let mut cx = self.conversion();
@@ -809,7 +842,7 @@ impl<'a> Activation<'a> {
             return std::ptr::null();
         };
         let bytes = bytes.into_owned();
-        cx.strings.intern_for(object, &bytes)
+        cx.c_string_for(object, &bytes)
     }
 
     /// `StringLength`, or zero where [`Activation::string_data`] answers a

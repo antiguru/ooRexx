@@ -778,3 +778,27 @@ fn dropping_the_libraries_closes_what_termination_left_open() {
     drop(libraries);
     assert!(!held.is_open(), "dropping the libraries left one open");
 }
+
+/// **A kept `CSTRING` lasts as long as its object**: a collection keeps the
+/// copy of a string a global reference holds, at the same address and bytes,
+/// and drops the copy of one nothing holds.
+#[test]
+fn a_kept_c_string_lives_and_dies_with_its_string() {
+    use rexx_api::values::Host;
+    let mut interp = Interp::new();
+    let held = interp.text(b"a string held by a global reference");
+    interp.global_references.register(held);
+    let loose = interp.text(b"a string nothing holds any longer");
+    let kept = interp.kept_c_string(held, b"a string held by a global reference");
+    interp.kept_c_string(loose, b"a string nothing holds any longer");
+    assert_eq!(interp.kept_strings.len(), 2);
+    interp.collect_now();
+    assert_eq!(interp.kept_strings.len(), 1);
+    assert_eq!(
+        interp.kept_c_string(held, b"not read again"),
+        kept,
+        "the held string's copy moved or was made again"
+    );
+    let bytes = interp.kept_strings.get(&held).expect("kept");
+    assert_eq!(&bytes[..], b"a string held by a global reference\0");
+}

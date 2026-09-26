@@ -568,7 +568,7 @@ impl Activation<'_> {
     }
 
     /// `ObjectToStringValue`: the string value's bytes, at one address per
-    /// string for the length of the call.
+    /// string kept as by [`Conversion::c_string_for`].
     pub fn object_to_string_value(&self, handle: RexxObjectPtr) -> CSTRING {
         self.with_object(
             "RexxThreadInterface.ObjectToStringValue",
@@ -581,7 +581,7 @@ impl Activation<'_> {
                 };
                 cx.host.locals().register(string);
                 let bytes = cx.host.string_value_text(string);
-                cx.strings.intern_for(string, &bytes)
+                cx.c_string_for(string, &bytes)
             },
         )
     }
@@ -1406,12 +1406,12 @@ impl Activation<'_> {
         )
     }
 
-    /// `GetMessageName` and `GetRoutineName`: the name, at an address that
-    /// lasts the call.
+    /// `GetMessageName` and `GetRoutineName`: the name, at an address kept as
+    /// by [`Conversion::c_string_name`].
     pub fn message_name(&self) -> CSTRING {
         let mut cx = self.conversion();
         let name = cx.host.message_name();
-        cx.strings.intern(&name)
+        cx.c_string_name(&name)
     }
 
     /// `GetSelf`, `GetScope` and `GetSuper`.
