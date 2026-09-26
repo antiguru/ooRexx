@@ -257,6 +257,12 @@ section 4 must deliver `arguments[0]` even for a call that raised.
 > owner, because Rust cannot raise a C++ exception. A `Throw` in a library loader that
 > `LoadLibrary` or `RegisterLibrary` ran leaves the extension that called them too, as the
 > oracle's does, so those two members and the package hooks are `extern "C-unwind"` as well.
+>
+> **Note, appended 2026-09-26 (Task 5, fix round 3).** The previous note's reason for leaving
+> the two divergences without an owner is corrected: matching them needs a real C++ exception,
+> which a C++ shim could raise, and a shim would add a C++ compiler to this crate's build, which
+> the no-new-dependency rule keeps out. `LoadLibrary` and `RegisterLibrary` unwind only with the
+> `Throw` marker; any other panic in them aborts, as every other slot's does.
 
 **The `__cplusplus` branch of the header binds.** Under `#ifndef __cplusplus` a context is
 typedefed to a pointer (`oorexxapi.h:135-174`), which would make `RexxThreadContext *` a pointer to
