@@ -3806,9 +3806,12 @@ pub(crate) extern "C-unwind" fn nest_then_raise_stub(
 #[cfg(test)]
 thread_local! {
     /// What [`throwing_stub`] reached: its guard's drop, and the code after
-    /// its `ThrowException0`.
+    /// its `Throw` call.
     pub(crate) static THROWN: std::cell::Cell<(bool, bool)> =
         const { std::cell::Cell::new((false, false)) };
+    /// Which `Throw` member [`throwing_stub`] calls: `ThrowException0`, `1`,
+    /// `2`, `ThrowException` and `ThrowCondition`, in that order.
+    pub(crate) static THROW_WITH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// A method stub that throws [`STUB_CONDITION`] through its method context
@@ -3828,10 +3831,23 @@ pub(crate) extern "C-unwind" fn throwing_stub(
         return DROPPING_TYPES.as_ptr().cast_mut();
     }
     let _guard = Guard;
-    // SAFETY: as `refusing_stub`.
+    // SAFETY: as `refusing_stub`; the name is a literal with its terminator.
     unsafe {
         let table = &*(*context).functions;
-        (table.ThrowException0)(context, STUB_CONDITION);
+        let none = std::ptr::null_mut();
+        match THROW_WITH.get() {
+            0 => (table.ThrowException0)(context, STUB_CONDITION),
+            1 => (table.ThrowException1)(context, STUB_CONDITION, none),
+            2 => (table.ThrowException2)(context, STUB_CONDITION, none, none),
+            3 => (table.ThrowException)(context, STUB_CONDITION, std::ptr::null_mut()),
+            _ => (table.ThrowCondition)(
+                context,
+                c"USER STUB".as_ptr(),
+                std::ptr::null_mut(),
+                none,
+                none,
+            ),
+        }
     }
     THROWN.set((THROWN.get().0, true));
     std::ptr::null_mut()
@@ -4423,6 +4439,63 @@ mod tests {
         assert!(twice && global);
         assert_eq!(after, text.len());
         assert_eq!(name, b"FAKE");
+    }
+
+    /// **Each number member makes an object and each reader writes the value
+    /// back through its out-pointer**, at the width its type names.
+    #[test]
+    fn the_number_members_round_trip_through_their_out_pointers() {
+        let mut host = FakeHost::new();
+        let (read, refused) = with_thread(&mut host, |thread, t| {
+            // SAFETY: `thread` is live for the call, every handle is one the
+            // table answered, and each out-pointer is a live local of the
+            // width its member writes.
+            unsafe {
+                let (mut i64v, mut u64v, mut i32v, mut u32v) = (0i64, 0u64, 0i32, 0u32);
+                let (mut whole, mut size, mut iptr, mut uptr) = (0isize, 0usize, 0isize, 0usize);
+                let (mut logical, mut double) = (0 as crate::layout::logical_t, 0f64);
+                let answered = [
+                    (t.ObjectToInt64)(thread, (t.Int64ToObject)(thread, -7), &raw mut i64v),
+                    (t.ObjectToUnsignedInt64)(
+                        thread,
+                        (t.UnsignedInt64ToObject)(thread, 8),
+                        &raw mut u64v,
+                    ),
+                    (t.ObjectToInt32)(thread, (t.Int32ToObject)(thread, -9), &raw mut i32v),
+                    (t.ObjectToUnsignedInt32)(
+                        thread,
+                        (t.UnsignedInt32ToObject)(thread, 10),
+                        &raw mut u32v,
+                    ),
+                    (t.ObjectToWholeNumber)(thread, (t.IntptrToObject)(thread, 11), &raw mut whole),
+                    (t.ObjectToStringSize)(
+                        thread,
+                        (t.StringSizeToObject)(thread, 12),
+                        &raw mut size,
+                    ),
+                    (t.ObjectToIntptr)(thread, (t.IntptrToObject)(thread, -13), &raw mut iptr),
+                    (t.ObjectToUintptr)(thread, (t.UintptrToObject)(thread, 14), &raw mut uptr),
+                    (t.ObjectToLogical)(thread, (t.LogicalToObject)(thread, 1), &raw mut logical),
+                    (t.ObjectToDouble)(thread, (t.Int32ToObject)(thread, 2), &raw mut double),
+                ];
+                let doubled = (t.DoubleToObject)(thread, 0.5);
+                (
+                    answered,
+                    (i64v, u64v, i32v, u32v),
+                    (whole, size, iptr, uptr),
+                    (logical, double),
+                    doubled,
+                )
+            }
+        });
+        assert_eq!(refused, None);
+        let (answered, fixed, pointer_sized, (logical, double), doubled) = read;
+        assert!(answered.iter().all(|answer| *answer == 1), "{answered:?}");
+        assert_eq!(fixed, (-7, 8, -9, 10));
+        assert_eq!(pointer_sized, (11, 12, -13, 14));
+        assert_eq!((logical, double), (1, 2.0));
+        let doubled = host.locals.resolve(doubled.cast()).expect("registered");
+        assert_eq!(host.bytes(doubled), Some(b"0.5 at 9".to_vec()));
     }
 
     /// A member that needs the host's surface refuses on a host with none,
