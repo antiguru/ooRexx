@@ -931,6 +931,9 @@ fn double_text(value: f64, precision: usize) -> Vec<u8> {
     if value == f64::NEG_INFINITY {
         return b"-infinity".to_vec();
     }
+    if precision == 0 {
+        return no_digit_text(value);
+    }
     let printed = percent_g(value, precision.min(16) + 2);
     let digits = u64::try_from(precision).unwrap_or(u64::MAX);
     Number::parse(&printed)
@@ -938,6 +941,54 @@ fn double_text(value: f64, precision: usize) -> Vec<u8> {
         .into_round(digits)
         .format(digits)
         .into_bytes()
+}
+
+/// `newInstanceFromDouble` at precision 0: `truncateToDigits` keeps no digit
+/// and moves only the exponent, `mathRound` adds one to it where the first
+/// digit dropped is 5 or more (`classes/NumberStringMath.cpp:315`, `:489`), and
+/// `stringValue` renders the digitless number
+/// (`classes/NumberStringClass.cpp:338`): the sign alone at exponent 0, else
+/// `0` with any exponent past the first place.
+fn no_digit_text(value: f64) -> Vec<u8> {
+    if value == 0.0 {
+        return b"0".to_vec();
+    }
+    let printed = percent_g(value, 2);
+    let (sign, body) = match printed.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", printed.as_str()),
+    };
+    let (mantissa, scale) = match body.split_once('e') {
+        Some((mantissa, scale)) => (
+            mantissa,
+            scale
+                .parse::<i64>()
+                .unwrap_or_else(|_| unreachable!("%g prints a decimal exponent: {printed}")),
+        ),
+        None => (body, 0),
+    };
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    let digits = format!("{whole}{fraction}");
+    let digits = digits.trim_start_matches('0');
+    let width = |text: &str| i64::try_from(text.len()).unwrap_or(i64::MAX);
+    let mut exponent = scale - width(fraction) + width(digits);
+    if digits
+        .as_bytes()
+        .first()
+        .is_some_and(|first| *first >= b'5')
+    {
+        exponent += 1;
+    }
+    if exponent == 0 {
+        return sign.as_bytes().to_vec();
+    }
+    let shown = exponent - 1;
+    let mut out = format!("{sign}0");
+    if shown != 0 {
+        let direction = if shown > 0 { '+' } else { '-' };
+        out.push_str(&format!("E{direction}{}", shown.unsigned_abs()));
+    }
+    out.into_bytes()
 }
 
 /// C's `%.*g` with `significant` digits: the style `%e` would take where its

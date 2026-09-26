@@ -103,12 +103,25 @@ pub(super) fn raise_syntax_condition(text: &[u8], additional: Vec<Vec<u8>>) -> R
         return Raised::syntax(33, 904, Vec::new());
     }
     // Both bounds are checked above, so neither narrowing can lose anything.
-    let (major, sub) = (major as u16, sub as u16);
-    if rexx_inventory::errors::lookup(major, sub).is_some() {
+    raised_for_code(major as u64 * 1000 + sub as u64, additional)
+}
+
+/// The `SYNTAX` condition for error `code`, `major * 1000 + sub`, or 98.941
+/// where the catalogue has no text for it: naming the code as a whole number
+/// where the major has text, and as `major.sub` where it has none
+/// (`Activity::createExceptionObject` and `Activity::buildMessage`,
+/// `interpreter/concurrency/Activity.cpp:1017`, `:1229`).
+pub(crate) fn raised_for_code(code: u64, additional: Vec<Vec<u8>>) -> Raised {
+    let (major, sub) = (code / 1000, code % 1000);
+    let entry = |major: u64, sub: u64| {
+        let (major, sub) = (u16::try_from(major).ok()?, u16::try_from(sub).ok()?);
+        rexx_inventory::errors::lookup(major, sub).map(|_| (major, sub))
+    };
+    if let Some((major, sub)) = entry(major, sub) {
         return Raised::syntax(major, sub, additional);
     }
-    let found = if rexx_inventory::errors::lookup(major, 0).is_some() {
-        (u32::from(major) * 1000 + u32::from(sub)).to_string()
+    let found = if entry(major, 0).is_some() {
+        code.to_string()
     } else {
         format!("{major}.{sub}")
     };

@@ -60,11 +60,16 @@ impl Surface for Interp {
                     .unwrap_or_default()
             })
             .collect();
-        let major = u16::try_from(number / 1000).unwrap_or(u16::MAX);
-        let minor = u16::try_from(number % 1000).unwrap_or(0);
+        let raised = crate::run::raised_for_code(number as u64, texts);
+        // An unknown code raises 98.941, whose one substitution is the code.
+        let additional = if raised.number == 98 && raised.sub == 941 && number != 98_941 {
+            None
+        } else {
+            substitutions
+        };
         let frame = self.native_frame_mut();
-        frame.raised = Some(Raised::syntax(major, minor, texts).into());
-        frame.additional = substitutions;
+        frame.raised = Some(raised.into());
+        frame.additional = additional;
         frame.result = None;
         frame.condition = None;
     }
@@ -428,6 +433,16 @@ impl Surface for Interp {
                 .is_none_or(|code| self.library_code_package_path(code).is_none());
         if unpackaged {
             let found = self.system_symbol(name)?;
+            return self.is_class_object(found).then_some(found);
+        }
+        // A method's executable is its own package's
+        // (`NativeActivation::findClass`, `execution/NativeActivation.cpp:3094`),
+        // which is the package that defined its scope.
+        if frame.method
+            && let Some(crate::plan::ClassPackage::Program(program)) =
+                self.class_packages.get(&frame.scope).copied()
+        {
+            let found = self.class_in_program(program, name)?;
             return self.is_class_object(found).then_some(found);
         }
         self.class_named(name)

@@ -1,0 +1,11 @@
+count 10
+/* DoubleToObjectWithPrecision through orxmethod at precision 0, which keeps
+   no digit and renders the sign, a zero and the exponent the rounding left,
+   beside precisions 1 and 2. */
+t = .T~new
+do v over .array~of(2/3, 1.5, 0.4, 0.5, 9.9, 123, -2/3, 0, 1e-7, 55.5, 5e10, -0.4, 0.96, 0.049, -9.9, 0.0004)
+  say v '->' '['t~d2op(v, 0)']' t~d2op(v, 1) t~d2op(v, 2)
+end
+exit
+::class T
+::method d2op external "LIBRARY orxmethod TestDoubleToObjectWithPrecision"

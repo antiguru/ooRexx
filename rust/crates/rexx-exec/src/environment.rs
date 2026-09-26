@@ -537,6 +537,40 @@ impl Interp {
         Ok(self.text(dotted))
     }
 
+    /// `PackageClass::findClass` for `program` rather than the running
+    /// package: [`Interp::dot_variable`]'s order without the reflection names,
+    /// which only an activation has.
+    pub(crate) fn class_in_program(&mut self, program: ProgramId, bare: &[u8]) -> Option<ObjRef> {
+        let own = |table: &rexx_core::NameMap<ProgramId, rexx_core::NameMap<Box<[u8]>, ObjRef>>| {
+            table
+                .get(&program)
+                .and_then(|classes| classes.get(bare))
+                .copied()
+        };
+        if let Some(found) = own(&self.package_classes).or_else(|| own(&self.merged_public_classes))
+        {
+            return Some(found);
+        }
+        if let Some(found) = self.rexx_package_class(bare) {
+            return Some(found);
+        }
+        if let Some(found) = self
+            .package_locals
+            .get(&Package::Program(program))
+            .and_then(|directory| self.native_map_entry(*directory, bare))
+        {
+            return Some(found);
+        }
+        match self.directory_lookup(
+            &[EnvScope::Local, EnvScope::Environment],
+            bare,
+            &env_seam::Access::Resolve,
+        ) {
+            Ok(hash::DirectoryEntry::Found(found)) => Some(found),
+            _ => None,
+        }
+    }
+
     /// What `Interpreter::findClass` (`runtime/Interpreter.cpp:601`) answers
     /// for `bare`: the `REXX` package's class, then `.local`'s and
     /// `.environment`'s entry, with no program's own classes in the search.

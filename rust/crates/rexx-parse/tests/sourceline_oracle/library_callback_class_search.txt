@@ -1,0 +1,19 @@
+count 18
+/* FindContextClass through orxmethod's method and orxfunction's routine, both
+   defined in the fixture package: the method searches its own package, a
+   class it holds privately included, and the routine the caller's. */
+t = .T~new
+do n over .array~of('Hidden', 'Shown', 'Mine', 'Array', 'T')
+  say n try(t, n) tryr(n)
+end
+exit
+try: procedure
+  signal on syntax
+  return arg(1)~find(arg(2))
+syntax: return 'not found' condition('o')~code
+tryr: procedure
+  signal on syntax
+  return findr(arg(1))
+syntax: return 'not found' condition('o')~code
+::requires 'lib.cls'
+::class Mine

@@ -54,7 +54,9 @@ use raised::{
     raised_naming_the_operand, raised_repetition_count_not_whole, raised_select_no_when,
     raised_symbol_expected, raised_until_not_logical, raised_while_not_logical,
 };
-pub(crate) use raised::{raised_from_settings, raised_if_not_logical, raised_when_not_logical};
+pub(crate) use raised::{
+    raised_for_code, raised_from_settings, raised_if_not_logical, raised_when_not_logical,
+};
 
 // `SELECT`'s own clauses, and where `IF`, `WHEN` and `SELECT` send control.
 mod select;
