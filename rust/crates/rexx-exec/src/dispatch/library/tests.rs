@@ -805,3 +805,29 @@ fn a_kept_c_string_lives_and_dies_with_its_string() {
     let bytes = interp.kept_strings.get(&held).expect("kept");
     assert_eq!(&bytes[..], b"a string held by a global reference\0");
 }
+
+/// **A handle-carried value's kept `CSTRING` lasts as long as the calls
+/// that asked for it**, and past them only while a global reference holds
+/// the value.
+#[test]
+fn a_handle_carried_values_copy_ends_with_its_last_call() {
+    use rexx_api::values::Host;
+    use rexx_core::ObjRef;
+    let mut interp = Interp::new();
+    let loose = ObjRef::small_int(41).expect("a small integer");
+    let held = ObjRef::small_int(42).expect("a small integer");
+    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+    interp.kept_c_string(loose, b"41");
+    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+    interp.kept_c_string(loose, b"41");
+    interp.kept_c_string(held, b"42");
+    interp.global_references.register(held);
+    interp.pop_native_frame();
+    assert!(
+        interp.kept_strings.contains_key(&loose),
+        "the outer call still holds it"
+    );
+    interp.pop_native_frame();
+    assert!(!interp.kept_strings.contains_key(&loose));
+    assert!(interp.kept_strings.contains_key(&held));
+}

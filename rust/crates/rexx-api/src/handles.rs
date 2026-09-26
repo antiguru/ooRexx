@@ -51,6 +51,11 @@ impl Table {
         self.entries.get(&handle.addr()).copied()
     }
 
+    /// Whether this table holds `object`.
+    pub fn holds(&self, object: ObjRef) -> bool {
+        self.entries.contains_key(&address_of(object))
+    }
+
     /// Drops `handle`'s registration. A handle this table never held is
     /// ignored, as `NativeActivation::removeLocalReference` ignores one.
     pub fn remove(&mut self, handle: RexxObjectPtr) {

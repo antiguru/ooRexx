@@ -1296,10 +1296,14 @@ struct Interp {
     /// The terminated copies `StringData` and its kin answered, by the object
     /// they copy. Not roots: a collection drops the copy of an object it
     /// frees, and a handle-carried value, which no collection frees, keeps
-    /// its copy for the interpreter's lifetime.
+    /// its copy as [`Interp::kept_holders`] says.
     kept_strings: std::collections::HashMap<ObjRef, Box<[u8]>>,
     /// The terminated copies of message and routine names answered, by name.
     kept_names: std::collections::HashMap<Box<[u8]>, Box<[u8]>>,
+    /// For each handle-carried value in [`Interp::kept_strings`], how many
+    /// native calls in flight asked for its copy. The copy goes when the
+    /// last of them ends and no global reference holds the value.
+    kept_holders: std::collections::HashMap<ObjRef, usize>,
     /// Every native library a name has loaded, by the name it was resolved
     /// under -- `PackageManager::packages`
     /// (`interpreter/package/PackageManager.cpp:229-248`). A miss is not held,
@@ -1831,6 +1835,9 @@ struct NativeFrame {
     /// A routine's [`Interp::library_codes`] row, `None` for a method or a
     /// package hook.
     code: Option<usize>,
+    /// The handle-carried values this call asked a kept `CSTRING` of, each
+    /// counted once in [`Interp::kept_holders`].
+    kept: std::collections::HashSet<ObjRef>,
 }
 
 /// What one just-installed dictionary key resolves to, handed to
@@ -1995,6 +2002,7 @@ impl Interp {
             global_references: rexx_api::handles::Table::new(),
             kept_strings: std::collections::HashMap::new(),
             kept_names: std::collections::HashMap::new(),
+            kept_holders: std::collections::HashMap::new(),
             special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
@@ -2649,6 +2657,7 @@ impl Interp {
             // Copies keyed by object, dropped with it rather than keeping it.
             kept_strings: _,
             kept_names: _,
+            kept_holders: _,
             special_methods: _,
             out: _,
             trace: _,

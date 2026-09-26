@@ -340,6 +340,7 @@ impl Interp {
             result: None,
             condition: None,
             code: None,
+            kept: std::collections::HashSet::new(),
         });
         frame.owner = owner;
         frame.scope = scope;
@@ -373,8 +374,30 @@ impl Interp {
         frame.arguments.clear();
         frame.argument_list = None;
         frame.locals.clear();
+        for object in frame.kept.drain() {
+            self.release_kept(object);
+        }
         self.native_spares.push(frame);
         answer
+    }
+
+    /// One native call's end for a handle-carried value's kept copy: the
+    /// copy goes with the last call holding it, unless a global reference
+    /// holds the value.
+    fn release_kept(&mut self, object: ObjRef) {
+        let std::collections::hash_map::Entry::Occupied(mut holders) =
+            self.kept_holders.entry(object)
+        else {
+            return;
+        };
+        *holders.get_mut() -= 1;
+        if *holders.get() > 0 {
+            return;
+        }
+        holders.remove();
+        if !self.global_references.holds(object) {
+            self.kept_strings.remove(&object);
+        }
     }
 
     /// What the boundary's own refusal reports.
@@ -807,6 +830,12 @@ impl Host for Interp {
     }
 
     fn kept_c_string(&mut self, object: ObjRef, bytes: &[u8]) -> Option<rexx_api::layout::CSTRING> {
+        if !matches!(object.decode(), rexx_core::Decoded::Heap { .. }) {
+            let frame = self.native_handles.last_mut()?;
+            if frame.kept.insert(object) {
+                *self.kept_holders.entry(object).or_default() += 1;
+            }
+        }
         let kept = self
             .kept_strings
             .entry(object)
