@@ -521,7 +521,7 @@ impl Surface for FakeHost {
         let grown = Surface::allocate_object_memory(self, size)?;
         let buffer = *self.memory.last()?;
         if let Some(NativeState::Data(data)) = self.state(buffer) {
-            data[..bytes.len()].copy_from_slice(&bytes);
+            data.write(0, &bytes);
         }
         Surface::free_object_memory(self, pointer);
         Some(grown)

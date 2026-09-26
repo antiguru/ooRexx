@@ -4226,7 +4226,10 @@ mod tests {
         assert_eq!(host.bytes(finished), Some(b"xyz".to_vec()));
         let buffer = host.locals.resolve(buffer.cast()).expect("registered");
         let state = host.state(buffer).expect("a buffer");
-        assert_eq!(state.data(), Some(&[7u8; 4][..]));
+        assert_eq!(
+            state.data().map(rexx_core::AlignedBytes::to_vec),
+            Some(vec![7u8; 4])
+        );
         let grown = host.locals.resolve(grown.cast()).expect("registered");
         let state = host.state(grown).expect("a mutable buffer");
         let contents = state.buffer().expect("a mutable buffer");
@@ -4261,6 +4264,32 @@ mod tests {
         let contents = state.buffer().expect("a mutable buffer");
         assert!(contents.bytes.capacity() >= contents.capacity);
         assert_eq!(contents.bytes, b"zzz");
+    }
+
+    /// **Object memory is aligned as `malloc` aligns**, 16 bytes, at every
+    /// size and across a growth, so an extension may keep any C object in
+    /// it.
+    #[test]
+    fn object_memory_is_aligned_for_any_c_object() {
+        let mut host = FakeHost::new();
+        let (misaligned, refused) = with_method(&mut host, |context| {
+            // SAFETY: `context` is live for the call; no address is written.
+            unsafe {
+                let table = &*(*context).functions;
+                let mut addresses: Vec<usize> = [0, 1, 7, 16, 17, 100]
+                    .into_iter()
+                    .map(|size| (table.AllocateObjectMemory)(context, size) as usize)
+                    .collect();
+                let first = (table.AllocateObjectMemory)(context, 3);
+                addresses.push((table.ReallocateObjectMemory)(context, first, 300) as usize);
+                addresses
+                    .into_iter()
+                    .filter(|address| address % 16 != 0)
+                    .collect::<Vec<_>>()
+            }
+        });
+        assert_eq!(refused, None);
+        assert_eq!(misaligned, Vec::<usize>::new());
     }
 
     /// **Object memory is writable to the size asked for, kept across a
@@ -4328,7 +4357,10 @@ mod tests {
         assert_eq!(refused, None);
         assert_eq!(own, of_object);
         let state = host.state(buffer).expect("a buffer");
-        assert_eq!(state.data(), Some(&[3u8; 8][..]));
+        assert_eq!(
+            state.data().map(rexx_core::AlignedBytes::to_vec),
+            Some(vec![3u8; 8])
+        );
     }
 
     /// **The object variable members set, read and drop the receiver's

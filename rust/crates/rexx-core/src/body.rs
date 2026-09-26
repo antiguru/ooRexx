@@ -165,8 +165,70 @@ pub enum NativeState {
     Pointer(*mut std::ffi::c_void),
     /// A `Buffer`'s bytes (`interpreter/classes/BufferClass.hpp`), which an
     /// extension writes through the address `BufferData` handed it for as long
-    /// as the object lives, so the vector is never resized.
-    Data(Vec<u8>),
+    /// as the object lives, so the storage is never resized.
+    Data(AlignedBytes),
+}
+
+/// One 16-byte unit of [`AlignedBytes`], aligned as `malloc` aligns on
+/// x86-64, which is what an extension may store any C object in.
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C, align(16))]
+pub struct Word(u128);
+
+/// Bytes whose first one is 16-byte aligned, with a length of their own.
+#[derive(Clone, Debug)]
+pub struct AlignedBytes {
+    words: Vec<Word>,
+    len: usize,
+}
+
+impl AlignedBytes {
+    /// `len` zero bytes, in at least one word, so that even an empty run has
+    /// an address no other shares.
+    pub fn zeroed(len: usize) -> AlignedBytes {
+        AlignedBytes {
+            words: vec![Word::default(); len.div_ceil(16).max(1)],
+            len,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// A copy of the bytes.
+    pub fn to_vec(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = self
+            .words
+            .iter()
+            .flat_map(|word| word.0.to_ne_bytes())
+            .collect();
+        bytes.truncate(self.len);
+        bytes
+    }
+
+    /// Writes `bytes` from `at`, as far as the length reaches.
+    pub fn write(&mut self, at: usize, bytes: &[u8]) {
+        for (offset, byte) in bytes.iter().enumerate() {
+            let index = at + offset;
+            if index >= self.len {
+                break;
+            }
+            let word = &mut self.words[index / 16];
+            let mut raw = word.0.to_ne_bytes();
+            raw[index % 16] = *byte;
+            word.0 = u128::from_ne_bytes(raw);
+        }
+    }
+
+    /// The address of the first byte.
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.words.as_mut_ptr().cast()
+    }
 }
 
 impl NativeState {
@@ -174,9 +236,7 @@ impl NativeState {
     /// shares, which an empty `Vec` would not give: the oracle's empty buffer
     /// is an object of its own.
     pub fn zeroed(length: usize) -> NativeState {
-        let mut bytes = Vec::with_capacity(length.max(1));
-        bytes.resize(length, 0);
-        NativeState::Data(bytes)
+        NativeState::Data(AlignedBytes::zeroed(length))
     }
 
     /// The buffer this state holds, or `None` for state of another kind.
@@ -224,7 +284,7 @@ impl NativeState {
     }
 
     /// A `Buffer`'s bytes, or `None` for state of another kind.
-    pub fn data(&self) -> Option<&[u8]> {
+    pub fn data(&self) -> Option<&AlignedBytes> {
         match self {
             NativeState::Data(bytes) => Some(bytes),
             NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Pointer(_) => None,
@@ -892,5 +952,21 @@ impl Object {
     /// Whether this object defines an `UNINIT` method. See the field.
     pub fn has_uninit(&self) -> bool {
         self.has_uninit
+    }
+}
+
+#[cfg(test)]
+mod aligned_tests {
+    use super::{AlignedBytes, Word};
+
+    /// **A buffer's bytes start 16-byte aligned**, and read back as written.
+    #[test]
+    fn aligned_bytes_are_aligned_and_read_back() {
+        assert_eq!(std::mem::align_of::<Word>(), 16);
+        let mut bytes = AlignedBytes::zeroed(20);
+        assert_eq!(bytes.as_mut_ptr() as usize % 16, 0);
+        bytes.write(15, b"abcdefgh");
+        let read = bytes.to_vec();
+        assert_eq!((read.len(), &read[15..20]), (20, &b"abcde"[..]));
     }
 }

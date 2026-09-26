@@ -555,7 +555,7 @@ impl Surface for Interp {
         let grown = Surface::allocate_object_memory(self, size)?;
         let buffer = self.object_memory()?.last().copied().flatten()?;
         if let Some(NativeState::Data(data)) = self.native_state_mut(buffer) {
-            data[..bytes.len()].copy_from_slice(&bytes);
+            data.write(0, &bytes);
         }
         Surface::free_object_memory(self, pointer);
         Some(grown)
