@@ -766,7 +766,10 @@ fn an_optional_cstring_that_is_supplied_converts_like_a_required_one() {
         panic!("both are CSTRINGs")
     };
     assert_eq!(strings.bytes_at(a), strings.bytes_at(b));
-    assert_eq!(a, b, "one address per string, as the oracle's interior pointer");
+    assert_eq!(
+        a, b,
+        "one address per string, as the oracle's interior pointer"
+    );
 }
 
 /// An omitted optional argument is answered before the per-type conversion,
