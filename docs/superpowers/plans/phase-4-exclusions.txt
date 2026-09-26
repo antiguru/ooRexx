@@ -4744,6 +4744,76 @@ directory's probes/.
   unwinder, agrees with the oracle. OWNER: none, for the reason the entry
   above gives.
 
+DIVERGENCES THE SURFACE PLAN'S TASK 6 LEAVES, measured 2026-09-26 against
+the oracle's orxfunction and a forged extension
+(docs/superpowers/records/2026-09-14-phase-8-surface/task-6-forge/: cmd.cpp,
+built by its build.sh, NEEDED libgcc_s.so.1 and libc.so.6; probes in
+probes/, compared by compare.sh), each side from a fresh directory, three
+descriptors separately.
+  A REDIRECTING HANDLER'S LINES REACH THEIR TARGETS WHEN IT RETURNS, AND
+  ITS INPUT IS READ BEFORE IT STARTS. The oracle writes each line to its
+  target as the handler writes it, buffering only where the output target
+  is also the input source (CommandIOContext::resolveConflicts,
+  interpreter/instructions/CommandIOContext.cpp), and reads each input
+  line as the handler asks for it (StemInputSource::read and its kin,
+  interpreter/instructions/InputRedirector.cpp). Ours gathers the input
+  first and writes every line once the handler has returned, as this
+  crate's shell commands already do (rust/crates/rexx-exec/src/redirect.rs).
+  Only the handler can tell: an output stem read back through the exit
+  context during the call holds the lines on the oracle and not here, and
+  an input source it changes during the call is read as it was. Read, not
+  measured; every probe, and every orxfunction handler, reads and writes
+  only through the redirector context, and a SYNTAX the handler raises
+  after writing leaves the written line in place on both (redirect_raise.rex).
+  OWNER: none; the redirector context would have to reach the interpreter
+  on every member.
+  A NULL COMMAND HANDLER REGISTERS NOTHING. AddCommandEnvironment with a
+  null handler registers nothing here and the name keeps the handler it
+  had. The oracle registers it, replacing that handler
+  (InterpreterInstance::addCommandHandler,
+  interpreter/runtime/InterpreterInstance.cpp:913-917), and a command to
+  the name would then call address 0; not run. An environment type the
+  header does not define registers nothing on both (returns.rex, "bad
+  type 30 -1"). OWNER: none; this crate does not call address 0.
+  NO REGISTERED HANDLER SURVIVES THE FIRST LIBRARY CLOSE. Termination's
+  unloader walk empties the handler table when it closes its first library
+  (Interp::run_package_unloaders), because nothing ties a handler's code to
+  the library that registered it. A command an unloader issues after that
+  answers 30 with FAILURE here where the oracle calls the handler, which
+  works while that handler's own library is still loaded. Not measured: no
+  extension this crate may load issues a command from an unloader. OWNER:
+  none; the clearing is what keeps an unmapped handler from being called.
+  ::OPTIONS ERROR SYNTAX AND FAILURE SYNTAX OVER A HANDLER'S RaiseCondition
+  ESCALATE WHEN THE HANDLER RETURNS. The oracle escalates inside the
+  callback (Activity::raiseCondition,
+  interpreter/concurrency/Activity.cpp:596-610), so the SYNTAX leaves the
+  handler there and nothing after the callback runs; ours holds the
+  condition and escalates once the handler has returned, so the handler's
+  later callbacks run and its answer is discarded. The error, its message
+  and RC agree (raises2.rex and raises2.cls, a handler that returns right
+  after raising). OWNER: none; the callback would have to unwind, which a
+  Raise member does not.
+  AN INPUT STREAM OBJECT WITH NO STATE METHOD IS 97.1. The oracle reads a
+  USING input stream object with LINEIN until a condition, NOTREADY at the
+  end, is trapped (StreamObjectInputSource::read,
+  interpreter/instructions/InputRedirector.cpp); this crate's reader, for a
+  shell command and a registered handler alike, sends LINEIN and then
+  STATE. stream_state.rex, the FUNCTION group's own ArrayInputStream shape
+  (ootest/ooRexx/API/oo/FUNCTION.testGroup, test_input_output_stream),
+  answers "handler 2 2" and "shell 0 2" at rc 0 on the oracle and ends here
+  at rc 159 with "Error 97.1: Object "an ARRAYINPUTSTREAM" does not
+  understand message "STATE"." Found by this task, not made by it: the
+  reader is Phase 7's. OWNER: none assigned here; the FUNCTION group's
+  test_input_output_stream fails on it.
+  THE ADDRESS INSTRUCTION'S OWN COMMAND ECHOES NO CLAUSE LINE UNDER TRACE C.
+  address_trace.rex, no extension: the oracle prints `4 *-* address system
+  "exit 3"` before the `>>>` and `+++` lines, and likewise for `address
+  nosuch "x"`; ours prints the `>>>` and `+++` lines alone. A command
+  clause echoes on both. Found by this task, not made by it: the echo is
+  classified by InstructionKind::Command alone, in
+  rust/crates/rexx-exec/src/run.rs and src/ir/compile.rs. OWNER: none
+  assigned here.
+
 KNOWN GAPS RECORDED AFTER THE FINAL REVIEW AND THE FIX ROUNDS, each with
 its evidence and its owner, or the reason it has none. Every transcript
 below was re-run on 2026-09-15 in fresh directories, each side its own,
