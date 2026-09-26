@@ -1258,3 +1258,121 @@ termination UNINITs, citing `Interpreter.cpp:277-281`. rexx-exec release
 
 **Task 4 complete at `aacd284d7`.** Records committed under
 `docs/superpowers/records/2026-09-14-phase-8-surface/`.
+
+## Task 5 dispatched: thread, method-context and call-context tables; BASE `e67b2f703`
+
+Implementer `surface-5` (Opus). Carried: sigcheck.py's real path
+(`final-review-a/`), Task 2's filled members, Task 4's owner design, unfilled
+slots keep refusing with an owning phase, Miri per ffi.rs/load.rs commit via
+Task 4's scratch toolchain, forge extension allowed for slots no shipped
+extension reaches.
+
+### Task 5 implemented: nine commits `8ea8a0f05`..`fb52b794e`; gates green
+
+Derived tests (refusing members, slot types, reach from the extensions) then
+one commit per group. Gates at `fb52b794e`: 2685/0/4, 2686/0/4, corpus 612 of
+612 (+8 `library_callback_*`). Miri SB green before every commit. Still
+refusing: embedding members (Phase 9), guard-on-update (Phase 6),
+AddCommandEnvironment (Task 6), and the ten Throw* members (Phase 8, ruling
+asked).
+
+**The Throw* question.** The oracle's Throw* stubs throw a C++ exception out
+through the extension's frames (unlike Raise*, which the spec measured to
+catch inside the stub); orxmethod/orxfunction test it by setting CONTINUE
+after the call, "this should never execute" (`testbinaries/orxmethod.cpp:2126-2176`,
+`orxfunction.cpp:818+`), so holding the condition and returning fails those
+tests observably. The spec's "entry points stay extern \"C\"" rule
+(`specs/2026-09-14-phase-8-native-api.md:217-230`) was written about Raise*,
+for the reason that a panic from a bug should abort.
+Ruling (provisional, pending the review's cost figure): implement Throw* as
+the only unwinding path -- the Throw* slots and the call into an extension
+entry point become `extern "C-unwind"`, the slots `resume_unwind` a private
+marker payload, and the single invoke boundary catches exactly that payload
+(anything else resumes, so a bug still aborts at the next `extern "C"`
+frame); a forge probe with a C++ local whose destructor prints shows the
+extension frame's cleanups run as the oracle's do. Cost if wrong: an unwind
+path across foreign frames that Miri cannot check. Moritz to be told; he
+may overrule. Two reviewers dispatched in parallel (boundary, behaviour).
+
+### Task 5 boundary review: NOT READY, one Critical
+
+C1: `MutableBufferCapacity` can exceed `MutableBufferData`'s allocation
+(`Object~copy` clones only the length; a failed reservation is ignored;
+capacity raised before `try_reserve`): a forge that fills the reported
+capacity of a copied buffer corrupts the heap, rc 134 where the oracle
+answers. I1: CSTRING answers (StringData, ObjectToStringValue,
+GetMessageName) die at the call's end; the oracle's live as long as the
+string; a kept global reference reads freed memory. M1 `attach_thread` reads
+a `!Sync` cell before checking the thread (a race before the abort). M2
+`with_surface` holds its borrow across a send: an outer context used inside a
+nested send aborts on the RefCell, oracle answers. M3 zero-size
+AllocateObjectMemory returns one shared dangling address. M4 Miri reaches few
+of the new members. Throw* refusal confirmed loud and untrappable.
+Waiting for the behaviour review before the fix round.
+
+### Task 5 behaviour review: NOT CLEAN, five Important; fix round 1 sent
+
+Witnesses match. Group reach measured per test in its own process:
+CONVERSION 97/97 identical; METHOD 296 identical, 20 differ, 4 Throw skipped;
+FUNCTION 148 identical, 6 differ, 4 Throw skipped. Important: Throw* slots
+abort the whole process, and ooTest runs a group in one process, so one
+Throw test kills METHOD or FUNCTION entirely; ArrayDimension of an empty array
+0 vs 1; a stem as an object variable (get .nil, set not replacing); N6a's
+"unobservable" is false; no exclusions entries for the divergences, and three
+oracle crashes missing from oracle-crashes.txt. Other differing tests are
+refusals outside Task 5 (`==` on Array and interpreter objects, Class~new,
+EXPOSE of a compound tail, StringTable~items, parse-error reporting,
+AddCommandEnvironment): Task 8's failing set.
+Ruling: the Throw* ruling is confirmed by the abort's cost -- implement the
+single marker-payload unwind path in this fix round. All Critical, Important
+and the cheap Minors fixed here; kept divergences recorded with owners.
+Cost if wrong: a larger fix round than splitting would have given.
+
+### Task 5 fix round 1: `366845a06`..`e1c9d32a0`; gates green; re-review dispatched
+
+2697/0/4, 2698/0/4, 617 of 617; Miri SB 45/0/8 (reach 86 of 180 filled
+members). Throw* implemented per the ruling; the forge must link libgcc_s
+(a static libgcc carries a second unwinder and aborts). CSTRING answers kept
+per object in `kept_strings`, freed by collection; handle-carried values'
+copies never freed (concern). Kept divergences recorded with owner Phase 8:
+Directory-subclass AT/PUT, native frame and PROPAGATED, POSITION on a
+trapped RaiseCondition, a blocking member on a busy outer context. **Task 9
+must re-home or resolve every divergence and refusal still owned by Phase 8
+before closing.** Concern to carry: AllocateObjectMemory's alignment is 1 by
+Rust's promise (C callers expect malloc's 16); raise it in the next round if
+the re-review has one, else in Task 6.
+
+### Task 5 re-review: all original findings addressed; Throw* unwind holds; fix round 2 sent
+
+Unwind confined to the Throw members and Stub<C>; non-Throw panics and foreign
+payloads abort; state consistent after repeated Throws; C frames with unwind
+tables identical to the oracle. New: I1 kept CSTRING copies of handle-carried
+values grow without bound (1M calls: 124 MB vs 20 MB); I2 three unwind
+divergences unrecorded -- catch(...) swallowing, static libgcc, Throw from a
+loader run by LoadLibrary. Rulings: I1 fix (drop at call end unless a global
+reference holds the handle); I2(c) fix (hooks take the C-unwind path);
+I2(a)(b) accepted divergences, owner none (Rust cannot raise a C++
+exception), spec note corrected by an appended note; M3 abort a bug panic
+inside throw_* before unwinding; M4 to Task 6; M5 Miri for the call-context
+instantiation; object memory aligned to 16.
+
+### Task 5 fix round 2: `d5924d4ea`..`7d25fa15d`; gates green (2701/0/4, 2702/0/4, 617/617); re-checked
+
+All six asks addressed (grow.rex bounded at 1M calls, loader Throw matches,
+M3 aborts at the slot, alignment 16 from the type, Miri 47/0/8). New Minors:
+LoadLibrary/RegisterLibrary are C-unwind whole, so a bug panic there unwinds
+into the extension; a short string's kept copy now dies at call end, so a
+pointer kept past the call reads freed memory (keptots2); the exclusions
+reason "Rust cannot raise a C++ exception" overstates (a C++ shim could).
+Ruling: fix round 3 -- throw_after shape for both slots, handle-carried
+copies live until the next collection, reason corrected to the build rule,
+probe source into the forge records.
+
+### Task 5 fix round 3: `facf431aa`..`7eeb77846`; gates green (2702/0/4, 2703/0/4, 617/617)
+
+**Task 5 complete at `7eeb77846`.** Throw* ruling stands unless Moritz
+overrules. Carried to Task 6: the exit context's Throw* members abort today
+(re-review M4). Carried to Task 9: every divergence still owned by Phase 8
+must be resolved or re-homed.
+
+## Task 6 dispatched: AddCommandEnvironment, exit and IO-redirector contexts; BASE `7eeb77846`
