@@ -943,6 +943,26 @@ fn throw_after(record: impl FnOnce()) -> ! {
     unwind()
 }
 
+/// Runs `load`, a member's whole body that may run package hooks, and
+/// answers what it answered, or [`unwind`]s where one of the hooks was left
+/// by a `Throw`.
+///
+/// # Panics
+/// Never: any other panic is a defect, and the process aborts here, as in
+/// [`throw_after`], rather than unwind it through the extension.
+fn loading<R>(load: impl FnOnce() -> R) -> R {
+    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        crate::load::noting_hook_throws(load)
+    }));
+    let Ok((answered, threw)) = ran else {
+        std::process::abort();
+    };
+    if threw {
+        unwind();
+    }
+    answered
+}
+
 /// `ThrowException0`: [`raise_exception0`], then out of the extension.
 ///
 /// # Safety
@@ -3065,16 +3085,12 @@ mod packages {
         context: *mut RexxThreadContext_,
         name: CSTRING,
     ) -> logical_t {
-        // SAFETY: as `load_package`.
-        let (activation, name) =
-            unsafe { (innermost_activation(context, "LoadLibrary"), name_of(name)) };
-        let (loaded, threw) = crate::load::noting_hook_throws(|| {
-            name.is_some_and(|name| activation.load_library(name))
-        });
-        if threw {
-            super::unwind();
-        }
-        logical_t::from(loaded)
+        super::loading(|| {
+            // SAFETY: as `load_package`.
+            let (activation, name) =
+                unsafe { (innermost_activation(context, "LoadLibrary"), name_of(name)) };
+            logical_t::from(name.is_some_and(|name| activation.load_library(name)))
+        })
     }
 
     /// The package members that each answer one message of the package.
@@ -3264,24 +3280,21 @@ unsafe extern "C-unwind" fn register_library(
     name: CSTRING,
     entry: *mut RexxPackageEntry,
 ) -> logical_t {
-    // SAFETY: as `whole_number_to_object`; the caller guarantees `name`.
-    let (activation, name) = unsafe {
-        (
-            innermost_activation(context, "RegisterLibrary"),
-            name_of(name),
-        )
-    };
-    let Some(name) = name else {
-        return 0;
-    };
-    // SAFETY: the caller guarantees the entry.
-    let library = unsafe { crate::load::registered(entry, &String::from_utf8_lossy(name)) };
-    let (registered, threw) =
-        crate::load::noting_hook_throws(|| activation.register_library(name, library));
-    if threw {
-        unwind();
-    }
-    logical_t::from(registered)
+    loading(|| {
+        // SAFETY: as `whole_number_to_object`; the caller guarantees `name`.
+        let (activation, name) = unsafe {
+            (
+                innermost_activation(context, "RegisterLibrary"),
+                name_of(name),
+            )
+        };
+        let Some(name) = name else {
+            return 0;
+        };
+        // SAFETY: the caller guarantees the entry.
+        let library = unsafe { crate::load::registered(entry, &String::from_utf8_lossy(name)) };
+        logical_t::from(activation.register_library(name, library))
+    })
 }
 
 /// # Safety
