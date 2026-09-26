@@ -931,14 +931,25 @@ fn unwind() -> ! {
     std::panic::resume_unwind(Box::new(Thrown))
 }
 
+/// Runs a `Throw` member's `record`, then [`unwind`]s.
+///
+/// # Panics
+/// Never: a panic in `record` is a defect, and the process aborts here, as an
+/// `extern "C"` slot's does, rather than unwind it through the extension.
+fn throw_after(record: impl FnOnce()) -> ! {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(record)).is_err() {
+        std::process::abort();
+    }
+    unwind()
+}
+
 /// `ThrowException0`: [`raise_exception0`], then out of the extension.
 ///
 /// # Safety
 /// As [`activation_of`].
 unsafe extern "C-unwind" fn throw_exception0<C: CallLinked>(context: *mut C, number: usize) {
     // SAFETY: as `activation_of`.
-    unsafe { activation_of(context) }.raise_syntax(number);
-    unwind()
+    throw_after(|| unsafe { activation_of(context) }.raise_syntax(number))
 }
 
 /// `ThrowException1`: [`raise_exception1`], then out of the extension.
@@ -951,8 +962,7 @@ unsafe extern "C-unwind" fn throw_exception1<C: CallLinked>(
     first: RexxObjectPtr,
 ) {
     // SAFETY: as `activation_of`.
-    unsafe { activation_of(context) }.raise_with(C::THROW[1], number, &[first]);
-    unwind()
+    throw_after(|| unsafe { activation_of(context) }.raise_with(C::THROW[1], number, &[first]))
 }
 
 /// `ThrowException2`: [`raise_exception2`], then out of the extension.
@@ -965,9 +975,10 @@ unsafe extern "C-unwind" fn throw_exception2<C: CallLinked>(
     first: RexxObjectPtr,
     second: RexxObjectPtr,
 ) {
-    // SAFETY: as `activation_of`.
-    unsafe { activation_of(context) }.raise_with(C::THROW[2], number, &[first, second]);
-    unwind()
+    throw_after(|| {
+        // SAFETY: as `activation_of`.
+        unsafe { activation_of(context) }.raise_with(C::THROW[2], number, &[first, second]);
+    })
 }
 
 /// `ThrowException`: [`raise_exception`], then out of the extension.
@@ -979,9 +990,10 @@ unsafe extern "C-unwind" fn throw_exception<C: CallLinked>(
     number: usize,
     substitutions: RexxArrayObject,
 ) {
-    // SAFETY: as `activation_of`.
-    unsafe { activation_of(context) }.raise_with_array(number, substitutions.cast());
-    unwind()
+    throw_after(|| {
+        // SAFETY: as `activation_of`.
+        unsafe { activation_of(context) }.raise_with_array(number, substitutions.cast());
+    })
 }
 
 /// `ThrowCondition`: [`raise_condition`], then out of the extension.
@@ -995,12 +1007,13 @@ unsafe extern "C-unwind" fn throw_condition<C: CallLinked>(
     additional: RexxObjectPtr,
     result: RexxObjectPtr,
 ) {
-    // SAFETY: as `activation_of`.
-    let activation = unsafe { activation_of(context) };
-    // SAFETY: the caller guarantees the terminator.
-    let name = unsafe { name_of(name) }.unwrap_or_default();
-    activation.raise_condition(name, description.cast(), additional, result);
-    unwind()
+    throw_after(|| {
+        // SAFETY: as `activation_of`.
+        let activation = unsafe { activation_of(context) };
+        // SAFETY: the caller guarantees the terminator.
+        let name = unsafe { name_of(name) }.unwrap_or_default();
+        activation.raise_condition(name, description.cast(), additional, result);
+    })
 }
 
 /// # Safety
@@ -3819,6 +3832,44 @@ thread_local! {
 #[cfg(test)]
 pub(crate) extern "C-unwind" fn throwing_stub(
     context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            THROWN.set((true, THROWN.get().1));
+        }
+    }
+    if arguments.is_null() {
+        return DROPPING_TYPES.as_ptr().cast_mut();
+    }
+    let _guard = Guard;
+    // SAFETY: as `refusing_stub`; the name is a literal with its terminator.
+    unsafe {
+        let table = &*(*context).functions;
+        let none = std::ptr::null_mut();
+        match THROW_WITH.get() {
+            0 => (table.ThrowException0)(context, STUB_CONDITION),
+            1 => (table.ThrowException1)(context, STUB_CONDITION, none),
+            2 => (table.ThrowException2)(context, STUB_CONDITION, none, none),
+            3 => (table.ThrowException)(context, STUB_CONDITION, std::ptr::null_mut()),
+            _ => (table.ThrowCondition)(
+                context,
+                c"USER STUB".as_ptr(),
+                std::ptr::null_mut(),
+                none,
+                none,
+            ),
+        }
+    }
+    THROWN.set((THROWN.get().0, true));
+    std::ptr::null_mut()
+}
+
+/// [`throwing_stub`] for a routine, through its call context.
+#[cfg(test)]
+pub(crate) extern "C-unwind" fn throwing_routine_stub(
+    context: *mut crate::layout::RexxCallContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
     struct Guard;

@@ -1108,6 +1108,33 @@ fn every_throw_member_unwinds_the_extension() {
     crate::ffi::THROW_WITH.set(0);
 }
 
+/// **Every `Throw` member of the call context leaves a routine the same
+/// way.**
+#[test]
+fn every_call_context_throw_member_unwinds_the_routine() {
+    let entry = stub_routine_entry(
+        ROUTINE_TYPED_STYLE,
+        b"throwing",
+        crate::ffi::throwing_routine_stub,
+    );
+    for which in 0..5 {
+        let thread = ThreadContext::new();
+        let mut interpreter = Interpreter::new();
+        let mut strings = CStringPool::new();
+        crate::ffi::THROWN.set((false, false));
+        crate::ffi::THROW_WITH.set(which);
+        let activation = Activation::new(Conversion {
+            host: &mut interpreter,
+            strings: &mut strings,
+        });
+        let _ = thread.enter(&activation, |contexts| {
+            routine(&entry, &contexts.call(), &activation, &[])
+        });
+        assert_eq!(crate::ffi::THROWN.get(), (true, false), "member {which}");
+    }
+    crate::ffi::THROW_WITH.set(0);
+}
+
 /// Runs `library`'s `which` hook through `thread`, and answers what the
 /// hook answered beside the condition it left pending.
 fn run_hook(
