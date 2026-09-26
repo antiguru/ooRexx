@@ -510,6 +510,24 @@ impl Interp {
         }
     }
 
+    /// `RoutineClass::runProgram`, which `CallProgram` runs a file's routine
+    /// through: as a command, and its `EXIT` ending that program alone.
+    pub(crate) fn run_routine_as_program(
+        &mut self,
+        installed: InstalledRoutine,
+        arguments: Vec<Option<ObjRef>>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        match self.invoke_call_over(
+            Resolved::Routine(installed),
+            b"CALL",
+            arguments,
+            CallType::Command,
+            CallEntry::Written,
+        )? {
+            Ended::Exited(value) | Ended::Returned(value) => Ok(value),
+        }
+    }
+
     /// [`Interp::invoke_call`] past its argument evaluation: everything a
     /// callee needs once its arguments are values.
     pub(crate) fn invoke_call_over(

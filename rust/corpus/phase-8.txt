@@ -260,3 +260,8 @@ lang/library_callback_variables.rex
 # Surface Task 5: the message members and the running call's own
 # description, through orxmethod's methods and orxfunction's routines.
 lang/library_callback_messages.rex
+
+# Surface Task 5: the package, library and executable members through
+# orxmethod's methods, with a package and a program in the fixture
+# directory.
+lang/library_callback_packages.rex

@@ -6,7 +6,7 @@ B=/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/target/release/rexx-run
 for P in "$@"; do
   P=$(readlink -f $P); n=$(basename $P .rex)
   for side in oracle crate; do
-    R=$(mktemp -d $S/run.XXXX); cd $R
+    R=$(mktemp -d $S/run.XXXX); [ -d ${P%.rex}.d ] && cp -r ${P%.rex}.d/. $R/; cd $R
     if [ $side = oracle ]; then
       ( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib:/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/surface-5/forge timeout 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx $P ) >$S/out/$n.$side.out 2>$S/out/$n.$side.err
     else

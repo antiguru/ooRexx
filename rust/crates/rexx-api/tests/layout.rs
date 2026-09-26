@@ -922,21 +922,8 @@ fn the_test_extensions_reach_only_members_that_answer() {
         "MethodContextInterface.ThrowException2",
         "RexxInstanceInterface.AddCommandEnvironment",
         "RexxInstanceInterface.AttachThread",
-        "RexxThreadInterface.CallProgram",
-        "RexxThreadInterface.CallRoutine",
         "RexxThreadInterface.DetachThread",
         "RexxThreadInterface.GetInterpreterInstance",
-        "RexxThreadInterface.GetMethodPackage",
-        "RexxThreadInterface.GetPackageClasses",
-        "RexxThreadInterface.GetPackageMethods",
-        "RexxThreadInterface.GetPackagePublicClasses",
-        "RexxThreadInterface.GetPackagePublicRoutines",
-        "RexxThreadInterface.GetPackageRoutines",
-        "RexxThreadInterface.GetRoutinePackage",
-        "RexxThreadInterface.LoadPackage",
-        "RexxThreadInterface.LoadPackageFromData",
-        "RexxThreadInterface.NewMethod",
-        "RexxThreadInterface.NewRoutine",
     ];
     let refusing = refusing_members();
     let reached: BTreeSet<String> = members_the_test_extensions_call()

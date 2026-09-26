@@ -166,6 +166,21 @@ pub trait Surface {
     /// An array's slots up to its size, or `None` for an object that is not
     /// an array.
     fn array_items(&mut self, array: ObjRef) -> Option<Vec<Option<ObjRef>>>;
+
+    /// `InterpreterInstance::loadRequires` over a file: the package the name
+    /// resolves to globally, loaded and its prologue run once, or `None`
+    /// where that raised a condition, which the host holds.
+    fn load_package(&mut self, name: &[u8]) -> Option<ObjRef>;
+
+    /// `loadRequires` over source text, one line per line end.
+    fn load_package_source(&mut self, name: &[u8], lines: &[Vec<u8>]) -> Option<ObjRef>;
+
+    /// `PackageManager::loadLibrary`: whether the library loaded.
+    fn load_library(&mut self, name: &[u8]) -> bool;
+
+    /// `CallProgramDispatcher::run`: the program the name resolves to
+    /// globally, run with `arguments`, answering its result.
+    fn call_program(&mut self, name: &[u8], arguments: &[Option<ObjRef>]) -> Option<ObjRef>;
 }
 
 /// `Error_Incorrect_method_positive` (`api/oorexxerrors.h`), which `ArrayAt`
@@ -1495,6 +1510,91 @@ impl Activation<'_> {
         );
     }
 
+    /// `LoadPackage`.
+    pub fn load_package(&self, name: &[u8]) -> RexxObjectPtr {
+        self.surface_handle("RexxThreadInterface.LoadPackage", |surface| {
+            surface.load_package(name)
+        })
+    }
+
+    /// `LoadPackageFromData`: `source` split into lines at each line end.
+    pub fn load_package_from_data(&self, name: &[u8], source: &[u8]) -> RexxObjectPtr {
+        let lines = source_lines(source);
+        self.surface_handle("RexxThreadInterface.LoadPackageFromData", |surface| {
+            surface.load_package_source(name, &lines)
+        })
+    }
+
+    /// `LoadLibrary`.
+    pub fn load_library(&self, name: &[u8]) -> bool {
+        self.with_surface("RexxThreadInterface.LoadLibrary", false, |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .load_library(name)
+        })
+    }
+
+    /// `GetPackageRoutines` and its neighbours: what the package answers
+    /// `name`.
+    pub fn package_answer(
+        &self,
+        slot: &'static str,
+        package: RexxObjectPtr,
+        name: &[u8],
+    ) -> RexxObjectPtr {
+        let package = self.resolve(package);
+        self.send_for_handle(slot, package, name, &[])
+    }
+
+    /// `CallRoutine`: the routine run with the array's items, or with none
+    /// for a null array.
+    pub fn call_routine(&self, routine: RexxObjectPtr, arguments: RexxObjectPtr) -> RexxObjectPtr {
+        const SLOT: &str = "RexxThreadInterface.CallRoutine";
+        let routine = self.resolve(routine);
+        if arguments.is_null() {
+            return self.send_for_handle(SLOT, routine, b"CALL", &[]);
+        }
+        self.send_for_handle(SLOT, routine, b"CALLWITH", &[Argument::Handle(arguments)])
+    }
+
+    /// `CallProgram`.
+    pub fn call_program(&self, name: &[u8], arguments: RexxObjectPtr) -> RexxObjectPtr {
+        let arguments = if arguments.is_null() {
+            Vec::new()
+        } else {
+            match self.arguments_of(arguments) {
+                Some(arguments) => arguments,
+                None => return std::ptr::null_mut(),
+            }
+        };
+        self.surface_handle("RexxThreadInterface.CallProgram", |surface| {
+            surface.call_program(name, &arguments)
+        })
+    }
+
+    /// `NewMethod` and `NewRoutine`: the class's `NEW` over `source` split
+    /// into lines at each line end, as `LanguageParser` reads a buffer.
+    pub fn new_executable(
+        &self,
+        slot: &'static str,
+        id: &str,
+        name: &[u8],
+        source: &[u8],
+    ) -> RexxObjectPtr {
+        let lines = source_lines(source);
+        let handles: Vec<RexxObjectPtr> =
+            lines.iter().map(|line| self.string_object(line)).collect();
+        let array = self.array_of(slot, &handles);
+        let class = self.class(slot, id);
+        self.send_for_handle(
+            slot,
+            class,
+            b"NEW",
+            &[Argument::Text(name), Argument::Handle(array)],
+        )
+    }
+
     /// `ObjectToValue`: `handle` converted as `declared` asks, or `None`
     /// where it does not convert, with any condition the conversion raised
     /// forgotten (`interpreter/api/ThreadContextStubs.cpp:730`).
@@ -1557,4 +1657,18 @@ pub enum MethodObject {
     Receiver,
     Scope,
     Super,
+}
+
+/// Program text as the lines `LanguageParser` reads out of a buffer: split at
+/// each line feed, a carriage return before one dropped, and no empty line
+/// after a final line end.
+fn source_lines(source: &[u8]) -> Vec<Vec<u8>> {
+    let mut lines: Vec<Vec<u8>> = source
+        .split(|&byte| byte == b'\n')
+        .map(|line| line.strip_suffix(b"\r").unwrap_or(line).to_vec())
+        .collect();
+    if source.ends_with(b"\n") {
+        lines.pop();
+    }
+    lines
 }

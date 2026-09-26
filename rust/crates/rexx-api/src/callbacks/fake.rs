@@ -432,6 +432,22 @@ impl Surface for FakeHost {
     fn array_items(&mut self, array: ObjRef) -> Option<Vec<Option<ObjRef>>> {
         self.items(array)
     }
+
+    fn load_package(&mut self, _name: &[u8]) -> Option<ObjRef> {
+        None
+    }
+
+    fn load_package_source(&mut self, _name: &[u8], _lines: &[Vec<u8>]) -> Option<ObjRef> {
+        None
+    }
+
+    fn load_library(&mut self, _name: &[u8]) -> bool {
+        false
+    }
+
+    fn call_program(&mut self, _name: &[u8], _arguments: &[Option<ObjRef>]) -> Option<ObjRef> {
+        None
+    }
 }
 
 impl FakeHost {

@@ -24,6 +24,7 @@ use crate::Novalue;
 use crate::builtin::datatype::{SymbolKind, classify};
 
 use crate::error::{Raised, displayable};
+use crate::plan::Package;
 use crate::{Failure, Interp};
 
 impl Surface for Interp {
@@ -445,6 +446,65 @@ impl Surface for Interp {
 
     fn array_items(&mut self, array: ObjRef) -> Option<Vec<Option<ObjRef>>> {
         self.array_slots_of(array)
+    }
+
+    fn load_package(&mut self, name: &[u8]) -> Option<ObjRef> {
+        let loaded = self.load_package_global(name);
+        let program = self.held(loaded)?;
+        Some(self.package_object(Package::Program(program)))
+    }
+
+    fn load_package_source(&mut self, name: &[u8], lines: &[Vec<u8>]) -> Option<ObjRef> {
+        let loaded = self.package_from_source(name, lines, None);
+        let program = self.held(loaded)?;
+        Some(self.package_object(Package::Program(program)))
+    }
+
+    fn load_library(&mut self, name: &[u8]) -> bool {
+        match self.resolve_library(name) {
+            crate::LibraryLoad::Loaded(_) => true,
+            crate::LibraryLoad::Missing => false,
+            crate::LibraryLoad::Version => {
+                let raised = Raised::library_version(name);
+                self.hold_native_condition(raised.into());
+                false
+            }
+            crate::LibraryLoad::Raised(failure) => {
+                self.hold_native_condition(failure);
+                false
+            }
+        }
+    }
+
+    fn call_program(&mut self, name: &[u8], arguments: &[Option<ObjRef>]) -> Option<ObjRef> {
+        let Some(path) = self.resolve_program_name(None, name, false) else {
+            // `Error_Program_unreadable_notfound`
+            // (`concurrency/RexxStartDispatcher.cpp:233`).
+            let raised = Raised::syntax(3, 901, vec![name.to_vec()]);
+            self.hold_native_condition(raised.into());
+            return None;
+        };
+        let routine = self.new_file_executable(path.as_bytes(), true, None);
+        let routine = self.held(routine)?;
+        self.roots.push_temp(routine);
+        let (program, directive) = self.executable_sources.get(&routine)?.routine?;
+        let installed = crate::InstalledRoutine { program, directive };
+        let answered = self.run_routine_as_program(installed, arguments.to_vec());
+        self.held(answered).flatten()
+    }
+}
+
+impl Interp {
+    /// The value `result` carries, or `None` with its condition held on the
+    /// running native call.
+    fn held<T>(&mut self, result: Result<T, Failure>) -> Option<T> {
+        match result {
+            Ok(value) => Some(value),
+            Err(failure) => {
+                self.hold_native_condition(failure);
+                None
+            }
+        }
     }
 }
 

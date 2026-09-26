@@ -301,6 +301,20 @@ pub const THREAD: RexxThreadInterface = {
     table.FindPackageClass = messages::find_package_class;
     table.IsMethod = messages::is_method;
     table.IsRoutine = messages::is_routine;
+    table.LoadPackage = packages::load_package;
+    table.LoadPackageFromData = packages::load_package_from_data;
+    table.LoadLibrary = packages::load_library;
+    table.GetPackageRoutines = packages::package_routines;
+    table.GetPackagePublicRoutines = packages::package_public_routines;
+    table.GetPackageClasses = packages::package_classes;
+    table.GetPackagePublicClasses = packages::package_public_classes;
+    table.GetPackageMethods = packages::package_methods;
+    table.GetRoutinePackage = packages::routine_package;
+    table.GetMethodPackage = packages::method_package;
+    table.CallRoutine = packages::call_routine;
+    table.CallProgram = packages::call_program;
+    table.NewMethod = packages::new_method;
+    table.NewRoutine = packages::new_routine;
     table
 };
 
@@ -2830,6 +2844,207 @@ mod messages {
     pub(super) unsafe extern "C" fn invalid_routine(context: *mut RexxCallContext_) {
         // SAFETY: as `get_context_digits`.
         unsafe { activation_of(context) }.invalid_routine();
+    }
+}
+
+/// The members over packages, libraries, routines and methods.
+mod packages {
+    use super::{bytes_of, innermost_activation, name_of};
+    use crate::layout::{
+        CSTRING, RexxArrayObject, RexxDirectoryObject, RexxMethodObject, RexxObjectPtr,
+        RexxPackageObject, RexxRoutineObject, RexxThreadContext_, logical_t,
+    };
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`], and a non-null `name` is
+    /// NUL-terminated.
+    pub(super) unsafe extern "C" fn load_package(
+        context: *mut RexxThreadContext_,
+        name: CSTRING,
+    ) -> RexxPackageObject {
+        // SAFETY: as `whole_number_to_object`; the caller guarantees `name`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "LoadPackage"), name_of(name)) };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation.load_package(name).cast()
+        })
+    }
+
+    /// # Safety
+    /// As [`load_package`], and a non-null `data` is valid for reads of
+    /// `length` bytes.
+    pub(super) unsafe extern "C" fn load_package_from_data(
+        context: *mut RexxThreadContext_,
+        name: CSTRING,
+        data: CSTRING,
+        length: usize,
+    ) -> RexxPackageObject {
+        // SAFETY: as `load_package`; the caller guarantees the range.
+        let (activation, name, source) = unsafe {
+            (
+                innermost_activation(context, "LoadPackageFromData"),
+                name_of(name),
+                bytes_of(data, length),
+            )
+        };
+        let (Some(name), Some(source)) = (name, source) else {
+            return std::ptr::null_mut();
+        };
+        activation.load_package_from_data(name, source).cast()
+    }
+
+    /// # Safety
+    /// As [`load_package`].
+    pub(super) unsafe extern "C" fn load_library(
+        context: *mut RexxThreadContext_,
+        name: CSTRING,
+    ) -> logical_t {
+        // SAFETY: as `load_package`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "LoadLibrary"), name_of(name)) };
+        logical_t::from(name.is_some_and(|name| activation.load_library(name)))
+    }
+
+    /// The package members that each answer one message of the package.
+    macro_rules! package_answer {
+        ($function:ident, $member:literal, $message:literal) => {
+            /// # Safety
+            /// As [`super::whole_number_to_object`].
+            pub(super) unsafe extern "C" fn $function(
+                context: *mut RexxThreadContext_,
+                package: RexxPackageObject,
+            ) -> RexxDirectoryObject {
+                // SAFETY: as `whole_number_to_object`.
+                unsafe { innermost_activation(context, $member) }
+                    .package_answer(
+                        concat!("RexxThreadInterface.", $member),
+                        package.cast(),
+                        $message,
+                    )
+                    .cast()
+            }
+        };
+    }
+
+    package_answer!(package_routines, "GetPackageRoutines", b"ROUTINES");
+    package_answer!(
+        package_public_routines,
+        "GetPackagePublicRoutines",
+        b"PUBLICROUTINES"
+    );
+    package_answer!(package_classes, "GetPackageClasses", b"CLASSES");
+    package_answer!(
+        package_public_classes,
+        "GetPackagePublicClasses",
+        b"PUBLICCLASSES"
+    );
+    package_answer!(package_methods, "GetPackageMethods", b"DEFINEDMETHODS");
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn routine_package(
+        context: *mut RexxThreadContext_,
+        routine: RexxRoutineObject,
+    ) -> RexxPackageObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "GetRoutinePackage") }
+            .package_answer(
+                "RexxThreadInterface.GetRoutinePackage",
+                routine.cast(),
+                b"PACKAGE",
+            )
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn method_package(
+        context: *mut RexxThreadContext_,
+        method: RexxMethodObject,
+    ) -> RexxPackageObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "GetMethodPackage") }
+            .package_answer(
+                "RexxThreadInterface.GetMethodPackage",
+                method.cast(),
+                b"PACKAGE",
+            )
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn call_routine(
+        context: *mut RexxThreadContext_,
+        routine: RexxRoutineObject,
+        arguments: RexxArrayObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "CallRoutine") }
+            .call_routine(routine.cast(), arguments.cast())
+    }
+
+    /// # Safety
+    /// As [`load_package`].
+    pub(super) unsafe extern "C" fn call_program(
+        context: *mut RexxThreadContext_,
+        name: CSTRING,
+        arguments: RexxArrayObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `load_package`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "CallProgram"), name_of(name)) };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation.call_program(name, arguments.cast())
+        })
+    }
+
+    /// # Safety
+    /// As [`load_package_from_data`].
+    pub(super) unsafe extern "C" fn new_method(
+        context: *mut RexxThreadContext_,
+        name: CSTRING,
+        source: CSTRING,
+        length: usize,
+    ) -> RexxMethodObject {
+        // SAFETY: as `load_package_from_data`.
+        let (activation, name, source) = unsafe {
+            (
+                innermost_activation(context, "NewMethod"),
+                name_of(name),
+                bytes_of(source, length),
+            )
+        };
+        let (Some(name), Some(source)) = (name, source) else {
+            return std::ptr::null_mut();
+        };
+        activation
+            .new_executable("RexxThreadInterface.NewMethod", "Method", name, source)
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`load_package_from_data`].
+    pub(super) unsafe extern "C" fn new_routine(
+        context: *mut RexxThreadContext_,
+        name: CSTRING,
+        source: CSTRING,
+        length: usize,
+    ) -> RexxRoutineObject {
+        // SAFETY: as `load_package_from_data`.
+        let (activation, name, source) = unsafe {
+            (
+                innermost_activation(context, "NewRoutine"),
+                name_of(name),
+                bytes_of(source, length),
+            )
+        };
+        let (Some(name), Some(source)) = (name, source) else {
+            return std::ptr::null_mut();
+        };
+        activation
+            .new_executable("RexxThreadInterface.NewRoutine", "Routine", name, source)
+            .cast()
     }
 }
 

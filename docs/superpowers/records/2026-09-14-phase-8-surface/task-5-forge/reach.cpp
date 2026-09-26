@@ -180,6 +180,12 @@ RexxMethod1(RexxObjectPtr, FwdTo, RexxObjectPtr, to)
     return context->ForwardMessage(to, NULL, NULL, NULL);
 }
 
+// LoadLibrary by name.
+RexxRoutine1(logical_t, LoadLib, CSTRING, name)
+{
+    return context->LoadLibrary(name);
+}
+
 RexxMethodEntry methods[] = {
     REXX_METHOD(FwdTo, FwdTo),
     REXX_METHOD(CSelfRead, CSelfRead),
@@ -188,6 +194,7 @@ RexxMethodEntry methods[] = {
 
 RexxRoutineEntry routines[] = {
     REXX_TYPED_ROUTINE(BufStr, BufStr),
+    REXX_TYPED_ROUTINE(LoadLib, LoadLib),
     REXX_TYPED_ROUTINE(Env, Env),
     REXX_TYPED_ROUTINE(CallerCtx, CallerCtx),
     REXX_TYPED_ROUTINE(Invalid, Invalid),
