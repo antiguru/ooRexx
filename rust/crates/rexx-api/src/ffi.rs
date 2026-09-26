@@ -3878,8 +3878,8 @@ mod tests {
     use super::{ThreadContext, owner_of, value_of};
     use crate::callbacks::fake::FakeHost;
     use crate::layout::{
-        Owned, RexxCallContext_, RexxMethodContext_, RexxThreadContext_, RexxThreadInterface,
-        ValueDescriptor, ValueUnion, recording_refusals,
+        Owned, RexxCallContext_, RexxMethodContext_, RexxObjectPtr_, RexxThreadContext_,
+        RexxThreadInterface, ValueDescriptor, ValueUnion, recording_refusals,
     };
     use crate::values::{
         self, CStringPool, Conversion, Converted, Repr, Value, code, descriptor, repr, rows,
@@ -3905,6 +3905,39 @@ mod tests {
                 (thread, &*(*thread).functions)
             };
             recording_refusals(|| body(thread, table))
+        })
+    }
+
+    /// Runs `body` with the method context of a native call `host` serves,
+    /// recording the first member it refused.
+    fn with_method<R>(
+        host: &mut FakeHost,
+        body: impl FnOnce(*mut RexxMethodContext_) -> R,
+    ) -> (R, Option<&'static str>) {
+        let mut strings = CStringPool::new();
+        let activation = values::Activation::new(Conversion {
+            host,
+            strings: &mut strings,
+        });
+        ThreadContext::new().enter(&activation, |contexts| {
+            let context = contexts.method().as_ptr();
+            recording_refusals(|| body(context))
+        })
+    }
+
+    /// [`with_method`] for the call context.
+    fn with_call<R>(
+        host: &mut FakeHost,
+        body: impl FnOnce(*mut RexxCallContext_) -> R,
+    ) -> (R, Option<&'static str>) {
+        let mut strings = CStringPool::new();
+        let activation = values::Activation::new(Conversion {
+            host,
+            strings: &mut strings,
+        });
+        ThreadContext::new().enter(&activation, |contexts| {
+            let context = contexts.call().as_ptr();
+            recording_refusals(|| body(context))
         })
     }
 
@@ -4161,6 +4194,235 @@ mod tests {
         let contents = state.buffer().expect("a mutable buffer");
         assert!(contents.bytes.capacity() >= contents.capacity);
         assert_eq!(contents.bytes, b"zzz");
+    }
+
+    /// **Object memory is writable to the size asked for, kept across a
+    /// shrink, copied across a growth and gone once freed**, and two empty
+    /// allocations are two.
+    #[test]
+    fn the_object_memory_members_allocate_grow_and_free() {
+        let mut host = FakeHost::new();
+        let ((same, grown, copied, stale, apart), refused) = with_method(&mut host, |context| {
+            // SAFETY: `context` is live for the call; each address is written
+            // and read only within the size it was allocated at.
+            unsafe {
+                let table = &*(*context).functions;
+                let first = (table.AllocateObjectMemory)(context, 16).cast::<u8>();
+                first.copy_from_nonoverlapping(b"hello".as_ptr(), 5);
+                let same = (table.ReallocateObjectMemory)(context, first.cast(), 8);
+                let grown = (table.ReallocateObjectMemory)(context, first.cast(), 64).cast::<u8>();
+                grown.add(63).write(b'!');
+                let mut copied = [0u8; 5];
+                copied
+                    .as_mut_ptr()
+                    .copy_from_nonoverlapping(grown.cast_const(), 5);
+                (table.FreeObjectMemory)(context, grown.cast());
+                let stale = (table.ReallocateObjectMemory)(context, grown.cast(), 128);
+                let empty = (table.AllocateObjectMemory)(context, 0);
+                let other = (table.AllocateObjectMemory)(context, 0);
+                (
+                    same == first.cast(),
+                    grown != first,
+                    copied,
+                    stale.is_null(),
+                    empty != other,
+                )
+            }
+        });
+        assert_eq!(refused, None);
+        assert_eq!(
+            (same, grown, &copied, stale, apart),
+            (true, true, b"hello", true, true)
+        );
+        assert_eq!(host.memory.len(), 2, "the empty pair, the rest freed");
+    }
+
+    /// **`GetCSelf` and `ObjectToCSelf` answer the bytes of the buffer the
+    /// object holds**, writable through either.
+    #[test]
+    fn the_cself_members_answer_the_held_buffers_bytes() {
+        let mut host = FakeHost::new();
+        let buffer = host.buffer(8);
+        host.cself = Some(buffer);
+        let object = host.text(b"an object with a CSELF");
+        let object = host.locals.register(object);
+        let ((own, of_object), refused) = with_method(&mut host, |context| {
+            // SAFETY: `context` and `thread` are live for the call, `object`
+            // is registered, and the buffer is eight bytes long.
+            unsafe {
+                let table = &*(*context).functions;
+                let thread = (*context).threadContext;
+                let own = (table.GetCSelf)(context);
+                own.cast::<u8>().write_bytes(3, 8);
+                let of_object = ((*(*thread).functions).ObjectToCSelf)(thread, object.cast());
+                (own, of_object)
+            }
+        });
+        assert_eq!(refused, None);
+        assert_eq!(own, of_object);
+        let state = host.state(buffer).expect("a buffer");
+        assert_eq!(state.data(), Some(&[3u8; 8][..]));
+    }
+
+    /// **The object variable members set, read and drop the receiver's
+    /// variable by its upper-cased name.**
+    #[test]
+    fn the_object_variable_members_set_read_and_drop() {
+        let mut host = FakeHost::new();
+        let value = host.text(b"a value bound to an object variable");
+        let value = host.locals.register(value);
+        let ((read, dropped), refused) = with_method(&mut host, |context| {
+            // SAFETY: `context` is live for the call, `value` is registered,
+            // and each name is a literal with its terminator.
+            unsafe {
+                let table = &*(*context).functions;
+                (table.SetObjectVariable)(context, c"abc".as_ptr(), value.cast());
+                let read = (table.GetObjectVariable)(context, c"ABC".as_ptr());
+                (table.DropObjectVariable)(context, c"Abc".as_ptr());
+                let dropped = (table.GetObjectVariable)(context, c"abc".as_ptr());
+                (read, dropped)
+            }
+        });
+        assert_eq!(refused, None);
+        assert!(dropped.is_null());
+        let value = host.locals.resolve(value).expect("registered");
+        assert_eq!(host.locals.resolve(read.cast()), Some(value));
+    }
+
+    /// **The send members hand the host the upper-cased name and their
+    /// arguments, and answer what it answered**; `GetRoutineName` answers a
+    /// terminated name.
+    #[test]
+    fn the_send_members_and_the_routine_name_answer_through_the_host() {
+        let mut host = FakeHost::new();
+        let receiver = host.text(b"a receiver for the fake host's sends");
+        let receiver = host.locals.register(receiver);
+        let item = host.text(b"an argument the fake host echoes back");
+        let item = host.locals.register(item);
+        let ((echoed, none, counted, listed, unknown, name), refused) =
+            with_call(&mut host, |context| {
+                // SAFETY: `context` and `thread` are live for the call, every
+                // handle is registered or answered by the table, and each name is
+                // a literal with its terminator.
+                unsafe {
+                    let table = &*(*context).functions;
+                    let thread = (*context).threadContext;
+                    let t = &*(*thread).functions;
+                    let echoed =
+                        (t.SendMessage1)(thread, receiver.cast(), c"echo".as_ptr(), item.cast());
+                    let none = (t.SendMessage0)(thread, receiver.cast(), c"Echo".as_ptr());
+                    let counted = (t.SendMessage2)(
+                        thread,
+                        receiver.cast(),
+                        c"count".as_ptr(),
+                        item.cast(),
+                        item.cast(),
+                    );
+                    let array = (t.ArrayOfThree)(thread, item.cast(), item.cast(), item.cast());
+                    let listed = (t.SendMessage)(thread, receiver.cast(), c"COUNT".as_ptr(), array);
+                    let unknown = (t.SendMessage0)(thread, receiver.cast(), c"nothing".as_ptr());
+                    let name = std::ffi::CStr::from_ptr((table.GetRoutineName)(context))
+                        .to_bytes()
+                        .to_vec();
+                    let length = (t.StringLength)(thread, echoed.cast());
+                    (echoed, none, (counted, length), listed, unknown, name)
+                }
+            });
+        assert_eq!(refused, None);
+        assert_eq!(
+            host.locals.resolve(echoed.cast()),
+            host.locals.resolve(item)
+        );
+        assert!(none.is_null() && unknown.is_null());
+        let count = |handle: *mut RexxObjectPtr_| host.locals.resolve(handle.cast());
+        assert_eq!(count(counted.0), rexx_core::ObjRef::small_int(2));
+        assert_eq!(counted.1, b"an argument the fake host echoes back".len());
+        assert_eq!(count(listed), rexx_core::ObjRef::small_int(3));
+        assert_eq!(name, b"FAKE");
+    }
+
+    /// **On the interpreter's own thread with a call in flight, `AttachThread`
+    /// answers the thread context the call already has**, the instance
+    /// `GetInterpreterInstance` answers is the one that context links, and
+    /// `DetachThread` releases nothing.
+    #[test]
+    fn a_nested_attach_answers_the_calls_own_thread_context() {
+        let mut host = FakeHost::new();
+        let ((same_instance, attached, answered), refused) =
+            with_thread(&mut host, |thread, table| {
+                // SAFETY: `thread` is live for the call and links its instance.
+                unsafe {
+                    let instance = (table.GetInterpreterInstance)(thread);
+                    let mut attached = std::ptr::null_mut();
+                    let answered =
+                        ((*(*instance).functions).AttachThread)(instance, &raw mut attached);
+                    ((*(*attached).functions).DetachThread)(attached);
+                    (instance == (*thread).instance, attached == thread, answered)
+                }
+            });
+        assert_eq!(refused, None);
+        assert_eq!((same_instance, attached, answered), (true, true, 1));
+    }
+
+    /// **The context variable members set, read and drop the calling
+    /// activation's variable.**
+    #[test]
+    fn the_context_variable_members_set_read_and_drop() {
+        let mut host = FakeHost::new();
+        let value = host.text(b"a value bound to a context variable");
+        let value = host.locals.register(value);
+        let ((read, dropped), refused) = with_call(&mut host, |context| {
+            // SAFETY: `context` is live for the call, `value` is registered,
+            // and each name is a literal with its terminator.
+            unsafe {
+                let table = &*(*context).functions;
+                (table.SetContextVariable)(context, c"CTX".as_ptr(), value.cast());
+                let read = (table.GetContextVariable)(context, c"CTX".as_ptr());
+                (table.DropContextVariable)(context, c"CTX".as_ptr());
+                let dropped = (table.GetContextVariable)(context, c"CTX".as_ptr());
+                (read, dropped)
+            }
+        });
+        assert_eq!(refused, None);
+        assert!(dropped.is_null());
+        let value = host.locals.resolve(value).expect("registered");
+        assert_eq!(host.locals.resolve(read.cast()), Some(value));
+    }
+
+    /// **`ObjectToStringValue` answers one terminated address per string, a
+    /// global reference is the local's handle and outlives its release, and
+    /// `GetMessageName` answers a terminated name.**
+    #[test]
+    fn the_string_value_reference_and_name_members_answer_through_the_host() {
+        let mut host = FakeHost::new();
+        let string = host.text(b"a string whose value is asked twice");
+        let string = host.locals.register(string);
+        let ((text, twice, global, after, name), refused) = with_method(&mut host, |context| {
+            // SAFETY: `context` and `thread` are live for the call, `string`
+            // is registered, and each answered address is read only up to its
+            // terminator while the call lasts.
+            unsafe {
+                let table = &*(*context).functions;
+                let thread = (*context).threadContext;
+                let t = &*(*thread).functions;
+                let first = (t.ObjectToStringValue)(thread, string.cast());
+                let twice = (t.ObjectToStringValue)(thread, string.cast()) == first;
+                let text = std::ffi::CStr::from_ptr(first).to_bytes().to_vec();
+                let global = (t.RequestGlobalReference)(thread, string.cast());
+                (t.ReleaseGlobalReference)(thread, global);
+                (t.ReleaseLocalReference)(thread, string.cast());
+                let after = (t.StringLength)(thread, global.cast());
+                let name = std::ffi::CStr::from_ptr((table.GetMessageName)(context))
+                    .to_bytes()
+                    .to_vec();
+                (text, twice, global == string.cast(), after, name)
+            }
+        });
+        assert_eq!(refused, None);
+        assert_eq!(text, b"a string whose value is asked twice");
+        assert!(twice && global);
+        assert_eq!(after, text.len());
+        assert_eq!(name, b"FAKE");
     }
 
     /// A member that needs the host's surface refuses on a host with none,

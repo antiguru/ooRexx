@@ -46,6 +46,16 @@ pub(crate) struct FakeHost {
     pub(crate) variables: Vec<(Vec<u8>, ObjRef)>,
     /// Every object [`Surface::global_reference`] was asked to hold.
     pub(crate) globals: Vec<ObjRef>,
+    /// The same objects as handles, which [`Host::resolve`] consults after
+    /// the locals.
+    global_handles: Table,
+    /// The receiver's object variables, by pool name.
+    pub(crate) object_variables: Vec<(Vec<u8>, ObjRef)>,
+    /// The buffers [`Surface::allocate_object_memory`] made and not freed.
+    pub(crate) memory: Vec<ObjRef>,
+    /// The buffer [`Host::cself`] and [`Surface::object_cself`] answer the
+    /// bytes of.
+    pub(crate) cself: Option<ObjRef>,
 }
 
 /// A condition a [`FakeHost`] holds.
@@ -68,6 +78,10 @@ impl FakeHost {
             displayed: 0,
             variables: Vec::new(),
             globals: Vec::new(),
+            global_handles: Table::new(),
+            object_variables: Vec::new(),
+            memory: Vec::new(),
+            cself: None,
         }
     }
 
@@ -123,7 +137,8 @@ impl Host for FakeHost {
     }
 
     fn cself(&mut self) -> Option<POINTER> {
-        None
+        let buffer = self.cself?;
+        self.state(buffer)?.data_address()
     }
 
     fn constants(&mut self) -> Constants<ObjRef> {
@@ -135,9 +150,17 @@ impl Host for FakeHost {
         }
     }
 
-    fn set_object_variable(&mut self, _name: &[u8], _value: Option<ObjRef>) {}
+    fn set_object_variable(&mut self, name: &[u8], value: Option<ObjRef>) {
+        let name = name.to_ascii_uppercase();
+        self.object_variables.retain(|(bound, _)| *bound != name);
+        if let Some(value) = value {
+            self.object_variables.push((name, value));
+        }
+    }
 
-    fn drop_object_variable(&mut self, _name: &[u8]) {}
+    fn drop_object_variable(&mut self, name: &[u8]) {
+        self.set_object_variable(name, None);
+    }
 
     fn whole_number(&mut self, value: isize) -> ObjRef {
         match i64::try_from(value).ok().and_then(ObjRef::small_int) {
@@ -250,6 +273,12 @@ impl Host for FakeHost {
 
     fn surface(&mut self) -> Option<&mut dyn Surface> {
         if self.serves { Some(self) } else { None }
+    }
+
+    fn resolve(&mut self, handle: crate::layout::RexxObjectPtr) -> Option<ObjRef> {
+        self.locals
+            .resolve(handle)
+            .or_else(|| self.global_handles.resolve(handle))
     }
 }
 
@@ -368,17 +397,25 @@ impl Surface for FakeHost {
     }
 
     fn object_cself(&mut self, _object: ObjRef, _scope: Option<ObjRef>) -> Option<POINTER> {
-        None
+        Host::cself(self)
     }
 
+    /// `ECHO` answers its first argument and `COUNT` how many it was sent;
+    /// anything else fails as an unknown message does.
     fn send(
         &mut self,
         _receiver: ObjRef,
-        _name: &[u8],
+        name: &[u8],
         _scope: Option<ObjRef>,
-        _arguments: &[Option<ObjRef>],
+        arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, ()> {
-        Err(())
+        match name {
+            b"ECHO" => Ok(arguments.first().copied().flatten()),
+            b"COUNT" => Ok(i64::try_from(arguments.len())
+                .ok()
+                .and_then(ObjRef::small_int)),
+            _ => Err(()),
+        }
     }
 
     fn class_object(&mut self, _id: &str) -> Option<ObjRef> {
@@ -405,8 +442,12 @@ impl Surface for FakeHost {
         None
     }
 
-    fn object_variable(&mut self, _name: &[u8]) -> Option<ObjRef> {
-        None
+    fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef> {
+        let name = name.to_ascii_uppercase();
+        self.object_variables
+            .iter()
+            .find(|(bound, _)| *bound == name)
+            .map(|(_, value)| *value)
     }
 
     fn variable_reference(&mut self, _name: &[u8], _object: bool) -> Option<ObjRef> {
@@ -451,16 +492,39 @@ impl Surface for FakeHost {
 
     fn global_reference(&mut self, object: ObjRef) {
         self.globals.push(object);
+        self.global_handles.register(object);
     }
 
-    fn allocate_object_memory(&mut self, _size: usize) -> Option<POINTER> {
-        None
+    fn allocate_object_memory(&mut self, size: usize) -> Option<POINTER> {
+        let buffer = self.native(NativeState::zeroed(size));
+        self.memory.push(buffer);
+        self.state(buffer)?.data_address()
     }
 
-    fn free_object_memory(&mut self, _pointer: POINTER) {}
+    fn free_object_memory(&mut self, pointer: POINTER) {
+        let held = std::mem::take(&mut self.memory);
+        self.memory = held
+            .into_iter()
+            .filter(|buffer| self.address(*buffer) != Some(pointer))
+            .collect();
+    }
 
-    fn reallocate_object_memory(&mut self, _pointer: POINTER, _size: usize) -> Option<POINTER> {
-        None
+    fn reallocate_object_memory(&mut self, pointer: POINTER, size: usize) -> Option<POINTER> {
+        let memory = self.memory.clone();
+        let old = memory
+            .into_iter()
+            .find(|buffer| self.address(*buffer) == Some(pointer))?;
+        let bytes = self.state(old)?.data()?.to_vec();
+        if size <= bytes.len() {
+            return Some(pointer);
+        }
+        let grown = Surface::allocate_object_memory(self, size)?;
+        let buffer = *self.memory.last()?;
+        if let Some(NativeState::Data(data)) = self.state(buffer) {
+            data[..bytes.len()].copy_from_slice(&bytes);
+        }
+        Surface::free_object_memory(self, pointer);
+        Some(grown)
     }
 
     fn register_library(
@@ -489,6 +553,16 @@ impl FakeHost {
     pub(crate) fn copy(&mut self, object: ObjRef) -> Option<ObjRef> {
         let body = self.heap.get(object)?.body.clone();
         Some(self.heap.alloc(body))
+    }
+
+    /// The address of a buffer's bytes.
+    fn address(&mut self, buffer: ObjRef) -> Option<POINTER> {
+        self.state(buffer)?.data_address()
+    }
+
+    /// A `Buffer` of `length` zero bytes, for a test to make a `CSELF` of.
+    pub(crate) fn buffer(&mut self, length: usize) -> ObjRef {
+        self.native(NativeState::zeroed(length))
     }
 
     /// The state an instance carries.
