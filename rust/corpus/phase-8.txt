@@ -273,3 +273,7 @@ lang/library_callback_memory.rex
 # Surface Task 5: the Throw members through orxmethod's methods and
 # orxfunction's routines, in the METHOD and FUNCTION groups' shape.
 lang/library_callback_throw.rex
+
+# Surface Task 5: a stem as an object variable through orxmethod's methods,
+# and the METHOD group's variable reference shape.
+lang/library_callback_stems.rex

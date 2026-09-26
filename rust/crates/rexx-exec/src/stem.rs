@@ -457,6 +457,18 @@ impl Interp {
         self.text(&name)
     }
 
+    /// A fresh stem named `stem_name`, with no default and no tails.
+    pub(crate) fn empty_stem(&mut self, stem_name: &[u8]) -> ObjRef {
+        self.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: stem_name.into(),
+                default: None,
+                tails: rexx_core::NameMap::default(),
+            },
+        )
+    }
+
     /// What a stem-shaped name is *worth* when `value` is assigned to it:
     /// `value` itself when it is already a stem, and otherwise a fresh stem
     /// object carrying it as the new default.

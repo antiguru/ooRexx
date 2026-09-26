@@ -1,0 +1,41 @@
+count 40
+/* A stem as an object variable through orxmethod's methods: read back as the
+   Stem, made on first read, replaced by a Stem, given a default by anything
+   else, left fresh by a drop, and named by a variable reference, in the
+   METHOD group's test_GetObjectVariableReference shape. */
+o = .V~new
+o~init2
+say o~getornil('st.')~class o~getornil('ST.')~class o~getornil('st.q') o~getornil('SIMPLE')
+say o~getornil('fresh.')~class o~getornil('fresh.')~items
+o~setv('simple', 5); say o~show
+o~setv('ST.', .stem~new('Z')); say o~show
+o~setv('ST.', 'dflt'); say o~show
+o~dropv('ST.'); say o~show
+o~dropv('simple'); say o~show
+say .W~new~refs
+exit
+::class V
+::method init2
+  expose st. simple
+  st. = 'd'; st.q = 'qq'; simple = 1
+::method show
+  expose st. simple
+  return simple st.~class st.q st.~items
+::method setv external "LIBRARY orxmethod TestSetObjectVariable"
+::method dropv external "LIBRARY orxmethod TestDropObjectVariable"
+::method getornil external "LIBRARY orxmethod TestGetObjectVariableOrNil"
+::method ref external "LIBRARY orxmethod TestGetObjectVariableReference"
+::class W
+::method refs
+  expose simple stem.
+  tester = .V~new
+  simple = 456
+  stem. = 789
+  tester~setv('SIMPLE', simple)
+  tester~setv('STEM.', stem.)
+  line = ''
+  do name over 'SIMPLE', 'STEM.'
+    r = tester~ref(name)
+    line = line r~class~id r~name (r~value == value(name))
+  end
+  return line

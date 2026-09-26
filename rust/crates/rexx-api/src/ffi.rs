@@ -2059,11 +2059,7 @@ mod collections {
         array: RexxArrayObject,
     ) -> usize {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayDimension") }.array_count(
-            "RexxThreadInterface.ArrayDimension",
-            array.cast(),
-            b"DIMENSION",
-        )
+        unsafe { innermost_activation(context, "ArrayDimension") }.array_dimension(array.cast())
     }
 
     /// # Safety

@@ -627,6 +627,9 @@ fn a_pool_name_is_upcased_and_a_compound_one_is_refused() {
     assert_eq!(pool_variable_name(b"cself").as_deref(), Some(&b"CSELF"[..]));
     assert_eq!(pool_variable_name(b""), None);
     assert_eq!(pool_variable_name(b"a.b"), None);
+    assert_eq!(pool_variable_name(b"st."), Some(b"ST.".to_vec()));
+    assert_eq!(pool_variable_name(b"."), None);
+    assert_eq!(pool_variable_name(b"st.q"), None);
     assert_eq!(pool_variable_name(b"1x"), None);
 }
 

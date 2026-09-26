@@ -4,7 +4,7 @@
    written. */
 t = .T~new
 a = .array~of('a', 'b', , 'd')
-say t~at(a, 1) t~at(a, 4) t~size(a) t~items(a) t~dim(a) t~dim(.array~new(2,3))
+say t~at(a, 1) t~at(a, 4) t~size(a) t~items(a) t~dim(a) t~dim(.array~new(2,3)) t~dim(.array~new) t~dim(.array~of(1))
 say t~put(a, 'z', 7) a~size a[7] t~append(a, 'q') a~size t~appendstr(a, 'strq') a[9]
 n = t~new(5); say n~class n~size n~items n~dimension
 n0 = t~new(0); say n0~size n0~items

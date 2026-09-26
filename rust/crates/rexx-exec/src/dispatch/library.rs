@@ -46,13 +46,17 @@ fn rendered(value: ObjRef) -> Option<Vec<u8>> {
     }
 }
 
-/// The pool name an extension's spelling addresses, or `None` for one
-/// `getVariableRetriever` (`execution/VariableDictionary.cpp:738`) answers
-/// nothing for: the write then does nothing, which is all the API can see of
-/// the refusal.
+/// The pool name an extension's spelling addresses, a simple or a stem
+/// name, or `None` for one `getObjectVariableRetriever`
+/// (`execution/NativeActivation.cpp:3002`) answers nothing for: a constant
+/// symbol or a compound name. The write then does nothing, which is all the
+/// API can see of the refusal.
 fn pool_variable_name(name: &[u8]) -> Option<Vec<u8>> {
     let first = *name.first()?;
-    if first.is_ascii_digit() || name.contains(&b'.') {
+    if first.is_ascii_digit()
+        || first == b'.'
+        || crate::run::shape_of(name) == crate::run::NameShape::Compound
+    {
         return None;
     }
     Some(name.to_ascii_uppercase())
@@ -544,8 +548,21 @@ impl Host for Interp {
         let Some(name) = pool_variable_name(name) else {
             return;
         };
+        let stem = crate::run::shape_of(&name) == crate::run::NameShape::Stem;
         match value {
+            // `st. = value`'s rule: a stem is shared, anything else becomes a
+            // fresh stem's default.
+            Some(value) if stem => {
+                let value = self.stem_assignment_value(&name, value);
+                self.set_pool_variable(owner, scope, &name, value);
+            }
             Some(value) => self.set_pool_variable(owner, scope, &name, value),
+            // `VariableDictionary::dropStemVariable` (`:356`): a stem variable
+            // always has a value, so a drop leaves a fresh one.
+            None if stem => {
+                let fresh = self.empty_stem(&name);
+                self.set_pool_variable(owner, scope, &name, fresh);
+            }
             None => self.clear_pool_variable(owner, scope, &name),
         }
     }

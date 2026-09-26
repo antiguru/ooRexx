@@ -1018,11 +1018,32 @@ impl Activation<'_> {
         self.send_for_count(slot, array, b"APPEND", &[item])
     }
 
-    /// `ArraySize`, `ArrayItems` and `ArrayDimension`: what `SIZE`, `ITEMS`
-    /// and `DIMENSION` answer.
+    /// `ArraySize` and `ArrayItems`: what `SIZE` and `ITEMS` answer.
     pub fn array_count(&self, slot: &'static str, array: RexxObjectPtr, name: &[u8]) -> usize {
         let array = self.resolve(array);
         self.send_for_count(slot, array, name, &[])
+    }
+
+    /// `ArrayDimension`: `ArrayClass::getDimensions`
+    /// (`interpreter/classes/ArrayClass.hpp:204`), which is 1 for any
+    /// single-dimensional array, empty too, where `DIMENSION` answers 0 for
+    /// an empty one. Zero for anything that answers no dimension.
+    pub fn array_dimension(&self, array: RexxObjectPtr) -> usize {
+        let array = self.resolve(array);
+        let Some(answer) = self.send_to(
+            "RexxThreadInterface.ArrayDimension",
+            array,
+            b"DIMENSION",
+            &[],
+        ) else {
+            return 0;
+        };
+        let found = self.conversion().host.unsigned_integer(answer, u64::MAX);
+        found
+            .ok()
+            .flatten()
+            .and_then(|dimensions| usize::try_from(dimensions).ok())
+            .map_or(0, |dimensions| dimensions.max(1))
     }
 
     /// `NewArray`: an array of that size and no items.

@@ -372,7 +372,17 @@ impl Surface for Interp {
         let frame = self.native_frame();
         let (owner, scope) = (frame.owner, frame.scope);
         let name = super::pool_variable_name(name)?;
-        self.pools_of(owner)?.get(scope, &name)
+        if let Some(value) = self.pools_of(owner)?.get(scope, &name) {
+            return Some(value);
+        }
+        // A stem variable always has a value, made on first read
+        // (`RexxStemVariable::getRealValue`, `expression/ExpressionStem.cpp:178`).
+        if crate::run::shape_of(&name) != crate::run::NameShape::Stem {
+            return None;
+        }
+        let fresh = self.empty_stem(&name);
+        self.set_pool_variable(owner, scope, &name, fresh);
+        Some(fresh)
     }
 
     fn variable_reference(&mut self, name: &[u8], object: bool) -> Option<ObjRef> {
