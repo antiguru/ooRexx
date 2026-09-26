@@ -4719,6 +4719,26 @@ directory's probes/.
   reads the descriptor after a failed conversion can see it; orxmethod
   raises and answers NULL. OWNER: none; the header specifies no value on
   failure.
+  A Throw member leaves the extension by unwinding a Rust panic payload
+  through its frames, where the oracle throws a C++ exception
+  (interpreter/api/CallContextStubs.cpp:207-240). An extension sees the
+  difference in two shapes, measured 2026-09-26 with the Task 5
+  re-review's extension (rr.cpp, built -static-libstdc++), each loud on
+  our side:
+  A THROW SWALLOWED BY THE EXTENSION'S OWN catch (...) ABORTS. The oracle
+  continues past the catch and raises the Throw's condition when the call
+  returns (catchall.rex: "trapped 40 40.1 inner;caught;after-catch;", rc
+  0); ours ends at rc 134 with "fatal runtime error: Rust panics must be
+  rethrown, aborting". A catch (...) that rethrows, and destructors, behave
+  as the oracle's. OWNER: none: Rust cannot raise a C++ exception.
+  AN EXTENSION LINKED WITH A STATIC libgcc CANNOT BE UNWOUND. Built
+  -static-libgcc, the extension carries an unwinder of its own, and a
+  Throw through it ends ours at rc 134 with an empty stderr (the re-review
+  found the abort in _Unwind_SetGR, in the extension's own personality
+  routine), where the oracle runs rethrow.rex, cuw.rex and after.rex at
+  rc 0. The same library linked against libgcc_s.so.1, the process's one
+  unwinder, agrees with the oracle. OWNER: none: Rust cannot raise a C++
+  exception.
 
 KNOWN GAPS RECORDED AFTER THE FINAL REVIEW AND THE FIX ROUNDS, each with
 its evidence and its owner, or the reason it has none. Every transcript

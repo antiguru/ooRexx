@@ -248,6 +248,15 @@ section 4 must deliver `arguments[0]` even for a call that raised.
 > `rust/corpus/lang/library_callback_throw.rex` agrees with the oracle byte for byte. An unwinding
 > extension needs the process's one unwinder, `libgcc_s`: a forge linking `libgcc` statically
 > aborted at its first `Throw`.
+>
+> **Note, appended 2026-09-26 (Task 5, fix round 2).** The last sentence above is a divergence
+> from the oracle, not a requirement this phase may place on extensions, and it is one of two: an
+> extension linked with a static `libgcc` aborts at a `Throw` where the oracle's runs on, and an
+> extension that swallows a `Throw` in its own `catch (...)` aborts ("Rust panics must be
+> rethrown") where the oracle's continues. Both are recorded in `phase-4-exclusions.txt` with no
+> owner, because Rust cannot raise a C++ exception. A `Throw` in a library loader that
+> `LoadLibrary` or `RegisterLibrary` ran leaves the extension that called them too, as the
+> oracle's does, so those two members and the package hooks are `extern "C-unwind"` as well.
 
 **The `__cplusplus` branch of the header binds.** Under `#ifndef __cplusplus` a context is
 typedefed to a pointer (`oorexxapi.h:135-174`), which would make `RexxThreadContext *` a pointer to
