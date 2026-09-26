@@ -37,8 +37,9 @@ pub(crate) type NativeMethod = Stub<RexxMethodContext_>;
 /// (`api/oorexxapi.h:4562`), answering as [`NativeMethod`] does.
 pub(crate) type NativeRoutine = Stub<RexxCallContext_>;
 
-/// A generated stub over the context struct `C`.
-type Stub<C> = unsafe extern "C" fn(*mut C, *mut ValueDescriptor) -> *mut u16;
+/// A generated stub over the context struct `C`. It may unwind: a `Throw`
+/// member leaves the extension that way, and [`call_stub`] catches it.
+type Stub<C> = unsafe extern "C-unwind" fn(*mut C, *mut ValueDescriptor) -> *mut u16;
 
 /// `ROUTINE_TYPED_STYLE` (`api/oorexxapi.h:200`).
 pub const ROUTINE_TYPED_STYLE: c_int = 1;
@@ -461,9 +462,19 @@ unsafe fn call_stub<C>(
         // live array, which nothing else touches for the duration of the
         // call, and the stub reads and writes only the elements its own
         // signature declares.
-        unsafe { stub(context, array) };
+        let returned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            stub(context, array)
+        }));
         // SAFETY: as the write above.
         unsafe { *published = std::ptr::null_mut() };
+        // A `Throw` member recorded its condition and unwound the extension,
+        // which then answered nothing: element zero is still the zero written
+        // above. Anything else is a defect, resumed.
+        if let Err(payload) = returned
+            && !payload.is::<crate::ffi::Thrown>()
+        {
+            std::panic::resume_unwind(payload);
+        }
     }
     Some(match result? {
         // SAFETY: element zero's word was written in full above, and a stub

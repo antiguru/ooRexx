@@ -1,0 +1,93 @@
+/* The Throw members through orxmethod's methods and orxfunction's routines,
+   in the shape the METHOD and FUNCTION test groups use: each leaves the
+   extension before it sets CONTINUE, and SIGNAL ON SYNTAX takes the
+   condition. */
+t = .tester~new
+call show 'method0', t~throw0x(3000), t~orNil('CONTINUE')
+call show 'method0', t~throw0x(6002), t~orNil('CONTINUE')
+call show 'method1', t~throw1x(99925, 'Fred'), t~orNil('CONTINUE')
+call show 'method2', t~throw2x(13001, 'F', c2x('F')), t~orNil('CONTINUE')
+call show 'method', t~throwx(40901, .array~of('FRED', 80, 'yada')), t~orNil('CONTINUE')
+call show 'routine0', throw0x(3000)
+call show 'routine1', throw1x(99925, 'Fred')
+call show 'routine2', throw2x(13001, 'F', c2x('F'))
+call show 'routine', throwx(88907, .array~of('min', 80, 100, 0))
+exit
+
+show: procedure
+  use arg label, c, continue = ''
+  line = label c~rc c~code c~additional~items
+  do a over c~additional
+    line = line '['a']'
+  end
+  say line continue
+  return
+
+throw0x: procedure
+  continue = .false
+  signal on syntax
+  call TestThrowException0 arg(1)
+  return .nil
+syntax:
+  say 'continue' continue
+  return condition('o')
+
+throw1x: procedure
+  continue = .false
+  signal on syntax
+  call TestThrowException1 arg(1), arg(2)
+  return .nil
+syntax:
+  say 'continue' continue
+  return condition('o')
+
+throw2x: procedure
+  continue = .false
+  signal on syntax
+  call TestThrowException2 arg(1), arg(2), arg(3)
+  return .nil
+syntax:
+  say 'continue' continue
+  return condition('o')
+
+throwx: procedure
+  continue = .false
+  signal on syntax
+  call TestThrowException arg(1), arg(2)
+  return .nil
+syntax:
+  say 'continue' continue
+  return condition('o')
+
+::requires 'orxfunction' LIBRARY
+
+::class tester
+::method TestThrowException external "LIBRARY orxmethod"
+::method TestThrowException0 external "LIBRARY orxmethod"
+::method TestThrowException1 external "LIBRARY orxmethod"
+::method TestThrowException2 external "LIBRARY orxmethod"
+::method orNil external "LIBRARY orxmethod TestGetObjectVariableOrNil"
+::method throwx
+  signal on syntax
+  forward message(TestThrowException) continue
+  return .nil
+syntax:
+  return condition('o')
+::method throw0x
+  signal on syntax
+  forward message(TestThrowException0) continue
+  return .nil
+syntax:
+  return condition('o')
+::method throw1x
+  signal on syntax
+  forward message(TestThrowException1) continue
+  return .nil
+syntax:
+  return condition('o')
+::method throw2x
+  signal on syntax
+  forward message(TestThrowException2) continue
+  return .nil
+syntax:
+  return condition('o')

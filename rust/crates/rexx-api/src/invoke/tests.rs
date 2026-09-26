@@ -99,21 +99,21 @@ fn answer(arguments: *mut ValueDescriptor, types: &'static [u16]) -> *mut u16 {
     std::ptr::null_mut()
 }
 
-extern "C" fn probe(
+extern "C-unwind" fn probe(
     _context: *mut RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
     answer(arguments, &ONE_CSTRING)
 }
 
-extern "C" fn longest_probe(
+extern "C-unwind" fn longest_probe(
     _context: *mut RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
     answer(arguments, &LONGEST)
 }
 
-extern "C" fn too_long_probe(
+extern "C-unwind" fn too_long_probe(
     _context: *mut RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -127,21 +127,21 @@ static UNKNOWN_CODE: [u16; 3] = [code::INT, 9, ARGUMENT_TERMINATOR];
 /// An `int` result declared with the optional bit.
 static OPTIONAL_RESULT: [u16; 2] = [OPTIONAL_ARGUMENT | code::INT, ARGUMENT_TERMINATOR];
 
-extern "C" fn unknown_code_probe(
+extern "C-unwind" fn unknown_code_probe(
     _context: *mut RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
     answer(arguments, &UNKNOWN_CODE)
 }
 
-extern "C" fn optional_result_probe(
+extern "C-unwind" fn optional_result_probe(
     _context: *mut RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
     answer(arguments, &OPTIONAL_RESULT)
 }
 
-extern "C" fn routine_probe(
+extern "C-unwind" fn routine_probe(
     _context: *mut RexxCallContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -149,7 +149,7 @@ extern "C" fn routine_probe(
 }
 
 /// A stub that publishes no signature at all.
-extern "C" fn silent_probe(
+extern "C-unwind" fn silent_probe(
     _context: *mut RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -1058,6 +1058,31 @@ fn a_nested_call_hands_the_thread_context_back_to_the_outer_call() {
         }))
     );
     assert_eq!(interpreter.nested_pending, None);
+}
+
+/// **A `Throw` member leaves the extension**: its frames unwind, dropping
+/// what they hold, the code after the call never runs, and the call answers
+/// with the condition held as a raise leaves it.
+#[test]
+fn a_throw_unwinds_the_extension_and_holds_the_condition() {
+    let thread = ThreadContext::new();
+    let entry = stub_entry(b"throwing", crate::ffi::throwing_stub);
+    let mut interpreter = Interpreter::new();
+    let mut strings = CStringPool::new();
+    crate::ffi::THROWN.set((false, false));
+    let (outcome, pending) = {
+        let activation = Activation::new(Conversion {
+            host: &mut interpreter,
+            strings: &mut strings,
+        });
+        let outcome = thread.enter(&activation, |contexts| {
+            method(&entry, &contexts.method(), &activation, &[])
+        });
+        (outcome, activation.pending())
+    };
+    assert_eq!(outcome, Ok(Some(ObjRef::small_int(0).expect("zero"))));
+    assert_eq!(pending, Some(crate::ffi::STUB_CONDITION));
+    assert_eq!(crate::ffi::THROWN.get(), (true, false), "(dropped, ran on)");
 }
 
 /// Runs `library`'s `which` hook through `thread`, and answers what the

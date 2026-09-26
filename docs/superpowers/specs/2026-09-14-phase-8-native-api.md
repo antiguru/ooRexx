@@ -230,6 +230,25 @@ well-defined, where an abort is the behaviour a bug on our side should have. And
 that raises still runs to completion and still returns a value, so the two-call protocol in
 section 4 must deliver `arguments[0]` even for a call that raised.
 
+> **Note, appended 2026-09-26 (Phase 8 surface Task 5, fix round 1; controller ruling,
+> provisional).** The paragraph above holds for the `Raise*` members and does not hold for the
+> `Throw*` members, which it did not consider. `ThrowException0`, `1`, `2`, `ThrowException` and
+> `ThrowCondition` of the method and call contexts call `reportException` or `raiseCondition`
+> with no `try` (`interpreter/api/CallContextStubs.cpp:207-240`, "don't use try/catch to allow a
+> return to the caller. This will unwinded back to the invoking NativeActivation"), so the C++
+> exception unwinds through the extension's frames, running their destructors, and the code after
+> the call never runs (`testbinaries/orxmethod.cpp:2122-2162` sets `CONTINUE` after each call, and
+> the METHOD and FUNCTION groups assert it stays unset). An aborting slot ended the whole ooTest
+> process. So these slots, the exit context's `Throw*` members, and the call into an extension's
+> entry point are `extern "C-unwind"`: a `Throw*` slot records its condition as the matching
+> `Raise*` member does and unwinds with a private marker payload, and the one call boundary
+> (`load::call_stub`) catches exactly that marker and lets the held condition be raised as after
+> any return; any other payload is resumed. Every other slot stays `extern "C"`, so a panic there
+> still aborts. Measured: a forged extension's local with a destructor runs on both sides, and
+> `rust/corpus/lang/library_callback_throw.rex` agrees with the oracle byte for byte. An unwinding
+> extension needs the process's one unwinder, `libgcc_s`: a forge linking `libgcc` statically
+> aborted at its first `Throw`.
+
 **The `__cplusplus` branch of the header binds.** Under `#ifndef __cplusplus` a context is
 typedefed to a pointer (`oorexxapi.h:135-174`), which would make `RexxThreadContext *` a pointer to
 a pointer. Nothing in this tree builds that way: the one `.c` file that includes `oorexxapi.h` is

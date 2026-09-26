@@ -507,8 +507,21 @@ fn without_parameter_name(c: &str) -> &str {
     }
 }
 
+/// The ABI a member is declared with here. The header states only
+/// `RexxEntry`, the C convention; the `Throw` members leave the extension by
+/// C++ `throw` (`interpreter/api/CallContextStubs.cpp:207-213`), which is an
+/// unwind through its frames, so here they are `C-unwind`. Arguments and
+/// result are the header's either way.
+fn abi_of(member: &str) -> &'static str {
+    if member.starts_with("Throw") {
+        "C-unwind"
+    } else {
+        "C"
+    }
+}
+
 /// Each member's type as the header declares it, in the spelling
-/// [`rust_type`] gives.
+/// [`rust_type`] gives, with the ABI [`abi_of`] names.
 fn header_types(header: &str, name: &str) -> Vec<(String, String)> {
     let lines: Vec<&str> = header.lines().collect();
     let close = format!("}} {name};");
@@ -550,9 +563,10 @@ fn header_types(header: &str, name: &str) -> Vec<(String, String)> {
             } else {
                 format!(" -> {returns}")
             };
+            let abi = abi_of(&member);
             found.push((
                 member,
-                format!("unsafe extern \"C\" fn({}){tail}", arguments.join(", ")),
+                format!("unsafe extern \"{abi}\" fn({}){tail}", arguments.join(", ")),
             ));
         } else {
             let member = trailing_name(declaration);
@@ -656,6 +670,20 @@ fn the_type_comparison_sees_a_width_and_an_argument() {
     assert_eq!(
         append,
         "unsafe extern \"C\" fn(*mut RexxThreadContext_, *mut RexxArrayObject_, *const i8, usize) -> usize"
+    );
+    let call = header_types(&header(), "CallContextInterface");
+    let (_, throw) = call
+        .iter()
+        .find(|(member, _)| member == "ThrowException1")
+        .expect("the header declares ThrowException1");
+    assert_eq!(
+        throw,
+        "unsafe extern \"C-unwind\" fn(*mut RexxCallContext_, usize, *mut RexxObjectPtr_)"
+    );
+    assert_ne!(
+        unqualified(std::any::type_name::<unsafe extern "C" fn(usize)>()),
+        unqualified(std::any::type_name::<unsafe extern "C-unwind" fn(usize)>()),
+        "the spelling does not tell the two ABIs apart"
     );
 }
 
@@ -905,18 +933,8 @@ fn the_wrapper_scan_follows_one_wrapper_into_another() {
 #[test]
 fn the_test_extensions_reach_only_members_that_answer() {
     const STILL_REFUSING: &[&str] = &[
-        "CallContextInterface.ThrowCondition",
-        "CallContextInterface.ThrowException",
-        "CallContextInterface.ThrowException0",
-        "CallContextInterface.ThrowException1",
-        "CallContextInterface.ThrowException2",
         "MethodContextInterface.SetGuardOffWhenUpdated",
         "MethodContextInterface.SetGuardOnWhenUpdated",
-        "MethodContextInterface.ThrowCondition",
-        "MethodContextInterface.ThrowException",
-        "MethodContextInterface.ThrowException0",
-        "MethodContextInterface.ThrowException1",
-        "MethodContextInterface.ThrowException2",
         "RexxInstanceInterface.AddCommandEnvironment",
     ];
     let refusing = refusing_members();

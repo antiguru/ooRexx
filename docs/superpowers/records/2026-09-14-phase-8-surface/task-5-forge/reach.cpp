@@ -345,12 +345,23 @@ RexxMethod0(RexxStringObject, ZeroAlloc)
     return context->String(buffer);
 }
 
-// Prints from its destructor, so an unwind through the frame shows.
+// What the destructors below ran, read back by Dtors.
+static char dtorLog[256];
+
+// Logs from its destructor, so an unwind through the frame shows.
 struct Noisy
 {
     const char *name;
-    ~Noisy() { fprintf(stdout, "destructor %s\n", name); fflush(stdout); }
+    ~Noisy() { strncat(dtorLog, name, sizeof(dtorLog) - strlen(dtorLog) - 2); strcat(dtorLog, ";"); }
 };
+
+// The destructor log, emptied.
+RexxRoutine0(RexxStringObject, Dtors)
+{
+    RexxStringObject logged = context->String(dtorLog);
+    dtorLog[0] = '\0';
+    return logged;
+}
 
 // Each Throw member of the call context, with a local whose destructor
 // prints, then code the oracle never runs.
@@ -387,8 +398,7 @@ RexxRoutine1(RexxObjectPtr, SendThrow, RexxObjectPtr, o)
 {
     Noisy local = {"outer"};
     RexxObjectPtr r = context->SendMessage0(o, "RUN");
-    fprintf(stdout, "outer continues checked=%d\n", (int)context->CheckCondition());
-    fflush(stdout);
+    strcat(dtorLog, context->CheckCondition() ? "outer continues held;" : "outer continues;");
     return r == NULLOBJECT ? context->String("null") : r;
 }
 
@@ -434,6 +444,7 @@ RexxRoutineEntry routines[] = {
     REXX_TYPED_ROUTINE(ForeignAttach, ForeignAttach),
     REXX_TYPED_ROUTINE(Throw, Throw),
     REXX_TYPED_ROUTINE(SendThrow, SendThrow),
+    REXX_TYPED_ROUTINE(Dtors, Dtors),
     REXX_LAST_ROUTINE()
 };
 

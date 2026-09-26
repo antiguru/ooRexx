@@ -1,10 +1,9 @@
 do w over .array~of('0', '1', '2', 'A')
-  say w':' try(w)
+  say w':' try(w) Dtors()
 end
-say 'user:' tryuser()
-say 'method:' .m~new~try('1')
-say 'method user:' .m~new~tryuser
-say 'send:' SendThrow(.r~new)
+say 'user:' tryuser() Dtors()
+say 'method:' .m~new~try('1') Dtors()
+say 'method user:' .m~new~tryuser Dtors()
 exit
 try: procedure
   signal on syntax
@@ -38,6 +37,3 @@ syntax:
 bar:
   c = condition('o')
   return 'signalled' c~condition c~description c~additional c~result
-::class r
-::method run
-  return Throw('0')

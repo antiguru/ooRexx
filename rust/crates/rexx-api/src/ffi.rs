@@ -120,6 +120,11 @@ pub unsafe fn value_of(descriptor: &ValueDescriptor, repr: Repr) -> Value {
 /// ```
 pub static METHOD_CONTEXT: MethodContextInterface = {
     let mut table = MethodContextInterface::REFUSING;
+    table.ThrowException0 = throw_exception0::<RexxMethodContext_>;
+    table.ThrowException1 = throw_exception1::<RexxMethodContext_>;
+    table.ThrowException2 = throw_exception2::<RexxMethodContext_>;
+    table.ThrowException = throw_exception::<RexxMethodContext_>;
+    table.ThrowCondition = throw_condition::<RexxMethodContext_>;
     table.SetObjectVariable = set_object_variable;
     table.DropObjectVariable = drop_object_variable;
     table.GetCSelf = get_cself;
@@ -148,6 +153,11 @@ pub static METHOD_CONTEXT: MethodContextInterface = {
 /// as [`METHOD_CONTEXT`] is.
 pub static CALL_CONTEXT: CallContextInterface = {
     let mut table = CallContextInterface::REFUSING;
+    table.ThrowException0 = throw_exception0::<RexxCallContext_>;
+    table.ThrowException1 = throw_exception1::<RexxCallContext_>;
+    table.ThrowException2 = throw_exception2::<RexxCallContext_>;
+    table.ThrowException = throw_exception::<RexxCallContext_>;
+    table.ThrowCondition = throw_condition::<RexxCallContext_>;
     table.GetContextDigits = get_context_digits;
     table.GetContextFuzz = get_context_fuzz;
     table.GetContextForm = get_context_form;
@@ -616,6 +626,10 @@ impl Contexts<'_, '_> {
 
 /// A method or call context, which links its thread context first.
 trait CallLinked {
+    /// The `ThrowException0`, `1` and `2` members' names in this context's
+    /// table, as a refusal records them.
+    const THROW: [&'static str; 3];
+
     /// The thread context `context` links.
     ///
     /// # Safety
@@ -624,6 +638,12 @@ trait CallLinked {
 }
 
 impl CallLinked for RexxMethodContext_ {
+    const THROW: [&'static str; 3] = [
+        "MethodContextInterface.ThrowException0",
+        "MethodContextInterface.ThrowException1",
+        "MethodContextInterface.ThrowException2",
+    ];
+
     unsafe fn thread_of(context: *mut Self) -> *mut RexxThreadContext_ {
         // SAFETY: the caller guarantees `context` is live.
         unsafe { (*context).threadContext }
@@ -631,6 +651,12 @@ impl CallLinked for RexxMethodContext_ {
 }
 
 impl CallLinked for RexxCallContext_ {
+    const THROW: [&'static str; 3] = [
+        "CallContextInterface.ThrowException0",
+        "CallContextInterface.ThrowException1",
+        "CallContextInterface.ThrowException2",
+    ];
+
     unsafe fn thread_of(context: *mut Self) -> *mut RexxThreadContext_ {
         // SAFETY: the caller guarantees `context` is live.
         unsafe { (*context).threadContext }
@@ -892,6 +918,89 @@ unsafe extern "C" fn raise_condition(
     // SAFETY: the caller guarantees the terminator.
     let name = unsafe { name_of(name) }.unwrap_or_default();
     activation.raise_condition(name, description.cast(), additional, result);
+}
+
+/// The payload a `Throw` member unwinds the extension with, which the call's
+/// boundary (`load::call_stub`) accepts and nothing else carries.
+pub(crate) struct Thrown;
+
+/// Leaves the extension as the oracle's `Throw` stubs do by C++ `throw`
+/// (`interpreter/api/CallContextStubs.cpp:207-213`): the condition is already
+/// recorded, and the call answers once the unwind reaches its boundary.
+fn unwind() -> ! {
+    std::panic::resume_unwind(Box::new(Thrown))
+}
+
+/// `ThrowException0`: [`raise_exception0`], then out of the extension.
+///
+/// # Safety
+/// As [`activation_of`].
+unsafe extern "C-unwind" fn throw_exception0<C: CallLinked>(context: *mut C, number: usize) {
+    // SAFETY: as `activation_of`.
+    unsafe { activation_of(context) }.raise_syntax(number);
+    unwind()
+}
+
+/// `ThrowException1`: [`raise_exception1`], then out of the extension.
+///
+/// # Safety
+/// As [`activation_of`].
+unsafe extern "C-unwind" fn throw_exception1<C: CallLinked>(
+    context: *mut C,
+    number: usize,
+    first: RexxObjectPtr,
+) {
+    // SAFETY: as `activation_of`.
+    unsafe { activation_of(context) }.raise_with(C::THROW[1], number, &[first]);
+    unwind()
+}
+
+/// `ThrowException2`: [`raise_exception2`], then out of the extension.
+///
+/// # Safety
+/// As [`activation_of`].
+unsafe extern "C-unwind" fn throw_exception2<C: CallLinked>(
+    context: *mut C,
+    number: usize,
+    first: RexxObjectPtr,
+    second: RexxObjectPtr,
+) {
+    // SAFETY: as `activation_of`.
+    unsafe { activation_of(context) }.raise_with(C::THROW[2], number, &[first, second]);
+    unwind()
+}
+
+/// `ThrowException`: [`raise_exception`], then out of the extension.
+///
+/// # Safety
+/// As [`activation_of`].
+unsafe extern "C-unwind" fn throw_exception<C: CallLinked>(
+    context: *mut C,
+    number: usize,
+    substitutions: RexxArrayObject,
+) {
+    // SAFETY: as `activation_of`.
+    unsafe { activation_of(context) }.raise_with_array(number, substitutions.cast());
+    unwind()
+}
+
+/// `ThrowCondition`: [`raise_condition`], then out of the extension.
+///
+/// # Safety
+/// As [`activation_of`], and a non-null `name` is NUL-terminated.
+unsafe extern "C-unwind" fn throw_condition<C: CallLinked>(
+    context: *mut C,
+    name: CSTRING,
+    description: RexxStringObject,
+    additional: RexxObjectPtr,
+    result: RexxObjectPtr,
+) {
+    // SAFETY: as `activation_of`.
+    let activation = unsafe { activation_of(context) };
+    // SAFETY: the caller guarantees the terminator.
+    let name = unsafe { name_of(name) }.unwrap_or_default();
+    activation.raise_condition(name, description.cast(), additional, result);
+    unwind()
 }
 
 /// # Safety
@@ -3285,7 +3394,7 @@ static READING_TYPES: [u16; 3] = [
 /// A method stub that reads its argument through the context rather than
 /// through the parameter, as an extension using `argumentExists` does.
 #[cfg(test)]
-pub(crate) extern "C" fn reading_stub(
+pub(crate) extern "C-unwind" fn reading_stub(
     context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3318,7 +3427,7 @@ static DROPPING_TYPES: [u16; 2] = [crate::values::code::INT, crate::values::ARGU
 /// A method stub that drops `CSELF` through the context it was handed, which
 /// is the call that recovers the activation with [`owner_of`].
 #[cfg(test)]
-pub(crate) extern "C" fn dropping_stub(
+pub(crate) extern "C-unwind" fn dropping_stub(
     context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3359,7 +3468,7 @@ pub(crate) const STUB_CONDITION: usize = 40_001;
 /// object variables through the method table: `LENGTH` and `FIRST` for its
 /// argument's length and first byte, and `POINTER` for [`STUB_POINTER`].
 #[cfg(test)]
-pub(crate) extern "C" fn thread_table_stub(
+pub(crate) extern "C-unwind" fn thread_table_stub(
     context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3405,7 +3514,7 @@ pub(crate) extern "C" fn thread_table_stub(
 /// the instance its thread context links, and stores them in the object
 /// variables `VERSION` and `LEVEL`.
 #[cfg(test)]
-pub(crate) extern "C" fn instance_stub(
+pub(crate) extern "C-unwind" fn instance_stub(
     context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3434,7 +3543,7 @@ pub(crate) extern "C" fn instance_stub(
 /// A method stub that reaches `HaltThread` through its thread context, which
 /// nothing fills.
 #[cfg(test)]
-pub(crate) extern "C" fn refusing_stub(
+pub(crate) extern "C-unwind" fn refusing_stub(
     context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3455,7 +3564,7 @@ pub(crate) extern "C" fn refusing_stub(
 /// `WholeNumberToObject`, which the host a nesting test builds answers by
 /// running a native call of its own, then raises [`STUB_CONDITION`].
 #[cfg(test)]
-pub(crate) extern "C" fn nesting_stub(
+pub(crate) extern "C-unwind" fn nesting_stub(
     context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3487,7 +3596,7 @@ pub(crate) static STUB_TEXT: [u8; 15] = *b"answered\0after\0";
 
 /// A method stub answering [`STUB_TEXT`] as its `CSTRING` result.
 #[cfg(test)]
-pub(crate) extern "C" fn cstring_stub(
+pub(crate) extern "C-unwind" fn cstring_stub(
     _context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3502,7 +3611,7 @@ pub(crate) extern "C" fn cstring_stub(
 /// A method stub answering a null `CSTRING` result, which it leaves as the
 /// zeroed word it was handed.
 #[cfg(test)]
-pub(crate) extern "C" fn null_cstring_stub(
+pub(crate) extern "C-unwind" fn null_cstring_stub(
     _context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3524,7 +3633,7 @@ static ARGLIST_TYPES: [u16; 4] = [
 
 /// A method stub answering its `int` argument.
 #[cfg(test)]
-pub(crate) extern "C" fn arglist_stub(
+pub(crate) extern "C-unwind" fn arglist_stub(
     _context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3539,7 +3648,7 @@ pub(crate) extern "C" fn arglist_stub(
 
 /// [`arglist_stub`] as a routine.
 #[cfg(test)]
-pub(crate) extern "C" fn arglist_routine_stub(
+pub(crate) extern "C-unwind" fn arglist_routine_stub(
     _context: *mut RexxCallContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3556,7 +3665,7 @@ static NAME_RESULT_TYPES: [u16; 2] = [
 /// A method stub declaring `NAME` as its result type and writing a `CSTRING`
 /// into it, which nothing reads.
 #[cfg(test)]
-pub(crate) extern "C" fn name_result_stub(
+pub(crate) extern "C-unwind" fn name_result_stub(
     _context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3600,7 +3709,7 @@ static NUMERIC_TYPES: [u16; 2] = [
 /// read, which is what `rxmath`'s `NumericFormatter` does
 /// (`extensions/rxmath/rxmath.cpp:118-140`).
 #[cfg(test)]
-pub(crate) extern "C" fn numeric_stub(
+pub(crate) extern "C-unwind" fn numeric_stub(
     context: *mut RexxCallContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3634,7 +3743,7 @@ thread_local! {
 /// A method stub that keeps the thread context its method context links, as
 /// an extension may.
 #[cfg(test)]
-pub(crate) extern "C" fn stashing_stub(
+pub(crate) extern "C-unwind" fn stashing_stub(
     context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3660,7 +3769,7 @@ pub(crate) const STASHED_NUMBER: isize = 42;
 /// [`STASHED_NUMBER`] through the thread context [`stashing_stub`] kept,
 /// rather than through the one its own method context links.
 #[cfg(test)]
-pub(crate) extern "C" fn stash_using_stub(
+pub(crate) extern "C-unwind" fn stash_using_stub(
     _context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3681,7 +3790,7 @@ pub(crate) extern "C" fn stash_using_stub(
 /// test builds answers by running a native call of its own, and then raises
 /// [`STUB_CONDITION`], both through its thread context.
 #[cfg(test)]
-pub(crate) extern "C" fn nest_then_raise_stub(
+pub(crate) extern "C-unwind" fn nest_then_raise_stub(
     context: *mut crate::layout::RexxMethodContext_,
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
@@ -3695,6 +3804,40 @@ pub(crate) extern "C" fn nest_then_raise_stub(
         (table.WholeNumberToObject)(thread, 3);
         (table.RaiseException0)(thread, STUB_CONDITION);
     }
+    std::ptr::null_mut()
+}
+
+#[cfg(test)]
+thread_local! {
+    /// What [`throwing_stub`] reached: its guard's drop, and the code after
+    /// its `ThrowException0`.
+    pub(crate) static THROWN: std::cell::Cell<(bool, bool)> =
+        const { std::cell::Cell::new((false, false)) };
+}
+
+/// A method stub that throws [`STUB_CONDITION`] through its method context
+/// with a guard alive, and records in [`THROWN`] what ran.
+#[cfg(test)]
+pub(crate) extern "C-unwind" fn throwing_stub(
+    context: *mut crate::layout::RexxMethodContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            THROWN.set((true, THROWN.get().1));
+        }
+    }
+    if arguments.is_null() {
+        return DROPPING_TYPES.as_ptr().cast_mut();
+    }
+    let _guard = Guard;
+    // SAFETY: as `refusing_stub`.
+    unsafe {
+        let table = &*(*context).functions;
+        (table.ThrowException0)(context, STUB_CONDITION);
+    }
+    THROWN.set((THROWN.get().0, true));
     std::ptr::null_mut()
 }
 

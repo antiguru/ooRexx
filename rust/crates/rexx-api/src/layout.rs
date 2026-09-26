@@ -384,16 +384,6 @@ pub const REFUSING_MEMBERS: &[(&str, &str)] = &[
     ("RexxThreadInterface.SetThreadTrace", "Phase 9"),
     ("MethodContextInterface.SetGuardOnWhenUpdated", "Phase 6"),
     ("MethodContextInterface.SetGuardOffWhenUpdated", "Phase 6"),
-    ("MethodContextInterface.ThrowException0", "Phase 8"),
-    ("MethodContextInterface.ThrowException1", "Phase 8"),
-    ("MethodContextInterface.ThrowException2", "Phase 8"),
-    ("MethodContextInterface.ThrowException", "Phase 8"),
-    ("MethodContextInterface.ThrowCondition", "Phase 8"),
-    ("CallContextInterface.ThrowException0", "Phase 8"),
-    ("CallContextInterface.ThrowException1", "Phase 8"),
-    ("CallContextInterface.ThrowException2", "Phase 8"),
-    ("CallContextInterface.ThrowException", "Phase 8"),
-    ("CallContextInterface.ThrowCondition", "Phase 8"),
 ];
 
 /// The phase a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and
@@ -413,6 +403,14 @@ pub fn refusal_owner(entry: &str) -> &'static str {
 /// panic aborts rather than unwinding into the extension's stack.
 fn abort(entry: &str) -> ! {
     panic!("{entry} is not implemented ({})", refusal_owner(entry));
+}
+
+/// Abandon the process, naming the entry the caller reached, without
+/// unwinding: the stubs that call it are `extern "C-unwind"` frames, which a
+/// panic would leave into the extension's stack.
+fn abort_now(entry: &str) -> ! {
+    eprintln!("{entry} is not implemented ({})", refusal_owner(entry));
+    std::process::abort()
 }
 
 thread_local! {
@@ -472,6 +470,9 @@ macro_rules! entry_type {
     (value $ty:ty = $value:expr) => {
         $ty
     };
+    (unwinds call($($arg:ty),*)) => {
+        unsafe extern "C-unwind" fn($($arg),*)
+    };
     ($(aborts)? call($($arg:ty),*)) => {
         unsafe extern "C" fn($($arg),*)
     };
@@ -483,8 +484,9 @@ macro_rules! entry_type {
 /// The value one interface member holds in a table nothing has built yet.
 ///
 /// A function member records itself and returns, unless it is marked
-/// `aborts`: those answer a data pointer the extension dereferences, or leave
-/// the extension by a C++ throw, so no value they could return is safe.
+/// `aborts`, which answers a data pointer the extension dereferences, or
+/// `unwinds`, which leaves the extension by unwinding as the oracle's C++
+/// throw does: no value either could return is safe.
 macro_rules! entry_stub {
     ($entry:expr, value $ty:ty = $value:expr) => {
         $value
@@ -506,6 +508,12 @@ macro_rules! entry_stub {
         extern "C" fn stub($(_: $arg),*) -> $ret {
             refuse($entry);
             $value
+        }
+        stub
+    }};
+    ($entry:expr, unwinds call($($arg:ty),*)) => {{
+        extern "C-unwind" fn stub($(_: $arg),*) {
+            abort_now($entry)
         }
         stub
     }};
@@ -533,9 +541,13 @@ macro_rules! entry_address {
     };
 }
 
-/// Whether one interface member is marked `aborts`.
+/// Whether one interface member's refusing stub aborts: marked `aborts` or
+/// `unwinds`.
 macro_rules! entry_aborts {
     (aborts $($rest:tt)*) => {
+        true
+    };
+    (unwinds $($rest:tt)*) => {
         true
     };
     ($($rest:tt)*) => {
@@ -798,11 +810,11 @@ interface! {
         GetObjectVariableReference: { call(*mut RexxMethodContext_, CSTRING) -> RexxVariableReferenceObject },
         SetGuardOnWhenUpdated: { call(*mut RexxMethodContext_, CSTRING) -> RexxObjectPtr },
         SetGuardOffWhenUpdated: { call(*mut RexxMethodContext_, CSTRING) -> RexxObjectPtr },
-        ThrowException0: { aborts call(*mut RexxMethodContext_, usize) },
-        ThrowException1: { aborts call(*mut RexxMethodContext_, usize, RexxObjectPtr) },
-        ThrowException2: { aborts call(*mut RexxMethodContext_, usize, RexxObjectPtr, RexxObjectPtr) },
-        ThrowException: { aborts call(*mut RexxMethodContext_, usize, RexxArrayObject) },
-        ThrowCondition: { aborts call(*mut RexxMethodContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException0: { unwinds call(*mut RexxMethodContext_, usize) },
+        ThrowException1: { unwinds call(*mut RexxMethodContext_, usize, RexxObjectPtr) },
+        ThrowException2: { unwinds call(*mut RexxMethodContext_, usize, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException: { unwinds call(*mut RexxMethodContext_, usize, RexxArrayObject) },
+        ThrowCondition: { unwinds call(*mut RexxMethodContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
     }
 }
 
@@ -826,11 +838,11 @@ interface! {
         GetCallerContext: { call(*mut RexxCallContext_) -> RexxObjectPtr },
         FindContextClass: { call(*mut RexxCallContext_, CSTRING) -> RexxClassObject },
         GetContextVariableReference: { call(*mut RexxCallContext_, CSTRING) -> RexxVariableReferenceObject },
-        ThrowException0: { aborts call(*mut RexxCallContext_, usize) },
-        ThrowException1: { aborts call(*mut RexxCallContext_, usize, RexxObjectPtr) },
-        ThrowException2: { aborts call(*mut RexxCallContext_, usize, RexxObjectPtr, RexxObjectPtr) },
-        ThrowException: { aborts call(*mut RexxCallContext_, usize, RexxArrayObject) },
-        ThrowCondition: { aborts call(*mut RexxCallContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException0: { unwinds call(*mut RexxCallContext_, usize) },
+        ThrowException1: { unwinds call(*mut RexxCallContext_, usize, RexxObjectPtr) },
+        ThrowException2: { unwinds call(*mut RexxCallContext_, usize, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException: { unwinds call(*mut RexxCallContext_, usize, RexxArrayObject) },
+        ThrowCondition: { unwinds call(*mut RexxCallContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
     }
 }
 
@@ -844,11 +856,11 @@ interface! {
         GetAllContextVariables: { call(*mut RexxExitContext_) -> RexxDirectoryObject },
         GetCallerContext: { call(*mut RexxExitContext_) -> RexxObjectPtr },
         GetContextVariableReference: { call(*mut RexxExitContext_, CSTRING) -> RexxVariableReferenceObject },
-        ThrowException0: { call(*mut RexxExitContext_, usize) },
-        ThrowException1: { call(*mut RexxExitContext_, usize, RexxObjectPtr) },
-        ThrowException2: { call(*mut RexxExitContext_, usize, RexxObjectPtr, RexxObjectPtr) },
-        ThrowException: { call(*mut RexxExitContext_, usize, RexxArrayObject) },
-        ThrowCondition: { call(*mut RexxExitContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException0: { unwinds call(*mut RexxExitContext_, usize) },
+        ThrowException1: { unwinds call(*mut RexxExitContext_, usize, RexxObjectPtr) },
+        ThrowException2: { unwinds call(*mut RexxExitContext_, usize, RexxObjectPtr, RexxObjectPtr) },
+        ThrowException: { unwinds call(*mut RexxExitContext_, usize, RexxArrayObject) },
+        ThrowCondition: { unwinds call(*mut RexxExitContext_, CSTRING, RexxStringObject, RexxObjectPtr, RexxObjectPtr) },
     }
 }
 

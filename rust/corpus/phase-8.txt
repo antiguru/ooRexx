@@ -269,3 +269,7 @@ lang/library_callback_packages.rex
 # Surface Task 5: object memory through orxmethod's methods, and a nested
 # AttachThread through orxfunction's routine.
 lang/library_callback_memory.rex
+
+# Surface Task 5: the Throw members through orxmethod's methods and
+# orxfunction's routines, in the METHOD and FUNCTION groups' shape.
+lang/library_callback_throw.rex

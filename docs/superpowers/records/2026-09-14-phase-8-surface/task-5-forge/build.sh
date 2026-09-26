@@ -2,6 +2,6 @@
 # build.sh OUTDIR : build libreach.so from reach.cpp against the frozen headers
 O=${1:?usage: build.sh OUTDIR}; mkdir -p "$O"
 D=$(dirname $(readlink -f $0))
-g++ -shared -fPIC -O1 -static-libstdc++ -static-libgcc -I/home/moritz/dev/repos/ooRexx/api -I/home/moritz/dev/repos/ooRexx/api/platform/unix $D/reach.cpp -o $O/libreach.so
+g++ -shared -fPIC -O1 -static-libstdc++ -I/home/moritz/dev/repos/ooRexx/api -I/home/moritz/dev/repos/ooRexx/api/platform/unix $D/reach.cpp -o $O/libreach.so
 readelf -d $O/libreach.so | grep NEEDED
 nm -D --undefined-only $O/libreach.so | grep -i rexx || echo "no undefined Rexx symbol"
