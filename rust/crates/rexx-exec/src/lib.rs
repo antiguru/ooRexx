@@ -1817,6 +1817,9 @@ struct NativeFrame {
     result: Option<ObjRef>,
     /// The held condition's object, once a callback asked for it.
     condition: Option<ObjRef>,
+    /// A routine's [`Interp::library_codes`] row, `None` for a method or a
+    /// package hook.
+    code: Option<usize>,
 }
 
 /// What one just-installed dictionary key resolves to, handed to

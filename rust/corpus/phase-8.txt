@@ -256,3 +256,7 @@ lang/library_callback_collections.rex
 # variables, the method context's object variables and guards, and a
 # VariableReference through the thread table.
 lang/library_callback_variables.rex
+
+# Surface Task 5: the message members and the running call's own
+# description, through orxmethod's methods and orxfunction's routines.
+lang/library_callback_messages.rex

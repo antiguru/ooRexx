@@ -82,7 +82,7 @@ impl Interp {
         let Some(entry) = library.method(&binding.procedure) else {
             return Err(Loud::library_procedure_gone().into());
         };
-        self.push_native_frame(owner, resolution.scope, Some(receiver), name, args);
+        self.push_native_frame(owner, resolution.scope, Some(receiver), name, args, None);
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (answered, pending) = {
@@ -147,7 +147,7 @@ impl Interp {
         let Some(entry) = library.routine(&key.procedure) else {
             return Err(Loud::library_procedure_gone().into());
         };
-        self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, name, args);
+        self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, name, args, Some(code));
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (answered, pending) = {
@@ -187,7 +187,7 @@ impl Interp {
         if !library.has_hook(hook) {
             return Ok(());
         }
-        self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[]);
+        self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (ran, pending) = {
@@ -320,6 +320,7 @@ impl Interp {
         receiver: Option<ObjRef>,
         name: &[u8],
         args: &[Option<ObjRef>],
+        code: Option<usize>,
     ) {
         let mut frame = self.native_spares.pop().unwrap_or_else(|| NativeFrame {
             owner: ObjRef::NIL,
@@ -334,11 +335,13 @@ impl Interp {
             additional: None,
             result: None,
             condition: None,
+            code: None,
         });
         frame.owner = owner;
         frame.scope = scope;
         frame.method = receiver.is_some();
         frame.receiver = receiver.unwrap_or(ObjRef::NIL);
+        frame.code = code;
         frame.name.extend_from_slice(name);
         frame.arguments.extend_from_slice(args);
         self.native_handles.push(frame);

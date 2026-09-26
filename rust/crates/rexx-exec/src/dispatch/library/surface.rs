@@ -277,10 +277,11 @@ impl Surface for Interp {
         &mut self,
         receiver: ObjRef,
         name: &[u8],
+        scope: Option<ObjRef>,
         arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, ()> {
         let caller = self.caller();
-        match self.send_message(receiver, name, None, arguments, caller) {
+        match self.send_message(receiver, name, scope, arguments, caller) {
             Ok(answer) => {
                 if let Some(answer) = answer {
                     self.roots.push_temp(answer);
@@ -404,9 +405,60 @@ impl Surface for Interp {
         self.roots.push_temp(reference);
         Some(reference)
     }
+
+    fn find_class(&mut self, name: &[u8], executable: bool) -> Option<ObjRef> {
+        let frame = self.native_frame();
+        // A routine a library registered has no package of its own.
+        let unpackaged = executable
+            && !frame.method
+            && frame
+                .code
+                .is_none_or(|code| self.library_code_package_path(code).is_none());
+        if unpackaged {
+            let found = self.system_symbol(name)?;
+            return self.is_class_object(found).then_some(found);
+        }
+        self.class_named(name)
+    }
+
+    fn environment(&mut self, local: bool) -> Option<ObjRef> {
+        let name: &[u8] = if local { b".LOCAL" } else { b".ENVIRONMENT" };
+        self.dot_variable(name).ok()
+    }
+
+    fn executable(&mut self) -> Option<ObjRef> {
+        let frame = self.native_frame();
+        let (method, scope, name, code) =
+            (frame.method, frame.scope, frame.name.clone(), frame.code);
+        let object = if method {
+            self.method_executable(scope, &name).ok()?
+        } else {
+            self.library_routine_object(code?)
+        };
+        self.roots.push_temp(object);
+        Some(object)
+    }
+
+    fn caller_context(&mut self) -> Option<ObjRef> {
+        self.context_object_at(0)
+    }
+
+    fn array_items(&mut self, array: ObjRef) -> Option<Vec<Option<ObjRef>>> {
+        self.array_slots_of(array)
+    }
 }
 
 impl Interp {
+    /// The class `.name` resolves to from the calling activation, or `None`
+    /// where it resolves to something that is not a class.
+    fn class_named(&mut self, name: &[u8]) -> Option<ObjRef> {
+        let mut dotted = Vec::with_capacity(name.len() + 1);
+        dotted.push(b'.');
+        dotted.extend_from_slice(name);
+        let found = self.dot_variable(&dotted).ok()?;
+        self.is_class_object(found).then_some(found)
+    }
+
     /// A compound name's stem, with its period, and its tail resolved as
     /// `VALUE` resolves one: each piece that is a symbol replaced by the
     /// variable's value.

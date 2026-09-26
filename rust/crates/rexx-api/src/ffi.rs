@@ -127,6 +127,15 @@ pub static METHOD_CONTEXT: MethodContextInterface = {
     table.GetObjectVariableReference = variables::get_object_variable_reference;
     table.SetGuardOn = variables::set_guard;
     table.SetGuardOff = variables::set_guard;
+    table.GetArguments = messages::method_arguments;
+    table.GetArgument = messages::method_argument;
+    table.GetMessageName = messages::message_name;
+    table.GetMethod = messages::current_method;
+    table.GetSelf = messages::get_self;
+    table.GetSuper = messages::get_super;
+    table.GetScope = messages::get_scope;
+    table.ForwardMessage = messages::forward_message;
+    table.FindContextClass = messages::method_find_context_class;
     table
 };
 
@@ -145,6 +154,13 @@ pub static CALL_CONTEXT: CallContextInterface = {
     table.GetAllContextVariables = variables::get_all_context_variables;
     table.ResolveStemVariable = variables::resolve_stem_variable;
     table.GetContextVariableReference = variables::get_context_variable_reference;
+    table.GetArguments = messages::call_arguments;
+    table.GetArgument = messages::call_argument;
+    table.GetRoutineName = messages::routine_name;
+    table.GetRoutine = messages::current_routine;
+    table.GetCallerContext = messages::caller_context;
+    table.FindContextClass = messages::call_find_context_class;
+    table.InvalidRoutine = messages::invalid_routine;
     table
 };
 
@@ -271,6 +287,20 @@ pub const THREAD: RexxThreadInterface = {
     table.VariableReferenceValue = variables::variable_reference_value;
     table.SetVariableReferenceValue = variables::set_variable_reference_value;
     table.IsVariableReference = variables::is_variable_reference;
+    table.SendMessage = messages::send_message;
+    table.SendMessage0 = messages::send_message0;
+    table.SendMessage1 = messages::send_message1;
+    table.SendMessage2 = messages::send_message2;
+    table.SendMessageScoped = messages::send_message_scoped;
+    table.GetLocalEnvironment = messages::get_local_environment;
+    table.GetGlobalEnvironment = messages::get_global_environment;
+    table.IsInstanceOf = messages::is_instance_of;
+    table.IsOfType = messages::is_of_type;
+    table.HasMethod = messages::has_method;
+    table.FindClass = messages::find_class;
+    table.FindPackageClass = messages::find_package_class;
+    table.IsMethod = messages::is_method;
+    table.IsRoutine = messages::is_routine;
     table
 };
 
@@ -2383,6 +2413,423 @@ mod variables {
                 "VariableReference",
             ),
         )
+    }
+}
+
+/// The members that send messages, find classes and describe the running
+/// call: the thread table's, and the method and call contexts' own.
+mod messages {
+    use super::{activation_of, innermost_activation, name_of};
+    use crate::callbacks::MethodObject;
+    use crate::layout::{
+        CSTRING, RexxArrayObject, RexxCallContext_, RexxClassObject, RexxDirectoryObject,
+        RexxMethodContext_, RexxMethodObject, RexxObjectPtr, RexxPackageObject, RexxRoutineObject,
+        RexxThreadContext_, logical_t,
+    };
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`], and a non-null `name` is
+    /// NUL-terminated.
+    pub(super) unsafe extern "C" fn send_message(
+        context: *mut RexxThreadContext_,
+        receiver: RexxObjectPtr,
+        name: CSTRING,
+        arguments: RexxArrayObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `whole_number_to_object`; the caller guarantees `name`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "SendMessage"), name_of(name)) };
+        let (Some(name), Some(arguments)) = (name, activation.arguments_of(arguments.cast()))
+        else {
+            return std::ptr::null_mut();
+        };
+        activation.send_message(
+            "RexxThreadInterface.SendMessage",
+            receiver,
+            name,
+            None,
+            arguments,
+        )
+    }
+
+    /// # Safety
+    /// As [`send_message`].
+    pub(super) unsafe extern "C" fn send_message_scoped(
+        context: *mut RexxThreadContext_,
+        receiver: RexxObjectPtr,
+        name: CSTRING,
+        scope: RexxClassObject,
+        arguments: RexxArrayObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `send_message`.
+        let (activation, name) = unsafe {
+            (
+                innermost_activation(context, "SendMessageScoped"),
+                name_of(name),
+            )
+        };
+        let (Some(name), Some(arguments)) = (name, activation.arguments_of(arguments.cast()))
+        else {
+            return std::ptr::null_mut();
+        };
+        activation.send_message(
+            "RexxThreadInterface.SendMessageScoped",
+            receiver,
+            name,
+            Some(scope.cast()),
+            arguments,
+        )
+    }
+
+    /// # Safety
+    /// As [`send_message`].
+    pub(super) unsafe extern "C" fn send_message0(
+        context: *mut RexxThreadContext_,
+        receiver: RexxObjectPtr,
+        name: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `send_message`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "SendMessage0"), name_of(name)) };
+        let Some(name) = name else {
+            return std::ptr::null_mut();
+        };
+        activation.send_message(
+            "RexxThreadInterface.SendMessage0",
+            receiver,
+            name,
+            None,
+            Vec::new(),
+        )
+    }
+
+    /// # Safety
+    /// As [`send_message`].
+    pub(super) unsafe extern "C" fn send_message1(
+        context: *mut RexxThreadContext_,
+        receiver: RexxObjectPtr,
+        name: CSTRING,
+        first: RexxObjectPtr,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `send_message`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "SendMessage1"), name_of(name)) };
+        let Some(name) = name else {
+            return std::ptr::null_mut();
+        };
+        let arguments = activation.objects(&[first]);
+        activation.send_message(
+            "RexxThreadInterface.SendMessage1",
+            receiver,
+            name,
+            None,
+            arguments,
+        )
+    }
+
+    /// # Safety
+    /// As [`send_message`].
+    pub(super) unsafe extern "C" fn send_message2(
+        context: *mut RexxThreadContext_,
+        receiver: RexxObjectPtr,
+        name: CSTRING,
+        first: RexxObjectPtr,
+        second: RexxObjectPtr,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `send_message`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "SendMessage2"), name_of(name)) };
+        let Some(name) = name else {
+            return std::ptr::null_mut();
+        };
+        let arguments = activation.objects(&[first, second]);
+        activation.send_message(
+            "RexxThreadInterface.SendMessage2",
+            receiver,
+            name,
+            None,
+            arguments,
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn get_local_environment(
+        context: *mut RexxThreadContext_,
+    ) -> RexxDirectoryObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "GetLocalEnvironment") }
+            .environment("RexxThreadInterface.GetLocalEnvironment", true)
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn get_global_environment(
+        context: *mut RexxThreadContext_,
+    ) -> RexxDirectoryObject {
+        // SAFETY: as `whole_number_to_object`.
+        unsafe { innermost_activation(context, "GetGlobalEnvironment") }
+            .environment("RexxThreadInterface.GetGlobalEnvironment", false)
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn is_instance_of(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+        class: RexxClassObject,
+    ) -> logical_t {
+        // SAFETY: as `whole_number_to_object`.
+        logical_t::from(
+            unsafe { innermost_activation(context, "IsInstanceOf") }
+                .is_instance_of(object, class.cast()),
+        )
+    }
+
+    /// # Safety
+    /// As [`send_message`].
+    pub(super) unsafe extern "C" fn is_of_type(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+        name: CSTRING,
+    ) -> logical_t {
+        // SAFETY: as `send_message`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "IsOfType"), name_of(name)) };
+        logical_t::from(name.is_some_and(|name| activation.is_of_type(object, name)))
+    }
+
+    /// # Safety
+    /// As [`send_message`].
+    pub(super) unsafe extern "C" fn has_method(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+        name: CSTRING,
+    ) -> logical_t {
+        // SAFETY: as `send_message`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "HasMethod"), name_of(name)) };
+        logical_t::from(name.is_some_and(|name| activation.has_method(object, name)))
+    }
+
+    /// # Safety
+    /// As [`send_message`].
+    pub(super) unsafe extern "C" fn find_class(
+        context: *mut RexxThreadContext_,
+        name: CSTRING,
+    ) -> RexxClassObject {
+        // SAFETY: as `send_message`.
+        let (activation, name) =
+            unsafe { (innermost_activation(context, "FindClass"), name_of(name)) };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation
+                .find_class("RexxThreadInterface.FindClass", name, true)
+                .cast()
+        })
+    }
+
+    /// # Safety
+    /// As [`send_message`].
+    pub(super) unsafe extern "C" fn find_package_class(
+        context: *mut RexxThreadContext_,
+        package: RexxPackageObject,
+        name: CSTRING,
+    ) -> RexxClassObject {
+        // SAFETY: as `send_message`.
+        let (activation, name) = unsafe {
+            (
+                innermost_activation(context, "FindPackageClass"),
+                name_of(name),
+            )
+        };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation.find_package_class(package.cast(), name).cast()
+        })
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn is_method(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+    ) -> logical_t {
+        // SAFETY: as `whole_number_to_object`.
+        logical_t::from(
+            unsafe { innermost_activation(context, "IsMethod") }.is_executable(object, "Method"),
+        )
+    }
+
+    /// # Safety
+    /// As [`super::whole_number_to_object`].
+    pub(super) unsafe extern "C" fn is_routine(
+        context: *mut RexxThreadContext_,
+        object: RexxObjectPtr,
+    ) -> logical_t {
+        // SAFETY: as `whole_number_to_object`.
+        logical_t::from(
+            unsafe { innermost_activation(context, "IsRoutine") }.is_executable(object, "Routine"),
+        )
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn method_arguments(
+        context: *mut RexxMethodContext_,
+    ) -> RexxArrayObject {
+        // SAFETY: as `set_object_variable`.
+        unsafe { activation_of(context) }.arguments().cast()
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn method_argument(
+        context: *mut RexxMethodContext_,
+        index: usize,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `set_object_variable`.
+        unsafe { activation_of(context) }.argument(index)
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn message_name(context: *mut RexxMethodContext_) -> CSTRING {
+        // SAFETY: as `set_object_variable`.
+        unsafe { activation_of(context) }.message_name()
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn current_method(
+        context: *mut RexxMethodContext_,
+    ) -> RexxMethodObject {
+        // SAFETY: as `set_object_variable`.
+        unsafe { activation_of(context) }
+            .executable("MethodContextInterface.GetMethod")
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn get_self(context: *mut RexxMethodContext_) -> RexxObjectPtr {
+        // SAFETY: as `set_object_variable`.
+        unsafe { activation_of(context) }.method_object(MethodObject::Receiver)
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn get_super(context: *mut RexxMethodContext_) -> RexxClassObject {
+        // SAFETY: as `set_object_variable`.
+        unsafe { activation_of(context) }
+            .method_object(MethodObject::Super)
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn get_scope(context: *mut RexxMethodContext_) -> RexxObjectPtr {
+        // SAFETY: as `set_object_variable`.
+        unsafe { activation_of(context) }.method_object(MethodObject::Scope)
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`], and a non-null `name` is
+    /// NUL-terminated.
+    pub(super) unsafe extern "C" fn forward_message(
+        context: *mut RexxMethodContext_,
+        receiver: RexxObjectPtr,
+        name: CSTRING,
+        scope: RexxClassObject,
+        arguments: RexxArrayObject,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `set_object_variable`.
+        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        activation.forward_message(receiver, name, scope.cast(), arguments.cast())
+    }
+
+    /// # Safety
+    /// As [`forward_message`].
+    pub(super) unsafe extern "C" fn method_find_context_class(
+        context: *mut RexxMethodContext_,
+        name: CSTRING,
+    ) -> RexxClassObject {
+        // SAFETY: as `set_object_variable`.
+        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation
+                .find_class("MethodContextInterface.FindContextClass", name, true)
+                .cast()
+        })
+    }
+
+    /// # Safety
+    /// As [`super::get_context_digits`].
+    pub(super) unsafe extern "C" fn call_arguments(
+        context: *mut RexxCallContext_,
+    ) -> RexxArrayObject {
+        // SAFETY: as `get_context_digits`.
+        unsafe { activation_of(context) }.arguments().cast()
+    }
+
+    /// # Safety
+    /// As [`super::get_context_digits`].
+    pub(super) unsafe extern "C" fn call_argument(
+        context: *mut RexxCallContext_,
+        index: usize,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `get_context_digits`.
+        unsafe { activation_of(context) }.argument(index)
+    }
+
+    /// # Safety
+    /// As [`super::get_context_digits`].
+    pub(super) unsafe extern "C" fn routine_name(context: *mut RexxCallContext_) -> CSTRING {
+        // SAFETY: as `get_context_digits`.
+        unsafe { activation_of(context) }.message_name()
+    }
+
+    /// # Safety
+    /// As [`super::get_context_digits`].
+    pub(super) unsafe extern "C" fn current_routine(
+        context: *mut RexxCallContext_,
+    ) -> RexxRoutineObject {
+        // SAFETY: as `get_context_digits`.
+        unsafe { activation_of(context) }
+            .executable("CallContextInterface.GetRoutine")
+            .cast()
+    }
+
+    /// # Safety
+    /// As [`super::get_context_digits`].
+    pub(super) unsafe extern "C" fn caller_context(
+        context: *mut RexxCallContext_,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `get_context_digits`.
+        unsafe { activation_of(context) }.caller_context()
+    }
+
+    /// # Safety
+    /// As [`super::get_context_digits`], and a non-null `name` is
+    /// NUL-terminated.
+    pub(super) unsafe extern "C" fn call_find_context_class(
+        context: *mut RexxCallContext_,
+        name: CSTRING,
+    ) -> RexxClassObject {
+        // SAFETY: as `get_context_digits`; the caller guarantees `name`.
+        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        name.map_or(std::ptr::null_mut(), |name| {
+            activation
+                .find_class("CallContextInterface.FindContextClass", name, false)
+                .cast()
+        })
+    }
+
+    /// # Safety
+    /// As [`super::get_context_digits`].
+    pub(super) unsafe extern "C" fn invalid_routine(context: *mut RexxCallContext_) {
+        // SAFETY: as `get_context_digits`.
+        unsafe { activation_of(context) }.invalid_routine();
     }
 }
 

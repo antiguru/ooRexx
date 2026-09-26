@@ -111,11 +111,14 @@ pub trait Surface {
 
     /// Sends `name` to `receiver`, answering what it answered, or `Err`
     /// where it raised a condition, which the host holds.
+    /// `scope` starts the method search above that class, as a
+    /// scope-qualified message does.
     #[allow(clippy::result_unit_err)]
     fn send(
         &mut self,
         receiver: ObjRef,
         name: &[u8],
+        scope: Option<ObjRef>,
         arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, ()>;
 
@@ -143,11 +146,35 @@ pub trait Surface {
     /// running method's object variable where `object` is set, the calling
     /// activation's otherwise.
     fn variable_reference(&mut self, name: &[u8], object: bool) -> Option<ObjRef>;
+
+    /// The class `name`, upper-cased, names, or `None` where it names no
+    /// class: resolved from the calling activation, or where `executable` is
+    /// set from the running native call's own package, which for a routine a
+    /// library registered is the system's search alone
+    /// (`NativeActivation::findClass`, `execution/NativeActivation.cpp:3094`).
+    fn find_class(&mut self, name: &[u8], executable: bool) -> Option<ObjRef>;
+
+    /// `.environment`, or `.local` where `local` is set.
+    fn environment(&mut self, local: bool) -> Option<ObjRef>;
+
+    /// The `Method` or `Routine` object the running native call runs.
+    fn executable(&mut self) -> Option<ObjRef>;
+
+    /// The calling activation's `RexxContext`.
+    fn caller_context(&mut self) -> Option<ObjRef>;
+
+    /// An array's slots up to its size, or `None` for an object that is not
+    /// an array.
+    fn array_items(&mut self, array: ObjRef) -> Option<Vec<Option<ObjRef>>>;
 }
 
 /// `Error_Incorrect_method_positive` (`api/oorexxerrors.h`), which `ArrayAt`
 /// and `ArrayPut` raise for an index of zero.
 const INCORRECT_METHOD_POSITIVE: usize = 93_907;
+
+/// `Error_Incorrect_call_external` (`api/oorexxerrors.h`), which
+/// `InvalidRoutine` raises.
+const INCORRECT_CALL_EXTERNAL: usize = 40_001;
 
 /// What `DecodeConditionInfo` writes into a `RexxCondition`
 /// (`Interpreter::decodeConditionData`, `interpreter/runtime/Interpreter.cpp:541`).
@@ -808,7 +835,7 @@ impl Activation<'_> {
                 .host
                 .surface()
                 .expect("checked by with_surface")
-                .send(receiver, name, &objects)
+                .send(receiver, name, None, &objects)
                 .ok()
                 .flatten()?;
             cx.host.locals().register(answer);
@@ -1220,6 +1247,254 @@ impl Activation<'_> {
         );
     }
 
+    /// `SendMessage` and its fixed-count forms: `name` upper-cased, and
+    /// `arguments` the objects the extension passed, a null one omitted.
+    pub fn send_message(
+        &self,
+        slot: &'static str,
+        receiver: RexxObjectPtr,
+        name: &[u8],
+        scope: Option<RexxObjectPtr>,
+        arguments: Vec<Option<ObjRef>>,
+    ) -> RexxObjectPtr {
+        let Some(receiver) = self.resolve(receiver) else {
+            return std::ptr::null_mut();
+        };
+        let scope = match scope {
+            Some(handle) => match self.resolve(handle) {
+                Some(scope) => Some(scope),
+                None => return std::ptr::null_mut(),
+            },
+            None => None,
+        };
+        let name = name.to_ascii_uppercase();
+        self.surface_handle(slot, |surface| {
+            surface
+                .send(receiver, &name, scope, &arguments)
+                .ok()
+                .flatten()
+        })
+    }
+
+    /// The items of the array `handle` names, an empty slot omitted, or
+    /// `None` for a handle this activation does not hold or an object that
+    /// is not an array.
+    pub fn arguments_of(&self, handle: RexxObjectPtr) -> Option<Vec<Option<ObjRef>>> {
+        let array = self.resolve(handle)?;
+        self.with_surface("RexxThreadInterface.SendMessage", None, |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .array_items(array)
+        })
+    }
+
+    /// The objects `handles` name, a null or unheld one omitted.
+    pub fn objects(&self, handles: &[RexxObjectPtr]) -> Vec<Option<ObjRef>> {
+        handles.iter().map(|handle| self.resolve(*handle)).collect()
+    }
+
+    /// `ForwardMessage`: each null argument the running method's own -- its
+    /// receiver, its message name and its arguments -- and `scope` the class
+    /// the method search starts above.
+    pub fn forward_message(
+        &self,
+        receiver: RexxObjectPtr,
+        name: Option<&[u8]>,
+        scope: RexxObjectPtr,
+        arguments: RexxObjectPtr,
+    ) -> RexxObjectPtr {
+        let receiver = if receiver.is_null() {
+            let mut cx = self.conversion();
+            cx.host.receiver()
+        } else {
+            match self.resolve(receiver) {
+                Some(receiver) => receiver,
+                None => return std::ptr::null_mut(),
+            }
+        };
+        let name = match name {
+            Some(name) => name.to_ascii_uppercase(),
+            None => self.conversion().host.message_name(),
+        };
+        let arguments = if arguments.is_null() {
+            let array = {
+                let mut cx = self.conversion();
+                let array = cx.host.arguments();
+                cx.host.locals().register(array)
+            };
+            self.arguments_of(array)
+        } else {
+            self.arguments_of(arguments)
+        };
+        let Some(arguments) = arguments else {
+            return std::ptr::null_mut();
+        };
+        let scope = if scope.is_null() {
+            None
+        } else {
+            match self.resolve(scope) {
+                Some(scope) => Some(scope),
+                None => return std::ptr::null_mut(),
+            }
+        };
+        self.surface_handle("MethodContextInterface.ForwardMessage", |surface| {
+            surface
+                .send(receiver, &name, scope, &arguments)
+                .ok()
+                .flatten()
+        })
+    }
+
+    /// `GetArguments`: the same array however often the call asks.
+    pub fn arguments(&self) -> RexxObjectPtr {
+        let mut cx = self.conversion();
+        let array = cx.host.arguments();
+        cx.host.locals().register(array)
+    }
+
+    /// `GetArgument`: null for an omitted or absent argument.
+    pub fn argument(&self, index: usize) -> RexxObjectPtr {
+        if index == 0 {
+            return std::ptr::null_mut();
+        }
+        let array = self.arguments();
+        self.item_at(
+            "MethodContextInterface.GetArgument",
+            array,
+            Argument::Number(index),
+        )
+    }
+
+    /// `GetMessageName` and `GetRoutineName`: the name, at an address that
+    /// lasts the call.
+    pub fn message_name(&self) -> CSTRING {
+        let mut cx = self.conversion();
+        let name = cx.host.message_name();
+        cx.strings.intern(&name)
+    }
+
+    /// `GetSelf`, `GetScope` and `GetSuper`.
+    pub fn method_object(&self, which: MethodObject) -> RexxObjectPtr {
+        let mut cx = self.conversion();
+        let object = match which {
+            MethodObject::Receiver => cx.host.receiver(),
+            MethodObject::Scope => cx.host.scope(),
+            MethodObject::Super => cx.host.super_scope(),
+        };
+        cx.host.locals().register(object)
+    }
+
+    /// `GetMethod` and `GetRoutine`.
+    pub fn executable(&self, slot: &'static str) -> RexxObjectPtr {
+        self.surface_handle(slot, |surface| surface.executable())
+    }
+
+    /// `GetCallerContext`.
+    pub fn caller_context(&self) -> RexxObjectPtr {
+        self.surface_handle("CallContextInterface.GetCallerContext", |surface| {
+            surface.caller_context()
+        })
+    }
+
+    /// `GetLocalEnvironment` and `GetGlobalEnvironment`.
+    pub fn environment(&self, slot: &'static str, local: bool) -> RexxObjectPtr {
+        self.surface_handle(slot, |surface| surface.environment(local))
+    }
+
+    /// `FindClass`, `FindContextClass` and the class `IsOfType` asks about;
+    /// `executable` as [`Surface::find_class`] takes it.
+    pub fn find_class(&self, slot: &'static str, name: &[u8], executable: bool) -> RexxObjectPtr {
+        let name = name.to_ascii_uppercase();
+        self.surface_handle(slot, |surface| surface.find_class(&name, executable))
+    }
+
+    /// `FindPackageClass`: the package's `FINDCLASS`, null where it answers
+    /// no class.
+    pub fn find_package_class(&self, package: RexxObjectPtr, name: &[u8]) -> RexxObjectPtr {
+        const SLOT: &str = "RexxThreadInterface.FindPackageClass";
+        let package = self.resolve(package);
+        let name = name.to_ascii_uppercase();
+        let found = self.send_to(SLOT, package, b"FINDCLASS", &[Argument::Text(&name)]);
+        let Some(found) = found else {
+            return std::ptr::null_mut();
+        };
+        let is_class = self
+            .conversion()
+            .host
+            .is_instance_of(found, crate::values::Class::Class);
+        if is_class {
+            self.register(found)
+        } else {
+            std::ptr::null_mut()
+        }
+    }
+
+    /// `IsInstanceOf`: the object's `ISINSTANCEOF` over the class.
+    pub fn is_instance_of(&self, object: RexxObjectPtr, class: RexxObjectPtr) -> bool {
+        let object = self.resolve(object);
+        self.send_for_truth(
+            "RexxThreadInterface.IsInstanceOf",
+            object,
+            b"ISINSTANCEOF",
+            &[Argument::Handle(class)],
+        )
+    }
+
+    /// `IsOfType`: whether the object is an instance of the class `name`
+    /// names in this context, false where it names none.
+    pub fn is_of_type(&self, object: RexxObjectPtr, name: &[u8]) -> bool {
+        let class = self.find_class("RexxThreadInterface.IsOfType", name, true);
+        if class.is_null() {
+            return false;
+        }
+        self.is_instance_of(object, class)
+    }
+
+    /// `HasMethod`.
+    pub fn has_method(&self, object: RexxObjectPtr, name: &[u8]) -> bool {
+        let object = self.resolve(object);
+        let name = name.to_ascii_uppercase();
+        self.send_for_truth(
+            "RexxThreadInterface.HasMethod",
+            object,
+            b"HASMETHOD",
+            &[Argument::Text(&name)],
+        )
+    }
+
+    /// `IsMethod` and `IsRoutine`: an instance of `Method` or `Routine`, a
+    /// subclass's included.
+    pub fn is_executable(&self, object: RexxObjectPtr, id: &str) -> bool {
+        let Some(object) = self.resolve(object) else {
+            return false;
+        };
+        let slot = if id == "Method" {
+            "RexxThreadInterface.IsMethod"
+        } else {
+            "RexxThreadInterface.IsRoutine"
+        };
+        let class = self.class(slot, id);
+        let Some(class) = class else {
+            return false;
+        };
+        let class = self.register(class);
+        let object = self.register(object);
+        self.is_instance_of(object, class)
+    }
+
+    /// `InvalidRoutine`: `Error_Incorrect_call_external` naming the routine,
+    /// raised once the call returns.
+    pub fn invalid_routine(&self) {
+        let name = self.conversion().host.message_name();
+        let name = self.string_object(&name);
+        self.raise_with(
+            "CallContextInterface.InvalidRoutine",
+            INCORRECT_CALL_EXTERNAL,
+            &[name],
+        );
+    }
+
     /// `ObjectToValue`: `handle` converted as `declared` asks, or `None`
     /// where it does not convert, with any condition the conversion raised
     /// forgotten (`interpreter/api/ThreadContextStubs.cpp:730`).
@@ -1273,4 +1548,13 @@ pub enum Argument<'a> {
     Text(&'a [u8]),
     /// A whole number.
     Number(usize),
+}
+
+/// Which of the running method's objects [`Activation::method_object`]
+/// answers.
+#[derive(Clone, Copy, Debug)]
+pub enum MethodObject {
+    Receiver,
+    Scope,
+    Super,
 }

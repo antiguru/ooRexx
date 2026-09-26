@@ -375,6 +375,7 @@ impl Surface for FakeHost {
         &mut self,
         _receiver: ObjRef,
         _name: &[u8],
+        _scope: Option<ObjRef>,
         _arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, ()> {
         Err(())
@@ -410,6 +411,26 @@ impl Surface for FakeHost {
 
     fn variable_reference(&mut self, _name: &[u8], _object: bool) -> Option<ObjRef> {
         None
+    }
+
+    fn find_class(&mut self, _name: &[u8], _executable: bool) -> Option<ObjRef> {
+        None
+    }
+
+    fn environment(&mut self, _local: bool) -> Option<ObjRef> {
+        None
+    }
+
+    fn executable(&mut self) -> Option<ObjRef> {
+        None
+    }
+
+    fn caller_context(&mut self) -> Option<ObjRef> {
+        None
+    }
+
+    fn array_items(&mut self, array: ObjRef) -> Option<Vec<Option<ObjRef>>> {
+        self.items(array)
     }
 }
 

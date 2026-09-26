@@ -139,13 +139,60 @@ RexxRoutine1(RexxObjectPtr, CtxRef, CSTRING, name)
     return r == NULLOBJECT ? context->String("none") : r;
 }
 
+// The two environment directories.
+RexxRoutine1(RexxObjectPtr, Env, logical_t, local)
+{
+    return local ? (RexxObjectPtr)context->GetLocalEnvironment() : (RexxObjectPtr)context->GetGlobalEnvironment();
+}
+
+// The caller's RexxContext.
+RexxRoutine0(RexxObjectPtr, CallerCtx)
+{
+    return context->GetCallerContext();
+}
+
+// InvalidRoutine, then an answer the raise replaces.
+RexxRoutine0(int, Invalid)
+{
+    context->InvalidRoutine();
+    return 3;
+}
+
+// IsOfType, IsMethod and IsRoutine over one object.
+RexxRoutine2(RexxStringObject, Types, RexxObjectPtr, o, CSTRING, name)
+{
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "%d %d %d", (int)context->IsOfType(o, name),
+        (int)context->IsMethod(o), (int)context->IsRoutine(o));
+    return context->String(buffer);
+}
+
+// FindClass through the thread table.
+RexxRoutine1(RexxObjectPtr, FindCls, CSTRING, name)
+{
+    RexxObjectPtr c = (RexxObjectPtr)context->FindClass(name);
+    return c == NULLOBJECT ? context->String("none") : c;
+}
+
+// ForwardMessage with every override but the receiver left out.
+RexxMethod1(RexxObjectPtr, FwdTo, RexxObjectPtr, to)
+{
+    return context->ForwardMessage(to, NULL, NULL, NULL);
+}
+
 RexxMethodEntry methods[] = {
+    REXX_METHOD(FwdTo, FwdTo),
     REXX_METHOD(CSelfRead, CSelfRead),
     REXX_LAST_METHOD()
 };
 
 RexxRoutineEntry routines[] = {
     REXX_TYPED_ROUTINE(BufStr, BufStr),
+    REXX_TYPED_ROUTINE(Env, Env),
+    REXX_TYPED_ROUTINE(CallerCtx, CallerCtx),
+    REXX_TYPED_ROUTINE(Invalid, Invalid),
+    REXX_TYPED_ROUTINE(Types, Types),
+    REXX_TYPED_ROUTINE(FindCls, FindCls),
     REXX_TYPED_ROUTINE(CtxRef, CtxRef),
     REXX_TYPED_ROUTINE(BufLen, BufLen),
     REXX_TYPED_ROUTINE(PtrValue, PtrValue),

@@ -378,6 +378,7 @@ fn a_reused_native_frame_holds_nothing_of_the_call_before() {
         Some(object),
         b"FIRST",
         &[Some(object), None],
+        None,
     );
     let handle = interp.native_frame_mut().locals.register(object);
     interp.native_frame_mut().argument_list = Some(object);
@@ -391,6 +392,7 @@ fn a_reused_native_frame_holds_nothing_of_the_call_before() {
         None,
         b"SECOND",
         &[],
+        None,
     );
     assert_eq!(
         interp.native_spares.len(),

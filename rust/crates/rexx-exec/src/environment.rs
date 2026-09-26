@@ -537,6 +537,23 @@ impl Interp {
         Ok(self.text(dotted))
     }
 
+    /// What `Interpreter::findClass` (`runtime/Interpreter.cpp:601`) answers
+    /// for `bare`: the `REXX` package's class, then `.local`'s and
+    /// `.environment`'s entry, with no program's own classes in the search.
+    pub(crate) fn system_symbol(&mut self, bare: &[u8]) -> Option<ObjRef> {
+        if let Some(found) = self.rexx_package_class(bare) {
+            return Some(found);
+        }
+        match self.directory_lookup(
+            &[EnvScope::Local, EnvScope::Environment],
+            bare,
+            &env_seam::Access::Resolve,
+        ) {
+            Ok(hash::DirectoryEntry::Found(found)) => Some(found),
+            _ => None,
+        }
+    }
+
     /// The class an **unqualified** `::CLASS` directive's `SUBCLASS`,
     /// `INHERIT` or `METACLASS` keyword names, when the file's own directives
     /// do not declare it. A `ns:Name` target never comes here --
