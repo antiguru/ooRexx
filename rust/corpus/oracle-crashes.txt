@@ -856,3 +856,64 @@ package. **Read**, not established under a debugger.
 Found 2026-09-14 by the Phase 8 residual fix round. **No upstream ticket.** This crate hands such a
 context on as the `REXX` package, a parent its routine lookup does not search, so it answers every
 shape the oracle answers and answers the crashing ones as if the context held nothing.
+
+## 16. The forge's `refs.rex`: global references, `RegisterLibrary`, a nested attach
+
+    say Keep(.array~of(1,2,3))
+    call collect
+    say Kept()~items
+    say Release() Kept()~items
+    say Release() Kept()~items
+    say LocalRelease('abc')
+    say Register('myreg') Register('myreg') Register('rxmath')
+    say RegisteredEcho('hi')
+    say Nested(.array~of(4,5))
+    exit
+    collect: procedure
+      do i = 1 to 2000; x = .array~new(10); end
+      return
+    ::requires 'reach' LIBRARY
+
+The routines are the Phase 8 surface forge's
+(`docs/superpowers/records/2026-09-14-phase-8-surface/task-5-forge/reach.cpp`, built by its
+`build.sh`, loaded with the output directory on `LD_LIBRARY_PATH`); the file is that directory's
+`probes/refs.rex`, which its `compare.sh` runs.
+
+SIGSEGV, rc 139, **at termination**: stdout is complete and byte-identical to this crate's, which
+ends at rc 0. Measured twice by the Phase 8 surface plan's Task 5, which found it, and by its
+behaviour review. Which call leaves the state the termination trips on **has not been isolated**,
+so the program is the entry. **No upstream ticket.**
+
+## 17. orxmethod's `TestRaiseCondition` with a description, read back by a `CALL ON` handler
+
+    t = .T~new
+    call on user bar name h
+    say 'r' t~rc('USER BAR', 'a description', , 'r2')
+    say 'after'
+    exit
+    h: say 'handler' condition('d'); return
+    ::class T
+    ::method rc external "LIBRARY orxmethod TestRaiseCondition"
+
+SIGSEGV, rc 139, measured by the Phase 8 surface plan's Task 5 and again by its behaviour review.
+`TestRaiseCondition` passes its `OPTIONAL_CSTRING` description to `RaiseCondition` cast to a
+`RexxStringObject` (`testbinaries/orxmethod.cpp:2116`), so the condition's `DESCRIPTION` is a C
+string the interpreter treats as an object, and reading it back is the crash. **Read**, not
+established under a debugger. The fault is the test extension's, not the interpreter's. This crate
+prints `r r2`, `handler ` with an empty description and `after`, rc 0 (measured 2026-09-26). No upstream ticket.
+
+## 18. orxmethod's `TestRaiseCondition('SYNTAX')` with nothing else
+
+    t = .T~new
+    say 'before'
+    t~rc('SYNTAX')
+    say 'after'
+    ::class T
+    ::method rc external "LIBRARY orxmethod TestRaiseCondition"
+
+SIGSEGV, rc 139, after `before`. Measured by the Phase 8 surface plan's Task 5 behaviour review,
+and hit again by its fix round 1 inside a longer probe. A `SYNTAX` condition raised by name carries
+no error number, code or message for the interpreter's `SYNTAX` handling to read. **Cause not
+established.** This crate prints `before`, then reports `Error 0` with `<no message 0.0 in the catalogue>`, rc 0
+(measured 2026-09-26). No upstream
+ticket.

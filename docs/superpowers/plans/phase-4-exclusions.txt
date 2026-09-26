@@ -4678,6 +4678,48 @@ the loadable ones that declare a loader, rxsock and rxunixsys, print nothing.
   their order among themselves, and so do the extension's. OWNER: none; A1 is
   the decision, and no shipped extension this crate may load writes to stdout.
 
+DIVERGENCES THE SURFACE PLAN'S TASK 5 LEAVES, measured 2026-09-26 against
+the oracle's orxmethod and orxfunction and a forged extension
+(docs/superpowers/records/2026-09-14-phase-8-surface/task-5-forge/, built
+by its build.sh, NEEDED libgcc_s.so.1 and libc.so.6), each side from a fresh
+directory, three descriptors separately. The probes named are in that
+directory's probes/.
+  A NATIVE SYNTAX CONDITION RE-RAISED INTO A CALLER LACKS THE NATIVE FRAME
+  AND PROPAGATED. cond3.rex (RaiseKept, then SIGNAL ON SYNTAX in the
+  caller): the oracle's condition object leads its TRACEBACK with
+  `*-* Compiled routine "RAISEKEPT".` and its STACKFRAMES with the ROUTINE
+  frame, and has PROPAGATED = 1; ours has neither line and PROPAGATED = 0.
+  sendthrow.rex, a Throw inside a Rexx method a SendMessage0 reached, shows
+  PROPAGATED 1 against 0 the same way, and untrapped, its final `Error 40
+  running ... line N` names the line of the clause that called the
+  extension on the oracle (7) and the raising clause here (43). The
+  METHOD group's `forward ... continue` shape lacks the native METHOD frame
+  likewise. OWNER: Phase 8; the native frame in a propagated condition is
+  the native boundary's.
+  A RaiseCondition TAKEN BY CALL ON OR SIGNAL ON CARRIES POSITION. rcond.rex:
+  the oracle's condition object has no POSITION entry, ours has one. OWNER:
+  Phase 8.
+  COLLECTION MEMBERS ARE MESSAGE SENDS, SO A SUBCLASS OVERRIDE IS SEEN. The
+  oracle's DirectoryAt, DirectoryPut and their kin call the C++ collection
+  directly; ours send AT, PUT, HASINDEX, REMOVE and the rest. ov.rex over a
+  Directory subclass whose AT and PUT are overridden: the oracle's
+  DirectoryAt answers `v` and DirectoryPut stores under the key as given
+  (`.nil 2`), ours answers `overridden dat` and stores through the
+  override (`w 2`). An Array subclass with the same overrides agrees.
+  OWNER: Phase 8.
+  A BLOCKING MEMBER ON AN OUTER CONTEXT, USED FROM A CALL NESTED INSIDE IT,
+  ANSWERS FOR THE INNERMOST CALL. The oracle's non-blocking members
+  (GetRoutineName, GetMessageName) resolve the thread's current activation
+  (ApiContext(RexxCallContext *, bool), interpreter/api/ContextApi.hpp:135)
+  and ours do the same: outer.rex answers USEOUTER on both. Its blocking
+  members use the context's own activation (:108); ours cannot reach that
+  activation while the nested call holds its state, and answer the
+  innermost's. Read, not measured. OWNER: Phase 8.
+  ObjectToValue WRITES NO PARTIAL VALUE ON FAILURE. Only an extension that
+  reads the descriptor after a failed conversion can see it; orxmethod
+  raises and answers NULL. OWNER: none; the header specifies no value on
+  failure.
+
 KNOWN GAPS RECORDED AFTER THE FINAL REVIEW AND THE FIX ROUNDS, each with
 its evidence and its owner, or the reason it has none. Every transcript
 below was re-run on 2026-09-15 in fresh directories, each side its own,
