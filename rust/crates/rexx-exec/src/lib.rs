@@ -1407,6 +1407,10 @@ struct Interp {
     /// destructure can root it, and this field is covered by the exhaustive
     /// match in `object_roots`.
     pending_additional: Option<ObjRef>,
+    /// The `RESULT` a condition an extension raised names, held from the
+    /// raise until the condition object is built, as
+    /// [`Interp::pending_additional`] is.
+    pending_result: Option<ObjRef>,
     /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
     /// `case` text, or `None` inside a plain `SELECT` (or before any
     /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
@@ -1804,10 +1808,15 @@ struct NativeFrame {
     /// The array [`NativeFrame::arguments`] became, once a conversion asked.
     argument_list: Option<ObjRef>,
     locals: rexx_api::handles::Table,
-    /// The condition an argument's string conversion raised, held for the
-    /// call to raise once the boundary has answered
-    /// [`rexx_api::values::Failure::Raised`].
+    /// The condition an argument's string conversion or a callback raised,
+    /// held for the call to raise once it has returned.
     raised: Option<Failure>,
+    /// The held condition's `ADDITIONAL` object, where the raise named one.
+    additional: Option<ObjRef>,
+    /// The held condition's `RESULT` object, where the raise named one.
+    result: Option<ObjRef>,
+    /// The held condition's object, once a callback asked for it.
+    condition: Option<ObjRef>,
 }
 
 /// What one just-installed dictionary key resolves to, handed to
@@ -1980,6 +1989,7 @@ impl Interp {
             pending_traps: VecDeque::new(),
             active_condition: None,
             pending_additional: None,
+            pending_result: None,
             next_activation_id: 0,
             next_invocation: 0,
             current_case_text: None,
@@ -2632,6 +2642,7 @@ impl Interp {
             pending_traps,
             active_condition: _,
             pending_additional,
+            pending_result,
             current_case_text: _,
             indent_offset: _,
             activation_indent: _,
@@ -2697,6 +2708,7 @@ impl Interp {
         // The raise's own `ADDITIONAL`, alive between the raise and the
         // condition object that will hold it.
         out.extend(*pending_additional);
+        out.extend(*pending_result);
         // Everything a native call has been handed, and the receiver it is
         // writing object variables through. Held here rather than by the
         // collector's other routes because an extension's handle is the only
@@ -2707,6 +2719,11 @@ impl Interp {
             out.extend([frame.owner, frame.scope, frame.receiver]);
             out.extend(frame.arguments.iter().copied().flatten());
             out.extend(frame.argument_list);
+            out.extend(
+                [frame.additional, frame.result, frame.condition]
+                    .into_iter()
+                    .flatten(),
+            );
         }
         // A manager is an ordinary program object held by nothing else: the
         // package that carries it is a plan, not an object with a slot.

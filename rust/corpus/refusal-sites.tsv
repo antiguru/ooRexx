@@ -106,7 +106,7 @@ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:416	off-send-surface	-
 Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1154	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
 Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1160	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
 Loud	compound_expose	body	crates/rexx-exec/src/lib.rs:525	off-send-surface	-	-	-
-Raised	condition	body	crates/rexx-exec/src/error.rs:134	off-send-surface	-	-	-
+Raised	condition	body+send	crates/rexx-exec/src/error.rs:134	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
 Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:561	off-send-surface	-	-	-
 Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1527	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
 Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:666	off-send-surface	-	-	-

@@ -36,6 +36,50 @@ pub trait Surface {
 
     /// A single-dimensional array of `items`, an absent item an empty slot.
     fn new_array(&mut self, items: &[Option<ObjRef>]) -> ObjRef;
+
+    /// Holds a `SYNTAX` condition numbered `number` (`major * 1000 + minor`)
+    /// for the running native call, whose substitutions are the items of the
+    /// array `substitutions`, replacing any it held: `reportException`.
+    fn raise_exception(&mut self, number: usize, substitutions: Option<ObjRef>);
+
+    /// Holds the condition `name` for the running native call, replacing any
+    /// it held: `Activity::raiseCondition`.
+    fn raise_condition(
+        &mut self,
+        name: &[u8],
+        description: Option<ObjRef>,
+        additional: Option<ObjRef>,
+        result: Option<ObjRef>,
+    );
+
+    /// Whether the running native call holds a condition.
+    fn has_condition(&mut self) -> bool;
+
+    /// The condition object of the condition the running native call holds,
+    /// or `None`.
+    fn condition_object(&mut self) -> Option<ObjRef>;
+
+    /// `Activity::displayCondition`: writes the report of a held `SYNTAX`
+    /// condition and answers its `RC`, or answers zero.
+    fn display_condition(&mut self) -> isize;
+
+    /// The entry `name` of the directory `directory`, or `None`.
+    fn directory_entry(&mut self, directory: ObjRef, name: &[u8]) -> Option<ObjRef>;
+}
+
+/// What `DecodeConditionInfo` writes into a `RexxCondition`
+/// (`Interpreter::decodeConditionData`, `interpreter/runtime/Interpreter.cpp:541`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DecodedCondition {
+    pub code: isize,
+    pub rc: isize,
+    pub position: usize,
+    pub name: RexxObjectPtr,
+    pub message: RexxObjectPtr,
+    pub errortext: RexxObjectPtr,
+    pub program: RexxObjectPtr,
+    pub description: RexxObjectPtr,
+    pub additional: RexxObjectPtr,
 }
 
 /// `NumberString::newInstanceFromDouble`'s precision for `DoubleToObject`,
@@ -189,6 +233,159 @@ impl Activation<'_> {
         )
     }
 
+    /// `RaiseException0`: a host that serves the callback tables holds the
+    /// condition itself, and one that does not records it here.
+    pub fn raise_syntax(&self, number: usize) {
+        let mut cx = self.conversion();
+        match cx.host.surface() {
+            Some(surface) => surface.raise_exception(number, None),
+            None => {
+                drop(cx);
+                self.raise(number);
+            }
+        }
+    }
+
+    /// `RaiseException1` and `RaiseException2`: the substitutions as a new
+    /// array, a handle this activation does not hold an empty slot.
+    pub fn raise_with(&self, slot: &'static str, number: usize, substitutions: &[RexxObjectPtr]) {
+        let items: Vec<Option<ObjRef>> = substitutions
+            .iter()
+            .map(|handle| self.resolve(*handle))
+            .collect();
+        self.with_surface(slot, (), |cx| {
+            let surface = cx.host.surface().expect("checked by with_surface");
+            let array = surface.new_array(&items);
+            surface.raise_exception(number, Some(array));
+        });
+    }
+
+    /// `RaiseException`: `substitutions` is the extension's own array.
+    pub fn raise_with_array(&self, number: usize, substitutions: RexxObjectPtr) {
+        let array = self.resolve(substitutions);
+        self.with_surface("RexxThreadInterface.RaiseException", (), |cx| {
+            let surface = cx.host.surface().expect("checked by with_surface");
+            surface.raise_exception(number, array);
+        });
+    }
+
+    /// `RaiseCondition`, with `name` upper-cased as `new_upper_string` does.
+    pub fn raise_condition(
+        &self,
+        name: &[u8],
+        description: RexxObjectPtr,
+        additional: RexxObjectPtr,
+        result: RexxObjectPtr,
+    ) {
+        let (description, additional, result) = (
+            self.resolve(description),
+            self.resolve(additional),
+            self.resolve(result),
+        );
+        let name = name.to_ascii_uppercase();
+        self.with_surface("RexxThreadInterface.RaiseCondition", (), |cx| {
+            let surface = cx.host.surface().expect("checked by with_surface");
+            surface.raise_condition(&name, description, additional, result);
+        });
+    }
+
+    /// `CheckCondition`.
+    pub fn check_condition(&self) -> bool {
+        if self.pending().is_some() {
+            return true;
+        }
+        self.with_surface("RexxThreadInterface.CheckCondition", false, |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .has_condition()
+        })
+    }
+
+    /// `ClearCondition`.
+    pub fn clear_condition(&self) {
+        self.clear_pending();
+        self.with_surface("RexxThreadInterface.ClearCondition", (), |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .clear_condition();
+        });
+    }
+
+    /// `GetConditionInfo`, null where no condition is held.
+    pub fn condition_info(&self) -> RexxObjectPtr {
+        self.with_surface(
+            "RexxThreadInterface.GetConditionInfo",
+            std::ptr::null_mut(),
+            |cx| {
+                let surface = cx.host.surface().expect("checked by with_surface");
+                match surface.condition_object() {
+                    Some(object) => cx.host.locals().register(object),
+                    None => std::ptr::null_mut(),
+                }
+            },
+        )
+    }
+
+    /// `DisplayCondition`.
+    pub fn display_condition(&self) -> isize {
+        // `Error_Interpretation / 1000`, the stub's own answer where the
+        // call fails (`interpreter/api/ThreadContextStubs.cpp:1948`).
+        self.with_surface("RexxThreadInterface.DisplayCondition", 49, |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .display_condition()
+        })
+    }
+
+    /// `DecodeConditionInfo` over the directory `handle` names, or `None`
+    /// for a handle this activation does not hold.
+    pub fn decode_condition(&self, handle: RexxObjectPtr) -> Option<DecodedCondition> {
+        let directory = self.resolve(handle)?;
+        self.with_surface("RexxThreadInterface.DecodeConditionInfo", None, |cx| {
+            let mut entry = |name: &[u8]| {
+                let object = cx
+                    .host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .directory_entry(directory, name)?;
+                Some((object, cx.host.locals().register(object)))
+            };
+            let code = entry(b"CODE");
+            let rc = entry(b"RC");
+            let position = entry(b"POSITION");
+            let handle = |found: Option<(ObjRef, RexxObjectPtr)>| {
+                found.map_or(std::ptr::null_mut(), |(_, handle)| handle)
+            };
+            let decoded = DecodedCondition {
+                code: 0,
+                rc: 0,
+                position: 0,
+                name: handle(entry(b"CONDITION")),
+                message: handle(entry(b"MESSAGE")),
+                errortext: handle(entry(b"ERRORTEXT")),
+                program: handle(entry(b"PROGRAM")),
+                description: handle(entry(b"DESCRIPTION")),
+                additional: handle(entry(b"ADDITIONAL")),
+            };
+            let text = |found: Option<(ObjRef, RexxObjectPtr)>, cx: &mut Conversion<'_>| {
+                let (object, _) = found?;
+                let text = cx.host.string_value_text(object);
+                Some(text)
+            };
+            Some(DecodedCondition {
+                code: text(code, cx).map_or(0, |code| message_number(&code)),
+                rc: text(rc, cx).map_or(0, |rc| message_number(&rc) / 1000),
+                position: text(position, cx)
+                    .and_then(|position| std::str::from_utf8(&position).ok()?.parse().ok())
+                    .unwrap_or(0),
+                ..decoded
+            })
+        })
+    }
+
     /// `ObjectToValue`: `handle` converted as `declared` asks, or `None`
     /// where it does not convert, with any condition the conversion raised
     /// forgotten (`interpreter/api/ThreadContextStubs.cpp:730`).
@@ -217,5 +414,18 @@ impl Activation<'_> {
                 }
             },
         )
+    }
+}
+
+/// `Interpreter::messageNumber` (`interpreter/runtime/Interpreter.cpp:679`):
+/// `major.minor` as `major * 1000 + minor`, zero where it is not one.
+fn message_number(text: &[u8]) -> isize {
+    let text = std::str::from_utf8(text).unwrap_or_default();
+    let (major, minor) = text.split_once('.').unwrap_or((text, "0"));
+    match (major.parse::<isize>(), minor.parse::<isize>()) {
+        (Ok(major), Ok(minor)) if (1..100).contains(&major) && (0..1000).contains(&minor) => {
+            major * 1000 + minor
+        }
+        _ => 0,
     }
 }

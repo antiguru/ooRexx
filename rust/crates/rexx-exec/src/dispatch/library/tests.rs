@@ -382,8 +382,8 @@ fn a_reused_native_frame_holds_nothing_of_the_call_before() {
     let handle = interp.native_frame_mut().locals.register(object);
     interp.native_frame_mut().argument_list = Some(object);
     interp.native_frame_mut().raised = Some(crate::Loud::library_procedure_gone().into());
-    let (raised, method) = interp.pop_native_frame();
-    assert!(raised.is_some() && method);
+    let popped = interp.pop_native_frame();
+    assert!(popped.raised.is_some() && popped.method);
 
     interp.push_native_frame(
         rexx_core::ObjRef::NIL,
@@ -539,8 +539,12 @@ fn a_signature_refusal_is_numbered_for_a_method_or_a_routine() {
     let mut interp = Interp::new();
     let mut numbered = |refused: Refused, method: bool| match interp.settle_native_call(
         Err(refused),
-        None,
-        method,
+        super::Popped {
+            raised: None,
+            method,
+            additional: None,
+            result: None,
+        },
         true,
     ) {
         Err(Failure::Raised(raised)) => (raised.number, raised.sub, raised.delivery.lineless),

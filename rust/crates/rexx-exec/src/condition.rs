@@ -43,18 +43,40 @@ impl Interp {
     /// `call` is whether a `CALL ON` trap took it, which is what
     /// `INSTRUCTION` names -- **the trapping instruction, not the raising
     /// clause**, measured `CALL` under `CALL ON` and `SIGNAL` under `SIGNAL
-    /// ON` for the same failing command.
+    /// ON` for the same failing command. `None` is an object a native call
+    /// asked for before any trap took it, which has no `INSTRUCTION`
+    /// (measured through `GetConditionInfo`).
     ///
     /// **Which indexes appear depends on the condition**, measured on four
-    /// kinds. Nine are always there; `RC` joins them wherever the raise
-    /// carries one; `RESULT` only on the command path; and a `SYNTAX`
-    /// condition adds `ADDITIONAL`, `CODE`, `ERRORTEXT` and `MESSAGE`. A
-    /// directory that carried all of them for every kind would answer
-    /// plausibly and wrongly.
+    /// kinds. Those every kind carries are always there, `INSTRUCTION` among
+    /// them once a trap took it; `RC` joins them wherever the raise
+    /// carries one; `RESULT` on the command path and where an extension's
+    /// `RaiseCondition` named one; and a `SYNTAX` condition adds
+    /// `ADDITIONAL`, `CODE`, `ERRORTEXT` and `MESSAGE`. A directory that
+    /// carried all of them for every kind would answer plausibly and wrongly.
     pub(crate) fn build_condition_object(
         &mut self,
         raised: &Raised,
-        call: bool,
+        call: Option<bool>,
+    ) -> Result<ObjRef, Failure> {
+        self.build_condition_object_from(raised, call, false)
+    }
+
+    /// [`Interp::build_condition_object`] for a condition the innermost
+    /// native call raised, whose own frame leads `STACKFRAMES` and
+    /// `TRACEBACK` (`NativeActivation::createStackFrame`).
+    pub(crate) fn build_native_condition_object(
+        &mut self,
+        raised: &Raised,
+    ) -> Result<ObjRef, Failure> {
+        self.build_condition_object_from(raised, None, true)
+    }
+
+    fn build_condition_object_from(
+        &mut self,
+        raised: &Raised,
+        call: Option<bool>,
+        native: bool,
     ) -> Result<ObjRef, Failure> {
         let class = self
             .classes()
@@ -65,7 +87,7 @@ impl Interp {
         let frame = self.roots.push_frame();
 
         let syntax = raised.condition == "SYNTAX";
-        let (frames, traceback, frame_line) = self.condition_frames()?;
+        let (frames, traceback, frame_line) = self.condition_frames(native)?;
 
         // Each value is rooted as it is made: the allocations after it, and the
         // `PUT` sends below, can collect any that are not.
@@ -76,9 +98,11 @@ impl Interp {
         let description = self.text(raised.description.as_deref().unwrap_or(b""));
         self.roots.push_temp(description);
         entries.push((key::DESCRIPTION, description));
-        let instruction = self.text(if call { b"CALL" } else { b"SIGNAL" });
-        self.roots.push_temp(instruction);
-        entries.push((key::INSTRUCTION, instruction));
+        if let Some(call) = call {
+            let instruction = self.text(if call { b"CALL" } else { b"SIGNAL" });
+            self.roots.push_temp(instruction);
+            entries.push((key::INSTRUCTION, instruction));
+        }
         let package = self.condition_package();
         self.roots.push_temp(package);
         entries.push((key::PACKAGE, package));
@@ -141,6 +165,10 @@ impl Interp {
         // array)` rebuilds an Array of that array's strings rather than
         // handing back the original. Right for `SYNTAX`, whose substitutions
         // are text to begin with; an approximation for `USER`.
+        if let Some(result) = self.pending_result.take() {
+            self.roots.push_temp(result);
+            entries.push((key::RESULT, result));
+        }
         match self.pending_additional.take() {
             // The raise's own object, whatever its class.
             Some(object) => {
@@ -173,7 +201,10 @@ impl Interp {
     /// same frames: the first holds the `StackFrame` objects and the second
     /// the trace line each one renders as, which is why they print alike and
     /// answer different classes.
-    fn condition_frames(&mut self) -> Result<(ObjRef, ObjRef, Option<ObjRef>), Failure> {
+    fn condition_frames(
+        &mut self,
+        native: bool,
+    ) -> Result<(ObjRef, ObjRef, Option<ObjRef>), Failure> {
         let list_class = self
             .classes()
             .lookup("List")
@@ -194,6 +225,18 @@ impl Interp {
         // caller's own clause is line 2. The frame already carries the right
         // number, so it is read back rather than derived a second way.
         let mut position = None;
+        if native {
+            let frame = crate::dispatch::context::build_native_frame(self)?;
+            let caller = self.caller();
+            self.send_message(frames, b"APPEND", None, &[Some(frame)], caller)?;
+            let caller = self.caller();
+            let line = self
+                .send_message(frame, b"TRACELINE", None, &[], caller)?
+                .unwrap_or(ObjRef::NIL);
+            self.roots.push_temp(line);
+            let caller = self.caller();
+            self.send_message(lines, b"APPEND", None, &[Some(line)], caller)?;
+        }
         for depth in 0..self.frames().count() {
             let frame = crate::dispatch::context::build_frame(self, depth)?;
             self.roots.push_temp(frame);

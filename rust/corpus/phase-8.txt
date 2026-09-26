@@ -237,3 +237,8 @@ lang/condition_object_entries_rooted.rex
 # constructors, their converse readers and ObjectToValue, through orxmethod's
 # methods that call each and its inline alias.
 lang/library_callback_numbers.rex
+
+# Surface Task 5: the thread table's raise members, the SYNTAX condition a
+# caller traps with each one's substitutions, and RaiseCondition's RESULT,
+# through orxmethod's methods that run on after the raise.
+lang/library_callback_conditions.rex

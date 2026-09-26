@@ -30,6 +30,22 @@ pub(crate) struct FakeHost {
     pub(crate) cleared: usize,
     /// Whether [`Host::surface`] answers this host.
     pub(crate) serves: bool,
+    /// The condition held: a `SYNTAX` number and its substitution array, or
+    /// a condition's name and its description, additional and result.
+    pub(crate) held: Option<Held>,
+    /// What [`Surface::condition_object`] answers while a condition is held.
+    pub(crate) condition: ObjRef,
+    /// The entries [`Surface::directory_entry`] answers, by directory.
+    pub(crate) entries: Vec<(ObjRef, Vec<u8>, ObjRef)>,
+    /// What [`Surface::display_condition`] answers.
+    pub(crate) displayed: isize,
+}
+
+/// A condition a [`FakeHost`] holds.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Held {
+    Syntax(usize, Option<ObjRef>),
+    Named(Vec<u8>, [Option<ObjRef>; 3]),
 }
 
 impl FakeHost {
@@ -39,6 +55,10 @@ impl FakeHost {
             locals: Table::new(),
             cleared: 0,
             serves: true,
+            held: None,
+            condition: ObjRef::NIL,
+            entries: Vec::new(),
+            displayed: 0,
         }
     }
 
@@ -227,6 +247,7 @@ impl Host for FakeHost {
 impl Surface for FakeHost {
     fn clear_condition(&mut self) {
         self.cleared += 1;
+        self.held = None;
     }
 
     fn new_array(&mut self, items: &[Option<ObjRef>]) -> ObjRef {
@@ -234,5 +255,41 @@ impl Surface for FakeHost {
             dimensions: None,
             slots: items.to_vec(),
         })
+    }
+
+    fn raise_exception(&mut self, number: usize, substitutions: Option<ObjRef>) {
+        self.held = Some(Held::Syntax(number, substitutions));
+    }
+
+    fn raise_condition(
+        &mut self,
+        name: &[u8],
+        description: Option<ObjRef>,
+        additional: Option<ObjRef>,
+        result: Option<ObjRef>,
+    ) {
+        self.held = Some(Held::Named(
+            name.to_vec(),
+            [description, additional, result],
+        ));
+    }
+
+    fn has_condition(&mut self) -> bool {
+        self.held.is_some()
+    }
+
+    fn condition_object(&mut self) -> Option<ObjRef> {
+        self.held.as_ref().map(|_| self.condition)
+    }
+
+    fn display_condition(&mut self) -> isize {
+        self.displayed
+    }
+
+    fn directory_entry(&mut self, directory: ObjRef, name: &[u8]) -> Option<ObjRef> {
+        self.entries
+            .iter()
+            .find(|(held, key, _)| *held == directory && key == name)
+            .map(|(_, _, value)| *value)
     }
 }

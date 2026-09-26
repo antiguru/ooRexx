@@ -22,9 +22,9 @@ use std::rc::Rc;
 
 use crate::layout::{
     CSTRING, CallContextInterface, MethodContextInterface, Owned, POINTER, RexxArrayObject,
-    RexxCallContext_, RexxInstance_, RexxInstanceInterface, RexxMethodContext_, RexxObjectPtr,
-    RexxPointerObject, RexxStringObject, RexxThreadContext_, RexxThreadInterface, ValueDescriptor,
-    logical_t, stringsize_t, wholenumber_t,
+    RexxCallContext_, RexxCondition, RexxDirectoryObject, RexxInstance_, RexxInstanceInterface,
+    RexxMethodContext_, RexxObjectPtr, RexxPointerObject, RexxStringObject, RexxThreadContext_,
+    RexxThreadInterface, ValueDescriptor, logical_t, stringsize_t, wholenumber_t,
 };
 use crate::values::{Activation, Converted, MAX_WHOLENUMBER, Repr, Value};
 
@@ -183,6 +183,15 @@ pub const THREAD: RexxThreadInterface = {
     table.ValueToObject = value_to_object;
     table.ValuesToObject = values_to_object;
     table.ObjectToValue = object_to_value;
+    table.RaiseException1 = raise_exception1;
+    table.RaiseException2 = raise_exception2;
+    table.RaiseException = raise_exception;
+    table.RaiseCondition = raise_condition;
+    table.CheckCondition = check_condition;
+    table.ClearCondition = clear_condition;
+    table.GetConditionInfo = get_condition_info;
+    table.DisplayCondition = display_condition;
+    table.DecodeConditionInfo = decode_condition_info;
     table
 };
 
@@ -655,7 +664,138 @@ unsafe extern "C" fn get_context_form(context: *mut RexxCallContext_) -> logical
 /// As [`whole_number_to_object`].
 unsafe extern "C" fn raise_exception0(context: *mut RexxThreadContext_, number: usize) {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "RaiseException0") }.raise(number);
+    unsafe { innermost_activation(context, "RaiseException0") }.raise_syntax(number);
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn raise_exception1(
+    context: *mut RexxThreadContext_,
+    number: usize,
+    first: RexxObjectPtr,
+) {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "RaiseException1") }.raise_with(
+        "RexxThreadInterface.RaiseException1",
+        number,
+        &[first],
+    );
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn raise_exception2(
+    context: *mut RexxThreadContext_,
+    number: usize,
+    first: RexxObjectPtr,
+    second: RexxObjectPtr,
+) {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "RaiseException2") }.raise_with(
+        "RexxThreadInterface.RaiseException2",
+        number,
+        &[first, second],
+    );
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn raise_exception(
+    context: *mut RexxThreadContext_,
+    number: usize,
+    substitutions: RexxArrayObject,
+) {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "RaiseException") }
+        .raise_with_array(number, substitutions.cast());
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], and a non-null `name` is NUL-terminated.
+unsafe extern "C" fn raise_condition(
+    context: *mut RexxThreadContext_,
+    name: CSTRING,
+    description: RexxStringObject,
+    additional: RexxObjectPtr,
+    result: RexxObjectPtr,
+) {
+    // SAFETY: as `whole_number_to_object`.
+    let activation = unsafe { innermost_activation(context, "RaiseCondition") };
+    // SAFETY: the caller guarantees the terminator.
+    let name = unsafe { name_of(name) }.unwrap_or_default();
+    activation.raise_condition(name, description.cast(), additional, result);
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn check_condition(context: *mut RexxThreadContext_) -> logical_t {
+    // SAFETY: as `whole_number_to_object`.
+    logical_t::from(unsafe { innermost_activation(context, "CheckCondition") }.check_condition())
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn clear_condition(context: *mut RexxThreadContext_) {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "ClearCondition") }.clear_condition();
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn get_condition_info(context: *mut RexxThreadContext_) -> RexxDirectoryObject {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "GetConditionInfo") }
+        .condition_info()
+        .cast()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`].
+unsafe extern "C" fn display_condition(context: *mut RexxThreadContext_) -> wholenumber_t {
+    // SAFETY: as `whole_number_to_object`.
+    unsafe { innermost_activation(context, "DisplayCondition") }.display_condition()
+}
+
+/// # Safety
+/// As [`whole_number_to_object`], and a non-null `condition` is valid for a
+/// write.
+unsafe extern "C" fn decode_condition_info(
+    context: *mut RexxThreadContext_,
+    directory: RexxDirectoryObject,
+    condition: *mut RexxCondition,
+) {
+    // SAFETY: as `whole_number_to_object`.
+    let activation = unsafe { innermost_activation(context, "DecodeConditionInfo") };
+    if condition.is_null() {
+        return;
+    }
+    let decoded = activation.decode_condition(directory.cast());
+    let written = decoded.map_or(
+        RexxCondition {
+            code: 0,
+            rc: 0,
+            position: 0,
+            conditionName: std::ptr::null_mut(),
+            message: std::ptr::null_mut(),
+            errortext: std::ptr::null_mut(),
+            program: std::ptr::null_mut(),
+            description: std::ptr::null_mut(),
+            additional: std::ptr::null_mut(),
+        },
+        |decoded| RexxCondition {
+            code: decoded.code,
+            rc: decoded.rc,
+            position: decoded.position,
+            conditionName: decoded.name.cast(),
+            message: decoded.message.cast(),
+            errortext: decoded.errortext.cast(),
+            program: decoded.program.cast(),
+            description: decoded.description.cast(),
+            additional: decoded.additional.cast(),
+        },
+    );
+    // SAFETY: the caller guarantees the write.
+    unsafe { condition.write(written) };
 }
 
 /// Writes `value` through `out` and answers true, or answers false for no
@@ -1657,6 +1797,99 @@ mod tests {
             .expect("an array");
         let items: Vec<Option<Vec<u8>>> = items.into_iter().map(|item| host.bytes(item?)).collect();
         assert_eq!(items, [Some(b"5".to_vec()), Some(b"q".to_vec())]);
+    }
+
+    /// **The condition members reach the host's held condition**: a raise
+    /// with substitutions hands the host an array of them, `CheckCondition`
+    /// and `ClearCondition` read and clear it, `GetConditionInfo` answers
+    /// its object, and `DecodeConditionInfo` reads a directory's entries.
+    #[test]
+    fn the_condition_members_hold_read_and_clear_the_hosts_condition() {
+        use crate::callbacks::fake::Held;
+        use crate::layout::RexxCondition;
+
+        let mut host = FakeHost::new();
+        host.displayed = 40;
+        let sub = host.text(b"sub");
+        let sub = host.locals.register(sub);
+        let directory = host.text(b"directory");
+        host.condition = directory;
+        for (name, text) in [
+            (&b"CODE"[..], &b"88.917"[..]),
+            (b"RC", b"88"),
+            (b"POSITION", b"3"),
+            (b"CONDITION", b"SYNTAX"),
+            (b"MESSAGE", b"a message"),
+        ] {
+            let value = host.text(text);
+            host.entries.push((directory, name.to_vec(), value));
+        }
+        let (answers, refused) = with_thread(&mut host, |thread, table| {
+            let mut decoded = std::mem::MaybeUninit::<RexxCondition>::uninit();
+            // SAFETY: every handle is registered or answered by the table,
+            // the name is a literal, and `decoded` is written in full.
+            unsafe {
+                (table.RaiseException1)(thread, 88_917, sub);
+                let raised = (table.CheckCondition)(thread);
+                let info = (table.GetConditionInfo)(thread);
+                (table.DecodeConditionInfo)(thread, info, decoded.as_mut_ptr());
+                let displayed = (table.DisplayCondition)(thread);
+                (table.ClearCondition)(thread);
+                let cleared = (table.CheckCondition)(thread);
+                (table.RaiseCondition)(
+                    thread,
+                    c"user thing".as_ptr(),
+                    std::ptr::null_mut(),
+                    sub,
+                    std::ptr::null_mut(),
+                );
+                (raised, info, decoded.assume_init(), displayed, cleared)
+            }
+        });
+        assert_eq!(refused, None);
+        let (raised, info, decoded, displayed, cleared) = answers;
+        assert_eq!((raised, cleared, displayed), (1, 0, 40));
+        assert_eq!(host.locals.resolve(info.cast()), Some(directory));
+        assert_eq!(
+            (decoded.code, decoded.rc, decoded.position),
+            (88_917, 88, 3)
+        );
+        let bytes = |handle: *mut crate::layout::RexxStringObject_| {
+            host.bytes(host.locals.resolve(handle.cast())?)
+        };
+        assert_eq!(bytes(decoded.conditionName), Some(b"SYNTAX".to_vec()));
+        assert_eq!(bytes(decoded.message), Some(b"a message".to_vec()));
+        assert!(decoded.errortext.is_null() && decoded.additional.is_null());
+        let sub = host.locals.resolve(sub);
+        assert_eq!(
+            host.held,
+            Some(Held::Named(b"USER THING".to_vec(), [None, sub, None]))
+        );
+    }
+
+    /// A raise's substitutions reach the host as one array, in order.
+    #[test]
+    fn a_raise_hands_the_host_its_substitutions_as_an_array() {
+        use crate::callbacks::fake::Held;
+
+        let mut host = FakeHost::new();
+        let (first, second) = (host.text(b"first"), host.text(b"second"));
+        let (first, second) = (host.locals.register(first), host.locals.register(second));
+        let ((), refused) = with_thread(&mut host, |thread, table| {
+            // SAFETY: both handles are registered.
+            unsafe { (table.RaiseException2)(thread, 93_903, first, second) };
+        });
+        assert_eq!(refused, None);
+        let Some(Held::Syntax(93_903, Some(array))) = host.held else {
+            panic!("the host holds {:?}", host.held);
+        };
+        let items: Vec<Option<Vec<u8>>> = host
+            .items(array)
+            .expect("an array")
+            .into_iter()
+            .map(|item| host.bytes(item?))
+            .collect();
+        assert_eq!(items, [Some(b"first".to_vec()), Some(b"second".to_vec())]);
     }
 
     /// A member that needs the host's surface refuses on a host with none,

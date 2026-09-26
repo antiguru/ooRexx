@@ -514,6 +514,77 @@ pub(crate) fn build_frame(interp: &mut Interp, depth: usize) -> Result<ObjRef, F
     Ok(object)
 }
 
+/// The `StackFrame` of the innermost native call --
+/// `NativeActivation::createStackFrame` (`execution/NativeActivation.cpp:3620`):
+/// no line and no invocation, the calling activation's context, and the
+/// `Compiled routine` or `Compiled method` line as its traceback.
+///
+/// # Panics
+/// If no native call is running.
+pub(crate) fn build_native_frame(interp: &mut Interp) -> Result<ObjRef, Failure> {
+    let native = interp
+        .native_handles
+        .last()
+        .expect("a native call is running");
+    let (method, name, receiver, scope, arguments) = (
+        native.method,
+        native.name.clone(),
+        native.receiver,
+        native.scope,
+        native.arguments.clone(),
+    );
+    let (kind, target, trace_text) = if method {
+        let scope = interp.classes().id_string(scope).to_string();
+        (
+            &b"METHOD"[..],
+            receiver,
+            Raised::compiled_method_line(&name, &scope),
+        )
+    } else {
+        (
+            &b"ROUTINE"[..],
+            ObjRef::NIL,
+            Raised::compiled_routine_line(&name),
+        )
+    };
+    let context = interp.context_object_at(0);
+    let frame = interp.roots.push_frame();
+    let kind = interp.text(kind);
+    interp.roots.push_temp(kind);
+    let name = interp.text_built(name);
+    interp.roots.push_temp(name);
+    let trace_line = interp.text(&trace_text);
+    interp.roots.push_temp(trace_line);
+    let arguments = array_of_slots(interp, arguments);
+    interp.roots.push_temp(arguments);
+    let class = interp.object_model().stack_frame;
+    let object = interp.native_instance(class);
+    let entries = [
+        (key::TYPE, kind),
+        (key::NAME, name),
+        (key::LINE, ObjRef::NIL),
+        (key::INVOCATION, ObjRef::NIL),
+        (key::TARGET, target),
+        (key::ARGUMENTS, arguments),
+        (key::CONTEXT, context.unwrap_or(ObjRef::NIL)),
+        (key::TRACE_LINE, trace_line),
+    ];
+    let held = interp
+        .heap
+        .get_mut(object)
+        .expect("just allocated and rooted");
+    let Body::Native(native) = &mut held.body else {
+        unreachable!("allocated as Body::Native by native_instance")
+    };
+    for (name, value) in entries {
+        native.set_entry(name, value);
+    }
+    native.set_string_value(&trace_text);
+    interp.roots.pop_frame(frame);
+    interp.roots.push_temp(object);
+    Ok(object)
+}
+
 /// The activation at `depth` read out in one pass, before anything allocates.
 fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
     let activation = interp

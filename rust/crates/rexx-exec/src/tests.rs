@@ -913,6 +913,9 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
         argument_list: None,
         locals: rexx_api::handles::Table::new(),
         raised: None,
+        additional: None,
+        result: None,
+        condition: None,
     };
     let handle = frame.locals.register(object);
     interp.native_handles.push(frame);
@@ -948,6 +951,8 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
         })
     };
     let (receiver, argument, list) = (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
+    let (additional, result, condition) =
+        (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
     interp.native_handles.push(crate::NativeFrame {
         owner: rexx_core::ObjRef::NIL,
         scope: rexx_core::ObjRef::NIL,
@@ -958,22 +963,25 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
         argument_list: Some(list),
         locals: rexx_api::handles::Table::new(),
         raised: None,
+        additional: Some(additional),
+        result: Some(result),
+        condition: Some(condition),
     });
-    interp.collect_now();
-    for (held, what) in [
+    let held = [
         (receiver, "receiver"),
         (argument, "argument"),
         (list, "list"),
-    ] {
+        (additional, "held ADDITIONAL"),
+        (result, "held RESULT"),
+        (condition, "held condition object"),
+    ];
+    interp.collect_now();
+    for (held, what) in held {
         assert!(interp.heap.get(held).is_some(), "the {what} was collected");
     }
     interp.native_handles.pop();
     interp.collect_now();
-    for (held, what) in [
-        (receiver, "receiver"),
-        (argument, "argument"),
-        (list, "list"),
-    ] {
+    for (held, what) in held {
         assert!(
             interp.heap.get(held).is_none(),
             "the {what} outlived its frame, so something else roots it"

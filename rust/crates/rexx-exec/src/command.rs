@@ -790,7 +790,7 @@ impl Interp {
                 // Built now, not at delivery: by then this clause has
                 // finished and `POSITION` and `STACKFRAMES` no longer exist
                 // to be read.
-                let object = self.build_condition_object(&raised, true)?;
+                let object = self.build_condition_object(&raised, Some(true))?;
                 self.pending_traps.push_back(crate::PendingTrap {
                     condition: condition.as_bytes().into(),
                     rc: raised.rc.clone(),

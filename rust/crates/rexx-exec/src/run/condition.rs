@@ -107,7 +107,7 @@ impl Interp {
         };
         match self.trap_for(b"NOTREADY") {
             Some(trap) if trap.call => {
-                let object = self.build_condition_object(&raised, true)?;
+                let object = self.build_condition_object(&raised, Some(true))?;
                 self.pending_traps.push_back(PendingTrap {
                     condition: b"NOTREADY".as_slice().into(),
                     rc: None,
@@ -328,7 +328,7 @@ impl Interp {
         // Built here, on the raising clause, because everything in it is a
         // raise-time fact: `POSITION` is this clause's own line and
         // `STACKFRAMES` the stack as it stands now.
-        let object = self.build_condition_object(&raised, false)?;
+        let object = self.build_condition_object(&raised, Some(false))?;
         self.activation_mut().condition = Some(TrappedCondition {
             name: raised.condition.as_bytes().into(),
             // Only a `SYNTAX` condition has a `CODE` item at all
@@ -815,7 +815,7 @@ impl Interp {
                     position: u32::try_from(self.clause_state.line()).unwrap_or(0),
                     ..Raised::condition(Cow::Owned(String::from_utf8_lossy(&name).into_owned()))
                 };
-                let object = self.build_condition_object(&queued, true)?;
+                let object = self.build_condition_object(&queued, Some(true))?;
                 self.pending_traps.push_back(PendingTrap {
                     condition: name,
                     rc,

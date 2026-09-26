@@ -34,7 +34,7 @@ use rexx_num::{DIGITS64, Number};
 use super::Resolution;
 use crate::builtin::datatype::{SymbolKind, classify};
 use crate::error::Raised;
-use crate::{Failure, Interp, LibraryBinding, Loud, NativeFrame};
+use crate::{Failure, Interp, LibraryBinding, Loud, NativeFrame, PendingTrap};
 
 /// The bytes a small integer or an inline string renders as, for a reader
 /// that cannot allocate into the interpreter.
@@ -95,7 +95,7 @@ impl Interp {
             });
             (answered, activation.pending())
         };
-        let (raised, method) = self.pop_native_frame();
+        let popped = self.pop_native_frame();
 
         // The condition first, because the oracle raises it in the caller's
         // frame once the call has returned (`NativeActivation::checkConditions`,
@@ -107,7 +107,7 @@ impl Interp {
             return Err(condition_of(number));
         }
         let packaged = self.external_package_path(resolution.method).is_some();
-        self.settle_native_call(answered, raised, method, packaged)
+        self.settle_native_call(answered, popped, packaged)
     }
 
     /// Runs the routine a [`Interp::package_routine`] slot names, as the call
@@ -160,11 +160,11 @@ impl Interp {
             });
             (answered, activation.pending())
         };
-        let (raised, method) = self.pop_native_frame();
+        let popped = self.pop_native_frame();
         let package = self.library_code_package_path(code);
         let outcome = match pending {
             Some(number) => Err(condition_of(number)),
-            None => self.settle_native_call(answered, raised, method, package.is_some()),
+            None => self.settle_native_call(answered, popped, package.is_some()),
         };
         if outcome.is_err() {
             self.blame_native_routine(name, package);
@@ -200,11 +200,11 @@ impl Interp {
             });
             (ran, activation.pending())
         };
-        let (raised, method) = self.pop_native_frame();
+        let popped = self.pop_native_frame();
         if let Some(number) = pending {
             return Err(condition_of(number));
         }
-        self.settle_native_call(ran.map(|()| None), raised, method, true)
+        self.settle_native_call(ran.map(|()| None), popped, true)
             .map(|_| ())
     }
 
@@ -248,19 +248,66 @@ impl Interp {
     fn settle_native_call(
         &mut self,
         answered: Result<Option<ObjRef>, Refused>,
-        raised: Option<Failure>,
-        method: bool,
+        popped: Popped,
         packaged: bool,
     ) -> Result<Option<ObjRef>, Failure> {
         match answered {
-            Err(Refused::Raised) => {
-                Err(raised.expect("a host answering Raised holds the condition it raised"))
+            Err(Refused::Raised) => Err(popped
+                .raised
+                .expect("a host answering Raised holds the condition it raised")),
+            Ok(value) => match popped.raised {
+                None => Ok(value),
+                Some(raised) => self.raise_held_condition(raised, popped.additional, popped.result),
+            },
+            Err(refused) => Err(self.refusal(refused, packaged, popped.method)),
+        }
+    }
+
+    /// A condition a callback raised and the extension did not clear, raised
+    /// once the call has returned (`NativeActivation::checkConditions`,
+    /// `:1787`): a `SYNTAX` condition as the call's failure; any other is
+    /// offered to the caller's trap, and the call answers its `RESULT` where
+    /// no `SIGNAL ON` takes it.
+    fn raise_held_condition(
+        &mut self,
+        raised: Failure,
+        additional: Option<ObjRef>,
+        result: Option<ObjRef>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let condition = match &raised {
+            Failure::Raised(held) if held.condition != "SYNTAX" => held.condition.to_string(),
+            _ => {
+                if additional.is_some() {
+                    self.pending_additional = additional;
+                }
+                return Err(raised);
             }
-            // A condition a callback raised and the extension did not clear
-            // is raised once the call returns, whatever it answered
-            // (`NativeActivation::checkConditions`, `:1787`).
-            Ok(value) => raised.map_or(Ok(value), Err),
-            Err(refused) => Err(self.refusal(refused, packaged, method)),
+        };
+        let Failure::Raised(held) = &raised else {
+            unreachable!("matched as a raise above")
+        };
+        match self.trap_for(condition.as_bytes()) {
+            Some(trap) if trap.call => {
+                self.pending_additional = additional;
+                self.pending_result = result;
+                let object = self.build_condition_object(held, Some(true))?;
+                self.pending_traps.push_back(PendingTrap {
+                    condition: condition.as_bytes().into(),
+                    rc: None,
+                    description: held.description.clone(),
+                    object: Some(object),
+                    activation: self.activation().id,
+                    queued_during_delivery: false,
+                    fragment_depth: self.fragment_depth,
+                });
+                Ok(result)
+            }
+            Some(_) => {
+                self.pending_additional = additional;
+                self.pending_result = result;
+                Err(raised)
+            }
+            None => Ok(result),
         }
     }
 
@@ -284,6 +331,9 @@ impl Interp {
             argument_list: None,
             locals: Table::new(),
             raised: None,
+            additional: None,
+            result: None,
+            condition: None,
         });
         frame.owner = owner;
         frame.scope = scope;
@@ -296,13 +346,22 @@ impl Interp {
 
     /// Pops the innermost native frame, answering the condition it holds and
     /// whether it was a method's, and keeps its cleared buffers for the next
-    /// call to refill.
-    fn pop_native_frame(&mut self) -> (Option<Failure>, bool) {
+    /// call to refill. The held condition's objects stay rooted as temps.
+    fn pop_native_frame(&mut self) -> Popped {
         let mut frame = self
             .native_handles
             .pop()
             .expect("the frame pushed for this call is still the innermost");
-        let answer = (frame.raised.take(), frame.method);
+        let answer = Popped {
+            raised: frame.raised.take(),
+            method: frame.method,
+            additional: frame.additional.take(),
+            result: frame.result.take(),
+        };
+        frame.condition = None;
+        for object in [answer.additional, answer.result].into_iter().flatten() {
+            self.roots.push_temp(object);
+        }
         frame.name.clear();
         frame.arguments.clear();
         frame.argument_list = None;
@@ -397,6 +456,14 @@ impl Interp {
         }
         raised.into()
     }
+}
+
+/// What [`Interp::pop_native_frame`] answers.
+struct Popped {
+    raised: Option<Failure>,
+    method: bool,
+    additional: Option<ObjRef>,
+    result: Option<ObjRef>,
 }
 
 /// The condition an extension raised, whose number is the major and the minor
