@@ -1376,3 +1376,7 @@ overrules. Carried to Task 6: the exit context's Throw* members abort today
 must be resolved or re-homed.
 
 ## Task 6 dispatched: AddCommandEnvironment, exit and IO-redirector contexts; BASE `7eeb77846`
+Task 6: implementer stalled after gates; controller fix b06b278ce (refusal table column 4 + two sourceline files); gates re-running 2026-09-26T20:35:18+02:00
+Task 6 review (review-s6, opus): spec met; I1 USER/NOTREADY not promoted to SYNTAX, I2 false ledger 'only the handler can tell'; M1-M7. Fix round 1 dispatched to fix-s6 (opus, fresh; implementer stalled). Rulings: I1 match; M6 record as divergence (oracle NULL deref, read not run); M7 queued (predates Task 6). 2026-09-27T21:12:53+02:00
+Task 6 fix round 1: ea4a6d194, six gates green 21:43; re-review next 2026-09-27T22:31:49+02:00
+Task 6 re-review clean (N1/N2 minor fixed by controller 28d559343). Task 6: complete 2026-09-27T22:38:39+02:00
