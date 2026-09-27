@@ -564,7 +564,6 @@ impl Interp {
     }
 }
 
-/// What [`Interp::pop_native_frame`] answers.
 /// What a registered command handler left once its frame is off the stack:
 /// the object it returned and the condition it raised, each rooted as a temp.
 pub(crate) struct HandledCommand {
@@ -574,6 +573,7 @@ pub(crate) struct HandledCommand {
     pub(crate) result: Option<ObjRef>,
 }
 
+/// What [`Interp::pop_native_frame`] answers.
 struct Popped {
     raised: Option<Failure>,
     method: bool,

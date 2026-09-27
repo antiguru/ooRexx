@@ -11,8 +11,8 @@
 
 //! What a redirecting command handler reads and writes through its
 //! `RexxIORedirectorContext`: the command's input, gathered before the call,
-//! and the lines it writes, which reach their targets after it
-//! (`interpreter/instructions/CommandIOContext.cpp`).
+//! and the lines it writes, which reach their targets after it (a recorded
+//! divergence, `docs/superpowers/plans/phase-4-exclusions.txt`).
 
 use std::cell::{Cell, OnceCell, RefCell};
 

@@ -4759,14 +4759,24 @@ descriptors separately.
   interpreter/instructions/InputRedirector.cpp). Ours gathers the input
   first and writes every line once the handler has returned, as this
   crate's shell commands already do (rust/crates/rexx-exec/src/redirect.rs).
-  Only the handler can tell: an output stem read back through the exit
-  context during the call holds the lines on the oracle and not here, and
-  an input source it changes during the call is read as it was. Read, not
-  measured; every probe, and every orxfunction handler, reads and writes
-  only through the redirector context, and a SYNTAX the handler raises
-  after writing leaves the written line in place on both (redirect_raise.rex).
-  OWNER: none; the redirector context would have to reach the interpreter
-  on every member.
+  A plain Rexx program can tell, with no exit-context read: interleave.rex
+  gives output and error OutputStream subclasses whose LINEOUT says its
+  line, and a handler writing o: then e: per input line. The oracle prints
+  "out o:a", "err e:a", "out o:b", "err e:b"; ours prints both out lines
+  and then both err lines. Both rc 0, stderr empty. Any stream-object
+  target with a side effect sees it, the FUNCTION group's ArrayOutputStream
+  shape among them. A SYNTAX the handler raises after writing leaves the
+  written line in place on both (redirect_raise.rex), except where the
+  output target is also the input source: that target is buffered
+  (resolveConflicts) and CommandHandler::call
+  (interpreter/concurrency/CommandHandler.cpp) runs ioContext->cleanup(),
+  which flushes the buffer, only when the handler returns. conflict_syntax.rex,
+  a WSYNTAX with input and output both stem s. (s.0 2, s1, s2): the
+  oracle prints "stem 93.900 2 s1 s2", ours "stem 93.900 1 before S.2";
+  the same with input and output both one array is "array 93.900 1 before
+  The NIL object" on both. Both measured 2026-09-27 with compare.sh at the
+  fix round's build. OWNER: none; the redirector context would have to
+  reach the interpreter on every member.
   A NULL COMMAND HANDLER REGISTERS NOTHING. AddCommandEnvironment with a
   null handler registers nothing here and the name keeps the handler it
   had. The oracle registers it, replacing that handler
@@ -4775,6 +4785,14 @@ descriptors separately.
   the name would then call address 0; not run. An environment type the
   header does not define registers nothing on both (returns.rex, "bad
   type 30 -1"). OWNER: none; this crate does not call address 0.
+  A NULL COMMAND ENVIRONMENT NAME REGISTERS NOTHING. AddCommandEnvironment
+  with a null name registers nothing here. The oracle's
+  InterpreterInstance::addCommandHandler
+  (interpreter/runtime/InterpreterInstance.cpp:915) passes it to
+  new_upper_string, which calls strlen on it
+  (interpreter/classes/StringClass.hpp:887) with no guard. Accepted: the
+  oracle dereferences NULL (read from source, not run). No Rexx program can
+  send a null name. OWNER: none.
   NO REGISTERED HANDLER SURVIVES THE FIRST LIBRARY CLOSE. Termination's
   unloader walk empties the handler table when it closes its first library
   (Interp::run_package_unloaders), because nothing ties a handler's code to
@@ -4783,16 +4801,17 @@ descriptors separately.
   works while that handler's own library is still loaded. Not measured: no
   extension this crate may load issues a command from an unloader. OWNER:
   none; the clearing is what keeps an unmapped handler from being called.
-  ::OPTIONS ERROR SYNTAX AND FAILURE SYNTAX OVER A HANDLER'S RaiseCondition
-  ESCALATE WHEN THE HANDLER RETURNS. The oracle escalates inside the
-  callback (Activity::raiseCondition,
-  interpreter/concurrency/Activity.cpp:596-610), so the SYNTAX leaves the
-  handler there and nothing after the callback runs; ours holds the
-  condition and escalates once the handler has returned, so the handler's
-  later callbacks run and its answer is discarded. The error, its message
-  and RC agree (raises2.rex and raises2.cls, a handler that returns right
-  after raising). OWNER: none; the callback would have to unwind, which a
-  Raise member does not.
+  ::OPTIONS ERROR, FAILURE, LOSTDIGITS, NOSTRING AND NOTREADY SYNTAX OVER A
+  HANDLER'S RaiseCondition ESCALATE WHEN THE HANDLER RETURNS. The oracle
+  escalates a condition of the same name inside the callback
+  (Activity::raiseCondition, interpreter/concurrency/Activity.cpp:596-620),
+  so the SYNTAX leaves the handler there and nothing after the callback
+  runs; ours holds the condition and escalates once the handler has
+  returned, so the handler's later callbacks run and its answer is
+  discarded. The error, its message, RC and .RS agree (raises2.rex and
+  raises2.cls, opts_callback.rex and opts_both.rex, each a handler that
+  returns right after raising). OWNER: none; the callback would have to
+  unwind, which a Raise member does not.
   AN INPUT STREAM OBJECT WITH NO STATE METHOD IS 97.1. The oracle reads a
   USING input stream object with LINEIN until a condition, NOTREADY at the
   end, is trapped (StreamObjectInputSource::read,

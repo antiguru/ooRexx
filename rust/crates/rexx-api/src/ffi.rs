@@ -3592,7 +3592,7 @@ mod redirector {
         unsafe { answer(data, length, redirector_of(context).read_buffer()) };
     }
 
-    /// One of the four write members.
+    /// One of the write members.
     ///
     /// # Safety
     /// As [`redirector_of`], and a non-null `data` is valid for reads of

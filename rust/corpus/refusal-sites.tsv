@@ -127,7 +127,7 @@ Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:387	diverges	yes	di
 Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1784	off-send-surface	-	-	-
 Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:378	off-send-surface	-	-	-
 Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1568	off-send-surface	-	-	-
-Raised	escalated	body	crates/rexx-exec/src/command.rs:865	off-send-surface	-	-	-
+Raised	escalated	body	crates/rexx-exec/src/command.rs:408	off-send-surface	-	-	-
 Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:541	off-send-surface	-	-	-
 Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1767	off-send-surface	-	-	-
 Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1731	off-send-surface	-	-	-
@@ -223,7 +223,7 @@ Raised	no_result	body+send	crates/rexx-exec/src/error.rs:1602	agrees	yes	91.999	
 Raised	nomethod	send	crates/rexx-exec/src/error.rs:1538	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
 Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:186	off-send-surface	-	-	-
 Raised	nostring	send	crates/rexx-exec/src/error.rs:1549	agrees	yes	NOSTRING	substr('abcdef', o)
-Raised	nostring_syntax	send	crates/rexx-exec/src/error.rs:1558	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1558	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
 Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1716	off-send-surface	-	-	-
 Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1706	off-send-surface	-	-	-
 Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1690	off-send-surface	-	-	-

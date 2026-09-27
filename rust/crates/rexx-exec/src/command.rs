@@ -401,13 +401,17 @@ fn exit_code(status: std::process::ExitStatus) -> i32 {
     }
 }
 
-/// The `SYNTAX` error `::OPTIONS ERROR|FAILURE SYNTAX` makes of `condition`,
-/// 98.971 for `FAILURE` and 98.970 for `ERROR`.
-fn escalated(condition: &str, description: &[u8], rc: &[u8]) -> Raised {
-    if condition == "FAILURE" {
-        Raised::failure_syntax(description, rc)
-    } else {
-        Raised::error_syntax(description, rc)
+/// The `SYNTAX` error the `::OPTIONS` for `condition` makes of it: 98.971
+/// for `FAILURE`, the `LOSTDIGITS`, `NOSTRING` and `NOTREADY` ones for a
+/// handler's condition of that name (`Activity::raiseCondition`,
+/// `concurrency/Activity.cpp:596-620`), and 98.970 for any other.
+fn escalated(condition: &[u8], description: &[u8], rc: &[u8]) -> Raised {
+    match condition {
+        b"FAILURE" => Raised::failure_syntax(description, rc),
+        b"LOSTDIGITS" => Raised::lostdigits(description),
+        b"NOSTRING" => Raised::nostring_syntax(description),
+        b"NOTREADY" => Raised::notready_syntax(description),
+        _ => Raised::error_syntax(description, rc),
     }
 }
 
@@ -795,14 +799,24 @@ impl Interp {
         // only `ERROR SYNTAX` set escalates at neither point: it traces, finds
         // no trap, is renamed, and is caught by the check in
         // `raise_command_condition` -- the C++'s own second test.
-        if let Some(condition) = outcome.status.condition()
-            && self.condition_raises_syntax(condition.as_bytes())
-        {
-            return Err(match &outcome.condition {
-                Some(held) => self.escalated(held, condition),
-                None => escalated(condition, &command, &outcome.rc.to_string().into_bytes()),
+        //
+        // A handler's `LOSTDIGITS`, `NOSTRING` and `NOTREADY` escalate here
+        // too, under their own `::OPTIONS`: `Activity::raiseCondition` has an
+        // arm for each and none for `NOVALUE`.
+        match &outcome.condition {
+            Some(held) => {
+                if held.name != b"NOVALUE" && self.condition_raises_syntax(&held.name) {
+                    return Err(self.handler_escalation(held, &held.name));
+                }
             }
-            .into());
+            None => {
+                if let Some(condition) = outcome.status.condition()
+                    && self.condition_raises_syntax(condition.as_bytes())
+                {
+                    let rc = outcome.rc.to_string().into_bytes();
+                    return Err(escalated(condition.as_bytes(), &command, &rc).into());
+                }
+            }
         }
 
         // `RC` before anything else, which is where the C++ puts it too
@@ -859,15 +873,17 @@ impl Interp {
         Ok(Flow::Next)
     }
 
-    /// The `SYNTAX` error `::OPTIONS ERROR|FAILURE SYNTAX` makes of a
-    /// handler's condition, whose substitutions are its description and
-    /// `RESULT` (`Activity::raiseCondition`, `concurrency/Activity.cpp:596-610`).
-    fn escalated(&mut self, held: &HandlerCondition, condition: &str) -> Raised {
-        let rc = held
-            .result
-            .map(|result| self.string_value_text(result))
-            .unwrap_or_default();
-        escalated(condition, held.description.as_deref().unwrap_or(b""), &rc)
+    /// The `SYNTAX` error the `::OPTIONS` for `condition` makes of a
+    /// handler's condition: its description and, for `ERROR` and `FAILURE`
+    /// alone, its `RESULT` as the `RC` substitution.
+    fn handler_escalation(&mut self, held: &HandlerCondition, condition: &[u8]) -> Failure {
+        let rc = match held.result {
+            Some(result) if matches!(condition, b"ERROR" | b"FAILURE") => {
+                self.string_value_text(result)
+            }
+            _ => Vec::new(),
+        };
+        escalated(condition, held.description.as_deref().unwrap_or(b""), &rc).into()
     }
 
     /// Offers a condition a registered handler raised to the traps in force
@@ -881,14 +897,18 @@ impl Interp {
         held: &HandlerCondition,
         name: &[u8],
     ) -> Result<(), Failure> {
+        // **Any condition but `FAILURE` meets `ERROR SYNTAX` ahead of the
+        // traps** (`RexxActivation::command`'s `!failureCondition` test):
+        // measured, a handler's `USER` under `::OPTIONS ERROR SYNTAX` is
+        // 98.970 with a `CALL ON USER` armed.
         let command_status = matches!(name, b"ERROR" | b"FAILURE");
-        if command_status && self.condition_raises_syntax(name) {
-            let condition = if name == b"FAILURE" {
-                "FAILURE"
-            } else {
-                "ERROR"
-            };
-            return Err(self.escalated(held, condition).into());
+        let syntax: &[u8] = if name == b"FAILURE" {
+            b"FAILURE"
+        } else {
+            b"ERROR"
+        };
+        if self.condition_raises_syntax(syntax) {
+            return Err(self.handler_escalation(held, syntax));
         }
         let raised = Raised {
             description: held.description.clone(),
@@ -949,7 +969,9 @@ impl Interp {
         // handler and exits 0. The reraise below re-enters here, which is the
         // C++'s second check after a FAILURE becomes an ERROR.
         if self.condition_raises_syntax(condition.as_bytes()) {
-            return Err(escalated(condition, command, &rc.to_string().into_bytes()).into());
+            return Err(
+                escalated(condition.as_bytes(), command, &rc.to_string().into_bytes()).into(),
+            );
         }
         let rendered = rc.to_string().into_bytes();
         // One `Raised` for both branches. `result` beside `rc` is what parts

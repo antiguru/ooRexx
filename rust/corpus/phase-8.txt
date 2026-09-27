@@ -291,3 +291,6 @@ lang/library_callback_class_search.rex
 # handler reading and writing each stream through the redirector context.
 lang/library_command_environments.rex
 lang/library_command_redirect.rex
+# The same handlers under every ::OPTIONS ... SYNTAX a handler's condition can
+# meet: they raise nothing, so nothing escalates (surface Task 6's fix round).
+lang/library_command_options.rex
