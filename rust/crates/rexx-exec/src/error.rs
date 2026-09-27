@@ -468,7 +468,8 @@ impl Raised {
 
     /// 98.972: an arithmetic operand carrying more digits than the precision
     /// in force, under `::OPTIONS LOSTDIGITS SYNTAX`. One substitution, the
-    /// operand's own string value.
+    /// operand's own string value. From a command handler's condition
+    /// (`command.rs`'s `escalated`), the condition's description instead.
     pub(crate) fn lostdigits(operand: &[u8]) -> Raised {
         Raised::syntax(98, 972, vec![operand.to_vec()])
     }
@@ -1585,7 +1586,9 @@ impl Raised {
     /// 98.974, what `::OPTIONS NOTREADY SYNTAX` turns an untrapped NOTREADY
     /// into (`Activity::raiseCondition`, `concurrency/Activity.cpp:619`).
     /// `name` is the stream's name as the program wrote it, not the qualified
-    /// path -- measured, `Stream "n.txt" is not ready.` at rc 158.
+    /// path -- measured, `Stream "n.txt" is not ready.` at rc 158. From a
+    /// command handler's condition (`command.rs`'s `escalated`), the
+    /// condition's description instead.
     pub(crate) fn notready_syntax(name: &[u8]) -> Raised {
         Raised::syntax(98, 974, vec![name.to_vec()])
     }

@@ -4763,9 +4763,9 @@ descriptors separately.
   gives output and error OutputStream subclasses whose LINEOUT says its
   line, and a handler writing o: then e: per input line. The oracle prints
   "out o:a", "err e:a", "out o:b", "err e:b"; ours prints both out lines
-  and then both err lines. Both rc 0, stderr empty. Any stream-object
-  target with a side effect sees it, the FUNCTION group's ArrayOutputStream
-  shape among them. A SYNTAX the handler raises after writing leaves the
+  and then both err lines. Both rc 0, stderr empty. Two targets that
+  share a destination show it, as interleave.rex's both write to stdout;
+  an ArrayOutputStream alone cannot. A SYNTAX the handler raises after writing leaves the
   written line in place on both (redirect_raise.rex), except where the
   output target is also the input source: that target is buffered
   (resolveConflicts) and CommandHandler::call
