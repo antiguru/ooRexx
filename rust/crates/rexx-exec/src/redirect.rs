@@ -687,7 +687,9 @@ impl Interp {
             let trapped = std::mem::replace(&mut self.input_dispatch_trapped, outer_trapped);
             self.input_dispatch = outer;
             let value = match answered {
-                Ok(value) => value.unwrap_or(ObjRef::NIL),
+                Ok(Some(value)) => value,
+                // `readBuffered` stops at a `LINEIN` that answers nothing.
+                Ok(None) => return Ok(lines),
                 Err(Failure::Raised(raised)) if raised.condition == "SYNTAX" => {
                     self.input_dispatch_syntax = Some(Failure::Raised(raised));
                     return Ok(lines);

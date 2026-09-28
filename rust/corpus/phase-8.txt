@@ -337,3 +337,7 @@ lang/input_stream_object_reader.rex
 lang/native_reraise_position.rex
 # Method~new over directives, the sibling of Routine~new's (m4).
 lang/method_source_directives.rex
+# Task 8 round C (N5): an input reader's LINEIN ending without a RETURN
+# tail, and a tail-less or EXIT RAISE offered to the caller.
+lang/input_stream_reader_ends.rex
+lang/raise_exit_offered_to_caller.rex

@@ -252,12 +252,14 @@ impl Interp {
     fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
         let saved_pause = self.replace_debug_pause(true);
         self.fragment_depth += 1;
+        self.fragment_owners.push(self.activation().id);
         let saved_entry = self.enter_fragment(self.clause_line_override.is_some());
         let outcome = self.run_fragment(text);
         let depth = self.fragment_depth;
         self.pending_traps
             .retain(|pending| pending.fragment_depth != depth);
         self.fragment_depth -= 1;
+        self.fragment_owners.pop();
         self.leave_fragment(saved_entry);
         self.replace_debug_pause(saved_pause);
         match outcome {

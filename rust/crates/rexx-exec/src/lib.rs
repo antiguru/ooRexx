@@ -1493,6 +1493,8 @@ struct Interp {
     /// How many `INTERPRET` fragments are running, counted from zero outside
     /// any of them.
     fragment_depth: usize,
+    /// The activation each running fragment runs in, outermost first.
+    fragment_owners: Vec<crate::activation::ActivationId>,
     /// Whether a line typed at an interactive-debug pause is running.
     /// `RexxActivation::noTracing` includes this, so a pause's own fragment
     /// traces nothing and pauses nowhere. Written only through
@@ -2061,6 +2063,7 @@ impl Interp {
             input_dispatch_syntax: None,
             clause_line_override: None,
             fragment_depth: 0,
+            fragment_owners: Vec::new(),
             debug_pause: false,
             stress_collect: false,
             uninit_ready: Vec::new(),
@@ -2736,6 +2739,7 @@ impl Interp {
             input_dispatch_syntax: _,
             clause_line_override: _,
             fragment_depth: _,
+            fragment_owners: _,
             debug_pause: _,
             stress_collect: _,
             // The collector's own resurrection flag holds each object until

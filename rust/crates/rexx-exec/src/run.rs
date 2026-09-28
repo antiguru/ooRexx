@@ -676,6 +676,7 @@ impl Interp {
                 // nested fragment inherits each of those and needs a level of
                 // its own here.
                 self.fragment_depth += 1;
+                self.fragment_owners.push(self.activation().id);
                 // `saved_line` read before the replace above is also the
                 // answer to "is a fragment already running", which is the one
                 // extra thing `enter_fragment` needs and the only place it is
@@ -708,6 +709,7 @@ impl Interp {
                     "a condition queued inside a fragment outlived that fragment's own exit"
                 );
                 self.fragment_depth -= 1;
+                self.fragment_owners.pop();
                 self.leave_fragment(saved_entry);
                 self.activation_indent = saved_base;
                 self.indent_offset = saved_offset;

@@ -945,6 +945,24 @@ impl Interp {
         self.frames().nth(depth)
     }
 
+    /// The depth of the innermost activation that is not an internal call.
+    pub(crate) fn first_non_internal_depth(&self) -> usize {
+        self.frames()
+            .position(|activation| activation.entry != Entry::InternalCall)
+            .unwrap_or(0)
+    }
+
+    /// How many of the running `INTERPRET` fragments run in the activations
+    /// from the running one out to the one at `depth`.
+    pub(crate) fn fragments_within(&self, depth: usize) -> usize {
+        let levels: Vec<ActivationId> = self.frames().take(depth + 1).map(|a| a.id).collect();
+        self.fragment_owners
+            .iter()
+            .rev()
+            .take_while(|owner| levels.contains(owner))
+            .count()
+    }
+
     /// The clause the activation at `depth` is stopped on.
     pub(crate) fn clause_of(&self, depth: usize) -> ClauseSnapshot {
         if depth == 0 && self.running.is_some() {
@@ -996,13 +1014,8 @@ impl Interp {
         self.running.as_deref()
     }
 
-    /// The running activation's own caller, or `None` at the outermost
-    /// level.
-    pub(crate) fn caller_activation(&self) -> Option<&Activation> {
-        self.suspended.last().map(Box::as_ref)
-    }
-
-    /// [`Interp::caller_activation`] for a writer.
+    /// The running activation's own caller, for a writer, or `None` at the
+    /// outermost level.
     pub(crate) fn caller_activation_mut(&mut self) -> Option<&mut Activation> {
         self.suspended.last_mut().map(Box::as_mut)
     }

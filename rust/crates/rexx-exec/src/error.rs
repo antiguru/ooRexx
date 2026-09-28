@@ -33,6 +33,10 @@ pub(crate) enum Search {
     /// there; every internal call it unwinds through first skips its own trap
     /// check.
     Top,
+    /// The caller of the first activation that is not an internal call,
+    /// then outward: a tail-less or `EXIT` `RAISE` of a condition other than
+    /// `SYNTAX`.
+    AboveTop,
     /// No activation at all may trap this -- it is already the condition's
     /// default action, on its way to the report.
     Nobody,
@@ -158,26 +162,11 @@ impl Raised {
     /// activation before its own trap can see the condition, so the trap
     /// does not fire.
     pub(crate) fn halt() -> Raised {
-        Raised {
-            condition: Cow::Borrowed("HALT"),
-            number: 4,
-            sub: 1,
-            // The `(4, 1)` catalogue entry is "Program interrupted with &1
-            // condition.", so the condition's own name is the substitution
-            // -- measured, the oracle prints `HALT`, and a version with no
-            // substitution prints the literal `&1`.
-            result_is_rc: false,
-            position: 0,
-            additional: vec![b"HALT".to_vec()],
-            // `None` rather than `4`: `RC` is measured to carry the major
-            // only for `SYNTAX` (42 for `say 1/0`, 40 for `raise syntax
-            // 40.4`) and to be left untouched for a trapped `NOVALUE`. A
-            // trapped `HALT` is not measured either way, so this follows the
-            // non-`SYNTAX` row rather than inventing a third rule.
-            rc: None,
-            description: None,
-            delivery: Delivery::default(),
-        }
+        // `RexxActivation::raise` reports it as a SYNTAX error of the raising
+        // level (`execution/RexxActivation.cpp:1870`), which a `SIGNAL ON
+        // SYNTAX` there traps. The `(4, 1)` catalogue entry's `&1` is the
+        // condition's own name.
+        Raised::syntax(4, 1, vec![b"HALT".to_vec()])
     }
 
     /// 41.1: a nonnumeric value used in arithmetic. `value` is the
