@@ -354,3 +354,6 @@ lang/external_program_levels.rex
 lang/live_stack_frames.rex
 # Task 8 round C: an exposed tail detached by ~empty or a tail-less PUT.
 lang/expose_tail_detached.rex
+# Task 9 (ruling 2b): the directory and string-table members reach the
+# collection's own get, put and remove, side table included.
+lang/library_directory_members.rex

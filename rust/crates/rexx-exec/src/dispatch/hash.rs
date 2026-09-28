@@ -1042,6 +1042,27 @@ fn merged_get(
     unknown_value(interp, receiver, index)
 }
 
+/// `DirectoryClass::get` for the native API's `DirectoryAt` and
+/// `StringTableAt`, which call the collection rather than send `AT`
+/// (`interpreter/api/ThreadContextStubs.cpp:1218-1224`).
+pub(crate) fn store_get(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    merged_get(interp, receiver, index)
+}
+
+/// `DirectoryClass::remove` for the native API's `DirectoryRemove` and
+/// `StringTableRemove`, likewise.
+pub(crate) fn store_remove(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    take_merged(interp, receiver, index, Removal::Answered)
+}
+
 /// `DirectoryClass::hasIndex`: either half, and **not** the unknown method.
 /// Measured, with an `UNKNOWN` method set: `hasIndex('nosuch')` is 0 while
 /// `d['nosuch']` answers what the method returns.

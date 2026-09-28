@@ -421,6 +421,27 @@ impl Surface for FakeHost {
         }
     }
 
+    fn store_get(&mut self, _table: ObjRef, _index: &[u8]) -> Option<Result<Option<ObjRef>, ()>> {
+        None
+    }
+
+    fn store_put(
+        &mut self,
+        _table: ObjRef,
+        _index: &[u8],
+        _item: ObjRef,
+    ) -> Option<Result<(), ()>> {
+        None
+    }
+
+    fn store_remove(
+        &mut self,
+        _table: ObjRef,
+        _index: &[u8],
+    ) -> Option<Result<Option<ObjRef>, ()>> {
+        None
+    }
+
     fn class_object(&mut self, _id: &str) -> Option<ObjRef> {
         None
     }

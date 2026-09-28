@@ -20,6 +20,7 @@ use rexx_core::{
     VarRefHome,
 };
 
+use super::super::hash;
 use crate::Novalue;
 use crate::builtin::datatype::{SymbolKind, classify};
 
@@ -300,6 +301,39 @@ impl Surface for Interp {
                 Err(())
             }
         }
+    }
+
+    fn store_get(&mut self, table: ObjRef, index: &[u8]) -> Option<Result<Option<ObjRef>, ()>> {
+        if !hash::owns(self, table) {
+            return None;
+        }
+        let index = self.text(index);
+        self.roots.push_temp(index);
+        let answered = hash::store_get(self, table, index);
+        Some(self.served(answered))
+    }
+
+    fn store_put(&mut self, table: ObjRef, index: &[u8], item: ObjRef) -> Option<Result<(), ()>> {
+        if !hash::owns(self, table) {
+            return None;
+        }
+        match hash::directory_put(self, table, index, item) {
+            Ok(()) => Some(Ok(())),
+            Err(failure) => {
+                self.hold_native_condition(failure);
+                Some(Err(()))
+            }
+        }
+    }
+
+    fn store_remove(&mut self, table: ObjRef, index: &[u8]) -> Option<Result<Option<ObjRef>, ()>> {
+        if !hash::owns(self, table) {
+            return None;
+        }
+        let index = self.text(index);
+        self.roots.push_temp(index);
+        let answered = hash::store_remove(self, table, index);
+        Some(self.served(answered))
     }
 
     fn class_object(&mut self, id: &str) -> Option<ObjRef> {
@@ -602,6 +636,23 @@ impl Surface for Interp {
 }
 
 impl Interp {
+    /// A direct collection member's answer as the surface reports it, rooted,
+    /// or its condition held.
+    fn served(&mut self, answered: Result<Option<ObjRef>, Failure>) -> Result<Option<ObjRef>, ()> {
+        match answered {
+            Ok(answer) => {
+                if let Some(answer) = answer {
+                    self.roots.push_temp(answer);
+                }
+                Ok(answer)
+            }
+            Err(failure) => {
+                self.hold_native_condition(failure);
+                Err(())
+            }
+        }
+    }
+
     /// The buffers the running method's receiver keeps for
     /// `AllocateObjectMemory`, which the oracle keeps in the receiver's
     /// `Object`-scope pool under the empty name (`classes/ObjectClass.cpp:2994`),

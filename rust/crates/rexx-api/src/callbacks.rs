@@ -123,6 +123,19 @@ pub trait Surface {
         arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, ()>;
 
+    /// `get` on a string-keyed collection this host stores itself, run
+    /// without a message send, so a subclass's `AT` is not what answers, as
+    /// the oracle's `DirectoryAt` calls `DirectoryClass::get`. `None` where
+    /// `table` is not such a collection; `Err` where it raised a condition,
+    /// which the host holds.
+    fn store_get(&mut self, table: ObjRef, index: &[u8]) -> Option<Result<Option<ObjRef>, ()>>;
+
+    /// [`Surface::store_get`]'s `put`.
+    fn store_put(&mut self, table: ObjRef, index: &[u8], item: ObjRef) -> Option<Result<(), ()>>;
+
+    /// [`Surface::store_get`]'s `remove`, answering what `get` would have.
+    fn store_remove(&mut self, table: ObjRef, index: &[u8]) -> Option<Result<Option<ObjRef>, ()>>;
+
     /// The built-in class `id` names.
     fn class_object(&mut self, id: &str) -> Option<ObjRef>;
 
@@ -1088,7 +1101,8 @@ impl Activation<'_> {
         self.send_for_handle(slot, class, b"NEW", arguments)
     }
 
-    /// `DirectoryPut` and `StringTablePut`.
+    /// `DirectoryPut` and `StringTablePut`: the collection's own `put`
+    /// where the host has one, a `PUT` send otherwise.
     pub fn table_put(
         &self,
         slot: &'static str,
@@ -1097,6 +1111,17 @@ impl Activation<'_> {
         index: &[u8],
     ) {
         let table = self.resolve(table);
+        if let (Some(collection), Some(value)) = (table, self.resolve(item)) {
+            let direct = self.with_surface(slot, None, |cx| {
+                cx.host
+                    .surface()
+                    .expect("checked by with_surface")
+                    .store_put(collection, index, value)
+            });
+            if direct.is_some() {
+                return;
+            }
+        }
         self.send_to(
             slot,
             table,
@@ -1105,24 +1130,58 @@ impl Activation<'_> {
         );
     }
 
-    /// `DirectoryAt` and `StringTableAt`.
+    /// `DirectoryAt` and `StringTableAt`: the collection's own `get` where
+    /// the host has one, `HASINDEX` and `AT` sends otherwise.
     pub fn table_at(
         &self,
         slot: &'static str,
         table: RexxObjectPtr,
         index: &[u8],
     ) -> RexxObjectPtr {
-        self.item_at(slot, table, Argument::Text(index))
+        match self.store_answer(slot, table, |surface, collection| {
+            surface.store_get(collection, index)
+        }) {
+            Some(answer) => answer,
+            None => self.item_at(slot, table, Argument::Text(index)),
+        }
     }
 
-    /// `DirectoryRemove` and `StringTableRemove`.
+    /// `DirectoryRemove` and `StringTableRemove`, as [`Activation::table_at`]
+    /// chooses.
     pub fn table_remove(
         &self,
         slot: &'static str,
         table: RexxObjectPtr,
         index: &[u8],
     ) -> RexxObjectPtr {
-        self.item_removed(slot, table, Argument::Text(index))
+        match self.store_answer(slot, table, |surface, collection| {
+            surface.store_remove(collection, index)
+        }) {
+            Some(answer) => answer,
+            None => self.item_removed(slot, table, Argument::Text(index)),
+        }
+    }
+
+    /// Runs a direct collection member, answering its object as a handle,
+    /// null for none or a raised condition; `None` where the host stores no
+    /// such collection.
+    fn store_answer(
+        &self,
+        slot: &'static str,
+        table: RexxObjectPtr,
+        serve: impl FnOnce(&mut dyn Surface, ObjRef) -> Option<Result<Option<ObjRef>, ()>>,
+    ) -> Option<RexxObjectPtr> {
+        let collection = self.resolve(table)?;
+        self.with_surface(slot, None, |cx| {
+            let answered = serve(
+                cx.host.surface().expect("checked by with_surface"),
+                collection,
+            )?;
+            Some(match answered {
+                Ok(Some(object)) => cx.host.locals().register(object),
+                Ok(None) | Err(()) => std::ptr::null_mut(),
+            })
+        })
     }
 
     /// `SupplierItem` and `SupplierIndex`.
@@ -1674,11 +1733,12 @@ impl Activation<'_> {
         })
     }
 
-    /// `ReleaseLocalReference`: a handle this call does not hold locally is
-    /// ignored, and a global reference to the same object stays.
-    pub fn release_local_reference(&self, handle: RexxObjectPtr) {
-        self.conversion().host.locals().remove(handle);
-    }
+    /// `ReleaseLocalReference`: the handle stays resolvable and rooted until
+    /// the call ends. The oracle's release leaves the object to its next
+    /// collection, so an extension that returns or uses the handle afterwards
+    /// is answered there unless a collection intervenes, and collection
+    /// timing is not a specified observable.
+    pub fn release_local_reference(&self, _handle: RexxObjectPtr) {}
 
     /// `AllocateObjectMemory`.
     pub fn allocate_object_memory(&self, size: usize) -> POINTER {

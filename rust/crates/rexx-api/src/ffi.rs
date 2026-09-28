@@ -4980,6 +4980,25 @@ mod tests {
         assert_eq!(host.bytes(doubled), Some(b"0.5 at 9".to_vec()));
     }
 
+    /// **A released local reference still answers until the call ends**,
+    /// as the oracle's does until its next collection.
+    #[test]
+    fn a_released_local_reference_still_answers() {
+        let mut host = FakeHost::new();
+        let string = host.text(b"released");
+        let string = host.locals.register(string);
+        let (length, refused) = with_thread(&mut host, |thread, table| {
+            // SAFETY: `thread` is live for the call and `string` is
+            // registered before it; neither member reads a descriptor.
+            unsafe {
+                (table.ReleaseLocalReference)(thread, string.cast());
+                (table.StringLength)(thread, string.cast())
+            }
+        });
+        assert_eq!(refused, None);
+        assert_eq!(length, b"released".len());
+    }
+
     /// A member that needs the host's surface refuses on a host with none,
     /// naming itself.
     #[test]
