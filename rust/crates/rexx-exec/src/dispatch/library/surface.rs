@@ -317,7 +317,7 @@ impl Surface for Interp {
         if !hash::owns(self, table) {
             return None;
         }
-        match hash::directory_put(self, table, index, item) {
+        match hash::native_put(self, table, index, item) {
             Ok(()) => Some(Ok(())),
             Err(failure) => {
                 self.hold_native_condition(failure);

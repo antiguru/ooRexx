@@ -357,3 +357,6 @@ lang/expose_tail_detached.rex
 # Task 9 (ruling 2b): the directory and string-table members reach the
 # collection's own get, put and remove, side table included.
 lang/library_directory_members.rex
+# Final fix round (I2, M3): the same members on every hashed collection,
+# StringTableRemove included.
+lang/library_collection_members.rex

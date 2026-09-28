@@ -4755,6 +4755,17 @@ directory's probes/.
   subclass overriding AT, PUT and REMOVE, setMethod entries named and
   UNKNOWN, a put over a method entry, and a lower-case miss; with the direct
   path disabled it is the one program red, on all three descriptors.
+  REGRESSION FIXED 2026-09-29 (final review I2). That direct put replaced on
+  every class, where the oracle's stub reaches HashCollection::put, whose
+  contents for a Relation and a Bag are MultiValueContents, whose put is
+  addFront (classes/support/HashContents.hpp:453-467), so a second put under
+  one index adds; only DirectoryClass overrides put, get and remove. The put
+  now adds on a multi-value collection. Witness
+  corpus/lang/library_collection_members.rex: Relation, Bag, Set, Table,
+  IdentityTable, Properties, StringTable and Directory through the
+  Directory and StringTable members, StringTableRemove included; red on the
+  Relation and Bag lines alone with the add removed, and on every other
+  class's with the add made unconditional.
   A BLOCKING MEMBER ON AN OUTER CONTEXT, USED FROM A CALL NESTED INSIDE IT,
   ANSWERS FOR THE INNERMOST CALL. The oracle's non-blocking members
   (GetRoutineName, GetMessageName) resolve the thread's current activation

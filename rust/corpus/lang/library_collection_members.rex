@@ -1,0 +1,75 @@
+/* DirectoryPut, DirectoryAt, DirectoryRemove and the StringTable members on
+   each hashed collection: the oracle's stubs call the collection's own put,
+   get and remove, so a Relation and a Bag add a second entry under an index
+   they hold, and every other class replaces. An IdentityTable is put once:
+   the stub's index is a new string, which DEVIATION 4 does not model. */
+t = .T~new
+r = .relation~new
+t~TestDirectoryPut(r, 'p', 'P')
+t~TestDirectoryPut(r, 'q', 'P')
+say 'relation put' r~items r~allAt('P')~makeString('l', ',')
+say 'relation at' t~TestDirectoryAt(r, 'P')
+say 'relation remove' t~TestDirectoryRemove(r, 'P') r~items r~allAt('P')~makeString('l', ',')
+say 'relation stringtable put'
+t~TestStringTablePut(r, 's', 'S')
+t~TestStringTablePut(r, 'u', 'S')
+say r~items r~allAt('S')~makeString('l', ',') t~TestStringTableAt(r, 'S')
+say 'relation stringtable remove' t~TestStringTableRemove(r, 'S') r~allAt('S')~makeString('l', ',')
+b = .bag~new
+t~TestDirectoryPut(b, 'p', 'P')
+t~TestDirectoryPut(b, 'q', 'P')
+say 'bag put' b~items b~allAt('P')~makeString('l', ',')
+say 'bag at' t~TestDirectoryAt(b, 'P')
+say 'bag remove' t~TestDirectoryRemove(b, 'P') b~items
+s = .set~new
+t~TestDirectoryPut(s, 'p', 'P')
+t~TestDirectoryPut(s, 'q', 'P')
+say 'set put' s~items s~allItems~makeString('l', ',') s~allIndexes~makeString('l', ',')
+say 'set at' t~TestDirectoryAt(s, 'P')
+say 'set remove' t~TestDirectoryRemove(s, 'P') s~items
+a = .table~new
+t~TestDirectoryPut(a, 'p', 'P')
+t~TestDirectoryPut(a, 'q', 'P')
+say 'table put' a~items a['P']
+say 'table at' t~TestDirectoryAt(a, 'P')
+say 'table remove' t~TestDirectoryRemove(a, 'P') a~items
+i = .identityTable~new
+t~TestDirectoryPut(i, 'p', 'P')
+say 'identitytable put' i~items i~allItems~makeString('l', ',')
+o = .properties~new
+t~TestDirectoryPut(o, 'p', 'P')
+t~TestStringTablePut(o, 'q', 'P')
+say 'properties put' o~items o['P']
+say 'properties at' t~TestDirectoryAt(o, 'P') t~TestStringTableAt(o, 'P')
+say 'properties remove' t~TestStringTableRemove(o, 'P') o~items
+g = .stringTable~new
+t~TestStringTablePut(g, 'p', 'P')
+t~TestStringTablePut(g, 'q', 'P')
+say 'stringtable put' g~items g['P']
+say 'stringtable remove' t~TestStringTableRemove(g, 'P') g~items g~hasIndex('P')
+h = .OS~new
+h['K'] = 'k'
+say 'stringtable subclass remove' t~TestStringTableRemove(h, 'K') h~items
+d = .directory~new
+t~TestDirectoryPut(d, 'p', 'P')
+t~TestDirectoryPut(d, 'q', 'P')
+say 'directory put' d~items d['P']
+say 'directory at' t~TestDirectoryAt(d, 'P')
+say 'directory remove' t~TestDirectoryRemove(d, 'P') d~items
+signal on syntax
+m = t~TestStringTableRemove(g, 'NONE')
+say 'stringtable remove miss' var('m')
+exit
+syntax:
+  say 'stringtable remove miss raised' condition('o')~code
+  exit
+::class T
+::method TestDirectoryPut EXTERNAL "LIBRARY orxmethod TestDirectoryPut"
+::method TestDirectoryAt EXTERNAL "LIBRARY orxmethod TestDirectoryAt"
+::method TestDirectoryRemove EXTERNAL "LIBRARY orxmethod TestDirectoryRemove"
+::method TestStringTablePut EXTERNAL "LIBRARY orxmethod TestStringTablePut"
+::method TestStringTableAt EXTERNAL "LIBRARY orxmethod TestStringTableAt"
+::method TestStringTableRemove EXTERNAL "LIBRARY orxmethod TestStringTableRemove"
+::class OS subclass StringTable
+::method remove
+  return 'overridden remove' arg(1)

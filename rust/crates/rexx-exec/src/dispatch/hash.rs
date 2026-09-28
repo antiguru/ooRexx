@@ -1560,6 +1560,26 @@ pub(crate) fn directory_put(
     insert(interp, directory, index, Some(item))
 }
 
+/// `HashCollection::put` of `item` under the string `name`, run for the
+/// native API's `DirectoryPut` and `StringTablePut` on any collection this
+/// file owns (`interpreter/api/ThreadContextStubs.cpp:1205-1216`): a
+/// multi-value one adds, as its contents' `put` is `addFront`, and a
+/// `Directory` runs `DirectoryClass::put`.
+pub(crate) fn native_put(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    name: &[u8],
+    item: ObjRef,
+) -> Result<(), Failure> {
+    let index = interp.text(name);
+    interp.roots.push_temp(index);
+    if multi_value(interp, receiver) {
+        insert_front(interp, receiver, index, Some(item))
+    } else {
+        insert(interp, receiver, index, Some(item))
+    }
+}
+
 /// Puts `value` into the method-table half under `name`, as an entry that
 /// answers `value` when run.
 pub(crate) fn directory_put_method_value(

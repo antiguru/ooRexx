@@ -123,14 +123,15 @@ pub trait Surface {
         arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, ()>;
 
-    /// `get` on a string-keyed collection this host stores itself, run
-    /// without a message send, so a subclass's `AT` is not what answers, as
-    /// the oracle's `DirectoryAt` calls `DirectoryClass::get`. `None` where
+    /// `get` on a hashed collection this host stores itself, run without a
+    /// message send, so a subclass's `AT` is not what answers, as the
+    /// oracle's `DirectoryAt` calls the collection's own `get`. `None` where
     /// `table` is not such a collection; `Err` where it raised a condition,
     /// which the host holds.
     fn store_get(&mut self, table: ObjRef, index: &[u8]) -> Option<Result<Option<ObjRef>, ()>>;
 
-    /// [`Surface::store_get`]'s `put`.
+    /// [`Surface::store_get`]'s `put`, which adds on a multi-value
+    /// collection.
     fn store_put(&mut self, table: ObjRef, index: &[u8], item: ObjRef) -> Option<Result<(), ()>>;
 
     /// [`Surface::store_get`]'s `remove`, answering what `get` would have.
