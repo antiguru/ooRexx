@@ -4625,10 +4625,16 @@ testbinaries/ against /home/moritz/dev/repos/ooRexx, both empty): readelf
 NEEDs liborxexits.so, which NEEDs librexx.so.4 and librexxapi.so.4 and
 imports RexxCreateInterpreter, RexxStart and the exit and subcom
 registries; liborxclassic.so and liborxclassic1.so import the function,
-subcom, queue and macro-space registries. RE-HOMED: RexxStart,
-ProcessRexxStart, INVOCATION and ProcessInvocation to Phase 9, whose row
-ships the embedding API; CLASSIC to Phase 10, whose row is RXAPI. METHOD,
-CONVERSION and FUNCTION stay Phase 8's. Loading orxinvocation from this
+subcom, queue and macro-space registries. RE-HOMED: every group but
+METHOD, CONVERSION and FUNCTION to Phase 10, whose row is RXAPI. RexxStart,
+ProcessRexxStart, INVOCATION and ProcessInvocation were first recorded
+here as Phase 9's, whose row ships the embedding API, from their
+RexxCreateInterpreter and RexxStart imports alone; corrected 2026-09-28,
+since the same library imports the exit and subcom registries and a group
+belongs to the latest phase any of its imports needs.
+rexx-exec/tests/api_group_partition.rs derives the partition from the
+groups and the oracle's build/lib and asserts it (phase-8-gate.md section
+9). METHOD, CONVERSION and FUNCTION stay Phase 8's. Loading orxinvocation from this
 crate would dlopen the oracle's own librexx.so.4 into the process, and a
 green result would be the oracle's. The spec and the roadmap's row 8 first
 read the partition as two embedding groups and six extension-only, from

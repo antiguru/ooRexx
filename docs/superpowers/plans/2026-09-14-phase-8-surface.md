@@ -35,9 +35,11 @@ Moritz of 2026-09-14. What changed and why:
   `orxmethod`, `FUNCTION` loads `orxfunction`, and neither library needs an interpreter library or
   imports a `Rexx*` symbol. `RexxStart`, `ProcessRexxStart`, `INVOCATION` and `ProcessInvocation`
   all load `INVOCATIONTester.cls`, which binds `orxinvocation`, which NEEDs `liborxexits.so`, which
-  NEEDs `librexx.so.4` and imports `RexxCreateInterpreter` and `RexxStart`: embedding, Phase 9's.
-  `CLASSIC` loads `orxclassic` and registers `orxclassic1` through `rxfuncadd`; between them they
-  import the function, subcom, queue and macro-space registries: Phase 10's. Roadmap rows 9 and 10 and
+  NEEDs `librexx.so.4` and imports `RexxCreateInterpreter` and `RexxStart`, embedding, and the
+  exit and subcom registries too, so they are Phase 10's (first read as Phase 9's; Task 7 derived
+  the correction, `phase-8-gate.md` section 9). `CLASSIC` loads `orxclassic` and registers
+  `orxclassic1` through `rxfuncadd`; between them they import the function, subcom, queue and
+  macro-space registries: Phase 10's. Roadmap rows 9 and 10 and
   `phase-4-exclusions.txt` carry that re-homing with its commands since `313807bc5` and `3bb1d34d2`.
 * **"`testbinaries/` compile unchanged" is already witnessed**, by the oracle's own build of
   sources byte-identical to this tree's against headers byte-identical to this tree's. Building them

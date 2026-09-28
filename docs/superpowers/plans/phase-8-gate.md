@@ -236,9 +236,10 @@ recorded in the ledger, and the commits are left as they are.
   on `deferred`). The scoping survey's section 5 had listed it among this phase's refusals.
 * **Five of the eight native-API ooTest groups**, by measurement on 2026-09-15 (the scoping
   survey's section 3 carries the commands): `RexxStart`, `ProcessRexxStart`, `INVOCATION` and
-  `ProcessInvocation` to Phase 9, since each loads `INVOCATIONTester.cls`, whose `orxinvocation`
-  NEEDs `liborxexits.so` and through it `librexx.so.4`, importing `RexxCreateInterpreter` and
-  `RexxStart`; `CLASSIC` to Phase 10, since `orxclassic` and `orxclassic1` import the function,
+  `ProcessInvocation` to Phase 10 (first recorded as Phase 9's; corrected 2026-09-28, section 9),
+  since each loads `INVOCATIONTester.cls`, whose `orxinvocation` NEEDs `liborxexits.so` and through
+  it `librexx.so.4`, importing `RexxCreateInterpreter` and `RexxStart` and also the exit and subcom
+  registries; `CLASSIC` to Phase 10, since `orxclassic` and `orxclassic1` import the function,
   subcom, queue and macro-space registries. Recorded in the roadmap's rows 9 and 10 and in
   `phase-4-exclusions.txt`. `METHOD`, `CONVERSION` and `FUNCTION` stay this phase's.
 
@@ -269,3 +270,69 @@ read at `cf92ff4fb` and `233d2766d` on the way.
 Miri is not among these gates: `rexx-api`'s lib tests ran under Stacked Borrows during the rounds
 from a scratch toolchain, as the INSTRUMENTS OUTSIDE THE GATE entry of `phase-4-exclusions.txt`
 records.
+
+## 9. The surface plan's Task 7: frozen headers, and which phase owns each API group
+
+Measured 2026-09-28 at `c750719b7`, from the worktree root, the oracle checkout at
+`/home/moritz/dev/repos/ooRexx`.
+
+**"`testbinaries/` compile unchanged against frozen headers" is witnessed by the oracle's own
+build.** Both commands print nothing and exit 0:
+
+    diff -rq api /home/moritz/dev/repos/ooRexx/api
+    diff -rq testbinaries /home/moritz/dev/repos/ooRexx/testbinaries
+
+and every target `testbinaries/CMakeLists.txt` declares has its product in the oracle's build (each
+`ls` succeeds; the libraries land in `build/lib`, the `rexxinstance` and `provoke_locks`
+executables in `build/bin`):
+
+    O=/home/moritz/dev/repos/ooRexx/build
+    for t in $(/bin/grep -a -o -e 'generate_test_library([a-z0-9]*' -e 'add_library([a-z0-9]\+' \
+                 testbinaries/CMakeLists.txt | sed 's/.*(//'); do ls $O/lib/lib$t.so; done
+    for t in $(/bin/grep -a -o 'add_executable([a-z_]*' testbinaries/CMakeLists.txt | sed 's/.*(//'); do
+      ls $O/bin/$t; done
+
+So the sources the plan row names, against headers byte-identical to the ones this crate implements,
+compiled and linked. **That says the headers are compatible, not that the entry points behind them
+work**: a build checks declarations, and a declaration this crate leaves refusing compiles exactly
+as well as one it implements. Whether the entry points work is what running the groups says (Task
+8). One caveat on the witness: the products are dated 2026-08-05 16:02, and three files under the
+oracle's `testbinaries/` (`CMakeLists.txt`, `provoke_locks.cpp`, `provoke_locks.rex`) have a later
+mtime, 2026-08-22; `git status --short api testbinaries` in the oracle checkout is empty and
+`git log -1 -- api testbinaries` there is `334ab5460`, 2026-08-02, so the content those builds saw
+is the committed content unless the tree was edited and restored in between, which nothing records.
+
+**Which phase owns each API group is derived, not recorded**, by
+`rexx-exec/tests/api_group_partition.rs`:
+
+    cargo test -p rexx-exec --test api_group_partition
+
+It reads every `.testGroup` under `ootest/ooRexx/API` and the package files each names through
+`loadPackage`, collects the libraries bound by `EXTERNAL "LIBRARY <name> ..."` and by `rxfuncadd`,
+follows each library's `readelf -d` `NEEDED` entries transitively from the oracle's `build/lib`
+(stopping at `librexx.so` and `librexxapi.so`), and collects the undefined `Rexx*` symbols of every
+library it reaches (`readelf --dyn-syms`). A group whose closure needs no interpreter library is
+Phase 8's; any other group belongs to the latest phase one of its imports needs, from the test's own
+map (embedding to Phase 9, the RXAPI registries to Phase 10; memory and the variable pool name no
+phase). Nothing is loaded. The test's list and the derivation agree: `METHOD`, `CONVERSION` and
+`FUNCTION` are Phase 8's; `CLASSIC` is Phase 10's; and `RexxStart`, `ProcessRexxStart`,
+`INVOCATION` and `ProcessInvocation` are **Phase 10's, not Phase 9's** as section 7 first recorded.
+Each binds `orxinvocation`, which NEEDs `liborxexits.so`, which imports `RexxCreateInterpreter` and
+`RexxStart` but also `RexxRegisterExitDll`, `RexxRegisterExitExe`, `RexxDeregisterExit`,
+`RexxQueryExit`, `RexxRegisterSubcomExe` and `RexxDeregisterSubcom`, the registries
+`librexxapi.so.4` exports (and whose client registers through the rxapi daemon,
+`rexxapi/client/LocalRegistrationManager.cpp:70`). The full import list, `RexxVariablePool` and
+`RexxFreeMemory` besides, is what
+
+    readelf --dyn-syms -W /home/moritz/dev/repos/ooRexx/build/lib/liborxexits.so \
+      | awk '$7=="UND"{print $8}' | /bin/grep -a '^Rexx'
+
+prints. A group runs only once every import it needs exists, so it is the later phase's.
+
+The test's own negative control, `a_group_whose_library_changes_changes_phase`, rewrites
+`METHODPackage.cls`'s library to `orxinvocation` in a copy under `CARGO_TARGET_TMPDIR` and asserts
+`METHOD` moves to Phase 10. Two controls were run by hand with their predictions written first
+(`.superpowers/sdd/2026-09-14-phase-8-surface/task-7-report.md`): pointing the test at a scratch copy
+whose `FUNCTIONPackage.cls` binds `orxclassic` turned it red on the `FUNCTION` row alone, and
+replacing the maximum with the first classified import turned it red on the `INVOCATIONTester.cls`
+groups alone, each at Phase 9.
