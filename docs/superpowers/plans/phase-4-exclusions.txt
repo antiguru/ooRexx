@@ -5390,3 +5390,31 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   so their gate table C rows read `diverge-both` rather than `unanswered`;
   neither is gated today because Phase 6 is not in `CLOSED_PHASES`, and this
   row is what closing it would have to answer for first.
+
+  CONDITION AND STACK-FRAME RESIDUALS FOUND IN TASK 8's REVIEW (Phase 8
+  surface, 2026-09-28, measured at f24f208ad against the oracle, each side in
+  its own fresh directory; the probes are committed under
+  docs/superpowers/records/2026-09-14-phase-8-surface/task-8-residual-probes/,
+  and task-8-rereview2.md there describes each run). None changes the
+  outcome or the failure detail of any METHOD, CONVERSION or FUNCTION test
+  (api_group_tests). All but the first predate Task 8, identical at
+  391242b7e.
+
+  * g3.rex: an untrapped RAISE PROPAGATE issued by INTERPRET inside a
+    routine's SYNTAX handler adds an `interpret 'raise propagate'` traceback
+    line and reports line 6 where the oracle reports line 1. The trapped
+    form agrees.
+  * l6.rex: a SYNTAX trapped through an INTERPRET whose fragment holds a DO
+    puts the traceback lines' indentation on the wrong line.
+  * ri1.rex: RAISE ... RETURN inside INTERPRET is offered to a different
+    activation than the oracle's.
+  * if1.rex: Routine~call from Rexx lacks the oracle's METHOD CALL level and
+    the routine's name in .context~stackframes. The native CallRoutine path
+    agrees since d354a2c3d.
+  * pf1.rex: after SIGNAL ON SYNTAX traps a SYNTAX raised inside INTERPRET,
+    the oracle names the main PROGRAM frame "" for the rest of the run; no
+    other trap does. This looks like state the oracle's trap leaves behind,
+    a candidate for the upstream-accident licence.
+
+  OWNER: Phase 9 (core conformance: condition objects, stack frames and
+  traceback under INTERPRET are core-suite behaviour, not native API).
