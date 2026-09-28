@@ -462,8 +462,13 @@ records Phase 5 as a debt deliberately absent from `CLOSED`, and the sites are l
 record for whichever phase takes them.
 
 **The roadmap's row 8 exit criteria are met**: `testbinaries/` compile unchanged against frozen
-headers (section 9), and the native-API ooTest groups this row owns pass, but for the one test
-row 10 owns. **L2 is still not reached**, and what blocks it is not this phase's: the framework,
+headers (section 9), and the native-API ooTest groups this row owns pass on this crate, whole and
+with every test the instrument's `RECORDED` does not name, but for two tests owned by later rows:
+`FUNCTION`'s `TEST_REXXQUEUE` (row 10's rxapi queue, run on neither side) and `METHOD`'s
+`TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA`, which runs `rexxc` and fails on both sides
+here with rc 127 because none is on the gate's `PATH` (row 9: "`rexx`, `rexxc`, `rxqueue`,
+`rxsubcom` ship"). Until 2026-09-29 the instrument asserted only agreement with the oracle, which
+could not see the second. **L2 is still not reached**, and what blocks it is not this phase's: the framework,
 unmodified, stops at its ticker, a `GUARD ... WHEN` that another activity satisfies (Phase 6),
 and with `-U` it runs a group's tests and stops in `printSummary` at `RXFUNCQUERY`, which the
 oracle answers through rxapi (Phase 10); both measured 2026-09-28 at `2ae06085c` with

@@ -13,13 +13,15 @@
 //! single-group form on both sides, one test per run, each run from a fresh
 //! copy of the framework and the group's directory at the same path, stdout
 //! compared with its timings and timestamps masked. A test whose outcome,
-//! assertion count, stderr or exit status differs is a member of the failing
-//! set, which must be exactly [`RECORDED`]'s run tests; one that differs only
-//! in a failure's or an error's detail is a member of the set that must be
-//! exactly [`DETAIL_DIFFERS`]. Then each group runs whole in one process on
-//! both sides, the tests [`left_out`] names renamed out of the group in the
-//! copy, and the three descriptors must agree: some tests depend on an earlier
-//! one (FUNCTION's io tests on `TEST`), which a lone run cannot see. Gate-only.
+//! assertion count, stderr or exit status differs must be in [`RECORDED`],
+//! and each of [`RECORDED`]'s run tests must not pass on this crate; one that
+//! differs only in a failure's or an error's detail must be in
+//! [`DETAIL_DIFFERS`]. Then each group runs whole in one process on both
+//! sides, the tests [`left_out`] names renamed out of the group in the copy,
+//! and must pass on this crate and agree on all three descriptors: some tests
+//! depend on an earlier one (FUNCTION's io tests on `TEST`, which fail alone
+//! on both sides), so the whole run is where every test [`RECORDED`] does
+//! not name must pass. Gate-only.
 //!
 //! Both sides run at `-V 2`, which prints the assertion count and each
 //! failure's and error's detail, so a test that fails differently, or runs
@@ -60,11 +62,17 @@ fn gate_mode() -> bool {
 /// The groups `api_group_partition.rs` derives as Phase 8's.
 const GROUPS: &[&str] = &["CONVERSION", "FUNCTION", "METHOD"];
 
-/// The tests that differ, as `GROUP.TEST`, each recorded with its
+/// The tests this crate does not pass, as `GROUP.TEST`, each recorded with its
 /// cause and the phase that owns it in
 /// `docs/superpowers/plans/phase-4-exclusions.txt`; `false` for one that runs
 /// on neither side, which must be exactly the ones [`reaching_rxapi`] derives.
-const RECORDED: &[(&str, bool)] = &[("FUNCTION.TEST_REXXQUEUE", false)];
+const RECORDED: &[(&str, bool)] = &[
+    ("FUNCTION.TEST_REXXQUEUE", false),
+    (
+        "METHOD.TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA",
+        true,
+    ),
+];
 
 /// See the module doc.
 const VERBOSITY: &str = "2";
@@ -540,7 +548,7 @@ fn excerpt(bytes: &[u8]) -> String {
 }
 
 #[test]
-fn every_test_of_the_phase_8_groups_matches_the_oracle_but_the_recorded() {
+fn every_test_of_the_phase_8_groups_passes_and_matches_the_oracle_but_the_recorded() {
     if !gate_mode() {
         eprintln!("api_group_tests: skipped without {GATE_ENV}");
         return;
@@ -568,6 +576,7 @@ fn every_test_of_the_phase_8_groups_matches_the_oracle_but_the_recorded() {
         .join(format!("api-group-tests-{}", std::process::id()))
         .join("run");
     let not_run = not_run();
+    let mut passing = BTreeSet::new();
     let mut differing = BTreeSet::new();
     let mut detail_differing = BTreeSet::new();
     let mut report = String::new();
@@ -599,6 +608,9 @@ fn every_test_of_the_phase_8_groups_matches_the_oracle_but_the_recorded() {
                 theirs.status.is_some(),
                 "the oracle did not finish {group}.{name}"
             );
+            if passes(&ours) {
+                passing.insert(member.clone());
+            }
             let (their_out, our_out) = (masked(&theirs.stdout), masked(&ours.stdout));
             if their_out != our_out || theirs.stderr != ours.stderr || theirs.status != ours.status
             {
@@ -636,7 +648,11 @@ fn every_test_of_the_phase_8_groups_matches_the_oracle_but_the_recorded() {
         let ours = run_crate(&run, &args);
         assert!(theirs.status.is_some(), "the oracle did not finish {group}");
         let (their_out, our_out) = (masked(&theirs.stdout), masked(&ours.stdout));
-        if their_out != our_out || theirs.stderr != ours.stderr || theirs.status != ours.status {
+        if their_out != our_out
+            || theirs.stderr != ours.stderr
+            || theirs.status != ours.status
+            || !passes(&ours)
+        {
             whole.push_str(&format!(
                 "{group}: oracle {:?} {}, ours {:?} {}; {}\n",
                 theirs.status,
@@ -654,12 +670,12 @@ fn every_test_of_the_phase_8_groups_matches_the_oracle_but_the_recorded() {
         .filter(|(_, run)| *run)
         .map(|(name, _)| name.to_string())
         .collect();
-    let newly_failing: Vec<&String> = differing.difference(&recorded).collect();
-    let newly_passing: Vec<&String> = recorded.difference(&differing).collect();
+    let newly_differing: Vec<&String> = differing.difference(&recorded).collect();
+    let newly_passing: Vec<&String> = recorded.intersection(&passing).collect();
     let mut problems = Vec::new();
-    if !newly_failing.is_empty() || !newly_passing.is_empty() {
+    if !newly_differing.is_empty() || !newly_passing.is_empty() {
         problems.push(format!(
-            "newly failing: {newly_failing:?}\nnewly passing: {newly_passing:?}\n{report}"
+            "newly differing: {newly_differing:?}\nrecorded but passing: {newly_passing:?}\n{report}"
         ));
     }
     let detail: BTreeSet<String> = DETAIL_DIFFERS
@@ -677,8 +693,13 @@ fn every_test_of_the_phase_8_groups_matches_the_oracle_but_the_recorded() {
     }
     if !whole.is_empty() {
         problems.push(format!(
-            "a whole-group run without the left-out tests differs:\n{whole}"
+            "a whole-group run without the left-out tests differs or does not pass:\n{whole}"
         ));
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// Whether a run's summary reports a pass and it exited 0.
+fn passes(run: &Run) -> bool {
+    run.status == Some(0) && outcome(&run.stdout).starts_with("pass,")
 }

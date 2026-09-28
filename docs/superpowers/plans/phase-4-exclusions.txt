@@ -4668,7 +4668,8 @@ belongs to the latest phase any of its imports needs.
 rexx-exec/tests/api_group_partition.rs derives the partition from the
 groups and the oracle's build/lib and asserts it (phase-8-gate.md section
 9). METHOD, CONVERSION and FUNCTION stayed Phase 8's, and pass at its close
-but for FUNCTION's TEST_REXXQUEUE (Phase 10, below). Loading orxinvocation from this
+but for FUNCTION's TEST_REXXQUEUE (Phase 10, below) and METHOD's
+TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA (Phase 9, below). Loading orxinvocation from this
 crate would dlopen the oracle's own librexx.so.4 into the process, and a
 green result would be the oracle's. The spec and the roadmap's row 8 first
 read the partition as two embedding groups and six extension-only, from
@@ -4913,6 +4914,18 @@ the rxapi queue, which is row 10's.
   external call (interpreter/package/PackageManager.cpp:747,
   interpreter/execution/RexxActivation.cpp:2996), so no ooTest run on the
   oracle leaves rxapi untouched.
+FAILS ON BOTH SIDES, SO AGREEMENT DID NOT SEE IT (2026-09-29, final review
+I1). The instrument asserted agreement only; it now also asserts that this
+crate passes every test RECORDED does not name, in the whole-group run
+(FUNCTION's io tests fail alone on both sides and pass after TEST).
+  rexxc. Test:
+    TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA
+  METHOD.testGroup:3105 runs `address "" "rexxc" ...` and asserts rc 0.
+  rexxc is not on the gate's PATH, so both sides fail it with rc 127
+  (`assertRc` expected 0, actual 127); with the oracle's build/bin on PATH
+  the oracle would have a rexxc to run and this crate still none.
+  Roadmap row 9: "`rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship".
+  OWNER: Phase 9.
   NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND PATCHES ooTest.frm. The
   framework's ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking) is
   a REPLY thread and a GUARD ON WHEN, refused naming Phase 6; -U starts no
