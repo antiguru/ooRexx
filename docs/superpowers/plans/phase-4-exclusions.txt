@@ -5578,5 +5578,11 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
   this activation is not implemented". The oracle's object is unrooted once
   the first call ends and answers only while no collection has run; this
   crate's handle table ends with the call, and resolving a bare address
-  could name a different object. Loud. OWNER: none, for the collection-
-  timing reason above.
+  could name a different object. Loud. OWNER: none: a local reference
+  protects its object only until the call that made it ends
+  (NativeActivation::createLocalReference, "protects the object from GC
+  until the environment terminates", interpreter/execution/
+  NativeActivation.cpp:1179-1185), so an extension using one after its call
+  is outside the API contract, and no answer is the right one to match. The
+  collection-timing licence above is not the reason: it covers ordering,
+  not an exit status or stderr difference (final review M1, 2026-09-29).

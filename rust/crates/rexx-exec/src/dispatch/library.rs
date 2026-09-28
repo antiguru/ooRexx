@@ -604,8 +604,11 @@ impl Interp {
                 }
                 .into();
             }
-            // No phase owes a stale handle: the oracle's answer depends on
-            // whether its collector has run (phase-4-exclusions.txt).
+            // No phase owes a stale handle: a local reference protects its
+            // object only until the call that made it ends
+            // (`NativeActivation::createLocalReference`,
+            // `interpreter/execution/NativeActivation.cpp:1179-1185`), so an
+            // extension using one past that call is outside the API.
             Refused::StaleHandle | Refused::Raised => {
                 return Loud {
                     message: crate::owned_message(&format!("{refused}"), None),
