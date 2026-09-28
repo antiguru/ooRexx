@@ -13,10 +13,11 @@
 //! `~init`, and `Pointer`'s and `WeakReference`'s methods.
 
 use super::{
-    Arity, Body, Cleared, Failure, INIT, Interp, Loud, NativeMethod, ObjRef, Package, Raised,
-    class_receiver, compile_method_source, compile_routine_source, decode_message_name, hash,
-    native, native_new, new_instance, optional_length_argument, required_string_argument,
-    required_string_named_argument,
+    Arity, ArrayArgument, Body, Cleared, Failure, INIT, Interp, Loud, MESSAGE_ARGUMENTS,
+    MESSAGE_NAME, MESSAGE_SCOPE, MESSAGE_TARGET, NativeMethod, ObjRef, Package, Raised,
+    array_argument, class_receiver, compile_method_source, compile_routine_source,
+    decode_message_name, hash, native, native_new, new_instance, option_method_argument,
+    optional_length_argument, required_string_argument, required_string_named_argument,
 };
 
 /// `Pointer`'s and `WeakReference`'s instance methods. Chained into
@@ -135,11 +136,39 @@ pub(super) fn native_message_new(
     if args[0].is_none() {
         return Err(Raised::missing_named_argument("message target").into());
     }
-    decode_message_name(interp, args[1])?;
-    if args.len() > 2 || class != interp.object_model().message {
+    let (name, scope) = decode_message_name(interp, args[1])?;
+    let arguments = match args.get(2) {
+        None => Vec::new(),
+        Some(None) => return Err(Raised::missing_named_argument("argument style").into()),
+        Some(Some(_)) => match option_method_argument(interp, args, 2, "AI")? {
+            Some(b'A') => {
+                if args.len() < 4 {
+                    return Err(Raised::not_enough_method_arguments(4).into());
+                }
+                if args.len() > 4 {
+                    return Err(Raised::too_many_method_arguments(4).into());
+                }
+                let Some(array) = args[3] else {
+                    return Err(Raised::missing_named_argument("message arguments").into());
+                };
+                array_argument(interp, array, ArrayArgument::Named("message arguments"))?
+            }
+            _ => args[3..].to_vec(),
+        },
+    };
+    if class != interp.object_model().message {
         return Err(unbuilt_new(interp, class));
     }
     let object = interp.native_instance(class);
+    let target = args[0].expect("checked above");
+    interp.set_native_entry(object, MESSAGE_TARGET, target);
+    let name = interp.text(&name);
+    interp.set_native_entry(object, MESSAGE_NAME, name);
+    if let Some(scope) = scope {
+        interp.set_native_entry(object, MESSAGE_SCOPE, scope);
+    }
+    let arguments = interp.security_arguments_array(&arguments);
+    interp.set_native_entry(object, MESSAGE_ARGUMENTS, arguments);
     let caller = interp.caller();
     interp.send_message(object, INIT, None, &[], caller)?;
     Ok(Some(object))

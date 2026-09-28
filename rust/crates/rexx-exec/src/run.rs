@@ -2360,6 +2360,52 @@ impl Interp {
                 }
                 self.give_key_buffer(key);
             }
+            // `RexxExpressionMessage::assign` (`expression/ExpressionMessage.cpp:232`):
+            // the term's `NAME=` sent with the value ahead of its own
+            // arguments, each argument traced as a result.
+            ExprKind::Message {
+                target: receiver,
+                name,
+                super_class,
+                args,
+                ..
+            } => {
+                let receiver = self.eval(code, receiver)?;
+                self.roots.push_temp(receiver);
+                let scope = match super_class {
+                    Some(super_class) => {
+                        let scope = self.eval(code, super_class)?;
+                        self.roots.push_temp(scope);
+                        Some(scope)
+                    }
+                    None => None,
+                };
+                let mut values = vec![Some(value)];
+                for arg in args {
+                    let evaluated = match arg {
+                        Some(expr) => {
+                            let evaluated = self.eval(code, expr)?;
+                            self.roots.push_temp(evaluated);
+                            Some(evaluated)
+                        }
+                        None => None,
+                    };
+                    if let Some(shown) = evaluated.and_then(|value| self.result_text(value)) {
+                        self.trace_result(indent, &shown);
+                    } else if evaluated.is_none() {
+                        self.trace_result(indent, b"");
+                    }
+                    values.push(evaluated);
+                }
+                let mut setter = name.to_vec();
+                setter.push(b'=');
+                self.validate_scope_override(receiver, scope)?;
+                let caller = self.caller();
+                let answer = self.send_message(receiver, &setter, scope, &values, caller)?;
+                if let Some(shown) = answer.and_then(|answer| self.intermediate_text(answer)) {
+                    self.trace_assignment(indent, &setter, &shown);
+                }
+            }
             other => return Err(Loud::expression(other).into()),
         }
         Ok(())

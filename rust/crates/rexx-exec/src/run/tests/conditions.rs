@@ -309,7 +309,7 @@ fn raise_delivery_depends_on_the_tail_and_on_the_condition() {
         b"MID 8\n".to_vec()
     );
 
-    // The same raise with no tail skips every level but the outermost,
+    // The same raise with no tail skips each internal call's own trap,
     // so `mid` never runs and the condition is fatal.
     let mut interp = Interp::new();
     let failure = run_source(

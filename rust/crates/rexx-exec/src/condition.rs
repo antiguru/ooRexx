@@ -82,7 +82,12 @@ impl Interp {
             .classes()
             .lookup("Directory")
             .expect("Directory is a native class");
-        let object = self.native_instance(class);
+        // `NEW` rather than `native_instance`, for `new_list`'s reason: the
+        // store-backed `Directory` answers the whole `Directory` surface.
+        let caller = self.caller();
+        let object = self
+            .send_message(class, b"NEW", None, &[], caller)?
+            .expect("Directory~new answers an instance");
         self.roots.push_temp(object);
         let frame = self.roots.push_frame();
 

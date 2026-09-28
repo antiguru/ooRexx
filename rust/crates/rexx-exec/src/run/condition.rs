@@ -12,7 +12,7 @@
 //! Condition traps and their delivery, `RAISE`, and `SIGNAL`.
 
 use super::{
-    ActiveCondition, CallEntry, CallType, Code, ConditionTrap, Cow, Ended, Failure, Flow,
+    ActiveCondition, CallEntry, CallType, Code, ConditionTrap, Cow, Ended, Entry, Failure, Flow,
     HandlerExit, Interp, Loud, Novalue, Number, ObjRef, PendingTrap, Raise, Raised, Rc, Search,
     Trap, TrappedCondition, body_of, raise_syntax_condition,
 };
@@ -267,9 +267,17 @@ impl Interp {
                 raised.delivery.search = Search::Here;
                 return Err(Failure::Raised(raised));
             }
-            // The outermost activation is the only one allowed to look.
-            Search::Top if self.activation_depth() > 1 => return Err(failure),
-            Search::Top => {}
+            // `RexxActivation::raiseExit` (`execution/RexxActivation.cpp:1741`):
+            // an internal call hands the raise to its parent, and the first
+            // activation that is not one raises it, from there outward.
+            Search::Top if self.activation().entry == Entry::InternalCall => return Err(failure),
+            Search::Top => {
+                let Failure::Raised(mut raised) = failure else {
+                    unreachable!("matched Failure::Raised immediately above")
+                };
+                raised.delivery.search = Search::Here;
+                return self.offer_to_trap(code, Failure::Raised(raised));
+            }
             Search::Nobody => return Err(failure),
         }
         // A phantom does not trap. `RexxActivation::trap`
@@ -558,8 +566,8 @@ impl Interp {
     /// `RAISE`, in all of its forms.
     /// ```text
     /// RAISE SYNTAX n.m RETURN [e]   search from the raising activation outward
-    /// RAISE SYNTAX n.m             \  the OUTERMOST activation's trap only;
-    /// RAISE SYNTAX n.m EXIT [e]    /  every level in between skips its own
+    /// RAISE SYNTAX n.m             \  the nearest activation not an internal
+    /// RAISE SYNTAX n.m EXIT [e]    /  call, then outward; internal calls skip
     /// RAISE other ... RETURN [e]      search from the raising activation's CALLER
     /// RAISE other ...              \  no trap at all -- the program ends, and
     /// RAISE other ... EXIT [e]     /  the condition's default action applies
@@ -698,6 +706,7 @@ impl Interp {
             //   >A>   "X"
             //   >K>   "ARRAY" => "an Array"
             // ```
+            let mut held = Vec::with_capacity(items.len());
             for item in items {
                 let Some(expr) = item else {
                     // An omitted position (`array (1,,3)`) **holds its
@@ -710,10 +719,12 @@ impl Interp {
                     // is X." here.
                     self.trace_argument(indent, b"");
                     additional.push(Vec::new());
+                    held.push(None);
                     continue;
                 };
                 let value = self.eval(code, expr)?;
                 self.roots.push_temp(value);
+                held.push(Some(value));
                 // **No gap check here, and the absence is the decision.**
                 // `RaiseInstruction::execute` builds a real `ArrayClass` from
                 // these elements (`RaiseInstruction.cpp:217`-`239`) and the
@@ -729,6 +740,9 @@ impl Interp {
                 self.trace_argument(indent, &rendered);
                 additional.push(rendered);
             }
+            // The condition object's `ADDITIONAL` is the array of the items
+            // themselves, as `ADDITIONAL`'s own value is.
+            self.pending_additional = Some(self.security_arguments_array(&held));
             // **`an Array`, verbatim and regardless of the elements** --
             // it is the Array class's own default string form, which is
             // what the oracle traces here (measured for `array

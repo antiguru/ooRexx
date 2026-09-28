@@ -1938,15 +1938,21 @@ pub(super) fn native_length(
     Ok(Some(interp.counted(length)))
 }
 
-/// `String~makeArray`: the receiver's lines, one array element each.
+/// `String~makeArray`: the receiver's lines, one array element each, or its
+/// pieces between `separator`s where one is given (`StringUtil::makearray`,
+/// `classes/support/StringUtil.cpp:545`).
 pub(super) fn native_string_makearray(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
-    _args: &[Option<ObjRef>],
+    args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    let separator = super::method_arguments::optional_string_or_none_argument(interp, args, 0)?;
     let bytes = interp.to_text(receiver).to_vec();
-    let lines = crate::builtin::string::line_slices(&bytes);
+    let lines = match &separator {
+        Some(separator) => crate::builtin::string::split_slices(&bytes, separator),
+        None => crate::builtin::string::line_slices(&bytes),
+    };
     // **Each line is rooted as it is built.** The `Vec` gathering them is a
     // Rust local and invisible to the collector, so a line built earlier is
     // swept by the allocation of the next one -- and, for a single-line

@@ -21,78 +21,78 @@ fn run_source(source: &[u8]) -> (i32, String, String) {
     )
 }
 
-/// Every operator the oracle sends to its left operand as a message
-/// refuses loudly, naming the operator and the operand's shape.
+/// An array and an object the interpreter builds natively are operator
+/// receivers: the operator is sent, `Object`'s six answer by identity and
+/// every other operator is the send's own 97.1. Each row measured, oracle
+/// three descriptors identical.
 #[test]
-fn an_operator_sent_to_an_object_is_loud() {
-    // (source, the operator the message must name, the shape it must name)
-    let cases: &[(&[u8], &str, &str)] = &[
-        // **No `.array` row here**, and that is the property rather than
-        // an omission: a class object is an operator *receiver*
-        // (`Interp::operator_message_receiver`), so every operator
-        // reaches it as a message and none of them reports a gap.
-        // `a_class_objects_operators_are_sent_as_messages` is where they
-        // are asserted, and the rows below are the control -- a change
-        // that widened past class handles would move one of them.
-        // oracle 0 -- two distinct tables rendering the same text
+fn an_operator_sent_to_an_array_or_a_native_object_is_a_message() {
+    // (source, exit code, stdout, the 97.1 line stderr must carry)
+    let cases: &[(&[u8], i32, &str, &str)] = &[
+        // Two distinct tables rendering the same text.
         (
             b"say (.methods == .routines)\n::method m\n  return 1\n::routine r\n  return 2\n",
-            "==",
-            "one of the interpreter's own objects",
+            0,
+            "0\n",
+            "",
         ),
-        // An array, which `~superClasses` puts in a program's hands.
-        // oracle 97.1 at rc 159, `Object "an Array" does not understand
-        // message "+"` -- `.Array` defines no arithmetic or logical
-        // method, so the send finds nothing.
-        (b"say (.Object~superClasses + 1)\n", "+", "an array"),
-        (b"say (.Object~superClasses & 1)\n", "&", "an array"),
-        // oracle 0 on both, measured -- `Object`'s own identity
-        // comparison, which this crate does not model. **A build
-        // converting through the array's string value answers `1`**: the
-        // array is `.Object`'s own superclass list, which holds nothing,
-        // so the items joined are the empty string. Measured, three
-        // descriptors, `say (.Object~superClasses = '')` and the `==`
-        // form: `0` on the oracle at rc 0.
-        (b"say (.Object~superClasses = '')\n", "=", "an array"),
-        (b"say (.Object~superClasses == '')\n", "==", "an array"),
-        // An array whose joined items *are* a number, which the rows
-        // above cannot reach: `.Object~superClasses` holds nothing, so
-        // its string value is empty and parses as no number whatever
-        // this crate does with it. Measured, oracle: `a = (1,)` then
-        // `say a + 1` and `say (a & 1)` are 97.1 at rc 159, and
-        // `say (a = 1)` is `0` at rc 0 -- `Object`'s identity test, not
-        // a comparison of `1` against `1`.
-        (b"a = (1,)\nsay (a + 1)\n", "+", "an array"),
-        (b"a = (1,)\nsay (a = 1)\n", "=", "an array"),
-        (b"a = (1,)\nsay (a & 1)\n", "&", "an array"),
-        (b"a = (1,)\nsay \\a\n", "\\", "an array"),
-        // A package object, which `~package` puts in a program's hands
-        // and which reaches the same arm `.environment` does.
-        // oracle 97.1 at rc 159
+        (
+            b"say (.Object~superClasses + 1)\n",
+            159,
+            "",
+            "Object \"an Array\" does not understand message \"+\".",
+        ),
+        (
+            b"say (.Object~superClasses & 1)\n",
+            159,
+            "",
+            "Object \"an Array\" does not understand message \"&\".",
+        ),
+        // **A build converting through the array's string value answers
+        // `1`**: `.Object`'s superclass list holds nothing, so its items
+        // join to the empty string.
+        (b"say (.Object~superClasses = '')\n", 0, "0\n", ""),
+        (b"say (.Object~superClasses == '')\n", 0, "0\n", ""),
+        // An array whose joined items *are* a number: identity, not a
+        // comparison of `1` against `1`.
+        (
+            b"a = (1,)\nsay (a + 1)\n",
+            159,
+            "",
+            "Object \"an Array\" does not understand message \"+\".",
+        ),
+        (b"a = (1,)\nsay (a = 1)\n", 0, "0\n", ""),
+        (
+            b"a = (1,)\nsay (a & 1)\n",
+            159,
+            "",
+            "Object \"an Array\" does not understand message \"&\".",
+        ),
+        (
+            b"a = (1,)\nsay \\a\n",
+            159,
+            "",
+            "Object \"an Array\" does not understand message \"\\\".",
+        ),
         (
             b"say (.Array~package + 1)\n",
-            "+",
-            "one of the interpreter's own objects",
+            159,
+            "",
+            "Object \"The REXX Package\" does not understand message \"+\".",
         ),
-        // oracle 1 -- one package object, measured:
-        // `(.Array~package == .String~package)`
-        (
-            b"say (.Array~package == .String~package)\n",
-            "==",
-            "one of the interpreter's own objects",
-        ),
+        // One package object.
+        (b"say (.Array~package == .String~package)\n", 0, "1\n", ""),
     ];
-    for (source, op, kind) in cases {
-        let (code, stdout, stderr) = run_source(source);
-        let expected = format!(
-            "rexx-exec: the operator `{op}` applied to {kind} is not implemented (Phase 5)\n"
-        );
+    for (source, code, stdout, raised) in cases {
+        let (got_code, got_stdout, got_stderr) = run_source(source);
+        let shown = String::from_utf8_lossy(source);
         assert_eq!(
-            (code, stdout.as_str(), stderr.as_str()),
-            (120, "", expected.as_str()),
-            "{:?}",
-            String::from_utf8_lossy(source)
+            (got_code, got_stdout.as_str()),
+            (*code, *stdout),
+            "{shown:?}"
         );
+        assert!(got_stderr.contains(raised), "{shown:?}: {got_stderr:?}");
+        assert_eq!(got_stderr.is_empty(), raised.is_empty(), "{shown:?}");
     }
 }
 
@@ -227,11 +227,13 @@ fn an_object_as_a_do_over_target_is_loud() {
             b"do e over .context~package~local\nsay e\nend\nsay 'done'\n",
             "one of the interpreter's own objects",
         ),
-        (
-            b"signal on syntax\nsay 1 + 'a'\nsyntax:\ndo e over condition('O')\nend\n",
-            "one of the interpreter's own objects",
-        ),
     ];
+    // A condition object is a store-backed `Directory` and converts --
+    // measured, oracle rc 0 with nothing written.
+    assert_eq!(
+        run_source(b"signal on syntax\nsay 1 + 'a'\nsyntax:\ndo e over condition('O')\nend\n"),
+        (0, String::new(), String::new())
+    );
     for (source, kind) in cases {
         let (code, stdout, stderr) = run_source(source);
         let expected = format!(
@@ -613,8 +615,7 @@ fn a_value_the_operator_gap_names_parses_as_no_number() {
         );
     }
     // The send targets among them, which is the half `arith_left_operand`
-    // rides. `array` is in the gap's set and is not one, so this is not
-    // the same assertion in different words.
+    // rides: the array and the instance are both sent to.
     assert!(interp.operator_message_receiver(named).is_some());
-    assert!(interp.operator_message_receiver(array).is_none());
+    assert!(interp.operator_message_receiver(array).is_some());
 }

@@ -1185,6 +1185,10 @@ impl Interp {
             // `97.1 Object "The Array class" does not understand message`.
             Body::Class { .. } => Some(value),
             Body::Instance { .. } => Some(value),
+            // Neither `Array` nor a class this crate builds as a native body
+            // declares an operator but `Object`'s six and `Pointer`'s four
+            // (`memory/Setup.cpp`), so the send answers by identity or 97.1.
+            Body::Array { .. } | Body::Native(_) => Some(value),
             Body::Stem {
                 default: Some(default),
                 ..

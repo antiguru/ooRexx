@@ -1,0 +1,22 @@
+-- Operators on an Array and on natively built objects are sends.
+a = .array~of(1,2); b = a
+say (a == b) (a = b) (a \== .array~of(1,2)) (a <> b) (a >< .nil) (a = 'x')
+d = .directory~new; say (d == d) (d = .directory~new) (d \= d)
+m = .mutablebuffer~new('abc'); say (m == m) (m = 'abc') (m == 'abc')
+say (.context == .context) (.methods == .methods)
+say ('x' == a) (1 = a)
+signal on syntax name s1
+say a + 1
+s1: say condition('o')~code condition('o')~message
+signal on syntax name s2
+say d < d
+s2: say condition('o')~code condition('o')~message
+signal on syntax name s3
+say \a
+s3: say condition('o')~code condition('o')~message
+signal on syntax name s4
+say a & 1
+s4: say condition('o')~code condition('o')~message
+signal on syntax name s5
+say -a
+s5: say condition('o')~code condition('o')~message

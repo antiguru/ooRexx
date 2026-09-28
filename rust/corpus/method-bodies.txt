@@ -99,8 +99,8 @@ Message	notify	instance	loud	method "NOTIFY" of class "Message"
 Message	reply	instance	loud	method "REPLY" of class "Message"
 Message	replyWith	instance	loud	method "REPLYWITH" of class "Message"
 Message	result	instance	loud	`Message~result` on a message whose send has not been made
-Message	send	instance	loud	method "SEND" of class "Message"
-Message	sendWith	instance	loud	method "SENDWITH" of class "Message"
+Message	send	instance	answers	rc 0
+Message	sendWith	instance	answers	rc 168
 Message	start	instance	loud	method "START" of class "Message"
 Message	startWith	instance	loud	method "STARTWITH" of class "Message"
 Message	target	instance	loud	method "TARGET" of class "Message"

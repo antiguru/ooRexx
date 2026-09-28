@@ -294,3 +294,15 @@ lang/library_command_redirect.rex
 # The same handlers under every ::OPTIONS ... SYNTAX a handler's condition can
 # meet: they raise nothing, so nothing escalates (surface Task 6's fix round).
 lang/library_command_options.rex
+
+# Surface Task 8: what the ooTest framework and the METHOD, CONVERSION and
+# FUNCTION groups reach on their way through a single-group run.
+lang/string_copy.rex
+lang/string_makearray_separator.rex
+lang/message_send.rex
+lang/message_new_arguments.rex
+lang/operator_native_receivers.rex
+lang/raise_syntax_nearest_top_level.rex
+lang/raise_array_additional_objects.rex
+lang/condition_object_directory.rex
+lang/parse_message_targets.rex

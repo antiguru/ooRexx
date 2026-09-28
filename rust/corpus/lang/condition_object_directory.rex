@@ -1,0 +1,13 @@
+-- A condition object answers the whole Directory surface.
+signal on syntax name h1
+x = 1/0
+h1: c = condition('o')
+say c~class~id c~items c~hasEntry('CODE') c~hasIndex('CODE') c~hasEntry('RC') c~code c~rc
+say c~allIndexes~sortWith(.caselessComparator~new)~makeString('L', ' ')
+say c~isA(.directory) c~entry('condition') c['MESSAGE']
+c~extra = 5; say c~extra c~items
+call on error name he
+'exit 3'
+say 'end'
+exit
+he: d = condition('o'); say d~items d~hasEntry('RC') d~rc d~condition condition('d'); return

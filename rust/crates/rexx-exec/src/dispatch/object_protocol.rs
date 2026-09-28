@@ -14,11 +14,12 @@
 //! readers.
 
 use super::{
-    Behaviour, BehaviourId, Body, Cleared, DEFAULTNAME, Failure, Interp, Loud, MESSAGE_RESULT,
-    OBJECTNAME, ObjRef, ObjectMethod, ObjectMethodWrite, Operator, Primitive, Raised, Resolution,
-    UNNAMED_METHOD, class_argument, compile_method_source, is_enhanced_instance,
-    method_name_argument, pointer_address, request_array, required_string_argument,
-    required_string_named_argument, unconverted_array_argument,
+    Behaviour, BehaviourId, Body, Cleared, DEFAULTNAME, Failure, Interp, Loud, MESSAGE_ARGUMENTS,
+    MESSAGE_NAME, MESSAGE_RESULT, MESSAGE_SCOPE, MESSAGE_TARGET, OBJECTNAME, ObjRef, ObjectMethod,
+    ObjectMethodWrite, Operator, Primitive, Raised, Resolution, UNNAMED_METHOD, class_argument,
+    compile_method_source, is_enhanced_instance, method_name_argument, pointer_address,
+    request_array, required_string_argument, required_string_named_argument,
+    unconverted_array_argument,
 };
 
 /// `RexxObject::initRexx` (`classes/ObjectClass.cpp:2546`-`:2549`): it takes
@@ -585,6 +586,11 @@ pub(super) fn native_copy(
         Ok(Primitive::Instance { .. }) => rexx_core::BehaviourId::OBJECT,
         Ok(Primitive::Array) => rexx_core::BehaviourId::ARRAY,
         Ok(Primitive::Stem) => rexx_core::BehaviourId::STEM,
+        // A value carried in its handle is its own copy (D15).
+        Ok(Primitive::String | Primitive::SmallInt) if interp.heap.get(receiver).is_none() => {
+            return Ok(Some(receiver));
+        }
+        Ok(Primitive::String) => rexx_core::BehaviourId::STRING,
         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
         Err(kind) => return Err(Loud::receiver_class(kind).into()),
     };
@@ -821,6 +827,78 @@ fn started_message(
     };
     interp.message_outcomes.insert(object, outcome);
     Ok(Some(object))
+}
+
+/// `Message~send([receiver] [, argument ...])`: the send a `Message~new`
+/// object holds, to a new receiver and with new arguments where given --
+/// `MessageClass::sendRexx` (`classes/MessageClass.cpp:308`).
+pub(super) fn native_message_send(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if let Some(Some(target)) = args.first() {
+        interp.set_native_entry(receiver, MESSAGE_TARGET, *target);
+    }
+    if args.len() > 1 {
+        let arguments = interp.security_arguments_array(&args[1..]);
+        interp.set_native_entry(receiver, MESSAGE_ARGUMENTS, arguments);
+    }
+    dispatch_held_message(interp, receiver)
+}
+
+/// `Message~sendWith(receiver, arguments)`: [`native_message_send`] with the
+/// arguments required, in an array -- `MessageClass::sendWithRexx`
+/// (`classes/MessageClass.cpp:340`).
+pub(super) fn native_message_send_with(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if let Some(Some(target)) = args.first() {
+        interp.set_native_entry(receiver, MESSAGE_TARGET, *target);
+    }
+    let values = message_arguments(interp, args.get(1).copied().flatten())?;
+    let arguments = interp.security_arguments_array(&values);
+    interp.set_native_entry(receiver, MESSAGE_ARGUMENTS, arguments);
+    dispatch_held_message(interp, receiver)
+}
+
+/// `MessageClass::send` and `dispatch` (`classes/MessageClass.cpp:401`,
+/// `:421`): the held send made, its answer or its condition recorded for
+/// `result`, `completed` and `hasError`, and the condition raised here too.
+fn dispatch_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    // A message `~start` made holds no unsent send, and reusing it is
+    // `Error_Execution_message_reuse`, which this crate does not raise.
+    let (Some(target), Some(name), Some(arguments)) = (
+        interp.native_entry(message, MESSAGE_TARGET),
+        interp.native_entry(message, MESSAGE_NAME),
+        interp.native_entry(message, MESSAGE_ARGUMENTS),
+    ) else {
+        return Err(Loud::native_method(b"SEND", "Message").into());
+    };
+    let scope = interp.native_entry(message, MESSAGE_SCOPE);
+    let name = interp.to_text(name).into_owned();
+    let values = interp.array_slots_of(arguments).unwrap_or_default();
+    interp.message_outcomes.remove(&message);
+    interp.validate_scope_override(target, scope)?;
+    let caller = interp.caller();
+    match interp.send_message(target, &name, scope, &values, caller) {
+        Ok(answer) => {
+            interp.set_native_entry(message, MESSAGE_RESULT, answer.unwrap_or(ObjRef::NIL));
+            interp.message_outcomes.insert(message, None);
+            Ok(answer)
+        }
+        Err(Failure::Raised(raised)) => {
+            interp
+                .message_outcomes
+                .insert(message, Some(raised.clone()));
+            Err(Failure::Raised(raised))
+        }
+        Err(other) => Err(other),
+    }
 }
 
 /// `Message~result`: the value the send answered, `.nil` for one that

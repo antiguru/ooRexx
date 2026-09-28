@@ -29,8 +29,9 @@ pub(crate) enum Search {
     /// From the **caller** of the activation that raised, outward -- the
     /// raising activation's own (inherited) trap is skipped.
     Caller,
-    /// The **outermost** activation only; every level it unwinds through
-    /// skips its own trap check.
+    /// The first activation that is not an internal call, then outward from
+    /// there; every internal call it unwinds through first skips its own trap
+    /// check.
     Top,
     /// No activation at all may trap this -- it is already the condition's
     /// default action, on its way to the report.

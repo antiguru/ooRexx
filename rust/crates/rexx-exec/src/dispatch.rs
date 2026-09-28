@@ -145,9 +145,9 @@ use buffer::{
 // The method-argument parsers the primitive methods share.
 mod method_arguments;
 use method_arguments::{
-    named_string_argument, optional_length_argument, optional_position_argument,
-    pad_method_argument, refuse_method_argument, required_position_argument,
-    string_method_argument, usize_or_refuse, whole_method_argument,
+    named_string_argument, option_method_argument, optional_length_argument,
+    optional_position_argument, pad_method_argument, refuse_method_argument,
+    required_position_argument, string_method_argument, usize_or_refuse, whole_method_argument,
 };
 
 // `Class`'s own methods: its readers, the mutators, the class factory.
@@ -179,10 +179,11 @@ use object_protocol::{
     ArrayArgument, array_argument, decode_message_name, hash_value, native_class, native_copy,
     native_default_name, native_has_method, native_hash_code, native_identity_hash, native_is_a,
     native_is_nil, native_message_completed, native_message_has_error, native_message_result,
-    native_no_op, native_object_concat, native_object_concat_blank, native_object_different,
-    native_object_identical, native_object_name, native_object_name_set, native_request,
-    native_run, native_send, native_send_with, native_set_method, native_start, native_start_with,
-    native_string, native_unset_method, operator_argument, run_method_body, string_hash,
+    native_message_send, native_message_send_with, native_no_op, native_object_concat,
+    native_object_concat_blank, native_object_different, native_object_identical,
+    native_object_name, native_object_name_set, native_request, native_run, native_send,
+    native_send_with, native_set_method, native_start, native_start_with, native_string,
+    native_unset_method, operator_argument, run_method_body, string_hash,
 };
 
 // The required-string protocol and the string conversion behind it.
@@ -441,6 +442,13 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_message_has_error,
     ),
     ("Message", "RESULT", Arity::Fixed(0), native_message_result),
+    ("Message", "SEND", Arity::Counted, native_message_send),
+    (
+        "Message",
+        "SENDWITH",
+        Arity::Fixed(2),
+        native_message_send_with,
+    ),
     ("Method", "ANNOTATION", Arity::Fixed(1), native_annotation),
     ("Method", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     // `MethodClass::getScopeRexx`, `memory/Setup.cpp:1113`. `Routine` and
@@ -555,7 +563,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     (
         "String",
         "MAKEARRAY",
-        Arity::Fixed(0),
+        Arity::Fixed(1),
         native_string_makearray,
     ),
     (
@@ -787,6 +795,13 @@ const UNNAMED_METHOD: &[u8] = b"*UNNAMED*";
 
 /// The entry a `Message` object keeps the value its send answered under.
 const MESSAGE_RESULT: &[u8] = b"RESULT";
+
+/// The entries a `Message~new` object keeps its unsent message in:
+/// `MessageClass`'s `receiver`, `message`, `startscope` and `args`.
+const MESSAGE_TARGET: &[u8] = b"TARGET";
+const MESSAGE_NAME: &[u8] = b"MESSAGENAME";
+const MESSAGE_SCOPE: &[u8] = b"SCOPE";
+const MESSAGE_ARGUMENTS: &[u8] = b"ARGUMENTS";
 
 /// The message a class construction sends the class it just built --
 /// `GlobalNames::INIT`, sent by `RexxClass::subclass`

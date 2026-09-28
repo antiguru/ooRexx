@@ -1,0 +1,13 @@
+-- String~copy: an equal String, and for a heap string a distinct object.
+s = 'abc'; t = s~copy
+say t (s == t) t~class~id
+l = copies('x', 100); m = l~copy
+say m~length (l == m) m~class~id
+n = 12; o = n~copy
+say o (n == o) o~class~id (o + 1)
+d = 1.5; e = d~copy
+say e (e * 2) e~class~id
+say 'abc'~copy~length
+t = .IdentityTable~new
+t[l] = 1
+say t~hasIndex(m) t~hasIndex(l)

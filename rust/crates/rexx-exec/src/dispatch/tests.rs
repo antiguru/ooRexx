@@ -108,9 +108,11 @@ fn a_start_scope_hides_a_method_defined_after_it_and_not_one_defined_before() {
 #[test]
 fn an_unimplemented_method_is_loud_where_an_unknown_one_is_a_condition() {
     let mut interp = Interp::new();
-    let receiver = interp.text(b"abc");
-    let string = interp.classes().lookup("String").expect("String is native");
-    let answered = interp.classes().instance_method_names(string);
+    // A `Method` object: every name `String` answers now has an
+    // implementation, `COPY` last.
+    let method = interp.method_class();
+    let receiver = interp.native_instance(method);
+    let answered = interp.classes().instance_method_names(method);
     // **The candidate is found in the registry and only then sent.**
     // Sending every name until one refuses used to do it, and that stopped
     // working the moment a numeric method landed early in the order: a
@@ -125,7 +127,7 @@ fn an_unimplemented_method_is_loud_where_an_unknown_one_is_a_condition() {
         .chain(array::sort::NATIVE_METHODS)
         .chain(array::surface::NATIVE_METHODS)
         .chain(collection::supplier::NATIVE_METHODS)
-        .filter(|(class, ..)| *class == "String")
+        .filter(|(class, ..)| *class == "Method")
         .map(|(_, method, ..)| *method)
         .collect();
     let mut unimplemented = None;
@@ -143,7 +145,7 @@ fn an_unimplemented_method_is_loud_where_an_unknown_one_is_a_condition() {
     }
     assert!(
         unimplemented.is_some(),
-        "every name .String's behaviour answers now has an implementation, so this test \
+        "every name .Method's behaviour answers now has an implementation, so this test \
          has no subject left and its pair has to be rebuilt on something else"
     );
     assert!(matches!(
@@ -1127,9 +1129,11 @@ fn a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state() {
         run_source(&format!("o = {message}\nsay o~class~id\n")),
         (0, "Message\n".to_string(), String::new())
     );
-    let (code, stdout, stderr) = run_source(&format!("o = {message}\nsay o~send\n"));
-    assert_eq!((code, stdout.as_str()), (120, ""));
-    assert!(stderr.starts_with("rexx-exec: "), "{stderr:?}");
+    // `Message` keeps its send and makes it -- measured, oracle rc 0.
+    assert_eq!(
+        run_source(&format!("o = {message}\nsay o~send\n")),
+        (0, "an Object\n".to_string(), String::new())
+    );
     assert_eq!(
         run_source("o = .MutableBuffer~new('abc')\nsay o~class~id\nsay o~length\n"),
         (0, "MutableBuffer\n3\n".to_string(), String::new())
@@ -1671,16 +1675,6 @@ fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
 #[test]
 fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer() {
     for (source, message) in [
-        // `MAKEARRAY` is in this behaviour's dictionary and this crate
-        // has no code for it on a `Directory` built on `NativeObject`'s
-        // map. Answering `.nil` would contradict the oracle, which
-        // converts: measured, oracle rc 0 and the condition object's
-        // array holds `14` items.
-        (
-            "signal on syntax\nsay 1 + 'a'\nsyntax:\nsay condition('O')~request('ARRAY')~items\n",
-            "rexx-exec: method \"MAKEARRAY\" of class \"Directory\" is not implemented \
-             (Phase 5)\n",
-        ),
         // A receiver with no variable pool to keep a name in. The oracle
         // stores one and remembers it; answering rc 0 and forgetting it
         // would be a wrong answer.
@@ -1708,6 +1702,12 @@ fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answe
     for (source, expected) in [
         ("say .K~request('ARRAY')\n::class K\n", "The NIL object\n"),
         ("say .Array~request('CLASS')\n", "The Array class\n"),
+        // A condition object is a store-backed `Directory`, which converts:
+        // measured, oracle rc 0 and the array holds `14` items.
+        (
+            "signal on syntax\nsay 1 + 'a'\nsyntax:\nsay condition('O')~request('ARRAY')~items\n",
+            "14\n",
+        ),
         (".K~objectName = 'named'\nsay .K\n::class K\n", "named\n"),
         (
             ".environment~objectName = 'named'\nsay .environment\n",
