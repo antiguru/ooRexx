@@ -846,7 +846,7 @@ impl Interp {
         }
         let scope = self.string_class();
         let scope_id = self.classes().id_string(scope).to_string();
-        self.blame_native_method(op, &scope_id);
+        self.blame_native_method(op, &scope_id, value, &[]);
     }
 
     /// Whether `value` is a stem whose forwarded operator would actually

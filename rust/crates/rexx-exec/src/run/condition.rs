@@ -323,6 +323,12 @@ impl Interp {
         // site reports line 3.
         let site = self.failure_site.take();
         let sites = std::mem::take(&mut self.failure_sites);
+        let frames = std::mem::take(&mut self.failure_frames);
+        for &frame in &frames {
+            self.roots.push_temp(frame);
+        }
+        self.failure_frame = None;
+        let origin = self.failure_origin.take();
         self.set_sigl(self.clause_state.line());
         if let Some(rc) = &raised.rc {
             let value = self.text(rc);
@@ -334,9 +340,14 @@ impl Interp {
         // (`TrappedCondition`), while `active_condition` is the interpreter's
         // one slot for `RAISE PROPAGATE`.
         // Built here, on the raising clause, because everything in it is a
-        // raise-time fact: `POSITION` is this clause's own line and
-        // `STACKFRAMES` the stack as it stands now.
-        let object = self.build_condition_object(&raised, Some(false))?;
+        // raise-time fact: `POSITION` is the innermost level's line and
+        // `STACKFRAMES` the levels left above the stack as it stands now.
+        let unwound = crate::condition::Unwound {
+            sites: &sites,
+            frames,
+            origin,
+        };
+        let object = self.build_trapped_condition_object(&raised, &unwound)?;
         self.activation_mut().condition = Some(TrappedCondition {
             name: raised.condition.as_bytes().into(),
             // Only a `SYNTAX` condition has a `CODE` item at all
@@ -908,8 +919,10 @@ impl Interp {
         // propagate` clause recording itself over the clause that actually
         // raised -- measured, the oracle echoes line 8 (`say 1/0`), not line
         // 12 (`raise propagate`).
-        self.failure_site = active.site.clone();
-        self.failure_sites = active.sites.clone();
+        let (site, sites) = (active.site.clone(), active.sites.clone());
+        self.clear_failure_levels();
+        self.failure_site = site;
+        self.failure_sites = sites;
         Err(raised.into())
     }
 

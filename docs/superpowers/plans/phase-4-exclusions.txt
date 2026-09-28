@@ -4690,21 +4690,21 @@ the oracle's orxmethod and orxfunction and a forged extension
 by its build.sh, NEEDED libgcc_s.so.1 and libc.so.6), each side from a fresh
 directory, three descriptors separately. The probes named are in that
 directory's probes/.
-  A NATIVE SYNTAX CONDITION RE-RAISED INTO A CALLER LACKS THE NATIVE FRAME
-  AND PROPAGATED. cond3.rex (RaiseKept, then SIGNAL ON SYNTAX in the
-  caller): the oracle's condition object leads its TRACEBACK with
-  `*-* Compiled routine "RAISEKEPT".` and its STACKFRAMES with the ROUTINE
-  frame, and has PROPAGATED = 1; ours has neither line and PROPAGATED = 0.
+  A NATIVE SYNTAX CONDITION RE-RAISED INTO A CALLER LACKS PROPAGATED.
+  cond3.rex (RaiseKept, then SIGNAL ON SYNTAX in the caller): the oracle's
+  condition object has PROPAGATED = 1, ours PROPAGATED = 0; its TRACEBACK
+  and STACKFRAMES, which lacked the native frame here, agree since the Task
+  8 fix round B (re-run with the forged library built by build.sh).
   sendthrow.rex, a Throw inside a Rexx method a SendMessage0 reached, shows
-  PROPAGATED 1 against 0 the same way, and untrapped, its final `Error 40
-  running ... line N` names the line of the clause that called the
-  extension on the oracle (7) and the raising clause here (43). The
-  METHOD group's `forward ... continue` shape lacks the native METHOD frame
-  likewise. OWNER: Phase 8; the native frame in a propagated condition is
-  the native boundary's.
-  A RaiseCondition TAKEN BY CALL ON OR SIGNAL ON CARRIES POSITION. rcond.rex:
-  the oracle's condition object has no POSITION entry, ours has one. OWNER:
-  Phase 8.
+  PROPAGATED 1 against 0 the same way (its POSITION agrees), and untrapped,
+  its final `Error 40 running ... line N` names the line of the clause that
+  called the extension on the oracle (7) and the raising clause here (43).
+  The METHOD group's `forward ... continue` shape was recorded as lacking
+  the native METHOD frame likewise; not re-measured by fix round B. OWNER:
+  Phase 8; PROPAGATED in a re-raised condition is the native boundary's.
+  A RaiseCondition TAKEN BY CALL ON CARRIES POSITION. rcond.rex: the
+  oracle's condition object has no POSITION entry, ours has one. Taken by
+  SIGNAL ON, the two agree since the Task 8 fix round B. OWNER: Phase 8.
   COLLECTION MEMBERS ARE MESSAGE SENDS, SO A SUBCLASS OVERRIDE IS SEEN. The
   oracle's DirectoryAt, DirectoryPut and their kin call the C++ collection
   directly; ours send AT, PUT, HASINDEX, REMOVE and the rest. ov.rex over a
@@ -4839,8 +4839,8 @@ descriptors separately.
   reports "Error 36 running Testing line 1" under a first traceback line
   "1 *-* return arg(1", and this crate reports the caller's path and line
   with no such line; trapped, the condition object's TRACEBACK lacks the
-  same line (oracle 3 items, here 1, of which the two missing are this
-  entry's line and the I2 trapped-traceback divergence). ParseError carries
+  same line (oracle 3 items, here 2, the missing one being this entry's
+  line). ParseError carries
   the failing clause's start byte and no end, so there is no clause text to
   echo (execute's parse arm in lib.rs says the same for the top level).
   OWNER: not assigned by the fix round that made the raise; raised with the
@@ -4908,28 +4908,6 @@ under each is a single program, run from a fresh empty directory.
     TEST_REXXQUEUE
   rc 120, `the LIBRARY REXX entry point "rexx_create_queue" is not
   implemented (Phase 10)`. OWNER: Phase 10.
-  TESTS WHOSE FAILURE OR ERROR DETAIL DIFFERS, their outcome, assertion
-  count, stderr and exit status agreeing (the instrument's DETAIL_DIFFERS,
-  asserted exactly). Each fails on both sides when run alone, the FUNCTION
-  ones for want of the io handler FUNCTION's TEST registers and
-  TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA because rexxc is not on
-  PATH (RC 127 on both). Tests:
-    TEST_BUFFERED_INPUT
-    TEST_BUFFERING
-    TEST_FILE_INPUT
-    TEST_GLOBAL_SETTING
-    TEST_SIMPLE_WITH
-    TEST_WRITE_BUFFER
-    TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA
-  At -V 2 each failure report says "Line: -1" here where the oracle names
-  the failing assertion's line (TEST_BUFFERING: 1300), and TEST_BUFFERED_
-  INPUT's error report lacks the raising line and the `Compiled method
-  "SEND"` line and prints a "Program:" line the oracle does not. The cause
-  is the trapped SYNTAX condition's POSITION, STACKFRAMES and TRACEBACK,
-  which here describe the trapping activation rather than the raising one
-  (the Task 8 review's I2). The last also differs in the METHOD whole-group
-  run, which leaves it out. OWNER: Phase 8, the Task 8 fix round that owns
-  I2.
   NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND PATCHES ooTest.frm. The
   framework's ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking) is
   a REPLY thread and a GUARD ON WHEN, refused naming Phase 6; -U starts no
@@ -4941,6 +4919,31 @@ under each is a single program, run from a fresh empty directory.
   either side prints (neither name is registered on either side), and runs
   both sides at -V 2, which prints the assertion count and every failure's
   and error's detail.
+  WHAT A TRAPPED CONDITION STILL DOES NOT DESCRIBE, left by the Task 8 fix
+  round B, which made a condition a SIGNAL ON trap takes after it left the
+  levels that raised it carry their STACKFRAMES, TRACEBACK lines, POSITION
+  and program (trapped_condition_raising_frames.rex,
+  trapped_condition_raising_program.rex,
+  trapped_condition_native_levels.rex). Each probe below is one program run
+  from a fresh directory, three descriptors separately, stdout differing
+  and stderr and rc agreeing.
+  An INTERPRET fragment still running pushes no frame, so a trap in an
+  activation called from inside one, and RexxContext~stackFrames taken
+  inside one, lack its INTERPRET frame (the phase 5i found-not-fixed
+  register's row 6): `interpret 'do f over .context~stackframes; say
+  f~type f~line f~traceline; end'` in a routine prints three frames on the
+  oracle and two here. A fragment a failure leaves is a frame here too.
+  An external program called as a routine or function is a PROGRAM frame
+  here and a ROUTINE frame on the oracle: `r = 'w.rex'()` with w.rex
+  printing `.context~stackframes[1]~type`, oracle ROUTINE, here PROGRAM.
+  A failure in an external program's directive install, trapped by its
+  caller: `signal on syntax; call 'bad.rex'` over a bad.rex holding `::class
+  K` and `::constant c (1/0)`, the oracle's object has POSITION 3, program
+  bad.rex, the frames METHOD ::CONSTANT, ROUTINE bad.rex and the caller's,
+  and a traceback line `2 *-* ::class K`; here POSITION 2, the caller's
+  program, the caller's frame alone and no `::class K` line. OWNER: Phase 9
+  for all three, whose exit is the full suite green; none is a member of the
+  METHOD, CONVERSION or FUNCTION failing set.
 
 KNOWN GAPS RECORDED AFTER THE FINAL REVIEW AND THE FIX ROUNDS, each with
 its evidence and its owner, or the reason it has none. Every transcript
@@ -4949,23 +4952,6 @@ the oracle under the standard wrapper and this crate's release rexx-run at
 362f50453, both with the oracle checkout's build/lib on LD_LIBRARY_PATH,
 three descriptors to three files; where an entry says "read" no run was
 possible and the citation is what was checked.
-
-  THE CONDITION OBJECT A TRAP READS NAMES THE RUNNING PROGRAM FOR A
-  BOUNDARY RAISE (the final review's B12). The declaring-package rule of
-  c9616b3d0 and 03ceb04df lives in Raised's rendering, so the untrapped
-  report is byte-identical and the trapped object is not. signal on
-  syntax around r~doparse() over the committed
-  library_method_package_blame.d/re.cls, printing condition('O'):
-    oracle: code 88.901 / position The NIL object / program <dir>/re.cls /
-            traceback items 2 (Compiled method "DOPARSE" with scope "RE".
-            and 3 *-* say r~doparse())
-    this:   code 88.901 / position 3 / program <dir>/main.rex /
-            traceback items 1 (3 *-* say r~doparse())
-  rc 0 both. Predates the phase as a mechanism: B12 measured the same
-  three differences for a LIBRARY REXX method on the pre-slice binary, and
-  for a plain Rexx method raising 93.901 in a required package (~position
-  2 against 3). NO OWNER: it is the trapped side of required-package
-  attribution, which no phase in the plan names.
 
   A USER REQUEST METHOD IS NEVER SENT BY ANY STRING CONVERSION (the fix
   re-review's R9, parked by the controller). 'xaaby'~pos(.Req~new) where

@@ -1124,6 +1124,13 @@ impl Interp {
         })
     }
 
+    /// A `RexxContext` no activation answers for, which is what an
+    /// `INTERPRET` fragment's has become by the time its frame is read.
+    pub(crate) fn ended_context_object(&mut self) -> ObjRef {
+        let class = self.environment_model().context;
+        self.native_instance(class)
+    }
+
     /// [`Interp::context_object`] for the activation at `depth`, which
     /// `RexxContext~stackFrames` needs: `RexxActivation::createStackFrame`
     /// passes `getContextObject()`, so **building a frame creates the

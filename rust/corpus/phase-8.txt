@@ -316,3 +316,8 @@ lang/compiled_source_syntax.rex
 lang/library_routine_shared_object.rex
 # That object's annotation table, where no directive binds it.
 lang/library_routine_unbound_annotation.rex
+# The detail of FUNCTION's and METHOD's failure reports: a condition trapped
+# after it left the levels that raised it describes those levels first.
+lang/trapped_condition_raising_frames.rex
+lang/trapped_condition_raising_program.rex
+lang/trapped_condition_native_levels.rex

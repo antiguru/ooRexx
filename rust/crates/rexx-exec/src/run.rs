@@ -20,7 +20,7 @@ use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
 use crate::eval::logical_value;
 use crate::ir::{BodyEngine, NodePath};
-use crate::plan::BodyKey;
+use crate::plan::{BodyKey, Package};
 use crate::trace::{
     Announced, is_whole_number, raised_invalid_trace_letter, raised_numeric_trace_interactive_only,
 };
@@ -2859,6 +2859,67 @@ impl Interp {
         if let Some(site) = self.failure_site.take() {
             self.failure_sites.push(site);
         }
+        if let Some(frame) = self.failure_frame.take() {
+            self.failure_frames.push(frame);
+        }
+    }
+
+    /// Builds the `StackFrame` of the running activation, which `failure` is
+    /// about to leave, for a trap further out: `Activity::
+    /// generateProgramInformation` takes every frame at the raise, so the
+    /// frames a trap unwinds are still in the condition object.
+    pub(crate) fn capture_activation_frame(&mut self, failure: &Failure) {
+        let Failure::Raised(raised) = failure else {
+            return;
+        };
+        if self.failure_frame.is_some() {
+            return;
+        }
+        let arguments =
+            raised.delivery.search != Search::Top || self.activation().entry != Entry::InternalCall;
+        let Ok(frame) = crate::dispatch::context::build_frame_with(self, 0, arguments) else {
+            return;
+        };
+        self.failure_frame = Some(frame);
+        let origin = (
+            Package::Program(self.activation().program_id),
+            Some(self.clause_state.line()),
+        );
+        self.failure_origin.get_or_insert(origin);
+    }
+
+    /// The same for an `INTERPRET` fragment `failure` is leaving, whose frame
+    /// is the one `RexxActivation::createStackFrame` gives an interpret
+    /// activation: no name, target or arguments, and its own invocation and
+    /// context.
+    pub(crate) fn capture_fragment_frame(&mut self, failure: &Failure) {
+        if !matches!(failure, Failure::Raised(_)) || self.failure_frame.is_some() {
+            return;
+        }
+        let Some((line, text)) = self.failure_site.as_ref().and_then(|site| {
+            let line = site.line()?;
+            let mut text = Vec::new();
+            site.push_trace_line(&mut text);
+            Some((line, text))
+        }) else {
+            return;
+        };
+        let Ok(frame) = crate::dispatch::context::build_interpret_frame(self, line, &text) else {
+            return;
+        };
+        self.failure_frame = Some(frame);
+        let origin = (Package::Program(self.activation().program_id), Some(line));
+        self.failure_origin.get_or_insert(origin);
+    }
+
+    /// Forgets every level a failure has left, which a trap or a report has
+    /// already taken what it needs from.
+    pub(crate) fn clear_failure_levels(&mut self) {
+        self.failure_site = None;
+        self.failure_sites.clear();
+        self.failure_frame = None;
+        self.failure_frames.clear();
+        self.failure_origin = None;
     }
 
     /// The clause boundary a promoted construct owes once the branch it chose

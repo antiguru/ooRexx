@@ -1,0 +1,13 @@
+count 12
+-- A condition raised in a required package names that package's file, and an
+-- external call's caller keeps its own clause across the callee's prologues.
+signal on syntax
+call raiseIt 'x'
+exit
+syntax:
+  c = condition('O')
+  say filespec('n', c~program) filespec('n', c~package~name) c~position
+  do l over c~traceback; say l; end
+  say 'callee' 'callee.rex'('a') .context~line
+  exit
+::requires 'raiser.cls'

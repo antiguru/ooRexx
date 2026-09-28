@@ -438,15 +438,15 @@ impl Interp {
             return Err(Loud::internal_routine(row.name.as_bytes(), owner).into());
         };
         let outcome = body(self, row.name.as_bytes(), values);
-        if outcome.is_err() {
+        if let Err(failure) = &outcome {
             // The oracle reports one of these under its own routine line,
             // whether the argument marshalling or the body raised -- measured,
             // `filespec('D')` and `SysSleep('abc')` both carry it.
             match name {
-                Some(name) => self.blame_internal_routine(name),
+                Some(name) => self.blame_internal_routine(name, values, failure),
                 None => {
                     let upper = row.name.to_ascii_uppercase();
-                    self.blame_internal_routine(upper.as_bytes());
+                    self.blame_internal_routine(upper.as_bytes(), values, failure);
                 }
             }
         }
@@ -801,6 +801,9 @@ impl Interp {
         );
 
         let ended = self.run_activation();
+        if let Err(failure) = &ended {
+            self.capture_activation_frame(failure);
+        }
 
         // Before the pop, because both halves of `<I<`'s gate are the
         // callee's own -- its `trace_entry` state and its `TRACE` setting.

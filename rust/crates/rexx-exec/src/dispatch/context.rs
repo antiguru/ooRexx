@@ -450,12 +450,28 @@ fn context_stack_frames(
 /// One `StackFrame` for the activation at `depth` --
 /// `RexxActivation::createStackFrame` (`RexxActivation.cpp:5006`).
 pub(crate) fn build_frame(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
+    build_frame_with(interp, depth, true)
+}
+
+/// [`build_frame`], with the arguments left out where `arguments` is false:
+/// an internal call a tail-less `RAISE` left has had its argument list
+/// cleared by the time the oracle's frame is taken (`RexxActivation::
+/// raiseExit`). Measured, oracle rc 0: a call with two arguments reports
+/// none in the condition object.
+pub(crate) fn build_frame_with(
+    interp: &mut Interp,
+    depth: usize,
+    arguments: bool,
+) -> Result<ObjRef, Failure> {
     let invocation = interp.invocation_of(depth);
     // Created here when the activation never asked for one, which is what
     // `createStackFrame`'s own `getContextObject()` does -- see
     // `Interp::context_object_at`.
     let context = interp.context_object_at(depth);
     let mut snapshot = read_snapshot(interp, depth)?;
+    if !arguments {
+        snapshot.arguments.clear();
+    }
     let frame = interp.roots.push_frame();
     let kind = interp.text(snapshot.kind);
     interp.roots.push_temp(kind);
@@ -475,8 +491,6 @@ pub(crate) fn build_frame(interp: &mut Interp, depth: usize) -> Result<ObjRef, F
     interp.roots.push_temp(trace_line);
     let arguments = array_of_slots(interp, std::mem::take(&mut snapshot.arguments));
     interp.roots.push_temp(arguments);
-    let class = interp.object_model().stack_frame;
-    let object = interp.native_instance(class);
     let entries = [
         (key::TYPE, kind),
         (key::NAME, name),
@@ -487,14 +501,27 @@ pub(crate) fn build_frame(interp: &mut Interp, depth: usize) -> Result<ObjRef, F
         (key::CONTEXT, context.unwrap_or(ObjRef::NIL)),
         (key::TRACE_LINE, trace_line),
     ];
+    Ok(frame_object(interp, frame, entries, &trace_text))
+}
+
+/// The `StackFrame` holding `entries`, whose values the caller rooted inside
+/// `frame`, which this closes.
+fn frame_object(
+    interp: &mut Interp,
+    frame: rexx_core::FrameId,
+    entries: [(&'static [u8], ObjRef); 8],
+    trace_text: &[u8],
+) -> ObjRef {
+    let class = interp.object_model().stack_frame;
+    let object = interp.native_instance(class);
+    let held = interp
+        .heap
+        .get_mut(object)
+        .expect("just allocated and rooted");
+    let Body::Native(native) = &mut held.body else {
+        unreachable!("allocated as Body::Native by native_instance")
+    };
     for (name, value) in entries {
-        let held = interp
-            .heap
-            .get_mut(object)
-            .expect("just allocated and rooted");
-        let Body::Native(native) = &mut held.body else {
-            unreachable!("allocated as Body::Native by native_instance")
-        };
         native.set_entry(name, value);
     }
     // `StackFrameClass::stringValue`/`makeString`, which answer the traceback
@@ -503,21 +530,94 @@ pub(crate) fn build_frame(interp: &mut Interp, depth: usize) -> Result<ObjRef, F
     // frame joins on the default name: measured, oracle rc 0,
     // `say .array~of(f)` is the traceback line where `f~objectName` is
     // `a StackFrame`.
-    let held = interp
-        .heap
-        .get_mut(object)
-        .expect("just allocated and rooted");
-    let Body::Native(native) = &mut held.body else {
-        unreachable!("allocated as Body::Native by native_instance")
-    };
-    native.set_string_value(&trace_text);
+    native.set_string_value(trace_text);
     interp.roots.pop_frame(frame);
     // Re-pushed above the frame that has just closed, which is the shape
     // `Interp::line_array` and `array_of_texts` already have: the temp
     // `native_instance` took for this object was inside that frame, so
     // without this the frame comes back to its caller rooted by nothing.
     interp.roots.push_temp(object);
-    Ok(object)
+    object
+}
+
+/// The `StackFrame` of an `INTERPRET` fragment of the running activation,
+/// executing `line`, whose traceback line is `trace_text`: `FRAME_INTERPRET`
+/// with no name, target or arguments, and an invocation and a context of its
+/// own (`RexxActivation::createStackFrame`, `RexxActivation.cpp:5006`). The
+/// context is one whose activation has ended, as the fragment's has by the
+/// time anything reads it.
+pub(crate) fn build_interpret_frame(
+    interp: &mut Interp,
+    line: usize,
+    trace_text: &[u8],
+) -> Result<ObjRef, Failure> {
+    let frame = interp.roots.push_frame();
+    let kind = interp.text(b"INTERPRET");
+    interp.roots.push_temp(kind);
+    let name = interp.text(b"");
+    interp.roots.push_temp(name);
+    let line = interp.counted(line);
+    interp.next_invocation += 1;
+    let invocation = interp.counted(interp.next_invocation as usize);
+    interp.roots.push_temp(invocation);
+    let context = interp.ended_context_object();
+    let trace_line = interp.text(trace_text);
+    interp.roots.push_temp(trace_line);
+    let arguments = array_of_slots(interp, Vec::new());
+    let entries = [
+        (key::TYPE, kind),
+        (key::NAME, name),
+        (key::LINE, line),
+        (key::INVOCATION, invocation),
+        (key::TARGET, ObjRef::NIL),
+        (key::ARGUMENTS, arguments),
+        (key::CONTEXT, context),
+        (key::TRACE_LINE, trace_line),
+    ];
+    Ok(frame_object(interp, frame, entries, trace_text))
+}
+
+/// The `StackFrame` of a native method or routine that `target` (`.nil` for a
+/// routine) was sent with `arguments`, with no line or invocation and its
+/// `Compiled method` or `Compiled routine` line as its traceback
+/// (`InternalActivationFrame::createStackFrame`,
+/// `concurrency/ActivationFrame.cpp:100`, and `NativeActivation::
+/// createStackFrame`, `execution/NativeActivation.cpp:3620`). A routine's
+/// context is the calling activation's and a method's is `.nil`: measured,
+/// oracle rc 0, `SysSleep`, `FILESPEC` and an `EXTERNAL` routine answer one,
+/// `SUBSTR` and an `EXTERNAL` method none.
+pub(crate) fn build_native_level_frame(
+    interp: &mut Interp,
+    method: bool,
+    name: &[u8],
+    target: ObjRef,
+    arguments: &[Option<ObjRef>],
+    trace_text: &[u8],
+) -> ObjRef {
+    let context = if !method {
+        interp.context_object_at(0).unwrap_or(ObjRef::NIL)
+    } else {
+        ObjRef::NIL
+    };
+    let frame = interp.roots.push_frame();
+    let kind = interp.text(if method { b"METHOD" } else { b"ROUTINE" });
+    interp.roots.push_temp(kind);
+    let name = interp.text(name);
+    interp.roots.push_temp(name);
+    let trace_line = interp.text(trace_text);
+    interp.roots.push_temp(trace_line);
+    let arguments = array_of_slots(interp, arguments.to_vec());
+    let entries = [
+        (key::TYPE, kind),
+        (key::NAME, name),
+        (key::LINE, ObjRef::NIL),
+        (key::INVOCATION, ObjRef::NIL),
+        (key::TARGET, target),
+        (key::ARGUMENTS, arguments),
+        (key::CONTEXT, context),
+        (key::TRACE_LINE, trace_line),
+    ];
+    frame_object(interp, frame, entries, trace_text)
 }
 
 /// The `StackFrame` of the innermost native call --
@@ -562,9 +662,6 @@ pub(crate) fn build_native_frame(interp: &mut Interp) -> Result<ObjRef, Failure>
     let trace_line = interp.text(&trace_text);
     interp.roots.push_temp(trace_line);
     let arguments = array_of_slots(interp, arguments);
-    interp.roots.push_temp(arguments);
-    let class = interp.object_model().stack_frame;
-    let object = interp.native_instance(class);
     let entries = [
         (key::TYPE, kind),
         (key::NAME, name),
@@ -575,20 +672,7 @@ pub(crate) fn build_native_frame(interp: &mut Interp) -> Result<ObjRef, Failure>
         (key::CONTEXT, context.unwrap_or(ObjRef::NIL)),
         (key::TRACE_LINE, trace_line),
     ];
-    let held = interp
-        .heap
-        .get_mut(object)
-        .expect("just allocated and rooted");
-    let Body::Native(native) = &mut held.body else {
-        unreachable!("allocated as Body::Native by native_instance")
-    };
-    for (name, value) in entries {
-        native.set_entry(name, value);
-    }
-    native.set_string_value(&trace_text);
-    interp.roots.pop_frame(frame);
-    interp.roots.push_temp(object);
-    Ok(object)
+    Ok(frame_object(interp, frame, entries, &trace_text))
 }
 
 /// The activation at `depth` read out in one pass, before anything allocates.

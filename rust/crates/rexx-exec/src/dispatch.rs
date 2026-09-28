@@ -25,7 +25,7 @@ use crate::activation::{
     Activation, DeferredReply, MethodIdentity, ReplyState, TraceEntry, body_of,
 };
 use crate::error::{FailureSite, Raised};
-use crate::plan::{BodyKey, Package};
+use crate::plan::{BodyKey, Package, ProgramId};
 use crate::run::MAX_ACTIVATION_DEPTH;
 use crate::{Failure, Interp, Loud};
 
@@ -1925,7 +1925,7 @@ impl Interp {
                 };
                 if outcome.is_err() {
                     let scope = self.classes().id_string(resolution.scope).to_string();
-                    self.blame_native_method(name, &scope);
+                    self.blame_native_method(name, &scope, receiver, args);
                 }
                 outcome
             }
@@ -1969,18 +1969,20 @@ impl Interp {
                         }
                         Arity::Fixed(_) | Arity::Counted => run(self, cleared, receiver, args),
                     };
-                    if outcome.is_err() {
+                    if let Err(failure) = &outcome {
                         let scope = self.classes().id_string(resolution.scope).to_string();
-                        self.blame_external_method(name, &scope, resolution.method);
+                        let method = resolution.method;
+                        self.blame_external_method(name, &scope, method, receiver, args, failure);
                     }
                     outcome
                 }
             },
             Invocable::Library(binding) => {
                 let outcome = self.run_library_method(&binding, resolution, receiver, name, args);
-                if outcome.is_err() {
+                if let Err(failure) = &outcome {
                     let scope = self.classes().id_string(resolution.scope).to_string();
-                    self.blame_external_method(name, &scope, resolution.method);
+                    let method = resolution.method;
+                    self.blame_external_method(name, &scope, method, receiver, args, failure);
                 }
                 outcome
             }
@@ -2257,6 +2259,9 @@ impl Interp {
         let saved_line = std::mem::take(&mut self.clause_line_override);
 
         let ended = self.run_activation();
+        if let Err(failure) = &ended {
+            self.capture_activation_frame(failure);
+        }
 
         self.trace_invocation_exit();
         let callee = self.pop_activation().expect("the activation just pushed");
@@ -2358,6 +2363,7 @@ impl Interp {
                 abandoned = matches!(failure, Failure::Deadline);
                 let mut sites = std::mem::take(&mut self.failure_sites);
                 sites.extend(self.failure_site.take());
+                self.clear_failure_levels();
                 failures.push((failure, sites));
                 if abandoned {
                     break;
@@ -2392,8 +2398,7 @@ impl Interp {
         }
         let caller = self.caller();
         let outcome = self.send_message(object, UNINIT, None, &[], caller);
-        self.failure_site = None;
-        self.failure_sites.clear();
+        self.clear_failure_levels();
         match outcome {
             // A deadline is discarded here with the rest, and `execute`'s own
             // guard is what keeps that from being a silent answer: the flag
@@ -2518,6 +2523,9 @@ impl Interp {
         self.trace_invocation_entry();
 
         let ended = self.run_activation();
+        if let Err(failure) = &ended {
+            self.capture_activation_frame(failure);
+        }
 
         self.trace_invocation_exit();
         let callee = self.pop_activation().expect("the activation just pushed");
@@ -2737,39 +2745,155 @@ impl Interp {
 
     /// Records the traceback line a failing native method contributes, and
     /// closes the level so the sending clause records its own.
-    pub(crate) fn blame_native_method(&mut self, name: &[u8], scope: &str) {
-        self.blame_native_level(Raised::compiled_method_line(name, scope), None);
+    pub(crate) fn blame_native_method(
+        &mut self,
+        name: &[u8],
+        scope: &str,
+        target: ObjRef,
+        arguments: &[Option<ObjRef>],
+    ) {
+        let level = NativeLevel {
+            method: true,
+            name,
+            target,
+            arguments,
+            activation: None,
+        };
+        self.blame_native_level(Raised::compiled_method_line(name, scope), None, level);
     }
 
     /// [`Interp::blame_native_method`] for a method an `EXTERNAL` directive
     /// bound, whose level carries the package that directive was written in.
-    pub(crate) fn blame_external_method(&mut self, name: &[u8], scope: &str, method: MethodId) {
+    /// `failure` is what the method answered.
+    pub(crate) fn blame_external_method(
+        &mut self,
+        name: &[u8],
+        scope: &str,
+        method: MethodId,
+        target: ObjRef,
+        arguments: &[Option<ObjRef>],
+        failure: &Failure,
+    ) {
         let package = self.external_package_path(method);
-        self.blame_native_level(Raised::compiled_method_line(name, scope), package);
+        let level = NativeLevel {
+            method: true,
+            name,
+            target,
+            arguments,
+            activation: Some(NativeActivationLevel {
+                package: self.external_package_program(method).map(Package::Program),
+                reraised: failure.reraised_by_native_call(),
+            }),
+        };
+        self.blame_native_level(Raised::compiled_method_line(name, scope), package, level);
     }
 
     /// The same for a routine of an internal package, whose traceback line
     /// names the routine alone and upcased -- measured, `filespec('D')` is
     /// reported for `Filespec` as `"FILESPEC"`.
-    pub(crate) fn blame_internal_routine(&mut self, name: &[u8]) {
-        self.blame_native_level(Raised::compiled_routine_line(name), None);
+    pub(crate) fn blame_internal_routine(
+        &mut self,
+        name: &[u8],
+        arguments: &[Option<ObjRef>],
+        failure: &Failure,
+    ) {
+        let level = NativeLevel {
+            method: false,
+            name,
+            target: ObjRef::NIL,
+            arguments,
+            activation: Some(NativeActivationLevel {
+                package: Some(Package::Rexx),
+                reraised: failure.reraised_by_native_call(),
+            }),
+        };
+        self.blame_native_level(Raised::compiled_routine_line(name), None, level);
     }
 
     /// The same for a routine of a loaded library, whose level carries the
     /// package its shared code reports, if any.
-    pub(crate) fn blame_native_routine(&mut self, name: &[u8], package: Option<Vec<u8>>) {
-        self.blame_native_level(Raised::compiled_routine_line(name), package);
+    pub(crate) fn blame_native_routine(
+        &mut self,
+        name: &[u8],
+        program: Option<ProgramId>,
+        arguments: &[Option<ObjRef>],
+        failure: &Failure,
+    ) {
+        let package = program.map(|program| self.package_path(program).as_bytes().to_vec());
+        let level = NativeLevel {
+            method: false,
+            name,
+            target: ObjRef::NIL,
+            arguments,
+            activation: Some(NativeActivationLevel {
+                package: program.map(Package::Program),
+                reraised: failure.reraised_by_native_call(),
+            }),
+        };
+        self.blame_native_level(Raised::compiled_routine_line(name), package, level);
     }
 
     /// Records `text` as a native level's whole traceback line, first call
     /// wins, and closes the level so the sending clause records its own.
-    fn blame_native_level(&mut self, text: Vec<u8>, package: Option<Vec<u8>>) {
+    fn blame_native_level(
+        &mut self,
+        text: Vec<u8>,
+        package: Option<Vec<u8>>,
+        level: NativeLevel<'_>,
+    ) {
         if self.failure_site.is_some() {
             return;
+        }
+        let frame = crate::dispatch::context::build_native_level_frame(
+            self,
+            level.method,
+            level.name,
+            level.target,
+            level.arguments,
+            &text,
+        );
+        self.failure_frame = Some(frame);
+        match level.activation {
+            // `NativeActivation::checkConditions` (`execution/
+            // NativeActivation.cpp:1787`) re-raises a SYNTAX condition in the
+            // caller through `Activity::reraiseException`, whose `POSITION`
+            // and program are the caller's.
+            Some(NativeActivationLevel { reraised: true, .. }) => self.failure_origin = None,
+            // Anything else keeps the object built where it was raised, and
+            // a condition raised here names this frame's package, which has
+            // no line.
+            Some(NativeActivationLevel {
+                package: Some(package),
+                reraised: false,
+            }) => {
+                self.failure_origin.get_or_insert((package, None));
+            }
+            Some(_) | None => {}
         }
         self.failure_site = Some(FailureSite::Rendered { text, package });
         self.seal_site_level();
     }
+}
+
+/// What the `StackFrame` of a failing native level is built from; see
+/// [`context::build_native_level_frame`].
+struct NativeLevel<'a> {
+    method: bool,
+    name: &'a [u8],
+    target: ObjRef,
+    arguments: &'a [Option<ObjRef>],
+    /// `None` for an `InternalActivationFrame`, which neither has a package nor
+    /// re-raises.
+    activation: Option<NativeActivationLevel>,
+}
+
+/// A level the oracle runs as a `NativeActivation`.
+struct NativeActivationLevel {
+    /// What `NativeActivationFrame::getPackage` answers.
+    package: Option<Package>,
+    /// Whether the condition leaves it re-raised: a SYNTAX condition the
+    /// boundary did not raise for itself.
+    reraised: bool,
 }
 
 /// `VariableReference~name`: the referenced variable's own spelling --

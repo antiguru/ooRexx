@@ -88,18 +88,7 @@ const STAMPED: &[&str] = &["[failure] ", "[error] "];
 /// a failure's or an error's detail differs, as `GROUP.TEST`, each recorded as
 /// [`RECORDED`]'s are; `true` where the detail differs in the whole-group run
 /// too, which then leaves the test out as it does a recorded one.
-const DETAIL_DIFFERS: &[(&str, bool)] = &[
-    ("FUNCTION.TEST_BUFFERED_INPUT", false),
-    ("FUNCTION.TEST_BUFFERING", false),
-    ("FUNCTION.TEST_FILE_INPUT", false),
-    ("FUNCTION.TEST_GLOBAL_SETTING", false),
-    ("FUNCTION.TEST_SIMPLE_WITH", false),
-    ("FUNCTION.TEST_WRITE_BUFFER", false),
-    (
-        "METHOD.TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA",
-        true,
-    ),
-];
+const DETAIL_DIFFERS: &[(&str, bool)] = &[];
 
 /// The tests a whole-group run leaves out.
 fn left_out() -> BTreeSet<&'static str> {

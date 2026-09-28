@@ -16,7 +16,21 @@
 use rexx_core::{Body, ObjRef};
 
 use crate::Interp;
-use crate::error::{Failure, Raised};
+use crate::error::{Failure, FailureSite, Raised};
+use crate::plan::Package;
+
+/// What the levels a trapped failure left contribute to its condition object:
+/// the frames `Activity::generateProgramInformation` takes at the raise, which
+/// this crate can only take as each level ends.
+pub(crate) struct Unwound<'a> {
+    /// Innermost first, as [`Interp::failure_sites`] holds them.
+    pub(crate) sites: &'a [FailureSite],
+    /// The `StackFrame`s of those levels, innermost first; each is rooted by
+    /// the caller.
+    pub(crate) frames: Vec<ObjRef>,
+    /// The innermost level with a package, and its line if it has one.
+    pub(crate) origin: Option<(Package, Option<usize>)>,
+}
 
 /// The indexes a condition's directory is keyed by.
 mod key {
@@ -102,7 +116,18 @@ impl Interp {
         raised: &Raised,
         call: Option<bool>,
     ) -> Result<ObjRef, Failure> {
-        self.build_condition_object_from(raised, call, false)
+        self.build_condition_object_from(raised, call, false, None)
+    }
+
+    /// [`Interp::build_condition_object`] for a condition a `SIGNAL ON` trap
+    /// took after it left `unwound`'s levels, whose frames lead `STACKFRAMES`
+    /// and `TRACEBACK` and whose innermost line is `POSITION`.
+    pub(crate) fn build_trapped_condition_object(
+        &mut self,
+        raised: &Raised,
+        unwound: &Unwound<'_>,
+    ) -> Result<ObjRef, Failure> {
+        self.build_condition_object_from(raised, Some(false), false, Some(unwound))
     }
 
     /// [`Interp::build_condition_object`] for a condition the innermost
@@ -112,7 +137,7 @@ impl Interp {
         &mut self,
         raised: &Raised,
     ) -> Result<ObjRef, Failure> {
-        self.build_condition_object_from(raised, None, true)
+        self.build_condition_object_from(raised, None, true, None)
     }
 
     fn build_condition_object_from(
@@ -120,11 +145,12 @@ impl Interp {
         raised: &Raised,
         call: Option<bool>,
         native: bool,
+        unwound: Option<&Unwound<'_>>,
     ) -> Result<ObjRef, Failure> {
         let frame = self.roots.push_frame();
 
         let syntax = raised.condition == "SYNTAX";
-        let (frames, traceback, frame_line) = self.condition_frames(native)?;
+        let (frames, traceback, frame_line) = self.condition_frames(native, unwound)?;
 
         // Each value is rooted as it is made: the allocations after it can
         // collect any that are not.
@@ -140,24 +166,41 @@ impl Interp {
             self.roots.push_temp(instruction);
             entries.push((key::INSTRUCTION, instruction));
         }
-        let package = self.condition_package();
+        let unwound_origin = unwound.and_then(|unwound| unwound.origin);
+        let origin = unwound_origin
+            .map(|(package, _)| package)
+            .or_else(|| self.running_program().map(Package::Program))
+            .unwrap_or(Package::Rexx);
+        let package = self.package_object(origin);
         self.roots.push_temp(package);
         entries.push((key::PACKAGE, package));
+        // `generateProgramInformation` puts no `POSITION` where the frame it
+        // takes the package from is native, which has no line.
         let position = if raised.position != 0 {
             // Captured at the raise, which is the only correct source when
             // the raising activation has since unwound.
-            self.counted(raised.position as usize)
+            Some(self.counted(raised.position as usize))
         } else {
-            match frame_line {
-                Some(line) => line,
+            match (unwound_origin, frame_line) {
+                (Some((_, line)), _) => line.map(|line| self.counted(line)),
+                (None, Some(line)) => Some(line),
                 // No frame at all, which a raise from outside any activation
                 // would be; the clause state is the only line there is.
-                None => self.counted(self.clause_state.line()),
+                (None, None) => Some(self.counted(self.clause_state.line())),
             }
         };
-        self.roots.push_temp(position);
-        entries.push((key::POSITION, position));
-        let program = self.text(self.program_path.clone().as_bytes());
+        if let Some(position) = position {
+            self.roots.push_temp(position);
+            entries.push((key::POSITION, position));
+        }
+        let program = match origin {
+            Package::Program(id) if !self.library_programs.contains(&id) => {
+                self.program_display_name(id).to_vec()
+            }
+            Package::Program(_) => self.program_path.clone().into_bytes(),
+            Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
+        };
+        let program = self.text_built(program);
         self.roots.push_temp(program);
         entries.push((key::PROGRAM, program));
         // Always `0` here: this crate re-raises through `RAISE PROPAGATE`
@@ -298,6 +341,7 @@ impl Interp {
     fn condition_frames(
         &mut self,
         native: bool,
+        unwound: Option<&Unwound<'_>>,
     ) -> Result<(ObjRef, ObjRef, Option<ObjRef>), Failure> {
         let list_class = self
             .classes()
@@ -319,6 +363,20 @@ impl Interp {
         // caller's own clause is line 2. The frame already carries the right
         // number, so it is read back rather than derived a second way.
         let mut position = None;
+        if let Some(unwound) = unwound {
+            for &frame in &unwound.frames {
+                let caller = self.caller();
+                self.send_message(frames, b"APPEND", None, &[Some(frame)], caller)?;
+            }
+            for site in unwound.sites {
+                let mut text = Vec::new();
+                site.push_trace_line(&mut text);
+                let line = self.text_built(text);
+                self.roots.push_temp(line);
+                let caller = self.caller();
+                self.send_message(lines, b"APPEND", None, &[Some(line)], caller)?;
+            }
+        }
         if native {
             let frame = crate::dispatch::context::build_native_frame(self)?;
             let caller = self.caller();
@@ -377,18 +435,6 @@ impl Interp {
             .ok()
             .flatten()
             .filter(|answer| *answer != ObjRef::NIL)
-    }
-
-    /// `PACKAGE`: the running program's own, or the `REXX` package when
-    /// nothing is running.
-    fn condition_package(&mut self) -> ObjRef {
-        // `plan::Package` and not `internal_routines::Package`: this crate has
-        // two enums of that name and only one of them is what a package
-        // object stands for.
-        match self.running_program() {
-            Some(program) => self.package_object(crate::plan::Package::Program(program)),
-            None => self.package_object(crate::plan::Package::Rexx),
-        }
     }
 
     /// `ADDITIONAL`: an Array of the raise's substitutions, empty for a

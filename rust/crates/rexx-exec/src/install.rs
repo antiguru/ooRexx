@@ -500,11 +500,16 @@ impl Interp {
     /// `loadExternalMethod` answer, the package of the first directive that
     /// bound the same code. `None` where there is neither.
     pub(crate) fn external_package_path(&self, method: MethodId) -> Option<Vec<u8>> {
-        if let Some(code) = self.defined_library_codes.get(&method) {
-            return self.library_code_package_path(*code);
-        }
-        let program = *self.external_packages.get(&method)?;
+        let program = self.external_package_program(method)?;
         Some(self.package_path(program).as_bytes().to_vec())
+    }
+
+    /// The package [`Interp::external_package_path`] names.
+    pub(crate) fn external_package_program(&self, method: MethodId) -> Option<ProgramId> {
+        if let Some(code) = self.defined_library_codes.get(&method) {
+            return self.library_code_program(*code);
+        }
+        self.external_packages.get(&method).copied()
     }
 
     /// Loads every library and package this program's `::REQUIRES` directives
@@ -1448,7 +1453,7 @@ impl Interp {
         };
         let scope = self.root_and_metaclass().1;
         let scope = self.classes().id_string(scope).to_string();
-        self.blame_native_method(b"INHERIT", &scope);
+        self.blame_native_method(b"INHERIT", &scope, class, &[Some(mixin)]);
         self.blame_directive(program, directive);
         Err(raised.into())
     }
@@ -2180,8 +2185,13 @@ impl Interp {
     /// The file of the package row `code`'s shared code reports, or `None`
     /// while no directive has bound it.
     pub(crate) fn library_code_package_path(&self, code: usize) -> Option<Vec<u8>> {
-        let program = self.library_codes.get(code).copied().flatten()?;
+        let program = self.library_code_program(code)?;
         Some(self.package_path(program).as_bytes().to_vec())
+    }
+
+    /// The package [`Interp::library_code_package_path`] names.
+    pub(crate) fn library_code_program(&self, code: usize) -> Option<ProgramId> {
+        self.library_codes.get(code).copied().flatten()
     }
 
     /// The library procedure a dictionary key's `EXTERNAL` binds it to, or

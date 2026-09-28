@@ -584,7 +584,7 @@ fn class_factory(
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
     let metaclass = factory_metaclass(interp, class, args)?;
-    let name = class_id_argument(interp, args)?;
+    let name = class_id_argument(interp, metaclass, args)?;
     let id = interp.mint_class();
     interp.classes().define_unregistered_class(
         id,
@@ -647,10 +647,19 @@ fn factory_metaclass(
 
 /// The `class id` argument, and the traceback frame the oracle's own `NEW`
 /// activation contributes when it refuses.
-fn class_id_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
+fn class_id_argument(
+    interp: &mut Interp,
+    metaclass: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Vec<u8>, Failure> {
     let outcome = required_class_id(interp, args);
     if outcome.is_err() {
-        interp.blame_native_method(b"NEW", "Class");
+        interp.blame_native_method(
+            b"NEW",
+            "Class",
+            metaclass,
+            args.get(..1).unwrap_or_default(),
+        );
     }
     outcome
 }

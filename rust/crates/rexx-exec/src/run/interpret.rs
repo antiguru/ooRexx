@@ -86,6 +86,7 @@ impl Interp {
         let flow = match ran {
             Ok(flow) => flow,
             Err(failure) => {
+                self.capture_fragment_frame(&failure);
                 self.seal_site_level();
                 return Err(failure);
             }
@@ -101,21 +102,25 @@ impl Interp {
         match flow {
             Flow::Leave(name, origin) => {
                 self.record_leave_failure(&origin);
-                self.seal_site_level();
-                let raised = match name {
+                let failure = match name {
                     None => raised_leave_no_loop(),
                     Some(id) => raised_leave_no_match(fragment.symbols.name(id).as_bytes()),
-                };
-                Err(raised.into())
+                }
+                .into();
+                self.capture_fragment_frame(&failure);
+                self.seal_site_level();
+                Err(failure)
             }
             Flow::Iterate(name, origin) => {
                 self.record_leave_failure(&origin);
-                self.seal_site_level();
-                let raised = match name {
+                let failure = match name {
                     None => raised_iterate_no_loop(),
                     Some(id) => raised_iterate_no_match(fragment.symbols.name(id).as_bytes()),
-                };
-                Err(raised.into())
+                }
+                .into();
+                self.capture_fragment_frame(&failure);
+                self.seal_site_level();
+                Err(failure)
             }
             other => Ok(other),
         }

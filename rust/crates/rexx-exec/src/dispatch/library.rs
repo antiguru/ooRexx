@@ -166,13 +166,13 @@ impl Interp {
             (answered, activation.pending())
         };
         let popped = self.pop_native_frame();
-        let package = self.library_code_package_path(code);
+        let program = self.library_code_program(code);
         let outcome = match pending {
             Some(number) => Err(condition_of(number)),
-            None => self.settle_native_call(answered, popped, package.is_some()),
+            None => self.settle_native_call(answered, popped, program.is_some()),
         };
-        if outcome.is_err() {
-            self.blame_native_routine(name, package);
+        if let Err(failure) = &outcome {
+            self.blame_native_routine(name, program, args, failure);
         }
         outcome
     }

@@ -146,7 +146,7 @@ impl Interp {
             }
             Ok(None) => {}
             Err(failure) => {
-                self.blame_request();
+                self.blame_request(value);
                 return Err(failure);
             }
         }
@@ -278,7 +278,7 @@ impl Interp {
     ) -> Result<Option<ObjRef>, Failure> {
         let converted = self.string_conversion(value);
         if converted.is_err() {
-            self.blame_request();
+            self.blame_request(value);
         }
         converted
     }
@@ -370,8 +370,10 @@ impl Interp {
 
     /// The traceback line the oracle's own `REQUEST` activation contributes
     /// when a `makeString` reached through the protocol fails.
-    fn blame_request(&mut self) {
-        self.blame_native_method(b"REQUEST", "Object");
+    fn blame_request(&mut self, value: ObjRef) {
+        let class = self.text(b"STRING");
+        self.roots.push_temp(class);
+        self.blame_native_method(b"REQUEST", "Object", value, &[Some(class)]);
     }
 }
 

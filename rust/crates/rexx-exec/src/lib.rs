@@ -1474,6 +1474,17 @@ struct Interp {
     /// The levels that have already finished failing, innermost first --
     /// `Raised::report`'s echo stack minus its last entry.
     failure_sites: Vec<FailureSite>,
+    /// The `StackFrame` of the level [`Interp::failure_site`] belongs to,
+    /// built before that level ends.
+    failure_frame: Option<ObjRef>,
+    /// The `StackFrame`s of the levels in [`Interp::failure_sites`] that have
+    /// one, innermost first: what a trapped condition's `STACKFRAMES` holds
+    /// above the trapping activation.
+    failure_frames: Vec<ObjRef>,
+    /// The innermost of those levels that has a package: its program, whose
+    /// file and package a trapped condition names, and its line, which is
+    /// the condition's `POSITION` (a native level has none).
+    failure_origin: Option<(Package, Option<usize>)>,
     /// The line number every clause echo prints while an `INTERPRET`
     /// fragment is running, overriding the clause's own line in its own
     /// source.
@@ -2040,6 +2051,9 @@ impl Interp {
             activation_indent: 0,
             failure_site: None,
             failure_sites: Vec::new(),
+            failure_frame: None,
+            failure_frames: Vec::new(),
+            failure_origin: None,
             clause_line_override: None,
             fragment_depth: 0,
             debug_pause: false,
@@ -2356,6 +2370,9 @@ impl Interp {
         // bootstrap**, whose programs are this crate's stand-in for
         // `Setup.cpp` and have no activation on the oracle to trace.
         let external_trace = !self.library_bootstrap && self.external_trace_enabled();
+        // The caller's clause, which its `StackFrame` goes on reporting while
+        // this runs and which a program this installs must not leave behind.
+        let caller_clause = self.save_clause_state();
         self.push_activation(main);
         // Through the same route a `TRACE` instruction takes, because
         // `enableExternalTrace` is `setTrace` and that calls `traceEntry()`:
@@ -2381,6 +2398,7 @@ impl Interp {
         // way it was found even on the failure path.
         let activation = self.pop_activation().expect("the frame just pushed");
         self.roots.pop_slots(activation.frame);
+        self.restore_clause_state(caller_clause);
         exit
     }
 
@@ -2701,6 +2719,10 @@ impl Interp {
             activation_indent: _,
             failure_site: _,
             failure_sites: _,
+            failure_frame,
+            failure_frames,
+            // A package identity and a line.
+            failure_origin: _,
             clause_line_override: _,
             fragment_depth: _,
             debug_pause: _,
@@ -2763,6 +2785,8 @@ impl Interp {
         out.extend(*pending_additional);
         out.extend(*pending_result);
         out.extend(*pending_rc);
+        out.extend(*failure_frame);
+        out.extend(failure_frames.iter().copied());
         out.extend(global_references.roots());
         // Everything a native call has been handed, and the receiver it is
         // writing object variables through. Held here rather than by the

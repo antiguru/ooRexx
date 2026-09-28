@@ -1900,6 +1900,16 @@ impl From<Raised> for Failure {
     }
 }
 
+impl Failure {
+    /// Whether a native call this left re-raises it in its caller: a SYNTAX
+    /// condition other than one its boundary raised for itself
+    /// ([`Delivery::lineless`]).
+    pub(crate) fn reraised_by_native_call(&self) -> bool {
+        matches!(self, Failure::Raised(raised)
+            if raised.condition == "SYNTAX" && !raised.delivery.lineless)
+    }
+}
+
 /// Where a failing clause was found -- `Interp::failure_site`'s own type
 /// (`lib.rs`), and what `run.rs`'s `record_failure_site` fills in.
 #[derive(Clone)]
@@ -1974,6 +1984,21 @@ impl FailureSite {
         match self {
             FailureSite::Rendered { package, .. } => package.as_deref(),
             FailureSite::Clause { .. } | FailureSite::Named { .. } => None,
+        }
+    }
+
+    /// This level's traceback line, as the report echoes it, without the
+    /// line end.
+    pub(crate) fn push_trace_line(&self, out: &mut Vec<u8>) {
+        match self {
+            FailureSite::Clause { line, text, indent }
+            | FailureSite::Named {
+                line, text, indent, ..
+            } => crate::trace::push_clause(out, *line, *indent, text),
+            FailureSite::Rendered { text, .. } => out.extend_from_slice(text),
+        }
+        while out.last() == Some(&b'\n') {
+            out.pop();
         }
     }
 
