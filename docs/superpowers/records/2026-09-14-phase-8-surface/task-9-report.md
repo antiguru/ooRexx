@@ -1,6 +1,6 @@
 # Task 9 report: close Phase 8
 
-Status: DONE_WITH_CONCERNS. BASE `2ae06085c`; gated at `14636fe6a`.
+Status: DONE_WITH_CONCERNS. BASE `2ae06085c`; gated at `fc32f74aa`.
 
 ## 1. The Phase 8 enumeration
 
@@ -41,7 +41,7 @@ so the filter was added and the before list re-taken with it.)
 
 (B)'s sentences are each attributed in section 2's table B.
 
-After, at 915e57a8d: (A) prints nothing; (C) prints nothing, and `closed_phases` is green with
+After, at fc32f74aa (and first at 915e57a8d): (A) prints nothing; (C) prints nothing, and `closed_phases` is green with
 Phase 8 in `CLOSED`. (A) cannot see an owner phrased without "OWNER" (the loader row's "OWNER: the
 surface half", row 662's "it is Phase 8's", the L2 paragraph); (B) is what finds those, and section
 2's table B attributes each of its sentences.
@@ -64,18 +64,25 @@ task-9-probes/` and `task-5-forge/probes/`.
 | L2 paragraph (~4537) | METHOD group, unpatched framework, ours: rc 120 at the ticker's GUARD WHEN (Phase 6); with -U, tests run, rc 120 at RXFUNCQUERY (Phase 10) | updated; section 6 |
 | "interface member not written yet" (~4566) | sinunit (`RxCalcSin(30, 2, 'Q')`): identical, 88.916 rc 168 | CLOSED by Tasks 5 and 6 |
 | Task 5: native frame and PROPAGATED (cond3, sendthrow, nframe; no exclusions row) | all three identical, rc 0 | matched; nothing to delete |
-| Task 5: POSITION on a CALL ON-trapped RaiseCondition (rcond) | stdout differs by `  POSITION = 6`; stderr, rc 0 agree | re-homed to Phase 9 (pending lead ruling) |
-| Task 5: Directory-subclass AT/PUT (ov, rewritten; the original was not committed) | oracle `v` / `w The NIL object 2`; ours `overridden K` / `The NIL object w 2`; rc 0 both | re-homed to Phase 10 (pending lead ruling) |
-| Task 5: blocking member on a busy outer context (outer9, new forge; outer.rex is the non-blocking member and is identical) | oracle `main ok y-in-run run-y` / `y set-by-inner`; ours `run ok y-in-run set-by-inner` / `y Y`; rc 0 both | re-homed to Phase 6 (pending lead ruling) |
+| Task 5: POSITION on a CALL ON-trapped RaiseCondition (rcond) | stdout differs by `  POSITION = 6`; stderr, rc 0 agree | re-homed to Phase 9 (ruling 2a) |
+| Task 5: Directory-subclass AT/PUT (ov, rewritten; the original was not committed) | oracle `v` / `w The NIL object 2`; ours `overridden K` / `The NIL object w 2`; rc 0 both | FIXED (ruling 2b, `da17061ba`): witness `corpus/lang/library_directory_members.rex` (subclass AT/PUT/REMOVE, StringTable subclass, setMethod named and UNKNOWN, put over a method, lower-case miss), identical; NC4 (direct path disabled): 652 of 653, that program alone, all three descriptors, as predicted |
+| Task 5: blocking member on a busy outer context (outer9, new forge; outer.rex is the non-blocking member and is identical) | oracle `main ok y-in-run run-y` / `y set-by-inner`; ours `run ok y-in-run set-by-inner` / `y Y`; rc 0 both | re-homed to Phase 6, D3 frame ownership (ruling 2c) |
 | loader/unloader hooks row (~4906) | Task 4's unit tests named in the row | CLOSED by Task 4 |
 | Method~new third argument (~4931) | mnew3: ours rc 120 "method "NEW" of class "Method" is not implemented (Phase 9)"; oracle `a Method` rc 0 | owner Phase 9 via the m4 relabel |
 | `layout.rs` `refusal_owner` default "Phase 8" | tests/layout.rs holds populated tables to REFUSING_MEMBERS | owner now `None` (5a48f75fa) |
-| `library.rs` StaleHandle/Raised "Phase 8" | stale (new forge routine): oracle `got released`/`after` rc 0; ours rc 120 | owner None, recorded (pending lead ruling; fix offered) |
+| `library.rs` StaleHandle/Raised "Phase 8" | stale (new forge routine): oracle `got released`/`after` rc 0; ours rc 120 | FIXED (ruling 3, `da17061ba`): stale.rex identical rc 0; unit witness `a_released_local_reference_still_answers`; NC5 (removal restored): test red left 0 right 8 and stale.rex rc 120, as predicted. The Loud stays, owner none: stash.rex (a local handle kept from an earlier call) is oracle `use stashed` rc 0, ours rc 120 |
 | `native/tests.rs` OPEN list | -- | Phase 8 removed (a3022e3e4) |
 
 New, found by the enumeration: `::routine r external 'LIBRARY rexxutil SysSleep'` (extrout) runs on
 the oracle and is 98.903 rc 158 here; the ::METHOD form (extmeth) is 90.998 rc 166 against 98.903
-rc 158; `REXXUTIL` spelled upper case agrees at 98.903 (extmeth2). Recorded, Phase 10.
+rc 158; `REXXUTIL` spelled upper case agrees at 98.903 (extmeth2); `call SysSleep 0` is identical
+(syssleep). Recorded, Phase 10, quoting D11: "Decision: build the `Sys*` subset ooTest depends on
+as part of Phase 7, and the remainder in Phase 10." (ruling 4). The binding is a package name
+rather than a Sys* function; D11 is the closest line and names Phase 10.
+
+Directory~setMethod (ruling 2b addendum): ours is the side table, not Object's setMethod. dsm.rex
+(named entry via at/[]/message, hasIndex, items, UNKNOWN via at and message, put over it) is
+identical on all three descriptors, so nothing beyond the native API needed fixing.
 
 ### Table B: (B)'s sentences after the edits
 
@@ -103,6 +110,15 @@ close". None assigns open work to Phase 8.
   PREDICTION: `every_deferred_entry_point_names_an_open_phase` red naming that entry, and
   `no_refusal_names_a_closed_phase` red too if the owner is a literal on a non-comment line.
 
+* NC1-NC3 results: each red exactly as predicted (NC1 `src/layout.rs:396: Phase 8`; NC2
+  `src/dispatch/library.rs:566: Phase 8`; NC3 `src/dispatch/native.rs:116: Phase 8` and
+  `alarm_startTimer defers to "Phase 8"`), each restored and checked.
+* NC4: the Interp host's `store_get`/`store_put`/`store_remove` answer `None` (send path back).
+  PREDICTION: corpus red on `lang/library_directory_members.rex` alone, all three descriptors.
+  RESULT: 652 of 653, that program, stdout, stderr and exit code. Restored.
+* NC5: `release_local_reference` removes the handle again. PREDICTION: the unit witness red and
+  stale.rex back to rc 120. RESULT: `left: 0 right: 8`; stale.rex rc 120. Restored.
+
 ## 3. Refusals relabelled
 
 * `Loud::native_method` (lib.rs): Phase 5 -> Phase 9, per ruling m4(a) (281b356df); the
@@ -112,7 +128,8 @@ close". None assigns open work to Phase 8.
   is closed by this and is to be deleted (untracked scratch; not deleted by me).
 * `rexx_api::layout::refusal_owner`'s default: Phase 8 -> none (5a48f75fa).
 * The stale-handle refusal: Phase 8 -> none (5a48f75fa).
-* Not relabelled, and named for the lead (message sent): every other refusal naming Phase 5, a
+* Not relabelled (ruling 1), and queued in
+  `.superpowers/sdd/queued/2026-09-28-phase-5-refusal-labels.md`: every other refusal naming Phase 5, a
   closed phase that `closed_phases.rs` documents as deliberately absent from `CLOSED`. Found by
   `git grep -n '"Phase 5"' -- rust/crates | /bin/grep -a /src/` less comment lines: `lib.rs`'s
   `receiver_class`, `operator_operand`, `object_position`, `method_from_source`, `object_method`,
@@ -124,44 +141,50 @@ close". None assigns open work to Phase 8.
 
 `RUSTUP_HOME=<scratchpad>/surface-4/rustup-home CARGO_TARGET_DIR=<scratchpad>/surface-9/target-miri
 cargo +nightly miri test -p rexx-api --lib --offline`, Stacked Borrows (no `MIRIFLAGS`), miri
-0.1.0 (f7575a9da8 2026-09-24), on the tree committed as 5a48f75fa (rexx-api's sources unchanged
-after): exit 0, 54 passed, 0 failed, 8 ignored (`scratchpad/surface-9/miri-1.txt`). The gate
+0.1.0 (f7575a9da8 2026-09-24), on the tree committed as 5a48f75fa: exit 0, 54 passed, 0 failed, 8 ignored
+(`scratchpad/surface-9/miri-1.txt`); and on the tree committed as da17061ba, the last rexx-api
+change: exit 0, 55 passed, 0 failed, 8 ignored (`miri-2.txt`). The gate
 document records it as a recorded run, not a gate: the gate hosts cannot install Miri through
 `rustup`.
 
 ## 5. Gate status lines
 
-Run 3, at `14636fe6a` (the closing code commit), `scratchpad/surface-9/gates/status.txt`:
+Run 5, at `fc32f74aa` (the closing code commit), `scratchpad/surface-9/gates/status.txt`:
 
-    14636fe6a72af47ad8b18f6d3579436db5f29aed
-    started 2026-09-28T22:37:59+02:00
-    load at start 3.91 7.51 8.58 6/2443 4007506
+    fc32f74aaae25a92281c73fc34ef5114f472b036
+    started 2026-09-28T23:15:58+02:00
+    load at start 7.15 8.72 8.07 9/2606 228075
     G1 fmt exit 0
     G2 clippy(empty target) exit 0
     G3 release build (test --no-run) exit 0
-    load G4 6.61 7.56 8.52 5/2584 4009648 2026-09-28T22:39:03+02:00
+    load G4 7.82 8.82 8.10 2/2590 230064 2026-09-28T23:16:10+02:00
     G4 release test exit 0
     G4 Compiling lines: 0
-    load after G4 4.02 7.20 8.29 2/2570 4138129
+    load after G4 4.20 7.60 8.07 5/2555 358587
     G5 debug build (test --no-run) exit 0
-    load G6 4.02 7.20 8.29 3/2582 4138619 2026-09-28T22:44:58+02:00
+    load G6 4.26 7.56 8.06 2/2560 358884 2026-09-28T23:22:09+02:00
     G6 debug test exit 0
     G6 Compiling lines: 0
-    load after G6 3.39 6.67 7.93 5/2586 73143
-    14636fe6a72af47ad8b18f6d3579436db5f29aed
-    finished 2026-09-28T22:51:09+02:00
+    load after G6 3.58 7.23 8.03 6/2587 487401
+    fc32f74aaae25a92281c73fc34ef5114f472b036
+    finished 2026-09-28T23:28:23+02:00
 
-G4 2752 passed / 0 failed / 4 ignored; G6 2753 / 0 / 4. Both failing sets empty. Corpus 652 of
-652 in both; api_group_tests passes (RECORDED = FUNCTION.TEST_REXXQUEUE, DETAIL_DIFFERS empty);
+G4 2753 passed / 0 failed / 4 ignored; G6 2754 / 0 / 4. Both failing sets empty. Corpus 653 of
+653 in both; api_group_tests passes (RECORDED = FUNCTION.TEST_REXXQUEUE, DETAIL_DIFFERS empty);
 gate tables "gated by this run: 0 row(s)".
 
-Run 1, at `915e57a8d`: G4 exit 101, one member, `introspection_arity::the_table_matches_the_three_sides`
--- two RexxInfo evidence cells carry native_method's text, which I relabelled. My miss: I had seen
-those rows in the grep before relabelling. Stopped, refreshed through
-`REXX_INTROSPECTION_ARITY_REFRESH=1` (diff: those two cells), `783a57e40`. Run 2 at `783a57e40`: all
-green. Then I noticed the gate tables' `CLOSED_PHASES` lacked `8` (Phase 7's close added `7`); the
-gate-table tests with `REXX_PHASE_GATE=8 REXX_CORPUS_GATE=1` were green at `783a57e40`, no row names
-owner 8; added at `14636fe6a` and run 3 taken.
+Earlier runs, every red member attributed:
+* Run 1, `915e57a8d`: G4 red on `introspection_arity::the_table_matches_the_three_sides` alone --
+  two RexxInfo evidence cells carry native_method's text, which I relabelled. My miss: I had seen
+  those rows in the grep before relabelling. Refreshed through `REXX_INTROSPECTION_ARITY_REFRESH=1`
+  (diff: those two cells), `783a57e40`.
+* Run 2, `783a57e40`: green. Then I added `8` to the gate tables' `CLOSED_PHASES` (Phase 7's close
+  added `7`); the gate-table tests with `REXX_PHASE_GATE=8 REXX_CORPUS_GATE=1` were green before,
+  and no row names owner 8.
+* Run 3, `14636fe6a`: green. Superseded by the rulings' fixes.
+* Run 4, `ef62d6800`: G4 red on `sourceline_oracle::sourceline_matches_the_interpreter_for_every_corpus_program`
+  alone -- the new corpus program had no oracle expectation file. Generated from the oracle by the
+  module comment's program for that file only (equal to the source), `fc32f74aa`.
 
 ## 6. L2
 
@@ -185,21 +208,23 @@ The roadmap's row 8 rung is `L2 -> 6, 10`, saying so.
 * `915e57a8d` Re-home or close every exclusions row Phase 8 owned
 * `783a57e40` Refresh introspection-arity.tsv for the Phase 9 native-method refusal
 * `14636fe6a` Gate Phase 8's gate-table rows for the rest of the project
-* then a docs-only commit: phase-8-gate.md section 10, roadmap rows 8 and 10, this report in records
+* `65880137e` Record Phase 8's close (first version of section 10, roadmap rows 8 and 10)
+* `da17061ba` Reach a directory's own get, put and remove from the native API (and the released
+  local reference fix)
+* `ef62d6800` Record the directory-member and released-reference fixes, and D11's line
+* `fc32f74aa` Add the sourceline expectation for library_directory_members.rex (gated)
+* then a docs-only commit: section 10 rewritten from run 5, this report in records
 
 ## 8. Concerns
 
-* **Rulings requested and not answered while I worked** (two messages to team-lead). I proceeded on
-  my recommendations, all reversible: rcond POSITION -> Phase 9; Directory-subclass AT/PUT ->
-  Phase 10 (a Phase 8 API defect in `table_at`/`table_put`; fixing it here was the alternative);
-  blocking member on a busy outer context -> Phase 6; stale handle -> no owner, recorded (I
-  recommended fixing it instead: keep a released local resolvable and rooted until the call
-  ends); `LIBRARY rexxutil` -> Phase 10; Phase 5 refusals other than native_method not relabelled.
-* The ov.rex probe of Task 5 was never committed; mine is a reconstruction from the review's
-  description, and my first version was self-defeating (its PUT override changed the setup key)
-  and read "identical" until rewritten.
-* `outer.rex` (Task 5's) exercises only a non-blocking member and is identical; the blocking
-  divergence was "read, not measured" until `outer9.rex`.
-* Commit `783a57e40`'s message splits a test name across a line break.
-* The queued file `.superpowers/sdd/queued/2026-09-28-native-method-refusal-names-closed-phase.md`
-  is closed by `281b356df` and should be deleted (untracked; I did not delete it).
+* The stale-handle Loud is still reachable (stash.rex), so it stays with owner none rather than
+  being removed; refusal-sites.tsv unchanged (the arm is inline in library.rs, not a lib.rs
+  constructor; `refusal_sites` green in every run).
+* DirectoryRemove and StringTableRemove were changed with DirectoryAt/Put (same defect, same
+  stubs); the StringTable-subclass case in the witness covers At and Put, not Remove.
+* The ov.rex probe of Task 5 was never committed; mine is a reconstruction, and my first version
+  was self-defeating (its PUT override changed the setup key) and read "identical" until rewritten.
+* Commit messages: `783a57e40`'s splits a test name across a line break; `da17061ba` carries two
+  fixes (partial staging of callbacks.rs would have split a hunk).
+* `.superpowers/sdd/queued/2026-09-28-native-method-refusal-names-closed-phase.md` is closed by
+  `281b356df` and should be deleted (untracked; not deleted by me).
