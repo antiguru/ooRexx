@@ -305,6 +305,21 @@ mtime, 2026-08-22; `git status --short api testbinaries` in the oracle checkout 
 `git log -1 -- api testbinaries` there is `334ab5460`, 2026-08-02, so the content those builds saw
 is the committed content unless the tree was edited and restored in between, which nothing records.
 
+**A compile of today's tree, added 2026-09-29 (final review M5).** The builds above are dated
+2026-08-05. Every `testbinaries/` source was compiled against this worktree's `api/` with
+`-fsyntax-only` from the worktree root, `g++ (Debian 16.2.0-3) 16.2.0` and `gcc` of the same
+version. Each line printed `ok`, and both `diff -rq` commands above still print nothing:
+
+    for f in testbinaries/*.cpp; do
+      g++ -fsyntax-only -Iapi -Iapi/platform/unix -Itestbinaries "$f" && echo "ok $f" || echo "FAIL $f"
+    done
+    gcc -fsyntax-only -Iapi -Iapi/platform/unix testbinaries/orxclassic1.c \
+      && echo "ok testbinaries/orxclassic1.c" || echo FAIL
+
+This checks declarations, not linking. A negative control, with its prediction written first,
+used a scratch copy of `api/` whose `oorexxapi.h` renamed `RaiseCondition` to `RaiseConditionX`.
+Exactly the two sources that call it failed, `orxmethod.cpp` and `orxinstance.cpp`.
+
 **Which phase owns each API group is derived, not recorded**, by
 `rexx-exec/tests/api_group_partition.rs`:
 
