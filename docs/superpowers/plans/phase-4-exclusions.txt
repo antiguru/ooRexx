@@ -28,6 +28,13 @@ Phase 10 (the queues and the rest of RexxUtil) at the same time.
 `crates/rexx-exec/tests/closed_phases.rs` asserts that no refusal in the crate
 names Phase 7, so this paragraph is checkable rather than a claim.
 
+**PHASE 8 HAS CLOSED AND OWES THIS FILE NOTHING, 2026-09-28.** Every row that
+named it as owner has a DELIVERED or CLOSED note, is re-homed with its reason, or
+names Phase 8 only as history. The command that finds them, over the file with
+its line breaks collapsed, is in `docs/superpowers/plans/phase-8-gate.md`'s
+surface section with its output before and after, and `closed_phases.rs` now
+asserts the same for Phase 8 over every crate's sources, `rexx-api` included.
+
 The gate reads "77 of the 81 builtins in builtinTable[] (BuiltinFunctions.cpp
 :3042) are in scope, one of them partially, and the excluded set is exactly
 this file".
@@ -430,7 +437,9 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   REFUSED BY THE ORACLE BEFORE main, stdout EMPTY in every case -- and
   refused here, loudly, naming Phase 5 (or Phase 8 for the EXTERNAL forms,
   which need a library loaded; that was Phase 7's until its close-out re-homed
-  every refusal it left behind):
+  every refusal it left behind; the EXTERNAL forms below were DELIVERED by
+  Phase 8, each identical to the oracle on all three descriptors at
+  2ae06085c, measured 2026-09-28):
 
     ::class foo subclass ns:other                         98.987 rc 158
     ::class foo mixinclass ns:other                       98.987 rc 158
@@ -518,7 +527,11 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   rexxutil SysFileTree'` is 90.998 rc 166, the entry-point error, where the
   same line spelled `LIBRARY REXXUTIL` is 98.903 rc 158 -- so `librexxutil`
   opens and the library name reaches `dlopen` in the case it was written in.
-  OWNER: Phase 5 for the rest of ::REQUIRES, and Phase 8 for EXTERNAL. The
+  OWNER: Phase 5 for the rest of ::REQUIRES. EXTERNAL was DELIVERED by the
+  phase that loads libraries: measured 2026-09-28 at 2ae06085c, the second
+  row above agrees at rc 214, and with a ::METHOD naming `LIBRARY rxmath
+  RxCalcSqrt` in its place at rc 166. What does not agree is the `LIBRARY
+  rexxutil` spelling, re-homed with its own entry under "PHASE 8 CLOSES". The
   ::ANNOTATE shapes this paragraph used to carry are in CLOSED DEFECTS.
 
   CLOSED BY R33, AND IT WAS RECORDED HERE FIRST AS UNFIXED. The oracle walks
@@ -659,7 +672,9 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
     ::REQUIRES IS REFUSED EVEN WHEN THE FILE IS PRESENT. CLOSED BY PHASE 5d
     TASK 4, which built the four-route search, the install and the prologue,
     and by TASK 5, which built NAMESPACE; only the LIBRARY subkeyword still
-    refuses, and it is Phase 8's -- it opens a shared library. The entry
+    refused, and it was DELIVERED by the phase that opens shared libraries
+    (`::requires 'rxmath' LIBRARY` then `say rxcalcsqrt(16)`: 4, rc 0 on
+    both, 2026-09-28). The entry
     stands
     as written below because the reasoning is what made it an over-refusal
     rather than an omission. This one
@@ -4549,6 +4564,17 @@ roadmap recorded that the Rung column cannot be re-homed until a phase takes
 those methods; Moritz ruled on 2026-09-14 that Phase 8 does, as Task 1 of
 docs/superpowers/plans/2026-09-14-phase-8-surface.md. See
 docs/superpowers/plans/phase-8-l2.md.
+AT PHASE 8'S CLOSE (measured 2026-09-28 at 2ae06085c): Task 1 built those
+methods, and the framework now loads and runs a group's tests. It still does
+not finish a run unmodified. From a scratch copy of the framework and API/oo,
+testOORexx.rex -f METHOD.testGroup -V 1 stops at rc 120 before any test, at
+the ticker's wait, "a GUARD that has to wait for another activity to make its
+WHEN expression true is not implemented (Phase 6)"; with -U, which starts no
+ticker, the tests run and the summary stops at rc 120 with "routine
+"RXFUNCQUERY" is not implemented (Phase 10)", which the oracle answers through
+rxapi. So L2 is blocked by Phase 6's GUARD WHEN and Phase 10's RXFUNCQUERY;
+rust/crates/rexx-exec/tests/api_group_tests.rs runs the groups with -U and
+without the two rxfuncquery probes, which is how the groups are gated.
 
 THE ROUTINE HALF OF THE NATIVE CALLING PROTOCOL: BUILT by Task 2 of
 docs/superpowers/plans/2026-09-14-phase-8-surface.md and its fix round. A
@@ -4568,6 +4594,13 @@ refuses on the routine path, each naming its owner:
   not accept, which refuses loudly naming NewStringFromAsciiz where the
   oracle raises 88.916). A member answering a data pointer, and the Throw
   members, still abort the process naming themselves.
+  CLOSED by the surface plan's Tasks 5 and 6: RxCalcSin(30, 2, 'Q') is 88.916
+  rc 168 on both, all three descriptors, 2026-09-28. The members a populated
+  table still refuses are rexx-api's layout::REFUSING_MEMBERS, each naming
+  Phase 9 or Phase 6, and rexx-api/tests/layout.rs's
+  a_populated_table_refuses_exactly_the_members_it_names holds that list
+  equal to the tables. A member no row names now refuses naming no phase,
+  since only an unpopulated table reaches it.
 
 THREE TRACE AND BLAME DIVERGENCES THE L2 WALK FOUND, WITH TRANSCRIPTS IN
 phase-8-l2.md SECTION 5. Two predate Phase 8: >I>/<I< names the running
@@ -4634,7 +4667,8 @@ since the same library imports the exit and subcom registries and a group
 belongs to the latest phase any of its imports needs.
 rexx-exec/tests/api_group_partition.rs derives the partition from the
 groups and the oracle's build/lib and asserts it (phase-8-gate.md section
-9). METHOD, CONVERSION and FUNCTION stay Phase 8's. Loading orxinvocation from this
+9). METHOD, CONVERSION and FUNCTION stayed Phase 8's, and pass at its close
+but for FUNCTION's TEST_REXXQUEUE (Phase 10, below). Loading orxinvocation from this
 crate would dlopen the oracle's own librexx.so.4 into the process, and a
 green result would be the oracle's. The spec and the roadmap's row 8 first
 read the partition as two embedding groups and six extension-only, from
@@ -4692,7 +4726,12 @@ directory, three descriptors separately. The probes named are in that
 directory's probes/.
   A RaiseCondition TAKEN BY CALL ON CARRIES POSITION. rcond.rex: the
   oracle's condition object has no POSITION entry, ours has one. Taken by
-  SIGNAL ON, the two agree since the Task 8 fix round B. OWNER: Phase 8.
+  SIGNAL ON, the two agree since the Task 8 fix round B. Measured again
+  2026-09-28 at 2ae06085c with the same probe: stdout differs by the one
+  line "  POSITION = 6" in the CALL ON handler's listing, stderr and rc 0
+  agree. RE-HOMED AT PHASE 8'S CLOSE: which entries a delivered condition
+  object carries is the condition machinery's, the family of Task 8's
+  residuals below. OWNER: Phase 9.
   COLLECTION MEMBERS ARE MESSAGE SENDS, SO A SUBCLASS OVERRIDE IS SEEN. The
   oracle's DirectoryAt, DirectoryPut and their kin call the C++ collection
   directly; ours send AT, PUT, HASINDEX, REMOVE and the rest. ov.rex over a
@@ -4700,7 +4739,14 @@ directory's probes/.
   DirectoryAt answers `v` and DirectoryPut stores under the key as given
   (`.nil 2`), ours answers `overridden dat` and stores through the
   override (`w 2`). An Array subclass with the same overrides agrees.
-  OWNER: Phase 8.
+  Measured again 2026-09-28 at 2ae06085c (the probe is in the surface plan's
+  Task 9 records): TestDirectoryAt answers `v` on the oracle and `overridden
+  K` here; after TestDirectoryPut(d, 'w', 'J') the oracle's d['J'] is `w`,
+  ours is .nil with `w` under the override's key; rc 0 both. The cause is
+  rexx-api's table_at/table_put, which send AT and PUT where the oracle
+  calls the collection. RE-HOMED AT PHASE 8'S CLOSE: no METHOD, CONVERSION
+  or FUNCTION test reaches it, and the next consumers of these members are
+  the extensions row 10 recompiles. OWNER: Phase 10.
   A BLOCKING MEMBER ON AN OUTER CONTEXT, USED FROM A CALL NESTED INSIDE IT,
   ANSWERS FOR THE INNERMOST CALL. The oracle's non-blocking members
   (GetRoutineName, GetMessageName) resolve the thread's current activation
@@ -4708,7 +4754,15 @@ directory's probes/.
   and ours do the same: outer.rex answers USEOUTER on both. Its blocking
   members use the context's own activation (:108); ours cannot reach that
   activation while the nested call holds its state, and answer the
-  innermost's. Read, not measured. OWNER: Phase 8.
+  innermost's. Read, not measured, until 2026-09-28: a forged routine
+  (NEEDs nothing) stashes its call context, sends RUN to an object whose
+  method sets X and Y and calls a second routine, which reads X and sets Y
+  through the stashed context. At 2ae06085c the oracle answers `main` and
+  sets the main program's Y; ours answers `run` and sets the method's Y; rc
+  0 both (the forge and probe are in the surface plan's Task 9 records).
+  RE-HOMED AT PHASE 8'S CLOSE: reaching one activation's frame while a
+  nested call holds the interpreter is D3's frame-ownership question.
+  OWNER: Phase 6.
   ObjectToValue WRITES NO PARTIAL VALUE ON FAILURE. Only an extension that
   reads the descriptor after a failed conversion can see it; orxmethod
   raises and answers NULL. OWNER: none; the header specifies no value on
@@ -4917,6 +4971,12 @@ possible and the citation is what was checked.
   first shipped consumer is orxinvocation.cpp:473-478, a Phase 10 group's.
   OWNER: the surface half, which fills the package entry; no oracle-built
   extension in reach can witness it before then.
+  CLOSED by the surface plan's Task 4, which runs both hooks in the oracle's
+  order (dispatch/library/tests.rs: a_loaded_librarys_loader_and_unloader_run,
+  a_programs_end_runs_its_librarys_unloader,
+  unloaders_run_in_the_oracles_table_order; rexx-api's load.rs:
+  a_library_refused_for_its_version_keeps_only_its_unloader). Its divergences
+  are the "THREE DIVERGENCES THE SURFACE PLAN'S TASK 4 LEAVES" entry above.
 
   THE ORACLE SEGFAULTS ON A NAME RESOLVED THROUGH AN UNBOUND loadExternal*
   CONTEXT (Y1). corpus/oracle-crashes.txt entry 15 holds the program and
@@ -4938,6 +4998,11 @@ possible and the citation is what was checked.
   Loud and pre-existing. OWNER: none. It is Phase 5 debt of the kind D-L2
   recorded for the Directory methods, but the ruling that gave those to
   Phase 8 named only them, so no open phase holds this one.
+  RE-HOMED AT PHASE 8'S CLOSE: the refusal is Loud::native_method's, which
+  now names Phase 9, the phase that owns an unimplemented native method (the
+  surface plan's m4 ruling); measured 2026-09-28, the same program ends rc
+  120 with "... is not implemented (Phase 9)". OWNER: Phase 9. The Routine~new
+  entries below that quote the old text are the same refusal.
 
   THE TRACEBACK OF A RAISE INSIDE .Package~new OR loadPackage LACKS THE
   ORACLE'S COMPILED-METHOD LINE AND THE CALLING CLAUSE (the residual
@@ -5418,3 +5483,31 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
 
   OWNER: Phase 9 (core conformance: condition objects, stack frames and
   traceback under INTERPRET are core-suite behaviour, not native API).
+
+PHASE 8 CLOSES, 2026-09-28: WHAT ITS CLOSE FOUND, RE-HOMED. Each measured at
+2ae06085c against the oracle, each side from a fresh directory, three
+descriptors separately; the probes are in
+docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
+
+  `LIBRARY rexxutil` NAMES THE ORACLE'S INTERNAL RexxUtil PACKAGE, NOT A
+  FILE. The oracle loads REXXUTIL as an internal package beside REXX
+  (interpreter/package/PackageManager.cpp:87-88), and no librexxutil.so
+  exists on this machine. extrout.rex, a ::routine r external 'LIBRARY
+  rexxutil SysSleep' called with 0: the oracle prints go and done, rc 0;
+  ours prints go and ends at rc 158 with 98.903 'Unable to load library
+  "rexxutil"'. The ::METHOD form (extmeth.rex, SysFileTree) is 90.998 rc
+  166 there against 98.903 rc 158 here. Spelled REXXUTIL, both sides give
+  98.903 rc 158 (extmeth2.rex). OWNER: Phase 10, which owns the rest of
+  RexxUtil (D11); binding the internal package's names is new mechanism
+  beside `LIBRARY REXX`'s.
+
+  A RELEASED LOCAL REFERENCE RETURNED BY A NATIVE ROUTINE IS REFUSED. The
+  forge's StaleRet makes a string, releases its local reference and returns
+  it (stale.rex): the oracle prints "got released" and "after", rc 0; ours
+  ends at rc 120 with "rexx-exec: the handle is no longer held by this
+  activation is not implemented". The oracle's release drops the object from
+  the activation's references, so its answer holds only while no collection
+  has run since (read, not measured: nothing in reach forces a collection
+  between the release and the return). Loud here, and it named Phase 8 until
+  this close. OWNER: none; what the oracle answers depends on collection
+  timing, which is not a specified observable.
