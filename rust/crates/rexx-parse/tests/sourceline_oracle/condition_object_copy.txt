@@ -1,0 +1,28 @@
+count 27
+-- CONDITION('O') answers a copy of the condition object on every ask: a write
+-- to one copy reaches no later CONDITION('O') or CONDITION('A'), while the
+-- items themselves are shared, and a copy iterates in the oracle's order.
+signal on syntax name h1
+raise syntax 93.900 array('orig')
+h1:
+c = condition('O')
+say (c == condition('O')) (c~class == .directory) (condition('O') == condition('O'))
+c['CODE'] = 'changed'
+c~remove('MESSAGE')
+c['ADDITIONAL'] = .array~of('replaced')
+say condition('O')['CODE'] condition('O')~hasEntry('MESSAGE') condition('A')[1]
+say c~code c~hasEntry('MESSAGE') c~additional[1] c~items condition('O')~items
+d = condition('O')
+d~additional[1] = 'inplace'
+say condition('A')[1] condition('O')~additional[1] (d~additional == condition('A'))
+say condition('O')~allIndexes~makeString('L', ' ')
+call on error name h2
+'exit 3'
+say 'end'
+exit
+h2:
+e = condition('O')
+e['RC'] = 99
+say condition('O')~rc e~rc rc (e == condition('O'))
+say condition('O')~allIndexes~makeString('L', ' ')
+return

@@ -305,6 +305,8 @@ lang/operator_native_receivers.rex
 lang/raise_syntax_nearest_top_level.rex
 lang/raise_array_additional_objects.rex
 lang/condition_object_directory.rex
+# CONDITION('O') answers a copy, iterating in the oracle's order.
+lang/condition_object_copy.rex
 lang/parse_message_targets.rex
 # FUNCTION's TestGetRoutine01: GetRoutine and every ::ROUTINE naming one
 # library procedure answer that procedure's one Routine object.

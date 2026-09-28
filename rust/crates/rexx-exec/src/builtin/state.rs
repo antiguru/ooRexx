@@ -332,10 +332,10 @@ pub(crate) fn condition(
                 .and_then(|object| interp.condition_entry(object, b"ADDITIONAL"));
             Ok(additional.unwrap_or(ObjRef::NIL))
         }
-        (b'O', active) => Ok(active
-            .as_ref()
-            .and_then(|condition| condition.object)
-            .unwrap_or(ObjRef::NIL)),
+        (b'O', active) => match active.as_ref().and_then(|condition| condition.object) {
+            Some(object) => interp.condition_copy(object),
+            None => Ok(ObjRef::NIL),
+        },
         (b'R', _) => {
             interp.activation_mut().condition = None;
             Ok(interp.text(b""))

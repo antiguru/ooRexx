@@ -1493,6 +1493,17 @@ pub(crate) fn store_indexes(interp: &mut Interp, receiver: ObjRef) -> Vec<ObjRef
         .collect()
 }
 
+/// [`insert`] for a caller that built `receiver` and validated `index`
+/// itself, without a `PUT` send.
+pub(crate) fn store_insert(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+    item: ObjRef,
+) -> Result<(), Failure> {
+    insert(interp, receiver, index, Some(item))
+}
+
 /// The item the receiver's store holds under `index`.
 pub(crate) fn store_item(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Option<ObjRef> {
     let (store, found) = probe(interp, receiver, index).ok()?;
