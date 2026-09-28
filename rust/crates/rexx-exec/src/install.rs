@@ -488,7 +488,7 @@ impl Interp {
 
     /// The file a package was loaded from: the program's own path, or the
     /// resolved name a `::REQUIRES` found it under.
-    pub(super) fn package_path(&self, id: ProgramId) -> &str {
+    pub(crate) fn package_path(&self, id: ProgramId) -> &str {
         match self.required_paths.get(&id) {
             Some(path) => path,
             None => &self.program_path,
@@ -1089,6 +1089,8 @@ impl Interp {
                     //      3 *-* ::class K
                     // ```
                     self.blame_directive(program, directive);
+                    // `ConstantDirective`'s method runs as `::CONSTANT`.
+                    self.capture_site_frame(&failure, b"METHOD", b"::CONSTANT", &[], id);
                     self.seal_site_level();
                     self.blame_directive(
                         program,

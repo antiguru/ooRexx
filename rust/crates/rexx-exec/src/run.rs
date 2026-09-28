@@ -2942,6 +2942,41 @@ impl Interp {
         self.failure_origin.get_or_insert(origin);
     }
 
+    /// The frame of a level `failure` is leaving that no activation of this
+    /// crate's stands for: an ended frame of `kind` whose line and traceback
+    /// line are the level's own site, and whose program is the origin.
+    pub(crate) fn capture_site_frame(
+        &mut self,
+        failure: &Failure,
+        kind: &[u8],
+        name: &[u8],
+        arguments: &[Option<ObjRef>],
+        program: crate::plan::ProgramId,
+    ) {
+        if matches!(failure, Failure::Raised(raised) if raised.condition == "SYNTAX") {
+            self.failure_propagated = true;
+        }
+        if self.failure_frame.is_some() {
+            return;
+        }
+        let Some((line, text)) = self.failure_site.as_ref().and_then(|site| {
+            let line = site.line()?;
+            let mut text = Vec::new();
+            site.push_trace_line(&mut text);
+            Some((line, text))
+        }) else {
+            return;
+        };
+        let Ok(frame) =
+            crate::dispatch::context::build_ended_frame(self, kind, name, line, arguments, &text)
+        else {
+            return;
+        };
+        self.failure_frame = Some(frame);
+        self.failure_origin
+            .get_or_insert((Package::Program(program), Some(line)));
+    }
+
     /// The same for an `INTERPRET` fragment `failure` is leaving, whose frame
     /// is the one `RexxActivation::createStackFrame` gives an interpret
     /// activation: no name, target or arguments, and its own invocation and

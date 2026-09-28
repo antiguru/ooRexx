@@ -2341,7 +2341,18 @@ impl Interp {
         // `::class foo subclass zzznotaclass` is 98.909 at rc 158, likewise
         // empty. A program whose directives all install runs its main body
         // exactly as one with no directives does.
-        self.install_directives(program_id, &program)?;
+        // A called program's level is a `ROUTINE` frame named as it was called,
+        // whose line while its directives install is the one installing.
+        let called = matches!(call_type, CallType::Subroutine | CallType::Function);
+        if let Err(failure) = self.install_directives(program_id, &program) {
+            if called {
+                let arguments = Rc::clone(&self.call_context.arguments);
+                let name = self.call_context.name.clone();
+                self.capture_site_frame(&failure, b"ROUTINE", &name, &arguments, program_id);
+                self.seal_site_level();
+            }
+            return Err(failure);
+        }
 
         // **`::OPTIONS NOPROLOG` suppresses the leading code section of a
         // package a `::REQUIRES` loaded, and of nothing else** --
@@ -2397,6 +2408,14 @@ impl Interp {
         // The caller's clause, which its `StackFrame` goes on reporting while
         // this runs and which a program this installs must not leave behind.
         let caller_clause = self.save_clause_state();
+        // A called program's clauses trace from the margin, as a routine's do.
+        let caller_levels = called.then(|| {
+            (
+                std::mem::take(&mut self.activation_indent),
+                std::mem::take(&mut self.indent_offset),
+                self.clause_line_override.take(),
+            )
+        });
         self.push_activation(main);
         // Through the same route a `TRACE` instruction takes, because
         // `enableExternalTrace` is `setTrace` and that calls `traceEntry()`:
@@ -2417,12 +2436,26 @@ impl Interp {
         // apart because a *callee* has to tell them apart, not because the
         // program's own exit value ever depends on which arrived.
         let exit = self.run_activation().map(Ended::value);
+        if called {
+            if let Err(failure) = &exit {
+                self.capture_activation_frame(failure);
+            }
+            self.trace_invocation_exit();
+        }
 
         // Popped whether or not the body raised, so the root set is left the
         // way it was found even on the failure path.
         let activation = self.pop_activation().expect("the frame just pushed");
         self.roots.pop_slots(activation.frame);
         self.restore_clause_state(caller_clause);
+        if let Some((base, offset, line)) = caller_levels {
+            self.activation_indent = base;
+            self.indent_offset = offset;
+            self.clause_line_override = line;
+        }
+        if called && exit.is_err() {
+            self.seal_site_level();
+        }
         exit
     }
 

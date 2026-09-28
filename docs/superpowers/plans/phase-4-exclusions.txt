@@ -4867,16 +4867,7 @@ the rxapi queue, which is row 10's.
   register's row 6): `interpret 'do f over .context~stackframes; say
   f~type f~line f~traceline; end'` in a routine prints three frames on the
   oracle and two here. A fragment a failure leaves is a frame here too.
-  An external program called as a routine or function is a PROGRAM frame
-  here and a ROUTINE frame on the oracle: `r = 'w.rex'()` with w.rex
-  printing `.context~stackframes[1]~type`, oracle ROUTINE, here PROGRAM.
-  A failure in an external program's directive install, trapped by its
-  caller: `signal on syntax; call 'bad.rex'` over a bad.rex holding `::class
-  K` and `::constant c (1/0)`, the oracle's object has POSITION 3, program
-  bad.rex, the frames METHOD ::CONSTANT, ROUTINE bad.rex and the caller's,
-  and a traceback line `2 *-* ::class K`; here POSITION 2, the caller's
-  program, the caller's frame alone and no `::class K` line. OWNER: Phase 9
-  for all three, whose exit is the full suite green; none is a member of the
+  OWNER: Phase 9, whose exit is the full suite green; not a member of the
   METHOD, CONVERSION or FUNCTION failing set.
   AN OBJECT'S STEM EMPTIED WHILE A METHOD'S STEM EXPOSES ONE OF ITS TAILS,
   left by the Task 8 fix round B, which built EXPOSE and PROCEDURE EXPOSE

@@ -551,10 +551,24 @@ pub(crate) fn build_interpret_frame(
     line: usize,
     trace_text: &[u8],
 ) -> Result<ObjRef, Failure> {
+    build_ended_frame(interp, b"INTERPRET", b"", line, &[], trace_text)
+}
+
+/// A `StackFrame` of type `kind` for a level that has ended, built from its
+/// parts: its own invocation, no target, and a context whose activation has
+/// ended.
+pub(crate) fn build_ended_frame(
+    interp: &mut Interp,
+    kind: &[u8],
+    name: &[u8],
+    line: usize,
+    arguments: &[Option<ObjRef>],
+    trace_text: &[u8],
+) -> Result<ObjRef, Failure> {
     let frame = interp.roots.push_frame();
-    let kind = interp.text(b"INTERPRET");
+    let kind = interp.text(kind);
     interp.roots.push_temp(kind);
-    let name = interp.text(b"");
+    let name = interp.text(name);
     interp.roots.push_temp(name);
     let line = interp.counted(line);
     interp.next_invocation += 1;
@@ -563,7 +577,7 @@ pub(crate) fn build_interpret_frame(
     let context = interp.ended_context_object();
     let trace_line = interp.text(trace_text);
     interp.roots.push_temp(trace_line);
-    let arguments = array_of_slots(interp, Vec::new());
+    let arguments = array_of_slots(interp, arguments.to_vec());
     let entries = [
         (key::TYPE, kind),
         (key::NAME, name),
@@ -688,6 +702,14 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
     // The phase's `found-not-fixed-register.md` is where which kinds this
     // crate reaches is recorded, because that is a boundary that moves.
     let (kind, target) = match activation.entry {
+        Entry::TopLevel
+            if matches!(
+                activation.call_type,
+                crate::activation::CallType::Subroutine | crate::activation::CallType::Function
+            ) =>
+        {
+            (&b"ROUTINE"[..], None)
+        }
         Entry::TopLevel => (&b"PROGRAM"[..], None),
         Entry::InternalCall => (&b"INTERNALCALL"[..], None),
         Entry::Routine => (&b"ROUTINE"[..], None),

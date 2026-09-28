@@ -143,7 +143,10 @@ impl Interp {
             return;
         }
         self.activation_mut().trace_entry = TraceEntry::Done;
-        let package = self.program_path.clone().into_bytes();
+        let package = self
+            .package_path(self.activation().program_id)
+            .as_bytes()
+            .to_vec();
         self.trace_invocation(">I>", &subject, &package);
     }
 
@@ -157,7 +160,10 @@ impl Interp {
             return;
         };
         self.activation_mut().trace_entry = TraceEntry::Done;
-        let package = self.program_path.clone().into_bytes();
+        let package = self
+            .package_path(self.activation().program_id)
+            .as_bytes()
+            .to_vec();
         self.trace_invocation(">I>", &subject, &package);
     }
 
@@ -172,7 +178,10 @@ impl Interp {
         if !self.trace_mode().labels {
             return;
         }
-        let package = self.program_path.clone().into_bytes();
+        let package = self
+            .package_path(self.activation().program_id)
+            .as_bytes()
+            .to_vec();
         self.trace_invocation("<I<", &subject, &package);
     }
 
@@ -184,6 +193,18 @@ impl Interp {
             return Some(Announced::Method {
                 name: identity.name.to_vec(),
                 scope: self.class_id_text(identity.scope).as_bytes().to_vec(),
+            });
+        }
+        // A program called as a routine is announced under its own path.
+        if self.activation().entry == crate::activation::Entry::TopLevel
+            && matches!(
+                self.activation().call_type,
+                crate::activation::CallType::Subroutine | crate::activation::CallType::Function
+            )
+        {
+            let path = self.package_path(self.activation().program_id);
+            return Some(Announced::Routine {
+                name: path.as_bytes().to_vec(),
             });
         }
         let index = self.activation().body?;
