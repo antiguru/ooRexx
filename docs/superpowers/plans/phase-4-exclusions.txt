@@ -4916,7 +4916,7 @@ possible and the citation is what was checked.
   (rexx-api/src/load.rs) and calls neither hook, which layout.rs:313-314
   carries as fields. Every Phase 8 group's binary and rxregexp set both to
   null (orxmethod.cpp:2729, orxfunction.cpp:969, rxregexp.cpp:224); the
-  first shipped consumer is orxinvocation.cpp:473-478, a Phase 9 group's.
+  first shipped consumer is orxinvocation.cpp:473-478, a Phase 10 group's.
   OWNER: the surface half, which fills the package entry; no oracle-built
   extension in reach can witness it before then.
 
