@@ -311,3 +311,5 @@ lang/parse_message_targets.rex
 # FUNCTION's TestGetRoutine01: GetRoutine and every ::ROUTINE naming one
 # library procedure answer that procedure's one Routine object.
 lang/library_routine_shared_object.rex
+# That object's annotation table, where no directive binds it.
+lang/library_routine_unbound_annotation.rex

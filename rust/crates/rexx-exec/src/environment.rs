@@ -285,6 +285,8 @@ pub(crate) enum Annotated {
     Unattached(ProgramId, Box<[u8]>),
     /// A `::ROUTINE`, by the directive that declares it.
     Routine(ProgramId, usize),
+    /// The one `Routine` object of a library procedure, by its code row.
+    LibraryRoutine(usize),
     /// A method compiled from source text, by a count of its own.
     Compiled(usize),
 }

@@ -105,6 +105,9 @@ impl Interp {
         // object does not exist yet: a `::CLASS` has no class object until
         // the install pass creates one.
         let mut staged: BTreeMap<AnnotatedSite, Vec<(Box<[u8]>, Box<[u8]>)>> = BTreeMap::new();
+        // Every write to a `Directive` target, in `::ANNOTATE` order, which
+        // is the order a shared library `Routine` object's table takes them in.
+        let mut directive_writes: Vec<(usize, Box<[u8]>, Box<[u8]>)> = Vec::new();
         // The package's routine records, handed over where this walk finishes
         // as `resolveDependencies` hands its tables to the package
         // (`parser/LanguageParser.cpp:1893-1900`), so a translation that raises
@@ -215,11 +218,18 @@ impl Interp {
                     // and `::annotate class K a 1 a 2` leaves it 1 with `A`
                     // answering `2`.
                     for site in target {
-                        let pairs = staged.entry(site).or_default();
+                        let pairs = staged.entry(site.clone()).or_default();
                         for annotation in &annotate.annotations {
                             let name = program.symbols.name(annotation.name).as_bytes();
                             pairs.retain(|(held, _)| **held != *name);
                             pairs.push((name.into(), annotation.value.clone()));
+                            if let AnnotatedSite::Directive(directive) = site {
+                                directive_writes.push((
+                                    directive,
+                                    name.into(),
+                                    annotation.value.clone(),
+                                ));
+                            }
                         }
                     }
                 }
@@ -434,6 +444,21 @@ impl Interp {
                 AnnotatedSite::Member(_, name) => environment::Annotated::Unattached(id, name),
             };
             self.record_annotations(&[site], &pairs);
+        }
+        // `::ANNOTATE ROUTINE` reaches the one object a library procedure
+        // has, so every directive bound to it writes into one table
+        // (`parser/DirectiveParser.cpp:2003-2014`).
+        for (directive, name, value) in directive_writes {
+            let installed = InstalledRoutine {
+                program: id,
+                directive,
+            };
+            if let Some(code) = self.library_routine_codes.get(&installed).copied() {
+                self.record_annotations(
+                    &[environment::Annotated::LibraryRoutine(code)],
+                    &[(name, value)],
+                );
+            }
         }
 
         // The gap forms whose stage is after the classes are created; see
