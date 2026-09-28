@@ -13,7 +13,11 @@
 //! single-group form on both sides, one test per run, each run from a fresh
 //! copy of the framework and the group's directory at the same path. A test
 //! whose stdout, stderr or exit status differs is a member of the failing
-//! set, and that set must be exactly [`RECORDED`]. Gate-only.
+//! set, and that set must be exactly [`RECORDED`]. Then each group runs whole
+//! in one process on both sides, its recorded tests renamed out of the group
+//! in the copy, and the three descriptors must agree: some tests depend on an
+//! earlier one (FUNCTION's io tests on `TEST`), which a lone run cannot see.
+//! Gate-only.
 //!
 //! Two options keep the framework itself off paths other phases own, on both
 //! sides alike: `-U` starts no ticker (a `REPLY` thread waiting on `GUARD ON
@@ -165,6 +169,51 @@ fn test_names(oracle: &oracle::Oracle, run: &Path, group_file: &str) -> Vec<Stri
     names
 }
 
+/// Renames each recorded test of `group` in the copy's group file, so the
+/// framework no longer counts it a test; each must be found.
+fn skip_recorded(group_file: &Path, group: &str) {
+    let text = fs::read(group_file).expect("the copied group file");
+    let text = String::from_utf8_lossy(&text).into_owned();
+    let mut skipped = BTreeSet::new();
+    let lines: Vec<String> = text
+        .split('\n')
+        .map(|line| {
+            let trimmed = line.trim_start();
+            let Some(rest) = trimmed
+                .get(..8)
+                .filter(|head| head.eq_ignore_ascii_case("::method"))
+                .map(|_| &trimmed[8..])
+            else {
+                return line.to_string();
+            };
+            let rest = rest.trim_start();
+            let quoted = rest.starts_with(['\'', '"']);
+            let name_start = usize::from(quoted);
+            let name: String = rest[name_start..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect();
+            let member = format!("{group}.{}", name.to_ascii_uppercase());
+            if !RECORDED.contains(&member.as_str()) {
+                return line.to_string();
+            }
+            skipped.insert(member);
+            let at = line.len() - rest.len() + name_start;
+            format!("{}SKIPPED_{}", &line[..at], &line[at..])
+        })
+        .collect();
+    let wanted: BTreeSet<String> = RECORDED
+        .iter()
+        .filter(|name| name.starts_with(&format!("{group}.")))
+        .map(|name| name.to_string())
+        .collect();
+    assert_eq!(
+        skipped, wanted,
+        "the recorded tests of {group} renamed in the copy"
+    );
+    fs::write(group_file, lines.join("\n")).expect("cannot rewrite the copied group file");
+}
+
 fn excerpt(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes);
     text.chars().take(300).collect()
@@ -232,6 +281,31 @@ fn every_test_of_the_phase_8_groups_matches_the_oracle_but_the_recorded() {
             }
         }
     }
+    let mut whole = String::new();
+    for group in GROUPS {
+        let group_file = run.join(format!("ooRexx/API/oo/{group}.testGroup"));
+        let shown = group_file.to_string_lossy().into_owned();
+        let args = ["-f", shown.as_str(), "-U", "-V", "0", "-S"];
+        fresh_copy(&run);
+        skip_recorded(&group_file, group);
+        let theirs = run_oracle(&oracle, &run, &args);
+        fresh_copy(&run);
+        skip_recorded(&group_file, group);
+        let ours = run_crate(&run, &args);
+        assert!(theirs.status.is_some(), "the oracle did not finish {group}");
+        if theirs.stdout != ours.stdout
+            || theirs.stderr != ours.stderr
+            || theirs.status != ours.status
+        {
+            whole.push_str(&format!(
+                "{group}: oracle {:?} {:?}, ours {:?} {:?}\n",
+                theirs.status,
+                excerpt(&theirs.stdout),
+                ours.status,
+                excerpt(&ours.stdout),
+            ));
+        }
+    }
     fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run directory");
 
     let recorded: BTreeSet<String> = RECORDED.iter().map(|name| name.to_string()).collect();
@@ -240,5 +314,9 @@ fn every_test_of_the_phase_8_groups_matches_the_oracle_but_the_recorded() {
     assert!(
         newly_failing.is_empty() && newly_passing.is_empty(),
         "newly failing: {newly_failing:?}\nnewly passing: {newly_passing:?}\n{report}"
+    );
+    assert!(
+        whole.is_empty(),
+        "a whole-group run without the recorded tests differs:\n{whole}"
     );
 }
