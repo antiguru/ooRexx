@@ -434,22 +434,11 @@ impl Surface for Interp {
         }
     }
 
-    fn enter_caller(&mut self, frame: usize) -> Option<usize> {
-        let caller = self.native_handles.get(frame)?.caller?;
-        if self.running.as_ref()?.id == caller {
-            return None;
+    fn in_caller(&mut self, frame: usize, serve: &mut dyn FnMut(&mut dyn Surface)) {
+        match self.suspended_caller(frame) {
+            Some(index) => serve(&mut *CallerSwap::new(self, index)),
+            None => serve(self),
         }
-        let index = self.suspended.iter().position(|held| held.id == caller)?;
-        let running = self.running.as_mut()?;
-        std::mem::swap(running, &mut self.suspended[index]);
-        self.outer_caller = true;
-        Some(index)
-    }
-
-    fn leave_caller(&mut self, entered: usize) {
-        let running = self.running.as_mut().expect("the swapped-in caller");
-        std::mem::swap(running, &mut self.suspended[entered]);
-        self.outer_caller = false;
     }
 
     fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef> {
@@ -789,6 +778,16 @@ impl Interp {
         (stem, key)
     }
 
+    /// The index in [`Interp::suspended`] of the activation that made the
+    /// native call in frame `frame`, or `None` where it is the running one.
+    fn suspended_caller(&self, frame: usize) -> Option<usize> {
+        let caller = self.native_handles.get(frame)?.caller?;
+        if self.running.as_ref()?.id == caller {
+            return None;
+        }
+        self.suspended.iter().position(|held| held.id == caller)
+    }
+
     /// Whether a context-variable member is reaching a kept outer call's
     /// caller, whose frame is not the top one, for a variable that caller
     /// has not bound, which would need a slot that frame cannot grow.
@@ -796,16 +795,17 @@ impl Interp {
         self.outer_caller && self.bound_slot_of(governing).is_none()
     }
 
-    /// Refuses `member` on a variable [`Interp::unbound_outer`] names. No
-    /// phase is assigned: it needs a frame below the top to grow
-    /// (`rexx_core::RootSet::grow_slots`).
+    /// Refuses `member` on a variable [`Interp::unbound_outer`] names: the
+    /// slots are one stack that grows only on the top frame
+    /// (`rexx_core::RootSet::grow_slots`), and reaching a lower frame's
+    /// layout is D3's frame-ownership work.
     fn refuse_unbound_outer(&mut self, member: &str) {
         let message = crate::owned_message(
             &format!(
                 "CallContextInterface.{member} through a kept outer call context, of a \
                  variable its activation has not bound,"
             ),
-            None,
+            Some("Phase 6"),
         );
         self.hold_native_condition(crate::Loud { message }.into());
     }
@@ -911,6 +911,45 @@ impl Interp {
         }
         displayable(&mut report);
         report
+    }
+}
+
+/// The caller of a kept outer call swapped in as [`Interp::running`] for as
+/// long as this lives, and swapped back when it drops, an unwind included.
+/// Both activations stay in `running` and `suspended`, where the collector
+/// reads them.
+struct CallerSwap<'a> {
+    interp: &'a mut Interp,
+    index: usize,
+}
+
+impl<'a> CallerSwap<'a> {
+    fn new(interp: &'a mut Interp, index: usize) -> CallerSwap<'a> {
+        let running = interp.running.as_mut().expect("a native call has a caller");
+        std::mem::swap(running, &mut interp.suspended[index]);
+        interp.outer_caller = true;
+        CallerSwap { interp, index }
+    }
+}
+
+impl Drop for CallerSwap<'_> {
+    fn drop(&mut self) {
+        let running = self.interp.running.as_mut().expect("the swapped-in caller");
+        std::mem::swap(running, &mut self.interp.suspended[self.index]);
+        self.interp.outer_caller = false;
+    }
+}
+
+impl std::ops::Deref for CallerSwap<'_> {
+    type Target = Interp;
+    fn deref(&self) -> &Interp {
+        self.interp
+    }
+}
+
+impl std::ops::DerefMut for CallerSwap<'_> {
+    fn deref_mut(&mut self) -> &mut Interp {
+        self.interp
     }
 }
 
