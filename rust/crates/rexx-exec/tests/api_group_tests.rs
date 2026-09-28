@@ -32,12 +32,16 @@
 //! and neither name they ask for is registered on either side, so the summary
 //! prints the same lines without them.
 //!
-//! A test whose source uses the data queue or the function and macro-space
+//! A test whose source uses a named queue or the function and macro-space
 //! registries ([`reaching_rxapi`]) runs on neither side, the listing run
-//! included: on the oracle those reach rxapi's daemon and the state it keeps
-//! between processes. The oracle still asks rxapi's macro space on each
-//! `::REQUIRES` and external call (`PackageManager.cpp:747`,
-//! `RexxActivation.cpp:2996`), which no ooTest run can avoid.
+//! included: on the oracle those read or change the state rxapi's daemon
+//! keeps between processes. The session queue lives for the process and is
+//! not excluded. The oracle still asks rxapi's macro space, read-only, on each
+//! `::REQUIRES` and external call (`interpreter/package/PackageManager.cpp:747`,
+//! `interpreter/execution/RexxActivation.cpp:2996`), through
+//! `rexxapi/client/MacroSpaceApi.cpp:217-230` and `LocalAPIManager.cpp:56-74`
+//! and `:177-243`, which starts the daemon if it is not running; no ooTest run
+//! on the oracle can avoid that.
 
 mod support;
 mod watchdog;
@@ -108,7 +112,7 @@ fn left_out() -> BTreeSet<&'static str> {
         .collect()
 }
 
-/// The `GROUP.TEST` of each test of [`GROUPS`] whose source uses the data
+/// The `GROUP.TEST` of each test of [`GROUPS`] whose source uses a named
 /// queue or the function or macro-space registries: an instruction or a call
 /// in its own method body, or through a `::METHOD` or `::ROUTINE` of the group
 /// file, or of a file it requires or loads from its own directory, that does.
@@ -207,41 +211,20 @@ fn words(text: &str) -> impl Iterator<Item = &str> {
         .filter(|word| !word.is_empty())
 }
 
-/// Whether a lower-cased source line uses the data queue or a registry.
+/// Whether a lower-cased source line uses a named queue or a registry, the
+/// daemon's persistent state. The session queue lives for the process.
 fn uses_rxapi(line: &str) -> bool {
-    const CALLS: &[&str] = &[
-        "rxqueue",
-        "queued",
-        "rxfuncadd",
-        "rxfuncdrop",
-        "rxfuncquery",
-    ];
+    const CALLS: &[&str] = &["rxqueue", "rxfuncadd", "rxfuncdrop", "rxfuncquery"];
     if line.contains(".rexxqueue") || line.contains("rexxmacro") {
         return true;
     }
     if CALLS.iter().any(|call| line.contains(&format!("{call}("))) {
         return true;
     }
-    let clauses = [" then ", " else ", " otherwise "]
-        .iter()
-        .fold(format!(" {line} ").replace(';', " ; "), |text, lead| {
-            text.replace(lead, " ; ")
-        });
-    clauses.split(';').any(|clause| {
+    line.split(';').any(|clause| {
         let mut tokens = clause.split_whitespace();
-        let first = tokens.next().unwrap_or("");
-        let assignment = tokens
-            .clone()
-            .next()
-            .is_some_and(|next| next.starts_with('='));
-        match first {
-            "push" | "queue" | "pull" => !assignment,
-            "call" => tokens.next().is_some_and(|target| CALLS.contains(&target)),
-            "parse" => tokens
-                .find(|word| !matches!(*word, "upper" | "lower" | "caseless"))
-                .is_some_and(|word| word == "pull"),
-            _ => false,
-        }
+        tokens.any(|word| word == "call")
+            && tokens.next().is_some_and(|target| CALLS.contains(&target))
     })
 }
 
@@ -268,12 +251,9 @@ fn assert_rxapi_tests_are_not_run() {
 fn the_detector_tells_a_queue_use_from_a_name_that_only_looks_like_one() {
     for line in [
         "  q = .rexxqueue~new('x')",
-        "  push 'a'",
-        "  if a then queue 'b'",
-        "  x = 1; pull",
-        "  parse upper pull line",
-        "  n = queued()",
-        "  call rxfuncadd 'f', 'lib', 'f'",
+        "  call rxqueue 'create', 'q'",
+        "  name = rxqueue('get')",
+        "  if a then call rxfuncadd 'f', 'lib', 'f'",
         "  call sysaddrexxmacro 'm', 'm.rex'",
     ] {
         assert!(uses_rxapi(line), "{line:?} reaches rxapi");
@@ -283,7 +263,9 @@ fn the_detector_tells_a_queue_use_from_a_name_that_only_looks_like_one() {
         "  queue~queue('line1')",
         "  self~assertsame(1, queue~queued)",
         "  -- some rexxqueue tests",
-        "  parse arg pull",
+        "  push 'a'",
+        "  n = queued()",
+        "  parse pull line",
     ] {
         assert!(!uses_rxapi(line), "{line:?} does not reach rxapi");
     }

@@ -4809,9 +4809,9 @@ directory's probes/.
   implemented`. A new variable needs a slot, and slots are one stack that
   only the top frame can grow (rust/crates/rexx-core/src/roots.rs:414-422,
   RootSet::grow_slots); the outer activation is not on top. A drop of such
-  a name does nothing, which is all the oracle's drop can show. OWNER: not
-  assigned by this round (it needs a frame below the top to grow); raised
-  with the controller.
+  a name does nothing, which is all the oracle's drop can show. OWNER:
+  Phase 6 (controller ruling 2026-09-29): growing a frame below the top one
+  is D3's frame-ownership work.
   ObjectToValue WRITES NO PARTIAL VALUE ON FAILURE. Only an extension that
   reads the descriptor after a failed conversion can see it; orxmethod
   raises and answers NULL. OWNER: none; the header specifies no value on
@@ -4948,13 +4948,16 @@ the rxapi queue, which is row 10's.
   RUN ON NEITHER SIDE SINCE 2026-09-29. The instrument ran it on the oracle,
   whose RexxQueue creates a named queue in rxapi's daemon, which starts that
   daemon and keeps the queue between processes. api_group_tests.rs derives
-  the tests whose source uses the data queue or the function and macro-space
-  registries (reaching_rxapi) and fails before any run unless they are
-  exactly RECORDED's not-run entries; the -S listing run renames them out
-  too. The oracle still asks rxapi's macro space on each ::REQUIRES and
+  the tests whose source uses a named queue or the function and macro-space
+  registries (reaching_rxapi), the daemon's persistent state, and fails
+  before any run unless they are exactly RECORDED's not-run entries; the -S
+  listing run renames them out too (controller's ruling, 2026-09-29). The
+  oracle still asks rxapi's macro space, read-only, on each ::REQUIRES and
   external call (interpreter/package/PackageManager.cpp:747,
-  interpreter/execution/RexxActivation.cpp:2996), so no ooTest run on the
-  oracle leaves rxapi untouched.
+  interpreter/execution/RexxActivation.cpp:2996, through
+  rexxapi/client/MacroSpaceApi.cpp:217-230 and LocalAPIManager.cpp:56-74,
+  :177-243, which start the daemon if it is not running), so no ooTest run
+  on the oracle leaves rxapi untouched.
 FAILS ON BOTH SIDES, SO AGREEMENT DID NOT SEE IT (2026-09-29, final review
 I1). The instrument asserted agreement only; it now also asserts that this
 crate passes every test RECORDED does not name, in the whole-group run

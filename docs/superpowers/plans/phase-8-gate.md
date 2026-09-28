@@ -423,16 +423,38 @@ bodies.
 **The oracle and rxapi.**
 - The instrument used to run `TEST_REXXQUEUE` on the oracle, alone and inside the `-S` listing
   run, which runs the whole group. That test creates a named `RexxQueue` in rxapi's daemon.
-- Now the tests whose group source (or a file the group loads) uses the data queue or the
-  function and macro-space registries are derived, and the gate fails before any oracle run
-  unless they are exactly `RECORDED`'s not-run entries. They are renamed out of the listing run
-  as well.
-- What no ooTest run can avoid: the oracle asks rxapi's macro space on every `::REQUIRES` and
-  every external call (`interpreter/package/PackageManager.cpp:747`,
-  `interpreter/execution/RexxActivation.cpp:2996`), and that call starts the daemon when it is
-  not running (`rexxapi/client/LocalAPIManager.cpp:216-243`). The corpus and several oracle
-  tests also run `PUSH`, `QUEUE`, `PULL` and `QUEUED()`, whose session queue is rxapi's.
-- That wider exposure is reported to the controller in the fix report and is not changed here.
+- The constraint, as the controller ruled on 2026-09-29, is never to read or change the daemon's
+  persistent state: named queues, function registration, the macro space. The tests whose group
+  source (or a file the group loads) uses a named queue or those registries are derived, and the
+  gate fails before any oracle run unless they are exactly `RECORDED`'s not-run entries. They
+  are renamed out of the listing run as well.
+- What no ooTest run can avoid: the oracle asks rxapi's macro space, read-only, on every
+  `::REQUIRES` and every external call (`interpreter/package/PackageManager.cpp:747`,
+  `interpreter/execution/RexxActivation.cpp:2996`). That goes through `RexxQueryMacro`
+  (`rexxapi/client/MacroSpaceApi.cpp:217-230`) to `LocalAPIManager::getInstance`, `initProcess`
+  and `establishServerConnection` (`rexxapi/client/LocalAPIManager.cpp:56-74`, `:177-243`),
+  which start the daemon when it is not running.
+- The session queue: on the oracle `PUSH`, `QUEUE`, `PULL`, `PARSE PULL` and `QUEUED()` go to
+  `.local`'s `STDQUE`, an rxapi queue (`interpreter/concurrency/Activity.cpp:3282`, `:3361`),
+  which lives for the process. The corpus has used it since Phase 4, and by the same ruling it is
+  not re-scoped. The files with those forms, from a text grep that does not exclude comments,
+  run from `rust/`:
+
+        for f in $(git ls-files corpus crates/rexx-exec/tests | /bin/grep -aE '\.(rex|rs)$|ir_recorded_cases/'); do
+          n=$(/bin/grep -a -ciE '\.rexxqueue|rxqueue\(|queued\(|rxfunc(add|drop|query)|sys[a-z]*rexxmacro|^[[:space:]"]*(push|queue|pull)\b|parse[[:space:]]+(upper[[:space:]]+)?(caseless[[:space:]]+)?pull' $f)
+          [ "$n" != 0 ] && echo "$f $n"; done
+
+  It printed, at `94897d79e` with this round's detector edit uncommitted: `corpus/gate-tables/classes/rexxqueue.rex`,
+  `corpus/gate-tables/hierarchy/queue__orderedcollection.rex`,
+  `corpus/gate-tables/hierarchy/rexxqueue__object.rex`,
+  `corpus/gate-tables/methods/rexxqueue__class.rex`,
+  `corpus/gate-tables/methods/rexxqueue__instance.rex`, `corpus/lang/input_redirection.rex`,
+  `corpus/lang/pull_queue.rex`, `corpus/lang/push_queue.rex`,
+  `corpus/lang/required_string_contexts.rex`, `corpus/lang/required_string_default_name.rex`,
+  `corpus/lang/state_builtins.rex`, `crates/rexx-exec/tests/api_group_partition.rs`,
+  `api_group_tests.rs`, `collection_scopes.rs`, `input_oracle.rs`,
+  `ir_recorded_cases/return-and-queue`, `prompt_before_read.rs` and `state_builtin_oracle.rs`
+  (each with its count of matching lines).
 
 **Miri is a recorded run, not a gate.** rexx-api's lib tests ran under Stacked Borrows (no
 `MIRIFLAGS`), miri 0.1.0 (f7575a9da8 2026-09-24), from a scratch `RUSTUP_HOME`, on the tree at
