@@ -4828,8 +4828,8 @@ descriptors separately.
   answers "handler 2 2" and "shell 0 2" at rc 0 on the oracle and ends here
   at rc 159 with "Error 97.1: Object "an ARRAYINPUTSTREAM" does not
   understand message "STATE"." Found by this task, not made by it: the
-  reader is Phase 7's. OWNER: none assigned here; the FUNCTION group's
-  test_input_output_stream fails on it.
+  reader is Phase 7's. OWNER: Phase 9, assigned by the surface plan's Task
+  8; the FUNCTION group's test_input_output_stream fails on it.
   THE ADDRESS INSTRUCTION'S OWN COMMAND ECHOES NO CLAUSE LINE UNDER TRACE C.
   address_trace.rex, no extension: the oracle prints `4 *-* address system
   "exit 3"` before the `>>>` and `+++` lines, and likewise for `address
@@ -4838,6 +4838,81 @@ descriptors separately.
   classified by InstructionKind::Command alone, in
   rust/crates/rexx-exec/src/run.rs and src/ir/compile.rs. OWNER: none
   assigned here.
+
+TESTS OF THE METHOD, CONVERSION AND FUNCTION GROUPS THAT DIFFER, measured
+2026-09-28 by the surface plan's Task 8 and asserted exactly by
+rust/crates/rexx-exec/tests/api_group_tests.rs (gate-only): each test run
+alone through testOORexx.rex -f GROUP.testGroup -U -V 0 -t TEST, both sides
+from a fresh copy of the framework and ootest/ooRexx/API/oo at the same
+path, three descriptors separately. None is Phase 8's: each cause is general
+language or runtime behaviour outside the native API surface. The probe
+under each is a single program, run from a fresh empty directory.
+  Class~new BUILDS NO CLASS. Test:
+    TESTCLASS01
+  `.class~new("FooBar")` is rc 120, `method "NEW" of class "Class" is not
+  implemented (Phase 5)`. The oracle's RexxClass::newRexx
+  (interpreter/classes/ClassClass.cpp:1776) clones the receiver into a
+  class whose behaviour is a copy of the receiver's instance behaviour,
+  whose superclass is Object and which no subclass list holds; measured,
+  its ~new is 97.1 and its package is the REXX package, so it is not
+  Object~subclass under another name. Probe: c = .class~new('FooBar');
+  say c~id c~superclass~id .object~subclasses~hasItem(c) c~package, oracle
+  "FooBar Object 0 The REXX Package" rc 0. OWNER: Phase 9.
+  EXPOSE OF A SINGLE COMPOUND TAIL. Tests:
+    TESTGETOBJECTVARIABLE01
+    TESTGETOBJECTVARIABLE02
+    TESTGETOBJECTVARIABLE03
+    TESTSETOBJECTVARIABLE01
+    TESTDROPOBJECTVARIABLE01
+  Each builds a VariableTester, whose INIT exposes `stem2.1`
+  (METHODPackage.cls), and this crate refuses at rc 120: `EXPOSE of the
+  single compound tail "STEM2.1" is not implemented`. A single tail is
+  aliasing inside a stem object, which the variable model has no
+  representation for (run.rs, bind_exposed). Probe: a ::METHOD whose first
+  instruction is `expose a.1`. OWNER: Phase 9.
+  A PACKAGE'S CLASS AND ROUTINE TABLES, AND Routine~new OVER DIRECTIVES.
+  Tests:
+    TESTGETPACKAGECLASSES01
+    TESTGETPACKAGEPUBLICCLASSES01
+    TESTGETPACKAGEPUBLICROUTINES01
+    TESTGETPACKAGEROUTINES01
+  Each reads ~items of a package table first, which refuses at rc 120 on a
+  table built as a NativeObject (`method "ITEMS" of class "StringTable" is
+  not implemented (Phase 5)`); each then builds a Routine from source
+  carrying ::CLASS or ::ROUTINE directives, which refuses too (`a routine
+  source that carries a directive is not implemented (Phase 5)`). Probes:
+  say .context~package~classes~items (oracle 0), and
+  say .Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')
+  (oracle 1). OWNER: Phase 9.
+  A SOURCE THAT DOES NOT PARSE, HANDED TO NewMethod OR NewRoutine. Tests:
+    TESTNEWMETHOD02
+    TESTNEWROUTINE02
+  The API members compile through the path Method~new and Routine~new take
+  (dispatch/class_protocol.rs), which refuses at rc 120 (`reporting a
+  routine source that does not parse ... is not implemented (Phase 5)`).
+  The oracle raises 36.901 with a substituted message, POSITION the line
+  within the source, and a traceback whose first line is the compiled
+  source's own; rexx-parse carries none of that (Phase 3's scope
+  decision). Probe: signal on syntax; r = .Routine~new('Testing', 'return
+  arg(1'), oracle 36.901 with "Left parenthesis "(" in position 11 on line
+  1 requires a corresponding right parenthesis ")"." and POSITION 1.
+  OWNER: Phase 9.
+  AN INPUT STREAM OBJECT WITH NO STATE METHOD. Test:
+    TEST_INPUT_OUTPUT_STREAM
+  The Task 6 entry above. Inside the suite the oracle fails this test too
+  (RC(30) from the handler, Failures 1), so the two sides differ in which
+  kind of problem they count. OWNER: Phase 9.
+  RexxQueue. Test:
+    TEST_REXXQUEUE
+  rc 120, `the LIBRARY REXX entry point "rexx_create_queue" is not
+  implemented (Phase 10)`. OWNER: Phase 10.
+  NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND -V 0. The framework's
+  ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking) is a REPLY
+  thread and a GUARD ON WHEN, refused naming Phase 6; the full summary
+  calls RXFUNCQUERY, refused naming Phase 10, and the oracle answers
+  rxfuncquery("SysWinVer") through RexxQueryFunction, which is rxapi (read:
+  interpreter/package/PackageManager.cpp:618-635). -U
+  starts no ticker and -V 0 prints the brief summary, on both sides alike.
 
 KNOWN GAPS RECORDED AFTER THE FINAL REVIEW AND THE FIX ROUNDS, each with
 its evidence and its owner, or the reason it has none. Every transcript
