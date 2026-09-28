@@ -57,6 +57,20 @@ impl Interp {
         self.class_packages.insert(class, ClassPackage::Null);
     }
 
+    /// Gives `copy` the package `class` answers, which is what a clone of the
+    /// class object carries.
+    pub(crate) fn copy_class_package(&mut self, class: ObjRef, copy: ObjRef) {
+        if let Some(package) = self.class_packages.get(&class).copied() {
+            self.class_packages.insert(copy, package);
+        }
+    }
+
+    /// Whether `class` is one the interpreter's own bootstrap built, which
+    /// no program's install recorded -- the oracle's `isPrimitiveClass`.
+    pub(crate) fn is_primitive_class(&self, class: ObjRef) -> bool {
+        !self.class_packages.contains_key(&class)
+    }
+
     /// `Package~addClass` and `Package~addPublicClass`, which differ only in
     /// whether the public table gets the entry too --
     /// `PackageClass::addInstalledClass` (`classes/PackageClass.cpp:1401`),

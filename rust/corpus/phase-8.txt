@@ -326,3 +326,5 @@ lang/trapped_condition_native_levels.rex
 lang/expose_compound_tail.rex
 lang/expose_compound_tail_trace.rex
 lang/expose_compound_tail_redirect.rex
+# METHOD's TestClass01: Class~new builds a class.
+lang/class_new.rex

@@ -102,25 +102,6 @@ fn unbuilt_class_method(interp: &mut Interp, class: ObjRef, name: &[u8]) -> Fail
     Loud::native_method(name, &id).into()
 }
 
-/// `Class~new(id, ...)`: the class id is required and this crate builds no
-/// class from it -- `RexxClass::newRexx` (`classes/ClassClass.cpp:1776`).
-pub(super) fn native_class_new(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    receiver: ObjRef,
-    args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    let class = class_receiver(interp, receiver)?;
-    if args.is_empty() {
-        return Err(Raised::not_enough_method_arguments(1).into());
-    }
-    match args[0] {
-        Some(id) => required_string_named_argument(interp, id, "class id")?,
-        None => return Err(Raised::missing_named_argument("class id").into()),
-    };
-    Err(unbuilt_new(interp, class))
-}
-
 /// `Message~new(target, message, ...)`: a message object whose send has not
 /// been made -- `MessageClass::newRexx` (`classes/MessageClass.cpp:828`).
 pub(super) fn native_message_new(

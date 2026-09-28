@@ -1,0 +1,37 @@
+count 36
+-- Class~new: a copy of the receiver that answers the receiver's instance
+-- methods, whose instances derive from Object alone and which no subclass
+-- list holds, sent INIT with the arguments after the id.
+c = .class~new('FooBar')
+say c~id c~superclass~id .object~subclasses~hasItem(c) c~package c~class c~metaclass c~defaultName c~string
+say c~isSubclassOf(.object) c~superclasses~items c~subclasses~items c~baseclass~id c~isabstract c~querymixinclass
+say c~hasMethod('NEW') c~hasMethod('SUBCLASS') c~hasMethod('ID') c~instanceMethods(c)~allIndexes~items
+s = c~subclass('Sub')
+say s~superclass~id s~new~class~id c~subclasses~items
+m = .Meta~new('Viam', 'a1')
+say m~id m~hello m~class~id m~metaclass~id filespec('n', m~package~name) m~hasMethod('NEW')
+say m~superclass~id .Meta~subclasses~items
+say (c == c) (c = c) (c \== .class) (c~class == .class)
+call try "x = c~new"
+call try "x = .class~new"
+call try "x = .class~new(, 'x')"
+call try "x = .class~new('WithInit', 'x', 'y')"
+say .class~new(.array~new)~id .class~new(3)~id
+exit
+try: procedure expose c
+  signal on syntax
+  interpret arg(1)
+  say 'no condition'
+  return
+syntax:
+  o = condition('O')
+  say o~code o~message
+  do l over o~traceback; say ' ' l; end
+  return
+::class Meta subclass class
+::method init
+  use arg id, extra
+  say 'init' id extra arg()
+  forward class (super) arguments (.array~new)
+::method hello
+  return 'hi' self~id

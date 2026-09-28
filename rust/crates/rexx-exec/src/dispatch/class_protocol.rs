@@ -526,6 +526,46 @@ pub(super) fn native_mixin_class_factory(
     class_factory(interp, receiver, args, ClassKind::Mixin)
 }
 
+/// `Class~new(id, ...)`: `RexxClass::newRexx` (`classes/ClassClass.cpp:1776`),
+/// a copy of the receiver that answers the receiver's instance methods,
+/// derives its instances from `Object` alone and is in no subclass list,
+/// sent `INIT` with the arguments after the id. Measured, oracle rc 0:
+/// `.class~new('FooBar')` answers `FooBar Object 0 The REXX Package` for
+/// its id, superclass, membership of `.object~subclasses` and package, and
+/// its own `~new` is 97.1.
+pub(super) fn native_new_class(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let class = class_receiver(interp, receiver)?;
+    if args.is_empty() {
+        return Err(Raised::not_enough_method_arguments(1).into());
+    }
+    let name = required_class_id(interp, args)?;
+    let metaclass = if interp.is_primitive_class(class) {
+        interp.object_model().metaclass
+    } else {
+        class
+    };
+    let root = interp.object_model().object;
+    let id = interp.mint_class();
+    interp.classes().define_cloned_class(
+        id,
+        &String::from_utf8_lossy(&name),
+        class,
+        root,
+        metaclass,
+    );
+    interp.copy_class_package(class, id);
+    interp.classes().check_uninit(id);
+    interp.flag_class_uninit(id);
+    let caller = interp.caller();
+    interp.send_message(id, INIT, None, &args[1..], caller)?;
+    Ok(Some(id))
+}
+
 /// `Object~new`: what every class that declares no `NEW` of its own answers.
 pub(super) fn native_new(
     interp: &mut Interp,

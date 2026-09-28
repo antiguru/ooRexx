@@ -4862,17 +4862,6 @@ from a fresh copy of the framework and ootest/ooRexx/API/oo at the same
 path, three descriptors separately. None is Phase 8's: each cause is general
 language or runtime behaviour outside the native API surface. The probe
 under each is a single program, run from a fresh empty directory.
-  Class~new BUILDS NO CLASS. Test:
-    TESTCLASS01
-  `.class~new("FooBar")` is rc 120, `method "NEW" of class "Class" is not
-  implemented (Phase 5)`. The oracle's RexxClass::newRexx
-  (interpreter/classes/ClassClass.cpp:1776) clones the receiver into a
-  class whose behaviour is a copy of the receiver's instance behaviour,
-  whose superclass is Object and which no subclass list holds; measured,
-  its ~new is 97.1 and its package is the REXX package, so it is not
-  Object~subclass under another name. Probe: c = .class~new('FooBar');
-  say c~id c~superclass~id .object~subclasses~hasItem(c) c~package, oracle
-  "FooBar Object 0 The REXX Package" rc 0. OWNER: Phase 9.
   A PACKAGE'S CLASS AND ROUTINE TABLES, AND Routine~new OVER DIRECTIVES.
   Tests:
     TESTGETPACKAGECLASSES01

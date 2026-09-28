@@ -119,6 +119,22 @@ impl ClassRegistry {
         id
     }
 
+    /// [`ClassGraph::define_cloned_class`], with the id string `name`.
+    pub fn define_cloned_class(
+        &mut self,
+        id: ObjRef,
+        name: &str,
+        receiver: ObjRef,
+        root: ObjRef,
+        metaclass: ObjRef,
+    ) -> ObjRef {
+        self.graph
+            .define_cloned_class(id, receiver, root, metaclass);
+        self.names.insert(id, name.to_string());
+        self.default_names.insert(id, format!("The {name} class"));
+        id
+    }
+
     /// Allocate a fresh identity and give it an id string, registered in the
     /// **kernel** directory rather than the environment one -- oracle's
     /// `addToSystem(name, currentClass)`, which is what

@@ -159,18 +159,18 @@ use class_protocol::{
     native_class_inherit, native_define, native_define_class_method, native_define_methods,
     native_delete, native_enhanced, native_id, native_inherit_instance_methods,
     native_is_subclass_of, native_metaclass, native_method, native_mixin_class_factory, native_new,
-    native_package, native_package_add_class, native_package_add_public_class, native_scope,
-    native_subclass, native_superclass, native_superclasses, native_uninherit, new_instance,
+    native_new_class, native_package, native_package_add_class, native_package_add_public_class,
+    native_scope, native_subclass, native_superclass, native_superclasses, native_uninherit,
+    new_instance,
 };
 
 // The native constructors, and `Pointer`'s and `WeakReference`'s methods,
 // chained the same way.
 mod construct;
 use construct::{
-    native_capacity_init, native_class_new, native_directory_new, native_executable_new,
-    native_hash_collection_new, native_load_external, native_message_new, native_new_file,
-    native_package_new, native_stem_new, native_string_new, native_unsupported_new,
-    native_weak_reference_new, pointer_address,
+    native_capacity_init, native_directory_new, native_executable_new, native_hash_collection_new,
+    native_load_external, native_message_new, native_new_file, native_package_new, native_stem_new,
+    native_string_new, native_unsupported_new, native_weak_reference_new, pointer_address,
 };
 
 // `Object`'s own methods, `run`/`send`/`start`, and the `Message` readers.
@@ -708,13 +708,14 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Set", "OF", Arity::Counted, hash::native_set_of),
     ("Supplier", "NEW", Arity::Counted, native_new),
     ("Table", "NEW", Arity::Counted, hash::native_hash_new),
+    // `AddClassMethod("New", RexxClass::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:450`, the one class method `.Class` adds.
+    ("Class", "NEW", Arity::Counted, native_new_class),
     // The classes whose own `newRexx` checks its arguments and then builds
-    // something this crate does not -- a class object, an undispatched
-    // message, a compiled executable, a loaded package, a weak reference
-    // (`memory/Setup.cpp:450`, `:1052`, `:1091`, `:1128`, `:1156`, `:1683`).
-    // Each checks exactly what the C++ checks before that point and refuses
-    // loudly past it.
-    ("Class", "NEW", Arity::Counted, native_class_new),
+    // something this crate does not -- an undispatched message, a compiled
+    // executable, a loaded package, a weak reference (`memory/Setup.cpp:1052`,
+    // `:1091`, `:1128`, `:1156`, `:1683`). Each checks exactly what the C++
+    // checks before that point and refuses loudly past it.
     ("Message", "NEW", Arity::Counted, native_message_new),
     (
         "Method",

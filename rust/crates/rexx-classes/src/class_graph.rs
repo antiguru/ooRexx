@@ -225,6 +225,48 @@ impl ClassGraph {
         self.rebuild_behaviour(id, Side::Class);
     }
 
+    /// A class `RexxClass::newRexx` (`ClassClass.cpp:1776`) makes: a copy of
+    /// `receiver` whose class behaviour is a copy of `receiver`'s instance
+    /// behaviour, whose instance side derives from `root` alone, and which no
+    /// subclass list holds. `metaclass` is `receiver` where it is not one of
+    /// the image's own classes, and `.Class` where it is.
+    pub fn define_cloned_class(
+        &mut self,
+        id: ObjRef,
+        receiver: ObjRef,
+        root: ObjRef,
+        metaclass: ObjRef,
+    ) {
+        let instance_behaviour = self.alloc_behaviour();
+        let class_behaviour = self.alloc_behaviour();
+        self.classes.insert(
+            id,
+            ClassDef {
+                kind: ClassKind::Regular,
+                superclasses: vec![root],
+                subclasses: Vec::new(),
+                own_instance_methods: MethodDict::new(),
+                own_class_methods: MethodDict::new(),
+                instance_behaviour,
+                class_behaviour,
+                base_class: id,
+                metaclass,
+                owning_class: receiver,
+                is_metaclass: false,
+                has_uninit: false,
+                parent_has_uninit: false,
+                is_abstract: false,
+                rexx_defined: false,
+            },
+        );
+        self.rebuild_behaviour(id, Side::Instance);
+        let source = self.classes[&receiver].instance_behaviour;
+        let dict = self.behaviours[source.index()].dict.clone();
+        let behaviour = &mut self.behaviours[class_behaviour.index()];
+        behaviour.dict = dict;
+        behaviour.version += 1;
+    }
+
     /// Oracle's `hasUninitDefined() || parentHasUninitDefined()`, the exact
     /// pair every propagation site asks about the class it is deriving from
     /// (`ClassClass.cpp:1364`, `:1525`, `:1634`).
