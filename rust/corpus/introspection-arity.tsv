@@ -70,7 +70,7 @@ Class	metaClass	instance	agree	rc0
 Class	method	instance	agree	rc0
 Class	methods	instance	agree	rc0
 Class	mixinClass	instance	agree	rc0
-Class	new	class	send-differs	oracle rc0 VALUE The C9 class; crate rc120 rexx-exec: method "NEW" of class "Class" is not implemented (Phase 5)
+Class	new	class	agree	rc0
 Class	package	instance	agree	rc0
 Class	queryMixinClass	instance	agree	rc0
 Class	subclass	instance	agree	rc0
