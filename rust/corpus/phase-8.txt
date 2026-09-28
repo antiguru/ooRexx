@@ -341,3 +341,8 @@ lang/method_source_directives.rex
 # tail, and a tail-less or EXIT RAISE offered to the caller.
 lang/input_stream_reader_ends.rex
 lang/raise_exit_offered_to_caller.rex
+# Task 8 round C (N2, N3): PROPAGATED, RAISE PROPAGATE's re-raise, and a
+# RAISE SYNTAX a native call re-raises.
+lang/propagated_leaving_levels.rex
+lang/propagate_untrapped_from_method.rex
+lang/native_reraise_raise_syntax.rex

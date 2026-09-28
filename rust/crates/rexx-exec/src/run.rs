@@ -2919,6 +2919,13 @@ impl Interp {
         let Failure::Raised(raised) = failure else {
             return;
         };
+        if raised.condition == "SYNTAX" && self.activation().entry != Entry::InternalCall {
+            self.failure_propagated = true;
+        }
+        if self.reraise_leaving > 0 {
+            self.reraise_leaving -= 1;
+            return;
+        }
         if self.failure_frame.is_some() {
             return;
         }
@@ -2965,6 +2972,8 @@ impl Interp {
     /// while every level already left keeps its traceback line.
     pub(crate) fn reraise_failure_levels(&mut self) {
         self.failure_origin = None;
+        self.failure_propagated = true;
+        self.failure_reraised = true;
         for site in self
             .failure_sites
             .iter_mut()
@@ -2989,6 +2998,10 @@ impl Interp {
         self.failure_frame = None;
         self.failure_frames.clear();
         self.failure_origin = None;
+        self.failure_propagated = false;
+        self.failure_reraised = false;
+        self.reraised_object = None;
+        self.reraise_leaving = 0;
     }
 
     /// The clause boundary a promoted construct owes once the branch it chose

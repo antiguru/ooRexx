@@ -30,6 +30,10 @@ pub(crate) struct Unwound<'a> {
     pub(crate) frames: Vec<ObjRef>,
     /// The innermost level with a package, and its line if it has one.
     pub(crate) origin: Option<(Package, Option<usize>)>,
+    /// `PROPAGATED`.
+    pub(crate) propagated: bool,
+    /// Whether a level re-raised it, whose line replaces the raise's own.
+    pub(crate) reraised: bool,
 }
 
 /// The indexes a condition's directory is keyed by.
@@ -130,6 +134,40 @@ impl Interp {
         self.build_condition_object_from(raised, Some(false), false, Some(unwound))
     }
 
+    /// `Activity::reraiseException` over `object`: `POSITION`, `PROGRAM` and
+    /// `PACKAGE` become those of the level it was re-raised in, `origin` when
+    /// that level has since been left, and it is `PROPAGATED`.
+    pub(crate) fn reraise_condition_object(
+        &mut self,
+        object: ObjRef,
+        origin: Option<(Package, Option<usize>)>,
+    ) -> Result<ObjRef, Failure> {
+        self.roots.push_temp(object);
+        let (package, line) = match origin {
+            Some(origin) => origin,
+            None => (
+                self.running_program()
+                    .map_or(Package::Rexx, Package::Program),
+                Some(self.clause_state.line()),
+            ),
+        };
+        if let Some(line) = line {
+            let position = self.counted(line);
+            self.hash_entry_write(object, key::POSITION, position)?;
+        }
+        let program = match package {
+            Package::Program(id) => self.program_display_name(id).to_vec(),
+            Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
+        };
+        let program = self.text_built(program);
+        self.hash_entry_write(object, key::PROGRAM, program)?;
+        let package = self.package_object(package);
+        self.hash_entry_write(object, key::PACKAGE, package)?;
+        let propagated = self.text(b"1");
+        self.hash_entry_write(object, key::PROPAGATED, propagated)?;
+        Ok(object)
+    }
+
     /// [`Interp::build_condition_object`] for a condition the innermost
     /// native call raised, whose own frame leads `STACKFRAMES` and
     /// `TRACEBACK` (`NativeActivation::createStackFrame`).
@@ -176,7 +214,8 @@ impl Interp {
         entries.push((key::PACKAGE, package));
         // `generateProgramInformation` puts no `POSITION` where the frame it
         // takes the package from is native, which has no line.
-        let position = if raised.position != 0 {
+        let reraised = unwound.is_some_and(|unwound| unwound.reraised);
+        let position = if raised.position != 0 && !reraised {
             // Captured at the raise, which is the only correct source when
             // the raising activation has since unwound.
             Some(self.counted(raised.position as usize))
@@ -203,9 +242,10 @@ impl Interp {
         let program = self.text_built(program);
         self.roots.push_temp(program);
         entries.push((key::PROGRAM, program));
-        // Always `0` here: this crate re-raises through `RAISE PROPAGATE`
-        // without rebuilding the object, so nothing sets it to 1 yet.
-        let propagated = self.text(b"0");
+        let propagated = match unwound.is_some_and(|unwound| unwound.propagated) {
+            true => self.text(b"1"),
+            false => self.text(b"0"),
+        };
         self.roots.push_temp(propagated);
         entries.push((key::PROPAGATED, propagated));
         self.roots.push_temp(frames);

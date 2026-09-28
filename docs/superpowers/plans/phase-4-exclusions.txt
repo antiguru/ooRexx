@@ -4690,19 +4690,6 @@ the oracle's orxmethod and orxfunction and a forged extension
 by its build.sh, NEEDED libgcc_s.so.1 and libc.so.6), each side from a fresh
 directory, three descriptors separately. The probes named are in that
 directory's probes/.
-  A NATIVE SYNTAX CONDITION RE-RAISED INTO A CALLER LACKS PROPAGATED.
-  cond3.rex (RaiseKept, then SIGNAL ON SYNTAX in the caller): the oracle's
-  condition object has PROPAGATED = 1, ours PROPAGATED = 0; its TRACEBACK
-  and STACKFRAMES, which lacked the native frame here, agree since the Task
-  8 fix round B (re-run with the forged library built by build.sh).
-  sendthrow.rex, a Throw inside a Rexx method a SendMessage0 reached, shows
-  PROPAGATED 1 against 0 the same way (its POSITION agrees); untrapped, its
-  final `Error 40 running ... line N`, which named the raising clause here
-  and the clause that called the extension on the oracle, agrees since the
-  Task 8 fix round B (sendthrow2.rex, the probe without its trap). The
-  METHOD group's `forward ... continue` shape was recorded as lacking
-  the native METHOD frame likewise; not re-measured by fix round B. OWNER:
-  Phase 8; PROPAGATED in a re-raised condition is the native boundary's.
   A RaiseCondition TAKEN BY CALL ON CARRIES POSITION. rcond.rex: the
   oracle's condition object has no POSITION entry, ours has one. Taken by
   SIGNAL ON, the two agree since the Task 8 fix round B. OWNER: Phase 8.

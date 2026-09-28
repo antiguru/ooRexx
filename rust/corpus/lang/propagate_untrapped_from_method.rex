@@ -1,0 +1,12 @@
+-- RAISE PROPAGATE out of a method that nothing traps is reported at the
+-- caller's line, where the same at the program's own level has no line.
+t = .T~new
+t~m
+say 'not reached'
+::class T
+::method m
+  signal on syntax name s
+  x = 1/0
+  return
+s:
+  raise propagate

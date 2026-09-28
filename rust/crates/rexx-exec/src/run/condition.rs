@@ -345,6 +345,8 @@ impl Interp {
         }
         self.failure_frame = None;
         let origin = self.failure_origin.take();
+        let propagated = std::mem::take(&mut self.failure_propagated);
+        let reraised = std::mem::take(&mut self.failure_reraised);
         self.set_sigl(self.clause_state.line());
         if let Some(rc) = &raised.rc {
             let value = self.text(rc);
@@ -362,8 +364,13 @@ impl Interp {
             sites: &sites,
             frames,
             origin,
+            propagated,
+            reraised,
         };
-        let object = self.build_trapped_condition_object(&raised, &unwound)?;
+        let object = match self.reraised_object.take() {
+            Some(object) => self.reraise_condition_object(object, unwound.origin)?,
+            None => self.build_trapped_condition_object(&raised, &unwound)?,
+        };
         self.activation_mut().condition = Some(TrappedCondition {
             name: raised.condition.as_bytes().into(),
             // Only a `SYNTAX` condition has a `CODE` item at all
@@ -918,8 +925,8 @@ impl Interp {
                 };
                 Err(raised.into())
             }
-            // Nothing traps it. `HALT` reports; everything else is ignored
-            // outright and the routine simply returns its value -- measured,
+            // Nothing traps it. `HALT` and `NOMETHOD` report; everything else
+            // is ignored outright and the routine simply returns its value -- measured,
             // `raise user foo return 'RETVAL-88'` with no trap anywhere
             // prints `RETVAL-88` and the caller carries on.
             // `RexxActivation::raise` reports an untrapped `HALT` or `NOMETHOD`
@@ -965,6 +972,24 @@ impl Interp {
         self.clear_failure_levels();
         self.failure_site = site;
         self.failure_sites = sites;
+        // `RexxActivation::raise` pops the level and `Activity::
+        // reraiseException`s the same object (`execution/RexxActivation.cpp:
+        // 1840`). Measured: from an internal call it is trapped neither by
+        // that call's parent nor by the first activation that is not one,
+        // but by the caller of that activation.
+        let top = self.first_non_internal_depth();
+        if self.frame_at(top + 1).is_some() {
+            raised.delivery.search = if top == 0 {
+                Search::Caller
+            } else {
+                Search::AboveTop
+            };
+            raised.delivery.positionless = false;
+            raised.position = 0;
+            self.reraise_failure_levels();
+            self.reraised_object = self.activation().condition.as_ref().and_then(|c| c.object);
+            self.reraise_leaving = top + 1;
+        }
         Err(raised.into())
     }
 

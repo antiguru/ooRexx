@@ -1426,6 +1426,12 @@ struct Interp {
     /// is not a rendering of the command's code, `.nil` for an entry present
     /// with no value.
     pending_rc: Option<ObjRef>,
+    /// The condition object a `RAISE PROPAGATE` re-raises in its caller, from
+    /// the propagate until a trap takes it.
+    reraised_object: Option<ObjRef>,
+    /// How many of the levels that `RAISE PROPAGATE` leaves are still to be
+    /// left, which add no frame and no origin: the object has its frames.
+    reraise_leaving: usize,
     /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
     /// `case` text, or `None` inside a plain `SELECT` (or before any
     /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
@@ -1486,6 +1492,12 @@ struct Interp {
     /// file and package a trapped condition names, and its line, which is
     /// the condition's `POSITION` (a native level has none).
     failure_origin: Option<(Package, Option<usize>)>,
+    /// Whether the SYNTAX failure has left a level that is not an internal
+    /// call, or was re-raised: `Activity::raiseException` marks it
+    /// `PROPAGATED` once the raising activation does not trap it.
+    failure_propagated: bool,
+    /// Whether it was re-raised, so that `POSITION` is no longer the raise's.
+    failure_reraised: bool,
     /// The line number every clause echo prints while an `INTERPRET`
     /// fragment is running, overriding the clause's own line in its own
     /// source.
@@ -2045,6 +2057,8 @@ impl Interp {
             pending_traps: VecDeque::new(),
             active_condition: None,
             pending_additional: None,
+            reraised_object: None,
+            reraise_leaving: 0,
             pending_result: None,
             pending_rc: None,
             next_activation_id: 0,
@@ -2057,6 +2071,8 @@ impl Interp {
             failure_frame: None,
             failure_frames: Vec::new(),
             failure_origin: None,
+            failure_propagated: false,
+            failure_reraised: false,
             native_reraise: false,
             input_dispatch: None,
             input_dispatch_trapped: false,
@@ -2720,6 +2736,8 @@ impl Interp {
             pending_traps,
             active_condition: _,
             pending_additional,
+            reraised_object,
+            reraise_leaving: _,
             pending_result,
             pending_rc,
             current_case_text: _,
@@ -2731,6 +2749,8 @@ impl Interp {
             failure_frames,
             // A package identity and a line.
             failure_origin: _,
+            failure_propagated: _,
+            failure_reraised: _,
             // Flags and an activation identity.
             native_reraise: _,
             input_dispatch: _,
@@ -2800,6 +2820,7 @@ impl Interp {
         out.extend(*pending_additional);
         out.extend(*pending_result);
         out.extend(*pending_rc);
+        out.extend(*reraised_object);
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
         out.extend(global_references.roots());
