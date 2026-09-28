@@ -33,7 +33,7 @@ use std::path::{Path, PathBuf};
 /// Phase 7's task. Adding it here would redden the tree for work this phase
 /// did not take on; the honest statement is the narrow one, and the phase
 /// that pays that debt widens this list.
-const CLOSED: &[&str] = &["Phase 7"];
+const CLOSED: &[&str] = &["Phase 7", "Phase 8"];
 
 /// Every `.rs` file under one crate's `src/`, recursively.
 fn source_files(crate_dir: &str) -> Vec<PathBuf> {
@@ -99,7 +99,13 @@ fn mentions(crate_dir: &str) -> Vec<String> {
 /// The whole claim, over every crate a refusal can come from.
 #[test]
 fn no_refusal_names_a_closed_phase() {
-    for crate_dir in ["rexx-exec", "rexx-parse", "rexx-core", "rexx-inventory"] {
+    for crate_dir in [
+        "rexx-exec",
+        "rexx-parse",
+        "rexx-core",
+        "rexx-inventory",
+        "rexx-api",
+    ] {
         let named = mentions(crate_dir);
         assert!(
             named.is_empty(),
@@ -121,7 +127,7 @@ fn the_scan_finds_an_open_phase_it_is_not_asked_about() {
             if line.trim_start().starts_with("//") {
                 continue;
             }
-            if line.contains("\"Phase 8\"") || line.contains("\"Phase 10\"") {
+            if line.contains("\"Phase 6\"") || line.contains("\"Phase 10\"") {
                 open += 1;
             }
         }

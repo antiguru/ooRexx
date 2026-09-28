@@ -143,11 +143,11 @@ fn the_bootstrap_files_and_the_registry_name_the_same_entry_points() {
 /// program pinning that family's refusal can be written at all.
 #[test]
 fn every_deferred_entry_point_names_an_open_phase() {
-    // The phases that still owe entry points, and no more: a fourth
+    // The phases that still owe entry points, and no more: another
     // spelling is either a typo or work nobody has been assigned, and a
     // phase that has closed cannot owe anything -- a refusal naming one
     // is a lie a program can read.
-    const OPEN: &[&str] = &["Phase 6", "Phase 8", "Phase 10"];
+    const OPEN: &[&str] = &["Phase 6", "Phase 10"];
     let mut deferred = 0usize;
     for entry in LIBRARY_REXX_METHODS {
         let ExternalBody::Deferred { owner } = entry.body else {
