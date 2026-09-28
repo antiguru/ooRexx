@@ -5035,8 +5035,9 @@ mod tests {
         );
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("RexxThreadInterface.BufferData is not implemented (Phase 8)"),
-            "the refusal did not name the entry and the phase that owes it:\n{stderr}"
+            stderr.contains("RexxThreadInterface.BufferData is not implemented\n"),
+            "the refusal did not name the entry, or named an owner for a member \
+             every populated table fills:\n{stderr}"
         );
     }
 

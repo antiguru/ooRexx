@@ -386,13 +386,21 @@ pub const REFUSING_MEMBERS: &[(&str, &str)] = &[
 ];
 
 /// The phase a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and
-/// Phase 8 for a member no row names.
+/// none for a member no row names, which every populated table fills.
 #[must_use]
-pub fn refusal_owner(entry: &str) -> &'static str {
+pub fn refusal_owner(entry: &str) -> Option<&'static str> {
     REFUSING_MEMBERS
         .iter()
         .find(|(member, _)| *member == entry)
-        .map_or("Phase 8", |(_, owner)| owner)
+        .map(|(_, owner)| *owner)
+}
+
+/// The refusal text for `entry`, with its owner when it has one.
+fn refusal_text(entry: &str) -> String {
+    match refusal_owner(entry) {
+        Some(owner) => format!("{entry} is not implemented ({owner})"),
+        None => format!("{entry} is not implemented"),
+    }
 }
 
 /// Abandon the process, naming the entry the caller reached.
@@ -401,14 +409,14 @@ pub fn refusal_owner(entry: &str) -> &'static str {
 /// Always. The stubs below call it, and each is an `extern "C"` frame, so the
 /// panic aborts rather than unwinding into the extension's stack.
 fn abort(entry: &str) -> ! {
-    panic!("{entry} is not implemented ({})", refusal_owner(entry));
+    panic!("{}", refusal_text(entry));
 }
 
 /// Abandon the process, naming the entry the caller reached, without
 /// unwinding: the stubs that call it are `extern "C-unwind"` frames, which a
 /// panic would leave into the extension's stack.
 fn abort_now(entry: &str) -> ! {
-    eprintln!("{entry} is not implemented ({})", refusal_owner(entry));
+    eprintln!("{}", refusal_text(entry));
     std::process::abort()
 }
 

@@ -554,14 +554,16 @@ impl Interp {
                 return Loud {
                     message: crate::owned_message(
                         &format!("{refused}"),
-                        Some(rexx_api::layout::refusal_owner(entry)),
+                        rexx_api::layout::refusal_owner(entry),
                     ),
                 }
                 .into();
             }
+            // No phase owes a stale handle: the oracle's answer depends on
+            // whether its collector has run (phase-4-exclusions.txt).
             Refused::StaleHandle | Refused::Raised => {
                 return Loud {
-                    message: crate::owned_message(&format!("{refused}"), Some("Phase 8")),
+                    message: crate::owned_message(&format!("{refused}"), None),
                 }
                 .into();
             }
