@@ -21,7 +21,19 @@ RexxRoutine0(RexxObjectPtr, StaleRet)
     context->ReleaseLocalReference(s);
     return s;
 }
+static RexxObjectPtr stashed = NULLOBJECT;
+RexxRoutine0(int, StashLocal)
+{
+    stashed = context->String("stashed");
+    return 1;
+}
+RexxRoutine0(RexxObjectPtr, UseStashed)
+{
+    return stashed;
+}
 RexxRoutineEntry routines[] = {
+    REXX_TYPED_ROUTINE(StashLocal, StashLocal),
+    REXX_TYPED_ROUTINE(UseStashed, UseStashed),
     REXX_TYPED_ROUTINE(StaleRet, StaleRet),
     REXX_TYPED_ROUTINE(Outer9, Outer9),
     REXX_TYPED_ROUTINE(UseOuterVar, UseOuterVar),

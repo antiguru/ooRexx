@@ -4744,9 +4744,16 @@ directory's probes/.
   K` here; after TestDirectoryPut(d, 'w', 'J') the oracle's d['J'] is `w`,
   ours is .nil with `w` under the override's key; rc 0 both. The cause is
   rexx-api's table_at/table_put, which send AT and PUT where the oracle
-  calls the collection. RE-HOMED AT PHASE 8'S CLOSE: no METHOD, CONVERSION
-  or FUNCTION test reaches it, and the next consumers of these members are
-  the extensions row 10 recompiles. OWNER: Phase 10.
+  calls the collection. CLOSED at Phase 8's close (Task 9, ruling 2b):
+  DirectoryAt, DirectoryPut, DirectoryRemove, StringTableAt, StringTablePut
+  and StringTableRemove run DirectoryClass::get, put and remove on a
+  collection this crate stores, the setMethod side table and a setMethod
+  UNKNOWN included (ThreadContextStubs.cpp:1205-1305), and send only to
+  one it does not, such as a condition object. Witness
+  corpus/lang/library_directory_members.rex: a Directory and a StringTable
+  subclass overriding AT, PUT and REMOVE, setMethod entries named and
+  UNKNOWN, a put over a method entry, and a lower-case miss; with the direct
+  path disabled it is the one program red, on all three descriptors.
   A BLOCKING MEMBER ON AN OUTER CONTEXT, USED FROM A CALL NESTED INSIDE IT,
   ANSWERS FOR THE INNERMOST CALL. The oracle's non-blocking members
   (GetRoutineName, GetMessageName) resolve the thread's current activation
@@ -5484,9 +5491,10 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   OWNER: Phase 9 (core conformance: condition objects, stack frames and
   traceback under INTERPRET are core-suite behaviour, not native API).
 
-PHASE 8 CLOSES, 2026-09-28: WHAT ITS CLOSE FOUND, RE-HOMED. Each measured at
-2ae06085c against the oracle, each side from a fresh directory, three
-descriptors separately; the probes are in
+PHASE 8 CLOSES, 2026-09-28: WHAT ITS CLOSE FOUND. Each measured against the
+oracle at 2ae06085c, or where an entry says it was closed, again after the
+fix, each side from a fresh directory, three descriptors separately; the
+probes are in
 docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
 
   `LIBRARY rexxutil` NAMES THE ORACLE'S INTERNAL RexxUtil PACKAGE, NOT A
@@ -5497,17 +5505,35 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
   ours prints go and ends at rc 158 with 98.903 'Unable to load library
   "rexxutil"'. The ::METHOD form (extmeth.rex, SysFileTree) is 90.998 rc
   166 there against 98.903 rc 158 here. Spelled REXXUTIL, both sides give
-  98.903 rc 158 (extmeth2.rex). OWNER: Phase 10, which owns the rest of
-  RexxUtil (D11); binding the internal package's names is new mechanism
-  beside `LIBRARY REXX`'s.
+  98.903 rc 158 (extmeth2.rex). The functions themselves answer here:
+  `call SysSleep 0` is rc 0 with result 0 on both (syssleep.rex); what is
+  missing is the package name. The roadmap's D11 reads "Decision: build the
+  `Sys*` subset ooTest depends on as part of Phase 7, and the remainder in
+  Phase 10." OWNER: Phase 10, by that line, as the remainder of RexxUtil;
+  binding the internal package's names is new mechanism beside `LIBRARY
+  REXX`'s. Row 521's ::REQUIRES LIBRARY and ::CONSTANT-before-EXTERNAL
+  shapes match (constlib.rex rc 214, constlib2.rex rc 166, reqlib.rex rc 0,
+  each identical on all three descriptors).
 
-  A RELEASED LOCAL REFERENCE RETURNED BY A NATIVE ROUTINE IS REFUSED. The
-  forge's StaleRet makes a string, releases its local reference and returns
-  it (stale.rex): the oracle prints "got released" and "after", rc 0; ours
-  ends at rc 120 with "rexx-exec: the handle is no longer held by this
-  activation is not implemented". The oracle's release drops the object from
-  the activation's references, so its answer holds only while no collection
-  has run since (read, not measured: nothing in reach forces a collection
-  between the release and the return). Loud here, and it named Phase 8 until
-  this close. OWNER: none; what the oracle answers depends on collection
-  timing, which is not a specified observable.
+  A RELEASED LOCAL REFERENCE RETURNED BY A NATIVE ROUTINE WAS REFUSED.
+  CLOSED at Phase 8's close (Task 9, ruling 3): ReleaseLocalReference keeps
+  the handle resolvable and rooted until the call ends. The forge's
+  StaleRet makes a string, releases its local reference and returns it
+  (stale.rex): "got released" and "after", rc 0, on both. The oracle's
+  release leaves the object to its next collection, so where a collection
+  runs mid-call the two may differ, which Moritz's ruling of 2026-09-01
+  licenses ("anything that depends on gc ordering is inherently
+  unpredictable", docs/superpowers/plans/2026-08-27-phase-5b.md). No
+  oracle-built extension on this host releases a local reference (only
+  ooDialog does), so the witnesses are rexx-api's
+  a_released_local_reference_still_answers, red with the old removal
+  restored, and the forge probe.
+  A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED. The forge's
+  StashLocal keeps a string's local handle in a static and UseStashed
+  returns it on the next call (stash.rex): the oracle prints "use stashed",
+  rc 0; ours ends at rc 120 with "rexx-exec: the handle is no longer held by
+  this activation is not implemented". The oracle's object is unrooted once
+  the first call ends and answers only while no collection has run; this
+  crate's handle table ends with the call, and resolving a bare address
+  could name a different object. Loud. OWNER: none, for the collection-
+  timing reason above.
