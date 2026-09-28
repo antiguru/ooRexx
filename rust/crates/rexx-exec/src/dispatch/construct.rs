@@ -444,6 +444,7 @@ pub(super) fn native_stem_new(
             name: name.into(),
             default: None,
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     interp.roots.push_temp(object);

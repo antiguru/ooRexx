@@ -95,6 +95,11 @@ pub enum Body {
         /// `APPLE,Q,ZEBRA,LONGKEYNAME,MANGO`. A `HashMap` cannot say which
         /// came first, so the ordinal rides with the value.
         tails: crate::NameMap<Vec<u8>, (usize, Option<ObjRef>)>,
+        /// The tails an `EXPOSE` or `PROCEDURE EXPOSE` made another stem's,
+        /// each naming that stem: `CompoundTableElement::expose`'s
+        /// `realElement`. Such a tail is also in `tails`, as a tombstone, so
+        /// that it keeps its place and holds no value of its own.
+        exposed: Option<Box<crate::NameMap<Vec<u8>, ObjRef>>>,
     },
     /// An array's slots, in index order, `None` for a slot that holds no
     /// object at all.
@@ -871,11 +876,17 @@ impl Body {
             // both plain data, never a handle into the heap.
             Body::Text { .. } => {}
             Body::Num { .. } => {}
-            Body::Stem { default, tails, .. } => {
+            Body::Stem {
+                default,
+                tails,
+                exposed,
+                ..
+            } => {
                 out.extend(default.iter().copied());
                 // A tombstone (`None`) reaches nothing, same as a weak
                 // reference clearing to `.nil` -- it is present but dead.
                 out.extend(tails.values().filter_map(|(_, tail)| *tail));
+                out.extend(exposed.iter().flat_map(|exposed| exposed.values().copied()));
             }
             // An empty slot reaches nothing, the same as a stem's tombstone
             // above.

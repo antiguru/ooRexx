@@ -1266,13 +1266,19 @@ impl Interp {
         // this activation has not swapped in a frame of its own yet.
         let outer = self.activation().frame;
         let mut bindings: Vec<(Box<[u8]>, usize, VarHome)> = Vec::with_capacity(names.len());
+        let mut tails: Vec<(Box<[u8]>, Box<[u8]>, Vec<u8>, ObjRef)> = Vec::new();
         for name in names {
             // Whole stems alias fine -- the stem object lives in one slot,
             // so aliasing that slot shares the object and every measured
-            // stem transcript falls out of it. A single tail does not; see
-            // `Loud::compound_expose`.
+            // stem transcript falls out of it. A single tail is exposed once
+            // the callee has a frame of its own: `procedureExpose` resolves it
+            // and makes it in the caller (`exposeLocalCompoundVariable`), and
+            // the caller's stem is found here, in the caller's pool.
             if shape_of(&name) == NameShape::Compound {
-                return Err(Loud::compound_expose("PROCEDURE EXPOSE", &name).into());
+                let (stem_name, key) = self.split_compound(&name)?;
+                let home = self.read_stem(&stem_name);
+                tails.push((name, stem_name, key, home));
+                continue;
             }
             let slot = self.slot_of(&name);
             // A name the enclosing method exposed has no frame storage to
@@ -1333,6 +1339,10 @@ impl Interp {
         // calling `inner: procedure` with no list, which assigns `v` -- the
         // object variable is unchanged.
         activation.exposed = exposed;
+        for (name, stem_name, key, home) in tails {
+            self.expose_tail(home, &stem_name, &key);
+            self.trace_exposed_tail(&name, &stem_name, &key);
+        }
         Ok(())
     }
 
@@ -1396,14 +1406,13 @@ impl Interp {
         name: Box<[u8]>,
     ) -> Result<(), Failure> {
         // A whole stem is one value in one pool entry, so it binds like any
-        // other name; a single tail is aliasing *inside* a stem object, which
-        // this crate has no representation for. Measured on the oracle,
-        // `expose a.1` in one class method assigning `a.1` and `a.2` and the
-        // same in another reading them back: `[tail-one][A.2]`, so tail 1 is
-        // shared and tail 2 is the method's own local. Exposing the whole stem
-        // instead would be a silent wrong answer.
+        // other name; a single tail is aliasing *inside* a stem object.
+        // Measured on the oracle, `expose a.1` in one class method assigning
+        // `a.1` and `a.2` and the same in another reading them back:
+        // `[tail-one][A.2]`, so tail 1 is shared and tail 2 is the method's
+        // own local.
         if shape_of(&name) == NameShape::Compound {
-            return Err(Loud::compound_expose("EXPOSE", &name).into());
+            return self.expose_object_tail(owner, scope, &name);
         }
         let slot = self.slot_of(&name);
         let var = InstanceVar { owner, scope, name };
@@ -1416,6 +1425,42 @@ impl Interp {
             None => activation.exposed.push((slot, var)),
         }
         Ok(())
+    }
+
+    /// `RexxCompoundVariable::expose`: the tail `name` spells becomes the same
+    /// tail of `scope`'s stem on `owner`, which `VariableDictionary::getStem`
+    /// makes if the object has none, and the resolved name is traced.
+    fn expose_object_tail(
+        &mut self,
+        owner: ObjRef,
+        scope: ObjRef,
+        name: &[u8],
+    ) -> Result<(), Failure> {
+        let (stem_name, key) = self.split_compound(name)?;
+        let home = match self
+            .pools_of(owner)
+            .and_then(|pools| pools.get(scope, &stem_name))
+        {
+            Some(stem) => stem,
+            None => {
+                let stem = self.empty_stem(&stem_name);
+                self.set_pool_variable(owner, scope, &stem_name, stem);
+                stem
+            }
+        };
+        self.expose_tail(home, &stem_name, &key);
+        self.trace_exposed_tail(name, &stem_name, &key);
+        Ok(())
+    }
+
+    /// The `>C>` line `traceCompoundName` gives an exposed tail.
+    fn trace_exposed_tail(&mut self, name: &[u8], stem_name: &[u8], key: &[u8]) {
+        if self.tracing_intermediates() {
+            let mut resolved = stem_name.to_vec();
+            resolved.extend_from_slice(key);
+            let indent = self.clause_state.current_value_indent;
+            self.trace_compound_name(indent, name, &resolved);
+        }
     }
 
     /// The object whose [`rexx_core::ScopePools`] a send to `receiver` binds

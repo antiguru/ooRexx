@@ -32,6 +32,19 @@ fn body_variant_name(body: &Body) -> &'static str {
     }
 }
 
+/// The stem an `EXPOSE` made `key` of a stem whose exposed tails are
+/// `exposed` belong to, if one did.
+#[inline(always)]
+pub(crate) fn exposed_home(
+    exposed: &Option<Box<rexx_core::NameMap<Vec<u8>, ObjRef>>>,
+    key: &[u8],
+) -> Option<ObjRef> {
+    exposed
+        .as_deref()
+        .and_then(|exposed| exposed.get(key))
+        .copied()
+}
+
 impl Interp {
     /// Resolves a compound's tail pieces into the one key its tails map is
     /// keyed by (D15a): each piece verbatim and case-sensitively, joined by
@@ -81,6 +94,14 @@ impl Interp {
             Some(entry) => self.join_tails(&entry.tails),
             None => self.join_tails(&CompoundName::split(code.symbols.name(id)).tails),
         }
+    }
+
+    /// A compound-shaped name's stem, its trailing period included, and the
+    /// key its tail pieces resolve to in the running activation.
+    pub(crate) fn split_compound(&mut self, name: &[u8]) -> Result<(Box<[u8]>, Vec<u8>), Failure> {
+        let compound = CompoundName::split(&String::from_utf8_lossy(name));
+        let key = self.join_tails(&compound.tails)?;
+        Ok((compound.stem, key))
     }
 
     /// Joins one compound's tail pieces into the key its stem's tails map is
@@ -197,6 +218,7 @@ impl Interp {
                 name: name.into(),
                 default: None,
                 tails: rexx_core::NameMap::default(),
+                exposed: None,
             },
         );
         self.set_variable(frame, slot, stem);
@@ -271,16 +293,26 @@ impl Interp {
         // the borrow on `self.heap` never has to overlap one.
         let resolved = {
             let object = self.heap.get(stem_value).expect("a live value");
-            let Body::Stem { default, tails, .. } = &object.body else {
+            let Body::Stem {
+                default,
+                tails,
+                exposed,
+                ..
+            } = &object.body
+            else {
                 unreachable!(
                     "a stem-named slot holds only Body::Stem, got {}",
                     body_variant_name(&object.body)
                 );
             };
-            match tails.get(key) {
-                Some((_, Some(value))) => Some(*value),
-                Some((_, None)) => None, // the tombstone: absent from the default too
-                None => *default,        // an untouched tail falls back to the default
+            if let Some(home) = exposed_home(exposed, key) {
+                self.tail_value(home, key)
+            } else {
+                match tails.get(key) {
+                    Some((_, Some(value))) => Some(*value),
+                    Some((_, None)) => None, // the tombstone: absent from the default too
+                    None => *default,        // an untouched tail falls back to the default
+                }
             }
         };
 
@@ -326,12 +358,16 @@ impl Interp {
         match self.variable(frame, slot) {
             Some(stem_value) => {
                 let object = self.heap.get_mut(stem_value).expect("a live value");
-                let Body::Stem { tails, .. } = &mut object.body else {
+                let Body::Stem { tails, exposed, .. } = &mut object.body else {
                     unreachable!(
                         "a stem-named slot holds only Body::Stem, got {}",
                         body_variant_name(&object.body)
                     );
                 };
+                if let Some(home) = exposed_home(exposed, key) {
+                    self.set_tail(home, key, Some(value));
+                    return;
+                }
                 // **Looked up before it is inserted, because the key is
                 // already there on all but the first write to a tail.**
                 // `insert` needs an owned key whether or not it keeps it, so
@@ -358,6 +394,7 @@ impl Interp {
                         name: stem_name.into(),
                         default: None,
                         tails,
+                        exposed: None,
                     },
                 );
                 self.set_variable(frame, slot, stem);
@@ -383,12 +420,16 @@ impl Interp {
         let frame = self.activation().frame;
         if let Some(stem_value) = self.variable(frame, slot) {
             let object = self.heap.get_mut(stem_value).expect("a live value");
-            let Body::Stem { tails, .. } = &mut object.body else {
+            let Body::Stem { tails, exposed, .. } = &mut object.body else {
                 unreachable!(
                     "a stem-named slot holds only Body::Stem, got {}",
                     body_variant_name(&object.body)
                 );
             };
+            if let Some(home) = exposed_home(exposed, key) {
+                self.set_tail(home, key, None);
+                return;
+            }
             // A drop keeps the tail's place, so the ordinal survives it.
             let next = tails.len();
             let ordinal = tails.get(key).map_or(next, |(at, _)| *at);
@@ -441,9 +482,71 @@ impl Interp {
                 name: stem_name.into(),
                 default,
                 tails: rexx_core::NameMap::default(),
+                exposed: None,
             },
         );
         self.set_variable(frame, slot, stem);
+    }
+
+    /// `RexxCompoundVariable::expose` and `procedureExpose` past resolving the
+    /// tail: `key` of `home` (the object's stem or the caller's) becomes the
+    /// same tail of the stem the running activation names `stem_name`, so one
+    /// value is read and written through both. `StemClass::
+    /// exposeCompoundVariable` makes the tail in `home` first, holding the
+    /// stem's assigned default if it has one.
+    pub(crate) fn expose_tail(&mut self, home: ObjRef, stem_name: &[u8], key: &[u8]) {
+        // The tail's own stem when `home`'s is already another's, so that
+        // every exposed tail names the stem that holds the value.
+        let home = match self.heap.get(home).map(|object| &object.body) {
+            Some(Body::Stem { exposed, .. }) => exposed_home(exposed, key).unwrap_or(home),
+            _ => home,
+        };
+        if let Some(Body::Stem { default, tails, .. }) =
+            self.heap.get_mut(home).map(|object| &mut object.body)
+            && !tails.contains_key(key)
+        {
+            let next = tails.len();
+            tails.insert(key.to_vec(), (next, *default));
+        }
+        let local = self.read_stem(stem_name);
+        // `expose a. a.1`: the local stem is the object's own.
+        if local == home {
+            return;
+        }
+        if let Some(Body::Stem { tails, exposed, .. }) =
+            self.heap.get_mut(local).map(|object| &mut object.body)
+        {
+            // Held as a tail with no value of its own, which keeps its place
+            // among the stem's tails and leaves it out of `items`.
+            let next = tails.len();
+            tails.entry(key.to_vec()).or_insert((next, None));
+            exposed
+                .get_or_insert_with(Default::default)
+                .insert(key.to_vec(), home);
+        }
+    }
+
+    /// What `key` holds in `stem`, the default where the tail is absent.
+    pub(crate) fn tail_value(&self, stem: ObjRef, key: &[u8]) -> Option<ObjRef> {
+        match self.heap.get(stem).map(|object| &object.body) {
+            Some(Body::Stem { default, tails, .. }) => match tails.get(key) {
+                Some((_, value)) => *value,
+                None => *default,
+            },
+            _ => None,
+        }
+    }
+
+    /// Writes `key` of `stem`, `None` dropping it; a drop keeps the tail's
+    /// place, as an overwrite does.
+    pub(crate) fn set_tail(&mut self, stem: ObjRef, key: &[u8], value: Option<ObjRef>) {
+        if let Some(Body::Stem { tails, .. }) =
+            self.heap.get_mut(stem).map(|object| &mut object.body)
+        {
+            let next = tails.len();
+            let ordinal = tails.get(key).map_or(next, |(at, _)| *at);
+            tails.insert(key.to_vec(), (ordinal, value));
+        }
     }
 
     /// The derived name for a tail with no value to answer: the stem's own
@@ -465,6 +568,7 @@ impl Interp {
                 name: stem_name.into(),
                 default: None,
                 tails: rexx_core::NameMap::default(),
+                exposed: None,
             },
         )
     }
@@ -482,6 +586,7 @@ impl Interp {
                 name: stem_name.into(),
                 default: Some(value),
                 tails: rexx_core::NameMap::default(),
+                exposed: None,
             },
         )
     }

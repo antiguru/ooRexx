@@ -1083,51 +1083,39 @@ fn use_local_first_in_a_routine_raises_98_993_not_99_910() {
     }
 }
 
-/// `PROCEDURE EXPOSE` of a single compound tail fails loudly rather than
-/// approximating.
+/// `PROCEDURE EXPOSE` of a single compound tail shares that tail with the
+/// caller and nothing else. Measured, oracle rc 0: `kept more A.2`.
 #[test]
-fn procedure_expose_of_a_single_compound_tail_fails_loudly() {
+fn procedure_expose_of_a_single_compound_tail_shares_that_tail() {
     let mut interp = Interp::new();
-    let failure = run_source(
-        &mut interp,
-        b"a.1 = 'kept'\ncall sub\nexit\nsub: procedure expose a.1\nreturn\n",
-    )
-    .unwrap_err();
-    let Failure::Loud(loud) = failure else {
-        panic!("expected Loud, got {failure:?}");
-    };
-    assert!(
-        loud.message.contains("A.1"),
-        "the message must name the tail it refused: {}",
-        loud.message
+    assert_eq!(
+        say_output(
+            &mut interp,
+            b"a.1 = 'kept'\ncall sub\nsay a.1 a.2\nexit\nsub: procedure expose a.1\n\
+              a.1 = a.1 'more'; a.2 = 'local'\nreturn\n",
+        ),
+        b"kept more A.2\n"
     );
 }
 
 // ---- EXPOSE and the scope-keyed variable pool ----
 
-/// `EXPOSE` of a single compound tail fails loudly, the same refusal
-/// `PROCEDURE EXPOSE` makes and for the same reason.
+/// `EXPOSE` of a single compound tail shares that tail with the object's stem
+/// and nothing else. Measured, oracle rc 0: `5 5 A.2 1`.
 #[test]
-fn expose_of_a_single_compound_tail_fails_loudly() {
+fn expose_of_a_single_compound_tail_shares_that_tail() {
     let mut interp = Interp::new();
-    let failure = run_source_with_directives(
-        &mut interp,
-        b"say .K~m\n::class K\n::method m class\nexpose a.1\nreturn 1\n",
-    )
-    .unwrap_err();
-    let Failure::Loud(loud) = failure else {
-        panic!("expected Loud, got {failure:?}");
-    };
-    assert!(
-        loud.message.contains("A.1") && loud.message.starts_with("EXPOSE "),
-        "the message must name EXPOSE and the tail it refused: {}",
-        loud.message
+    assert_eq!(
+        say_output_with_directives(
+            &mut interp,
+            b"say .K~m .K~n\n::class K\n::method m class\nexpose a.1\na.1 = 5; a.2 = 6\n\
+              return a.1\n::method n class\nexpose a.\nreturn a.1 a.2 a.~items\n",
+        ),
+        b"5 5 A.2 1\n"
     );
 }
 
-/// The neighbouring success, which is what pins the refusal above to the
-/// *tail* rather than to a compound having been mentioned at all: the whole
-/// stem binds and round-trips through the pool.
+/// The whole stem binds and round-trips through the pool.
 #[test]
 fn expose_of_a_whole_stem_binds_rather_than_refusing() {
     let mut interp = Interp::new();

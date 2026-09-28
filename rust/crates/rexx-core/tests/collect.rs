@@ -126,6 +126,7 @@ fn a_stems_tails_and_default_are_traced() {
             name: b"A.".to_vec().into_boxed_slice(),
             default: Some(default),
             tails,
+            exposed: None,
         },
     );
     roots.add_global("a.", stem);

@@ -122,9 +122,9 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // method with no implementation) fail loudly rather than silently.
     InstructionKind::Message { .. } => ("Message", Owner::InScope),
     // Binds its names to the receiving object's scope pool. In scope in the
-    // same sense `Message` is: the variant executes, and the sub-cases with no
-    // code -- a single compound tail, a receiver that is not a class object --
-    // fail loudly rather than silently.
+    // same sense `Message` is: the variant executes, and the sub-case with no
+    // code -- a receiver that is not a class object -- fails loudly rather
+    // than silently.
     InstructionKind::Expose { .. } => ("Expose", Owner::InScope),
     // Reserves and releases the receiver's scope. In scope in the same sense
     // `Expose` is: the variant executes -- a reservation nothing can contend

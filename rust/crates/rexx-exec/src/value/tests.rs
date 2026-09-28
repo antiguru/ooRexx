@@ -257,6 +257,7 @@ fn text_len_agrees_with_to_text() {
             name: b"Q.".to_vec().into(),
             default: None,
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     values.push(bare);
@@ -267,6 +268,7 @@ fn text_len_agrees_with_to_text() {
             name: b"W.".to_vec().into(),
             default: Some(default),
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     values.push(defaulted);
@@ -700,6 +702,7 @@ fn the_borrowing_accessor_answers_what_to_text_answers() {
             name: b"A.".to_vec().into(),
             default: Some(five),
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     let bare = interp.alloc_with(
@@ -708,6 +711,7 @@ fn the_borrowing_accessor_answers_what_to_text_answers() {
             name: b"Q.".to_vec().into(),
             default: None,
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     let aliasing = interp.alloc_with(
@@ -716,6 +720,7 @@ fn the_borrowing_accessor_answers_what_to_text_answers() {
             name: b"B.".to_vec().into(),
             default: Some(with_default),
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
 
@@ -776,6 +781,7 @@ fn try_text_answers_only_where_the_bytes_already_exist() {
             name: b"A.".to_vec().into(),
             default: Some(small),
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     assert_eq!(interp.try_text(stem), None, "the default is a SmallInt");
@@ -788,6 +794,7 @@ fn try_text_answers_only_where_the_bytes_already_exist() {
             name: b"B.".to_vec().into(),
             default: Some(text),
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     assert_eq!(
@@ -905,6 +912,7 @@ fn to_number_on_a_stem_redirects_through_its_numeric_default() {
             name: b"A.".to_vec().into(),
             default: Some(five),
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     let value = interp.to_number(stem).unwrap();
@@ -926,6 +934,7 @@ fn to_number_on_a_defaultless_stem_parses_its_own_name_and_fails() {
             name: b"Q.".to_vec().into(),
             default: None,
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     assert_eq!(interp.to_number(stem), Err(NotNumeric));
@@ -949,6 +958,7 @@ fn to_number_on_a_stem_aliasing_another_stem_chases_through_both() {
             name: b"A.".to_vec().into(),
             default: Some(five),
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     let b = interp.alloc_with(
@@ -957,6 +967,7 @@ fn to_number_on_a_stem_aliasing_another_stem_chases_through_both() {
             name: b"B.".to_vec().into(),
             default: Some(a),
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     let value = interp.to_number(b).unwrap();

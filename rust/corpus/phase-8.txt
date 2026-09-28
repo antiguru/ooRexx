@@ -321,3 +321,8 @@ lang/library_routine_unbound_annotation.rex
 lang/trapped_condition_raising_frames.rex
 lang/trapped_condition_raising_program.rex
 lang/trapped_condition_native_levels.rex
+# METHOD's TestGetObjectVariable01-03, TestSetObjectVariable01 and
+# TestDropObjectVariable01: EXPOSE of a single compound tail.
+lang/expose_compound_tail.rex
+lang/expose_compound_tail_trace.rex
+lang/expose_compound_tail_redirect.rex

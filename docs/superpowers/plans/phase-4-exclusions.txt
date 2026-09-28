@@ -4873,18 +4873,6 @@ under each is a single program, run from a fresh empty directory.
   Object~subclass under another name. Probe: c = .class~new('FooBar');
   say c~id c~superclass~id .object~subclasses~hasItem(c) c~package, oracle
   "FooBar Object 0 The REXX Package" rc 0. OWNER: Phase 9.
-  EXPOSE OF A SINGLE COMPOUND TAIL. Tests:
-    TESTGETOBJECTVARIABLE01
-    TESTGETOBJECTVARIABLE02
-    TESTGETOBJECTVARIABLE03
-    TESTSETOBJECTVARIABLE01
-    TESTDROPOBJECTVARIABLE01
-  Each builds a VariableTester, whose INIT exposes `stem2.1`
-  (METHODPackage.cls), and this crate refuses at rc 120: `EXPOSE of the
-  single compound tail "STEM2.1" is not implemented`. A single tail is
-  aliasing inside a stem object, which the variable model has no
-  representation for (run.rs, bind_exposed). Probe: a ::METHOD whose first
-  instruction is `expose a.1`. OWNER: Phase 9.
   A PACKAGE'S CLASS AND ROUTINE TABLES, AND Routine~new OVER DIRECTIVES.
   Tests:
     TESTGETPACKAGECLASSES01
@@ -4944,6 +4932,18 @@ under each is a single program, run from a fresh empty directory.
   program, the caller's frame alone and no `::class K` line. OWNER: Phase 9
   for all three, whose exit is the full suite green; none is a member of the
   METHOD, CONVERSION or FUNCTION failing set.
+  AN OBJECT'S STEM EMPTIED WHILE A METHOD'S STEM EXPOSES ONE OF ITS TAILS,
+  left by the Task 8 fix round B, which built EXPOSE and PROCEDURE EXPOSE
+  of a single tail (expose_compound_tail.rex). The oracle's exposed tail is
+  one element two stems share, and `~empty` casts the object's tree off
+  while the method's stem keeps the element; here the method's stem names
+  the object's stem and the tail, so after the empty it reads and writes the
+  object's stem afresh. A method exposing `a.1`, assigning it 'x', calling
+  one that exposes `a.` and sends `a.~empty`, then saying `a.1`, assigning
+  it 'y' and asking the object's stem for `a.1` and `~items`: oracle `after
+  empty x` and `object A.1 0`, here `after empty A.1` and `object y 1`.
+  Replacing the object's stem (`a. = 'new'`) agrees. OWNER: Phase 9; no
+  test of the three groups empties a stem another stem exposes.
 
 KNOWN GAPS RECORDED AFTER THE FINAL REVIEW AND THE FIX ROUNDS, each with
 its evidence and its owner, or the reason it has none. Every transcript

@@ -952,6 +952,7 @@ fn a_stem_forwards_a_message_it_has_no_method_for_to_its_value() {
             name: b"A."[..].into(),
             default: None,
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     let answered = interp

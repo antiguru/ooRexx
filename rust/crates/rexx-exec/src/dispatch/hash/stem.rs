@@ -45,8 +45,14 @@ fn stem_read(interp: &mut Interp, receiver: ObjRef, tail: &[u8]) -> ObjRef {
             tails,
             default,
             name,
+            exposed,
         }) => (
-            tails.get(tail).map(|(_, value)| *value),
+            match crate::stem::exposed_home(exposed, tail) {
+                // `findCompoundVariable` answers the exposed tail's
+                // `realVariable`, as the variable read does.
+                Some(home) => Some(interp.tail_value(home, tail)),
+                None => tails.get(tail).map(|(_, value)| *value),
+            },
             *default,
             name.as_ref().to_vec(),
         ),
@@ -95,6 +101,14 @@ fn native_stem_put(
     let tail = stem_tail(interp, args.get(1..).unwrap_or_default())?;
     stem_write(interp, receiver, tail, Some(value));
     Ok(None)
+}
+
+/// The stem an `EXPOSE` made `tail` of `receiver` belong to, if one did.
+fn exposed_tail(interp: &Interp, receiver: ObjRef, tail: &[u8]) -> Option<ObjRef> {
+    match interp.heap.get(receiver).map(|object| &object.body) {
+        Some(Body::Stem { exposed, .. }) => crate::stem::exposed_home(exposed, tail),
+        _ => None,
+    }
 }
 
 /// Whether `receiver` is a stem, which is what every row below needs and what
@@ -544,9 +558,12 @@ fn native_stem_has_index(
         return Ok(Some(crate::eval::logical(true)));
     }
     let tail = stem_tail(interp, args)?;
-    let held = stem_live(interp, receiver)
-        .into_iter()
-        .any(|(name, _)| name == tail);
+    let held = match exposed_tail(interp, receiver, &tail) {
+        Some(home) => interp.tail_value(home, &tail).is_some(),
+        None => stem_live(interp, receiver)
+            .into_iter()
+            .any(|(name, _)| name == tail),
+    };
     Ok(Some(crate::eval::logical(held)))
 }
 
@@ -593,6 +610,10 @@ fn native_stem_index(
 
 /// Writes one tail, `None` dropping it.
 fn stem_write(interp: &mut Interp, receiver: ObjRef, tail: Vec<u8>, value: Option<ObjRef>) {
+    if let Some(home) = exposed_tail(interp, receiver, &tail) {
+        interp.set_tail(home, &tail, value);
+        return;
+    }
     if let Some(Body::Stem { tails, .. }) = interp.heap.get_mut(receiver).map(|held| &mut held.body)
     {
         // The ordinal survives a drop and an overwrite -- see `Body::Stem`.
@@ -619,10 +640,13 @@ fn native_stem_remove(
         return Ok(Some(stem_read(interp, receiver, b"")));
     }
     let tail = stem_tail(interp, args)?;
-    let held = stem_live(interp, receiver)
-        .into_iter()
-        .find(|(name, _)| *name == tail)
-        .map(|(_, value)| value);
+    let held = match exposed_tail(interp, receiver, &tail) {
+        Some(home) => interp.tail_value(home, &tail),
+        None => stem_live(interp, receiver)
+            .into_iter()
+            .find(|(name, _)| *name == tail)
+            .map(|(_, value)| value),
+    };
     if held.is_some() {
         stem_write(interp, receiver, tail, None);
     }
@@ -669,9 +693,11 @@ fn native_stem_empty(
         Some(Body::Stem { default, .. }) => *default,
         _ => None,
     };
-    if let Some(Body::Stem { tails, .. }) = interp.heap.get_mut(receiver).map(|held| &mut held.body)
+    if let Some(Body::Stem { tails, exposed, .. }) =
+        interp.heap.get_mut(receiver).map(|held| &mut held.body)
     {
         *tails = rexx_core::NameMap::default();
+        *exposed = None;
     }
     let _ = default;
     // Answers the receiver, as `Array~empty` and `List~empty` do -- measured,

@@ -599,6 +599,7 @@ fn a_value_the_operator_gap_names_parses_as_no_number() {
             name: b"A.".to_vec().into(),
             default: Some(array),
             tails: rexx_core::NameMap::default(),
+            exposed: None,
         },
     );
     for value in [array, named, aliased] {

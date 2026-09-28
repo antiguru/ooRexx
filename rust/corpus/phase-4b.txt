@@ -35,8 +35,8 @@
 #   USE ARG >name aliasing the caller's own variable. NOT USE LOCAL, which
 #   rexx-parse rejects at parse time in every position but one and which has
 #   no legal use here at all (this crate has no method invocations), and NOT
-#   PROCEDURE EXPOSE of a single compound tail (`expose a.1`), which fails
-#   loudly -- see Loud::compound_expose.
+#   PROCEDURE EXPOSE of a single compound tail (`expose a.1`), which failed
+#   loudly then and is expose_compound_tail.rex's since the surface plan.
 #
 #   ExprKind::Call, the internal-function expression form (4b Task 4) -- f(...)
 #   resolved against the calling activation's own labels and evaluated for its

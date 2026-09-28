@@ -1,0 +1,150 @@
+-- EXPOSE and PROCEDURE EXPOSE of a single compound tail: the one value is
+-- read and written through both stems, the rest of each stem its own.
+o = .t~new
+o~setdef
+o~readdef
+o~indirect
+o~both
+o~order
+o~methods
+o~sym
+o~viaproc
+o~show
+a.1 = 'main1'; a.2 = 'main2'; i = 2
+call p1
+say 'main' a.1 a.2 a.3
+call p2
+say 'main' a.2
+call p3
+say 'main' a.1 a.~items
+o = .u~new
+o~setup
+o~show
+say o~peek
+o~dropit
+o~show
+o~again
+o~show
+o = .v~new
+o~exp
+o~fill
+o~locempty
+o~after
+o = .w~new
+o~setdef
+o~touch
+o~count
+exit
+p1: procedure expose a.1 a.3
+  say 'p1' a.1 a.2 a.~items
+  a.1 = 'p1'; a.3 = 'new3'
+  return
+p2: procedure expose i a.i
+  say 'p2' a.2 a.i
+  a.i = 'p2i'
+  return
+p3: procedure expose a. a.1
+  a.1 = 'p3'
+  return
+::class t
+::method setdef
+  expose d.
+  d. = 'dflt'
+  d.5 = 'five'
+::method readdef
+  expose d.1 d.5 d.7
+  say 'readdef' d.1 d.5 d.7 d.8
+  drop d.7
+  say 'dropped' d.7
+::method indirect
+  expose list
+  list = 'Q.1 R'
+  self~ind2
+::method ind2
+  expose list (list)
+  q.1 = 'viaind'; r = 'rr'
+  say 'ind2' q.1 r
+::method both
+  expose b. b.1
+  b.1 = 'bb'
+  say 'both' b.1 b.~items
+::method order
+  expose c.2
+  c.9 = 'n'; c.3 = 't'; c.10 = 'x'; c.2 = 'e'
+  say 'order' c.~allIndexes~makestring('l', ',') c.~items c.~hasIndex(2) c.[2] c.~hasItem('e') c.~index('e')
+  cp = c.~copy
+  say 'copy' cp~items cp[2] cp~hasIndex(2)
+  say 'remove' c.~remove(2) c.2
+  c.[2] = 'again'
+  say 'again' c.2
+::method methods
+  expose c.
+  say 'methods' c.2 c.~items
+::method sym
+  expose e.1
+  say 'sym' symbol('E.1') symbol('E.2') value('E.1') var('E.1')
+  e.1 = 'set'
+  say 'sym' symbol('E.1') value('E.1', 'vv') value('E.1')
+::method viaproc
+  expose f.1
+  f.1 = 'm'
+  call inner
+  say 'viaproc' f.1
+  return
+inner: procedure expose f.1
+  f.1 = f.1 || 'i'
+  return
+::method show
+  expose e. f. q.
+  say 'show' e.1 f.1 q.1
+
+::class u
+::method setup
+  expose a.1
+  a.1 = 'one'; a.2 = 'two'
+  say a.~items a.1 a.2 a.[1] a.~hasIndex(1)
+  i = 1
+  say a.i
+::method show
+  expose a.
+  say 'show' a.~items a.1 a.2 a.~allIndexes~makestring('l',',')
+::method peek
+  expose a.1
+  return a.1 a.2 a.~items
+::method dropit
+  expose a.1
+  drop a.1
+  say 'dropped' a.1 a.~items
+::method again
+  expose a.1
+  a.[1] = 'viaindex'
+  say a.1
+  a. = 'reset'
+  say a.1 a.3
+  a.1 = 'afterreset'
+::class v
+::method exp
+  expose g.3
+::method fill
+  expose g.
+  g.1 = 'a'; g.5 = 'e'; g.3 = 'c'; g.2 = 'b'; g.4 = 'd'
+  say 'order' g.~allIndexes~makestring('l', ',')
+::method locempty
+  expose h.1
+  h.1 = 'obj'
+  h.~empty
+  h.1 = 'loc'
+  say 'locempty' h.1 h.~items
+::method after
+  expose h.
+  say 'after' h.1 h.~items
+::class w
+::method setdef
+  expose d.
+  d. = 'dflt'
+::method touch
+  expose d.1 d.2
+::method count
+  expose d.
+  d. ~ put('x', 9)
+  say 'count' d.~items d.~allIndexes~makestring('l', ',')

@@ -521,16 +521,6 @@ impl Loud {
         }
     }
 
-    /// `EXPOSE` or `PROCEDURE EXPOSE` naming a single compound tail.
-    fn compound_expose(keyword: &str, name: &[u8]) -> Loud {
-        Loud {
-            message: format!(
-                "{keyword} of the single compound tail \"{}\" is not implemented",
-                String::from_utf8_lossy(name)
-            ),
-        }
-    }
-
     /// A generated `::METHOD ATTRIBUTE`/`::ATTRIBUTE` accessor whose
     /// variable is a stem or a single compound tail.
     fn accessor_variable(name: &[u8]) -> Loud {
@@ -815,10 +805,7 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // though `USE LOCAL` can only ever fail here: it fails with the
         // oracle's own two errors (98.993/99.910), measured, which is an
         // implemented instruction answering the same bytes the oracle
-        // answers -- not a gap. The one shape inside `Procedure` this crate
-        // cannot express, `expose a.1`, fails loudly through
-        // `Loud::compound_expose` rather than through this table, because it
-        // is a sub-case of a variant and this table is per variant.
+        // answers -- not a gap.
         InstructionKind::Procedure { .. } | InstructionKind::Use(_) => None,
         // All three `Signal` arms are implemented, so unlike
         // `Call` above this one needs no arm-grained match. `RAISE` needs none
@@ -854,9 +841,8 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         InstructionKind::Message { .. } => None,
         // `EXPOSE` binds its names to the receiving object's scope pool.
         // `None` in the same sense `Message` above is: the variant executes,
-        // and the two sub-cases with no code here -- a single compound tail,
-        // and a receiver that is not a class object -- fail loudly through
-        // `Loud::compound_expose`/`Loud::expose_receiver` rather than
+        // and the sub-case with no code here, a receiver that is not a class
+        // object, fails loudly through `Loud::expose_receiver` rather than
         // answering.
         InstructionKind::Expose { .. } => None,
         // `GUARD` reserves and releases the receiver's scope and `REPLY`

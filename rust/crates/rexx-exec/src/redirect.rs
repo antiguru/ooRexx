@@ -777,9 +777,13 @@ impl Interp {
     /// One tail's own value, with no fallback to the stem's default and none
     /// to a derived name. A tombstone answers `None`, as an absent tail does.
     fn stem_object_tail(&self, object: ObjRef, key: &[u8]) -> Option<ObjRef> {
-        let Body::Stem { tails, .. } = &self.heap.get(object)?.body else {
+        let Body::Stem { tails, exposed, .. } = &self.heap.get(object)?.body else {
             return None;
         };
+        // `getElement` answers an exposed tail's `realVariable`.
+        if let Some(home) = crate::stem::exposed_home(exposed, key) {
+            return self.tail_value(home, key);
+        }
         match tails.get(key) {
             Some((_, value)) => *value,
             None => None,
@@ -799,13 +803,22 @@ impl Interp {
             let Some(found) = self.heap.get(object) else {
                 return ObjRef::NIL;
             };
-            let Body::Stem { default, tails, .. } = &found.body else {
+            let Body::Stem {
+                default,
+                tails,
+                exposed,
+                ..
+            } = &found.body
+            else {
                 return ObjRef::NIL;
             };
-            match tails.get(key) {
-                Some((_, Some(value))) => Some(*value),
-                Some((_, None)) => None,
-                None => *default,
+            match crate::stem::exposed_home(exposed, key) {
+                Some(home) => self.tail_value(home, key),
+                None => match tails.get(key) {
+                    Some((_, Some(value))) => Some(*value),
+                    Some((_, None)) => None,
+                    None => *default,
+                },
             }
         };
         match resolved {
@@ -823,9 +836,13 @@ impl Interp {
         let Some(found) = self.heap.get_mut(object) else {
             return;
         };
-        let Body::Stem { tails, .. } = &mut found.body else {
+        let Body::Stem { tails, exposed, .. } = &mut found.body else {
             return;
         };
+        if let Some(home) = crate::stem::exposed_home(exposed, key) {
+            self.set_tail(home, key, Some(value));
+            return;
+        }
         let next = tails.len();
         match tails.get_mut(key) {
             Some((_, existing)) => *existing = Some(value),
@@ -846,10 +863,11 @@ impl Interp {
         let Some(found) = self.heap.get_mut(object) else {
             return;
         };
-        let Body::Stem { tails, .. } = &mut found.body else {
+        let Body::Stem { tails, exposed, .. } = &mut found.body else {
             return;
         };
         tails.clear();
+        *exposed = None;
     }
 
     /// A stem object's own name, its trailing period included.

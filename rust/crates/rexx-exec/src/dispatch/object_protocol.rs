@@ -601,7 +601,12 @@ pub(super) fn native_copy(
     let Some(source) = interp.heap.get(receiver) else {
         return Err(Loud::receiver_class("a value whose object is no longer live").into());
     };
-    let body = source.body.clone();
+    let mut body = source.body.clone();
+    // `CompoundVariableTable::copyFrom` copies each tail's own value, so an
+    // exposed tail comes over as one that holds none.
+    if let Body::Stem { exposed, .. } = &mut body {
+        *exposed = None;
+    }
     let copy = interp.alloc_with(behaviour, body);
     interp.roots.push_temp(copy);
     duplicate_collection_stores(interp, copy);

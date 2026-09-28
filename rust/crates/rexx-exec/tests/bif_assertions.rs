@@ -204,7 +204,7 @@ impl RowOutcome {
 }
 
 /// Splits a `rexx-exec: X is not implemented (OWNER)` line into `X` and
-/// `OWNER`. The owner is optional: `Loud::compound_expose` deliberately
+/// `OWNER`. The owner is optional: `Loud::accessor_variable` deliberately
 /// carries none, because nothing has been scheduled to build what it needs.
 fn parse_loud(stderr: &[u8]) -> (String, Option<String>) {
     let text = String::from_utf8_lossy(stderr);
