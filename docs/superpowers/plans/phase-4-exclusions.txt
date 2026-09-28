@@ -4908,13 +4908,39 @@ under each is a single program, run from a fresh empty directory.
     TEST_REXXQUEUE
   rc 120, `the LIBRARY REXX entry point "rexx_create_queue" is not
   implemented (Phase 10)`. OWNER: Phase 10.
-  NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND -V 0. The framework's
-  ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking) is a REPLY
-  thread and a GUARD ON WHEN, refused naming Phase 6; the full summary
-  calls RXFUNCQUERY, refused naming Phase 10, and the oracle answers
-  rxfuncquery("SysWinVer") through RexxQueryFunction, which is rxapi (read:
-  interpreter/package/PackageManager.cpp:618-635). -U
-  starts no ticker and -V 0 prints the brief summary, on both sides alike.
+  TESTS WHOSE FAILURE OR ERROR DETAIL DIFFERS, their outcome, assertion
+  count, stderr and exit status agreeing (the instrument's DETAIL_DIFFERS,
+  asserted exactly). Each fails on both sides when run alone, the FUNCTION
+  ones for want of the io handler FUNCTION's TEST registers and
+  TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA because rexxc is not on
+  PATH (RC 127 on both). Tests:
+    TEST_BUFFERED_INPUT
+    TEST_BUFFERING
+    TEST_FILE_INPUT
+    TEST_GLOBAL_SETTING
+    TEST_SIMPLE_WITH
+    TEST_WRITE_BUFFER
+    TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA
+  At -V 2 each failure report says "Line: -1" here where the oracle names
+  the failing assertion's line (TEST_BUFFERING: 1300), and TEST_BUFFERED_
+  INPUT's error report lacks the raising line and the `Compiled method
+  "SEND"` line and prints a "Program:" line the oracle does not. The cause
+  is the trapped SYNTAX condition's POSITION, STACKFRAMES and TRACEBACK,
+  which here describe the trapping activation rather than the raising one
+  (the Task 8 review's I2). The last also differs in the METHOD whole-group
+  run, which leaves it out. OWNER: Phase 8, the Task 8 fix round that owns
+  I2.
+  NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND PATCHES ooTest.frm. The
+  framework's ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking) is
+  a REPLY thread and a GUARD ON WHEN, refused naming Phase 6; -U starts no
+  ticker. The summary -V 1 and above print calls RXFUNCQUERY, refused naming
+  Phase 10, and the oracle answers rxfuncquery("SysWinVer") through
+  RexxQueryFunction, which is rxapi (read:
+  interpreter/package/PackageManager.cpp:618-635). The instrument removes
+  both rxfuncquery tests from its copy of ooTest.frm, which changes no line
+  either side prints (neither name is registered on either side), and runs
+  both sides at -V 2, which prints the assertion count and every failure's
+  and error's detail.
 
 KNOWN GAPS RECORDED AFTER THE FINAL REVIEW AND THE FIX ROUNDS, each with
 its evidence and its owner, or the reason it has none. Every transcript

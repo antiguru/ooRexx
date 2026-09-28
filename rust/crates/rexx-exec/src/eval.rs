@@ -1186,7 +1186,7 @@ impl Interp {
             Body::Class { .. } => Some(value),
             Body::Instance { .. } => Some(value),
             // Neither `Array` nor a class this crate builds as a native body
-            // declares an operator but `Object`'s six and `Pointer`'s four
+            // declares an operator but `Object`'s and `Pointer`'s
             // (`memory/Setup.cpp`), so the send answers by identity or 97.1.
             Body::Array { .. } | Body::Native(_) => Some(value),
             Body::Stem {
