@@ -1,0 +1,21 @@
+count 20
+-- A ::ROUTINE bound to a library procedure is the one Routine object that
+-- procedure has, whichever directive names it and whatever GetRoutine answers.
+g0 = TestGetRoutine()
+say g0~annotation('k')
+r1 = .context~package~findRoutine('TESTGETROUTINE')
+say (r1 == g0)
+r1b = .context~package~findRoutine('TESTGETROUTINE')
+g1 = TestGetRoutine()
+g1b = TestGetRoutine()
+say (r1 == r1b) (g1 == g1b) (r1 == g1) g1~class~id
+r2 = .context~package~findRoutine('TESTGETROUTINE2')
+g2 = TestGetRoutine2()
+say (r2 == g2) (r1 == r2) (g1 == g2)
+say (.routines~testGetRoutine == g1) (.context~package~routines['TESTGETROUTINE'] == g1)
+say (r1~package == .context~package) r1~source~items
+say r1~call == r1
+say r1~annotation('k') .routines~testgetroutine2~annotation('k')
+::routine TestGetRoutine PUBLIC EXTERNAL "LIBRARY orxfunction TestGetRoutine"
+::annotate routine TestGetRoutine k 'v1'
+::routine TestGetRoutine2 PUBLIC EXTERNAL "LIBRARY orxfunction TestGetRoutine"

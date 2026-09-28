@@ -1008,29 +1008,42 @@ impl Interp {
                     runnable,
                     routine,
                 } => {
-                    let class = self
-                        .classes()
-                        .lookup(id)
-                        .expect("every TableValue::Instance names a native class");
-                    let object = self.native_instance(class);
-                    self.attach_annotations(object, site);
-                    self.executable_sources.insert(
-                        object,
-                        crate::ExecutableRecord {
-                            source: crate::ExecutableSource::Directive { program, directive },
-                            installed: None,
-                            routine: routine.then_some((program, directive)),
-                        },
-                    );
-                    if runnable {
-                        self.table_method_bodies
-                            .insert(object, crate::InstalledMethodBody { program, directive });
+                    let installed = crate::InstalledRoutine { program, directive };
+                    // A library-backed `::ROUTINE` is the one object its
+                    // library procedure has, shared by every directive naming
+                    // it (`LibraryPackage::resolveRoutine`,
+                    // `package/LibraryPackage.cpp:410-432`).
+                    if let Some(code) = routine
+                        .then(|| self.library_routine_code(installed))
+                        .flatten()
+                    {
+                        let object = self.library_routine_object(code);
+                        self.routine_objects.insert(installed, object);
+                        object
+                    } else {
+                        let class = self
+                            .classes()
+                            .lookup(id)
+                            .expect("every TableValue::Instance names a native class");
+                        let object = self.native_instance(class);
+                        self.attach_annotations(object, site);
+                        self.executable_sources.insert(
+                            object,
+                            crate::ExecutableRecord {
+                                source: crate::ExecutableSource::Directive { program, directive },
+                                installed: None,
+                                routine: routine.then_some((program, directive)),
+                            },
+                        );
+                        if runnable {
+                            self.table_method_bodies
+                                .insert(object, crate::InstalledMethodBody { program, directive });
+                        }
+                        if routine {
+                            self.routine_objects.insert(installed, object);
+                        }
+                        object
                     }
-                    if routine {
-                        self.routine_objects
-                            .insert(crate::InstalledRoutine { program, directive }, object);
-                    }
-                    object
                 }
                 TableValue::Lines(lines) => self.line_array(&lines),
             };

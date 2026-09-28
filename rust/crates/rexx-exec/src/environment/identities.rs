@@ -651,6 +651,17 @@ impl Interp {
             .add_global(&library_routine_root_key(code), object);
         self.library_routine_objects.insert(code, object);
         self.record_loaded_executable(object, code);
+        // The annotations of the first `::ROUTINE` bound to this procedure,
+        // whichever reached the object first.
+        let first = self
+            .library_routine_codes
+            .iter()
+            .filter(|(_, row)| **row == code)
+            .map(|(installed, _)| (installed.program.0, installed.directive))
+            .min();
+        if let Some((program, directive)) = first {
+            self.attach_annotations(object, Annotated::Routine(ProgramId(program), directive));
+        }
         object
     }
 
