@@ -4846,11 +4846,11 @@ descriptors separately.
 TESTS OF THE METHOD, CONVERSION AND FUNCTION GROUPS THAT DIFFER, measured
 2026-09-28 by the surface plan's Task 8 and asserted exactly by
 rust/crates/rexx-exec/tests/api_group_tests.rs (gate-only): each test run
-alone through testOORexx.rex -f GROUP.testGroup -U -V 0 -t TEST, both sides
+alone through testOORexx.rex -f GROUP.testGroup -U -V 2 -t TEST, both sides
 from a fresh copy of the framework and ootest/ooRexx/API/oo at the same
-path, three descriptors separately. None is Phase 8's: each cause is general
-language or runtime behaviour outside the native API surface. The probe
-under each is a single program, run from a fresh empty directory.
+path, three descriptors separately. Roadmap row 8 makes these groups Phase
+8's, and the Task 8 fix rounds fixed every other member; the one left needs
+the rxapi queue, which is row 10's.
   RexxQueue. Test:
     TEST_REXXQUEUE
   rc 120, `the LIBRARY REXX entry point "rexx_create_queue" is not
