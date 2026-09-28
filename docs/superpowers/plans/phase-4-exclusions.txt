@@ -4903,6 +4903,16 @@ the rxapi queue, which is row 10's.
     TEST_REXXQUEUE
   rc 120, `the LIBRARY REXX entry point "rexx_create_queue" is not
   implemented (Phase 10)`. OWNER: Phase 10.
+  RUN ON NEITHER SIDE SINCE 2026-09-29. The instrument ran it on the oracle,
+  whose RexxQueue creates a named queue in rxapi's daemon, which starts that
+  daemon and keeps the queue between processes. api_group_tests.rs derives
+  the tests whose source uses the data queue or the function and macro-space
+  registries (reaching_rxapi) and fails before any run unless they are
+  exactly RECORDED's not-run entries; the -S listing run renames them out
+  too. The oracle still asks rxapi's macro space on each ::REQUIRES and
+  external call (interpreter/package/PackageManager.cpp:747,
+  interpreter/execution/RexxActivation.cpp:2996), so no ooTest run on the
+  oracle leaves rxapi untouched.
   NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND PATCHES ooTest.frm. The
   framework's ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking) is
   a REPLY thread and a GUARD ON WHEN, refused naming Phase 6; -U starts no
