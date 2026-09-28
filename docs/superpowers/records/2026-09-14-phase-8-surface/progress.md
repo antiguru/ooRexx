@@ -1380,3 +1380,8 @@ Task 6: implementer stalled after gates; controller fix b06b278ce (refusal table
 Task 6 review (review-s6, opus): spec met; I1 USER/NOTREADY not promoted to SYNTAX, I2 false ledger 'only the handler can tell'; M1-M7. Fix round 1 dispatched to fix-s6 (opus, fresh; implementer stalled). Rulings: I1 match; M6 record as divergence (oracle NULL deref, read not run); M7 queued (predates Task 6). 2026-09-27T21:12:53+02:00
 Task 6 fix round 1: ea4a6d194, six gates green 21:43; re-review next 2026-09-27T22:31:49+02:00
 Task 6 re-review clean (N1/N2 minor fixed by controller 28d559343). Task 6: complete 2026-09-27T22:38:39+02:00
+Task 7 dispatched to surface-7 (opus), BASE c750719b7 2026-09-27T22:38:57+02:00
+Ruling (Task 7): test at rexx-exec/tests/api_group_partition.rs per S3 -- one oracle_root -- cost: none. Ruling: group owner = latest phase any transitive import needs (INVOCATION family -> Phase 10 via RexxRegisterExitDll/rxapi) -- a group runs only when all imports exist -- if wrong, records name 10 where 9 was meant; reversible. 2026-09-27T22:41:39+02:00
+Task 7: surface-7 stalled at 22:43 (uncommitted draft), stopped; surface-7b (opus) dispatched to finish 2026-09-28T06:20:50+02:00
+Task 7: 844ed9e0a, gates green 06:40; review next 2026-09-28T06:51:00+02:00
+Task 7 review (review-s7): spec met; C1 stale 'Phase 9 group' at exclusions:4919 -- controller fixed 2a3d86f54; reviewer grepped for other misses, none. Task 7: complete 2026-09-28T07:45:35+02:00
