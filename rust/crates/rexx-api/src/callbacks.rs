@@ -183,6 +183,11 @@ pub trait Surface {
     /// globally, run with `arguments`, answering its result.
     fn call_program(&mut self, name: &[u8], arguments: &[Option<ObjRef>]) -> Option<ObjRef>;
 
+    /// `CallRoutineDispatcher::run`: `routine` run over the items of the
+    /// array `arguments`, or over none, answering its result, or `None`
+    /// where it raised a condition, which the host holds.
+    fn call_routine(&mut self, routine: ObjRef, arguments: Option<ObjRef>) -> Option<ObjRef>;
+
     /// Holds `object` as a global reference, which [`crate::values::Host::resolve`]
     /// then answers from any native call for as long as the interpreter runs.
     fn global_reference(&mut self, object: ObjRef);
@@ -1602,11 +1607,17 @@ impl Activation<'_> {
     /// for a null array.
     pub fn call_routine(&self, routine: RexxObjectPtr, arguments: RexxObjectPtr) -> RexxObjectPtr {
         const SLOT: &str = "RexxThreadInterface.CallRoutine";
-        let routine = self.resolve(routine);
-        if arguments.is_null() {
-            return self.send_for_handle(SLOT, routine, b"CALL", &[]);
-        }
-        self.send_for_handle(SLOT, routine, b"CALLWITH", &[Argument::Handle(arguments)])
+        let Some(routine) = self.resolve(routine) else {
+            return std::ptr::null_mut();
+        };
+        let arguments = match arguments.is_null() {
+            true => None,
+            false => match self.resolve(arguments) {
+                Some(arguments) => Some(arguments),
+                None => return std::ptr::null_mut(),
+            },
+        };
+        self.surface_handle(SLOT, |surface| surface.call_routine(routine, arguments))
     }
 
     /// `CallProgram`.

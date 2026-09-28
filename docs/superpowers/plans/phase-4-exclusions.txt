@@ -4853,22 +4853,6 @@ the rxapi queue, which is row 10's.
   either side prints (neither name is registered on either side), and runs
   both sides at -V 2, which prints the assertion count and every failure's
   and error's detail.
-  WHAT A TRAPPED CONDITION STILL DOES NOT DESCRIBE, left by the Task 8 fix
-  round B, which made a condition a SIGNAL ON trap takes after it left the
-  levels that raised it carry their STACKFRAMES, TRACEBACK lines, POSITION
-  and program (trapped_condition_raising_frames.rex,
-  trapped_condition_raising_program.rex,
-  trapped_condition_native_levels.rex). Each probe below is one program run
-  from a fresh directory, three descriptors separately, stdout differing
-  and stderr and rc agreeing.
-  An INTERPRET fragment still running pushes no frame, so a trap in an
-  activation called from inside one, and RexxContext~stackFrames taken
-  inside one, lack its INTERPRET frame (the phase 5i found-not-fixed
-  register's row 6): `interpret 'do f over .context~stackframes; say
-  f~type f~line f~traceline; end'` in a routine prints three frames on the
-  oracle and two here. A fragment a failure leaves is a frame here too.
-  OWNER: Phase 9, whose exit is the full suite green; not a member of the
-  METHOD, CONVERSION or FUNCTION failing set.
   AN OBJECT'S STEM EMPTIED WHILE A METHOD'S STEM EXPOSES ONE OF ITS TAILS,
   left by the Task 8 fix round B, which built EXPOSE and PROCEDURE EXPOSE
   of a single tail (expose_compound_tail.rex). The oracle's exposed tail is

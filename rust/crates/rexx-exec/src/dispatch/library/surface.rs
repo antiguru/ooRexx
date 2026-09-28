@@ -519,6 +519,15 @@ impl Surface for Interp {
         self.held(answered).flatten()
     }
 
+    fn call_routine(&mut self, routine: ObjRef, arguments: Option<ObjRef>) -> Option<ObjRef> {
+        let answered = crate::dispatch::executable::call_routine_directly(self, routine, arguments);
+        let answer = self.held(answered).flatten();
+        if let Some(answer) = answer {
+            self.roots.push_temp(answer);
+        }
+        answer
+    }
+
     fn global_reference(&mut self, object: ObjRef) {
         self.global_references.register(object);
     }

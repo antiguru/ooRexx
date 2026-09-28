@@ -409,12 +409,14 @@ impl Interp {
             condition: None,
             code: None,
             kept: std::collections::HashSet::new(),
+            caller: None,
         });
         frame.owner = owner;
         frame.scope = scope;
         frame.method = receiver.is_some();
         frame.receiver = receiver.unwrap_or(ObjRef::NIL);
         frame.code = code;
+        frame.caller = self.running_activation().map(|activation| activation.id);
         frame.name.extend_from_slice(name);
         frame.arguments.extend_from_slice(args);
         self.native_handles.push(frame);

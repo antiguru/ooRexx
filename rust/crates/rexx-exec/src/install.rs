@@ -2289,9 +2289,10 @@ impl Interp {
         program: ProgramId,
         directive: usize,
         arguments: Vec<Option<ObjRef>>,
+        name: &[u8],
     ) -> Result<Option<ObjRef>, Failure> {
         let installed = InstalledRoutine { program, directive };
-        self.call_over_installed_routine(installed, arguments)
+        self.call_over_installed_routine(installed, arguments, name)
     }
 
     /// `PARSE SOURCE`'s third word: a compiled method's own name, the file a

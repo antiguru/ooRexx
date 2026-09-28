@@ -349,3 +349,6 @@ lang/native_reraise_raise_syntax.rex
 # Task 8 round C (N1, I2's residuals): a program called as a routine is a
 # ROUTINE level, trapped, installing and traced.
 lang/external_program_levels.rex
+# Task 8 round C (N4, I2's INTERPRET residual): the live stack's native and
+# INTERPRET levels, and CallRoutine's direct call.
+lang/live_stack_frames.rex

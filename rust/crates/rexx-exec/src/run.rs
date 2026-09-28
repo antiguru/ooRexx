@@ -676,7 +676,8 @@ impl Interp {
                 // nested fragment inherits each of those and needs a level of
                 // its own here.
                 self.fragment_depth += 1;
-                self.fragment_owners.push(self.activation().id);
+                let line = base_line.unwrap_or_else(|| self.clause_state.line());
+                self.enter_fragment_level(line, base_indent);
                 // `saved_line` read before the replace above is also the
                 // answer to "is a fragment already running", which is the one
                 // extra thing `enter_fragment` needs and the only place it is
@@ -709,7 +710,7 @@ impl Interp {
                     "a condition queued inside a fragment outlived that fragment's own exit"
                 );
                 self.fragment_depth -= 1;
-                self.fragment_owners.pop();
+                self.leave_fragment_level();
                 self.leave_fragment(saved_entry);
                 self.activation_indent = saved_base;
                 self.indent_offset = saved_offset;
@@ -2610,6 +2611,8 @@ impl Interp {
         // `FRAME_INTERPRET` one.
         if self.clause_line_override.is_none() {
             self.clause_state.current_clause_index = index;
+        } else {
+            self.fragment_clause = index;
         }
         let entry = self.enter_clause(line, counted);
         // **`Echo::Gated` asks whether the setting in force echoes this

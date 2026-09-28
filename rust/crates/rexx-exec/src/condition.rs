@@ -16,6 +16,7 @@
 use rexx_core::{Body, ObjRef};
 
 use crate::Interp;
+use crate::dispatch::context::LiveLevel;
 use crate::error::{Failure, FailureSite, Raised};
 use crate::plan::Package;
 
@@ -417,20 +418,17 @@ impl Interp {
                 self.send_message(lines, b"APPEND", None, &[Some(line)], caller)?;
             }
         }
-        if native {
-            let frame = crate::dispatch::context::build_native_frame(self)?;
-            let caller = self.caller();
-            self.send_message(frames, b"APPEND", None, &[Some(frame)], caller)?;
-            let caller = self.caller();
-            let line = self
-                .send_message(frame, b"TRACELINE", None, &[], caller)?
-                .unwrap_or(ObjRef::NIL);
-            self.roots.push_temp(line);
-            let caller = self.caller();
-            self.send_message(lines, b"APPEND", None, &[Some(line)], caller)?;
+        let mut levels = crate::dispatch::context::live_levels(self);
+        // A native call's own condition leads with its frame even where no
+        // activation called it.
+        if native
+            && let Some(row) = self.native_handles.len().checked_sub(1)
+            && !levels.contains(&LiveLevel::Native(row))
+        {
+            levels.insert(0, LiveLevel::Native(row));
         }
-        for depth in 0..self.frames().count() {
-            let frame = crate::dispatch::context::build_frame(self, depth)?;
+        for level in levels {
+            let frame = crate::dispatch::context::build_live_frame(self, level)?;
             self.roots.push_temp(frame);
             let caller = self.caller();
             self.send_message(frames, b"APPEND", None, &[Some(frame)], caller)?;
@@ -441,7 +439,7 @@ impl Interp {
             self.roots.push_temp(line);
             let caller = self.caller();
             self.send_message(lines, b"APPEND", None, &[Some(line)], caller)?;
-            if depth == 0 {
+            if level == LiveLevel::Activation(0) {
                 let caller = self.caller();
                 position = self.send_message(frame, b"LINE", None, &[], caller)?;
             }

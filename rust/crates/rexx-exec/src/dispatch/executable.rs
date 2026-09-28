@@ -497,7 +497,7 @@ fn call(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    enter_routine(interp, receiver, args.to_vec())
+    enter_routine(interp, receiver, args.to_vec(), b"CALL")
 }
 
 /// `RoutineClass::callWithRexx`: the same call over an argument array.
@@ -511,14 +511,34 @@ fn call_with(
         return Err(Raised::missing_method_argument(1).into());
     };
     let values = super::array_argument(interp, array, super::ArrayArgument::Positional)?;
-    enter_routine(interp, receiver, values)
+    enter_routine(interp, receiver, values, b"CALL")
 }
 
-/// The half [`call`] and [`call_with`] share, once the arguments are values.
+/// `CallRoutineDispatcher::run` (`concurrency/RexxStartDispatcher.cpp:207`):
+/// the routine run directly, under the null string for a name, over the
+/// items of `arguments` or over none.
+///
+/// # Errors
+/// 98.913 for `arguments` that is not an array, and what the routine raised.
+pub(crate) fn call_routine_directly(
+    interp: &mut Interp,
+    routine: ObjRef,
+    arguments: Option<ObjRef>,
+) -> Result<Option<ObjRef>, Failure> {
+    let values = match arguments {
+        Some(array) => super::array_argument(interp, array, super::ArrayArgument::Positional)?,
+        None => Vec::new(),
+    };
+    enter_routine(interp, routine, values, b"")
+}
+
+/// The half [`call`] and [`call_with`] share, once the arguments are values,
+/// `name` being what the routine's frame is called.
 fn enter_routine(
     interp: &mut Interp,
     receiver: ObjRef,
     values: Vec<Option<ObjRef>>,
+    name: &[u8],
 ) -> Result<Option<ObjRef>, Failure> {
     let Some(record) = interp.executable_sources.get(&receiver).copied() else {
         return Err(
@@ -558,5 +578,5 @@ fn enter_routine(
             Loud::method_from_source("a routine whose body this crate does not hold").into(),
         );
     };
-    interp.enter_installed_routine(program, directive, values)
+    interp.enter_installed_routine(program, directive, values, name)
 }

@@ -497,10 +497,11 @@ impl Interp {
         &mut self,
         installed: InstalledRoutine,
         arguments: Vec<Option<ObjRef>>,
+        name: &[u8],
     ) -> Result<Option<ObjRef>, Failure> {
         match self.invoke_call_over(
             Resolved::Routine(installed),
-            b"CALL",
+            name,
             arguments,
             CallType::Subroutine,
             CallEntry::Written,

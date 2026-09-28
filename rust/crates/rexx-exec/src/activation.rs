@@ -956,10 +956,10 @@ impl Interp {
     /// from the running one out to the one at `depth`.
     pub(crate) fn fragments_within(&self, depth: usize) -> usize {
         let levels: Vec<ActivationId> = self.frames().take(depth + 1).map(|a| a.id).collect();
-        self.fragment_owners
+        self.fragments
             .iter()
             .rev()
-            .take_while(|owner| levels.contains(owner))
+            .take_while(|level| levels.contains(&level.owner))
             .count()
     }
 

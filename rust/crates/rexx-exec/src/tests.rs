@@ -918,6 +918,7 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
         condition: None,
         code: None,
         kept: std::collections::HashSet::new(),
+        caller: None,
     };
     let handle = frame.locals.register(object);
     interp.native_handles.push(frame);
@@ -970,6 +971,7 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
         condition: Some(condition),
         code: None,
         kept: std::collections::HashSet::new(),
+        caller: None,
     });
     let held = [
         (receiver, "receiver"),

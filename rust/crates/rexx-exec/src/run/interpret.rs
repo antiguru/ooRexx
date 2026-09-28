@@ -40,6 +40,9 @@ impl Interp {
         // An owned `Fragment` would do here, since nothing but this loop reads
         // it. It is an `Rc` because an `INTERPRET` inside a fragment makes this
         // function reentrant and each level anchors its own.
+        if let Some(level) = self.fragments.last_mut() {
+            level.fragment = Some(Rc::clone(&fragment));
+        }
         let (slots, fragment_plan) = self.fragment_plan(&fragment);
         let code = Code {
             body: &fragment.body,
@@ -252,14 +255,18 @@ impl Interp {
     fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
         let saved_pause = self.replace_debug_pause(true);
         self.fragment_depth += 1;
-        self.fragment_owners.push(self.activation().id);
+        let (line, indent) = (
+            self.clause_state.line(),
+            self.clause_state.current_value_indent,
+        );
+        self.enter_fragment_level(line, indent);
         let saved_entry = self.enter_fragment(self.clause_line_override.is_some());
         let outcome = self.run_fragment(text);
         let depth = self.fragment_depth;
         self.pending_traps
             .retain(|pending| pending.fragment_depth != depth);
         self.fragment_depth -= 1;
-        self.fragment_owners.pop();
+        self.leave_fragment_level();
         self.leave_fragment(saved_entry);
         self.replace_debug_pause(saved_pause);
         match outcome {
@@ -280,6 +287,27 @@ impl Interp {
             self.trace.extend_from_slice(&line);
             self.trace.push(b'\n');
             self.route_trace_line(start);
+        }
+    }
+
+    /// Records a fragment entered from the running activation's clause at
+    /// `line` and `indent`.
+    pub(super) fn enter_fragment_level(&mut self, line: usize, indent: usize) {
+        let owner = self.activation().id;
+        self.fragments.push(crate::FragmentLevel {
+            owner,
+            fragment: None,
+            line,
+            indent,
+            outer_clause: self.fragment_clause,
+        });
+    }
+
+    /// Forgets the innermost fragment, whose enclosing one's clause is
+    /// current again.
+    pub(super) fn leave_fragment_level(&mut self) {
+        if let Some(level) = self.fragments.pop() {
+            self.fragment_clause = level.outer_clause;
         }
     }
 

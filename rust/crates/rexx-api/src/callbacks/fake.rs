@@ -493,6 +493,10 @@ impl Surface for FakeHost {
         None
     }
 
+    fn call_routine(&mut self, _routine: ObjRef, _arguments: Option<ObjRef>) -> Option<ObjRef> {
+        None
+    }
+
     fn global_reference(&mut self, object: ObjRef) {
         self.globals.push(object);
         self.global_handles.register(object);

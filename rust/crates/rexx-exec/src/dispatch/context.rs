@@ -427,11 +427,11 @@ fn context_stack_frames(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     depth_of(interp, receiver)?;
-    let depths: Vec<usize> = (0..interp.frames().count()).collect();
+    let levels = live_levels(interp);
     let frame = interp.roots.push_frame();
-    let mut slots = Vec::with_capacity(depths.len());
-    for depth in depths {
-        let object = build_frame(interp, depth)?;
+    let mut slots = Vec::with_capacity(levels.len());
+    for level in levels {
+        let object = build_live_frame(interp, level)?;
         interp.roots.push_temp(object);
         slots.push(Some(object));
     }
@@ -445,6 +445,75 @@ fn context_stack_frames(
     interp.roots.pop_frame(frame);
     interp.roots.push_temp(array);
     Ok(Some(array))
+}
+
+/// One level of the running stack as `Activity::generateStackFrames` walks
+/// it: an activation, a native call, or an `INTERPRET` fragment.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LiveLevel {
+    /// The activation at this depth.
+    Activation(usize),
+    /// This row of [`Interp::native_handles`].
+    Native(usize),
+    /// This row of [`Interp::fragments`].
+    Fragment(usize),
+}
+
+/// Every level of the running stack, innermost first: before each
+/// activation, the native calls it made and then the fragments running in
+/// it, each innermost first.
+pub(crate) fn live_levels(interp: &Interp) -> Vec<LiveLevel> {
+    let mut levels = Vec::new();
+    for (depth, activation) in interp.frames().enumerate() {
+        let id = activation.id;
+        for (row, native) in interp.native_handles.iter().enumerate().rev() {
+            if native.caller == Some(id) {
+                levels.push(LiveLevel::Native(row));
+            }
+        }
+        for (row, level) in interp.fragments.iter().enumerate().rev() {
+            if level.owner == id {
+                levels.push(LiveLevel::Fragment(row));
+            }
+        }
+        levels.push(LiveLevel::Activation(depth));
+    }
+    levels
+}
+
+/// The `StackFrame` of one live level.
+pub(crate) fn build_live_frame(interp: &mut Interp, level: LiveLevel) -> Result<ObjRef, Failure> {
+    match level {
+        LiveLevel::Activation(depth) => build_frame(interp, depth),
+        LiveLevel::Native(row) => build_native_frame_at(interp, row),
+        LiveLevel::Fragment(row) => build_fragment_frame(interp, row),
+    }
+}
+
+/// The `StackFrame` of the running fragment in row `row`, stopped on its
+/// clause being stepped, or the one that entered the fragment above it.
+fn build_fragment_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
+    let clause = match interp.fragments.get(row + 1) {
+        Some(inner) => inner.outer_clause,
+        None => interp.fragment_clause,
+    };
+    let level = &interp.fragments[row];
+    let (line, indent) = (level.line, level.indent);
+    let text = level
+        .fragment
+        .as_ref()
+        .and_then(|fragment| {
+            let span = fragment.body.instructions.get(clause)?.clause_span.clone();
+            fragment.source.join_span(span)
+        })
+        .map(std::borrow::Cow::into_owned)
+        .unwrap_or_default();
+    let mut trace_text = Vec::new();
+    crate::trace::push_clause(&mut trace_text, line, indent, &text);
+    while trace_text.last() == Some(&b'\n') {
+        trace_text.pop();
+    }
+    build_ended_frame(interp, b"INTERPRET", b"", line, &[], &trace_text)
 }
 
 /// One `StackFrame` for the activation at `depth` --
@@ -634,18 +703,17 @@ pub(crate) fn build_native_level_frame(
     frame_object(interp, frame, entries, trace_text)
 }
 
-/// The `StackFrame` of the innermost native call --
-/// `NativeActivation::createStackFrame` (`execution/NativeActivation.cpp:3620`):
-/// no line and no invocation, the calling activation's context, and the
-/// `Compiled routine` or `Compiled method` line as its traceback.
+/// The `StackFrame` of the native call in row `row` of
+/// [`Interp::native_handles`] -- `NativeActivation::createStackFrame`
+/// (`execution/NativeActivation.cpp:3620`): no line and no invocation, the
+/// calling activation's context, and the `Compiled routine` or `Compiled
+/// method` line as its traceback.
 ///
 /// # Panics
-/// If no native call is running.
-pub(crate) fn build_native_frame(interp: &mut Interp) -> Result<ObjRef, Failure> {
-    let native = interp
-        .native_handles
-        .last()
-        .expect("a native call is running");
+/// If no native call is in that row.
+pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
+    let native = &interp.native_handles[row];
+    let caller = native.caller;
     let (method, name, receiver, scope, arguments) = (
         native.method,
         native.name.clone(),
@@ -667,7 +735,11 @@ pub(crate) fn build_native_frame(interp: &mut Interp) -> Result<ObjRef, Failure>
             Raised::compiled_routine_line(&name),
         )
     };
-    let context = interp.context_object_at(0);
+    let depth = interp
+        .frames()
+        .position(|activation| Some(activation.id) == caller)
+        .unwrap_or(0);
+    let context = interp.context_object_at(depth);
     let frame = interp.roots.push_frame();
     let kind = interp.text(kind);
     interp.roots.push_temp(kind);
@@ -695,9 +767,9 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
         .frame_at(depth)
         .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
     // `RexxActivation::createStackFrame`'s own cascade, whose whole value set
-    // is `StackFrameClass.cpp`'s `FRAME_*` constants. `FRAME_INTERPRET` needs
-    // an activation for a fragment, which `run_fragment` does not push, and
-    // `FRAME_COMPILE` belongs to the parser
+    // is `StackFrameClass.cpp`'s `FRAME_*` constants. `FRAME_INTERPRET` is a
+    // fragment's, which `run_fragment` pushes no activation for and
+    // `live_levels` lists beside them, and `FRAME_COMPILE` belongs to the parser
     // (`LanguageParser::createStackFrame`, `parser/LanguageParser.cpp:866`).
     // The phase's `found-not-fixed-register.md` is where which kinds this
     // crate reaches is recorded, because that is a boundary that moves.

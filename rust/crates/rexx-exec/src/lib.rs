@@ -1505,8 +1505,11 @@ struct Interp {
     /// How many `INTERPRET` fragments are running, counted from zero outside
     /// any of them.
     fragment_depth: usize,
-    /// The activation each running fragment runs in, outermost first.
-    fragment_owners: Vec<crate::activation::ActivationId>,
+    /// Each running fragment, outermost first.
+    fragments: Vec<FragmentLevel>,
+    /// The index, in the innermost running fragment's body, of its clause
+    /// being stepped.
+    fragment_clause: usize,
     /// Whether a line typed at an interactive-debug pause is running.
     /// `RexxActivation::noTracing` includes this, so a pause's own fragment
     /// traces nothing and pauses nowhere. Written only through
@@ -1841,6 +1844,21 @@ pub(crate) struct LibraryBinding {
     pub(crate) procedure: Vec<u8>,
 }
 
+/// One running `INTERPRET` fragment, which the oracle runs as an activation
+/// of its own and this crate inside its owner's.
+pub(crate) struct FragmentLevel {
+    /// The activation it runs in.
+    pub(crate) owner: crate::activation::ActivationId,
+    /// Its parsed text, once parsed.
+    pub(crate) fragment: Option<Rc<rexx_parse::Fragment>>,
+    /// The `INTERPRET` clause's line, which each of its clauses reports.
+    pub(crate) line: usize,
+    /// The `INTERPRET` clause's printed indent.
+    pub(crate) indent: usize,
+    /// [`Interp::fragment_clause`] as the enclosing fragment left it.
+    pub(crate) outer_clause: usize,
+}
+
 /// One native activation: what an extension writes its object variables
 /// through, and the handles it has been given.
 struct NativeFrame {
@@ -1878,6 +1896,8 @@ struct NativeFrame {
     /// The handle-carried values this call asked a kept `CSTRING` of, each
     /// counted once in [`Interp::kept_holders`].
     kept: std::collections::HashSet<ObjRef>,
+    /// The activation the call was made from.
+    caller: Option<crate::activation::ActivationId>,
 }
 
 /// What one just-installed dictionary key resolves to, handed to
@@ -2079,7 +2099,8 @@ impl Interp {
             input_dispatch_syntax: None,
             clause_line_override: None,
             fragment_depth: 0,
-            fragment_owners: Vec::new(),
+            fragments: Vec::new(),
+            fragment_clause: 0,
             debug_pause: false,
             stress_collect: false,
             uninit_ready: Vec::new(),
@@ -2792,7 +2813,8 @@ impl Interp {
             input_dispatch_syntax: _,
             clause_line_override: _,
             fragment_depth: _,
-            fragment_owners: _,
+            fragments: _,
+            fragment_clause: _,
             debug_pause: _,
             stress_collect: _,
             // The collector's own resurrection flag holds each object until
