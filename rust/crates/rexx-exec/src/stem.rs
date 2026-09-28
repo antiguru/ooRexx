@@ -524,6 +524,95 @@ impl Interp {
                 .get_or_insert_with(Default::default)
                 .insert(key.to_vec(), home);
         }
+        self.record_exposer(home, local);
+    }
+
+    /// The stem a weak reference `cell` still reaches, if any.
+    fn weak_target(&self, cell: ObjRef) -> Option<ObjRef> {
+        match self.heap.get(cell).map(|object| &object.body) {
+            Some(Body::WeakRef(target)) if *target != ObjRef::NIL => Some(*target),
+            _ => None,
+        }
+    }
+
+    /// Notes that `local` exposes tails of `home`. Notes whose stems have been
+    /// collected are dropped whenever a list, or the table, doubles.
+    fn record_exposer(&mut self, home: ObjRef, local: ObjRef) {
+        let cell = self.alloc_with(BehaviourId::OBJECT, Body::WeakRef(local));
+        let heap = &self.heap;
+        let live = |cell: &ObjRef| {
+            matches!(heap.get(*cell).map(|object| &object.body),
+                Some(Body::WeakRef(target)) if *target != ObjRef::NIL)
+        };
+        let fresh = !self.stem_exposers.contains_key(&home);
+        let cells = self.stem_exposers.entry(home).or_default();
+        cells.push(cell);
+        if cells.len() >= 8 && cells.len().is_power_of_two() {
+            cells.retain(live);
+        }
+        let size = self.stem_exposers.len();
+        if fresh && size >= 64 && size.is_power_of_two() {
+            self.stem_exposers.retain(|_, cells| cells.iter().any(live));
+        }
+    }
+
+    /// `CompoundVariableTable::clear` over `home`: the elements another stem
+    /// exposes stay with that stem, holding what they hold now, and `home`
+    /// no longer has them. Called before `home`'s tails are cleared.
+    pub(crate) fn detach_exposed_tails(&mut self, home: ObjRef) {
+        let Some(cells) = self.stem_exposers.get(&home) else {
+            return;
+        };
+        let exposers: Vec<ObjRef> = cells
+            .iter()
+            .filter_map(|cell| self.weak_target(*cell))
+            .filter(|local| {
+                matches!(self.heap.get(*local).map(|object| &object.body),
+                    Some(Body::Stem { exposed: Some(exposed), .. })
+                        if exposed.values().any(|value| *value == home))
+            })
+            .collect();
+        let Some(cells) = self.stem_exposers.remove(&home) else {
+            return;
+        };
+        if exposers.is_empty() {
+            return;
+        }
+        let Some(Body::Stem {
+            name,
+            default,
+            tails,
+            ..
+        }) = self.heap.get(home).map(|object| &object.body)
+        else {
+            return;
+        };
+        let body = Body::Stem {
+            name: name.clone(),
+            default: *default,
+            tails: tails.clone(),
+            exposed: None,
+        };
+        // The cells go back in before the allocation, which can collect.
+        self.stem_exposers.insert(home, cells);
+        let orphan = self.alloc_with(BehaviourId::STEM, body);
+        self.roots.push_temp(orphan);
+        for local in exposers {
+            if let Some(Body::Stem {
+                exposed: Some(exposed),
+                ..
+            }) = self.heap.get_mut(local).map(|object| &mut object.body)
+            {
+                for value in exposed.values_mut() {
+                    if *value == home {
+                        *value = orphan;
+                    }
+                }
+            }
+        }
+        if let Some(cells) = self.stem_exposers.remove(&home) {
+            self.stem_exposers.insert(orphan, cells);
+        }
     }
 
     /// What `key` holds in `stem`, the default where the tail is absent.

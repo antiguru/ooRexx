@@ -98,6 +98,26 @@ fn native_stem_put(
         return Err(stem_refusal(interp, receiver, b"[]="));
     }
     let value = super::collection::item_argument(args)?;
+    // No tail: `StemClass::bracketEqual` (`classes/StemClass.cpp:476`) makes
+    // `value` the default and clears every tail.
+    if args.len() == 1 {
+        if is_stem(interp, value) {
+            return Err(Raised::syntax(98, 976, Vec::new()).into());
+        }
+        interp.detach_exposed_tails(receiver);
+        if let Some(Body::Stem {
+            default,
+            tails,
+            exposed,
+            ..
+        }) = interp.heap.get_mut(receiver).map(|held| &mut held.body)
+        {
+            *default = Some(value);
+            *tails = rexx_core::NameMap::default();
+            *exposed = None;
+        }
+        return Ok(None);
+    }
     let tail = stem_tail(interp, args.get(1..).unwrap_or_default())?;
     stem_write(interp, receiver, tail, Some(value));
     Ok(None)
@@ -689,6 +709,7 @@ fn native_stem_empty(
     // read as the stem's default. Measured: `u. = 5` with one tail set
     // answers `items` 0 after `empty` and `u~at('K')` still answers `5`,
     // where writing tombstones answered `U.K`.
+    interp.detach_exposed_tails(receiver);
     let default = match interp.heap.get(receiver).map(|object| &object.body) {
         Some(Body::Stem { default, .. }) => *default,
         _ => None,

@@ -1251,6 +1251,9 @@ struct Interp {
     /// reports on -- see [`ExecutableSource`], which carries why this is not
     /// [`Interp::table_method_bodies`] with more rows in it.
     executable_sources: HashMap<ObjRef, ExecutableRecord>,
+    /// For a stem some other stem's `EXPOSE` made tails of, a weak reference
+    /// to each such stem. The stems are not roots through this.
+    stem_exposers: HashMap<ObjRef, Vec<ObjRef>>,
     /// What `Method`'s four setters have written on each object they have
     /// been sent to, over what its directive declared -- see
     /// [`dispatch::executable::MethodFlagWrites`].
@@ -2037,6 +2040,7 @@ impl Interp {
             object_methods: false,
             table_method_bodies: NameMap::default(),
             executable_sources: HashMap::new(),
+            stem_exposers: HashMap::new(),
             method_flag_writes: HashMap::new(),
             message_outcomes: HashMap::new(),
             generated_methods: HashMap::new(),
@@ -2736,6 +2740,7 @@ impl Interp {
             // miss, because the generation bump makes the handle unequal.
             table_method_bodies: _,
             executable_sources: _,
+            stem_exposers,
             method_flag_writes: _,
             message_outcomes: _,
             generated_methods: _,
@@ -2876,6 +2881,7 @@ impl Interp {
         out.extend(*pending_result);
         out.extend(*pending_rc);
         out.extend(*reraised_object);
+        out.extend(stem_exposers.values().flatten().copied());
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
         out.extend(global_references.roots());

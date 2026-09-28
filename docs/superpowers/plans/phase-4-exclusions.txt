@@ -4853,18 +4853,6 @@ the rxapi queue, which is row 10's.
   either side prints (neither name is registered on either side), and runs
   both sides at -V 2, which prints the assertion count and every failure's
   and error's detail.
-  AN OBJECT'S STEM EMPTIED WHILE A METHOD'S STEM EXPOSES ONE OF ITS TAILS,
-  left by the Task 8 fix round B, which built EXPOSE and PROCEDURE EXPOSE
-  of a single tail (expose_compound_tail.rex). The oracle's exposed tail is
-  one element two stems share, and `~empty` casts the object's tree off
-  while the method's stem keeps the element; here the method's stem names
-  the object's stem and the tail, so after the empty it reads and writes the
-  object's stem afresh. A method exposing `a.1`, assigning it 'x', calling
-  one that exposes `a.` and sends `a.~empty`, then saying `a.1`, assigning
-  it 'y' and asking the object's stem for `a.1` and `~items`: oracle `after
-  empty x` and `object A.1 0`, here `after empty A.1` and `object y 1`.
-  Replacing the object's stem (`a. = 'new'`) agrees. OWNER: Phase 9; no
-  test of the three groups empties a stem another stem exposes.
 
 KNOWN GAPS RECORDED AFTER THE FINAL REVIEW AND THE FIX ROUNDS, each with
 its evidence and its owner, or the reason it has none. Every transcript

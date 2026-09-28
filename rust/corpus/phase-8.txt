@@ -352,3 +352,5 @@ lang/external_program_levels.rex
 # Task 8 round C (N4, I2's INTERPRET residual): the live stack's native and
 # INTERPRET levels, and CallRoutine's direct call.
 lang/live_stack_frames.rex
+# Task 8 round C: an exposed tail detached by ~empty or a tail-less PUT.
+lang/expose_tail_detached.rex

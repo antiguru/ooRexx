@@ -1,0 +1,86 @@
+-- A tail another stem's EXPOSE shares stays with that stem when the object's
+-- stem is emptied, by ~empty or by a PUT with no tail: the method keeps the
+-- element and what it held, and the object's stem no longer has it.
+o = .T~new
+o~setup
+o~m
+.T~new~b
+.T~new~viaPut
+s.1 = 1; s.~put('d'); say s.~items s.1 s.2
+s.3 = 3; s.[]=('e'); say s.~items s.3
+b. = 2
+s.~put(b.)
+::class T
+::method setup
+  expose a.
+  a.1 = 'one'; a.2 = 'two'
+::method m
+  expose a.1 a.2
+  say 'before' a.1 a.2
+  self~other
+  say 'after empty' a.1 a.2
+  a.1 = 'changed'
+  self~peek
+  self~other2
+  call proc
+  say 'after proc' a.1 a.2
+  self~refill
+  self~m2
+  say 'mine now' a.1
+  self~emptyAgain
+  say 'still' a.1
+  return
+proc: procedure expose a.1
+  say 'proc sees' a.1
+  a.1 = 'from proc'
+  return
+::method other
+  expose a.
+  say 'object items before' a.~items
+  a.~empty
+  say 'object items after' a.~items a.1
+::method other2
+  expose a.1
+  say 'other2 sees' a.1
+::method peek
+  expose a.
+  say 'object' a.1 a.~items
+::method refill
+  expose a.
+  a.1 = 'fresh'
+::method m2
+  expose a.1
+  say 'm2 sees' a.1
+::method emptyAgain
+  expose a.
+  a.~empty
+  say 'emptied again' a.~items
+::method b
+  expose b.1 b.7
+  b.1 = 'x'
+  self~n
+  say b.1 b.7 symbol('b.1') symbol('b.7')
+  do i over b.~allIndexes; say 'idx' i; end
+  say b.~items b.~hasIndex(1) b.[1]
+  b.~empty
+  say b.1 b.~items
+  self~look
+::method n
+  expose b.
+  b.~empty
+  b.1 = 'new'
+::method look
+  expose b.
+  say 'object' b.1 b.~items
+::method viaPut
+  expose c.1
+  c.1 = 'kept'
+  self~putDefault
+  say 'after put' c.1
+  self~lookC
+::method putDefault
+  expose c.
+  c.~put('dflt')
+::method lookC
+  expose c.
+  say 'object' c.1 c.~items
