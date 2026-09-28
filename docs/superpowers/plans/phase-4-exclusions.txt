@@ -4830,6 +4830,21 @@ descriptors separately.
   understand message "STATE"." Found by this task, not made by it: the
   reader is Phase 7's. OWNER: Phase 9, assigned by the surface plan's Task
   8; the FUNCTION group's test_input_output_stream fails on it.
+  A SOURCE THAT DOES NOT PARSE, COMPILED BY Method~new, Routine~new, define,
+  NewMethod OR NewRoutine, RAISES ITS SYNTAX CONDITION WITHOUT THE COMPILED
+  SOURCE'S OWN FRAME. The code, RC, POSITION (the line within the source)
+  and trapping agree (compiled_source_syntax.rex); the message keeps its
+  &1/&2 placeholders, which roadmap row 3 licenses. What differs is the
+  frame: r = .Routine~new('Testing', 'return arg(1') untrapped, the oracle
+  reports "Error 36 running Testing line 1" under a first traceback line
+  "1 *-* return arg(1", and this crate reports the caller's path and line
+  with no such line; trapped, the condition object's TRACEBACK lacks the
+  same line (oracle 3 items, here 1, of which the two missing are this
+  entry's line and the I2 trapped-traceback divergence). ParseError carries
+  the failing clause's start byte and no end, so there is no clause text to
+  echo (execute's parse arm in lib.rs says the same for the top level).
+  OWNER: not assigned by the fix round that made the raise; raised with the
+  controller.
   THE ADDRESS INSTRUCTION'S OWN COMMAND ECHOES NO CLAUSE LINE UNDER TRACE C.
   address_trace.rex, no extension: the oracle prints `4 *-* address system
   "exit 3"` before the `>>>` and `+++` lines, and likewise for `address
@@ -4884,19 +4899,6 @@ under each is a single program, run from a fresh empty directory.
   say .context~package~classes~items (oracle 0), and
   say .Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')
   (oracle 1). OWNER: Phase 9.
-  A SOURCE THAT DOES NOT PARSE, HANDED TO NewMethod OR NewRoutine. Tests:
-    TESTNEWMETHOD02
-    TESTNEWROUTINE02
-  The API members compile through the path Method~new and Routine~new take
-  (dispatch/class_protocol.rs), which refuses at rc 120 (`reporting a
-  routine source that does not parse ... is not implemented (Phase 5)`).
-  The oracle raises 36.901 with a substituted message, POSITION the line
-  within the source, and a traceback whose first line is the compiled
-  source's own; rexx-parse carries none of that (Phase 3's scope
-  decision). Probe: signal on syntax; r = .Routine~new('Testing', 'return
-  arg(1'), oracle 36.901 with "Left parenthesis "(" in position 11 on line
-  1 requires a corresponding right parenthesis ")"." and POSITION 1.
-  OWNER: Phase 9.
   AN INPUT STREAM OBJECT WITH NO STATE METHOD. Test:
     TEST_INPUT_OUTPUT_STREAM
   The Task 6 entry above. Inside the suite the oracle fails this test too

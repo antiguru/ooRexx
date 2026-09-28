@@ -264,16 +264,6 @@ fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
             "a method source that is neither a string nor an array is not implemented (Phase 5)",
         ),
         (
-            b".k~define(\"bad\", 'this is not rexx +++')\n::class k\n",
-            "reporting a method source that does not parse (bad, 35.901: Invalid expression.) \
-             is not implemented (Phase 5)",
-        ),
-        (
-            b".k~define(\"m\", 'say 1' || '0a'x || 'say 2')\n::class k\n",
-            "reporting a method source that does not parse (m, 13.1: Invalid character in \
-             program.) is not implemented (Phase 5)",
-        ),
-        (
             b".k~define(\"m\", ('return 1', '::class zz'))\n::class k\n",
             "a method source that carries a directive is not implemented (Phase 5)",
         ),

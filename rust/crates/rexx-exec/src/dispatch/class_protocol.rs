@@ -284,6 +284,16 @@ fn is_source_line(interp: &Interp, value: ObjRef) -> bool {
     )
 }
 
+/// The `SYNTAX` condition a source that does not parse raises, `POSITION`
+/// the line within that source (measured, oracle `1` for
+/// `.Routine~new('T', 'return arg(1')` on line 2 of its caller).
+fn source_syntax(lines: &[&[u8]], error: &rexx_parse::ParseError) -> Raised {
+    let mut raised = Raised::from(error);
+    let line = rexx_parse::ProgramSource::from_lines(lines).line_of(error.byte);
+    raised.position = u32::try_from(line).unwrap_or(0);
+    raised
+}
+
 /// `MethodClass::newMethodObject`'s compiling arm
 /// (`classes/MethodClass.cpp:462`-`:485`): the `Method` object a source text
 /// becomes, carrying no scope, for a caller that is about to install it.
@@ -295,12 +305,8 @@ pub(super) fn compile_method_source(
 ) -> Result<ObjRef, Failure> {
     let lines = method_source_lines(interp, source, position)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
-    let parsed = rexx_parse::parse_lines(&borrowed).map_err(|error| {
-        Failure::from(Loud::method_from_source(&format!(
-            "reporting a method source that does not parse ({}, {error})",
-            String::from_utf8_lossy(name)
-        )))
-    })?;
+    let parsed =
+        rexx_parse::parse_lines(&borrowed).map_err(|error| source_syntax(&borrowed, &error))?;
     if !parsed.directives.is_empty() {
         return Err(Loud::method_from_source("a method source that carries a directive").into());
     }
@@ -329,12 +335,8 @@ pub(super) fn compile_routine_source(
 ) -> Result<ObjRef, Failure> {
     let lines = method_source_lines(interp, source, position)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
-    let parsed = rexx_parse::parse_lines(&borrowed).map_err(|error| {
-        Failure::from(Loud::method_from_source(&format!(
-            "reporting a routine source that does not parse ({}, {error})",
-            String::from_utf8_lossy(name)
-        )))
-    })?;
+    let parsed =
+        rexx_parse::parse_lines(&borrowed).map_err(|error| source_syntax(&borrowed, &error))?;
     // The oracle installs them and this crate does not: measured, oracle rc
     // 0, `.Routine~new('R', <four lines with a ::ROUTINE among them>)~call`
     // resolves the declared routine and answers. Refused loudly here rather

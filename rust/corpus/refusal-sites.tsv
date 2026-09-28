@@ -139,7 +139,7 @@ Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1576	off-send-surface	-
 Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:849	off-send-surface	-	-	-
 Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1756	off-send-surface	-	-	-
 Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1750	off-send-surface	-	-	-
-Raised	from	body	crates/rexx-exec/src/error.rs:1836	off-send-surface	-	-	-
+Raised	from	body+send	crates/rexx-exec/src/error.rs:1836	agrees	yes	syntax(error.code	signal on syntax over .Routine~new('T', 'return arg(1') -- 36.901, the code the parse error carries, so the row's answer is the source of the code rather than an M.N
 Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1740	off-send-surface	-	-	-
 Loud	guard_when_false	body	crates/rexx-exec/src/lib.rs:673	off-send-surface	-	-	-
 Raised	halt	body	crates/rexx-exec/src/error.rs:160	off-send-surface	-	-	-
@@ -293,6 +293,7 @@ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:825	off-send-surf
 Loud	setup_method	send	crates/rexx-exec/src/lib.rs:502	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
 Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:641	off-send-surface	-	-	-
 Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1145	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+Raised	source_syntax	send	crates/rexx-exec/src/dispatch/class_protocol.rs:290	agrees	yes	line_of(error.byte)	signal on syntax over .Routine~new('T', .array~of('nop', 'say 1', 'if then', 'nop')) -- 35.929 at POSITION 3, the line within the source; the message keeps its placeholders (roadmap row 3)
 Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:700	off-send-surface	-	-	-
 Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:784	off-send-surface	-	-	-
 Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:779	off-send-surface	-	-	-

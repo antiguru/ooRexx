@@ -308,6 +308,9 @@ lang/condition_object_directory.rex
 # CONDITION('O') answers a copy, iterating in the oracle's order.
 lang/condition_object_copy.rex
 lang/parse_message_targets.rex
+# METHOD's TestNewMethod02 and TestNewRoutine02: a source that does not parse
+# raises its SYNTAX condition from the compile path.
+lang/compiled_source_syntax.rex
 # FUNCTION's TestGetRoutine01: GetRoutine and every ::ROUTINE naming one
 # library procedure answer that procedure's one Routine object.
 lang/library_routine_shared_object.rex

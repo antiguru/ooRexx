@@ -1,0 +1,19 @@
+count 18
+-- A method or routine source that does not parse raises SYNTAX, POSITION its
+-- line within that source.
+call try "r = .Routine~new('T', 'return arg(1')"
+call try "m = .Method~new('M', .array~of('nop', 'x = (1'))"
+call try ".k~define('bad', 'this is not rexx +++')"
+call try ".k~define('m', 'say 1' || '0a'x || 'say 2')"
+call try "r = .Routine~new('T', .array~of('nop', 'say 1', 'if then', 'nop'))"
+exit
+try: procedure
+  signal on syntax
+  interpret arg(1)
+  say 'no condition'
+  return
+syntax:
+  c = condition('O')
+  say c~code c~rc c~position condition('E') c~condition
+  return
+::class k
