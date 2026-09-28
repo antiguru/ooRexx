@@ -193,14 +193,14 @@ RexxInfo	debug	instance	agree	rc0
 RexxInfo	digits	instance	agree	rc0
 RexxInfo	directorySeparator	instance	agree	rc0
 RexxInfo	endofline	instance	agree	rc0
-RexxInfo	executable	instance	send-differs	oracle rc0 VALUE /home/moritz/dev/repos/ooRexx/build/bin/rexx; crate rc120 rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	executable	instance	send-differs	oracle rc0 VALUE /home/moritz/dev/repos/ooRexx/build/bin/rexx; crate rc120 rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)
 RexxInfo	form	instance	agree	rc0
 RexxInfo	fuzz	instance	agree	rc0
 RexxInfo	internalDigits	instance	agree	rc0
 RexxInfo	internalMaxNumber	instance	agree	rc0
 RexxInfo	internalMinNumber	instance	agree	rc0
 RexxInfo	languageLevel	instance	agree	rc0
-RexxInfo	libraryPath	instance	send-differs	oracle rc0 VALUE /home/moritz/dev/repos/ooRexx/build/lib; crate rc120 rexx-exec: method "LIBRARYPATH" of class "RexxInfo" is not implemented (Phase 5)
+RexxInfo	libraryPath	instance	send-differs	oracle rc0 VALUE /home/moritz/dev/repos/ooRexx/build/lib; crate rc120 rexx-exec: method "LIBRARYPATH" of class "RexxInfo" is not implemented (Phase 9)
 RexxInfo	majorVersion	instance	agree	rc0
 RexxInfo	maxArraySize	instance	agree	rc0
 RexxInfo	maxExponent	instance	agree	rc0
