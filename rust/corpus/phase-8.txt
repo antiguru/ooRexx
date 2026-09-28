@@ -335,3 +335,5 @@ lang/package_tables_routine_source.rex
 # oracle's RedirectionDispatcher, and a re-raised condition's position.
 lang/input_stream_object_reader.rex
 lang/native_reraise_position.rex
+# Method~new over directives, the sibling of Routine~new's (m4).
+lang/method_source_directives.rex

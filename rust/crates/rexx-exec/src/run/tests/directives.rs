@@ -264,10 +264,6 @@ fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
             "a method source that is neither a string nor an array is not implemented (Phase 5)",
         ),
         (
-            b".k~define(\"m\", ('return 1', '::class zz'))\n::class k\n",
-            "a method source that carries a directive is not implemented (Phase 5)",
-        ),
-        (
             b".methods~put('return 1', 'M')\n\
               zk = .object~subclass(\"k\", .Class, .methods)\n\
               ::method z\n  return 1\n",

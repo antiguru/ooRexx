@@ -307,8 +307,13 @@ pub(super) fn compile_method_source(
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
     let parsed =
         rexx_parse::parse_lines(&borrowed).map_err(|error| source_syntax(&borrowed, &error))?;
+    // `generateMethod` installs them as `generateRoutine` does; see
+    // [`compile_routine_source`].
     if !parsed.directives.is_empty() {
-        return Err(Loud::method_from_source("a method source that carries a directive").into());
+        let parent = interp.running_program().map(crate::plan::Package::Program);
+        return interp.install_executable(parsed, name, false, parent, |interp, id| {
+            interp.compiled_method_names.insert(id, name.into());
+        });
     }
     let method_class = interp.method_class();
     let object = interp.native_instance(method_class);

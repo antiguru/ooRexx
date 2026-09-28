@@ -1,0 +1,11 @@
+count 10
+-- Method~new over a source with directives installs them in the method's
+-- own package, as Routine~new does.
+src = .array~of("return 'm' helper() .a1~new~hi", "::routine helper", "  return 'h'", "::class a1 public", "::method hi", "  return 'hi'")
+m = .Method~new('M', src)
+say m~package~name m~package~classes~items m~package~routines~items m~source~items m~package~publicClasses~hasIndex('A1')
+say .k~new~go(m)
+::class k
+::method go
+  use arg m
+  return self~run(m)
