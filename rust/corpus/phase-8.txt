@@ -331,3 +331,7 @@ lang/class_new.rex
 # METHOD's TestGetPackageClasses01, TestGetPackagePublicClasses01,
 # TestGetPackageRoutines01 and TestGetPackagePublicRoutines01.
 lang/package_tables_routine_source.rex
+# FUNCTION's test_input_output_stream: the input reader's LINEIN under the
+# oracle's RedirectionDispatcher, and a re-raised condition's position.
+lang/input_stream_object_reader.rex
+lang/native_reraise_position.rex

@@ -1973,17 +1973,19 @@ impl Interp {
                     if let Err(failure) = &outcome {
                         let scope = self.classes().id_string(resolution.scope).to_string();
                         let method = resolution.method;
-                        self.blame_external_method(name, &scope, method, receiver, args, failure);
+                        let reraised = failure.reraised_by_native_call();
+                        self.blame_external_method(name, &scope, method, receiver, args, reraised);
                     }
                     outcome
                 }
             },
             Invocable::Library(binding) => {
                 let outcome = self.run_library_method(&binding, resolution, receiver, name, args);
-                if let Err(failure) = &outcome {
+                if outcome.is_err() {
                     let scope = self.classes().id_string(resolution.scope).to_string();
                     let method = resolution.method;
-                    self.blame_external_method(name, &scope, method, receiver, args, failure);
+                    let reraised = std::mem::take(&mut self.native_reraise);
+                    self.blame_external_method(name, &scope, method, receiver, args, reraised);
                 }
                 outcome
             }
@@ -2766,6 +2768,8 @@ impl Interp {
     /// [`Interp::blame_native_method`] for a method an `EXTERNAL` directive
     /// bound, whose level carries the package that directive was written in.
     /// `failure` is what the method answered.
+    /// `reraised` is whether the call's failure is the condition it raised
+    /// while running.
     pub(crate) fn blame_external_method(
         &mut self,
         name: &[u8],
@@ -2773,7 +2777,7 @@ impl Interp {
         method: MethodId,
         target: ObjRef,
         arguments: &[Option<ObjRef>],
-        failure: &Failure,
+        reraised: bool,
     ) {
         let package = self.external_package_path(method);
         let level = NativeLevel {
@@ -2783,7 +2787,7 @@ impl Interp {
             arguments,
             activation: Some(NativeActivationLevel {
                 package: self.external_package_program(method).map(Package::Program),
-                reraised: failure.reraised_by_native_call(),
+                reraised,
             }),
         };
         self.blame_native_level(Raised::compiled_method_line(name, scope), package, level);
@@ -2818,7 +2822,6 @@ impl Interp {
         name: &[u8],
         program: Option<ProgramId>,
         arguments: &[Option<ObjRef>],
-        failure: &Failure,
     ) {
         let package = program.map(|program| self.package_path(program).as_bytes().to_vec());
         let level = NativeLevel {
@@ -2828,7 +2831,7 @@ impl Interp {
             arguments,
             activation: Some(NativeActivationLevel {
                 package: program.map(Package::Program),
-                reraised: failure.reraised_by_native_call(),
+                reraised: std::mem::take(&mut self.native_reraise),
             }),
         };
         self.blame_native_level(Raised::compiled_routine_line(name), package, level);
@@ -2859,7 +2862,7 @@ impl Interp {
             // NativeActivation.cpp:1787`) re-raises a SYNTAX condition in the
             // caller through `Activity::reraiseException`, whose `POSITION`
             // and program are the caller's.
-            Some(NativeActivationLevel { reraised: true, .. }) => self.failure_origin = None,
+            Some(NativeActivationLevel { reraised: true, .. }) => self.reraise_failure_levels(),
             // Anything else keeps the object built where it was raised, and
             // a condition raised here names this frame's package, which has
             // no line.

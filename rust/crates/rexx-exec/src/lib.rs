@@ -1467,6 +1467,21 @@ struct Interp {
     /// one, innermost first: what a trapped condition's `STACKFRAMES` holds
     /// above the trapping activation.
     failure_frames: Vec<ObjRef>,
+    /// Whether the failure an extension's method or routine call is answering
+    /// is the condition it raised while running, which
+    /// `NativeActivation::checkConditions` re-raises in the caller, rather
+    /// than one its arguments' conversion raised on the way in.
+    native_reraise: bool,
+    /// The activation a redirection's input reader is sending `LINEIN` from,
+    /// for as long as that send runs: the `RedirectionDispatcher` a condition
+    /// raised straight into it meets, which takes it and ends the input.
+    input_dispatch: Option<crate::activation::ActivationId>,
+    /// Whether the dispatcher took a condition during the current send.
+    input_dispatch_trapped: bool,
+    /// A SYNTAX condition the dispatcher took, which `RedirectionDispatcher::
+    /// handleError` hands to the command's own callout to raise once the
+    /// command completes.
+    input_dispatch_syntax: Option<Failure>,
     /// The innermost of those levels that has a package: its program, whose
     /// file and package a trapped condition names, and its line, which is
     /// the condition's `POSITION` (a native level has none).
@@ -2040,6 +2055,10 @@ impl Interp {
             failure_frame: None,
             failure_frames: Vec::new(),
             failure_origin: None,
+            native_reraise: false,
+            input_dispatch: None,
+            input_dispatch_trapped: false,
+            input_dispatch_syntax: None,
             clause_line_override: None,
             fragment_depth: 0,
             debug_pause: false,
@@ -2709,6 +2728,12 @@ impl Interp {
             failure_frames,
             // A package identity and a line.
             failure_origin: _,
+            // Flags and an activation identity.
+            native_reraise: _,
+            input_dispatch: _,
+            input_dispatch_trapped: _,
+            // A condition, whose ADDITIONAL `pending_additional` roots.
+            input_dispatch_syntax: _,
             clause_line_override: _,
             fragment_depth: _,
             debug_pause: _,

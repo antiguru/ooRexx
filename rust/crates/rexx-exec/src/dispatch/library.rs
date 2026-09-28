@@ -109,6 +109,7 @@ impl Interp {
         // `Error 38 ... Invalid template or pattern.` at rc 218, and the
         // extension returned zero on that path.
         if let Some(number) = pending {
+            self.native_reraise = true;
             return Err(condition_of(number));
         }
         let packaged = self.external_package_path(resolution.method).is_some();
@@ -168,11 +169,14 @@ impl Interp {
         let popped = self.pop_native_frame();
         let program = self.library_code_program(code);
         let outcome = match pending {
-            Some(number) => Err(condition_of(number)),
+            Some(number) => {
+                self.native_reraise = true;
+                Err(condition_of(number))
+            }
             None => self.settle_native_call(answered, popped, program.is_some()),
         };
-        if let Err(failure) = &outcome {
-            self.blame_native_routine(name, program, args, failure);
+        if outcome.is_err() {
+            self.blame_native_routine(name, program, args);
         }
         outcome
     }
@@ -209,8 +213,10 @@ impl Interp {
         if let Some(number) = pending {
             return Err(condition_of(number));
         }
-        self.settle_native_call(ran.map(|()| None), popped, true)
-            .map(|_| ())
+        let settled = self.settle_native_call(ran.map(|()| None), popped, true);
+        // A hook is no level of the failure's, so nothing re-raises it.
+        self.native_reraise = false;
+        settled.map(|_| ())
     }
 
     /// Runs the registered command handler `handler` for `command`, issued to
@@ -345,6 +351,7 @@ impl Interp {
                 if additional.is_some() {
                     self.pending_additional = additional;
                 }
+                self.native_reraise = true;
                 return Err(raised);
             }
         };

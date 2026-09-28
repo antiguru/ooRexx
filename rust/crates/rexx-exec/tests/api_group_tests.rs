@@ -55,10 +55,7 @@ const GROUPS: &[&str] = &["CONVERSION", "FUNCTION", "METHOD"];
 
 /// The tests that differ, as `GROUP.TEST`. Each is recorded, with its cause
 /// and the phase that owns it, in `docs/superpowers/plans/phase-4-exclusions.txt`.
-const RECORDED: &[&str] = &[
-    "FUNCTION.TEST_INPUT_OUTPUT_STREAM",
-    "FUNCTION.TEST_REXXQUEUE",
-];
+const RECORDED: &[&str] = &["FUNCTION.TEST_REXXQUEUE"];
 
 /// See the module doc.
 const VERBOSITY: &str = "2";

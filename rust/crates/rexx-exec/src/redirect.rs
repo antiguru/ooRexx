@@ -24,7 +24,7 @@ use std::rc::Rc;
 use rexx_core::{Body, Decoded, ObjRef};
 use rexx_parse::{AddressIo, Expr, OutputOption, Redirection, SymbolId};
 
-use crate::activation::IoConfigs;
+use crate::activation::{ActivationId, IoConfigs};
 use crate::error::{Failure, Raised};
 use crate::{Code, Interp, Loud};
 
@@ -668,30 +668,51 @@ impl Interp {
     }
 
     /// Every line a stream still holds, read as `StreamObjectInputSource`
-    /// reads: `LINEIN` until the stream reports `NOTREADY`.
+    /// reads: `LINEIN` until a send of it raises a condition, `NOTREADY` at
+    /// the end of a stream.
     ///
-    /// **The state decides, not the answer.** A blank line answers `''` and so
-    /// does the read past the end -- measured over a file of `l1`, `l2`, an
-    /// empty line and `l4`, four reads answer with `state` `READY` throughout
-    /// and only the fifth is `NOTREADY`, so stopping on an empty answer would
-    /// swallow every line after a blank one.
+    /// **The condition decides, not the answer.** A blank line answers `''`
+    /// and so does the read past the end -- measured over a file of `l1`,
+    /// `l2`, an empty line and `l4`, four reads answer with `state` `READY`
+    /// throughout and only the fifth is `NOTREADY`, so stopping on an empty
+    /// answer would swallow every line after a blank one.
     fn read_stream_lines(&mut self, stream: ObjRef) -> Result<Vec<Vec<u8>>, Failure> {
         let mut lines = Vec::new();
         loop {
+            let dispatcher = self.running_activation().map(|activation| activation.id);
+            let outer = std::mem::replace(&mut self.input_dispatch, dispatcher);
+            let outer_trapped = std::mem::take(&mut self.input_dispatch_trapped);
             let caller = self.caller();
-            let value = self
-                .send_message(stream, b"LINEIN", None, &[], caller)?
-                .unwrap_or(ObjRef::NIL);
-            self.roots.push_temp(value);
-            let caller = self.caller();
-            let state = self
-                .send_message(stream, b"STATE", None, &[], caller)?
-                .unwrap_or(ObjRef::NIL);
-            if self.string_value_text(state) == b"NOTREADY" {
+            let answered = self.send_message(stream, b"LINEIN", None, &[], caller);
+            let trapped = std::mem::replace(&mut self.input_dispatch_trapped, outer_trapped);
+            self.input_dispatch = outer;
+            let value = match answered {
+                Ok(value) => value.unwrap_or(ObjRef::NIL),
+                Err(Failure::Raised(raised)) if raised.condition == "SYNTAX" => {
+                    self.input_dispatch_syntax = Some(Failure::Raised(raised));
+                    return Ok(lines);
+                }
+                Err(failure) => return Err(failure),
+            };
+            // `StreamObjectInputSource::read` (`instructions/
+            // InputRedirector.cpp:313`): a condition the send raised ends the
+            // input, and the line it answered with is not one.
+            if trapped {
                 return Ok(lines);
             }
             lines.push(self.string_value_text(value));
         }
+    }
+
+    /// Whether a condition raised now, by the activation `raiser` or by a
+    /// native method running in it, is raised straight into the input
+    /// reader's `RedirectionDispatcher`, which then takes it.
+    pub(crate) fn input_dispatcher_takes(&mut self, raiser: Option<ActivationId>) -> bool {
+        if self.input_dispatch.is_none() || raiser != self.input_dispatch {
+            return false;
+        }
+        self.input_dispatch_trapped = true;
+        true
     }
 
     /// `StemOutputTarget`: `stem.1` upwards, with `stem.0` rewritten to the

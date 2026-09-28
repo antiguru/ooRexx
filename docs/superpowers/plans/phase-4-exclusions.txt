@@ -4696,10 +4696,11 @@ directory's probes/.
   and STACKFRAMES, which lacked the native frame here, agree since the Task
   8 fix round B (re-run with the forged library built by build.sh).
   sendthrow.rex, a Throw inside a Rexx method a SendMessage0 reached, shows
-  PROPAGATED 1 against 0 the same way (its POSITION agrees), and untrapped,
-  its final `Error 40 running ... line N` names the line of the clause that
-  called the extension on the oracle (7) and the raising clause here (43).
-  The METHOD group's `forward ... continue` shape was recorded as lacking
+  PROPAGATED 1 against 0 the same way (its POSITION agrees); untrapped, its
+  final `Error 40 running ... line N`, which named the raising clause here
+  and the clause that called the extension on the oracle, agrees since the
+  Task 8 fix round B (sendthrow2.rex, the probe without its trap). The
+  METHOD group's `forward ... continue` shape was recorded as lacking
   the native METHOD frame likewise; not re-measured by fix round B. OWNER:
   Phase 8; PROPAGATED in a re-raised condition is the native boundary's.
   A RaiseCondition TAKEN BY CALL ON CARRIES POSITION. rcond.rex: the
@@ -4818,18 +4819,6 @@ descriptors separately.
   raises2.cls, opts_callback.rex and opts_both.rex, each a handler that
   returns right after raising). OWNER: none; the callback would have to
   unwind, which a Raise member does not.
-  AN INPUT STREAM OBJECT WITH NO STATE METHOD IS 97.1. The oracle reads a
-  USING input stream object with LINEIN until a condition, NOTREADY at the
-  end, is trapped (StreamObjectInputSource::read,
-  interpreter/instructions/InputRedirector.cpp); this crate's reader, for a
-  shell command and a registered handler alike, sends LINEIN and then
-  STATE. stream_state.rex, the FUNCTION group's own ArrayInputStream shape
-  (ootest/ooRexx/API/oo/FUNCTION.testGroup, test_input_output_stream),
-  answers "handler 2 2" and "shell 0 2" at rc 0 on the oracle and ends here
-  at rc 159 with "Error 97.1: Object "an ARRAYINPUTSTREAM" does not
-  understand message "STATE"." Found by this task, not made by it: the
-  reader is Phase 7's. OWNER: Phase 9, assigned by the surface plan's Task
-  8; the FUNCTION group's test_input_output_stream fails on it.
   A SOURCE THAT DOES NOT PARSE, COMPILED BY Method~new, Routine~new, define,
   NewMethod OR NewRoutine, RAISES ITS SYNTAX CONDITION WITHOUT THE COMPILED
   SOURCE'S OWN FRAME. The code, RC, POSITION (the line within the source)
@@ -4862,11 +4851,6 @@ from a fresh copy of the framework and ootest/ooRexx/API/oo at the same
 path, three descriptors separately. None is Phase 8's: each cause is general
 language or runtime behaviour outside the native API surface. The probe
 under each is a single program, run from a fresh empty directory.
-  AN INPUT STREAM OBJECT WITH NO STATE METHOD. Test:
-    TEST_INPUT_OUTPUT_STREAM
-  The Task 6 entry above. Inside the suite the oracle fails this test too
-  (RC(30) from the handler, Failures 1), so the two sides differ in which
-  kind of problem they count. OWNER: Phase 9.
   RexxQueue. Test:
     TEST_REXXQUEUE
   rc 120, `the LIBRARY REXX entry point "rexx_create_queue" is not

@@ -775,7 +775,16 @@ impl Interp {
             Err(failure) => Err(failure),
         };
         self.roots.pop_frame(frame);
+        let kept = self.input_dispatch_syntax.take();
         let outcome = outcome?;
+        // The SYNTAX condition the input reader's dispatcher took, raised now
+        // that the command has completed: measured, oracle rc 0, a `LINEIN`
+        // failing on its second line leaves `cat`'s one line of output in
+        // the target and `RC` 41 in the trap.
+        if let Some(kept) = kept {
+            self.reraise_failure_levels();
+            return Err(kept);
+        }
         if let Some(supplied) = &outcome.supplied {
             // The frame that held it is gone and `RC` is assigned below,
             // after allocations of this clause's own.

@@ -99,6 +99,12 @@ impl Interp {
     /// **The caller answers normally after `Ok`**: a raise never changes what
     /// the failing call returns -- the residual, `1`, or the null string.
     pub(crate) fn raise_notready(&mut self, name: &[u8]) -> Result<(), Failure> {
+        // A native `LINEIN` the input reader sent runs in the reader's own
+        // activation.
+        let running = self.running_activation().map(|activation| activation.id);
+        if self.input_dispatcher_takes(running) {
+            return Ok(());
+        }
         // One `Raised` for both branches, so the queued form can build its
         // condition object here rather than at delivery.
         let raised = Raised {
@@ -814,7 +820,12 @@ impl Interp {
         }
 
         // `RETURN`: this routine returns `result`, and the condition is
-        // offered to the caller.
+        // offered to the caller -- the input reader's dispatcher, where the
+        // caller is the one that sent the reader's `LINEIN`.
+        let caller = self.caller_activation().map(|activation| activation.id);
+        if self.input_dispatcher_takes(caller) {
+            return Ok(Flow::Return(result));
+        }
         let name: Box<[u8]> = raise.condition.clone();
         // `RC` for `ERROR`/`FAILURE` is the raise's own argument, measured at
         // `rc= 5` for `raise error 5` trapped one level up. `SYNTAX`'s own

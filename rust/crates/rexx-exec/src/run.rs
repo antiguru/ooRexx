@@ -2957,6 +2957,28 @@ impl Interp {
         self.failure_origin.get_or_insert(origin);
     }
 
+    /// `Activity::reraiseException` (`concurrency/Activity.cpp:1330`): the
+    /// condition is raised again from the level that is failing now, so
+    /// `POSITION`, the program and the report's `line <n>` are that level's,
+    /// while every level already left keeps its traceback line.
+    pub(crate) fn reraise_failure_levels(&mut self) {
+        self.failure_origin = None;
+        for site in self
+            .failure_sites
+            .iter_mut()
+            .chain(self.failure_site.as_mut())
+        {
+            if site.line().is_some() {
+                let mut text = Vec::new();
+                site.push_trace_line(&mut text);
+                *site = FailureSite::Rendered {
+                    text,
+                    package: None,
+                };
+            }
+        }
+    }
+
     /// Forgets every level a failure has left, which a trap or a report has
     /// already taken what it needs from.
     pub(crate) fn clear_failure_levels(&mut self) {
