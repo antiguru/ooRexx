@@ -164,9 +164,9 @@ fn directive_bodies(text: &str) -> Vec<(String, String)> {
     let mut current: Option<(String, String)> = None;
     for line in text.lines() {
         let trimmed = line.trim_start();
-        if trimmed.starts_with("::") {
+        if let Some(directive) = trimmed.strip_prefix("::") {
             bodies.extend(current.take());
-            let mut parts = trimmed[2..].split_whitespace();
+            let mut parts = directive.split_whitespace();
             let kind = parts.next().unwrap_or("").to_ascii_lowercase();
             if kind == "method" || kind == "routine" {
                 let name = parts
