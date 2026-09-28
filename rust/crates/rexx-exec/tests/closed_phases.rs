@@ -20,7 +20,9 @@
 //! The scan is over the crate's own sources rather than over a table,
 //! because an owner reaches a refusal three ways: as a row in a table, as a
 //! literal argument to a `Loud` constructor, and as a match arm. Only the
-//! first is enumerable.
+//! first is enumerable. A literal is read whole, so an owner inside a longer
+//! refusal text (`"... is not implemented (Phase 8)"`) is found too, and the
+//! exclusions file's OWNER rows are held to the same rule.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -73,22 +75,134 @@ fn shown(path: &Path) -> String {
     }
 }
 
-/// Every mention of a closed phase inside a string literal, which is what a
-/// refusal is built from. Comments are skipped: a comment naming a phase is
-/// prose about the code, and the rules elsewhere govern that.
+/// Every string literal in `text`, as its starting line and its contents,
+/// comments skipped: a comment naming a phase is prose about the code, and
+/// the rules elsewhere govern that.
+fn literals(text: &str) -> Vec<(usize, String)> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut found = Vec::new();
+    let (mut at, mut line) = (0, 1);
+    while at < chars.len() {
+        match chars[at] {
+            '\n' => line += 1,
+            '/' if chars.get(at + 1) == Some(&'/') => {
+                while at < chars.len() && chars[at] != '\n' {
+                    at += 1;
+                }
+                continue;
+            }
+            '/' if chars.get(at + 1) == Some(&'*') => {
+                at += 2;
+                while at < chars.len() && !(chars[at] == '*' && chars.get(at + 1) == Some(&'/')) {
+                    line += usize::from(chars[at] == '\n');
+                    at += 1;
+                }
+                at += 2;
+                continue;
+            }
+            '\'' => {
+                // A character literal, which may be a quote; otherwise a lifetime.
+                if chars.get(at + 1) == Some(&'\\') {
+                    at += 3;
+                    while at < chars.len() && chars[at] != '\'' {
+                        at += 1;
+                    }
+                } else if chars.get(at + 2) == Some(&'\'') {
+                    at += 2;
+                }
+            }
+            'r' if matches!(chars.get(at + 1), Some('"' | '#')) && starts_word(&chars, at) => {
+                let hashes = chars[at + 1..].iter().take_while(|c| **c == '#').count();
+                if chars.get(at + 1 + hashes) == Some(&'"') {
+                    let start = line;
+                    let mut body = String::new();
+                    at += hashes + 2;
+                    while at < chars.len()
+                        && !(chars[at] == '"'
+                            && chars[at + 1..]
+                                .iter()
+                                .take(hashes)
+                                .filter(|c| **c == '#')
+                                .count()
+                                == hashes)
+                    {
+                        line += usize::from(chars[at] == '\n');
+                        body.push(chars[at]);
+                        at += 1;
+                    }
+                    found.push((start, body));
+                    at += hashes + 1;
+                    continue;
+                }
+            }
+            '"' => {
+                let start = line;
+                let mut body = String::new();
+                at += 1;
+                while at < chars.len() && chars[at] != '"' {
+                    if chars[at] == '\\' {
+                        if chars.get(at + 1) == Some(&'\n') {
+                            // A continued literal drops the line break and the
+                            // next line's indentation.
+                            at += 2;
+                            line += 1;
+                            while at < chars.len() && chars[at].is_whitespace() {
+                                line += usize::from(chars[at] == '\n');
+                                at += 1;
+                            }
+                            continue;
+                        }
+                        body.push(chars[at]);
+                        at += 1;
+                    }
+                    if at < chars.len() {
+                        line += usize::from(chars[at] == '\n');
+                        body.push(chars[at]);
+                        at += 1;
+                    }
+                }
+                found.push((start, body));
+            }
+            _ => {}
+        }
+        at += 1;
+    }
+    found
+}
+
+/// Whether the `r` at `at` opens a raw literal rather than ending a name;
+/// `br"..."` is one too.
+fn starts_word(chars: &[char], at: usize) -> bool {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    match at.checked_sub(1).map(|before| chars[before]) {
+        None => true,
+        Some('b') => at < 2 || !ident(chars[at - 2]),
+        Some(before) => !ident(before),
+    }
+}
+
+/// Whether `text` names `phase` as a whole word: `Phase 1` is not in
+/// `Phase 10`.
+fn names(text: &str, phase: &str) -> bool {
+    text.match_indices(phase).any(|(at, _)| {
+        !text[at + phase.len()..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit())
+    })
+}
+
+/// Every string literal naming a closed phase, alone (`"Phase 8"`) or
+/// inside a longer text (`"... not implemented (Phase 8)"`), which is what a
+/// refusal is built from.
 fn mentions(crate_dir: &str) -> Vec<String> {
     let mut found = Vec::new();
     for path in source_files(crate_dir) {
         let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        for (index, line) in text.lines().enumerate() {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("//") {
-                continue;
-            }
+        for (line, literal) in literals(&text) {
             for phase in CLOSED {
-                let quoted = format!("\"{phase}\"");
-                if line.contains(&quoted) {
-                    found.push(format!("{}:{}: {phase}", shown(&path), index + 1));
+                if names(&literal, phase) {
+                    found.push(format!("{}:{line}: {phase}", shown(&path)));
                 }
             }
         }
@@ -115,6 +229,97 @@ fn no_refusal_names_a_closed_phase() {
     }
 }
 
+/// The words a record uses when an owner's work has been done or moved.
+const RESOLVED: &[&str] = &["DELIVERED", "CLOSED", "RE-HOMED", "FIXED", "RESOLVED"];
+
+/// Every OWNER sentence of `text` naming a closed phase with no resolution
+/// after it, in the rest of its paragraph or in the next one, before the
+/// next OWNER: an exclusions record keeps its owner line as history and says
+/// beside or below it what became of the work. `NO OWNER` is not an owner,
+/// and a sentence ends at its first full stop.
+fn open_owners(text: &str) -> Vec<String> {
+    let mut paragraphs: Vec<String> = Vec::new();
+    let mut current = Vec::new();
+    for line in text.lines().chain([""]) {
+        if line.trim().is_empty() {
+            if !current.is_empty() {
+                paragraphs.push(current.join(" "));
+                current.clear();
+            }
+        } else {
+            current.extend(line.split_whitespace());
+        }
+    }
+    let mut found = Vec::new();
+    for (position, paragraph) in paragraphs.iter().enumerate() {
+        let next = paragraphs.get(position + 1).map_or("", String::as_str);
+        let window = format!("{paragraph} {next}");
+        let owners: Vec<usize> = window
+            .match_indices("OWNER")
+            .map(|(at, _)| at)
+            .filter(|&at| word_at(&window, at, "OWNER"))
+            .collect();
+        for (index, &at) in owners.iter().enumerate() {
+            if at >= paragraph.len() || window[..at].ends_with("NO ") {
+                continue;
+            }
+            let end = window[at..]
+                .find('.')
+                .map_or(window.len(), |stop| at + stop);
+            let sentence = &window[at..end];
+            let stop = owners
+                .get(index + 1)
+                .copied()
+                .unwrap_or(window.len())
+                .max(end);
+            let rest = &window[end..stop];
+            let resolved = RESOLVED.iter().any(|marker| {
+                rest.match_indices(marker)
+                    .any(|(offset, _)| word_at(&window, end + offset, marker))
+            });
+            for phase in CLOSED {
+                if names(sentence, phase) && !resolved {
+                    found.push(sentence.to_string());
+                }
+            }
+        }
+    }
+    found
+}
+
+/// Whether `word` stands alone at `at` in `text`.
+fn word_at(text: &str, at: usize, word: &str) -> bool {
+    let joined = |c: char| c.is_ascii_alphanumeric() || c == '-';
+    text[at..].starts_with(word)
+        && !text[..at].chars().next_back().is_some_and(joined)
+        && !text[at + word.len()..].chars().next().is_some_and(joined)
+}
+
+/// The same claim over the exclusions file, whose rows name their owners.
+#[test]
+fn no_open_exclusions_row_names_a_closed_phase() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../docs/superpowers/plans/phase-4-exclusions.txt");
+    let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let named = open_owners(&text);
+    assert!(
+        named.is_empty(),
+        "these rows give a closed phase as their owner and do not say what became of \
+         the work:\n{named:#?}"
+    );
+}
+
+/// The row check reads an owner, and a resolution after it, as a record
+/// writes them.
+#[test]
+fn the_row_check_tells_an_open_owner_from_a_resolved_one() {
+    let rows = "A. OWNER: Phase 8, the loader.\n\n  DELIVERED, later.\n\n\
+                B. OWNER:\n Phase 8. C. NO OWNER: Phase 8 is closed.\n\n\
+                D. OWNERSHIP of Phase 8. E. OWNER: Phase 80.\n\n\
+                F. OWNER: Phase 8.\n\nG.\n\nFIXED.\n";
+    assert_eq!(open_owners(rows), ["OWNER: Phase 8", "OWNER: Phase 8"]);
+}
+
 /// The negative control for the scan: a phase that is still open is found by
 /// the same walk, so an empty result above means the sites are gone and not
 /// that the scan is looking in the wrong place.
@@ -136,5 +341,41 @@ fn the_scan_finds_an_open_phase_it_is_not_asked_about() {
         open >= 2,
         "the scan found {open} refusals naming a phase that is still open, so it \
          is not reading the sources the other test clears"
+    );
+}
+
+/// The literal scan reads a phase inside a longer refusal text, across a
+/// continued line, and not in a comment, a character or a lifetime.
+#[test]
+fn the_literal_scan_finds_a_phase_inside_a_longer_text() {
+    let source = r##"fn f<'a>(x: &'a str) -> char {
+// "not (Phase 8)"
+/* "(Phase 8)" */
+let q = '"'; let e = '\''; let s = "a \"b\" (Phase 8)";
+let t = "x is \
+      not implemented (Phase 8)";
+let r = r#"raw "q" Phase 8"#; let u = "Phase 80";
+}
+"##;
+    let named: Vec<usize> = literals(source)
+        .into_iter()
+        .filter(|(_, literal)| names(literal, "Phase 8"))
+        .map(|(line, _)| line)
+        .collect();
+    assert_eq!(named, [4, 5, 7]);
+    let found = mentions("rexx-api")
+        .into_iter()
+        .filter(|site| site.starts_with("src/ffi.rs:"))
+        .count();
+    assert_eq!(found, 0, "rexx-api's ffi.rs names no closed phase");
+    let open = source_files("rexx-api")
+        .iter()
+        .flat_map(|path| literals(&fs::read_to_string(path).expect("a source")))
+        .filter(|(_, literal)| literal != "Phase 9" && names(literal, "Phase 9"))
+        .count();
+    assert!(
+        open >= 1,
+        "the scan found no longer text naming the open Phase 9 in rexx-api, where \
+         the boundary's thread refusals name it"
     );
 }
