@@ -154,13 +154,10 @@ pub trait Surface {
     /// A `Directory` of the calling activation's variables.
     fn context_variables(&mut self) -> Option<ObjRef>;
 
-    /// Makes the activation that made the native call in the host's frame
-    /// `frame` the one the context-variable members reach, answering what
-    /// [`Surface::leave_caller`] takes back; `None` where it already is.
-    fn enter_caller(&mut self, frame: usize) -> Option<usize>;
-
-    /// Undoes an [`Surface::enter_caller`].
-    fn leave_caller(&mut self, entered: usize);
+    /// Runs `serve` with the activation that made the native call in the
+    /// host's frame `frame` as the one the context-variable members reach,
+    /// and puts the running activation back however `serve` ends.
+    fn in_caller(&mut self, frame: usize, serve: &mut dyn FnMut(&mut dyn Surface));
 
     /// The value of the running method's object variable `name`, or `None`.
     fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef>;
@@ -1903,10 +1900,12 @@ fn in_caller<R>(
     outer: Option<usize>,
     serve: impl FnOnce(&mut dyn Surface) -> R,
 ) -> R {
-    let entered = outer.and_then(|frame| surface.enter_caller(frame));
-    let answer = serve(surface);
-    if let Some(entered) = entered {
-        surface.leave_caller(entered);
-    }
-    answer
+    let Some(frame) = outer else {
+        return serve(surface);
+    };
+    let (mut serve, mut answer) = (Some(serve), None);
+    surface.in_caller(frame, &mut |surface| {
+        answer = serve.take().map(|serve| serve(surface));
+    });
+    answer.expect("in_caller runs its closure once")
 }

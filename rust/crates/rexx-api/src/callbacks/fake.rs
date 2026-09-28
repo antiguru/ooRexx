@@ -466,11 +466,9 @@ impl Surface for FakeHost {
         None
     }
 
-    fn enter_caller(&mut self, _frame: usize) -> Option<usize> {
-        None
+    fn in_caller(&mut self, _frame: usize, serve: &mut dyn FnMut(&mut dyn Surface)) {
+        serve(self);
     }
-
-    fn leave_caller(&mut self, _entered: usize) {}
 
     fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef> {
         let name = name.to_ascii_uppercase();

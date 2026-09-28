@@ -1,0 +1,149 @@
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+/*                                                                            */
+/* This program and the accompanying materials are made available under       */
+/* the terms of the Common Public License v1.0 which accompanies this         */
+/* distribution. A copy is also available at the following address:           */
+/* https://www.oorexx.org/license.html                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+//! The context-variable members reached through a call context kept from an
+//! enclosing native call, against the oracle. No extension the oracle builds
+//! keeps a context, so the forged `outer9b.cpp` in the surface plan's Task 9
+//! probes is compiled against this worktree's `api/` into the target
+//! directory; it NEEDs nothing, which is asserted before it is loaded.
+//! `o9b.rex` reads, sets and drops bound simple, stem and compound variables
+//! through the kept context and must match on all three descriptors, run
+//! plainly and with a collection at every allocation, which collects while
+//! the outer call's caller is swapped in. `o9c.rex` reaches a variable the
+//! outer activation never bound, which stays loud. Gate-only, Linux only.
+
+#![cfg(target_os = "linux")]
+
+mod support;
+
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use rexx_exec::{Invocation, Outcome, run_program, run_program_collect_every_alloc};
+
+const GATE_ENV: &str = "REXX_CORPUS_GATE";
+
+fn gate_mode() -> bool {
+    env::var(GATE_ENV).is_ok_and(|value| !value.is_empty() && value != "0")
+}
+
+fn worktree() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+}
+
+fn probes() -> PathBuf {
+    worktree().join("docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes")
+}
+
+/// Builds `libouter9b.so` into `dir` and checks it NEEDs no interpreter.
+fn build_forge(dir: &Path) {
+    let api = worktree().join("api");
+    let built = Command::new("g++")
+        .args(["-shared", "-fPIC", "-O1", "-static-libstdc++"])
+        .arg(format!("-I{}", api.display()))
+        .arg(format!("-I{}", api.join("platform/unix").display()))
+        .arg(probes().join("outer9b.cpp"))
+        .arg("-o")
+        .arg(dir.join("libouter9b.so"))
+        .status()
+        .expect("g++ runs");
+    assert!(built.success(), "the forge did not build");
+    let dynamic = Command::new("readelf")
+        .arg("-d")
+        .arg(dir.join("libouter9b.so"))
+        .output()
+        .expect("readelf runs");
+    let dynamic = String::from_utf8_lossy(&dynamic.stdout);
+    assert!(
+        !dynamic.contains("librexx"),
+        "the forge NEEDs an interpreter library:\n{dynamic}"
+    );
+}
+
+fn run_ours(program: &Path, run: &Path, library_path: &str, stress: bool) -> Outcome {
+    let text = fs::read(program).expect("the probe");
+    let mut environment: Vec<(Vec<u8>, Vec<u8>)> = env::vars()
+        .filter(|(name, _)| name != "LD_LIBRARY_PATH")
+        .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
+        .collect();
+    environment.push((
+        b"LD_LIBRARY_PATH".to_vec(),
+        library_path.as_bytes().to_vec(),
+    ));
+    let invocation = Invocation::none()
+        .with_directory(run.to_path_buf())
+        .with_environment(environment);
+    let path = program.to_string_lossy().into_owned();
+    if stress {
+        run_program_collect_every_alloc(&path, text, invocation)
+    } else {
+        run_program(&path, text, invocation)
+    }
+}
+
+#[test]
+fn a_kept_outer_context_reaches_its_callers_bound_variables() {
+    if !gate_mode() {
+        eprintln!("outer_context: skipped without {GATE_ENV}");
+        return;
+    }
+    let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("outer-context-{}", std::process::id()));
+    let (forge, run) = (base.join("forge"), base.join("run"));
+    fs::create_dir_all(&forge).expect("the forge directory");
+    fs::create_dir_all(&run).expect("the run directory");
+    build_forge(&forge);
+    let oracle = support::oracle::locate();
+    let library_path = format!("{}:{}", oracle.lib_dir().display(), forge.display());
+
+    let bound = probes().join("o9b.rex");
+    let theirs = oracle.run_in(&bound, &run, &[("LD_LIBRARY_PATH", &library_path)]);
+    let status = theirs.expect_exit_code();
+    for stress in [false, true] {
+        let ours = run_ours(&bound, &run, &library_path, stress);
+        assert_eq!(
+            (
+                String::from_utf8_lossy(&ours.stdout),
+                String::from_utf8_lossy(&ours.stderr),
+                ours.exit_code
+            ),
+            (
+                String::from_utf8_lossy(&theirs.stdout),
+                String::from_utf8_lossy(&theirs.stderr),
+                status
+            ),
+            "o9b.rex, collecting at every allocation: {stress}"
+        );
+        assert!(
+            !stress || ours.collections > 0,
+            "the stress mode did not collect"
+        );
+    }
+
+    let unbound = probes().join("o9c.rex");
+    let theirs = oracle.run_in(&unbound, &run, &[("LD_LIBRARY_PATH", &library_path)]);
+    assert_eq!(
+        theirs.expect_exit_code(),
+        0,
+        "the oracle makes the variable"
+    );
+    let ours = run_ours(&unbound, &run, &library_path, false);
+    assert_eq!(ours.exit_code, 120);
+    assert!(
+        String::from_utf8_lossy(&ours.stderr)
+            .contains("has not bound, is not implemented (Phase 6)"),
+        "o9c.rex's refusal: {}",
+        String::from_utf8_lossy(&ours.stderr)
+    );
+    fs::remove_dir_all(&base).expect("cannot remove the run directory");
+}
