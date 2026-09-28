@@ -328,3 +328,6 @@ lang/expose_compound_tail_trace.rex
 lang/expose_compound_tail_redirect.rex
 # METHOD's TestClass01: Class~new builds a class.
 lang/class_new.rex
+# METHOD's TestGetPackageClasses01, TestGetPackagePublicClasses01,
+# TestGetPackageRoutines01 and TestGetPackagePublicRoutines01.
+lang/package_tables_routine_source.rex

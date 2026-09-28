@@ -1519,6 +1519,14 @@ pub(crate) fn new_directory(interp: &mut Interp, capacity: usize) -> Result<ObjR
     Ok(directory)
 }
 
+/// A fresh `StringTable` with the store `.StringTable~new` gives one.
+pub(crate) fn new_string_table(interp: &mut Interp) -> Result<ObjRef, Failure> {
+    let class = interp.object_model().string_table;
+    let table = new_instance(interp, class)?;
+    install_store(interp, table, CONTENTS, calculate_bucket_size(0));
+    Ok(table)
+}
+
 /// `DirectoryClass::put` of `item` under the string `name`.
 pub(crate) fn directory_put(
     interp: &mut Interp,

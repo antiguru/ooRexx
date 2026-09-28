@@ -1059,25 +1059,28 @@ impl Interp {
         Some(table)
     }
 
-    /// A fresh `StringTable` holding `entries`, sorted by name.
-    pub(crate) fn string_table_of(&mut self, mut entries: Vec<(Box<[u8]>, ObjRef)>) -> ObjRef {
+    /// A fresh `StringTable` holding `entries`, put in name order: the copy
+    /// `PackageClass::getClassesRexx` and its siblings answer, which a program
+    /// can ask everything a `.StringTable~new` answers.
+    pub(crate) fn string_table_of(
+        &mut self,
+        mut entries: Vec<(Box<[u8]>, ObjRef)>,
+    ) -> Result<ObjRef, Failure> {
         entries.sort_by(|a, b| a.0.cmp(&b.0));
         let frame = self.roots.push_frame();
         for (_, value) in &entries {
             self.roots.push_temp(*value);
         }
-        let class = self.environment_model().string_table;
-        let table = self.native_instance(class);
-        let object = self.heap.get_mut(table).expect("just allocated and rooted");
-        let Body::Native(native) = &mut object.body else {
-            unreachable!("allocated as Body::Native by native_instance")
-        };
+        let table = crate::dispatch::hash::new_string_table(self)?;
+        self.roots.push_temp(table);
         for (name, value) in entries {
-            native.set_entry(&name, value);
+            let index = self.text(&name);
+            self.roots.push_temp(index);
+            crate::dispatch::hash::store_insert(self, table, index, value)?;
         }
         self.roots.pop_frame(frame);
         self.roots.push_temp(table);
-        table
+        Ok(table)
     }
 
     /// A fresh `Array` holding `items` in the order given.

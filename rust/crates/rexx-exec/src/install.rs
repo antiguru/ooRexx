@@ -1749,6 +1749,27 @@ impl Interp {
                 .into());
             }
         };
+        let parent = parent.or_else(|| {
+            self.running_activation()
+                .map(|activation| Package::Program(activation.program_id))
+        });
+        self.install_executable(parsed, name, routine, parent, |interp, id| {
+            interp.required_paths.insert(id, path.into());
+        })
+    }
+
+    /// `LanguageParser::generateRoutine` and `generateMethod`
+    /// (`parser/LanguageParser.cpp:624`) over a parsed source: its main body
+    /// becomes the executable, its directives install into a package of its
+    /// own whose parent is `parent`, and `record` names that package.
+    pub(crate) fn install_executable(
+        &mut self,
+        parsed: Program,
+        name: &[u8],
+        routine: bool,
+        parent: Option<Package>,
+        record: impl FnOnce(&mut Self, ProgramId),
+    ) -> Result<ObjRef, Failure> {
         let Program {
             source,
             main,
@@ -1788,16 +1809,12 @@ impl Interp {
         });
         let id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&program));
-        self.required_paths.insert(id, path.into());
+        record(self, id);
         // **Recorded before the directives install, not after.** Installing
         // runs a `::REQUIRES` prologue, and code running there resolves
         // routines -- which must already reach the package that built this
         // executable. `load_requires` caches ahead of its own prologue for
         // the same reason.
-        let parent = parent.or_else(|| {
-            self.running_activation()
-                .map(|activation| Package::Program(activation.program_id))
-        });
         if let Some(parent) = parent {
             self.package_parents.insert(id, parent);
         }

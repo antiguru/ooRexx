@@ -448,7 +448,7 @@ fn classes(
         Some(program) => cloned(interp.package_classes.get(&program)),
         None => interp.rexx_package_class_table(false),
     };
-    Ok(Some(interp.string_table_of(entries)))
+    interp.string_table_of(entries).map(Some)
 }
 
 /// `PackageClass::getPublicClassesRexx`.
@@ -462,7 +462,7 @@ fn public_classes(
         Some(program) => cloned(interp.package_public_classes.get(&program)),
         None => interp.rexx_package_class_table(true),
     };
-    Ok(Some(interp.string_table_of(entries)))
+    interp.string_table_of(entries).map(Some)
 }
 
 /// `PackageClass::getImportedClassesRexx`: `mergedPublicClasses`, which is
@@ -480,7 +480,7 @@ fn imported_classes(
         Some(program) => cloned(interp.merged_public_classes.get(&program)),
         None => Vec::new(),
     };
-    Ok(Some(interp.string_table_of(entries)))
+    interp.string_table_of(entries).map(Some)
 }
 
 /// `PackageClass::getRoutinesRexx`: every routine this package's own
@@ -493,7 +493,7 @@ fn routines(
 ) -> Result<Option<ObjRef>, Failure> {
     let program = package_of(interp, receiver)?;
     let entries = routine_entries(interp, program, |interp| &interp.routines);
-    Ok(Some(interp.string_table_of(entries)))
+    interp.string_table_of(entries).map(Some)
 }
 
 /// `PackageClass::getPublicRoutinesRexx`.
@@ -505,7 +505,7 @@ fn public_routines(
 ) -> Result<Option<ObjRef>, Failure> {
     let program = package_of(interp, receiver)?;
     let entries = routine_entries(interp, program, |interp| &interp.package_public_routines);
-    Ok(Some(interp.string_table_of(entries)))
+    interp.string_table_of(entries).map(Some)
 }
 
 /// `PackageClass::getImportedRoutinesRexx`: `mergedPublicRoutines`.
@@ -523,7 +523,7 @@ fn imported_routines(
         .map(|(name, merged)| (name.clone(), *merged))
         .collect();
     let entries = rooted_routine_objects(interp, named);
-    Ok(Some(interp.string_table_of(entries)))
+    interp.string_table_of(entries).map(Some)
 }
 
 /// The (name, `Routine` object) pairs the table `which` answers holds for
@@ -577,7 +577,7 @@ fn defined_methods(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let entries = package_table_entries(interp, receiver, PackageTable::UnattachedMethods)?;
-    Ok(Some(interp.string_table_of(entries)))
+    interp.string_table_of(entries).map(Some)
 }
 
 /// `PackageClass::getResourcesRexx`: the package's `::RESOURCE` bodies, the
@@ -589,7 +589,7 @@ fn resources(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let entries = package_table_entries(interp, receiver, PackageTable::Resources)?;
-    Ok(Some(interp.string_table_of(entries)))
+    interp.string_table_of(entries).map(Some)
 }
 
 /// `PackageClass::getResourceRexx`: one `::RESOURCE`'s `Array`, or `.nil`.
@@ -664,7 +664,7 @@ fn namespaces(
             (name, object)
         })
         .collect();
-    Ok(Some(interp.string_table_of(entries)))
+    interp.string_table_of(entries).map(Some)
 }
 
 /// `PackageClass::getImportedPackagesRexx`: the packages this one has

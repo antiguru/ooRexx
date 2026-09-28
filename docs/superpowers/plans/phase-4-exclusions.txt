@@ -4862,20 +4862,6 @@ from a fresh copy of the framework and ootest/ooRexx/API/oo at the same
 path, three descriptors separately. None is Phase 8's: each cause is general
 language or runtime behaviour outside the native API surface. The probe
 under each is a single program, run from a fresh empty directory.
-  A PACKAGE'S CLASS AND ROUTINE TABLES, AND Routine~new OVER DIRECTIVES.
-  Tests:
-    TESTGETPACKAGECLASSES01
-    TESTGETPACKAGEPUBLICCLASSES01
-    TESTGETPACKAGEPUBLICROUTINES01
-    TESTGETPACKAGEROUTINES01
-  Each reads ~items of a package table first, which refuses at rc 120 on a
-  table built as a NativeObject (`method "ITEMS" of class "StringTable" is
-  not implemented (Phase 5)`); each then builds a Routine from source
-  carrying ::CLASS or ::ROUTINE directives, which refuses too (`a routine
-  source that carries a directive is not implemented (Phase 5)`). Probes:
-  say .context~package~classes~items (oracle 0), and
-  say .Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')
-  (oracle 1). OWNER: Phase 9.
   AN INPUT STREAM OBJECT WITH NO STATE METHOD. Test:
     TEST_INPUT_OUTPUT_STREAM
   The Task 6 entry above. Inside the suite the oracle fails this test too

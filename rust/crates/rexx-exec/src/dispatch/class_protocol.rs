@@ -337,13 +337,15 @@ pub(super) fn compile_routine_source(
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
     let parsed =
         rexx_parse::parse_lines(&borrowed).map_err(|error| source_syntax(&borrowed, &error))?;
-    // The oracle installs them and this crate does not: measured, oracle rc
-    // 0, `.Routine~new('R', <four lines with a ::ROUTINE among them>)~call`
-    // resolves the declared routine and answers. Refused loudly here rather
-    // than dropped, and it is the refusal [`compile_method_source`] already
-    // makes over the same shape.
+    // `generateRoutine` installs them into the routine's own package, whose
+    // parent is the caller's: measured, oracle rc 0,
+    // `.Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')`
+    // is `1`.
     if !parsed.directives.is_empty() {
-        return Err(Loud::method_from_source("a routine source that carries a directive").into());
+        let parent = interp.running_program().map(crate::plan::Package::Program);
+        return interp.install_executable(parsed, name, true, parent, |interp, id| {
+            interp.compiled_method_names.insert(id, name.into());
+        });
     }
     let routine_class = interp.routine_class();
     let object = interp.native_instance(routine_class);
