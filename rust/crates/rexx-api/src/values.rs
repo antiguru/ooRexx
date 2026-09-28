@@ -749,6 +749,7 @@ impl Conversion<'_> {
 pub struct Activation<'a> {
     conversion: RefCell<Conversion<'a>>,
     pending: Cell<Option<usize>>,
+    frame: Cell<Option<usize>>,
 }
 
 impl<'a> Activation<'a> {
@@ -756,7 +757,20 @@ impl<'a> Activation<'a> {
         Activation {
             conversion: RefCell::new(conversion),
             pending: Cell::new(None),
+            frame: Cell::new(None),
         }
+    }
+
+    /// Names the host's native frame this call runs in, which is what a
+    /// member reached through this call's context from a call nested inside
+    /// it addresses.
+    pub fn set_frame(&self, frame: usize) {
+        self.frame.set(Some(frame));
+    }
+
+    /// [`Activation::set_frame`]'s frame, or `None`.
+    pub fn frame(&self) -> Option<usize> {
+        self.frame.get()
     }
 
     /// The conversion state, for the length of one operation.

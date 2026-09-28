@@ -154,6 +154,14 @@ pub trait Surface {
     /// A `Directory` of the calling activation's variables.
     fn context_variables(&mut self) -> Option<ObjRef>;
 
+    /// Makes the activation that made the native call in the host's frame
+    /// `frame` the one the context-variable members reach, answering what
+    /// [`Surface::leave_caller`] takes back; `None` where it already is.
+    fn enter_caller(&mut self, frame: usize) -> Option<usize>;
+
+    /// Undoes an [`Surface::enter_caller`].
+    fn leave_caller(&mut self, entered: usize);
+
     /// The value of the running method's object variable `name`, or `None`.
     fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef>;
 
@@ -1282,41 +1290,45 @@ impl Activation<'_> {
         })
     }
 
-    /// `GetContextVariable`.
-    pub fn context_variable(&self, name: &[u8]) -> RexxObjectPtr {
+    /// `GetContextVariable`. `outer` is the host frame of the call whose
+    /// context it came through, where that is not this call: a context kept
+    /// from an enclosing call reaches that call's caller, as the oracle's
+    /// blocking members use the context's own activation
+    /// (`interpreter/api/ContextApi.hpp:108`).
+    pub fn context_variable(&self, outer: Option<usize>, name: &[u8]) -> RexxObjectPtr {
         self.surface_handle("CallContextInterface.GetContextVariable", |surface| {
-            surface.context_variable(name)
+            in_caller(surface, outer, |surface| surface.context_variable(name))
         })
     }
 
     /// `SetContextVariable`: a handle this activation does not hold assigns
-    /// nothing.
-    pub fn set_context_variable(&self, name: &[u8], value: RexxObjectPtr) {
+    /// nothing. `outer` as [`Activation::context_variable`]'s.
+    pub fn set_context_variable(&self, outer: Option<usize>, name: &[u8], value: RexxObjectPtr) {
         let Some(value) = self.resolve(value) else {
             return;
         };
         self.with_surface("CallContextInterface.SetContextVariable", (), |cx| {
-            cx.host
-                .surface()
-                .expect("checked by with_surface")
-                .set_context_variable(name, value);
+            let surface = cx.host.surface().expect("checked by with_surface");
+            in_caller(surface, outer, |surface| {
+                surface.set_context_variable(name, value);
+            });
         });
     }
 
-    /// `DropContextVariable`.
-    pub fn drop_context_variable(&self, name: &[u8]) {
+    /// `DropContextVariable`. `outer` as [`Activation::context_variable`]'s.
+    pub fn drop_context_variable(&self, outer: Option<usize>, name: &[u8]) {
         self.with_surface("CallContextInterface.DropContextVariable", (), |cx| {
-            cx.host
-                .surface()
-                .expect("checked by with_surface")
-                .drop_context_variable(name);
+            let surface = cx.host.surface().expect("checked by with_surface");
+            in_caller(surface, outer, |surface| {
+                surface.drop_context_variable(name)
+            });
         });
     }
 
-    /// `GetAllContextVariables`.
-    pub fn context_variables(&self) -> RexxObjectPtr {
+    /// `GetAllContextVariables`. `outer` as [`Activation::context_variable`]'s.
+    pub fn context_variables(&self, outer: Option<usize>) -> RexxObjectPtr {
         self.surface_handle("CallContextInterface.GetAllContextVariables", |surface| {
-            surface.context_variables()
+            in_caller(surface, outer, |surface| surface.context_variables())
         })
     }
 
@@ -1881,4 +1893,20 @@ fn source_lines(source: &[u8]) -> Vec<Vec<u8>> {
         lines.pop();
     }
     lines
+}
+
+/// Runs `serve` with the caller of the host frame `outer` as the activation
+/// the context-variable members reach, or as it stands where `outer` is
+/// `None` or already that activation.
+fn in_caller<R>(
+    surface: &mut dyn Surface,
+    outer: Option<usize>,
+    serve: impl FnOnce(&mut dyn Surface) -> R,
+) -> R {
+    let entered = outer.and_then(|frame| surface.enter_caller(frame));
+    let answer = serve(surface);
+    if let Some(entered) = entered {
+        surface.leave_caller(entered);
+    }
+    answer
 }

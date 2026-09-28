@@ -1481,6 +1481,10 @@ struct Interp {
     /// `NativeActivation::checkConditions` re-raises in the caller, rather
     /// than one its arguments' conversion raised on the way in.
     native_reraise: bool,
+    /// Whether a context-variable member reached through a kept outer call
+    /// context has swapped that call's caller in as [`Interp::running`],
+    /// whose frame is then not the top one and so cannot grow a slot.
+    outer_caller: bool,
     /// The activation a redirection's input reader is sending `LINEIN` from,
     /// for as long as that send runs: the `RedirectionDispatcher` a condition
     /// raised straight into it meets, which takes it and ends the input.
@@ -2101,6 +2105,7 @@ impl Interp {
             failure_propagated: false,
             failure_reraised: false,
             native_reraise: false,
+            outer_caller: false,
             input_dispatch: None,
             input_dispatch_trapped: false,
             input_dispatch_syntax: None,
@@ -2815,6 +2820,7 @@ impl Interp {
             failure_reraised: _,
             // Flags and an activation identity.
             native_reraise: _,
+            outer_caller: _,
             input_dispatch: _,
             input_dispatch_trapped: _,
             // A condition, whose ADDITIONAL `pending_additional` roots.

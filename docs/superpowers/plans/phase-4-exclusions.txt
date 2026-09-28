@@ -4788,9 +4788,30 @@ directory's probes/.
   through the stashed context. At 2ae06085c the oracle answers `main` and
   sets the main program's Y; ours answers `run` and sets the method's Y; rc
   0 both (the forge and probe are in the surface plan's Task 9 records).
-  RE-HOMED AT PHASE 8'S CLOSE: reaching one activation's frame while a
-  nested call holds the interpreter is D3's frame-ownership question.
-  OWNER: Phase 6.
+  It was re-homed to Phase 6 at Phase 8's close as D3's frame-ownership
+  question. The final review found it single-threaded, one activity, and
+  so the API's own. FIXED 2026-09-29 (final review I4) for every variable
+  the outer activation has bound: GetContextVariable,
+  SetContextVariable, DropContextVariable and GetAllContextVariables,
+  reached through a context kept from an enclosing call, run with that
+  call's caller swapped in as the running activation for the member's
+  length. The oracle answers `main` and sets the main program's Y, and so
+  does this crate now. Witnesses in the surface plan's Task 9 probes:
+  outer9.rex and o9b.rex are identical. o9b.rex covers simple, compound
+  and variable-tailed compound reads, an unset name, sets, a drop and the
+  whole-pool read.
+  STILL DIFFERS, LOUD: a read of a stem or a compound, or a set, through
+  the kept context of a name the outer activation has never bound. The
+  oracle creates the variable there, and its read of a compound creates
+  the stem (o9c.rex: `after VAR VAR`, rc 0). Ours ends at rc 120 with
+  `rexx-exec: CallContextInterface.GetContextVariable through a kept outer
+  call context, of a variable its activation has not bound, is not
+  implemented`. A new variable needs a slot, and slots are one stack that
+  only the top frame can grow (rust/crates/rexx-core/src/roots.rs:414-422,
+  RootSet::grow_slots); the outer activation is not on top. A drop of such
+  a name does nothing, which is all the oracle's drop can show. OWNER: not
+  assigned by this round (it needs a frame below the top to grow); raised
+  with the controller.
   ObjectToValue WRITES NO PARTIAL VALUE ON FAILURE. Only an extension that
   reads the descriptor after a failed conversion can see it; orxmethod
   raises and answers NULL. OWNER: none; the header specifies no value on

@@ -93,10 +93,12 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (answered, pending) = {
+            let frame = self.native_handles.len() - 1;
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
             });
+            activation.set_frame(frame);
             let answered = thread.enter(&activation, |contexts| {
                 invoke::method(entry, &contexts.method(), &activation, args)
             });
@@ -162,10 +164,12 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (answered, pending) = {
+            let frame = self.native_handles.len() - 1;
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
             });
+            activation.set_frame(frame);
             let answered = thread.enter(&activation, |contexts| {
                 invoke::routine(entry, &contexts.call(), &activation, args)
             });
@@ -208,10 +212,12 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (ran, pending) = {
+            let frame = self.native_handles.len() - 1;
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
             });
+            activation.set_frame(frame);
             let ran = thread.enter(&activation, |contexts| {
                 invoke::hook(library, hook, contexts, &activation)
             });
@@ -250,10 +256,12 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (answered, pending) = {
+            let frame = self.native_handles.len() - 1;
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
             });
+            activation.set_frame(frame);
             let answered = thread.enter(&activation, |contexts| {
                 invoke::command(handler, contexts, &activation, address, issued, redirector)
             });
