@@ -1901,6 +1901,9 @@ struct NativeFrame {
     kept: std::collections::HashSet<ObjRef>,
     /// The activation the call was made from.
     caller: Option<crate::activation::ActivationId>,
+    /// Whether the code reports a package, which then leads a condition it
+    /// raises with no line, so the condition has no `POSITION`.
+    packaged: bool,
 }
 
 /// What one just-installed dictionary key resolves to, handed to

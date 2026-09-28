@@ -179,6 +179,15 @@ impl Interp {
         self.build_condition_object_from(raised, None, true, None)
     }
 
+    /// [`Interp::build_native_condition_object`] for a `CALL ON` trap, which
+    /// names its instruction.
+    pub(crate) fn build_trapped_native_condition_object(
+        &mut self,
+        raised: &Raised,
+    ) -> Result<ObjRef, Failure> {
+        self.build_condition_object_from(raised, Some(true), true, None)
+    }
+
     fn build_condition_object_from(
         &mut self,
         raised: &Raised,
@@ -216,7 +225,14 @@ impl Interp {
         // `generateProgramInformation` puts no `POSITION` where the frame it
         // takes the package from is native, which has no line.
         let reraised = unwound.is_some_and(|unwound| unwound.reraised);
-        let position = if raised.position != 0 && !reraised {
+        let packaged_native = native
+            && self
+                .native_handles
+                .last()
+                .is_some_and(|frame| frame.packaged);
+        let position = if packaged_native {
+            None
+        } else if raised.position != 0 && !reraised {
             // Captured at the raise, which is the only correct source when
             // the raising activation has since unwound.
             Some(self.counted(raised.position as usize))
@@ -313,7 +329,7 @@ impl Interp {
         // A native call's object is handed to the extension as it is, so it
         // gets the `Directory` a program can use; a trapped one is only ever
         // seen through `condition_copy`.
-        let object = if native {
+        let object = if native && call.is_none() {
             let order = key::order(syntax);
             entries.sort_by_key(|(name, _)| order.iter().position(|k| k == name));
             self.store_directory(&entries)?

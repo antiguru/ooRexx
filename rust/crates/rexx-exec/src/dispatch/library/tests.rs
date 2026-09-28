@@ -548,6 +548,7 @@ fn a_signature_refusal_is_numbered_for_a_method_or_a_routine() {
             result: None,
         },
         true,
+        None,
     ) {
         Err(Failure::Raised(raised)) => (raised.number, raised.sub, raised.delivery.lineless),
         _ => panic!("a signature refusal is a raise"),

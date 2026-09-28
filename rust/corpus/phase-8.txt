@@ -360,3 +360,5 @@ lang/library_directory_members.rex
 # Final fix round (I2, M3): the same members on every hashed collection,
 # StringTableRemove included.
 lang/library_collection_members.rex
+# Final fix round (I4): RaiseCondition taken by CALL ON, built at the raise.
+lang/library_raise_condition_call_on.rex

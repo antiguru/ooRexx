@@ -88,6 +88,8 @@ impl Interp {
             return Err(Loud::library_procedure_gone().into());
         };
         self.push_native_frame(owner, resolution.scope, Some(receiver), name, args, None);
+        let packaged = self.external_package_path(resolution.method).is_some();
+        self.native_frame_mut().packaged = packaged;
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (answered, pending) = {
@@ -100,7 +102,9 @@ impl Interp {
             });
             (answered, activation.pending())
         };
+        let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
+        let trapped = trapped?;
 
         // The condition first, because the oracle raises it in the caller's
         // frame once the call has returned (`NativeActivation::checkConditions`,
@@ -112,8 +116,7 @@ impl Interp {
             self.native_reraise = true;
             return Err(condition_of(number));
         }
-        let packaged = self.external_package_path(resolution.method).is_some();
-        self.settle_native_call(answered, popped, packaged)
+        self.settle_native_call(answered, popped, packaged, trapped)
     }
 
     /// Runs the routine a [`Interp::package_routine`] slot names, as the call
@@ -154,6 +157,8 @@ impl Interp {
             return Err(Loud::library_procedure_gone().into());
         };
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, name, args, Some(code));
+        let program = self.library_code_program(code);
+        self.native_frame_mut().packaged = program.is_some();
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (answered, pending) = {
@@ -166,14 +171,17 @@ impl Interp {
             });
             (answered, activation.pending())
         };
+        let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
-        let program = self.library_code_program(code);
-        let outcome = match pending {
-            Some(number) => {
+        let outcome = match (pending, trapped) {
+            (Some(number), _) => {
                 self.native_reraise = true;
                 Err(condition_of(number))
             }
-            None => self.settle_native_call(answered, popped, program.is_some()),
+            (None, Err(failure)) => Err(failure),
+            (None, Ok(trapped)) => {
+                self.settle_native_call(answered, popped, program.is_some(), trapped)
+            }
         };
         if outcome.is_err() {
             self.blame_native_routine(name, program, args);
@@ -213,7 +221,7 @@ impl Interp {
         if let Some(number) = pending {
             return Err(condition_of(number));
         }
-        let settled = self.settle_native_call(ran.map(|()| None), popped, true);
+        let settled = self.settle_native_call(ran.map(|()| None), popped, true, None);
         // A hook is no level of the failure's, so nothing re-raises it.
         self.native_reraise = false;
         settled.map(|_| ())
@@ -316,11 +324,15 @@ impl Interp {
     /// what a refusal before the call is reported against with no line; one
     /// that reports none is reported against the caller's clause
     /// (`Activity::generateProgramInformation`, `interpreter/concurrency/Activity.cpp:1093-1113`).
+    ///
+    /// `trapped` is the object [`Interp::call_trapped_native_condition`]
+    /// built before the frame came off.
     fn settle_native_call(
         &mut self,
         answered: Result<Option<ObjRef>, Refused>,
         popped: Popped,
         packaged: bool,
+        trapped: Option<ObjRef>,
     ) -> Result<Option<ObjRef>, Failure> {
         match answered {
             Err(Refused::Raised) => Err(popped
@@ -328,7 +340,9 @@ impl Interp {
                 .expect("a host answering Raised holds the condition it raised")),
             Ok(value) => match popped.raised {
                 None => Ok(value),
-                Some(raised) => self.raise_held_condition(raised, popped.additional, popped.result),
+                Some(raised) => {
+                    self.raise_held_condition(raised, popped.additional, popped.result, trapped)
+                }
             },
             Err(refused) => Err(self.refusal(refused, packaged, popped.method)),
         }
@@ -344,6 +358,7 @@ impl Interp {
         raised: Failure,
         additional: Option<ObjRef>,
         result: Option<ObjRef>,
+        trapped: Option<ObjRef>,
     ) -> Result<Option<ObjRef>, Failure> {
         let condition = match &raised {
             Failure::Raised(held) if held.condition != "SYNTAX" => held.condition.to_string(),
@@ -360,9 +375,14 @@ impl Interp {
         };
         match self.trap_for(condition.as_bytes()) {
             Some(trap) if trap.call => {
-                self.pending_additional = additional;
-                self.pending_result = result;
-                let object = self.build_condition_object(held, Some(true))?;
+                let object = match trapped {
+                    Some(object) => object,
+                    None => {
+                        self.pending_additional = additional;
+                        self.pending_result = result;
+                        self.build_condition_object(held, Some(true))?
+                    }
+                };
                 self.pending_traps.push_back(PendingTrap {
                     condition: condition.as_bytes().into(),
                     rc: None,
@@ -381,6 +401,29 @@ impl Interp {
             }
             None => Ok(result),
         }
+    }
+
+    /// The object a `CALL ON` trap takes for the condition other than
+    /// `SYNTAX` that the innermost native call holds, built while that call's
+    /// frame still leads the stack, as `Activity::createConditionObject`
+    /// builds it at the raise (`interpreter/concurrency/Activity.cpp:722-749`).
+    fn call_trapped_native_condition(&mut self) -> Result<Option<ObjRef>, Failure> {
+        let Some(Failure::Raised(held)) = &self.native_frame().raised else {
+            return Ok(None);
+        };
+        if held.condition == "SYNTAX"
+            || !self
+                .trap_for(held.condition.as_bytes())
+                .is_some_and(|trap| trap.call)
+        {
+            return Ok(None);
+        }
+        let held = held.clone();
+        let frame = self.native_frame();
+        (self.pending_additional, self.pending_result) = (frame.additional, frame.result);
+        let object = self.build_trapped_native_condition_object(&held)?;
+        self.roots.push_temp(object);
+        Ok(Some(object))
     }
 
     /// Pushes the frame of a native call: a method's when `receiver` is
@@ -410,6 +453,7 @@ impl Interp {
             code: None,
             kept: std::collections::HashSet::new(),
             caller: None,
+            packaged: false,
         });
         frame.owner = owner;
         frame.scope = scope;
@@ -417,6 +461,7 @@ impl Interp {
         frame.receiver = receiver.unwrap_or(ObjRef::NIL);
         frame.code = code;
         frame.caller = self.running_activation().map(|activation| activation.id);
+        frame.packaged = false;
         frame.name.extend_from_slice(name);
         frame.arguments.extend_from_slice(args);
         self.native_handles.push(frame);

@@ -4730,9 +4730,18 @@ directory's probes/.
   SIGNAL ON, the two agree since the Task 8 fix round B. Measured again
   2026-09-28 at 2ae06085c with the same probe: stdout differs by the one
   line "  POSITION = 6" in the CALL ON handler's listing, stderr and rc 0
-  agree. RE-HOMED AT PHASE 8'S CLOSE: which entries a delivered condition
-  object carries is the condition machinery's, the family of Task 8's
-  residuals below. OWNER: Phase 9.
+  agree. It was re-homed to Phase 9 at Phase 8's close as the condition
+  machinery's; the final review found a pure-Rexx RAISE under CALL ON
+  identical, so the difference is the native path's. FIXED 2026-09-29
+  (final review I4): the oracle builds the object at the raise
+  (Activity::createConditionObject, interpreter/concurrency/
+  Activity.cpp:722-749) with the native frame leading, and a frame with a
+  package and no line gives it no POSITION (generateProgramInformation,
+  :1080-1113); ours built it once the frame was off the stack. The object a
+  CALL ON trap takes is now built before the frame comes off. Witness
+  corpus/lang/library_raise_condition_call_on.rex (main program, internal
+  routine, method), identical; red with the old build restored (POSITION,
+  STACKFRAMES and TRACEBACK) and with only the POSITION rule removed.
   COLLECTION MEMBERS ARE MESSAGE SENDS, SO A SUBCLASS OVERRIDE IS SEEN. The
   oracle's DirectoryAt, DirectoryPut and their kin call the C++ collection
   directly; ours send AT, PUT, HASINDEX, REMOVE and the rest. ov.rex over a
