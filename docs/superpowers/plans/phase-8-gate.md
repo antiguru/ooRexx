@@ -1,5 +1,8 @@
 # Phase 8 gate — the native API, L2 slice
 
+**Phase 8 closed on 2026-09-28; section 10 is the close.** What follows up to section 9 is the
+record as it was written.
+
 **Assessed 2026-09-14.** The commit and the gate readings are in section 6, which was written from
 the run rather than before it. The tree was clean at `d1796f69c` when the run started and nothing
 touched it until the run finished.
@@ -336,3 +339,118 @@ The test's own negative control, `a_group_whose_library_changes_changes_phase`, 
 whose `FUNCTIONPackage.cls` binds `orxclassic` turned it red on the `FUNCTION` row alone, and
 replacing the maximum with the first classified import turned it red on the `INVOCATIONTester.cls`
 groups alone, each at Phase 9.
+
+## 10. The surface plan's close: the gate readings, and what Phase 8 leaves
+
+**Phase 8 closed on 2026-09-28 at `14636fe6a`.** Recorded from the run, unpiped, by the gate script
+the surface plan's tasks used (`scratchpad/surface-9/gates.sh`), whose status file is quoted here
+line for line:
+
+    14636fe6a72af47ad8b18f6d3579436db5f29aed
+    started 2026-09-28T22:37:59+02:00
+    load at start 3.91 7.51 8.58 6/2443 4007506
+    G1 fmt exit 0
+    G2 clippy(empty target) exit 0
+    G3 release build (test --no-run) exit 0
+    load G4 6.61 7.56 8.52 5/2584 4009648 2026-09-28T22:39:03+02:00
+    G4 release test exit 0
+    G4 Compiling lines: 0
+    load after G4 4.02 7.20 8.29 2/2570 4138129
+    G5 debug build (test --no-run) exit 0
+    load G6 4.02 7.20 8.29 3/2582 4138619 2026-09-28T22:44:58+02:00
+    G6 debug test exit 0
+    G6 Compiling lines: 0
+    load after G6 3.39 6.67 7.93 5/2586 73143
+    14636fe6a72af47ad8b18f6d3579436db5f29aed
+    finished 2026-09-28T22:51:09+02:00
+
+HEAD did not move and `git status --short` printed nothing between the two hashes.
+
+| gate | command | exit | figures |
+|---|---|---|---|
+| G1 | `cargo fmt --all --check` | 0 | |
+| G2 | `cargo clippy --workspace --all-targets -- -D warnings`, empty target directory | 0 | |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | 0 | 2752 passed / 0 failed / 4 ignored |
+| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | 0 | 2753 / 0 / 4 |
+
+(G3 and G5 build what G4 and G6 run, outside the memory cap.) **Both failing sets are empty**, so
+there is no member to attribute; section 8's members (the `ir::drive` counter tests,
+`a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop`,
+`the_l0_subset_passes_again_under_collect_on_every_allocation` and `concept_and_class_gate_table`)
+each read `ok` in both logs. In both runs the corpus
+differential is **652 of 652**, `api_group_tests`'s
+`every_test_of_the_phase_8_groups_matches_the_oracle_but_the_recorded` passes with `RECORDED`
+holding `FUNCTION.TEST_REXXQUEUE` alone and `DETAIL_DIFFERS` empty, and the gate tables print
+"gated by this run: 0 row(s)". Report-mode figures, which are progress signals and not gates:
+the assertion table 4247 of 4259 rows, `base/bif` 4992 of 4999 value rows and 186 of 186 raise
+rows, `base/keyword` 892 of 896 bodies. The gate tables' `CLOSED_PHASES` gains `8` at this commit;
+no row names 8 as its owner, and the gate-table tests run with `REXX_PHASE_GATE=8` beside the
+corpus gate were green before it was added.
+
+Two earlier runs of the same script: at `915e57a8d` G4 was red on one member,
+`introspection_arity`'s `the_table_matches_the_three_sides`, because two `RexxInfo` rows of
+`corpus/introspection-arity.tsv` record the crate's native-method refusal text, which this close
+relabelled; refreshed at `783a57e40` through the table's own writer, and that run was green
+throughout. Adding `8` to `CLOSED_PHASES` at `14636fe6a` is why the gate ran a third time.
+
+**Miri is a recorded run, not a gate**: the gate hosts cannot install it through `rustup`.
+`rexx-api`'s lib tests ran under Stacked Borrows (no `MIRIFLAGS`), miri 0.1.0 (f7575a9da8
+2026-09-24) from a scratch `RUSTUP_HOME`, on the tree committed as `5a48f75fa` (no `rexx-api`
+source changed after it): exit 0, 54 passed, 0 failed, 8 ignored.
+
+**No refusal names Phase 8.** `closed_phases.rs` has `Phase 8` in `CLOSED` and now scans
+`rexx-api` too, where the boundary's refusals are built, and `dispatch::native`'s `OPEN` list lost
+it. The enumeration over the sources and over `phase-4-exclusions.txt`, run from the worktree root:
+
+    # (A) every OWNER sentence naming Phase 8, NO OWNER sentences dropped
+    tr '\n' ' ' < docs/superpowers/plans/phase-4-exclusions.txt | tr -s ' ' \
+      | /bin/grep -a -oE '(NO )?OWNER[^.]*Phase 8[^.]*' | /bin/grep -av '^NO OWNER'
+    # (B) every sentence naming Phase 8, for attribution
+    tr '\n' ' ' < docs/superpowers/plans/phase-4-exclusions.txt | tr -s ' ' \
+      | /bin/grep -a -oiE '[^.]*phase 8[^.]*'
+    # (C) every quoted "Phase 8" outside a comment in any crate's sources
+    git grep -n '"Phase 8"' -- rust/crates | /bin/grep -a '/src/' \
+      | /bin/grep -avE '^[^:]+:[0-9]+:[[:space:]]*//'
+
+At `2ae06085c` (A) printed `OWNER: Phase 5 for the rest of ::REQUIRES, and Phase 8 for EXTERNAL`
+and `OWNER: Phase 8` three times, and (C) printed `rexx-api/src/layout.rs:395` (`refusal_owner`'s
+default), `rexx-exec/src/dispatch/library.rs:564` (the stale-handle refusal) and the `OPEN` list.
+At `14636fe6a` (A) and (C) print nothing. (A) cannot see an owner written without "OWNER"; every
+sentence (B) prints is attributed in the surface plan's `task-9-report.md` and none assigns work
+to Phase 8. Three negative controls were run with their predictions written first, each red as
+predicted and restored: `"Phase 8"` back as `refusal_owner`'s default (red on `layout.rs` alone,
+so `rexx-api` is scanned), back in the stale-handle arm (red on `library.rs` alone), and as a
+LIBRARY REXX entry point's deferred owner (red in `closed_phases` and in
+`every_deferred_entry_point_names_an_open_phase`).
+
+What each Phase 8 row became, every one re-run against the oracle at `2ae06085c` on three
+descriptors from fresh directories (the probes are in
+`docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/` and `task-5-forge/probes/`):
+
+* **Matched, so DELIVERED or CLOSED**: the EXTERNAL refusal forms and `::REQUIRES ... LIBRARY`; the
+  interface members Task 5 left (`RxCalcSin(30, 2, 'Q')` is 88.916 on both); the package loader
+  and unloader hooks (Task 4); and Task 5's native frame and `PROPAGATED` (its `cond3`,
+  `sendthrow` and `nframe` probes are identical).
+* **Re-homed**: `POSITION` on a `CALL ON`-trapped `RaiseCondition` to Phase 9; a `Directory`
+  subclass's `AT` and `PUT` reached by `DirectoryAt`/`DirectoryPut` to Phase 10; a blocking member
+  on a stashed outer call context, measured for the first time with a forged routine (the oracle
+  reads the outer activation's variables, ours the innermost's), to Phase 6. Each row in
+  `phase-4-exclusions.txt` gives its reason.
+* **Relabelled**: `Loud::native_method` names Phase 9 instead of the closed Phase 5 (the m4
+  ruling), which re-homes `Method~new`'s third-argument refusal with it; `refusal_owner` names no
+  phase for a member only an unpopulated table reaches; the stale-handle refusal names none, since
+  the oracle's answer to a released local reference depends on whether its collector has run.
+* **Found by the close and recorded**: `LIBRARY rexxutil`, an internal package on the oracle and a
+  failed `dlopen` here, to Phase 10.
+
+Refusals naming Phase 5 other than `native_method`'s are unchanged; `closed_phases.rs` still
+records Phase 5 as a debt deliberately absent from `CLOSED`.
+
+**The roadmap's row 8 exit criteria are met**: `testbinaries/` compile unchanged against frozen
+headers (section 9), and the native-API ooTest groups this row owns pass, but for the one test
+row 10 owns. **L2 is still not reached**, and what blocks it is not this phase's: the framework,
+unmodified, stops at its ticker, a `GUARD ... WHEN` that another activity satisfies (Phase 6),
+and with `-U` it runs a group's tests and stops in `printSummary` at `RXFUNCQUERY`, which the
+oracle answers through rxapi (Phase 10); both measured 2026-09-28 at `2ae06085c` with
+`testOORexx.rex -f METHOD.testGroup -V 1` from a scratch copy. The Rung column reads
+`L2 -> 6, 10`.
