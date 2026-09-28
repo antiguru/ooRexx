@@ -398,7 +398,7 @@ impl Loud {
         Loud {
             message: owned_message(
                 &format!("method \"{shown}\" of class \"{scope}\""),
-                Some("Phase 5"),
+                Some("Phase 9"),
             ),
         }
     }

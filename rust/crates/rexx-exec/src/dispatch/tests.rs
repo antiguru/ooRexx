@@ -1295,7 +1295,7 @@ fn a_stem_receiver_answers_stem_and_renders_its_own_value() {
     assert_eq!((code, stdout.as_str()), (120, ""));
     assert_eq!(
         stderr,
-        "rexx-exec: method \"NEW\" of class \"K\" is not implemented (Phase 5)\n"
+        "rexx-exec: method \"NEW\" of class \"K\" is not implemented (Phase 9)\n"
     );
 }
 
@@ -1527,7 +1527,7 @@ fn a_metaclass_with_its_own_new_is_loud() {
     assert_eq!((code, stdout.as_str()), (120, ""));
     assert_eq!(
         stderr,
-        "rexx-exec: method \"NEW\" of class \"MYMETA\" is not implemented (Phase 5)\n"
+        "rexx-exec: method \"NEW\" of class \"MYMETA\" is not implemented (Phase 9)\n"
     );
     assert_eq!(
         run_source(
@@ -1590,7 +1590,7 @@ fn an_unknown_sent_by_hand_needs_an_array_this_crate_does_not_convert() {
             120,
             String::new(),
             "rexx-exec: method \"MAKEARRAY\" of class \"String\" is not implemented \
-             (Phase 5)\n"
+             (Phase 9)\n"
                 .to_string()
         )
     );
@@ -1682,12 +1682,12 @@ fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answe
         (
             "'abc'~objectName = 'x'\n",
             "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented \
-             (Phase 5)\n",
+             (Phase 9)\n",
         ),
         (
             "5~objectName = 'x'\n",
             "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented \
-             (Phase 5)\n",
+             (Phase 9)\n",
         ),
     ] {
         assert_eq!(
