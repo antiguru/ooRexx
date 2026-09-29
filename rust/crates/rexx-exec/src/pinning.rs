@@ -107,9 +107,12 @@ mod counter {
 
     impl PinKind {
         /// The frame a native method `name` pushes; `None` for the natives
-        /// the spec makes resumable entries.
+        /// the spec makes resumable entries and for the park-point natives.
         pub(crate) fn native(name: &[u8]) -> Option<PinKind> {
-            const RESUMABLE: &[&[u8]] = &[
+            const RESUMABLE_OR_PARKING: &[&[u8]] = &[
+                b"RESULT",
+                b"WAIT",
+                b"ACQUIRE",
                 b"SEND",
                 b"SENDWITH",
                 b"START",
@@ -118,7 +121,7 @@ mod counter {
                 b"CALL",
                 b"CALLWITH",
             ];
-            (!RESUMABLE.contains(&name))
+            (!RESUMABLE_OR_PARKING.contains(&name))
                 .then(|| PinKind::Native(String::from_utf8_lossy(name).into()))
         }
     }

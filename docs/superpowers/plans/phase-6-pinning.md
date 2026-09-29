@@ -26,7 +26,8 @@ cargo test --release -p rexx-exec --features pinning --test concurrency_tests \
 ```
 
 A row is a test method whose body, or a `::METHOD`, `::ROUTINE` or `::RESOURCE` of its group file
-it reaches by name (a class named reaches its `INIT`), uses a feature the criterion names; comments
+it reaches by name (a class named reaches its `INIT`; a class method `ACTIVATE` or `INIT` is reached by
+every test of the file), uses a feature the criterion names; comments
 and string contents are ignored except for the TraceObject entry names. `Message~reply` is matched
 beside `~start`.
 
@@ -93,6 +94,16 @@ base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF ~start
 base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS ~start
 base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES ~start
 base/class/Method.testGroup TESTDIRECTIVES TraceObject field
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS Alarm,Ticker
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT Alarm,Ticker
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING Alarm,Ticker
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD Alarm,Ticker
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE Alarm,Ticker
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE Alarm,Ticker
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE Alarm,Ticker
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM Alarm,Ticker
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER Alarm,Ticker
+base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE Alarm,Ticker
 base/class/MutexSemaphore.testGroup TEST_NEW_ONE_ARG semaphore class
 base/class/MutexSemaphore.testGroup TEST_ACQUIRE_TWO_ARGS semaphore class
 base/class/MutexSemaphore.testGroup TEST_ACQUIRE_NUMBER semaphore class
@@ -255,6 +266,9 @@ Feature `pinning` of `rexx-exec`, off by default; `src/pinning.rs`. Park points:
 | SysSleep | `builtin::rexxutil::sleep` |
 | Timer | `Interp::invoke`'s deferred-entry refusal, for `alarm_startTimer`, `ticker_waitTimer` |
 
+The guarded-method reservation at a send is not counted. Parks inside a child process a test runs
+as a command are not counted.
+
 Pinned frames:
 
 | frame | site |
@@ -278,38 +292,40 @@ Pinned frames:
 | TreeEval | `Op::EvalExpr` |
 | TreeSend | `Op::Message` |
 | OpExec | `Op::Exec` |
-| Native | `Interp::invoke`'s native and implemented-external arms, except `SEND`, `SENDWITH`, `START`, `STARTWITH`, `NEW`, `CALL`, `CALLWITH` |
+| Native | `Interp::invoke`'s native and implemented-external arms, except `SEND`, `SENDWITH`, `START`, `STARTWITH`, `NEW`, `CALL`, `CALLWITH` and the park points `RESULT`, `WAIT`, `ACQUIRE` |
 
 ## Measured
 
-At the commit adding this file; each test run alone with `-U -V 2 -t`, `ooTest.frm`'s `rxfuncquery`
-probes removed. Arrival counts of busy-wait loops depend on timing. "refused at" is the first
-`rexx-exec:` line of stderr, the deadline report included.
+At the commit that last wrote this section; each test run alone with `-U -V 2 -t`, `ooTest.frm`'s
+`rxfuncquery` probes removed. Arrival counts of busy-wait loops depend on timing. "refused at" is
+the first `rexx-exec:` line of stderr, the deadline report included.
 
 | park | frames | tests | arrivals |
 |---|---|---|---|
 | GuardOn | TreeSend > OpExec | 6 | 8 |
 | GuardWhen | OpExec | 1 | 1 |
+| GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 10 | 10 |
 | GuardWhen | TreeSend > OpExec | 12 | 21 |
 | Reply | OpExec | 2 | 3 |
+| Reply | TreeEval > OpExec > TreeEval > OpExec | 10 | 10 |
 | Reply | TreeSend > OpExec | 29 | 32 |
 | Reply | TreeSend > TreeEval > OpExec | 2 | 2 |
 | Reply | TreeSend > TreeEval > TreeSend > OpExec | 1 | 1 |
-| MessageResult | TreeSend > Native ~RESULT | 10 | 24 |
-| MessageResult | TreeSend > TreeEval > Native ~RESULT | 4 | 14 |
+| MessageResult | TreeSend | 10 | 24 |
+| MessageResult | TreeSend > TreeEval | 4 | 14 |
 | MessageWait | TreeSend | 1 | 1 |
 | SemaphoreWait | TreeSend | 7 | 7 |
 | SemaphoreWait | TreeSend > TreeEval | 1 | 1 |
 | SysSleep | - | 3 | 28 |
 | SysSleep | TreeSend | 26 | 1449 |
 | SysSleep | TreeSend > TreeEval | 1 | 1 |
-| Timer | TreeSend | 1 | 1 |
+| Timer | TreeSend | 11 | 11 |
 
-arrivals 1594, with a frame other than TreeEval, TreeSend or OpExec 38
+arrivals 1624, with a frame other than TreeEval, TreeSend or OpExec 0
 
 | test | outcome | park | frames | arrivals |
 |---|---|---|---|---|
-| base/bif/STREAM.testGroup TEST_QUERYDIR_EXISTS | pass, rc 0 | none | | |
+| base/bif/STREAM.testGroup TEST_QUERYDIR_EXISTS | pass, rc 0 | no park reached in-process | | |
 | base/bif/TIME.testGroup TEST_2 | pass, rc 0 | SysSleep | TreeSend | 3 |
 | base/bif/TIME.testGroup TEST_3 | pass, rc 0 | SysSleep | TreeSend | 5 |
 | base/bif/TIME.testGroup TEST_4 | failure, rc 1 | SysSleep | TreeSend | 3 |
@@ -323,144 +339,174 @@ arrivals 1594, with a frame other than TreeEval, TreeSend or OpExec 38
 | base/class/Alarm.testGroup TEST_BASE_ALARM | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeSend > OpExec | 1 |
 | base/class/Alarm.testGroup TEST_BASE_ALARM | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | SysSleep | - | 1 |
 | base/class/Alarm.testGroup TEST_BASE_ALARM | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
-| base/class/Alarm.testGroup TEST_ALARM_NO_TIME | pass, rc 0 | none | | |
-| base/class/Alarm.testGroup TEST_ALARM_NO_TARGET | pass, rc 0 | none | | |
-| base/class/Alarm.testGroup TEST_ALARM_BAD_TIME | pass, rc 0 | none | | |
-| base/class/Alarm.testGroup TEST_ALARM_NEGATIVE_TIME | pass, rc 0 | none | | |
-| base/class/Alarm.testGroup TEST_ALARM_BAD_TARGET | pass, rc 0 | none | | |
-| base/class/Class.testGroup TEST_SUBCLASSES | pass, rc 0 | none | | |
+| base/class/Alarm.testGroup TEST_ALARM_NO_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_NO_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_BAD_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_NEGATIVE_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_BAD_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Class.testGroup TEST_SUBCLASSES | pass, rc 0 | no park reached in-process | | |
 | base/class/DateTime.testGroup TEST_ELAPSED1 | pass, rc 0 | SysSleep | TreeSend | 1 |
-| base/class/EventSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | none | | |
-| base/class/EventSemaphore.testGroup TEST_ISPOSTED_ONE_ARG | refused at method "ISPOSTED" of class "EventSemaphore" is not implemented (Phase 9) | none | | |
-| base/class/EventSemaphore.testGroup TEST_POST_ONE_ARG | refused at method "POST" of class "EventSemaphore" is not implemented (Phase 9) | none | | |
-| base/class/EventSemaphore.testGroup TEST_RESET_ONE_ARG | refused at method "RESET" of class "EventSemaphore" is not implemented (Phase 9) | none | | |
-| base/class/EventSemaphore.testGroup TEST_POST_RESET | refused at method "ISPOSTED" of class "EventSemaphore" is not implemented (Phase 9) | none | | |
+| base/class/EventSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_ISPOSTED_ONE_ARG | refused at method "ISPOSTED" of class "EventSemaphore" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_POST_ONE_ARG | refused at method "POST" of class "EventSemaphore" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_RESET_ONE_ARG | refused at method "RESET" of class "EventSemaphore" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_POST_RESET | refused at method "ISPOSTED" of class "EventSemaphore" is not implemented (Phase 9) | no park reached in-process | | |
 | base/class/EventSemaphore.testGroup TEST_WAIT_TWO_ARGS | refused at method "WAIT" of class "EventSemaphore" is not implemented (Phase 9) | SemaphoreWait | TreeSend | 1 |
 | base/class/EventSemaphore.testGroup TEST_WAIT_NUMBER | refused at method "WAIT" of class "EventSemaphore" is not implemented (Phase 9) | SemaphoreWait | TreeSend | 1 |
 | base/class/EventSemaphore.testGroup TEST_WAIT_SIMPLE | refused at method "WAIT" of class "EventSemaphore" is not implemented (Phase 9) | SemaphoreWait | TreeSend | 1 |
 | base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | refused at method "WAIT" of class "EventSemaphore" is not implemented (Phase 9) | SemaphoreWait | TreeSend > TreeEval | 1 |
-| base/class/Message.testGroup TEST_START | refused at method "START" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLY | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_NOTIFY | refused at method "NOTIFY" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_SUPER_OVERRIDE | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_NO_ARRAY | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_NOT_ARRAY | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_TOO_MANY | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLYWITH_NO_ARRAY | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLYWITH_NOT_ARRAY | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLYWITH_TOO_MANY | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_START_OVERRIDE_CONTEXT | refused at method "START" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLY_OVERRIDE_CONTEXT | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_CONTEXT | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_FOUND | refused at method "START" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_FOUND | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_FOUND | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_START_OVERRIDE_NO_METHOD | refused at method "START" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NO_METHOD | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NO_METHOD | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | refused at method "START" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_NON_SCOPE | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_NON_SCOPE | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_HALT_START | refused at method "HALT" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF | refused at method "START" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | none | | |
-| base/class/Message.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | refused at method "START" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | none | | |
-| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | none | | |
-| base/class/Method.testGroup TESTDIRECTIVES | refused at DO is not implemented | none | | |
-| base/class/MutexSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | none | | |
+| base/class/Message.testGroup TEST_START | refused at method "START" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLY | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_NOTIFY | refused at method "NOTIFY" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_SUPER_OVERRIDE | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_NO_ARRAY | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_NOT_ARRAY | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_TOO_MANY | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_NO_ARRAY | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_NOT_ARRAY | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_TOO_MANY | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_CONTEXT | refused at method "START" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_CONTEXT | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_CONTEXT | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_FOUND | refused at method "START" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_FOUND | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_FOUND | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_NO_METHOD | refused at method "START" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NO_METHOD | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NO_METHOD | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | refused at method "START" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_NON_SCOPE | refused at method "REPLY" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_NON_SCOPE | refused at method "REPLYWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_HALT_START | refused at method "HALT" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF | refused at method "START" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | refused at method "START" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | refused at method "STARTWITH" of class "Message" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Method.testGroup TESTDIRECTIVES | refused at DO is not implemented | no park reached in-process | | |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeEval > OpExec > TreeSend > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeEval > OpExec > TreeEval > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Timer | TreeSend | 1 |
+| base/class/MutexSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | no park reached in-process | | |
 | base/class/MutexSemaphore.testGroup TEST_ACQUIRE_TWO_ARGS | refused at method "ACQUIRE" of class "MutexSemaphore" is not implemented (Phase 9) | SemaphoreWait | TreeSend | 1 |
 | base/class/MutexSemaphore.testGroup TEST_ACQUIRE_NUMBER | refused at method "ACQUIRE" of class "MutexSemaphore" is not implemented (Phase 9) | SemaphoreWait | TreeSend | 1 |
-| base/class/MutexSemaphore.testGroup TEST_RELEASE_ONE_ARG | refused at method "RELEASE" of class "MutexSemaphore" is not implemented (Phase 9) | none | | |
+| base/class/MutexSemaphore.testGroup TEST_RELEASE_ONE_ARG | refused at method "RELEASE" of class "MutexSemaphore" is not implemented (Phase 9) | no park reached in-process | | |
 | base/class/MutexSemaphore.testGroup TEST_ACQUIRE_ACQUIRE_SIMPLE | refused at method "ACQUIRE" of class "MutexSemaphore" is not implemented (Phase 9) | SemaphoreWait | TreeSend | 1 |
-| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_SIMPLE | refused at method "RELEASE" of class "MutexSemaphore" is not implemented (Phase 9) | none | | |
-| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_NESTED | refused at method "RELEASE" of class "MutexSemaphore" is not implemented (Phase 9) | none | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_SIMPLE | refused at method "RELEASE" of class "MutexSemaphore" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_NESTED | refused at method "RELEASE" of class "MutexSemaphore" is not implemented (Phase 9) | no park reached in-process | | |
 | base/class/MutexSemaphore.testGroup TEST_EXCLUSION | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeSend > OpExec | 1 |
 | base/class/MutexSemaphore.testGroup TEST_EXCLUSION | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeSend > OpExec | 1 |
 | base/class/MutexSemaphore.testGroup TEST_EXCLUSION | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | SemaphoreWait | TreeSend | 1 |
-| base/class/Object.testGroup TESTSTART01 | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 1 |
-| base/class/Object.testGroup TESTSTARTWITH01 | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 1 |
-| base/class/Object.testGroup TEST_START_NO_NAME | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_NO_NAME2 | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_NOT_STRING | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_NO_METHOD | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 1 |
-| base/class/Object.testGroup TEST_START_OVERRIDE | pass, rc 0 | MessageResult | TreeSend > TreeEval > Native ~RESULT | 6 |
-| base/class/Object.testGroup TEST_START_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 1 |
-| base/class/Object.testGroup TEST_START_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_NAME | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_SCOPE | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_EXTRA_STUFF | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_NON_STRING_NAME | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | TreeSend > TreeEval > Native ~RESULT | 1 |
-| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_NO_METHOD | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_NO_NAME | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_NO_NAME2 | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_NOT_STRING | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_NO_METHOD | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 1 |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE | pass, rc 0 | MessageResult | TreeSend > TreeEval > Native ~RESULT | 6 |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 1 |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_NAME | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_SCOPE | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EXTRA_STUFF | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_STRING_NAME | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | TreeSend > TreeEval > Native ~RESULT | 1 |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 4 |
-| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 5 |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 4 |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | none | | |
-| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | TreeSend > Native ~RESULT | 5 |
+| base/class/Object.testGroup TESTSTART01 | pass, rc 0 | MessageResult | TreeSend | 1 |
+| base/class/Object.testGroup TESTSTARTWITH01 | pass, rc 0 | MessageResult | TreeSend | 1 |
+| base/class/Object.testGroup TEST_START_NO_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_NO_NAME2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_NOT_STRING | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_NO_METHOD | pass, rc 0 | MessageResult | TreeSend | 1 |
+| base/class/Object.testGroup TEST_START_OVERRIDE | pass, rc 0 | MessageResult | TreeSend > TreeEval | 6 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | TreeSend | 1 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_EXTRA_STUFF | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NON_STRING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | TreeSend > TreeEval | 1 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NO_METHOD | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NO_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NO_NAME2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NOT_STRING | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NO_METHOD | pass, rc 0 | MessageResult | TreeSend | 1 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE | pass, rc 0 | MessageResult | TreeSend > TreeEval | 6 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | TreeSend | 1 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EXTRA_STUFF | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_STRING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | TreeSend > TreeEval | 1 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | TreeSend | 4 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | TreeSend | 5 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | TreeSend | 4 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | TreeSend | 5 |
 | base/class/RexxContext.testGroup TEST_INTERPRETER_THREAD_INVOCATION | failure, rc 1 | Reply | TreeSend > TreeEval > TreeSend > OpExec | 1 |
 | base/class/RexxContext.testGroup TEST_INTERPRETER_THREAD_INVOCATION | failure, rc 1 | SysSleep | TreeSend > TreeEval | 1 |
-| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_CANCEL | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_CANCEL | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_CANCEL | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_CANCEL | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_NO_ARGS | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_NO_TIME | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_NO_TARGET | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_BAD_TIME | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIME | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_ALARM_TIME | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_DATETIME_TIME | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIMESPAN_TIME | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_BAD_TARGET | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_MESSAGE_NOTIFICATION_TARGET | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_FOUR_ARGS | pass, rc 0 | none | | |
-| base/class/Ticker.testGroup TEST_ATTACHMENT_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_CANCEL_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_CANCELED_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_CANCELLED_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_CANCEL_IMMEDIATELY | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_CANCEL_TWICE | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_INTERVAL_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_INTERVAL_ZERO | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/class/Ticker.testGroup TEST_TICKER_NEW_INTERVAL_TIMESPAN | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | none | | |
-| base/directives/ATTRIBUTE.testGroup TEST001 | pass, rc 0 | none | | |
-| base/directives/ATTRIBUTE.testGroup TESTDELEGATE | failure, rc 1 | none | | |
-| base/directives/CONSTANT.testGroup TEST_CONSTANT_METHOD_PROPERTIES | pass, rc 0 | none | | |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_CANCEL | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_CANCEL | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_CANCEL | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_CANCEL | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NO_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NO_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_BAD_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_ALARM_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_DATETIME_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIMESPAN_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_BAD_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_MESSAGE_NOTIFICATION_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_FOUR_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_ATTACHMENT_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_CANCEL_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_CANCELED_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_CANCELLED_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_CANCEL_IMMEDIATELY | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_CANCEL_TWICE | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_INTERVAL_TOO_MANY_ARGS | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_INTERVAL_ZERO | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NEW_INTERVAL_TIMESPAN | refused at the LIBRARY REXX entry point "ticker_createTimer" is not implemented (Phase 6) | no park reached in-process | | |
+| base/directives/ATTRIBUTE.testGroup TEST001 | pass, rc 0 | no park reached in-process | | |
+| base/directives/ATTRIBUTE.testGroup TESTDELEGATE | failure, rc 1 | no park reached in-process | | |
+| base/directives/CONSTANT.testGroup TEST_CONSTANT_METHOD_PROPERTIES | pass, rc 0 | no park reached in-process | | |
 | base/directives/METHOD.testGroup TESTGUARDEDACCESS | refused at the run exceeded its deadline | Reply | TreeSend > OpExec | 2 |
 | base/directives/METHOD.testGroup TESTGUARDEDACCESS | refused at the run exceeded its deadline | SysSleep | TreeSend | 628 |
-| base/directives/METHOD.testGroup TESTDELEGATE | failure, rc 1 | none | | |
+| base/directives/METHOD.testGroup TESTDELEGATE | failure, rc 1 | no park reached in-process | | |
 | base/keyword/CALL.testGroup TEST_4 | failure, rc 1 | SysSleep | TreeSend | 1 |
 | base/keyword/GUARD.testGroup TEST_WHEN_NOVALUE | pass, rc 0 | GuardWhen | TreeSend > OpExec | 1 |
 | base/keyword/GUARD.testGroup TEST_WHEN_NOT_BOOLEAN | pass, rc 0 | GuardWhen | TreeSend > OpExec | 1 |
@@ -480,7 +526,7 @@ arrivals 1594, with a frame other than TreeEval, TreeSend or OpExec 38
 | base/keyword/GUARD.testGroup TEST_ON_OFF | failure, rc 1 | Reply | TreeSend > OpExec | 1 |
 | base/keyword/GUARD.testGroup TEST_ON_OFF | failure, rc 1 | SysSleep | TreeSend | 1 |
 | base/keyword/GUARD.testGroup TEST_WHEN_SINGLE_NO_WAIT | pass, rc 0 | GuardWhen | TreeSend > OpExec | 4 |
-| base/keyword/GUARD.testGroup TEST_WHEN_USE_LOCAL_NO_WAIT | refused at USE LOCAL in a ::METHOD body is not implemented (Phase 5) | none | | |
+| base/keyword/GUARD.testGroup TEST_WHEN_USE_LOCAL_NO_WAIT | refused at USE LOCAL in a ::METHOD body is not implemented (Phase 5) | no park reached in-process | | |
 | base/keyword/GUARD.testGroup TEST_WHEN_SINGLE_UNINITIALIZED_NO_WAIT | pass, rc 0 | GuardWhen | TreeSend > OpExec | 2 |
 | base/keyword/GUARD.testGroup TEST_WHEN_MULTIPLE_NO_WAIT | pass, rc 0 | GuardWhen | TreeSend > OpExec | 6 |
 | base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE_TRIGGER | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeSend > OpExec | 1 |
@@ -495,9 +541,9 @@ arrivals 1594, with a frame other than TreeEval, TreeSend or OpExec 38
 | base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | SysSleep | TreeSend | 1 |
 | base/keyword/RAISE.testGroup TEST_RAISE_INSERT_CRLF | failure, rc 1 | Reply | TreeSend > OpExec | 1 |
 | base/keyword/RAISE.testGroup TEST_RAISE_INSERT_CRLF | failure, rc 1 | SysSleep | TreeSend | 10 |
-| base/keyword/REPLY.testGroup TEST_REPLY_ROUTINE | pass, rc 0 | none | | |
-| base/keyword/REPLY.testGroup TEST_REPLY_PROCEDURE | pass, rc 0 | none | | |
-| base/keyword/REPLY.testGroup TEST_REPLY_CALL | pass, rc 0 | none | | |
+| base/keyword/REPLY.testGroup TEST_REPLY_ROUTINE | pass, rc 0 | no park reached in-process | | |
+| base/keyword/REPLY.testGroup TEST_REPLY_PROCEDURE | pass, rc 0 | no park reached in-process | | |
+| base/keyword/REPLY.testGroup TEST_REPLY_CALL | pass, rc 0 | no park reached in-process | | |
 | base/keyword/REPLY.testGroup TEST_REPLY_TWICE_REPLYASSERT | pass, rc 0 | Reply | TreeSend > OpExec | 1 |
 | base/keyword/REPLY.testGroup TEST_REPLY_TWICE_REPLYASSERT | pass, rc 0 | Reply | OpExec | 1 |
 | base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_REPLYASSERT | pass, rc 0 | Reply | TreeSend > OpExec | 1 |
@@ -525,14 +571,14 @@ arrivals 1594, with a frame other than TreeEval, TreeSend or OpExec 38
 | base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | GuardWhen | TreeSend > OpExec | 1 |
 | base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | Reply | TreeSend > OpExec | 1 |
 | base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at a GUARD that has to wait for another activity to make its WHEN expression true is not implemented (Phase 6) | SysSleep | TreeSend | 2 |
-| base/rexxutil/SysSleep.testGroup TEST_SLEEP_NO_ARG | pass, rc 0 | none | | |
-| base/rexxutil/SysSleep.testGroup TEST_SLEEP_TWO_ARGS | pass, rc 0 | none | | |
-| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID | pass, rc 0 | none | | |
-| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_NEGATIVE | pass, rc 0 | none | | |
-| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_TOO_LARGE | pass, rc 0 | none | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_NO_ARG | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_TWO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_NEGATIVE | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_TOO_LARGE | pass, rc 0 | no park reached in-process | | |
 | base/rexxutil/SysSleep.testGroup TEST_SLEEP_DURATION | pass, rc 0 | SysSleep | TreeSend | 9 |
 | base/rexxutil/SysSleep.testGroup TEST_SLEEP_CONCURRENT | refused at method "WAIT" of class "Message" is not implemented (Phase 9) | MessageWait | TreeSend | 1 |
 | base/rexxutil/SysSleep.testGroup TEST_SLEEP_CONCURRENT | refused at method "WAIT" of class "Message" is not implemented (Phase 9) | SysSleep | TreeSend | 4 |
 | base/special.variables/RESULT_RC_SIGL.testGroup TEST_RESULT_WITH_REPLY | pass, rc 0 | Reply | TreeSend > OpExec | 3 |
 | doc/rexxref/chapter5/Section1.testGroup TEST_OBJECT_START | refused at method "START" of class "Message" is not implemented (Phase 9) | SysSleep | TreeSend | 1 |
-| regressions/bug2003_guard_when.testGroup TEST_GUARD_WHEN_1 | error, rc 2 | none | | |
+| regressions/bug2003_guard_when.testGroup TEST_GUARD_WHEN_1 | error, rc 2 | no park reached in-process | | |

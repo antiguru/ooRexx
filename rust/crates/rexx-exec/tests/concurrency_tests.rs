@@ -46,6 +46,8 @@ struct Unit {
     name: String,
     class: Option<String>,
     test: bool,
+    /// A class method `ACTIVATE` or `INIT`, which runs whichever test runs.
+    activation: bool,
     /// Lower case, comments removed, string contents removed.
     code: String,
     /// Lower case, comments removed.
@@ -175,10 +177,17 @@ fn units(text: &str) -> Vec<Unit> {
                             });
                         resource_end = Some(end);
                     }
+                    let activation = keyword == "method"
+                        && (name == "activate" || name == "init")
+                        && directive
+                            .split_whitespace()
+                            .skip(2)
+                            .any(|word| word == "class");
                     current = Some(Unit {
                         name,
                         class: class.clone().filter(|_| keyword == "method"),
                         test,
+                        activation,
                         code: String::new(),
                         text: String::new(),
                     });
@@ -320,8 +329,14 @@ fn derive_group(text: &str) -> Vec<(String, BTreeSet<&'static str>, Option<&'sta
         if !unit.test {
             continue;
         }
-        let mut seen = BTreeSet::from([at]);
-        let mut frontier = vec![at];
+        let mut seen: BTreeSet<usize> = units
+            .iter()
+            .enumerate()
+            .filter(|(_, unit)| unit.activation)
+            .map(|(at, _)| at)
+            .chain([at])
+            .collect();
+        let mut frontier: Vec<usize> = seen.iter().copied().collect();
         while let Some(from) = frontier.pop() {
             for (to, target) in units.iter().enumerate() {
                 if !seen.contains(&to) && !target.test && reaches(from, target) {
@@ -481,7 +496,8 @@ fn the_detector_tells_an_instruction_from_a_name_that_only_looks_like_one() {
                  ::method test_message\n  m = o~start('x')\n\
                  ::method test_class\n  x = .worker~new\n\
                  ::routine helper\n  call syssleep 1\n\
-                 ::class worker\n::method init\n  guard on when a\n";
+                 ::class worker\n::method init\n  guard on when a\n\
+                 ::class timers\n::method activate class\n  a = .alarm~new(1, .nil)\n";
     let derived: BTreeMap<String, BTreeSet<&str>> = derive_group(group)
         .into_iter()
         .map(|(name, features, _)| (name, features))
@@ -493,12 +509,12 @@ fn the_detector_tells_an_instruction_from_a_name_that_only_looks_like_one() {
             "{name}"
         );
     };
-    expect("TEST_REPLY", &["REPLY"]);
-    expect("TEST_HELPER", &["SysSleep"]);
-    expect("TEST_QUOTED", &[]);
-    expect("TEST_ASSIGNED", &[]);
-    expect("TEST_MESSAGE", &["~start"]);
-    expect("TEST_CLASS", &["GUARD"]);
+    expect("TEST_REPLY", &["Alarm", "REPLY"]);
+    expect("TEST_HELPER", &["Alarm", "SysSleep"]);
+    expect("TEST_QUOTED", &["Alarm"]);
+    expect("TEST_ASSIGNED", &["Alarm"]);
+    expect("TEST_MESSAGE", &["Alarm", "~start"]);
+    expect("TEST_CLASS", &["Alarm", "GUARD"]);
 }
 
 #[cfg(feature = "pinning")]
@@ -565,6 +581,92 @@ mod measured {
             ".c~new~m\n::class c\n::method m\n  expose a\n  a = 1\n  guard on when a = 1\n",
         );
         assert_eq!(frames_at(&report, ParkKind::GuardWhen).len(), 1);
+    }
+
+    /// One program per frame kind reachable from Rexx, each reaching `SysSleep`
+    /// under that kind.
+    const FRAME_PROBES: &[(&str, &str)] = &[
+        (
+            "Unknown",
+            ".c~new~foo\n::class c\n::method unknown\n  call SysSleep 0\n",
+        ),
+        (
+            "Forward",
+            ".c~new~m\n::class c\n::method m\n  forward message('N')\n::method n\n  call SysSleep 0\n",
+        ),
+        (
+            "Operator",
+            "y = .c~new + 1\n::class c\n::method '+'\n  call SysSleep 0\n  return 1\n",
+        ),
+        (
+            "TrapHandler",
+            "call on error name h\naddress system 'false'\nexit\nh:\n  call SysSleep 0\n  return\n",
+        ),
+        (
+            "LoopHeader",
+            "do i = 1 to 2 while f()\nend\nexit\nf:\n  call SysSleep 0\n  return 1\n",
+        ),
+        ("NestedLoop", "do\n  call SysSleep 0\nend\n"),
+        (
+            "Conversion",
+            "do i over .c~new\nend\n::class c\n::method makearray\n  call SysSleep 0\n  return .array~new\n",
+        ),
+        (
+            "TreeEval",
+            "if .c~new~m then nop\n::class c\n::method m\n  call SysSleep 0\n  return 1\n",
+        ),
+        (
+            "TreeSend",
+            ".c~new~m\n::class c\n::method m\n  call SysSleep 0\n",
+        ),
+        ("OpExec", "interpret 'call SysSleep 0'\n"),
+        ("Interpret", "interpret 'call SysSleep 0'\n"),
+        (
+            "OutputWrapper",
+            ".output~destination(.c~new)\nsay 'x'\n::class c\n::method say\n  call SysSleep 0\n",
+        ),
+        (
+            "PullWrapper",
+            ".input~destination(.c~new)\nparse pull line\n::class c\n::method linein\n  call SysSleep 0\n  return 'x'\n",
+        ),
+        (
+            "TraceWrapper",
+            ".traceOutput~destination(.c~new)\ntrace r\nx = 1\n::class c\n::method lineout\n  call SysSleep 0\n",
+        ),
+        (
+            "RedirectWrapper",
+            "a = .d~new\naddress system 'echo hi' with output using (a)\n\
+             ::class d subclass array\n::method append\n  call SysSleep 0\n  forward class (super)\n",
+        ),
+    ];
+
+    #[test]
+    fn a_park_under_each_frame_kind_records_it() {
+        let mut missing = Vec::new();
+        for (kind, program) in FRAME_PROBES {
+            let report = report_of(program);
+            let seen = frames_at(&report, ParkKind::SysSleep)
+                .iter()
+                .flatten()
+                .any(|frame| format!("{frame:?}") == *kind);
+            if !seen {
+                missing.push(format!("{kind}: {:?}", report.parks));
+            }
+        }
+        assert!(missing.is_empty(), "{missing:#?}");
+    }
+
+    #[test]
+    fn a_park_point_native_is_not_a_frame_above_itself() {
+        let report = report_of("m = .message~new('abc', 'LENGTH')\nm~send\nm~result\n");
+        let frames = frames_at(&report, ParkKind::MessageResult);
+        assert!(
+            frames.len() == 1
+                && !frames[0]
+                    .iter()
+                    .any(|frame| matches!(frame, PinKind::Native(_))),
+            "{frames:?}"
+        );
     }
 
     #[test]
@@ -753,7 +855,9 @@ mod measured {
                 unbalanced.push(test.clone());
             }
             if report.parks.is_empty() {
-                per_test.push_str(&format!("| {test} | {outcome} | none | | |\n"));
+                per_test.push_str(&format!(
+                    "| {test} | {outcome} | no park reached in-process | | |\n"
+                ));
             }
             for ((park, frames), count) in &report.parks {
                 let frames = frames_text(frames);
