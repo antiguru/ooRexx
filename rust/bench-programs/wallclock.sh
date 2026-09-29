@@ -1,10 +1,11 @@
 #!/bin/bash
 # Wall-clock seconds per program per binary, interleaved, median of ROUNDS.
 #
-# usage: wallclock.sh [-r ROUNDS] [-o OUTDIR] [-x PROGRAMS] NAME=BINARY...
+# usage: wallclock.sh [-r ROUNDS] [-o OUTDIR] [-x PROGRAMS] [-T] NAME=BINARY...
 #   ROUNDS    rounds (default 5); round r starts at arm r
 #   OUTDIR    output directory (default: mktemp -d)
 #   PROGRAMS  programs also run on the oracle (arm name "oracle")
+#   -T        print the table for OUTDIR's wall.tsv without running
 # env: REXX_LIB_DIR  put on LD_LIBRARY_PATH (default: the oracle's build/lib)
 #      ORACLE_ROOT   the oracle's build directory (default /home/moritz/dev/repos/ooRexx/build)
 #
@@ -12,18 +13,19 @@
 # `time` times the interpreter process. Programs: callgrind.sh's PROGRAMS.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-rounds=5 out= with_oracle=
-while getopts r:o:x: opt; do
+rounds=5 out= with_oracle= table_only=
+while getopts r:o:x:T opt; do
     case $opt in
         r) rounds=$OPTARG ;;
         o) out=$OPTARG ;;
         x) with_oracle=$OPTARG ;;
+        T) table_only=1 ;;
         *) exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
 if [ $# -lt 1 ]; then
-    echo "usage: wallclock.sh [-r ROUNDS] [-o OUTDIR] [-x PROGRAMS] NAME=BINARY..." >&2
+    echo "usage: wallclock.sh [-r ROUNDS] [-o OUTDIR] [-x PROGRAMS] [-T] NAME=BINARY..." >&2
     exit 2
 fi
 oracle_root=${ORACLE_ROOT:-/home/moritz/dev/repos/ooRexx/build}
@@ -41,6 +43,7 @@ for arg in "$@"; do
     names+=("${arg%%=*}")
     bin[${arg%%=*}]=$(readlink -f "${arg#*=}")
 done
+if [ -z "$table_only" ]; then
 {
     echo "# $(date -u +%FT%TZ) rounds=$rounds REXX_LIB_DIR=$lib load=$(cut -d' ' -f1-3 /proc/loadavg)"
     for name in "${names[@]}"; do echo "# $name ${bin[$name]} $(sha256sum < "${bin[$name]}" | cut -d' ' -f1)"; done
@@ -69,13 +72,17 @@ for ((r = 1; r <= rounds; r++)); do
     done
 done
 echo "# end load=$(cut -d' ' -f1-3 /proc/loadavg)" >> "$out/binaries.txt"
+fi
 python3 - "$out/wall.tsv" "${names[@]}" oracle <<'EOF' | tee "$out/table.txt"
 import statistics
 import sys
 rows = {}
 for line in open(sys.argv[1]):
     a, p, r, t = line.rstrip("\n").split("\t")
-    rows.setdefault(p, {}).setdefault(a, []).append(float(t))
+    # bash's `time` carries a rounded-up digit as the next character: "1.:00" is 2.000.
+    whole, frac = t.split(".")
+    secs = int(whole) + sum((ord(c) - 48) / 10 ** (i + 1) for i, c in enumerate(frac))
+    rows.setdefault(p, {}).setdefault(a, []).append(secs)
 arms = sys.argv[2:]
 print("\t".join(["program"] + [f"{a} median" for a in arms] + [f"{a} d%" for a in arms[1:]]))
 for p, d in rows.items():
