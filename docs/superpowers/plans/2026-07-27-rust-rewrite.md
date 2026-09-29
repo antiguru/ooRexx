@@ -35,7 +35,7 @@ Every task's requirements implicitly include this section.
      - **FFI-facing unsafe** (the `extern "C"` entry points in `rexx-api`): full encapsulation is *impossible* and demanding it would be incoherent — a C caller passing a valid pointer is a precondition no Rust API can enforce. The requirement here is instead: validate everything that *can* be validated (handles go through the local-reference table, never a raw dereference), keep the unvalidatable surface as small as possible, enumerate it explicitly in the module doc, and make the first statement of every entry point the validation, so the unsafe region is one line long rather than the whole function.
   3. **Justified in writing.** The module carries a `//!`-level block stating: what the invariant is, why the compiler cannot check it, what enforces it instead, and what breaks if it is violated. Every `unsafe` block carries a `SAFETY:` comment naming the specific precondition it discharges. The crate carries `#![deny(unsafe_op_in_unsafe_fn)]`.
   4. **Reviewed as a decision, not a task.** Introducing a new unsafe module is a Section 1 decision block with an identifier, not something a task does in passing. It goes into this file before it goes into the code.
-  - Expect exactly two candidates over the whole project: the `extern "C"` entry points in `rexx-api`, and any platform call in `rexx-sys` that `rustix`/`windows-sys` do not cover. Both are *candidates*, not exemptions. Under D5 the FFI surface is far smaller than it looks: `RexxObjectPtr` is an opaque handle validated by table lookup, so the entry points dereference almost nothing.
+  - The granted sites are the modules the D-U blocks in Section 1 name, plus `rexx-core`'s `bytes.rs` and `frame.rs`, each granted at its `#[allow(unsafe_code)]` (`frame.rs`'s re-granted per activity by D-U4); `crates/rexx-core/tests/unsafe_sites.rs` enumerates the ones in the tree, and a site outside them is a new decision. Each is a *candidate* admitted by its record, not an exemption. Under D5 the FFI surface is far smaller than it looks: `RexxObjectPtr` is an opaque handle validated by table lookup, so the entry points dereference almost nothing.
   - **Every phase exit reports the unsafe-block count** (`grep -rc 'unsafe' rust/crates --include='*.rs'`) **and the list of crate roots carrying `deny` rather than `forbid`**. Either growing without a corresponding decision block in Section 1 fails the gate.
 - **The C++ tree is read-only.** No file under `interpreter/`, `api/`, `common/`, `rexxapi/`, `extensions/` is modified by this project. It is the oracle. The only exception is `.github/workflows/` (adding Rust legs) and new files under `rust/` and `docs/`.
 - **`api/oorexxapi.h`, `api/rexx.h`, `api/rexxapidefs.h`, `api/oorexxerrors.h` are frozen.** Source compatibility is the contract: native extensions must recompile unchanged. ABI compatibility is explicitly *not* required — struct layouts and symbol addresses may change, but declarations, macro names, type names, and call semantics may not.
@@ -106,8 +106,8 @@ Blocks are numbered in the order they were raised and ordered below by topic, so
 | **D4** | Numeric core | Phase 2 | settled — port `NumberString` |
 | **D5** | Native API surface | Phase 8 | settled by the user — source-compatible |
 | **D-U1** | The `unsafe` grant and `dlopen`'s provider | Phase 8 | **closed** — two modules in `rexx-api`, `libloading` (2026-09-14) |
-| **D-U2** | `Send` for the interpreter island | Phase 6 (S4) | **closed** -- `rexx-exec/src/island.rs`, lands in S4 (2026-09-29) |
-| **D-U3** | The signal module | Phase 6 (S4) | **closed** -- one module, `libc` direct, lands in S4 (2026-09-29) |
+| **D-U2** | `Send` for the interpreter island | Phase 6 (S4) | **closed** -- `rexx-exec/src/island.rs` (named here; the spec leaves it to the plan), lands in S4 (2026-09-29) |
+| **D-U3** | The signal module | Phase 6 (S4) | **closed** -- `rexx-exec/src/signal.rs` (named here; the spec leaves it to the plan), `libc` direct, lands in S4 (2026-09-29) |
 | **D-U4** | `frame.rs`: one frame arena per activity | Phase 6 (S1) | **closed** -- LIFO per activity (2026-09-29) |
 | **D6** | Platform layer | Phase 7 | settled — `std` → `rustix` → `libc` |
 | **D13** | AST ownership | Phase 3 | **closed** — plain owned Rust data (2026-07-27) |
@@ -203,7 +203,7 @@ no invariant may rest on one activity running at a time across the process. The 
 cross-activity requests go through a channel or an atomic flag, never a foreign frame pointer, is
 unchanged and holds inside one interpreter too. (2) Race checking is ThreadSanitizer with the
 installed nightly, gate-only, plus a `loom` model of the baton protocol; `loom` is admitted as a
-dev-dependency. The same ruling adds three more, quoted from the design's section 1.1:
+dev-dependency. The same rulings continue, quoted from the design's section 1.1:
 (3) *"`.environment` per interpreter is a licensed divergence for Phase 9. The oracle's is
 process-wide (`RexxCore.h:267`, `Setup.cpp:300`); only `.local` is per instance
 (`runtime/InterpreterInstance.cpp:208`)."* (4) *"Signal handling is a new `unsafe` site. One module
@@ -214,7 +214,7 @@ already in the dependency graph transitively, so no new code enters the build; i
 sites the design needs are D-U2 (the interpreter island's `Send`) and D-U4 (`frame.rs`, one arena
 per activity).
 
-**Evidence that settles this.** Phase 6 runs the ooTest concurrency groups plus a TSan build of the Rust interpreter (`RUSTFLAGS="-Zsanitizer=thread"` requires nightly — if the nightly ban in Global Constraints blocks this, substitute `loom` for the lock protocol and rely on ooTest for the rest; record which was used).
+**Evidence that settles this.** Phase 6 runs the ooTest concurrency groups plus a TSan build of the Rust interpreter (`RUSTFLAGS="-Zsanitizer=thread"` requires nightly — if the nightly ban in Global Constraints blocks this, substitute `loom` for the lock protocol and rely on ooTest for the rest; record which was used). (Resolved 2026-09-29 by ruling 2 of the dated note above: both, with nightly admitted for the TSan gate only.)
 
 ### D4 — Numeric core
 
@@ -321,7 +321,7 @@ representation: replacing the interior with `Arc`, atomics and locks puts a sync
 paths the performance rule (spec section 7) forbids taxing.
 
 **Decision (Moritz, 2026-09-29, with the design): one `unsafe impl Send`, in
-`rexx-exec/src/island.rs`.** The spec leaves the module to the plan; this block names it. The
+`rexx-exec/src/island.rs`.** Named here; the spec leaves it to the plan. The
 grant lands with its first user in S4, not before, and `unsafe_sites.rs` gains the file then.
 
 **The invariant.** The island is reachable only through one root pointer and the baton. A thread
@@ -335,8 +335,8 @@ it:** "no island value is live on this thread" is a property of every frame belo
 type. **What enforces it instead** (the wrapper's shape is this block's proposal, settled when S4
 is planned): the island type is `Send` only inside a wrapper that
 `island.rs` hands out by taking the baton and takes back by releasing it, so the wrapper is the
-only path from one thread's use to another's (Rust-facing unsafe, full encapsulation); `ObjRef` is
-`!Send` and `!Sync` (spec section 5), so no handle leaks into a completion or the inbox; the TSan
+only path from one thread's use to another's (Rust-facing unsafe, full encapsulation); `ObjRef`
+becomes `!Send` and `!Sync` (spec section 5) before this grant lands, so no handle leaks into a completion or the inbox; the TSan
 gate and the `loom` model of the baton (D3's note, ruling 2) check the protocol. **What breaks if
 violated:** a non-atomic `Rc` count or a `Cell` written from two threads, which is a data race and
 undefined behaviour, not merely a wrong answer.
@@ -351,12 +351,12 @@ design's section 4.
 
 **Question.** Handlers for SIGINT, SIGTERM and SIGHUP are installed at interpreter start, only where
 no handler is already set, without SA_RESTART, as the oracle's library does
-(`platform/unix/SystemInterpreter.cpp:95-110`, `:130-145`). Installing a handler and reading the
+(`platform/unix/SystemInterpreter.cpp:95-110`, `:130-145`); the oracle checks only SIGHUP's previous
+action (`:136-139`) and this design checks each, a licensed divergence (spec section 4). Installing a handler and reading the
 previous action are `unsafe` calls.
 
 **Decision (Moritz, 2026-09-29): one module installs the handlers, with `libc` as its direct
-dependency.** The spec names no file; the proposed landing location is
-`rexx-exec/src/signal.rs`, fixed when S4 is planned. `libc` is already in the dependency graph
+dependency.** Module `rexx-exec/src/signal.rs`, named here; the spec leaves it to the plan. `libc` is already in the dependency graph
 transitively, so no new code enters the build. It lands in S4, with the timer thread that reads
 its pipe.
 
