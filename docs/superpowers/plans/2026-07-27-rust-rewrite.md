@@ -188,6 +188,17 @@ The C++ model: one `Activity` per thread; a global kernel lock acquired/released
 
 **Design constraint that falls out, and must hold from Phase 1.** Under (a) in Rust, an activity owns its own activation and expression stacks as plain Rust data. Another thread therefore *cannot* reach into them — the first known defect becomes unrepresentable. Cross-activity requests (yield, halt, trace-toggle, condition raise) go through a channel or an atomic flag the target polls at instruction boundaries, never through a foreign frame pointer. **Do not design frames as shared, GC-visible objects reachable from other activities.** That single constraint is the concurrency dividend of the rewrite; losing it loses the argument for doing this at all.
 
+**Rulings, 2026-09-29 (Moritz), with the Phase 6 design
+(`docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md`).** Phase 6 takes isolation
+rather than (a) or (b): one interpreter owns its heap and shares nothing, and parallelism comes from
+separate interpreters. (1) The no-global-lock constraint above is read as **process-wide**:
+per-interpreter serialization (the design's baton, PEP 684's per-interpreter lock) is allowed, and
+no invariant may rest on one activity running at a time across the process. The rule that
+cross-activity requests go through a channel or an atomic flag, never a foreign frame pointer, is
+unchanged and holds inside one interpreter too. (2) Race checking is ThreadSanitizer with the
+installed nightly, gate-only, plus a `loom` model of the baton protocol; `loom` is admitted as a
+dev-dependency.
+
 **Evidence that settles this.** Phase 6 runs the ooTest concurrency groups plus a TSan build of the Rust interpreter (`RUSTFLAGS="-Zsanitizer=thread"` requires nightly — if the nightly ban in Global Constraints blocks this, substitute `loom` for the lock protocol and rely on ooTest for the rest; record which was used).
 
 ### D4 — Numeric core
