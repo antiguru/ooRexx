@@ -917,3 +917,19 @@ no error number, code or message for the interpreter's `SYNTAX` handling to read
 established.** This crate prints `before`, then reports `Error 0` with `<no message 0.0 in the catalogue>`, rc 0
 (measured 2026-09-26). No upstream
 ticket.
+
+## 19. Two orxmethod `TestRaiseCondition` USER raises trapped by CALL ON in one clause
+
+    t = .T~new
+    call on user bar name h
+    say 'twice' t~rc('USER BAR', , , 'a') t~rc('USER BAR', , , 'b')
+    say 'after'
+    exit
+    h: say 'handler' condition('c'); return
+    ::class T
+    ::method rc external "LIBRARY orxmethod TestRaiseCondition"
+
+SIGSEGV, rc 139, 3 runs of 3. Measured 2026-09-29 by the Phase 8 final re-review (probe
+`rc/tw2.rex` in its scratchpad). **Cause not established.** One such raise in a clause is
+identical on both sides (`library_raise_condition_call_on.rex`); this crate runs the handler
+twice. No upstream ticket.

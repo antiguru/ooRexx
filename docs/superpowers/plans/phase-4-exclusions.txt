@@ -4971,7 +4971,8 @@ crate passes every test RECORDED does not name, in the whole-group run
   METHOD.testGroup:3105 runs `address "" "rexxc" ...` and asserts rc 0.
   rexxc is not on the gate's PATH, so both sides fail it with rc 127
   (`assertRc` expected 0, actual 127); with the oracle's build/bin on PATH
-  the oracle would have a rexxc to run and this crate still none.
+  both sides run the oracle's rexxc, and this crate then refuses to load
+  the tokenized file it wrote, naming Phase 5 (final re-review N3).
   Roadmap row 9: "`rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship".
   OWNER: Phase 9.
   NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND PATCHES ooTest.frm. The
@@ -5614,3 +5615,14 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
   is outside the API contract, and no answer is the right one to match. The
   collection-timing licence above is not the reason: it covers ordering,
   not an exit status or stderr difference (final review M1, 2026-09-29).
+
+  ReleaseLocalReference FREES NOTHING UNTIL THE NATIVE CALL ENDS (Phase 8
+  final review M2, 2026-09-29). Since da17061ba the released handle stays
+  resolvable and rooted for the call, and no collection runs inside a native
+  call, so an extension that allocates and releases in a loop holds every
+  object until it returns: a 2M-iteration release loop peaks at 430 MB here
+  against the oracle's 20 MB (348 MB at 2ae06085c, before the change). The
+  oracle's release drops the object from the activation's save list
+  (NativeActivation::removeLocalReference,
+  interpreter/execution/NativeActivation.cpp:1219). Output and rc agree.
+  OWNER: Phase 9 (benchmark and resource parity).
