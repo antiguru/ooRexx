@@ -1786,7 +1786,7 @@ impl Interp {
             security_managers: FxHashMap::default(),
             plans: NameMap::default(),
             deadline: None,
-            clause_countdown: crate::clause::Deadline::NO_DEADLINE_SPACING,
+            clause_countdown: crate::clause::Deadline::CLAUSES_PER_CHECK,
             chunks: NameMap::default(),
             chunks_refused: 0,
             deferred: std::collections::VecDeque::new(),
@@ -2862,9 +2862,6 @@ fn execute(
     // caller asking for a bounded run wants: a bootstrap that did not finish
     // is a run that did not finish.
     interp.deadline = deadline.map(crate::clause::Deadline::starting_now);
-    if interp.deadline.is_some() {
-        interp.clause_countdown = crate::clause::Deadline::CLAUSES_PER_CHECK;
-    }
     // **The library bootstrap runs before the command line's own program is
     // installed or run, and before its argument string exists.** The program
     // has already been *parsed* above, which is where a syntax error is

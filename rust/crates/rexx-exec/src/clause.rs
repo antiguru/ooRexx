@@ -26,13 +26,11 @@ pub(crate) struct Deadline {
 }
 
 impl Deadline {
-    /// Clauses between two reads of the clock, and so the granularity the
-    /// bound is honoured to.
+    /// Clauses between two visits to [`Interp::countdown_reached`], with or
+    /// without a deadline: any interpreter can receive a request or a
+    /// completion, so the cold path always runs on this cadence (design
+    /// section 4).
     pub(crate) const CLAUSES_PER_CHECK: u32 = 1024;
-
-    /// Clauses between two visits to [`Interp::countdown_reached`] for a run
-    /// with no deadline, where the visit does nothing but reload this.
-    pub(crate) const NO_DEADLINE_SPACING: u32 = u32::MAX;
 
     /// A bound `limit` from now.
     pub(crate) fn starting_now(limit: Duration) -> Deadline {
@@ -282,7 +280,7 @@ impl Interp {
     #[inline(never)]
     fn countdown_reached(&mut self) -> Result<(), Failure> {
         let Some(deadline) = &mut self.deadline else {
-            self.clause_countdown = Deadline::NO_DEADLINE_SPACING;
+            self.clause_countdown = Deadline::CLAUSES_PER_CHECK;
             return Ok(());
         };
         if deadline.expired || Instant::now() >= deadline.at {
