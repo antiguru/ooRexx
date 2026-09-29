@@ -303,3 +303,150 @@ Exits 0. r1 holds the running activity's `ActivityRoots` inline in `RootSet`.
 | textnum | 1,176,579,478 | 1,176,579,674 | +196 | +0.0000 |
 | varlookup | 14,878,111,694 | 14,878,111,805 | +111 | +0.0000 |
 | rexxcps | 17,817,340,661 | 17,817,273,008 | -67,653 | -0.0004 |
+
+## Task 6 (S0 gate)
+
+`S` is `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/p6-t6`.
+
+```
+git archive REV | tar -x -C $S/trees/NAME       # base 1754a3b5a, stepA 6956e90f2, stepB 98d9fae33
+find $S/trees/NAME -type f -exec touch {} +
+cd $S/trees/NAME/rust && CARGO_TARGET_DIR=$S/tgt/NAME cargo build --release -p rexx-exec --bin rexx-run > $S/logs/build-NAME.log 2>&1
+/bin/grep -a -c 'Compiling rexx-exec' $S/logs/build-NAME.log                 # 1 for each NAME
+cp $S/tgt/NAME/release/rexx-run $S/bin/NAME/rexx-run
+sha256sum < $S/bin/NAME/rexx-run
+objcopy -O binary --only-section=.text $S/bin/NAME/rexx-run /dev/stdout | wc -c
+```
+
+`stepA` is the running total through the `ObjRef` `!Send`/`!Sync` commit; `stepB` adds the bounded
+countdown reload. Both are on top of Tasks 1-5, so each is the S0 running total at that point
+against the unmodified Phase 6 base.
+
+| name | sha256 of `rexx-run` | `.text` bytes |
+|---|---|---:|
+| base | `39685fe900b5a6685160875833b8f8952dbd1eb4445b8f7f9f2a0bf22f2e1cff` | 2,732,523 |
+| stepA | `78f35aaafc0dd6ba3ff0e9b2440331648fd877239a663081fcfb06c22f120c11` | 2,729,083 |
+| stepB | `7a49502632ed82323866c6e796251356dd8a1e821421211fcd13b5444e468b36` | 2,729,035 |
+
+### Oracle comparison
+
+```
+cd $B; LIB=/home/moritz/dev/repos/ooRexx/build/lib; O=$S
+for p in fibcall fibfunc sendloop extcall; do
+  f=$(readlink -f $p.rex)
+  d=$(mktemp -d); (cd $d; ( ulimit -v 1048576; LD_LIBRARY_PATH=$LIB /home/moritz/dev/repos/ooRexx/build/bin/rexx $f ) > $O/o.$p.out 2> $O/o.$p.err; echo $? > $O/o.$p.rc); rmdir $d
+  d=$(mktemp -d); (cd $d; LD_LIBRARY_PATH=$LIB $S/bin/stepB/rexx-run $f > $O/r.$p.out 2> $O/r.$p.err; echo $? > $O/r.$p.rc); rmdir $d
+  echo "$p stdout=$(cmp -s $O/o.$p.out $O/r.$p.out && echo same || echo DIFF) stderr=$(cmp -s $O/o.$p.err $O/r.$p.err && echo same || echo DIFF) rc=$(cat $O/o.$p.rc)/$(cat $O/r.$p.rc)"
+done
+```
+```
+fibcall stdout=same stderr=same rc=0/0
+fibfunc stdout=same stderr=same rc=0/0
+sendloop stdout=same stderr=same rc=0/0
+extcall stdout=same stderr=same rc=0/0
+```
+
+### Instruction counts (running total)
+
+```
+$B/callgrind.sh -r 3 -j 16 -o $S/cg base=$S/bin/base/rexx-run stepA=$S/bin/stepA/rexx-run stepB=$S/bin/stepB/rexx-run
+```
+
+Exit 0, every run's `rc` file 0, no SPREAD line. Instructions less libc.so.6 and ld-linux, median
+of three rounds.
+
+| program | base | stepA - base | stepB - base | stepB d% |
+|---|---:|---:|---:|---:|
+| alloc | 25,168,678,420 | -38,584 | +301,269 | +0.0012% |
+| alloc4c | 3,224,394,995 | -12,421 | +100,855 | +0.0031% |
+| arith | 11,520,060,116 | -44,760 | +68,516 | +0.0006% |
+| assign | 19,637,557,532 | +216 | +2,860,575 | +0.0146% |
+| compound | 9,271,611,407 | -5 | +424,818 | +0.0046% |
+| decloop | 2,565,175,661 | -14,857 | +64,041 | +0.0025% |
+| decrender | 4,348,396,259 | -14,941 | +109,284 | +0.0025% |
+| dispatch | 20,483,285,044 | -5 | +566,396 | +0.0028% |
+| dispatchclass | 15,850,195,658 | +71 | +339,924 | +0.0021% |
+| emptyloop | 9,308,098,377 | +71 | +1,416,085 | +0.0152% |
+| extcall | 8,281,259,474 | +206 | +170,119 | +0.0021% |
+| fibcall | 8,345,686,371 | +209 | +341,048 | +0.0041% |
+| fibfunc | 7,988,911,717 | +209 | +268,026 | +0.0034% |
+| heapshape | 3,278,634,162 | -3,469,527 | -3,412,716 | -0.1041% |
+| nop | 9,437,300,124 | +209 | +2,860,568 | +0.0303% |
+| parse | 1,541,986,683 | -9,997 | +35,303 | +0.0023% |
+| sayloop | 114,813,322 | +209 | +5,866 | +0.0051% |
+| sendloop | 13,863,190,774 | -5 | +283,182 | +0.0020% |
+| startup | 58,074,011 | +209 | +211 | +0.0004% |
+| strings | 17,749,287,436 | -75,958 | +433,806 | +0.0024% |
+| textnum | 1,176,579,433 | +209 | +68,187 | +0.0058% |
+| varlookup | 14,878,111,751 | +71 | +1,614,329 | +0.0109% |
+| rexxcps | 17,817,337,824 | -61,517 | +542,884 | +0.0030% |
+
+Budget: at most +0.3% beyond each program's noise band (recorded above; 0 for every program except
+`heapshape` 0.00000%, `sayloop` 0.0030%, `startup` 0.0045%, `rexxcps` 0.00006%). Largest `stepB`
+delta is `nop` at +0.0303%, `heapshape` is negative. Every program is inside budget in round 1;
+`emptyloop`'s +0.0152% matches the spec's own N=50-to-N=1024 scaling from the spike's +0.27% (1024
+is about 20.5x 50; 0.27/20.5 = 0.0132%, close to measured).
+
+### Wall clock
+
+```
+$B/wallclock.sh -r 5 -o $S/wall base=$S/bin/base/rexx-run stepB=$S/bin/stepB/rexx-run
+```
+
+| program | base median s | stepB median s | stepB d% |
+|---|---:|---:|---:|
+| alloc | 2.017 | 1.997 | -0.99 |
+| alloc4c | 0.567 | 0.576 | +1.59 |
+| arith | 1.226 | 1.230 | +0.33 |
+| assign | 1.066 | 1.070 | +0.38 |
+| compound | 0.648 | 0.641 | -1.08 |
+| decloop | 0.250 | 0.249 | -0.40 |
+| decrender | 0.462 | 0.476 | +3.03 |
+| dispatch | 1.772 | 1.957 | +10.44 |
+| dispatchclass | 1.386 | 1.385 | -0.07 |
+| emptyloop | 0.527 | 0.527 | +0.00 |
+| extcall | 0.923 | 0.909 | -1.52 |
+| fibcall | 0.802 | 0.817 | +1.87 |
+| fibfunc | 0.795 | 0.802 | +0.88 |
+| heapshape | 0.322 | 0.322 | +0.00 |
+| nop | 0.663 | 0.660 | -0.45 |
+| parse | 0.129 | 0.130 | +0.78 |
+| sayloop | 0.029 | 0.030 | +3.45 |
+| sendloop | 1.095 | 1.135 | +3.65 |
+| startup | 0.025 | 0.026 | +4.00 |
+| strings | 1.145 | 1.163 | +1.57 |
+| textnum | 0.092 | 0.092 | +0.00 |
+| varlookup | 0.784 | 0.777 | -0.89 |
+| rexxcps | 2.036 | 1.984 | -2.55 |
+
+Every program is inside its ±4% bar (`startup`'s own band is -7.69% per Ruling P10) except
+`dispatch` at +10.44%.
+
+### `dispatch`'s wall clock: three controls
+
+`dispatch` reproduces its excursion across an independent re-run, and reproduces even against a
+change with a flat instruction count, so the excursion is layout noise rather than added work.
+
+```
+$B/wallclock.sh -r 5 -o $S/wall2 base=$S/bin/base/rexx-run stepB=$S/bin/stepB/rexx-run   # independent re-run, same two binaries
+cp $S/bin/base/rexx-run $S/bin/base2/rexx-run                                            # identical-binary control
+$B/wallclock.sh -r 5 -o $S/wallctl base=$S/bin/base/rexx-run base2=$S/bin/base2/rexx-run
+$B/wallclock.sh -r 5 -o $S/wallA base=$S/bin/base/rexx-run stepA=$S/bin/stepA/rexx-run    # stepA alone (flat Ir vs base on dispatch)
+```
+
+| run | base median s | other median s | d% | `dispatch` Ir vs base |
+|---|---:|---:|---:|---:|
+| stepB re-run (`wall2`) | 1.764 | 1.969 (stepB) | +11.62 | +566,396 (+0.0028%) |
+| identical binary (`wallctl`) | 1.781 | 1.767 (base2, byte-identical) | -0.79 | +0 |
+| stepA alone (`wallA`) | 1.777 | 2.042 (stepA) | +14.91 | -5 (-0.0000%) |
+
+`sendloop` also moved beyond ±4% in two of the four wall-clock runs (`wall2` +11.15%, `wallA`
++7.96%) but not the other two (`wall` +3.65%, and it is not `wallctl`'s pair), and its own Ir delta
+is flat (+283,182, +0.0020%) same as `dispatch`'s. The identical-binary control (`wallctl`) shows
+every program, `dispatch` and `sendloop` included, inside 4% when nothing about the binary differs,
+so the instrument itself is not this noisy; a real, flat-instruction-count code change is enough to
+move `dispatch` and sometimes `sendloop` past ±4% here. Task 2's own three padding controls put
+`dispatch`'s band at -3.58% (`pad2`), narrower than what a real (non-padding) code change produces.
+Reported for a ruling rather than spent on rounds: no candidate change is indicated by a flat
+instruction count, and a round chasing linker-address luck on one benchmark is not a principled
+S0 change.
