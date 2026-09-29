@@ -1,20 +1,15 @@
 # Phase 6 performance record
 
-The instrument and budget are `docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md`
-section 7. Every Phase 6 stage is measured against the base below, with the noise band below.
+Base `9d863ccc5`, three layout controls and `0d911ab7c`, measured 2026-09-29.
 
 ## Base
 
-**Phase 6 base: `9d863ccc5`** (ruling P1). Measured 2026-09-29 on this machine (`nproc` 32), rustc 1.98.1, valgrind-3.27.1. Programs: every `rust/bench-programs/*.rex` and
-`rust/bench-rexxcps/rexxcps.rex`, as listed in `callgrind.sh`'s `PROGRAMS` line at `f0e3e727e`.
-`extcall.rex` loads `/home/moritz/dev/repos/ooRexx/build/lib/liborxfunction.so` on every binary
-and on the oracle.
+rustc 1.98.1, valgrind-3.27.1, `nproc` 32. Programs and `callgrind.sh` as at `f0e3e727e`.
+`REXX_LIB_DIR` default (`/home/moritz/dev/repos/ooRexx/build/lib`) on every run, oracle included.
 
 ### Builds
 
-Each binary from a `git archive` of its commit, every file touched, its own target directory,
-and a build log holding a `Compiling rexx-exec` line (all five logs do). `S` is the task scratch
-directory.
+`S` is the task scratch directory. Each build log has one `Compiling rexx-exec` line.
 
 ```
 git archive 9d863ccc5 | tar -x -C $S/trees/9d863ccc5
@@ -22,11 +17,9 @@ find $S/trees/9d863ccc5 -type f -exec touch {} +
 cd $S/trees/9d863ccc5/rust && CARGO_TARGET_DIR=$S/tgt/base cargo build --release -p rexx-exec --bin rexx-run
 ```
 
-Layout controls: the same archive of `9d863ccc5`, then
-`rust/bench-programs/layout-pad.py $S/trees/padN N` with N = 8, 48, 192, then touch and build as
-above into `$S/tgt/pad1`, `pad2`, `pad3`. `0d911ab7c` (Task 1's parent) is built the same way
-into `$S/tgt/t1pa`. Every function but the pads has the same size in all four base-commit builds
-(`nm -S`); only addresses move.
+Controls: the same archive, then `rust/bench-programs/layout-pad.py $S/trees/padN N` (N = 8, 48,
+192), touched and built as above into `$S/tgt/pad1`, `pad2`, `pad3`. `0d911ab7c` built as above
+into `$S/tgt/t1pa`. `nm -S`: symbol sizes, pads excluded, identical to base in all three controls.
 
 | name | source | sha256 of `rexx-run` | `.text` bytes |
 |---|---|---|---:|
@@ -38,11 +31,8 @@ into `$S/tgt/t1pa`. Every function but the pads has the same size in all four ba
 
 ### Instruction counts
 
-Two sittings of three rounds each, all five binaries interleaved program by program:
-
 ```
-# sitting 1, script at 55ee6c08b (exit 1: its stdout check then covered heapshape and rexxcps,
-# which print timings; every run exited 0)
+# sitting 1, script at 55ee6c08b: exit 1, stdout differed on heapshape and rexxcps, every run exited 0
 rust/bench-programs/callgrind.sh -r 3 -j 16 -o $S/cg1 base=$S/bin/base/rexx-run pad1=$S/bin/pad1/rexx-run pad2=$S/bin/pad2/rexx-run pad3=$S/bin/pad3/rexx-run t1pa=$S/bin/t1pa/rexx-run
 # sitting 2, script at 0696153b4, exit 0
 rust/bench-programs/callgrind.sh -r 3 -j 16 -o $S/cg2 base=... (same arguments)
@@ -51,9 +41,8 @@ rust/bench-programs/callgrind.sh -T -o $S/cg1 base=... (same arguments)
 rust/bench-programs/callgrind.sh -T -o $S/cg2 base=... (same arguments)
 ```
 
-Figures are instructions with libc.so.6 and ld-linux subtracted, median of three rounds. The
-control columns are sitting 2; band 1 and band 2 are the largest control delta in each sitting,
-and a program's **noise band is the larger of the two**. `0.0000` is under 0.00005%.
+Instructions less libc.so.6 and ld-linux, median of three rounds. Control columns: sitting 2.
+Band 1, band 2: largest control delta in sitting 1, 2. `0.0000`: under 0.00005%.
 
 | program | base Ir ex-libc (sitting 2) | pad1 d% | pad2 d% | pad3 d% | band 1 | band 2 | noise band | 0d911ab7c d% (1 / 2) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -81,31 +70,23 @@ and a program's **noise band is the larger of the two**. `0.0000` is under 0.000
 | varlookup | 14,881,155,494 | +0.0000 | +0.0000 | -0.0000 | 0.0000 | 0.0000 | **0.0000** | +0.0000 / +0.0000 |
 | rexxcps | 17,920,429,749 | +0.0000 | +0.0000 | +0.0000 | 0.0000 | 0.0000 | **0.0000** | +0.0221 / +0.0221 |
 
-**Single-run excursions.** In sitting 2 one pad2 run of `extcall` read 42,000,341 instructions
-(+0.42%) above the higher of the other two runs of that binary, 42,000,000 of it self cost in
-`rexx_api::handles::Table::register`, and one pad2 run of `rexxcps` read 7,554,142 (+0.042%)
-above, in `Interp::resolve_fixed_call` and 280,003 extra `memcmp` calls. Twelve further callgrind
-runs of base on `extcall` showed none. `Table::register` inserts into a `std` `HashMap`, whose
-hasher is seeded per process; the cause of either excursion is not established. The median
-discards one such run in three; the spread columns of `callgrind.sh`'s own table show when one
-occurred.
+Single-run excursions, sitting 2: one pad2 `extcall` run 42,000,341 above the higher of that
+binary's other two runs (+0.42%), 42,000,000 of it in `rexx_api::handles::Table::register`; one
+pad2 `rexxcps` run 7,554,142 above (+0.042%), in `Interp::resolve_fixed_call` and 280,003 extra
+`memcmp` calls. Twelve further callgrind runs of base on `extcall`: none.
 
-### Task 1 against the base
+### `0d911ab7c` against the base
 
-`0d911ab7c` against `9d863ccc5`, last column above: **`rexxcps` executes 0.0221% fewer
-instructions at the base** (17,924,390,887 against 17,920,429,749 in sitting 2; 0.0221% in
-sitting 1 too), outside its band. Every other program is within its band or less than 0.0001%
-beyond it, except two whose runs of a single binary already vary by more: `startup` read +0.0142%
-in sitting 2 and +0.0026% in sitting 1 against a 0.0045% band (round-to-round spread 0.0139% on
-t1pa in sitting 2, up to 0.0245% on pad2 in sitting 1), and `sayloop` read +0.0043% in sitting 2
-and -0.0018% in sitting 1 against a 0.0030% band (spread 0.0109% on t1pa in sitting 1).
+`rexxcps`: -0.0221% at the base in both sittings (17,920,429,749 against 17,924,390,887 in
+sitting 2). Beyond band by more than 0.0001%: `startup` +0.0142% (sitting 2; band 0.0045%, t1pa
+spread 0.0139%) and `sayloop` +0.0043% (sitting 2; band 0.0030%, t1pa spread in sitting 1
+0.0109%).
 
 ### Wall clock
 
-Five interleaved rounds, base against pad2 on every program, and the oracle on `extcall`. Each
-`rexx-run` is copied to one fixed path before each run, so argv and the environment match across
-arms; bash's `time` builtin times the interpreter process itself. The one-minute load average was
-5.97 at the start and 6.28 at the end (other sessions on the machine). The command, `$S/wall.sh $S/wall1`:
+Five interleaved rounds, base and pad2 on every program, oracle on `extcall`, each `rexx-run`
+copied to one path before each run. One-minute load average 5.97 at start, 6.28 at end.
+`$S/wall.sh $S/wall1`:
 
 ```
 PROGRAMS=<callgrind.sh's PROGRAMS line>
@@ -130,8 +111,8 @@ for r in 1 2 3 4 5; do
 done
 ```
 
-Every run's stderr was empty; stdout matched across rounds and arms except on `heapshape` and
-`rexxcps`, which print timings; `extcall`'s stdout matched the oracle's.
+Stderr empty on every run; stdout identical across rounds and arms except `heapshape` and
+`rexxcps` (timings); `extcall` stdout identical to the oracle's.
 
 | program | base median s | base runs | pad2 median s | pad2 runs | pad2 d% |
 |---|---:|---|---:|---|---:|
@@ -160,6 +141,3 @@ Every run's stderr was empty; stdout matched across rounds and arms except on `h
 | rexxcps | 2.085 | 2.120 2.014 2.191 2.085 2.037 | 2.051 | 2.042 2.051 2.063 2.084 2.050 | -1.63 |
 
 oracle extcall: median 0.563 s, runs 0.563 0.559 0.528 0.578 0.566; base/oracle 1.76x
-
-pad2 is identical code at other addresses, so its column is the wall-clock layout noise of this
-sitting: -3.58% to +3.38%, inside the spec's ±4%.

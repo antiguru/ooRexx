@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
-"""Summarise one callgrind output file by object.
+"""Sum one callgrind output file's self instructions by object.
 
-usage: cgsum.py CALLGRIND_OUT
-prints: summary<TAB>libc<TAB>ld<TAB>exlibc
-where libc and ld are the self instructions attributed to libc.so.6 and to
-ld-linux, and exlibc is the summary less both. glibc's allocator varies from
-run to run of the same binary (measured 0.57% on arith.rex), which is why the
-comparison is taken on exlibc. Needs --compress-strings=no. Call lines'
-inclusive costs are skipped so each instruction is counted once.
+usage: cgsum.py CALLGRIND_OUT   (recorded with --compress-strings=no)
+prints: summary<TAB>libc.so.6<TAB>ld-linux<TAB>summary less both
 """
 import sys
 

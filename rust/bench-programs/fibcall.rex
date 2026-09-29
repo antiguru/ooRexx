@@ -1,5 +1,4 @@
-/* Recursive fib(22) by internal CALL, repeated n times: the cost of a CALL
-   and its RETURN, with a PROCEDURE activation per call. */
+/* Recursive fib(22) by internal CALL, n times. */
 n = 30
 do i = 1 to n
     call fib 22

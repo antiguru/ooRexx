@@ -1,5 +1,4 @@
-/* An external routine from liborxfunction called in a loop: the cost of one
-   native call and its return. The library is found through LD_LIBRARY_PATH. */
+/* liborxfunction's TestIntArg called n times; needs its directory on LD_LIBRARY_PATH. */
 n = 3000000
 t = 0
 do i = 1 to n

@@ -1,5 +1,4 @@
-/* Recursive fib(22) by internal function call, repeated n times: the same
-   work as fibcall.rex reached through a function invocation in an expression. */
+/* Recursive fib(22) by internal function call, n times. */
 n = 30
 do i = 1 to n
     r = fib(22)

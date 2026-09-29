@@ -57,8 +57,7 @@ impl Side {
             // No engine variable: the arm used to be selected per child
             // through `REXX_ENGINE`; `rexx-run` reads no such variable now,
             // so setting one would be a row labelled with an arm nobody
-            // chose. The oracle's library directory, so `extcall.rex` loads
-            // the same `liborxfunction.so` on both sides.
+            // chose. The oracle's library directory is for `extcall.rex`.
             env: vec![(
                 "LD_LIBRARY_PATH".to_string(),
                 PathBuf::from(ORACLE_ROOT).join("lib").display().to_string(),

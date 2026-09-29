@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Turn a checkout into a layout control: add COUNT dead functions to the IR
-driver's file, kept alive by a #[used] static and never called, so the build
-differs from its base only in where code lands.
+"""Insert COUNT never-called functions, kept by a #[used] static, into TREE's
+rust/crates/rexx-exec/src/ir/drive.rs.
 
 usage: layout-pad.py TREE COUNT
-TREE is the repository root of an extracted copy, never the working tree.
+TREE is an extracted copy of the repository, not the working tree.
 """
 import sys
 from pathlib import Path

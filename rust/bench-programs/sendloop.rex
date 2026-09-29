@@ -1,5 +1,4 @@
-/* A ::METHOD sent in a loop whose body does nothing: the cost of a send and
-   its return, without dispatch.rex's EXPOSE and arithmetic. */
+/* An empty ::METHOD sent n times. */
 n = 5000000
 o = .sink~new
 do i = 1 to n

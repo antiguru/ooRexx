@@ -1,22 +1,16 @@
 #!/bin/bash
-# Callgrind instruction counts, glibc and ld-linux excluded, for two or more
-# interpreter binaries over every benchmark program, interleaved.
+# Callgrind instruction counts, libc.so.6 and ld-linux subtracted, per program per binary.
 #
 # usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-T] NAME=BINARY NAME=BINARY...
-#   ROUNDS  rounds per binary and program (default 3); round r starts the
-#           binary order at binary r, so no binary always runs first
-#   JOBS    programs measured at once (default 8); counts do not depend on load
-#   OUTDIR  where callgrind files, outputs and summary.tsv go (default: mktemp -d)
-#   -T      only print the table for OUTDIR's existing summary.tsv
-# env: REXX_LIB_DIR  directory holding liborxfunction.so for extcall.rex, put
-#      on LD_LIBRARY_PATH for every run (default: the oracle's build/lib)
+#   ROUNDS  rounds (default 3); round r starts at binary r
+#   JOBS    programs run at once (default 8)
+#   OUTDIR  output directory (default: mktemp -d)
+#   -T      print the table for OUTDIR's summary.tsv without running
+# env: REXX_LIB_DIR  put on LD_LIBRARY_PATH (default: the oracle's build/lib)
 #
-# Prints one table: per program, the median exlibc count per binary, each
-# binary's delta against the first, and each binary's spread across rounds.
-# The median, because an occasional run of the same binary lands well above
-# the rest (measured +0.42% on extcall.rex, in rexx_api::handles::Table::register).
-# Every run must exit 0, and every binary must print the same stdout except
-# on TIMED, whose output reports timings.
+# Table: median per binary, delta against the first binary, spread across rounds.
+# Exits 1 if a run exits non-zero or its stdout differs from the first binary's,
+# except on TIMED.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 rounds=3 jobs=8 out= table_only=
@@ -40,9 +34,7 @@ lib=${REXX_LIB_DIR:-/home/moritz/dev/repos/ooRexx/build/lib}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 
-# Every program in this directory, plus rexxcps, which lives in its own.
-# The list is explicit so a run records what it measured; it is checked
-# against the directory so a new program cannot be left out unnoticed.
+# Every *.rex here plus rexxcps; checked against the directory.
 PROGRAMS="alloc alloc4c arith assign compound decloop decrender dispatch
 dispatchclass emptyloop extcall fibcall fibfunc heapshape nop parse sayloop
 sendloop startup strings textnum varlookup rexxcps"

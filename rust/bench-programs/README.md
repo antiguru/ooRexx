@@ -20,10 +20,10 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
 | `decrender.rex` | The same decimal control plus the renderings a real program performs on the control value (`length(j)`, `j='foobar'`), which is `rexxcps`' inner-loop shape. **1.99x**, the worst ratio in the suite, and the construct that carries `rexxcps` above every other primitive it exercises |
 | `nop.rex` | The fixed cost every clause pays: a counted loop whose body is 100 `nop` clauses, one per line, so the loop step is amortised over them. 1,000,000 passes |
 | `assign.rex` | The same shape with 100 `x = y` clauses, `y` assigned once before the loop: the per-clause cost plus one variable read and one write. 1,000,000 passes |
-| `fibcall.rex` | Recursive fib(22) by internal `CALL`, `n` times: a `PROCEDURE` activation per call. Added for Phase 6 |
-| `fibfunc.rex` | The same fib(22) by internal function call. Added for Phase 6 |
-| `sendloop.rex` | A `::METHOD` with an empty body sent in a loop: the send and its return, without `dispatch.rex`'s `EXPOSE` and arithmetic. Added for Phase 6 |
-| `extcall.rex` | `TestIntArg` from `liborxfunction` (`testbinaries/orxfunction.cpp`) called in a loop: one native call and its return. Needs the library's directory on `LD_LIBRARY_PATH`, on both interpreters; `callgrind.sh` and `rexx-bench-suite` set it. Added for Phase 6 |
+| `fibcall.rex` | Recursive fib(22) by internal `CALL`, 30 times |
+| `fibfunc.rex` | Recursive fib(22) by internal function call, 30 times |
+| `sendloop.rex` | An empty `::METHOD` sent 5,000,000 times |
+| `extcall.rex` | `liborxfunction`'s `TestIntArg` called 3,000,000 times; needs the library's directory on `LD_LIBRARY_PATH` |
 | `startup.rex` | `say 1` — cold-start timing (D2's gate), timed separately with `rexx-time`, not through criterion's statistical sampling |
 | `heapshape.rex` | Full-GC pause over a ~1M-object graph. It prints its own figures, so the suite reports those rather than timing the process. **The slot strings are wider than seven bytes on purpose**: a shorter one lives in the Rust handle and allocates nothing, which collapses the graph to ~1,001 objects -- see the program's own comment |
 
@@ -56,10 +56,6 @@ unexposed; `.rexxinfo` is an instance, not a class). None of these programs refe
 ## Instruction counts: `callgrind.sh`
 
 `callgrind.sh NAME=BINARY NAME=BINARY...` runs every program here and `../bench-rexxcps/rexxcps.rex`
-under `valgrind --tool=callgrind` for each binary, program by program with the binary order rotated
-each round, and prints one table of instruction counts with glibc and ld-linux subtracted
-(`cgsum.py`). Its `PROGRAMS` line is the list, and it refuses to run if this directory disagrees.
-`REXX_LIB_DIR` names the directory `extcall.rex` loads `liborxfunction.so` from; the default is
-the oracle's `build/lib`. `layout-pad.py TREE COUNT` turns an extracted copy of the tree into a
-layout control: dead functions in the IR driver's file, never called.
-`docs/superpowers/plans/phase-6-perf.md` holds the Phase 6 base measured with both.
+under callgrind on each binary and prints instruction counts less libc.so.6 and ld-linux
+(`cgsum.py`). `layout-pad.py TREE COUNT` adds never-called functions to a tree's IR driver.
+Measurements: `docs/superpowers/plans/phase-6-perf.md`.

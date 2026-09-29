@@ -73,8 +73,8 @@ pub static NOT_BENCHMARKED: &[&str] = &["heapshape"];
 /// Resolves `REXX_BENCH_BINARY` into an `Interpreter`, deriving its library
 /// search path the same way `rexx-diff` does (`rexx-oracle/src/bin/rexx-diff.rs`):
 /// the binary's own directory, plus a sibling `lib/`, which is where
-/// `build/bin/rexx` finds `build/lib/*.so`. The oracle's library directory
-/// follows, so `extcall` finds `liborxfunction.so` under a `rexx-run` too.
+/// `build/bin/rexx` finds `build/lib/*.so`, then the oracle's library
+/// directory, for `extcall`.
 pub fn interpreter_under_test() -> Interpreter {
     let raw = std::env::var(BINARY_VAR)
         .unwrap_or_else(|_| panic!("set {BINARY_VAR} to the interpreter binary to benchmark"));
