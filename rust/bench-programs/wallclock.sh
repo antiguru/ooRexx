@@ -11,6 +11,8 @@
 #
 # Each binary is copied to OUTDIR/stage/rexx-run before each of its runs; bash's
 # `time` times the interpreter process. Programs: callgrind.sh's PROGRAMS.
+# Exits 1 if a run exits non-zero or its stdout differs from the first binary's
+# (except on TIMED).
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 rounds=5 out= with_oracle= table_only=
@@ -43,21 +45,23 @@ for arg in "$@"; do
     names+=("${arg%%=*}")
     bin[${arg%%=*}]=$(readlink -f "${arg#*=}")
 done
+status=0
 if [ -z "$table_only" ]; then
 {
     echo "# $(date -u +%FT%TZ) rounds=$rounds REXX_LIB_DIR=$lib load=$(cut -d' ' -f1-3 /proc/loadavg)"
     for name in "${names[@]}"; do echo "# $name ${bin[$name]} $(sha256sum < "${bin[$name]}" | cut -d' ' -f1)"; done
 } > "$out/binaries.txt"
 
+TIMED="heapshape rexxcps"
 TIMEFORMAT=%R
 run() { # arm program round
     local d t f="$out/$2.$1.r$3"
     d=$(mktemp -d)
     if [ "$1" = oracle ]; then
-        t=$( { cd "$d"; ( ulimit -v 1048576; export LD_LIBRARY_PATH=$lib; time "$oracle_root/bin/rexx" "$(prog "$2")" > "$f.out" 2> "$f.err" ); } 2>&1 )
+        t=$( { cd "$d"; ( ulimit -v 1048576; export LD_LIBRARY_PATH=$lib; time "$oracle_root/bin/rexx" "$(prog "$2")" > "$f.out" 2> "$f.err"; echo $? > "$f.rc" ); } 2>&1 )
     else
         cp "${bin[$1]}" "$out/stage/rexx-run"
-        t=$( { cd "$d"; ( export LD_LIBRARY_PATH=$lib; time "$out/stage/rexx-run" "$(prog "$2")" > "$f.out" 2> "$f.err" ); } 2>&1 )
+        t=$( { cd "$d"; ( export LD_LIBRARY_PATH=$lib; time "$out/stage/rexx-run" "$(prog "$2")" > "$f.out" 2> "$f.err"; echo $? > "$f.rc" ); } 2>&1 )
     fi
     rmdir "$d"
     printf '%s\t%s\tr%s\t%s\n' "$1" "$2" "$3" "$t" >> "$out/wall.tsv"
@@ -72,6 +76,15 @@ for ((r = 1; r <= rounds; r++)); do
     done
 done
 echo "# end load=$(cut -d' ' -f1-3 /proc/loadavg)" >> "$out/binaries.txt"
+for f in "$out"/*.rc; do
+    [ "$(cat "$f")" = 0 ] || { echo "$(basename "$f" .rc) exited $(cat "$f")" >&2; status=1; }
+done
+for p in $PROGRAMS; do
+    [[ " $TIMED " == *" $p "* ]] && continue
+    for f in "$out/$p".*.out; do
+        cmp -s "$f" "$out/$p.${names[0]}.r1.out" || { echo "$(basename "$f" .out) stdout differs from ${names[0]} r1" >&2; status=1; }
+    done
+done
 fi
 python3 - "$out/wall.tsv" "${names[@]}" oracle <<'EOF' | tee "$out/table.txt"
 import statistics
@@ -93,3 +106,4 @@ for p, d in rows.items():
     print("\t".join(cells))
 EOF
 echo "# outputs in $out" >&2
+exit $status

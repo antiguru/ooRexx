@@ -170,6 +170,7 @@ fn collect(arguments: &[String]) -> ExitCode {
     }
     for entry in &axes {
         let (axis, program) = resolve(entry);
+        let rust = rust.for_axis(&axis);
         eprintln!("pass {pass} [{config}]: {axis}");
         for index in 0..(warmup + pairs) {
             let sampled = index >= warmup;
