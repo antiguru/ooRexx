@@ -1028,7 +1028,7 @@ struct Interp {
     heap: Heap,
     roots: RootSet,
     /// The one activity: the state of the execution now running.
-    activity: Box<Activity>,
+    activity: Activity,
     /// A buffer lent out for building a compound's tail key, and handed back.
     key_buffer: Vec<u8>,
     /// Buffers lent out for a `PARSE` instruction's source strings, and
@@ -1772,7 +1772,7 @@ impl Interp {
         Interp {
             heap: Heap::new(),
             roots: RootSet::new(),
-            activity: Box::new(Activity::new()),
+            activity: Activity::new(),
             key_buffer: Vec::new(),
             parse_buffers: Vec::new(),
             text_scratch: [0; crate::value::TEXT_SCRATCH],
