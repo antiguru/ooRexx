@@ -1,7 +1,7 @@
 /* Task 21, fix round 3: an activation parked by REPLY keeps its context
    object across a collection taken while it is off every stack.
 
-   That route -- `park_reply` into `RootSet::park` into
+   That route -- `park_reply` into `ActivityRoots::park` into
    `Activation::object_roots` -- is the one the running and suspended rows
    cannot reach, and it had no differential row: no corpus program contained
    both REPLY and `.context`, which is the same disjoint-sets shape that let
