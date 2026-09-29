@@ -59,4 +59,5 @@ unexposed; `.rexxinfo` is an instance, not a class). None of these programs refe
 under callgrind on each binary and prints instruction counts less libc.so.6 and ld-linux
 (`cgsum.py`). `layout-pad.py TREE COUNT` adds never-called functions to a tree's IR driver.
 `wallclock.sh NAME=BINARY...` times the same programs, interleaved.
+`cgdiff.py A B` prints per-function differences between two callgrind files.
 Measurements: `docs/superpowers/plans/phase-6-perf.md`.
