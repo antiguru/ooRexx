@@ -381,8 +381,7 @@ of three rounds.
 | varlookup | 14,878,111,751 | +71 | +1,614,329 | +0.0109% |
 | rexxcps | 17,817,337,824 | -61,517 | +542,884 | +0.0030% |
 
-Budget: at most +0.3% beyond each program's noise band (recorded above; 0 for every program except
-`heapshape` 0.00000%, `sayloop` 0.0030%, `startup` 0.0045%, `rexxcps` 0.00006%). Largest `stepB`
+Budget: at most +0.3% beyond each program's noise band (recorded above). Largest `stepB`
 delta is `nop` at +0.0303%, `heapshape` is negative. Every program is inside budget in round 1;
 `emptyloop`'s +0.0152% matches the spec's own N=50-to-N=1024 scaling from the spike's +0.27% (1024
 is about 20.5x 50; 0.27/20.5 = 0.0132%, close to measured).
