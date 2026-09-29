@@ -372,7 +372,7 @@ impl Interp {
             }
             Redirection::Using(expression) => {
                 let object = self.eval(code, expression)?;
-                self.roots.push_temp(object);
+                self.roots.activity_mut().push_temp(object);
                 self.trace_redirect_target(Stream::Input, object);
                 self.using_input_lines(object)?
             }
@@ -440,11 +440,11 @@ impl Interp {
             None => {
                 let caller = self.caller();
                 let selector = self.text(b"ARRAY");
-                self.roots.push_temp(selector);
+                self.roots.activity_mut().push_temp(selector);
                 let answered = self
                     .send_message(object, b"REQUEST", None, &[Some(selector)], caller)?
                     .unwrap_or(ObjRef::NIL);
-                self.roots.push_temp(answered);
+                self.roots.activity_mut().push_temp(answered);
                 answered
             }
         };
@@ -479,7 +479,7 @@ impl Interp {
             }
             Redirection::Using(expression) => {
                 let object = self.eval(code, expression)?;
-                self.roots.push_temp(object);
+                self.roots.activity_mut().push_temp(object);
                 self.trace_redirect_target(stream, object);
                 self.using_output_target(object, option)
             }
@@ -556,7 +556,7 @@ impl Interp {
     fn redirect_stem(&mut self, code: &Code<'_>, id: SymbolId, stream: Stream) -> ObjRef {
         let name = code.symbols.name(id).as_bytes().to_vec();
         let object = self.read_stem(&name);
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         self.echo_symbol_read(code, id, object);
         self.trace_redirect_target(stream, object);
         object
@@ -605,7 +605,7 @@ impl Interp {
     ) -> Result<(), Failure> {
         for line in lines {
             let value = self.text(line);
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             let caller = self.caller();
             self.send_message(object, b"LINEOUT", None, &[Some(value)], caller)?;
         }
@@ -625,7 +625,7 @@ impl Interp {
         stream: Stream,
     ) -> Result<Vec<u8>, Failure> {
         let value = self.eval(code, expression)?;
-        self.roots.push_temp(value);
+        self.roots.activity_mut().push_temp(value);
         self.trace_redirect_target(stream, value);
         let value = self.required_string_value(value)?;
         let name = self.to_text(value).into_owned();
@@ -652,14 +652,14 @@ impl Interp {
             return Err(Loud::environment_symbol(b".STREAM", "Phase 5").into());
         };
         let argument = self.text(qualified);
-        self.roots.push_temp(argument);
+        self.roots.activity_mut().push_temp(argument);
         let caller = self.caller();
         let object = self
             .send_message(class, b"NEW", None, &[Some(argument)], caller)?
             .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         let option = self.text(mode);
-        self.roots.push_temp(option);
+        self.roots.activity_mut().push_temp(option);
         let caller = self.caller();
         let answer = self
             .send_message(object, b"OPEN", None, &[Some(option)], caller)?
@@ -780,7 +780,7 @@ impl Interp {
         }
         for line in lines {
             let value = self.text(line);
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             let caller = self.caller();
             self.send_message(object, b"APPEND", None, &[Some(value)], caller)?;
         }

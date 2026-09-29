@@ -255,9 +255,9 @@ impl Interp {
         redirector: &Redirector,
     ) -> Result<HandledCommand, Failure> {
         let address = self.text(environment);
-        self.roots.push_temp(address);
+        self.roots.activity_mut().push_temp(address);
         let issued = self.text(command);
-        self.roots.push_temp(issued);
+        self.roots.activity_mut().push_temp(issued);
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let mut strings = CStringPool::new();
@@ -289,7 +289,7 @@ impl Interp {
             Err(refused) => return Err(self.refusal(refused, true, false)),
         };
         if let Some(value) = value {
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
         }
         Ok(HandledCommand {
             value,
@@ -441,7 +441,7 @@ impl Interp {
             self.activity.pending_result,
         ) = (frame.additional, frame.result);
         let object = self.build_trapped_native_condition_object(&held)?;
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         Ok(Some(object))
     }
 
@@ -507,7 +507,7 @@ impl Interp {
         };
         frame.condition = None;
         for object in [answer.additional, answer.result].into_iter().flatten() {
-            self.roots.push_temp(object);
+            self.roots.activity_mut().push_temp(object);
         }
         frame.name.clear();
         frame.arguments.clear();
@@ -684,7 +684,7 @@ impl Host for Interp {
         match self.blamed_string_conversion(object) {
             Ok(converted) => {
                 if let Some(text) = converted {
-                    self.roots.push_temp(text);
+                    self.roots.activity_mut().push_temp(text);
                 }
                 Ok(converted)
             }
@@ -780,7 +780,7 @@ impl Host for Interp {
         let behaviour = self.classes().instance_behaviour_handle(class);
         let body = Body::pointer(class, behaviour, value);
         let object = self.alloc_with(BehaviourId::OBJECT, body);
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         object
     }
 
@@ -868,7 +868,7 @@ impl Host for Interp {
         let Some(array) = converted else {
             return Ok(None);
         };
-        self.roots.push_temp(array);
+        self.roots.activity_mut().push_temp(array);
         // `isMultiDimensional`: an array with a dimension list of any length
         // but one.
         Ok(match self.array_body(array) {
@@ -967,19 +967,19 @@ impl Host for Interp {
             Some(object) => object,
             None => self.text(value.to_string().as_bytes()),
         };
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         object
     }
 
     fn new_string(&mut self, bytes: &[u8]) -> ObjRef {
         let object = self.text(bytes);
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         object
     }
 
     fn double_object(&mut self, value: f64, precision: usize) -> ObjRef {
         let object = self.text(&double_text(value, precision));
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         object
     }
 
@@ -1054,7 +1054,7 @@ impl Interp {
             if let Ok(Some(answered)) =
                 self.send_message(object, super::OBJECTNAME, None, &[], caller)
             {
-                self.roots.push_temp(answered);
+                self.roots.activity_mut().push_temp(answered);
                 return self.string_value_text(answered);
             }
         }
@@ -1066,7 +1066,7 @@ impl Interp {
     fn native_string_conversion(&mut self, object: ObjRef) -> Result<ObjRef, Condition> {
         match self.required_string_value(object) {
             Ok(text) => {
-                self.roots.push_temp(text);
+                self.roots.activity_mut().push_temp(text);
                 Ok(text)
             }
             Err(failure) => Err(self.hold_native_condition(failure)),

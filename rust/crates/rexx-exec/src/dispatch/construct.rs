@@ -394,7 +394,7 @@ pub(super) fn native_string_new(
     }
     let bytes = interp.to_text(text).to_vec();
     let object = interp.text_built(bytes);
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     let caller = interp.caller();
     interp.send_message(object, INIT, None, &args[1..], caller)?;
     Ok(Some(object))
@@ -428,7 +428,7 @@ pub(super) fn native_stem_new(
             exposed: None,
         },
     );
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     let caller = interp.caller();
     let rest = args.get(1..).unwrap_or_default();
     interp.send_message(object, INIT, None, rest, caller)?;
@@ -517,7 +517,7 @@ pub(super) const WEAK_REFERENT: &[u8] = b"REFERENT";
 /// The cell `WEAK_REFERENT` holds: a `Body::WeakRef` allocated for `referent`.
 fn weak_referent_cell(interp: &mut Interp, referent: ObjRef) -> ObjRef {
     let cell = interp.alloc_with(rexx_core::BehaviourId::OBJECT, Body::WeakRef(referent));
-    interp.roots.push_temp(cell);
+    interp.roots.activity_mut().push_temp(cell);
     cell
 }
 

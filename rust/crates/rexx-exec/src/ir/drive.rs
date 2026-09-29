@@ -373,8 +373,8 @@ impl Interp {
         count_run_chunk_entry();
 
         // Truncated on the way out, so a temp this chunk leaks does not outlive it.
-        let temps = self.roots.push_frame();
-        let arena = self.roots.frames();
+        let temps = self.roots.activity_mut().push_frame();
+        let arena = self.roots.activity().frames();
         let registers = arena.reserve(chunk.registers);
         // Released on both paths rather than only on `Ok`: the loud and
         // raised paths leave the activation for `Interp::run` and
@@ -382,7 +382,7 @@ impl Interp {
         // would keep its registers rooted for the rest of the run.
         let ended = self.run_chunk_clauses(code, chunk, registers, source);
         arena.release(registers);
-        self.roots.pop_frame(temps);
+        self.roots.activity_mut().pop_frame(temps);
         ended
     }
 

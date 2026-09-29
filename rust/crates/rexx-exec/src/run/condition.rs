@@ -341,7 +341,7 @@ impl Interp {
         let sites = std::mem::take(&mut self.activity.failure_sites);
         let frames = std::mem::take(&mut self.activity.failure_frames);
         for &frame in &frames {
-            self.roots.push_temp(frame);
+            self.roots.activity_mut().push_temp(frame);
         }
         self.activity.failure_frame = None;
         let origin = self.activity.failure_origin.take();
@@ -635,7 +635,7 @@ impl Interp {
         let rc_text = match &raise.rc {
             Some(expr) => {
                 let value = self.eval(code, expr)?;
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 // **The line renders the object and the code is its string
                 // value**, which `Interp::string_value_text`'s own doc has the
                 // split for: `traceKeywordResult(conditionName, rc)`
@@ -657,7 +657,7 @@ impl Interp {
         let mut description: Option<Vec<u8>> = None;
         if let Some(expr) = &raise.description {
             let value = self.eval(code, expr)?;
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             // The object on the line and its string value in the condition,
             // the same split the `rc` keyword above takes. Measured,
             // `trace i` over `raise syntax 93.900 description (1,2)
@@ -676,7 +676,7 @@ impl Interp {
         let mut additional: Vec<Vec<u8>> = Vec::new();
         if let Some(expr) = &raise.additional {
             let value = self.eval(code, expr)?;
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             // **A surface that is neither `stringValue()` nor an operator,
             // and only under one condition.** `RaiseInstruction::execute`
             // (`instructions/RaiseInstruction.cpp:270`-`290`) calls
@@ -764,7 +764,7 @@ impl Interp {
                     continue;
                 };
                 let value = self.eval(code, expr)?;
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 held.push(Some(value));
                 // **No gap check here, and the absence is the decision.**
                 // `RaiseInstruction::execute` builds a real `ArrayClass` from
@@ -801,7 +801,7 @@ impl Interp {
             Some(result) => match &result.value {
                 Some(expr) => {
                     let value = self.eval(code, expr)?;
-                    self.roots.push_temp(value);
+                    self.roots.activity_mut().push_temp(value);
                     if let Some(rendered) = self.result_text(value) {
                         self.trace_keyword(indent, "RESULT", &rendered);
                     }

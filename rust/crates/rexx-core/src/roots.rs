@@ -19,7 +19,7 @@ use crate::frame::{FrameArena, FrameBlock};
 pub struct FrameId(usize);
 
 /// A handle to one activation's range of local-variable slots inside
-/// `RootSet` (D16). `push_slots`/`pop_slots` bracket its lifetime.
+/// `ActivityRoots` (D16). `push_slots`/`pop_slots` bracket its lifetime.
 /// `frame_slot`, `set_frame_slot` and `grow_slots` address within it.
 /// `depth` is the frame stack's length at the moment this frame was pushed,
 /// and is how `grow_slots` recognises "the top frame" even when two frames
@@ -41,8 +41,8 @@ pub struct SlotRef(usize);
 const CELL_TAG: usize = 1 << (usize::BITS - 1);
 
 /// One frame's alias entries, saved across a park by
-/// [`RootSet::take_frame_aliases`] and put back by
-/// [`RootSet::put_frame_aliases`].
+/// [`ActivityRoots::take_frame_aliases`] and put back by
+/// [`ActivityRoots::put_frame_aliases`].
 pub struct FrameAliases(Vec<Option<usize>>);
 
 impl SlotRef {
@@ -54,6 +54,16 @@ impl SlotRef {
 /// Everything the collector starts from.
 pub struct RootSet {
     globals: Vec<(String, ObjRef)>,
+    /// Storage for variables a `>name` reference has been taken to, outside
+    /// every frame and never truncated.
+    cells: Vec<Option<ObjRef>>,
+    /// The running activity's roots.
+    activity: ActivityRoots,
+}
+
+/// One activity's roots: its temporaries, register frames, slots and
+/// parked values.
+pub struct ActivityRoots {
     temps: Vec<ObjRef>,
     /// The driver's register frames.
     frames: Rc<FrameArena>,
@@ -71,9 +81,6 @@ pub struct RootSet {
     aliases: Vec<Option<usize>>,
     /// How many entries of `aliases` are `Some`.
     alias_count: usize,
-    /// Storage for variables a `>name` reference has been taken to, outside
-    /// every frame and never truncated.
-    cells: Vec<Option<ObjRef>>,
     /// The starting offset of every currently pushed frame, in push order.
     /// Its length is also every live frame's `depth` plus one, which is how
     /// `grow_slots` and `pop_slots` recognise the top frame.
@@ -85,8 +92,8 @@ pub struct RootSet {
     parked_free: Vec<usize>,
 }
 
-/// A handle to one parked set of values, issued by [`RootSet::park`] and spent
-/// by [`RootSet::release`].
+/// A handle to one parked set of values, issued by [`ActivityRoots::park`] and spent
+/// by [`ActivityRoots::release`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Parked(usize);
 
@@ -94,12 +101,144 @@ impl RootSet {
     pub fn new() -> Self {
         RootSet {
             globals: Vec::new(),
+            cells: Vec::new(),
+            activity: ActivityRoots::new(),
+        }
+    }
+
+    pub fn add_global(&mut self, name: &str, value: ObjRef) {
+        match self.globals.iter_mut().find(|(n, _)| n == name) {
+            Some(entry) => entry.1 = value,
+            None => self.globals.push((name.to_string(), value)),
+        }
+    }
+
+    /// The running activity's roots.
+    #[inline(always)]
+    pub fn activity(&self) -> &ActivityRoots {
+        &self.activity
+    }
+
+    /// The running activity's roots, mutably.
+    #[inline(always)]
+    pub fn activity_mut(&mut self) -> &mut ActivityRoots {
+        &mut self.activity
+    }
+
+    /// Moves slot `index` of `frame` into a cell and answers that cell, so
+    /// that a reference to the variable survives the frame.
+    pub fn promote(&mut self, frame: SlotFrame, index: usize) -> SlotRef {
+        let position = self.activity.resolve(frame, index);
+        if SlotRef(position).is_cell() {
+            return SlotRef(position);
+        }
+        self.cells.push(self.activity.slots[position]);
+        let cell = (self.cells.len() - 1) | CELL_TAG;
+        self.activity.slots[position] = None;
+        if self.activity.aliases[position].is_none() {
+            self.activity.alias_count += 1;
+        }
+        self.activity.aliases[position] = Some(cell);
+        SlotRef(cell)
+    }
+
+    /// Reads the storage `slot` names, `None` for an unassigned variable.
+    pub fn slot_value(&self, slot: SlotRef) -> Option<ObjRef> {
+        self.at(slot.0)
+    }
+
+    /// Writes the storage `slot` names.
+    pub fn set_slot_value(&mut self, slot: SlotRef, value: ObjRef) {
+        self.write(slot.0, Some(value));
+    }
+
+    /// Reads slot `index` within `frame`: `None` for an unassigned or
+    /// `DROP`ped variable, which is a legal outcome and not an error.
+    #[inline(always)]
+    pub fn frame_slot(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
+        let position = frame.start + index;
+        if self.activity.alias_count == 0 {
+            debug_assert!(
+                self.activity.aliases[position].is_none(),
+                "slot {position} redirects while the alias count says none does"
+            );
+            assert!(position < self.activity.slots.len());
+            return self.activity.slots[position];
+        }
+        self.at(self.activity.resolve_aliased(position))
+    }
+
+    #[inline(always)]
+    pub fn set_frame_slot(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
+        let position = frame.start + index;
+        if self.activity.alias_count == 0 {
+            debug_assert!(
+                self.activity.aliases[position].is_none(),
+                "slot {position} redirects while the alias count says none does"
+            );
+            assert!(position < self.activity.slots.len());
+            self.activity.slots[position] = Some(value);
+            return;
+        }
+        let position = self.activity.resolve_aliased(position);
+        self.write(position, Some(value));
+    }
+
+    /// Returns slot `index` within `frame` to the unset state, which is what
+    /// `DROP` on a simple variable does.
+    /// ```text
+    /// a = 5     ; drop a ; say a   ->  A                 (unset: derived name)
+    /// x = .nil            ; say x  ->  The NIL object    (`.nil` is a value)
+    /// y = .nil  ; drop y  ; say y  ->  Y                 (unset, not NIL)
+    /// ```
+    pub fn clear_frame_slot(&mut self, frame: SlotFrame, index: usize) {
+        let position = self.activity.resolve(frame, index);
+        self.write(position, None);
+    }
+
+    /// Reads the storage at a tagged position: the frame arena, or a cell.
+    #[inline(always)]
+    fn at(&self, position: usize) -> Option<ObjRef> {
+        if position & CELL_TAG == 0 {
+            assert!(position < self.activity.slots.len());
+            self.activity.slots[position]
+        } else {
+            self.cells[position & !CELL_TAG]
+        }
+    }
+
+    /// [`RootSet::at`]'s write, in the same position.
+    #[inline(always)]
+    fn write(&mut self, position: usize, value: Option<ObjRef>) {
+        if position & CELL_TAG == 0 {
+            assert!(position < self.activity.slots.len());
+            self.activity.slots[position] = value;
+        } else {
+            self.cells[position & !CELL_TAG] = value;
+        }
+    }
+
+    /// Yields globals, temps, every live register, and every assigned slot
+    /// across every currently active frame -- a popped frame's slots are
+    /// already gone, truncated out of `slots` by `pop_slots`, so nothing here
+    /// needs to filter them out again by frame.
+    pub fn iter(&self) -> impl Iterator<Item = ObjRef> + '_ {
+        self.globals
+            .iter()
+            .map(|(_, v)| *v)
+            .chain(self.cells.iter().filter_map(|c| *c))
+            .chain(self.activity.iter())
+    }
+}
+
+impl ActivityRoots {
+    pub fn new() -> Self {
+        ActivityRoots {
             temps: Vec::new(),
             frames: Rc::new(FrameArena::new(FrameBlock::DEFAULT)),
             slots: Vec::new(),
             aliases: Vec::new(),
             alias_count: 0,
-            cells: Vec::new(),
             frame_starts: Vec::new(),
             parked: Vec::new(),
             parked_free: Vec::new(),
@@ -133,13 +272,6 @@ impl RootSet {
     /// How many parked entries are currently rooting anything.
     pub fn live_parked(&self) -> usize {
         self.parked.iter().flatten().count()
-    }
-
-    pub fn add_global(&mut self, name: &str, value: ObjRef) {
-        match self.globals.iter_mut().find(|(n, _)| n == name) {
-            Some(entry) => entry.1 = value,
-            None => self.globals.push((name.to_string(), value)),
-        }
     }
 
     /// Marks the current top of the temporaries stack, to be handed back to
@@ -247,23 +379,6 @@ impl RootSet {
         SlotRef(self.resolve(frame, index))
     }
 
-    /// Moves slot `index` of `frame` into a cell and answers that cell, so
-    /// that a reference to the variable survives the frame.
-    pub fn promote(&mut self, frame: SlotFrame, index: usize) -> SlotRef {
-        let position = self.resolve(frame, index);
-        if SlotRef(position).is_cell() {
-            return SlotRef(position);
-        }
-        self.cells.push(self.slots[position]);
-        let cell = (self.cells.len() - 1) | CELL_TAG;
-        self.slots[position] = None;
-        if self.aliases[position].is_none() {
-            self.alias_count += 1;
-        }
-        self.aliases[position] = Some(cell);
-        SlotRef(cell)
-    }
-
     /// Copies out `frame`'s alias entries, for a caller that is about to
     /// release the frame and re-push it later.
     pub fn take_frame_aliases(&self, frame: SlotFrame) -> FrameAliases {
@@ -271,7 +386,7 @@ impl RootSet {
         FrameAliases(self.aliases[frame.start..end].to_vec())
     }
 
-    /// Puts back what [`RootSet::take_frame_aliases`] copied out, into a
+    /// Puts back what [`ActivityRoots::take_frame_aliases`] copied out, into a
     /// frame pushed at the same length.
     pub fn put_frame_aliases(&mut self, frame: SlotFrame, saved: &FrameAliases) {
         for (index, entry) in saved.0.iter().enumerate() {
@@ -282,16 +397,6 @@ impl RootSet {
             }
             *at = Some(target);
         }
-    }
-
-    /// Reads the storage `slot` names, `None` for an unassigned variable.
-    pub fn slot_value(&self, slot: SlotRef) -> Option<ObjRef> {
-        self.at(slot.0)
-    }
-
-    /// Writes the storage `slot` names.
-    pub fn set_slot_value(&mut self, slot: SlotRef, value: ObjRef) {
-        self.write(slot.0, Some(value));
     }
 
     /// Makes slot `index` of `frame` an alias for `target`: every later
@@ -323,7 +428,7 @@ impl RootSet {
         self.resolve_aliased(position)
     }
 
-    /// [`RootSet::resolve`]'s slow half, for a caller that has already found
+    /// [`ActivityRoots::resolve`]'s slow half, for a caller that has already found
     /// an alias may be in force.
     #[inline(always)]
     fn resolve_aliased(&self, position: usize) -> usize {
@@ -339,72 +444,6 @@ impl RootSet {
             at = target;
         }
         at
-    }
-
-    /// Reads slot `index` within `frame`: `None` for an unassigned or
-    /// `DROP`ped variable, which is a legal outcome and not an error.
-    #[inline(always)]
-    pub fn frame_slot(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
-        let position = frame.start + index;
-        if self.alias_count == 0 {
-            debug_assert!(
-                self.aliases[position].is_none(),
-                "slot {position} redirects while the alias count says none does"
-            );
-            assert!(position < self.slots.len());
-            return self.slots[position];
-        }
-        self.at(self.resolve_aliased(position))
-    }
-
-    #[inline(always)]
-    pub fn set_frame_slot(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
-        let position = frame.start + index;
-        if self.alias_count == 0 {
-            debug_assert!(
-                self.aliases[position].is_none(),
-                "slot {position} redirects while the alias count says none does"
-            );
-            assert!(position < self.slots.len());
-            self.slots[position] = Some(value);
-            return;
-        }
-        let position = self.resolve_aliased(position);
-        self.write(position, Some(value));
-    }
-
-    /// Returns slot `index` within `frame` to the unset state, which is what
-    /// `DROP` on a simple variable does.
-    /// ```text
-    /// a = 5     ; drop a ; say a   ->  A                 (unset: derived name)
-    /// x = .nil            ; say x  ->  The NIL object    (`.nil` is a value)
-    /// y = .nil  ; drop y  ; say y  ->  Y                 (unset, not NIL)
-    /// ```
-    pub fn clear_frame_slot(&mut self, frame: SlotFrame, index: usize) {
-        let position = self.resolve(frame, index);
-        self.write(position, None);
-    }
-
-    /// Reads the storage at a tagged position: the frame arena, or a cell.
-    #[inline(always)]
-    fn at(&self, position: usize) -> Option<ObjRef> {
-        if position & CELL_TAG == 0 {
-            assert!(position < self.slots.len());
-            self.slots[position]
-        } else {
-            self.cells[position & !CELL_TAG]
-        }
-    }
-
-    /// [`RootSet::at`]'s write, in the same position.
-    #[inline(always)]
-    fn write(&mut self, position: usize, value: Option<ObjRef>) {
-        if position & CELL_TAG == 0 {
-            assert!(position < self.slots.len());
-            self.slots[position] = value;
-        } else {
-            self.cells[position & !CELL_TAG] = value;
-        }
     }
 
     /// Grows `frame` by one slot for a name its plan never saw -- `DROP (v)`
@@ -427,23 +466,25 @@ impl RootSet {
         index
     }
 
-    /// Yields globals, temps, every live register, and every assigned slot
-    /// across every currently active frame -- a popped frame's slots are
-    /// already gone, truncated out of `slots` by `pop_slots`, so nothing here
-    /// needs to filter them out again by frame.
+    /// Yields this activity's temps, live registers, assigned slots and
+    /// parked values.
     pub fn iter(&self) -> impl Iterator<Item = ObjRef> + '_ {
-        self.globals
+        self.temps
             .iter()
-            .map(|(_, v)| *v)
-            .chain(self.temps.iter().copied())
+            .copied()
             .chain(self.frames.iter())
             .chain(self.slots.iter().filter_map(|s| *s))
-            .chain(self.cells.iter().filter_map(|c| *c))
             .chain(self.parked.iter().flatten().flatten().copied())
     }
 }
 
 impl Default for RootSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for ActivityRoots {
     fn default() -> Self {
         Self::new()
     }

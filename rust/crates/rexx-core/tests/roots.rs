@@ -12,21 +12,21 @@ fn globals_are_always_roots() {
 fn temporaries_stop_being_roots_when_their_frame_is_popped() {
     let mut roots = RootSet::new();
     let tmp = ObjRef::heap(5, 0);
-    let frame = roots.push_frame();
-    roots.push_temp(tmp);
+    let frame = roots.activity_mut().push_frame();
+    roots.activity_mut().push_temp(tmp);
     assert!(roots.iter().any(|r| r == tmp));
-    roots.pop_frame(frame);
+    roots.activity_mut().pop_frame(frame);
     assert!(!roots.iter().any(|r| r == tmp));
 }
 
 #[test]
 fn popping_an_outer_frame_discards_the_inner_frames_it_contains() {
     let mut roots = RootSet::new();
-    let outer = roots.push_frame();
-    roots.push_temp(ObjRef::heap(1, 0));
-    let _inner = roots.push_frame();
-    roots.push_temp(ObjRef::heap(2, 0));
-    roots.pop_frame(outer);
+    let outer = roots.activity_mut().push_frame();
+    roots.activity_mut().push_temp(ObjRef::heap(1, 0));
+    let _inner = roots.activity_mut().push_frame();
+    roots.activity_mut().push_temp(ObjRef::heap(2, 0));
+    roots.activity_mut().pop_frame(outer);
     assert_eq!(roots.iter().count(), 0);
 }
 
@@ -50,9 +50,9 @@ fn rebinding_a_global_replaces_it_rather_than_adding_a_second_root() {
 #[should_panic(expected = "grow_slots on a frame that is not the top one")]
 fn a_register_slot_frame_makes_the_variable_frame_beneath_it_ungrowable() {
     let mut roots = RootSet::new();
-    let variables = roots.push_slots(2);
-    let _registers = roots.push_slots(4);
-    roots.grow_slots(variables);
+    let variables = roots.activity_mut().push_slots(2);
+    let _registers = roots.activity_mut().push_slots(4);
+    roots.activity_mut().grow_slots(variables);
 }
 
 /// Registers live in the frame arena, so the variable frame beneath them is
@@ -60,13 +60,13 @@ fn a_register_slot_frame_makes_the_variable_frame_beneath_it_ungrowable() {
 #[test]
 fn registers_leave_the_variable_frame_growable() {
     let mut roots = RootSet::new();
-    let variables = roots.push_slots(2);
-    let arena = roots.frames();
+    let variables = roots.activity_mut().push_slots(2);
+    let arena = roots.activity().frames();
     let registers = arena.reserve(4);
     let live = ObjRef::heap(7, 0);
     registers.set(3, live);
 
-    let grown = roots.grow_slots(variables);
+    let grown = roots.activity_mut().grow_slots(variables);
     roots.set_frame_slot(variables, grown, ObjRef::heap(8, 0));
 
     assert_eq!(registers.get(3), live);
@@ -80,7 +80,7 @@ fn registers_leave_the_variable_frame_growable() {
 #[test]
 fn registers_are_roots_until_their_frame_is_released() {
     let roots = RootSet::new();
-    let arena = roots.frames();
+    let arena = roots.activity().frames();
     let registers = arena.reserve(2);
     let held = ObjRef::heap(9, 0);
     registers.set(1, held);
@@ -94,7 +94,7 @@ fn registers_are_roots_until_their_frame_is_released() {
 #[test]
 fn a_nested_register_frame_leaves_the_enclosing_one_intact() {
     let roots = RootSet::new();
-    let arena = roots.frames();
+    let arena = roots.activity().frames();
     let outer = arena.reserve(3);
     let outer_value = ObjRef::heap(11, 0);
     outer.set(2, outer_value);
@@ -115,11 +115,15 @@ fn a_nested_register_frame_leaves_the_enclosing_one_intact() {
 #[should_panic(expected = "the frame block size is set before the first frame")]
 fn the_frame_block_size_cannot_change_under_a_reserved_frame() {
     let mut roots = RootSet::new();
-    roots.set_frame_block(rexx_core::FrameBlock::new(8).expect("in range"));
-    let arena = roots.frames();
+    roots
+        .activity_mut()
+        .set_frame_block(rexx_core::FrameBlock::new(8).expect("in range"));
+    let arena = roots.activity().frames();
     arena.release(arena.reserve(1));
     drop(arena);
-    roots.set_frame_block(rexx_core::FrameBlock::DEFAULT);
+    roots
+        .activity_mut()
+        .set_frame_block(rexx_core::FrameBlock::DEFAULT);
 }
 
 /// A promoted variable keeps answering by name, through the redirect the
@@ -127,7 +131,7 @@ fn the_frame_block_size_cannot_change_under_a_reserved_frame() {
 #[test]
 fn a_promoted_variable_still_reads_and_writes_by_name() {
     let mut roots = RootSet::new();
-    let frame = roots.push_slots(2);
+    let frame = roots.activity_mut().push_slots(2);
     let first = ObjRef::heap(1, 0);
     roots.set_frame_slot(frame, 0, first);
     let cell = roots.promote(frame, 0);
@@ -145,7 +149,7 @@ fn a_promoted_variable_still_reads_and_writes_by_name() {
 #[test]
 fn promoting_a_variable_twice_answers_one_cell() {
     let mut roots = RootSet::new();
-    let frame = roots.push_slots(1);
+    let frame = roots.activity_mut().push_slots(1);
     roots.set_frame_slot(frame, 0, ObjRef::heap(1, 0));
     assert_eq!(roots.promote(frame, 0), roots.promote(frame, 0));
 }
@@ -156,18 +160,18 @@ fn promoting_a_variable_twice_answers_one_cell() {
 #[test]
 fn a_cell_outlives_the_frame_it_was_promoted_out_of() {
     let mut roots = RootSet::new();
-    let outer = roots.push_slots(1);
-    let inner = roots.push_slots(1);
+    let outer = roots.activity_mut().push_slots(1);
+    let inner = roots.activity_mut().push_slots(1);
     let held = ObjRef::heap(7, 0);
     roots.set_frame_slot(inner, 0, held);
     let cell = roots.promote(inner, 0);
-    roots.pop_slots(inner);
+    roots.activity_mut().pop_slots(inner);
     assert_eq!(roots.slot_value(cell), Some(held));
     assert!(roots.iter().any(|r| r == held));
     let written = ObjRef::heap(8, 0);
     roots.set_slot_value(cell, written);
     assert_eq!(roots.slot_value(cell), Some(written));
-    roots.pop_slots(outer);
+    roots.activity_mut().pop_slots(outer);
 }
 
 /// An exposed name promotes the storage it was exposed *from*, so the
@@ -175,9 +179,10 @@ fn a_cell_outlives_the_frame_it_was_promoted_out_of() {
 #[test]
 fn promoting_an_exposed_name_promotes_the_storage_behind_it() {
     let mut roots = RootSet::new();
-    let outer = roots.push_slots(1);
-    let inner = roots.push_slots(1);
-    roots.alias_slot(inner, 0, roots.slot_ref(outer, 0));
+    let outer = roots.activity_mut().push_slots(1);
+    let inner = roots.activity_mut().push_slots(1);
+    let target = roots.activity().slot_ref(outer, 0);
+    roots.activity_mut().alias_slot(inner, 0, target);
     let cell = roots.promote(inner, 0);
     let written = ObjRef::heap(3, 0);
     roots.set_slot_value(cell, written);
@@ -191,9 +196,10 @@ fn promoting_an_exposed_name_promotes_the_storage_behind_it() {
 #[test]
 fn an_alias_taken_before_a_promotion_still_reaches_the_cell() {
     let mut roots = RootSet::new();
-    let outer = roots.push_slots(1);
-    let inner = roots.push_slots(1);
-    roots.alias_slot(inner, 0, roots.slot_ref(outer, 0));
+    let outer = roots.activity_mut().push_slots(1);
+    let inner = roots.activity_mut().push_slots(1);
+    let target = roots.activity().slot_ref(outer, 0);
+    roots.activity_mut().alias_slot(inner, 0, target);
     let cell = roots.promote(outer, 0);
     let written = ObjRef::heap(4, 0);
     roots.set_slot_value(cell, written);

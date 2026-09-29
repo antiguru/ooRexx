@@ -143,7 +143,7 @@ impl Interp {
         object: ObjRef,
         origin: Option<(Package, Option<usize>)>,
     ) -> Result<ObjRef, Failure> {
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         let (package, line) = match origin {
             Some(origin) => origin,
             None => (
@@ -195,7 +195,7 @@ impl Interp {
         native: bool,
         unwound: Option<&Unwound<'_>>,
     ) -> Result<ObjRef, Failure> {
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
 
         let syntax = raised.condition == "SYNTAX";
         let (frames, traceback, frame_line) = self.condition_frames(native, unwound)?;
@@ -204,14 +204,14 @@ impl Interp {
         // collect any that are not.
         let mut entries: Vec<(&[u8], ObjRef)> = Vec::new();
         let condition = self.text(raised.condition.as_bytes());
-        self.roots.push_temp(condition);
+        self.roots.activity_mut().push_temp(condition);
         entries.push((key::CONDITION, condition));
         let description = self.text(raised.description.as_deref().unwrap_or(b""));
-        self.roots.push_temp(description);
+        self.roots.activity_mut().push_temp(description);
         entries.push((key::DESCRIPTION, description));
         if let Some(call) = call {
             let instruction = self.text(if call { b"CALL" } else { b"SIGNAL" });
-            self.roots.push_temp(instruction);
+            self.roots.activity_mut().push_temp(instruction);
             entries.push((key::INSTRUCTION, instruction));
         }
         let unwound_origin = unwound.and_then(|unwound| unwound.origin);
@@ -220,7 +220,7 @@ impl Interp {
             .or_else(|| self.running_program().map(Package::Program))
             .unwrap_or(Package::Rexx);
         let package = self.package_object(origin);
-        self.roots.push_temp(package);
+        self.roots.activity_mut().push_temp(package);
         entries.push((key::PACKAGE, package));
         // `generateProgramInformation` puts no `POSITION` where the frame it
         // takes the package from is native, which has no line.
@@ -247,7 +247,7 @@ impl Interp {
             }
         };
         if let Some(position) = position {
-            self.roots.push_temp(position);
+            self.roots.activity_mut().push_temp(position);
             entries.push((key::POSITION, position));
         }
         let program = match origin {
@@ -258,25 +258,25 @@ impl Interp {
             Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
         };
         let program = self.text_built(program);
-        self.roots.push_temp(program);
+        self.roots.activity_mut().push_temp(program);
         entries.push((key::PROGRAM, program));
         let propagated = match unwound.is_some_and(|unwound| unwound.propagated) {
             true => self.text(b"1"),
             false => self.text(b"0"),
         };
-        self.roots.push_temp(propagated);
+        self.roots.activity_mut().push_temp(propagated);
         entries.push((key::PROPAGATED, propagated));
-        self.roots.push_temp(frames);
+        self.roots.activity_mut().push_temp(frames);
         entries.push((key::STACKFRAMES, frames));
-        self.roots.push_temp(traceback);
+        self.roots.activity_mut().push_temp(traceback);
         entries.push((key::TRACEBACK, traceback));
 
         if let Some(rc) = self.activity.pending_rc.take() {
-            self.roots.push_temp(rc);
+            self.roots.activity_mut().push_temp(rc);
             entries.push((key::RC, rc));
         } else if let Some(rc) = raised.rc.as_deref() {
             let rc = self.text(rc);
-            self.roots.push_temp(rc);
+            self.roots.activity_mut().push_temp(rc);
             entries.push((key::RC, rc));
         }
         // The same bytes as `RC`, which is why `Raised` carries a flag
@@ -285,20 +285,20 @@ impl Interp {
             && let Some(rc) = raised.rc.as_deref()
         {
             let result = self.text(rc);
-            self.roots.push_temp(result);
+            self.roots.activity_mut().push_temp(result);
             entries.push((key::RESULT, result));
         }
         if syntax {
             let code = self.text(format!("{}.{}", raised.number, raised.sub).as_bytes());
-            self.roots.push_temp(code);
+            self.roots.activity_mut().push_temp(code);
             entries.push((key::CODE, code));
             let errortext = raised.message(raised.number, 0);
             let errortext = self.text_built(errortext);
-            self.roots.push_temp(errortext);
+            self.roots.activity_mut().push_temp(errortext);
             entries.push((key::ERRORTEXT, errortext));
             let message = raised.message(raised.number, raised.sub);
             let message = self.text_built(message);
-            self.roots.push_temp(message);
+            self.roots.activity_mut().push_temp(message);
             entries.push((key::MESSAGE, message));
         }
         // **Rendered bytes, not the object the raise named.** `Raised`
@@ -307,13 +307,13 @@ impl Interp {
         // handing back the original. Right for `SYNTAX`, whose substitutions
         // are text to begin with; an approximation for `USER`.
         if let Some(result) = self.activity.pending_result.take() {
-            self.roots.push_temp(result);
+            self.roots.activity_mut().push_temp(result);
             entries.push((key::RESULT, result));
         }
         match self.activity.pending_additional.take() {
             // The raise's own object, whatever its class.
             Some(object) => {
-                self.roots.push_temp(object);
+                self.roots.activity_mut().push_temp(object);
                 entries.push((key::ADDITIONAL, object));
             }
             // A `SYNTAX` condition always carries the entry, as the Array its
@@ -321,7 +321,7 @@ impl Interp {
             // as an `Array` of no items rather than `.NIL`.
             None if syntax => {
                 let additional = self.additional_array(&raised.additional);
-                self.roots.push_temp(additional);
+                self.roots.activity_mut().push_temp(additional);
                 entries.push((key::ADDITIONAL, additional));
             }
             None => {}
@@ -345,8 +345,8 @@ impl Interp {
             }
             object
         };
-        self.roots.pop_frame(frame);
-        self.roots.push_temp(object);
+        self.roots.activity_mut().pop_frame(frame);
+        self.roots.activity_mut().push_temp(object);
         Ok(object)
     }
 
@@ -358,17 +358,17 @@ impl Interp {
             let copy = self
                 .send_message(object, b"COPY", None, &[], caller)?
                 .unwrap_or(ObjRef::NIL);
-            self.roots.push_temp(copy);
+            self.roots.activity_mut().push_temp(copy);
             return Ok(copy);
         };
         let entries: Vec<(&[u8], ObjRef)> = key::order(native.entry(key::CODE).is_some())
             .iter()
             .filter_map(|name| Some((*name, native.entry(name)?)))
             .collect();
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let copy = self.store_directory(&entries)?;
-        self.roots.pop_frame(frame);
-        self.roots.push_temp(copy);
+        self.roots.activity_mut().pop_frame(frame);
+        self.roots.activity_mut().push_temp(copy);
         Ok(copy)
     }
 
@@ -383,10 +383,10 @@ impl Interp {
         let object = self
             .send_message(class, b"NEW", None, &[], caller)?
             .expect("Directory~new answers an instance");
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         for &(name, value) in entries {
             let index = self.text(name);
-            self.roots.push_temp(index);
+            self.roots.activity_mut().push_temp(index);
             crate::dispatch::hash::store_insert(self, object, index, value)?;
         }
         Ok(object)
@@ -430,7 +430,7 @@ impl Interp {
                 let mut text = Vec::new();
                 site.push_trace_line(&mut text);
                 let line = self.text_built(text);
-                self.roots.push_temp(line);
+                self.roots.activity_mut().push_temp(line);
                 let caller = self.caller();
                 self.send_message(lines, b"APPEND", None, &[Some(line)], caller)?;
             }
@@ -446,14 +446,14 @@ impl Interp {
         }
         for level in levels {
             let frame = crate::dispatch::context::build_live_frame(self, level)?;
-            self.roots.push_temp(frame);
+            self.roots.activity_mut().push_temp(frame);
             let caller = self.caller();
             self.send_message(frames, b"APPEND", None, &[Some(frame)], caller)?;
             let caller = self.caller();
             let line = self
                 .send_message(frame, b"TRACELINE", None, &[], caller)?
                 .unwrap_or(ObjRef::NIL);
-            self.roots.push_temp(line);
+            self.roots.activity_mut().push_temp(line);
             let caller = self.caller();
             self.send_message(lines, b"APPEND", None, &[Some(line)], caller)?;
             if level == LiveLevel::Activation(0) {
@@ -472,7 +472,7 @@ impl Interp {
         let list = self
             .send_message(list_class, b"NEW", None, &[], caller)?
             .expect("List~new answers an instance");
-        self.roots.push_temp(list);
+        self.roots.activity_mut().push_temp(list);
         Ok(list)
     }
 
@@ -484,7 +484,7 @@ impl Interp {
             return native.entry(name).filter(|answer| *answer != ObjRef::NIL);
         }
         let index = self.text(name);
-        self.roots.push_temp(index);
+        self.roots.activity_mut().push_temp(index);
         let caller = self.caller();
         self.send_message(object, b"AT", None, &[Some(index)], caller)
             .ok()
@@ -496,16 +496,16 @@ impl Interp {
     /// `SYNTAX` condition that carried none -- measured, `1/0` answers an
     /// Array with no items rather than `.NIL`.
     fn additional_array(&mut self, values: &[Vec<u8>]) -> ObjRef {
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let mut slots = Vec::with_capacity(values.len());
         for value in values {
             let item = self.text(value);
-            self.roots.push_temp(item);
+            self.roots.activity_mut().push_temp(item);
             slots.push(Some(item));
         }
         let array = self.alloc_with(rexx_core::BehaviourId::ARRAY, rexx_core::Body::array(slots));
-        self.roots.pop_frame(frame);
-        self.roots.push_temp(array);
+        self.roots.activity_mut().pop_frame(frame);
+        self.roots.activity_mut().push_temp(array);
         array
     }
 }

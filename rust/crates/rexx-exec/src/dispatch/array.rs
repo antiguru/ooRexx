@@ -547,7 +547,7 @@ pub(super) fn native_array_new(
 fn array_of_class(interp: &mut Interp, class: ObjRef, body: Body) -> Result<ObjRef, Failure> {
     let store = interp.alloc_with(BehaviourId::ARRAY, body);
     if class == interp.object_model().array {
-        interp.roots.push_temp(store);
+        interp.roots.activity_mut().push_temp(store);
         return Ok(store);
     }
     collection::instance_over_store(interp, class, store)

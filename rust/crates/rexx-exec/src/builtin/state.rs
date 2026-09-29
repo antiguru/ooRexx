@@ -280,7 +280,7 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
             let object = interp.alloc_with(BehaviourId::ARRAY, Body::Array { slots, dimensions });
             // The array's only root: nothing else names it between here and
             // the caller storing it.
-            interp.roots.push_temp(object);
+            interp.roots.activity_mut().push_temp(object);
             Ok(object)
         }
         Some(_) => {

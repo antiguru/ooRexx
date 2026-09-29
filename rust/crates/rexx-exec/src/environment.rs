@@ -94,7 +94,7 @@ mod env_seam {
             EnvScope::Environment => message::ENVIRONMENT,
         };
         let index = interp.text(name);
-        interp.roots.push_temp(index);
+        interp.roots.activity_mut().push_temp(index);
         let Some(info) = interp.security_check(checkpoint, &[(key::NAME, index)])? else {
             return Ok(Admission::Permitted(Admitted(())));
         };
@@ -359,7 +359,7 @@ impl Interp {
 
         // Every object below is rooted the instant it exists and before the
         // next allocation, which can collect.
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let mut owed = [(ObjRef::NIL, "Phase 5"), (ObjRef::NIL, "Phase 10")];
         for (at, (held, owner)) in owed.iter_mut().enumerate() {
             *held = self.alloc_with(
@@ -390,9 +390,9 @@ impl Interp {
         // `addToEnvironment` (`Setup.cpp:1730`-`1733`) registers these by
         // hand.
         let true_value = self.text(b"1");
-        self.roots.push_temp(true_value);
+        self.roots.activity_mut().push_temp(true_value);
         let false_value = self.text(b"0");
-        self.roots.push_temp(false_value);
+        self.roots.activity_mut().push_temp(false_value);
         // `Setup.cpp:1736`-`:1737`: `REXXINFO` is a pre-built *instance* of a
         // class no environment name reaches, which is why the entry renders
         // as `a RexxInfo` and answers `~class~id` `RexxInfo`. Measured
@@ -406,12 +406,12 @@ impl Interp {
             BehaviourId::OBJECT,
             Body::Native(Box::new(NativeObject::new(rexx_info_class, b"a RexxInfo"))),
         );
-        self.roots.push_temp(rexx_info);
+        self.roots.activity_mut().push_temp(rexx_info);
         // `.ENDOFLINE` is the platform's line terminator as a String --
         // measured, `c2x(.endOfLine)` is `0A` here and its length is 1. The
         // ooTest framework's own prologue reads it (`OOREXXUNIT.CLS:77`).
         let end_of_line = self.text(crate::version::LINE_END);
-        self.roots.push_temp(end_of_line);
+        self.roots.activity_mut().push_temp(end_of_line);
         for (name, value) in [
             (b"ENVIRONMENT".as_slice(), environment),
             (b"NIL", ObjRef::NIL),
@@ -453,7 +453,7 @@ impl Interp {
             };
             self.put_interpreter_entry(local, name.as_bytes(), owner);
         }
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
 
         EnvironmentModel {
             directories: env_seam::hold(environment, local),
@@ -785,9 +785,9 @@ impl Interp {
     /// **No panic on a miss, at any step.** A step that cannot build its
     /// entry leaves that entry and every later one owed.
     pub(crate) fn mint_local_directory(&mut self) {
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         self.mint_local_entries();
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
     }
 
     /// [`Interp::mint_local_directory`]'s steps, inside its root frame.
@@ -799,12 +799,12 @@ impl Interp {
         for at in 0..self.command_words.len() {
             let word = std::mem::take(&mut self.command_words[at]);
             let text = self.text(&word);
-            self.roots.push_temp(text);
+            self.roots.activity_mut().push_temp(text);
             slots.push(Some(text));
             self.command_words[at] = word;
         }
         let arguments = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
-        self.roots.push_temp(arguments);
+        self.roots.activity_mut().push_temp(arguments);
         if self
             .set_directory_entry(EnvScope::Local, b"SYSCARGS", arguments)
             .is_err()
@@ -875,7 +875,7 @@ impl Interp {
             else {
                 return;
             };
-            self.roots.push_temp(built);
+            self.roots.activity_mut().push_temp(built);
             if let Some(object) = self.heap.get_mut(built)
                 && let Body::Instance { name: held, .. } = &mut object.body
             {
@@ -1000,7 +1000,7 @@ impl Interp {
         self.roots
             .add_global(&package_table_root_key(program, kind), table);
         self.package_tables.insert((program, kind), table);
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         for (name, value) in entries {
             let value = match value {
                 TableValue::Instance {
@@ -1055,7 +1055,7 @@ impl Interp {
             };
             native.set_entry(&name, value);
         }
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         Some(table)
     }
 
@@ -1067,32 +1067,32 @@ impl Interp {
         mut entries: Vec<(Box<[u8]>, ObjRef)>,
     ) -> Result<ObjRef, Failure> {
         entries.sort_by(|a, b| a.0.cmp(&b.0));
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         for (_, value) in &entries {
-            self.roots.push_temp(*value);
+            self.roots.activity_mut().push_temp(*value);
         }
         let table = crate::dispatch::hash::new_string_table(self)?;
-        self.roots.push_temp(table);
+        self.roots.activity_mut().push_temp(table);
         for (name, value) in entries {
             let index = self.text(&name);
-            self.roots.push_temp(index);
+            self.roots.activity_mut().push_temp(index);
             crate::dispatch::hash::store_insert(self, table, index, value)?;
         }
-        self.roots.pop_frame(frame);
-        self.roots.push_temp(table);
+        self.roots.activity_mut().pop_frame(frame);
+        self.roots.activity_mut().push_temp(table);
         Ok(table)
     }
 
     /// A fresh `Array` holding `items` in the order given.
     pub(crate) fn object_array(&mut self, items: Vec<ObjRef>) -> ObjRef {
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         for item in &items {
-            self.roots.push_temp(*item);
+            self.roots.activity_mut().push_temp(*item);
         }
         let slots: Vec<Option<ObjRef>> = items.into_iter().map(Some).collect();
         let array = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
-        self.roots.pop_frame(frame);
-        self.roots.push_temp(array);
+        self.roots.activity_mut().pop_frame(frame);
+        self.roots.activity_mut().push_temp(array);
         array
     }
 
@@ -1110,11 +1110,11 @@ impl Interp {
         let mut slots = Vec::with_capacity(lines.len());
         for line in lines {
             let text = self.text(line);
-            self.roots.push_temp(text);
+            self.roots.activity_mut().push_temp(text);
             slots.push(Some(text));
         }
         let array = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
-        self.roots.push_temp(array);
+        self.roots.activity_mut().push_temp(array);
         array
     }
 
@@ -1159,7 +1159,7 @@ impl Interp {
             BehaviourId::OBJECT,
             Body::Native(Box::new(NativeObject::new(class, rendered.as_bytes()))),
         );
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         object
     }
 

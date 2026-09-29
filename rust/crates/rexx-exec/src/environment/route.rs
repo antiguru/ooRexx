@@ -213,7 +213,7 @@ impl Interp {
                 vec![b"TraceObject".to_vec()],
             ))));
         };
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         // A `StringTable` keeps its entries in a bucket table, so the put goes
         // through the message. `t[i] = v` sends `t~"[]="(v, i)`, so the value
         // leads.
@@ -227,13 +227,13 @@ impl Interp {
             let held = match value {
                 Some(bytes) => {
                     let held = self.text(bytes);
-                    self.roots.push_temp(held);
+                    self.roots.activity_mut().push_temp(held);
                     held
                 }
                 None => ObjRef::NIL,
             };
             let index = self.text(name);
-            self.roots.push_temp(index);
+            self.roots.activity_mut().push_temp(index);
             let caller = self.caller();
             self.send_message(object, b"PUT", None, &[Some(held), Some(index)], caller)?;
         }

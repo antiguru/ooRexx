@@ -612,7 +612,7 @@ pub(super) fn new_instance(interp: &mut Interp, class: ObjRef) -> Result<ObjRef,
     );
     // `ProtectedObject p(newObj)` (`ObjectClass.cpp:2637`): the `INIT` send
     // allocates, and nothing else holds the object until it returns.
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     // See `Interp::reqstr_armed` for why an instance arms the protocol
     // outright rather than by the name a directive installed.
     interp.reqstr_armed = true;
@@ -741,9 +741,9 @@ fn enhance_class_methods(
     // [`Interp::define_method_table`] has one: each entry allocates the copy
     // `newScope` makes, and the temporary rooting that copy carries until
     // `hold_method_object` roots it as a global has to be released somewhere.
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     let installed = install_enhancing_class_methods(interp, class, enhancing, &names);
-    interp.roots.pop_frame(frame);
+    interp.roots.activity_mut().pop_frame(frame);
     installed
 }
 
@@ -1045,9 +1045,9 @@ pub(super) fn native_enhanced(
     let mut names = interp.native_keys(table);
     names.sort();
     let object = new_instance(interp, class)?;
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     let installed = install_enhancing_object_methods(interp, object, table, &names);
-    interp.roots.pop_frame(frame);
+    interp.roots.activity_mut().pop_frame(frame);
     installed?;
     // `enhanced_object->behaviour->setEnhanced()` (`:1478`), which
     // `RexxObject::defaultName` reads. **Unconditional, and not folded into

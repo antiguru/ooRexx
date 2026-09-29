@@ -323,7 +323,7 @@ impl Interp {
             return Ok(ClauseOutcome::Ran(ran));
         }
         if let Some(value) = value.rooted() {
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
         }
         match self.deliver_pending_traps(code)? {
             Some(exit) => Ok(ClauseOutcome::Ended(exit)),

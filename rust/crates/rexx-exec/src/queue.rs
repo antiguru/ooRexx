@@ -147,7 +147,7 @@ mod tests {
             &program.symbols,
             &program.source,
         );
-        let frame = interp.roots.push_slots(plan.len());
+        let frame = interp.roots.activity_mut().push_slots(plan.len());
         let id = interp.next_activation_id();
         interp.push_activation(Activation::new(
             id,

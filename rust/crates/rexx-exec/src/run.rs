@@ -162,7 +162,7 @@ pub(crate) struct SteppedClause {
     entry: ClauseEntry,
     /// The GC temps frame the clause's own work pushes into.
     frame: FrameId,
-    /// `RootSet::temps_len` as the clause was opened.
+    /// `ActivityRoots::temps_len` as the clause was opened.
     temps_at_entry: usize,
 }
 
@@ -628,7 +628,7 @@ impl Interp {
             // arm is thin because `run_fragment` is where the work is.
             InstructionKind::Interpret { expression } => {
                 let value = self.eval(code, expression)?;
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 // `RexxInstructionExpression::evaluateStringExpression`
                 // (`instructions/RexxInstruction.cpp:257`), the one
                 // `requestString` every instruction that evaluates a single
@@ -826,7 +826,7 @@ impl Interp {
                 None => {
                     for value in values {
                         let v = self.eval(code, value)?;
-                        self.roots.push_temp(v);
+                        self.roots.activity_mut().push_temp(v);
                     }
                     Ok(Flow::Next)
                 }
@@ -913,7 +913,7 @@ impl Interp {
                 // routine "sub"`, so the value is not upcased on the way in.
                 rexx_parse::Call::Dynamic { target, args } => {
                     let value = self.eval(code, target)?;
-                    self.roots.push_temp(value);
+                    self.roots.activity_mut().push_temp(value);
                     // `targetName = evaluatedTarget->requestString()`
                     // (`instructions/CallInstruction.cpp:296`), before the
                     // `>>>` below: measured, `trace r` over `call (.K)` with a
@@ -1001,7 +1001,7 @@ impl Interp {
                     // register: the temp is what roots it across the render
                     // there, and a second one would be a frame this clause
                     // does not own.
-                    self.roots.push_temp(value);
+                    self.roots.activity_mut().push_temp(value);
                     self.signal_to_value(value)
                 }
                 // `SIGNAL ON cond NAME label` / `SIGNAL OFF cond`. Unlike the
@@ -1086,7 +1086,7 @@ impl Interp {
                         (Some(name), _) => name.to_vec(),
                         (None, Some(expression)) => {
                             let value = self.eval(code, expression)?;
-                            self.roots.push_temp(value);
+                            self.roots.activity_mut().push_temp(value);
                             let value = self.required_string_value(value)?;
                             self.to_text(value).into_owned()
                         }
@@ -1231,7 +1231,7 @@ impl Interp {
         // then `symbol('RESULT')` is `LIT`.
         match result {
             Some(result) => {
-                self.roots.push_temp(result);
+                self.roots.activity_mut().push_temp(result);
                 self.set_variable(frame, slot, result);
             }
             None => self.clear_variable(frame, slot),
@@ -1261,7 +1261,7 @@ impl Interp {
         // The swap at the end of this function gives the callee a frame of
         // its own, and an activation that already owned one would be pushing
         // a second onto the same stack. That is the state
-        // `RootSet::grow_slots` and `pop_slots` catch a step or two later,
+        // `ActivityRoots::grow_slots` and `pop_slots` catch a step or two later,
         // by which time the instruction that caused it has returned, so the
         // invariant is asserted where it is established rather than where
         // the damage surfaces. `Activation::nested` builds the entry kind
@@ -1299,7 +1299,7 @@ impl Interp {
             // assigns `v` -- the object variable is what changes.
             let target = match self.exposure(outer, slot) {
                 Some(var) => VarHome::Instance(Box::new(var.clone())),
-                None => VarHome::Slot(self.roots.slot_ref(outer, slot)),
+                None => VarHome::Slot(self.roots.activity().slot_ref(outer, slot)),
             };
             bindings.push((name, slot, target));
         }
@@ -1318,12 +1318,14 @@ impl Interp {
         // `plan.len()`: an exposed name may sit at an index the caller grew
         // into, and that same index has to address something on this side of
         // the alias too.
-        let len = self.roots.frame_len(outer);
-        let inner = self.roots.push_slots(len);
+        let len = self.roots.activity().frame_len(outer);
+        let inner = self.roots.activity_mut().push_slots(len);
         let mut exposed: Vec<(usize, InstanceVar)> = Vec::new();
         for (_, slot, target) in &bindings {
             match target {
-                VarHome::Slot(target) => self.roots.alias_slot(inner, *slot, *target),
+                VarHome::Slot(target) => {
+                    self.roots.activity_mut().alias_slot(inner, *slot, *target)
+                }
                 VarHome::Instance(var) => exposed.push((*slot, (**var).clone())),
             }
         }
@@ -1695,7 +1697,7 @@ impl Interp {
                 return Err(Raised::variable_reference_not_uninitialised(&name).into());
             }
             match slot {
-                VarRefHome::Cell(cell) => self.roots.alias_slot(frame, index, cell),
+                VarRefHome::Cell(cell) => self.roots.activity_mut().alias_slot(frame, index, cell),
                 // The same binding `EXPOSE` makes, on this activation's own
                 // slot: the target names the caller's object variable rather
                 // than any frame storage, so there is nothing to alias to.
@@ -1735,7 +1737,7 @@ impl Interp {
             None => match &target.default {
                 Some(default) => {
                     let value = self.eval(code, default)?;
-                    self.roots.push_temp(value);
+                    self.roots.activity_mut().push_temp(value);
                     Some(value)
                 }
                 None => None,
@@ -1814,7 +1816,7 @@ impl Interp {
     pub(crate) fn say_evaluated(&mut self, value: Option<ObjRef>) -> Result<(), Failure> {
         let line = match value {
             Some(value) => {
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 let value = self.required_string_value(value)?;
                 self.to_text(value).to_vec()
             }
@@ -1843,7 +1845,7 @@ impl Interp {
                 // this the collect-on-every-allocation gate fails `a live
                 // value` at `dispatch.rs:1465`. Measured, adding it takes the
                 // library suite from 788 to 790.
-                self.roots.push_temp(argument);
+                self.roots.activity_mut().push_temp(argument);
                 let caller = self.caller();
                 pinned!(
                     self,
@@ -1911,7 +1913,7 @@ impl Interp {
         // and at the same indent: `evaluateExpression` is the shared call in
         // the C++ and this is the shared call here.
         if let Some(value) = value {
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             if let Some(rendered) = self.result_text(value) {
                 self.trace_result(self.activity.clause_state.current_value_indent, &rendered);
             }
@@ -1959,7 +1961,7 @@ impl Interp {
             None => None,
             Some(expr) => {
                 let value = self.eval(code, expr)?;
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 // `_superClass->isInstanceOf(TheClassClass)`
                 // (`ForwardInstruction.cpp:171`), reported with the same two
                 // fixed substitutions a `~name:scope` override's own check
@@ -2007,7 +2009,7 @@ impl Interp {
         let frame = self.activation().frame;
         match sent {
             Some(value) => {
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 if let Some(rendered) = self.result_text(value) {
                     self.trace_result(indent, &rendered);
                 }
@@ -2037,7 +2039,7 @@ impl Interp {
         keyword: &str,
     ) -> Result<ObjRef, Failure> {
         let value = self.eval(code, expr)?;
-        self.roots.push_temp(value);
+        self.roots.activity_mut().push_temp(value);
         self.trace_forward_keyword(keyword, value);
         Ok(value)
     }
@@ -2096,7 +2098,7 @@ impl Interp {
         // Rooted here rather than relied on through `call_context`, which the
         // collector does not walk.
         for value in values.iter().flatten() {
-            self.roots.push_temp(*value);
+            self.roots.activity_mut().push_temp(*value);
         }
         Ok(())
     }
@@ -2190,7 +2192,7 @@ impl Interp {
     /// One converted `ARGUMENTS` item, rooted as it is appended.
     fn push_converted_argument(&mut self, bytes: &[u8], values: &mut Vec<Option<ObjRef>>) {
         let item = self.text(bytes);
-        self.roots.push_temp(item);
+        self.roots.activity_mut().push_temp(item);
         values.push(Some(item));
     }
 
@@ -2218,7 +2220,7 @@ impl Interp {
         keyword: ReturnKeyword,
     ) -> Result<Flow, Failure> {
         if let Some(value) = value {
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             if let Some(rendered) = self.result_text(value) {
                 self.trace_result(self.activity.clause_state.current_value_indent, &rendered);
             }
@@ -2258,7 +2260,7 @@ impl Interp {
     ) -> Result<(), Failure> {
         let line = match value {
             Some(value) => {
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 // `evaluateStringExpression` again, so the `>>>` below traces
                 // the conversion: measured, `trace r` over `push .K` with a
                 // class-side `makeString` returning `'pv'` prints
@@ -2286,7 +2288,7 @@ impl Interp {
         value: ObjRef,
         at: Option<usize>,
     ) -> Result<(), Failure> {
-        self.roots.push_temp(value);
+        self.roots.activity_mut().push_temp(value);
         // `>>>` fires before the assignment itself
         // (`RexxInstructionAssignment::execute`: evaluate, trace, *then*
         // assign), which matters only in that the traced value can never be
@@ -2457,11 +2459,11 @@ impl Interp {
                 ..
             } => {
                 let receiver = self.eval(code, receiver)?;
-                self.roots.push_temp(receiver);
+                self.roots.activity_mut().push_temp(receiver);
                 let scope = match super_class {
                     Some(super_class) => {
                         let scope = self.eval(code, super_class)?;
-                        self.roots.push_temp(scope);
+                        self.roots.activity_mut().push_temp(scope);
                         Some(scope)
                     }
                     None => None,
@@ -2471,7 +2473,7 @@ impl Interp {
                     let evaluated = match arg {
                         Some(expr) => {
                             let evaluated = self.eval(code, expr)?;
-                            self.roots.push_temp(evaluated);
+                            self.roots.activity_mut().push_temp(evaluated);
                             Some(evaluated)
                         }
                         None => None,
@@ -2663,13 +2665,13 @@ impl Interp {
         if matches!(echo, Echo::Gated) {
             self.echo_stepped_clause(source, instruction, indent);
         }
-        // The debug tripwire I22 asks for, alongside `RootSet::temps_len`, its
+        // The debug tripwire I22 asks for, alongside `ActivityRoots::temps_len`, its
         // one prerequisite. `SteppedClause` carries the watermark and the
         // frame across to the matching half, which is where the check reads
         // them; that type's own doc comment has what it checks and why it is
         // there rather than in `pop_frame`.
-        let temps_at_entry = self.roots.temps_len();
-        let frame = self.roots.push_frame();
+        let temps_at_entry = self.roots.activity().temps_len();
+        let frame = self.roots.activity_mut().push_frame();
         SteppedClause {
             entry,
             frame,
@@ -2691,13 +2693,13 @@ impl Interp {
         ran: Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
         debug_assert!(
-            ran.is_err() || self.roots.temps_len() >= entry.temps_at_entry,
+            ran.is_err() || self.roots.activity().temps_len() >= entry.temps_at_entry,
             "step popped below its own temps watermark ({} -> {}), so it \
              discarded roots it did not push",
             entry.temps_at_entry,
-            self.roots.temps_len()
+            self.roots.activity().temps_len()
         );
-        self.roots.pop_frame(entry.frame);
+        self.roots.activity_mut().pop_frame(entry.frame);
         if ran.is_err() {
             self.record_failure_site(code, index, source, instruction);
         }
@@ -2730,13 +2732,13 @@ impl Interp {
     #[inline(always)]
     pub(crate) fn finish_plain_clause(&mut self, entry: SteppedClause) {
         debug_assert!(
-            self.roots.temps_len() >= entry.temps_at_entry,
+            self.roots.activity().temps_len() >= entry.temps_at_entry,
             "step popped below its own temps watermark ({} -> {}), so it \
              discarded roots it did not push",
             entry.temps_at_entry,
-            self.roots.temps_len()
+            self.roots.activity().temps_len()
         );
-        self.roots.pop_frame(entry.frame);
+        self.roots.activity_mut().pop_frame(entry.frame);
         self.spend_clause_entry(entry.entry);
     }
 
@@ -3325,8 +3327,8 @@ impl Interp {
         // closed here releases it at the right time for every caller,
         // `IF`/`WHEN` included. The `?` path below leaves the pop to the outer
         // truncation, as `pop_frame`'s own doc describes.
-        let frame = self.roots.push_frame();
-        self.roots.push_temp(value);
+        let frame = self.roots.activity_mut().push_frame();
+        self.roots.activity_mut().push_temp(value);
         // **The owned copy is taken only when a line will print it.** Both
         // formatters below return at once unless `results` is on, and the copy
         // exists only because `to_text` borrows `self` while they need it
@@ -3381,7 +3383,7 @@ impl Interp {
         // on `self` has ended. The decision itself touches neither `self` nor
         // the roots, so making it before this pop rather than after changes no
         // answer and no lifetime.
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         decided
     }
 
@@ -3413,7 +3415,7 @@ impl Interp {
     ) -> Result<bool, Failure> {
         for value in values {
             let value = self.eval(code, value)?;
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             let text = self.to_text(value).to_vec();
             self.trace_result(indent, &text);
             let matched = text == case_text;
@@ -3630,7 +3632,7 @@ impl Interp {
             return Err(Loud::environment_symbol(b".STREAM", "Phase 5").into());
         };
         let argument = self.text(name);
-        self.roots.push_temp(argument);
+        self.roots.activity_mut().push_temp(argument);
         let caller = self.caller();
         let built = self
             .send_message(class, b"NEW", None, &[Some(argument)], caller)?
@@ -3654,7 +3656,7 @@ impl Interp {
             return Ok(None);
         }
         let name = self.text(qualified);
-        self.roots.push_temp(name);
+        self.roots.activity_mut().push_temp(name);
         let entries = [(crate::security::key::NAME, name)];
         let Some(info) = self.security_check(crate::security::message::STREAM, &entries)? else {
             return Ok(None);

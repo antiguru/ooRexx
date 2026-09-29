@@ -10,10 +10,11 @@
 /*----------------------------------------------------------------------------*/
 
 //! Register frames carved from blocks that never move while their arena
-//! lives, read and written through a base pointer with no bound check.
+//! lives, read and written through a base pointer with no bound check. Each
+//! activity owns one arena (D-U4).
 //!
 //! Every access is in bounds whatever index or release order the caller
-//! uses, by properties this module alone establishes:
+//! uses, by properties this module alone establishes for each arena:
 //!
 //! 1. a block is one zeroed allocation of `cells + GUARD` cells, freed only by
 //!    `FrameArena`'s `Drop`;
@@ -25,10 +26,16 @@
 //! 5. `FrameArena::iter` clamps every used length it walks to `cells + GUARD`,
 //!    so bookkeeping a misordered release corrupted cannot widen its slices.
 //!
-//! Staying inside a frame's own `len` is a logical property, not a safety one;
-//! the chunk validator in `rexx-exec` establishes it.
+//! None of these depends on release order, so LIFO within an arena is a
+//! logical property, not a safety one: an out-of-order release, or a frame
+//! released into another activity's arena, trips the debug assertion and at
+//! worst mis-scans roots. A `FrameArena` value may move with its activity; its
+//! blocks never do, and no `RegFrame` is live across the move, since it borrows
+//! the arena. Staying inside a frame's own `len` is a logical property, not a
+//! safety one; the chunk validator in `rexx-exec` establishes it.
 
-// Granted by Moritz, 2026-09-23: the invariant above is the whole argument.
+// Granted by Moritz, 2026-09-23, re-granted per activity 2026-09-29 (D-U4): the
+// invariant above is the whole argument.
 #![allow(unsafe_code)]
 
 use std::alloc::{Layout, alloc_zeroed, dealloc, handle_alloc_error};

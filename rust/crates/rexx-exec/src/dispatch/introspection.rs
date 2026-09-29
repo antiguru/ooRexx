@@ -262,16 +262,16 @@ fn supplier_of(
         // below can collect, and a handle held only by these `Vec`s is one
         // the collector cannot see.
         let object = method_object_for(interp, owner, &name, scope, method);
-        interp.roots.push_temp(object);
+        interp.roots.activity_mut().push_temp(object);
         items.push(object);
         let index = interp.text_built(name);
-        interp.roots.push_temp(index);
+        interp.roots.activity_mut().push_temp(index);
         indexes.push(index);
     }
     let items = array_of(interp, items);
-    interp.roots.push_temp(items);
+    interp.roots.activity_mut().push_temp(items);
     let indexes = array_of(interp, indexes);
-    interp.roots.push_temp(indexes);
+    interp.roots.activity_mut().push_temp(indexes);
     new_supplier(interp, items, indexes).map(Some)
 }
 

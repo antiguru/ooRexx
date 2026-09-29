@@ -69,8 +69,8 @@ impl Interp {
             }
         };
         // Truncated on the way out, so a temp this chunk leaks does not outlive it.
-        let temps = self.roots.push_frame();
-        let arena = self.roots.frames();
+        let temps = self.roots.activity_mut().push_frame();
+        let arena = self.roots.activity().frames();
         let registers = arena.reserve(chunk.registers);
         let ran = self.run_bounded(
             &code,
@@ -85,7 +85,7 @@ impl Interp {
         // Released on both paths, exactly as `run_chunk` does: a frame left
         // behind would keep its registers rooted for the rest of the run.
         arena.release(registers);
-        self.roots.pop_frame(temps);
+        self.roots.activity_mut().pop_frame(temps);
         let flow = match ran {
             Ok(flow) => flow,
             Err(failure) => {

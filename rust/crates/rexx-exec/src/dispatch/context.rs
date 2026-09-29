@@ -428,11 +428,11 @@ fn context_stack_frames(
 ) -> Result<Option<ObjRef>, Failure> {
     depth_of(interp, receiver)?;
     let levels = live_levels(interp);
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     let mut slots = Vec::with_capacity(levels.len());
     for level in levels {
         let object = build_live_frame(interp, level)?;
-        interp.roots.push_temp(object);
+        interp.roots.activity_mut().push_temp(object);
         slots.push(Some(object));
     }
     let array = interp.alloc_with(
@@ -442,8 +442,8 @@ fn context_stack_frames(
             slots,
         },
     );
-    interp.roots.pop_frame(frame);
-    interp.roots.push_temp(array);
+    interp.roots.activity_mut().pop_frame(frame);
+    interp.roots.activity_mut().push_temp(array);
     Ok(Some(array))
 }
 
@@ -541,11 +541,11 @@ pub(crate) fn build_frame_with(
     if !arguments {
         snapshot.arguments.clear();
     }
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     let kind = interp.text(snapshot.kind);
-    interp.roots.push_temp(kind);
+    interp.roots.activity_mut().push_temp(kind);
     let name = interp.text_built(std::mem::take(&mut snapshot.name));
-    interp.roots.push_temp(name);
+    interp.roots.activity_mut().push_temp(name);
     let line = interp.counted(snapshot.clause.line);
     let invocation = match invocation {
         // `StackFrameClass::getInvocation` answers `.nil` for a zero id,
@@ -554,12 +554,12 @@ pub(crate) fn build_frame_with(
         None => ObjRef::NIL,
         Some(id) => interp.counted(id as usize),
     };
-    interp.roots.push_temp(invocation);
+    interp.roots.activity_mut().push_temp(invocation);
     let trace_text = trace_line_text(interp, &snapshot);
     let trace_line = interp.text(&trace_text);
-    interp.roots.push_temp(trace_line);
+    interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, std::mem::take(&mut snapshot.arguments));
-    interp.roots.push_temp(arguments);
+    interp.roots.activity_mut().push_temp(arguments);
     let entries = [
         (key::TYPE, kind),
         (key::NAME, name),
@@ -600,12 +600,12 @@ fn frame_object(
     // `say .array~of(f)` is the traceback line where `f~objectName` is
     // `a StackFrame`.
     native.set_string_value(trace_text);
-    interp.roots.pop_frame(frame);
+    interp.roots.activity_mut().pop_frame(frame);
     // Re-pushed above the frame that has just closed, which is the shape
     // `Interp::line_array` and `array_of_texts` already have: the temp
     // `native_instance` took for this object was inside that frame, so
     // without this the frame comes back to its caller rooted by nothing.
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     object
 }
 
@@ -634,18 +634,18 @@ pub(crate) fn build_ended_frame(
     arguments: &[Option<ObjRef>],
     trace_text: &[u8],
 ) -> Result<ObjRef, Failure> {
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     let kind = interp.text(kind);
-    interp.roots.push_temp(kind);
+    interp.roots.activity_mut().push_temp(kind);
     let name = interp.text(name);
-    interp.roots.push_temp(name);
+    interp.roots.activity_mut().push_temp(name);
     let line = interp.counted(line);
     interp.next_invocation += 1;
     let invocation = interp.counted(interp.next_invocation as usize);
-    interp.roots.push_temp(invocation);
+    interp.roots.activity_mut().push_temp(invocation);
     let context = interp.ended_context_object();
     let trace_line = interp.text(trace_text);
-    interp.roots.push_temp(trace_line);
+    interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, arguments.to_vec());
     let entries = [
         (key::TYPE, kind),
@@ -682,13 +682,13 @@ pub(crate) fn build_native_level_frame(
     } else {
         ObjRef::NIL
     };
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     let kind = interp.text(if method { b"METHOD" } else { b"ROUTINE" });
-    interp.roots.push_temp(kind);
+    interp.roots.activity_mut().push_temp(kind);
     let name = interp.text(name);
-    interp.roots.push_temp(name);
+    interp.roots.activity_mut().push_temp(name);
     let trace_line = interp.text(trace_text);
-    interp.roots.push_temp(trace_line);
+    interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, arguments.to_vec());
     let entries = [
         (key::TYPE, kind),
@@ -740,13 +740,13 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
         .position(|activation| Some(activation.id) == caller)
         .unwrap_or(0);
     let context = interp.context_object_at(depth);
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     let kind = interp.text(kind);
-    interp.roots.push_temp(kind);
+    interp.roots.activity_mut().push_temp(kind);
     let name = interp.text_built(name);
-    interp.roots.push_temp(name);
+    interp.roots.activity_mut().push_temp(name);
     let trace_line = interp.text(&trace_text);
-    interp.roots.push_temp(trace_line);
+    interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, arguments);
     let entries = [
         (key::TYPE, kind),
@@ -844,7 +844,7 @@ fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
             slots,
         },
     );
-    interp.roots.push_temp(array);
+    interp.roots.activity_mut().push_temp(array);
     array
 }
 

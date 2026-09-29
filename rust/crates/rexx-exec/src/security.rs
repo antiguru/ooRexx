@@ -93,9 +93,9 @@ impl Interp {
         let Some(manager) = self.effective_security_manager() else {
             return Ok(None);
         };
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let outcome = self.security_send(manager, message, entries);
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         outcome
     }
 
@@ -108,13 +108,13 @@ impl Interp {
         entries: &[(&[u8], ObjRef)],
     ) -> Result<Option<ObjRef>, Failure> {
         let directory = self.security_arguments(entries)?;
-        self.roots.push_temp(directory);
+        self.roots.activity_mut().push_temp(directory);
         let caller = self.caller();
         let answer = self.send_message(manager, message, None, &[Some(directory)], caller)?;
         let Some(answer) = answer else {
             return Err(Raised::no_result(message).into());
         };
-        self.roots.push_temp(answer);
+        self.roots.activity_mut().push_temp(answer);
         let text = self.required_string_value(answer)?;
         let text = self.to_text(text).into_owned();
         match crate::eval::logical_value(&text) {
@@ -131,11 +131,11 @@ impl Interp {
             .lookup("Directory")
             .expect("Directory is a native class");
         let directory = self.native_instance(class);
-        self.roots.push_temp(directory);
-        let frame = self.roots.push_frame();
+        self.roots.activity_mut().push_temp(directory);
+        let frame = self.roots.activity_mut().push_frame();
         for (name, value) in entries {
             let index = self.text(name);
-            self.roots.push_temp(index);
+            self.roots.activity_mut().push_temp(index);
             let caller = self.caller();
             self.send_message(
                 directory,
@@ -145,7 +145,7 @@ impl Interp {
                 caller,
             )?;
         }
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         Ok(directory)
     }
 
@@ -154,7 +154,7 @@ impl Interp {
     /// list as it stands.
     pub(crate) fn security_arguments_array(&mut self, args: &[Option<ObjRef>]) -> ObjRef {
         let array = self.alloc_with(BehaviourId::ARRAY, Body::array(args.to_vec()));
-        self.roots.push_temp(array);
+        self.roots.activity_mut().push_temp(array);
         array
     }
 
@@ -167,7 +167,7 @@ impl Interp {
         name: &[u8],
     ) -> Result<Option<ObjRef>, Failure> {
         let index = self.text(name);
-        self.roots.push_temp(index);
+        self.roots.activity_mut().push_temp(index);
         let caller = self.caller();
         let answer = self.send_message(directory, b"AT", None, &[Some(index)], caller)?;
         Ok(answer.filter(|value| *value != ObjRef::NIL))

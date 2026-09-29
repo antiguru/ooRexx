@@ -276,15 +276,15 @@ fn concat_through_string_value(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let other = operator_argument(args)?;
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     let joined = interp
         .required_string_value(receiver)
         .and_then(|alias| {
-            interp.roots.push_temp(alias);
+            interp.roots.activity_mut().push_temp(alias);
             interp.apply_binary(op, alias, other)
         })
         .map(Some);
-    interp.roots.pop_frame(frame);
+    interp.roots.activity_mut().pop_frame(frame);
     joined
 }
 
@@ -597,7 +597,7 @@ pub(super) fn native_copy(
     // The allocation below collects first, and while the cloned body is a
     // local the collector does not walk, every value in it is reachable from
     // the receiver and from nowhere else.
-    interp.roots.push_temp(receiver);
+    interp.roots.activity_mut().push_temp(receiver);
     let Some(source) = interp.heap.get(receiver) else {
         return Err(Loud::receiver_class("a value whose object is no longer live").into());
     };
@@ -608,7 +608,7 @@ pub(super) fn native_copy(
         *exposed = None;
     }
     let copy = interp.alloc_with(behaviour, body);
-    interp.roots.push_temp(copy);
+    interp.roots.activity_mut().push_temp(copy);
     duplicate_collection_stores(interp, copy);
     if interp.answers_uninit(copy) {
         interp.heap.set_uninit(copy);
@@ -650,7 +650,7 @@ fn duplicate_collection_stores(interp: &mut Interp, copy: ObjRef) {
             continue;
         };
         let fresh = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
-        interp.roots.push_temp(fresh);
+        interp.roots.activity_mut().push_temp(fresh);
         interp.set_pool_variable(copy, scope, entry, fresh);
     }
 }

@@ -208,7 +208,7 @@ fn pointer(interp: &mut Interp, address: usize) -> ObjRef {
     let behaviour = interp.classes().instance_behaviour_handle(class);
     let body = Body::pointer(class, behaviour, std::ptr::without_provenance_mut(address));
     let object = interp.alloc_with(rexx_core::BehaviourId::OBJECT, body);
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     object
 }
 

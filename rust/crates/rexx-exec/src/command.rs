@@ -651,7 +651,7 @@ impl Interp {
                 None => self.counted(0),
             },
         };
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         let text = self.string_value_text(object);
         let status = match condition.as_ref().map(|held| held.name.as_slice()) {
             Some(b"FAILURE") => ReturnStatus::Failure,
@@ -682,9 +682,9 @@ impl Interp {
             return self.run_command(environment, command, io);
         }
         let address = self.text(environment);
-        self.roots.push_temp(address);
+        self.roots.activity_mut().push_temp(address);
         let issued = self.text(command);
-        self.roots.push_temp(issued);
+        self.roots.activity_mut().push_temp(issued);
         let entries = [(key::COMMAND, issued), (key::ADDRESS, address)];
         let Some(info) = self.security_check(message::COMMAND, &entries)? else {
             return self.run_command(environment, command, io);
@@ -713,7 +713,7 @@ impl Interp {
                 condition: None,
             });
         };
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         let text = self.required_string_value(object)?;
         let text = self.to_text(text).into_owned();
         let rc = whole_value(&text).unwrap_or(0);
@@ -746,7 +746,7 @@ impl Interp {
     ) -> Result<Flow, Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         let value = self.eval(code, expression)?;
-        self.roots.push_temp(value);
+        self.roots.activity_mut().push_temp(value);
         let value = self.required_string_value(value)?;
         let command = self.to_text(value).into_owned();
         // Before the command runs, and observably so: under `TRACE C` a
@@ -768,7 +768,7 @@ impl Interp {
         // shows `>L>` and `>>>` for the command and only then each target's
         // own echo and `>K>` line. The frame holds every object they resolve
         // to for as long as the command runs and the lines are written back.
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let context = pinned!(
             self,
             crate::pinning::PinKind::RedirectWrapper,
@@ -778,7 +778,7 @@ impl Interp {
             Ok(context) => self.checked_command(&name, &command, context.as_ref()),
             Err(failure) => Err(failure),
         };
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         let kept = self.activity.input_dispatch_syntax.take();
         let outcome = outcome?;
         // The SYNTAX condition the input reader's dispatcher took, raised now
@@ -792,7 +792,7 @@ impl Interp {
         if let Some(supplied) = &outcome.supplied {
             // The frame that held it is gone and `RC` is assigned below,
             // after allocations of this clause's own.
-            self.roots.push_temp(supplied.object);
+            self.roots.activity_mut().push_temp(supplied.object);
         }
 
         // **`::OPTIONS ERROR|FAILURE SYNTAX` escalates where the condition is

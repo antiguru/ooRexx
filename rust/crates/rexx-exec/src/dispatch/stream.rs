@@ -1122,7 +1122,7 @@ pub(super) fn arrayin(
     while let Some(text) = next_line(interp, receiver)? {
         let item = interp.text_built(text);
         // Rooted before the append, which allocates when the array grows.
-        interp.roots.push_temp(item);
+        interp.roots.activity_mut().push_temp(item);
         super::collection::append_slot(interp, array, item)?;
     }
     Ok(None)

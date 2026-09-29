@@ -704,19 +704,19 @@ impl Interp {
             return Ok(Some(name.to_vec()));
         }
         let requested = self.text(name);
-        self.roots.push_temp(requested);
+        self.roots.activity_mut().push_temp(requested);
         let entries = [(crate::security::key::NAME, requested)];
         let Some(info) = self.security_check(crate::security::message::REQUIRES, &entries)? else {
             return Ok(Some(name.to_vec()));
         };
         if let Some(manager) = self.security_entry(info, crate::security::key::SECURITYMANAGER)? {
-            self.roots.push_temp(manager);
+            self.roots.activity_mut().push_temp(manager);
             *inherited = Some(manager);
         }
         let Some(replaced) = self.security_entry(info, crate::security::key::NAME)? else {
             return Ok(None);
         };
-        self.roots.push_temp(replaced);
+        self.roots.activity_mut().push_temp(replaced);
         let text = self.required_string_value(replaced)?;
         Ok(Some(self.to_text(text).into_owned()))
     }
@@ -1170,7 +1170,7 @@ impl Interp {
     /// Pushes the activation an install-time evaluation or send runs in, and
     /// answers the frame [`Interp::pop_directive_activation`] takes back.
     fn push_directive_activation(&mut self, id: ProgramId, program: &Rc<Program>) -> SlotFrame {
-        let frame = self.roots.push_slots(0);
+        let frame = self.roots.activity_mut().push_slots(0);
         let activation_id = self.next_activation_id();
         self.push_activation(Activation::new(
             activation_id,
@@ -1185,7 +1185,7 @@ impl Interp {
     /// Tears down what [`Interp::push_directive_activation`] pushed.
     fn pop_directive_activation(&mut self, frame: SlotFrame) {
         self.pop_activation();
-        self.roots.pop_slots(frame);
+        self.roots.activity_mut().pop_slots(frame);
     }
 
     /// `::CLASS`'s own R9 install: a class object in [`Interp::classes`],

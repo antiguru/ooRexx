@@ -2029,7 +2029,7 @@ impl Interp {
             // Rooted for the whole of the bootstrap: `call_context` is not
             // walked by the collector, and the prologue allocates before it
             // reads `rexxPackage`.
-            self.roots.push_temp(package);
+            self.roots.activity_mut().push_temp(package);
             vec![Some(package)]
         });
         let saved = std::mem::replace(
@@ -2149,7 +2149,7 @@ impl Interp {
             &program.source,
         );
 
-        let frame = self.roots.push_slots(plan.len());
+        let frame = self.roots.activity_mut().push_slots(plan.len());
         let id = self.next_activation_id();
         let mut main = Activation::new(id, Rc::clone(&program), program_id, plan, frame);
         main.call_type = call_type;
@@ -2210,7 +2210,7 @@ impl Interp {
         // Popped whether or not the body raised, so the root set is left the
         // way it was found even on the failure path.
         let activation = self.pop_activation().expect("the frame just pushed");
-        self.roots.pop_slots(activation.frame);
+        self.roots.activity_mut().pop_slots(activation.frame);
         self.restore_clause_state(caller_clause);
         if let Some((base, offset, line)) = caller_levels {
             self.activity.activation_indent = base;
@@ -2409,7 +2409,7 @@ impl Interp {
             // A chunk's interned literals are allocated immortal.
             chunks: _,
             chunks_refused: _,
-            // `Interp::park_reply` hands each entry to `RootSet::park`.
+            // `Interp::park_reply` hands each entry to `ActivityRoots::park`.
             deferred: _,
             routines: _,
             package_public_routines: _,
@@ -2578,12 +2578,12 @@ impl Interp {
         // collector as temporaries for the length of the sweep.
         let mut anchor: Vec<ObjRef> = Vec::new();
         self.object_roots(&mut anchor);
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         for object in anchor {
-            self.roots.push_temp(object);
+            self.roots.activity_mut().push_temp(object);
         }
         let stats = self.heap.collect(&self.roots);
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         let heap = &self.heap;
         self.kept_strings.retain(|object, _| {
             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
@@ -2644,7 +2644,7 @@ impl Interp {
             rexx_core::BehaviourId::OBJECT,
             rexx_core::Body::Class { owned: Vec::new() },
         );
-        self.roots.push_temp(class);
+        self.roots.activity_mut().push_temp(class);
         class
     }
 
@@ -2841,7 +2841,10 @@ fn execute(
     // "no argument" from "one empty argument" apart.
     interp.activity.call_context.name = path.as_bytes().to_vec();
     let parts = invocation.into_parts();
-    interp.roots.set_frame_block(parts.frame_block);
+    interp
+        .roots
+        .activity_mut()
+        .set_frame_block(parts.frame_block);
     let (argument, deadline) = (parts.argument, parts.deadline);
     interp.input = Input::new(parts.input);
     interp.standard_transient = parts.standard_transient;
@@ -2883,7 +2886,7 @@ fn execute(
             // list it builds); `call_context` itself is not walked by the
             // collector, so without this the value is unreachable the first time
             // anything allocates.
-            interp.roots.push_temp(value);
+            interp.roots.activity_mut().push_temp(value);
             interp.activity.call_context.arguments = Rc::from(&[Some(value)][..]);
         }
         interp.run(program)

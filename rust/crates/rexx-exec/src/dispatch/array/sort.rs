@@ -284,7 +284,7 @@ fn sort_by(
     // runs Rexx that may empty the receiver -- so the items are rooted for
     // the duration rather than living only in the `Vec`.
     for item in &items {
-        interp.roots.push_temp(*item);
+        interp.roots.activity_mut().push_temp(*item);
     }
     let sorted = pinned!(
         interp,

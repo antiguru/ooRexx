@@ -39,7 +39,7 @@ pub use handle::{
     Decoded, GENERATION_MAX, INLINE_TEXT, InlineText, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN,
 };
 pub use heap::{CollectStats, Heap};
-pub use roots::{FrameAliases, FrameId, Parked, RootSet, SlotFrame, SlotRef};
+pub use roots::{ActivityRoots, FrameAliases, FrameId, Parked, RootSet, SlotFrame, SlotRef};
 
 /// The hasher behind [`NameMap`].
 pub type NameHasher = rustc_hash::FxBuildHasher;

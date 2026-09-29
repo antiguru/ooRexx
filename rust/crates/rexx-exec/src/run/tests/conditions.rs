@@ -426,7 +426,7 @@ fn a_trap_that_resumes_does_not_accumulate_temps_frames() {
             format!("done {cycles}\n").into_bytes(),
             "the loop must actually have trapped {cycles} times"
         );
-        interp.roots.temps_len()
+        interp.roots.activity().temps_len()
     }
     assert_eq!(
         live_temps_after(200),

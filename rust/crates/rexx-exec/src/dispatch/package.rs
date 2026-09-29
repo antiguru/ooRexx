@@ -337,15 +337,15 @@ fn source(
 ) -> Result<Option<ObjRef>, Failure> {
     let lines = source_lines(interp, package_of(interp, receiver)?);
     let mut items = Vec::with_capacity(lines.len());
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     for line in &lines {
         let text = interp.text(line);
-        interp.roots.push_temp(text);
+        interp.roots.activity_mut().push_temp(text);
         items.push(text);
     }
     let array = interp.object_array(items);
-    interp.roots.pop_frame(frame);
-    interp.roots.push_temp(array);
+    interp.roots.activity_mut().pop_frame(frame);
+    interp.roots.activity_mut().push_temp(array);
     Ok(Some(array))
 }
 
@@ -562,7 +562,7 @@ fn rooted_routine_objects(
         let Some(object) = interp.merged_routine_object(merged) else {
             continue;
         };
-        interp.roots.push_temp(object);
+        interp.roots.activity_mut().push_temp(object);
         entries.push((name, object));
     }
     entries

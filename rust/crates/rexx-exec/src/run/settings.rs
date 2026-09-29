@@ -101,7 +101,7 @@ impl Interp {
             // fallback).
             Trace::Value(expression) => {
                 let value = self.eval(code, expression)?;
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 // `result->requestString()` (`instructions/TraceInstruction
                 // .cpp:172`), and 24.1 names the conversion: measured, oracle
                 // rc 232, `trace value .K` with a class-side `makeString`
@@ -250,7 +250,7 @@ impl Interp {
             }
             (None, Some(expression)) => {
                 let value = self.eval(code, expression)?;
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 // `_address = result->requestString()` before the `>>>`
                 // (`instructions/AddressInstruction.cpp:182`), so the trace
                 // names the conversion: measured, `trace r` over
@@ -361,7 +361,7 @@ impl Interp {
                 // value 'engineering'` is 25.11, not accepted
                 // case-insensitively.
                 let value = self.eval(code, expression)?;
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 let text = self.to_text(value).to_vec();
                 // `>K>   "FORM" => "engineering"` (F2, branch review): fires
                 // before `set_form_str`'s own validation, same as `DIGITS`/
@@ -403,7 +403,7 @@ impl Interp {
             return Ok(None);
         };
         let value = self.eval(code, expression)?;
-        self.roots.push_temp(value);
+        self.roots.activity_mut().push_temp(value);
         let mut text = self.take_result_buffer();
         text.extend_from_slice(&self.to_text(value));
         self.trace_keyword(

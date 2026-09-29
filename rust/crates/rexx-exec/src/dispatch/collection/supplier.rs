@@ -38,7 +38,7 @@ pub(in crate::dispatch) fn new_supplier(
         .lookup("Supplier")
         .expect("Supplier is a native class");
     let object = new_instance(interp, class)?;
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     store_supplier(interp, object, items, indexes, 0);
     Ok(object)
 }

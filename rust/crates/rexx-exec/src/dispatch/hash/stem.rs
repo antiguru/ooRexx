@@ -359,7 +359,7 @@ fn native_stem_all_indexes(
     let mut names = Vec::new();
     for (name, _) in stem_live(interp, receiver) {
         let name = interp.text_built(name);
-        interp.roots.push_temp(name);
+        interp.roots.activity_mut().push_temp(name);
         names.push(name);
     }
     Ok(Some(super::collection::array_of(interp, names)))
@@ -381,7 +381,7 @@ fn native_stem_all_items(
     // The items are the stem's own and are reachable through it, but the
     // array below allocates, so they are held for that.
     for item in &items {
-        interp.roots.push_temp(*item);
+        interp.roots.activity_mut().push_temp(*item);
     }
     Ok(Some(super::collection::array_of(interp, items)))
 }
@@ -423,9 +423,9 @@ fn native_stem_request(
         return interp.send_message(receiver, b"MAKEARRAY", None, &[], caller);
     }
     let value = stem_value(interp, receiver);
-    interp.roots.push_temp(value);
+    interp.roots.activity_mut().push_temp(value);
     let forwarded = interp.text_built(upper);
-    interp.roots.push_temp(forwarded);
+    interp.roots.activity_mut().push_temp(forwarded);
     let caller = interp.caller();
     interp.send_message(value, b"REQUEST", None, &[Some(forwarded)], caller)
 }
@@ -447,10 +447,10 @@ fn native_stem_to_directory(
         .lookup("Directory")
         .expect("Directory is a native class");
     let object = new_instance(interp, class)?;
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     for (name, value) in stem_live(interp, receiver) {
         let index = interp.text_built(name);
-        interp.roots.push_temp(index);
+        interp.roots.activity_mut().push_temp(index);
         insert(interp, object, index, Some(value))?;
     }
     Ok(Some(object))
@@ -479,7 +479,7 @@ fn native_stem_unknown(
         return Err(unconverted_array_argument(interp, arguments));
     };
     let value = stem_value(interp, receiver);
-    interp.roots.push_temp(value);
+    interp.roots.activity_mut().push_temp(value);
     let caller = interp.caller();
     interp.send_message(value, &name, None, &forwarded, caller)
 }
@@ -505,13 +505,13 @@ fn native_stem_supplier(
     let live = stem_live(interp, receiver);
     let items: Vec<ObjRef> = live.iter().map(|(_, value)| *value).collect();
     for item in &items {
-        interp.roots.push_temp(*item);
+        interp.roots.activity_mut().push_temp(*item);
     }
     // Rooted as they are built -- see [`native_stem_all_indexes`].
     let mut indexes = Vec::new();
     for (name, _) in live {
         let name = interp.text_built(name);
-        interp.roots.push_temp(name);
+        interp.roots.activity_mut().push_temp(name);
         indexes.push(name);
     }
     let items = super::collection::array_of(interp, items);

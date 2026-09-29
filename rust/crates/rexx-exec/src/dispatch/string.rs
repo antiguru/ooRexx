@@ -1964,7 +1964,7 @@ pub(super) fn native_string_makearray(
     let mut slots: Vec<Option<ObjRef>> = Vec::with_capacity(lines.len());
     for line in lines {
         let text = interp.text_built(line.to_vec());
-        interp.roots.push_temp(text);
+        interp.roots.activity_mut().push_temp(text);
         slots.push(Some(text));
     }
     // Measured, oracle: `''~makeArray~dimension` is 0, so an empty result
@@ -1974,7 +1974,7 @@ pub(super) fn native_string_makearray(
         slots,
     };
     let object = interp.alloc_with(BehaviourId::ARRAY, body);
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     let caller = interp.caller();
     interp.send_message(object, INIT, None, &[], caller)?;
     Ok(Some(object))

@@ -61,7 +61,7 @@ fn a_live_handle_resolves_to_the_object_it_was_made_from() {
     // still resolves to the same object afterwards.
     let mut anchor = RootSet::new();
     for root in table.roots() {
-        anchor.push_temp(root);
+        anchor.activity_mut().push_temp(root);
     }
     let stats = heap.collect(&anchor);
     assert_eq!(stats.swept, 0);

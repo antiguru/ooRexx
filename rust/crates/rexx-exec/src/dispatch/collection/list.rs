@@ -70,7 +70,7 @@ pub(super) fn list_state(
     let mut built = Vec::with_capacity(3);
     for name in [LIST_ITEMS, LIST_HANDLES, LIST_FREE] {
         let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
-        interp.roots.push_temp(store);
+        interp.roots.activity_mut().push_temp(store);
         interp.set_pool_variable(receiver, scope, name, store);
         built.push(store);
     }
@@ -331,9 +331,9 @@ fn list_pairs(
     // Rooted for [`ordered_pairs`]'s reason: a caller sends `==` per pair and
     // the callback may empty the list.
     for (handle, item) in &pairs {
-        interp.roots.push_temp(*handle);
+        interp.roots.activity_mut().push_temp(*handle);
         if let Some(item) = *item {
-            interp.roots.push_temp(item);
+            interp.roots.activity_mut().push_temp(item);
         }
     }
     Ok(pairs)
@@ -583,7 +583,7 @@ fn native_list_section(
     // `Queue` subclass answers `MYQ` and the `Array` subclass `MYARR`.
     let class = list_scope(interp);
     let section = new_instance(interp, class)?;
-    interp.roots.push_temp(section);
+    interp.roots.activity_mut().push_temp(section);
     let caller = interp.caller();
     interp.send_message(section, super::INIT, None, &[], caller)?;
     for (_, item) in pairs.into_iter().skip(at).take(count) {

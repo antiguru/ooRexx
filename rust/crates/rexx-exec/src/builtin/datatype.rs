@@ -412,7 +412,7 @@ pub(crate) fn value(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
             // from nowhere the collector walks for the one allocation that
             // matters. The instruction loop's own temps frame (`run.rs`'s
             // `step`) closes this out at the end of the clause.
-            interp.roots.push_temp(old);
+            interp.roots.activity_mut().push_temp(old);
             if let Some(new) = newvalue {
                 interp.stem_set(&stem_name, &key, new);
             }

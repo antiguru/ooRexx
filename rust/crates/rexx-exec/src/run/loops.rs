@@ -589,7 +589,7 @@ impl Interp {
             );
         }
         let wanted = self.text_built(b"ARRAY".to_vec());
-        self.roots.push_temp(wanted);
+        self.roots.activity_mut().push_temp(wanted);
         pinned!(
             self,
             crate::pinning::PinKind::Conversion,
@@ -636,7 +636,7 @@ impl Interp {
             // different object from the target the source named, and its items
             // are reachable only through it.
             if array != value {
-                self.roots.push_temp(array);
+                self.roots.activity_mut().push_temp(array);
             }
             match self.heap.get(array).map(|object| &object.body) {
                 Some(Body::Array { slots, .. }) => slots.iter().flatten().copied().collect(),
@@ -649,7 +649,7 @@ impl Interp {
             BehaviourId::ARRAY,
             Body::array(items.iter().copied().map(Some).collect()),
         );
-        self.roots.push_temp(snapshot);
+        self.roots.activity_mut().push_temp(snapshot);
         debug_assert_eq!(
             self.array_slots(snapshot)
                 .map(|slots| slots.iter().copied().flatten().collect::<Vec<_>>())
@@ -670,7 +670,7 @@ impl Interp {
         let mut items = Vec::with_capacity(keys.len());
         for key in &keys {
             let item = self.text(key);
-            self.roots.push_temp(item);
+            self.roots.activity_mut().push_temp(item);
             items.push(item);
         }
         items
@@ -1974,7 +1974,7 @@ impl Interp {
                 // variable's own storage, which is what roots it from there
                 // on; the `?` paths below leave it to the outer truncation,
                 // exactly as `pop_frame`'s own doc describes.
-                let pass = self.roots.push_frame();
+                let pass = self.roots.activity_mut().push_frame();
                 if re_tested {
                     // **`read`, not `read_by_name`: this is an evaluation and
                     // it can raise `NOVALUE`** (review round 1 re-review,
@@ -2021,7 +2021,7 @@ impl Interp {
                         }
                     };
                     self.novalue_check(novalue, previous)?;
-                    self.roots.push_temp(previous);
+                    self.roots.activity_mut().push_temp(previous);
                     // `>C>` before `>V>`, both self-gated on `intermediates`
                     // like every other value-bearing prefix -- `stem_get`'s
                     // own read announces the fully-resolved name it used
@@ -2094,7 +2094,7 @@ impl Interp {
                 // between this allocation and the write before the trigger
                 // existed, so this push closes a window that was inert rather
                 // than absent.
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 let bind_indent = if re_tested { loop_indent } else { do_indent };
                 if re_tested && let Some(rendered) = self.result_text(value) {
                     self.trace_result(loop_indent, &rendered);
@@ -2104,7 +2104,7 @@ impl Interp {
                 // `previous` is dead, so the pass's frame goes here. The three
                 // `return Ok(false)` paths below end the loop, whose enclosing
                 // frame truncates past this one anyway.
-                self.roots.pop_frame(pass);
+                self.roots.activity_mut().pop_frame(pass);
 
                 if let Some(r) = for_remaining
                     && *r == 0

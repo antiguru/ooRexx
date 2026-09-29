@@ -389,7 +389,7 @@ impl Interp {
                         // the walk reads the object rather than a copy of it.
                         // The temporary lives until this clause ends, which
                         // outlasts the walk.
-                        self.roots.push_temp(value);
+                        self.roots.activity_mut().push_temp(value);
                         return SourceText::Text { value, length };
                     }
                 }
@@ -556,7 +556,7 @@ impl Interp {
                     Some(value) => value,
                     None => {
                         let value = self.eval(code, expression)?;
-                        self.roots.push_temp(value);
+                        self.roots.activity_mut().push_temp(value);
                         value
                     }
                 };
@@ -567,7 +567,7 @@ impl Interp {
             // measured, `signal on novalue` traps on `parse var zzunset t`.
             ParseSource::Var(id) => {
                 let value = self.read_parse_var(code, *id, indent)?;
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 ("VAR", Subject::Value(value))
             }
             // The second word is the *calling context* rather than the call
@@ -720,7 +720,7 @@ impl Interp {
             },
         };
         let value = self.eval(code, operand)?;
-        self.roots.push_temp(value);
+        self.roots.activity_mut().push_temp(value);
         // `>>>` for the operand, after `eval`'s own `>L>`/`>V>` and before
         // the conversion that can fail: `integerTrigger`
         // (`ParseTrigger.cpp:143`-`153`) traces and only then converts, so
@@ -819,7 +819,7 @@ impl Interp {
                     // field and stores nowhere, so a value built ahead of the
                     // match is created, rooted and dropped unread.
                     let (piece, value) = self.take_piece(source, cursor, index == last);
-                    self.roots.push_temp(value);
+                    self.roots.activity_mut().push_temp(value);
                     // **The slot the upfront pass already bound this target
                     // to.** No compiler resolves a `PARSE` target -- nothing
                     // promotes the instruction -- but `Plan::build` walks

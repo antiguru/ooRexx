@@ -399,7 +399,7 @@ impl Interp {
             return Ok(None);
         }
         let called = self.text(name);
-        self.roots.push_temp(called);
+        self.roots.activity_mut().push_temp(called);
         let arguments = self.security_arguments_array(values);
         let entries = [
             (crate::security::key::NAME, called),
@@ -753,7 +753,7 @@ impl Interp {
                     &routine_program.symbols,
                     &routine_program.source,
                 );
-                let frame = self.roots.push_slots(plan.len());
+                let frame = self.roots.activity_mut().push_slots(plan.len());
                 let mut callee = Activation::routine(
                     callee_id,
                     routine_program,
@@ -829,7 +829,7 @@ impl Interp {
         // `extra` write-back is what makes a name bound inside it survive
         // the return (measured, `interpret "zork = 42"` in a callee).
         if callee.owns_frame {
-            self.roots.pop_slots(callee.frame);
+            self.roots.activity_mut().pop_slots(callee.frame);
         } else {
             // Taken rather than moved out, so the box stays whole and can be
             // parked: moving a field out of a `Box` moves the whole of it out
@@ -962,7 +962,7 @@ impl Interp {
         let value = self.eval_node(code, expr);
         self.activity.depth -= 1;
         let value = value?;
-        self.roots.push_temp(value);
+        self.roots.activity_mut().push_temp(value);
         Ok(value)
     }
 
@@ -972,7 +972,7 @@ impl Interp {
         expr: &Expr,
     ) -> Result<ObjRef, Failure> {
         let argument = self.eval(code, expr)?;
-        self.roots.push_temp(argument);
+        self.roots.activity_mut().push_temp(argument);
         if let Some(rendered) = self.intermediate_text(argument) {
             self.trace_argument(self.activity.clause_state.current_value_indent, &rendered);
         }
@@ -1093,7 +1093,7 @@ impl Interp {
                 // by now. Same window `Flow::Exit`'s own arm documents,
                 // closed here rather than left open, because unlike an exit
                 // value this one goes on to be stored and read.
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 // The caller's own `>>>`, at the `CALL` clause's indent --
                 // `base_indent`, saved before the callee overwrote
                 // `current_value_indent` with its own clauses'.

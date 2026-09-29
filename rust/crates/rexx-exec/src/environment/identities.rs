@@ -248,7 +248,7 @@ impl Interp {
         // [`Interp::annotation_table`] roots as a global for the whole run,
         // so nothing the clone reaches can be swept while it is detached.
         let object = self.alloc_with(BehaviourId::OBJECT, Body::Native(copy));
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         // The copy reports on the same directive the original did, and
         // carries the flag writes the four setters made on it -- both are
         // `RexxObject::copy`'s doing, which duplicates the whole method
@@ -337,7 +337,7 @@ impl Interp {
     ) -> Option<()> {
         let mut installed: Vec<(String, Option<rexx_classes::MethodId>)> = Vec::new();
         let mut objects: Vec<(Box<[u8]>, ObjRef)> = Vec::new();
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         for (name, source) in entries {
             let name_text = String::from_utf8_lossy(name).into_owned();
             let Some(source) = *source else {
@@ -345,9 +345,9 @@ impl Interp {
                 continue;
             };
             let object = self.method_new_scope(source, class)?;
-            self.roots.push_temp(object);
+            self.roots.activity_mut().push_temp(object);
             let object = self.method_new_scope(object, class)?;
-            self.roots.push_temp(object);
+            self.roots.activity_mut().push_temp(object);
             let method = self.classes().mint_method_id();
             self.bind_loaded_method(method, object);
             installed.push((name_text, Some(method)));
@@ -357,7 +357,7 @@ impl Interp {
         for (name, object) in objects {
             self.hold_method_object(class, &name, object);
         }
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         Some(())
     }
 
@@ -409,17 +409,17 @@ impl Interp {
         // Each value is pushed as a temporary as it is built, because the
         // next value's own allocation may collect and the table does not hold
         // it until the line below.
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         for (name, value) in pairs {
             let value = self.text(value);
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             let object = self.heap.get_mut(table).expect("just built and rooted");
             let Body::Native(native) = &mut object.body else {
                 unreachable!("allocated as Body::Native by native_instance")
             };
             native.set_entry(name, value);
         }
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         for site in rest {
             self.annotations.insert(site.clone(), table);
         }

@@ -139,7 +139,7 @@ fn a_stems_tails_and_default_are_traced() {
 fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let frame = roots.push_slots(2);
+    let frame = roots.activity_mut().push_slots(2);
     let v = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"local"),
         num: None,
@@ -147,7 +147,7 @@ fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
     roots.set_frame_slot(frame, 0, v);
     heap.collect(&roots);
     assert!(heap.get(v).is_some(), "a live local was swept");
-    roots.pop_slots(frame);
+    roots.activity_mut().pop_slots(frame);
     let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 1, "the local outlived its frame");
 }
@@ -155,8 +155,8 @@ fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
 #[test]
 fn a_slot_frame_grows_for_a_name_the_plan_never_saw() {
     let mut roots = RootSet::new();
-    let frame = roots.push_slots(1);
-    let index = roots.grow_slots(frame);
+    let frame = roots.activity_mut().push_slots(1);
+    let index = roots.activity_mut().grow_slots(frame);
     assert_eq!(index, 1);
 }
 
@@ -167,9 +167,9 @@ fn a_slot_frame_grows_for_a_name_the_plan_never_saw() {
 #[should_panic(expected = "4a invariant")]
 fn growing_a_frame_that_is_not_the_top_one_panics() {
     let mut roots = RootSet::new();
-    let outer = roots.push_slots(1);
-    let _inner = roots.push_slots(1);
-    roots.grow_slots(outer);
+    let outer = roots.activity_mut().push_slots(1);
+    let _inner = roots.activity_mut().push_slots(1);
+    roots.activity_mut().grow_slots(outer);
 }
 
 /// `pop_slots` out of order is a different defect than `grow_slots`'s, and
@@ -183,9 +183,9 @@ fn growing_a_frame_that_is_not_the_top_one_panics() {
 #[should_panic(expected = "pop_slots on a frame that is not the top one")]
 fn popping_a_frame_that_is_not_the_top_one_panics() {
     let mut roots = RootSet::new();
-    let outer = roots.push_slots(1);
-    let _inner = roots.push_slots(1);
-    roots.pop_slots(outer);
+    let outer = roots.activity_mut().push_slots(1);
+    let _inner = roots.activity_mut().push_slots(1);
+    roots.activity_mut().pop_slots(outer);
 }
 
 /// A cleared slot reads as unset, and that is **distinguishable from a slot
@@ -200,7 +200,7 @@ fn popping_a_frame_that_is_not_the_top_one_panics() {
 fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let frame = roots.push_slots(2);
+    let frame = roots.activity_mut().push_slots(2);
 
     let five = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"5"),
@@ -237,7 +237,7 @@ fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
 fn a_cleared_slot_stops_being_a_root() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let frame = roots.push_slots(1);
+    let frame = roots.activity_mut().push_slots(1);
 
     let v = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"dropped"),
@@ -265,7 +265,7 @@ fn a_cleared_slot_stops_being_a_root() {
 fn growth_does_not_recycle_a_cleared_slot() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let frame = roots.push_slots(1);
+    let frame = roots.activity_mut().push_slots(1);
 
     let v = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"a"),
@@ -274,7 +274,7 @@ fn growth_does_not_recycle_a_cleared_slot() {
     roots.set_frame_slot(frame, 0, v);
     roots.clear_frame_slot(frame, 0);
 
-    let grown = roots.grow_slots(frame);
+    let grown = roots.activity_mut().grow_slots(frame);
     assert_eq!(grown, 1, "growth appends rather than reusing the cleared 0");
 
     // The cleared slot is still addressable and still its own name's, so a

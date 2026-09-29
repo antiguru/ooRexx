@@ -195,9 +195,9 @@ fn native_array_supplier(
     let items: Vec<ObjRef> = pairs.iter().map(|(_, item)| *item).collect();
     let indexes: Vec<ObjRef> = pairs.into_iter().map(|(index, _)| index).collect();
     let items = array_of(interp, items);
-    interp.roots.push_temp(items);
+    interp.roots.activity_mut().push_temp(items);
     let indexes = array_of(interp, indexes);
-    interp.roots.push_temp(indexes);
+    interp.roots.activity_mut().push_temp(indexes);
     new_supplier(interp, items, indexes).map(Some)
 }
 
@@ -515,7 +515,7 @@ fn same_class_array(
     slots: Vec<Option<ObjRef>>,
 ) -> Result<ObjRef, Failure> {
     let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
-    interp.roots.push_temp(store);
+    interp.roots.activity_mut().push_temp(store);
     if interp.array_slots(receiver).is_some() {
         return Ok(store);
     }
@@ -523,7 +523,7 @@ fn same_class_array(
         .class_of_value(receiver)
         .ok_or_else(|| Failure::from(Loud::receiver_class("a value that is not an array")))?;
     let object = new_instance(interp, class)?;
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     let scope = store_scope(interp);
     interp.set_pool_variable(object, scope, QUEUE_ITEMS, store);
     Ok(object)

@@ -29,7 +29,7 @@ impl Interp {
         // way in.
         let indent = self.activity.clause_state.current_value_indent;
         let value = self.eval(code, case_expr)?;
-        self.roots.push_temp(value);
+        self.roots.activity_mut().push_temp(value);
         let text = self.to_text(value).to_vec();
         // `>K>` (`SelectInstruction.cpp:372`, `traceKeywordResult(CASE, ...)`),
         // at the `SELECT`'s own level -- measured, `>K>   "CASE" => "2"` sits
@@ -88,7 +88,7 @@ impl Interp {
                 None => {
                     for value in values {
                         let v = self.eval(code, value)?;
-                        self.roots.push_temp(v);
+                        self.roots.activity_mut().push_temp(v);
                     }
                     Ok(false)
                 }

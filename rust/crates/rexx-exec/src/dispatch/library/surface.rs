@@ -157,7 +157,7 @@ impl Surface for Interp {
         }
         let bytes = self.to_text(string).into_owned();
         let string = self.text(&bytes);
-        self.roots.push_temp(string);
+        self.roots.activity_mut().push_temp(string);
         Some(string)
     }
 
@@ -191,7 +191,7 @@ impl Surface for Interp {
                 num: None,
             },
         );
-        self.roots.push_temp(string);
+        self.roots.activity_mut().push_temp(string);
         string
     }
 
@@ -292,7 +292,7 @@ impl Surface for Interp {
         match self.send_message(receiver, name, scope, arguments, caller) {
             Ok(answer) => {
                 if let Some(answer) = answer {
-                    self.roots.push_temp(answer);
+                    self.roots.activity_mut().push_temp(answer);
                 }
                 Ok(answer)
             }
@@ -308,7 +308,7 @@ impl Surface for Interp {
             return None;
         }
         let index = self.text(index);
-        self.roots.push_temp(index);
+        self.roots.activity_mut().push_temp(index);
         let answered = hash::store_get(self, table, index);
         Some(self.served(answered))
     }
@@ -331,7 +331,7 @@ impl Surface for Interp {
             return None;
         }
         let index = self.text(index);
-        self.roots.push_temp(index);
+        self.roots.activity_mut().push_temp(index);
         let answered = hash::store_remove(self, table, index);
         Some(self.served(answered))
     }
@@ -487,7 +487,7 @@ impl Surface for Interp {
                 home,
             })),
         );
-        self.roots.push_temp(reference);
+        self.roots.activity_mut().push_temp(reference);
         Some(reference)
     }
 
@@ -530,7 +530,7 @@ impl Surface for Interp {
         } else {
             self.library_routine_object(code?)
         };
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         Some(object)
     }
 
@@ -580,7 +580,7 @@ impl Surface for Interp {
         };
         let routine = self.new_file_executable(path.as_bytes(), true, None);
         let routine = self.held(routine)?;
-        self.roots.push_temp(routine);
+        self.roots.activity_mut().push_temp(routine);
         let (program, directive) = self.executable_sources.get(&routine)?.routine?;
         let installed = crate::InstalledRoutine { program, directive };
         let answered = self.run_routine_as_program(installed, arguments.to_vec());
@@ -591,7 +591,7 @@ impl Surface for Interp {
         let answered = crate::dispatch::executable::call_routine_directly(self, routine, arguments);
         let answer = self.held(answered).flatten();
         if let Some(answer) = answer {
-            self.roots.push_temp(answer);
+            self.roots.activity_mut().push_temp(answer);
         }
         answer
     }
@@ -676,7 +676,7 @@ impl Interp {
         match answered {
             Ok(answer) => {
                 if let Some(answer) = answer {
-                    self.roots.push_temp(answer);
+                    self.roots.activity_mut().push_temp(answer);
                 }
                 Ok(answer)
             }
@@ -709,7 +709,7 @@ impl Interp {
         let owner = self.native_frame().owner;
         let scope = self.classes().lookup("Object")?;
         let table = Surface::new_array(self, &buffers);
-        self.roots.push_temp(table);
+        self.roots.activity_mut().push_temp(table);
         self.set_pool_variable(owner, scope, b"", table);
         Some(())
     }
@@ -800,7 +800,7 @@ impl Interp {
 
     /// Refuses `member` on a variable [`Interp::unbound_outer`] names: the
     /// slots are one stack that grows only on the top frame
-    /// (`rexx_core::RootSet::grow_slots`), and reaching a lower frame's
+    /// (`rexx_core::ActivityRoots::grow_slots`), and reaching a lower frame's
     /// layout is D3's frame-ownership work.
     fn refuse_unbound_outer(&mut self, member: &str) {
         let message = crate::owned_message(
@@ -847,7 +847,7 @@ impl Interp {
                 native: Some(Box::new(state)),
             },
         );
-        self.roots.push_temp(object);
+        self.roots.activity_mut().push_temp(object);
         // As `new_instance` arms it for every instance.
         self.reqstr_armed = true;
         object

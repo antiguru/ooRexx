@@ -174,7 +174,7 @@ pub(super) fn list(
         let held = interp.text_built(name);
         // Rooted before the next allocation: the array below allocates, and
         // the names built so far are reachable from nothing until it exists.
-        interp.roots.push_temp(held);
+        interp.roots.activity_mut().push_temp(held);
         slots.push(Some(held));
     }
     Ok(Some(
@@ -514,7 +514,7 @@ pub(super) fn list_roots(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let root = interp.text(b"/");
-    interp.roots.push_temp(root);
+    interp.roots.activity_mut().push_temp(root);
     Ok(Some(interp.alloc_with(
         BehaviourId::ARRAY,
         Body::array(vec![Some(root)]),

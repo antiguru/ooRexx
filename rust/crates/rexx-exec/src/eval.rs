@@ -390,18 +390,18 @@ impl Interp {
             ExprKind::Binary { op, left, right }
                 if is_native_binary(*op) && !is_arithmetic(*op) =>
             {
-                let frame = self.roots.push_frame();
+                let frame = self.roots.activity_mut().push_frame();
                 let left_value = self.eval(code, left)?;
-                self.roots.push_temp(left_value);
+                self.roots.activity_mut().push_temp(left_value);
                 let right_value = self.eval(code, right)?;
-                self.roots.push_temp(right_value);
+                self.roots.activity_mut().push_temp(right_value);
                 // Bound rather than propagated with `?`, so the frame is
                 // popped on the failure path too -- an operator's own raise
                 // discards its operands here, where the `?` on an operand's
                 // evaluation above leaves them for `Op::Clause`'s region to
                 // truncate. The module doc has why both are safe.
                 let result = self.apply_binary(*op, left_value, right_value);
-                self.roots.pop_frame(frame);
+                self.roots.activity_mut().pop_frame(frame);
                 result
             }
 
@@ -493,7 +493,7 @@ impl Interp {
     /// positions.
     #[inline(never)]
     fn eval_list(&mut self, code: &Code<'_>, items: &[Option<Expr>]) -> Result<ObjRef, Failure> {
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let indent = self.activity.clause_state.current_value_indent;
         let mut slots = Vec::with_capacity(items.len());
         for item in items {
@@ -502,7 +502,7 @@ impl Interp {
                 continue;
             };
             let value = self.eval(code, expr)?;
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             if let Some(rendered) = self.intermediate_text(value) {
                 self.trace_argument(indent, &rendered);
             }
@@ -512,7 +512,7 @@ impl Interp {
         if let Some(rendered) = self.result_text(array) {
             self.trace_result(indent, &rendered);
         }
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         Ok(array)
     }
 
@@ -590,14 +590,14 @@ impl Interp {
         op: PrefixOp,
         operand: &Expr,
     ) -> Result<ObjRef, Failure> {
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let value = self.eval(code, operand)?;
-        self.roots.push_temp(value);
+        self.roots.activity_mut().push_temp(value);
         // Bound rather than propagated with `?`, so the frame is popped on the
         // failure path too -- the shape `eval_node`'s own binary arm has, and
         // the module doc has why both it and the `?` above are safe.
         let result = self.apply_prefix(op, value);
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         result
     }
 
@@ -668,11 +668,11 @@ impl Interp {
         left: &Expr,
         right: &Expr,
     ) -> Result<ObjRef, Failure> {
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let left_value = self.eval(code, left)?;
-        self.roots.push_temp(left_value);
+        self.roots.activity_mut().push_temp(left_value);
         let right_value = self.eval(code, right)?;
-        self.roots.push_temp(right_value);
+        self.roots.activity_mut().push_temp(right_value);
 
         // The two halves in the order they are tried, which is the whole of
         // what this function decides once its operands are values. Both are
@@ -685,7 +685,7 @@ impl Interp {
             None => self.arith_general(op, left_value, right_value)?,
         };
 
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         Ok(value)
     }
 
@@ -1320,12 +1320,12 @@ impl Interp {
     /// desugars to, "a logical AND of its parts" (`ast.rs`'s own doc
     /// comment).
     fn eval_logical_list(&mut self, code: &Code<'_>, items: &[Expr]) -> Result<ObjRef, Failure> {
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let indent = self.activity.clause_state.current_value_indent;
         let mut holds = true;
         for item in items {
             let value = self.eval(code, item)?;
-            self.roots.push_temp(value);
+            self.roots.activity_mut().push_temp(value);
             let text = self.to_text(value).to_vec();
             self.trace_result(indent, &text);
             let item_holds =
@@ -1337,7 +1337,7 @@ impl Interp {
         }
 
         let result = logical(holds);
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         Ok(result)
     }
 

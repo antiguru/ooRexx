@@ -151,7 +151,7 @@ fn native_relation_remove_all(
     let index = super::collection::item_argument(args)?;
     let mut removed = Vec::new();
     while let Some(item) = take(interp, receiver, index)? {
-        interp.roots.push_temp(item);
+        interp.roots.activity_mut().push_temp(item);
         removed.push(item);
     }
     Ok(Some(super::collection::array_of(interp, removed)))

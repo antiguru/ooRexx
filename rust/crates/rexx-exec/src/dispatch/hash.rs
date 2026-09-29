@@ -255,9 +255,9 @@ fn install_store(interp: &mut Interp, receiver: ObjRef, half: Half, buckets: usi
     let total = buckets * 2;
     let scope = hash_scope(interp);
     let indexes = interp.alloc_with(BehaviourId::ARRAY, Body::array(vec![None; total]));
-    interp.roots.push_temp(indexes);
+    interp.roots.activity_mut().push_temp(indexes);
     let items = interp.alloc_with(BehaviourId::ARRAY, Body::array(vec![None; total]));
-    interp.roots.push_temp(items);
+    interp.roots.activity_mut().push_temp(items);
     // `initializeFreeChain` (`classes/support/HashContents.cpp:145`): every
     // bucket slot ends its own chain, and the overflow slots are chained
     // upward from `bucketSize` with the last one ending the chain.
@@ -271,7 +271,7 @@ fn install_store(interp: &mut Interp, receiver: ObjRef, half: Half, buckets: usi
         links.push(Some(interp.counted(link)));
     }
     let next = interp.alloc_with(BehaviourId::ARRAY, Body::array(links));
-    interp.roots.push_temp(next);
+    interp.roots.activity_mut().push_temp(next);
     let buckets_value = interp.counted(buckets);
     let free_value = interp.counted(buckets);
     interp.set_pool_variable(receiver, scope, half.indexes, indexes);
@@ -685,9 +685,9 @@ fn expand(interp: &mut Interp, receiver: ObjRef, half: Half) -> Result<(), Failu
         let index = slot_at(interp, store.indexes, slot)?;
         let item = slot_at(interp, store.items, slot)?;
         if let Some(index) = index {
-            interp.roots.push_temp(index);
+            interp.roots.activity_mut().push_temp(index);
             if let Some(item) = item {
-                interp.roots.push_temp(item);
+                interp.roots.activity_mut().push_temp(item);
             }
             carried.push((index, item));
         }
@@ -1091,14 +1091,14 @@ fn method_pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, Ob
         let Some(stored) = slot_at(interp, store.items, slot)? else {
             continue;
         };
-        interp.roots.push_temp(index);
+        interp.roots.activity_mut().push_temp(index);
         held.push((index, stored));
     }
     let mut pairs = Vec::with_capacity(held.len());
     for (index, stored) in held {
         let name = interp.to_text(index).to_vec();
         let item = run_stored_method(interp, receiver, &name, stored, &[])?;
-        interp.roots.push_temp(item);
+        interp.roots.activity_mut().push_temp(item);
         pairs.push((index, item));
     }
     Ok(pairs)
@@ -1241,8 +1241,8 @@ fn pairs(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<(ObjRef, ObjRef)>,
         let item = item_at(interp, &store, slot)?.unwrap_or(ObjRef::NIL);
         // Rooted for `ordered_pairs`'s reason: a caller sends `==` per pair
         // and the callback may empty the collection.
-        interp.roots.push_temp(index);
-        interp.roots.push_temp(item);
+        interp.roots.activity_mut().push_temp(index);
+        interp.roots.activity_mut().push_temp(item);
         pairs.push((index, item));
     }
     // `DirectoryClass::allIndexes` and its siblings append the method table
@@ -1263,7 +1263,7 @@ fn indexes(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<ObjRef>, Failure
     for half in std::iter::once(store).chain(methods) {
         for slot in walk_in(interp, &half)? {
             if let Some(index) = slot_at(interp, half.indexes, slot)? {
-                interp.roots.push_temp(index);
+                interp.roots.activity_mut().push_temp(index);
                 indexes.push(index);
             }
         }
@@ -1474,7 +1474,7 @@ pub(super) fn native_hash_new(
     let class = super::class_receiver(interp, receiver)?;
     let capacity = super::optional_length_argument(interp, args, 0)?.unwrap_or(0);
     let object = new_instance(interp, class)?;
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     install_store(interp, object, CONTENTS, calculate_bucket_size(capacity));
     let caller = interp.caller();
     interp.send_message(object, super::INIT, None, args, caller)?;
@@ -1556,7 +1556,7 @@ pub(crate) fn directory_put(
     item: ObjRef,
 ) -> Result<(), Failure> {
     let index = interp.text(name);
-    interp.roots.push_temp(index);
+    interp.roots.activity_mut().push_temp(index);
     insert(interp, directory, index, Some(item))
 }
 
@@ -1572,7 +1572,7 @@ pub(crate) fn native_put(
     item: ObjRef,
 ) -> Result<(), Failure> {
     let index = interp.text(name);
-    interp.roots.push_temp(index);
+    interp.roots.activity_mut().push_temp(index);
     if multi_value(interp, receiver) {
         insert_front(interp, receiver, index, Some(item))
     } else {
@@ -1589,7 +1589,7 @@ pub(crate) fn directory_put_method_value(
     value: ObjRef,
 ) -> Result<(), Failure> {
     let index = interp.text(name);
-    interp.roots.push_temp(index);
+    interp.roots.activity_mut().push_temp(index);
     insert_in(interp, directory, METHODS, index, Some(value))
 }
 
@@ -1695,7 +1695,7 @@ fn view_get(
         return Ok(DirectoryEntry::Absent);
     };
     let index = interp.text(name);
-    interp.roots.push_temp(index);
+    interp.roots.activity_mut().push_temp(index);
     run_stored_method(interp, directory, b"UNKNOWN", stored, &[Some(index)])
         .map(DirectoryEntry::Found)
 }
@@ -1926,7 +1926,7 @@ fn native_directory_set_method(
         return Err(not_this_task(interp, receiver, b"SETMETHOD"));
     }
     let name = entry_name(interp, args)?;
-    interp.roots.push_temp(name);
+    interp.roots.activity_mut().push_temp(name);
     let unknown = is_unknown_name(interp, name);
     match args.get(1).copied().flatten() {
         Some(source) => {
@@ -2001,7 +2001,7 @@ pub(super) fn native_bag_of(
         }
     }
     let object = new_instance(interp, class)?;
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     install_store(interp, object, CONTENTS, MINIMUM_BUCKET_SIZE);
     let caller = interp.caller();
     interp.send_message(object, super::INIT, None, &[], caller)?;
@@ -2026,7 +2026,7 @@ pub(super) fn native_set_of(
         }
     }
     let object = new_instance(interp, class)?;
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     install_store(interp, object, CONTENTS, MINIMUM_BUCKET_SIZE);
     let caller = interp.caller();
     interp.send_message(object, super::INIT, None, &[], caller)?;
@@ -2182,12 +2182,12 @@ pub(super) fn directory_of(
 ) -> Result<ObjRef, Failure> {
     let class = interp.object_model().directory;
     let directory = new_instance(interp, class)?;
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     for (name, value) in entries {
         let key = interp.text_built(name);
-        interp.roots.push_temp(key);
+        interp.roots.activity_mut().push_temp(key);
         insert(interp, directory, key, Some(value))?;
     }
-    interp.roots.pop_frame(frame);
+    interp.roots.activity_mut().pop_frame(frame);
     Ok(directory)
 }

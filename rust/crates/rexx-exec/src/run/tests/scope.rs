@@ -284,7 +284,7 @@ fn an_isolated_callees_frame_is_released_on_both_paths() {
         b"zz = 1\ncall sub\ncall sub\ncall sub\nexit\nsub: procedure\nyy = 2\nreturn\n",
     );
     assert_eq!(
-        interp.roots.live_frames(),
+        interp.roots.activity().live_frames(),
         1,
         "three isolated calls must leave only the top-level frame open"
     );
@@ -300,7 +300,7 @@ fn an_isolated_callees_frame_is_released_on_both_paths() {
         "the callee must have raised, or this proves nothing about the error path"
     );
     assert_eq!(
-        interp.roots.live_frames(),
+        interp.roots.activity().live_frames(),
         1,
         "a raise inside an isolated callee must still release its frame"
     );
@@ -315,7 +315,7 @@ fn an_isolated_callees_frame_is_released_on_both_paths() {
         b"zz = 1\ncall sub\nexit\nsub:\nyy = 2\nreturn\n",
     );
     assert_eq!(
-        interp.roots.live_frames(),
+        interp.roots.activity().live_frames(),
         1,
         "a shared-pool callee must leave the caller's frame open"
     );

@@ -81,7 +81,7 @@ impl Interp {
                 self.heap.get(value).map(|object| &object.body),
                 Some(Body::Text { .. } | Body::Num { .. })
             ) {
-                self.roots.push_temp(value);
+                self.roots.activity_mut().push_temp(value);
                 return Ok(value);
             }
             return self.required_string_dispatch(value);
@@ -136,12 +136,12 @@ impl Interp {
     fn required_string_dispatch(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
         match self.required_string_answer(value) {
             Ok(Some(RequiredString::Object(text))) => {
-                self.roots.push_temp(text);
+                self.roots.activity_mut().push_temp(text);
                 return Ok(text);
             }
             Ok(Some(RequiredString::Bytes(bytes))) => {
                 let text = self.text_built(bytes);
-                self.roots.push_temp(text);
+                self.roots.activity_mut().push_temp(text);
                 return Ok(text);
             }
             Ok(None) => {}
@@ -185,7 +185,7 @@ impl Interp {
             return Err(Raised::nostring_syntax(&readable).into());
         }
         let readable = self.text_built(readable);
-        self.roots.push_temp(readable);
+        self.roots.activity_mut().push_temp(readable);
         Ok(readable)
     }
 
@@ -380,7 +380,7 @@ impl Interp {
     /// when a `makeString` reached through the protocol fails.
     fn blame_request(&mut self, value: ObjRef) {
         let class = self.text(b"STRING");
-        self.roots.push_temp(class);
+        self.roots.activity_mut().push_temp(class);
         self.blame_native_method(b"REQUEST", "Object", value, &[Some(class)]);
     }
 }

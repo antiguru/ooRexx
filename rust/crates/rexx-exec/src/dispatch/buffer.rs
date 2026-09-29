@@ -1022,11 +1022,11 @@ fn native_mutable_buffer_subword(
 
 /// A fresh `Array` holding one string per element of `pieces`.
 pub(super) fn array_of_texts(interp: &mut Interp, pieces: Vec<Vec<u8>>) -> Result<ObjRef, Failure> {
-    let frame = interp.roots.push_frame();
+    let frame = interp.roots.activity_mut().push_frame();
     let mut slots = Vec::with_capacity(pieces.len());
     for piece in pieces {
         let value = interp.text_built(piece);
-        interp.roots.push_temp(value);
+        interp.roots.activity_mut().push_temp(value);
         slots.push(Some(value));
     }
     let object = interp.alloc_with(
@@ -1036,8 +1036,8 @@ pub(super) fn array_of_texts(interp: &mut Interp, pieces: Vec<Vec<u8>>) -> Resul
             slots,
         },
     );
-    interp.roots.pop_frame(frame);
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().pop_frame(frame);
+    interp.roots.activity_mut().push_temp(object);
     let caller = interp.caller();
     interp.send_message(object, INIT, None, &[], caller)?;
     Ok(object)

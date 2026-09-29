@@ -596,7 +596,7 @@ impl Interp {
         // The cells go back in before the allocation, which can collect.
         self.stem_exposers.insert(home, cells);
         let orphan = self.alloc_with(BehaviourId::STEM, body);
-        self.roots.push_temp(orphan);
+        self.roots.activity_mut().push_temp(orphan);
         for local in exposers {
             if let Some(Body::Stem {
                 exposed: Some(exposed),
@@ -752,7 +752,7 @@ mod tests {
             &program.symbols,
             &program.source,
         );
-        let frame = interp.roots.push_slots(plan.len());
+        let frame = interp.roots.activity_mut().push_slots(plan.len());
         let id = interp.next_activation_id();
         interp.push_activation(Activation::new(
             id,

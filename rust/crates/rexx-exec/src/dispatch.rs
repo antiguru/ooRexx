@@ -1775,7 +1775,7 @@ impl Interp {
             return Ok(None);
         }
         let message = self.text(name);
-        self.roots.push_temp(message);
+        self.roots.activity_mut().push_temp(message);
         let arguments = self.security_arguments_array(args);
         let entries = [
             (crate::security::key::OBJECT, receiver),
@@ -2118,7 +2118,7 @@ impl Interp {
             Some(value) => value,
             None => self.text(&variable),
         };
-        self.roots.push_temp(target);
+        self.roots.activity_mut().push_temp(target);
         let caller = self.caller();
         self.send_message(target, name, None, args, caller)
     }
@@ -2202,7 +2202,7 @@ impl Interp {
             &program.symbols,
             &program.source,
         );
-        let frame = self.roots.push_slots(plan.len());
+        let frame = self.roots.activity_mut().push_slots(plan.len());
         let callee_id = self.next_activation_id();
         let super_scope = self.super_scope_for(receiver, resolution);
         // **The calling convention, entered before anything reads it.** The
@@ -2299,7 +2299,7 @@ impl Interp {
         if callee.reply == ReplyState::Owed {
             self.park_reply(callee, callee_context);
         } else {
-            self.roots.pop_slots(callee.frame);
+            self.roots.activity_mut().pop_slots(callee.frame);
             // **Back to the pool**, which until now only `Interp::invoke_call`
             // fed. The pool is drained by every push and was filled by the
             // `CALL` path alone, so a program of method sends missed it every
@@ -2333,7 +2333,7 @@ impl Interp {
     /// releases its frame, and queues the rest of its body.
     fn park_reply(&mut self, mut activation: Box<Activation>, context: crate::CallContext) {
         let frame = activation.frame;
-        let len = self.roots.frame_len(frame);
+        let len = self.roots.activity().frame_len(frame);
         // The values are copied out, so an alias in this frame would come back
         // as the resumed body's own storage and stop sharing. Both routes to
         // one are refused inside a method body -- measured, `PROCEDURE` there
@@ -2341,7 +2341,7 @@ impl Interp {
         // matching the oracle -- and this is that stated as a check rather
         // than as a sentence, because what makes it true is elsewhere.
         debug_assert_eq!(
-            self.roots.frame_aliases(frame),
+            self.roots.activity().frame_aliases(frame),
             0,
             "a parked method frame holds an alias, whose sharing a copy loses"
         );
@@ -2353,13 +2353,13 @@ impl Interp {
         // variable into a cell, and a copy that came back as plain storage
         // would leave the reference reading the cell and the variable
         // reading the copy.
-        let aliases = self.roots.take_frame_aliases(frame);
+        let aliases = self.roots.activity().take_frame_aliases(frame);
         let mut anchor = Vec::new();
         activation.object_roots(&mut anchor);
         context.object_roots(&mut anchor);
         anchor.extend(slots.iter().flatten().copied());
-        let parked = self.roots.park(anchor);
-        self.roots.pop_slots(frame);
+        let parked = self.roots.activity_mut().park(anchor);
+        self.roots.activity_mut().pop_slots(frame);
         activation.reply = ReplyState::Issued;
         self.deferred.push_back(DeferredReply {
             activation,
@@ -2390,10 +2390,10 @@ impl Interp {
         // Every park is matched by the release its resume does, and this is
         // where the pairing can be seen: the queue is empty, so a parked entry
         // still rooting anything is a set of values kept alive for the rest of
-        // the process. Cheap and once per run, unlike `RootSet::live_frames`'
+        // the process. Cheap and once per run, unlike `ActivityRoots::live_frames`'
         // own callers.
         debug_assert!(
-            abandoned || self.roots.live_parked() == 0,
+            abandoned || self.roots.activity().live_parked() == 0,
             "a replied method body's values are still parked with nothing owing them"
         );
         failures
@@ -2455,11 +2455,11 @@ impl Interp {
     /// Runs `UNINIT` on each of `batch`, oldest first, with the whole batch
     /// rooted for the length of the run.
     fn run_uninit_batch(&mut self, batch: Vec<ObjRef>, loud: &mut Vec<Loud>) {
-        let parked = self.roots.park(batch.clone());
+        let parked = self.roots.activity_mut().park(batch.clone());
         for object in batch {
             loud.extend(self.run_one_uninit(object));
         }
-        self.roots.release(parked);
+        self.roots.activity_mut().release(parked);
     }
 
     /// Runs the `UNINIT` of every object a collection has readied, oldest
@@ -2511,17 +2511,17 @@ impl Interp {
             aliases,
             parked,
         } = deferred;
-        let frame = self.roots.push_slots(slots.len());
+        let frame = self.roots.activity_mut().push_slots(slots.len());
         // Before the values, so that a promoted variable's write lands in
         // its cell and not in the slot the redirect stands in front of.
-        self.roots.put_frame_aliases(frame, &aliases);
+        self.roots.activity_mut().put_frame_aliases(frame, &aliases);
         for (index, value) in slots.iter().enumerate() {
             if let Some(value) = value {
                 self.roots.set_frame_slot(frame, index, *value);
             }
         }
         // Released only once the arena holds the values again.
-        self.roots.release(parked);
+        self.roots.activity_mut().release(parked);
         activation.frame = frame;
         activation.trace_entry = if activation.trace_entry == TraceEntry::Done {
             TraceEntry::Allowed
@@ -2561,7 +2561,7 @@ impl Interp {
             ReplyState::Owed,
             "a resumed method body asked to be parked a second time"
         );
-        self.roots.pop_slots(callee.frame);
+        self.roots.activity_mut().pop_slots(callee.frame);
         // Back to the pool, for the reason the send path above states.
         self.recycle_activation(callee);
         match ended {
@@ -2627,11 +2627,11 @@ impl Interp {
         // where the plain run prints the row. A message name of seven bytes
         // or fewer leaves the subset green, because `Interp::text` inlines it
         // and nothing allocates between the array and the send.
-        let frame = self.roots.push_frame();
+        let frame = self.roots.activity_mut().push_frame();
         let arguments = self.alloc_with(BehaviourId::ARRAY, Body::array(args.to_vec()));
-        self.roots.push_temp(arguments);
+        self.roots.activity_mut().push_temp(arguments);
         let missed = self.text(name);
-        self.roots.push_temp(missed);
+        self.roots.activity_mut().push_temp(missed);
         let forwarded = pinned!(
             self,
             crate::pinning::PinKind::Unknown,
@@ -2642,7 +2642,7 @@ impl Interp {
                 &[Some(missed), Some(arguments)],
             )
         );
-        self.roots.pop_frame(frame);
+        self.roots.activity_mut().pop_frame(frame);
         forwarded
     }
 
@@ -2686,7 +2686,7 @@ impl Interp {
             assigned,
         } = *term;
         let receiver = self.eval(code, target)?;
-        self.roots.push_temp(receiver);
+        self.roots.activity_mut().push_temp(receiver);
 
         let start_scope = match super_class {
             None => None,
@@ -2694,7 +2694,7 @@ impl Interp {
                 // Evaluated for its own trace lines and its own failures
                 // before either check below, which is the oracle's order.
                 let scope = self.eval(code, super_class)?;
-                self.roots.push_temp(scope);
+                self.roots.activity_mut().push_temp(scope);
                 // `RexxExpressionMessage::evaluate`'s
                 // `_super->isInstanceOf(TheClassClass)`, then
                 // `_target->validateScopeOverride(_super)`. Both run before

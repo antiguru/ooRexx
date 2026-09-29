@@ -106,7 +106,7 @@ pub(super) fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, 
         return Err(Loud::receiver_class("a value that is not an array").into());
     }
     let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
-    interp.roots.push_temp(store);
+    interp.roots.activity_mut().push_temp(store);
     interp.set_pool_variable(receiver, scope, QUEUE_ITEMS, store);
     Ok(store)
 }
@@ -148,13 +148,13 @@ pub(super) fn ordered_pairs(
         // object is no longer live. Measured: `collect_stress` caught exactly
         // that on `array_enumeration.rex`'s multi-dimensional half, and
         // nothing in the ordinary run saw it.
-        interp.roots.push_temp(index);
+        interp.roots.activity_mut().push_temp(index);
         // **The item is rooted too, and for a different reason than the
         // index.** The index is a fresh allocation; the item is only
         // reachable through the collection, and the very next thing a caller
         // does with these pairs is send `==` or `compare`, which runs Rexx
         // that may empty the collection.
-        interp.roots.push_temp(item);
+        interp.roots.activity_mut().push_temp(item);
         pairs.push((index, item));
     }
     Ok(pairs)
@@ -198,7 +198,7 @@ pub(super) fn array_of(interp: &mut Interp, items: Vec<ObjRef>) -> ObjRef {
 /// entry that holds nothing answers for `allItems`.
 fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
     let array = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
-    interp.roots.push_temp(array);
+    interp.roots.activity_mut().push_temp(array);
     array
 }
 
@@ -328,9 +328,9 @@ pub(super) fn instance_over_store(
     class: ObjRef,
     store: ObjRef,
 ) -> Result<ObjRef, Failure> {
-    interp.roots.push_temp(store);
+    interp.roots.activity_mut().push_temp(store);
     let object = new_instance(interp, class)?;
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     let scope = store_scope(interp);
     interp.set_pool_variable(object, scope, QUEUE_ITEMS, store);
     Ok(object)
@@ -408,7 +408,7 @@ pub(super) fn native_collection_of(
         }
     }
     let object = new_instance(interp, class)?;
-    interp.roots.push_temp(object);
+    interp.roots.activity_mut().push_temp(object);
     let caller = interp.caller();
     interp.send_message(object, super::INIT, None, &[], caller)?;
     let list = is_list(interp, object);
