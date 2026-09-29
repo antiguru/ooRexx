@@ -60,6 +60,10 @@ pub static PROGRAMS: &[&str] = &[
     "sayloop",
     "nop",
     "assign",
+    "fibcall",
+    "fibfunc",
+    "sendloop",
+    "extcall",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does
@@ -69,7 +73,8 @@ pub static NOT_BENCHMARKED: &[&str] = &["heapshape"];
 /// Resolves `REXX_BENCH_BINARY` into an `Interpreter`, deriving its library
 /// search path the same way `rexx-diff` does (`rexx-oracle/src/bin/rexx-diff.rs`):
 /// the binary's own directory, plus a sibling `lib/`, which is where
-/// `build/bin/rexx` finds `build/lib/*.so`.
+/// `build/bin/rexx` finds `build/lib/*.so`. The oracle's library directory
+/// follows, so `extcall` finds `liborxfunction.so` under a `rexx-run` too.
 pub fn interpreter_under_test() -> Interpreter {
     let raw = std::env::var(BINARY_VAR)
         .unwrap_or_else(|_| panic!("set {BINARY_VAR} to the interpreter binary to benchmark"));
@@ -78,7 +83,10 @@ pub fn interpreter_under_test() -> Interpreter {
     let library_paths = binary
         .parent()
         .map(|dir| vec![dir.to_path_buf(), dir.join("../lib")])
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .chain([Path::new(child::ORACLE_ROOT).join("lib")])
+        .collect();
     Interpreter {
         binary,
         library_paths,

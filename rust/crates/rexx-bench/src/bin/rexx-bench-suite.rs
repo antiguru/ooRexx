@@ -120,6 +120,18 @@ const AXES: &[Axis] = &[
         role: Role::Loop,
     },
     Axis {
+        name: "extcall",
+        role: Role::Loop,
+    },
+    Axis {
+        name: "fibcall",
+        role: Role::Loop,
+    },
+    Axis {
+        name: "fibfunc",
+        role: Role::Loop,
+    },
+    Axis {
         name: "heapshape",
         role: Role::SelfTimed,
     },
@@ -133,6 +145,10 @@ const AXES: &[Axis] = &[
     },
     Axis {
         name: "sayloop",
+        role: Role::Loop,
+    },
+    Axis {
+        name: "sendloop",
         role: Role::Loop,
     },
     Axis {

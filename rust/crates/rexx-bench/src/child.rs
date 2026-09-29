@@ -54,11 +54,15 @@ impl Side {
                 Arm::Ir => "rust-ir",
             },
             binary,
-            // **No environment.** The arm used to be selected per child
+            // No engine variable: the arm used to be selected per child
             // through `REXX_ENGINE`; `rexx-run` reads no such variable now,
             // so setting one would be a row labelled with an arm nobody
-            // chose.
-            env: Vec::new(),
+            // chose. The oracle's library directory, so `extcall.rex` loads
+            // the same `liborxfunction.so` on both sides.
+            env: vec![(
+                "LD_LIBRARY_PATH".to_string(),
+                PathBuf::from(ORACLE_ROOT).join("lib").display().to_string(),
+            )],
         }
     }
 }
@@ -302,14 +306,14 @@ mod tests {
             ]
         );
     }
-    /// A rust side sets **no** environment, and says which arm it is in its
-    /// label.
+    /// A rust side sets no environment but the library path, and says which
+    /// arm it is in its label.
     #[test]
     fn a_rust_side_sets_no_engine_environment_and_names_its_arm() {
         for arm in Arm::BOTH {
             let side = Side::rust(PathBuf::from("/bin/true"), arm);
             assert!(
-                side.env.is_empty(),
+                side.env.iter().all(|(name, _)| name == "LD_LIBRARY_PATH"),
                 "a rust side set {:?}, which selects an engine that no longer \
                  exists and would label the row with an arm nobody ran",
                 side.env
