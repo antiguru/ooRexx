@@ -90,7 +90,7 @@ enum HeaderClause {
 /// path.
 type IterateSite = Option<(usize, Vec<u8>)>;
 
-/// **SPIKE, not for commit.** One repeating loop being driven from the op
+/// One repeating loop being driven from the op
 /// driver's own frame: the state `run_repeating` holds in locals, held here
 /// instead because the pass loop is the driver's rather than its own.
 pub(crate) struct FlatLoop {
@@ -153,7 +153,7 @@ impl FlatLoop {
     }
 }
 
-/// **SPIKE.** What a header clause's own answer means: `Some(flow)` is the
+/// What a header clause's own answer means: `Some(flow)` is the
 /// loop finishing, `None` is one more pass.
 fn flat_header_outcome(
     header: ClauseOutcome<bool>,
@@ -167,7 +167,7 @@ fn flat_header_outcome(
     }
 }
 
-/// **SPIKE.** The `WHILE`/`UNTIL` of the `DO`/`LOOP` at `index`, read back off
+/// The `WHILE`/`UNTIL` of the `DO`/`LOOP` at `index`, read back off
 /// the instruction because a [`FlatLoop`] outlives any borrow of `code`.
 fn loop_conditional_of<'a>(code: &'a Code<'_>, index: usize) -> Option<&'a LoopConditional> {
     match &code.body.instructions.get(index)?.kind {
@@ -176,7 +176,7 @@ fn loop_conditional_of<'a>(code: &'a Code<'_>, index: usize) -> Option<&'a LoopC
     }
 }
 
-/// **SPIKE.** What `Interp::flat_loop_start` decided.
+/// What `Interp::flat_loop_start` decided.
 pub(crate) enum FlatStart {
     /// Driven from the driver's frame. The state is on `Interp::flat_loops`;
     /// this is the body's own instruction range, which the driver's frame
@@ -184,13 +184,13 @@ pub(crate) enum FlatStart {
     Flat { body_start: usize, end_index: usize },
     /// The header said zero passes, so the construct is already over.
     Ended(Flow),
-    /// Not a shape this spike drives: take the nested path, with the header
+    /// Not a shape the flat path drives: take the nested path, with the header
     /// values handed back so that the nested path can move them rather than
     /// this one copying them.
     Fallback(LoopHeaderValues),
 }
 
-/// **SPIKE.** What one pass boundary decided.
+/// What one pass boundary decided.
 pub(crate) enum FlatStep {
     /// One more pass, from this op.
     Body(u32),
@@ -1281,10 +1281,13 @@ impl Interp {
         }
     }
 
-    /// **SPIKE, not for commit.** Sets a repeating loop up to be driven from
+    /// Sets a repeating loop up to be driven from
     /// the op driver's own frame instead of a nested `run_ops` entry, or
     /// declines and leaves the caller to take the nested path.
-    #[allow(clippy::too_many_arguments, reason = "spike")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the same argument `run_loop_with_header`'s own allow makes: every parameter is state one DO/LOOP needs"
+    )]
     pub(crate) fn flat_loop_start(
         &mut self,
         code: &Code<'_>,
@@ -1296,18 +1299,11 @@ impl Interp {
         op_body: u32,
         registers: RegFrame<'_>,
     ) -> Result<FlatStart, Failure> {
-        // SPIKE: the switch is a run-time one so that both arms are the same
-        // binary -- the per-op checks this spike adds to the driver's loop are
-        // compiled in either way, so an arm with the flat path never taken
-        // prices those checks on their own.
-        static FLAT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         // **`loop_header_plan` is the whole refusal**, exactly as it is for
         // `run_loop_with_header`: it answers `None` for a `COUNTER`, a stem
         // `OVER` and `DO WITH`, which this crate does not run on either
         // engine, and the nested path is where that becomes the loud error.
-        if *FLAT.get_or_init(|| std::env::var_os("REXX_NO_FLAT").is_some())
-            || loop_header_plan(body).is_none()
-        {
+        if loop_header_plan(body).is_none() {
             return Ok(FlatStart::Fallback(values));
         }
         let over_register = values.over_register;
@@ -1437,7 +1433,7 @@ impl Interp {
         }
     }
 
-    /// **SPIKE.** One pass boundary of the innermost flat loop: the state is
+    /// One pass boundary of the innermost flat loop: the state is
     /// taken out of `Interp::flat_top` so that this can hold a `&mut Interp`
     /// beside it, and put back when another pass follows.
     pub(crate) fn flat_loop_step_top(
@@ -1472,7 +1468,7 @@ impl Interp {
         }
     }
 
-    /// **SPIKE.** One pass boundary: what the body just answered, then the
+    /// One pass boundary: what the body just answered, then the
     /// next pass's header test.
     fn flat_loop_step(
         &mut self,
@@ -1548,7 +1544,7 @@ impl Interp {
         }
     }
 
-    /// **SPIKE.** An `UNTIL` loop's own bottom-of-pass test: `Some(flow)` is
+    /// An `UNTIL` loop's own bottom-of-pass test: `Some(flow)` is
     /// the loop finishing, `None` is carrying on to the header.
     fn flat_loop_until(
         &mut self,
@@ -1589,7 +1585,7 @@ impl Interp {
         }
     }
 
-    /// **SPIKE.** Who a failing header re-test is blamed on: the clause that
+    /// Who a failing header re-test is blamed on: the clause that
     /// transferred control back to the loop, at the body's indent.
     #[cold]
     #[inline(never)]
@@ -1613,7 +1609,7 @@ impl Interp {
         }
     }
 
-    /// **SPIKE.** A `WHILE` that failed, blamed on the `DO`/`LOOP` clause at
+    /// A `WHILE` that failed, blamed on the `DO`/`LOOP` clause at
     /// the body's indent. `#[cold]` for the reason above.
     #[cold]
     #[inline(never)]
@@ -1627,7 +1623,7 @@ impl Interp {
         self.record_failure_at(source, &code.body.instructions[do_index], loop_indent);
     }
 
-    /// **SPIKE.** The header re-test, in its own clause: `Some(flow)` is the
+    /// The header re-test, in its own clause: `Some(flow)` is the
     /// loop finishing, `None` is one more pass.
     #[inline(always)]
     fn flat_loop_header(
@@ -1661,7 +1657,7 @@ impl Interp {
         flat_header_outcome(header, resume)
     }
 
-    /// **SPIKE.** [`Interp::flat_loop_header`] for a loop that carries a
+    /// [`Interp::flat_loop_header`] for a loop that carries a
     /// `WHILE`: the same advance, then the condition, both inside the one
     /// clause the oracle re-enters to make this decision.
     #[inline(never)]

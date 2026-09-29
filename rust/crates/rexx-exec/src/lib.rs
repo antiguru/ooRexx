@@ -1382,20 +1382,20 @@ struct Interp {
     /// that decides what belongs alongside them, and why they are one field
     /// rather than two.
     clause_state: ClauseState,
-    /// **SPIKE.** The flattened `DO`/`LOOP`s the op driver has open, innermost
+    /// The flattened `DO`/`LOOP`s the op driver has open, innermost
     /// last.
     #[expect(
         clippy::vec_box,
         reason = "the box is the point: a pass boundary takes the top out to hand it a &mut Interp beside it, and moves a pointer rather than the header's Numbers"
     )]
     flat_loops: Vec<Box<crate::run::FlatLoop>>,
-    /// **SPIKE.** The innermost open flat loop, held apart from the stack of
+    /// The innermost open flat loop, held apart from the stack of
     /// the ones enclosing it.
     flat_top: Option<Box<crate::run::FlatLoop>>,
-    /// **SPIKE.** The constructs the op driver has open, innermost last, across
+    /// The constructs the op driver has open, innermost last, across
     /// every level of it at once.
     frames: Vec<crate::ir::drive::Frame>,
-    /// **SPIKE.** Boxes a finished loop handed back, so that entering a loop
+    /// Boxes a finished loop handed back, so that entering a loop
     /// is a write into an allocation this interpreter already owns. A loop
     /// entered once per two passes is common enough -- `samples/rexxcps.rex`
     /// enters one 140,000 times to run 280,000 passes -- that an allocation

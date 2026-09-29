@@ -66,7 +66,7 @@ pub(crate) struct SelectFrame {
     branch: Branch,
 }
 
-/// **SPIKE.** One construct this level has open: a `SELECT`'s branch, or a
+/// One construct this level has open: a `SELECT`'s branch, or a
 /// flattened `DO`/`LOOP`.
 pub(crate) struct Frame {
     /// One past this frame's last op, which reaching means the frame's own
@@ -1877,8 +1877,8 @@ impl Interp {
                                             break 'cold Err(Loud::loop_op_off_its_node().into());
                                         };
                                         let values = header.take().unwrap_or_default();
-                                        // **SPIKE.** Flattened when this is a
-                                        // shape the spike drives: the frame goes
+                                        // Flattened when this is a
+                                        // shape the flat path drives: the frame goes
                                         // on the stack, the region ends, and the
                                         // counter falls into the body's first op,
                                         // which is the op after this region.
@@ -2059,7 +2059,7 @@ impl Interp {
                     pc += 1;
                     continue;
                 }
-                // **SPIKE.** The bottom of a flattened pass, reached by the
+                // The bottom of a flattened pass, reached by the
                 // body falling out of its last clause into the `END`'s own op.
                 Op::LoopNext { index } => {
                     if self.frames.len() <= base
@@ -2156,7 +2156,7 @@ impl Interp {
         end: usize,
         source: Option<&ProgramSource>,
     ) -> Result<Settled, Failure> {
-        // **SPIKE.** `Flow::Next` settles at `next` whatever is open: `absorb`
+        // `Flow::Next` settles at `next` whatever is open: `absorb`
         // answers `Advance` for it against every range, and every arm below
         // turns `Advance` into `At(next)`. So the walk over the open frames is
         // skipped for the one flow that every clause of every body produces,
@@ -2197,7 +2197,7 @@ impl Interp {
                         FrameKind::Select(frame) => {
                             flow = self.leave_branch(code, &frame, other)?;
                         }
-                        // **SPIKE.** A `LEAVE`/`ITERATE` that reached this
+                        // A `LEAVE`/`ITERATE` that reached this
                         // loop, decided by the same `do_body_outcome` the
                         // nested form hands the answering `Flow` to. An
                         // `ITERATE` this loop consumes puts the frame back and

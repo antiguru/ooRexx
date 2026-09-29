@@ -82,7 +82,7 @@ pub(crate) enum Op {
     /// Runs the `DO`/`LOOP` at `index` from the header values the ops before it
     /// filed, with **its body's clauses stepped from this chunk**.
     LoopRun { index: u32 },
-    /// **SPIKE, not for commit.** The bottom of one pass of the flattened
+    /// The bottom of one pass of the flattened
     /// `DO`/`LOOP` at `index`: what the body just did, then the next pass's
     /// header test, then either back to the body or on past the `END`.
     LoopNext { index: u32 },

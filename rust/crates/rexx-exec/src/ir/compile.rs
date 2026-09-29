@@ -233,7 +233,7 @@ pub(crate) fn compile(
     // and this is where that allocation ends.
     let mut release_at: Vec<Option<Mark>> = vec![None; len];
 
-    // **SPIKE.** Indexed by instruction: for an `END` that closes a repeating
+    // Indexed by instruction: for an `END` that closes a repeating
     // `DO`/`LOOP`, that loop's own instruction index. Filled in at the header,
     // which is where the kind and the `END`'s position are both known, and read
     // when the walk reaches the `END` itself.
@@ -346,7 +346,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                 });
                 close_region(&mut ops, at)?;
-                // **SPIKE.** A repeating loop's `END` carries the op that ends
+                // A repeating loop's `END` carries the op that ends
                 // a pass. `Simple` is left alone: it does not repeat, so it has
                 // no pass to end, and its `END` stays the delegating
                 // `Op::Exec` region that no range ever reaches.
@@ -1035,7 +1035,7 @@ pub(crate) fn compile(
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 close_region(&mut ops, at)?;
             }
-            // **SPIKE.** The `END` of a repeating loop, which the flattened
+            // The `END` of a repeating loop, which the flattened
             // form reaches by falling out of the body rather than by a range
             // check. An `END` closing anything else keeps the delegating
             // `Op::Exec` region below.
