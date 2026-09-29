@@ -23,6 +23,9 @@ Every task's requirements implicitly include this section.
   - **Why reviewing harder does not substitute.** Every review before that one enumerated from the plan, the C++ source, or the workload. Each is a *sample* of the object model; the documentation's chapter structure is the only enumeration of it that exists, and holes are invisible to any check whose universe is smaller than the thing being checked.
   - **The rule, then:** a phase's entry condition names its authority, and "the authority" means the documentation first, the implementation second, and the test suite third -- the implementation says what it does, the documentation says what it is *for*, and a plan derived only from the former cannot tell a missing feature from one nobody happened to call. Where genuinely no documentation exists, say so in the plan **as a finding**, with what was searched, so the next reader knows it was looked for rather than assumed absent.
 - **Rust floor:** 1.96.1 (the toolchain present on this machine). Edition 2024. No nightly features.
+  **Amended 2026-09-29 (Moritz, D3's dated note, ruling 2):** the installed nightly toolchain is
+  allowed for Phase 6's ThreadSanitizer gate only (`-Zsanitizer=thread`), never for a shipped build;
+  the code it checks builds on the stable floor unchanged.
 - **Unsafe: forbidden by default in every crate, including `rexx-api` and `rexx-sys`.** There is no blanket exemption.
   - **The mechanics, which are not interchangeable.** A crate with no unsafe at all carries `#![forbid(unsafe_code)]` at the root. A crate that has been granted an unsafe module carries `#![deny(unsafe_code)]` at the root and `#[allow(unsafe_code)]` on that one module. **`forbid` cannot be relaxed by an inner `allow`** — it is a hard error, `E0453: allow(unsafe_code) incompatible with previous forbid`, verified by compiling it. So the choice of `forbid` versus `deny` at the root *is* the record of whether a crate has been granted an exception, and downgrading a root from `forbid` to `deny` is exactly the visible, reviewable event that bar 4 below is about.
   - Granting a module an exception requires all four of:
@@ -103,6 +106,9 @@ Blocks are numbered in the order they were raised and ordered below by topic, so
 | **D4** | Numeric core | Phase 2 | settled — port `NumberString` |
 | **D5** | Native API surface | Phase 8 | settled by the user — source-compatible |
 | **D-U1** | The `unsafe` grant and `dlopen`'s provider | Phase 8 | **closed** — two modules in `rexx-api`, `libloading` (2026-09-14) |
+| **D-U2** | `Send` for the interpreter island | Phase 6 (S4) | **closed** -- `rexx-exec/src/island.rs`, lands in S4 (2026-09-29) |
+| **D-U3** | The signal module | Phase 6 (S4) | **closed** -- one module, `libc` direct, lands in S4 (2026-09-29) |
+| **D-U4** | `frame.rs`: one frame arena per activity | Phase 6 (S1) | **closed** -- LIFO per activity (2026-09-29) |
 | **D6** | Platform layer | Phase 7 | settled — `std` → `rustix` → `libc` |
 | **D13** | AST ownership | Phase 3 | **closed** — plain owned Rust data (2026-07-27) |
 | **D14** | String representation | Phase 4, constrains Phase 3 | **closed** — byte strings, UTF-8 arrives as operations (2026-07-28) |
@@ -197,7 +203,16 @@ no invariant may rest on one activity running at a time across the process. The 
 cross-activity requests go through a channel or an atomic flag, never a foreign frame pointer, is
 unchanged and holds inside one interpreter too. (2) Race checking is ThreadSanitizer with the
 installed nightly, gate-only, plus a `loom` model of the baton protocol; `loom` is admitted as a
-dev-dependency.
+dev-dependency. The same ruling adds three more, quoted from the design's section 1.1:
+(3) *"`.environment` per interpreter is a licensed divergence for Phase 9. The oracle's is
+process-wide (`RexxCore.h:267`, `Setup.cpp:300`); only `.local` is per instance
+(`runtime/InterpreterInstance.cpp:208`)."* (4) *"Signal handling is a new `unsafe` site. One module
+installs the handlers; a handler only sets atomics and writes a byte to a self-pipe (section 4)."*
+Its decision block is D-U3. (5) *"`libc` becomes a direct dependency of the signal module (it is
+already in the dependency graph transitively, so no new code enters the build; it gives correct
+`sigaction` layouts on every platform Phase 11 targets)."* The other new `unsafe`
+sites the design needs are D-U2 (the interpreter island's `Send`) and D-U4 (`frame.rs`, one arena
+per activity).
 
 **Evidence that settles this.** Phase 6 runs the ooTest concurrency groups plus a TSan build of the Rust interpreter (`RUSTFLAGS="-Zsanitizer=thread"` requires nightly — if the nightly ban in Global Constraints blocks this, substitute `loom` for the lock protocol and rely on ooTest for the rest; record which was used).
 
@@ -292,6 +307,95 @@ that phase's own and does not carry forward.
 **What the grant does not license.** A third module, and a site that reaches past the boundary. Any
 `unsafe` outside those two files is a new decision, and `unsafe_sites.rs` is what makes that a
 failing test rather than a matter of noticing.
+
+### D-U2 -- `Send` for the interpreter island
+
+**Blocks:** Phase 6, stage S4. Recorded 2026-09-29, before code, from the Phase 6 design's section
+2.5 (`docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md`).
+
+**Question.** S4 moves an interpreter's driver between OS threads: an activity that exits the driver
+for a native call or a blocking operation releases the baton, and a pooled driver thread takes it.
+The interpreter's state (its "island") holds `Rc`, `Cell` and `RefCell` interior, so it is not
+`Send`, and the compiler refuses the move. No safe alternative keeps today's single-threaded
+representation: replacing the interior with `Arc`, atomics and locks puts a synchronised operation on
+paths the performance rule (spec section 7) forbids taxing.
+
+**Decision (Moritz, 2026-09-29, with the design): one `unsafe impl Send`, in
+`rexx-exec/src/island.rs`.** The spec leaves the module to the plan; this block names it. The
+grant lands with its first user in S4, not before, and `unsafe_sites.rs` gains the file then.
+
+**The invariant.** The island is reachable only through one root pointer and the baton. A thread
+touches any island value (derives a borrow, clones or drops an `Rc`, reads or writes a `Cell`) only
+while it holds the baton. The baton is released only at a driver exit, where the releasing thread
+holds no island value, only raw handles; so no two threads ever hold island values at the same
+time, which is exactly the property `Rc` and `Cell` need. Today's native call holds `Rc` clones
+across the C call (`dispatch/library.rs:86`, `:94`, `:155`, `:165`); S4 turns those into raw
+handles or moves them into the activity record before the exit. **Why the compiler cannot check
+it:** "no island value is live on this thread" is a property of every frame below the exit, not of a
+type. **What enforces it instead** (the wrapper's shape is this block's proposal, settled when S4
+is planned): the island type is `Send` only inside a wrapper that
+`island.rs` hands out by taking the baton and takes back by releasing it, so the wrapper is the
+only path from one thread's use to another's (Rust-facing unsafe, full encapsulation); `ObjRef` is
+`!Send` and `!Sync` (spec section 5), so no handle leaks into a completion or the inbox; the TSan
+gate and the `loom` model of the baton (D3's note, ruling 2) check the protocol. **What breaks if
+violated:** a non-atomic `Rc` count or a `Cell` written from two threads, which is a data race and
+undefined behaviour, not merely a wrong answer.
+
+**What the grant does not license.** `Sync` for anything in the island, and an island value held
+across a driver exit.
+
+### D-U3 -- The signal module
+
+**Blocks:** Phase 6, stage S4. Recorded 2026-09-29 from D3's dated note, rulings 4 and 5, and the
+design's section 4.
+
+**Question.** Handlers for SIGINT, SIGTERM and SIGHUP are installed at interpreter start, only where
+no handler is already set, without SA_RESTART, as the oracle's library does
+(`platform/unix/SystemInterpreter.cpp:95-110`, `:130-145`). Installing a handler and reading the
+previous action are `unsafe` calls.
+
+**Decision (Moritz, 2026-09-29): one module installs the handlers, with `libc` as its direct
+dependency.** The spec names no file; the proposed landing location is
+`rexx-exec/src/signal.rs`, fixed when S4 is planned. `libc` is already in the dependency graph
+transitively, so no new code enters the build. It lands in S4, with the timer thread that reads
+its pipe.
+
+**The invariant.** A handler, on whatever thread the signal lands, only sets a pending atomic and
+writes one byte to a self-pipe; both are async-signal-safe, and the handler touches no interpreter
+state, allocates nothing and takes no lock. The timer thread waits on that pipe and sets the halt
+bit in every live interpreter. **Why the compiler cannot check it:** async-signal safety is not a
+property of Rust's type system. **What enforces it instead:** the handler's body is a few lines in
+this one module, reviewed as a unit, and reaches only a `static` atomic and the pipe's write end.
+**What breaks if violated:** a handler that allocates or locks can deadlock or corrupt the thread it
+interrupted. The live-interpreter registry and the timer thread are the one exception to "no
+mutable process-global state" (ruling 4).
+
+### D-U4 -- `frame.rs`: one frame arena per activity
+
+**Blocks:** Phase 6, stage S1 (the plan's Task 5 uses it). Recorded 2026-09-29 from the design's
+section 5. `rexx-core/src/frame.rs` was granted `unsafe` on 2026-09-23, recorded at the module's
+`#![allow(unsafe_code)]`; that grant assumed one `FrameArena` per interpreter.
+
+**Question.** Activities are continuations: one activity parks with frames live while another runs
+and pushes its own. One shared arena would then see releases out of LIFO order across activities.
+
+**Decision (Moritz, 2026-09-29, with the design): one `FrameArena` per activity instead of one per
+interpreter; LIFO holds per activity.** Each activity owns its arena; a frame is reserved from and
+released to the running activity's arena only. REPLY moves frames by copying them into the new
+activity's arena (design section 5), never by handing a `RegFrame` across.
+
+**The invariant the unsafe blocks rely on,** restated per arena: every block is one zeroed allocation
+of `cells + GUARD` cells freed only by that arena's `Drop`; a frame starts at an offset `<= cells`
+of its block; an index is a `u16`, so `start + index < cells + GUARD`; a `RegFrame<'a>` borrows its
+own arena for `'a`; and `iter` clamps every used length to `cells + GUARD`. None of these depends on
+release order, so **LIFO stays a logical property, not a safety one**: an out-of-order release, or a
+frame released into another activity's arena, trips the debug assertion and at worst mis-scans
+roots, but reads and writes stay inside live blocks. What the change adds is only that these hold
+for each arena separately, and that an arena may now move with its activity (the struct moves; its
+blocks never do, and no `RegFrame` can be live across the move, since it borrows the arena). **What
+enforces it:** the module alone, as before; nothing outside `frame.rs` gains `unsafe`. **Cost:** each
+arena's first block carries the 65,536-cell guard, so an activity costs at least about 512 KiB of
+arena, the size of an oracle activity's thread stack.
 
 ### D6 — Platform layer
 
@@ -550,7 +654,7 @@ Gates are hard. A phase does not close until every exit criterion is demonstrate
 | 3 | Scanner & parser | D1 closed, D13 closed ✓, D10 spiked | Round-trips every `.rex` under `samples/` to an AST (301 files); `SOURCELINE` and `TRACE`'s `*-*` source lines match the oracle byte-for-byte; parse errors give the oracle's **number and sub-number on a plausible line**, with message text and substitutions deliberately not reproduced (2026-07-28 scope decision); parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
 | 4 | Classic executor, split 4a / 4b / 4c / 4d / 4e / 4f | 2, 3 | Non-OO Rexx runs: assignment, `DO` (all variants), `IF`, `SELECT`, `CALL`, `PARSE`, `SAY`, `SIGNAL`, conditions, and **66 of the 81 builtin functions**, the excluded set being exactly `phase-4-exclusions.txt`; `samples/rexxcps.rex` runs clean, and **every classic-Rexx benchmark axis is within measurement noise of the C++ oracle or better** -- the Global Constraints `:39` parity gate, with no recorded debt available on a classic-Rexx axis (`phase-4d-gate.md`, amended 2026-08-09); **4e closed 2026-08-11** with the register IR the default engine and its ratios recorded on both instruments (`phase-4e-gate.md`), leaving the parity clause to 4f. **Not** `:40`'s 1.5× figure, which scopes to Phase 1 | L0 named subsets + the `base/expressions` assertion table |
 | 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; **the class wiring is complete**: every class named by a `cls*` section across the reference, minus `RegularExpression` (delivered by `::requires "rxregexp.cls"`, which is not on this build's search path, measured 43.901 rc 213), plus `ArgUtil`, is an `.environment` class answering `~id`, `~class`, `~superClass`, `~superClasses`, `~metaClass` and `~isA(.Class)` byte-identically, and every documented hierarchy edge is present in that class's `~superClasses`; `RexxInfo` is **out** of that class set, because `EndSpecialClassDefinition(RexxInfo)` routes the class object to a target no environment symbol reaches, **and** its `.environment` entry is required to be an *instance* whose `~class~id` is `RexxInfo`; the documented per-class **method** sets are **5c's** and are not this clause (`docs/superpowers/specs/2026-08-17-phase-5-object-model.md:328`, and D48 `:1245` for the class half); `::class`/`::method`/`::routine`/`::requires` work; security manager interception points in place (D12); cold start measured and recorded against C++ (D2) | L2 |
-| 6 | Concurrency | 5 | Activities, kernel lock, guard locks, `REPLY`, `GUARD`, message objects; ooTest concurrency groups pass; TSan (or `loom`) clean. **D3's frame-ownership constraint verified**, and **D3's no-global-lock constraint demonstrated**: no type, invariant or API is sound only while a global interpretation lock is held. A coarse lock may still be shipped here; nothing may depend on it | L2 |
+| 6 | Concurrency | 5 | Activities, kernel lock (per interpreter since D3's 2026-09-29 note, ruling 1: the design's baton; nothing process-wide), guard locks, `REPLY`, `GUARD`, message objects; ooTest concurrency groups pass; TSan (or `loom`) clean. **D3's frame-ownership constraint verified**, and **D3's no-global-lock constraint demonstrated**: no type, invariant or API is sound only while a global interpretation lock is held. A coarse lock may still be shipped here; nothing may depend on it | L2 |
 | 7 | Streams & platform | 5 | **CLOSED 2026-09-13**, `docs/superpowers/plans/phase-7-gate.md`. `StreamClasses.orx` runs; stream model, `ADDRESS`, file system green **on the host**; the `Sys*` subset ooTest needs (D11) works. The other four platforms are Phase 11's, per D-P1 below. **The rung is Phase 8's**: measured at the close, `ooTest.frm` loads past `.ENDOFLINE` and `rxregexp.cls` and then stops at `::METHOD INIT EXTERNAL "LIBRARY rxregexp RegExp_Init"`, so what stands between the framework and its first test group is `dlopen` | L2 -> 8 |
 | 8 | Native API | 5, 7 | **CLOSED 2026-09-29**, `docs/superpowers/plans/phase-8-gate.md`: the L2 slice (2026-09-14, sections 1-8) and the surface plan (sections 9-10). `testbinaries/` compile unchanged against frozen headers, witnessed by the oracle's own build (section 9); native-API ooTest groups pass. Which groups are this row's is derived by `rexx-exec/tests/api_group_partition.rs`: `METHOD`, `CONVERSION` and `FUNCTION`, whose binaries import nothing from the interpreter; every other API group is row 10's (measured 2026-09-15, corrected 2026-09-28). Every test of those three passes on this crate and agrees with the oracle through `rexx-exec/tests/api_group_tests.rs` but `FUNCTION`'s `TEST_REXXQUEUE`, which creates and reads a `RexxQueue`, whose queues live in rxapi, so it is row 10's and runs on neither side; and `METHOD`'s `TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA`, which runs `rexxc`, which row 9 ships (2026-09-29). **L2 is still not reached, and what blocks it is Phase 6's and Phase 10's work, not this phase's.** The `Directory` methods that stopped the framework at `ooTest.frm:49` were built (surface Task 1), and a group's tests now run; run unmodified, the framework stops at its ticker, a `GUARD ... WHEN` that another activity satisfies (Phase 6), and with `-U`, which starts no ticker, at `printSummary`'s `RXFUNCQUERY`, which the oracle answers through rxapi (Phase 10). The gate runs the groups with `-U` and without those two probes (section 10) | L2 -> 6, 10 |
 | 9 | Core conformance | 6, 7, 8 | **L3-core on the host**: the full suite green against existing baselines *excluding* the groups enumerated below; every benchmark at parity; `rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship. The other four platforms are Phase 11's, per D-P1 below. No native-API ooTest group is this phase's: the groups that load `INVOCATIONTester.cls` were recorded here on 2026-09-15 and are row 10's since 2026-09-28, because their library imports the RXAPI exit and subcom registries as well as the embedding API this row ships | L3-core |
