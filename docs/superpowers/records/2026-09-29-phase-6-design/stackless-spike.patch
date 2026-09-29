@@ -1,0 +1,2328 @@
+diff --git i/rust/crates/rexx-exec/Cargo.toml w/rust/crates/rexx-exec/Cargo.toml
+index b71c8dba5..016af6698 100644
+--- i/rust/crates/rexx-exec/Cargo.toml
++++ w/rust/crates/rexx-exec/Cargo.toml
+@@ -85,3 +85,6 @@ rayon = "1.12.0"
+ 
+ [lints]
+ workspace = true
++
++[features]
++spike-pins = []
+diff --git i/rust/crates/rexx-exec/src/builtin.rs w/rust/crates/rexx-exec/src/builtin.rs
+index a5e36e981..217d18c93 100644
+--- i/rust/crates/rexx-exec/src/builtin.rs
++++ w/rust/crates/rexx-exec/src/builtin.rs
+@@ -700,11 +700,26 @@ pub(crate) fn resolve(name: &[u8]) -> Option<BuiltinTarget> {
+ }
+ 
+ /// Runs the builtin `target` names over already-evaluated arguments.
++#[inline(always)]
+ pub(crate) fn run(
+     interp: &mut Interp,
+     name: &[u8],
+     target: BuiltinTarget,
+     args: &[Option<ObjRef>],
++) -> Result<ObjRef, Failure> {
++    #[cfg(feature = "spike-pins")]
++    let saved = interp.pin_as(format!("builtin:{}", String::from_utf8_lossy(name)));
++    let out = run_inner(interp, name, target, args);
++    #[cfg(feature = "spike-pins")]
++    interp.unpin(saved);
++    out
++}
++
++fn run_inner(
++    interp: &mut Interp,
++    name: &[u8],
++    target: BuiltinTarget,
++    args: &[Option<ObjRef>],
+ ) -> Result<ObjRef, Failure> {
+     let BuiltinTarget::Row(row) = target else {
+         // A builtin name this crate has no code for. It reads as the same
+diff --git i/rust/crates/rexx-exec/src/dispatch.rs w/rust/crates/rexx-exec/src/dispatch.rs
+index f6090ca16..b992df6b5 100644
+--- i/rust/crates/rexx-exec/src/dispatch.rs
++++ w/rust/crates/rexx-exec/src/dispatch.rs
+@@ -1238,6 +1238,21 @@ pub(crate) struct Resolution {
+     pub(crate) method: MethodId,
+ }
+ 
++/// **SPIKE.** What [`Interp::start_send`] left for its caller to do.
++pub(crate) enum SendStart {
++    Done(Option<ObjRef>),
++    Entered(MethodTail),
++}
++
++/// **SPIKE.** The level state a pushed method activation saved.
++pub(crate) struct MethodTail {
++    saved_context: crate::CallContext,
++    saved_clause_state: crate::clause::SavedClauseState,
++    saved_base: usize,
++    saved_offset: usize,
++    saved_line: Option<usize>,
++}
++
+ impl Interp {
+     /// The [`Caller`] a send written in the running activation resolves as.
+     pub(crate) fn caller(&self) -> Caller {
+@@ -1912,6 +1927,54 @@ impl Interp {
+         args: &[Option<ObjRef>],
+     ) -> Result<Option<ObjRef>, Failure> {
+         let invocable = self.invocable(resolution, name)?;
++        self.invoke_invocable(invocable, resolution, receiver, name, args)
++    }
++
++    /// **SPIKE.** A send whose target is already resolved, entered without
++    /// running a `::METHOD` body: such a body comes back as
++    /// [`SendStart::Entered`] with its activation pushed.
++    pub(crate) fn start_send(
++        &mut self,
++        receiver: ObjRef,
++        name: &[u8],
++        args: &[Option<ObjRef>],
++        caller: Caller,
++    ) -> Result<SendStart, Failure> {
++        if let Err(kind) = self.receiver_kind(receiver) {
++            return Err(Loud::receiver_class(kind).into());
++        }
++        match self.resolve(receiver, name, None, caller) {
++            Ok(resolution) => {
++                let invocable = self.invocable(resolution, name)?;
++                if let Invocable::Rexx(installed) = invocable {
++                    let cleared =
++                        match seam::clear(self, receiver, name, args, resolution.method)? {
++                            seam::Clearance::Cleared(cleared) => cleared,
++                            seam::Clearance::Answered(result) => {
++                                return Ok(SendStart::Done(result));
++                            }
++                        };
++                    return self
++                        .begin_method(cleared, installed, resolution, receiver, name, args)
++                        .map(SendStart::Entered);
++                }
++                self.invoke_invocable(invocable, resolution, receiver, name, args)
++                    .map(SendStart::Done)
++            }
++            Err(miss) => self
++                .unknown_or_nomethod(receiver, name, args, miss)
++                .map(SendStart::Done),
++        }
++    }
++
++    fn invoke_invocable(
++        &mut self,
++        invocable: Invocable,
++        resolution: Resolution,
++        receiver: ObjRef,
++        name: &[u8],
++        args: &[Option<ObjRef>],
++    ) -> Result<Option<ObjRef>, Failure> {
+         let cleared = match seam::clear(self, receiver, name, args, resolution.method)? {
+             seam::Clearance::Cleared(cleared) => cleared,
+             seam::Clearance::Answered(result) => return Ok(result),
+@@ -1922,7 +1985,15 @@ impl Interp {
+                     Arity::Fixed(arity) if args.len() > arity => {
+                         Err(Raised::too_many_method_arguments(arity).into())
+                     }
+-                    Arity::Fixed(_) | Arity::Counted => (entry.run)(self, cleared, receiver, args),
++                    Arity::Fixed(_) | Arity::Counted => {
++                        #[cfg(feature = "spike-pins")]
++                        let saved =
++                            self.pin_as(format!("native:{}", String::from_utf8_lossy(name)));
++                        let outcome = (entry.run)(self, cleared, receiver, args);
++                        #[cfg(feature = "spike-pins")]
++                        self.unpin(saved);
++                        outcome
++                    }
+                 };
+                 if outcome.is_err() {
+                     let scope = self.classes().id_string(resolution.scope).to_string();
+@@ -1968,7 +2039,9 @@ impl Interp {
+                         Arity::Fixed(arity) if args.len() > *arity => {
+                             Err(Raised::too_many_external_arguments(*arity).into())
+                         }
+-                        Arity::Fixed(_) | Arity::Counted => run(self, cleared, receiver, args),
++                        Arity::Fixed(_) | Arity::Counted => {
++                            self.pinned("external-method", |this| run(this, cleared, receiver, args))
++                        }
+                     };
+                     if let Err(failure) = &outcome {
+                         let scope = self.classes().id_string(resolution.scope).to_string();
+@@ -1980,7 +2053,9 @@ impl Interp {
+                 }
+             },
+             Invocable::Library(binding) => {
+-                let outcome = self.run_library_method(&binding, resolution, receiver, name, args);
++                let outcome = self.pinned("native-api", |this| {
++                    this.run_library_method(&binding, resolution, receiver, name, args)
++                });
+                 if outcome.is_err() {
+                     let scope = self.classes().id_string(resolution.scope).to_string();
+                     let method = resolution.method;
+@@ -2151,13 +2226,31 @@ impl Interp {
+     /// it returned.
+     fn enter_method_body(
+         &mut self,
+-        _cleared: Cleared,
++        cleared: Cleared,
+         installed: crate::InstalledMethodBody,
+         resolution: Resolution,
+         receiver: ObjRef,
+         name: &[u8],
+         args: &[Option<ObjRef>],
+     ) -> Result<Option<ObjRef>, Failure> {
++        let tail = self.begin_method(cleared, installed, resolution, receiver, name, args)?;
++        #[cfg(feature = "spike-pins")]
++        self.count_pinned_method();
++        let ended = self.run_activation();
++        self.finish_method(tail, ended)
++    }
++
++    /// **SPIKE.** [`Interp::enter_method_body`] up to the point the body
++    /// would run.
++    fn begin_method(
++        &mut self,
++        _cleared: Cleared,
++        installed: crate::InstalledMethodBody,
++        resolution: Resolution,
++        receiver: ObjRef,
++        name: &[u8],
++        args: &[Option<ObjRef>],
++    ) -> Result<MethodTail, Failure> {
+         let program = Rc::clone(&self.programs[installed.program.0]);
+         // Both reads are `get`, not an index: an `InstalledMethodBody` can
+         // only have come from `Interp::record_method_body` and so always
+@@ -2261,7 +2354,29 @@ impl Interp {
+         let saved_offset = std::mem::take(&mut self.indent_offset);
+         let saved_line = std::mem::take(&mut self.clause_line_override);
+ 
+-        let ended = self.run_activation();
++        Ok(MethodTail {
++            saved_context,
++            saved_clause_state,
++            saved_base,
++            saved_offset,
++            saved_line,
++        })
++    }
++
++    /// **SPIKE.** [`Interp::enter_method_body`] once the body has answered
++    /// `ended`.
++    pub(crate) fn finish_method(
++        &mut self,
++        tail: MethodTail,
++        ended: Result<crate::run::Ended, Failure>,
++    ) -> Result<Option<ObjRef>, Failure> {
++        let MethodTail {
++            saved_context,
++            saved_clause_state,
++            saved_base,
++            saved_offset,
++            saved_line,
++        } = tail;
+         if let Err(failure) = &ended {
+             self.capture_activation_frame(failure);
+         }
+@@ -2400,7 +2515,7 @@ impl Interp {
+             self.classes().forget_uninit_class(object);
+         }
+         let caller = self.caller();
+-        let outcome = self.send_message(object, UNINIT, None, &[], caller);
++        let outcome = self.pinned("uninit", |this| this.send_message(object, UNINIT, None, &[], caller));
+         self.clear_failure_levels();
+         match outcome {
+             // A deadline is discarded here with the rest, and `execute`'s own
+@@ -2525,7 +2640,7 @@ impl Interp {
+         // activation's own trace mode and subject.
+         self.trace_invocation_entry();
+ 
+-        let ended = self.run_activation();
++        let ended = self.pinned("reply", |this| this.run_activation());
+         if let Err(failure) = &ended {
+             self.capture_activation_frame(failure);
+         }
+@@ -2618,12 +2733,12 @@ impl Interp {
+         self.roots.push_temp(arguments);
+         let missed = self.text(name);
+         self.roots.push_temp(missed);
+-        let forwarded = self.invoke(
++        let forwarded = self.pinned("unknown-forward", |this| this.invoke(
+             resolution,
+             receiver,
+             UNKNOWN,
+             &[Some(missed), Some(arguments)],
+-        );
++        ));
+         self.roots.pop_frame(frame);
+         forwarded
+     }
+diff --git i/rust/crates/rexx-exec/src/dispatch/array/sort.rs w/rust/crates/rexx-exec/src/dispatch/array/sort.rs
+index 8bc7c67fa..3bef571b5 100644
+--- i/rust/crates/rexx-exec/src/dispatch/array/sort.rs
++++ w/rust/crates/rexx-exec/src/dispatch/array/sort.rs
+@@ -52,15 +52,15 @@ fn order_of(
+     let caller = interp.caller();
+     let answer = match order {
+         Order::CompareTo => {
+-            interp.send_message(left, b"COMPARETO", None, &[Some(right)], caller)?
++            interp.pinned("sort-compare", |this| this.send_message(left, b"COMPARETO", None, &[Some(right)], caller))?
+         }
+-        Order::With(comparator) => interp.send_message(
++        Order::With(comparator) => interp.pinned("sort-compare", |this| this.send_message(
+             *comparator,
+             b"COMPARE",
+             None,
+             &[Some(left), Some(right)],
+             caller,
+-        )?,
++        ))?,
+     };
+     let name: &[u8] = match order {
+         Order::CompareTo => b"COMPARETO",
+diff --git i/rust/crates/rexx-exec/src/dispatch/hash.rs w/rust/crates/rexx-exec/src/dispatch/hash.rs
+index 625c138a1..a7f224fa1 100644
+--- i/rust/crates/rexx-exec/src/dispatch/hash.rs
++++ w/rust/crates/rexx-exec/src/dispatch/hash.rs
+@@ -561,7 +561,7 @@ fn hash_of(interp: &mut Interp, keys: Keys, index: ObjRef) -> Result<u64, Failur
+         return Ok(get_hash_value(interp, index));
+     }
+     let caller = interp.caller();
+-    let answer = interp.send_message(index, b"HASHCODE", None, &[], caller)?;
++    let answer = interp.pinned("hash", |this| this.send_message(index, b"HASHCODE", None, &[], caller))?;
+     let Some(answer) = answer else {
+         return Err(Raised::no_result(b"HASHCODE").into());
+     };
+diff --git i/rust/crates/rexx-exec/src/dispatch/library.rs w/rust/crates/rexx-exec/src/dispatch/library.rs
+index fdbad12f1..ee01daed9 100644
+--- i/rust/crates/rexx-exec/src/dispatch/library.rs
++++ w/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -1031,7 +1031,7 @@ impl Interp {
+         if sends {
+             let caller = self.caller();
+             if let Ok(Some(answered)) =
+-                self.send_message(object, super::OBJECTNAME, None, &[], caller)
++                self.pinned("native-api", |this| this.send_message(object, super::OBJECTNAME, None, &[], caller))
+             {
+                 self.roots.push_temp(answered);
+                 return self.string_value_text(answered);
+diff --git i/rust/crates/rexx-exec/src/dispatch/library/surface.rs w/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+index f96a62409..40212513e 100644
+--- i/rust/crates/rexx-exec/src/dispatch/library/surface.rs
++++ w/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+@@ -289,7 +289,7 @@ impl Surface for Interp {
+         arguments: &[Option<ObjRef>],
+     ) -> Result<Option<ObjRef>, ()> {
+         let caller = self.caller();
+-        match self.send_message(receiver, name, scope, arguments, caller) {
++        match self.pinned("native-api", |this| this.send_message(receiver, name, scope, arguments, caller)) {
+             Ok(answer) => {
+                 if let Some(answer) = answer {
+                     self.roots.push_temp(answer);
+@@ -583,7 +583,7 @@ impl Surface for Interp {
+         self.roots.push_temp(routine);
+         let (program, directive) = self.executable_sources.get(&routine)?.routine?;
+         let installed = crate::InstalledRoutine { program, directive };
+-        let answered = self.run_routine_as_program(installed, arguments.to_vec());
++        let answered = self.pinned("native-api", |this| this.run_routine_as_program(installed, arguments.to_vec()));
+         self.held(answered).flatten()
+     }
+ 
+@@ -870,8 +870,7 @@ impl Interp {
+         let mut report = Vec::new();
+         if let Some(traceback) = self.condition_entry(object, b"TRACEBACK") {
+             let caller = self.caller();
+-            let lines = self
+-                .send_message(traceback, b"MAKEARRAY", None, &[], caller)
++            let lines = self.pinned("native-api", |this| this.send_message(traceback, b"MAKEARRAY", None, &[], caller))
+                 .ok()
+                 .flatten()
+                 .and_then(|array| self.array_slots_of(array))
+diff --git i/rust/crates/rexx-exec/src/dispatch/reqstr.rs w/rust/crates/rexx-exec/src/dispatch/reqstr.rs
+index f5a149c6a..940e4117f 100644
+--- i/rust/crates/rexx-exec/src/dispatch/reqstr.rs
++++ w/rust/crates/rexx-exec/src/dispatch/reqstr.rs
+@@ -157,7 +157,7 @@ impl Interp {
+         // `'x' o` and `length(o)` all follow it.
+         let readable = if matches!(self.receiver_kind(value), Ok(Primitive::Instance { .. })) {
+             let caller = self.caller();
+-            match self.send_message(value, STRING, None, &[], caller)? {
++            match self.pinned("conversion-string", |this| this.send_message(value, STRING, None, &[], caller))? {
+                 Some(answered) => self.string_value_text(answered),
+                 None => self.string_value_text(value),
+             }
+@@ -365,7 +365,7 @@ impl Interp {
+         // `getTopStackFrame()->getReceiver()`, and `requestString` runs no
+         // frame of its own that could answer that question differently.
+         let caller = self.caller();
+-        self.send_message(receiver, MAKESTRING, None, &[], caller)
++        self.pinned("conversion-makestring", |this| this.send_message(receiver, MAKESTRING, None, &[], caller))
+     }
+ 
+     /// The traceback line the oracle's own `REQUEST` activation contributes
+diff --git i/rust/crates/rexx-exec/src/environment/route.rs w/rust/crates/rexx-exec/src/environment/route.rs
+index c1c1caef3..8528fc884 100644
+--- i/rust/crates/rexx-exec/src/environment/route.rs
++++ w/rust/crates/rexx-exec/src/environment/route.rs
+@@ -202,7 +202,7 @@ impl Interp {
+         line: &[u8],
+     ) -> Result<(), Failure> {
+         let caller = self.caller();
+-        let Some(object) = self.send_message(class, b"NEW", None, &[], caller)? else {
++        let Some(object) = self.pinned("trace-output", |this| this.send_message(class, b"NEW", None, &[], caller))? else {
+             return Err(Failure::Raised(Box::new(crate::error::Raised::syntax(
+                 97,
+                 1,
+@@ -231,16 +231,16 @@ impl Interp {
+             let index = self.text(name);
+             self.roots.push_temp(index);
+             let caller = self.caller();
+-            self.send_message(object, b"PUT", None, &[Some(held), Some(index)], caller)?;
++            self.pinned("trace-output", |this| this.send_message(object, b"PUT", None, &[Some(held), Some(index)], caller))?;
+         }
+         let caller = self.caller();
+-        self.send_message(
++        self.pinned("trace-output", |this| this.send_message(
+             route,
+             crate::dispatch::LINEOUT,
+             None,
+             &[Some(object)],
+             caller,
+-        )?;
++        ))?;
+         Ok(())
+     }
+ }
+diff --git i/rust/crates/rexx-exec/src/eval.rs w/rust/crates/rexx-exec/src/eval.rs
+index 565c241b4..6fb3da83b 100644
+--- i/rust/crates/rexx-exec/src/eval.rs
++++ w/rust/crates/rexx-exec/src/eval.rs
+@@ -1210,7 +1210,7 @@ impl Interp {
+     ) -> Result<ObjRef, Failure> {
+         let caller = self.caller();
+         let name = spelling.as_bytes();
+-        match self.send_message(receiver, name, None, args, caller)? {
++        match self.pinned("operator", |this| this.send_message(receiver, name, None, args, caller))? {
+             Some(result) => Ok(result),
+             None => Err(Raised::no_result(name).into()),
+         }
+diff --git i/rust/crates/rexx-exec/src/install.rs w/rust/crates/rexx-exec/src/install.rs
+index 1cd0ac485..20de0208f 100644
+--- i/rust/crates/rexx-exec/src/install.rs
++++ w/rust/crates/rexx-exec/src/install.rs
+@@ -1149,7 +1149,7 @@ impl Interp {
+     ) -> Result<(), Failure> {
+         let frame = self.push_directive_activation(id, program);
+         let caller = self.caller();
+-        let sent = self.send_message(class, name, None, &[], caller);
++        let sent = self.pinned("install-directive", |this| this.send_message(class, name, None, &[], caller));
+         self.pop_directive_activation(frame);
+         let Err(failure) = sent else {
+             return Ok(());
+@@ -2292,7 +2292,7 @@ impl Interp {
+         name: &[u8],
+     ) -> Result<Option<ObjRef>, Failure> {
+         let installed = InstalledRoutine { program, directive };
+-        self.call_over_installed_routine(installed, arguments, name)
++        self.pinned("install-routine", |this| this.call_over_installed_routine(installed, arguments, name))
+     }
+ 
+     /// `PARSE SOURCE`'s third word: a compiled method's own name, the file a
+diff --git i/rust/crates/rexx-exec/src/ir.rs w/rust/crates/rexx-exec/src/ir.rs
+index 9f4b278d2..3f0619432 100644
+--- i/rust/crates/rexx-exec/src/ir.rs
++++ w/rust/crates/rexx-exec/src/ir.rs
+@@ -32,6 +32,7 @@ pub(crate) mod drive;
+ pub(crate) mod trace_flow;
+ mod valid;
+ pub(crate) use compile::compile;
++pub(crate) use drive::Level;
+ pub(crate) use golden::render_annotated;
+ 
+ // `render` serialises an op stream back to text. Nothing the interpreter does
+@@ -272,6 +273,16 @@ pub(crate) enum Op {
+         keyword: ConditionKeyword,
+         target: u32,
+     },
++    /// **SPIKE.** The message term at `path` inside expression `slot`, sent
++    /// to the receiver in `recv` over the `argc` arguments on top of the
++    /// driver's argument stack, into `dst`.
++    Send {
++        slot: u16,
++        path: NodePath,
++        recv: u16,
++        argc: u16,
++        dst: u16,
++    },
+ }
+ 
+ /// Which keyword's condition an [`Op::ConditionJump`] is validating.
+diff --git i/rust/crates/rexx-exec/src/ir/compile.rs w/rust/crates/rexx-exec/src/ir/compile.rs
+index 24ff5c51a..4cbabb884 100644
+--- i/rust/crates/rexx-exec/src/ir/compile.rs
++++ w/rust/crates/rexx-exec/src/ir/compile.rs
+@@ -1230,6 +1230,21 @@ fn native_shape(expr: &Expr, path: Option<NodePath>) -> bool {
+         // added to that enum is a compile error there rather than an operator
+         // silently promoted here.
+         ExprKind::Prefix { operand, .. } => native_shape(operand, descend(path, false)),
++        // **SPIKE.** A plain send whose receiver and arguments compile.
++        ExprKind::Message {
++            target,
++            super_class: None,
++            args,
++            cascade: false,
++            ..
++        } => {
++            path.is_some()
++                && std::env::var_os("SPIKE_NO_SEND").is_none()
++                && native_shape(target, None)
++                && args
++                    .iter()
++                    .all(|arg| arg.as_ref().is_none_or(|expr| native_shape(expr, None)))
++        }
+         _ => false,
+     }
+ }
+@@ -1491,6 +1506,76 @@ fn push_native<'a>(
+                 src: dst,
+             });
+         }
++        // **SPIKE.** The receiver, the arguments as `CallArgs` pushes them,
++        // then the send; its `>M>` line is the send op's own.
++        ExprKind::Message { target, args, .. } => {
++            let slot16 = u16::try_from(slot).map_err(|_| ChunkTooLarge {
++                what: "expression slots past u16",
++            })?;
++            let path = path.expect("native_shape accepts a send only where an address reaches it");
++            let argc = u16::try_from(args.len()).map_err(|_| ChunkTooLarge {
++                what: "call arguments past u16",
++            })?;
++            let mark = registers.mark();
++            let recv = registers.alloc()?;
++            push_native(
++                ops,
++                echoes_values,
++                consts,
++                registers,
++                hints,
++                calls,
++                plan,
++                target,
++                index,
++                slot,
++                None,
++                recv,
++            )?;
++            for arg in args {
++                match arg {
++                    None => {
++                        ops.push(Op::PushArg {
++                            src: Op::ARG_OMITTED,
++                        });
++                        if echoes_values {
++                            ops.push(Op::TraceArgument {
++                                src: Op::ARG_OMITTED,
++                            });
++                        }
++                    }
++                    Some(expr) => {
++                        let src = registers.alloc()?;
++                        push_native(
++                            ops,
++                            echoes_values,
++                            consts,
++                            registers,
++                            hints,
++                            calls,
++                            plan,
++                            expr,
++                            index,
++                            slot,
++                            None,
++                            src,
++                        )?;
++                        ops.push(Op::PushArg { src });
++                        if echoes_values {
++                            ops.push(Op::TraceArgument { src });
++                        }
++                    }
++                }
++            }
++            ops.push(Op::Send {
++                slot: slot16,
++                path,
++                recv,
++                argc,
++                dst,
++            });
++            registers.release(mark);
++        }
+         _ => unreachable!("this descends only into an expression native_shape accepted"),
+     }
+     Ok(())
+diff --git i/rust/crates/rexx-exec/src/ir/compile/invariants.rs w/rust/crates/rexx-exec/src/ir/compile/invariants.rs
+index 49f842c06..7e5e77692 100644
+--- i/rust/crates/rexx-exec/src/ir/compile/invariants.rs
++++ w/rust/crates/rexx-exec/src/ir/compile/invariants.rs
+@@ -258,7 +258,8 @@ pub(super) fn assert_region_ops_name_their_clause(ops: &[Op]) {
+                 | Op::LoopNext { index }
+                 | Op::Signal { index, .. }
+                 | Op::Parse { index, .. } => Some(*index),
+-                Op::TraceKeyword { .. }
++                Op::Send { .. }
++                | Op::TraceKeyword { .. }
+                 | Op::LoopHeaderValue { .. }
+                 | Op::Clause { .. }
+                 | Op::SelectCaseText { .. }
+diff --git i/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs w/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs
+index fb5a60656..5fd01a649 100644
+--- i/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs
++++ w/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs
+@@ -50,7 +50,7 @@ impl Root {
+             Op::Binary { .. } => Some(Root::Binary),
+             Op::Prefix { .. } => Some(Root::Prefix),
+             Op::EvalExpr { .. } => Some(Root::EvalExpr),
+-            Op::CallExpr { .. } | Op::CallArgs { .. } => Some(Root::CallExpr),
++            Op::CallExpr { .. } | Op::CallArgs { .. } | Op::Send { .. } => Some(Root::CallExpr),
+             Op::CallNamed { .. }
+             | Op::PushArg { .. }
+             | Op::TraceArgument { .. }
+diff --git i/rust/crates/rexx-exec/src/ir/drive.rs w/rust/crates/rexx-exec/src/ir/drive.rs
+index 34084b5b8..f4675477e 100644
+--- i/rust/crates/rexx-exec/src/ir/drive.rs
++++ w/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -12,6 +12,8 @@
+ //! The driver: what runs a compiled [`Chunk`] for the activation on top of
+ //! the stack.
+ 
++use std::rc::Rc;
++
+ use rexx_core::{Decoded, ObjRef, RegFrame};
+ use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, ProgramSource, SymbolId};
+ 
+@@ -23,6 +25,13 @@ use crate::run::{
+     ReturnKeyword, SelectEscape, SelectResume, absorb, otherwise_range, otherwise_resume,
+     select_escape, select_parts, when_resume, when_targets,
+ };
++use crate::activation::body_of;
++use crate::dispatch::{MethodTail, SendStart};
++use crate::error::Raised;
++use crate::plan::Plan;
++use rexx_parse::Program;
++use crate::activation::CallType;
++use crate::run::{Begun, CallEntry, CallTail, Resolved, SteppedClause};
+ use crate::{Code, Failure, Interp, Loud};
+ 
+ #[cfg(test)]
+@@ -35,6 +44,64 @@ use super::counters::{
+ #[cfg(test)]
+ pub(crate) use super::counters::{resume_counters, suspend_counters};
+ 
++/// **SPIKE.** One activation's body, owned, so a suspended level can keep it.
++pub(crate) struct Level {
++    pub(crate) program: Rc<Program>,
++    pub(crate) plan: Rc<Plan>,
++    pub(crate) chunk: Rc<Chunk>,
++    pub(crate) selector: Option<usize>,
++}
++
++/// **SPIKE.** Where a top-level driver stopped inside a clause region to run
++/// a callee, and what the callee's return hands it.
++pub(crate) struct Resume {
++    clause_pc: u32,
++    call_pc: u32,
++    base: usize,
++    granting: bool,
++    stale: bool,
++    debugging: bool,
++    entry: SteppedClause,
++    delivered: Option<Result<Delivered, Failure>>,
++}
++
++/// **SPIKE.** A finished callee's answer, as the resumed region takes it.
++pub(crate) enum Delivered {
++    /// Into this register, and the region continues.
++    Value(u16, ObjRef),
++    /// The clause's own flow: the region ends with it.
++    Flow(Flow),
++}
++
++/// **SPIKE.** What the call op that suspended does once its callee ends.
++pub(crate) enum Pending {
++    Function { dst: u16, tail: CallTail },
++    Subroutine { base_indent: usize, tail: CallTail },
++    Send { dst: u16, tail: MethodTail, name: rexx_parse::Selector },
++}
++
++/// **SPIKE.** Handed from a suspending call op to the trampoline.
++pub(crate) struct Suspension {
++    resume: Resume,
++    pending: Pending,
++    callee: Level,
++}
++
++/// **SPIKE.** A call op's outcome: ran to completion here, or entered.
++pub(crate) enum Started<T> {
++    Ran(T),
++    Entered(Pending, Level),
++}
++
++/// **SPIKE.** A suspended level on the trampoline's stack.
++struct Parked<'a> {
++    level: Level,
++    registers: RegFrame<'a>,
++    temps: rexx_core::FrameId,
++    resume: Resume,
++    pending: Pending,
++}
++
+ /// What a body that runs off its own end answers.
+ const END_OF_BODY: Ended = Ended::Exited(None);
+ 
+@@ -192,6 +259,7 @@ fn undriven_op_name(op: &Op) -> &'static str {
+         Op::Jump { .. } => "Jump",
+         Op::JumpUnless { .. } => "JumpUnless",
+         Op::ConditionJump { .. } => "ConditionJump",
++        Op::Send { .. } => "Send",
+     }
+ }
+ 
+@@ -362,28 +430,106 @@ impl Interp {
+ }
+ 
+ impl Interp {
+-    /// Runs `chunk` for the activation on top of the stack.
+-    pub(crate) fn run_chunk(
+-        &mut self,
+-        code: &Code<'_>,
+-        chunk: &Chunk,
+-        source: Option<&ProgramSource>,
+-    ) -> Result<Ended, Failure> {
+-        #[cfg(test)]
+-        count_run_chunk_entry();
+-
+-        // Truncated on the way out, so a temp this chunk leaks does not outlive it.
+-        let temps = self.roots.push_frame();
++    /// **SPIKE.** Runs `root` for the activation on top of the stack, and
++    /// every callee a top-level call op enters from it, on one Rust frame.
++    pub(crate) fn drive(&mut self, root: Level) -> Result<Ended, Failure> {
+         let arena = self.roots.frames();
+-        let registers = arena.reserve(chunk.registers);
+-        // Released on both paths rather than only on `Ok`: the loud and
+-        // raised paths leave the activation for `Interp::run` and
+-        // `resolve_and_run_call` to tear down, and a frame left behind
+-        // would keep its registers rooted for the rest of the run.
+-        let ended = self.run_chunk_clauses(code, chunk, registers, source);
+-        arena.release(registers);
+-        self.roots.pop_frame(temps);
+-        ended
++        let mut stack: Vec<Parked<'_>> = Vec::new();
++        let mut level = root;
++        let mut temps = self.roots.push_frame();
++        let mut registers = arena.reserve(level.chunk.registers);
++        loop {
++            let ended = match body_of(&level.program, level.selector) {
++                Some(body) => {
++                    let code = Code {
++                        body,
++                        symbols: &level.program.symbols,
++                        slots: &level.plan.by_symbol,
++                        plan: Some(&level.plan),
++                    };
++                    self.run_chunk_clauses(&code, &level.chunk, registers, Some(&level.program.source))
++                }
++                None => Err(Loud::missing_body().into()),
++            };
++            if let Some(suspension) = self.suspension.take() {
++                let Suspension {
++                    resume,
++                    pending,
++                    callee,
++                } = suspension;
++                stack.push(Parked {
++                    level,
++                    registers,
++                    temps,
++                    resume,
++                    pending,
++                });
++                level = callee;
++                temps = self.roots.push_frame();
++                registers = arena.reserve(level.chunk.registers);
++                continue;
++            }
++            arena.release(registers);
++            self.roots.pop_frame(temps);
++            let Some(parked) = stack.pop() else {
++                return ended;
++            };
++            let delivered = self.finish_pending(parked.pending, ended);
++            let mut resume = parked.resume;
++            resume.delivered = Some(delivered);
++            self.resume = Some(resume);
++            level = parked.level;
++            registers = parked.registers;
++            temps = parked.temps;
++        }
++    }
++
++    /// **SPIKE.** The half of a suspended call op that runs once its callee
++    /// has ended: the level state restored and the answer shaped as the op
++    /// would have taken it.
++    fn finish_pending(
++        &mut self,
++        pending: Pending,
++        ended: Result<Ended, Failure>,
++    ) -> Result<Delivered, Failure> {
++        match pending {
++            Pending::Function { dst, tail } => {
++                let name = matches!(ended, Ok(Ended::Returned(None)))
++                    .then(|| self.call_context.name.clone());
++                match self.finish_call(tail, ended)? {
++                    Ended::Exited(value) => Err(Failure::Exited(value)),
++                    Ended::Returned(Some(value)) => Ok(Delivered::Value(dst, value)),
++                    Ended::Returned(None) => {
++                        Err(Raised::no_data_returned(&name.unwrap_or_default()).into())
++                    }
++                }
++            }
++            Pending::Subroutine { base_indent, tail } => {
++                let ended = self.finish_call(tail, ended)?;
++                self.settle_call_result(ended, base_indent)
++                    .map(Delivered::Flow)
++            }
++            Pending::Send { dst, tail, name } => {
++                let sent = self.finish_method(tail, ended)?;
++                self.sent_value(&name, sent)
++                    .map(|value| Delivered::Value(dst, value))
++            }
++        }
++    }
++
++    /// **SPIKE.** `message_term`'s tail for a plain send: the `>M>` line, and
++    /// the raise for a send that answered nothing.
++    fn sent_value(
++        &mut self,
++        name: &rexx_parse::Selector,
++        sent: Option<ObjRef>,
++    ) -> Result<ObjRef, Failure> {
++        if let Some(value) = sent
++            && let Some(rendered) = self.intermediate_text(value)
++        {
++            self.trace_message(self.clause_state.current_value_indent, name.bytes(), &rendered);
++        }
++        sent.ok_or_else(|| Raised::no_result(name).into())
+     }
+ 
+     /// The body of `run_chunk` past the register frame, split out so the
+@@ -397,20 +543,34 @@ impl Interp {
+     ) -> Result<Ended, Failure> {
+         let len = code.body.instructions.len();
+         loop {
+-            // The activation's own `pc` is where a body is entered at -- `0`
+-            // for a program, a label's index for a `CALL`, a handler's for a
+-            // trap -- and `apply_flow` is what moves it afterwards.
+-            let entry = self.activation().pc;
+-            if entry >= len {
++            let ran = if let Some((at, granting)) =
++                self.resume.as_ref().map(|resume| (resume.clause_pc, resume.granting))
++            {
++                if granting {
++                    self.run_ops::<true, true>(code, chunk, registers, at, 0, len, source)
++                } else {
++                    self.run_ops::<false, true>(code, chunk, registers, at, 0, len, source)
++                }
++            } else {
++                // The activation's own `pc` is where a body is entered at -- `0`
++                // for a program, a label's index for a `CALL`, a handler's for a
++                // trap -- and `apply_flow` is what moves it afterwards.
++                let entry = self.activation().pc;
++                if entry >= len {
++                    return Ok(END_OF_BODY);
++                }
++                let Some(at) = chunk.op_at(entry) else {
++                    return Err(Loud::chunk_map_too_short().into());
++                };
++                // `[0, len]` is the whole body, so every `Goto` a clause of it
++                // produces is absorbed here and only the flows that end or
++                // redirect the activation come back.
++                self.run_ops::<true, true>(code, chunk, registers, at, 0, len, source)
++            };
++            if self.suspension.is_some() {
+                 return Ok(END_OF_BODY);
+             }
+-            let Some(at) = chunk.op_at(entry) else {
+-                return Err(Loud::chunk_map_too_short().into());
+-            };
+-            // `[0, len]` is the whole body, so every `Goto` a clause of it
+-            // produces is absorbed here and only the flows that end or
+-            // redirect the activation come back.
+-            let flow = match self.run_ops::<true>(code, chunk, registers, at, 0, len, source) {
++            let flow = match ran {
+                 Ok(flow) => flow,
+                 // `offer_to_trap` answers `Flow::Signal` for a trap that
+                 // fired and `Flow::Exit` for a handler that ended the
+@@ -449,7 +609,7 @@ impl Interp {
+         let Some(at) = chunk.op_at(start) else {
+             return Err(Loud::chunk_map_too_short().into());
+         };
+-        self.run_ops::<false>(code, chunk, registers, at, start, end, source)
++        self.run_ops::<false, false>(code, chunk, registers, at, start, end, source)
+     }
+ 
+     /// Runs `chunk`'s ops from op `at` until one of them produces a `Flow`
+@@ -462,7 +622,7 @@ impl Interp {
+     // 70,000 out of 6.3 billion branches either way, so it is not prediction.
+     // No mechanism below "the layout changed" was found, and a change with that
+     // profile is not worth 7 instructions.
+-    fn run_ops<const GRANTING: bool>(
++    fn run_ops<const GRANTING: bool, const TOP: bool>(
+         &mut self,
+         code: &Code<'_>,
+         chunk: &Chunk,
+@@ -477,15 +637,19 @@ impl Interp {
+         // whole of what makes one stack safe to share**: `settle` walks down
+         // to it and no further, so an escaping `Flow` meets exactly the
+         // constructs this level opened, in the order it opened them.
+-        let base = self.frames.len();
++        let base = match &self.resume {
++            Some(resume) if TOP => resume.base,
++            _ => self.frames.len(),
++        };
+         #[cfg(test)]
+         record_frame_floor(base);
+         let flow =
+-            self.run_ops_from::<GRANTING>(code, chunk, registers, at, start, end, source, base);
++            self.run_ops_from::<GRANTING, TOP>(code, chunk, registers, at, start, end, source, base);
+         // A `Flow` that left through `settle` has already popped every frame
+         // this level opened, so this fires only where a `Failure` unwound past
+         // them -- the point the `Vec` local to this call used to be dropped at.
+-        if self.frames.len() > base {
++        // A level that suspended keeps its frames for its resumption.
++        if self.frames.len() > base && !(TOP && self.suspension.is_some()) {
+             self.unwind_frames(base);
+         }
+         flow
+@@ -496,7 +660,7 @@ impl Interp {
+         clippy::too_many_arguments,
+         reason = "one caller, and every argument is a value it already holds"
+     )]
+-    fn run_ops_from<const GRANTING: bool>(
++    fn run_ops_from<const GRANTING: bool, const TOP: bool>(
+         &mut self,
+         code: &Code<'_>,
+         chunk: &Chunk,
+@@ -526,6 +690,7 @@ impl Interp {
+         let mut granting = GRANTING;
+         let range_end = end;
+         let mut pc = at;
++        let mut resuming = TOP && self.resume.is_some();
+         'ops: loop {
+             // **A branch that runs out exactly at this range's own end.**
+             // `stop` is `Chunk::op_of`'s entry for `end`, which is where the
+@@ -557,9 +722,15 @@ impl Interp {
+             }
+             let op = &stream[pc as usize];
+             let (flow, next) = match op {
+-                Op::Clause { index, end } => {
+-                    if GRANTING && !granting {
+-                        return self.run_ops_from::<false>(
++                Op::Clause { index, end } => 'arm: {
++                    let resumed = if TOP && resuming {
++                        resuming = false;
++                        self.resume.take()
++                    } else {
++                        None
++                    };
++                    if resumed.is_none() && GRANTING && !granting {
++                        return self.run_ops_from::<false, TOP>(
+                             code, chunk, registers, pc, start, range_end, source, base,
+                         );
+                     }
+@@ -570,101 +741,136 @@ impl Interp {
+                     let clause_pc = pc;
+                     let index = *index as usize;
+                     let end = *end;
+-                    // **The instruction this whole region names**, fetched once
+-                    // and read by every index-bearing op inside the region
+-                    // rather than each resolving its own `index` against the
+-                    // body, which is a bounds-checked lookup of the same
+-                    // instruction per op that would do it.
+-                    // `compile::invariants::assert_region_ops_name_their_clause` is what
+-                    // makes the two the same instruction by checking rather
+-                    // than by assuming, and [`debug_assert_names_the_clause`]
+-                    // is the same check per op in debug.
+                     let Some(clause) = code.body.instructions.get(index) else {
+                         return Err(Loud::chunk_map_too_short().into());
+                     };
+-                    if granting {
+-                        self.grant_procedure_permission(clause);
+-                        // **A label leaves the permission alone**, so a label
+-                        // reading `false` here is not the permission being
+-                        // spent: `sub: procedure expose zg` grants at the
+-                        // `PROCEDURE`, one clause after the label.
+-                        granting = self.procedure_permitted
+-                            || matches!(clause.kind, InstructionKind::Label { .. });
+-                    }
+-                    // **Whether the setting in force is still the one this
+-                    // chunk's trace ops were emitted for**, and the whole of
+-                    // what makes a compiled-in emission decision safe.
+-                    // **One read of the setting answers both questions.**
+-                    // Asking `self` again after the clause for the debug flag
+-                    // cost `bench-programs/emptyloop.rex` 1.52% and
+-                    // `dispatch.rex` 1.14% in `instructions:u`, measured.
+-                    let sink = self.chunk_trace();
+-                    // **The analysis, checked at the clause it answered for.**
+-                    // A `Known` answer is a claim that this clause always runs
+-                    // under exactly that setting, and the claim is what a
+-                    // compile-time emission decision rests on; a missing
+-                    // control-flow edge shows up here as a mismatch rather
+-                    // than as a program that silently stops tracing.
+-                    // `debug_pause` is excluded because
+-                    // [`Interp::traced_mode`] answers `OFF` under it by
+-                    // design, which is not the program's own setting.
+-                    #[cfg(debug_assertions)]
+-                    if !self.debug_pause
+-                        && let Some(crate::ir::trace_flow::Setting::Known(claimed)) =
+-                            chunk.setting_at(index)
+-                    {
+-                        debug_assert_eq!(
+-                            claimed, sink,
+-                            "the trace analysis answered {claimed:?} for instruction {index}, and \
+-                             the setting in force when it ran is not that one"
+-                        );
+-                    }
+-                    let stale = chunk.trace().clause_echoes() != sink.clause_echoes();
+-                    let debugging = sink.debugging();
+-                    // **`stale` moves the clause echo from the stream back to
+-                    // the run-time gate, in both directions at once.** The
+-                    // region's own [`Op::TraceClause`] is skipped and
+-                    // [`Echo::Gated`] is passed instead, so a chunk compiled to
+-                    // echo under a setting that no longer does prints nothing,
+-                    // and one compiled silent under a setting that now echoes
+-                    // prints the line the setting now asks for. The two have
+-                    // to be one decision: doing only the first would leave a
+-                    // `TRACE R` inside a body invisible to every promoted
+-                    // clause after it, and only the second would leave `TRACE
+-                    // N` unable to switch one off.
+-                    let echo = if stale { Echo::Gated } else { Echo::Compiled };
+-                    let counted = self.count_clause_against_deadline()?;
+-                    // **The clause unit, entered by its two halves rather than
+-                    // by its closure form**, which is what puts the region's
+-                    // ops in this function's own frame instead of a callee's.
+-                    // There is one implementation of the clause boundary --
+-                    // `Interp::enter_stepped_clause` and
+-                    // `Interp::leave_stepped_clause`, which
+-                    // `crate::ir::Op::Clause` is itself defined in
+-                    // terms of -- so a promoted clause and an unpromoted one
+-                    // discharge the same list from the same code.
+-                    let entry = self.enter_stepped_clause(
+-                        echo,
+-                        code,
+-                        index,
+-                        clause,
+-                        source,
+-                        chunk.position_at(index),
+-                        counted,
+-                    );
+-                    // Taken on entry exactly as `step` takes it, because a
+-                    // promoted clause is a clause and the permission is spent
+-                    // by whichever clause the activation granted it to.
+-                    // Outside a granting instance nothing has granted it, so
+-                    // there is nothing to take.
+-                    self.region_procedure_permitted = if GRANTING {
+-                        std::mem::take(&mut self.procedure_permitted)
+-                    } else {
+-                        debug_assert!(
+-                            !self.procedure_permitted,
+-                            "a permission granted outside a granting instance"
+-                        );
+-                        false
++                    let (stale, debugging, entry, region_from) = match resumed {
++                        Some(resume) => match resume.delivered {
++                            Some(Ok(Delivered::Value(dst, value))) => {
++                                registers.set(dst, value);
++                                (
++                                    resume.stale,
++                                    resume.debugging,
++                                    resume.entry,
++                                    resume.call_pc + 1,
++                                )
++                            }
++                            // A flow or a failure ends the region at once,
++                            // exactly as the call op's own arm would have.
++                            other => {
++                                let ran: Result<RegionEnd, Failure> = match other {
++                                    Some(Ok(Delivered::Flow(flow))) => {
++                                        Ok(RegionEnd::Flowed(flow))
++                                    }
++                                    Some(Err(failure)) => Err(failure),
++                                    _ => Err(Loud::op_not_driven("resume").into()),
++                                };
++                                break 'arm match self.leave_stepped_clause(
++                                    resume.entry,
++                                    code,
++                                    index,
++                                    clause,
++                                    source,
++                                    ran,
++                                )? {
++                                    ClauseOutcome::Ran(region) => match region? {
++                                        RegionEnd::At(next) => {
++                                            pc = next;
++                                            continue 'ops;
++                                        }
++                                        RegionEnd::Flowed(flow) => (flow, end),
++                                    },
++                                    ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), pc),
++                                };
++                            }
++                        },
++                        None => {
++                            if granting {
++                                self.grant_procedure_permission(clause);
++                                // **A label leaves the permission alone**, so a label
++                                // reading `false` here is not the permission being
++                                // spent: `sub: procedure expose zg` grants at the
++                                // `PROCEDURE`, one clause after the label.
++                                granting = self.procedure_permitted
++                                    || matches!(clause.kind, InstructionKind::Label { .. });
++                            }
++                            // **Whether the setting in force is still the one this
++                            // chunk's trace ops were emitted for**, and the whole of
++                            // what makes a compiled-in emission decision safe.
++                            // **One read of the setting answers both questions.**
++                            // Asking `self` again after the clause for the debug flag
++                            // cost `bench-programs/emptyloop.rex` 1.52% and
++                            // `dispatch.rex` 1.14% in `instructions:u`, measured.
++                            let sink = self.chunk_trace();
++                            // **The analysis, checked at the clause it answered for.**
++                            // A `Known` answer is a claim that this clause always runs
++                            // under exactly that setting, and the claim is what a
++                            // compile-time emission decision rests on; a missing
++                            // control-flow edge shows up here as a mismatch rather
++                            // than as a program that silently stops tracing.
++                            // `debug_pause` is excluded because
++                            // [`Interp::traced_mode`] answers `OFF` under it by
++                            // design, which is not the program's own setting.
++                            #[cfg(debug_assertions)]
++                            if !self.debug_pause
++                                && let Some(crate::ir::trace_flow::Setting::Known(claimed)) =
++                                    chunk.setting_at(index)
++                            {
++                                debug_assert_eq!(
++                                    claimed, sink,
++                                    "the trace analysis answered {claimed:?} for instruction {index}, and \
++                                     the setting in force when it ran is not that one"
++                                );
++                            }
++                            let stale = chunk.trace().clause_echoes() != sink.clause_echoes();
++                            let debugging = sink.debugging();
++                            // **`stale` moves the clause echo from the stream back to
++                            // the run-time gate, in both directions at once.** The
++                            // region's own [`Op::TraceClause`] is skipped and
++                            // [`Echo::Gated`] is passed instead, so a chunk compiled to
++                            // echo under a setting that no longer does prints nothing,
++                            // and one compiled silent under a setting that now echoes
++                            // prints the line the setting now asks for. The two have
++                            // to be one decision: doing only the first would leave a
++                            // `TRACE R` inside a body invisible to every promoted
++                            // clause after it, and only the second would leave `TRACE
++                            // N` unable to switch one off.
++                            let echo = if stale { Echo::Gated } else { Echo::Compiled };
++                            let counted = self.count_clause_against_deadline()?;
++                            // **The clause unit, entered by its two halves rather than
++                            // by its closure form**, which is what puts the region's
++                            // ops in this function's own frame instead of a callee's.
++                            // There is one implementation of the clause boundary --
++                            // `Interp::enter_stepped_clause` and
++                            // `Interp::leave_stepped_clause`, which
++                            // `crate::ir::Op::Clause` is itself defined in
++                            // terms of -- so a promoted clause and an unpromoted one
++                            // discharge the same list from the same code.
++                            let entry = self.enter_stepped_clause(
++                                echo,
++                                code,
++                                index,
++                                clause,
++                                source,
++                                chunk.position_at(index),
++                                counted,
++                            );
++                            // Taken on entry exactly as `step` takes it, because a
++                            // promoted clause is a clause and the permission is spent
++                            // by whichever clause the activation granted it to.
++                            // Outside a granting instance nothing has granted it, so
++                            // there is nothing to take.
++                            self.region_procedure_permitted = if GRANTING {
++                                std::mem::take(&mut self.procedure_permitted)
++                            } else {
++                                debug_assert!(
++                                    !self.procedure_permitted,
++                                    "a permission granted outside a granting instance"
++                                );
++                                false
++                            };
++                            (stale, debugging, entry, pc + 1)
++                        }
+                     };
+                     // The ops of this promoted clause, `[pc + 1, end)`, and
+                     // where they leave the counter.
+@@ -685,7 +891,7 @@ impl Interp {
+                             // have no register to live in: a bound is a `Number` and
+                             // a budget is a count.
+                             let mut header: Option<LoopHeaderValues> = None;
+-                            let Some(ops) = chunk.ops_in(pc + 1, end) else {
++                            let Some(ops) = chunk.ops_in(region_from, end) else {
+                                 break 'cold Err(Loud::chunk_map_too_short().into());
+                             };
+                             for region_op in ops {
+@@ -767,8 +973,12 @@ impl Interp {
+                                         {
+                                             break 'cold Err(failure);
+                                         }
++                                        #[cfg(feature = "spike-pins")]
++                                        let saved = self.pin_as("tree-eval:call");
+                                         let value =
+                                             self.eval_call_resolved(code, resolution, name, args);
++                                        #[cfg(feature = "spike-pins")]
++                                        self.unpin(saved);
+                                         self.depth -= 1;
+                                         let value = match value {
+                                             Ok(value) => value,
+@@ -819,9 +1029,43 @@ impl Interp {
+                                         // body inline, `varlookup` -- which
+                                         // calls nothing at all -- retired 4.9%
+                                         // more instructions.
+-                                        match self.run_call_args(
++                                        if TOP && header.is_none() && !self.stackless_off {
++                                            match self.start_call_args(
++                                                code, chunk, clause, *slot, *path, *site, *argc,
++                                                *dst,
++                                            ) {
++                                                Ok(Started::Ran(value)) => {
++                                                    registers.set(*dst, value);
++                                                }
++                                                Ok(Started::Entered(pending, callee)) => {
++                                                    self.suspension = Some(Suspension {
++                                                        resume: Resume {
++                                                            clause_pc,
++                                                            call_pc: op_position(stream, region_op),
++                                                            base,
++                                                            granting,
++                                                            stale,
++                                                            debugging,
++                                                            entry,
++                                                            delivered: None,
++                                                        },
++                                                        pending,
++                                                        callee,
++                                                    });
++                                                    return Ok(Flow::Next);
++                                                }
++                                                Err(failure) => break 'cold Err(failure),
++                                            }
++                                            continue;
++                                        }
++                                        #[cfg(feature = "spike-pins")]
++                                        let saved = self.pin_as("driver-nested");
++                                        let ran = self.run_call_args(
+                                             code, chunk, clause, *slot, *path, *site, *argc,
+-                                        ) {
++                                        );
++                                        #[cfg(feature = "spike-pins")]
++                                        self.unpin(saved);
++                                        match ran {
+                                             Ok(value) => {
+                                                 registers.set(*dst, value);
+                                             }
+@@ -870,8 +1114,12 @@ impl Interp {
+                                         debug_assert_names_the_clause(
+                                             code, *index, clause, "EvalExpr",
+                                         );
+-                                        let value = match self.eval_chunk_expr(code, clause, *slot)
+-                                        {
++                                        #[cfg(feature = "spike-pins")]
++                                        let saved = self.pin_as("tree-eval:expr");
++                                        let value = self.eval_chunk_expr(code, clause, *slot);
++                                        #[cfg(feature = "spike-pins")]
++                                        self.unpin(saved);
++                                        let value = match value {
+                                             Ok(value) => value,
+                                             Err(failure) => break 'cold Err(failure),
+                                         };
+@@ -1586,9 +1834,12 @@ impl Interp {
+                                             Ok(resolution) => resolution,
+                                             Err(failure) => break 'cold Err(failure),
+                                         };
+-                                        let flow = match self
+-                                            .invoke_named_call(code, resolution, name, args)
+-                                        {
++                                        #[cfg(feature = "spike-pins")]
++                                        let saved = self.pin_as("tree-eval:call-instr");
++                                        let flow = self.invoke_named_call(code, resolution, name, args);
++                                        #[cfg(feature = "spike-pins")]
++                                        self.unpin(saved);
++                                        let flow = match flow {
+                                             Ok(flow) => flow,
+                                             Err(failure) => break 'cold Err(failure),
+                                         };
+@@ -1605,7 +1856,38 @@ impl Interp {
+                                             clause,
+                                             "CallNamed",
+                                         );
+-                                        match self.run_call_named(clause, chunk, *site, *argc) {
++                                        if TOP && header.is_none() && !self.stackless_off {
++                                            match self.start_call_named(clause, chunk, *site, *argc)
++                                            {
++                                                Ok(Started::Ran(flow)) => {
++                                                    break 'cold Ok(RegionEnd::Flowed(flow));
++                                                }
++                                                Ok(Started::Entered(pending, callee)) => {
++                                                    self.suspension = Some(Suspension {
++                                                        resume: Resume {
++                                                            clause_pc,
++                                                            call_pc: op_position(stream, region_op),
++                                                            base,
++                                                            granting,
++                                                            stale,
++                                                            debugging,
++                                                            entry,
++                                                            delivered: None,
++                                                        },
++                                                        pending,
++                                                        callee,
++                                                    });
++                                                    return Ok(Flow::Next);
++                                                }
++                                                Err(failure) => break 'cold Err(failure),
++                                            }
++                                        }
++                                        #[cfg(feature = "spike-pins")]
++                                        let saved = self.pin_as("driver-nested");
++                                        let ran = self.run_call_named(clause, chunk, *site, *argc);
++                                        #[cfg(feature = "spike-pins")]
++                                        self.unpin(saved);
++                                        match ran {
+                                             Ok(flow) => break 'cold Ok(RegionEnd::Flowed(flow)),
+                                             Err(failure) => break 'cold Err(failure),
+                                         }
+@@ -1624,8 +1906,13 @@ impl Interp {
+                                         else {
+                                             break 'cold Err(Loud::instruction(&clause.kind).into());
+                                         };
++                                        #[cfg(feature = "spike-pins")]
++                                        let saved = self.pin_as("tree-eval:message-instr");
++                                        let flow = self.exec_message(code, term, value.as_ref());
++                                        #[cfg(feature = "spike-pins")]
++                                        self.unpin(saved);
+                                         let flow =
+-                                            match self.exec_message(code, term, value.as_ref()) {
++                                            match flow {
+                                                 Ok(flow) => flow,
+                                                 Err(failure) => break 'cold Err(failure),
+                                             };
+@@ -1650,13 +1937,18 @@ impl Interp {
+                                     // `Interp::exec_instruction`.
+                                     Op::Exec { index: at } => {
+                                         debug_assert_names_the_clause(code, *at, clause, "Exec");
+-                                        match self.exec_instruction(
++                                        #[cfg(feature = "spike-pins")]
++                                        let saved = self.pin_as("exec-instr");
++                                        let flow = self.exec_instruction(
+                                             code,
+                                             index,
+                                             clause,
+                                             source,
+                                             self.region_procedure_permitted,
+-                                        ) {
++                                        );
++                                        #[cfg(feature = "spike-pins")]
++                                        self.unpin(saved);
++                                        match flow {
+                                             Ok(flow) => {
+                                                 break 'cold Ok(RegionEnd::Flowed(flow));
+                                             }
+@@ -1900,7 +2192,9 @@ impl Interp {
+                                             Ok(crate::run::FlatStart::Fallback(values)) => values,
+                                             Err(failure) => break 'cold Err(failure),
+                                         };
+-                                        let flow = match self.run_loop_with_header(
++                                        #[cfg(feature = "spike-pins")]
++                                        let saved = self.pin_as("nested-loop");
++                                        let flow = self.run_loop_with_header(
+                                             code,
+                                             index,
+                                             clause,
+@@ -1908,7 +2202,10 @@ impl Interp {
+                                             source,
+                                             BodyEngine::Chunk { chunk, registers },
+                                             values,
+-                                        ) {
++                                        );
++                                        #[cfg(feature = "spike-pins")]
++                                        self.unpin(saved);
++                                        let flow = match flow {
+                                             Ok(flow) => flow,
+                                             Err(failure) => break 'cold Err(failure),
+                                         };
+@@ -1917,6 +2214,54 @@ impl Interp {
+                                     Op::Jump { target } => {
+                                         break 'region *target;
+                                     }
++                                    // **SPIKE.** A plain send whose receiver
++                                    // and arguments ran as ops of this region.
++                                    Op::Send {
++                                        slot,
++                                        path,
++                                        recv,
++                                        argc,
++                                        dst,
++                                    } => {
++                                        let suspendable =
++                                            TOP && header.is_none() && !self.stackless_off;
++                                        let started = self.start_send_op(
++                                            clause,
++                                            *slot,
++                                            *path,
++                                            registers.get(*recv),
++                                            *argc,
++                                            *dst,
++                                            suspendable,
++                                        );
++                                        // The receiver is not left rooted past
++                                        // its send, as `message_term`'s temp is
++                                        // not past its clause.
++                                        registers.set(*recv, ObjRef::NIL);
++                                        match started {
++                                            Ok(Started::Ran(value)) => {
++                                                registers.set(*dst, value);
++                                            }
++                                            Ok(Started::Entered(pending, callee)) => {
++                                                self.suspension = Some(Suspension {
++                                                    resume: Resume {
++                                                        clause_pc,
++                                                        call_pc: op_position(stream, region_op),
++                                                        base,
++                                                        granting,
++                                                        stale,
++                                                        debugging,
++                                                        entry,
++                                                        delivered: None,
++                                                    },
++                                                    pending,
++                                                    callee,
++                                                });
++                                                return Ok(Flow::Next);
++                                            }
++                                            Err(failure) => break 'cold Err(failure),
++                                        }
++                                    }
+                                     Op::LoopNext { .. } => {
+                                         break 'cold Err(Loud::op_not_driven("LoopNext").into());
+                                     }
+@@ -1977,7 +2322,7 @@ impl Interp {
+                             // end the activation, and that is the `Ended` below.
+                             RegionEnd::At(next) => {
+                                 pc = next;
+-                                continue;
++                                continue 'ops;
+                             }
+                             // Settled against this range from the op past the
+                             // region, which is where an absorbed `Flow::Next`
+@@ -2361,6 +2706,12 @@ fn debug_assert_names_the_clause(code: &Code<'_>, index: u32, clause: &Instructi
+     );
+ }
+ 
++/// **SPIKE.** The stream index of `op`, which is an element of `stream`.
++fn op_position(stream: &[Op], op: &Op) -> u32 {
++    let offset = std::ptr::from_ref(op).addr() - stream.as_ptr().addr();
++    (offset / size_of::<Op>()) as u32
++}
++
+ /// The op instruction `target` resumes at, or the loud failure a chunk whose
+ /// map is shorter than its own body earns.
+ fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
+@@ -2370,6 +2721,197 @@ fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
+ }
+ 
+ impl Interp {
++    /// **SPIKE.** [`Interp::run_call_args`], entering a Rexx callee rather
++    /// than running it.
++    #[inline(never)]
++    #[allow(clippy::too_many_arguments)]
++    fn start_call_args(
++        &mut self,
++        code: &Code<'_>,
++        chunk: &Chunk,
++        clause: &Instruction,
++        slot: u16,
++        path: super::NodePath,
++        site: u16,
++        argc: u16,
++        dst: u16,
++    ) -> Result<Started<ObjRef>, Failure> {
++        let Some(mark) = self.value_buffer.len().checked_sub(argc as usize) else {
++            return Err(Loud::call_op_off_its_node().into());
++        };
++        let target = || match Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind) {
++            Some(ExprKind::Call { target, .. }) => Ok(call_target_name(code, target)),
++            _ => Err(Failure::from(Loud::call_op_off_its_node())),
++        };
++        let mut spelling: &[u8] = b"";
++        let resolved = match chunk.resolved_call(site, self.routine_generation) {
++            Some(resolved) => {
++                if !matches!(resolved, crate::run::Resolved::Builtin(_)) {
++                    spelling = target()?.0;
++                }
++                resolved
++            }
++            None => {
++                let (name, search_labels) = target()?;
++                spelling = name;
++                let resolved = self.resolve_call(name, search_labels)?;
++                chunk.remember_call(site, resolved, self.routine_generation);
++                resolved
++            }
++        };
++        if !matches!(resolved, Resolved::Label(_) | Resolved::Routine(_)) {
++            let probe = 0u8;
++            self.enter_eval_node(&raw const probe)?;
++            let value = self.call_over_pushed_args(resolved, spelling, mark);
++            self.depth -= 1;
++            return value.map(Started::Ran);
++        }
++        let arguments = self.value_buffer[mark..].to_vec();
++        self.value_buffer.truncate(mark);
++        let tail = match self.begin_call(
++            resolved,
++            spelling,
++            arguments,
++            CallType::Function,
++            CallEntry::Written,
++        )? {
++            Begun::Done(ended) => return function_value(ended, spelling).map(Started::Ran),
++            Begun::Entered(tail) => tail,
++        };
++        #[cfg(feature = "spike-pins")]
++        self.count_stackless(0);
++        match self.prepare_level() {
++            Ok(level) => Ok(Started::Entered(Pending::Function { dst, tail }, level)),
++            Err(failure) => {
++                let ended = self.finish_call(tail, Err(failure))?;
++                function_value(ended, spelling).map(Started::Ran)
++            }
++        }
++    }
++
++    /// **SPIKE.** [`Interp::run_call_named`], entering a Rexx callee rather
++    /// than running it.
++    #[inline(never)]
++    fn start_call_named(
++        &mut self,
++        clause: &Instruction,
++        chunk: &Chunk,
++        site: u16,
++        argc: u16,
++    ) -> Result<Started<Flow>, Failure> {
++        let InstructionKind::Call(call) = &clause.kind else {
++            return Err(Loud::call_op_off_its_node().into());
++        };
++        let Call::Named { name, literal, .. } = &**call else {
++            return Err(Loud::call_op_off_its_node().into());
++        };
++        let Some(mark) = self.value_buffer.len().checked_sub(argc as usize) else {
++            return Err(Loud::call_op_off_its_node().into());
++        };
++        let resolved = match chunk.resolved_call(site, self.routine_generation) {
++            Some(resolved) => resolved,
++            None => {
++                let resolved = self.resolve_call(name, !*literal)?;
++                chunk.remember_call(site, resolved, self.routine_generation);
++                resolved
++            }
++        };
++        if !matches!(resolved, Resolved::Label(_) | Resolved::Routine(_)) {
++            return self
++                .invoke_named_call_over_pushed_args(resolved, name, mark)
++                .map(Started::Ran);
++        }
++        let base_indent = self.clause_state.current_value_indent;
++        let arguments = self.value_buffer[mark..].to_vec();
++        self.value_buffer.truncate(mark);
++        let tail = match self.begin_call(
++            resolved,
++            name,
++            arguments,
++            CallType::Subroutine,
++            CallEntry::Written,
++        )? {
++            Begun::Done(ended) => {
++                return self.settle_call_result(ended, base_indent).map(Started::Ran);
++            }
++            Begun::Entered(tail) => tail,
++        };
++        #[cfg(feature = "spike-pins")]
++        self.count_stackless(1);
++        match self.prepare_level() {
++            Ok(level) => Ok(Started::Entered(
++                Pending::Subroutine { base_indent, tail },
++                level,
++            )),
++            Err(failure) => {
++                let ended = self.finish_call(tail, Err(failure))?;
++                self.settle_call_result(ended, base_indent).map(Started::Ran)
++            }
++        }
++    }
++
++    /// **SPIKE.** One [`crate::ir::Op::Send`]: the send `message_term` makes,
++    /// over a receiver and arguments the region's own ops computed, entering
++    /// a `::METHOD` body rather than running it when `suspendable`.
++    #[inline(never)]
++    #[allow(clippy::too_many_arguments)]
++    fn start_send_op(
++        &mut self,
++        clause: &Instruction,
++        slot: u16,
++        path: super::NodePath,
++        receiver: ObjRef,
++        argc: u16,
++        dst: u16,
++        suspendable: bool,
++    ) -> Result<Started<ObjRef>, Failure> {
++        let Some(ExprKind::Message { name, .. }) =
++            Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind)
++        else {
++            return Err(Loud::call_op_off_its_node().into());
++        };
++        let Some(mark) = self.value_buffer.len().checked_sub(argc as usize) else {
++            return Err(Loud::call_op_off_its_node().into());
++        };
++        let caller = self.caller();
++        let mut values = std::mem::take(&mut self.value_buffer);
++        let started = if suspendable {
++            self.start_send(receiver, name.bytes(), &values[mark..], caller)
++        } else {
++            #[cfg(feature = "spike-pins")]
++            let saved = self.pin_as("driver-nested");
++            let sent = self
++                .send_message(receiver, name.bytes(), None, &values[mark..], caller)
++                .map(SendStart::Done);
++            #[cfg(feature = "spike-pins")]
++            self.unpin(saved);
++            sent
++        };
++        values.truncate(mark);
++        self.value_buffer = values;
++        match started? {
++            SendStart::Done(sent) => self.sent_value(name, sent).map(Started::Ran),
++            SendStart::Entered(tail) => {
++                #[cfg(feature = "spike-pins")]
++                self.count_stackless(2);
++                match self.prepare_level() {
++                    Ok(level) => Ok(Started::Entered(
++                        Pending::Send {
++                            dst,
++                            tail,
++                            name: name.clone(),
++                        },
++                        level,
++                    )),
++                    Err(failure) => {
++                        let sent = self.finish_method(tail, Err(failure))?;
++                        self.sent_value(name, sent).map(Started::Ran)
++                    }
++                }
++            }
++        }
++    }
++
+     /// A call op's resolution before its arguments run, for an op that
+     /// evaluates them itself: the site's kept answer, or the part of the
+     /// resolution the oracle decides before the arguments, kept when it
+@@ -2412,5 +2954,14 @@ impl Interp {
+     }
+ }
+ 
++/// **SPIKE.** A function call's answer, as `call_over_values` shapes it.
++fn function_value(ended: Ended, name: &[u8]) -> Result<ObjRef, Failure> {
++    match ended {
++        Ended::Exited(value) => Err(Failure::Exited(value)),
++        Ended::Returned(Some(value)) => Ok(value),
++        Ended::Returned(None) => Err(Raised::no_data_returned(name).into()),
++    }
++}
++
+ #[cfg(test)]
+ mod tests;
+diff --git i/rust/crates/rexx-exec/src/ir/golden.rs w/rust/crates/rexx-exec/src/ir/golden.rs
+index be5277a9c..6de8fe18a 100644
+--- i/rust/crates/rexx-exec/src/ir/golden.rs
++++ w/rust/crates/rexx-exec/src/ir/golden.rs
+@@ -88,6 +88,18 @@ pub(crate) fn render(chunk: &Chunk) -> String {
+                     render_path(*path)
+                 ));
+             }
++            Op::Send {
++                slot,
++                path,
++                recv,
++                argc,
++                dst,
++            } => {
++                out.push_str(&format!(
++                    "{index}: Send slot={slot} path={} recv={recv} argc={argc} dst={dst}\n",
++                    render_path(*path)
++                ));
++            }
+             Op::PushArg { src } => {
+                 out.push_str(&format!("{index}: PushArg src={}\n", render_arg(*src)));
+             }
+diff --git i/rust/crates/rexx-exec/src/ir/valid.rs w/rust/crates/rexx-exec/src/ir/valid.rs
+index ff950524c..606b0653e 100644
+--- i/rust/crates/rexx-exec/src/ir/valid.rs
++++ w/rust/crates/rexx-exec/src/ir/valid.rs
+@@ -49,6 +49,7 @@ impl ValidOps {
+                     inside(lhs) && inside(rhs) && inside(dst)
+                 }
+                 Op::Prefix { src, dst, .. } => inside(src) && inside(dst),
++                Op::Send { recv, dst, .. } => inside(recv) && inside(dst),
+                 Op::Say { src, .. }
+                 | Op::Signal { src, .. }
+                 | Op::Parse { src, .. }
+diff --git i/rust/crates/rexx-exec/src/lib.rs w/rust/crates/rexx-exec/src/lib.rs
+index fa73ca415..536d197c7 100644
+--- i/rust/crates/rexx-exec/src/lib.rs
++++ w/rust/crates/rexx-exec/src/lib.rs
+@@ -1021,6 +1021,16 @@ struct Interp {
+     key_buffer: Vec<u8>,
+     /// A buffer lent out for a builtin call's evaluated argument values.
+     value_buffer: Vec<Option<ObjRef>>,
++    /// **SPIKE.** A top-level call op's hand-off to the trampoline.
++    suspension: Option<crate::ir::drive::Suspension>,
++    /// **SPIKE.** The trampoline's hand-back to a resumed level.
++    resume: Option<crate::ir::drive::Resume>,
++    /// **SPIKE.** `SPIKE_NO_STACKLESS` set: every call op recurses.
++    stackless_off: bool,
++    #[cfg(feature = "spike-pins")]
++    pin_tag: String,
++    #[cfg(feature = "spike-pins")]
++    pin_counts: std::collections::BTreeMap<String, u64>,
+     /// Buffers lent out for a `PARSE` instruction's source strings, and
+     /// handed back when the template walk is done with them.
+     parse_buffers: Vec<Vec<u8>>,
+@@ -1994,6 +2004,13 @@ impl Interp {
+             roots: RootSet::new(),
+             key_buffer: Vec::new(),
+             value_buffer: Vec::new(),
++            suspension: None,
++            resume: None,
++            stackless_off: std::env::var_os("SPIKE_NO_STACKLESS").is_some(),
++            #[cfg(feature = "spike-pins")]
++            pin_tag: String::new(),
++            #[cfg(feature = "spike-pins")]
++            pin_counts: std::collections::BTreeMap::new(),
+             parse_buffers: Vec::new(),
+             text_scratch: [0; crate::value::TEXT_SCRATCH],
+             text_numbers: crate::value::TextNumbers::new(),
+@@ -2660,6 +2677,15 @@ impl Interp {
+             key_buffer: _,
+             // Every push site roots the value as a temp before it lands here.
+             value_buffer: _,
++            // Transient: set by a call op and taken by the trampoline with no
++            // allocation between.
++            suspension: _,
++            resume: _,
++            stackless_off: _,
++            #[cfg(feature = "spike-pins")]
++            pin_tag: _,
++            #[cfg(feature = "spike-pins")]
++            pin_counts: _,
+             parse_buffers: _,
+             text_scratch: _,
+             // Handle-inline strings, which are their own bytes and have no
+@@ -3243,6 +3269,11 @@ fn execute(
+     let parts = invocation.into_parts();
+     interp.roots.set_frame_block(parts.frame_block);
+     let (argument, deadline) = (parts.argument, parts.deadline);
++    #[cfg(feature = "spike-pins")]
++    let pin_label = format!(
++        "{path} {}",
++        String::from_utf8_lossy(argument.as_deref().unwrap_or(b""))
++    );
+     interp.input = Input::new(parts.input);
+     interp.standard_transient = parts.standard_transient;
+     interp.sinks = parts.sinks;
+@@ -3286,8 +3317,12 @@ fn execute(
+             interp.roots.push_temp(value);
+             interp.call_context.arguments = Rc::from(&[Some(value)][..]);
+         }
++        #[cfg(feature = "spike-pins")]
++        interp.pin_counts.clear();
+         interp.run(program)
+     });
++    #[cfg(feature = "spike-pins")]
++    interp.dump_pins(&pin_label);
+     // The whole echo stack, innermost first: the levels `seal_site_level`
+     // already closed, then the level that was still unwinding when the
+     // condition reached the top. See `Interp::failure_sites` for why the two
+@@ -3425,3 +3460,98 @@ fn execute(
+ 
+ #[cfg(test)]
+ mod tests;
++
++impl Interp {
++    /// **SPIKE.** Runs `f` under the pin tag `label`.
++    #[inline(always)]
++    pub(crate) fn pinned<T>(&mut self, label: &str, f: impl FnOnce(&mut Interp) -> T) -> T {
++        #[cfg(feature = "spike-pins")]
++        let saved = self.pin_as(label);
++        #[cfg(not(feature = "spike-pins"))]
++        let _ = label;
++        let out = f(self);
++        #[cfg(feature = "spike-pins")]
++        self.unpin(saved);
++        out
++    }
++}
++
++/// **SPIKE.** Counts of Rexx bodies entered by Rust recursion, by the native
++/// context that entered them.
++#[cfg(feature = "spike-pins")]
++impl Interp {
++    pub(crate) fn pin_as(&mut self, label: impl Into<String>) -> String {
++        std::mem::replace(&mut self.pin_tag, label.into())
++    }
++
++    pub(crate) fn unpin(&mut self, saved: String) {
++        self.pin_tag = saved;
++    }
++
++    /// A driver root: counted under the tag in force, which the body runs
++    /// without.
++    pub(crate) fn count_driver_root(&mut self) -> String {
++        let label = if self.activation_depth() <= 1 {
++            "root".to_string()
++        } else if self.pin_tag.is_empty() {
++            let trace = std::backtrace::Backtrace::force_capture().to_string();
++            let frames: Vec<String> = trace
++                .lines()
++                .filter_map(|line| {
++                    let line = line.trim();
++                    let name = line.split_once(": ")?.1;
++                    name.starts_with("rexx_exec::").then(|| {
++                        name.trim_start_matches("rexx_exec::")
++                            .rsplit("::")
++                            .next()
++                            .unwrap_or(name)
++                            .to_string()
++                    })
++                })
++                .filter(|name| {
++                    !matches!(
++                        name.as_str(),
++                        "count_driver_root" | "run_activation" | "pinned" | "{{closure}}"
++                    )
++                })
++                .take(4)
++                .collect();
++            format!("untagged:{}", frames.join("<"))
++        } else {
++            format!("pinned:{}", self.pin_tag)
++        };
++        *self.pin_counts.entry(label).or_default() += 1;
++        std::mem::take(&mut self.pin_tag)
++    }
++
++    pub(crate) fn count_stackless(&mut self, kind: usize) {
++        let label = ["stackless:function", "stackless:subroutine", "stackless:send"][kind];
++        *self.pin_counts.entry(label.to_string()).or_default() += 1;
++    }
++
++    pub(crate) fn count_pinned_call(&mut self) {
++        *self.pin_counts.entry("funnel:call".to_string()).or_default() += 1;
++    }
++
++    pub(crate) fn count_pinned_method(&mut self) {
++        *self.pin_counts.entry("funnel:method".to_string()).or_default() += 1;
++    }
++
++    fn dump_pins(&self, label: &str) {
++        use std::io::Write as _;
++        let Some(path) = std::env::var_os("SPIKE_PIN_OUT") else {
++            return;
++        };
++        let mut text = String::new();
++        for (kind, count) in &self.pin_counts {
++            text.push_str(&format!("{label}\t{kind}\t{count}\n"));
++        }
++        if let Ok(mut file) = std::fs::OpenOptions::new()
++            .create(true)
++            .append(true)
++            .open(path)
++        {
++            let _ = file.write_all(text.as_bytes());
++        }
++    }
++}
+diff --git i/rust/crates/rexx-exec/src/queue.rs w/rust/crates/rexx-exec/src/queue.rs
+index 3a69c3cb5..8edfba7b3 100644
+--- i/rust/crates/rexx-exec/src/queue.rs
++++ w/rust/crates/rexx-exec/src/queue.rs
+@@ -182,7 +182,7 @@ mod tests {
+         let program = parse_program(b"push \"a\"\nqueue \"b\"\npush \"c\"\n".to_vec())
+             .expect("test program parses");
+         activate(&mut interp, program);
+-        interp.run_activation().expect("push/queue never fail");
++        interp.pinned("queue", |this| this.run_activation()).expect("push/queue never fail");
+         assert_eq!(
+             interp.queue.lines,
+             VecDeque::from([b"c".to_vec(), b"a".to_vec(), b"b".to_vec()])
+diff --git i/rust/crates/rexx-exec/src/redirect.rs w/rust/crates/rexx-exec/src/redirect.rs
+index b19f09b64..b3adc1878 100644
+--- i/rust/crates/rexx-exec/src/redirect.rs
++++ w/rust/crates/rexx-exec/src/redirect.rs
+@@ -373,7 +373,7 @@ impl Interp {
+                 let stream = self.open_named_stream(&name, b"READ", true)?;
+                 let lines = self.read_stream_lines(stream)?;
+                 let caller = self.caller();
+-                self.send_message(stream, b"CLOSE", None, &[], caller)?;
++                self.pinned("redirect", |this| this.send_message(stream, b"CLOSE", None, &[], caller))?;
+                 lines
+             }
+         };
+@@ -424,7 +424,7 @@ impl Interp {
+             let stream = self.open_named_stream(&path, b"READ", true)?;
+             let lines = self.read_stream_lines(stream)?;
+             let caller = self.caller();
+-            self.send_message(stream, b"CLOSE", None, &[], caller)?;
++            self.pinned("redirect", |this| this.send_message(stream, b"CLOSE", None, &[], caller))?;
+             return Ok(lines);
+         }
+         let array = match self.array_slots_of(object) {
+@@ -433,8 +433,7 @@ impl Interp {
+                 let caller = self.caller();
+                 let selector = self.text(b"ARRAY");
+                 self.roots.push_temp(selector);
+-                let answered = self
+-                    .send_message(object, b"REQUEST", None, &[Some(selector)], caller)?
++                let answered = self.pinned("redirect", |this| this.send_message(object, b"REQUEST", None, &[Some(selector)], caller))?
+                     .unwrap_or(ObjRef::NIL);
+                 self.roots.push_temp(answered);
+                 answered
+@@ -599,11 +598,11 @@ impl Interp {
+             let value = self.text(line);
+             self.roots.push_temp(value);
+             let caller = self.caller();
+-            self.send_message(object, b"LINEOUT", None, &[Some(value)], caller)?;
++            self.pinned("redirect", |this| this.send_message(object, b"LINEOUT", None, &[Some(value)], caller))?;
+         }
+         if close {
+             let caller = self.caller();
+-            self.send_message(object, b"CLOSE", None, &[], caller)?;
++            self.pinned("redirect", |this| this.send_message(object, b"CLOSE", None, &[], caller))?;
+         }
+         Ok(())
+     }
+@@ -646,15 +645,13 @@ impl Interp {
+         let argument = self.text(qualified);
+         self.roots.push_temp(argument);
+         let caller = self.caller();
+-        let object = self
+-            .send_message(class, b"NEW", None, &[Some(argument)], caller)?
++        let object = self.pinned("redirect", |this| this.send_message(class, b"NEW", None, &[Some(argument)], caller))?
+             .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
+         self.roots.push_temp(object);
+         let option = self.text(mode);
+         self.roots.push_temp(option);
+         let caller = self.caller();
+-        let answer = self
+-            .send_message(object, b"OPEN", None, &[Some(option)], caller)?
++        let answer = self.pinned("redirect", |this| this.send_message(object, b"OPEN", None, &[Some(option)], caller))?
+             .unwrap_or(ObjRef::NIL);
+         let answered = self.string_value_text(answer);
+         if answered != b"READY:" {
+@@ -683,7 +680,7 @@ impl Interp {
+             let outer = std::mem::replace(&mut self.input_dispatch, dispatcher);
+             let outer_trapped = std::mem::take(&mut self.input_dispatch_trapped);
+             let caller = self.caller();
+-            let answered = self.send_message(stream, b"LINEIN", None, &[], caller);
++            let answered = self.pinned("redirect", |this| this.send_message(stream, b"LINEIN", None, &[], caller));
+             let trapped = std::mem::replace(&mut self.input_dispatch_trapped, outer_trapped);
+             self.input_dispatch = outer;
+             let value = match answered {
+@@ -767,13 +764,13 @@ impl Interp {
+     ) -> Result<(), Failure> {
+         if !append {
+             let caller = self.caller();
+-            self.send_message(object, b"EMPTY", None, &[], caller)?;
++            self.pinned("redirect", |this| this.send_message(object, b"EMPTY", None, &[], caller))?;
+         }
+         for line in lines {
+             let value = self.text(line);
+             self.roots.push_temp(value);
+             let caller = self.caller();
+-            self.send_message(object, b"APPEND", None, &[Some(value)], caller)?;
++            self.pinned("redirect", |this| this.send_message(object, b"APPEND", None, &[Some(value)], caller))?;
+         }
+         Ok(())
+     }
+@@ -933,8 +930,7 @@ impl Interp {
+             return Ok(None);
+         }
+         let caller = self.caller();
+-        let answer = self
+-            .send_message(value, b"ABSOLUTEPATH", None, &[], caller)?
++        let answer = self.pinned("redirect", |this| this.send_message(value, b"ABSOLUTEPATH", None, &[], caller))?
+             .unwrap_or(ObjRef::NIL);
+         Ok(Some(self.string_value_text(answer)))
+     }
+diff --git i/rust/crates/rexx-exec/src/run.rs w/rust/crates/rexx-exec/src/run.rs
+index 0390ed718..1fdae2dad 100644
+--- i/rust/crates/rexx-exec/src/run.rs
++++ w/rust/crates/rexx-exec/src/run.rs
+@@ -77,7 +77,7 @@ mod condition;
+ 
+ // `CALL` and function calls: resolving the name, running the arguments, entering the callee.
+ mod call;
+-pub(crate) use call::{CallEntry, CallResolution, MAX_ACTIVATION_DEPTH};
++pub(crate) use call::{Begun, CallEntry, CallResolution, CallTail, MAX_ACTIVATION_DEPTH};
+ #[cfg(test)]
+ use call::{Entered, entered_receiver};
+ 
+@@ -380,6 +380,21 @@ impl Interp {
+     /// }
+     /// ```
+     pub(crate) fn run_activation(&mut self) -> Result<Ended, Failure> {
++        #[cfg(feature = "spike-pins")]
++        let saved = self.count_driver_root();
++        let ended = match self.prepare_level() {
++            Ok(level) => self.drive(level),
++            Err(failure) => Err(failure),
++        };
++        #[cfg(feature = "spike-pins")]
++        self.unpin(saved);
++        ended
++    }
++
++    /// **SPIKE.** Everything `run_activation` does before it runs the chunk:
++    /// the calling convention recorded on the activation, and the body's
++    /// program, plan and chunk, owned so a suspended level can keep them.
++    pub(crate) fn prepare_level(&mut self) -> Result<crate::ir::Level, Failure> {
+         // `code` is bound to the activation on top of the stack at entry,
+         // while every `pc` read and write below goes to whatever is on top
+         // *now*. Those are the same frame only because `step` leaves the
+@@ -442,7 +457,13 @@ impl Interp {
+         let Some(chunk) = self.chunk_for(key, self.chunk_trace(), body, &plan) else {
+             return Err(Loud::chunk_refused().into());
+         };
+-        self.run_chunk(&code, &chunk, Some(&program.source))
++        let _ = code;
++        Ok(crate::ir::Level {
++            program,
++            plan,
++            chunk,
++            selector,
++        })
+     }
+ 
+     /// Transfers "is this the first instruction executed in this activation"
+@@ -1827,7 +1848,7 @@ impl Interp {
+                 // library suite from 788 to 790.
+                 self.roots.push_temp(argument);
+                 let caller = self.caller();
+-                self.send_message(route, crate::dispatch::SAY, None, &[Some(argument)], caller)?;
++                self.pinned("conversion-say", |this| this.send_message(route, crate::dispatch::SAY, None, &[Some(argument)], caller))?;
+             }
+             _ => {
+                 self.out.extend_from_slice(&line);
+@@ -1961,7 +1982,7 @@ impl Interp {
+         let sent = owed
+             .and_then(|()| self.validate_scope_override(target, start_scope))
+             .and_then(|()| {
+-                self.send_message(target, &message, start_scope, &values[mark..], caller)
++                self.pinned("forward", |this| this.send_message(target, &message, start_scope, &values[mark..], caller))
+             });
+         self.give_value_buffer(values, mark);
+         let sent = sent?;
+@@ -2449,7 +2470,7 @@ impl Interp {
+                 setter.push(b'=');
+                 self.validate_scope_override(receiver, scope)?;
+                 let caller = self.caller();
+-                let answer = self.send_message(receiver, &setter, scope, &values, caller)?;
++                let answer = self.pinned("assign-target", |this| this.send_message(receiver, &setter, scope, &values, caller))?;
+                 if let Some(shown) = answer.and_then(|answer| self.intermediate_text(answer)) {
+                     self.trace_assignment(indent, &setter, &shown);
+                 }
+@@ -3591,8 +3612,7 @@ impl Interp {
+         let argument = self.text(name);
+         self.roots.push_temp(argument);
+         let caller = self.caller();
+-        let built = self
+-            .send_message(class, b"NEW", None, &[Some(argument)], caller)?
++        let built = self.pinned("stream", |this| this.send_message(class, b"NEW", None, &[Some(argument)], caller))?
+             .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
+         if added && let Some(table) = self.stream_table_mut() {
+             table.insert(qualified.into_boxed_slice(), built);
+diff --git i/rust/crates/rexx-exec/src/run/call.rs w/rust/crates/rexx-exec/src/run/call.rs
+index b4ac3758f..ef2ff489a 100644
+--- i/rust/crates/rexx-exec/src/run/call.rs
++++ w/rust/crates/rexx-exec/src/run/call.rs
+@@ -42,6 +42,25 @@ pub(super) enum Entered {
+     Routine(InstalledRoutine),
+ }
+ 
++/// **SPIKE.** What [`Interp::begin_call`] left for its caller to do.
++pub(crate) enum Begun {
++    /// The callee ran no activation, and this is what it answered.
++    Done(Ended),
++    /// The callee's activation is pushed and its body has yet to run.
++    Entered(CallTail),
++}
++
++/// **SPIKE.** The level state a pushed call saved, which
++/// [`Interp::finish_call`] restores.
++pub(crate) struct CallTail {
++    entered: Entered,
++    saved_clause_state: crate::clause::SavedClauseState,
++    saved_base: usize,
++    saved_offset: usize,
++    saved_line: Option<usize>,
++    saved_context: crate::CallContext,
++}
++
+ /// How the callee was reached: written in the program, or delivered to it.
+ #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+ pub(crate) enum CallEntry {
+@@ -437,7 +456,11 @@ impl Interp {
+                 .expect("a row with no body names the phase that owes it");
+             return Err(Loud::internal_routine(row.name.as_bytes(), owner).into());
+         };
++        #[cfg(feature = "spike-pins")]
++        let saved = self.pin_as(format!("internal:{}", row.name));
+         let outcome = body(self, row.name.as_bytes(), values);
++        #[cfg(feature = "spike-pins")]
++        self.unpin(saved);
+         if let Err(failure) = &outcome {
+             // The oracle reports one of these under its own routine line,
+             // whether the argument marshalling or the body raised -- measured,
+@@ -539,6 +562,28 @@ impl Interp {
+         call_type: CallType,
+         entry: CallEntry,
+     ) -> Result<Ended, Failure> {
++        match self.begin_call(resolved, name, arguments, call_type, entry)? {
++            Begun::Done(ended) => Ok(ended),
++            Begun::Entered(tail) => {
++                #[cfg(feature = "spike-pins")]
++                self.count_pinned_call();
++                let ended = self.run_activation();
++                self.finish_call(tail, ended)
++            }
++        }
++    }
++
++    /// **SPIKE.** [`Interp::invoke_call_over`] up to the point its callee's
++    /// body would run: either the whole call, for a callee that runs no
++    /// activation, or the activation pushed and the level state saved.
++    pub(crate) fn begin_call(
++        &mut self,
++        resolved: Resolved,
++        name: &[u8],
++        arguments: Vec<Option<ObjRef>>,
++        call_type: CallType,
++        entry: CallEntry,
++    ) -> Result<Begun, Failure> {
+         // **The builtin outcome ends here**, before `SIGL`, before the depth
+         // guard and before any activation is pushed -- each of those three is
+         // the label path's, and the oracle answers that the builtin path has
+@@ -562,7 +607,7 @@ impl Interp {
+             Resolved::Library(_) | Resolved::External | Resolved::Unresolved
+         ) && let Some(handled) = self.call_checkpoint(name, &arguments)?
+         {
+-            return Ok(Ended::Returned(handled));
++            return Ok(Begun::Done(Ended::Returned(handled)));
+         }
+         if let Resolved::Unresolved = resolved {
+             return Err(Raised::routine_not_found(name).into());
+@@ -570,7 +615,7 @@ impl Interp {
+         if let Resolved::Library(program) = resolved {
+             return self
+                 .enter_library_program(program, Some(arguments))
+-                .map(Ended::Returned);
++                .map(|value| Begun::Done(Ended::Returned(value)));
+         }
+         // **And the external file ends here for the same reason**, which is
+         // the whole of why it is not an `Entered`: a file the search found is
+@@ -578,7 +623,7 @@ impl Interp {
+         if let Resolved::External = resolved {
+             return self
+                 .enter_external_program(name, arguments, call_type)
+-                .map(Ended::Returned);
++                .map(|value| Begun::Done(Ended::Returned(value)));
+         }
+ 
+         // A library routine merged into the package, and a `::ROUTINE` bound
+@@ -587,18 +632,18 @@ impl Interp {
+         if let Resolved::MergedLibraryRoutine(code) = resolved {
+             return self
+                 .run_library_routine(code, name, &arguments)
+-                .map(Ended::Returned);
++                .map(|value| Begun::Done(Ended::Returned(value)));
+         }
+         if let Resolved::Routine(installed) = resolved {
+             if let Some(code) = self.library_routine_code(installed) {
+                 return self
+                     .run_library_routine(code, name, &arguments)
+-                    .map(Ended::Returned);
++                    .map(|value| Begun::Done(Ended::Returned(value)));
+             }
+             if let Some(row) = self.rexx_routine_row(installed) {
+                 return self
+                     .run_internal_as(row, Some(name), &arguments)
+-                    .map(|value| Ended::Returned(Some(value)));
++                    .map(|value| Begun::Done(Ended::Returned(Some(value))));
+             }
+         }
+ 
+@@ -801,7 +846,31 @@ impl Interp {
+             },
+         );
+ 
+-        let ended = self.run_activation();
++        Ok(Begun::Entered(CallTail {
++            entered,
++            saved_clause_state,
++            saved_base,
++            saved_offset,
++            saved_line,
++            saved_context,
++        }))
++    }
++
++    /// **SPIKE.** [`Interp::invoke_call_over`] from the point its callee's
++    /// body has run and answered `ended`.
++    pub(crate) fn finish_call(
++        &mut self,
++        tail: CallTail,
++        ended: Result<Ended, Failure>,
++    ) -> Result<Ended, Failure> {
++        let CallTail {
++            entered,
++            saved_clause_state,
++            saved_base,
++            saved_offset,
++            saved_line,
++            saved_context,
++        } = tail;
+         if let Err(failure) = &ended {
+             self.capture_activation_frame(failure);
+         }
+@@ -1066,7 +1135,7 @@ impl Interp {
+ 
+     /// What a `CALL` does with the outcome its callee handed back: the
+     /// caller's own `>>>` and `RESULT`.
+-    fn settle_call_result(&mut self, ended: Ended, base_indent: usize) -> Result<Flow, Failure> {
++    pub(crate) fn settle_call_result(&mut self, ended: Ended, base_indent: usize) -> Result<Flow, Failure> {
+         let value = match ended {
+             // `EXIT` inside the callee ends the program rather than the
+             // call, and so does running off the end of the body -- measured
+diff --git i/rust/crates/rexx-exec/src/run/condition.rs w/rust/crates/rexx-exec/src/run/condition.rs
+index 8c89dc3cc..8cc005bc7 100644
+--- i/rust/crates/rexx-exec/src/run/condition.rs
++++ w/rust/crates/rexx-exec/src/run/condition.rs
+@@ -540,14 +540,14 @@ impl Interp {
+         // `internalCallTrap` passes `OREF_NULL` where `internalCall` passes
+         // the caller's receiver, so the handler's calling convention carries
+         // none -- `entered_receiver` has the measurement for both.
+-        let ended = self.resolve_and_run_call(
++        let ended = self.pinned("trap-handler", |this| this.resolve_and_run_call(
+             code,
+             &trap.label,
+             true,
+             &[],
+             CallType::Subroutine,
+             CallEntry::Trap,
+-        );
++        ));
+         // A trap queued by the handler that just ran is not one the
+         // interrupted clause owes, and `in_clause`'s tripwire has to be able
+         // to tell the two apart -- see the field's own doc comment.
+diff --git i/rust/crates/rexx-exec/src/run/loops.rs w/rust/crates/rexx-exec/src/run/loops.rs
+index 7075a9c5d..a02a2797f 100644
+--- i/rust/crates/rexx-exec/src/run/loops.rs
++++ w/rust/crates/rexx-exec/src/run/loops.rs
+@@ -578,11 +578,11 @@ impl Interp {
+             if self.lookup(value, b"MAKEARRAY", None).is_none() {
+                 return Ok(None);
+             }
+-            return self.send_message(value, b"MAKEARRAY", None, &[], caller);
++            return self.pinned("conversion-do-over", |this| this.send_message(value, b"MAKEARRAY", None, &[], caller));
+         }
+         let wanted = self.text_built(b"ARRAY".to_vec());
+         self.roots.push_temp(wanted);
+-        self.send_message(value, b"REQUEST", None, &[Some(wanted)], caller)
++        self.pinned("conversion-do-over", |this| this.send_message(value, b"REQUEST", None, &[Some(wanted)], caller))
+     }
+ 
+     /// The one `DO OVER` target this crate still refuses: one of the
+diff --git i/rust/crates/rexx-exec/src/security.rs w/rust/crates/rexx-exec/src/security.rs
+index 002622dce..45f5386c8 100644
+--- i/rust/crates/rexx-exec/src/security.rs
++++ w/rust/crates/rexx-exec/src/security.rs
+@@ -110,7 +110,7 @@ impl Interp {
+         let directory = self.security_arguments(entries)?;
+         self.roots.push_temp(directory);
+         let caller = self.caller();
+-        let answer = self.send_message(manager, message, None, &[Some(directory)], caller)?;
++        let answer = self.pinned("security", |this| this.send_message(manager, message, None, &[Some(directory)], caller))?;
+         let Some(answer) = answer else {
+             return Err(Raised::no_result(message).into());
+         };
+@@ -137,13 +137,13 @@ impl Interp {
+             let index = self.text(name);
+             self.roots.push_temp(index);
+             let caller = self.caller();
+-            self.send_message(
++            self.pinned("security", |this| this.send_message(
+                 directory,
+                 b"PUT",
+                 None,
+                 &[Some(*value), Some(index)],
+                 caller,
+-            )?;
++            ))?;
+         }
+         self.roots.pop_frame(frame);
+         Ok(directory)
+@@ -169,7 +169,7 @@ impl Interp {
+         let index = self.text(name);
+         self.roots.push_temp(index);
+         let caller = self.caller();
+-        let answer = self.send_message(directory, b"AT", None, &[Some(index)], caller)?;
++        let answer = self.pinned("security", |this| this.send_message(directory, b"AT", None, &[Some(index)], caller))?;
+         Ok(answer.filter(|value| *value != ObjRef::NIL))
+     }
+ }
+diff --git i/rust/crates/rexx-exec/src/trace.rs w/rust/crates/rexx-exec/src/trace.rs
+index a8ea31e9d..e027dd6e5 100644
+--- i/rust/crates/rexx-exec/src/trace.rs
++++ w/rust/crates/rexx-exec/src/trace.rs
+@@ -497,7 +497,7 @@ impl Interp {
+     pub(crate) fn intermediate_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
+         self.trace_mode()
+             .intermediates
+-            .then(|| self.string_value_text(value))
++            .then(|| self.pinned("trace-render", |this| this.string_value_text(value)))
+     }
+ 
+     /// `value`'s rendered bytes, or `None` when no **result-level** trace line
+@@ -507,7 +507,7 @@ impl Interp {
+     pub(crate) fn result_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
+         self.trace_mode()
+             .results
+-            .then(|| self.string_value_text(value))
++            .then(|| self.pinned("trace-render", |this| this.string_value_text(value)))
+     }
+ 
+     /// `>I>`/`<I<` (`TRACE_PREFIX_INVOCATION`/`_INVOCATION_EXIT`): a routine
