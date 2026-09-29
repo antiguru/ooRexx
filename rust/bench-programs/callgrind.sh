@@ -12,7 +12,8 @@
 #
 # Prints one table: per program, the mean exlibc count per binary, each
 # binary's delta against the first, and each binary's spread across rounds.
-# Every run must exit 0, and every binary must print the same stdout.
+# Every run must exit 0, and every binary must print the same stdout except
+# on TIMED, whose output reports timings.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 rounds=2 jobs=8 out=
@@ -48,6 +49,7 @@ if [ "$on_disk" != "$listed" ]; then
     diff <(echo "$listed") <(echo "$on_disk") >&2
     exit 2
 fi
+TIMED="heapshape rexxcps"
 prog() {
     if [ "$1" = rexxcps ]; then echo "$here/../bench-rexxcps/rexxcps.rex"; else echo "$here/$1.rex"; fi
 }
@@ -97,7 +99,7 @@ for p in $PROGRAMS; do
             if [ "$(cat "$out/$p.$name.r$r.rc")" != 0 ]; then
                 echo "$p $name r$r exited $(cat "$out/$p.$name.r$r.rc")" >&2; status=1
             fi
-            if ! cmp -s "$out/$p.$name.r$r.out" "$out/$p.${names[0]}.r1.out"; then
+            if ! [[ " $TIMED " == *" $p "* ]] && ! cmp -s "$out/$p.$name.r$r.out" "$out/$p.${names[0]}.r1.out"; then
                 echo "$p $name r$r stdout differs from ${names[0]} r1" >&2; status=1
             fi
         done
@@ -117,7 +119,7 @@ for p in progs:
     mean = {b: sum(rows[(b, p)]) / len(rows[(b, p)]) for b in names}
     base = mean[names[0]]
     cells = [p] + [f"{mean[b]:.0f}" for b in names]
-    cells += [f"{100 * (mean[b] - base) / base:+.3f}" for b in names[1:]]
+    cells += [f"{100 * (mean[b] - base) / base:+.4f}" for b in names[1:]]
     cells += [f"{100 * (max(rows[(b, p)]) - min(rows[(b, p)])) / mean[b]:.4f}" for b in names]
     print("\t".join(cells))
 EOF
