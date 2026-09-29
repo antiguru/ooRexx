@@ -209,6 +209,7 @@ git archive COMMIT | tar -x -C $S/trees/NAME       # base 1754a3b5a, r1 0a4c5f46
 find $S/trees/NAME -type f -exec touch {} +
 cd $S/trees/NAME/rust && CARGO_TARGET_DIR=$S/tgt/NAME cargo build --release -p rexx-exec --bin rexx-run > $S/logs/build-NAME.log 2>&1
 /bin/grep -a -c 'Compiling rexx-exec' $S/logs/build-NAME.log                 # 1 for each NAME
+cp $S/tgt/NAME/release/rexx-run $S/bin/NAME/rexx-run
 sha256sum < $S/bin/NAME/rexx-run
 objcopy -O binary --only-section=.text $S/bin/NAME/rexx-run /dev/stdout | wc -c
 ```
