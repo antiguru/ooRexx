@@ -18,7 +18,7 @@ use rexx_parse::{
     AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, ClassRef, Directive,
     DirectiveKind, MethodDirective, Program, SymbolId,
 };
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::rc::Rc;
 
 /// Every class this `::CLASS` names: its `SUBCLASS`/`MIXINCLASS` target (one
@@ -111,8 +111,8 @@ pub(super) fn unresolved_external(kind: &DirectiveKind) -> Option<Vec<u8>> {
 /// can resolve against: the index of every `::CLASS` the file declares, and
 /// the object each of the ones installed so far became.
 pub(super) struct FileClasses<'a> {
-    pub(super) declared: &'a HashMap<Box<[u8]>, usize>,
-    pub(super) installed: &'a HashMap<usize, ObjRef>,
+    pub(super) declared: &'a FxHashMap<Box<[u8]>, usize>,
+    pub(super) installed: &'a FxHashMap<usize, ObjRef>,
 }
 
 /// `directive`'s own line number and clause text, as a traceback echoes them.
@@ -132,7 +132,7 @@ pub(super) fn directive_clause(program: &Rc<Program>, directive: &Directive) -> 
 /// that this file also declares, unqualified.
 fn class_dependencies<'a>(
     class: &'a ClassDirective,
-    declared: &'a HashMap<Box<[u8]>, usize>,
+    declared: &'a FxHashMap<Box<[u8]>, usize>,
 ) -> impl Iterator<Item = usize> + 'a {
     class_references(class)
         .filter(|target| target.namespace.is_none())
@@ -149,7 +149,7 @@ fn class_dependencies<'a>(
 /// ```
 pub(super) fn class_install_order(
     program: &Program,
-    declared: &HashMap<Box<[u8]>, usize>,
+    declared: &FxHashMap<Box<[u8]>, usize>,
 ) -> Result<Vec<usize>, usize> {
     /// Where a directive is in the walk. Absent from the map is "not yet
     /// looked at".
@@ -157,7 +157,7 @@ pub(super) fn class_install_order(
         OnStack,
         Done,
     }
-    let mut state: HashMap<usize, Visit> = HashMap::new();
+    let mut state: FxHashMap<usize, Visit> = FxHashMap::default();
     let mut order = Vec::new();
     for root in 0..program.directives.len() {
         if !matches!(program.directives[root].kind, DirectiveKind::Class(_)) {
@@ -288,8 +288,8 @@ pub(super) fn member_dictionary_keys(kind: &DirectiveKind) -> Vec<(Vec<u8>, bool
 
 /// Which directives each `::CLASS` in `program` owns, keyed by that
 /// `::CLASS`'s own index and in source order within a class.
-pub(super) fn class_members(program: &Program) -> HashMap<usize, Vec<usize>> {
-    let mut members: HashMap<usize, Vec<usize>> = HashMap::new();
+pub(super) fn class_members(program: &Program) -> FxHashMap<usize, Vec<usize>> {
+    let mut members: FxHashMap<usize, Vec<usize>> = FxHashMap::default();
     let mut current: Option<usize> = None;
     for (index, directive) in program.directives.iter().enumerate() {
         // A synthetic directive belongs to no class -- see the skip in
@@ -356,9 +356,9 @@ pub(super) fn annotation_target<'a>(
     program: &Program,
     target: &'a AnnotationTarget,
     current_class: Option<usize>,
-    claimed: &HashMap<(Option<usize>, bool, Vec<u8>), usize>,
-    declared_classes: &HashMap<Vec<u8>, usize>,
-    declared_routines: &HashMap<Vec<u8>, usize>,
+    claimed: &FxHashMap<(Option<usize>, bool, Vec<u8>), usize>,
+    declared_classes: &FxHashMap<Vec<u8>, usize>,
+    declared_routines: &FxHashMap<Vec<u8>, usize>,
 ) -> Result<Vec<AnnotatedSite>, MissingTarget<'a>> {
     // `findMethod`'s own order, instance dictionary before class.
     let member = |name: &[u8]| -> Option<usize> {

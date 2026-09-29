@@ -6,6 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+# A hasher with no per-process seed.
+rustc-hash = "2.1.2"
+
 # `ObjRef` and its generation field, which is what `handles.rs` turns into an
 # opaque `RexxObjectPtr` and back (D5).
 rexx-core = { path = "../rexx-core" }

@@ -513,6 +513,7 @@ version = "0.1.0"
 dependencies = [
  "libloading",
  "rexx-core",
+ "rustc-hash",
 ]
 
 [[package]]
@@ -554,6 +555,7 @@ dependencies = [
  "rexx-lib",
  "rexx-num",
  "rexx-parse",
+ "rustc-hash",
  "rustix",
 ]
 
@@ -591,6 +593,7 @@ dependencies = [
  "criterion",
  "rexx-inventory",
  "rexx-num",
+ "rustc-hash",
 ]
 
 [[package]]

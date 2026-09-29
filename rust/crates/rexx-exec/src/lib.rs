@@ -18,7 +18,8 @@ use rexx_parse::{
     CodeBody, ExprKind, InstructionKind, Operator, Program, SymbolId, SymbolTable, compound_parts,
     parse_program,
 };
-use std::collections::{HashMap, VecDeque};
+use rustc_hash::FxHashMap;
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 // The value model: `text`/`number`/`to_text`/`to_number` on `Interp`, and the
@@ -1092,10 +1093,10 @@ struct Interp {
     /// What each program's `::OPTIONS` directives left on its package,
     /// entered by `Interp::install_directives` and read by every activation
     /// of that program's code.
-    package_options: HashMap<ProgramId, PackageOptions>,
+    package_options: FxHashMap<ProgramId, PackageOptions>,
     /// The security manager each package carries, written by all three
     /// `setSecurityManager` setters and read by every checkpoint.
-    security_managers: HashMap<ProgramId, ObjRef>,
+    security_managers: FxHashMap<ProgramId, ObjRef>,
     /// **`NameHasher` and not `RandomState`**, for the reason that alias's own
     /// doc gives and with the same shape of key behind it: a `BodyKey` is a
     /// pair of small integers this interpreter mints itself, so the
@@ -1124,17 +1125,17 @@ struct Interp {
     /// Every `::ROUTINE` a program installs, keyed by the program and then by
     /// the routine's **upcased** name, holding its index in
     /// `Program::directives`.
-    routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
+    routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, InstalledRoutine>>,
     /// The subset of [`routines`] a `::ROUTINE ... PUBLIC` filed -- the
     /// oracle's `publicRoutines`, a second table beside `routines` exactly as
     /// [`package_public_classes`] is beside [`package_classes`].
-    package_public_routines: HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
+    package_public_routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, InstalledRoutine>>,
     /// The routines a program imported -- `mergedPublicRoutines`: every
     /// `::REQUIRES ... LIBRARY`'s library routines, then each `::REQUIRES`'s
     /// public and imported routines, a name keeping its first entry
     /// (`PackageClass::mergeLibrary` and `::mergeRequired`,
     /// `classes/PackageClass.cpp:693-772`).
-    merged_public_routines: HashMap<ProgramId, HashMap<Box<[u8]>, MergedRoutine>>,
+    merged_public_routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, MergedRoutine>>,
     /// The public classes a program's `::REQUIRES` directives imported --
     /// `mergedPublicClasses`, merged alongside the routines above and read by
     /// `PackageClass::findClass` between the package's own installed classes
@@ -1146,11 +1147,11 @@ struct Interp {
     /// The packages a program's `::REQUIRES ... NAMESPACE` directives
     /// registered, under the upcased qualifier -- `PackageClass::addNamespace`
     /// (`classes/PackageClass.cpp:2152`), whose key is `name->upper()`.
-    package_namespaces: HashMap<ProgramId, HashMap<Box<[u8]>, Package>>,
+    package_namespaces: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, Package>>,
     /// The `Directory` `Package~local` answers, per package, built on first
     /// ask -- `PackageClass::getPackageLocal` (`classes/PackageClass.cpp:2131`
     /// region), which creates it lazily too.
-    package_locals: HashMap<Package, ObjRef>,
+    package_locals: FxHashMap<Package, ObjRef>,
     /// The object model message dispatch resolves against: `Setup.cpp`'s
     /// native classes, whatever `::CLASS`/`::METHOD`/`::ATTRIBUTE` have
     /// installed beside them, and the primitive methods this crate
@@ -1164,7 +1165,7 @@ struct Interp {
     environment: Option<environment::EnvironmentModel>,
     /// The arena object holding each class object's own variable pools, by
     /// class identity.
-    class_variables: HashMap<ObjRef, ObjRef>,
+    class_variables: FxHashMap<ObjRef, ObjRef>,
     /// The classes each program's own `::CLASS` directives installed, keyed by
     /// the uppercased name -- `PackageClass`'s installed-class table, which
     /// `.NAME` resolution consults ahead of `.local` and `.environment`.
@@ -1177,44 +1178,44 @@ struct Interp {
     package_public_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
     /// Which program's `::CLASS` directive created a class -- the other
     /// direction of [`package_classes`], which `~package` reads.
-    class_packages: HashMap<ObjRef, ClassPackage>,
+    class_packages: FxHashMap<ObjRef, ClassPackage>,
     /// The one empty argument list every call that has none shares.
     empty_arguments: Rc<[Option<ObjRef>]>,
     /// The package objects `~package` answers, keyed by the package itself
     /// -- see [`crate::plan::Package`] for why the interpreter's own is a
     /// variant rather than an absent program id.
-    package_objects: HashMap<Package, ObjRef>,
+    package_objects: FxHashMap<Package, ObjRef>,
     /// The one `Routine` object standing for a program's own main section --
     /// what `RexxContext~executable` answers from a `PROGRAM` or
     /// `INTERNALCALL` context.
-    program_routine_objects: HashMap<ProgramId, ObjRef>,
+    program_routine_objects: FxHashMap<ProgramId, ObjRef>,
     /// The `.METHODS`/`.ROUTINES`/`.RESOURCES` tables, keyed by the program
     /// whose directives fill them and by which of those names it answers.
-    package_tables: HashMap<(ProgramId, environment::PackageTable), ObjRef>,
+    package_tables: FxHashMap<(ProgramId, environment::PackageTable), ObjRef>,
     /// The one `Routine` object standing for each installed routine.
-    routine_objects: HashMap<InstalledRoutine, ObjRef>,
+    routine_objects: FxHashMap<InstalledRoutine, ObjRef>,
     /// The one `Routine` object standing for each library routine an
     /// imported-routine table holds, by its [`Interp::library_codes`] row:
     /// `mergeLibrary` merges the library package's own routine objects, so
     /// every package importing one answers the same object.
-    library_routine_objects: HashMap<usize, ObjRef>,
+    library_routine_objects: FxHashMap<usize, ObjRef>,
     /// The packages each program has imported, in the order they were added
     /// -- `PackageClass`'s `loadedPackages`, which `~importedPackages`
     /// answers a copy of.
-    package_imports: HashMap<ProgramId, Vec<Package>>,
+    package_imports: FxHashMap<ProgramId, Vec<Package>>,
     /// The package that built each program, for one an executable created
     /// rather than one loaded in its own right: `newFile`'s and
     /// `Package~new`'s parent context. A routine lookup that misses a
     /// program's own table and its imports walks this.
-    package_parents: HashMap<ProgramId, Package>,
+    package_parents: FxHashMap<ProgramId, Package>,
     /// The value each `::CONSTANT` accessor answers, keyed by the directive
     /// that declared it.
-    constant_values: HashMap<(ProgramId, usize), ObjRef>,
+    constant_values: FxHashMap<(ProgramId, usize), ObjRef>,
     /// The `StringTable` each annotated thing's `~annotations` answers, keyed
     /// by the thing -- see [`environment::Annotated`] for the key space and
     /// [`Interp::annotation_table`] for why the table is kept rather than
     /// rebuilt.
-    annotations: HashMap<environment::Annotated, ObjRef>,
+    annotations: FxHashMap<environment::Annotated, ObjRef>,
     /// How many methods have been compiled from source text, which is what
     /// [`environment::Annotated::Compiled`] counts -- see that variant for
     /// why a compiled method's annotation table is keyed by a count and not
@@ -1223,7 +1224,7 @@ struct Interp {
     /// The `Method` object `Class~method` answers, keyed by the class and the
     /// instance dictionary name -- see [`Interp::method_object`] for the two
     /// oracle answers that make one object per entry observable.
-    method_objects: HashMap<(ObjRef, Box<[u8]>), ObjRef>,
+    method_objects: FxHashMap<(ObjRef, Box<[u8]>), ObjRef>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
@@ -1239,7 +1240,7 @@ struct Interp {
     /// The programs the library bootstrap loaded, in load order.
     library_programs: Vec<ProgramId>,
     /// The name a program compiled from method source text reports under.
-    compiled_method_names: HashMap<ProgramId, Box<[u8]>>,
+    compiled_method_names: FxHashMap<ProgramId, Box<[u8]>>,
     /// Whether any object has been given a method of its own, which is what
     /// keeps the per-object dictionary off a send's path in a program that
     /// never sends `SETMETHOD` -- see `Interp::own_method_entry`.
@@ -1250,26 +1251,26 @@ struct Interp {
     /// What each `Method` and `Routine` object this crate has handed out
     /// reports on -- see [`ExecutableSource`], which carries why this is not
     /// [`Interp::table_method_bodies`] with more rows in it.
-    executable_sources: HashMap<ObjRef, ExecutableRecord>,
+    executable_sources: FxHashMap<ObjRef, ExecutableRecord>,
     /// For a stem some other stem's `EXPOSE` made tails of, a weak reference
     /// to each such stem. The stems are not roots through this.
-    stem_exposers: HashMap<ObjRef, Vec<ObjRef>>,
+    stem_exposers: FxHashMap<ObjRef, Vec<ObjRef>>,
     /// What `Method`'s four setters have written on each object they have
     /// been sent to, over what its directive declared -- see
     /// [`dispatch::executable::MethodFlagWrites`].
-    method_flag_writes: HashMap<ObjRef, dispatch::executable::MethodFlagWrites>,
+    method_flag_writes: FxHashMap<ObjRef, dispatch::executable::MethodFlagWrites>,
     /// What the send behind each `Message` object this crate has built ended
     /// with -- `MessageClass`'s `flagResultReturned` and `flagRaiseError`
     /// (`classes/MessageClass.hpp:61`-`:62`) and its `condition` field (`:135`).
-    message_outcomes: HashMap<ObjRef, Option<Box<Raised>>>,
+    message_outcomes: FxHashMap<ObjRef, Option<Box<Raised>>>,
     /// The methods a directive implements itself -- see [`GeneratedMethod`]
     /// for why these are not rows of [`method_bodies`], which is a
     /// measurement rather than a taxonomy.
-    generated_methods: HashMap<MethodId, GeneratedMethod>,
+    generated_methods: FxHashMap<MethodId, GeneratedMethod>,
     /// Which `LIBRARY REXX` entry point each `::METHOD ... EXTERNAL` bound
     /// to, keyed by the identity [`Interp::install_one_method`] minted for
     /// its dictionary key.
-    native_externals: HashMap<MethodId, &'static dispatch::native::NativeExternal>,
+    native_externals: FxHashMap<MethodId, &'static dispatch::native::NativeExternal>,
     /// The native activations on the stack, innermost last. Each carries the
     /// objects an extension's handles name (D5), rooted by
     /// [`Interp::object_roots`] for exactly as long as the frame is on this
@@ -1287,12 +1288,12 @@ struct Interp {
     /// frees, and of a handle-carried value, which no collection frees, that
     /// no call in flight ([`Interp::kept_holders`]) and no global reference
     /// holds.
-    kept_strings: std::collections::HashMap<ObjRef, Box<[u8]>>,
+    kept_strings: rustc_hash::FxHashMap<ObjRef, Box<[u8]>>,
     /// The terminated copies of message and routine names answered, by name.
-    kept_names: std::collections::HashMap<Box<[u8]>, Box<[u8]>>,
+    kept_names: rustc_hash::FxHashMap<Box<[u8]>, Box<[u8]>>,
     /// For each handle-carried value in [`Interp::kept_strings`], how many
     /// native calls in flight asked for its copy.
-    kept_holders: std::collections::HashMap<ObjRef, usize>,
+    kept_holders: rustc_hash::FxHashMap<ObjRef, usize>,
     /// How many of [`Interp::kept_strings`]' copies are of handle-carried
     /// values, and the count past which they are pruned without waiting for
     /// a collection.
@@ -1308,7 +1309,7 @@ struct Interp {
     /// The command handlers extensions registered, by upper-cased environment
     /// name (`InterpreterInstance::commandHandlers`). Emptied at the first
     /// library close, since nothing ties a handler's code to its library.
-    command_handlers: HashMap<Box<[u8]>, Rc<rexx_api::load::CommandHandler>>,
+    command_handlers: FxHashMap<Box<[u8]>, Rc<rexx_api::load::CommandHandler>>,
     /// The thread context every native call and package hook is handed,
     /// which an extension may keep for as long as this interpreter runs.
     thread: rexx_api::ffi::ThreadContext,
@@ -1320,11 +1321,11 @@ struct Interp {
     /// Which library procedure each `::METHOD`/`::ATTRIBUTE ... EXTERNAL
     /// "LIBRARY <name>"` bound to, keyed by the identity
     /// [`Interp::install_one_method`] minted for its dictionary key.
-    library_externals: HashMap<MethodId, LibraryBinding>,
+    library_externals: FxHashMap<MethodId, LibraryBinding>,
     /// Which package declared each `EXTERNAL` binding, keyed the same way.
     /// A raise the native boundary makes for itself is reported against this
     /// package rather than against the running program.
-    external_packages: HashMap<MethodId, ProgramId>,
+    external_packages: FxHashMap<MethodId, ProgramId>,
     /// The package of each library procedure's shared code object, `None`
     /// until a directive binds it, indexed by [`ExecutableSource::Loaded`].
     ///
@@ -1337,28 +1338,28 @@ struct Interp {
     /// own routine reports the first binder too.
     library_codes: Vec<Option<ProgramId>>,
     /// Which [`Interp::library_codes`] row each procedure owns.
-    library_code_rows: HashMap<LibraryCodeKey, usize>,
+    library_code_rows: FxHashMap<LibraryCodeKey, usize>,
     /// The procedure each [`Interp::library_codes`] row is, by row.
     library_code_keys: Vec<LibraryCodeKey>,
     /// The [`Interp::library_codes`] row each library-backed `::ROUTINE`
     /// directive bound, which is the package its routine reports.
-    library_routine_codes: HashMap<InstalledRoutine, usize>,
+    library_routine_codes: FxHashMap<InstalledRoutine, usize>,
     /// The `REXX` package routine each `::ROUTINE ... EXTERNAL "LIBRARY REXX"`
     /// directive bound.
-    rexx_routine_rows: HashMap<InstalledRoutine, &'static internal_routines::InternalRoutine>,
+    rexx_routine_rows: FxHashMap<InstalledRoutine, &'static internal_routines::InternalRoutine>,
     /// The `REXX` package routine each `loadExternalRoutine` answer over that
     /// package is.
-    rexx_routine_objects: HashMap<ObjRef, &'static internal_routines::InternalRoutine>,
+    rexx_routine_objects: FxHashMap<ObjRef, &'static internal_routines::InternalRoutine>,
     /// The [`Interp::library_codes`] row of each method a `~define` installed
     /// from a `loadExternalMethod` answer, which is the package it reports.
-    defined_library_codes: HashMap<MethodId, usize>,
+    defined_library_codes: FxHashMap<MethodId, usize>,
     /// `PackageManager::packageRoutines`
     /// (`interpreter/package/PackageManager.cpp:524`): every routine a loaded
     /// library exports, by upcased name, as the index of its slot in
     /// [`Interp::package_routine_codes`]. A later library exporting the same
     /// name replaces the slot's row and keeps its index, so a call site that
     /// resolved to the slot calls the replacement.
-    package_routines: HashMap<Vec<u8>, usize>,
+    package_routines: FxHashMap<Vec<u8>, usize>,
     /// The [`Interp::library_codes`] row each [`Interp::package_routines`]
     /// slot calls.
     package_routine_codes: Vec<usize>,
@@ -1640,15 +1641,15 @@ struct Interp {
     /// The resolved location of each program a `::REQUIRES` loaded, which is
     /// what that program's own `PARSE SOURCE`, `~package~name` and traceback
     /// report in place of [`Interp::program_path`].
-    required_paths: HashMap<ProgramId, Box<str>>,
+    required_paths: FxHashMap<ProgramId, Box<str>>,
     /// The package each `::REQUIRES` name has already loaded, keyed both by
     /// the name as written and by the file it resolved to.
-    required_packages: HashMap<Box<[u8]>, ProgramId>,
+    required_packages: FxHashMap<Box<[u8]>, ProgramId>,
     /// The programs whose first walk of [`Interp::install_directives`], which is
     /// this crate's translation, started and did not finish. The oracle gives
     /// the package of a translation that raised no routine, method or resource
     /// table (`parser/LanguageParser.cpp:1893-1908`) and no prolog (`:656-665`).
-    untranslated: std::collections::HashSet<ProgramId>,
+    untranslated: rustc_hash::FxHashSet<ProgramId>,
     /// The resolved paths whose `::REQUIRES` directives are still installing
     /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
     requires_installing: Vec<Box<str>>,
@@ -1902,7 +1903,7 @@ struct NativeFrame {
     code: Option<usize>,
     /// The handle-carried values this call asked a kept `CSTRING` of, each
     /// counted once in [`Interp::kept_holders`].
-    kept: std::collections::HashSet<ObjRef>,
+    kept: rustc_hash::FxHashSet<ObjRef>,
     /// The activation the call was made from.
     caller: Option<crate::activation::ActivationId>,
     /// Whether the code reports a package, which then leads a condition it
@@ -2006,75 +2007,75 @@ impl Interp {
             suspended: Vec::new(),
             spare_activations: Vec::new(),
             programs: Vec::new(),
-            package_options: HashMap::new(),
-            security_managers: HashMap::new(),
+            package_options: FxHashMap::default(),
+            security_managers: FxHashMap::default(),
             plans: NameMap::default(),
             deadline: None,
             clause_countdown: crate::clause::Deadline::NO_DEADLINE_SPACING,
             chunks: NameMap::default(),
             chunks_refused: 0,
             deferred: std::collections::VecDeque::new(),
-            routines: HashMap::new(),
-            package_public_routines: HashMap::new(),
-            merged_public_routines: HashMap::new(),
+            routines: FxHashMap::default(),
+            package_public_routines: FxHashMap::default(),
+            merged_public_routines: FxHashMap::default(),
             merged_public_classes: NameMap::default(),
             rexx_class_cache: NameMap::default(),
-            package_namespaces: HashMap::new(),
-            package_locals: HashMap::new(),
+            package_namespaces: FxHashMap::default(),
+            package_locals: FxHashMap::default(),
             object_model: None,
-            class_variables: HashMap::new(),
+            class_variables: FxHashMap::default(),
             environment: None,
             package_classes: NameMap::default(),
             package_public_classes: NameMap::default(),
-            class_packages: HashMap::new(),
+            class_packages: FxHashMap::default(),
             empty_arguments: Rc::from(&[][..]),
-            package_objects: HashMap::new(),
-            program_routine_objects: HashMap::new(),
-            package_tables: HashMap::new(),
-            routine_objects: HashMap::new(),
-            library_routine_objects: HashMap::new(),
-            package_imports: HashMap::new(),
-            package_parents: HashMap::new(),
-            constant_values: HashMap::new(),
-            annotations: HashMap::new(),
+            package_objects: FxHashMap::default(),
+            program_routine_objects: FxHashMap::default(),
+            package_tables: FxHashMap::default(),
+            routine_objects: FxHashMap::default(),
+            library_routine_objects: FxHashMap::default(),
+            package_imports: FxHashMap::default(),
+            package_parents: FxHashMap::default(),
+            constant_values: FxHashMap::default(),
+            annotations: FxHashMap::default(),
             compiled_methods: 0,
-            method_objects: HashMap::new(),
+            method_objects: FxHashMap::default(),
             library_bootstrap: false,
             collections_before_program: 0,
             library_programs: Vec::new(),
             method_bodies: NameMap::default(),
-            compiled_method_names: HashMap::new(),
+            compiled_method_names: FxHashMap::default(),
             object_methods: false,
             table_method_bodies: NameMap::default(),
-            executable_sources: HashMap::new(),
-            stem_exposers: HashMap::new(),
-            method_flag_writes: HashMap::new(),
-            message_outcomes: HashMap::new(),
-            generated_methods: HashMap::new(),
-            native_externals: HashMap::new(),
+            executable_sources: FxHashMap::default(),
+            stem_exposers: FxHashMap::default(),
+            method_flag_writes: FxHashMap::default(),
+            message_outcomes: FxHashMap::default(),
+            generated_methods: FxHashMap::default(),
+            native_externals: FxHashMap::default(),
             libraries: Libraries::new(),
             thread: rexx_api::ffi::ThreadContext::new(),
             #[cfg(test)]
             library_open_attempts: 0,
-            library_externals: HashMap::new(),
-            external_packages: HashMap::new(),
+            library_externals: FxHashMap::default(),
+            external_packages: FxHashMap::default(),
             library_codes: Vec::new(),
-            library_code_rows: HashMap::new(),
+            library_code_rows: FxHashMap::default(),
             library_code_keys: Vec::new(),
-            library_routine_codes: HashMap::new(),
-            defined_library_codes: HashMap::new(),
-            rexx_routine_rows: HashMap::new(),
-            rexx_routine_objects: HashMap::new(),
-            package_routines: HashMap::new(),
+            library_routine_codes: FxHashMap::default(),
+            defined_library_codes: FxHashMap::default(),
+            rexx_routine_rows: FxHashMap::default(),
+            rexx_routine_objects: FxHashMap::default(),
+            package_routines: FxHashMap::default(),
             package_routine_codes: Vec::new(),
             routine_generation: 0,
             native_handles: Vec::new(),
             native_spares: Vec::new(),
             global_references: rexx_api::handles::Table::new(),
-            command_handlers: HashMap::new(),
-            kept_strings: std::collections::HashMap::new(),
-            kept_names: std::collections::HashMap::new(),
-            kept_holders: std::collections::HashMap::new(),
+            command_handlers: FxHashMap::default(),
+            kept_strings: rustc_hash::FxHashMap::default(),
+            kept_names: rustc_hash::FxHashMap::default(),
+            kept_holders: rustc_hash::FxHashMap::default(),
             kept_carried: 0,
             kept_carried_limit: 4096,
             special_methods: Vec::new(),
@@ -2150,9 +2151,9 @@ impl Interp {
             reqstr_armed: false,
             lostdigits_armed: false,
             program_path: String::new(),
-            required_paths: HashMap::new(),
-            required_packages: HashMap::new(),
-            untranslated: std::collections::HashSet::new(),
+            required_paths: FxHashMap::default(),
+            required_packages: FxHashMap::default(),
+            untranslated: rustc_hash::FxHashSet::default(),
             requires_installing: Vec::new(),
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
         }

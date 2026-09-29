@@ -11,7 +11,7 @@
 
 //! The local-reference table: the `ObjRef` behind an extension's handle.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use rexx_core::ObjRef;
 
@@ -29,7 +29,7 @@ const _: () = assert!(usize::BITS == u64::BITS);
 /// minted before a slot was recycled cannot name the slot's next occupant.
 #[derive(Default)]
 pub struct Table {
-    entries: HashMap<usize, ObjRef>,
+    entries: FxHashMap<usize, ObjRef>,
 }
 
 impl Table {

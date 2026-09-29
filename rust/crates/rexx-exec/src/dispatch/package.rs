@@ -12,7 +12,7 @@
 //! `Package`'s readers and its four writes -- `classes/PackageClass.cpp`,
 //! bound by `memory/Setup.cpp`'s `Package` block.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use rexx_core::{Body, ObjRef};
 
@@ -531,7 +531,7 @@ fn imported_routines(
 fn routine_entries(
     interp: &mut Interp,
     program: Option<ProgramId>,
-    which: fn(&Interp) -> &HashMap<ProgramId, HashMap<Box<[u8]>, InstalledRoutine>>,
+    which: fn(&Interp) -> &FxHashMap<ProgramId, FxHashMap<Box<[u8]>, InstalledRoutine>>,
 ) -> Vec<(Box<[u8]>, ObjRef)> {
     let Some(program) = program else {
         return Vec::new();

@@ -12,7 +12,7 @@
 //! The builtin functions: which names are builtins, how many arguments each
 //! takes, and the one dispatch every implementation hangs off.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::OnceLock;
 
 use rexx_core::{Decoded, ObjRef};
@@ -616,8 +616,8 @@ const IMPLEMENTED: &[Builtin] = &[
 ];
 
 /// The builtin names Phase 4 dispatches, as a set built once.
-fn in_scope() -> &'static HashSet<&'static str> {
-    static NAMES: OnceLock<HashSet<&'static str>> = OnceLock::new();
+fn in_scope() -> &'static FxHashSet<&'static str> {
+    static NAMES: OnceLock<FxHashSet<&'static str>> = OnceLock::new();
     NAMES.get_or_init(|| rexx_inventory::builtins::in_scope().into_iter().collect())
 }
 
@@ -631,8 +631,8 @@ pub(crate) fn is_builtin(name: &[u8]) -> bool {
 /// `rexx_inventory::builtins::wholly_excluded()`. A *partially* excluded name
 /// is not here: its in-scope form still dispatches, and its excluded form is
 /// loud from inside the builtin's own code.
-fn wholly_excluded() -> &'static HashSet<&'static str> {
-    static NAMES: OnceLock<HashSet<&'static str>> = OnceLock::new();
+fn wholly_excluded() -> &'static FxHashSet<&'static str> {
+    static NAMES: OnceLock<FxHashSet<&'static str>> = OnceLock::new();
     NAMES.get_or_init(|| {
         rexx_inventory::builtins::wholly_excluded()
             .into_iter()
@@ -668,8 +668,8 @@ pub(crate) enum BuiltinTarget {
 }
 
 /// Every implemented builtin's row, keyed by the bytes a call site spells.
-fn rows() -> &'static HashMap<&'static [u8], u16> {
-    static ROWS: OnceLock<HashMap<&'static [u8], u16>> = OnceLock::new();
+fn rows() -> &'static FxHashMap<&'static [u8], u16> {
+    static ROWS: OnceLock<FxHashMap<&'static [u8], u16>> = OnceLock::new();
     ROWS.get_or_init(|| {
         IMPLEMENTED
             .iter()

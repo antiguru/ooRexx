@@ -13,7 +13,7 @@
 //! Decisions section: "compilation is whole-body and lazy: one body at a
 //! time, on first entry, cached").
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use rexx_parse::{
     Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, LoopKind, ParseSource, SymbolId,
@@ -98,14 +98,14 @@ struct Constants<'a> {
     /// which is what [`Chunk::consts`] becomes.
     values: Vec<Box<[u8]>>,
     /// Which entry a literal's bytes already have.
-    index: HashMap<&'a [u8], u32>,
+    index: FxHashMap<&'a [u8], u32>,
 }
 
 impl<'a> Constants<'a> {
     fn new() -> Constants<'a> {
         Constants {
             values: Vec::new(),
-            index: HashMap::new(),
+            index: FxHashMap::default(),
         }
     }
 

@@ -12,7 +12,8 @@
 use crate::bytes::Bytes;
 use crate::{ObjRef, SlotRef};
 use rexx_num::{Form, Number};
-use std::collections::{HashMap, TryReserveError};
+use rustc_hash::FxHashMap;
+use std::collections::TryReserveError;
 
 /// Identifies the behaviour (class + method dictionary) an object responds to.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -748,7 +749,7 @@ pub struct NativeObject {
     class: ObjRef,
     rendered: Box<[u8]>,
     string_value: Option<Box<[u8]>>,
-    entries: HashMap<Box<[u8]>, ObjRef>,
+    entries: FxHashMap<Box<[u8]>, ObjRef>,
     annotations: Option<ObjRef>,
     scope: Option<ObjRef>,
 }
@@ -759,7 +760,7 @@ impl NativeObject {
             class,
             rendered: rendered.into(),
             string_value: None,
-            entries: HashMap::new(),
+            entries: FxHashMap::default(),
             annotations: None,
             scope: None,
         }

@@ -14,7 +14,7 @@
 //! A module of its own so that the map is private to the write rule below and
 //! not to whichever module happens to resolve libraries.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::rc::Rc;
 
 use rexx_api::load::Library;
@@ -34,7 +34,7 @@ use rexx_api::load::Library;
 /// while an object of a class it contributed a method to is still reachable
 /// leaves the finalizer sweep calling an unmapped address.
 pub(crate) struct Libraries {
-    held: HashMap<Vec<u8>, Rc<Library>>,
+    held: FxHashMap<Vec<u8>, Rc<Library>>,
     order: PackageTable,
     /// The names held, in the order they loaded.
     loaded: Vec<Vec<u8>>,
@@ -43,7 +43,7 @@ pub(crate) struct Libraries {
 impl Libraries {
     pub(crate) fn new() -> Libraries {
         Libraries {
-            held: HashMap::new(),
+            held: FxHashMap::default(),
             order: PackageTable::new(),
             loaded: Vec::new(),
         }

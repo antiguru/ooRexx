@@ -6,6 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+# A hasher with no per-process seed.
+rustc-hash = "2.1.2"
+
 # The heap, the root set and the value bodies every evaluated value lives in.
 rexx-core = { path = "../rexx-core" }
 

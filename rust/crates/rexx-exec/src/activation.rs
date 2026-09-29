@@ -18,7 +18,7 @@ use crate::trace::TraceMode;
 use rexx_core::{NameMap, ObjRef, SlotFrame};
 use rexx_num::Settings;
 use rexx_parse::{CodeBody, DirectiveKind, Program};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::rc::Rc;
 
 /// How many ended activation boxes [`Interp::recycle_activation`] parks for
@@ -1171,7 +1171,7 @@ pub(crate) struct TrapMap {
     /// copies the whole `Activation` on every call. `TrapMap` is 16 bytes now
     /// and `Activation` 416 rather than 456.
     #[allow(clippy::box_collection)]
-    user: Option<Box<HashMap<Box<[u8]>, Trap>>>,
+    user: Option<Box<FxHashMap<Box<[u8]>, Trap>>>,
 }
 
 impl TrapMap {

@@ -6,6 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+# A hasher with no per-process seed.
+rustc-hash = "2.1.2"
+
 # `convert.rs` consults `Number::parse` for number ACCEPTANCE, so that "is this
 # text a Rexx number" has exactly one implementation in the workspace. The C++
 # layers it the same way: `LanguageParser` calls `RexxString::numberString()`

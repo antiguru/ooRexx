@@ -459,7 +459,7 @@ impl Interp {
             result: None,
             condition: None,
             code: None,
-            kept: std::collections::HashSet::new(),
+            kept: rustc_hash::FxHashSet::default(),
             caller: None,
             packaged: false,
         });

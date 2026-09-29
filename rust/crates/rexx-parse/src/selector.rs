@@ -11,7 +11,7 @@
 
 //! Message selectors, interned while a source is parsed.
 
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 use std::sync::Arc;
 
 /// One message name, as the parse that read it holds it.
@@ -41,7 +41,7 @@ impl std::ops::Deref for Selector {
 
 /// One parse's pool of message names.
 #[derive(Default)]
-pub(crate) struct SelectorTable(HashSet<Arc<[u8]>>);
+pub(crate) struct SelectorTable(FxHashSet<Arc<[u8]>>);
 
 impl SelectorTable {
     pub(crate) fn new() -> SelectorTable {

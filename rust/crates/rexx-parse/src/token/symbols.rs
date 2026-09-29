@@ -11,8 +11,8 @@
 
 //! Symbol interning: `SymbolId`, and the `SymbolTable` that hands them out.
 
+use rustc_hash::FxHashMap;
 use std::borrow::Cow;
-use std::collections::HashMap;
 
 /// A symbol's identity: the upcased spelling, interned. Two symbols with the
 /// same `SymbolId` name the same variable, method or label.
@@ -34,7 +34,7 @@ impl SymbolId {
 /// messages and `SIGNAL`'s label lookup.
 #[derive(Default, Debug)]
 pub struct SymbolTable {
-    by_name: HashMap<Box<str>, SymbolId>,
+    by_name: FxHashMap<Box<str>, SymbolId>,
     names: Vec<Box<str>>,
 }
 

@@ -34,7 +34,8 @@ use rexx_parse::{
     ConstantValue, Directive, DirectiveKind, Expr, GuardOption, MethodDirective, Program,
     Protection, parse_program,
 };
-use std::collections::{BTreeMap, HashMap};
+use rustc_hash::FxHashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 impl Interp {
@@ -86,7 +87,7 @@ impl Interp {
         // `::ANNOTATE ATTRIBUTE` and `::ANNOTATE CONSTANT` accept only a key
         // whose claimant is of the matching kind, which is `isAttribute()`
         // and `isConstant()` on the method object the C++ finds.
-        let mut claimed: HashMap<(Option<usize>, bool, Vec<u8>), usize> = HashMap::new();
+        let mut claimed: FxHashMap<(Option<usize>, bool, Vec<u8>), usize> = FxHashMap::default();
         // The other two tables the duplicate checks keep, each keyed by the
         // upcased name and separate from the others, so that a `::CLASS` and a
         // `::ROUTINE` of one name are not a collision. See
@@ -96,10 +97,10 @@ impl Interp {
         // resolves its target against exactly these two -- `classDependencies`
         // and `routines`, the same tables `findClassDirective` and
         // `findRoutine` read (`parser/DirectiveParser.cpp:230`, `:258`).
-        let mut declared_classes: HashMap<Vec<u8>, usize> = HashMap::new();
-        let mut declared_routines: HashMap<Vec<u8>, usize> = HashMap::new();
-        let mut declared_resources: std::collections::HashSet<Vec<u8>> =
-            std::collections::HashSet::new();
+        let mut declared_classes: FxHashMap<Vec<u8>, usize> = FxHashMap::default();
+        let mut declared_routines: FxHashMap<Vec<u8>, usize> = FxHashMap::default();
+        let mut declared_resources: rustc_hash::FxHashSet<Vec<u8>> =
+            rustc_hash::FxHashSet::default();
         // What each `::ANNOTATE` recorded, keyed by what its target names.
         // Filled in this walk and converted below, because a target's own
         // object does not exist yet: a `::CLASS` has no class object until
@@ -112,8 +113,8 @@ impl Interp {
         // as `resolveDependencies` hands its tables to the package
         // (`parser/LanguageParser.cpp:1893-1900`), so a translation that raises
         // leaves none.
-        let mut routines: HashMap<Box<[u8]>, InstalledRoutine> = HashMap::new();
-        let mut public_routines: HashMap<Box<[u8]>, InstalledRoutine> = HashMap::new();
+        let mut routines: FxHashMap<Box<[u8]>, InstalledRoutine> = FxHashMap::default();
+        let mut public_routines: FxHashMap<Box<[u8]>, InstalledRoutine> = FxHashMap::default();
         let mut routine_codes: Vec<(InstalledRoutine, usize)> = Vec::new();
         let mut rexx_routines: Vec<(
             InstalledRoutine,
@@ -359,7 +360,7 @@ impl Interp {
         // (98.9xx/43.901/the `::CONSTANT` expression evaluation), so a
         // program with both gets the translation error -- which is what
         // running the whole first pass before any of this reproduces.
-        let mut declared: HashMap<Box<[u8]>, usize> = HashMap::new();
+        let mut declared: FxHashMap<Box<[u8]>, usize> = FxHashMap::default();
         for (index, directive) in program.directives.iter().enumerate() {
             if let DirectiveKind::Class(class) = &directive.kind {
                 declared
@@ -414,7 +415,7 @@ impl Interp {
         // every `::CONSTANT` expression (`:1290`), then send `ACTIVATE` to
         // every class (`:1299`). Each pass walks `order` rather than the
         // file, because `processInstall`'s own list is the class list.
-        let mut classes: HashMap<usize, ObjRef> = HashMap::new();
+        let mut classes: FxHashMap<usize, ObjRef> = FxHashMap::default();
         for index in &order {
             let attached = members.get(index).map_or(&[][..], Vec::as_slice);
             let class =
@@ -1010,7 +1011,7 @@ impl Interp {
         program: &Rc<Program>,
         directive: &Directive,
         current_class: Option<usize>,
-        claimed: &mut HashMap<(Option<usize>, bool, Vec<u8>), usize>,
+        claimed: &mut FxHashMap<(Option<usize>, bool, Vec<u8>), usize>,
         index: usize,
     ) -> Result<(), Failure> {
         let constant = matches!(directive.kind, DirectiveKind::Constant(_));
@@ -1231,8 +1232,8 @@ impl Interp {
         program_id: ProgramId,
         program: &Rc<Program>,
         index: usize,
-        declared: &HashMap<Box<[u8]>, usize>,
-        installed: &HashMap<usize, ObjRef>,
+        declared: &FxHashMap<Box<[u8]>, usize>,
+        installed: &FxHashMap<usize, ObjRef>,
         attached: &[usize],
     ) -> Result<ObjRef, Failure> {
         let directive = &program.directives[index];

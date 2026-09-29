@@ -13,7 +13,7 @@
 //! `.NAME` resolves in, and the one chokepoint `.environment` and `.local`
 //! are read through.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use rexx_core::{BehaviourId, Body, NativeObject, ObjRef};
 
@@ -382,7 +382,7 @@ impl Interp {
         // class into the environment under its uppercased id, and that is the
         // whole of what this crate has to put there beyond the entries
         // `addToEnvironment` adds by hand.
-        let mut known: HashMap<Box<[u8]>, ObjRef> = self
+        let mut known: FxHashMap<Box<[u8]>, ObjRef> = self
             .classes()
             .registered()
             .map(|(name, id)| (name.as_bytes().into(), id))

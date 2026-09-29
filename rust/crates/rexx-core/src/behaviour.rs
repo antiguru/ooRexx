@@ -12,14 +12,14 @@
 //! Behaviours: which methods an object responds to, and what it inherits.
 
 use crate::body::{BehaviourId, MethodId};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 #[derive(Default)]
 struct BehaviourEntry {
     superclass: Option<BehaviourId>,
     /// Keyed by the uppercased message name, because Rexx uppercases message
     /// names before dispatch.
-    methods: HashMap<String, MethodId>,
+    methods: FxHashMap<String, MethodId>,
 }
 
 pub struct BehaviourTable {
