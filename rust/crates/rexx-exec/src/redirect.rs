@@ -190,7 +190,11 @@ impl IoContext {
         err: &[Vec<u8>],
     ) -> Result<(), Failure> {
         if let Some(target) = &self.output {
-            interp.write_target(target, out)?;
+            pinned!(
+                interp,
+                crate::pinning::PinKind::RedirectWrapper,
+                interp.write_target(target, out)
+            )?;
         }
         // **One object for both streams is written once.** Everything the
         // command produced is in `out` and `err` is empty, so a second write
@@ -199,7 +203,11 @@ impl IoContext {
             return Ok(());
         }
         if let Some(target) = &self.error {
-            interp.write_target(target, err)?;
+            pinned!(
+                interp,
+                crate::pinning::PinKind::RedirectWrapper,
+                interp.write_target(target, err)
+            )?;
         }
         Ok(())
     }

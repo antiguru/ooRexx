@@ -88,6 +88,7 @@ impl Interp {
             return Err(Loud::library_procedure_gone().into());
         };
         self.push_native_frame(owner, resolution.scope, Some(receiver), name, args, None);
+        pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let packaged = self.external_package_path(resolution.method).is_some();
         self.native_frame_mut().packaged = packaged;
         let mut strings = CStringPool::new();
@@ -106,6 +107,7 @@ impl Interp {
         };
         let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
+        pin_leave!(self);
         let trapped = trapped?;
 
         // The condition first, because the oracle raises it in the caller's
@@ -159,6 +161,7 @@ impl Interp {
             return Err(Loud::library_procedure_gone().into());
         };
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, name, args, Some(code));
+        pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let program = self.library_code_program(code);
         self.native_frame_mut().packaged = program.is_some();
         let mut strings = CStringPool::new();
@@ -177,6 +180,7 @@ impl Interp {
         };
         let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
+        pin_leave!(self);
         let outcome = match (pending, trapped) {
             (Some(number), _) => {
                 self.native_reraise = true;
@@ -209,6 +213,7 @@ impl Interp {
             return Ok(());
         }
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+        pin_enter!(self, crate::pinning::PinKind::LibraryEntry);
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (ran, pending) = {
@@ -224,6 +229,7 @@ impl Interp {
             (ran, activation.pending())
         };
         let popped = self.pop_native_frame();
+        pin_leave!(self);
         if let Some(number) = pending {
             return Err(condition_of(number));
         }
@@ -253,6 +259,7 @@ impl Interp {
         let issued = self.text(command);
         self.roots.push_temp(issued);
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+        pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let mut strings = CStringPool::new();
         let thread = self.thread.clone();
         let (answered, pending) = {
@@ -268,6 +275,7 @@ impl Interp {
             (answered, activation.pending())
         };
         let popped = self.pop_native_frame();
+        pin_leave!(self);
         if let Some(number) = pending {
             return Err(condition_of(number));
         }

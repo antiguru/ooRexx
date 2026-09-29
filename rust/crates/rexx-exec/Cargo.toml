@@ -67,6 +67,10 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 # gate their modules and pull no further crate.
 rustix = { version = "1.1.4", features = ["fs", "system"] }
 
+[features]
+# The pinned-park counter, `src/pinning.rs`.
+pinning = []
+
 [dev-dependencies]
 # Case tables as data files rather than `const` arrays in Rust sources, for
 # tables written from Task 6 onward (the plan's Tech Stack section). Test-only.

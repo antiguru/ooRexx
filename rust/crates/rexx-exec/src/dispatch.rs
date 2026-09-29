@@ -1900,6 +1900,10 @@ impl Interp {
         // successful send has no use for it, and every send would otherwise
         // pay for the copy.
         let scope = self.classes().id_string(resolution.scope).to_string();
+        park_point!(
+            self,
+            crate::pinning::ParkKind::unimplemented_method(&scope, name)
+        );
         Err(Loud::native_method(name, &scope).into())
     }
 
@@ -1922,7 +1926,11 @@ impl Interp {
                     Arity::Fixed(arity) if args.len() > arity => {
                         Err(Raised::too_many_method_arguments(arity).into())
                     }
-                    Arity::Fixed(_) | Arity::Counted => (entry.run)(self, cleared, receiver, args),
+                    Arity::Fixed(_) | Arity::Counted => pinned!(
+                        self,
+                        crate::pinning::PinKind::native(name),
+                        (entry.run)(self, cleared, receiver, args)
+                    ),
                 };
                 if outcome.is_err() {
                     let scope = self.classes().id_string(resolution.scope).to_string();
@@ -1961,6 +1969,7 @@ impl Interp {
             // "SEP" with scope "K".` line.
             Invocable::External(entry) => match &entry.body {
                 native::ExternalBody::Deferred { owner } => {
+                    park_point!(self, crate::pinning::ParkKind::entry_point(entry.name));
                     Err(native::deferred_send(entry, owner).into())
                 }
                 native::ExternalBody::Implemented { arity, run } => {
@@ -1968,7 +1977,11 @@ impl Interp {
                         Arity::Fixed(arity) if args.len() > *arity => {
                             Err(Raised::too_many_external_arguments(*arity).into())
                         }
-                        Arity::Fixed(_) | Arity::Counted => run(self, cleared, receiver, args),
+                        Arity::Fixed(_) | Arity::Counted => pinned!(
+                            self,
+                            crate::pinning::PinKind::native(name),
+                            run(self, cleared, receiver, args)
+                        ),
                     };
                     if let Err(failure) = &outcome {
                         let scope = self.classes().id_string(resolution.scope).to_string();
@@ -2618,11 +2631,15 @@ impl Interp {
         self.roots.push_temp(arguments);
         let missed = self.text(name);
         self.roots.push_temp(missed);
-        let forwarded = self.invoke(
-            resolution,
-            receiver,
-            UNKNOWN,
-            &[Some(missed), Some(arguments)],
+        let forwarded = pinned!(
+            self,
+            crate::pinning::PinKind::Unknown,
+            self.invoke(
+                resolution,
+                receiver,
+                UNKNOWN,
+                &[Some(missed), Some(arguments)],
+            )
         );
         self.roots.pop_frame(frame);
         forwarded

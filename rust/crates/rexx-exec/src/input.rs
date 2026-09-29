@@ -228,7 +228,11 @@ impl Interp {
             return Ok(self.input.read_line().unwrap_or_default());
         };
         let caller = self.caller();
-        let answer = self.send_message(route, crate::dispatch::LINEIN, None, &[], caller)?;
+        let answer = pinned!(
+            self,
+            crate::pinning::PinKind::PullWrapper,
+            self.send_message(route, crate::dispatch::LINEIN, None, &[], caller)
+        )?;
         Ok(match answer {
             Some(value) => self.to_text(value).into_owned(),
             None => Vec::new(),

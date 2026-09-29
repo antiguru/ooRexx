@@ -22,6 +22,12 @@ use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+// `pinned!` and `park_point!`, ahead of every module that uses them.
+#[macro_use]
+mod pinning;
+#[cfg(feature = "pinning")]
+pub use pinning::{ParkKind, PinKind, PinReport};
+
 // The value model: `text`/`number`/`to_text`/`to_number` on `Interp`, and the
 // two rules D15 exists to enforce (a number's rendering is fixed at creation,
 // and a `SmallInt` is admissible only within the DIGITS that produced it).
@@ -207,6 +213,9 @@ pub struct Outcome {
     /// fit the compiled stream's index widths. Such a body raises
     /// [`Loud::chunk_refused`]; there is no second engine to run it.
     pub chunks_refused: usize,
+    /// The would-be park points the run reached.
+    #[cfg(feature = "pinning")]
+    pub pinning: PinReport,
 }
 
 /// How deep evaluation went and how much stack it took to get there.
@@ -1237,6 +1246,8 @@ struct Interp {
     /// from -- see `Interp::bootstrap_library` for why the boundary is
     /// there and not at process start.
     collections_before_program: u64,
+    #[cfg(feature = "pinning")]
+    pinning: pinning::Pinning,
     /// The programs the library bootstrap loaded, in load order.
     library_programs: Vec<ProgramId>,
     /// The name a program compiled from method source text reports under.
@@ -2042,6 +2053,8 @@ impl Interp {
             method_objects: FxHashMap::default(),
             library_bootstrap: false,
             collections_before_program: 0,
+            #[cfg(feature = "pinning")]
+            pinning: pinning::Pinning::default(),
             library_programs: Vec::new(),
             method_bodies: NameMap::default(),
             compiled_method_names: FxHashMap::default(),
@@ -2201,6 +2214,8 @@ impl Interp {
         // rather than by the program, which is the criterion measuring
         // nothing.
         self.collections_before_program = self.heap.collections_performed();
+        #[cfg(feature = "pinning")]
+        self.pinning.reset();
         self.chunks_refused = 0;
         #[cfg(test)]
         ir::drive::resume_counters();
@@ -2742,6 +2757,8 @@ impl Interp {
             method_bodies: _,
             library_bootstrap: _,
             collections_before_program: _,
+            #[cfg(feature = "pinning")]
+                pinning: _,
             library_programs: _,
             compiled_method_names: _,
             object_methods: _,
@@ -3227,6 +3244,8 @@ fn execute(
                 stack: StackSpan::default(),
                 collections: 0,
                 chunks_refused: 0,
+                #[cfg(feature = "pinning")]
+                pinning: PinReport::default(),
             };
         }
     };
@@ -3421,6 +3440,8 @@ fn execute(
         stack,
         collections,
         chunks_refused,
+        #[cfg(feature = "pinning")]
+        pinning: interp.pinning.take(),
     }
 }
 

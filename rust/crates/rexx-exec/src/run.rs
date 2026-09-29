@@ -683,7 +683,11 @@ impl Interp {
                 // extra thing `enter_fragment` needs and the only place it is
                 // in hand. Nothing new is tracked for it.
                 let saved_entry = self.enter_fragment(saved_line.is_some());
-                let flow = self.run_fragment(text);
+                let flow = pinned!(
+                    self,
+                    crate::pinning::PinKind::Interpret,
+                    self.run_fragment(text)
+                );
                 // **A condition still queued at this depth dies with the
                 // fragment**, on the failing path as well as this one, because
                 // the activation whose queue it was in is what ends. Measured,
@@ -1827,7 +1831,11 @@ impl Interp {
                 // library suite from 788 to 790.
                 self.roots.push_temp(argument);
                 let caller = self.caller();
-                self.send_message(route, crate::dispatch::SAY, None, &[Some(argument)], caller)?;
+                pinned!(
+                    self,
+                    crate::pinning::PinKind::OutputWrapper,
+                    self.send_message(route, crate::dispatch::SAY, None, &[Some(argument)], caller)
+                )?;
             }
             _ => {
                 self.out.extend_from_slice(&line);
@@ -1843,6 +1851,13 @@ impl Interp {
         if self.activation().method_identity.is_none() {
             return Err(Raised::guard_outside_method().into());
         }
+        park_point!(
+            self,
+            match guard.condition {
+                Some(_) => Some(crate::pinning::ParkKind::GuardWhen),
+                None => guard.on.then_some(crate::pinning::ParkKind::GuardOn),
+            }
+        );
         let Some(condition) = &guard.condition else {
             return Ok(Flow::Next);
         };
@@ -1870,6 +1885,7 @@ impl Interp {
         if self.activation().method_identity.is_none() {
             return Err(Raised::reply_outside_method().into());
         }
+        park_point!(self, crate::pinning::ParkKind::Reply);
         if !top_level_clause(code.body, index) {
             return Err(Loud::reply_inside_construct().into());
         }
@@ -1961,7 +1977,11 @@ impl Interp {
         let sent = owed
             .and_then(|()| self.validate_scope_override(target, start_scope))
             .and_then(|()| {
-                self.send_message(target, &message, start_scope, &values[mark..], caller)
+                pinned!(
+                    self,
+                    crate::pinning::PinKind::Forward,
+                    self.send_message(target, &message, start_scope, &values[mark..], caller)
+                )
             });
         self.give_value_buffer(values, mark);
         let sent = sent?;

@@ -769,7 +769,11 @@ impl Interp {
         // own echo and `>K>` line. The frame holds every object they resolve
         // to for as long as the command runs and the lines are written back.
         let frame = self.roots.push_frame();
-        let context = self.io_context(code, &name, io);
+        let context = pinned!(
+            self,
+            crate::pinning::PinKind::RedirectWrapper,
+            self.io_context(code, &name, io)
+        );
         let outcome = match context {
             Ok(context) => self.checked_command(&name, &command, context.as_ref()),
             Err(failure) => Err(failure),

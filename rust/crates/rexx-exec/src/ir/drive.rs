@@ -870,8 +870,11 @@ impl Interp {
                                         debug_assert_names_the_clause(
                                             code, *index, clause, "EvalExpr",
                                         );
-                                        let value = match self.eval_chunk_expr(code, clause, *slot)
-                                        {
+                                        let value = match pinned!(
+                                            self,
+                                            crate::pinning::PinKind::TreeEval,
+                                            self.eval_chunk_expr(code, clause, *slot)
+                                        ) {
                                             Ok(value) => value,
                                             Err(failure) => break 'cold Err(failure),
                                         };
@@ -1624,11 +1627,14 @@ impl Interp {
                                         else {
                                             break 'cold Err(Loud::instruction(&clause.kind).into());
                                         };
-                                        let flow =
-                                            match self.exec_message(code, term, value.as_ref()) {
-                                                Ok(flow) => flow,
-                                                Err(failure) => break 'cold Err(failure),
-                                            };
+                                        let flow = match pinned!(
+                                            self,
+                                            crate::pinning::PinKind::TreeSend,
+                                            self.exec_message(code, term, value.as_ref())
+                                        ) {
+                                            Ok(flow) => flow,
+                                            Err(failure) => break 'cold Err(failure),
+                                        };
                                         break 'cold Ok(RegionEnd::Flowed(flow));
                                     }
                                     // `EXPOSE`, through `exec_expose` with the one
@@ -1650,12 +1656,16 @@ impl Interp {
                                     // `Interp::exec_instruction`.
                                     Op::Exec { index: at } => {
                                         debug_assert_names_the_clause(code, *at, clause, "Exec");
-                                        match self.exec_instruction(
-                                            code,
-                                            index,
-                                            clause,
-                                            source,
-                                            self.region_procedure_permitted,
+                                        match pinned!(
+                                            self,
+                                            crate::pinning::PinKind::OpExec,
+                                            self.exec_instruction(
+                                                code,
+                                                index,
+                                                clause,
+                                                source,
+                                                self.region_procedure_permitted,
+                                            )
                                         ) {
                                             Ok(flow) => {
                                                 break 'cold Ok(RegionEnd::Flowed(flow));
@@ -1900,14 +1910,18 @@ impl Interp {
                                             Ok(crate::run::FlatStart::Fallback(values)) => values,
                                             Err(failure) => break 'cold Err(failure),
                                         };
-                                        let flow = match self.run_loop_with_header(
-                                            code,
-                                            index,
-                                            clause,
-                                            body,
-                                            source,
-                                            BodyEngine::Chunk { chunk, registers },
-                                            values,
+                                        let flow = match pinned!(
+                                            self,
+                                            crate::pinning::PinKind::NestedLoop,
+                                            self.run_loop_with_header(
+                                                code,
+                                                index,
+                                                clause,
+                                                body,
+                                                source,
+                                                BodyEngine::Chunk { chunk, registers },
+                                                values,
+                                            )
                                         ) {
                                             Ok(flow) => flow,
                                             Err(failure) => break 'cold Err(failure),

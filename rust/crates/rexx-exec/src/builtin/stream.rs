@@ -44,9 +44,12 @@ fn send_to_stream(
         args.values_from(2).to_vec()
     };
     let caller = interp.caller();
-    interp
-        .send_message(stream, message, None, &rest, caller)?
-        .ok_or_else(|| Failure::from(Raised::no_result(message)))
+    pinned!(
+        interp,
+        crate::pinning::PinKind::StreamWrapper,
+        interp.send_message(stream, message, None, &rest, caller)
+    )?
+    .ok_or_else(|| Failure::from(Raised::no_result(message)))
 }
 
 /// `LINEIN(name, [line], [count])`.
@@ -134,9 +137,12 @@ pub(crate) fn lines(
     // `NORMAL` and the counting one as `C`.
     let argument = interp.text(if option == b'C' { b"C" } else { b"NORMAL" });
     let caller = interp.caller();
-    let answer = interp
-        .send_message(stream, b"LINES", None, &[Some(argument)], caller)?
-        .ok_or_else(|| Failure::from(Raised::no_result(b"LINES")))?;
+    let answer = pinned!(
+        interp,
+        crate::pinning::PinKind::StreamWrapper,
+        interp.send_message(stream, b"LINES", None, &[Some(argument)], caller)
+    )?
+    .ok_or_else(|| Failure::from(Raised::no_result(b"LINES")))?;
     if option == b'C' {
         return Ok(answer);
     }
@@ -196,12 +202,24 @@ pub(crate) fn stream(
     let stream = interp.resolve_stream(&stream_name, true, touches)?;
     let caller = interp.caller();
     let answer = match letter {
-        b'S' => interp.send_message(stream, b"STATE", None, &[], caller)?,
-        b'D' => interp.send_message(stream, b"DESCRIPTION", None, &[], caller)?,
+        b'S' => pinned!(
+            interp,
+            crate::pinning::PinKind::StreamWrapper,
+            interp.send_message(stream, b"STATE", None, &[], caller)
+        )?,
+        b'D' => pinned!(
+            interp,
+            crate::pinning::PinKind::StreamWrapper,
+            interp.send_message(stream, b"DESCRIPTION", None, &[], caller)
+        )?,
         _ => {
             let text = command.clone().unwrap_or_default();
             let argument = interp.text_built(text);
-            interp.send_message(stream, b"COMMAND", None, &[Some(argument)], caller)?
+            pinned!(
+                interp,
+                crate::pinning::PinKind::StreamWrapper,
+                interp.send_message(stream, b"COMMAND", None, &[Some(argument)], caller)
+            )?
         }
     };
     let answer = answer.ok_or_else(|| Failure::from(Raised::no_result(b"COMMAND")))?;

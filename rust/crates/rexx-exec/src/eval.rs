@@ -1210,7 +1210,11 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         let caller = self.caller();
         let name = spelling.as_bytes();
-        match self.send_message(receiver, name, None, args, caller)? {
+        match pinned!(
+            self,
+            crate::pinning::PinKind::Operator,
+            self.send_message(receiver, name, None, args, caller)
+        )? {
             Some(result) => Ok(result),
             None => Err(Raised::no_result(name).into()),
         }

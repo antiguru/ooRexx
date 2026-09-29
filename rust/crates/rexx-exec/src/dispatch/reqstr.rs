@@ -157,7 +157,11 @@ impl Interp {
         // `'x' o` and `length(o)` all follow it.
         let readable = if matches!(self.receiver_kind(value), Ok(Primitive::Instance { .. })) {
             let caller = self.caller();
-            match self.send_message(value, STRING, None, &[], caller)? {
+            match pinned!(
+                self,
+                crate::pinning::PinKind::Conversion,
+                self.send_message(value, STRING, None, &[], caller)
+            )? {
                 Some(answered) => self.string_value_text(answered),
                 None => self.string_value_text(value),
             }
@@ -365,7 +369,11 @@ impl Interp {
         // `getTopStackFrame()->getReceiver()`, and `requestString` runs no
         // frame of its own that could answer that question differently.
         let caller = self.caller();
-        self.send_message(receiver, MAKESTRING, None, &[], caller)
+        pinned!(
+            self,
+            crate::pinning::PinKind::Conversion,
+            self.send_message(receiver, MAKESTRING, None, &[], caller)
+        )
     }
 
     /// The traceback line the oracle's own `REQUEST` activation contributes

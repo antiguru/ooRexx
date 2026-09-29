@@ -915,6 +915,7 @@ pub(super) fn native_message_result(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    park_point!(interp, crate::pinning::ParkKind::MessageResult);
     match interp.message_outcomes.get(&receiver) {
         Some(Some(raised)) => Err(Failure::Raised(raised.clone())),
         Some(None) => {

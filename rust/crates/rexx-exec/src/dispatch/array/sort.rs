@@ -286,7 +286,11 @@ fn sort_by(
     for item in &items {
         interp.roots.push_temp(*item);
     }
-    let sorted = merge_sort(interp, order, items)?;
+    let sorted = pinned!(
+        interp,
+        crate::pinning::PinKind::SortComparator,
+        merge_sort(interp, order, items)
+    )?;
     // **Upstream sorts in place, so a comparator that changes the receiver
     // under the sort loses the sort's writes.** This crate sorts a copy, so
     // it has to notice: measured, `sortWith` over a comparator that empties

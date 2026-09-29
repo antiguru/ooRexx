@@ -171,6 +171,7 @@ impl Interp {
                     let owner = row
                         .owner
                         .expect("a row with no body names the phase that owes it");
+                    park_point!(self, crate::pinning::ParkKind::routine(name));
                     return Err(Loud::internal_routine(name, owner).into());
                 }
             },

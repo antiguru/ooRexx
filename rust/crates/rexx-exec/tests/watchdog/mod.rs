@@ -72,6 +72,8 @@ pub fn abandoned(path: &str, after: Duration) -> Outcome {
         stack: StackSpan::default(),
         collections: 0,
         chunks_refused: 0,
+        #[cfg(feature = "pinning")]
+        pinning: rexx_exec::PinReport::default(),
     }
 }
 

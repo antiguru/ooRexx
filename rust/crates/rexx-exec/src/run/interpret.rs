@@ -261,7 +261,11 @@ impl Interp {
         );
         self.enter_fragment_level(line, indent);
         let saved_entry = self.enter_fragment(self.clause_line_override.is_some());
-        let outcome = self.run_fragment(text);
+        let outcome = pinned!(
+            self,
+            crate::pinning::PinKind::Interpret,
+            self.run_fragment(text)
+        );
         let depth = self.fragment_depth;
         self.pending_traps
             .retain(|pending| pending.fragment_depth != depth);

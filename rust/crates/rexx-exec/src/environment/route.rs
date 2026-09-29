@@ -171,7 +171,11 @@ impl Interp {
         // under `trace i` refuses with `call_op_off_its_node`, where a call
         // with no arguments is untouched.
         let (values, mark) = self.take_value_buffer();
-        let delivered = self.deliver_trace_line(class, route, &line);
+        let delivered = pinned!(
+            self,
+            crate::pinning::PinKind::TraceWrapper,
+            self.deliver_trace_line(class, route, &line)
+        );
         self.give_value_buffer(values, mark);
         self.routing_trace = false;
         if delivered.is_err() {

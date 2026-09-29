@@ -540,13 +540,17 @@ impl Interp {
         // `internalCallTrap` passes `OREF_NULL` where `internalCall` passes
         // the caller's receiver, so the handler's calling convention carries
         // none -- `entered_receiver` has the measurement for both.
-        let ended = self.resolve_and_run_call(
-            code,
-            &trap.label,
-            true,
-            &[],
-            CallType::Subroutine,
-            CallEntry::Trap,
+        let ended = pinned!(
+            self,
+            crate::pinning::PinKind::TrapHandler,
+            self.resolve_and_run_call(
+                code,
+                &trap.label,
+                true,
+                &[],
+                CallType::Subroutine,
+                CallEntry::Trap,
+            )
         );
         // A trap queued by the handler that just ran is not one the
         // interrupted clause owes, and `in_clause`'s tripwire has to be able

@@ -578,11 +578,19 @@ impl Interp {
             if self.lookup(value, b"MAKEARRAY", None).is_none() {
                 return Ok(None);
             }
-            return self.send_message(value, b"MAKEARRAY", None, &[], caller);
+            return pinned!(
+                self,
+                crate::pinning::PinKind::Conversion,
+                self.send_message(value, b"MAKEARRAY", None, &[], caller)
+            );
         }
         let wanted = self.text_built(b"ARRAY".to_vec());
         self.roots.push_temp(wanted);
-        self.send_message(value, b"REQUEST", None, &[Some(wanted)], caller)
+        pinned!(
+            self,
+            crate::pinning::PinKind::Conversion,
+            self.send_message(value, b"REQUEST", None, &[Some(wanted)], caller)
+        )
     }
 
     /// The one `DO OVER` target this crate still refuses: one of the
@@ -1562,11 +1570,15 @@ impl Interp {
         // `UNTIL`'s intermediates would read the `DO`'s own indent.
         self.clause_state.current_value_indent = loop_indent;
         let tested = self.in_clause(code, until_line, |it| {
-            let held = it.eval_condition(
-                code,
-                &cond.condition,
-                ConditionTrace::Keyword(loop_indent, "UNTIL"),
-                raised_until_not_logical,
+            let held = pinned!(
+                it,
+                crate::pinning::PinKind::LoopHeader,
+                it.eval_condition(
+                    code,
+                    &cond.condition,
+                    ConditionTrace::Keyword(loop_indent, "UNTIL"),
+                    raised_until_not_logical,
+                )
             )?;
             // An `UNTIL` that held ends the loop, so this clause's own
             // boundary sits outside the block.
@@ -1694,11 +1706,15 @@ impl Interp {
             // `WHILE`'s condition is evaluated here, inside that same step,
             // never through a `Op::Clause`'s region of its own.
             it.clause_state.current_value_indent = loop_indent;
-            let held = match it.eval_condition(
-                code,
-                &cond.condition,
-                ConditionTrace::Keyword(loop_indent, "WHILE"),
-                raised_while_not_logical,
+            let held = match pinned!(
+                it,
+                crate::pinning::PinKind::LoopHeader,
+                it.eval_condition(
+                    code,
+                    &cond.condition,
+                    ConditionTrace::Keyword(loop_indent, "WHILE"),
+                    raised_while_not_logical,
+                )
             ) {
                 Ok(held) => held,
                 Err(failure) => {

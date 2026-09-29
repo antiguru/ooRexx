@@ -180,6 +180,7 @@ pub(crate) fn sleep(
             Raised::native_argument_out_of_range("delay", 0, SLEEP_MAXIMUM as i64, &text).into(),
         );
     }
+    park_point!(interp, crate::pinning::ParkKind::SysSleep);
     std::thread::sleep(std::time::Duration::from_secs_f64(seconds));
     Ok(answer(interp, 0))
 }
