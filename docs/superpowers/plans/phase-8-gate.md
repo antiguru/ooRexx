@@ -357,7 +357,7 @@ groups alone, each at Phase 9.
 
 ## 10. The surface plan's close: the gate readings, and what Phase 8 leaves
 
-**Phase 8 closed on 2026-09-29 at `c32f4ce21`**, after the final review's fix round
+**Phase 8 closed on 2026-09-29 at `8b45fb06e`**, after the final review's fix round
 (`.superpowers/sdd/2026-09-14-phase-8-surface/task-9-fix-report.md`). Task 9 first called it
 closed at `fc32f74aa` on 2026-09-28. The final review then found that the groups' "pass" was
 measured as agreement only (I1), a `Relation` regression in `DirectoryPut` (I2), two blind spots in
@@ -366,35 +366,36 @@ rxapi (I5). The gate script is the surface plan's own (`scratchpad/surface-9b/ga
 `G3 Compiling lines` count added. It ran unpiped after every rust source was touched, and its status
 file is quoted here line for line:
 
-    c32f4ce21881c6b0dcc44171857f40abdb78a09b
-    started 2026-09-29T01:20:04+02:00
-    load at start 5.43 6.14 6.76 4/2578 873333
+    8b45fb06ec6eaa817a98ca61642e0ecdb9c79b37
+    started 2026-09-29T01:57:04+02:00
+    load at start 3.32 3.82 5.36 4/2558 1152080
     G1 fmt exit 0
     G2 clippy(empty target) exit 0
     G3 release build (test --no-run) exit 0
     G3 Compiling lines: 11
-    load G4 14.94 15.52 10.71 2/2587 879282 2026-09-29T01:23:29+02:00
+    load G4 12.71 12.28 8.68 7/2569 1158089 2026-09-29T02:00:29+02:00
     G4 release test exit 0
     G4 Compiling lines: 0
-    load after G4 3.14 9.01 9.54 4/2585 1007845
+    load after G4 3.20 8.40 8.40 5/2550 1286693
     G5 debug build (test --no-run) exit 0
-    load G6 8.22 9.82 9.80 3/2592 1016639 2026-09-29T01:29:55+02:00
+    load G6 11.24 9.96 8.92 2/2575 1295777 2026-09-29T02:06:59+02:00
     G6 debug test exit 0
     G6 Compiling lines: 0
-    load after G6 5.03 7.83 9.11 3/2580 1145216
-    c32f4ce21881c6b0dcc44171857f40abdb78a09b
-    finished 2026-09-29T01:36:14+02:00
+    load after G6 3.31 7.15 8.18 2/2552 1424418
+    8b45fb06ec6eaa817a98ca61642e0ecdb9c79b37
+    finished 2026-09-29T02:13:19+02:00
 
 HEAD did not move and `git status --short` printed nothing between the two hashes. G3's and G5's
 logs each carry a `Compiling` line for every workspace crate, so G4 and G6 ran binaries built from
-`c32f4ce21`. The earlier close's G3 had compiled nothing (review M4).
+`8b45fb06e`. The earlier close's G3 had compiled nothing (review M4). A first run of the same script
+at `c32f4ce21`, before the rulings on I5 and outer9 arrived, was green throughout as well.
 
 | gate | command | exit | figures |
 |---|---|---|---|
 | G1 | `cargo fmt --all --check` | 0 | |
 | G2 | `cargo clippy --workspace --all-targets -- -D warnings`, empty target directory | 0 | |
-| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | 0 | 2758 passed / 0 failed / 4 ignored |
-| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | 0 | 2759 / 0 / 4 |
+| G4 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release --no-fail-fast` | 0 | 2779 passed / 0 failed / 4 ignored |
+| G6 | `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast` | 0 | 2780 / 0 / 4 |
 
 (G3 and G5 build what G4 and G6 run, outside the memory cap.) **Both failing sets are empty.** In
 both runs:
@@ -458,8 +459,9 @@ bodies.
 
 **Miri is a recorded run, not a gate.** rexx-api's lib tests ran under Stacked Borrows (no
 `MIRIFLAGS`), miri 0.1.0 (f7575a9da8 2026-09-24), from a scratch `RUSTUP_HOME`, on the tree at
-`c32f4ce21`, the last change to `rexx-api`: exit 0, 55 passed, 0 failed, 8 ignored. The busy-context
-path that change added runs only under the forged probes, not under Miri or the corpus.
+`8b45fb06e`, the last change to `rexx-api`: exit 0, 55 passed, 0 failed, 8 ignored. The busy-context
+path `c32f4ce21` added to `ffi.rs` runs under the forged probes and `outer_context.rs`, not under
+Miri.
 
 **No refusal and no open exclusions row names Phase 8, or Phase 7.**
 - `closed_phases.rs` now lexes each source file's string literals (comments, characters and
@@ -507,12 +509,16 @@ fresh directories. The probes are in
   * `2f7d9bd60`: a `RaiseCondition` taken by `CALL ON` has its object built at the raise. The
     native frame leads it, and the object has no `POSITION`. Witness:
     `corpus/lang/library_raise_condition_call_on.rex`.
-  * `c32f4ce21`: the context-variable members, reached through a call context kept from an
-    enclosing call, reach that call's caller (`outer9.rex`, `o9b.rex`).
-* **Still differs, loud, no owner assigned**: a stem or compound read, or a set, through such a
-  kept context of a name its activation has never bound (`o9c.rex`, rc 120). A new variable needs
-  a slot, and only the top frame's slots can grow (`rust/crates/rexx-core/src/roots.rs:414-422`).
-  This is raised with the controller.
+  * `c32f4ce21`, `5acd03895` and `8b45fb06e`: the context-variable members, reached through a call
+    context kept from an enclosing call, reach that call's caller, which a guard swaps in as the
+    running activation and back however the member ends (`outer9.rex`, `o9b.rex`). Witness
+    `rexx-exec/tests/outer_context.rs` (gate-only): it compiles the Task 9 forge against `api/`
+    and runs `o9b.rex` against the oracle, plainly and collecting at every allocation, and
+    `o9c.rex`. No corpus program can load a forge.
+* **Still differs, loud, OWNER: Phase 6**: a stem or compound read, or a set, through such a kept
+  context of a name its activation has never bound (`o9c.rex`, rc 120). The contiguous slot Vec
+  grows only on the top frame (`rust/crates/rexx-core/src/roots.rs:414-422`); reaching a non-top
+  frame's layout is D3 frame-ownership work (controller's ruling, 2026-09-29).
 * **Relabelled**: `Loud::native_method` names Phase 9 instead of the closed Phase 5 (the m4
   ruling), which re-homes `Method~new`'s third-argument refusal with it; `refusal_owner` names no
   phase for a member only an unpopulated table reaches. The stale-handle refusal names none. The
