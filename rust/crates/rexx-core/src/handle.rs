@@ -11,6 +11,8 @@
 
 //! A reference to a Rexx object.
 
+use std::marker::PhantomData;
+
 const TAG_BITS: u32 = 2;
 const TAG_MASK: u64 = 0b11;
 const TAG_HEAP: u64 = 0b00;
@@ -43,8 +45,31 @@ pub const GENERATION_MAX: u32 = (1 << GEN_BITS) - 1;
 pub const SMALL_INT_MAX: i64 = (1 << 61) - 1;
 pub const SMALL_INT_MIN: i64 = -(1 << 61);
 
+/// Not [`Send`] or [`Sync`]: a handle is meaningless off the island that
+/// allocated its slot, and nothing may carry one to another OS thread before
+/// Phase 6 says so (design section 2.5).
+///
+/// ```compile_fail
+/// fn require_send<T: Send>(_: T) {}
+/// require_send(rexx_core::ObjRef::NIL);
+/// ```
+///
+/// ```compile_fail
+/// fn require_sync<T: Sync>(_: T) {}
+/// require_sync(rexx_core::ObjRef::NIL);
+/// ```
+///
+/// A type that actually is `Send` and `Sync` passes the same two checks, so
+/// the failures above are `ObjRef`'s doing and not some unrelated mismatch:
+///
+/// ```
+/// fn require_send<T: Send>(_: T) {}
+/// fn require_sync<T: Sync>(_: T) {}
+/// require_send(0u64);
+/// require_sync(0u64);
+/// ```
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct ObjRef(u64);
+pub struct ObjRef(u64, PhantomData<*const ()>);
 
 /// A byte string held in the handle, with no heap object behind it.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -74,7 +99,7 @@ pub enum Decoded {
 }
 
 impl ObjRef {
-    pub const NIL: ObjRef = ObjRef(TAG_NIL);
+    pub const NIL: ObjRef = ObjRef(TAG_NIL, PhantomData);
 
     /// The handle's own bits, for a caller that has to *index* by identity
     /// rather than compare two handles.
@@ -84,14 +109,20 @@ impl ObjRef {
 
     pub const fn heap(slot: u32, generation: u32) -> Self {
         debug_assert!(generation <= GENERATION_MAX);
-        ObjRef(((generation as u64) << GEN_SHIFT) | ((slot as u64) << SLOT_SHIFT) | TAG_HEAP)
+        ObjRef(
+            ((generation as u64) << GEN_SHIFT) | ((slot as u64) << SLOT_SHIFT) | TAG_HEAP,
+            PhantomData,
+        )
     }
 
     pub const fn small_int(value: i64) -> Option<Self> {
         if value > SMALL_INT_MAX || value < SMALL_INT_MIN {
             return None;
         }
-        Some(ObjRef((((value as u64) << TAG_BITS) & !TAG_MASK) | TAG_INT))
+        Some(ObjRef(
+            (((value as u64) << TAG_BITS) & !TAG_MASK) | TAG_INT,
+            PhantomData,
+        ))
     }
 
     /// A handle carrying `bytes` itself, or `None` if there are too many.
@@ -107,12 +138,16 @@ impl ObjRef {
         let data = u64::from_le_bytes(buf);
         Some(ObjRef(
             (data << TEXT_DATA_SHIFT) | ((bytes.len() as u64) << TEXT_LEN_SHIFT) | TAG_TEXT,
+            PhantomData,
         ))
     }
 
     /// The inline-text handle for a single byte, as a constant.
     pub const fn inline_byte(byte: u8) -> Self {
-        ObjRef(((byte as u64) << TEXT_DATA_SHIFT) | (1 << TEXT_LEN_SHIFT) | TAG_TEXT)
+        ObjRef(
+            ((byte as u64) << TEXT_DATA_SHIFT) | (1 << TEXT_LEN_SHIFT) | TAG_TEXT,
+            PhantomData,
+        )
     }
 
     /// **`always` rather than a hint**, and the difference was measured
