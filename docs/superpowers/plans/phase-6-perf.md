@@ -252,3 +252,54 @@ Both exit 0. r1 holds `Box<Activity>`, r2 the `Activity` inline.
 | textnum | 1,176,579,478 | 1,221,386,348 | +44,806,870 | +3.8082 | 1,176,579,478 | 1,176,579,609 | +131 | +0.0000 |
 | varlookup | 14,878,111,694 | 15,657,118,479 | +779,006,785 | +5.2359 | 14,878,111,694 | 14,878,111,740 | +46 | +0.0000 |
 | rexxcps | 17,817,346,486 | 18,535,102,753 | +717,756,267 | +4.0284 | 17,817,346,062 | 17,817,329,203 | -16,859 | -0.0001 |
+
+## Task 5
+
+`S` is `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/p6-t5`.
+
+```
+git archive COMMIT | tar -x -C $S/trees/NAME       # base 1754a3b5a, r1 50cce849c
+find $S/trees/NAME -type f -exec touch {} +
+cd $S/trees/NAME/rust && CARGO_TARGET_DIR=$S/tgt/NAME cargo build --release -p rexx-exec --bin rexx-run > $S/logs/build-NAME.log 2>&1
+/bin/grep -a -c 'Compiling rexx-exec' $S/logs/build-NAME.log                 # 1 for each NAME
+cp $S/tgt/NAME/release/rexx-run $S/bin/NAME/rexx-run
+sha256sum < $S/bin/NAME/rexx-run
+objcopy -O binary --only-section=.text $S/bin/NAME/rexx-run /dev/stdout | wc -c
+```
+
+| name | sha256 of `rexx-run` | `.text` bytes |
+|---|---|---:|
+| base | `264eb30b93ecb351db2eb99dff146a3e6920d63210228460bd4afdfcc715a4e1` | 2,732,523 |
+| r1 | `d51e59452601948fc74e3a51854896481f7781fce121a7b9733b2d95c08b5e4c` | 2,728,539 |
+
+```
+$B/callgrind.sh -r 3 -j 16 -o $S/cg1 base=$S/bin/base/rexx-run r1=$S/bin/r1/rexx-run
+```
+
+Exits 0. r1 holds the running activity's `ActivityRoots` inline in `RootSet`.
+
+| program | base | r1 | r1 - base | r1 d% |
+|---|---:|---:|---:|---:|
+| alloc | 25,168,678,363 | 25,168,639,819 | -38,544 | -0.0002 |
+| alloc4c | 3,224,395,040 | 3,224,382,606 | -12,434 | -0.0004 |
+| arith | 11,520,060,059 | 11,520,015,339 | -44,720 | -0.0004 |
+| assign | 19,637,557,619 | 19,637,557,482 | -137 | -0.0000 |
+| compound | 9,271,611,424 | 9,271,611,489 | +65 | +0.0000 |
+| decloop | 2,565,175,706 | 2,565,160,836 | -14,870 | -0.0006 |
+| decrender | 4,348,396,202 | 4,348,381,301 | -14,901 | -0.0003 |
+| dispatch | 20,483,285,061 | 20,483,285,126 | +65 | +0.0000 |
+| dispatchclass | 15,850,195,601 | 15,850,195,712 | +111 | +0.0000 |
+| emptyloop | 9,308,098,320 | 9,308,098,431 | +111 | +0.0000 |
+| extcall | 8,281,259,519 | 8,281,259,712 | +193 | +0.0000 |
+| fibcall | 8,345,686,416 | 8,345,686,612 | +196 | +0.0000 |
+| fibfunc | 7,988,911,762 | 7,988,911,958 | +196 | +0.0000 |
+| heapshape | 3,278,634,105 | 3,275,164,618 | -3,469,487 | -0.1058 |
+| nop | 9,437,300,169 | 9,437,300,365 | +196 | +0.0000 |
+| parse | 1,541,986,626 | 1,541,976,669 | -9,957 | -0.0006 |
+| sayloop | 114,813,367 | 114,813,563 | +196 | +0.0002 |
+| sendloop | 13,863,190,791 | 13,863,190,856 | +65 | +0.0000 |
+| startup | 58,074,056 | 58,074,252 | +196 | +0.0003 |
+| strings | 17,749,287,481 | 17,749,211,510 | -75,971 | -0.0004 |
+| textnum | 1,176,579,478 | 1,176,579,674 | +196 | +0.0000 |
+| varlookup | 14,878,111,694 | 14,878,111,805 | +111 | +0.0000 |
+| rexxcps | 17,817,340,661 | 17,817,273,008 | -67,653 | -0.0004 |
