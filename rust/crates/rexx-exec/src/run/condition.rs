@@ -114,7 +114,7 @@ impl Interp {
         match self.trap_for(b"NOTREADY") {
             Some(trap) if trap.call => {
                 let object = self.build_condition_object(&raised, Some(true))?;
-                self.pending_traps.push_back(PendingTrap {
+                self.activity.pending_traps.push_back(PendingTrap {
                     condition: b"NOTREADY".as_slice().into(),
                     rc: None,
                     description: Some(name.to_vec()),
@@ -126,7 +126,7 @@ impl Interp {
                     // being popped; nothing is popped here.
                     activation: self.activation().id,
                     queued_during_delivery: false,
-                    fragment_depth: self.fragment_depth,
+                    fragment_depth: self.activity.fragment_depth,
                 });
                 Ok(())
             }
@@ -337,17 +337,17 @@ impl Interp {
         // trapped on line 3 and `say 2/0` untrapped on line 8 inside the
         // handler reports line 8, alone, and a version that kept the first
         // site reports line 3.
-        let site = self.failure_site.take();
-        let sites = std::mem::take(&mut self.failure_sites);
-        let frames = std::mem::take(&mut self.failure_frames);
+        let site = self.activity.failure_site.take();
+        let sites = std::mem::take(&mut self.activity.failure_sites);
+        let frames = std::mem::take(&mut self.activity.failure_frames);
         for &frame in &frames {
             self.roots.push_temp(frame);
         }
-        self.failure_frame = None;
-        let origin = self.failure_origin.take();
-        let propagated = std::mem::take(&mut self.failure_propagated);
-        let reraised = std::mem::take(&mut self.failure_reraised);
-        self.set_sigl(self.clause_state.line());
+        self.activity.failure_frame = None;
+        let origin = self.activity.failure_origin.take();
+        let propagated = std::mem::take(&mut self.activity.failure_propagated);
+        let reraised = std::mem::take(&mut self.activity.failure_reraised);
+        self.set_sigl(self.activity.clause_state.line());
         if let Some(rc) = &raised.rc {
             let value = self.text(rc);
             self.assign_by_name(b"RC", value);
@@ -367,7 +367,7 @@ impl Interp {
             propagated,
             reraised,
         };
-        let object = match self.reraised_object.take() {
+        let object = match self.activity.reraised_object.take() {
             Some(object) => self.reraise_condition_object(object, unwound.origin)?,
             None => self.build_trapped_condition_object(&raised, &unwound)?,
         };
@@ -385,7 +385,7 @@ impl Interp {
         });
         // What a later `RAISE PROPAGATE` re-raises. See `exec_raise_
         // propagate` for what is and is not measured about it.
-        self.active_condition = Some(ActiveCondition {
+        self.activity.active_condition = Some(ActiveCondition {
             raised: *raised,
             site,
             sites,
@@ -412,7 +412,7 @@ impl Interp {
     ) -> Result<Option<HandlerExit>, Failure> {
         // Snapshotted rather than re-read, so that anything a handler queues
         // lands beyond the prefix this boundary is answering for.
-        let mut owed = self.pending_traps.len();
+        let mut owed = self.activity.pending_traps.len();
         while owed > 0 {
             // Only the activation whose trap table matched delivers, and only
             // once it is running again -- `PendingTrap::activation`'s own doc
@@ -424,15 +424,18 @@ impl Interp {
             // `INTERPRET` fragment's queue the condition is sitting in. A
             // fragment is an activation in the oracle and is not one here, so
             // the second is what the first cannot see.
-            let depth = self.fragment_depth;
-            let Some(at) =
-                self.pending_traps.iter().take(owed).position(|pending| {
-                    pending.activation == here && pending.fragment_depth == depth
-                })
+            let depth = self.activity.fragment_depth;
+            let Some(at) = self
+                .activity
+                .pending_traps
+                .iter()
+                .take(owed)
+                .position(|pending| pending.activation == here && pending.fragment_depth == depth)
             else {
                 return Ok(None);
             };
             let pending = self
+                .activity
                 .pending_traps
                 .remove(at)
                 .expect("position answered an index inside the queue");
@@ -461,7 +464,7 @@ impl Interp {
             // silently running a `SIGNAL` handler as a call.
             return Ok(None);
         }
-        self.set_sigl(self.clause_state.line());
+        self.set_sigl(self.activity.clause_state.line());
         if let Some(rc) = &pending.rc {
             let value = self.text(rc);
             self.assign_by_name(b"RC", value);
@@ -486,8 +489,8 @@ impl Interp {
         // and never clearing at all gave silence at rc 0. Restoring gives the
         // oracle's answer in all three measured shapes, the "nothing was
         // active, restore `None`" one included.
-        let enclosing = self.active_condition.take();
-        self.active_condition = Some(ActiveCondition {
+        let enclosing = self.activity.active_condition.take();
+        self.activity.active_condition = Some(ActiveCondition {
             raised,
             site: None,
             sites: Vec::new(),
@@ -528,7 +531,7 @@ impl Interp {
             // the caller's own `call` line.
             object: pending.object,
         });
-        let queued_before = self.pending_traps.len();
+        let queued_before = self.activity.pending_traps.len();
         // `CallType::Subroutine` because a `CALL ON` handler is a `CALL`, and
         // that reaches `PARSE SOURCE` when the trap's name resolves to a
         // `::ROUTINE` rather than to a label. Measured: a trapped `USER`
@@ -555,7 +558,7 @@ impl Interp {
         // A trap queued by the handler that just ran is not one the
         // interrupted clause owes, and `in_clause`'s tripwire has to be able
         // to tell the two apart -- see the field's own doc comment.
-        for pending in self.pending_traps.iter_mut().skip(queued_before) {
+        for pending in self.activity.pending_traps.iter_mut().skip(queued_before) {
             pending.queued_during_delivery = true;
         }
         self.activation_mut().condition = enclosing_condition;
@@ -570,7 +573,7 @@ impl Interp {
             // The handler returned; execution resumes at the clause after
             // the one that finished.
             Ok(Ended::Returned(_)) => {
-                self.active_condition = enclosing;
+                self.activity.active_condition = enclosing;
                 Ok(None)
             }
             // The handler failed rather than returned. **Reachable but
@@ -581,7 +584,7 @@ impl Interp {
             // through `offer_to_trap` first, which overwrites the field
             // wholesale. So this line changes no output while that holds.
             Err(failure) => {
-                self.active_condition = enclosing;
+                self.activity.active_condition = enclosing;
                 Err(failure)
             }
             // `EXIT` inside the handler ends the program, exactly as it does
@@ -628,7 +631,7 @@ impl Interp {
         //   >K>   "DESCRIPTION" => "zdesc"
         //   >K>   "RESULT" => "zret"
         // ```
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let rc_text = match &raise.rc {
             Some(expr) => {
                 let value = self.eval(code, expr)?;
@@ -714,7 +717,7 @@ impl Interp {
             // substitution list below is a different thing: it is what a
             // catalogue message renders from, and only a `SYNTAX` condition
             // has one.
-            self.pending_additional = Some(value);
+            self.activity.pending_additional = Some(value);
             match slots {
                 Some(slots) => {
                     for slot in slots {
@@ -780,7 +783,7 @@ impl Interp {
             }
             // The condition object's `ADDITIONAL` is the array of the items
             // themselves, as `ADDITIONAL`'s own value is.
-            self.pending_additional = Some(self.security_arguments_array(&held));
+            self.activity.pending_additional = Some(self.security_arguments_array(&held));
             // **`an Array`, verbatim and regardless of the elements** --
             // it is the Array class's own default string form, which is
             // what the oracle traces here (measured for `array
@@ -820,7 +823,7 @@ impl Interp {
             // well-formed tail-less `RAISE SYNTAX` reports its own number
             // there. The substituted condition is still a `SYNTAX` condition
             // and travels like one.
-            raised.position = u32::try_from(self.clause_state.line()).unwrap_or(0);
+            raised.position = u32::try_from(self.activity.clause_state.line()).unwrap_or(0);
             raised.delivery.search = if returns { Search::Here } else { Search::Top };
             return Err(raised.into());
         }
@@ -871,11 +874,11 @@ impl Interp {
                     // `RAISE ... ADDITIONAL`'s own list, which the condition
                     // object reports and which this arm used to drop.
                     additional: additional.clone(),
-                    position: u32::try_from(self.clause_state.line()).unwrap_or(0),
+                    position: u32::try_from(self.activity.clause_state.line()).unwrap_or(0),
                     ..Raised::condition(Cow::Owned(String::from_utf8_lossy(&name).into_owned()))
                 };
                 let object = self.build_condition_object(&queued, Some(true))?;
-                self.pending_traps.push_back(PendingTrap {
+                self.activity.pending_traps.push_back(PendingTrap {
                     condition: name,
                     rc,
                     description: description.clone(),
@@ -897,8 +900,8 @@ impl Interp {
                     // `Interpret` arm maintains it. A tail-less raise leaves
                     // the fragments of every level it unwinds.
                     fragment_depth: match exits {
-                        true => self.fragment_depth - self.fragments_within(top),
-                        false => self.fragment_depth,
+                        true => self.activity.fragment_depth - self.fragments_within(top),
+                        false => self.activity.fragment_depth,
                     },
                 });
                 Ok(finish(result))
@@ -916,7 +919,7 @@ impl Interp {
                 // current: it is popped by the `Flow::Return` this branch
                 // does not take, and a `SIGNAL ON` handler sees the caller's
                 // frame rather than this one.
-                raised.position = u32::try_from(self.clause_state.line()).unwrap_or(0);
+                raised.position = u32::try_from(self.activity.clause_state.line()).unwrap_or(0);
                 // The raise's own `ADDITIONAL`, which the condition object
                 // reports. Measured: `raise user mycond additional (an
                 // array)` gives a directory carrying `ADDITIONAL`, and this
@@ -941,7 +944,7 @@ impl Interp {
                 Err(raised.into())
             }
             None if name.as_ref() == b"NOMETHOD" => {
-                let mut raised = match (self.pending_additional.take(), description) {
+                let mut raised = match (self.activity.pending_additional.take(), description) {
                     (Some(receiver), description) => {
                         let receiver = self.string_value_text(receiver);
                         Raised::no_method(&receiver, &description.unwrap_or_default())
@@ -957,7 +960,7 @@ impl Interp {
 
     /// `RAISE PROPAGATE`: re-raise the condition whose handler is running.
     fn exec_raise_propagate(&mut self) -> Result<Flow, Failure> {
-        let Some(active) = &self.active_condition else {
+        let Some(active) = &self.activity.active_condition else {
             return Err(Raised::syntax(98, 918, Vec::new()).into());
         };
         if !active.raised.reportable() {
@@ -974,8 +977,8 @@ impl Interp {
         // 12 (`raise propagate`).
         let (site, sites) = (active.site.clone(), active.sites.clone());
         self.clear_failure_levels();
-        self.failure_site = site;
-        self.failure_sites = sites;
+        self.activity.failure_site = site;
+        self.activity.failure_sites = sites;
         // `RexxActivation::raise` pops the level and `Activity::
         // reraiseException`s the same object (`execution/RexxActivation.cpp:
         // 1840`). Measured: from an internal call it is trapped neither by
@@ -991,8 +994,9 @@ impl Interp {
             raised.delivery.positionless = false;
             raised.position = 0;
             self.reraise_failure_levels();
-            self.reraised_object = self.activation().condition.as_ref().and_then(|c| c.object);
-            self.reraise_leaving = top + 1;
+            self.activity.reraised_object =
+                self.activation().condition.as_ref().and_then(|c| c.object);
+            self.activity.reraise_leaving = top + 1;
         }
         Err(raised.into())
     }
@@ -1016,7 +1020,7 @@ impl Interp {
         // `SIGNAL` (16.1) ends the program regardless, matching the oracle's
         // own `signalTo`, which a caller only ever invokes with an
         // already-resolved target.
-        self.set_sigl(self.clause_state.line());
+        self.set_sigl(self.activity.clause_state.line());
         Ok(Flow::Signal(target))
     }
 
@@ -1032,7 +1036,11 @@ impl Interp {
         // class-side `makeString` returning `'NOSUCH'` reports `Label
         // "NOSUCH" not found.`, so 16.1 names the conversion where NUMERIC's
         // own errors name the object.
-        self.trace_keyword(self.clause_state.current_value_indent, "VALUE", &text);
+        self.trace_keyword(
+            self.activity.clause_state.current_value_indent,
+            "VALUE",
+            &text,
+        );
         let converted = self.required_string_value(value)?;
         if converted == value {
             return self.signal_to_label(&text);

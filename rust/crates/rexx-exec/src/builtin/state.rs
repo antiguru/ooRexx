@@ -237,7 +237,7 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
         if option.is_some() {
             return Err(Raised::missing_argument(name, 1).into());
         }
-        let count = interp.call_context.arguments.len();
+        let count = interp.activity.call_context.arguments.len();
         return Ok(interp.text(count.to_string().as_bytes()));
     };
     if position <= 0 {
@@ -245,6 +245,7 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
     }
     let index = usize::try_from(position).unwrap_or(usize::MAX);
     let supplied = interp
+        .activity
         .call_context
         .arguments
         .get(index - 1)
@@ -261,7 +262,7 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
         Some(b'E') => Ok(interp.text(if supplied.is_some() { b"1" } else { b"0" })),
         Some(b'O') => Ok(interp.text(if supplied.is_some() { b"0" } else { b"1" })),
         Some(b'A') => {
-            let arguments = &interp.call_context.arguments;
+            let arguments = &interp.activity.call_context.arguments;
             let slots: Vec<Option<ObjRef>> = if index == 1 {
                 arguments.to_vec()
             } else if index > arguments.len() {

@@ -177,7 +177,7 @@ fn a_version_refused_library_raises_once_and_is_held() {
 /// `collect_stress` reads `phase-8.txt` last and aborts on a pre-existing
 /// panic before it gets there.
 ///
-/// **What it does not say**, measured: with `Interp::object_roots`
+/// **What it does not say**, measured: with `Activity::object_roots`
 /// dropping `native_handles` entirely this still passes, because the
 /// receiver is rooted by the send's own temps and `Host::new_pointer`
 /// pushes what it mints as a temp before handing it back. Whether the
@@ -395,7 +395,7 @@ fn a_reused_native_frame_holds_nothing_of_the_call_before() {
         None,
     );
     assert_eq!(
-        interp.native_spares.len(),
+        interp.activity.native_spares.len(),
         0,
         "the spare frame was not reused"
     );

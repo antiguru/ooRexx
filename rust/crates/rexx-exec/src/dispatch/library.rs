@@ -92,9 +92,9 @@ impl Interp {
         let packaged = self.external_package_path(resolution.method).is_some();
         self.native_frame_mut().packaged = packaged;
         let mut strings = CStringPool::new();
-        let thread = self.thread.clone();
+        let thread = self.activity.thread.clone();
         let (answered, pending) = {
-            let frame = self.native_handles.len() - 1;
+            let frame = self.activity.native_handles.len() - 1;
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -117,7 +117,7 @@ impl Interp {
         // `Error 38 ... Invalid template or pattern.` at rc 218, and the
         // extension returned zero on that path.
         if let Some(number) = pending {
-            self.native_reraise = true;
+            self.activity.native_reraise = true;
             return Err(condition_of(number));
         }
         self.settle_native_call(answered, popped, packaged, trapped)
@@ -165,9 +165,9 @@ impl Interp {
         let program = self.library_code_program(code);
         self.native_frame_mut().packaged = program.is_some();
         let mut strings = CStringPool::new();
-        let thread = self.thread.clone();
+        let thread = self.activity.thread.clone();
         let (answered, pending) = {
-            let frame = self.native_handles.len() - 1;
+            let frame = self.activity.native_handles.len() - 1;
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -183,7 +183,7 @@ impl Interp {
         pin_leave!(self);
         let outcome = match (pending, trapped) {
             (Some(number), _) => {
-                self.native_reraise = true;
+                self.activity.native_reraise = true;
                 Err(condition_of(number))
             }
             (None, Err(failure)) => Err(failure),
@@ -215,9 +215,9 @@ impl Interp {
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
         pin_enter!(self, crate::pinning::PinKind::LibraryEntry);
         let mut strings = CStringPool::new();
-        let thread = self.thread.clone();
+        let thread = self.activity.thread.clone();
         let (ran, pending) = {
-            let frame = self.native_handles.len() - 1;
+            let frame = self.activity.native_handles.len() - 1;
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -235,7 +235,7 @@ impl Interp {
         }
         let settled = self.settle_native_call(ran.map(|()| None), popped, true, None);
         // A hook is no level of the failure's, so nothing re-raises it.
-        self.native_reraise = false;
+        self.activity.native_reraise = false;
         settled.map(|_| ())
     }
 
@@ -261,9 +261,9 @@ impl Interp {
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let mut strings = CStringPool::new();
-        let thread = self.thread.clone();
+        let thread = self.activity.thread.clone();
         let (answered, pending) = {
-            let frame = self.native_handles.len() - 1;
+            let frame = self.activity.native_handles.len() - 1;
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -380,9 +380,9 @@ impl Interp {
             Failure::Raised(held) if held.condition != "SYNTAX" => held.condition.to_string(),
             _ => {
                 if additional.is_some() {
-                    self.pending_additional = additional;
+                    self.activity.pending_additional = additional;
                 }
-                self.native_reraise = true;
+                self.activity.native_reraise = true;
                 return Err(raised);
             }
         };
@@ -394,25 +394,25 @@ impl Interp {
                 let object = match trapped {
                     Some(object) => object,
                     None => {
-                        self.pending_additional = additional;
-                        self.pending_result = result;
+                        self.activity.pending_additional = additional;
+                        self.activity.pending_result = result;
                         self.build_condition_object(held, Some(true))?
                     }
                 };
-                self.pending_traps.push_back(PendingTrap {
+                self.activity.pending_traps.push_back(PendingTrap {
                     condition: condition.as_bytes().into(),
                     rc: None,
                     description: held.description.clone(),
                     object: Some(object),
                     activation: self.activation().id,
                     queued_during_delivery: false,
-                    fragment_depth: self.fragment_depth,
+                    fragment_depth: self.activity.fragment_depth,
                 });
                 Ok(result)
             }
             Some(_) => {
-                self.pending_additional = additional;
-                self.pending_result = result;
+                self.activity.pending_additional = additional;
+                self.activity.pending_result = result;
                 Err(raised)
             }
             None => Ok(result),
@@ -436,7 +436,10 @@ impl Interp {
         }
         let held = held.clone();
         let frame = self.native_frame();
-        (self.pending_additional, self.pending_result) = (frame.additional, frame.result);
+        (
+            self.activity.pending_additional,
+            self.activity.pending_result,
+        ) = (frame.additional, frame.result);
         let object = self.build_trapped_native_condition_object(&held)?;
         self.roots.push_temp(object);
         Ok(Some(object))
@@ -453,24 +456,28 @@ impl Interp {
         args: &[Option<ObjRef>],
         code: Option<usize>,
     ) {
-        let mut frame = self.native_spares.pop().unwrap_or_else(|| NativeFrame {
-            owner: ObjRef::NIL,
-            scope: ObjRef::NIL,
-            method: false,
-            receiver: ObjRef::NIL,
-            name: Vec::new(),
-            arguments: Vec::new(),
-            argument_list: None,
-            locals: Table::new(),
-            raised: None,
-            additional: None,
-            result: None,
-            condition: None,
-            code: None,
-            kept: rustc_hash::FxHashSet::default(),
-            caller: None,
-            packaged: false,
-        });
+        let mut frame = self
+            .activity
+            .native_spares
+            .pop()
+            .unwrap_or_else(|| NativeFrame {
+                owner: ObjRef::NIL,
+                scope: ObjRef::NIL,
+                method: false,
+                receiver: ObjRef::NIL,
+                name: Vec::new(),
+                arguments: Vec::new(),
+                argument_list: None,
+                locals: Table::new(),
+                raised: None,
+                additional: None,
+                result: None,
+                condition: None,
+                code: None,
+                kept: rustc_hash::FxHashSet::default(),
+                caller: None,
+                packaged: false,
+            });
         frame.owner = owner;
         frame.scope = scope;
         frame.method = receiver.is_some();
@@ -480,7 +487,7 @@ impl Interp {
         frame.packaged = false;
         frame.name.extend_from_slice(name);
         frame.arguments.extend_from_slice(args);
-        self.native_handles.push(frame);
+        self.activity.native_handles.push(frame);
     }
 
     /// Pops the innermost native frame, answering the condition it holds and
@@ -488,6 +495,7 @@ impl Interp {
     /// call to refill. The held condition's objects stay rooted as temps.
     fn pop_native_frame(&mut self) -> Popped {
         let mut frame = self
+            .activity
             .native_handles
             .pop()
             .expect("the frame pushed for this call is still the innermost");
@@ -508,7 +516,7 @@ impl Interp {
         for object in frame.kept.drain() {
             self.release_kept(object);
         }
-        self.native_spares.push(frame);
+        self.activity.native_spares.push(frame);
         answer
     }
 
@@ -666,7 +674,10 @@ fn condition_of(number: usize) -> Failure {
 
 impl Host for Interp {
     fn is_method(&self) -> bool {
-        self.native_handles.last().is_some_and(|frame| frame.method)
+        self.activity
+            .native_handles
+            .last()
+            .is_some_and(|frame| frame.method)
     }
 
     fn string_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {
@@ -707,7 +718,7 @@ impl Host for Interp {
     }
 
     fn cself(&mut self) -> Option<POINTER> {
-        let frame = self.native_handles.last()?;
+        let frame = self.activity.native_handles.last()?;
         let (receiver, scope) = (frame.receiver, frame.scope);
         // `NativeActivation::cself` (`execution/NativeActivation.cpp:2091`):
         // the receiver's, from the running method's scope upwards.
@@ -724,7 +735,7 @@ impl Host for Interp {
     }
 
     fn set_object_variable(&mut self, name: &[u8], value: Option<ObjRef>) {
-        let Some(frame) = self.native_handles.last() else {
+        let Some(frame) = self.activity.native_handles.last() else {
             return;
         };
         let (owner, scope) = (frame.owner, frame.scope);
@@ -939,7 +950,8 @@ impl Host for Interp {
                 slots,
             },
         );
-        self.native_handles
+        self.activity
+            .native_handles
             .last_mut()
             .expect("a native activation is running")
             .argument_list = Some(list);
@@ -973,6 +985,7 @@ impl Host for Interp {
 
     fn locals(&mut self) -> &mut Table {
         &mut self
+            .activity
             .native_handles
             .last_mut()
             .expect("a native activation is running")
@@ -991,7 +1004,7 @@ impl Host for Interp {
 
     fn kept_c_string(&mut self, object: ObjRef, bytes: &[u8]) -> Option<rexx_api::layout::CSTRING> {
         if !matches!(object.decode(), rexx_core::Decoded::Heap { .. }) {
-            let frame = self.native_handles.last_mut()?;
+            let frame = self.activity.native_handles.last_mut()?;
             if frame.kept.insert(object) {
                 *self.kept_holders.entry(object).or_default() += 1;
             }
@@ -1063,7 +1076,8 @@ impl Interp {
     /// Holds `failure` on the running native frame for the call to raise once
     /// the boundary has answered [`Refused::Raised`].
     fn hold_native_condition(&mut self, failure: Failure) -> Condition {
-        self.native_handles
+        self.activity
+            .native_handles
             .last_mut()
             .expect("a native activation is running")
             .raised = Some(failure);
@@ -1075,7 +1089,8 @@ impl Interp {
     /// # Panics
     /// As [`Interp::native_frame`].
     fn native_frame_mut(&mut self) -> &mut NativeFrame {
-        self.native_handles
+        self.activity
+            .native_handles
             .last_mut()
             .expect("a native activation is running")
     }
@@ -1086,7 +1101,8 @@ impl Interp {
     /// If no native activation is running, which is the only time the host is
     /// asked.
     fn native_frame(&self) -> &NativeFrame {
-        self.native_handles
+        self.activity
+            .native_handles
             .last()
             .expect("a native activation is running")
     }

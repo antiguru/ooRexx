@@ -19,7 +19,6 @@ use rexx_parse::{
     parse_program,
 };
 use rustc_hash::FxHashMap;
-use std::collections::VecDeque;
 use std::rc::Rc;
 
 // `pinned!` and `park_point!`, ahead of every module that uses them.
@@ -63,7 +62,8 @@ use plan::{BodyKey, BodyKind, ClassPackage, CompoundName, Package, Plan, Program
 // One activation: everything about the frame currently executing (D16).
 mod activation;
 use activation::{Activation, ActivationId, CallType, InstanceVar};
-use clause::ClauseState;
+mod activity;
+use activity::Activity;
 
 // `Raised` (the payload of a real Rexx condition) and `Failure` (either a
 // `Loud` not-implemented marker or a `Raised` condition, the one type
@@ -1008,7 +1008,7 @@ struct PendingTrap {
     /// carried by a command's condition and by no other.
     ///
     /// An `ObjRef` reachable only through this queue, so
-    /// [`Interp::object_roots`] names it: that destructure guards `Interp`'s
+    /// [`Activity::object_roots`] names it: that destructure guards `Activity`'s
     /// own fields and would not have caught one added inside a `VecDeque`.
     object: Option<ObjRef>,
     /// The activation this may be delivered to: the raising activation's
@@ -1017,20 +1017,20 @@ struct PendingTrap {
     /// Whether this was queued by a **handler** running at a clause boundary
     /// rather than by that clause's own work.
     queued_during_delivery: bool,
-    /// [`Interp::fragment_depth`] as it stood when this was queued: which
+    /// [`Activity::fragment_depth`] as it stood when this was queued: which
     /// `INTERPRET` fragment, if any, was running.
     fragment_depth: usize,
 }
 
-/// The interpreter. Owns the heap, the root set, the activation stack, the
+/// The interpreter. Owns the heap, the root set, the activity, the
 /// plan cache and the two sinks, and **does not own the AST**.
 struct Interp {
     heap: Heap,
     roots: RootSet,
+    /// The one activity: the state of the execution now running.
+    activity: Box<Activity>,
     /// A buffer lent out for building a compound's tail key, and handed back.
     key_buffer: Vec<u8>,
-    /// A buffer lent out for a builtin call's evaluated argument values.
-    value_buffer: Vec<Option<ObjRef>>,
     /// Buffers lent out for a `PARSE` instruction's source strings, and
     /// handed back when the template walk is done with them.
     parse_buffers: Vec<Vec<u8>>,
@@ -1060,36 +1060,6 @@ struct Interp {
     /// `std::env::set_current_dir` is process-wide. `DIRECTORY()` moves this
     /// and nothing else.
     cwd: std::path::PathBuf,
-    /// What each outstanding `SETLOCAL` saved, innermost last: the directory
-    /// and the whole environment, which `ENDLOCAL` puts back. The oracle keeps
-    /// this on the top-level activation and an internal routine's `SETLOCAL`
-    /// therefore outlives its return (`platform/unix/ExternalFunctions.cpp`,
-    /// and `funct.xml` says otherwise -- measured, the file is wrong).
-    locals: Vec<(std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>)>,
-    /// The activation running right now, held in a field of its own rather
-    /// than at the top of [`Interp::suspended`].
-    running: Option<Box<Activation>>,
-    /// The `TRACE` setting of whatever [`Interp::running`] holds, kept beside
-    /// it rather than read through it.
-    trace_cache: crate::trace::TraceCache,
-    /// The activations that entered before [`Interp::running`], oldest
-    /// first, so `suspended.last()` is the running activation's own caller.
-    #[expect(
-        clippy::vec_box,
-        reason = "the box is the same one `running` holds, so suspending and \
-                  resuming move a pointer instead of the activation"
-    )]
-    suspended: Vec<Box<Activation>>,
-    /// Boxes whose activations have ended, kept for the next push rather than
-    /// returned to the allocator. `Interp::recycle_activation` is what fills
-    /// it and `Interp::push_activation` what drains it; both carry the
-    /// reasoning.
-    #[expect(
-        clippy::vec_box,
-        reason = "the box is the allocation being kept, so unboxing here would \
-                  return the very thing this parks"
-    )]
-    spare_activations: Vec<Box<Activation>>,
     /// The next [`ActivationId`] to hand out. Monotonic, never reset, never
     /// reused -- see that type for the two defects that needed an identity a
     /// stack depth could not supply.
@@ -1282,14 +1252,6 @@ struct Interp {
     /// to, keyed by the identity [`Interp::install_one_method`] minted for
     /// its dictionary key.
     native_externals: FxHashMap<MethodId, &'static dispatch::native::NativeExternal>,
-    /// The native activations on the stack, innermost last. Each carries the
-    /// objects an extension's handles name (D5), rooted by
-    /// [`Interp::object_roots`] for exactly as long as the frame is on this
-    /// stack, so a handle that outlives its activation resolves to nothing.
-    native_handles: Vec<NativeFrame>,
-    /// Frames popped off [`Interp::native_handles`] with the buffers that held
-    /// objects cleared, whose allocations the next native call reuses.
-    native_spares: Vec<NativeFrame>,
     /// Every object an extension made a global reference, which a handle to
     /// it resolves to from any native call for as long as the interpreter
     /// runs (`InterpreterInstance::addGlobalReference`).
@@ -1321,9 +1283,6 @@ struct Interp {
     /// name (`InterpreterInstance::commandHandlers`). Emptied at the first
     /// library close, since nothing ties a handler's code to its library.
     command_handlers: FxHashMap<Box<[u8]>, Rc<rexx_api::load::CommandHandler>>,
-    /// The thread context every native call and package hook is handed,
-    /// which an extension may keep for as long as this interpreter runs.
-    thread: rexx_api::ffi::ThreadContext,
     /// How many times [`Interp::resolve_library`] has asked `load::open` for a
     /// name nothing held, whether or not a library loaded, which is what a
     /// test reads to see that a held one is not asked for again.
@@ -1389,151 +1348,6 @@ struct Interp {
     out: Vec<u8>,
     /// The trace sink, which becomes `Outcome::stderr`.
     trace: Vec<u8>,
-    /// `current_value_indent` and `current_clause_line`, bundled -- see
-    /// `ClauseState`'s own doc comment for what the two share, the property
-    /// that decides what belongs alongside them, and why they are one field
-    /// rather than two.
-    clause_state: ClauseState,
-    /// The flattened `DO`/`LOOP`s the op driver has open, innermost
-    /// last.
-    #[expect(
-        clippy::vec_box,
-        reason = "the box is the point: a pass boundary takes the top out to hand it a &mut Interp beside it, and moves a pointer rather than the header's Numbers"
-    )]
-    flat_loops: Vec<Box<crate::run::FlatLoop>>,
-    /// The innermost open flat loop, held apart from the stack of
-    /// the ones enclosing it.
-    flat_top: Option<Box<crate::run::FlatLoop>>,
-    /// The constructs the op driver has open, innermost last, across
-    /// every level of it at once.
-    frames: Vec<crate::ir::drive::Frame>,
-    /// Boxes a finished loop handed back, so that entering a loop
-    /// is a write into an allocation this interpreter already owns. A loop
-    /// entered once per two passes is common enough -- `samples/rexxcps.rex`
-    /// enters one 140,000 times to run 280,000 passes -- that an allocation
-    /// per entry is charged against a saving per pass.
-    #[expect(
-        clippy::vec_box,
-        reason = "these are allocations handed back for reuse, so the box is what is being kept"
-    )]
-    flat_spares: Vec<Box<crate::run::FlatLoop>>,
-    /// A condition raised by `RAISE` whose `CALL ON` handler has not run yet.
-    pending_traps: VecDeque<PendingTrap>,
-    /// The condition whose handler is running, for `RAISE PROPAGATE` to
-    /// re-raise.
-    active_condition: Option<ActiveCondition>,
-    /// The object a `RAISE ... ADDITIONAL` named, held from the raise until
-    /// the condition object is built. **The raise's own value and not a
-    /// rebuild of it**: measured, `additional 'JUSTONE'` puts a `String` in
-    /// the directory and `additional (.array~new)` an empty `Array`, where
-    /// reconstructing from the substitution list gives a one-item `Array` and
-    /// nothing at all. It lives on `Interp` rather than on `Raised` because a
-    /// `Raised` travels inside a `Failure` on the Rust stack, where no
-    /// destructure can root it, and this field is covered by the exhaustive
-    /// match in `object_roots`.
-    pending_additional: Option<ObjRef>,
-    /// The `RESULT` a condition an extension raised names, held from the
-    /// raise until the condition object is built, as
-    /// [`Interp::pending_additional`] is.
-    pending_result: Option<ObjRef>,
-    /// The `RC` a condition a registered command handler raised carries, held
-    /// as [`Interp::pending_additional`] is: an object where the entry's value
-    /// is not a rendering of the command's code, `.nil` for an entry present
-    /// with no value.
-    pending_rc: Option<ObjRef>,
-    /// The condition object a `RAISE PROPAGATE` re-raises in its caller, from
-    /// the propagate until a trap takes it.
-    reraised_object: Option<ObjRef>,
-    /// How many of the levels that `RAISE PROPAGATE` leaves are still to be
-    /// left, which add no frame and no origin: the object has its frames.
-    reraise_leaving: usize,
-    /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
-    /// `case` text, or `None` inside a plain `SELECT` (or before any
-    /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
-    /// **absorbed** `WhenCase` needs that nothing else threads to it: a
-    /// *listed* `WhenCase` gets `case_text` handed to it directly by
-    /// `Select`'s own explicit arm (`run.rs`), but an absorbed one (a
-    /// `WhenCase` reached only through ordinary `Op::Clause`'s region
-    /// stepping, because it is itself the `THEN` consequence of a
-    /// preceding `WHEN`/`WHEN CASE`, `ast.rs`'s own doc comment on
-    /// `whens`) has no such hand-off -- it is stepped like any other
-    /// instruction, with nothing carrying its enclosing `SELECT CASE`'s
-    /// own comparison value along.
-    current_case_text: Option<Vec<u8>>,
-    /// **F3's own perimeter, found by review -- and corrected twice more,
-    /// each correction found by re-verifying the previous one rather than
-    /// trusting it.** When an absorbed `WhenCase` (`run.rs`'s own doc
-    /// comment on that arm) takes its `Flow::Goto(false_target)` branch,
-    /// whatever it lands on -- `END`'s own 7.3, or (F-EX1) `OTHERWISE`'s
-    /// own marker *and its whole body*, redirected through `run_
-    /// otherwise` -- reports every indent it computes **`self` spaces
-    /// higher** than its own ordinary `static_indent` would give, for as
-    /// long as this stays non-zero.
-    indent_offset: usize,
-    /// The absolute printed indent every clause of the **current activation
-    /// level** starts from -- `0` for a program's own body, and an
-    /// `INTERPRET` fragment's enclosing clause's own printed indent for the
-    /// life of that fragment.
-    activation_indent: usize,
-    /// The clause a `Raised` condition escaped from, as the 1-based line and
-    /// the bytes `TRACE` would echo, or `None` if nothing raised.
-    failure_site: Option<FailureSite>,
-    /// The levels that have already finished failing, innermost first --
-    /// `Raised::report`'s echo stack minus its last entry.
-    failure_sites: Vec<FailureSite>,
-    /// The `StackFrame` of the level [`Interp::failure_site`] belongs to,
-    /// built before that level ends.
-    failure_frame: Option<ObjRef>,
-    /// The `StackFrame`s of the levels in [`Interp::failure_sites`] that have
-    /// one, innermost first: what a trapped condition's `STACKFRAMES` holds
-    /// above the trapping activation.
-    failure_frames: Vec<ObjRef>,
-    /// Whether the failure an extension's method or routine call is answering
-    /// is the condition it raised while running, which
-    /// `NativeActivation::checkConditions` re-raises in the caller, rather
-    /// than one its arguments' conversion raised on the way in.
-    native_reraise: bool,
-    /// Whether a context-variable member reached through a kept outer call
-    /// context has swapped that call's caller in as [`Interp::running`],
-    /// whose frame is then not the top one and so cannot grow a slot.
-    outer_caller: bool,
-    /// The activation a redirection's input reader is sending `LINEIN` from,
-    /// for as long as that send runs: the `RedirectionDispatcher` a condition
-    /// raised straight into it meets, which takes it and ends the input.
-    input_dispatch: Option<crate::activation::ActivationId>,
-    /// Whether the dispatcher took a condition during the current send.
-    input_dispatch_trapped: bool,
-    /// A SYNTAX condition the dispatcher took, which `RedirectionDispatcher::
-    /// handleError` hands to the command's own callout to raise once the
-    /// command completes.
-    input_dispatch_syntax: Option<Failure>,
-    /// The innermost of those levels that has a package: its program, whose
-    /// file and package a trapped condition names, and its line, which is
-    /// the condition's `POSITION` (a native level has none).
-    failure_origin: Option<(Package, Option<usize>)>,
-    /// Whether the SYNTAX failure has left a level that is not an internal
-    /// call, or was re-raised: `Activity::raiseException` marks it
-    /// `PROPAGATED` once the raising activation does not trap it.
-    failure_propagated: bool,
-    /// Whether it was re-raised, so that `POSITION` is no longer the raise's.
-    failure_reraised: bool,
-    /// The line number every clause echo prints while an `INTERPRET`
-    /// fragment is running, overriding the clause's own line in its own
-    /// source.
-    clause_line_override: Option<usize>,
-    /// How many `INTERPRET` fragments are running, counted from zero outside
-    /// any of them.
-    fragment_depth: usize,
-    /// Each running fragment, outermost first.
-    fragments: Vec<FragmentLevel>,
-    /// The index, in the innermost running fragment's body, of its clause
-    /// being stepped.
-    fragment_clause: usize,
-    /// Whether a line typed at an interactive-debug pause is running.
-    /// `RexxActivation::noTracing` includes this, so a pause's own fragment
-    /// traces nothing and pauses nowhere. Written only through
-    /// [`Interp::replace_debug_pause`], which keeps `trace_cache` in step.
-    pub(crate) debug_pause: bool,
     /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
     /// criterion 4): when true, [`Interp::alloc_with`] calls `Heap::collect`
     /// after every allocation instead of never. Off by default, and the off
@@ -1551,11 +1365,6 @@ struct Interp {
     /// Whether a `UNINIT` sweep is running -- oracle's `processingUninits`
     /// (`memory/RexxMemory.cpp:341`-`:347`, cleared at `:383`).
     processing_uninits: bool,
-    /// Whether a trace line is being delivered to `.TRACEOUTPUT`. A traced
-    /// clause inside that delivery writes to the buffer instead of routing
-    /// again: the oracle SIGSEGVs in the one shape that reaches this
-    /// (`corpus/oracle-crashes.txt` entry 14), and this crate must terminate.
-    routing_trace: bool,
     /// The `.STDERR` the bundle minted, for recognising a trace route no
     /// program has redirected: the monitor chain still ends here, and a direct
     /// write is then the same bytes a delivery would produce.
@@ -1579,25 +1388,6 @@ struct Interp {
     /// The arena size at which [`Interp::alloc_with`] collects, and half of
     /// this crate's trigger policy. The other half is `Heap::will_grow`.
     collect_at: usize,
-    /// Current `eval` recursion depth, and the deepest it has reached.
-    depth: usize,
-    max_depth: usize,
-    /// The depth-1 address of the chain currently being evaluated, kept aside
-    /// until that chain turns out to be the deepest one.
-    stack_entry: usize,
-    /// The two ends of the span, both from the chain that reached
-    /// `max_depth`, written together so they can never disagree.
-    stack_first: usize,
-    stack_deepest: usize,
-    /// Whether the instruction about to be stepped is allowed to be a
-    /// `PROCEDURE` -- and, read the other way, whether it is the first
-    /// instruction executed in its activation.
-    procedure_permitted: bool,
-    /// What [`Interp::procedure_permitted`] held when the running
-    /// [`crate::ir::Op::Clause`] region opened, for the one op that needs it.
-    region_procedure_permitted: bool,
-    /// The call that entered the running activation: what `USE ARG` reads.
-    call_context: CallContext,
     /// The in-process external data queue (I15): every line
     /// `PUSH`/`QUEUE` has written and `PULL`/`PARSE PULL` have not yet
     /// removed. See `queue.rs`'s own module doc for the LIFO/FIFO split, and
@@ -1622,25 +1412,6 @@ struct Interp {
     /// `Array` `.local` holds -- see `Invocation::words` for why the joined
     /// argument string cannot supply them.
     command_words: Vec<Vec<u8>>,
-    /// `RANDOM`'s generator state: the seed the next call will scramble, or
-    /// `None` before any call has drawn one.
-    random_seed: Option<u64>,
-    /// `TIME('E')`/`TIME('R')`'s anchor: the clock reading (`builtin::
-    /// datetime`'s microseconds-since-0001-01-01 unit) elapsed time is
-    /// measured from, or `None` before any `E`/`R` call has run.
-    /// ```text
-    /// zz=time('E'); call burn; call sub; say 'after' time('E')   [sub does n2 = time('R')]
-    ///   oracle:  inside 0.725271  inside-after-R 0.000004  after 0.725387
-    ///   crate:   inside 33.889432 inside-after-R 0.000005  after 0.000013
-    /// ```
-    elapsed_anchor: Option<i64>,
-    /// Whether a `TIME('R')` (or a clock read going backward) is waiting
-    /// to move [`elapsed_anchor`] the next time the clock cache next
-    /// refreshes -- `RexxActivation`'s own `elapsedReset` state flag
-    /// (`execution/ActivationSettings.hpp:121`), consumed by
-    /// `builtin::datetime::now_base_time`'s cache-miss path. See
-    /// [`elapsed_anchor`]'s own doc for why the reset is lazy at all.
-    pending_elapsed_reset: bool,
     /// Whether the required-string protocol can answer anything other than
     /// the value it was handed -- `Interp::required_string_value`'s gate.
     reqstr_armed: bool,
@@ -1661,9 +1432,6 @@ struct Interp {
     /// the package of a translation that raised no routine, method or resource
     /// table (`parser/LanguageParser.cpp:1893-1908`) and no prolog (`:656-665`).
     untranslated: rustc_hash::FxHashSet<ProgramId>,
-    /// The resolved paths whose `::REQUIRES` directives are still installing
-    /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
-    requires_installing: Vec<Box<str>>,
 }
 
 /// Where one installed `::ROUTINE` lives: which loaded program, and which of
@@ -1874,7 +1642,7 @@ pub(crate) struct FragmentLevel {
     pub(crate) line: usize,
     /// The `INTERPRET` clause's printed indent.
     pub(crate) indent: usize,
-    /// [`Interp::fragment_clause`] as the enclosing fragment left it.
+    /// [`Activity::fragment_clause`] as the enclosing fragment left it.
     pub(crate) outer_clause: usize,
 }
 
@@ -2004,8 +1772,8 @@ impl Interp {
         Interp {
             heap: Heap::new(),
             roots: RootSet::new(),
+            activity: Box::new(Activity::new()),
             key_buffer: Vec::new(),
-            value_buffer: Vec::new(),
             parse_buffers: Vec::new(),
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             text_numbers: crate::value::TextNumbers::new(),
@@ -2013,10 +1781,6 @@ impl Interp {
             library_search: library_search_of(&env),
             env,
             cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
-            locals: Vec::new(),
-            running: None,
-            suspended: Vec::new(),
-            spare_activations: Vec::new(),
             programs: Vec::new(),
             package_options: FxHashMap::default(),
             security_managers: FxHashMap::default(),
@@ -2067,7 +1831,6 @@ impl Interp {
             generated_methods: FxHashMap::default(),
             native_externals: FxHashMap::default(),
             libraries: Libraries::new(),
-            thread: rexx_api::ffi::ThreadContext::new(),
             #[cfg(test)]
             library_open_attempts: 0,
             library_externals: FxHashMap::default(),
@@ -2082,8 +1845,6 @@ impl Interp {
             package_routines: FxHashMap::default(),
             package_routine_codes: Vec::new(),
             routine_generation: 0,
-            native_handles: Vec::new(),
-            native_spares: Vec::new(),
             global_references: rexx_api::handles::Table::new(),
             command_handlers: FxHashMap::default(),
             kept_strings: rustc_hash::FxHashMap::default(),
@@ -2094,58 +1855,17 @@ impl Interp {
             special_methods: Vec::new(),
             out: Vec::new(),
             trace: Vec::new(),
-            clause_state: ClauseState::new(),
-            flat_loops: Vec::new(),
-            flat_top: None,
-            flat_spares: Vec::new(),
-            frames: Vec::new(),
-            pending_traps: VecDeque::new(),
-            active_condition: None,
-            pending_additional: None,
-            reraised_object: None,
-            reraise_leaving: 0,
-            pending_result: None,
-            pending_rc: None,
             next_activation_id: 0,
             next_invocation: 0,
-            current_case_text: None,
-            indent_offset: 0,
-            activation_indent: 0,
-            failure_site: None,
-            failure_sites: Vec::new(),
-            failure_frame: None,
-            failure_frames: Vec::new(),
-            failure_origin: None,
-            failure_propagated: false,
-            failure_reraised: false,
-            native_reraise: false,
-            outer_caller: false,
-            input_dispatch: None,
-            input_dispatch_trapped: false,
-            input_dispatch_syntax: None,
-            clause_line_override: None,
-            fragment_depth: 0,
-            fragments: Vec::new(),
-            fragment_clause: 0,
-            debug_pause: false,
             stress_collect: false,
             uninit_ready: Vec::new(),
             processing_uninits: false,
-            routing_trace: false,
             bootstrap_stderr: None,
             bootstrap_stdout: None,
             route_generation: 0,
             store_generation: 0,
             output_route: None,
             collect_at: COLLECT_FLOOR,
-            depth: 0,
-            max_depth: 0,
-            stack_entry: 0,
-            stack_first: 0,
-            stack_deepest: 0,
-            procedure_permitted: false,
-            region_procedure_permitted: false,
-            call_context: CallContext::default(),
             queue: Queue::new(),
             // Nothing to read, which is what makes it impossible for a unit
             // test to reach the harness's own standard input: only `execute`
@@ -2158,17 +1878,12 @@ impl Interp {
             standard_transient: [true; 3],
             sinks: None,
             command_words: Vec::new(),
-            random_seed: None,
-            elapsed_anchor: None,
-            pending_elapsed_reset: false,
             reqstr_armed: false,
             lostdigits_armed: false,
             program_path: String::new(),
             required_paths: FxHashMap::default(),
             required_packages: FxHashMap::default(),
             untranslated: rustc_hash::FxHashSet::default(),
-            requires_installing: Vec::new(),
-            trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
         }
     }
 
@@ -2268,7 +1983,7 @@ impl Interp {
         let address = self.activation().address.clone();
         let settings = self.activation().settings.clone();
         let saved = std::mem::replace(
-            &mut self.call_context,
+            &mut self.activity.call_context,
             CallContext {
                 name: name.to_vec(),
                 arguments: Rc::from(arguments),
@@ -2276,7 +1991,7 @@ impl Interp {
             },
         );
         let outcome = self.run_loaded(parsed, program_id, call_type, Some(address), Some(settings));
-        self.call_context = saved;
+        self.activity.call_context = saved;
         let value = outcome?;
         // What the callee made public becomes the caller's, and transitively
         // what the callee itself required.
@@ -2318,7 +2033,7 @@ impl Interp {
             vec![Some(package)]
         });
         let saved = std::mem::replace(
-            &mut self.call_context,
+            &mut self.activity.call_context,
             CallContext {
                 name: program.name.as_bytes().to_vec(),
                 arguments: Rc::from(arguments),
@@ -2326,7 +2041,7 @@ impl Interp {
             },
         );
         let outcome = self.run_loaded(parsed, program_id, CallType::Command, None, None);
-        self.call_context = saved;
+        self.activity.call_context = saved;
         outcome
     }
 
@@ -2395,8 +2110,8 @@ impl Interp {
         let called = matches!(call_type, CallType::Subroutine | CallType::Function);
         if let Err(failure) = self.install_directives(program_id, &program) {
             if called {
-                let arguments = Rc::clone(&self.call_context.arguments);
-                let name = self.call_context.name.clone();
+                let arguments = Rc::clone(&self.activity.call_context.arguments);
+                let name = self.activity.call_context.name.clone();
                 self.capture_site_frame(&failure, b"ROUTINE", &name, &arguments, program_id);
                 self.seal_site_level();
             }
@@ -2460,9 +2175,9 @@ impl Interp {
         // A called program's clauses trace from the margin, as a routine's do.
         let caller_levels = called.then(|| {
             (
-                std::mem::take(&mut self.activation_indent),
-                std::mem::take(&mut self.indent_offset),
-                self.clause_line_override.take(),
+                std::mem::take(&mut self.activity.activation_indent),
+                std::mem::take(&mut self.activity.indent_offset),
+                self.activity.clause_line_override.take(),
             )
         });
         self.push_activation(main);
@@ -2498,9 +2213,9 @@ impl Interp {
         self.roots.pop_slots(activation.frame);
         self.restore_clause_state(caller_clause);
         if let Some((base, offset, line)) = caller_levels {
-            self.activation_indent = base;
-            self.indent_offset = offset;
-            self.clause_line_override = line;
+            self.activity.activation_indent = base;
+            self.activity.indent_offset = offset;
+            self.activity.clause_line_override = line;
         }
         if called && exit.is_err() {
             self.seal_site_level();
@@ -2563,7 +2278,9 @@ impl Interp {
     /// `SETLOCAL`: saves the directory and the whole environment, and answers
     /// whether it saved one.
     pub(crate) fn push_local_environment(&mut self) -> bool {
-        self.locals.push((self.cwd.clone(), self.env.clone()));
+        self.activity
+            .locals
+            .push((self.cwd.clone(), self.env.clone()));
         true
     }
 
@@ -2572,7 +2289,7 @@ impl Interp {
     /// added since** -- measured on the oracle, and `restoreEnvironment` only
     /// re-`putenv`s what it holds.
     pub(crate) fn pop_local_environment(&mut self) -> bool {
-        let Some((cwd, saved)) = self.locals.pop() else {
+        let Some((cwd, saved)) = self.activity.locals.pop() else {
             return false;
         };
         self.cwd = cwd;
@@ -2673,21 +2390,14 @@ impl Interp {
         let Interp {
             heap: _,
             roots: _,
+            activity,
             key_buffer: _,
-            // Every push site roots the value as a temp before it lands here.
-            value_buffer: _,
             parse_buffers: _,
             text_scratch: _,
             // Handle-inline strings, which are their own bytes and have no
             // slot to recycle.
             text_numbers: _,
             result_buffer: _,
-            running,
-            trace_cache: _,
-            suspended,
-            // A finished activation's leftovers, overwritten at reuse and read
-            // by nothing in between.
-            spare_activations: _,
             next_activation_id: _,
             next_invocation: _,
             programs: _,
@@ -2773,9 +2483,6 @@ impl Interp {
             native_externals: _,
             // Library handles and procedure names, no `ObjRef` in either.
             libraries: _,
-            // Handles for constants that are not heap objects, and the
-            // innermost native call, whose frame `native_handles` roots.
-            thread: _,
             #[cfg(test)]
                 library_open_attempts: _,
             library_externals: _,
@@ -2793,11 +2500,6 @@ impl Interp {
             package_routines: _,
             package_routine_codes: _,
             routine_generation: _,
-            native_handles,
-            // A pop clears the buffers that held objects, and a push
-            // overwrites the handle fields before anything reads them, so a
-            // spare names nothing to root.
-            native_spares: _,
             global_references,
             // Entry points, not objects.
             command_handlers: _,
@@ -2810,50 +2512,11 @@ impl Interp {
             special_methods: _,
             out: _,
             trace: _,
-            clause_state: _,
-            // The `DO OVER` snapshot sits in a register held for the loop's
-            // lifetime, and `RootSet` reaches a register as a temp.
-            flat_loops: _,
-            flat_top: _,
-            frames: _,
-            // Overwritten at reuse, as `spare_activations` is.
-            flat_spares: _,
-            pending_traps,
-            active_condition: _,
-            pending_additional,
-            reraised_object,
-            reraise_leaving: _,
-            pending_result,
-            pending_rc,
-            current_case_text: _,
-            indent_offset: _,
-            activation_indent: _,
-            failure_site: _,
-            failure_sites: _,
-            failure_frame,
-            failure_frames,
-            // A package identity and a line.
-            failure_origin: _,
-            failure_propagated: _,
-            failure_reraised: _,
-            // Flags and an activation identity.
-            native_reraise: _,
-            outer_caller: _,
-            input_dispatch: _,
-            input_dispatch_trapped: _,
-            // A condition, whose ADDITIONAL `pending_additional` roots.
-            input_dispatch_syntax: _,
-            clause_line_override: _,
-            fragment_depth: _,
-            fragments: _,
-            fragment_clause: _,
-            debug_pause: _,
             stress_collect: _,
             // The collector's own resurrection flag holds each object until
             // its finalizer clears it.
             uninit_ready: _,
             processing_uninits: _,
-            routing_trace: _,
             // `.local` holds these streams and is a global root, so the
             // handles here root nothing of their own; they are only compared.
             bootstrap_stderr: _,
@@ -2864,35 +2527,20 @@ impl Interp {
             // root holds; this caches the decision, not the object.
             output_route: _,
             collect_at: _,
-            depth: _,
-            max_depth: _,
-            stack_entry: _,
-            stack_first: _,
-            stack_deepest: _,
-            procedure_permitted: _,
-            region_procedure_permitted: _,
-            // A running call's arguments and receiver are the caller's temps;
-            // `CallContext::object_roots` is the parked case's other route.
-            call_context: _,
             queue: _,
             input: _,
-            random_seed: _,
-            elapsed_anchor: _,
-            pending_elapsed_reset: _,
             reqstr_armed: _,
             lostdigits_armed: _,
             program_path: _,
             required_paths: _,
             required_packages: _,
             untranslated: _,
-            requires_installing: _,
             // Bytes and paths, no `ObjRef` in any of them: the interpreter's
             // own environment, current directory and `SETLOCAL` snapshots are
             // not the collector's.
             env: _,
             library_search: _,
             cwd: _,
-            locals: _,
             // The embedding's own writers, which take bytes and hold nothing
             // of this interpreter's.
             sinks: _,
@@ -2902,63 +2550,12 @@ impl Interp {
             standard_transient: _,
             command_words: _,
         } = self;
-        // The raise's own `ADDITIONAL`, alive between the raise and the
-        // condition object that will hold it.
-        out.extend(*pending_additional);
-        out.extend(*pending_result);
-        out.extend(*pending_rc);
-        out.extend(*reraised_object);
+        activity.object_roots(out);
         out.extend(stem_exposers.values().flatten().copied());
-        out.extend(*failure_frame);
-        out.extend(failure_frames.iter().copied());
         out.extend(global_references.roots());
-        // Everything a native call has been handed, and the receiver it is
-        // writing object variables through. Held here rather than by the
-        // collector's other routes because an extension's handle is the only
-        // reference to it: nothing on the Rexx side names an object a native
-        // method allocated and has not returned yet.
-        for frame in native_handles {
-            out.extend(frame.locals.roots());
-            out.extend([frame.owner, frame.scope, frame.receiver]);
-            out.extend(frame.arguments.iter().copied().flatten());
-            out.extend(frame.argument_list);
-            out.extend(
-                [frame.additional, frame.result, frame.condition]
-                    .into_iter()
-                    .flatten(),
-            );
-        }
         // A manager is an ordinary program object held by nothing else: the
         // package that carries it is a plan, not an object with a slot.
         out.extend(security_managers.values().copied());
-        // Each queued trap's condition object. Destructured rather than
-        // reached by field: the match above guards `Interp`'s own fields, and
-        // an `ObjRef` added inside this `VecDeque` would otherwise arrive
-        // unrooted with nothing to say so.
-        for PendingTrap {
-            condition: _,
-            rc: _,
-            description: _,
-            object,
-            activation: _,
-            queued_during_delivery: _,
-            fragment_depth: _,
-        } in pending_traps
-        {
-            out.extend(*object);
-        }
-        // The context objects of the activations on the stack. **The one
-        // object an activation owns outright**: everything else it holds is
-        // rooted by its slot frame, by `Interp::class_variables`, or -- a
-        // send's receiver -- by the temporary `Interp::message_term` takes
-        // over the sending clause. A `RexxContext` is created by
-        // `Interp::context_object` and stored on the activation, and nothing
-        // else refers to it. Handed over here rather than kept rooted per
-        // activation because the alternative is a global root whose key has
-        // to be minted, replaced and retired as activations come and go, and
-        // this pays only when a collection actually happens.
-        // `Activation::object_roots` is the same objects' other route, for an
-        // activation a `REPLY` has parked.
         // **A package pins the classes it declares**, which is the oracle's
         // behaviour and not a convenience: measured, a `::CLASS` class
         // survives a forced collection there, because nothing can drop the
@@ -2971,23 +2568,6 @@ impl Interp {
         ] {
             out.extend(table.values().flat_map(|names| names.values().copied()));
         }
-        out.extend(
-            running
-                .iter()
-                .map(std::ops::Deref::deref)
-                .chain(suspended.iter().map(Box::as_ref))
-                .filter_map(|activation| activation.context_object),
-        );
-        // The trapped condition's object, which a `CALL ON` handler's
-        // activation and every callee that inherits its `CONDITION()` hold
-        // once the queue has handed it over.
-        out.extend(
-            running
-                .iter()
-                .map(std::ops::Deref::deref)
-                .chain(suspended.iter().map(Box::as_ref))
-                .filter_map(|activation| activation.condition.as_ref()?.object),
-        );
     }
 
     /// The collection itself, kept out of [`Interp::collect_if_due`]'s body so
@@ -3259,7 +2839,7 @@ fn execute(
     // goes into the same `call_context` a `CALL` fills -- see that field's own
     // doc for what reads it and for the three measured invocations that tell
     // "no argument" from "one empty argument" apart.
-    interp.call_context.name = path.as_bytes().to_vec();
+    interp.activity.call_context.name = path.as_bytes().to_vec();
     let parts = invocation.into_parts();
     interp.roots.set_frame_block(parts.frame_block);
     let (argument, deadline) = (parts.argument, parts.deadline);
@@ -3304,16 +2884,16 @@ fn execute(
             // collector, so without this the value is unreachable the first time
             // anything allocates.
             interp.roots.push_temp(value);
-            interp.call_context.arguments = Rc::from(&[Some(value)][..]);
+            interp.activity.call_context.arguments = Rc::from(&[Some(value)][..]);
         }
         interp.run(program)
     });
     // The whole echo stack, innermost first: the levels `seal_site_level`
     // already closed, then the level that was still unwinding when the
-    // condition reached the top. See `Interp::failure_sites` for why the two
+    // condition reached the top. See `Activity::failure_sites` for why the two
     // are separate fields, and `Raised::report` for what the order means.
-    let mut failure_sites = std::mem::take(&mut interp.failure_sites);
-    failure_sites.extend(interp.failure_site.take());
+    let mut failure_sites = std::mem::take(&mut interp.activity.failure_sites);
+    failure_sites.extend(interp.activity.failure_site.take());
     // `exit_code_for` needs `&mut interp` (`to_number` fills a lazy cache),
     // so this has to run before `interp.trace`/`interp.out` move out of
     // `interp` below -- a partial move of one field ends `interp`'s usability
@@ -3441,7 +3021,7 @@ fn execute(
         collections,
         chunks_refused,
         #[cfg(feature = "pinning")]
-        pinning: interp.pinning.take(),
+        pinning: interp.pinning.take(&interp.activity.pins),
     }
 }
 

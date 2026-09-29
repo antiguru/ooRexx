@@ -139,7 +139,7 @@ fn clause_line_at_answers_what_clause_line_answers_and_the_override_still_wins()
         );
     }
 
-    interp.clause_line_override = Some(4242);
+    interp.activity.clause_line_override = Some(4242);
     for (index, instruction) in program.main.instructions.iter().enumerate() {
         assert_eq!(
             interp.clause_line_at(&code, index, instruction, Some(&program.source)),
@@ -151,7 +151,7 @@ fn clause_line_at_answers_what_clause_line_answers_and_the_override_still_wins()
     // `source: None` answers `None` whatever the override says, exactly
     // as `clause_line` does -- the two must not come apart on that arm
     // either.
-    interp.clause_line_override = None;
+    interp.activity.clause_line_override = None;
     for (index, instruction) in program.main.instructions.iter().enumerate() {
         assert_eq!(
             interp.clause_line_at(&code, index, instruction, None),

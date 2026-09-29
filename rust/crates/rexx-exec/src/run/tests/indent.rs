@@ -25,7 +25,8 @@ fn one_two_and_three_enclosing_dos_indent_by_two_four_and_six() {
     ] {
         let mut interp = Interp::new();
         run_source(&mut interp, source).unwrap_err();
-        let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+        let FailureSite::Clause { indent, .. } =
+            interp.activity.failure_site.expect("a site was resolved")
         else {
             panic!("not a clause site")
         };
@@ -45,7 +46,7 @@ fn the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"do i = 1 to 3\nsay i\nend\nsay 1/0").unwrap_err();
     let FailureSite::Clause { indent, text, .. } =
-        interp.failure_site.expect("a site was resolved")
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -73,7 +74,8 @@ fn control_setup_expressions_are_unindented_unlike_the_loop_body_they_precede() 
     ] {
         let mut interp = Interp::new();
         run_source(&mut interp, source).unwrap_err();
-        let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+        let FailureSite::Clause { indent, .. } =
+            interp.activity.failure_site.expect("a site was resolved")
         else {
             panic!("not a clause site")
         };
@@ -88,7 +90,8 @@ fn control_setup_expressions_are_unindented_unlike_the_loop_body_they_precede() 
 fn while_and_until_are_indented_inside_the_loops_own_frame() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"do while 1/0\nsay 1\nend").unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -96,7 +99,8 @@ fn while_and_until_are_indented_inside_the_loops_own_frame() {
 
     let mut interp = Interp::new();
     run_source(&mut interp, b"do until 1/0\nsay 1\nend").unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -112,7 +116,8 @@ fn while_and_until_are_indented_inside_the_loops_own_frame() {
 fn a_whens_own_condition_is_indented_at_the_selects_own_two_spaces() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select\nwhen 1/0 then nop\nend").unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -129,7 +134,8 @@ fn a_whens_own_condition_is_indented_at_the_selects_own_two_spaces() {
 fn a_matched_whens_then_body_indents_six_but_otherwises_body_indents_only_four() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select\nwhen 1 = 1 then say 1/0\nend").unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -141,7 +147,8 @@ fn a_matched_whens_then_body_indents_six_but_otherwises_body_indents_only_four()
         b"select\nwhen 1 = 0 then nop\notherwise\nsay 1/0\nend",
     )
     .unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -159,7 +166,8 @@ fn a_matched_whens_then_body_indents_six_but_otherwises_body_indents_only_four()
 fn an_ifs_matched_then_or_else_branch_indents_four_and_an_else_if_chain_indents_eight() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"if 1 = 1 then say 1/0").unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -167,7 +175,8 @@ fn an_ifs_matched_then_or_else_branch_indents_four_and_an_else_if_chain_indents_
 
     let mut interp = Interp::new();
     run_source(&mut interp, b"if 1 = 0 then say 2\nelse say 1/0").unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -179,7 +188,8 @@ fn an_ifs_matched_then_or_else_branch_indents_four_and_an_else_if_chain_indents_
         b"if 1 = 0 then say 2\nelse if 1 = 1 then say 1/0",
     )
     .unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -338,7 +348,8 @@ fn a_select_nested_inside_a_do_composes_the_two_constructs_own_contributions() {
         b"do i = 1 to 3\nselect\nwhen 1 = 1 then say 1/0\notherwise nop\nend\nend",
     )
     .unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };

@@ -893,7 +893,7 @@ fn every_class_the_library_declares_carries_the_rexx_defined_flag() {
 }
 
 /// A native activation's local references are roots while its table is on
-/// [`Interp::native_handles`] and nothing once it is popped, which is what
+/// [`Activity::native_handles`] and nothing once it is popped, which is what
 /// makes a handle outliving its activation a lookup miss (D5).
 #[test]
 fn a_native_activations_local_references_are_roots_only_while_it_lives() {
@@ -922,18 +922,18 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
         packaged: false,
     };
     let handle = frame.locals.register(object);
-    interp.native_handles.push(frame);
+    interp.activity.native_handles.push(frame);
     interp.collect_now();
     assert!(
         interp.heap.get(object).is_some(),
         "a live native activation's local reference was collected"
     );
     assert_eq!(
-        interp.native_handles[0].locals.resolve(handle),
+        interp.activity.native_handles[0].locals.resolve(handle),
         Some(object)
     );
 
-    interp.native_handles.pop();
+    interp.activity.native_handles.pop();
     interp.collect_now();
     assert!(
         interp.heap.get(object).is_none(),
@@ -957,7 +957,7 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
     let (receiver, argument, list) = (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
     let (additional, result, condition) =
         (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
-    interp.native_handles.push(crate::NativeFrame {
+    interp.activity.native_handles.push(crate::NativeFrame {
         owner: rexx_core::ObjRef::NIL,
         scope: rexx_core::ObjRef::NIL,
         method: true,
@@ -987,7 +987,7 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
     for (held, what) in held {
         assert!(interp.heap.get(held).is_some(), "the {what} was collected");
     }
-    interp.native_handles.pop();
+    interp.activity.native_handles.pop();
     interp.collect_now();
     for (held, what) in held {
         assert!(

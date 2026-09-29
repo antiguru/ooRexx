@@ -24,7 +24,7 @@ use crate::plan::Package;
 /// the frames `Activity::generateProgramInformation` takes at the raise, which
 /// this crate can only take as each level ends.
 pub(crate) struct Unwound<'a> {
-    /// Innermost first, as [`Interp::failure_sites`] holds them.
+    /// Innermost first, as [`Activity::failure_sites`] holds them.
     pub(crate) sites: &'a [FailureSite],
     /// The `StackFrame`s of those levels, innermost first; each is rooted by
     /// the caller.
@@ -149,7 +149,7 @@ impl Interp {
             None => (
                 self.running_program()
                     .map_or(Package::Rexx, Package::Program),
-                Some(self.clause_state.line()),
+                Some(self.activity.clause_state.line()),
             ),
         };
         if let Some(line) = line {
@@ -227,6 +227,7 @@ impl Interp {
         let reraised = unwound.is_some_and(|unwound| unwound.reraised);
         let packaged_native = native
             && self
+                .activity
                 .native_handles
                 .last()
                 .is_some_and(|frame| frame.packaged);
@@ -242,7 +243,7 @@ impl Interp {
                 (None, Some(line)) => Some(line),
                 // No frame at all, which a raise from outside any activation
                 // would be; the clause state is the only line there is.
-                (None, None) => Some(self.counted(self.clause_state.line())),
+                (None, None) => Some(self.counted(self.activity.clause_state.line())),
             }
         };
         if let Some(position) = position {
@@ -270,7 +271,7 @@ impl Interp {
         self.roots.push_temp(traceback);
         entries.push((key::TRACEBACK, traceback));
 
-        if let Some(rc) = self.pending_rc.take() {
+        if let Some(rc) = self.activity.pending_rc.take() {
             self.roots.push_temp(rc);
             entries.push((key::RC, rc));
         } else if let Some(rc) = raised.rc.as_deref() {
@@ -305,11 +306,11 @@ impl Interp {
         // array)` rebuilds an Array of that array's strings rather than
         // handing back the original. Right for `SYNTAX`, whose substitutions
         // are text to begin with; an approximation for `USER`.
-        if let Some(result) = self.pending_result.take() {
+        if let Some(result) = self.activity.pending_result.take() {
             self.roots.push_temp(result);
             entries.push((key::RESULT, result));
         }
-        match self.pending_additional.take() {
+        match self.activity.pending_additional.take() {
             // The raise's own object, whatever its class.
             Some(object) => {
                 self.roots.push_temp(object);
@@ -438,7 +439,7 @@ impl Interp {
         // A native call's own condition leads with its frame even where no
         // activation called it.
         if native
-            && let Some(row) = self.native_handles.len().checked_sub(1)
+            && let Some(row) = self.activity.native_handles.len().checked_sub(1)
             && !levels.contains(&LiveLevel::Native(row))
         {
             levels.insert(0, LiveLevel::Native(row));

@@ -146,7 +146,7 @@ impl Interp {
     /// it on stdout, which is `corpus/oracle-crashes.txt` entry 11's licensed
     /// answer for a route the oracle dies on.
     pub(crate) fn route_trace_line(&mut self, start: usize) {
-        if self.routing_trace {
+        if self.activity.routing_trace {
             return;
         }
         let Ok(Some(route)) = self.local_route(b"TRACEOUTPUT") else {
@@ -162,7 +162,7 @@ impl Interp {
         while line.last() == Some(&b'\n') {
             line.pop();
         }
-        self.routing_trace = true;
+        self.activity.routing_trace = true;
         // **The nested-send protocol, not a bare send**, and around the whole
         // delivery because `NEW`, each `PUT` and the `LINEOUT` all run Rexx
         // clauses. A clause boundary clears the shared argument stack, so
@@ -177,7 +177,7 @@ impl Interp {
             self.deliver_trace_line(class, route, &line)
         );
         self.give_value_buffer(values, mark);
-        self.routing_trace = false;
+        self.activity.routing_trace = false;
         if delivered.is_err() {
             self.out.extend_from_slice(&line);
             self.out.push(b'\n');

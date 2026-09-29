@@ -361,7 +361,8 @@ fn an_absorbed_whencases_escaping_false_branch_reports_end_at_its_own_residual_i
         panic!("expected Raised, got {failure:?}");
     };
     assert_eq!((raised.number, raised.sub), (7, 3));
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -392,7 +393,8 @@ fn an_absorbed_whencases_escape_to_end_reports_the_same_constant_offset_nested()
         panic!("expected Raised, got {failure:?}");
     };
     assert_eq!((raised.number, raised.sub), (7, 3));
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -489,6 +491,7 @@ fn a_when_conditions_own_failure_is_attributed_to_the_when_not_the_select() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select\nwhen 'x' then nop\nend").unwrap_err();
     let FailureSite::Clause { line, text, .. } = interp
+        .activity
         .failure_site
         .expect("a raised condition always resolves a site when source is Some")
     else {
@@ -514,7 +517,8 @@ fn the_second_of_two_whens_own_failure_moves_the_line_with_it() {
         b"select\nwhen 1 = 0 then nop\nwhen 'x' then nop\nend",
     )
     .unwrap_err();
-    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { line, text, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -530,7 +534,8 @@ fn the_second_of_two_whens_own_failure_moves_the_line_with_it() {
 fn a_select_cases_own_expression_failure_is_attributed_to_the_select() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select case (1/0)\nwhen 1 then nop\nend").unwrap_err();
-    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { line, text, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -546,7 +551,8 @@ fn a_select_cases_own_expression_failure_is_attributed_to_the_select() {
 fn a_whencase_values_own_failure_is_attributed_to_the_when_not_the_select() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select case 1\nwhen (1/0) then nop\nend").unwrap_err();
-    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { line, text, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -567,7 +573,8 @@ fn a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause() {
         b"select\nwhen 1 = 0 then nop\notherwise\n  say 1/0\nend",
     )
     .unwrap_err();
-    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { line, text, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -591,7 +598,8 @@ fn a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause() {
 fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"select\nwhen 1 = 1 then\n  say 1/0\nend").unwrap_err();
-    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { line, text, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -612,7 +620,8 @@ fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
 fn a_raise_inside_an_ifs_then_body_is_attributed_to_its_own_clause() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"if 1 = 1 then\n  say 1/0").unwrap_err();
-    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { line, text, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };

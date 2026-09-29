@@ -64,14 +64,14 @@ impl Interp {
     pub(crate) fn enter_eval_node<T>(&mut self, anchor: *const T) -> Result<(), Failure> {
         let here = anchor as usize;
 
-        self.depth += 1;
-        if self.depth == 1 {
-            self.stack_entry = here;
+        self.activity.depth += 1;
+        if self.activity.depth == 1 {
+            self.activity.stack_entry = here;
         }
-        if self.depth > self.max_depth {
-            self.max_depth = self.depth;
-            self.stack_first = self.stack_entry;
-            self.stack_deepest = here;
+        if self.activity.depth > self.activity.max_depth {
+            self.activity.max_depth = self.activity.depth;
+            self.activity.stack_first = self.activity.stack_entry;
+            self.activity.stack_deepest = here;
         }
 
         // D19's evaluation-depth limit, checked **after** the bookkeeping
@@ -84,8 +84,8 @@ impl Interp {
         // one level *above* the one the oracle is known to handle, or the
         // one depth we are supposed to match becomes the first one we
         // refuse.
-        if self.depth > MAX_EVAL_DEPTH {
-            self.depth -= 1;
+        if self.activity.depth > MAX_EVAL_DEPTH {
+            self.activity.depth -= 1;
             return Err(Raised::insufficient_stack().into());
         }
         Ok(())
@@ -95,7 +95,7 @@ impl Interp {
         let probe = 0u8;
         self.enter_eval_node(&raw const probe)?;
         let value = self.eval_node(code, expr);
-        self.depth -= 1;
+        self.activity.depth -= 1;
         // `TRACE I`'s own value events (D17), and the **single insertion
         // point** for all of them: `eval` was already split from
         // `eval_node` so every exit path -- every `?`-propagated one
@@ -130,7 +130,7 @@ impl Interp {
     /// [`Interp::trace_intermediate`]'s body, entered only under `TRACE I`.
     #[inline(never)]
     fn trace_intermediate_event(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         match &expr.kind {
             // `Constant`'s own shape is reasoned from `Literal`'s measured
             // one, not independently probed (this crate's own report says
@@ -297,7 +297,7 @@ impl Interp {
                     let tag = code.symbols.name(id).as_bytes().to_vec();
                     let mut printed = stem_name.to_vec();
                     printed.extend_from_slice(&key);
-                    let indent = self.clause_state.current_value_indent;
+                    let indent = self.activity.clause_state.current_value_indent;
                     self.trace_compound_name(indent, &tag, &printed);
                 }
                 let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
@@ -321,7 +321,7 @@ impl Interp {
     /// [`Interp::echo_symbol_read`]'s gate.
     #[inline(never)]
     fn echo_symbol_read_line(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
         let text = self.string_value_text(value);
         self.trace_variable(indent, &tag, &text);
@@ -494,7 +494,7 @@ impl Interp {
     #[inline(never)]
     fn eval_list(&mut self, code: &Code<'_>, items: &[Option<Expr>]) -> Result<ObjRef, Failure> {
         let frame = self.roots.push_frame();
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let mut slots = Vec::with_capacity(items.len());
         for item in items {
             let Some(expr) = item else {
@@ -1321,7 +1321,7 @@ impl Interp {
     /// comment).
     fn eval_logical_list(&mut self, code: &Code<'_>, items: &[Expr]) -> Result<ObjRef, Failure> {
         let frame = self.roots.push_frame();
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let mut holds = true;
         for item in items {
             let value = self.eval(code, item)?;
@@ -1343,8 +1343,11 @@ impl Interp {
 
     pub(crate) fn stack_span(&self) -> StackSpan {
         StackSpan {
-            max_depth: self.max_depth,
-            bytes: self.stack_first.saturating_sub(self.stack_deepest),
+            max_depth: self.activity.max_depth,
+            bytes: self
+                .activity
+                .stack_first
+                .saturating_sub(self.activity.stack_deepest),
         }
     }
 }

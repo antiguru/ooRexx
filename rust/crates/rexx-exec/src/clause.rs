@@ -118,7 +118,7 @@ impl ClauseState {
             current_clause_line: 0,
             current_clause_index: 0,
             // `false` is the state an interpreter with nothing running is in,
-            // matching `Interp::trace_cache`'s own `TraceMode::OFF`.
+            // matching `Activity::trace_cache`'s own `TraceMode::OFF`.
             instructions_traced_at_entry: false,
         }
     }
@@ -242,7 +242,7 @@ impl Interp {
         // ordinary call removes its own run, so this stores a length that is
         // already zero. Measured: 200,000 abandoned pushes grew the process
         // by 3.3 MB without it.
-        self.value_buffer.clear();
+        self.activity.value_buffer.clear();
         // **The fourth-site tripwire** (fix round 4). A condition queued by
         // this activation's clause at line L that is still waiting when a
         // clause at a *different* line begins means some construct resolved
@@ -252,17 +252,17 @@ impl Interp {
         // handler will now report `SIGL` for the wrong clause, which is the
         // half of the defect that has recurred every round.
         debug_assert!(
-            self.clause_state.current_clause_line == line
-                || !self.pending_traps.iter().any(|pending| {
+            self.activity.clause_state.current_clause_line == line
+                || !self.activity.pending_traps.iter().any(|pending| {
                     !pending.queued_during_delivery && pending.activation == self.activation().id
                 }),
             "a clause at line {} began while a condition queued by this activation's clause at \
              line {} was still waiting: some construct ran an instruction inside its own step \
              without ending its header clause first",
             line,
-            self.clause_state.current_clause_line
+            self.activity.clause_state.current_clause_line
         );
-        self.clause_state.current_clause_line = line;
+        self.activity.clause_state.current_clause_line = line;
         ClauseEntry(())
     }
 
@@ -319,7 +319,7 @@ impl Interp {
             // delivers nothing.
             return Ok(ClauseOutcome::Ran(ran));
         };
-        if self.pending_traps.is_empty() {
+        if self.activity.pending_traps.is_empty() {
             return Ok(ClauseOutcome::Ran(ran));
         }
         if let Some(value) = value.rooted() {
@@ -348,7 +348,7 @@ impl Interp {
     #[inline(always)]
     pub(crate) fn spend_clause_entry(&self, entry: ClauseEntry) {
         debug_assert!(
-            self.pending_traps.is_empty(),
+            self.activity.pending_traps.is_empty(),
             "a clause boundary was skipped while a condition was queued for it"
         );
         let ClauseEntry(()) = entry;
@@ -358,15 +358,15 @@ impl Interp {
     /// back after the callee has run.
     pub(crate) fn save_clause_state(&self) -> SavedClauseState {
         SavedClauseState(ClauseState {
-            current_value_indent: self.clause_state.current_value_indent,
-            current_clause_line: self.clause_state.current_clause_line,
-            current_clause_index: self.clause_state.current_clause_index,
-            instructions_traced_at_entry: self.clause_state.instructions_traced_at_entry,
+            current_value_indent: self.activity.clause_state.current_value_indent,
+            current_clause_line: self.activity.clause_state.current_clause_line,
+            current_clause_index: self.activity.clause_state.current_clause_index,
+            instructions_traced_at_entry: self.activity.clause_state.instructions_traced_at_entry,
         })
     }
 
     /// Puts back what [`Interp::save_clause_state`] took.
     pub(crate) fn restore_clause_state(&mut self, saved: SavedClauseState) {
-        self.clause_state = saved.0;
+        self.activity.clause_state = saved.0;
     }
 }

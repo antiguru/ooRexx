@@ -387,7 +387,7 @@ impl Interp {
         // inside the creating activation rather than pushing its own, and
         // true for a `CALL` only because the `Call` arm pops the callee
         // before it returns.
-        let arguments = Rc::clone(&self.call_context.arguments);
+        let arguments = Rc::clone(&self.activity.call_context.arguments);
         // **The name is copied only where nothing else records it.** A
         // method activation already carries the message name it was entered
         // under on `Activation::method_identity`, and that is the hot path:
@@ -396,7 +396,7 @@ impl Interp {
         // `Rc<[u8]>` built here for every send and +0.093% with this test in
         // front of it.
         let name = (self.activation().entry != crate::activation::Entry::Method)
-            .then(|| Rc::from(&self.call_context.name[..]));
+            .then(|| Rc::from(&self.activity.call_context.name[..]));
         let activation = self.activation_mut();
         if let Some(name) = name {
             activation.call_name = Some(name);
@@ -450,7 +450,7 @@ impl Interp {
     /// only readers of.
     pub(crate) fn grant_procedure_permission(&mut self, instruction: &Instruction) {
         if !matches!(instruction.kind, InstructionKind::Label { .. }) {
-            self.procedure_permitted =
+            self.activity.procedure_permitted =
                 std::mem::take(&mut self.activation_mut().first_instruction_pending);
         }
     }
@@ -473,8 +473,8 @@ impl Interp {
             // bound to.
             Flow::Signal(target) => {
                 self.activation_mut().pc = target;
-                self.activation_indent = 0;
-                self.indent_offset = 0;
+                self.activity.activation_indent = 0;
+                self.activity.indent_offset = 0;
             }
             // **The one place an activation's value stops being a clause's
             // temporary**, which is why the root that outlives the temps
@@ -650,7 +650,7 @@ impl Interp {
                 //        >>>   "nop"
                 //      3 *-* nop
                 // ```
-                self.trace_result(self.clause_state.current_value_indent, &text);
+                self.trace_result(self.activity.clause_state.current_value_indent, &text);
                 // **The fragment's level, with delta 0.** Measured: a
                 // fragment's clauses print at the enclosing `INTERPRET`
                 // clause's own absolute indent plus whatever nests them
@@ -663,20 +663,22 @@ impl Interp {
                 // two spaces further in (`call sub1` at printed indent 4 into
                 // a flat routine echoes the callee's clause at 6), and which
                 // is Task 3's to add.
-                let base_indent = self.clause_state.current_value_indent;
+                let base_indent = self.activity.clause_state.current_value_indent;
                 let base_line = self.clause_site(source, instruction).map(|(line, _)| line);
-                let saved_base = std::mem::replace(&mut self.activation_indent, base_indent);
-                let saved_offset = std::mem::take(&mut self.indent_offset);
-                let saved_line = std::mem::replace(&mut self.clause_line_override, base_line);
+                let saved_base =
+                    std::mem::replace(&mut self.activity.activation_indent, base_indent);
+                let saved_offset = std::mem::take(&mut self.activity.indent_offset);
+                let saved_line =
+                    std::mem::replace(&mut self.activity.clause_line_override, base_line);
                 // **The fragment's own condition queue**, which the depth is
                 // the key to rather than a second collection --
-                // `Interp::fragment_depth` has why the oracle has one and what
+                // `Activity::fragment_depth` has why the oracle has one and what
                 // was measured on either side of it. Incremented rather than
                 // replaced the way the values saved above are, because a
                 // nested fragment inherits each of those and needs a level of
                 // its own here.
-                self.fragment_depth += 1;
-                let line = base_line.unwrap_or_else(|| self.clause_state.line());
+                self.activity.fragment_depth += 1;
+                let line = base_line.unwrap_or_else(|| self.activity.clause_state.line());
                 self.enter_fragment_level(line, base_indent);
                 // `saved_line` read before the replace above is also the
                 // answer to "is a fragment already running", which is the one
@@ -696,8 +698,9 @@ impl Interp {
                 // the enclosing clause's own boundary does not pick it up.
                 // Dropping the entries also keeps a program that runs
                 // `INTERPRET` in a loop from accumulating undeliverable ones.
-                let depth = self.fragment_depth;
-                self.pending_traps
+                let depth = self.activity.fragment_depth;
+                self.activity
+                    .pending_traps
                     .retain(|pending| pending.fragment_depth != depth);
                 // **Nothing deeper than the fragment just left may survive
                 // it**, which is the invariant that lets the delivery key be
@@ -708,17 +711,18 @@ impl Interp {
                 // reasoned about, because the discard runs inside a
                 // `deliver_pending_traps` that a handler can have re-entered.
                 debug_assert!(
-                    self.pending_traps
+                    self.activity
+                        .pending_traps
                         .iter()
                         .all(|pending| pending.fragment_depth < depth),
                     "a condition queued inside a fragment outlived that fragment's own exit"
                 );
-                self.fragment_depth -= 1;
+                self.activity.fragment_depth -= 1;
                 self.leave_fragment_level();
                 self.leave_fragment(saved_entry);
-                self.activation_indent = saved_base;
-                self.indent_offset = saved_offset;
-                self.clause_line_override = saved_line;
+                self.activity.activation_indent = saved_base;
+                self.activity.indent_offset = saved_offset;
+                self.activity.clause_line_override = saved_line;
                 flow
             }
 
@@ -773,7 +777,7 @@ impl Interp {
                 self.eval_condition(
                     code,
                     condition,
-                    ConditionTrace::Result(self.clause_state.current_value_indent),
+                    ConditionTrace::Result(self.activity.clause_state.current_value_indent),
                     raised_when_not_logical,
                 )?;
                 Ok(Flow::Next)
@@ -783,9 +787,9 @@ impl Interp {
                 values,
                 false_target,
                 ..
-            } => match self.current_case_text.clone() {
+            } => match self.activity.current_case_text.clone() {
                 Some(case_text) => {
-                    let indent = self.clause_state.current_value_indent;
+                    let indent = self.activity.clause_state.current_value_indent;
                     if self.test_case_when(code, values, &case_text, indent)? {
                         Ok(Flow::Next)
                     } else {
@@ -813,7 +817,7 @@ impl Interp {
                         // all three landing shapes (`END`, `OTHERWISE`'s
                         // own marker, `OTHERWISE`'s own body) before
                         // trusting it a second time.
-                        self.indent_offset = 4;
+                        self.activity.indent_offset = 4;
                         Ok(Flow::Goto(
                             false_target.unwrap_or(code.body.instructions.len()),
                         ))
@@ -921,7 +925,7 @@ impl Interp {
                     // `Call::Named` has no equivalent of -- measured, `call
                     // sub 1+1, 'q'` under `trace r` traces no value line at
                     // all while `call (nm)` traces one for the target.
-                    self.trace_result(self.clause_state.current_value_indent, &name);
+                    self.trace_result(self.activity.clause_state.current_value_indent, &name);
                     self.exec_call(code, &name, true, args)
                 }
                 // `CALL ON cond NAME label` / `CALL OFF cond`. Shares every
@@ -1197,7 +1201,7 @@ impl Interp {
                         assigned: None,
                     },
                 );
-                self.depth -= 1;
+                self.activity.depth -= 1;
                 sent?
             }
             Some(value) => {
@@ -1465,7 +1469,7 @@ impl Interp {
         if self.tracing_intermediates() {
             let mut resolved = stem_name.to_vec();
             resolved.extend_from_slice(key);
-            let indent = self.clause_state.current_value_indent;
+            let indent = self.activity.clause_state.current_value_indent;
             self.trace_compound_name(indent, name, &resolved);
         }
     }
@@ -1590,7 +1594,7 @@ impl Interp {
     ) -> Result<(), Failure> {
         let in_method = self.activation().entry == Entry::Method;
         if strict {
-            let supplied = self.call_context.arguments.len();
+            let supplied = self.activity.call_context.arguments.len();
             // The minimum is the position of the last target that must be
             // supplied -- one with no default of its own. A later target
             // carrying a default does not raise it, which is what makes `use
@@ -1607,7 +1611,7 @@ impl Interp {
                 return Err(if in_method {
                     Raised::not_enough_method_arguments(minimum).into()
                 } else {
-                    let name = self.call_context.name.clone();
+                    let name = self.activity.call_context.name.clone();
                     Raised::not_enough_arguments(&name, minimum).into()
                 });
             }
@@ -1615,7 +1619,7 @@ impl Interp {
                 return Err(if in_method {
                     Raised::too_many_method_arguments(targets.len()).into()
                 } else {
-                    let name = self.call_context.name.clone();
+                    let name = self.activity.call_context.name.clone();
                     Raised::too_many_arguments(&name, targets.len()).into()
                 });
             }
@@ -1625,7 +1629,13 @@ impl Interp {
             let Some(target) = target else { continue };
             // `get` past the end and a `None` inside the list are the same
             // thing to a target: nothing was supplied for this position.
-            let argument = self.call_context.arguments.get(index).cloned().flatten();
+            let argument = self
+                .activity
+                .call_context
+                .arguments
+                .get(index)
+                .cloned()
+                .flatten();
             self.bind_use_target(code, index, target, argument, strict, in_method)?;
         }
         Ok(())
@@ -1709,7 +1719,11 @@ impl Interp {
             // `handleArgument` `return`s before its own `traceResult` for
             // this case). Caller's name first, target's second -- see
             // `trace_alias`.
-            self.trace_alias(self.clause_state.current_value_indent, &reference, &name);
+            self.trace_alias(
+                self.activity.clause_state.current_value_indent,
+                &reference,
+                &name,
+            );
             return Ok(());
         }
 
@@ -1742,7 +1756,7 @@ impl Interp {
                 // is the gating -- `>>>` is `results`, `>=>` is
                 // `intermediates`, so the pair is not one line's worth of
                 // conditional.
-                let indent = self.clause_state.current_value_indent;
+                let indent = self.activity.clause_state.current_value_indent;
                 // `results` and not `intermediates`, though the pair below
                 // needs both: `results` is the weaker gate, true wherever
                 // `intermediates` is, so this renders for either line and
@@ -1765,7 +1779,7 @@ impl Interp {
             None if strict => Err(if in_method {
                 Raised::missing_method_argument(position).into()
             } else {
-                let call = self.call_context.name.clone();
+                let call = self.activity.call_context.name.clone();
                 Raised::missing_argument(&call, position).into()
             }),
             None => {
@@ -1806,7 +1820,7 @@ impl Interp {
             }
             None => Vec::new(),
         };
-        self.trace_result(self.clause_state.current_value_indent, &line);
+        self.trace_result(self.activity.clause_state.current_value_indent, &line);
         // `Activity::sayOutput` (`concurrency/Activity.cpp:3214`): `.OUTPUT`
         // gets the line as a `SAY` message and its reply is dropped; an entry
         // that is missing **or holds `.nil`** takes the buffer instead.
@@ -1864,7 +1878,7 @@ impl Interp {
         let holds = self.eval_condition(
             code,
             condition,
-            ConditionTrace::Keyword(self.clause_state.current_value_indent, "WHEN"),
+            ConditionTrace::Keyword(self.activity.clause_state.current_value_indent, "WHEN"),
             raised_guard_not_logical,
         )?;
         if holds {
@@ -1899,7 +1913,7 @@ impl Interp {
         if let Some(value) = value {
             self.roots.push_temp(value);
             if let Some(rendered) = self.result_text(value) {
-                self.trace_result(self.clause_state.current_value_indent, &rendered);
+                self.trace_result(self.activity.clause_state.current_value_indent, &rendered);
             }
         }
         if self.activation().reply != ReplyState::None {
@@ -1921,7 +1935,7 @@ impl Interp {
         };
         let receiver = identity.receiver;
         let own_name = identity.name.clone();
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
 
         // The option order is the C++'s, and it is observable in the trace:
         // `TO`, `MESSAGE`, `CLASS`, then whichever of `ARGUMENTS` and `ARRAY`
@@ -2032,7 +2046,11 @@ impl Interp {
     /// and trace at separate points.
     fn trace_forward_keyword(&mut self, keyword: &str, value: ObjRef) {
         let traced = self.string_value_text(value);
-        self.trace_keyword(self.clause_state.current_value_indent, keyword, &traced);
+        self.trace_keyword(
+            self.activity.clause_state.current_value_indent,
+            keyword,
+            &traced,
+        );
     }
 
     /// The argument list a `FORWARD` sends, into a borrowed buffer so that
@@ -2055,7 +2073,7 @@ impl Interp {
             for item in items {
                 match item {
                     None => {
-                        self.trace_argument(self.clause_state.current_value_indent, b"");
+                        self.trace_argument(self.activity.clause_state.current_value_indent, b"");
                         values.push(None);
                     }
                     Some(expr) => {
@@ -2068,13 +2086,13 @@ impl Interp {
             // `trace i`, `forward message('OTHER') array(1,2)` writes
             // `>K>   "ARRAY" => "an Array"` after the items' own `>A>` lines.
             self.trace_keyword(
-                self.clause_state.current_value_indent,
+                self.activity.clause_state.current_value_indent,
                 "ARRAY",
                 crate::dispatch::ARRAY_DEFAULT_NAME,
             );
             return Ok(());
         }
-        values.extend(self.call_context.arguments.iter().copied());
+        values.extend(self.activity.call_context.arguments.iter().copied());
         // Rooted here rather than relied on through `call_context`, which the
         // collector does not walk.
         for value in values.iter().flatten() {
@@ -2202,7 +2220,7 @@ impl Interp {
         if let Some(value) = value {
             self.roots.push_temp(value);
             if let Some(rendered) = self.result_text(value) {
-                self.trace_result(self.clause_state.current_value_indent, &rendered);
+                self.trace_result(self.activity.clause_state.current_value_indent, &rendered);
             }
         }
         // **LEGALITY, and Phase 6 keeps it.** A `REPLY` has already answered
@@ -2250,7 +2268,7 @@ impl Interp {
             }
             None => Vec::new(),
         };
-        self.trace_result(self.clause_state.current_value_indent, &line);
+        self.trace_result(self.activity.clause_state.current_value_indent, &line);
         match keyword {
             QueueKeyword::Push => self.queue.push(line),
             QueueKeyword::Queue => self.queue.queue(line),
@@ -2281,7 +2299,7 @@ impl Interp {
         // two drift, which is exactly what happened here before this fix: this
         // site's own copy never learned about the offset when the field was
         // added.
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         // One render for both lines, and `results` is the gate because it is
         // the weaker of the two: `>>>` is gated on `results` and `>=>` on
         // `intermediates`, and `results` is true wherever `intermediates` is.
@@ -2294,7 +2312,7 @@ impl Interp {
             // oracle chose the path without one before it evaluated. See
             // `ClauseState::instructions_traced_at_entry`, which carries the
             // measurement.
-            if self.clause_state.instructions_traced_at_entry {
+            if self.activity.clause_state.instructions_traced_at_entry {
                 self.trace_result(indent, rendered);
             }
         }
@@ -2584,9 +2602,9 @@ impl Interp {
         // oracle's own `RexxInstruction::traceInstruction`, which every one
         // of those calls too from its own `execute`.
         let (tabled, position) = position;
-        let shortcut = tabled && source.is_some() && self.clause_line_override.is_none();
+        let shortcut = tabled && source.is_some() && self.activity.clause_line_override.is_none();
         let indent = if shortcut {
-            position.indent as usize + self.activation_indent + self.indent_offset
+            position.indent as usize + self.activity.activation_indent + self.activity.indent_offset
         } else {
             self.printed_indent(code, index)
         };
@@ -2595,11 +2613,11 @@ impl Interp {
             self.printed_indent(code, index),
             "the chunk's indent table disagrees with the plan's for instruction {index}"
         );
-        self.clause_state.current_value_indent = indent;
+        self.activity.clause_state.current_value_indent = indent;
         // Set here with the indent, and for the same reason that one is: this
         // is the one place every stepped instruction passes before its `step`
         // call runs, which is where the oracle reads it too. See the field.
-        self.clause_state.instructions_traced_at_entry = self.trace_mode().all;
+        self.activity.clause_state.instructions_traced_at_entry = self.trace_mode().all;
         // Set unconditionally, exactly like `current_value_indent` just
         // above and for the identical reason (that field's own doc comment):
         // `SIGL` (`lib.rs`'s doc on `current_clause_line`) has to stay
@@ -2614,12 +2632,12 @@ impl Interp {
             position.line as usize
         } else {
             self.clause_line_at(code, index, instruction, source)
-                .unwrap_or_else(|| self.clause_state.line())
+                .unwrap_or_else(|| self.activity.clause_state.line())
         };
         debug_assert_eq!(
             line,
             self.clause_line_at(code, index, instruction, source)
-                .unwrap_or_else(|| self.clause_state.line()),
+                .unwrap_or_else(|| self.activity.clause_state.line()),
             "the chunk's line table disagrees with the plan's for instruction {index}"
         );
         // The frame readers' own view of this clause
@@ -2629,10 +2647,10 @@ impl Interp {
         // `INTERPRET` clause stays in force for this activation -- the
         // answer the oracle gives the frame beneath its own
         // `FRAME_INTERPRET` one.
-        if self.clause_line_override.is_none() {
-            self.clause_state.current_clause_index = index;
+        if self.activity.clause_line_override.is_none() {
+            self.activity.clause_state.current_clause_index = index;
         } else {
-            self.fragment_clause = index;
+            self.activity.fragment_clause = index;
         }
         let entry = self.enter_clause(line, counted);
         // **`Echo::Gated` asks whether the setting in force echoes this
@@ -2784,11 +2802,11 @@ impl Interp {
         blame: &Instruction,
         indent: usize,
     ) {
-        if self.failure_site.is_some() {
+        if self.activity.failure_site.is_some() {
             return;
         }
         if let Some((line, text)) = self.clause_site(source, blame) {
-            self.failure_site = Some(match self.sourceless_site(line, indent) {
+            self.activity.failure_site = Some(match self.sourceless_site(line, indent) {
                 Some(site) => site,
                 None => match self.compiled_method_site(line, &text, indent) {
                     Some(site) => site,
@@ -2897,7 +2915,7 @@ impl Interp {
             // Already this instruction's own line: `Op::Clause`'s region's
             // `in_clause` set it before dispatching this `step`, through the
             // same `clause_line` call `SIGL` reads.
-            clause_line: self.clause_state.line(),
+            clause_line: self.activity.clause_state.line(),
         }
     }
 
@@ -2915,22 +2933,22 @@ impl Interp {
     /// caller's, because that blame prints at the loop body's indent rather
     /// than at the `ITERATE`'s own -- see that variant's doc comment.
     fn record_failure_site_at(&mut self, site: Option<(usize, Vec<u8>)>, indent: usize) {
-        if self.failure_site.is_some() {
+        if self.activity.failure_site.is_some() {
             return;
         }
         if let Some((line, text)) = site {
-            self.failure_site = Some(FailureSite::Clause { line, text, indent });
+            self.activity.failure_site = Some(FailureSite::Clause { line, text, indent });
         }
     }
 
     /// Closes off the level that is unwinding now, so the level above it can
     /// record its own clause.
     pub(crate) fn seal_site_level(&mut self) {
-        if let Some(site) = self.failure_site.take() {
-            self.failure_sites.push(site);
+        if let Some(site) = self.activity.failure_site.take() {
+            self.activity.failure_sites.push(site);
         }
-        if let Some(frame) = self.failure_frame.take() {
-            self.failure_frames.push(frame);
+        if let Some(frame) = self.activity.failure_frame.take() {
+            self.activity.failure_frames.push(frame);
         }
     }
 
@@ -2943,13 +2961,13 @@ impl Interp {
             return;
         };
         if raised.condition == "SYNTAX" && self.activation().entry != Entry::InternalCall {
-            self.failure_propagated = true;
+            self.activity.failure_propagated = true;
         }
-        if self.reraise_leaving > 0 {
-            self.reraise_leaving -= 1;
+        if self.activity.reraise_leaving > 0 {
+            self.activity.reraise_leaving -= 1;
             return;
         }
-        if self.failure_frame.is_some() {
+        if self.activity.failure_frame.is_some() {
             return;
         }
         let arguments =
@@ -2957,12 +2975,12 @@ impl Interp {
         let Ok(frame) = crate::dispatch::context::build_frame_with(self, 0, arguments) else {
             return;
         };
-        self.failure_frame = Some(frame);
+        self.activity.failure_frame = Some(frame);
         let origin = (
             Package::Program(self.activation().program_id),
-            Some(self.clause_state.line()),
+            Some(self.activity.clause_state.line()),
         );
-        self.failure_origin.get_or_insert(origin);
+        self.activity.failure_origin.get_or_insert(origin);
     }
 
     /// The frame of a level `failure` is leaving that no activation of this
@@ -2977,12 +2995,12 @@ impl Interp {
         program: crate::plan::ProgramId,
     ) {
         if matches!(failure, Failure::Raised(raised) if raised.condition == "SYNTAX") {
-            self.failure_propagated = true;
+            self.activity.failure_propagated = true;
         }
-        if self.failure_frame.is_some() {
+        if self.activity.failure_frame.is_some() {
             return;
         }
-        let Some((line, text)) = self.failure_site.as_ref().and_then(|site| {
+        let Some((line, text)) = self.activity.failure_site.as_ref().and_then(|site| {
             let line = site.line()?;
             let mut text = Vec::new();
             site.push_trace_line(&mut text);
@@ -2995,8 +3013,9 @@ impl Interp {
         else {
             return;
         };
-        self.failure_frame = Some(frame);
-        self.failure_origin
+        self.activity.failure_frame = Some(frame);
+        self.activity
+            .failure_origin
             .get_or_insert((Package::Program(program), Some(line)));
     }
 
@@ -3005,10 +3024,10 @@ impl Interp {
     /// activation: no name, target or arguments, and its own invocation and
     /// context.
     pub(crate) fn capture_fragment_frame(&mut self, failure: &Failure) {
-        if !matches!(failure, Failure::Raised(_)) || self.failure_frame.is_some() {
+        if !matches!(failure, Failure::Raised(_)) || self.activity.failure_frame.is_some() {
             return;
         }
-        let Some((line, text)) = self.failure_site.as_ref().and_then(|site| {
+        let Some((line, text)) = self.activity.failure_site.as_ref().and_then(|site| {
             let line = site.line()?;
             let mut text = Vec::new();
             site.push_trace_line(&mut text);
@@ -3019,9 +3038,9 @@ impl Interp {
         let Ok(frame) = crate::dispatch::context::build_interpret_frame(self, line, &text) else {
             return;
         };
-        self.failure_frame = Some(frame);
+        self.activity.failure_frame = Some(frame);
         let origin = (Package::Program(self.activation().program_id), Some(line));
-        self.failure_origin.get_or_insert(origin);
+        self.activity.failure_origin.get_or_insert(origin);
     }
 
     /// `Activity::reraiseException` (`concurrency/Activity.cpp:1330`): the
@@ -3029,13 +3048,14 @@ impl Interp {
     /// `POSITION`, the program and the report's `line <n>` are that level's,
     /// while every level already left keeps its traceback line.
     pub(crate) fn reraise_failure_levels(&mut self) {
-        self.failure_origin = None;
-        self.failure_propagated = true;
-        self.failure_reraised = true;
+        self.activity.failure_origin = None;
+        self.activity.failure_propagated = true;
+        self.activity.failure_reraised = true;
         for site in self
+            .activity
             .failure_sites
             .iter_mut()
-            .chain(self.failure_site.as_mut())
+            .chain(self.activity.failure_site.as_mut())
         {
             if site.line().is_some() {
                 let mut text = Vec::new();
@@ -3051,15 +3071,15 @@ impl Interp {
     /// Forgets every level a failure has left, which a trap or a report has
     /// already taken what it needs from.
     pub(crate) fn clear_failure_levels(&mut self) {
-        self.failure_site = None;
-        self.failure_sites.clear();
-        self.failure_frame = None;
-        self.failure_frames.clear();
-        self.failure_origin = None;
-        self.failure_propagated = false;
-        self.failure_reraised = false;
-        self.reraised_object = None;
-        self.reraise_leaving = 0;
+        self.activity.failure_site = None;
+        self.activity.failure_sites.clear();
+        self.activity.failure_frame = None;
+        self.activity.failure_frames.clear();
+        self.activity.failure_origin = None;
+        self.activity.failure_propagated = false;
+        self.activity.failure_reraised = false;
+        self.activity.reraised_object = None;
+        self.activity.reraise_leaving = 0;
     }
 
     /// The clause boundary a promoted construct owes once the branch it chose
@@ -3077,7 +3097,7 @@ impl Interp {
         code: &Code<'_>,
         flow: Flow,
     ) -> Result<Flow, Failure> {
-        let line = self.clause_state.line();
+        let line = self.activity.clause_state.line();
         match self.in_clause(code, line, move |_| Ok(flow))? {
             ClauseOutcome::Ran(ran) => ran,
             ClauseOutcome::Ended(exit) => Ok(Flow::Exit(exit.value())),
@@ -3101,7 +3121,7 @@ impl Interp {
     /// An `IF`'s own condition, evaluated as the whole of the `IF` clause's
     /// work.
     fn eval_if_condition(&mut self, code: &Code<'_>, condition: &Expr) -> Result<bool, Failure> {
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         self.eval_condition(
             code,
             condition,
@@ -3444,7 +3464,8 @@ impl Interp {
     ) -> Option<usize> {
         let source = source?;
         Some(
-            self.clause_line_override
+            self.activity
+                .clause_line_override
                 .unwrap_or_else(|| source.line_of(instruction.clause_span.start)),
         )
     }
@@ -3460,7 +3481,7 @@ impl Interp {
         source: Option<&ProgramSource>,
     ) -> Option<usize> {
         let source = source?;
-        if let Some(line) = self.clause_line_override {
+        if let Some(line) = self.activity.clause_line_override {
             return Some(line);
         }
         debug_assert!(

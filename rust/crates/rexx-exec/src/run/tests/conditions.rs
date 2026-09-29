@@ -131,7 +131,7 @@ fn a_second_raise_inside_a_handler_is_fatal_without_a_re_arm() {
     assert_eq!(interp.out, b"FIRST\n".to_vec());
 }
 
-/// **Inherited item I11.** `Interp::failure_site` is first-wins, so a
+/// **Inherited item I11.** `Activity::failure_site` is first-wins, so a
 /// second raise after a trapped first one reported the *first* site
 /// until `offer_to_trap` began clearing it. The report must name line 6,
 /// the second raise's own clause, and a version without the clearing
@@ -144,8 +144,8 @@ fn a_second_raise_after_a_trapped_one_reports_its_own_site() {
         b"signal on syntax\nsay 1/0\nexit\nsyntax:\nsay 'HANDLER'\nsay 2/0\n",
     )
     .unwrap_err();
-    let mut sites = std::mem::take(&mut interp.failure_sites);
-    sites.extend(interp.failure_site.take());
+    let mut sites = std::mem::take(&mut interp.activity.failure_sites);
+    sites.extend(interp.activity.failure_site.take());
     let lines: Vec<usize> = sites
         .iter()
         .map(|site| site.line().expect("a clause site"))
@@ -220,7 +220,7 @@ fn a_trap_label_that_does_not_exist_is_16_1_at_the_raising_clause() {
     };
     assert_eq!((raised.number, raised.sub), (16, 1));
     assert_eq!(raised.additional, vec![b"NOSUCHLABEL".to_vec()]);
-    let site = interp.failure_site.expect("a site was resolved");
+    let site = interp.activity.failure_site.expect("a site was resolved");
     assert_eq!((site.line(), site.text()), (Some(3), &b"say 1/0"[..]));
 }
 
@@ -458,8 +458,8 @@ fn raise_propagate_re_raises_the_original_condition_and_its_site() {
         "the major line drops its ` running <path> line <n>` span"
     );
     assert!(interp.out.is_empty(), "`outer` must not have run");
-    let mut sites = std::mem::take(&mut interp.failure_sites);
-    sites.extend(interp.failure_site.take());
+    let mut sites = std::mem::take(&mut interp.activity.failure_sites);
+    sites.extend(interp.activity.failure_site.take());
     let lines: Vec<usize> = sites
         .iter()
         .map(|site| site.line().expect("a clause site"))
@@ -1034,8 +1034,8 @@ fn a_handler_that_fails_at_a_clause_boundary_blames_that_clause() {
         b"call on user foo name uh\ndo i = 1 to 1\ncall sub\nsay 'after'\nend\nexit\nsub:\nraise user foo return 'SV'\nuh:\nsay 1/0\nreturn\n",
     )
     .unwrap_err();
-    let mut sites = std::mem::take(&mut interp.failure_sites);
-    sites.extend(interp.failure_site.take());
+    let mut sites = std::mem::take(&mut interp.activity.failure_sites);
+    sites.extend(interp.activity.failure_site.take());
     assert!(
         sites.iter().any(|site| site.text() == b"call sub"),
         "expected the `call sub` clause among the echoes, got {:?}",

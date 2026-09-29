@@ -17,9 +17,9 @@
 #[cfg(feature = "pinning")]
 macro_rules! pinned {
     ($interp:expr, $kind:expr, $body:expr) => {{
-        $interp.pinning.enter($kind);
+        $interp.activity.pins.enter($kind);
         let answer = $body;
-        $interp.pinning.leave();
+        $interp.activity.pins.leave();
         answer
     }};
 }
@@ -35,7 +35,7 @@ macro_rules! pinned {
 #[cfg(feature = "pinning")]
 macro_rules! pin_enter {
     ($interp:expr, $kind:expr) => {
-        $interp.pinning.enter($kind)
+        $interp.activity.pins.enter($kind)
     };
 }
 
@@ -47,7 +47,7 @@ macro_rules! pin_enter {
 #[cfg(feature = "pinning")]
 macro_rules! pin_leave {
     ($interp:expr) => {
-        $interp.pinning.leave()
+        $interp.activity.pins.leave()
     };
 }
 
@@ -60,7 +60,7 @@ macro_rules! pin_leave {
 #[cfg(feature = "pinning")]
 macro_rules! park_point {
     ($interp:expr, $kind:expr) => {
-        $interp.pinning.park($kind)
+        $interp.pinning.park(&$interp.activity.pins, $kind)
     };
 }
 
@@ -70,9 +70,9 @@ macro_rules! park_point {
 }
 
 #[cfg(feature = "pinning")]
-pub(crate) use counter::Pinning;
-#[cfg(feature = "pinning")]
 pub use counter::{ParkKind, PinKind, PinReport};
+#[cfg(feature = "pinning")]
+pub(crate) use counter::{PinStack, Pinning};
 
 #[cfg(feature = "pinning")]
 mod counter {
@@ -180,11 +180,16 @@ mod counter {
     /// The per-interpreter counter.
     #[derive(Default)]
     pub(crate) struct Pinning {
-        stack: RefCell<Vec<Option<PinKind>>>,
         report: RefCell<PinReport>,
     }
 
-    impl Pinning {
+    /// One activity's pinned frames, innermost last.
+    #[derive(Default)]
+    pub(crate) struct PinStack {
+        stack: RefCell<Vec<Option<PinKind>>>,
+    }
+
+    impl PinStack {
         pub(crate) fn enter(&self, kind: impl Into<Option<PinKind>>) {
             self.stack.borrow_mut().push(kind.into());
         }
@@ -192,12 +197,14 @@ mod counter {
         pub(crate) fn leave(&self) {
             self.stack.borrow_mut().pop();
         }
+    }
 
-        pub(crate) fn park(&self, kind: impl Into<Option<ParkKind>>) {
+    impl Pinning {
+        pub(crate) fn park(&self, pins: &PinStack, kind: impl Into<Option<ParkKind>>) {
             let Some(kind) = kind.into() else {
                 return;
             };
-            let mut frames: Vec<PinKind> = self.stack.borrow().iter().flatten().cloned().collect();
+            let mut frames: Vec<PinKind> = pins.stack.borrow().iter().flatten().cloned().collect();
             frames.dedup();
             *self
                 .report
@@ -212,9 +219,9 @@ mod counter {
             self.report.borrow_mut().parks.clear();
         }
 
-        pub(crate) fn take(&self) -> PinReport {
+        pub(crate) fn take(&self, pins: &PinStack) -> PinReport {
             let mut report = std::mem::take(&mut *self.report.borrow_mut());
-            report.unbalanced = self.stack.borrow().len();
+            report.unbalanced = pins.stack.borrow().len();
             report
         }
     }

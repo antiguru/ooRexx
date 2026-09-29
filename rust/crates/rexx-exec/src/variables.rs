@@ -96,7 +96,11 @@ impl Interp {
         // name borrowed out of the activation has to stay live across the
         // `&mut self.heap` below; disjoint fields borrow independently where a
         // method taking `&self` would not.
-        let activation = self.running.as_deref().expect("an activation is running");
+        let activation = self
+            .activity
+            .running
+            .as_deref()
+            .expect("an activation is running");
         let Some(var) = Interp::exposure_in(activation, frame, slot) else {
             self.roots.set_frame_slot(frame, slot, value);
             return;
@@ -117,7 +121,11 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn clear_exposed_variable(&mut self, frame: SlotFrame, slot: usize) {
-        let activation = self.running.as_deref().expect("an activation is running");
+        let activation = self
+            .activity
+            .running
+            .as_deref()
+            .expect("an activation is running");
         let Some(var) = Interp::exposure_in(activation, frame, slot) else {
             self.roots.clear_frame_slot(frame, slot);
             return;

@@ -1899,7 +1899,7 @@ impl Failure {
     }
 }
 
-/// Where a failing clause was found -- `Interp::failure_site`'s own type
+/// Where a failing clause was found -- `Activity::failure_site`'s own type
 /// (`lib.rs`), and what `run.rs`'s `record_failure_site` fills in.
 #[derive(Clone)]
 pub(crate) enum FailureSite {

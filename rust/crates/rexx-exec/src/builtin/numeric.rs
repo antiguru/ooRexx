@@ -566,9 +566,9 @@ fn next_seed(interp: &mut Interp, seed: Option<i64>) -> u64 {
         for _ in 0..13 {
             state = randomize(state);
         }
-        interp.random_seed = Some(state);
+        interp.activity.random_seed = Some(state);
     }
-    let state = interp.random_seed.get_or_insert_with(initial_seed);
+    let state = interp.activity.random_seed.get_or_insert_with(initial_seed);
     *state = randomize(*state);
     *state
 }

@@ -570,7 +570,7 @@ impl Interp {
             return;
         }
         let text = self.string_value_text(value);
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         self.trace_keyword(indent, stream.keyword(), &text);
     }
 
@@ -688,18 +688,19 @@ impl Interp {
         let mut lines = Vec::new();
         loop {
             let dispatcher = self.running_activation().map(|activation| activation.id);
-            let outer = std::mem::replace(&mut self.input_dispatch, dispatcher);
-            let outer_trapped = std::mem::take(&mut self.input_dispatch_trapped);
+            let outer = std::mem::replace(&mut self.activity.input_dispatch, dispatcher);
+            let outer_trapped = std::mem::take(&mut self.activity.input_dispatch_trapped);
             let caller = self.caller();
             let answered = self.send_message(stream, b"LINEIN", None, &[], caller);
-            let trapped = std::mem::replace(&mut self.input_dispatch_trapped, outer_trapped);
-            self.input_dispatch = outer;
+            let trapped =
+                std::mem::replace(&mut self.activity.input_dispatch_trapped, outer_trapped);
+            self.activity.input_dispatch = outer;
             let value = match answered {
                 Ok(Some(value)) => value,
                 // `readBuffered` stops at a `LINEIN` that answers nothing.
                 Ok(None) => return Ok(lines),
                 Err(Failure::Raised(raised)) if raised.condition == "SYNTAX" => {
-                    self.input_dispatch_syntax = Some(Failure::Raised(raised));
+                    self.activity.input_dispatch_syntax = Some(Failure::Raised(raised));
                     return Ok(lines);
                 }
                 Err(failure) => return Err(failure),
@@ -718,10 +719,10 @@ impl Interp {
     /// native method running in it, is raised straight into the input
     /// reader's `RedirectionDispatcher`, which then takes it.
     pub(crate) fn input_dispatcher_takes(&mut self, raiser: Option<ActivationId>) -> bool {
-        if self.input_dispatch.is_none() || raiser != self.input_dispatch {
+        if self.activity.input_dispatch.is_none() || raiser != self.activity.input_dispatch {
             return false;
         }
-        self.input_dispatch_trapped = true;
+        self.activity.input_dispatch_trapped = true;
         true
     }
 

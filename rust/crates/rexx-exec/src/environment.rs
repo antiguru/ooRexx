@@ -945,7 +945,7 @@ impl Interp {
                 let rs = self.activation().rs?;
                 Some(self.text(rs.to_string().as_bytes()))
             }
-            b"LINE" => Some(self.counted(self.clause_state.line())),
+            b"LINE" => Some(self.counted(self.activity.clause_state.line())),
             b"CONTEXT" => Some(self.context_object()),
             _ => None,
         }

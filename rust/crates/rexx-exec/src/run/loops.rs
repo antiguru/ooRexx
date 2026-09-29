@@ -178,7 +178,7 @@ fn loop_conditional_of<'a>(code: &'a Code<'_>, index: usize) -> Option<&'a LoopC
 
 /// What `Interp::flat_loop_start` decided.
 pub(crate) enum FlatStart {
-    /// Driven from the driver's frame. The state is on `Interp::flat_loops`;
+    /// Driven from the driver's frame. The state is on `Activity::flat_loops`;
     /// this is the body's own instruction range, which the driver's frame
     /// absorbs an escaping `Flow` against.
     Flat { body_start: usize, end_index: usize },
@@ -467,7 +467,11 @@ impl Interp {
             return;
         }
         let text = self.string_value_text(value);
-        self.trace_keyword(self.clause_state.current_value_indent, keyword, &text);
+        self.trace_keyword(
+            self.activity.clause_state.current_value_indent,
+            keyword,
+            &text,
+        );
     }
 
     /// Validates one header value against whatever its role requires and files
@@ -776,7 +780,7 @@ impl Interp {
                 // `run_repeating` captures it: this is the `DO`'s own indent,
                 // and `current_value_indent` holds whatever the last body
                 // clause left once `run_bounded` has returned.
-                let do_indent = self.clause_state.current_value_indent;
+                let do_indent = self.activity.clause_state.current_value_indent;
                 // **The block's own clause, opened and ended before any body
                 // instruction runs.** The oracle's
                 // `RexxInstructionSimpleDo::execute` traces the instruction,
@@ -788,7 +792,7 @@ impl Interp {
                 // and prints its output ahead of `body`.
                 let do_line = self
                     .clause_line_at(code, index, instruction, source)
-                    .unwrap_or_else(|| self.clause_state.line());
+                    .unwrap_or_else(|| self.activity.clause_state.line());
                 match self.in_clause(code, do_line, |it| {
                     // A block that opened, so the boundary's own handler runs
                     // one level in -- the `select case raiser()` row of
@@ -827,7 +831,7 @@ impl Interp {
                         let end_instruction = &code.body.instructions[end_index];
                         let end_line = self
                             .clause_line_at(code, end_index, end_instruction, source)
-                            .unwrap_or_else(|| self.clause_state.line());
+                            .unwrap_or_else(|| self.activity.clause_state.line());
                         // A fresh computation, not `current_value_indent` --
                         // `run_bounded`, just above, has already stepped this
                         // block's own body, so that field now holds whatever
@@ -936,7 +940,7 @@ impl Interp {
     /// select case raiser()       always open      -> 12 *-*     h:
     /// ```
     pub(super) fn settle_block_indent(&mut self, open: bool, clause_indent: usize) {
-        self.clause_state.current_value_indent = if open {
+        self.activity.clause_state.current_value_indent = if open {
             clause_indent + 2
         } else {
             clause_indent
@@ -987,7 +991,7 @@ impl Interp {
         // instruction, and every caller into this function reaches it
         // through nothing but `self.eval` calls in between (never another
         // instruction step), so it has not moved.
-        let do_indent = self.clause_state.current_value_indent;
+        let do_indent = self.activity.clause_state.current_value_indent;
         let loop_indent = do_indent + 2;
         // `TRACE`'s own per-iteration re-echo (D17, this task's report,
         // "Step 6"): the oracle's `DO`/`LOOP` instruction is re-executed
@@ -1032,7 +1036,7 @@ impl Interp {
             // `sub()` right there rather than after the whole loop.
             let do_line = self
                 .clause_line_at(code, do_index, do_instruction, source)
-                .unwrap_or_else(|| self.clause_state.line());
+                .unwrap_or_else(|| self.activity.clause_state.line());
             let header_line = match header_clause {
                 HeaderClause::Do => do_line,
                 HeaderClause::End => end_line,
@@ -1074,7 +1078,7 @@ impl Interp {
                         // the `DO`/`LOOP` instruction itself) -- `WHILE`'s own
                         // condition is evaluated here, inside that same `step`
                         // call, never through a `Op::Clause`'s region of its own.
-                        it.clause_state.current_value_indent = loop_indent;
+                        it.activity.clause_state.current_value_indent = loop_indent;
                         match it.eval_condition(
                             code,
                             &cond.condition,
@@ -1164,7 +1168,7 @@ impl Interp {
                 // `current_value_indent` untouched (its own `trace_clause`
                 // call does not set it), so without this `UNTIL`'s
                 // intermediates would otherwise still read `do_indent`.
-                self.clause_state.current_value_indent = loop_indent;
+                self.activity.clause_state.current_value_indent = loop_indent;
                 // `UNTIL`'s test belongs to the same clause the *next*
                 // top-of-loop re-test does, and for the same reason: in the
                 // oracle they are one event, `reExecute` called by whichever
@@ -1375,13 +1379,13 @@ impl Interp {
         let end_index = body
             .end
             .expect("an unclosed DO/LOOP is error 14.1/14.5, so a body that parsed has this set");
-        let do_indent = self.clause_state.current_value_indent;
+        let do_indent = self.activity.clause_state.current_value_indent;
         let end_line = self
             .clause_line_at(code, end_index, &code.body.instructions[end_index], source)
             .unwrap_or(0);
         let do_line = self
             .clause_line_at(code, index, instruction, source)
-            .unwrap_or_else(|| self.clause_state.line());
+            .unwrap_or_else(|| self.activity.clause_state.line());
         // **Built where it will live, not on the stack and then moved
         // there.** A `FlatLoop` is 328 bytes, 200 of them the `LoopState` a
         // controlled loop's three `Number`s live in, and the version that
@@ -1391,7 +1395,7 @@ impl Interp {
         // 1 to 1 ; end ; end`: -5.871% retired instructions, with
         // `__memmove_avx_unaligned_erms` falling from 8.41% of the program's
         // cycles to 2.52%.
-        let mut boxed = match self.flat_spares.pop() {
+        let mut boxed = match self.activity.flat_spares.pop() {
             Some(spare) => spare,
             None => Box::new(FlatLoop::vacant()),
         };
@@ -1414,7 +1418,7 @@ impl Interp {
         let header = match self.flat_loop_header(code, source, &mut boxed) {
             Ok(header) => header,
             Err(failure) => {
-                self.flat_spares.push(boxed);
+                self.activity.flat_spares.push(boxed);
                 return Err(failure);
             }
         };
@@ -1423,15 +1427,15 @@ impl Interp {
                 // The header ended the loop, so nothing will drive it and
                 // this box is spare again rather than leaked back to the
                 // allocator.
-                self.flat_spares.push(boxed);
+                self.activity.flat_spares.push(boxed);
                 Ok(FlatStart::Ended(flow))
             }
             None => {
                 let range = (boxed.body_start, boxed.end_index);
                 // The loop just entered becomes the innermost, and whatever
                 // was innermost joins the ones enclosing it.
-                if let Some(enclosing) = self.flat_top.replace(boxed) {
-                    self.flat_loops.push(enclosing);
+                if let Some(enclosing) = self.activity.flat_top.replace(boxed) {
+                    self.activity.flat_loops.push(enclosing);
                 }
                 Ok(FlatStart::Flat {
                     body_start: range.0,
@@ -1442,7 +1446,7 @@ impl Interp {
     }
 
     /// One pass boundary of the innermost flat loop: the state is
-    /// taken out of `Interp::flat_top` so that this can hold a `&mut Interp`
+    /// taken out of `Activity::flat_top` so that this can hold a `&mut Interp`
     /// beside it, and put back when another pass follows.
     pub(crate) fn flat_loop_step_top(
         &mut self,
@@ -1450,19 +1454,19 @@ impl Interp {
         source: Option<&ProgramSource>,
         arrival: Flow,
     ) -> Result<FlatStep, Failure> {
-        let Some(mut top) = self.flat_top.take() else {
+        let Some(mut top) = self.activity.flat_top.take() else {
             return Err(Loud::op_not_driven("a pass boundary with no loop open").into());
         };
         match self.flat_loop_step(code, source, &mut top, arrival) {
             Ok(FlatStep::Body(op_body)) => {
-                self.flat_top = Some(top);
+                self.activity.flat_top = Some(top);
                 Ok(FlatStep::Body(op_body))
             }
             Ok(FlatStep::Done(flow)) => {
-                self.flat_spares.push(top);
+                self.activity.flat_spares.push(top);
                 // The loop that just ended uncovers the one enclosing it, and
                 // `None` here is the outermost of a nest having ended.
-                self.flat_top = self.flat_loops.pop();
+                self.activity.flat_top = self.activity.flat_loops.pop();
                 Ok(FlatStep::Done(flow))
             }
             // `top` is dropped rather than handed back, and this loop's own
@@ -1568,7 +1572,7 @@ impl Interp {
         // The re-echoed `END` clause just above leaves `current_value_indent`
         // untouched -- `trace_clause` does not set it -- so without this the
         // `UNTIL`'s intermediates would read the `DO`'s own indent.
-        self.clause_state.current_value_indent = loop_indent;
+        self.activity.clause_state.current_value_indent = loop_indent;
         let tested = self.in_clause(code, until_line, |it| {
             let held = pinned!(
                 it,
@@ -1705,7 +1709,7 @@ impl Interp {
             // Overrides what stepping the `DO`/`LOOP` instruction set:
             // `WHILE`'s condition is evaluated here, inside that same step,
             // never through a `Op::Clause`'s region of its own.
-            it.clause_state.current_value_indent = loop_indent;
+            it.activity.clause_state.current_value_indent = loop_indent;
             let held = match pinned!(
                 it,
                 crate::pinning::PinKind::LoopHeader,

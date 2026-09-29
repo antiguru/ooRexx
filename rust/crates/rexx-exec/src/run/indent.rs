@@ -25,7 +25,7 @@ impl Interp {
             Some(plan) => plan.indent_of(&code.body.instructions, target),
             None => static_indent(&code.body.instructions, target),
         };
-        base + self.activation_indent + self.indent_offset
+        base + self.activity.activation_indent + self.activity.indent_offset
     }
 }
 

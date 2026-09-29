@@ -44,7 +44,7 @@ impl Interp {
     /// ([`ChunkTrace`]).
     #[inline(always)]
     pub(crate) fn chunk_trace(&self) -> ChunkTrace {
-        let answer = self.trace_cache.chunk();
+        let answer = self.activity.trace_cache.chunk();
         debug_assert_eq!(
             answer,
             ChunkTrace::of(self.traced_mode()),
@@ -53,10 +53,10 @@ impl Interp {
         answer
     }
 
-    /// Sets [`Interp::debug_pause`], answering the value it replaces.
+    /// Sets [`Activity::debug_pause`], answering the value it replaces.
     pub(crate) fn replace_debug_pause(&mut self, paused: bool) -> bool {
-        self.trace_cache = TraceCache::of(self.trace_cache.mode(), paused);
-        std::mem::replace(&mut self.debug_pause, paused)
+        self.activity.trace_cache = TraceCache::of(self.activity.trace_cache.mode(), paused);
+        std::mem::replace(&mut self.activity.debug_pause, paused)
     }
 
     /// The setting the trace sink obeys, which is [`TraceMode::OFF`] while a
@@ -70,7 +70,7 @@ impl Interp {
     /// merges into -- is [`Interp::trace_mode`] and is untouched.
     #[inline(always)]
     pub(crate) fn traced_mode(&self) -> TraceMode {
-        if self.debug_pause {
+        if self.activity.debug_pause {
             return TraceMode::OFF;
         }
         self.trace_mode()
@@ -277,7 +277,7 @@ impl Interp {
     /// The rendering and the line, out of line behind [`echo_literal`]'s gate.
     #[inline(never)]
     fn echo_literal_line(&mut self, value: ObjRef) {
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let text = self.to_text(value).to_vec();
         self.trace_literal(indent, &text);
     }
@@ -337,7 +337,7 @@ impl Interp {
         if !self.tracing_intermediates() {
             return;
         }
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let text = self.to_text(value).to_vec();
         self.trace_operator(indent, op.spelling().as_bytes(), &text);
     }
@@ -360,7 +360,7 @@ impl Interp {
         if !self.tracing_intermediates() {
             return;
         }
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let text = self.to_text(value).to_vec();
         self.trace_prefix_op(indent, op.spelling().as_bytes(), &text);
     }

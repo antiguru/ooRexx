@@ -106,9 +106,9 @@ fn parse_numbers<const N: usize>(stdout: &str) -> [f64; N] {
 /// The first `TIME('R')` a program runs answers `0`; a later one answers
 /// elapsed time **since the last reset**, not since the first call.
 /// Driven through real burns and real clause boundaries rather than a
-/// fabricated `Interp::elapsed_anchor` -- a raw `dispatch` call with no
+/// fabricated `Activity::elapsed_anchor` -- a raw `dispatch` call with no
 /// clause boundary in between never marks the clock cache stale, so a
-/// reset's own *lazy* application (`Interp::elapsed_anchor`'s own doc)
+/// reset's own *lazy* application (`Activity::elapsed_anchor`'s own doc)
 /// would never be exercised by that shape, only assumed.
 #[test]
 fn time_r_resets_relative_to_the_last_reset_not_program_start() {
@@ -179,7 +179,7 @@ fn time_e_does_not_reset_the_anchor_time_r_does() {
     assert!(e3 > e2, "e2 = {e2}, e3 = {e3}");
 }
 
-/// The real divergence `Interp::elapsed_anchor`'s own doc names: a
+/// The real divergence `Activity::elapsed_anchor`'s own doc names: a
 /// callee's own `TIME('R')` resets the *caller's* elapsed-time anchor
 /// too, once the callee returns, because both read and write the one
 /// field this crate shares between them where the oracle's own

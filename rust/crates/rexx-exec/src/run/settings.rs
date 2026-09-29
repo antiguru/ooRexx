@@ -27,7 +27,7 @@ impl Interp {
     /// `trace 2` traces the two clauses it skips the pause for and
     /// `trace -2` traces neither.
     fn set_debug_skip(&mut self, count: i64) -> Result<(), Failure> {
-        if !self.debug_pause {
+        if !self.activity.debug_pause {
             return Err(raised_numeric_trace_interactive_only().into());
         }
         self.activation_mut().debug.skip = count.abs();
@@ -62,7 +62,7 @@ impl Interp {
         // instruction the program cannot use is what a line typed at the
         // pause uses to end debug -- measured, `trace off` at a prompt ends
         // the session and the pause with it.
-        if self.trace_mode().debug && !self.debug_pause {
+        if self.trace_mode().debug && !self.activity.debug_pause {
             return;
         }
         let merged = crate::trace::applied(self.trace_mode(), request);
@@ -263,7 +263,7 @@ impl Interp {
                 // VALUE` clause.
                 let mut text = self.take_result_buffer();
                 text.extend_from_slice(&self.to_text(value));
-                self.trace_result(self.clause_state.current_value_indent, &text);
+                self.trace_result(self.activity.clause_state.current_value_indent, &text);
                 if text.len() > MAX_ADDRESS_NAME_LENGTH {
                     let raised = Raised::environment_name_too_long(MAX_ADDRESS_NAME_LENGTH, &text);
                     self.give_result_buffer(text);
@@ -373,7 +373,11 @@ impl Interp {
                 // unmodified case -- `set_form_str`'s own no-uppercasing
                 // rule for this one path, unlike the two keyword spellings
                 // above.
-                self.trace_keyword(self.clause_state.current_value_indent, "FORM", &text);
+                self.trace_keyword(
+                    self.activity.clause_state.current_value_indent,
+                    "FORM",
+                    &text,
+                );
                 // The required-string protocol between the `>K>` and the
                 // validation, which is where `requestString` sits
                 // (`instructions/NumericInstruction.cpp:175`).
@@ -402,7 +406,11 @@ impl Interp {
         self.roots.push_temp(value);
         let mut text = self.take_result_buffer();
         text.extend_from_slice(&self.to_text(value));
-        self.trace_keyword(self.clause_state.current_value_indent, keyword, &text);
+        self.trace_keyword(
+            self.activity.clause_state.current_value_indent,
+            keyword,
+            &text,
+        );
         // **The required-string protocol runs after the `>K>` and its answer
         // replaces the bytes**, which is `requestUnsignedNumber`'s own
         // `requestString()` (`classes/ObjectClass.cpp:1077`). The trace above

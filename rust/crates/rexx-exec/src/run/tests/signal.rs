@@ -375,9 +375,10 @@ fn signal_to_an_undefined_label_inside_a_fragment_reports_both_clauses() {
         Failure::Raised(raised) if raised.number == 16 && raised.sub == 1
     ));
     let sealed: Vec<(usize, Vec<u8>)> = interp
+        .activity
         .failure_sites
         .iter()
-        .chain(interp.failure_site.iter())
+        .chain(interp.activity.failure_site.iter())
         .map(|s| (s.line().expect("a clause site"), s.text().to_vec()))
         .collect();
     assert_eq!(

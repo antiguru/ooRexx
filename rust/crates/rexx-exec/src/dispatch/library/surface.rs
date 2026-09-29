@@ -107,8 +107,8 @@ impl Surface for Interp {
             return None;
         };
         let (raised, additional, result) = (raised.clone(), frame.additional, frame.result);
-        self.pending_additional = additional;
-        self.pending_result = result;
+        self.activity.pending_additional = additional;
+        self.activity.pending_result = result;
         let object = self.build_native_condition_object(&raised).ok()?;
         self.native_frame_mut().condition = Some(object);
         Some(object)
@@ -347,7 +347,7 @@ impl Surface for Interp {
             // `isString(retriever)`: a constant symbol is its own value.
             SymbolKind::Numeric | SymbolKind::Literal => Some(self.text(&upper)),
             SymbolKind::LiteralDot => self.dot_variable(&upper).ok(),
-            SymbolKind::Name if self.outer_caller => {
+            SymbolKind::Name if self.activity.outer_caller => {
                 let slot = self.bound_slot_of(&upper)?;
                 let frame = self.activation().frame;
                 self.variable(frame, slot)
@@ -752,7 +752,7 @@ impl Interp {
             .position(|&byte| byte == b'.')
             .expect("a compound name has a period");
         let stem = upper[..=dot].to_vec();
-        if !self.outer_caller {
+        if !self.activity.outer_caller {
             let key = crate::builtin::datatype::resolve_compound_key(self, &upper[dot + 1..]);
             return (stem, key);
         }
@@ -778,21 +778,24 @@ impl Interp {
         (stem, key)
     }
 
-    /// The index in [`Interp::suspended`] of the activation that made the
+    /// The index in [`Activity::suspended`] of the activation that made the
     /// native call in frame `frame`, or `None` where it is the running one.
     fn suspended_caller(&self, frame: usize) -> Option<usize> {
-        let caller = self.native_handles.get(frame)?.caller?;
-        if self.running.as_ref()?.id == caller {
+        let caller = self.activity.native_handles.get(frame)?.caller?;
+        if self.activity.running.as_ref()?.id == caller {
             return None;
         }
-        self.suspended.iter().position(|held| held.id == caller)
+        self.activity
+            .suspended
+            .iter()
+            .position(|held| held.id == caller)
     }
 
     /// Whether a context-variable member is reaching a kept outer call's
     /// caller, whose frame is not the top one, for a variable that caller
     /// has not bound, which would need a slot that frame cannot grow.
     fn unbound_outer(&self, governing: &[u8]) -> bool {
-        self.outer_caller && self.bound_slot_of(governing).is_none()
+        self.activity.outer_caller && self.bound_slot_of(governing).is_none()
     }
 
     /// Refuses `member` on a variable [`Interp::unbound_outer`] names: the
@@ -914,7 +917,7 @@ impl Interp {
     }
 }
 
-/// The caller of a kept outer call swapped in as [`Interp::running`] for as
+/// The caller of a kept outer call swapped in as [`Activity::running`] for as
 /// long as this lives, and swapped back when it drops, an unwind included.
 /// Both activations stay in `running` and `suspended`, where the collector
 /// reads them.
@@ -925,18 +928,27 @@ struct CallerSwap<'a> {
 
 impl<'a> CallerSwap<'a> {
     fn new(interp: &'a mut Interp, index: usize) -> CallerSwap<'a> {
-        let running = interp.running.as_mut().expect("a native call has a caller");
-        std::mem::swap(running, &mut interp.suspended[index]);
-        interp.outer_caller = true;
+        let running = interp
+            .activity
+            .running
+            .as_mut()
+            .expect("a native call has a caller");
+        std::mem::swap(running, &mut interp.activity.suspended[index]);
+        interp.activity.outer_caller = true;
         CallerSwap { interp, index }
     }
 }
 
 impl Drop for CallerSwap<'_> {
     fn drop(&mut self) {
-        let running = self.interp.running.as_mut().expect("the swapped-in caller");
-        std::mem::swap(running, &mut self.interp.suspended[self.index]);
-        self.interp.outer_caller = false;
+        let running = self
+            .interp
+            .activity
+            .running
+            .as_mut()
+            .expect("the swapped-in caller");
+        std::mem::swap(running, &mut self.interp.activity.suspended[self.index]);
+        self.interp.activity.outer_caller = false;
     }
 }
 

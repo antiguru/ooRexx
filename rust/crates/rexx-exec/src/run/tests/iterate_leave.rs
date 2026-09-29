@@ -247,7 +247,8 @@ fn leave_no_match_through_two_real_loops_resets_to_the_outer_ones_own_indent() {
         b"do i = 1 to 3\ndo j = 1 to 3\nleave zz\nend\nend",
     )
     .unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -268,7 +269,8 @@ fn leave_no_match_through_two_real_loops_resets_to_the_outer_ones_own_indent() {
 fn iterate_wrong_kind_through_a_transparent_unlabelled_block_reports_full_lexical_depth() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"do label x\ndo\niterate x\nend\nend").unwrap_err();
-    let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { indent, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -342,7 +344,8 @@ fn the_corrected_28x_indent_rule_matches_all_fourteen_probed_shapes() {
     ] {
         let mut interp = Interp::new();
         run_source(&mut interp, source).unwrap_err();
-        let FailureSite::Clause { indent, .. } = interp.failure_site.expect("a site was resolved")
+        let FailureSite::Clause { indent, .. } =
+            interp.activity.failure_site.expect("a site was resolved")
         else {
             panic!("not a clause site")
         };

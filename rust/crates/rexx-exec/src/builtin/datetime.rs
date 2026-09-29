@@ -774,11 +774,11 @@ fn now_base_time(interp: &mut Interp) -> i64 {
             .cached_clock
             .expect("a clock that is not stale was read at least once");
     }
-    if interp.pending_elapsed_reset {
+    if interp.activity.pending_elapsed_reset {
         if let Some(stale) = interp.activation().cached_clock {
-            interp.elapsed_anchor = Some(stale);
+            interp.activity.elapsed_anchor = Some(stale);
         }
-        interp.pending_elapsed_reset = false;
+        interp.activity.pending_elapsed_reset = false;
     }
     let micros = real_clock_base_time();
     let activation = interp.activation_mut();
@@ -854,17 +854,17 @@ fn now(interp: &mut Interp) -> Timestamp {
 }
 
 /// `TIME('E')`/`TIME('R')`'s own reading: elapsed microseconds, formatted,
-/// since [`Interp::elapsed_anchor`] -- lazily anchored to `reading` on the
+/// since [`Activity::elapsed_anchor`] -- lazily anchored to `reading` on the
 /// very first call. A reset (`reset` set, or the clock read backward) does
 /// **not** move the anchor here -- it only arms [`Interp::
 /// pending_elapsed_reset`], which [`now_base_time`]'s own cache-miss path
 /// is what actually consumes, matching the oracle's own lazy order.
 fn elapsed_reading(interp: &mut Interp, reading: i64, reset: bool) -> Vec<u8> {
-    let anchor = *interp.elapsed_anchor.get_or_insert(reading);
+    let anchor = *interp.activity.elapsed_anchor.get_or_insert(reading);
     let threshold = reading - anchor;
     let text = match threshold {
         negative if negative < 0 => {
-            interp.pending_elapsed_reset = true;
+            interp.activity.pending_elapsed_reset = true;
             b"0".to_vec()
         }
         0 => b"0".to_vec(),
@@ -873,7 +873,7 @@ fn elapsed_reading(interp: &mut Interp, reading: i64, reset: bool) -> Vec<u8> {
         }
     };
     if reset {
-        interp.pending_elapsed_reset = true;
+        interp.activity.pending_elapsed_reset = true;
     }
     text
 }

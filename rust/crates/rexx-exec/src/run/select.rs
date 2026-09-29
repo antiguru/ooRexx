@@ -27,7 +27,7 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         // The clause unit set this to the `SELECT`'s own printed indent on the
         // way in.
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let value = self.eval(code, case_expr)?;
         self.roots.push_temp(value);
         let text = self.to_text(value).to_vec();
@@ -49,12 +49,12 @@ impl Interp {
     }
 
     /// Hands a `SELECT` its case text: the value its `WHEN CASE`s compare
-    /// against, and `Interp::current_case_text` for the **absorbed** ones that
+    /// against, and `Activity::current_case_text` for the **absorbed** ones that
     /// have no other way to reach it (`lib.rs`'s own doc comment on the
     /// field).
     pub(crate) fn open_select_case(&mut self, value: Option<ObjRef>) -> Option<Vec<u8>> {
         let text = value.map(|value| self.to_text(value).to_vec());
-        self.current_case_text = text.clone();
+        self.activity.current_case_text = text.clone();
         text
     }
 
@@ -67,7 +67,7 @@ impl Interp {
     ) -> Result<bool, Failure> {
         // The clause unit set this to this `WHEN`'s own printed indent on the
         // way in, which is what its condition's `>>>` lines trace at.
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         match &when_instruction.kind {
             InstructionKind::When { condition, .. } => self.eval_condition(
                 code,
@@ -115,7 +115,7 @@ impl Interp {
             otherwise_range(code.body.instructions.len(), end),
             "an OTHERWISE branch was run over a range that is not its own"
         );
-        self.indent_offset = 0;
+        self.activity.indent_offset = 0;
         let resume = otherwise_resume(code.body.instructions.len(), end);
         self.leave_select(code, index, label, resume, flow)
     }
@@ -166,7 +166,8 @@ impl Interp {
         index: usize,
         mut origin: Box<LeaveOrigin>,
     ) -> Box<LeaveOrigin> {
-        origin.indent = static_indent(&code.body.instructions, index) + self.activation_indent;
+        origin.indent =
+            static_indent(&code.body.instructions, index) + self.activity.activation_indent;
         // `site` and `clause_line` are left alone: this resets the *indent*
         // the search reports at, and the clause line stays the
         // `LEAVE`/`ITERATE`'s own however many frames it is forwarded past --

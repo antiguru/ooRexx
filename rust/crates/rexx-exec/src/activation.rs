@@ -901,10 +901,11 @@ impl Interp {
     /// `Activity::generateStackFrames` (`concurrency/Activity.cpp:1141`)
     /// walks it and the order `RexxContext~stackFrames` answers in.
     pub(crate) fn frames(&self) -> impl DoubleEndedIterator<Item = &Activation> {
-        self.running
+        self.activity
+            .running
             .iter()
             .map(std::ops::Deref::deref)
-            .chain(self.suspended.iter().rev().map(Box::as_ref))
+            .chain(self.activity.suspended.iter().rev().map(Box::as_ref))
     }
 
     /// The stream table of the activation that owns one: the running frame
@@ -925,13 +926,19 @@ impl Interp {
     /// notice it, since both are plausible.
     pub(crate) fn stream_table_mut(&mut self) -> Option<&mut NameMap<Box<[u8]>, ObjRef>> {
         if self
+            .activity
             .running
             .as_deref()
             .is_some_and(|frame| matches!(frame.entry, Entry::TopLevel | Entry::Method))
         {
-            return self.running.as_deref_mut().map(|frame| &mut frame.streams);
+            return self
+                .activity
+                .running
+                .as_deref_mut()
+                .map(|frame| &mut frame.streams);
         }
-        self.suspended
+        self.activity
+            .suspended
             .iter_mut()
             .rev()
             .map(Box::as_mut)
@@ -939,7 +946,7 @@ impl Interp {
             .map(|frame| &mut frame.streams)
     }
 
-    /// The activation at `depth`, counted as [`Interp::frames`] counts: `0`
+    /// The activation at `depth`, counted as [`Activity::frames`] counts: `0`
     /// is the running one.
     pub(crate) fn frame_at(&self, depth: usize) -> Option<&Activation> {
         self.frames().nth(depth)
@@ -956,7 +963,8 @@ impl Interp {
     /// from the running one out to the one at `depth`.
     pub(crate) fn fragments_within(&self, depth: usize) -> usize {
         let levels: Vec<ActivationId> = self.frames().take(depth + 1).map(|a| a.id).collect();
-        self.fragments
+        self.activity
+            .fragments
             .iter()
             .rev()
             .take_while(|level| levels.contains(&level.owner))
@@ -965,11 +973,11 @@ impl Interp {
 
     /// The clause the activation at `depth` is stopped on.
     pub(crate) fn clause_of(&self, depth: usize) -> ClauseSnapshot {
-        if depth == 0 && self.running.is_some() {
+        if depth == 0 && self.activity.running.is_some() {
             return ClauseSnapshot {
-                line: self.clause_state.line(),
-                indent: self.clause_state.current_value_indent,
-                index: self.clause_state.clause_index(),
+                line: self.activity.clause_state.line(),
+                indent: self.activity.clause_state.current_value_indent,
+                index: self.activity.clause_state.clause_index(),
             };
         }
         self.frame_at(depth)
@@ -986,11 +994,11 @@ impl Interp {
         // its caller -- a wrong answer with nothing to notice it, since both
         // are plausible numbers.
         let expected = self.frame_at(depth).map(|activation| activation.id);
-        let found = match depth.checked_sub(usize::from(self.running.is_some())) {
-            None => self.running.as_deref_mut(),
-            Some(below) => match self.suspended.len().checked_sub(below + 1) {
+        let found = match depth.checked_sub(usize::from(self.activity.running.is_some())) {
+            None => self.activity.running.as_deref_mut(),
+            Some(below) => match self.activity.suspended.len().checked_sub(below + 1) {
                 None => None,
-                Some(index) => self.suspended.get_mut(index).map(Box::as_mut),
+                Some(index) => self.activity.suspended.get_mut(index).map(Box::as_mut),
             },
         };
         debug_assert_eq!(
@@ -1002,22 +1010,25 @@ impl Interp {
     }
 
     pub(crate) fn activation(&self) -> &Activation {
-        self.running.as_deref().expect("a live activation")
+        self.activity.running.as_deref().expect("a live activation")
     }
 
     pub(crate) fn activation_mut(&mut self) -> &mut Activation {
-        self.running.as_deref_mut().expect("a live activation")
+        self.activity
+            .running
+            .as_deref_mut()
+            .expect("a live activation")
     }
 
     /// The running activation, or `None` where nothing is running.
     pub(crate) fn running_activation(&self) -> Option<&Activation> {
-        self.running.as_deref()
+        self.activity.running.as_deref()
     }
 
     /// The running activation's own caller, for a writer, or `None` at the
     /// outermost level.
     pub(crate) fn caller_activation_mut(&mut self) -> Option<&mut Activation> {
-        self.suspended.last_mut().map(Box::as_mut)
+        self.activity.suspended.last_mut().map(Box::as_mut)
     }
 
     /// The activation whose trap table answers for a condition raised right
@@ -1029,7 +1040,8 @@ impl Interp {
         if !running.forwarded {
             return Some(running);
         }
-        self.suspended
+        self.activity
+            .suspended
             .iter()
             .rev()
             .map(Box::as_ref)
@@ -1038,12 +1050,12 @@ impl Interp {
 
     /// How many activations are live, the running one included.
     pub(crate) fn activation_depth(&self) -> usize {
-        self.suspended.len() + usize::from(self.running.is_some())
+        self.activity.suspended.len() + usize::from(self.activity.running.is_some())
     }
 
     /// Makes `activation` the running one and suspends whatever was.
     pub(crate) fn push_activation(&mut self, activation: Activation) {
-        let boxed = match self.spare_activations.pop() {
+        let boxed = match self.activity.spare_activations.pop() {
             Some(mut spare) => {
                 *spare = activation;
                 spare
@@ -1052,44 +1064,46 @@ impl Interp {
         };
         // `trace_cache`'s own invariant: the setting travels with whichever
         // activation is running, and this changes which one that is.
-        self.trace_cache = crate::trace::TraceCache::of(boxed.trace_mode, self.debug_pause);
+        self.activity.trace_cache =
+            crate::trace::TraceCache::of(boxed.trace_mode, self.activity.debug_pause);
         // The clause the activation being suspended is stopped on, which is
         // what its own `StackFrame` reports for as long as it stays
-        // suspended: `Interp::clause_state` is about to start describing the
+        // suspended: `Activity::clause_state` is about to start describing the
         // callee's clauses instead. Taken here rather than at each of the
         // sites that push, for the reason `Interp::run_activation` takes the
         // calling convention there: this is the one place every push passes.
         let clause = ClauseSnapshot {
-            line: self.clause_state.line(),
-            indent: self.clause_state.current_value_indent,
-            index: self.clause_state.clause_index(),
+            line: self.activity.clause_state.line(),
+            indent: self.activity.clause_state.current_value_indent,
+            index: self.activity.clause_state.clause_index(),
         };
-        if let Some(mut outer) = self.running.replace(boxed) {
+        if let Some(mut outer) = self.activity.running.replace(boxed) {
             outer.clause = clause;
-            self.suspended.push(outer);
+            self.activity.suspended.push(outer);
         }
     }
 
     /// Keeps an ended activation's box for the next [`Interp::
     /// push_activation`], instead of returning it to the allocator.
     pub(crate) fn recycle_activation(&mut self, ended: Box<Activation>) {
-        if self.spare_activations.len() < SPARE_ACTIVATIONS {
-            self.spare_activations.push(ended);
+        if self.activity.spare_activations.len() < SPARE_ACTIVATIONS {
+            self.activity.spare_activations.push(ended);
         }
     }
 
     /// Ends the running activation and resumes its caller, answering the
     /// activation that ended.
     pub(crate) fn pop_activation(&mut self) -> Option<Box<Activation>> {
-        let ended = self.running.take()?;
-        self.running = self.suspended.pop();
+        let ended = self.activity.running.take()?;
+        self.activity.running = self.activity.suspended.pop();
         // The resumed caller's setting, or `OFF` where nothing is left to
         // resume -- which is the state `Interp::new` starts in.
-        self.trace_cache = crate::trace::TraceCache::of(
-            self.running
+        self.activity.trace_cache = crate::trace::TraceCache::of(
+            self.activity
+                .running
                 .as_deref()
                 .map_or(TraceMode::OFF, |resumed| resumed.trace_mode),
-            self.debug_pause,
+            self.activity.debug_pause,
         );
         Some(ended)
     }
@@ -1104,10 +1118,10 @@ impl Interp {
         debug_assert_eq!(
             self.running_activation()
                 .map(|activation| activation.trace_mode),
-            Some(self.trace_cache.mode()),
+            Some(self.activity.trace_cache.mode()),
             "the cached TRACE setting is not the running activation's"
         );
-        self.trace_cache.mode()
+        self.activity.trace_cache.mode()
     }
 
     /// Sets the running activation's `TRACE`. Only the `TRACE` instruction
@@ -1115,7 +1129,7 @@ impl Interp {
     /// value through [`Activation::nested`] instead, never through here.
     pub(crate) fn set_trace_mode(&mut self, mode: TraceMode) {
         self.activation_mut().trace_mode = mode;
-        self.trace_cache = crate::trace::TraceCache::of(mode, self.debug_pause);
+        self.activity.trace_cache = crate::trace::TraceCache::of(mode, self.activity.debug_pause);
     }
 }
 

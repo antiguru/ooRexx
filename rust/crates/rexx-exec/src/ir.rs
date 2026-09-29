@@ -545,7 +545,7 @@ pub(crate) struct ClausePosition {
     /// `Plan::lines`' own entry: the source line the clause starts on.
     pub(crate) line: u32,
     /// `Plan::indents`' own entry: the nesting indent **before**
-    /// `Interp::activation_indent` and `Interp::indent_offset` are added,
+    /// `Activity::activation_indent` and `Activity::indent_offset` are added,
     /// which is what `Interp::printed_indent` adds to it.
     pub(crate) indent: u32,
 }

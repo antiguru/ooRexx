@@ -1242,7 +1242,7 @@ impl Interp {
     /// The [`Caller`] a send written in the running activation resolves as.
     pub(crate) fn caller(&self) -> Caller {
         Caller {
-            receiver: self.call_context.receiver,
+            receiver: self.activity.call_context.receiver,
             package: match self.running_program() {
                 None => CallerPackage::NoActivation,
                 Some(program) => CallerPackage::Package(Package::Program(program)),
@@ -1997,7 +1997,7 @@ impl Interp {
                 if outcome.is_err() {
                     let scope = self.classes().id_string(resolution.scope).to_string();
                     let method = resolution.method;
-                    let reraised = std::mem::take(&mut self.native_reraise);
+                    let reraised = std::mem::take(&mut self.activity.native_reraise);
                     self.blame_external_method(name, &scope, method, receiver, args, reraised);
                 }
                 outcome
@@ -2212,7 +2212,7 @@ impl Interp {
         // each taking its own copy of this function's argument.
         let arguments = self.shared_arguments(args);
         let saved_context = std::mem::replace(
-            &mut self.call_context,
+            &mut self.activity.call_context,
             crate::CallContext {
                 name: name.to_vec(),
                 arguments,
@@ -2224,6 +2224,7 @@ impl Interp {
         // `receiver` is the convention's own field, so the bindings below
         // cannot read the argument even by accident.
         let receiver = self
+            .activity
             .call_context
             .receiver
             .expect("the calling convention replaced directly above carries the receiver");
@@ -2270,9 +2271,9 @@ impl Interp {
         // clause's own indent was: measured, a send from inside two nested
         // `DO` blocks echoes the method's clauses at 0.
         let saved_clause_state = self.save_clause_state();
-        let saved_base = std::mem::replace(&mut self.activation_indent, 0);
-        let saved_offset = std::mem::take(&mut self.indent_offset);
-        let saved_line = std::mem::take(&mut self.clause_line_override);
+        let saved_base = std::mem::replace(&mut self.activity.activation_indent, 0);
+        let saved_offset = std::mem::take(&mut self.activity.indent_offset);
+        let saved_line = std::mem::take(&mut self.activity.clause_line_override);
 
         let ended = self.run_activation();
         if let Err(failure) = &ended {
@@ -2290,7 +2291,7 @@ impl Interp {
         // in**, because a parked body still owns it: `ARG()` and a send's
         // caller resolution inside the resumed half read the same convention
         // the first half did. A body that is not parked drops it here.
-        let callee_context = std::mem::replace(&mut self.call_context, saved_context);
+        let callee_context = std::mem::replace(&mut self.activity.call_context, saved_context);
         // The frame is released either way; what a `REPLY` changes is where
         // its contents go first. `park_reply` reads them out and hands them to
         // the collector's parked set, so the values survive with no frame open
@@ -2307,9 +2308,9 @@ impl Interp {
             // `Activation` and the free that follows.
             self.recycle_activation(callee);
         }
-        self.activation_indent = saved_base;
-        self.indent_offset = saved_offset;
-        self.clause_line_override = saved_line;
+        self.activity.activation_indent = saved_base;
+        self.activity.indent_offset = saved_offset;
+        self.activity.clause_line_override = saved_line;
         self.restore_clause_state(saved_clause_state);
 
         match ended {
@@ -2377,8 +2378,8 @@ impl Interp {
         while let Some(deferred) = self.deferred.pop_front() {
             if let Err(failure) = self.resume_reply(deferred) {
                 abandoned = matches!(failure, Failure::Deadline);
-                let mut sites = std::mem::take(&mut self.failure_sites);
-                sites.extend(self.failure_site.take());
+                let mut sites = std::mem::take(&mut self.activity.failure_sites);
+                sites.extend(self.activity.failure_site.take());
                 self.clear_failure_levels();
                 failures.push((failure, sites));
                 if abandoned {
@@ -2528,11 +2529,11 @@ impl Interp {
             TraceEntry::Spent
         };
         activation.first_instruction_pending = false;
-        let saved_context = std::mem::replace(&mut self.call_context, context);
+        let saved_context = std::mem::replace(&mut self.activity.call_context, context);
         let saved_clause_state = self.save_clause_state();
-        let saved_base = std::mem::replace(&mut self.activation_indent, 0);
-        let saved_offset = std::mem::take(&mut self.indent_offset);
-        let saved_line = std::mem::take(&mut self.clause_line_override);
+        let saved_base = std::mem::replace(&mut self.activity.activation_indent, 0);
+        let saved_offset = std::mem::take(&mut self.activity.indent_offset);
+        let saved_line = std::mem::take(&mut self.activity.clause_line_override);
         self.push_activation(*activation);
         // After the push, because the announcement reads the running
         // activation's own trace mode and subject.
@@ -2545,11 +2546,11 @@ impl Interp {
 
         self.trace_invocation_exit();
         let callee = self.pop_activation().expect("the activation just pushed");
-        self.activation_indent = saved_base;
-        self.indent_offset = saved_offset;
-        self.clause_line_override = saved_line;
+        self.activity.activation_indent = saved_base;
+        self.activity.indent_offset = saved_offset;
+        self.activity.clause_line_override = saved_line;
         self.restore_clause_state(saved_clause_state);
-        self.call_context = saved_context;
+        self.activity.call_context = saved_context;
         // A resumed body cannot park again: `Interp::exec_reply` raises 98.935
         // on a second `REPLY` before it can set the state, so the frame is
         // released here unconditionally. The assertion is what makes a state
@@ -2732,7 +2733,11 @@ impl Interp {
         if let Some(value) = value
             && let Some(rendered) = self.intermediate_text(value)
         {
-            self.trace_message(self.clause_state.current_value_indent, name, &rendered);
+            self.trace_message(
+                self.activity.clause_state.current_value_indent,
+                name,
+                &rendered,
+            );
         }
         Ok(value)
     }
@@ -2754,7 +2759,7 @@ impl Interp {
                 // An omitted position traces an empty value line, not no
                 // line -- the same rule a call's own argument list follows.
                 None => {
-                    self.trace_argument(self.clause_state.current_value_indent, b"");
+                    self.trace_argument(self.activity.clause_state.current_value_indent, b"");
                     values.push(None);
                 }
                 Some(expr) => values.push(Some(self.eval_traced_argument(code, expr)?)),
@@ -2848,7 +2853,7 @@ impl Interp {
             arguments,
             activation: Some(NativeActivationLevel {
                 package: program.map(Package::Program),
-                reraised: std::mem::take(&mut self.native_reraise),
+                reraised: std::mem::take(&mut self.activity.native_reraise),
             }),
         };
         self.blame_native_level(Raised::compiled_routine_line(name), package, level);
@@ -2862,7 +2867,7 @@ impl Interp {
         package: Option<Vec<u8>>,
         level: NativeLevel<'_>,
     ) {
-        if self.failure_site.is_some() {
+        if self.activity.failure_site.is_some() {
             return;
         }
         let frame = crate::dispatch::context::build_native_level_frame(
@@ -2873,7 +2878,7 @@ impl Interp {
             level.arguments,
             &text,
         );
-        self.failure_frame = Some(frame);
+        self.activity.failure_frame = Some(frame);
         match level.activation {
             // `NativeActivation::checkConditions` (`execution/
             // NativeActivation.cpp:1787`) re-raises a SYNTAX condition in the
@@ -2887,11 +2892,11 @@ impl Interp {
                 package: Some(package),
                 reraised: false,
             }) => {
-                self.failure_origin.get_or_insert((package, None));
+                self.activity.failure_origin.get_or_insert((package, None));
             }
             Some(_) | None => {}
         }
-        self.failure_site = Some(FailureSite::Rendered { text, package });
+        self.activity.failure_site = Some(FailureSite::Rendered { text, package });
         self.seal_site_level();
     }
 }

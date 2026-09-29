@@ -637,7 +637,7 @@ impl Interp {
             }
             Some(raised) => {
                 if handled.additional.is_some() {
-                    self.pending_additional = handled.additional;
+                    self.activity.pending_additional = handled.additional;
                 }
                 return Err(raised);
             }
@@ -744,7 +744,7 @@ impl Interp {
         environment: Option<&[u8]>,
         io: Option<&AddressIo>,
     ) -> Result<Flow, Failure> {
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let value = self.eval(code, expression)?;
         self.roots.push_temp(value);
         let value = self.required_string_value(value)?;
@@ -779,7 +779,7 @@ impl Interp {
             Err(failure) => Err(failure),
         };
         self.roots.pop_frame(frame);
-        let kept = self.input_dispatch_syntax.take();
+        let kept = self.activity.input_dispatch_syntax.take();
         let outcome = outcome?;
         // The SYNTAX condition the input reader's dispatcher took, raised now
         // that the command has completed: measured, oracle rc 0, a `LINEIN`
@@ -936,25 +936,25 @@ impl Interp {
         };
         match self.trap_for(name) {
             Some(trap) if trap.call => {
-                self.pending_rc = rc;
-                self.pending_additional = held.additional;
-                self.pending_result = held.result;
+                self.activity.pending_rc = rc;
+                self.activity.pending_additional = held.additional;
+                self.activity.pending_result = held.result;
                 let object = self.build_condition_object(&raised, Some(true))?;
-                self.pending_traps.push_back(crate::PendingTrap {
+                self.activity.pending_traps.push_back(crate::PendingTrap {
                     condition: name.into(),
                     rc: None,
                     description: held.description.clone(),
                     object: Some(object),
                     activation: self.activation().id,
                     queued_during_delivery: false,
-                    fragment_depth: self.fragment_depth,
+                    fragment_depth: self.activity.fragment_depth,
                 });
                 Ok(())
             }
             Some(_) => {
-                self.pending_rc = rc;
-                self.pending_additional = held.additional;
-                self.pending_result = held.result;
+                self.activity.pending_rc = rc;
+                self.activity.pending_additional = held.additional;
+                self.activity.pending_result = held.result;
                 Err(raised.into())
             }
             None if name == b"FAILURE" => self.raise_handler_condition(held, b"ERROR"),
@@ -1003,14 +1003,14 @@ impl Interp {
                 // finished and `POSITION` and `STACKFRAMES` no longer exist
                 // to be read.
                 let object = self.build_condition_object(&raised, Some(true))?;
-                self.pending_traps.push_back(crate::PendingTrap {
+                self.activity.pending_traps.push_back(crate::PendingTrap {
                     condition: condition.as_bytes().into(),
                     rc: raised.rc.clone(),
                     description: Some(command.to_vec()),
                     object: Some(object),
                     activation: self.activation().id,
                     queued_during_delivery: false,
-                    fragment_depth: self.fragment_depth,
+                    fragment_depth: self.activity.fragment_depth,
                 });
                 Ok(())
             }

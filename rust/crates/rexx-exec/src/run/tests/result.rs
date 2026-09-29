@@ -575,9 +575,10 @@ fn the_report_echoes_one_clause_per_activation_innermost_first() {
     )
     .unwrap_err();
     let sealed: Vec<(usize, Vec<u8>, usize)> = interp
+        .activity
         .failure_sites
         .iter()
-        .chain(interp.failure_site.iter())
+        .chain(interp.activity.failure_site.iter())
         .map(|s| {
             (
                 s.line().expect("a clause site"),
@@ -608,7 +609,7 @@ fn a_calls_arguments_are_evaluated_in_the_caller() {
         matches!(&failure, Failure::Raised(raised) if raised.number == 42),
         "an argument that raises must surface as its own condition, not run the callee: {failure:?}"
     );
-    let site = interp.failure_site.expect("a site was resolved");
+    let site = interp.activity.failure_site.expect("a site was resolved");
     assert_eq!((site.line(), site.text()), (Some(1), &b"call sub 1/0"[..]));
 }
 

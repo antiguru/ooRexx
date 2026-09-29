@@ -527,9 +527,11 @@ impl Interp {
         {
             return Ok(());
         }
-        self.requires_installing.push(self.package_path(id).into());
+        self.activity
+            .requires_installing
+            .push(self.package_path(id).into());
         let outcome = self.install_requires(id, program);
-        self.requires_installing.pop();
+        self.activity.requires_installing.pop();
         outcome
     }
 
@@ -724,7 +726,12 @@ impl Interp {
     /// (`concurrency/Activity.cpp:3702`).
     fn check_not_installing(&self, loaded: ProgramId) -> Result<(), Failure> {
         let path = self.package_path(loaded);
-        if self.requires_installing.iter().any(|open| &**open == path) {
+        if self
+            .activity
+            .requires_installing
+            .iter()
+            .any(|open| &**open == path)
+        {
             return Err(Raised::circular_requires(path).into());
         }
         Ok(())
@@ -1986,7 +1993,7 @@ impl Interp {
     ) -> LibraryLoad {
         match opened {
             Ok(Some(mut library)) => {
-                library.keep_thread_context(&self.thread);
+                library.keep_thread_context(&self.activity.thread);
                 let held = self.libraries.hold(name, Rc::new(library));
                 self.register_package_routines(name, &held);
                 // Measured, oracle: a loader that raises leaves the library
@@ -2001,7 +2008,7 @@ impl Interp {
                 LibraryLoad::Missing
             }
             Err(mut refused) => {
-                refused.library.keep_thread_context(&self.thread);
+                refused.library.keep_thread_context(&self.activity.thread);
                 self.libraries.hold(name, Rc::from(refused.library));
                 LibraryLoad::Version
             }
@@ -2344,7 +2351,7 @@ impl Interp {
         // calls echoes that method's clause above the `::CONSTANT` and the
         // `::CLASS`, and names no method.
         let saved_context = std::mem::replace(
-            &mut self.call_context,
+            &mut self.activity.call_context,
             CallContext {
                 name: b"::CONSTANT".to_vec(),
                 arguments: Rc::from(&[][..]),
@@ -2365,7 +2372,7 @@ impl Interp {
             plan: None,
         };
         let result = self.eval(&code, expr);
-        self.call_context = saved_context;
+        self.activity.call_context = saved_context;
         self.pop_directive_activation(frame);
         result
     }
@@ -2375,7 +2382,7 @@ impl Interp {
     /// line the oracle prints above the two `Error` lines.
     fn blame_directive(&mut self, program: &Rc<Program>, directive: &Directive) {
         let (line, text) = directive_clause(program, directive);
-        self.failure_site = Some(FailureSite::Clause {
+        self.activity.failure_site = Some(FailureSite::Clause {
             line,
             text,
             indent: 0,
@@ -2386,7 +2393,7 @@ impl Interp {
     /// report names that package's own file when a `::REQUIRES` loaded it.
     fn blame_directive_in(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
         let (line, text) = directive_clause(program, directive);
-        self.failure_site = Some(match self.required_paths.get(&id) {
+        self.activity.failure_site = Some(match self.required_paths.get(&id) {
             Some(path) => FailureSite::Named {
                 line,
                 indent: 0,

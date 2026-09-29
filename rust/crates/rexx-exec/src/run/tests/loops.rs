@@ -809,7 +809,8 @@ fn a_comma_list_while_condition_raises_34_6_not_34_3() {
 fn until_is_attributed_to_the_end_clause_while_while_is_attributed_to_the_do_clause() {
     let mut interp = Interp::new();
     run_source(&mut interp, b"do until 'x'\nnop\nend").unwrap_err();
-    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { line, text, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };
@@ -818,7 +819,8 @@ fn until_is_attributed_to_the_end_clause_while_while_is_attributed_to_the_do_cla
 
     let mut interp = Interp::new();
     run_source(&mut interp, b"do while 'x'\nnop\nend").unwrap_err();
-    let FailureSite::Clause { line, text, .. } = interp.failure_site.expect("a site was resolved")
+    let FailureSite::Clause { line, text, .. } =
+        interp.activity.failure_site.expect("a site was resolved")
     else {
         panic!("not a clause site")
     };

@@ -216,7 +216,7 @@ impl Interp {
     /// Takes the shared value buffer **with the caller's run intact**, and the
     /// depth to build above it.
     pub(crate) fn take_value_buffer(&mut self) -> (Vec<Option<ObjRef>>, usize) {
-        let buffer = std::mem::take(&mut self.value_buffer);
+        let buffer = std::mem::take(&mut self.activity.value_buffer);
         let mark = buffer.len();
         (buffer, mark)
     }
@@ -225,7 +225,7 @@ impl Interp {
     /// send ended.
     pub(crate) fn give_value_buffer(&mut self, mut buffer: Vec<Option<ObjRef>>, mark: usize) {
         buffer.truncate(mark);
-        self.value_buffer = buffer;
+        self.activity.value_buffer = buffer;
     }
 
     /// One builtin call: its arguments evaluated in the caller, then the row
@@ -242,11 +242,11 @@ impl Interp {
         // back into `&mut self`, so nothing may hold the `Vec` across it, and
         // a run that is only ever appended to needs no borrow between pushes.
         // The compiled path's `Op::PushArg` writes the same stack.
-        let mark = self.value_buffer.len();
+        let mark = self.activity.value_buffer.len();
         for arg in args {
             let value = match arg {
                 None => {
-                    self.trace_argument(self.clause_state.current_value_indent, b"");
+                    self.trace_argument(self.activity.clause_state.current_value_indent, b"");
                     None
                 }
                 Some(expr) if self.leaf_argument(expr) => {
@@ -254,7 +254,7 @@ impl Interp {
                 }
                 Some(expr) => Some(self.eval_traced_argument(code, expr)?),
             };
-            self.value_buffer.push(value);
+            self.activity.value_buffer.push(value);
         }
         self.run_over_pushed_args(mark, |interp, values| {
             builtin::run(interp, name, target, values)
@@ -293,7 +293,7 @@ impl Interp {
                     // An omitted position traces an **empty** value line, not
                     // no line: `traceArgument(GlobalNames::NULLSTRING)`,
                     // `RexxInstruction.cpp:161`, and measured above.
-                    self.trace_argument(self.clause_state.current_value_indent, b"");
+                    self.trace_argument(self.activity.clause_state.current_value_indent, b"");
                     arguments.push(None);
                 }
                 Some(expr) if self.leaf_argument(expr) => {
@@ -376,10 +376,10 @@ impl Interp {
         mark: usize,
         body: impl FnOnce(&mut Interp, &[Option<ObjRef>]) -> Result<ObjRef, Failure>,
     ) -> Result<ObjRef, Failure> {
-        let mut values = std::mem::take(&mut self.value_buffer);
+        let mut values = std::mem::take(&mut self.activity.value_buffer);
         let outcome = body(self, &values[mark..]);
         values.truncate(mark);
-        self.value_buffer = values;
+        self.activity.value_buffer = values;
         outcome
     }
 
@@ -636,7 +636,7 @@ impl Interp {
         // `SIGL` before evaluating arguments would report the argument as
         // the `CALL`'s own line instead.
         if matches!(entered, Entered::Label(_)) {
-            self.set_sigl(self.clause_state.line());
+            self.set_sigl(self.activity.clause_state.line());
         }
 
         // D19/I6: one Rust frame per activation, plus this counter, so an
@@ -784,13 +784,13 @@ impl Interp {
             Entered::Label(_) => saved_clause_state.value_indent() + 2,
             Entered::Routine(_) => 0,
         };
-        let saved_base = std::mem::replace(&mut self.activation_indent, callee_indent);
-        let saved_offset = std::mem::take(&mut self.indent_offset);
-        let saved_line = std::mem::take(&mut self.clause_line_override);
-        let inherited = entered_receiver(entered, entry, self.call_context.receiver);
+        let saved_base = std::mem::replace(&mut self.activity.activation_indent, callee_indent);
+        let saved_offset = std::mem::take(&mut self.activity.indent_offset);
+        let saved_line = std::mem::take(&mut self.activity.clause_line_override);
+        let inherited = entered_receiver(entered, entry, self.activity.call_context.receiver);
         let arguments = self.shared_arguments(&arguments);
         let saved_context = std::mem::replace(
-            &mut self.call_context,
+            &mut self.activity.call_context,
             CallContext {
                 name: name.to_vec(),
                 arguments,
@@ -839,11 +839,11 @@ impl Interp {
             self.activation_mut().extra = std::mem::take(&mut callee.extra);
         }
         self.recycle_activation(callee);
-        self.activation_indent = saved_base;
-        self.indent_offset = saved_offset;
-        self.clause_line_override = saved_line;
+        self.activity.activation_indent = saved_base;
+        self.activity.indent_offset = saved_offset;
+        self.activity.clause_line_override = saved_line;
         self.restore_clause_state(saved_clause_state);
-        self.call_context = saved_context;
+        self.activity.call_context = saved_context;
 
         // **`EXIT` inside a `::ROUTINE` ends the routine, not the program**,
         // where `EXIT` inside a `CALL`ed label ends the program. The C++'s
@@ -960,7 +960,7 @@ impl Interp {
         let anchor = 0u8;
         self.enter_eval_node(&raw const anchor)?;
         let value = self.eval_node(code, expr);
-        self.depth -= 1;
+        self.activity.depth -= 1;
         let value = value?;
         self.roots.push_temp(value);
         Ok(value)
@@ -974,7 +974,7 @@ impl Interp {
         let argument = self.eval(code, expr)?;
         self.roots.push_temp(argument);
         if let Some(rendered) = self.intermediate_text(argument) {
-            self.trace_argument(self.clause_state.current_value_indent, &rendered);
+            self.trace_argument(self.activity.clause_state.current_value_indent, &rendered);
         }
         Ok(argument)
     }
@@ -1012,7 +1012,7 @@ impl Interp {
         for arg in args {
             let raised = match arg {
                 None => {
-                    self.trace_argument(self.clause_state.current_value_indent, b"");
+                    self.trace_argument(self.activity.clause_state.current_value_indent, b"");
                     continue;
                 }
                 Some(expr) if self.leaf_argument(expr) => self.eval_leaf_argument(code, expr).err(),
@@ -1053,7 +1053,7 @@ impl Interp {
         // `current_value_indent` with its own clauses' -- this is the `CALL`
         // clause's own printed indent, needed below for the caller-side
         // `RESULT` trace.
-        let base_indent = self.clause_state.current_value_indent;
+        let base_indent = self.activity.clause_state.current_value_indent;
         let ended = self.invoke_call(
             code,
             resolution,
@@ -1115,7 +1115,7 @@ impl Interp {
         name: &[u8],
         mark: usize,
     ) -> Result<Flow, Failure> {
-        let base_indent = self.clause_state.current_value_indent;
+        let base_indent = self.activity.clause_state.current_value_indent;
         let ended = self.subroutine_over_pushed_args(resolved, name, mark)?;
         self.settle_call_result(ended, base_indent)
     }
@@ -1129,7 +1129,7 @@ impl Interp {
         name: &[u8],
         mark: usize,
     ) -> Result<Ended, Failure> {
-        let mut values = std::mem::take(&mut self.value_buffer);
+        let mut values = std::mem::take(&mut self.activity.value_buffer);
         let outcome = match resolved {
             // No activation, no `Argument`s built -- the shortcut
             // `call_over_values` takes, and the reason a `CALL` to a builtin
@@ -1162,7 +1162,7 @@ impl Interp {
             ),
         };
         values.truncate(mark);
-        self.value_buffer = values;
+        self.activity.value_buffer = values;
         outcome
     }
 }

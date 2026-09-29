@@ -453,9 +453,9 @@ fn context_stack_frames(
 pub(crate) enum LiveLevel {
     /// The activation at this depth.
     Activation(usize),
-    /// This row of [`Interp::native_handles`].
+    /// This row of [`Activity::native_handles`].
     Native(usize),
-    /// This row of [`Interp::fragments`].
+    /// This row of [`Activity::fragments`].
     Fragment(usize),
 }
 
@@ -466,12 +466,12 @@ pub(crate) fn live_levels(interp: &Interp) -> Vec<LiveLevel> {
     let mut levels = Vec::new();
     for (depth, activation) in interp.frames().enumerate() {
         let id = activation.id;
-        for (row, native) in interp.native_handles.iter().enumerate().rev() {
+        for (row, native) in interp.activity.native_handles.iter().enumerate().rev() {
             if native.caller == Some(id) {
                 levels.push(LiveLevel::Native(row));
             }
         }
-        for (row, level) in interp.fragments.iter().enumerate().rev() {
+        for (row, level) in interp.activity.fragments.iter().enumerate().rev() {
             if level.owner == id {
                 levels.push(LiveLevel::Fragment(row));
             }
@@ -493,11 +493,11 @@ pub(crate) fn build_live_frame(interp: &mut Interp, level: LiveLevel) -> Result<
 /// The `StackFrame` of the running fragment in row `row`, stopped on its
 /// clause being stepped, or the one that entered the fragment above it.
 fn build_fragment_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
-    let clause = match interp.fragments.get(row + 1) {
+    let clause = match interp.activity.fragments.get(row + 1) {
         Some(inner) => inner.outer_clause,
-        None => interp.fragment_clause,
+        None => interp.activity.fragment_clause,
     };
-    let level = &interp.fragments[row];
+    let level = &interp.activity.fragments[row];
     let (line, indent) = (level.line, level.indent);
     let text = level
         .fragment
@@ -704,7 +704,7 @@ pub(crate) fn build_native_level_frame(
 }
 
 /// The `StackFrame` of the native call in row `row` of
-/// [`Interp::native_handles`] -- `NativeActivation::createStackFrame`
+/// [`Activity::native_handles`] -- `NativeActivation::createStackFrame`
 /// (`execution/NativeActivation.cpp:3620`): no line and no invocation, the
 /// calling activation's context, and the `Compiled routine` or `Compiled
 /// method` line as its traceback.
@@ -712,7 +712,7 @@ pub(crate) fn build_native_level_frame(
 /// # Panics
 /// If no native call is in that row.
 pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
-    let native = &interp.native_handles[row];
+    let native = &interp.activity.native_handles[row];
     let caller = native.caller;
     let (method, name, receiver, scope, arguments) = (
         native.method,

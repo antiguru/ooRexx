@@ -82,7 +82,7 @@ pub(crate) enum FrameKind {
     Select(SelectFrame),
     /// Boxed so that the stack's element stays near a `SelectFrame`'s width:
     /// a loop's state holds the header's `Number`s and is several times that.
-    /// The state is on `Interp::flat_loops`, innermost last, which is the same
+    /// The state is on `Activity::flat_loops`, innermost last, which is the same
     /// order this stack is in -- so the loop a frame belongs to is that stack's
     /// top when the frame is the innermost one, and no index is needed.
     Loop,
@@ -215,14 +215,14 @@ impl Interp {
         } else {
             Some(registers.get(src))
         };
-        self.value_buffer.push(value);
+        self.activity.value_buffer.push(value);
     }
 
     /// One [`crate::ir::Op::TraceArgument`]'s `>A>` line, its gate already
     /// answered by the caller.
     #[inline(never)]
     fn trace_call_arg(&mut self, registers: RegFrame<'_>, src: u16) {
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         if src == Op::ARG_OMITTED {
             self.trace_argument(indent, b"");
             return;
@@ -250,7 +250,7 @@ impl Interp {
         site: u16,
         argc: u16,
     ) -> Result<ObjRef, Failure> {
-        let Some(mark) = self.value_buffer.len().checked_sub(argc as usize) else {
+        let Some(mark) = self.activity.value_buffer.len().checked_sub(argc as usize) else {
             return Err(Loud::call_op_off_its_node().into());
         };
         // **A kept builtin is the one resolution that runs without the
@@ -282,7 +282,7 @@ impl Interp {
         let probe = 0u8;
         self.enter_eval_node(&raw const probe)?;
         let value = self.call_over_pushed_args(resolved, spelling, mark);
-        self.depth -= 1;
+        self.activity.depth -= 1;
         value
     }
 
@@ -303,7 +303,7 @@ impl Interp {
         let Call::Named { name, literal, .. } = &**call else {
             return Err(Loud::call_op_off_its_node().into());
         };
-        let Some(mark) = self.value_buffer.len().checked_sub(argc as usize) else {
+        let Some(mark) = self.activity.value_buffer.len().checked_sub(argc as usize) else {
             return Err(Loud::call_op_off_its_node().into());
         };
         // The site's own kept answer and the resolution when it has none --
@@ -342,10 +342,10 @@ impl Interp {
         end: usize,
         source: Option<&ProgramSource>,
     ) -> Result<BranchEnd, Failure> {
-        if self.frames.len() <= base {
+        if self.activity.frames.len() <= base {
             return Ok(BranchEnd::None);
         }
-        let Some(frame) = self.frames.pop_if(|frame| pc >= frame.op_end) else {
+        let Some(frame) = self.activity.frames.pop_if(|frame| pc >= frame.op_end) else {
             return Ok(BranchEnd::None);
         };
         let FrameKind::Select(frame) = frame.kind else {
@@ -477,7 +477,7 @@ impl Interp {
         // whole of what makes one stack safe to share**: `settle` walks down
         // to it and no further, so an escaping `Flow` meets exactly the
         // constructs this level opened, in the order it opened them.
-        let base = self.frames.len();
+        let base = self.activity.frames.len();
         #[cfg(test)]
         record_frame_floor(base);
         let flow =
@@ -485,7 +485,7 @@ impl Interp {
         // A `Flow` that left through `settle` has already popped every frame
         // this level opened, so this fires only where a `Failure` unwound past
         // them -- the point the `Vec` local to this call used to be dropped at.
-        if self.frames.len() > base {
+        if self.activity.frames.len() > base {
             self.unwind_frames(base);
         }
         flow
@@ -550,8 +550,12 @@ impl Interp {
             #[cfg(debug_assertions)]
             if !matches!(stream.get(pc as usize), Some(Op::EndWhen)) {
                 debug_assert!(
-                    !(self.frames.len() > base
-                        && self.frames.last().is_some_and(|frame| pc >= frame.op_end)),
+                    !(self.activity.frames.len() > base
+                        && self
+                            .activity
+                            .frames
+                            .last()
+                            .is_some_and(|frame| pc >= frame.op_end)),
                     "the innermost SELECT frame ended before op {pc}, which is not its own EndWhen"
                 );
             }
@@ -588,7 +592,7 @@ impl Interp {
                         // reading `false` here is not the permission being
                         // spent: `sub: procedure expose zg` grants at the
                         // `PROCEDURE`, one clause after the label.
-                        granting = self.procedure_permitted
+                        granting = self.activity.procedure_permitted
                             || matches!(clause.kind, InstructionKind::Label { .. });
                     }
                     // **Whether the setting in force is still the one this
@@ -609,7 +613,7 @@ impl Interp {
                     // [`Interp::traced_mode`] answers `OFF` under it by
                     // design, which is not the program's own setting.
                     #[cfg(debug_assertions)]
-                    if !self.debug_pause
+                    if !self.activity.debug_pause
                         && let Some(crate::ir::trace_flow::Setting::Known(claimed)) =
                             chunk.setting_at(index)
                     {
@@ -657,11 +661,11 @@ impl Interp {
                     // by whichever clause the activation granted it to.
                     // Outside a granting instance nothing has granted it, so
                     // there is nothing to take.
-                    self.region_procedure_permitted = if GRANTING {
-                        std::mem::take(&mut self.procedure_permitted)
+                    self.activity.region_procedure_permitted = if GRANTING {
+                        std::mem::take(&mut self.activity.procedure_permitted)
                     } else {
                         debug_assert!(
-                            !self.procedure_permitted,
+                            !self.activity.procedure_permitted,
                             "a permission granted outside a granting instance"
                         );
                         false
@@ -714,7 +718,8 @@ impl Interp {
                                             // it, so the two engines cannot come to
                                             // print an echo at two different indents
                                             // for one clause.
-                                            let indent = self.clause_state.current_value_indent;
+                                            let indent =
+                                                self.activity.clause_state.current_value_indent;
                                             self.echo_compiled_clause(source, clause, indent);
                                         }
                                     }
@@ -769,7 +774,7 @@ impl Interp {
                                         }
                                         let value =
                                             self.eval_call_resolved(code, resolution, name, args);
-                                        self.depth -= 1;
+                                        self.activity.depth -= 1;
                                         let value = match value {
                                             Ok(value) => value,
                                             Err(failure) => break 'cold Err(failure),
@@ -1664,7 +1669,7 @@ impl Interp {
                                                 index,
                                                 clause,
                                                 source,
-                                                self.region_procedure_permitted,
+                                                self.activity.region_procedure_permitted,
                                             )
                                         ) {
                                             Ok(flow) => {
@@ -1743,7 +1748,8 @@ impl Interp {
                                         // Read live rather than compiled in, for
                                         // the reason `eval_if_condition` reads it
                                         // live: a nested activation moves it.
-                                        let indent = self.clause_state.current_value_indent;
+                                        let indent =
+                                            self.activity.clause_state.current_value_indent;
                                         // **A value that is already a logical
                                         // needs neither a frame nor the general
                                         // test.** `condition_value` opens a temps
@@ -1900,7 +1906,8 @@ impl Interp {
                                                 body_start,
                                                 end_index,
                                             }) => {
-                                                self.frames
+                                                self.activity
+                                                    .frames
                                                     .push(Frame::loop_pass(body_start, end_index));
                                                 break 'region end;
                                             }
@@ -1966,7 +1973,7 @@ impl Interp {
                         // building the value that answer would travel in.
                         // `finish_plain_clause` discharges what is left of the
                         // boundary.
-                        if self.pending_traps.is_empty() {
+                        if self.activity.pending_traps.is_empty() {
                             self.finish_plain_clause(entry);
                             // **Asked of the setting and not of `stale`.**
                             // Staleness heals -- the chunk is recompiled under
@@ -2063,26 +2070,29 @@ impl Interp {
                 }
                 Op::EnterWhen { select, when } => {
                     let frame = self.when_frame(code, chunk, *select as usize, *when as usize)?;
-                    self.frames.push(Frame::select(frame));
+                    self.activity.frames.push(Frame::select(frame));
                     pc += 1;
                     continue;
                 }
                 Op::EnterOtherwise { select } => {
                     let frame = self.otherwise_frame(code, chunk, *select as usize)?;
-                    self.frames.push(Frame::select(frame));
+                    self.activity.frames.push(Frame::select(frame));
                     pc += 1;
                     continue;
                 }
                 // The bottom of a flattened pass, reached by the
                 // body falling out of its last clause into the `END`'s own op.
                 Op::LoopNext { index } => {
-                    if self.frames.len() <= base
-                        || !matches!(self.frames.last().map(|f| &f.kind), Some(FrameKind::Loop))
+                    if self.activity.frames.len() <= base
+                        || !matches!(
+                            self.activity.frames.last().map(|f| &f.kind),
+                            Some(FrameKind::Loop)
+                        )
                     {
                         return Err(Loud::op_not_driven("LoopNext").into());
                     }
                     debug_assert_eq!(
-                        self.flat_top.as_ref().map(|flat| flat.do_index),
+                        self.activity.flat_top.as_ref().map(|flat| flat.do_index),
                         Some(*index as usize),
                         "a LoopNext op ended a pass of a loop other than the one it names"
                     );
@@ -2092,7 +2102,7 @@ impl Interp {
                             continue;
                         }
                         crate::run::FlatStep::Done(flow) => {
-                            self.frames.pop();
+                            self.activity.frames.pop();
                             (flow, pc)
                         }
                     }
@@ -2131,23 +2141,23 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn unwind_frames(&mut self, base: usize) {
-        while self.frames.len() > base {
-            let Some(frame) = self.frames.pop() else {
+        while self.activity.frames.len() > base {
+            let Some(frame) = self.activity.frames.pop() else {
                 return;
             };
             if matches!(frame.kind, FrameKind::Loop) {
                 // The innermost open loop is the one this frame stands for.
                 // `None` is a pass boundary having taken it out and then
                 // raised, which loses one box to the allocator and no state.
-                if let Some(flat) = self.flat_top.take() {
-                    self.flat_spares.push(flat);
+                if let Some(flat) = self.activity.flat_top.take() {
+                    self.activity.flat_spares.push(flat);
                 }
                 // Uncovering the loop enclosing it is the same line
                 // `Interp::flat_loop_step_top` runs for a loop that ends
                 // normally, and it is what keeps `flat_top` meaning "the
                 // innermost loop still open" without a repair pass after this
                 // one. `None` is the last of them having gone.
-                self.flat_top = self.flat_loops.pop();
+                self.activity.flat_top = self.activity.flat_loops.pop();
             }
         }
     }
@@ -2184,8 +2194,8 @@ impl Interp {
             // frame this came from. **`base` and not emptiness** is what ends
             // the walk: the frames below it are another level's, and this one's
             // own range has the next say.
-            let Some((frame_start, frame_end)) = (self.frames.len() > base)
-                .then(|| self.frames.last().map(|f| (f.start, f.end)))
+            let Some((frame_start, frame_end)) = (self.activity.frames.len() > base)
+                .then(|| self.activity.frames.last().map(|f| (f.start, f.end)))
                 .flatten()
             else {
                 return Ok(match absorb(flow, start, end) {
@@ -2203,6 +2213,7 @@ impl Interp {
                 Absorbed::Resume(target) => return Ok(Settled::At(op_at(chunk, target)?)),
                 Absorbed::Escaped(other) => {
                     match self
+                        .activity
                         .frames
                         .pop()
                         .expect("the check above just observed one")
@@ -2219,7 +2230,7 @@ impl Interp {
                         // `Op::LoopNext` resumes a pass that fell through.
                         FrameKind::Loop => match self.flat_loop_step_top(code, source, other)? {
                             crate::run::FlatStep::Body(op_body) => {
-                                self.frames.push(Frame {
+                                self.activity.frames.push(Frame {
                                     op_end: u32::MAX,
                                     start: frame_start,
                                     end: frame_end,

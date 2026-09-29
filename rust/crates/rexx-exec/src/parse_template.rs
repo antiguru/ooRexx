@@ -432,7 +432,7 @@ impl Interp {
 
     /// `PARSE ARG`'s string for the template at argument position `at`.
     fn argument_text(&mut self, at: usize, parse: &Parse) -> Result<SourceText, Failure> {
-        let argument = match self.call_context.arguments.get(at) {
+        let argument = match self.activity.call_context.arguments.get(at) {
             Some(Some(argument)) => Some(*argument),
             Some(None) | None => None,
         };
@@ -455,7 +455,7 @@ impl Interp {
         parse: &Parse,
         evaluated: Option<ObjRef>,
     ) -> Result<(), Failure> {
-        let indent = self.clause_state.current_value_indent;
+        let indent = self.activity.clause_state.current_value_indent;
         let mut strings = self.parse_strings(code, parse, indent, evaluated)?;
         let (mut source, mut cursor) = self.next_template(&mut strings, parse, indent)?;
 
