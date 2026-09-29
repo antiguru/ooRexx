@@ -87,6 +87,52 @@ band: largest control difference. Base spread: max minus min of base's rounds.
 | varlookup | 14,878,111,844 | +0 | +0 | +0 | 0 (0.00000%) | 0 |
 | rexxcps | 17,817,346,507 | +5,722 | -9,942 | -11,030 | 11,030 (0.00006%) | 20,659 |
 
+### Hasher change (`9d863ccc5` to `1754a3b5a`)
+
+`9d863ccc5` (sha256 `3a82550968f46b4d0a82d38151bda74469d1a89b3980c42d2cdd35a640fa85b0`) measured with
+`callgrind.sh` at `0696153b4`, `-r 3 -j 16 -o $S/../cg2`, base rows only; medians compared with
+`$S/cg`'s base rows:
+
+```
+python3 - $S/../cg2/summary.tsv $S/cg/summary.tsv <<'EOF'
+import sys, statistics as st
+def load(p):
+    r = {}
+    for l in open(p):
+        b, pr, rr, s, libc, ld, ex, rc = l.rstrip("\n").split("\t")
+        if b == "base": r.setdefault(pr, []).append(int(ex))
+    return {k: st.median(v) for k, v in r.items()}
+a, b = load(sys.argv[1]), load(sys.argv[2])
+for k in a: print(k, a[k], b[k], f"{100 * (b[k] - a[k]) / a[k]:+.2f}")
+EOF
+```
+
+| program | 9d863ccc5 | 1754a3b5a | d% |
+|---|---:|---:|---:|
+| alloc | 25,099,728,421 | 25,168,678,513 | +0.27 |
+| alloc4c | 3,227,439,144 | 3,224,395,275 | -0.09 |
+| arith | 11,523,104,960 | 11,520,060,209 | -0.03 |
+| assign | 19,640,624,700 | 19,637,557,640 | -0.02 |
+| compound | 9,274,659,543 | 9,271,611,489 | -0.03 |
+| decloop | 2,568,226,963 | 2,565,175,941 | -0.12 |
+| decrender | 4,351,442,505 | 4,348,396,352 | -0.07 |
+| dispatch | 20,511,340,571 | 20,483,285,126 | -0.14 |
+| dispatchclass | 15,873,243,458 | 15,850,195,751 | -0.15 |
+| emptyloop | 9,311,140,499 | 9,308,098,470 | -0.03 |
+| extcall | 9,910,530,890 | 8,281,259,754 | -16.44 |
+| fibcall | 8,350,458,412 | 8,345,686,651 | -0.06 |
+| fibfunc | 7,993,681,764 | 7,988,911,997 | -0.06 |
+| heapshape | 3,277,676,017 | 3,278,634,255 | +0.03 |
+| nop | 9,440,357,070 | 9,437,300,404 | -0.03 |
+| parse | 1,545,045,099 | 1,541,986,776 | -0.20 |
+| sayloop | 117,855,283 | 114,813,602 | -2.58 |
+| sendloop | 13,891,242,032 | 13,863,190,856 | -0.20 |
+| startup | 61,114,468 | 58,074,291 | -4.97 |
+| strings | 17,752,337,687 | 17,749,287,716 | -0.02 |
+| textnum | 1,179,627,074 | 1,176,579,713 | -0.26 |
+| varlookup | 14,881,155,494 | 14,878,111,844 | -0.02 |
+| rexxcps | 17,920,429,749 | 17,817,346,507 | -0.58 |
+
 ### Repeat runs
 
 ```
@@ -148,5 +194,8 @@ stdout identical to the oracle's.
 | textnum | 0.094 | 0.091 | -3.19 |
 | varlookup | 0.780 | 0.784 | +0.51 |
 | rexxcps | 2.028 | 1.972 | -2.76 |
+
+The ±4% wall-clock bar applies where pad2's delta is inside ±4%; for `decloop` (+6.10%) and
+`startup` (-7.69%) the bar is that measured delta.
 
 `extcall` on the oracle: median 0.546 s; base/oracle 1.70.
