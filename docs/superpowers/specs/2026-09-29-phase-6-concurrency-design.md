@@ -1,7 +1,7 @@
 # Phase 6: concurrency, as isolated interpreters with continuation activities
 
 **Status:** design, agreed with Moritz in conversation on 2026-09-29 section by section, then
-revised after review rounds 1 to 3 (`spec-review-1.md` to `spec-review-3.md` in
+revised after review rounds 1 to 4 (`spec-review-1.md` to `spec-review-4.md` in
 `docs/superpowers/records/2026-09-29-phase-6-design/`) with his rulings R1 to R5 (1.1). It replaces
 the delivery order of the roadmap's D3 option (a), a coarse process-wide kernel lock. Roadmap row 6
 (`docs/superpowers/plans/2026-07-27-rust-rewrite.md`) remains the exit contract, read through this
@@ -10,7 +10,7 @@ document.
 **Inputs.** `docs/superpowers/specs/2026-09-08-concurrency-research-direction.md`; the records in
 `docs/superpowers/records/2026-09-29-phase-6-design/` (`yield-spike-findings.md`,
 `stackless-spike-findings.md` with `stackless-spike.patch` and `stackless-reentry-sites.txt`, and
-the three reviews). Oracle source paths are relative to `/home/moritz/dev/repos/ooRexx/interpreter`.
+the reviews). Oracle source paths are relative to `/home/moritz/dev/repos/ooRexx/interpreter`.
 
 ---
 
@@ -20,7 +20,7 @@ the three reviews). Oracle source paths are relative to `/home/moritz/dev/repos/
 |---|---|---|
 | P6-1 | **Isolation.** One interpreter owns its heap, collector, classes, `.environment`, `.local` and scheduler. Interpreters share nothing. | No process-wide lock, by construction. Shared-heap runtimes paid with a per-operation shared structure (research direction, section 5). |
 | P6-2 | **Activities are continuations.** An activity's state is arena data run by a driver loop; Rexx-to-Rexx calls and sends swap frames inside that loop. | A switch on a slice or a Rexx-level wait is a pointer swap; REPLY is a continuation split; and it is what makes handing an interpreter between OS threads sound in Rust (P6-3). Precedents: CPython 3.11, Lua. |
-| P6-3 | **A per-interpreter baton, released only at a driver exit.** Holding the baton is the right to touch interpreter state. It is released where the oracle releases its kernel lock, around calls into extension C code and around blocking operations (`execution/NativeActivation.cpp:1303-1306`, `:1420-1423`, `:1541-1544`, `:1690-1692`; `api/ContextApi.hpp:64-77`), and only at a **driver exit**: a point where the releasing thread holds no value of the interpreter island at all (no borrow, no `Rc` clone, no `Cell` or `RefCell` access), only raw handles. The native call or blocking operation then runs off the baton; its **completion** (a raw result handle and a pending-condition code, never an `ObjRef`) is posted to the interpreter's inbox, and whichever thread holds the baton runs the operation's finish half. Only a C **callback** into the API needs the baton on the calling thread. | `&mut` function arguments are protected under Stacked and Tree Borrows, so a thread still holding one cannot let another touch the same state; handing the baton from inside nested Rust frames would force returns into LIFO order across threads and deadlock programs the oracle runs (review 2, C-A). Posting completions means a return never waits for the baton, so a pinned waiter can consume it (review 3, C-1). The Go runtime's processor handoff around a system call is the same shape. |
+| P6-3 | **A per-interpreter baton, released only at a driver exit.** Holding the baton is the right to touch interpreter state. It is released where the oracle releases its kernel lock, around calls into extension C code and around blocking operations (`execution/NativeActivation.cpp:1303-1306`, `:1420-1423`, `:1541-1544`, `:1690-1692`; `api/ContextApi.hpp:64-77`), and only at a **driver exit**: a point where the releasing thread holds no value of the interpreter island at all (no borrow, no `Rc` clone, no `Cell` or `RefCell` access), only raw handles. The native call or blocking operation then runs off the baton; its **completion** (a typed record, 2.1, never an `ObjRef`) is posted to the interpreter's inbox; the baton holder moves it into the activity's parked record and readies the activity, and the finish half runs **as that activity**, as its first step when it resumes. Only a C **callback** into the API needs interpreter state while off the driver, and it is served under the baton (2.4); the return of a callback is itself a baton release. | `&mut` function arguments are protected under Stacked and Tree Borrows, so a thread still holding one cannot let another touch the same state; handing the baton from inside nested Rust frames would force returns into LIFO order across threads and deadlock programs the oracle runs (review 2, C-A). Posting completions means a return never waits for the baton, so a pinned waiter can consume it (review 3, C-1). The Go runtime's processor handoff around a system call is the same shape. |
 | P6-4 | **Pinning.** An activity is **pinned** while any Rust frame lies between the scheduler and its running driver (a native re-entry, a tree-evaluated expression, a Rust wrapper that sends a message). A pinned activity never releases the baton. A pinned activity that must wait runs a nested scheduler on its own stack; a SLICE seen while pinned is deferred to the next unpinned clause boundary. | Loom's pinning; Lua's "cannot yield across a C-call boundary". Nesting is LIFO, so a wait inverted against the nesting cannot complete: detected and refused loudly, counted (2.6). Deferring slices, as Lua and Loom do, avoids nesting ready activities above a guard holder and livelocking two pinned busy-waiters (review 3, I-2). Correctness rests on pinned waits being rare, which exit criterion 9 measures. |
 | P6-5 | **A scheduling seam.** Nothing outside the scheduler knows how an activity is carried. | Keeps the carrier replaceable on measurement. |
 | P6-6 | **An RBED-shaped scheduler shipping round-robin.** Dispatch is separate from allocation; Phase 6 ships the uniform policy only. | Uniform allocation with arrival-order tie-breaks is round-robin, which parity needs. |
@@ -75,7 +75,8 @@ R4.
   The depth cap raising Error 11 stays, for parity.
 * **Resumable entries (S1).** Internal CALL and function calls; `::ROUTINE` calls; **message sends in
   expression position and the arguments of calls and sends**, compiled to ops rather than rejected by
-  `native_shape` into `Op::EvalExpr` (`rexx-exec/src/ir/compile.rs:1212-1235`); `Op::Send`;
+  `native_shape` into `Op::EvalExpr` (`rexx-exec/src/ir/compile.rs:1212-1235`); a new `Op::Send`
+  (today only in `stackless-spike.patch`);
   `Op::Message` (instruction-form sends); `~new` into INIT; `Message~send`/`~sendWith` and
   `Object~send`/`~sendWith` (every ooTest body runs through `.message~new(self, name)~send`,
   `OOREXXUNIT.CLS` near line 1583, today recursive at `dispatch/object_protocol.rs:893`);
@@ -83,6 +84,20 @@ R4.
   `send_message`, `object_protocol.rs:824`); and the REPLY continuation's resume (today `resume_reply`
   -> `run_activation`, `dispatch.rs:2528`). Without these, the concurrency tests would park pinned
   (review 3, criterion 9 estimate).
+* **Park points for instructions (S1 provides the channel; S2 and S3 use it).** GUARD, REPLY,
+  FORWARD and some CALLs run inside `Op::Exec` (`ir/compile.rs:1052-1078`; `exec_instruction` ->
+  `exec_guard`, `run.rs:1114`). Their arms return an outcome to the driver instead of waiting inside:
+  a contended GUARD ON and a GUARD WHEN return **Park**, REPLY returns **Split**, and the
+  guarded-method reservation parks in a send's begin half. Without these, every GUARD wait would be a
+  pinned park and every REPLY immovable; GUARD.testGroup `test_wait_multiple` (`:287-330`) would
+  invert deterministically (review 4, C-1).
+* **Plain DO blocks are flattened (S1).** `DO; ... END` (`LoopKind::Simple`) today falls back from
+  the flat-loop path (`run/loops.rs:1356`) to a nested `run_loop_with_header` with `BodyEngine::Chunk`
+  (`ir/drive.rs:1900-1915`), so a wait in `if ... then do ... end` would pin. S1 runs its body inline
+  (it has no pass boundary; END is a no-op). **The flat-loop path is adopted**: it is committed and
+  runs by default, and its "SPIKE, not for commit" markers (`run/loops.rs:1284`, `ir/compile.rs:1038`)
+  and the environment-variable toggle behind `static FLAT` are stale; S0 removes both (the queued
+  item `2026-09-26-flatloop-spike-comment` covers the comment).
 * **Parkable natives.** A native implemented in Rust may answer `Park(reason)` instead of a value;
   the reason carries the wake outcome (a value, a timeout, a lock acquired). **Composition:** `Park`
   propagates through resumable entries to the driver, which parks the activity and on wake re-enters
@@ -91,12 +106,20 @@ R4.
   by the same continuation half. `Message~result`/`~wait`, `MutexSemaphore~request`,
   `EventSemaphore~wait`, the native timers `!startTimer`/`!waitTimer`, SysSleep and the unnamed
   `Sys*Sem` waits are parkable natives.
-* **Blocking Rust operations** split into prepare, block and finish: prepare runs under the baton,
-  the driver exits, block runs on the activity's thread holding no island value, and the completion is
-  posted to the inbox for finish. This applies where the operation is reached from a resumable entry.
+* **Native calls and blocking Rust operations** split into prepare, call (or block) and finish.
+  Today `invoke::run` holds `Conversion { host: &mut dyn Host }` across the whole C call
+  (`rexx-api/src/values.rs:716-719`, `dispatch/library.rs:96-106`) and then runs
+  `values::from_native` (`rexx-api/src/invoke.rs:218-224`); it splits into those halves. Prepare runs
+  under the baton; the driver exits; the call runs holding no island value; its completion record
+  carries the declared result type, the `Written` payload, the refused slot (captured from the
+  thread-local `REFUSED` on the calling thread) and the `pending` conditions (`values.rs:749-802`).
+  The call's native frame stays pushed and rooted as that activity's until the finish half pops it,
+  since a returned handle resolves only in that frame's `locals` (`rexx-api/src/handles.rs:43-52`).
+  Builtins that work on island data (SysStemSort sorts a stem) copy it out in prepare and back in
+  finish, or stay on the baton. This applies where the operation is reached from a resumable entry.
   **Wrappers that keep the baton** (reached only through nested Rust frames today, so pinned): the
   stream BIFs (`builtin/stream.rs:48`), PULL (`input.rs:231`), SAY to a routed `.output`
-  (`run.rs:1830`), trace and output delivery (`environment/route.rs:205`), ADDRESS WITH redirection
+  (`run.rs:1830`), trace output delivery (`environment/route.rs`, TraceObject construction at `:205`), ADDRESS WITH redirection
   (`redirect.rs:376`, `:686`), condition handling (`run/condition.rs`), package loaders
   (`install.rs:1993`) and `Routine~call` of a library routine (`dispatch/executable.rs:563`). While
   one of these blocks (a console read, a pipe), the interpreter's other activities wait. This is
@@ -138,12 +161,18 @@ nesting (`ffi.rs:508-525`), and `native_handles` a per-interpreter stack, "inner
 * the interpreter's `RexxInstance`, and the context of the activity that loaded a library, outlive
   that activity, since libraries keep them (`install.rs:1988`, `rexx-api/src/load.rs:809`) and
   extensions cache the instance for `AttachThread`;
-* `Host` becomes a baton-guarded accessor: a callback acquires the baton on behalf of its context's
-  activity, derives a fresh `&mut` from the interpreter's root pointer, and drops every island value
-  before returning to C;
-* a callback from a thread that is not its activity's raises Error_Execution_invalid_thread, after
-  taking the baton, as the oracle's `Activity::validateThread` does (`ContextApi.hpp:73-76`,
-  `concurrency/Activity.cpp:3620-3626`).
+* `Host` becomes a baton-guarded accessor, served in one of two ways (review 4, I-3). If the baton's
+  holder is unpinned, the callback takes the baton at the holder's next cold visit, derives a fresh
+  `&mut` from the interpreter's root pointer, and drops every island value before returning to C.
+  If the holder is pinned (its frames hold protected borrows), the callback is **delegated**: it posts
+  the API member to the inbox and blocks; the holder's nested loop runs it on behalf of the callback's
+  activity, reborrowing its own `&mut`, and posts the answer (and any refused slot) back. The oracle
+  takes its kernel lock per API call (`ContextApi.hpp:64-77`), so the cost shape matches; a callback
+  never inverts a pinned wait;
+* "the thread of an activity" means the thread currently running that activity's native call (an
+  activity may run on different OS threads over its life); a callback from any other thread raises
+  Error_Execution_invalid_thread, after taking the baton, as the oracle's `Activity::validateThread`
+  does (`ContextApi.hpp:73-76`, `concurrency/Activity.cpp:3620-3626`).
 
 ### 2.5 The `Send` grant
 
@@ -160,15 +189,27 @@ R3's signal module; `unsafe` is otherwise confined to `rexx-api/src/ffi.rs`, `re
 (`rexx-api/src/layout.rs:423`) and `HOOK_THREW` (`rexx-api/src/load.rs:678`) belong to one native
 call's own stack and stay per OS thread; they are the only non-test `thread_local!`s today.
 
+**Island memory lent to C.** C reads and writes some island memory through raw pointers while off
+the baton: kept C strings (`kept_strings`, `dispatch/library.rs:984-1010`, pruned by
+`drop_loose_kept_strings`) and the storage behind `BufferData` and `MutableBufferData`
+(`dispatch/library/surface.rs:212-237`). The rule, per kind: storage lent to a native call is not
+freed or reallocated in place while that call is in flight. A kept string is not pruned while any
+call that received it is in flight; a MutableBuffer mutation that would reallocate lent storage
+allocates new storage and keeps the old alive until the lending call completes. C writes that land in
+the old storage after such a reallocation are not seen by Rexx, a licensed divergence (in the oracle
+they are writes into freed memory).
+
 ### 2.6 Pinned waits
 
 A pinned activity that parks runs a nested scheduler loop on its own stack until its wait is
 satisfied; other activities run inside it as continuations, and inbox completions are drained there
 too, so an activity returning from C can complete even while a pinned waiter holds the baton. A
 **wait is inverted** when what the innermost pinned waiter needs can only come from an activity whose
-continuation lies below it in the nesting, or from a C callback that is waiting for the baton; then
-nothing the nested loop can run will satisfy it. The nested scheduler checks this whenever it finds
-nothing ready and no completion pending, and raises a loud refusal naming the pinned re-entry kind.
+continuation lies below it in the nesting; then nothing the nested loop can run will satisfy it.
+While an off-baton operation is still in flight the nested loop blocks on the inbox (its completion,
+or a delegated callback, may satisfy the wait); only when nothing is ready, nothing is in flight and
+the wait is inverted does it raise a loud refusal naming the pinned re-entry kind. A single pinned
+busy-waiter on a ready activity never yields, since its slices are deferred; the oracle preempts it.
 An activity that traps HALT and parks again while nested keeps the enclosing pinned activities
 waiting, and a targeted HALT of an enclosing activity waits until the inner region ends. These are
 known divergences from the oracle (whose every activity has its own OS thread), recorded with an
@@ -212,8 +253,9 @@ reached, a release with ready activities leaves them for the next thread that ta
   deadline. It sets the SLICE bit after the oracle's 24 ms and wakes idle interpreters for due
   sleepers. SLICE switches at that clause boundary, never mid-clause, and while pinned is deferred to
   the next unpinned boundary (P6-4). Precedent: CPython's `eval_breaker`, Ruby's timer thread.
-* **Baton requests** come only from C callbacks. A callback sets the request word, which forces a
-  switch at the holder's next cold visit without waiting out the 24 ms, as the oracle prioritises API
+* **Baton requests** come only from C callbacks (2.4). Against an unpinned holder a callback sets
+  the request word, which forces a switch at the holder's next cold visit without waiting out the
+  24 ms; against a pinned holder it is delegated instead, as the oracle prioritises API
   callers (`requestApiAccess` -> `addWaitingApiActivity`, `concurrency/Activity.cpp:2235-2249`,
   `:339`; `relinquishIfNeeded`, `concurrency/ActivityManager.hpp:303-323`). Completions of returning
   calls never request the baton (P6-3).
@@ -225,7 +267,9 @@ reached, a release with ready activities leaves them for the next thread that ta
 * **Signals.** Handlers for SIGINT, SIGTERM and SIGHUP are installed at interpreter start, only where
   no handler is already set, as the oracle's library does
   (`platform/unix/SystemInterpreter.cpp:95-110`, `:130-145`; the oracle in fact reads only SIGHUP's
-  previous action before installing all three, `:136-139`, and this design checks each), without
+  previous action before installing any, `:136-139`, and this design checks each; under `nohup`,
+  with SIGHUP ignored, the oracle installs none and SIGINT kills the process, where this design halts,
+  a licensed divergence), without
   SA_RESTART (`SystemInterpreter.cpp:127`). A handler, on whatever thread the signal lands, sets a
   pending bit and writes one byte to a self-pipe (both async-signal-safe); the timer thread waits on
   that pipe alongside its deadline and, on wake, sets the halt bit in every live interpreter and
@@ -274,12 +318,15 @@ reached, a release with ready activities leaves them for the next thread that ta
 * **REPLY moves frames** from the replier's arena to the new activity's. A REPLY with Rust frames
   inside the replier (inside a non-flattened loop, INTERPRET or a CALL ON handler) cannot move and
   refuses loudly, counted, with an owner of none (recorded divergence).
-* **D3 frame ownership.** An activity's frames are reachable only through its own activation record,
-  and only by the baton holder: RexxContext and StackFrame objects and kept call contexts hold an
-  activation identity, never an arena pointer, and resolve it through a function that requires the
-  baton. The evidence is type-level (no public type exposes a frame reference; resolution takes a
-  baton token) plus a test that a context object of a finished or moved activation resolves to the
-  oracle's answer, never another activity's frame.
+* **D3 frame ownership.** No GC-visible object can hold a frame: `RegFrame<'a>` borrows its arena,
+  while heap `Body` values are `'static`, so the type system refuses a frame reference in any heap
+  object (review 4, I-5). RexxContext and StackFrame objects and kept call contexts hold an activation
+  identity and resolve it under the baton by looking the activation up among **all** the
+  interpreter's activities, not by scanning the running activity's frames as today
+  (`dispatch/context.rs:136-148`): a live activation in another activity answers as the oracle's does
+  (its `checkValid` tests only for null, `ContextClass.cpp:145-151`); a finished one answers the
+  oracle's error. The evidence is that type-level fact plus a test of a context object read from
+  another live activity, a finished one and a moved (REPLY) one.
 * **Collection points.** Every allocation remains one, as a stated constraint (the only instrument
   that finds a missed root). A continuation switch and a driver exit are added; anything live across
   either must be rooted, and **no island value is held across a driver exit** (P6-3).
@@ -324,7 +371,9 @@ in the first task that needs it, with the command recorded.
   here the yield becomes a switch request taken at the next clause boundary, a licensed difference.
   Each re-evaluation is traced as the oracle traces it (`GuardInstruction.cpp:176`, `:183`).
 * **REPLY** splits the continuation: the caller resumes with the reply value; the rest becomes a new
-  activity (its frames move, section 5). The guard lock moves only at nesting count 1
+  activity (its frames move, section 5, keeping the activation's `invocation` number, which
+  RexxContext.testGroup:236 asserts, `dispatch/context.rs:152-160`). The guard lock moves only at
+  nesting count 1
   (`VariableDictionary::transfer`, `VariableDictionary.cpp:600-617`); otherwise the continuation
   reserves again (`execution/RexxActivation.cpp:766-773`, `:561-568`). REPLY then yields (`:776`), as a
   switch request at the next boundary. GUARD.testGroup `:258-279` and `:290-330` depend on these rules.
@@ -352,12 +401,14 @@ in the first task that needs it, with the command recorded.
   native `!startTimer` or `!waitTimer`, today deferred at `dispatch/native.rs:116-120`. The natives are
   parkable timed waits with early wake on cancel; firing runs on the replied activity, and program end
   waits for it.
-* **Thread identity and guard state.** `.context~thread` answers the **activity's number**: assigned
-  at the activity's creation from a free list, the lowest free number, returned when the activity
-  ends. This reproduces the oracle's numbering, which is per OS thread with pooled threads reused
-  (`getIdntfr`, `concurrency/Activity.cpp:105-112`; measured: two sequential `~start`s both answer 2,
-  main answers 1), and keeps distinct live activities distinct (RexxContext.testGroup:223-227,
-  TRACE_TraceObject.testGroup:324). TraceObjects carry THREAD, CALLERSTACKFRAME, ISGUARDED,
+* **Thread identity and guard state.** `.context~thread` answers the **activity's number**, assigned
+  as the oracle assigns its thread numbers: main is 1; a new activity takes the oldest number from a
+  bounded FIFO of numbers freed by ended activities (the oracle's thread pool is a FIFO,
+  `availableActivities`, `concurrency/ActivityManager.cpp:556`, `:650-662`, bounded by
+  MAX_THREAD_POOL_SIZE, `ActivityManager.hpp:358`), else the next unused number (`getIdntfr`,
+  `concurrency/Activity.cpp:105-112`). Measured on the oracle: two sequential `~start`s both answer 2;
+  with B and C running concurrently and D started after both end, `main 1 D 3 B 2 C 3` (5 of 5). Live
+  activities stay distinct (RexxContext.testGroup:223-227, TRACE_TraceObject.testGroup:324). TraceObjects carry THREAD, CALLERSTACKFRAME, ISGUARDED,
   SCOPELOCKCOUNT, HASSCOPELOCK and ISWAITING as the oracle sets them (`RexxActivation.cpp:5160-5230`),
   not today's fixed values (`rexx-exec/src/environment/route.rs:216-221`).
 * **UNINIT** runs on the ending activity when it ends, and at interpreter termination
@@ -399,10 +450,10 @@ Each stage ends with every gate green and within its budget.
 | Stage | Delivers |
 |---|---|
 | S0 Foundations | The scheduler seam; per-activity state split out of `Interp` with the exhaustive classification (section 5); per-activity frame arenas; `ObjRef` `!Send`/`!Sync`; the process-global `static FLAT` (`run/loops.rs`, marked SPIKE, already queued) removed; the countdown reload bounded; the benchmarks of section 7 committed. No behaviour change, no second activity. |
-| S1 Stackless calls | The resumable entries of 2.1 (sends in expressions and call and send arguments compiled to ops included); mid-region resume through a separate entry; parked state in the arena; activation-relative offsets (section 5); slots per activation segment. |
-| S2 Activities, single driver thread | The scheduler (section 3), request bits and inbox, timer thread, deterministic switch mode; parkable natives and their composition; `Message~start`/`~result`/`~wait`/`~reply`/`~replyWith`/`~notify`; REPLY as a split with frame moves; SysSleep and the native timers as parks; pinned waits and slice deferral (2.6, P6-4); activity numbers and TraceObject fields; program-end and UNINIT rules. Native calls and blocking Rust operations still run on the baton here. |
-| S3 Synchronisation | Guard locks with deadlock detection; GUARD ON/OFF/WHEN and its barrier; the classes MutexSemaphore and EventSemaphore; unnamed `Sys*Sem` as parkable natives; Alarm and Ticker. |
-| S4 The baton | Driver exits for native calls and blocking Rust operations, with completions through the inbox; `Host` as a baton-guarded accessor; per-activity API contexts and native-handle stacks with the per-callback thread check (2.4); the driver pool with its stack, bound and fallback (2.7); callback priority; the `Send` grant (2.5); signals (R3, R5); pinning counters and report. |
+| S1 Stackless calls | The resumable entries of 2.1 (sends in expressions and call and send arguments compiled to ops included); the park-point channel for `Op::Exec` arms; plain DO flattened; mid-region resume through a separate entry; parked state in the arena; activation-relative offsets (section 5); slots per activation segment. |
+| S2 Activities, single driver thread | The scheduler (section 3), request bits and inbox, timer thread, deterministic switch mode; parkable natives and their composition; `Message~start`/`~result`/`~wait`/`~reply`/`~replyWith`/`~notify`; REPLY as a split with frame moves; SysSleep and the native timers as parks; pinned waits and slice deferral (2.6, P6-4); REPLY's Split from its `Op::Exec` arm; activity numbers and TraceObject fields; program-end and UNINIT rules. Native calls and blocking Rust operations still run on the baton here. |
+| S3 Synchronisation | Guard locks with deadlock detection, parking at the send's begin half; GUARD ON/OFF/WHEN parking from their `Op::Exec` arms, and the barrier; the classes MutexSemaphore and EventSemaphore; unnamed `Sys*Sem` as parkable natives; Alarm and Ticker. |
+| S4 The baton | Driver exits for native calls and blocking Rust operations, with completions through the inbox; `Host` as a baton-guarded accessor; per-activity API contexts and native-handle stacks with the per-callback thread check (2.4); the driver pool with its stack, bound and fallback (2.7); callback priority and delegation (2.4); lent island memory (2.5); the `Send` grant (2.5); signals (R3, R5); pinning counters and report. |
 | S5 Close | Section 9. |
 
 ---
@@ -442,7 +493,8 @@ Each stage ends with every gate green and within its budget.
    residual, the L2 ticker rows, and the Message and semaphore methods that fall through to the generic
    native-method refusal today. The enumeration is derived by a committed command, shown empty at the
    close, and enforced: `closed_phases` gains Phase 6. The divergences this design records (inverted
-   pinned waits, an immovable REPLY, wrappers blocking on the baton, HALT under nesting) name no phase:
+   pinned waits, an immovable REPLY, wrappers blocking on the baton, HALT under nesting, a pinned
+   busy-waiter, stale C writes to reallocated lent storage, the `nohup` signal difference) name no phase:
    each is an exclusions row with an owner of none and its reason.
 9. **Pinned waits are measured and bounded.** The pinning report over the corpus and the tests of
    criterion 1, run normally and under the deterministic switch-at-every-opportunity mode, lists every
@@ -467,3 +519,24 @@ behaviour (JavaScript workers); copy, move or share-if-deeply-frozen (Erlang, Ru
 PEP 734 "shareable" types); and full pickling with per-class hooks. The natural fit for Rexx is
 structured clone over its own types (strings, numbers, Array, Directory, StringTable, Stem, Bag) plus
 an opt-in pair of methods for user classes.
+
+---
+
+## 11. Settled in the plan's first tasks
+
+Review round 4 found these small enough to settle while planning, with their evidence recorded there:
+
+* S1's per-site node addressing for calls and sends in argument position (`NodePath` is binary,
+  `ir.rs:309-319`; arguments compile with `path: None`, `ir/compile.rs:918`, `:1417`) and the leaf
+  kinds `native_shape` must accept (DotVariable, List and the others), with S1's performance risk
+  (the spike's +520 and +585 Ir per stackless send) measured on the first send-compilation step.
+* **An early pinned-park instrument**, counting pinned parks per kind over the criterion-1 tests on
+  today's code, run before S1 closes, so criterion 9's risk is measured rather than inferred.
+* The self-pipe's details (`UnixStream::pair`, a read timeout, arming through the same socket, a
+  nonblocking write end, errno saved in the handler), the record the Global Constraints require of a
+  safe alternative tried (`signal-hook` chains to prior handlers where this design, like the oracle,
+  installs only where none is set), and ignoring SIGPIPE as the oracle does
+  (`platform/unix/SystemInterpreter.cpp:146-148`) for an embedded interpreter.
+* Activities migrating between OS threads: successive native calls of one activity may land on
+  different threads (a thread-affine extension behaves differently from the oracle), and the Error 11
+  depth on a pool thread depends on scheduling. Both are recorded divergences.
