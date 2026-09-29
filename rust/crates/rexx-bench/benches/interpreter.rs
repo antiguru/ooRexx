@@ -38,6 +38,10 @@ fn bench_interpreter(c: &mut Criterion) {
 
     for name in PROGRAMS {
         let program = program_path(name);
+        let mut interpreter = interpreter.clone();
+        interpreter
+            .library_paths
+            .extend(rexx_bench::child::axis_library_dir(name));
         group.bench_function(*name, |b| {
             b.iter(|| {
                 interpreter

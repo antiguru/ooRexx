@@ -54,16 +54,33 @@ impl Side {
                 Arm::Ir => "rust-ir",
             },
             binary,
-            // No engine variable: the arm used to be selected per child
+            // **No environment.** The arm used to be selected per child
             // through `REXX_ENGINE`; `rexx-run` reads no such variable now,
             // so setting one would be a row labelled with an arm nobody
-            // chose. The oracle's library directory is for `extcall.rex`.
-            env: vec![(
-                "LD_LIBRARY_PATH".to_string(),
-                PathBuf::from(ORACLE_ROOT).join("lib").display().to_string(),
-            )],
+            // chose.
+            env: Vec::new(),
         }
     }
+
+    /// This side with `LD_LIBRARY_PATH` added for an axis that loads a
+    /// library, and unchanged for any other.
+    pub fn for_axis(&self, axis: &str) -> Side {
+        let mut env = self.env.clone();
+        if let Some(dir) = axis_library_dir(axis) {
+            env.push(("LD_LIBRARY_PATH".to_string(), dir.display().to_string()));
+        }
+        Side {
+            label: self.label,
+            binary: self.binary.clone(),
+            env,
+        }
+    }
+}
+
+/// The directory `axis` loads a library from: the oracle's `lib/` for
+/// `extcall`, which loads `liborxfunction.so`; `None` for every other axis.
+pub fn axis_library_dir(axis: &str) -> Option<PathBuf> {
+    (axis == "extcall").then(|| PathBuf::from(ORACLE_ROOT).join("lib"))
 }
 
 /// Which `perf stat` events wrap the child, if any.
@@ -305,14 +322,14 @@ mod tests {
             ]
         );
     }
-    /// A rust side sets no environment but the library path, and says which
-    /// arm it is in its label.
+    /// A rust side sets **no** environment, and says which arm it is in its
+    /// label.
     #[test]
     fn a_rust_side_sets_no_engine_environment_and_names_its_arm() {
         for arm in Arm::BOTH {
             let side = Side::rust(PathBuf::from("/bin/true"), arm);
             assert!(
-                side.env.iter().all(|(name, _)| name == "LD_LIBRARY_PATH"),
+                side.env.is_empty(),
                 "a rust side set {:?}, which selects an engine that no longer \
                  exists and would label the row with an arm nobody ran",
                 side.env
@@ -324,6 +341,23 @@ mod tests {
                 arm.label(),
                 side.label
             );
+        }
+    }
+
+    /// `extcall` gets the oracle's library directory and no other axis gets
+    /// any library path.
+    #[test]
+    fn only_extcall_gets_a_library_path() {
+        let rust = Side::rust(PathBuf::from("/bin/true"), Arm::Ir);
+        let lib = PathBuf::from(ORACLE_ROOT).join("lib").display().to_string();
+        assert_eq!(
+            rust.for_axis("extcall").env,
+            vec![("LD_LIBRARY_PATH".to_string(), lib)]
+        );
+        for name in crate::PROGRAMS.iter().chain(crate::NOT_BENCHMARKED) {
+            if *name != "extcall" {
+                assert!(rust.for_axis(name).env.is_empty(), "{name}");
+            }
         }
     }
 

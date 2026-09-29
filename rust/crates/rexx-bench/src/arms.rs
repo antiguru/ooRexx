@@ -500,7 +500,8 @@ pub fn measure(
             .iter()
             .find(|(size, _, _)| *size == cell.size)
             .expect("every cell names a rendered size");
-        let side = Side::rust(builds[cell.build].binary.clone(), cell.arm);
+        let side =
+            Side::rust(builds[cell.build].binary.clone(), cell.arm).for_axis(workload.name());
         let completed = run(&side, path, workdir, &wrapper)?;
         if !completed.succeeded() {
             return Err(format!(

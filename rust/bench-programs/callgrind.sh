@@ -1,31 +1,33 @@
 #!/bin/bash
 # Callgrind instruction counts, libc.so.6 and ld-linux subtracted, per program per binary.
 #
-# usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-T] NAME=BINARY NAME=BINARY...
+# usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-T] NAME=BINARY...
 #   ROUNDS  rounds (default 3); round r starts at binary r
 #   JOBS    programs run at once (default 8)
 #   OUTDIR  output directory (default: mktemp -d)
+#   PROGRAMS  space-separated subset of PROGRAMS (default: all)
 #   -T      print the table for OUTDIR's summary.tsv without running
 # env: REXX_LIB_DIR  put on LD_LIBRARY_PATH (default: the oracle's build/lib)
 #
 # Table: median per binary, delta against the first binary, spread across rounds.
-# Exits 1 if a run exits non-zero or its stdout differs from the first binary's,
-# except on TIMED.
+# Exits 1 if a run exits non-zero, if its stdout differs from the first binary's
+# (except on TIMED), or if a cell's spread exceeds 0.01% (flagged SPREAD).
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-rounds=3 jobs=8 out= table_only=
-while getopts r:j:o:T opt; do
+rounds=3 jobs=8 out= table_only= sel=
+while getopts r:j:o:p:T opt; do
     case $opt in
         r) rounds=$OPTARG ;;
         j) jobs=$OPTARG ;;
         o) out=$OPTARG ;;
+        p) sel=$OPTARG ;;
         T) table_only=1 ;;
         *) exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
-if [ $# -lt 2 ]; then
-    echo "usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-T] NAME=BINARY NAME=BINARY..." >&2
+if [ $# -lt 1 ]; then
+    echo "usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-T] NAME=BINARY..." >&2
     exit 2
 fi
 lib=${REXX_LIB_DIR:-/home/moritz/dev/repos/ooRexx/build/lib}
@@ -44,6 +46,12 @@ if [ "$on_disk" != "$listed" ]; then
     echo "PROGRAMS and $here/*.rex disagree:" >&2
     diff <(echo "$listed") <(echo "$on_disk") >&2
     exit 2
+fi
+if [ -n "$sel" ]; then
+    for p in $sel; do
+        [[ " $(echo $PROGRAMS) " == *" $p "* ]] || { echo "not in PROGRAMS: $p" >&2; exit 2; }
+    done
+    PROGRAMS=$sel
 fi
 TIMED="heapshape rexxcps"
 prog() {
@@ -103,10 +111,11 @@ for p in $PROGRAMS; do
     done
 done
 fi
-python3 - "$out/summary.tsv" "${names[@]}" <<'EOF' | tee "$out/table.txt"
+python3 - "$out/summary.tsv" "${names[@]}" > "$out/table.txt" <<'EOF'
 import statistics
 import sys
 rows = {}
+flagged = False
 for line in open(sys.argv[1]):
     b, p, r, summ, libc, ld, ex, rc = line.rstrip("\n").split("\t")
     rows.setdefault((b, p), []).append(int(ex))
@@ -119,8 +128,16 @@ for p in progs:
     base = mid[names[0]]
     cells = [p] + [f"{mid[b]:.0f}" for b in names]
     cells += [f"{100 * (mid[b] - base) / base:+.4f}" for b in names[1:]]
-    cells += [f"{100 * (max(rows[(b, p)]) - min(rows[(b, p)])) / mid[b]:.4f}" for b in names]
+    spread = {b: 100 * (max(rows[(b, p)]) - min(rows[(b, p)])) / mid[b] for b in names}
+    cells += [f"{spread[b]:.4f}" for b in names]
     print("\t".join(cells))
+    for b in names:
+        if spread[b] > 0.01:
+            print(f"SPREAD {p} {b} {spread[b]:.4f}%", file=sys.stderr)
+            flagged = True
+sys.exit(1 if flagged else 0)
 EOF
+[ $? = 0 ] || status=1
+cat "$out/table.txt"
 echo "# outputs in $out" >&2
 exit $status

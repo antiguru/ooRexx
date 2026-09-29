@@ -315,6 +315,7 @@ fn main() -> ExitCode {
             }
         };
         eprintln!("measuring {} ({iterations} iterations)", axis.name);
+        let rust = rust.for_axis(axis.name);
         match measure_interleaved(&oracle, &rust, &path, &workdir, pairs, warmup, &wrapper) {
             Ok(paired) => rows.push(AxisRow {
                 name: axis.name.to_string(),

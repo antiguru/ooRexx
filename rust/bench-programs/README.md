@@ -58,4 +58,5 @@ unexposed; `.rexxinfo` is an instance, not a class). None of these programs refe
 `callgrind.sh NAME=BINARY NAME=BINARY...` runs every program here and `../bench-rexxcps/rexxcps.rex`
 under callgrind on each binary and prints instruction counts less libc.so.6 and ld-linux
 (`cgsum.py`). `layout-pad.py TREE COUNT` adds never-called functions to a tree's IR driver.
+`wallclock.sh NAME=BINARY...` times the same programs, interleaved.
 Measurements: `docs/superpowers/plans/phase-6-perf.md`.
