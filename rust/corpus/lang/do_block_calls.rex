@@ -1,0 +1,78 @@
+/* Plain DO blocks run calls, sends, SIGNAL, LEAVE and ITERATE inside them. */
+o = .k~new
+n = 0
+if o~ready then do
+  x = double(3) + 1
+  say 'then block' x o~twice(4)
+  call note 'called'
+  say 'result' result
+end
+else do
+  say 'not reached'
+end
+do i = 1 to 3
+  do
+    n = n + double(i)
+    if i = 2 then do
+      say 'inner' i o~twice(i)
+    end
+  end
+end
+say 'n' n
+do i = 1 to 5
+  do
+    if i = 2 then iterate
+    if i = 4 then leave
+    say 'pass' i
+  end
+end
+say 'left at' i
+select
+  when n > 100 then say 'big'
+  when n > 5 then do
+    say 'mid' double(n)
+  end
+  otherwise nop
+end
+do label blk
+  say 'labelled' double(1)
+  leave blk
+  say 'not reached'
+end
+trace r
+if n > 0 then do
+  y = double(n)
+end
+trace o
+call escape
+say 'escape answered' result
+exit
+
+escape:
+  do
+    say 'before signal'
+    signal out
+    say 'not reached'
+  end
+  say 'not reached'
+out:
+  return 'out' sigl
+
+double: procedure
+  return arg(1) * 2
+
+note:
+  do
+    say 'note' arg(1)
+  end
+  return 'noted'
+
+::class k
+::method ready
+  return 1
+::method twice
+  use arg v
+  do
+    w = v * 2
+  end
+  return w

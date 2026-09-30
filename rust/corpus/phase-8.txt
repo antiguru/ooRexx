@@ -382,3 +382,7 @@ lang/send_new_init_fails.rex
 lang/send_guarded.rex
 lang/builtin_argument_call.rex
 lang/new_init_subclasses.rex
+
+# Phase 6 Task 10: plain DO blocks run flat, their calls and sends on the
+# driver's frame.
+lang/do_block_calls.rex

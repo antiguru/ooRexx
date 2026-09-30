@@ -348,9 +348,8 @@ pub(crate) fn compile(
                 });
                 close_region(&mut ops, at)?;
                 // A repeating loop's `END` carries the op that ends
-                // a pass. `Simple` is left alone: it does not repeat, so it has
-                // no pass to end, and its `END` stays the delegating
-                // `Op::Exec` region that no range ever reaches.
+                // a pass. `Simple` has no pass to end, and its `END` stays the
+                // delegating `Op::Exec` region, a no-op clause.
                 if let Some(end) = body_node.end
                     && end < len
                     && !matches!(body_node.kind, LoopKind::Simple)

@@ -184,6 +184,9 @@ pub(crate) enum FlatStart {
     Flat { body_start: usize, end_index: usize },
     /// The header said zero passes, so the construct is already over.
     Ended(Flow),
+    /// An unlabelled `DO; ... END` block whose `DO` clause has run: the body
+    /// runs inline and its `END` is an ordinary clause, with nothing pushed.
+    Block,
     /// Not a shape the flat path drives: take the nested path, with the header
     /// values handed back so that the nested path can move them rather than
     /// this one copying them.
@@ -1311,6 +1314,11 @@ impl Interp {
         op_body: u32,
         registers: RegFrame<'_>,
     ) -> Result<FlatStart, Failure> {
+        // A labelled block is left by a `LEAVE` naming it, which needs a
+        // frame to absorb it, so it keeps the nested path.
+        if matches!(body.kind, LoopKind::Simple) && body.label.is_none() {
+            return self.flat_block_start(code, index, instruction, source);
+        }
         // **`loop_header_plan` is the whole refusal**, exactly as it is for
         // `run_loop_with_header`: it answers `None` for a `COUNTER`, a stem
         // `OVER` and `DO WITH`, which this crate does not run on either
@@ -1357,10 +1365,8 @@ impl Interp {
                     remaining: values.for_remaining,
                 }
             }
-            // A block, not a loop: one pass, its own trace shape, and
-            // `run_loop_with_header`'s own arm resolves the whole of it
-            // without ever reaching a pass boundary. `DO WITH` is refused
-            // above and cannot arrive here.
+            // A labelled block, and `DO WITH`, which `loop_header_plan`
+            // refuses above.
             LoopKind::Simple | LoopKind::With { .. } => {
                 return Ok(FlatStart::Fallback(values));
             }
@@ -1442,6 +1448,29 @@ impl Interp {
                     end_index: range.1,
                 })
             }
+        }
+    }
+
+    /// The block's own clause, run inside the `DO`'s as `run_loop_with_header`'s
+    /// `Simple` arm runs it, so a condition queued before the `DO` is
+    /// delivered with the block open.
+    fn flat_block_start(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+    ) -> Result<FlatStart, Failure> {
+        let do_indent = self.activity.clause_state.current_value_indent;
+        let do_line = self
+            .clause_line_at(code, index, instruction, source)
+            .unwrap_or_else(|| self.activity.clause_state.line());
+        match self.in_clause(code, do_line, |it| {
+            it.settle_block_indent(true, do_indent);
+            Ok(())
+        })? {
+            ClauseOutcome::Ended(exit) => Ok(FlatStart::Ended(Flow::Exit(exit.value()))),
+            ClauseOutcome::Ran(ran) => ran.map(|()| FlatStart::Block),
         }
     }
 

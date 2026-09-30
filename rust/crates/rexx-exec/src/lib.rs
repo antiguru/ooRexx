@@ -89,6 +89,9 @@ mod clause;
 mod run;
 use run::Ended;
 
+// The scheduler seam the driver's park and split outcomes go through.
+mod scheduler;
+
 // The `PARSE` template engine: the movement cursor (source-independent, one
 // struct, unit-tested against measured oracle bytes) and the driver that
 // evaluates trigger operands, traces, and assigns the targets.
@@ -1221,6 +1224,7 @@ struct Interp {
     collections_before_program: u64,
     #[cfg(feature = "pinning")]
     pinning: pinning::Pinning,
+    scheduler: scheduler::SingleActivity,
     /// The programs the library bootstrap loaded, in load order.
     library_programs: Vec<ProgramId>,
     /// The name a program compiled from method source text reports under.
@@ -1826,6 +1830,7 @@ impl Interp {
             collections_before_program: 0,
             #[cfg(feature = "pinning")]
             pinning: pinning::Pinning::default(),
+            scheduler: scheduler::SingleActivity,
             library_programs: Vec::new(),
             method_bodies: NameMap::default(),
             compiled_method_names: FxHashMap::default(),
@@ -2477,6 +2482,7 @@ impl Interp {
             collections_before_program: _,
             #[cfg(feature = "pinning")]
                 pinning: _,
+            scheduler: _,
             library_programs: _,
             compiled_method_names: _,
             object_methods: _,

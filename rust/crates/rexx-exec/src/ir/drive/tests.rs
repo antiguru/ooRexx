@@ -13,9 +13,11 @@
 
 use super::super::{CALL_SITE_CACHE, QUICKENING};
 use super::{
-    arith_hint_skips, call_site_hits, clause_op_entries, const_builds, frame_floor_high_water,
-    load_constant_builds, run_chunk_entries, stackless_entries, trace_op_echoes,
+    arith_hint_skips, call_site_hits, clause_op_entries, const_builds, exec_parks, exec_splits,
+    frame_floor_high_water, load_constant_builds, run_chunk_entries, stackless_entries,
+    trace_op_echoes,
 };
+use crate::scheduler::{Scripted, script, take_scripted};
 use crate::{Invocation, Outcome, execute, run_program};
 
 /// The path these programs are reported under. Nothing reads it back: no
@@ -73,7 +75,8 @@ fn the_ir_engine_steps_a_loop_body_from_the_chunk() {
     );
 }
 
-/// A `DO ... END` block's two body clauses are stepped from the chunk too.
+/// A `DO ... END` block's two body clauses and its `END` are stepped from the
+/// chunk too.
 #[test]
 fn the_ir_engine_steps_a_simple_blocks_body_from_the_chunk() {
     let before = clause_op_entries();
@@ -86,9 +89,9 @@ fn the_ir_engine_steps_a_simple_blocks_body_from_the_chunk() {
     let stepped = clause_op_entries() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
-        stepped, 3,
+        stepped, 4,
         "the IR engine stepped {stepped} clauses from the chunk where a block \
-         over two clauses has three: its own DO clause and both body clauses"
+         over two clauses has four: its own DO clause, both body clauses and its END"
     );
 }
 
@@ -673,4 +676,66 @@ fn recursion_by_send_keeps_the_native_stack_flat() {
         deep <= shallow + 1024,
         "2000 levels took {deep} stack bytes against {shallow} for 50"
     );
+}
+
+/// Runs `program` on this thread with `outcomes` queued for its `Op::Exec`
+/// instructions, and how many parks and splits the driver handled.
+fn scripted(program: &[u8], outcomes: &[Scripted]) -> (Outcome, usize, usize, usize) {
+    let (parks, splits, entries) = (exec_parks(), exec_splits(), clause_op_entries());
+    script(outcomes);
+    let outcome = execute(TEST_PATH, program.to_vec(), false, Invocation::none());
+    assert!(
+        take_scripted().is_none(),
+        "a scripted outcome was not taken"
+    );
+    (
+        outcome,
+        exec_parks() - parks,
+        exec_splits() - splits,
+        clause_op_entries() - entries,
+    )
+}
+
+/// An `Op::Exec` that answers `Park` parks its clause region and the
+/// activity, and on wake the instruction runs again inside the same clause.
+#[test]
+fn a_parked_exec_runs_again_in_its_own_clause() {
+    const PROGRAM: &[u8] = b"z = 'v'\ndrop z\nsay symbol('Z')\n";
+    let (plain, _, _, plain_entries) = scripted(PROGRAM, &[]);
+    let (parked, parks, splits, entries) = scripted(PROGRAM, &[Scripted::Park]);
+    assert_eq!(parked.exit_code, 0, "stderr: {:?}", parked.stderr);
+    assert_eq!(String::from_utf8_lossy(&parked.stdout), "LIT\n");
+    assert_eq!((parks, splits), (1, 0));
+    assert_eq!(entries, plain_entries, "the parked clause was opened twice");
+    assert_eq!(parked.stdout, plain.stdout);
+}
+
+/// The adjacent refusal: an `Op::Exec` run by a nested Rust frame cannot
+/// park its activity.
+#[test]
+fn a_park_on_a_pinned_path_is_loud() {
+    let (outcome, parks, _, _) = scripted(
+        b"do label l\n  drop z\nend\nsay 'after'\n",
+        &[Scripted::Park],
+    );
+    assert_ne!(outcome.exit_code, 0);
+    assert!(
+        String::from_utf8_lossy(&outcome.stderr).contains("a park on a pinned path"),
+        "stderr: {:?}",
+        outcome.stderr
+    );
+    assert_eq!(parks, 0);
+    assert!(outcome.stdout.is_empty());
+}
+
+/// An `Op::Exec` that answers `Split` goes on with the `Flow` it carries.
+#[test]
+fn a_split_exec_goes_on_with_its_flow() {
+    let (outcome, parks, splits, _) = scripted(
+        b"interpret 'signal l'\nsay 'skipped'\nl:\nsay 'at l'\n",
+        &[Scripted::Split],
+    );
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "at l\n");
+    assert_eq!((parks, splits), (0, 1));
 }

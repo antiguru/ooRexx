@@ -21,6 +21,7 @@ use crate::error::{FailureSite, Raised, Search};
 use crate::eval::logical_value;
 use crate::ir::{BodyEngine, NodePath};
 use crate::plan::{BodyKey, Package};
+use crate::scheduler::ExecOutcome;
 use crate::trace::{
     Announced, is_whole_number, raised_invalid_trace_letter, raised_numeric_trace_interactive_only,
 };
@@ -556,11 +557,42 @@ impl Interp {
         Ok(None)
     }
 
-    /// One instruction's own work, with the clause unit already discharged by
-    /// whoever called: [`Interp::step`] takes the permission and enters from
-    /// `Op::Clause`'s region, and [`crate::ir::Op::Exec`] enters from inside
-    /// the [`crate::ir::Op::Clause`] region that already opened the clause.
+    /// One instruction's own work, entered by [`crate::ir::Op::Exec`] from
+    /// inside the [`crate::ir::Op::Clause`] region that already opened the
+    /// clause, and what the driver does next.
     pub(crate) fn exec_instruction(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+        first_instruction: bool,
+    ) -> Result<ExecOutcome, Failure> {
+        #[cfg(test)]
+        if let Some(scripted) = crate::scheduler::take_scripted() {
+            return match scripted {
+                crate::scheduler::Scripted::Park => {
+                    Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Guard))
+                }
+                crate::scheduler::Scripted::Split => self
+                    .exec_flow(code, index, instruction, source, first_instruction)
+                    .map(ExecOutcome::Split),
+            };
+        }
+        match &instruction.kind {
+            InstructionKind::Guard(guard) => self.exec_guard(code, guard),
+            InstructionKind::Reply { expression } => {
+                self.exec_reply(code, index, expression.as_ref())
+            }
+            _ => self
+                .exec_flow(code, index, instruction, source, first_instruction)
+                .map(ExecOutcome::Done),
+        }
+    }
+
+    /// [`Interp::exec_instruction`] for the instructions that always run to
+    /// their `Flow`.
+    fn exec_flow(
         &mut self,
         code: &Code<'_>,
         index: usize,
@@ -1137,15 +1169,6 @@ impl Interp {
             // `exec_message`.
             InstructionKind::Message { term, value } => {
                 self.exec_message(code, term, value.as_ref())
-            }
-
-            // `GUARD ON`/`GUARD OFF`, with or without a `WHEN`. See
-            // `exec_guard`.
-            InstructionKind::Guard(guard) => self.exec_guard(code, guard),
-
-            // `REPLY`, bare or with a value. See `exec_reply`.
-            InstructionKind::Reply { expression } => {
-                self.exec_reply(code, index, expression.as_ref())
             }
 
             // `FORWARD` and its options. See `exec_forward`.
@@ -1885,7 +1908,7 @@ impl Interp {
 
     /// `GUARD ON`/`GUARD OFF`, with or without a `WHEN` expression
     /// (`RexxInstructionGuard::execute`, `instructions/GuardInstruction.cpp`).
-    fn exec_guard(&mut self, code: &Code<'_>, guard: &Guard) -> Result<Flow, Failure> {
+    fn exec_guard(&mut self, code: &Code<'_>, guard: &Guard) -> Result<ExecOutcome, Failure> {
         if self.activation().method_identity.is_none() {
             return Err(Raised::guard_outside_method().into());
         }
@@ -1897,7 +1920,7 @@ impl Interp {
             }
         );
         let Some(condition) = &guard.condition else {
-            return Ok(Flow::Next);
+            return Ok(ExecOutcome::Done(Flow::Next));
         };
         let holds = self.eval_condition(
             code,
@@ -1906,7 +1929,7 @@ impl Interp {
             raised_guard_not_logical,
         )?;
         if holds {
-            Ok(Flow::Next)
+            Ok(ExecOutcome::Done(Flow::Next))
         } else {
             Err(Loud::guard_when_false().into())
         }
@@ -1919,7 +1942,7 @@ impl Interp {
         code: &Code<'_>,
         index: usize,
         expression: Option<&Expr>,
-    ) -> Result<Flow, Failure> {
+    ) -> Result<ExecOutcome, Failure> {
         if self.activation().method_identity.is_none() {
             return Err(Raised::reply_outside_method().into());
         }
@@ -1947,7 +1970,7 @@ impl Interp {
         activation.reply = ReplyState::Owed;
         activation.replied_a_value = value.is_some();
         activation.pc = index + 1;
-        Ok(Flow::Return(value))
+        Ok(ExecOutcome::Done(Flow::Return(value)))
     }
 
     /// `FORWARD`, with any of `TO`, `MESSAGE`, `CLASS`, `ARGUMENTS`, `ARRAY`

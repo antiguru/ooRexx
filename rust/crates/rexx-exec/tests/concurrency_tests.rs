@@ -611,7 +611,7 @@ mod measured {
             "LoopHeader",
             "do i = 1 to 2 while f()\nend\nexit\nf:\n  call SysSleep 0\n  return 1\n",
         ),
-        ("NestedLoop", "do\n  call SysSleep 0\nend\n"),
+        ("NestedLoop", "do label l\n  call SysSleep 0\nend\n"),
         (
             "Conversion",
             "do i over .c~new\nend\n::class c\n::method makearray\n  call SysSleep 0\n  return .array~new\n",
@@ -673,9 +673,9 @@ mod measured {
         assert!(missing.is_empty(), "{missing:#?}");
     }
 
-    /// Calls and sends in argument positions, sends, and the natives that
-    /// run a Rexx body run it on the driver's frame, so a park inside it has
-    /// no pinned frame above it.
+    /// Calls and sends in argument positions, sends, the natives that run a
+    /// Rexx body, and calls inside a plain `DO` block run on the driver's
+    /// frame, so a park inside them has no pinned frame above it.
     #[test]
     fn a_park_inside_a_stackless_entry_is_under_no_pinned_frame() {
         const CLASS: &str = "::class c\n::method m\n  call SysSleep 0\n  return 1\n\
@@ -694,6 +694,8 @@ mod measured {
             "x = .c~new~send('M')\n",
             "x = .c~new~start('M')\n",
             "x = .context~package~findRoutine('R')~call\n::routine r\n  call SysSleep 0\n",
+            "if 1 then do\n  x = g()\n  y = .c~new~m\n  call g\nend\nexit\ng:\n  call SysSleep 0\n  return 2\n",
+            "do i = 1 to 2\n  do\n    x = g()\n  end\nend\nexit\ng:\n  call SysSleep 0\n  return 2\n",
         ] {
             let source = format!("{program}{CLASS}");
             let report = report_of(&source);

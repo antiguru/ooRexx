@@ -38,7 +38,7 @@ thread_local! {
 }
 
 #[cfg(test)]
-fn counting() -> bool {
+pub(crate) fn counting() -> bool {
     COUNTING.with(std::cell::Cell::get)
 }
 
@@ -214,4 +214,32 @@ pub(super) fn count_stackless_entry() {
 #[cfg(test)]
 pub(super) fn stackless_entries() -> usize {
     STACKLESS_ENTRIES.with(std::cell::Cell::get)
+}
+
+// Test-only instrumentation: how many times this thread's driver parked an
+// activity at an `Op::Exec` and handed a continuation on at one.
+#[cfg(test)]
+thread_local! {
+    static EXEC_PARKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static EXEC_SPLITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn count_exec_park() {
+    EXEC_PARKS.with(|parks| parks.set(parks.get() + 1));
+}
+
+#[cfg(test)]
+pub(super) fn exec_parks() -> usize {
+    EXEC_PARKS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(super) fn count_exec_split() {
+    EXEC_SPLITS.with(|splits| splits.set(splits.get() + 1));
+}
+
+#[cfg(test)]
+pub(super) fn exec_splits() -> usize {
+    EXEC_SPLITS.with(std::cell::Cell::get)
 }
