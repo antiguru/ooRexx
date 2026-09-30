@@ -1141,3 +1141,72 @@ target dir.
 Over +0.3% against `92ac5c054`: assign +3.72, nop +3.25, varlookup +2.50, textnum +1.32,
 compound +1.31, emptyloop +1.08, dispatch +0.73, sayloop +0.70, alloc4c +0.69, decloop +0.65,
 decrender +0.65, arith +0.52, parse +0.46, dispatchclass +0.41, strings +0.34, sendloop +0.33.
+
+### Task 10 fix round 1 (I3)
+
+The per-clause Ir rise came from the live park path in the driver's op loop (Control A in
+`task-10-review.md`). Variants were measured against `92ac5c054` with
+`bash rust/bench-programs/callgrind.sh -r 1 -o $S/cg-full-x7v5 prev=<92ac5c054>/rexx-run x7=... v5=... x1=...`:
+
+- x7: the park is a cold `RegionEnd::Parked` intercepted before the clause closes.
+- v5: the park rides the Send edge with an activity flag, and drive retargets it to the Exec op.
+- x1: Park is loud in the driver (the prototype of what landed).
+
+| program | x7 % | v5 % | x1 % |
+|---|---|---|---|
+| alloc | -0.07 | +0.21 | -0.00 |
+| alloc4c | +0.44 | +0.57 | +0.00 |
+| arith | +0.75 | +0.44 | +0.24 |
+| assign | +2.65 | +2.12 | -0.00 |
+| compound | +1.20 | +0.87 | +0.11 |
+| decloop | +0.99 | +0.51 | +0.14 |
+| decrender | +0.80 | +0.54 | +0.08 |
+| dispatch | +1.05 | +0.17 | +0.34 |
+| dispatchclass | +0.96 | -0.05 | +0.34 |
+| emptyloop | -1.08 | +0.27 | -0.00 |
+| extcall | +0.00 | +0.11 | +0.00 |
+| fibcall | +0.08 | -1.71 | -2.07 |
+| fibfunc | -0.40 | -1.92 | -1.98 |
+| heapshape | -0.08 | +0.17 | +0.00 |
+| nop | -3.26 | +1.08 | +0.00 |
+| parse | +1.45 | +0.42 | -0.00 |
+| sayloop | +0.17 | +0.44 | +0.00 |
+| sendloop | +0.36 | -0.04 | +0.51 |
+| startup | +0.00 | +0.00 | +0.00 |
+| strings | +0.31 | +0.41 | +0.00 |
+| textnum | +1.16 | +0.94 | +0.07 |
+| varlookup | +2.10 | +1.45 | +0.13 |
+| rexxcps | +0.66 | -0.04 | -0.93 |
+
+Codegen perturbation from a live park arm; the sign varies by program (P19). Under ruling P21 (the
+largest rise must be at most +1.0%), x1 landed as `a7e53d4c0`: Park stays loud in the driver in S1.
+
+The committed state, `bash rust/bench-programs/callgrind.sh -r 3 -o $S/cg-fr base=<1754a3b5a>/rexx-run
+prev=<92ac5c054>/rexx-run head=<a7e53d4c0>/rexx-run`. Each binary was built from `git archive` in its
+own target dir, and every spread is 0.0000%:
+
+| program | base Ir | prev Ir | head Ir | prev vs base % | head vs base % | head vs prev % |
+|---|---|---|---|---|---|---|
+| alloc | 25168678552 | 20249018559 | 20270018744 | -19.55 | -19.46 | +0.10 |
+| alloc4c | 3224395138 | 3173498684 | 3176498869 | -1.58 | -1.49 | +0.09 |
+| arith | 11520060248 | 11471165757 | 11498165942 | -0.42 | -0.19 | +0.24 |
+| assign | 19637557611 | 18840415350 | 18840415535 | -4.06 | -4.06 | +0.00 |
+| compound | 9271611629 | 9187029588 | 9187029780 | -0.91 | -0.91 | +0.00 |
+| decloop | 2565175804 | 2533249310 | 2536049106 | -1.24 | -1.14 | +0.11 |
+| decrender | 4348396391 | 4274115353 | 4276915149 | -1.71 | -1.64 | +0.07 |
+| dispatch | 20483285266 | 20508850258 | 20493850438 | +0.12 | +0.05 | -0.07 |
+| dispatchclass | 15850195790 | 15494532692 | 15490532877 | -2.24 | -2.27 | -0.03 |
+| emptyloop | 9308098509 | 9259510005 | 9259510190 | -0.52 | -0.52 | +0.00 |
+| extcall | 8281259617 | 8227425066 | 8230425251 | -0.65 | -0.61 | +0.04 |
+| fibcall | 8345686514 | 8522465879 | 8324736214 | +2.12 | -0.25 | -2.32 |
+| fibfunc | 7988911860 | 8332398587 | 8138967382 | +4.30 | +1.88 | -2.32 |
+| heapshape | 3278634306 | 2373947492 | 2373955790 | -27.59 | -27.59 | +0.00 |
+| nop | 9437300267 | 9240156702 | 9240156887 | -2.09 | -2.09 | +0.00 |
+| parse | 1541986815 | 1533228145 | 1534028330 | -0.57 | -0.52 | +0.05 |
+| sayloop | 114813465 | 114714602 | 114714787 | -0.09 | -0.09 | +0.00 |
+| sendloop | 13863190996 | 13713470957 | 13703471143 | -1.08 | -1.15 | -0.07 |
+| startup | 58074154 | 58069747 | 58069925 | -0.01 | -0.01 | +0.00 |
+| strings | 17749287579 | 17488789122 | 17503789307 | -1.47 | -1.38 | +0.09 |
+| textnum | 1176579576 | 1152043463 | 1152443648 | -2.09 | -2.05 | +0.03 |
+| varlookup | 14878111883 | 14461721676 | 14461721861 | -2.80 | -2.80 | +0.00 |
+| rexxcps | 17817343428 | 17834084874 | 17663721405 | +0.09 | -0.86 | -0.96 |
