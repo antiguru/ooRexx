@@ -931,3 +931,58 @@ Verdict: over the S1 budget on fibcall (+2.64%), fibfunc (+3.87%), sendloop (+1.
 - alloc's sends no longer evaluate through the tree: against prev, `eval_node`, `message_term` and
   `eval_chunk_expr` retire 5.76 billion fewer instructions between them (`cgdiff.py` on
   `cg-full1/alloc.prev.r1.cg` and `cg-full2/alloc.r3.r1.cg`). heapshape was not broken down.
+
+### Final commit and wall clock
+
+`fin` is `54c4c28e5` (the seam fix after round 3; gates ran on it), built by the same recipe:
+sha256 `3f780e78b64f6764001890228aa2f220653d10ab12757a5251a1bcbb910d1b08`, `.text` 2,800,203 bytes.
+`$B/callgrind.sh -r 1 -j 8 -o $S/cg-fin -p "sendloop dispatch dispatchclass fibcall fibfunc rexxcps nop" r3=... fin=...`:
+sendloop -0.3197%, dispatch -0.2223%, dispatchclass -0.2341% against r3, the others within 6,000
+instructions. So against base: sendloop 14,033,461,969 (+1.23%).
+
+```
+$B/wallclock.sh -r 5 -o $S/wall base=$S/bin/base/rexx-run fin=$S/bin/fin/rexx-run base2=$S/bin/base2/rexx-run
+```
+
+`base2` is a copy of `base`. Started once the one-minute load was under 2: load 1.96 4.06 8.54 at
+start, 1.95 2.76 6.75 at end, exit 0.
+
+| program | base median s | fin median s | base2 median s | fin d% | base2 d% |
+|---|---:|---:|---:|---:|---:|
+| alloc | 2.028 | 1.651 | 2.036 | -18.59 | +0.39 |
+| alloc4c | 0.605 | 0.603 | 0.601 | -0.33 | -0.66 |
+| arith | 1.225 | 1.306 | 1.238 | +6.61 | +1.06 |
+| assign | 1.076 | 1.098 | 1.082 | +2.04 | +0.56 |
+| compound | 0.644 | 0.640 | 0.647 | -0.62 | +0.47 |
+| decloop | 0.255 | 0.246 | 0.249 | -3.53 | -2.35 |
+| decrender | 0.460 | 0.445 | 0.454 | -3.26 | -1.30 |
+| dispatch | 1.804 | 2.146 | 1.781 | +18.96 | -1.27 |
+| dispatchclass | 1.371 | 1.492 | 1.364 | +8.83 | -0.51 |
+| emptyloop | 0.525 | 0.531 | 0.531 | +1.14 | +1.14 |
+| extcall | 0.970 | 0.907 | 0.984 | -6.49 | +1.44 |
+| fibcall | 0.809 | 0.832 | 0.802 | +2.84 | -0.87 |
+| fibfunc | 0.789 | 0.854 | 0.787 | +8.24 | -0.25 |
+| heapshape | 0.321 | 0.190 | 0.326 | -40.81 | +1.56 |
+| nop | 0.667 | 0.569 | 0.663 | -14.69 | -0.60 |
+| parse | 0.129 | 0.127 | 0.131 | -1.55 | +1.55 |
+| sayloop | 0.029 | 0.029 | 0.029 | +0.00 | +0.00 |
+| sendloop | 1.073 | 1.284 | 1.064 | +19.66 | -0.84 |
+| startup | 0.024 | 0.025 | 0.026 | +4.17 | +8.33 |
+| strings | 1.134 | 1.129 | 1.129 | -0.44 | -0.44 |
+| textnum | 0.093 | 0.096 | 0.095 | +3.23 | +2.15 |
+| varlookup | 0.782 | 0.776 | 0.785 | -0.77 | +0.38 |
+| rexxcps | 2.043 | 2.006 | 2.026 | -1.81 | -0.83 |
+
+Wall is over its +-4% bar on sendloop (+19.66%), dispatch (+18.96%), dispatchclass (+8.83%),
+fibfunc (+8.24%) and arith (+6.61%, instructions -0.43%; base2 +1.06%).
+
+`perf stat -x, -e EVENT rexx-run bench-programs/sendloop.rex`, one event per run, base, fin, base:
+
+| event | base | fin | base (again) |
+|---|---:|---:|---:|
+| cycles | 3,146,932,706 | 3,693,099,344 | 3,160,010,451 |
+| instructions | 14,991,267,637 | 15,150,479,569 | 14,991,035,956 |
+| L1-icache-load-misses | 838,924 | 55,633,195 | 954,665 |
+| branch-misses | 340,844 | 358,712 | 3,097,434 |
+
+About eleven L1 instruction-cache misses per send against none on base.
