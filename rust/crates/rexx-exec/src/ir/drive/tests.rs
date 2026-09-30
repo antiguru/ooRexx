@@ -584,3 +584,50 @@ fn recursion_by_function_call_keeps_the_native_stack_flat() {
         "2000 levels took {deep} stack bytes against {shallow} for 50"
     );
 }
+
+/// A send made by an op of a body -- as a clause, as a value, in an argument,
+/// and through each primitive method that runs a Rexx body -- runs that body
+/// on the driver's frame.
+#[test]
+fn a_send_op_runs_its_method_on_the_drivers_own_frame() {
+    let (outcome, entered) = stackless(
+        b"o = .c~new(1)\no~m\nx = o~m\nsay f(o~m) x\n\
+          say .message~new(o, 'M')~send o~send('M') o~start('M')~result\n\
+          say .context~package~findRoutine('R')~call\nexit\n\
+          f: return arg(1)\n\
+          ::routine r\n  return 'r'\n\
+          ::class c\n::method init\n  return\n::method m\n  return 'm'\n",
+    );
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "m m\nm m m\nr\n");
+    assert_eq!(
+        entered, 9,
+        "INIT, m by clause, by value and in f's argument, f, m by Message~send, by \
+         Object~send and by Object~start, and r by Routine~call are the bodies this program \
+         enters"
+    );
+}
+
+/// Recursion by send adds no native stack per level.
+#[test]
+fn recursion_by_send_keeps_the_native_stack_flat() {
+    let span = |depth: usize| {
+        let program = format!(
+            "say .c~new~f({depth})\nexit\n::class c\n::method f\n  use arg n\n  \
+             if n = 0 then return 0\n  return self~f(n - 1) + 1\n"
+        );
+        let outcome = crate::run_program("flat.rex", program.into_bytes(), Invocation::none());
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stdout),
+            format!("{depth}\n")
+        );
+        assert!(outcome.stack.max_depth > depth, "{:?}", outcome.stack);
+        outcome.stack.bytes
+    };
+    let (shallow, deep) = (span(50), span(2000));
+    assert!(
+        deep <= shallow + 1024,
+        "2000 levels took {deep} stack bytes against {shallow} for 50"
+    );
+}

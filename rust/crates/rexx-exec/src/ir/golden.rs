@@ -88,6 +88,23 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     render_path(*path)
                 ));
             }
+            Op::Send {
+                slot,
+                path,
+                recv,
+                argc,
+                dst,
+                form,
+            } => {
+                out.push_str(&format!(
+                    "{index}: Send slot={slot} path={} recv={recv} argc={argc} dst={dst} \
+                     form={form:?}\n",
+                    render_path(*path)
+                ));
+            }
+            Op::List { argc, dst } => {
+                out.push_str(&format!("{index}: List argc={argc} dst={dst}\n"));
+            }
             Op::PushArg { src } => {
                 out.push_str(&format!("{index}: PushArg src={}\n", render_arg(*src)));
             }

@@ -78,7 +78,7 @@ mod condition;
 // `CALL` and function calls: resolving the name, running the arguments, entering the callee.
 mod call;
 pub(crate) use call::{
-    CallEntry, CallResolution, CallTail, MAX_ACTIVATION_DEPTH, Started, function_started,
+    Begun, CallEntry, CallResolution, CallTail, MAX_ACTIVATION_DEPTH, Started, function_started,
     subroutine_started,
 };
 #[cfg(test)]
@@ -2561,7 +2561,7 @@ impl Interp {
     }
 
     /// The slot `RESULT` lives in, from the plan when it has one.
-    fn reserved_result_slot(&mut self) -> usize {
+    pub(crate) fn reserved_result_slot(&mut self) -> usize {
         match self.activation().plan.result_slot {
             Some(slot) => slot,
             None => self.slot_of(b"RESULT"),
@@ -3214,13 +3214,38 @@ impl Interp {
             (InstructionKind::Do(body) | InstructionKind::Loop(body), slot) => {
                 loop_header_slot(body, u32::from(slot))?
             }
+            // A `CALL`'s argument `slot`.
+            (InstructionKind::Call(call), slot) => match &**call {
+                rexx_parse::Call::Named { args, .. } => args.get(usize::from(slot))?.as_ref()?,
+                _ => return None,
+            },
+            // A message instruction's term, and the assignment form's value.
+            (InstructionKind::Message { term, .. }, 0) => term,
+            (
+                InstructionKind::Message {
+                    value: Some(value), ..
+                },
+                1,
+            ) => value,
             _ => return None,
         };
-        for right in path.steps() {
-            node = match (&node.kind, right) {
+        let mut steps = path.steps();
+        while let Some(step) = steps.next() {
+            node = match (&node.kind, step) {
                 (ExprKind::Binary { left, .. }, false) => left,
                 (ExprKind::Binary { right, .. }, true) => right,
                 (ExprKind::Prefix { operand, .. }, false) => operand,
+                // A list step: its index in clear steps, then a set one.
+                (ExprKind::Call { args, .. } | ExprKind::List(args), _) => {
+                    let index = list_step(step, &mut steps)?;
+                    args.get(index)?.as_ref()?
+                }
+                (ExprKind::Message { target, args, .. }, _) => {
+                    match list_step(step, &mut steps)?.checked_sub(1) {
+                        None => target,
+                        Some(index) => args.get(index)?.as_ref()?,
+                    }
+                }
                 _ => return None,
             };
         }
@@ -3536,6 +3561,18 @@ pub(crate) enum NameShape {
     Simple,
     Stem,
     Compound,
+}
+
+/// The index a list step names, `first` its first step and `rest` the ones
+/// after it: how many clear steps come before a set one.
+fn list_step(first: bool, rest: &mut impl Iterator<Item = bool>) -> Option<usize> {
+    let mut index = 0;
+    let mut step = first;
+    while !step {
+        index += 1;
+        step = rest.next()?;
+    }
+    Some(index)
 }
 
 pub(crate) fn shape_of(name: &[u8]) -> NameShape {

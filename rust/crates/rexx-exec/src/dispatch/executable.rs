@@ -13,7 +13,10 @@
 //! `classes/RoutineClass.cpp` and the `BaseExecutable` rows both share, bound
 //! by `memory/Setup.cpp:1089`-`:1113` and `:1128`-`:1143`.
 
-use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, ObjRef, Raised, array_of_texts};
+use super::{
+    Arity, Cleared, Failure, Interp, Loud, NativeBegin, NativeMethod, NativeStarted, ObjRef,
+    Raised, array_of_texts,
+};
 use crate::{ExecutableSource, ProgramId};
 use rexx_parse::{Access, DirectiveKind, GuardOption, Program, Protection};
 
@@ -39,9 +42,6 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("Method", "SETUNGUARDED", Arity::Fixed(0), set_unguarded),
     ("Method", "SOURCE", Arity::Fixed(0), source),
-    ("Routine", "[]", Arity::Counted, call),
-    ("Routine", "CALL", Arity::Counted, call),
-    ("Routine", "CALLWITH", Arity::Fixed(1), call_with),
     ("Routine", "PACKAGE", Arity::Fixed(0), package),
     (
         "Routine",
@@ -149,6 +149,13 @@ fn declared_flag(interp: &Interp, source: ExecutableSource, which: Flag) -> bool
         _ => false,
     }
 }
+
+/// `Routine`'s methods that run the routine, entered by their begin halves.
+pub(super) static RESUMABLE_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
+    ("Routine", "[]", Arity::Counted, call),
+    ("Routine", "CALL", Arity::Counted, call),
+    ("Routine", "CALLWITH", Arity::Fixed(1), call_with),
+];
 
 /// `MethodClass::isAbstractRexx`.
 fn is_abstract(
@@ -496,8 +503,8 @@ fn call(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    enter_routine(interp, receiver, args.to_vec(), b"CALL")
+) -> Result<NativeStarted, Failure> {
+    begin_routine(interp, receiver, args.to_vec(), b"CALL")
 }
 
 /// `RoutineClass::callWithRexx`: the same call over an argument array.
@@ -506,12 +513,12 @@ fn call_with(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     let Some(Some(array)) = args.first().copied() else {
         return Err(Raised::missing_method_argument(1).into());
     };
     let values = super::array_argument(interp, array, super::ArrayArgument::Positional)?;
-    enter_routine(interp, receiver, values, b"CALL")
+    begin_routine(interp, receiver, values, b"CALL")
 }
 
 /// `CallRoutineDispatcher::run` (`concurrency/RexxStartDispatcher.cpp:207`):
@@ -529,17 +536,19 @@ pub(crate) fn call_routine_directly(
         Some(array) => super::array_argument(interp, array, super::ArrayArgument::Positional)?,
         None => Vec::new(),
     };
-    enter_routine(interp, routine, values, b"")
+    let started = begin_routine(interp, routine, values, b"")?;
+    interp.complete_native(started)
 }
 
 /// The half [`call`] and [`call_with`] share, once the arguments are values,
-/// `name` being what the routine's frame is called.
-fn enter_routine(
+/// `name` being what the routine's frame is called, up to the point a Rexx
+/// routine's body would run.
+fn begin_routine(
     interp: &mut Interp,
     receiver: ObjRef,
     values: Vec<Option<ObjRef>>,
     name: &[u8],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     let Some(record) = interp.executable_sources.get(&receiver).copied() else {
         return Err(
             Loud::method_from_source("a routine whose body this crate does not hold").into(),
@@ -560,7 +569,9 @@ fn enter_routine(
     };
     if let Some(code) = code {
         let name = interp.library_code_key(code).procedure.clone();
-        return interp.run_library_routine(code, &name, &values);
+        return interp
+            .run_library_routine(code, &name, &values)
+            .map(NativeStarted::Ran);
     }
     let row = match record.routine {
         Some((program, directive)) => {
@@ -571,12 +582,12 @@ fn enter_routine(
     if let Some(row) = row {
         return interp
             .run_internal_as(row, Some(row.name.as_bytes()), &values)
-            .map(Some);
+            .map(|value| NativeStarted::Ran(Some(value)));
     }
     let Some((program, directive)) = record.routine else {
         return Err(
             Loud::method_from_source("a routine whose body this crate does not hold").into(),
         );
     };
-    interp.enter_installed_routine(program, directive, values, name)
+    interp.begin_installed_routine(program, directive, &values, name)
 }

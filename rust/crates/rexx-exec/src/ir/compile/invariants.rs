@@ -261,6 +261,8 @@ pub(super) fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 Op::TraceKeyword { .. }
                 | Op::LoopHeaderValue { .. }
                 | Op::Clause { .. }
+                | Op::Send { .. }
+                | Op::List { .. }
                 | Op::SelectCaseText { .. }
                 | Op::EndBranch
                 | Op::EndWhen

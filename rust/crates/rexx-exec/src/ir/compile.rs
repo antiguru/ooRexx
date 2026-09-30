@@ -21,6 +21,7 @@ use rexx_parse::{
 
 use super::{
     Calls, Chunk, ChunkTooLarge, ClausePosition, ConditionKeyword, Hints, NodePath, Op, PlanSlot,
+    SendForm,
 };
 use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
 use crate::plan::Plan;
@@ -888,12 +889,11 @@ pub(crate) fn compile(
                 registers.release(mark);
             }
             // A `CALL name`/`CALL "name"` clause, whose arguments compile to
-            // ops of their own when every one of them is a value -- a `>name`
+            // ops of their own when every one of them does -- a `>name`
             // reference carries the caller's own slot rather than an `ObjRef`,
-            // and an argument that is itself a call needs an address this
-            // instruction has no expression slot for, so either one keeps the
-            // whole clause on `Op::Call` and leaves the arguments, the `>A>`
-            // lines and their intermediates to `Interp::invoke_call`.
+            // so one keeps the whole clause on `Op::Call` and leaves the
+            // arguments, the `>A>` lines and their intermediates to
+            // `Interp::invoke_call`.
             InstructionKind::Call(call) if matches!(&**call, Call::Named { .. }) => {
                 let Call::Named { args, .. } = &**call else {
                     unreachable!("the guard above admits only `Call::Named`")
@@ -907,49 +907,27 @@ pub(crate) fn compile(
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 // **The arguments become ops of their own where they can**,
-                // exactly as `ExprKind::Call`'s arm does it, and the guard is
-                // the identical one: `native_shape` with no address declines a
-                // nested call -- which would need a slot this instruction has
-                // none of -- and declines the `>v` reference form, which
-                // carries a variable's home where the stack carries a value.
+                // exactly as `ExprKind::Call`'s arm does it. Argument `k` is
+                // the instruction's expression slot `k`.
                 let native = u16::try_from(args.len()).is_ok()
-                    && args
-                        .iter()
-                        .all(|arg| arg.as_ref().is_none_or(|expr| native_shape(expr, None)));
+                    && args.iter().all(|arg| {
+                        arg.as_ref()
+                            .is_none_or(|expr| native_shape(expr, Some(NodePath::ROOT)))
+                    });
                 if native {
-                    let argc = u16::try_from(args.len()).map_err(|_| ChunkTooLarge {
-                        what: "call arguments past u16",
-                    })?;
-                    for arg in args {
-                        let src = match arg {
-                            None => Op::ARG_OMITTED,
-                            Some(expr) => {
-                                let src = registers.alloc()?;
-                                push_native(
-                                    &mut ops,
-                                    echoes_values,
-                                    &mut consts,
-                                    &mut registers,
-                                    &mut hints,
-                                    &mut calls,
-                                    plan,
-                                    expr,
-                                    instruction_index(index)?,
-                                    0,
-                                    None,
-                                    src,
-                                )?;
-                                src
-                            }
-                        };
-                        ops.push(Op::PushArg { src });
-                        // Behind the argument's own ops, so its `>L>`/`>V>`
-                        // lines print first -- the order `invoke_call`'s own
-                        // loop produces.
-                        if echoes_values {
-                            ops.push(Op::TraceArgument { src });
-                        }
-                    }
+                    let argc = push_arguments(
+                        &mut ops,
+                        echoes_values,
+                        &mut consts,
+                        &mut registers,
+                        &mut hints,
+                        &mut calls,
+                        plan,
+                        args,
+                        instruction_index(index)?,
+                        |k| (k as u32, Some(NodePath::ROOT)),
+                        true,
+                    )?;
                     ops.push(Op::CallNamed {
                         index: instruction_index(index)?,
                         site: calls.reserve()?,
@@ -964,12 +942,100 @@ pub(crate) fn compile(
                 close_region(&mut ops, at)?;
                 registers.release(mark);
             }
-            // A message send as a whole clause: the plain form, the `~~`
-            // form, and the message-assignment form. No register and no
-            // expression slot -- `Interp::exec_message` evaluates the term
-            // itself, exactly as arm does, so what this
-            // promotion decides is the clause region around it and nothing
-            // about the send.
+            // A message send as a whole clause whose term compiles: the
+            // receiver, the assigned value of the message-assignment form, the
+            // arguments, and the send. The term is slot 0 and the assigned
+            // value slot 1.
+            InstructionKind::Message { term, value }
+                if native_message_instruction(term, value.as_ref()) =>
+            {
+                let ExprKind::Message { target, args, .. } = &term.kind else {
+                    unreachable!("the guard above admits only a message term")
+                };
+                let mark = registers.mark();
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                let recv = registers.alloc()?;
+                push_native(
+                    &mut ops,
+                    echoes_values,
+                    &mut consts,
+                    &mut registers,
+                    &mut hints,
+                    &mut calls,
+                    plan,
+                    target,
+                    instruction_index(index)?,
+                    0,
+                    NodePath::ROOT.nth(0),
+                    recv,
+                )?;
+                let assigned = match value {
+                    Some(value) => {
+                        let src = registers.alloc()?;
+                        push_native(
+                            &mut ops,
+                            echoes_values,
+                            &mut consts,
+                            &mut registers,
+                            &mut hints,
+                            &mut calls,
+                            plan,
+                            value,
+                            instruction_index(index)?,
+                            1,
+                            Some(NodePath::ROOT),
+                            src,
+                        )?;
+                        ops.push(Op::PushArg { src });
+                        if echoes_values {
+                            ops.push(Op::TraceArgument { src });
+                        }
+                        1
+                    }
+                    None => 0,
+                };
+                let argc = push_arguments(
+                    &mut ops,
+                    echoes_values,
+                    &mut consts,
+                    &mut registers,
+                    &mut hints,
+                    &mut calls,
+                    plan,
+                    args,
+                    instruction_index(index)?,
+                    |k| (0, NodePath::ROOT.nth(k + 1)),
+                    true,
+                )?
+                .checked_add(assigned)
+                .ok_or(ChunkTooLarge {
+                    what: "call arguments past u16",
+                })?;
+                ops.push(Op::Send {
+                    slot: 0,
+                    path: NodePath::ROOT,
+                    recv,
+                    argc,
+                    dst: recv,
+                    form: if value.is_some() {
+                        SendForm::Assign
+                    } else {
+                        SendForm::Clause
+                    },
+                });
+                close_region(&mut ops, at)?;
+                registers.release(mark);
+            }
+            // A message send as a whole clause whose term does not compile.
+            // No register and no expression slot -- `Interp::exec_message`
+            // evaluates the term itself, so what this promotion decides is the
+            // clause region around it and nothing about the send.
             InstructionKind::Message { .. } => {
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
@@ -1215,11 +1281,26 @@ fn native_shape(expr: &Expr, path: Option<NodePath>) -> bool {
         | ExprKind::Constant(_)
         | ExprKind::Variable(_)
         | ExprKind::Stem(_)
-        | ExprKind::Compound(_) => true,
+        | ExprKind::Compound(_)
+        | ExprKind::DotVariable(_) => true,
         // A call needs an address, and a node past the width has none. The
         // whole slot then falls to `Op::EvalExpr`, which is the answer it had
         // before there was an address at all.
         ExprKind::Call { .. } => path.is_some(),
+        // A send needs an address for the same reason; the receiver is child
+        // 0 and the arguments follow it.
+        ExprKind::Message {
+            target,
+            super_class: None,
+            args,
+            cascade: false,
+            ..
+        } => {
+            path.is_some()
+                && native_shape(target, descend_nth(path, 0))
+                && native_arguments(args, path, 1)
+        }
+        ExprKind::List(items) => native_arguments(items, path, 0),
         ExprKind::Binary { op, left, right } => {
             is_native_binary(*op)
                 && native_shape(left, descend(path, false))
@@ -1234,10 +1315,102 @@ fn native_shape(expr: &Expr, path: Option<NodePath>) -> bool {
     }
 }
 
+/// Whether a message instruction's term and assigned `value` compile to
+/// native ops. A cascade answers its receiver, which only the assignment
+/// form, whose answer is never the term's, can ignore.
+fn native_message_instruction(term: &Expr, value: Option<&Expr>) -> bool {
+    let ExprKind::Message {
+        target,
+        super_class: None,
+        args,
+        cascade,
+        ..
+    } = &term.kind
+    else {
+        return false;
+    };
+    (value.is_some() || !cascade)
+        && native_shape(target, NodePath::ROOT.nth(0))
+        && native_arguments(args, Some(NodePath::ROOT), 1)
+        && value.is_none_or(|value| native_shape(value, Some(NodePath::ROOT)))
+}
+
 /// The address of one child of the node addressed by `path`: the right child
 /// when `right`, and the left or only one otherwise.
 fn descend(path: Option<NodePath>, right: bool) -> Option<NodePath> {
     path?.child(right)
+}
+
+/// The address of child `index` of the node with a list of children that
+/// `path` addresses.
+fn descend_nth(path: Option<NodePath>, index: usize) -> Option<NodePath> {
+    path?.nth(index)
+}
+
+/// Whether every one of `args` is omitted or compiles to native ops, each at
+/// child `first + k` of the node `path` addresses, and their count fits an op.
+fn native_arguments(args: &[Option<Expr>], path: Option<NodePath>, first: usize) -> bool {
+    u16::try_from(args.len()).is_ok()
+        && args.iter().enumerate().all(|(k, arg)| {
+            arg.as_ref()
+                .is_none_or(|expr| native_shape(expr, descend_nth(path, first + k)))
+        })
+}
+
+/// The ops that push each of `args` onto the driver's argument stack, the
+/// `k`th addressed by `address(k)`, and the `>A>` line each owes: an omitted
+/// position's too where `trace_omitted`. Answers how many were pushed.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the emission sinks, the plan a read resolves its slot against, and the address               each argument's own call ops name"
+)]
+fn push_arguments<'a>(
+    ops: &mut Vec<Op>,
+    echoes_values: bool,
+    consts: &mut Constants<'a>,
+    registers: &mut Registers,
+    hints: &mut Hints,
+    calls: &mut Calls,
+    plan: &Plan,
+    args: &'a [Option<Expr>],
+    index: u32,
+    address: impl Fn(usize) -> (u32, Option<NodePath>),
+    trace_omitted: bool,
+) -> Result<u16, ChunkTooLarge> {
+    let argc = u16::try_from(args.len()).map_err(|_| ChunkTooLarge {
+        what: "call arguments past u16",
+    })?;
+    for (k, arg) in args.iter().enumerate() {
+        let src = match arg {
+            None => Op::ARG_OMITTED,
+            Some(expr) => {
+                let (slot, path) = address(k);
+                let src = registers.alloc()?;
+                push_native(
+                    ops,
+                    echoes_values,
+                    consts,
+                    registers,
+                    hints,
+                    calls,
+                    plan,
+                    expr,
+                    index,
+                    slot,
+                    path,
+                    src,
+                )?;
+                src
+            }
+        };
+        ops.push(Op::PushArg { src });
+        // Behind the argument's own ops, so its `>L>`/`>V>` lines print
+        // first -- the order `invoke_call`'s own loop produces.
+        if echoes_values && (trace_omitted || src != Op::ARG_OMITTED) {
+            ops.push(Op::TraceArgument { src });
+        }
+    }
+    Ok(argc)
 }
 
 /// The ops that leave `expr` -- which [`native_shape`] has already accepted --
@@ -1291,6 +1464,9 @@ fn push_native<'a>(
         ExprKind::Stem(id) => push_read(ops, echoes_values, plan, SymbolRead::Stem, *id, dst),
         ExprKind::Compound(id) => {
             push_read(ops, echoes_values, plan, SymbolRead::Compound, *id, dst)
+        }
+        ExprKind::DotVariable(id) => {
+            push_read(ops, echoes_values, plan, SymbolRead::Environment, *id, dst)
         }
         ExprKind::Binary { op, left, right } => {
             // **The left operand lands in `dst` itself and only the right one
@@ -1412,52 +1588,21 @@ fn push_native<'a>(
             // the name lookup and one `eval` entry per argument; measured on
             // a ladder of `zq = length(s)` clauses, a builtin call cost 617
             // instructions against the -O3 interpreter's 293.
-            if args
-                .iter()
-                .all(|arg| arg.as_ref().is_none_or(|expr| native_shape(expr, None)))
-            {
-                let argc = u16::try_from(args.len()).map_err(|_| ChunkTooLarge {
-                    what: "call arguments past u16",
-                })?;
+            if native_arguments(args, Some(path), 0) {
                 let mark = registers.mark();
-                for arg in args {
-                    match arg {
-                        None => {
-                            ops.push(Op::PushArg {
-                                src: Op::ARG_OMITTED,
-                            });
-                            if echoes_values {
-                                ops.push(Op::TraceArgument {
-                                    src: Op::ARG_OMITTED,
-                                });
-                            }
-                        }
-                        Some(expr) => {
-                            let src = registers.alloc()?;
-                            push_native(
-                                ops,
-                                echoes_values,
-                                consts,
-                                registers,
-                                hints,
-                                calls,
-                                plan,
-                                expr,
-                                index,
-                                slot,
-                                None,
-                                src,
-                            )?;
-                            ops.push(Op::PushArg { src });
-                            // Behind the argument's own ops, so its `>L>`/
-                            // `>V>` lines print first -- the order
-                            // `invoke_call`'s own loop produces.
-                            if echoes_values {
-                                ops.push(Op::TraceArgument { src });
-                            }
-                        }
-                    }
-                }
+                let argc = push_arguments(
+                    ops,
+                    echoes_values,
+                    consts,
+                    registers,
+                    hints,
+                    calls,
+                    plan,
+                    args,
+                    index,
+                    |k| (slot, path.nth(k)),
+                    true,
+                )?;
                 ops.push(Op::CallArgs {
                     slot: slot16,
                     path,
@@ -1491,6 +1636,71 @@ fn push_native<'a>(
                 src: dst,
             });
         }
+        // The receiver lands in `dst` itself, which the send reads before it
+        // writes its answer there.
+        ExprKind::Message { target, args, .. } => {
+            let slot16 = u16::try_from(slot).map_err(|_| ChunkTooLarge {
+                what: "expression slots past u16",
+            })?;
+            let path = path.expect("native_shape accepts a send only where an address reaches it");
+            push_native(
+                ops,
+                echoes_values,
+                consts,
+                registers,
+                hints,
+                calls,
+                plan,
+                target,
+                index,
+                slot,
+                path.nth(0),
+                dst,
+            )?;
+            let mark = registers.mark();
+            let argc = push_arguments(
+                ops,
+                echoes_values,
+                consts,
+                registers,
+                hints,
+                calls,
+                plan,
+                args,
+                index,
+                |k| (slot, path.nth(k + 1)),
+                true,
+            )?;
+            ops.push(Op::Send {
+                slot: slot16,
+                path,
+                recv: dst,
+                argc,
+                dst,
+                form: SendForm::Value,
+            });
+            registers.release(mark);
+        }
+        // An omitted item owes no `>A>` line, where an omitted argument owes
+        // an empty one (`eval_list`).
+        ExprKind::List(items) => {
+            let mark = registers.mark();
+            let argc = push_arguments(
+                ops,
+                echoes_values,
+                consts,
+                registers,
+                hints,
+                calls,
+                plan,
+                items,
+                index,
+                |k| (slot, descend_nth(path, k)),
+                false,
+            )?;
+            ops.push(Op::List { argc, dst });
+            registers.release(mark);
+        }
         _ => unreachable!("this descends only into an expression native_shape accepted"),
     }
     Ok(())
@@ -1521,7 +1731,7 @@ fn push_read(
         SymbolRead::Simple | SymbolRead::Stem => plan
             .slot_for_symbol(symbol)
             .map_or(PlanSlot::UNRESOLVED, PlanSlot::of),
-        SymbolRead::Compound => PlanSlot::UNRESOLVED,
+        SymbolRead::Compound | SymbolRead::Environment => PlanSlot::UNRESOLVED,
     };
     ops.push(Op::Load {
         symbol,

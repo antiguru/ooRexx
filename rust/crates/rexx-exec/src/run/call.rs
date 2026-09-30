@@ -64,13 +64,53 @@ pub(crate) enum Begun {
 /// [`Activity::call_tails`](crate::activity::Activity), which
 /// [`Interp::finish_call`] puts back.
 pub(crate) struct CallTail {
-    entered: Entered,
+    kind: TailKind,
     saved_clause_state: crate::clause::SavedClauseState,
     saved_base: usize,
     saved_offset: usize,
     saved_line: Option<usize>,
     saved_context: CallContext,
     stack: LentStack,
+}
+
+/// Which activation a [`CallTail`] was pushed for.
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum TailKind {
+    /// An internal label, sharing its caller's pool unless it says otherwise.
+    Label,
+    /// A `::ROUTINE`.
+    Routine,
+    /// A `::METHOD` body entered by a send.
+    Method,
+    /// The rest of a method body a `REPLY` left owed.
+    Resumed,
+}
+
+impl CallTail {
+    /// The tail a method activation just pushed leaves, holding the
+    /// caller's level state it replaced.
+    pub(crate) fn method(
+        resumed: bool,
+        saved_context: CallContext,
+        saved_clause_state: crate::clause::SavedClauseState,
+        saved_base: usize,
+        saved_offset: usize,
+        saved_line: Option<usize>,
+    ) -> CallTail {
+        CallTail {
+            kind: if resumed {
+                TailKind::Resumed
+            } else {
+                TailKind::Method
+            },
+            saved_clause_state,
+            saved_base,
+            saved_offset,
+            saved_line,
+            saved_context,
+            stack: LentStack::Kept,
+        }
+    }
 }
 
 /// What a call does with the argument stack when it finishes.
@@ -446,7 +486,7 @@ impl Interp {
     /// for a call whose callee was `entered`, lends the rest to that callee's
     /// [`CallTail`].
     #[inline(always)]
-    fn lend_stack(&mut self, entered: bool, values: Vec<Option<ObjRef>>) {
+    pub(crate) fn lend_stack(&mut self, entered: bool, values: Vec<Option<ObjRef>>) {
         if entered {
             self.lend_stack_to_callee(values);
         } else {
@@ -615,26 +655,6 @@ impl Interp {
         .then(|| self.activity.call_context.name.clone());
         let ended = self.finish_call(ended)?;
         function_value(ended, name.as_deref().unwrap_or_default())
-    }
-
-    /// One `::ROUTINE` entered from a native method body: `Routine~call`,
-    /// `~callWith` and `~'[]'`.
-    pub(crate) fn call_over_installed_routine(
-        &mut self,
-        installed: InstalledRoutine,
-        arguments: Vec<Option<ObjRef>>,
-        name: &[u8],
-    ) -> Result<Option<ObjRef>, Failure> {
-        match self.invoke_call_over(
-            Resolved::Routine(installed),
-            name,
-            arguments,
-            CallType::Subroutine,
-            CallEntry::Written,
-        )? {
-            Ended::Exited(value) => Err(Failure::Exited(value)),
-            Ended::Returned(returned) => Ok(returned),
-        }
     }
 
     /// `RoutineClass::runProgram`, which `CallProgram` runs a file's routine
@@ -954,7 +974,10 @@ impl Interp {
         );
 
         self.activity.call_tails.push(CallTail {
-            entered,
+            kind: match entered {
+                Entered::Label(_) => TailKind::Label,
+                Entered::Routine(_) => TailKind::Routine,
+            },
             saved_clause_state,
             saved_base,
             saved_offset,
@@ -970,7 +993,7 @@ impl Interp {
     #[inline(always)]
     pub(crate) fn finish_call(&mut self, ended: Result<Ended, Failure>) -> Result<Ended, Failure> {
         let Some(CallTail {
-            entered,
+            kind,
             saved_clause_state,
             saved_base,
             saved_offset,
@@ -997,31 +1020,39 @@ impl Interp {
         // trip that assertion in the caller rather than quietly running the
         // wrong frame's `pc`.
         let mut callee = self.pop_activation().expect("the activation just pushed");
-        // **The two halves of "was the pool shared" are one bool, and both
-        // are needed.** A `PROCEDURE` callee pushed a frame of its own, so
-        // that frame is popped here -- on the error path as well, which is
-        // why this is not inside the `Ok` arm below. It also keeps its own
-        // run-time name bindings, so they are *not* moved back: doing that
-        // would overwrite the caller's `extra` with the callee's isolated
-        // one. A shared-pool callee is the opposite on both counts, and its
-        // `extra` write-back is what makes a name bound inside it survive
-        // the return (measured, `interpret "zork = 42"` in a callee).
-        if callee.owns_frame {
-            self.roots.activity_mut().pop_slots(callee.frame);
-        } else {
-            // Taken rather than moved out, so the box stays whole and can be
-            // parked: moving a field out of a `Box` moves the whole of it out
-            // and frees the box, which is the allocation the pool exists to
-            // keep. What is left behind is the empty map a fresh activation
-            // starts with.
-            self.activation_mut().extra = std::mem::take(&mut callee.extra);
+        match kind {
+            TailKind::Method | TailKind::Resumed => {
+                self.release_method_activation(callee, kind == TailKind::Resumed, saved_context);
+            }
+            TailKind::Label | TailKind::Routine => {
+                // **The two halves of "was the pool shared" are one bool, and
+                // both are needed.** A `PROCEDURE` callee pushed a frame of its
+                // own, so that frame is popped here -- on the error path as
+                // well, which is why this is not inside the `Ok` arm below. It
+                // also keeps its own run-time name bindings, so they are *not*
+                // moved back: doing that would overwrite the caller's `extra`
+                // with the callee's isolated one. A shared-pool callee is the
+                // opposite on both counts, and its `extra` write-back is what
+                // makes a name bound inside it survive the return (measured,
+                // `interpret "zork = 42"` in a callee).
+                if callee.owns_frame {
+                    self.roots.activity_mut().pop_slots(callee.frame);
+                } else {
+                    // Taken rather than moved out, so the box stays whole and
+                    // can be parked: moving a field out of a `Box` moves the
+                    // whole of it out and frees the box, which is the
+                    // allocation the pool exists to keep. What is left behind
+                    // is the empty map a fresh activation starts with.
+                    self.activation_mut().extra = std::mem::take(&mut callee.extra);
+                }
+                self.recycle_activation(callee);
+                self.activity.call_context = saved_context;
+            }
         }
-        self.recycle_activation(callee);
         self.activity.activation_indent = saved_base;
         self.activity.indent_offset = saved_offset;
         self.activity.clause_line_override = saved_line;
         self.restore_clause_state(saved_clause_state);
-        self.activity.call_context = saved_context;
         match stack {
             LentStack::Kept => {}
             LentStack::Emptied => self.activity.value_buffer.clear(),
@@ -1042,10 +1073,9 @@ impl Interp {
         // call rtn / say 'after'      a label INSIDE the routine exits 9 -> "after" runs
         // call rtn / say 'after'      interpret "exit 4" in the routine  -> "after" runs
         // ```
+        // A method body's `EXIT` answers its sender the same way.
         let ended = match ended {
-            Ok(Ended::Exited(value)) | Err(Failure::Exited(value))
-                if matches!(entered, Entered::Routine(_)) =>
-            {
+            Ok(Ended::Exited(value)) | Err(Failure::Exited(value)) if kind != TailKind::Label => {
                 return Ok(Ended::Returned(value));
             }
             other => other,

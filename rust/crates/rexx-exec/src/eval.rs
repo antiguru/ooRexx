@@ -56,6 +56,8 @@ pub(crate) enum SymbolRead {
     /// site, neither of which is the symbol's own slot -- which is why a
     /// compound is the kind a compiled read has no slot for.
     Compound,
+    /// `ExprKind::DotVariable`: an environment symbol, which traces `>E>`.
+    Environment,
 }
 
 impl Interp {
@@ -156,11 +158,7 @@ impl Interp {
             // than assumed. The other `DotVariable` names all fail loudly
             // before reaching here (`eval_node`'s own arm), so this is
             // exhaustive over what can arrive.
-            ExprKind::DotVariable(id) => {
-                let tag = code.symbols.name(*id).as_bytes().to_vec();
-                let text = self.string_value_text(value);
-                self.trace_dotvar(indent, &tag, &text);
-            }
+            ExprKind::DotVariable(id) => self.echo_environment_symbol(code, *id, value),
             // `>P>`, not `>O>` -- a prefix operator's line is its own, which
             // is why this is not the arm below with a different operator type.
             // `echo_prefix_op` rather than an open-coded render plus
@@ -305,7 +303,41 @@ impl Interp {
                 self.novalue_check(novalue, value)?;
                 Ok(value)
             }
+            SymbolRead::Environment => self.environment_symbol(code, id),
         }
+    }
+
+    /// An environment symbol's value.
+    ///
+    /// **The parser's own names never reach resolution and every other one
+    /// does.** `LanguageParser`'s constructor installs a
+    /// `SpecialDotVariable` retriever for `.NIL`, `.TRUE` and `.FALSE`
+    /// (`parser/LanguageParser.cpp:781`-`783`), so those three are parse-time
+    /// constants in the oracle too. Measured: with `::class True` in the
+    /// file, `say .TRUE` still prints `1` where `say value('.TRUE')` prints
+    /// `The TRUE class`, because only the second goes through
+    /// `getVariableRetriever`.
+    fn environment_symbol(&mut self, code: &Code<'_>, id: SymbolId) -> Result<ObjRef, Failure> {
+        match code.symbols.name(id) {
+            ".NIL" => Ok(ObjRef::NIL),
+            // `.true`/`.false` need no representation of their own (D15):
+            // they are the one-byte strings "1" and "0", built fresh here the
+            // same way any other text value is.
+            ".TRUE" => Ok(LOGICAL_TRUE),
+            ".FALSE" => Ok(self.text(b"0")),
+            other => {
+                let name = other.as_bytes().to_vec();
+                self.dot_variable(&name)
+            }
+        }
+    }
+
+    /// The `>E>` line one environment symbol's read owes.
+    pub(crate) fn echo_environment_symbol(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
+        let indent = self.activity.clause_state.current_value_indent;
+        let tag = code.symbols.name(id).as_bytes().to_vec();
+        let text = self.string_value_text(value);
+        self.trace_dotvar(indent, &tag, &text);
     }
 
     /// The `>V>` line one bare-symbol read owes.
@@ -343,26 +375,7 @@ impl Interp {
             ExprKind::Stem(id) => self.read_symbol(code, SymbolRead::Stem, *id, None),
             ExprKind::Compound(id) => self.read_symbol(code, SymbolRead::Compound, *id, None),
 
-            // **The parser's own names never reach resolution and every
-            // other one does.** `LanguageParser`'s constructor installs a
-            // `SpecialDotVariable` retriever for `.NIL`, `.TRUE` and `.FALSE`
-            // (`parser/LanguageParser.cpp:781`-`783`), so those three are
-            // parse-time constants in the oracle too. Measured: with `::class
-            // True` in the file, `say .TRUE` still prints `1` where `say
-            // value('.TRUE')` prints `The TRUE class`, because only the
-            // second goes through `getVariableRetriever`.
-            ExprKind::DotVariable(id) => match code.symbols.name(*id) {
-                ".NIL" => Ok(ObjRef::NIL),
-                // `.true`/`.false` need no representation of their own
-                // (D15): they are the one-byte strings "1" and "0", built
-                // fresh here the same way any other text value is.
-                ".TRUE" => Ok(LOGICAL_TRUE),
-                ".FALSE" => Ok(self.text(b"0")),
-                other => {
-                    let name = other.as_bytes().to_vec();
-                    self.dot_variable(&name)
-                }
-            },
+            ExprKind::DotVariable(id) => self.environment_symbol(code, *id),
 
             ExprKind::Prefix { op, operand } => self.eval_prefix(code, *op, operand),
 

@@ -613,23 +613,23 @@ mod measured {
         ),
         (
             "TreeEval",
-            "if .c~new~m then nop\n::class c\n::method m\n  call SysSleep 0\n  return 1\n",
+            "x = .c~new~~m\n::class c\n::method m\n  call SysSleep 0\n",
         ),
         (
             "TreeEval",
-            "x = f(g())\nexit\nf: return 1\ng:\n  call SysSleep 0\n  return 2\n",
+            "x = f(.c~new~~m)\nexit\nf: return 1\n::class c\n::method m\n  call SysSleep 0\n",
         ),
         (
             "TreeEval",
-            "call f g()\nexit\nf: return\ng:\n  call SysSleep 0\n  return 2\n",
+            "call f .c~new~~m\nexit\nf: return\n::class c\n::method m\n  call SysSleep 0\n",
         ),
         (
             "TreeEval",
-            "x = abs(g())\nexit\ng:\n  call SysSleep 0\n  return 2\n",
+            "x = length(.c~new~~m)\n::class c\n::method m\n  call SysSleep 0\n",
         ),
         (
             "TreeSend",
-            ".c~new~m\n::class c\n::method m\n  call SysSleep 0\n",
+            ".c~new~~m\n::class c\n::method m\n  call SysSleep 0\n",
         ),
         ("OpExec", "interpret 'call SysSleep 0'\n"),
         ("Interpret", "interpret 'call SysSleep 0'\n"),
@@ -666,6 +666,38 @@ mod measured {
             }
         }
         assert!(missing.is_empty(), "{missing:#?}");
+    }
+
+    /// Calls and sends in argument positions, sends, and the natives that
+    /// run a Rexx body run it on the driver's frame, so a park inside it has
+    /// no pinned frame above it.
+    #[test]
+    fn a_park_inside_a_stackless_entry_is_under_no_pinned_frame() {
+        const CLASS: &str = "::class c\n::method m\n  call SysSleep 0\n  return 1\n\
+                             ::method init\n  if arg() > 0 then call SysSleep 0\n";
+        let mut pinned = Vec::new();
+        for program in [
+            "x = f(g())\nexit\nf: return 1\ng:\n  call SysSleep 0\n  return 2\n",
+            "call f g()\nexit\nf: return\ng:\n  call SysSleep 0\n  return 2\n",
+            "x = abs(g())\nexit\ng:\n  call SysSleep 0\n  return 2\n",
+            "x = (g(), 1)\nexit\ng:\n  call SysSleep 0\n  return 2\n",
+            "if .c~new~m then nop\n",
+            ".c~new~m\n",
+            "x = f(.c~new~m)\nexit\nf: return 1\n",
+            "x = .c~new(1)\n",
+            "x = .message~new(.c~new, 'M')~send\n",
+            "x = .c~new~send('M')\n",
+            "x = .c~new~start('M')\n",
+            "x = .context~package~findRoutine('R')~call\n::routine r\n  call SysSleep 0\n",
+        ] {
+            let source = format!("{program}{CLASS}");
+            let report = report_of(&source);
+            let frames = frames_at(&report, ParkKind::SysSleep);
+            if frames != [Vec::<PinKind>::new()] {
+                pinned.push(format!("{program:?}: {frames:?}"));
+            }
+        }
+        assert!(pinned.is_empty(), "{pinned:#?}");
     }
 
     #[test]

@@ -26,7 +26,7 @@ use crate::activation::{
 };
 use crate::error::{FailureSite, Raised};
 use crate::plan::{BodyKey, Package, ProgramId};
-use crate::run::MAX_ACTIVATION_DEPTH;
+use crate::run::{MAX_ACTIVATION_DEPTH, Started};
 use crate::{Failure, Interp, Loud};
 
 /// The dispatch security seam.
@@ -220,11 +220,79 @@ fn put_native(natives: &mut Vec<Option<NativeEntry>>, method: MethodId, entry: N
     natives[index] = Some(entry);
 }
 
+/// The begin half of a primitive method that runs a Rexx activation, which
+/// answers [`NativeStarted::Entered`] with that activation pushed.
+type NativeBegin =
+    fn(&mut Interp, Cleared, ObjRef, &[Option<ObjRef>]) -> Result<NativeStarted, Failure>;
+
 /// What [`Interp::invoke`] needs about one primitive method beyond its code.
 #[derive(Copy, Clone)]
 struct NativeEntry {
     arity: Arity,
-    run: NativeMethod,
+    body: NativeBody,
+}
+
+/// One primitive method's code.
+#[derive(Copy, Clone)]
+enum NativeBody {
+    Run(NativeMethod),
+    Begin(NativeBegin),
+}
+
+/// What a [`NativeBegin`] left.
+pub(crate) enum NativeStarted {
+    Ran(Option<ObjRef>),
+    /// A Rexx activation is pushed, and `Then` is the native's own work once
+    /// it has ended.
+    Entered(Then),
+}
+
+/// A primitive method's work after the Rexx activation it entered has ended.
+#[derive(Clone, Copy)]
+pub(crate) enum Then {
+    /// The activation's answer.
+    Pass,
+    /// This object, whatever the activation answered.
+    Answer(ObjRef),
+    /// This started message, with the activation's outcome recorded on it.
+    Started(ObjRef),
+    /// The activation's answer, with its outcome recorded on this message.
+    Held(ObjRef),
+}
+
+/// A [`Then`] parked on [`Activity::native_tails`] until the activation whose
+/// [`CallTail`] sits at `depth` ends.
+///
+/// [`Activity::native_tails`]: crate::activity::Activity
+/// [`CallTail`]: crate::run::CallTail
+pub(crate) struct NativeTail {
+    /// `Activity::call_tails`' length with that tail on top.
+    depth: usize,
+    then: Then,
+    /// The method's traceback line for a failure, where a send made it.
+    blame: Option<NativeBlame>,
+}
+
+/// What [`Interp::blame_native_method`] names for one send.
+struct NativeBlame {
+    name: Box<[u8]>,
+    scope: ObjRef,
+    receiver: ObjRef,
+    args: Box<[Option<ObjRef>]>,
+}
+
+impl NativeTail {
+    /// Appends every `ObjRef` this tail holds to `out`.
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        match self.then {
+            Then::Pass => {}
+            Then::Answer(object) | Then::Started(object) | Then::Held(object) => out.push(object),
+        }
+        if let Some(blame) = &self.blame {
+            out.extend([blame.scope, blame.receiver]);
+            out.extend(blame.args.iter().flatten().copied());
+        }
+    }
 }
 
 /// How many arguments an entry admits.
@@ -442,13 +510,6 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         native_message_has_error,
     ),
     ("Message", "RESULT", Arity::Fixed(0), native_message_result),
-    ("Message", "SEND", Arity::Counted, native_message_send),
-    (
-        "Message",
-        "SENDWITH",
-        Arity::Fixed(2),
-        native_message_send_with,
-    ),
     ("Method", "ANNOTATION", Arity::Fixed(1), native_annotation),
     ("Method", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     // `MethodClass::getScopeRexx`, `memory/Setup.cpp:1113`. `Routine` and
@@ -510,10 +571,6 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // the private check before this entry is reached, and restricted
     // besides -- D66 and [`check_restricted_method`].
     ("Object", "RUN", Arity::Counted, native_run),
-    ("Object", "SEND", Arity::Counted, native_send),
-    ("Object", "SENDWITH", Arity::Fixed(2), native_send_with),
-    ("Object", "START", Arity::Counted, native_start),
-    ("Object", "STARTWITH", Arity::Fixed(2), native_start_with),
     // `AddPrivateMethod("SetMethod", ..., 3)` and its partner at
     // `memory/Setup.cpp:550`-`:551`. Private, which is where the refusal a
     // program context meets comes from; `rexx_classes::native_classes` files
@@ -635,13 +692,39 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
 ];
 
+/// The primitive methods that send a message the receiver may answer with a
+/// Rexx body, entered by their begin halves.
+static RESUMABLE_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
+    ("Message", "SEND", Arity::Counted, native_message_send),
+    (
+        "Message",
+        "SENDWITH",
+        Arity::Fixed(2),
+        native_message_send_with,
+    ),
+    ("Object", "SEND", Arity::Counted, native_send),
+    ("Object", "SENDWITH", Arity::Fixed(2), native_send_with),
+    ("Object", "START", Arity::Counted, native_start),
+    ("Object", "STARTWITH", Arity::Fixed(2), native_start_with),
+];
+
+/// [`RESUMABLE_METHODS`] for the class dictionary.
+static RESUMABLE_CLASS_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
+    // `AddClassMethod("New", RexxObject::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:514`, reached by every class whose own class
+    // behaviour declares no `NEW` of its own, and the classes below whose
+    // `newRexx` allocates a body this crate does not model.
+    ("Object", "NEW", Arity::Counted, native_new),
+    ("EventSemaphore", "NEW", Arity::Counted, native_new),
+    ("List", "NEW", Arity::Counted, native_new),
+    ("MutexSemaphore", "NEW", Arity::Counted, native_new),
+    ("Queue", "NEW", Arity::Counted, native_new),
+    ("Supplier", "NEW", Arity::Counted, native_new),
+];
+
 /// The primitive methods bound to a class's **class** dictionary rather than
 /// its instance one -- `memory/Setup.cpp`'s `AddClassMethod` rows.
 static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
-    // `AddClassMethod("New", RexxObject::newRexx, A_COUNT)`,
-    // `memory/Setup.cpp:514`, reached by every class whose own class
-    // behaviour declares no `NEW` of its own.
-    ("Object", "NEW", Arity::Counted, native_new),
     // `AddClassMethod("New", ArrayClass::newRexx, A_COUNT)`,
     // `memory/Setup.cpp:708`. A row of its own for the reason
     // `StringTable`'s below is one: the answer is a body this crate builds
@@ -688,7 +771,6 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `AddClassMethod("Of", BagClass::ofRexx, A_COUNT)`, which unlike
     // `Set~of` keeps the duplicates.
     ("Bag", "OF", Arity::Counted, hash::native_bag_of),
-    ("EventSemaphore", "NEW", Arity::Counted, native_new),
     // `TableClass::newRexx` and `IdentityTable::newRexx` take an optional
     // initial capacity, and it is observable: it decides the bucket count,
     // which decides the order every iteration answers in.
@@ -698,15 +780,11 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Counted,
         hash::native_hash_new,
     ),
-    ("List", "NEW", Arity::Counted, native_new),
-    ("MutexSemaphore", "NEW", Arity::Counted, native_new),
-    ("Queue", "NEW", Arity::Counted, native_new),
     ("Relation", "NEW", Arity::Counted, hash::native_hash_new),
     ("Set", "NEW", Arity::Counted, hash::native_hash_new),
     // `AddClassMethod("Of", SetClass::ofRexx, A_COUNT)`: `Set`'s own, unlike
     // the mapped classes whose `of` is `MapCollection~OF` in Rexx.
     ("Set", "OF", Arity::Counted, hash::native_set_of),
-    ("Supplier", "NEW", Arity::Counted, native_new),
     ("Table", "NEW", Arity::Counted, hash::native_hash_new),
     // `AddClassMethod("New", RexxClass::newRexx, A_COUNT)`,
     // `memory/Setup.cpp:450`, the one class method `.Class` adds.
@@ -915,7 +993,7 @@ impl ObjectModel {
         extra: &[(&str, &str, Arity, NativeMethod)],
     ) -> ObjectModel {
         let mut natives: Vec<Option<NativeEntry>> = Vec::new();
-        for (class_id, method_name, arity, run) in NATIVE_METHODS
+        for (class_id, method_name, arity, body) in NATIVE_METHODS
             .iter()
             .chain(buffer::NATIVE_METHODS)
             .chain(construct::NATIVE_METHODS)
@@ -934,6 +1012,17 @@ impl ObjectModel {
             .chain(context::NATIVE_METHODS)
             .chain(package::NATIVE_METHODS)
             .chain(extra)
+            .map(|(class_id, method_name, arity, run)| {
+                (class_id, method_name, arity, NativeBody::Run(*run))
+            })
+            .chain(
+                RESUMABLE_METHODS
+                    .iter()
+                    .chain(executable::RESUMABLE_METHODS)
+                    .map(|(class_id, method_name, arity, begin)| {
+                        (class_id, method_name, arity, NativeBody::Begin(*begin))
+                    }),
+            )
         {
             // **The kernel directory as well as the environment one**, since
             // `RexxInfo` is registered only in the former: `ClassRegistry`'s
@@ -959,14 +1048,23 @@ impl ObjectModel {
                 method,
                 NativeEntry {
                     arity: *arity,
-                    run: *run,
+                    body,
                 },
             );
         }
-        for (class_id, method_name, arity, run) in NATIVE_CLASS_METHODS
-            .iter()
-            .chain(context::NATIVE_CLASS_METHODS)
-            .chain(package::NATIVE_CLASS_METHODS)
+        for (class_id, method_name, arity, body) in
+            NATIVE_CLASS_METHODS
+                .iter()
+                .chain(context::NATIVE_CLASS_METHODS)
+                .chain(package::NATIVE_CLASS_METHODS)
+                .map(|(class_id, method_name, arity, run)| {
+                    (class_id, method_name, arity, NativeBody::Run(*run))
+                })
+                .chain(RESUMABLE_CLASS_METHODS.iter().map(
+                    |(class_id, method_name, arity, begin)| {
+                        (class_id, method_name, arity, NativeBody::Begin(*begin))
+                    },
+                ))
         {
             let class = classes.lookup(class_id).unwrap_or_else(|| {
                 panic!(
@@ -986,7 +1084,7 @@ impl ObjectModel {
                 method,
                 NativeEntry {
                     arity: *arity,
-                    run: *run,
+                    body,
                 },
             );
         }
@@ -1915,28 +2013,55 @@ impl Interp {
         name: &[u8],
         args: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
+        let started = self.begin_invoke(resolution, receiver, name, args)?;
+        self.complete_send(started)
+    }
+
+    /// [`Interp::invoke`] up to the point a Rexx body it enters would run.
+    fn begin_invoke(
+        &mut self,
+        resolution: Resolution,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<Started<Option<ObjRef>>, Failure> {
         let invocable = self.invocable(resolution, name)?;
         let cleared = match seam::clear(self, receiver, name, args, resolution.method)? {
             seam::Clearance::Cleared(cleared) => cleared,
-            seam::Clearance::Answered(result) => return Ok(result),
+            seam::Clearance::Answered(result) => return Ok(Started::Ran(result)),
         };
-        match invocable {
+        let outcome = match invocable {
             Invocable::Native(entry) => {
-                let outcome = match entry.arity {
-                    Arity::Fixed(arity) if args.len() > arity => {
+                let outcome = match (entry.arity, entry.body) {
+                    (Arity::Fixed(arity), _) if args.len() > arity => {
                         Err(Raised::too_many_method_arguments(arity).into())
                     }
-                    Arity::Fixed(_) | Arity::Counted => pinned!(
+                    (_, NativeBody::Run(run)) => pinned!(
                         self,
                         crate::pinning::PinKind::native(name),
-                        (entry.run)(self, cleared, receiver, args)
-                    ),
+                        run(self, cleared, receiver, args)
+                    )
+                    .map(NativeStarted::Ran),
+                    (_, NativeBody::Begin(begin)) => begin(self, cleared, receiver, args),
                 };
-                if outcome.is_err() {
-                    let scope = self.classes().id_string(resolution.scope).to_string();
-                    self.blame_native_method(name, &scope, receiver, args);
+                match outcome {
+                    Ok(NativeStarted::Ran(value)) => Ok(value),
+                    Ok(NativeStarted::Entered(then)) => {
+                        let blame = NativeBlame {
+                            name: name.into(),
+                            scope: resolution.scope,
+                            receiver,
+                            args: args.into(),
+                        };
+                        self.push_native_tail(then, Some(blame));
+                        return Ok(Started::Entered);
+                    }
+                    Err(failure) => {
+                        let scope = self.classes().id_string(resolution.scope).to_string();
+                        self.blame_native_method(name, &scope, receiver, args);
+                        Err(failure)
+                    }
                 }
-                outcome
             }
             // **Neither this arm nor `Generated` blames the method**,
             // measured twice over -- a claim about those arms and not
@@ -1957,7 +2082,8 @@ impl Interp {
             // from inside a `NativeActivation` of its own
             // (`execution/CPPCode.cpp:280`, `:526`).
             Invocable::Rexx(installed) => {
-                self.enter_method_body(cleared, installed, resolution, receiver, name, args)
+                self.begin_method(cleared, installed, resolution, receiver, name, args)?;
+                return Ok(Started::Entered);
             }
             // **The refusal is the ordinary outcome here**, so unlike the
             // `Native` arm above this one does not blame the method for it:
@@ -2017,6 +2143,109 @@ impl Interp {
                     self.send_to_delegate(cleared, generated, resolution, receiver, name, args)
                 }
             },
+        };
+        outcome.map(Started::Ran)
+    }
+
+    /// Runs a started send's Rexx body on this Rust stack, and answers the
+    /// send's value.
+    pub(crate) fn complete_send(
+        &mut self,
+        started: Started<Option<ObjRef>>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        match started {
+            Started::Ran(value) => Ok(value),
+            Started::Entered => {
+                let ended = self.run_activation();
+                self.finish_send(ended)
+            }
+        }
+    }
+
+    /// A send's value once the Rexx body it entered has ended `ended`: the
+    /// sender's level state back, and the work of every primitive method
+    /// between the sender and that body.
+    pub(crate) fn finish_send(
+        &mut self,
+        ended: Result<crate::run::Ended, Failure>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let depth = self.activity.call_tails.len();
+        let sent = self.finish_call(ended).map(crate::run::Ended::value);
+        if self
+            .activity
+            .native_tails
+            .last()
+            .is_some_and(|tail| tail.depth == depth)
+        {
+            return self.finish_native_tails(depth, sent);
+        }
+        sent
+    }
+
+    /// [`Interp::finish_send`]'s primitive methods, innermost first.
+    #[cold]
+    #[inline(never)]
+    fn finish_native_tails(
+        &mut self,
+        depth: usize,
+        mut sent: Result<Option<ObjRef>, Failure>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let first = self
+            .activity
+            .native_tails
+            .iter()
+            .rposition(|tail| tail.depth != depth)
+            .map_or(0, |below| below + 1);
+        let tails: Vec<NativeTail> = self.activity.native_tails.drain(first..).collect();
+        for tail in tails {
+            sent = self.apply_then(tail.then, sent);
+            if sent.is_err()
+                && let Some(blame) = tail.blame
+            {
+                let scope = self.classes().id_string(blame.scope).to_string();
+                self.blame_native_method(&blame.name, &scope, blame.receiver, &blame.args);
+            }
+        }
+        sent
+    }
+
+    /// Parks `then` beside the [`crate::run::CallTail`] on top.
+    fn push_native_tail(&mut self, then: Then, blame: Option<NativeBlame>) {
+        let depth = self.activity.call_tails.len();
+        self.activity
+            .native_tails
+            .push(NativeTail { depth, then, blame });
+    }
+
+    /// A [`NativeBegin`]'s outcome, with the activation it entered run on
+    /// this Rust stack: the whole primitive method, for a caller that is not
+    /// a send.
+    pub(crate) fn complete_native(
+        &mut self,
+        started: NativeStarted,
+    ) -> Result<Option<ObjRef>, Failure> {
+        match started {
+            NativeStarted::Ran(value) => Ok(value),
+            NativeStarted::Entered(then) => {
+                self.push_native_tail(then, None);
+                let ended = self.run_activation();
+                self.finish_send(ended)
+            }
+        }
+    }
+
+    /// What a primitive method answers once the activation it entered
+    /// answered `sent`.
+    fn apply_then(
+        &mut self,
+        then: Then,
+        sent: Result<Option<ObjRef>, Failure>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        match then {
+            Then::Pass => sent,
+            Then::Answer(object) => sent.map(|_| Some(object)),
+            Then::Started(message) => object_protocol::record_started(self, message, sent),
+            Then::Held(message) => object_protocol::record_held(self, message, sent),
         }
     }
 
@@ -2160,9 +2389,11 @@ impl Interp {
         Ok(variable.into())
     }
 
-    /// Runs one `::METHOD` body in an activation of its own, and answers what
-    /// it returned.
-    fn enter_method_body(
+    /// Pushes one `::METHOD` body's activation and the [`CallTail`] its
+    /// sender's level state goes into, up to the point the body would run.
+    ///
+    /// [`CallTail`]: crate::run::CallTail
+    fn begin_method(
         &mut self,
         _cleared: Cleared,
         installed: crate::InstalledMethodBody,
@@ -2170,7 +2401,7 @@ impl Interp {
         receiver: ObjRef,
         name: &[u8],
         args: &[Option<ObjRef>],
-    ) -> Result<Option<ObjRef>, Failure> {
+    ) -> Result<(), Failure> {
         let program = Rc::clone(&self.programs[installed.program.0]);
         // Both reads are `get`, not an index: an `InstalledMethodBody` can
         // only have come from `Interp::record_method_body` and so always
@@ -2274,14 +2505,25 @@ impl Interp {
         let saved_base = std::mem::replace(&mut self.activity.activation_indent, 0);
         let saved_offset = std::mem::take(&mut self.activity.indent_offset);
         let saved_line = std::mem::take(&mut self.activity.clause_line_override);
+        self.activity.call_tails.push(crate::run::CallTail::method(
+            false,
+            saved_context,
+            saved_clause_state,
+            saved_base,
+            saved_offset,
+            saved_line,
+        ));
+        Ok(())
+    }
 
-        let ended = self.run_activation();
-        if let Err(failure) = &ended {
-            self.capture_activation_frame(failure);
-        }
-
-        self.trace_invocation_exit();
-        let callee = self.pop_activation().expect("the activation just pushed");
+    /// [`Interp::finish_call`]'s release of a method activation that has
+    /// just been popped, with `saved_context` the sender's convention.
+    pub(crate) fn release_method_activation(
+        &mut self,
+        callee: Box<Activation>,
+        resumed: bool,
+        saved_context: crate::CallContext,
+    ) {
         // Unconditionally, where `Interp::invoke_call` asks `owns_frame`
         // first: a method activation always owns its frame and nothing can
         // change that under it, because the one instruction that swaps a
@@ -2296,9 +2538,16 @@ impl Interp {
         // its contents go first. `park_reply` reads them out and hands them to
         // the collector's parked set, so the values survive with no frame open
         // above the caller's own.
-        if callee.reply == ReplyState::Owed {
+        // A resumed body cannot park again: `Interp::exec_reply` raises 98.935
+        // on a second `REPLY` before it can set the state.
+        if callee.reply == ReplyState::Owed && !resumed {
             self.park_reply(callee, callee_context);
         } else {
+            debug_assert_ne!(
+                callee.reply,
+                ReplyState::Owed,
+                "a resumed method body asked to be parked a second time"
+            );
             self.roots.activity_mut().pop_slots(callee.frame);
             // **Back to the pool**, which until now only `Interp::invoke_call`
             // fed. The pool is drained by every push and was filled by the
@@ -2308,30 +2557,15 @@ impl Interp {
             // `Activation` and the free that follows.
             self.recycle_activation(callee);
         }
-        self.activity.activation_indent = saved_base;
-        self.activity.indent_offset = saved_offset;
-        self.activity.clause_line_override = saved_line;
-        self.restore_clause_state(saved_clause_state);
-
-        match ended {
-            Ok(ended) => Ok(ended.value()),
-            Err(crate::Failure::Exited(value)) => Ok(value),
-            Err(failure) => {
-                // Seal before the failure leaves the callee, the same rule
-                // `Interp::invoke_call` follows: without it the method's own
-                // clause wins `record_failure_at`'s first-wins race and the
-                // sending clause is never echoed. Measured, `say 1/0` in a
-                // class method reports the method's clause and then the
-                // send's.
-                self.seal_site_level();
-                Err(failure)
-            }
-        }
     }
 
     /// Takes a method activation whose `REPLY` has just handed a value out,
     /// releases its frame, and queues the rest of its body.
-    fn park_reply(&mut self, mut activation: Box<Activation>, context: crate::CallContext) {
+    pub(crate) fn park_reply(
+        &mut self,
+        mut activation: Box<Activation>,
+        context: crate::CallContext,
+    ) {
         let frame = activation.frame;
         let len = self.roots.activity().frame_len(frame);
         // The values are copied out, so an alias in this frame would come back
@@ -2504,6 +2738,20 @@ impl Interp {
 
     /// Puts one parked method body back and runs the rest of it.
     fn resume_reply(&mut self, deferred: DeferredReply) -> Result<(), Failure> {
+        self.begin_resume_reply(deferred);
+        let ended = self.run_activation();
+        // Every ending is the same ending here: nothing is waiting for a
+        // value, and a resumed body's `EXIT` does not set the process's
+        // status. Measured, oracle rc 0: `reply 'v'` then `say 'tail'` then
+        // `exit "boom"` is 98.937 with the main body's own rc kept.
+        self.finish_call(ended).map(|_| ())
+    }
+
+    /// [`Interp::resume_reply`] up to the point the rest of the body would
+    /// run: its activation pushed and the [`CallTail`] its finish reads.
+    ///
+    /// [`CallTail`]: crate::run::CallTail
+    fn begin_resume_reply(&mut self, deferred: DeferredReply) {
         let DeferredReply {
             mut activation,
             context,
@@ -2538,43 +2786,14 @@ impl Interp {
         // After the push, because the announcement reads the running
         // activation's own trace mode and subject.
         self.trace_invocation_entry();
-
-        let ended = self.run_activation();
-        if let Err(failure) = &ended {
-            self.capture_activation_frame(failure);
-        }
-
-        self.trace_invocation_exit();
-        let callee = self.pop_activation().expect("the activation just pushed");
-        self.activity.activation_indent = saved_base;
-        self.activity.indent_offset = saved_offset;
-        self.activity.clause_line_override = saved_line;
-        self.restore_clause_state(saved_clause_state);
-        self.activity.call_context = saved_context;
-        // A resumed body cannot park again: `Interp::exec_reply` raises 98.935
-        // on a second `REPLY` before it can set the state, so the frame is
-        // released here unconditionally. The assertion is what makes a state
-        // that stopped being unreachable announce itself rather than silently
-        // dropping the body this branch has no queue entry for.
-        debug_assert_ne!(
-            callee.reply,
-            ReplyState::Owed,
-            "a resumed method body asked to be parked a second time"
-        );
-        self.roots.activity_mut().pop_slots(callee.frame);
-        // Back to the pool, for the reason the send path above states.
-        self.recycle_activation(callee);
-        match ended {
-            // Every ending is the same ending here: nothing is waiting for a
-            // value, and a resumed body's `EXIT` does not set the process's
-            // status. Measured, oracle rc 0: `reply 'v'` then `say 'tail'`
-            // then `exit "boom"` is 98.937 with the main body's own rc kept.
-            Ok(_) | Err(crate::Failure::Exited(_)) => Ok(()),
-            Err(failure) => {
-                self.seal_site_level();
-                Err(failure)
-            }
-        }
+        self.activity.call_tails.push(crate::run::CallTail::method(
+            true,
+            saved_context,
+            saved_clause_state,
+            saved_base,
+            saved_offset,
+            saved_line,
+        ));
     }
 
     /// [`Interp::resolve`] then [`Interp::invoke`], with
@@ -2588,12 +2807,28 @@ impl Interp {
         args: &[Option<ObjRef>],
         caller: Caller,
     ) -> Result<Option<ObjRef>, Failure> {
+        let started = self.begin_send(receiver, name, start_scope, args, caller)?;
+        self.complete_send(started)
+    }
+
+    /// [`Interp::send_message`] up to the point a Rexx body it enters would
+    /// run.
+    pub(crate) fn begin_send(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+        start_scope: Option<ObjRef>,
+        args: &[Option<ObjRef>],
+        caller: Caller,
+    ) -> Result<Started<Option<ObjRef>>, Failure> {
         if let Err(kind) = self.receiver_kind(receiver) {
             return Err(Loud::receiver_class(kind).into());
         }
         match self.resolve(receiver, name, start_scope, caller) {
-            Ok(resolution) => self.invoke(resolution, receiver, name, args),
-            Err(miss) => self.unknown_or_nomethod(receiver, name, args, miss),
+            Ok(resolution) => self.begin_invoke(resolution, receiver, name, args),
+            Err(miss) => self
+                .unknown_or_nomethod(receiver, name, args, miss)
+                .map(Started::Ran),
         }
     }
 

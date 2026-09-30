@@ -273,6 +273,33 @@ pub(crate) enum Op {
         keyword: ConditionKeyword,
         target: u32,
     },
+    /// Sends the message term at `path` inside expression `slot` to the
+    /// receiver in `recv`, over the `argc` arguments on top of the driver's
+    /// argument stack, and delivers the answer as `form` says.
+    Send {
+        slot: u16,
+        path: NodePath,
+        recv: u16,
+        argc: u16,
+        dst: u16,
+        form: SendForm,
+    },
+    /// Builds the array a parenthesised list is from the `argc` values on top
+    /// of the driver's argument stack, into register `dst`.
+    List { argc: u16, dst: u16 },
+}
+
+/// Where an [`Op::Send`]'s answer goes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SendForm {
+    /// Into `dst`, as an expression's value, which a send that answers
+    /// nothing cannot give.
+    Value,
+    /// Into `RESULT`, as the message instruction does.
+    Clause,
+    /// Into `RESULT`, for the message-assignment form, whose message name is
+    /// the term's own with `=` appended.
+    Assign,
 }
 
 /// Which keyword's condition an [`Op::ConditionJump`] is validating.
@@ -317,6 +344,14 @@ impl NodePath {
     /// or only child otherwise, or `None` when this width has no room for it.
     pub(crate) fn child(self, right: bool) -> Option<NodePath> {
         (self.0 >> (u32::BITS - 1) == 0).then(|| NodePath(self.0 << 1 | u32::from(right)))
+    }
+
+    /// One step further down, into child `index` of a node with a list of
+    /// children: `index` clear steps and a set one. `None` when this width
+    /// has no room for them.
+    pub(crate) fn nth(self, index: usize) -> Option<NodePath> {
+        let width = u32::try_from(index).ok()?.checked_add(1)?;
+        (self.0.leading_zeros() >= width).then(|| NodePath(self.0 << width | 1))
     }
 
     /// The steps below the sentinel, **outermost first**: the order a descent
@@ -758,5 +793,23 @@ mod tests {
             .and_then(|path| path.child(false))
             .expect("two steps fit");
         assert_eq!(path.steps().collect::<Vec<_>>(), [true, false]);
+    }
+
+    /// A list step is its index in clear steps and then a set one, and it
+    /// fits exactly where that many steps do.
+    #[test]
+    fn a_list_step_is_its_index_in_clear_steps_then_a_set_one() {
+        let path = NodePath::ROOT
+            .nth(2)
+            .and_then(|path| path.child(true))
+            .and_then(|path| path.nth(0))
+            .expect("five steps fit");
+        assert_eq!(
+            path.steps().collect::<Vec<_>>(),
+            [false, false, true, true, true]
+        );
+        assert!(NodePath::ROOT.nth(30).is_some());
+        assert!(NodePath::ROOT.nth(31).is_none());
+        assert!(NodePath::ROOT.nth(usize::MAX).is_none());
     }
 }

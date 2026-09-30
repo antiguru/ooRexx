@@ -71,7 +71,8 @@ pub(super) fn native_directory_new(
     if class == interp.object_model().directory {
         native_hash_collection_new(interp, cleared, receiver, args)
     } else {
-        native_new(interp, cleared, receiver, args)
+        let started = native_new(interp, cleared, receiver, args)?;
+        interp.complete_native(started)
     }
 }
 

@@ -94,6 +94,9 @@ pub(crate) struct Activity {
     pub(crate) parked_calls: Vec<crate::ir::drive::ParkedCall>,
     /// The levels `Interp::drive` left for a callee, innermost last.
     pub(crate) parked_levels: Vec<crate::ir::drive::ParkedLevel>,
+    /// The work each primitive method whose Rexx activation is running has
+    /// left, innermost last.
+    pub(crate) native_tails: Vec<crate::dispatch::NativeTail>,
     /// Boxes a finished loop handed back, so that entering a loop
     /// is a write into an allocation this interpreter already owns. A loop
     /// entered once per two passes is common enough -- `samples/rexxcps.rex`
@@ -287,6 +290,7 @@ impl Activity {
             call_tails: Vec::new(),
             parked_calls: Vec::new(),
             parked_levels: Vec::new(),
+            native_tails: Vec::new(),
             pending_traps: VecDeque::new(),
             active_condition: None,
             pending_additional: None,
@@ -366,6 +370,7 @@ impl Activity {
             call_tails: _,
             parked_calls: _,
             parked_levels: _,
+            native_tails,
             // Overwritten at reuse, as `spare_activations` is.
             flat_spares: _,
             pending_traps,
@@ -424,6 +429,9 @@ impl Activity {
         out.extend(*reraised_object);
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
+        for tail in native_tails {
+            tail.object_roots(out);
+        }
         // Everything a native call has been handed, and the receiver it is
         // writing object variables through. Held here rather than by the
         // collector's other routes because an extension's handle is the only

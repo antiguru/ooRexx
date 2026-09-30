@@ -54,15 +54,12 @@ fn traced() -> ChunkTrace {
     ChunkTrace::of(crate::trace::mode_from_setting(b"r").expect("R is a valid TRACE setting"))
 }
 
-/// A message send as a whole clause compiles to a `Clause` region ending in
-/// an `Op::Message`, whichever form it was written in.
+/// A message send as a whole clause whose term does not compile -- a cascade,
+/// or a scope override -- compiles to a `Clause` region ending in an
+/// `Op::Message`.
 #[test]
 fn a_message_send_clause_compiles_to_a_region_ending_in_one_message_op() {
-    for source in [
-        &b"'abc'~length"[..],
-        &b"'abc'~~length"[..],
-        &b"zz = 'abc'; zz[1] = 2"[..],
-    ] {
+    for source in [&b"'abc'~~length"[..], &b"zz = 'abc'; zz~length:.object"[..]] {
         let chunk = compile_for_test(source).expect("the chunk fits");
         let rendered = render(&chunk);
         let last = rendered
@@ -81,12 +78,38 @@ fn a_message_send_clause_compiles_to_a_region_ending_in_one_message_op() {
         );
     }
 
-    // The whole stream for the plain form, so that the region's own bounds and
+    // The whole stream for the cascade, so that the region's own bounds and
     // the absence of any expression op are stated rather than implied.
     assert_eq!(
-        render(&compile_for_test(b"'abc'~length").expect("the chunk fits")),
+        render(&compile_for_test(b"'abc'~~length").expect("the chunk fits")),
         "0: Clause index=0 end=2\n\
          1: Message index=0\n"
+    );
+}
+
+/// A message send as a whole clause whose term compiles ends in one
+/// [`super::Op::Send`] that settles `RESULT`, the assignment form's value
+/// pushed as its first argument.
+#[test]
+fn a_message_send_clause_whose_term_compiles_ends_in_one_send_op() {
+    assert_eq!(
+        render(&compile_for_test(b"'abc'~length").expect("the chunk fits")),
+        "0: Clause index=0 end=3\n\
+         1: Const dst=0 konst=0\n\
+         2: Send slot=0 path=root recv=0 argc=0 dst=0 form=Clause\n"
+    );
+    assert_eq!(
+        render(&compile_for_test(b"zz = 'abc'; zz[1] = 2").expect("the chunk fits")),
+        "0: Clause index=0 end=3\n\
+         1: Const dst=0 konst=0\n\
+         2: Store index=0 at=0 src=0\n\
+         3: Clause index=1 end=10\n\
+         4: Load read=Simple at=0 dst=0\n\
+         5: LoadConstant dst=1\n\
+         6: PushArg src=1\n\
+         7: LoadConstant dst=2\n\
+         8: PushArg src=2\n\
+         9: Send slot=0 path=root recv=0 argc=2 dst=0 form=Assign\n"
     );
 }
 
@@ -391,7 +414,7 @@ fn an_expression_that_only_contains_a_symbol_is_more_than_that_symbols_read() {
     assert_eq!(
         render(&dotvar),
         "0: Clause index=0 end=3\n\
-         1: EvalExpr index=0 slot=0 dst=0\n\
+         1: Load read=Environment at=- dst=0\n\
          2: Store index=0 at=0 src=0\n"
     );
     let reference = compile_for_test(b"zw = >zv\n").expect("compiles");
@@ -457,15 +480,15 @@ fn precedence_decides_which_operator_is_the_inner_one() {
 #[test]
 fn the_value_shapes_outside_the_native_set_stay_general() {
     for source in [
-        // An environment symbol, which traces `>E>` rather than `>V>`.
-        &b"zw = .nil\n"[..],
-        &b"zw = .nil || za\n"[..],
+        // A cascade, which answers its receiver rather than the send's value.
+        &b"zw = za~~x\n"[..],
+        &b"zw = za~~x || zb\n"[..],
         // `>name` in a value position, which is a node of its own around the
         // read rather than the read.
         &b"zw = >za\n"[..],
         // A call beside a term with no op: the address reaches the call and
         // the slot still goes general, because the choice is the slot's.
-        &b"zw = .nil || length('a')\n"[..],
+        &b"zw = za~~x || length('a')\n"[..],
     ] {
         let chunk = compile_for_test(source).expect("compiles");
         assert_eq!(
@@ -478,13 +501,13 @@ fn the_value_shapes_outside_the_native_set_stay_general() {
         );
     }
 
-    // The adjacent success: the same concatenation with the environment symbol
-    // replaced by an ordinary variable does promote, so the row above is about
-    // the term rather than about the operator holding it.
+    // The adjacent success: the same concatenation with the cascade replaced
+    // by an ordinary variable does promote, so the row above is about the term
+    // rather than about the operator holding it.
     let promoted = compile_for_test(b"zw = zv || za\n").expect("compiles");
     assert!(
         render(&promoted).contains("Binary op=||"),
-        "the same shape without the environment symbol did not promote either\n{}",
+        "the same shape without the cascade did not promote either\n{}",
         render(&promoted)
     );
 }
@@ -687,7 +710,7 @@ fn a_header_bound_that_is_a_symbol_and_one_that_is_a_call_take_their_own_ops() {
 /// because each slot is its own decision.
 #[test]
 fn a_header_slot_outside_the_native_set_leaves_the_other_slots_native() {
-    let chunk = compile_for_test(b"do i = .nil to 3\n  nop\nend\n").expect("compiles");
+    let chunk = compile_for_test(b"do i = za~~x to 3\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&chunk),
         "0: Clause index=0 end=6\n\
@@ -851,7 +874,7 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
 /// above.
 #[test]
 fn a_condition_outside_the_native_set_stays_one_eval_expr() {
-    let chunk = compile_for_test(b"if .nil then nop\n").expect("compiles");
+    let chunk = compile_for_test(b"if za~~x then nop\n").expect("compiles");
     assert_eq!(
         render(&chunk),
         "0: Clause index=0 end=3\n\
@@ -1068,7 +1091,7 @@ fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
 /// `a_condition_outside_the_native_set_stays_one_eval_expr`.
 #[test]
 fn a_when_condition_outside_the_native_set_stays_one_when_test() {
-    let chunk = compile_for_test(b"select\n  when .nil then nop\nend\n").expect("compiles");
+    let chunk = compile_for_test(b"select\n  when za~~x then nop\nend\n").expect("compiles");
     assert_eq!(
         render(&chunk),
         "0: Clause index=0 end=1\n\
@@ -1406,22 +1429,30 @@ fn a_call_compiles_its_arguments_to_ops_and_one_call_op() {
     assert_eq!(chunk.registers, 1);
 }
 
-/// **The two argument shapes that keep a `CALL` on [`super::Op::Call`]**, each
-/// beside the promoted form above so that what separates them is the argument
-/// and nothing else.
+/// A call in a `CALL`'s argument compiles to ops of its own, addressed at the
+/// argument's own slot.
 #[test]
-fn an_argument_that_is_not_a_plain_value_keeps_the_whole_call_unpromoted() {
-    let nested = compile_for_test(b"call zsub length('x')\n").expect("compiles");
+fn a_call_argument_that_is_a_call_compiles_to_ops_of_its_own() {
+    let nested = compile_for_test(b"call zsub 1, length('x')\n").expect("compiles");
     assert_eq!(
         render(&nested),
-        "0: Clause index=0 end=2\n\
-         1: Call index=0 site=0\n"
+        "0: Clause index=0 end=9\n\
+         1: LoadConstant dst=0\n\
+         2: PushArg src=0\n\
+         3: Const dst=2 konst=0\n\
+         4: PushArg src=2\n\
+         5: CallArgs slot=1 path=root site=0 argc=1 dst=1\n\
+         6: TraceFunction index=0 slot=1 path=root src=1\n\
+         7: PushArg src=1\n\
+         8: CallNamed index=0 site=1 argc=2\n"
     );
-    assert_eq!(nested.registers, 0);
-    // Nothing interned either: the argument's literal is evaluated from its
-    // own node by `invoke_call`, not loaded from this chunk's table.
-    assert!(nested.consts.is_empty());
+}
 
+/// **The argument shape that keeps a `CALL` on [`super::Op::Call`]**, beside
+/// the promoted forms above so that what separates them is the argument and
+/// nothing else.
+#[test]
+fn an_argument_that_is_not_a_plain_value_keeps_the_whole_call_unpromoted() {
     let reference = compile_for_test(b"zp = 1\ncall zsub >zp\n").expect("compiles");
     assert!(
         render(&reference).contains("Call index=1 site=0\n"),
@@ -1595,7 +1626,7 @@ fn a_push_and_a_queue_compile_to_one_op_tagged_with_their_end() {
 /// fallback and **not** the `IF` one.
 #[test]
 fn a_return_expression_outside_the_native_set_keeps_its_return_op() {
-    let chunk = compile_for_test(b"return .nil\n").expect("compiles");
+    let chunk = compile_for_test(b"return za~~x\n").expect("compiles");
     assert_eq!(
         render(&chunk),
         "0: Clause index=0 end=3\n\

@@ -15,11 +15,11 @@
 
 use super::{
     Behaviour, BehaviourId, Body, Cleared, DEFAULTNAME, Failure, Interp, Loud, MESSAGE_ARGUMENTS,
-    MESSAGE_NAME, MESSAGE_RESULT, MESSAGE_SCOPE, MESSAGE_TARGET, OBJECTNAME, ObjRef, ObjectMethod,
-    ObjectMethodWrite, Operator, Primitive, Raised, Resolution, UNNAMED_METHOD, class_argument,
-    compile_method_source, is_enhanced_instance, method_name_argument, pointer_address,
-    request_array, required_string_argument, required_string_named_argument,
-    unconverted_array_argument,
+    MESSAGE_NAME, MESSAGE_RESULT, MESSAGE_SCOPE, MESSAGE_TARGET, NativeStarted, OBJECTNAME, ObjRef,
+    ObjectMethod, ObjectMethodWrite, Operator, Primitive, Raised, Resolution, Started, Then,
+    UNNAMED_METHOD, class_argument, compile_method_source, is_enhanced_instance,
+    method_name_argument, pointer_address, request_array, required_string_argument,
+    required_string_named_argument, unconverted_array_argument,
 };
 
 /// `RexxObject::initRexx` (`classes/ObjectClass.cpp:2546`-`:2549`): it takes
@@ -741,7 +741,7 @@ pub(super) fn native_send(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     let (name, scope) = decode_message_name(interp, args.first().copied().flatten())?;
     dynamic_send(interp, receiver, &name, scope, &args[1..])
 }
@@ -754,7 +754,7 @@ pub(super) fn native_send_with(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     let (name, scope) = decode_message_name(interp, args.first().copied().flatten())?;
     let values = message_arguments(interp, args.get(1).copied().flatten())?;
     dynamic_send(interp, receiver, &name, scope, &values)
@@ -768,7 +768,7 @@ pub(super) fn native_start(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     let Some(message) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("message name").into());
     };
@@ -783,7 +783,7 @@ pub(super) fn native_start_with(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     let Some(message) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("message name").into());
     };
@@ -801,10 +801,15 @@ fn dynamic_send(
     name: &[u8],
     scope: Option<ObjRef>,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     interp.validate_scope_override(receiver, scope)?;
     let caller = interp.caller();
-    interp.send_message(receiver, name, scope, args, caller)
+    Ok(
+        match interp.begin_send(receiver, name, scope, args, caller)? {
+            Started::Ran(value) => NativeStarted::Ran(value),
+            Started::Entered => NativeStarted::Entered(Then::Pass),
+        },
+    )
 }
 
 /// The `Message` object `~start` and `~startWith` answer, with its send
@@ -815,13 +820,28 @@ fn started_message(
     receiver: ObjRef,
     message: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     let (name, scope) = decode_message_name(interp, Some(message))?;
     interp.validate_scope_override(receiver, scope)?;
     let class = interp.object_model().message;
     let object = interp.native_instance(class);
     let caller = interp.caller();
-    let outcome = match interp.send_message(receiver, &name, scope, args, caller) {
+    let sent = match interp.begin_send(receiver, &name, scope, args, caller) {
+        Ok(Started::Entered) => return Ok(NativeStarted::Entered(Then::Started(object))),
+        Ok(Started::Ran(value)) => Ok(value),
+        Err(failure) => Err(failure),
+    };
+    record_started(interp, object, sent).map(NativeStarted::Ran)
+}
+
+/// A started message's outcome recorded on it, and the message answered;
+/// a failure that is not a condition is the start's own.
+pub(super) fn record_started(
+    interp: &mut Interp,
+    object: ObjRef,
+    sent: Result<Option<ObjRef>, Failure>,
+) -> Result<Option<ObjRef>, Failure> {
+    let outcome = match sent {
         Ok(None) => None,
         Ok(Some(value)) => {
             interp.set_native_entry(object, MESSAGE_RESULT, value);
@@ -842,7 +862,7 @@ pub(super) fn native_message_send(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     if let Some(Some(target)) = args.first() {
         interp.set_native_entry(receiver, MESSAGE_TARGET, *target);
     }
@@ -861,7 +881,7 @@ pub(super) fn native_message_send_with(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     if let Some(Some(target)) = args.first() {
         interp.set_native_entry(receiver, MESSAGE_TARGET, *target);
     }
@@ -874,7 +894,7 @@ pub(super) fn native_message_send_with(
 /// `MessageClass::send` and `dispatch` (`classes/MessageClass.cpp:401`,
 /// `:421`): the held send made, its answer or its condition recorded for
 /// `result`, `completed` and `hasError`, and the condition raised here too.
-fn dispatch_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<ObjRef>, Failure> {
+fn dispatch_held_message(interp: &mut Interp, message: ObjRef) -> Result<NativeStarted, Failure> {
     // A message `~start` made holds no unsent send, and reusing it is
     // `Error_Execution_message_reuse`, which this crate does not raise.
     let (Some(target), Some(name), Some(arguments)) = (
@@ -890,7 +910,21 @@ fn dispatch_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<
     interp.message_outcomes.remove(&message);
     interp.validate_scope_override(target, scope)?;
     let caller = interp.caller();
-    match interp.send_message(target, &name, scope, &values, caller) {
+    let sent = match interp.begin_send(target, &name, scope, &values, caller) {
+        Ok(Started::Entered) => return Ok(NativeStarted::Entered(Then::Held(message))),
+        Ok(Started::Ran(value)) => Ok(value),
+        Err(failure) => Err(failure),
+    };
+    record_held(interp, message, sent).map(NativeStarted::Ran)
+}
+
+/// A held send's outcome recorded on `message`, and the send's own answer.
+pub(super) fn record_held(
+    interp: &mut Interp,
+    message: ObjRef,
+    sent: Result<Option<ObjRef>, Failure>,
+) -> Result<Option<ObjRef>, Failure> {
+    match sent {
         Ok(answer) => {
             interp.set_native_entry(message, MESSAGE_RESULT, answer.unwrap_or(ObjRef::NIL));
             interp.message_outcomes.insert(message, None);

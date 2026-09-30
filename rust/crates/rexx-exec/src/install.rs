@@ -2290,17 +2290,35 @@ impl Interp {
         &mut self.special_methods[index]
     }
 
-    /// One `::ROUTINE` run over the arguments given, for `Routine~call` and
-    /// the two rows beside it.
-    pub(crate) fn enter_installed_routine(
+    /// One `::ROUTINE` over the arguments given, for `Routine~call` and the
+    /// two rows beside it, up to the point its body would run.
+    pub(crate) fn begin_installed_routine(
         &mut self,
         program: ProgramId,
         directive: usize,
-        arguments: Vec<Option<ObjRef>>,
+        arguments: &[Option<ObjRef>],
         name: &[u8],
-    ) -> Result<Option<ObjRef>, Failure> {
+    ) -> Result<crate::dispatch::NativeStarted, Failure> {
         let installed = InstalledRoutine { program, directive };
-        self.call_over_installed_routine(installed, arguments, name)
+        Ok(
+            match self.begin_call(
+                crate::run::Resolved::Routine(installed),
+                name,
+                arguments,
+                crate::activation::CallType::Subroutine,
+                crate::run::CallEntry::Written,
+            )? {
+                crate::run::Begun::Done(crate::run::Ended::Exited(value)) => {
+                    return Err(Failure::Exited(value));
+                }
+                crate::run::Begun::Done(crate::run::Ended::Returned(returned)) => {
+                    crate::dispatch::NativeStarted::Ran(returned)
+                }
+                crate::run::Begun::Entered => {
+                    crate::dispatch::NativeStarted::Entered(crate::dispatch::Then::Pass)
+                }
+            },
+        )
     }
 
     /// `PARSE SOURCE`'s third word: a compiled method's own name, the file a

@@ -49,6 +49,8 @@ impl ValidOps {
                     inside(lhs) && inside(rhs) && inside(dst)
                 }
                 Op::Prefix { src, dst, .. } => inside(src) && inside(dst),
+                Op::Send { recv, dst, .. } => inside(recv) && inside(dst),
+                Op::List { dst, .. } => inside(dst),
                 Op::Say { src, .. }
                 | Op::Signal { src, .. }
                 | Op::Parse { src, .. }

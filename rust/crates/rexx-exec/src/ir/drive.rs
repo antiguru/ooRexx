@@ -17,7 +17,7 @@ use std::rc::Rc;
 use rexx_core::{Decoded, FrameId, ObjRef, ParkedFrame, RegFrame};
 use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, Program, ProgramSource, SymbolId};
 
-use super::{BodyEngine, Chunk, ConditionKeyword, Op};
+use super::{BodyEngine, Chunk, ConditionKeyword, Op, SendForm};
 use crate::activation::{CallType, body_of};
 use crate::clause::{ClauseOutcome, ClauseValue};
 use crate::eval::{SymbolRead, call_target_name};
@@ -28,7 +28,7 @@ use crate::run::{
     otherwise_range, otherwise_resume, select_escape, select_parts, subroutine_started,
     when_resume, when_targets,
 };
-use crate::{Code, Failure, Interp, Loud};
+use crate::{Code, Failure, Interp, Loud, Raised};
 
 #[cfg(test)]
 use super::counters::{
@@ -88,6 +88,8 @@ enum Deliver {
     /// A `CALL`'s `RESULT`, settled at this indent, and the `Flow` that ends
     /// its clause.
     Flow(usize),
+    /// Where the [`Op::Send`] in front of the resume point says.
+    Send,
 }
 
 /// Where [`Interp::drive`] goes on with the level it holds.
@@ -283,6 +285,8 @@ fn undriven_op_name(op: &Op) -> &'static str {
         Op::Jump { .. } => "Jump",
         Op::JumpUnless { .. } => "JumpUnless",
         Op::ConditionJump { .. } => "ConditionJump",
+        Op::Send { .. } => "Send",
+        Op::List { .. } => "List",
     }
 }
 
@@ -495,6 +499,45 @@ macro_rules! region_ops {
                     let value = $registers.get(*src);
                     $self.trace_intermediate($code, expr, value);
                 }
+                // A send whose receiver and arguments ops of this region
+                // computed. Its body is behind a call for the reason
+                // `Op::CallArgs`'s arm gives.
+                Op::Send { recv, dst, .. } => {
+                    debug_assert!(
+                        $chunk.holds_register(*recv) && $chunk.holds_register(*dst),
+                        "op reads or writes a register outside the region the chunk \
+                     reserved"
+                    );
+                    if $top {
+                        match $self.begin_send_op($clause, $registers, region_op) {
+                            Ok(true) => {}
+                            Ok(false) => {
+                            break $park Park {
+                                at: op_after($ops, region_op, $from),
+                                $header: $header.take().map(Box::new),
+                                deliver: Deliver::Send,
+                            };
+                            }
+                            Err(failure) => break $cold Err(failure),
+                        }
+                        continue;
+                    }
+                    if let Err(failure) =
+                        $self.run_send_op($clause, $registers, region_op)
+                    {
+                        break $cold Err(failure);
+                    }
+                }
+                Op::List { argc, dst } => {
+                    debug_assert!(
+                        $chunk.holds_register(*dst),
+                        "op writes register {dst} outside the region the chunk \
+                     reserved"
+                    );
+                    if let Err(failure) = $self.build_list($registers, *argc, *dst) {
+                        break $cold Err(failure);
+                    }
+                }
                 Op::EvalExpr { $index, slot, dst } => {
                     debug_assert!(
                         $chunk.holds_register(*dst),
@@ -689,7 +732,7 @@ macro_rules! region_ops {
                             }
                             value
                         }
-                        SymbolRead::Stem | SymbolRead::Compound => {
+                        SymbolRead::Stem | SymbolRead::Compound | SymbolRead::Environment => {
                             match $self.read_symbol($code, *read, *symbol, at) {
                                 Ok(value) => value,
                                 Err(failure) => break $cold Err(failure),
@@ -705,7 +748,7 @@ macro_rules! region_ops {
                 // side effect of evaluating -- so a promoted
                 // clause with no such op drops them while every
                 // line after them still matches.
-                Op::TraceRead { symbol, src, .. } => {
+                Op::TraceRead { symbol, read, src } => {
                     debug_assert!(
                         $chunk.holds_register(*src),
                         "op reads register {src} outside the region the chunk \
@@ -717,7 +760,11 @@ macro_rules! region_ops {
                         continue;
                     }
                     let value = $registers.get(*src);
-                    $self.echo_symbol_read($code, *symbol, value);
+                    if *read == SymbolRead::Environment {
+                        $self.echo_environment_symbol($code, *symbol, value);
+                    } else {
+                        $self.echo_symbol_read($code, *symbol, value);
+                    }
                 }
                 // **A native expression op**: one arithmetic
                 // operator applied to two registers, through
@@ -1871,6 +1918,226 @@ impl Interp {
         Ok((subroutine_started(begun), base_indent))
     }
 
+    /// One [`Op::Send`] up to the point a Rexx body it enters would run:
+    /// `true` where it answered without entering one, with the answer
+    /// delivered. An entered body keeps the evaluation depth this counted
+    /// until [`Interp::finish_send_op`].
+    #[inline(never)]
+    fn begin_send_op(
+        &mut self,
+        clause: &Instruction,
+        registers: RegFrame<'_>,
+        op: &Op,
+    ) -> Result<bool, Failure> {
+        let Op::Send {
+            slot,
+            path,
+            recv,
+            argc,
+            form,
+            ..
+        } = *op
+        else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        let Some(ExprKind::Message { name, .. }) =
+            Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind)
+        else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        let Some(mark) = self
+            .activity
+            .value_buffer
+            .len()
+            .checked_sub(usize::from(argc))
+        else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        let assigned;
+        let name: &[u8] = if form == SendForm::Assign {
+            assigned = [&name[..], b"="].concat();
+            &assigned
+        } else {
+            name
+        };
+        let receiver = registers.get(recv);
+        let probe = 0u8;
+        self.enter_eval_node(&raw const probe)?;
+        let caller = self.caller();
+        let mut values = std::mem::take(&mut self.activity.value_buffer);
+        let started = self.begin_send(receiver, name, None, &values[mark..], caller);
+        values.truncate(mark);
+        self.lend_stack(matches!(started, Ok(Started::Entered)), values);
+        match started {
+            Ok(Started::Entered) => Ok(false),
+            Ok(Started::Ran(sent)) => {
+                self.activity.depth -= 1;
+                self.deliver_sent(clause, registers, op, sent)?;
+                Ok(true)
+            }
+            Err(failure) => {
+                self.activity.depth -= 1;
+                Err(failure)
+            }
+        }
+    }
+
+    /// One [`Op::Send`], a Rexx body it enters run on this Rust stack.
+    #[inline(never)]
+    fn run_send_op(
+        &mut self,
+        clause: &Instruction,
+        registers: RegFrame<'_>,
+        op: &Op,
+    ) -> Result<(), Failure> {
+        if self.begin_send_op(clause, registers, op)? {
+            return Ok(());
+        }
+        let ended = self.run_activation();
+        self.finish_sent(clause, registers, op, ended)
+    }
+
+    /// The [`Op::Send`] in front of op `at`, once the body it entered has
+    /// ended `ended`.
+    #[inline(never)]
+    fn finish_send_op(
+        &mut self,
+        chunk: &Chunk,
+        clause: &Instruction,
+        registers: RegFrame<'_>,
+        at: u32,
+        ended: Result<Ended, Failure>,
+    ) -> Result<(), Failure> {
+        let op = at
+            .checked_sub(1)
+            .and_then(|send| chunk.ops_in(send, at))
+            .and_then(<[Op]>::first);
+        let Some(op) = op else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
+        self.finish_sent(clause, registers, op, ended)
+    }
+
+    /// [`Interp::finish_send_op`] with the op in hand.
+    fn finish_sent(
+        &mut self,
+        clause: &Instruction,
+        registers: RegFrame<'_>,
+        op: &Op,
+        ended: Result<Ended, Failure>,
+    ) -> Result<(), Failure> {
+        let sent = self.finish_send(ended);
+        self.activity.depth -= 1;
+        self.deliver_sent(clause, registers, op, sent?)
+    }
+
+    /// Where [`Op::Send`] `op` puts the answer `sent`, and the `>M>` line it
+    /// owes: the line comes before `RESULT` is settled, as
+    /// `Interp::message_term` emits it for `Interp::exec_message`.
+    fn deliver_sent(
+        &mut self,
+        clause: &Instruction,
+        registers: RegFrame<'_>,
+        op: &Op,
+        sent: Option<ObjRef>,
+    ) -> Result<(), Failure> {
+        let Op::Send {
+            slot,
+            path,
+            dst,
+            form,
+            ..
+        } = *op
+        else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        if form == SendForm::Value {
+            let Some(value) = sent else {
+                return Err(self.sent_nothing(clause, slot, path));
+            };
+            registers.set(dst, value);
+        }
+        if let Some(value) = sent
+            && self.tracing_intermediates()
+        {
+            self.trace_sent(clause, slot, path, form, value)?;
+        }
+        if form != SendForm::Value {
+            let slot = self.reserved_result_slot();
+            let frame = self.activation().frame;
+            // **A send that produced no value drops `RESULT`** rather than
+            // leaving the previous one in place, as `Interp::exec_message`
+            // does.
+            match sent {
+                Some(value) => {
+                    self.roots.activity_mut().push_temp(value);
+                    self.set_variable(frame, slot, value);
+                }
+                None => self.clear_variable(frame, slot),
+            }
+        }
+        Ok(())
+    }
+
+    /// The 91.999 a send in an expression that answered nothing raises.
+    #[cold]
+    #[inline(never)]
+    fn sent_nothing(&self, clause: &Instruction, slot: u16, path: super::NodePath) -> Failure {
+        match Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind) {
+            Some(ExprKind::Message { name, .. }) => Raised::no_result(name).into(),
+            _ => Loud::call_op_off_its_node().into(),
+        }
+    }
+
+    /// The `>M>` line a send that answered `value` owes.
+    #[cold]
+    #[inline(never)]
+    fn trace_sent(
+        &mut self,
+        clause: &Instruction,
+        slot: u16,
+        path: super::NodePath,
+        form: SendForm,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
+        let Some(ExprKind::Message { name, .. }) =
+            Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind)
+        else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        let mut name = name.to_vec();
+        if form == SendForm::Assign {
+            name.push(b'=');
+        }
+        if let Some(rendered) = self.intermediate_text(value) {
+            let indent = self.activity.clause_state.current_value_indent;
+            self.trace_message(indent, &name, &rendered);
+        }
+        Ok(())
+    }
+
+    /// One [`Op::List`]: the array of the `argc` values on top of the argument
+    /// stack, into `dst`, and the `>>>` line it owes.
+    #[inline(never)]
+    fn build_list(&mut self, registers: RegFrame<'_>, argc: u16, dst: u16) -> Result<(), Failure> {
+        let Some(mark) = self
+            .activity
+            .value_buffer
+            .len()
+            .checked_sub(usize::from(argc))
+        else {
+            return Err(Loud::call_op_off_its_node().into());
+        };
+        let slots = self.activity.value_buffer.split_off(mark);
+        let array = self.alloc_with(rexx_core::BehaviourId::ARRAY, rexx_core::Body::array(slots));
+        registers.set(dst, array);
+        if let Some(rendered) = self.result_text(array) {
+            let indent = self.activity.clause_state.current_value_indent;
+            self.trace_result(indent, &rendered);
+        }
+        Ok(())
+    }
+
     /// Parks the clause region `park` stopped at, for its callee to run:
     /// everything [`Interp::resume_region`] needs to go on from `park.at`.
     #[expect(
@@ -2014,10 +2281,11 @@ impl Interp {
                                                 base_indent,
                                                 ended,
                                             ),
-                                            Deliver::Register(dst) => self.resume_region(
-                                                code, chunk, registers, source, base, len, parked,
-                                                dst, ended,
-                                            ),
+                                            Deliver::Register(_) | Deliver::Send => self
+                                                .resume_region(
+                                                    code, chunk, registers, source, base, len,
+                                                    parked, ended,
+                                                ),
                                         },
                                         None => Err(Loud::op_not_driven("a parked call").into()),
                                     }
@@ -2198,8 +2466,8 @@ impl Interp {
 
     /// The level [`Interp::drive`] has just taken back from
     /// [`Activity::parked_levels`](crate::activity::Activity), run on from
-    /// `parked`, a function call op, with `ended`, what the callee's body
-    /// answered: the call's value into `dst`, the rest of its clause region,
+    /// `parked`, a function call or send op, with `ended`, what the callee's
+    /// body answered: the answer delivered, the rest of its clause region,
     /// and where the counter goes after them.
     #[expect(
         clippy::too_many_arguments,
@@ -2215,7 +2483,6 @@ impl Interp {
         base: usize,
         len: usize,
         parked: ParkedCall,
-        dst: u16,
         ended: Result<Ended, Failure>,
     ) -> Result<Exit, Failure> {
         let ParkedCall {
@@ -2227,7 +2494,7 @@ impl Interp {
             stale,
             debugging,
             header,
-            deliver: _,
+            deliver,
         } = parked;
         let Some(clause) = code.body.instructions.get(index) else {
             return Err(Loud::chunk_map_too_short().into());
@@ -2239,9 +2506,19 @@ impl Interp {
                 let ran: Result<RegionEnd, Failure> = 'cold: {
                     let next: u32 = 'region: {
                         let mut header = header.map(|header| *header);
-                        match self.finish_function_op(ended) {
-                            Ok(value) => registers.set(dst, value),
-                            Err(failure) => break 'cold Err(failure),
+                        let delivered = match deliver {
+                            Deliver::Register(dst) => self
+                                .finish_function_op(ended)
+                                .map(|value| registers.set(dst, value)),
+                            Deliver::Send => {
+                                self.finish_send_op(chunk, clause, registers, at, ended)
+                            }
+                            Deliver::Flow(_) => {
+                                Err(Loud::op_not_driven("a parked CALL resumed mid-region").into())
+                            }
+                        };
+                        if let Err(failure) = delivered {
+                            break 'cold Err(failure);
                         }
                         let Some(ops) = chunk.ops_in(at, end) else {
                             break 'cold Err(Loud::chunk_map_too_short().into());

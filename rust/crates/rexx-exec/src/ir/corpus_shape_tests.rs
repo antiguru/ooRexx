@@ -35,6 +35,8 @@ enum Root {
     Binary,
     Prefix,
     CallExpr,
+    Send,
+    List,
     EvalExpr,
 }
 
@@ -51,6 +53,8 @@ impl Root {
             Op::Prefix { .. } => Some(Root::Prefix),
             Op::EvalExpr { .. } => Some(Root::EvalExpr),
             Op::CallExpr { .. } | Op::CallArgs { .. } => Some(Root::CallExpr),
+            Op::Send { .. } => Some(Root::Send),
+            Op::List { .. } => Some(Root::List),
             Op::CallNamed { .. }
             | Op::PushArg { .. }
             | Op::TraceArgument { .. }
@@ -130,8 +134,15 @@ fn root_of(expr: &Expr) -> Root {
         ExprKind::Call { .. } => Root::CallExpr,
         ExprKind::Literal(_) => Root::Const,
         ExprKind::Constant(_) => Root::LoadConstant,
-        ExprKind::Variable(_) | ExprKind::Stem(_) | ExprKind::Compound(_) => Root::Load,
-        ExprKind::Binary { op, left, right } if native(left, 1) && native(right, 1) => {
+        ExprKind::Variable(_)
+        | ExprKind::Stem(_)
+        | ExprKind::Compound(_)
+        | ExprKind::DotVariable(_) => Root::Load,
+        ExprKind::Message { .. } if native(expr, Some(0)) => Root::Send,
+        ExprKind::List(_) if native(expr, Some(0)) => Root::List,
+        ExprKind::Binary { op, left, right }
+            if native(left, step(Some(0), 1)) && native(right, step(Some(0), 1)) =>
+        {
             if arithmetic(*op) {
                 Root::Arith
             } else if other_family(*op) {
@@ -145,35 +156,62 @@ fn root_of(expr: &Expr) -> Root {
         // its operator, and one that did not would leave an `Op::EvalExpr`
         // where this arm calls for `Root::Prefix` -- which reddens rather than
         // passes, so the arm is the claim and not an assumption behind it.
-        ExprKind::Prefix { operand, .. } if native(operand, 1) => Root::Prefix,
+        ExprKind::Prefix { operand, .. } if native(operand, step(Some(0), 1)) => Root::Prefix,
         _ => Root::EvalExpr,
     }
 }
 
-/// The deepest a call can sit below its slot's root and still be addressed by
-/// an op of its own: one step per bit a `u32` holds below the sentinel bit
-/// that marks where the route starts.
-const DEEPEST_ADDRESSED_CALL: usize = 31;
+/// How many steps a route can take below its slot's root: one per bit a
+/// `u32` holds below the sentinel bit that marks where the route starts.
+const WIDEST_ROUTE: usize = 31;
+
+/// The steps a route has taken once it takes `width` more, or `None` past
+/// [`WIDEST_ROUTE`] or once it had none: a node there has no address.
+fn step(taken: Option<usize>, width: usize) -> Option<usize> {
+    taken
+        .map(|taken| taken + width)
+        .filter(|taken| *taken <= WIDEST_ROUTE)
+}
 
 /// Whether every part of `expr` has a native op, which is what licenses the
-/// whole tree compiling without `eval.rs` being entered. `depth` is how many
-/// operators stand between `expr` and its slot's own root.
-fn native(expr: &Expr, depth: usize) -> bool {
+/// whole tree compiling without `eval.rs` being entered. `taken` is how many
+/// route steps stand between `expr` and its slot's own root: one below an
+/// operator, `k + 1` for the `k`th child of a list of them, and `None` once
+/// no address reaches it.
+fn native(expr: &Expr, taken: Option<usize>) -> bool {
     match &expr.kind {
         ExprKind::Literal(_)
         | ExprKind::Constant(_)
         | ExprKind::Variable(_)
         | ExprKind::Stem(_)
-        | ExprKind::Compound(_) => true,
-        ExprKind::Call { .. } => depth <= DEEPEST_ADDRESSED_CALL,
+        | ExprKind::Compound(_)
+        | ExprKind::DotVariable(_) => true,
+        ExprKind::Call { .. } => taken.is_some(),
+        ExprKind::Message {
+            target,
+            super_class: None,
+            args,
+            cascade: false,
+            ..
+        } => taken.is_some() && native(target, step(taken, 1)) && arguments(args, taken, 1),
+        ExprKind::List(items) => arguments(items, taken, 0),
         ExprKind::Binary { op, left, right } => {
             (arithmetic(*op) || other_family(*op))
-                && native(left, depth + 1)
-                && native(right, depth + 1)
+                && native(left, step(taken, 1))
+                && native(right, step(taken, 1))
         }
-        ExprKind::Prefix { operand, .. } => native(operand, depth + 1),
+        ExprKind::Prefix { operand, .. } => native(operand, step(taken, 1)),
         _ => false,
     }
+}
+
+/// Whether every written one of `args` is [`native`], the `k`th being child
+/// `first + k` of a node `taken` steps down.
+fn arguments(args: &[Option<Expr>], taken: Option<usize>, first: usize) -> bool {
+    args.iter().enumerate().all(|(k, arg)| {
+        arg.as_ref()
+            .is_none_or(|expr| native(expr, step(taken, first + k + 1)))
+    })
 }
 
 /// The operators `Interp::eval_arithmetic` computes, as this file's own
@@ -385,6 +423,26 @@ fn check_body(
                 Root::EvalExpr => None,
                 root => Some(root),
             },
+            // A message instruction whose term and assigned value are native
+            // ends in its send, and one whose are not in no `Root` at all.
+            InstructionKind::Message { term, value } => {
+                let native_term = match &term.kind {
+                    ExprKind::Message {
+                        target,
+                        super_class: None,
+                        args,
+                        cascade,
+                        ..
+                    } => {
+                        (value.is_some() || !cascade)
+                            && native(target, Some(1))
+                            && arguments(args, Some(0), 1)
+                            && value.as_ref().is_none_or(|value| native(value, Some(0)))
+                    }
+                    _ => false,
+                };
+                native_term.then_some(Root::Send)
+            }
             _ => continue,
         };
         let actual = region.iter().filter_map(Root::of).next_back();
@@ -574,6 +632,8 @@ fn sweep_every_corpus_body() {
     );
     for root in [
         Root::CallExpr,
+        Root::Send,
+        Root::List,
         Root::Const,
         Root::LoadConstant,
         Root::Load,

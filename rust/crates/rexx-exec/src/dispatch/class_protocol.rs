@@ -14,8 +14,8 @@
 
 use super::{
     BehaviourId, Body, ClassKind, Cleared, Failure, INIT, InheritRefusal, Interp, Loud, MethodSlot,
-    ObjRef, Object, ObjectMethod, ObjectMethodWrite, ObjectMethods, Package, Primitive, Raised,
-    hash, required_string_named_argument,
+    NativeStarted, ObjRef, Object, ObjectMethod, ObjectMethodWrite, ObjectMethods, Package,
+    Primitive, Raised, Started, Then, hash, required_string_named_argument,
 };
 
 /// `Class~baseClass`: `RexxClass::getBaseClass`, bound as a method of
@@ -579,12 +579,14 @@ pub(super) fn native_new(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     let object = new_instance(interp, class)?;
     let caller = interp.caller();
-    interp.send_message(object, INIT, None, args, caller)?;
-    Ok(Some(object))
+    Ok(match interp.begin_send(object, INIT, None, args, caller)? {
+        Started::Ran(_) => NativeStarted::Ran(Some(object)),
+        Started::Entered => NativeStarted::Entered(Then::Answer(object)),
+    })
 }
 
 /// `RexxClass::completeNewObject` (`classes/ClassClass.cpp:1882`) up to but
