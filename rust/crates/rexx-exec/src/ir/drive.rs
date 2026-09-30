@@ -387,42 +387,12 @@ macro_rules! region_ops {
                         }
                         continue;
                     }
-                    // The address resolves to a node, and the
-                    // pair this op needs is that node's own.
-                    // The match is here rather than inside the
-                    // descent, which answers with an
-                    // expression so that the echo op below can
-                    // address a node of any kind.
-                    let Some(ExprKind::Call { target, args }) =
-                        Interp::chunk_node_at($clause, *slot, *path)
-                            .map(|node| &node.kind)
-                    else {
-                        break $cold Err(Loud::call_op_off_its_node().into());
-                    };
-                    let (name, search_labels) = call_target_name($code, target);
-                    let resolution = match $self
-                        .site_resolution_before_arguments(
-                            $chunk,
-                            *site,
-                            name,
-                            search_labels,
-                        ) {
-                        Ok(resolution) => resolution,
+                    match $self.run_call_expr($code, $chunk, $clause, *slot, *path, *site) {
+                        Ok(value) => {
+                            $registers.set(*dst, value);
+                        }
                         Err(failure) => break $cold Err(failure),
-                    };
-                    let probe = 0u8;
-                    if let Err(failure) = $self.enter_eval_node(&raw const probe)
-                    {
-                        break $cold Err(failure);
                     }
-                    let value =
-                        $self.eval_call_resolved($code, resolution, name, args);
-                    $self.activity.depth -= 1;
-                    let value = match value {
-                        Ok(value) => value,
-                        Err(failure) => break $cold Err(failure),
-                    };
-                    $registers.set(*dst, value);
                 }
                 // **Every one of these bodies is behind
                 // a call.** What they do is small, but
@@ -1213,14 +1183,9 @@ macro_rules! region_ops {
                         break $cold Err(failure);
                     }
                 }
-                // The call, through the same
-                // `Interp::invoke_named_call` that `step`'s own
-                // `Call` arm reaches -- so the resolution
-                // order, the argument loop with its `>A>`
-                // lines, the depth guard, the level state saved
-                // around the nested activation and the `RESULT`
-                // settle are that arm's rather than a second
-                // copy. This op emits nothing itself and owes
+                // The call, through the same `begin_invoke_call`
+                // and `settle_call_result` that `step`'s own `Call`
+                // arm reaches. This op emits nothing itself and owes
                 // no echo op, because it took no line away from
                 // `eval.rs`: `Op::Call`'s own doc comment has
                 // the argument and the measurement behind it.
@@ -1243,40 +1208,10 @@ macro_rules! region_ops {
                             Err(failure) => break $cold Err(failure),
                         }
                     }
-                    let InstructionKind::Call(call) = &$clause.kind else {
-                        break $cold Err(Loud::call_op_off_its_node().into());
-                    };
-                    let Call::Named {
-                        name,
-                        literal,
-                        args,
-                    } = &**call
-                    else {
-                        break $cold Err(Loud::call_op_off_its_node().into());
-                    };
-                    // A failure is held until the arguments
-                    // have run, which on this op they have not
-                    // -- `Op::CallNamed` took every clause
-                    // whose arguments compile, so what is left
-                    // here evaluates them inside `invoke_call`.
-                    // `Interp::resolved_after_arguments` has
-                    // the citation.
-                    let resolution = $self.site_resolution_before_arguments(
-                        $chunk, *site, name, !*literal,
-                    );
-                    let resolution = match $self
-                        .resolved_after_arguments($code, resolution, args)
-                    {
-                        Ok(resolution) => resolution,
+                    match $self.run_call_tree($code, $chunk, $clause, *site) {
+                        Ok(flow) => break $cold Ok(RegionEnd::Flowed(flow)),
                         Err(failure) => break $cold Err(failure),
-                    };
-                    let flow = match $self
-                        .invoke_named_call($code, resolution, name, args)
-                    {
-                        Ok(flow) => flow,
-                        Err(failure) => break $cold Err(failure),
-                    };
-                    break $cold Ok(RegionEnd::Flowed(flow));
+                    }
                 }
                 // The same clause with its arguments
                 // already computed by ops of this region.
@@ -1771,6 +1706,27 @@ impl Interp {
         started
     }
 
+    /// One [`crate::ir::Op::CallExpr`], its callee's body run on this Rust
+    /// stack.
+    #[inline(never)]
+    fn run_call_expr(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        clause: &Instruction,
+        slot: u16,
+        path: super::NodePath,
+        site: u16,
+    ) -> Result<ObjRef, Failure> {
+        match self.begin_call_expr(code, chunk, clause, slot, path, site)? {
+            Started::Ran(value) => Ok(value),
+            Started::Entered => {
+                let ended = self.run_activation();
+                self.finish_function_op(ended)
+            }
+        }
+    }
+
     /// One [`crate::ir::Op::CallExpr`] up to the point its callee's body would
     /// run, as [`Interp::begin_call_args`] is for its op.
     #[inline(never)]
@@ -1863,6 +1819,19 @@ impl Interp {
         let base_indent = self.activity.clause_state.current_value_indent;
         let started = self.begin_subroutine_over_pushed_args(resolved, name, mark)?;
         Ok((started, base_indent))
+    }
+
+    /// One [`crate::ir::Op::Call`], its callee's body run on this Rust stack.
+    #[inline(never)]
+    fn run_call_tree(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        clause: &Instruction,
+        site: u16,
+    ) -> Result<Flow, Failure> {
+        let (started, base_indent) = self.begin_call_tree(code, chunk, clause, site)?;
+        self.complete_subroutine(started, base_indent)
     }
 
     /// One [`crate::ir::Op::Call`] up to the point its callee's body would
