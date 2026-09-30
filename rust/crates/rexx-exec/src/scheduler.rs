@@ -53,10 +53,6 @@ impl ActivityId {
 }
 
 /// What the driver asks of whatever runs the interpreter's activities.
-#[expect(
-    dead_code,
-    reason = "the seam methods the single-activity driver does not call"
-)]
 pub(crate) trait Scheduler {
     /// A new activity for a continuation, or `None` where none is made and
     /// the continuation stays with the current activity.
@@ -66,20 +62,6 @@ pub(crate) trait Scheduler {
     fn run_until_park(&mut self) -> ActivityId;
     /// The current activity parks for `reason`.
     fn park(&mut self, reason: ParkReason);
-    /// `activity` is ready again.
-    fn unpark(&mut self, activity: ActivityId);
-    /// The current activity's slice has ended.
-    fn yield_at_slice(&mut self);
-    /// The driver exits for a native call, releasing the baton.
-    fn exit_for_native(&mut self);
-    /// The driver exits for a blocking operation, releasing the baton.
-    fn exit_for_block(&mut self);
-    /// An off-baton operation of `activity` has finished.
-    fn post_completion(&mut self, activity: ActivityId);
-    /// A callback's thread asks for the baton.
-    fn request_baton(&mut self);
-    /// Runs `world` with every other activity stopped.
-    fn stop_the_world<T>(&mut self, world: impl FnOnce() -> T) -> T;
 }
 
 /// One activity and no other: a parked activity is the one that continues,
@@ -88,31 +70,18 @@ pub(crate) trait Scheduler {
 pub(crate) struct SingleActivity;
 
 impl Scheduler for SingleActivity {
+    /// No second activity exists to take a continuation.
     fn spawn(&mut self) -> Option<ActivityId> {
         None
     }
 
+    /// No other activity is ready, so the parked one continues.
     fn run_until_park(&mut self) -> ActivityId {
         ActivityId::FIRST
     }
 
+    /// Nothing is descheduled: `run_until_park` answers the same activity.
     fn park(&mut self, _reason: ParkReason) {}
-
-    fn unpark(&mut self, _activity: ActivityId) {}
-
-    fn yield_at_slice(&mut self) {}
-
-    fn exit_for_native(&mut self) {}
-
-    fn exit_for_block(&mut self) {}
-
-    fn post_completion(&mut self, _activity: ActivityId) {}
-
-    fn request_baton(&mut self) {}
-
-    fn stop_the_world<T>(&mut self, world: impl FnOnce() -> T) -> T {
-        world()
-    }
 }
 
 /// An outcome [`crate::Interp::exec_instruction`] answers in place of running
