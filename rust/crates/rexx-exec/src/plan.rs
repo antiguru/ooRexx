@@ -148,6 +148,19 @@ pub(crate) struct Plan {
     /// How a compound-shaped symbol this body names splits, by
     /// `SymbolId::index`, `None` where this pass recorded nothing for it.
     pub(crate) compounds: Box<[Option<CompoundName>]>,
+    last_chunk: LastChunk,
+}
+
+/// The chunk [`Interp::chunk_for`] last answered for a plan, with the key and
+/// setting it answered it for. The cache never replaces an entry, so this
+/// stays the cache's own answer.
+#[derive(Default)]
+struct LastChunk(std::cell::RefCell<Option<(BodyKey, ChunkTrace, Rc<crate::ir::Chunk>)>>);
+
+impl std::fmt::Debug for LastChunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LastChunk")
+    }
 }
 
 impl Plan {
@@ -709,20 +722,28 @@ impl Interp {
         body: &CodeBody,
         plan: &Plan,
     ) -> Option<Rc<crate::ir::Chunk>> {
-        if let Some(chunk) = self.chunks.get(&(key, trace)) {
+        if let Some((last_key, last_trace, chunk)) = &*plan.last_chunk.0.borrow()
+            && *last_key == key
+            && *last_trace == trace
+        {
             return Some(Rc::clone(chunk));
         }
-        match crate::ir::compile(body, plan, trace) {
-            Ok(chunk) => {
-                let chunk = Rc::new(chunk);
-                self.chunks.insert((key, trace), Rc::clone(&chunk));
-                Some(chunk)
-            }
-            Err(_) => {
-                self.chunks_refused += 1;
-                None
-            }
-        }
+        let chunk = match self.chunks.get(&(key, trace)) {
+            Some(chunk) => Rc::clone(chunk),
+            None => match crate::ir::compile(body, plan, trace) {
+                Ok(chunk) => {
+                    let chunk = Rc::new(chunk);
+                    self.chunks.insert((key, trace), Rc::clone(&chunk));
+                    chunk
+                }
+                Err(_) => {
+                    self.chunks_refused += 1;
+                    return None;
+                }
+            },
+        };
+        *plan.last_chunk.0.borrow_mut() = Some((key, trace, Rc::clone(&chunk)));
+        Some(chunk)
     }
 
     /// The slot `name` resolves to in the current frame, allocating one if it

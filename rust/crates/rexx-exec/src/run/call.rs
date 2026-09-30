@@ -418,6 +418,15 @@ impl Interp {
         name: &[u8],
         mark: usize,
     ) -> Result<Started<ObjRef>, Failure> {
+        // The builtin path, which runs no activation -- the same shortcut
+        // `begin_eval_call` takes and for the same measured reason.
+        if let Resolved::Builtin(target) = resolved {
+            return self
+                .run_over_pushed_args(mark, |interp, values| {
+                    builtin::run(interp, name, target, values)
+                })
+                .map(Started::Ran);
+        }
         let mut values = std::mem::take(&mut self.activity.value_buffer);
         let started = self.begin_call_over_values(resolved, name, &values[mark..]);
         values.truncate(mark);
@@ -428,13 +437,19 @@ impl Interp {
     /// Hands the argument stack back with a call's run removed from it, or,
     /// for a call whose callee was `entered`, lends the rest to that callee's
     /// [`CallTail`].
+    #[inline(always)]
     fn lend_stack(&mut self, entered: bool, values: Vec<Option<ObjRef>>) {
-        let tail = if entered {
-            self.activity.call_tails.last_mut()
+        if entered {
+            self.lend_stack_to_callee(values);
         } else {
-            None
-        };
-        match tail {
+            self.activity.value_buffer = values;
+        }
+    }
+
+    /// [`Interp::lend_stack`] for a call whose callee was entered.
+    #[inline(always)]
+    fn lend_stack_to_callee(&mut self, values: Vec<Option<ObjRef>>) {
+        match self.activity.call_tails.last_mut() {
             Some(tail) if !values.is_empty() => tail.stack = LentStack::Lent(values),
             Some(tail) => {
                 tail.stack = LentStack::Emptied;
@@ -536,11 +551,6 @@ impl Interp {
         name: &[u8],
         values: &[Option<ObjRef>],
     ) -> Result<Started<ObjRef>, Failure> {
-        // The builtin path, which runs no activation -- the same shortcut
-        // `begin_eval_call` takes and for the same measured reason.
-        if let Resolved::Builtin(target) = resolved {
-            return builtin::run(self, name, target, values).map(Started::Ran);
-        }
         if let Resolved::Internal(row) = resolved {
             if let Some(handled) = self.call_checkpoint(name, values)? {
                 return handled
@@ -949,6 +959,7 @@ impl Interp {
 
     /// [`Interp::invoke_call_over`] from the point its callee's body has run
     /// and ended `ended`.
+    #[inline(always)]
     pub(crate) fn finish_call(&mut self, ended: Result<Ended, Failure>) -> Result<Ended, Failure> {
         let Some(CallTail {
             entered,

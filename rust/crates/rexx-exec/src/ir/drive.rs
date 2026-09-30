@@ -1908,7 +1908,7 @@ impl Interp {
         clippy::too_many_arguments,
         reason = "every argument is one the driver already holds for the clause it has open"
     )]
-    #[inline(never)]
+    #[inline(always)]
     fn park_call(
         &mut self,
         park: Park,
@@ -2028,14 +2028,30 @@ impl Interp {
                                         code, chunk, registers, at, 0, len, source, base,
                                     )
                                 }
-                                Next::At(at) => self.ops_loop::<false, true>(
+                                Next::At(at) => self.ops_loop_steady(
                                     code, chunk, registers, at, 0, len, source, base,
                                 ),
                                 Next::Resume => {
                                     let ended = std::mem::replace(&mut callee, Ok(END_OF_BODY));
-                                    self.resume_region(
-                                        code, chunk, registers, source, base, len, ended,
-                                    )
+                                    match self.activity.parked_calls.pop() {
+                                        Some(parked) => match parked.deliver {
+                                            Deliver::Flow(base_indent) => self.resume_call(
+                                                code,
+                                                chunk,
+                                                source,
+                                                base,
+                                                len,
+                                                parked,
+                                                base_indent,
+                                                ended,
+                                            ),
+                                            Deliver::Register(dst) => self.resume_region(
+                                                code, chunk, registers, source, base, len, parked,
+                                                dst, ended,
+                                            ),
+                                        },
+                                        None => Err(Loud::op_not_driven("a parked call").into()),
+                                    }
                                 }
                             };
                             let flow = match ran {
@@ -2163,11 +2179,59 @@ impl Interp {
         self.running_level().map(Some)
     }
 
+    /// [`Interp::resume_region`] for a parked `CALL`, whose op ends its clause
+    /// region: its `RESULT` settled at `base_indent`, and the clause boundary.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one caller, and every argument is a value it already holds"
+    )]
+    #[inline(never)]
+    fn resume_call(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        source: Option<&ProgramSource>,
+        base: usize,
+        len: usize,
+        parked: ParkedCall,
+        base_indent: usize,
+        ended: Result<Ended, Failure>,
+    ) -> Result<Exit, Failure> {
+        let ParkedCall {
+            clause_pc,
+            end,
+            index,
+            entry,
+            ..
+        } = parked;
+        let Some(clause) = code.body.instructions.get(index) else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
+        let ran = self
+            .finish_call(ended)
+            .and_then(|ended| self.settle_call_result(ended, base_indent))
+            .map(RegionEnd::Flowed);
+        let (flow, next) =
+            match self.leave_stepped_clause(entry, code, index, clause, source, ran)? {
+                ClauseOutcome::Ran(region) => match region? {
+                    RegionEnd::At(next) => return Ok(Exit::At(next)),
+                    RegionEnd::Flowed(flow) => (flow, end),
+                },
+                ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), clause_pc),
+            };
+        Ok(
+            match self.settle(code, chunk, base, flow, next, 0, len, source)? {
+                Settled::At(pc) => Exit::At(pc),
+                Settled::Escaped(other) => Exit::Flow(other),
+            },
+        )
+    }
+
     /// The level [`Interp::drive`] has just taken back from
-    /// [`Activity::parked_levels`](crate::activity::Activity), run on from its
-    /// parked call with `ended`, what the callee's body answered: the call
-    /// op's own finish and the rest of its clause region, and where the
-    /// counter goes after them.
+    /// [`Activity::parked_levels`](crate::activity::Activity), run on from
+    /// `parked`, a function call op, with `ended`, what the callee's body
+    /// answered: the call's value into `dst`, the rest of its clause region,
+    /// and where the counter goes after them.
     #[expect(
         clippy::too_many_arguments,
         reason = "one caller, and every argument is a value it already holds"
@@ -2181,9 +2245,11 @@ impl Interp {
         source: Option<&ProgramSource>,
         base: usize,
         len: usize,
+        parked: ParkedCall,
+        dst: u16,
         ended: Result<Ended, Failure>,
     ) -> Result<Exit, Failure> {
-        let Some(ParkedCall {
+        let ParkedCall {
             clause_pc,
             at,
             end,
@@ -2192,11 +2258,8 @@ impl Interp {
             stale,
             debugging,
             header,
-            deliver,
-        }) = self.activity.parked_calls.pop()
-        else {
-            return Err(Loud::op_not_driven("a parked call").into());
-        };
+            deliver: _,
+        } = parked;
         let Some(clause) = code.body.instructions.get(index) else {
             return Err(Loud::chunk_map_too_short().into());
         };
@@ -2207,17 +2270,9 @@ impl Interp {
                 let ran: Result<RegionEnd, Failure> = 'cold: {
                     let next: u32 = 'region: {
                         let mut header = header.map(|header| *header);
-                        match deliver {
-                            Deliver::Register(dst) => match self.finish_function_op(ended) {
-                                Ok(value) => registers.set(dst, value),
-                                Err(failure) => break 'cold Err(failure),
-                            },
-                            Deliver::Flow(base_indent) => {
-                                break 'cold self
-                                    .finish_call(ended)
-                                    .and_then(|ended| self.settle_call_result(ended, base_indent))
-                                    .map(RegionEnd::Flowed);
-                            }
+                        match self.finish_function_op(ended) {
+                            Ok(value) => registers.set(dst, value),
+                            Err(failure) => break 'cold Err(failure),
                         }
                         let Some(ops) = chunk.ops_in(at, end) else {
                             break 'cold Err(Loud::chunk_map_too_short().into());
@@ -2336,6 +2391,28 @@ impl Interp {
                 Err(Loud::op_not_driven("a handoff or a park outside a driven body").into())
             }
         }
+    }
+
+    /// [`Interp::ops_loop`]'s non-granting instance for a body [`Interp::drive`]
+    /// runs. Its own function rather than inlined into `drive`: measured,
+    /// `bench-programs/nop.rex` retires 5.2% fewer instructions this way.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one caller, and every argument is a value it already holds"
+    )]
+    #[inline(never)]
+    fn ops_loop_steady(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        registers: RegFrame<'_>,
+        at: u32,
+        start: usize,
+        end: usize,
+        source: Option<&ProgramSource>,
+        base: usize,
+    ) -> Result<Exit, Failure> {
+        self.ops_loop::<false, true>(code, chunk, registers, at, start, end, source, base)
     }
 
     /// Runs `chunk`'s ops from op `at` until one of them produces a `Flow`
