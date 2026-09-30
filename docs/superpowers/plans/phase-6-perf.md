@@ -654,3 +654,100 @@ Callgrind exit 0, no SPREAD line.
 | rexxcps | 2.024 | 1.940 | 2.055 | -4.15 | +1.53 |
 
 Verdict at `d112d68f9`: every program inside +0.3% except `extcall` at +0.3642% (round 3 of 3, reported for a ruling); wall clock inside each bar except `assign` at +4.21% (Ir +0.0145%).
+
+## Task 8
+
+`S` is `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/p6-t8`; `T7` is Task 7's.
+
+```
+cp $T7/bin/base/rexx-run $S/bin/base/rexx-run      # Task 7's base build, sha checked against its table
+cp $T7/bin/base/rexx-run $S/bin/base2/rexx-run     # identical-binary control
+cp $T7/bin/t7c/rexx-run $S/bin/prev/rexx-run       # Task 7's d112d68f9 build; 8d26923bb changed only docs
+git archive REV | tar -x -C $S/trees/NAME           # t8 4822d01e0, t8r1 1f976e121
+find $S/trees/NAME -type f -exec touch {} +
+cd $S/trees/NAME/rust && CARGO_TARGET_DIR=$S/tgt/NAME cargo build --release -p rexx-exec --bin rexx-run > $S/logs/build-NAME.log 2>&1
+/bin/grep -a -c 'Compiling rexx-exec' $S/logs/build-NAME.log                 # 1 for each NAME
+cp $S/tgt/NAME/release/rexx-run $S/bin/NAME/rexx-run
+sha256sum < $S/bin/NAME/rexx-run
+objcopy -O binary --only-section=.text $S/bin/NAME/rexx-run /dev/stdout | wc -c
+```
+
+| name | sha256 of `rexx-run` | `.text` bytes |
+|---|---|---:|
+| base | `d59c32248068af0bb927e2f2b714b1bffca4b17d32231c884f812b4bd40005b6` | 2,732,523 |
+| prev | `22cea71ac7fdc3c6daf50af2497bcb625d9b51f4f66aa432ef4b9267061de28e` | 2,725,275 |
+| t8 | `7ccbbe2c4d879db7b813a743b02c84f85b75c937aaa4db259cc3b59219ba0025` | 2,763,803 |
+| t8r1 | `0c9a7a3b6bc9d1d5db4c1fa0654f7f7090fb2a97ea53bdc063e1e9d569876423` | 2,772,475 |
+
+### Instruction counts
+
+```
+$B/callgrind.sh -r 3 -j 8 -o $S/cg2 base=$S/bin/base/rexx-run prev=$S/bin/prev/rexx-run t8=$S/bin/t8/rexx-run t8r1=$S/bin/t8r1/rexx-run
+```
+
+Exit 0, no SPREAD line. Instructions less libc.so.6 and ld-linux, median of three rounds, delta
+against base. `t8` is the implementation, `t8r1` round 1.
+
+| program | base | prev d% | t8 d% | t8r1 d% |
+|---|---:|---:|---:|---:|
+| alloc | 25,168,678,399 | -0.2968% | +0.0369% | -0.1061% |
+| alloc4c | 3,224,395,037 | -0.3068% | +0.4066% | -1.5782% |
+| arith | 11,520,060,095 | -0.0255% | -0.0125% | -0.3640% |
+| assign | 19,637,557,681 | +0.0145% | -2.5326% | -5.0777% |
+| compound | 9,271,611,428 | +0.2202% | +0.1122% | -0.9662% |
+| decloop | 2,565,175,703 | -0.3253% | -0.4968% | -0.8085% |
+| decrender | 4,348,396,238 | -0.4668% | -0.1265% | -1.3222% |
+| dispatch | 20,483,285,065 | -0.1435% | +0.9790% | +0.3201% |
+| dispatchclass | 15,850,195,637 | -0.0231% | +1.2638% | +0.1535% |
+| emptyloop | 9,308,098,356 | -0.5220% | +0.2827% | -1.0592% |
+| extcall | 8,281,259,516 | +0.3642% | +1.5959% | +0.9077% |
+| fibcall | 8,345,686,413 | -0.1195% | +2.8674% | +4.6498% |
+| fibfunc | 7,988,911,759 | -0.1258% | +4.6319% | +5.2548% |
+| heapshape | 3,278,634,141 | -0.2897% | -0.2285% | -0.3506% |
+| nop | 9,437,300,166 | -2.0890% | +1.0878% | -4.2082% |
+| parse | 1,541,986,662 | -0.0112% | +1.5581% | -0.4649% |
+| sayloop | 114,813,364 | -0.1758% | +0.4346% | -0.2599% |
+| sendloop | 13,863,190,795 | +0.1102% | +4.9792% | +3.0677% |
+| startup | 58,074,053 | -0.0129% | -0.0106% | -0.0069% |
+| strings | 17,749,287,478 | -0.1497% | +1.7262% | -1.5019% |
+| textnum | 1,176,579,475 | -0.0289% | +1.0759% | -1.6604% |
+| varlookup | 14,878,111,730 | +0.0108% | -0.7559% | -2.6710% |
+| rexxcps | 17,817,347,549 | -0.2362% | +1.9752% | +0.7581% |
+
+### Wall clock
+
+```
+$B/wallclock.sh -r 5 -o $S/wall base=$S/bin/base/rexx-run t8r1=$S/bin/t8r1/rexx-run base2=$S/bin/base2/rexx-run
+```
+
+Load average 1.09 4.13 7.35 at start, 1.15 2.23 5.64 at end.
+
+| program | base median s | t8r1 median s | base2 median s | t8r1 d% | base2 d% |
+|---|---:|---:|---:|---:|---:|
+| alloc | 2.045 | 2.137 | 2.027 | +4.50 | -0.88 |
+| alloc4c | 0.570 | 0.570 | 0.569 | +0.00 | -0.18 |
+| arith | 1.261 | 1.260 | 1.247 | -0.08 | -1.11 |
+| assign | 1.074 | 1.049 | 1.071 | -2.33 | -0.28 |
+| compound | 0.644 | 0.637 | 0.637 | -1.09 | -1.09 |
+| decloop | 0.249 | 0.252 | 0.249 | +1.20 | +0.00 |
+| decrender | 0.445 | 0.441 | 0.447 | -0.90 | +0.45 |
+| dispatch | 1.764 | 1.961 | 1.768 | +11.17 | +0.23 |
+| dispatchclass | 1.392 | 1.563 | 1.365 | +12.28 | -1.94 |
+| emptyloop | 0.528 | 0.518 | 0.527 | -1.89 | -0.19 |
+| extcall | 0.925 | 0.932 | 0.917 | +0.76 | -0.86 |
+| fibcall | 0.793 | 0.852 | 0.793 | +7.44 | +0.00 |
+| fibfunc | 0.784 | 0.869 | 0.794 | +10.84 | +1.28 |
+| heapshape | 0.322 | 0.331 | 0.328 | +2.80 | +1.86 |
+| nop | 0.666 | 0.646 | 0.660 | -3.00 | -0.90 |
+| parse | 0.132 | 0.128 | 0.131 | -3.03 | -0.76 |
+| sayloop | 0.029 | 0.028 | 0.030 | -3.45 | +3.45 |
+| sendloop | 1.096 | 1.172 | 1.093 | +6.93 | -0.27 |
+| startup | 0.026 | 0.024 | 0.025 | -7.69 | -3.85 |
+| strings | 1.131 | 1.102 | 1.136 | -2.56 | +0.44 |
+| textnum | 0.093 | 0.091 | 0.092 | -2.15 | -1.08 |
+| varlookup | 0.775 | 0.765 | 0.776 | -1.29 | +0.13 |
+| rexxcps | 2.028 | 2.036 | 2.019 | +0.39 | -0.44 |
+
+Verdict: over the S1 budget. t8r1 exceeds +0.3% on fibcall (+4.65%), fibfunc (+5.25%), sendloop
+(+3.07%), extcall (+0.91%, of which +0.36% is Task 7's), rexxcps (+0.76%) and dispatch (+0.32%);
+wall clock is over its bar on fibcall, fibfunc, sendloop, dispatchclass and alloc.
