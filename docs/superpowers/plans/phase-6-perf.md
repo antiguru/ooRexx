@@ -1098,3 +1098,49 @@ inside +0.3% of base everywhere except fibcall (+2.12%) and fibfunc (+4.30%), bo
 too. The variants behind it are in the round's report
 (`.superpowers/sdd/2026-09-29-phase-6-s0-s1/perf1-report.md`).
 
+
+## Task 10
+
+Plain DO flattened and the `Op::Exec` outcome channel, head `2fb2bd50c`. Instructions (Ir), libc
+and ld-linux subtracted, median of 3 rounds, every spread 0.0001% or less:
+
+```
+bash rust/bench-programs/callgrind.sh -r 3 -o $S/cg base=<1754a3b5a>/rexx-run \
+  prev=<92ac5c054>/rexx-run head=<2fb2bd50c>/rexx-run
+```
+
+Each binary was built from `git archive` of its commit (`rust` and `interpreter`) into its own
+target dir.
+
+| program | base Ir | prev Ir | head Ir | prev vs base % | head vs base % | head vs prev % |
+|---|---|---|---|---|---|---|
+| alloc | 25168678552 | 20249018559 | 20285019284 | -19.55 | -19.40 | +0.18 |
+| alloc4c | 3224395138 | 3173498684 | 3195499409 | -1.58 | -0.90 | +0.69 |
+| arith | 11520060248 | 11471165757 | 11531154772 | -0.42 | +0.10 | +0.52 |
+| assign | 19637557611 | 18840415350 | 19541123107 | -4.06 | -0.49 | +3.72 |
+| compound | 9271611629 | 9187029588 | 9307007547 | -0.91 | +0.38 | +1.31 |
+| decloop | 2565175804 | 2533249310 | 2549646127 | -1.24 | -0.61 | +0.65 |
+| decrender | 4348396391 | 4274115353 | 4301707487 | -1.71 | -1.07 | +0.65 |
+| dispatch | 20483285266 | 20508850258 | 20658792415 | +0.12 | +0.86 | +0.73 |
+| dispatchclass | 15850195790 | 15494532692 | 15558509978 | -2.24 | -1.84 | +0.41 |
+| emptyloop | 9308098509 | 9259510005 | 9359364239 | -0.52 | +0.55 | +1.08 |
+| extcall | 8281259617 | 8227425066 | 8233425791 | -0.65 | -0.58 | +0.07 |
+| fibcall | 8345686514 | 8522465879 | 8411530492 | +2.12 | +0.79 | -1.30 |
+| fibfunc | 7988911860 | 8332398587 | 8200838404 | +4.30 | +2.65 | -1.58 |
+| heapshape | 3278634294 | 2373947480 | 2376968928 | -27.59 | -27.50 | +0.13 |
+| nop | 9437300267 | 9240156702 | 9540864449 | -2.09 | +1.10 | +3.25 |
+| parse | 1541986815 | 1533228145 | 1540224191 | -0.57 | -0.11 | +0.46 |
+| sayloop | 114813465 | 114714602 | 115514728 | -0.09 | +0.61 | +0.70 |
+| sendloop | 13863190996 | 13713470957 | 13758471676 | -1.08 | -0.76 | +0.33 |
+| startup | 58074154 | 58069747 | 58070444 | -0.01 | -0.01 | +0.00 |
+| strings | 17749287579 | 17488789122 | 17548737120 | -1.47 | -1.13 | +0.34 |
+| textnum | 1176579576 | 1152043463 | 1167239499 | -2.09 | -0.79 | +1.32 |
+| varlookup | 14878111883 | 14461721676 | 14822611074 | -2.80 | -0.37 | +2.50 |
+| rexxcps | 17817335255 | 17834081656 | 17844231924 | +0.09 | +0.15 | +0.06 |
+
+Over +0.3% against `92ac5c054`: assign +3.72, nop +3.25, varlookup +2.50, textnum +1.32,
+compound +1.31, emptyloop +1.08, dispatch +0.73, sayloop +0.70, alloc4c +0.69, decloop +0.65,
+decrender +0.65, arith +0.52, parse +0.46, dispatchclass +0.41, strings +0.34, sendloop +0.33. No
+bench program has a plain DO block (`grep -E '(then|else|^) *do *$'` over `bench-programs/*.rex`
+finds none), so the moves do not come from running a flattened block. Their cause is not
+attributed and is left for the perf agent.
