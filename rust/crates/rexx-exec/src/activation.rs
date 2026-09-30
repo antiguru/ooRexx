@@ -221,7 +221,7 @@ pub(crate) enum ReplyState {
     /// 98.936/98.937.
     Issued,
     /// A `REPLY` has just handed its value out and the rest of the body is
-    /// owed. `Interp::enter_method_body` reads this to park the activation
+    /// owed. `Interp::release_method_activation` reads this to park the activation
     /// instead of releasing it, and moves it to `Issued` as it does.
     Owed,
 }
@@ -486,7 +486,7 @@ pub(crate) struct DeferredReply {
     pub(crate) activation: Box<Activation>,
     /// The calling convention the method was entered under: what `ARG()`,
     /// `USE ARG` and a send's own caller resolution read. Restored around the
-    /// resumed body exactly as `Interp::enter_method_body` restores it around
+    /// resumed body exactly as `Interp::finish_call` restores it around
     /// the first half.
     pub(crate) context: crate::CallContext,
     pub(crate) slots: Vec<Option<ObjRef>>,

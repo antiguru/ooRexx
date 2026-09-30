@@ -324,7 +324,8 @@ macro_rules! region_ops {
         $region:lifetime,
         $park:lifetime
     ) => {
-        for region_op in $ops {
+        'region_loop: for region_op in $ops {
+            let deliver: Deliver = 'entered: {
             match region_op {
                 // **No gate**: this op exists only in a chunk
                 // compiled under a setting that echoes, which is
@@ -381,15 +382,11 @@ macro_rules! region_ops {
                         {
                             Ok(Started::Ran(value)) => $registers.set(*dst, value),
                             Ok(Started::Entered) => {
-                            break $park Park {
-                                at: op_after($ops, region_op, $from),
-                                $header: $header.take().map(Box::new),
-                                deliver: Deliver::Register(*dst),
-                            };
+                            break 'entered Deliver::Register(*dst);
                             }
                             Err(failure) => break $cold Err(failure),
                         }
-                        continue;
+                        continue 'region_loop;
                     }
                     match $self.run_call_expr($code, $chunk, $clause, *slot, *path, *site) {
                         Ok(value) => {
@@ -414,7 +411,7 @@ macro_rules! region_ops {
                 }
                 Op::TraceArgument { src } => {
                     if !$self.tracing_intermediates() {
-                        continue;
+                        continue 'region_loop;
                     }
                     $self.trace_call_arg($registers, *src);
                 }
@@ -447,15 +444,11 @@ macro_rules! region_ops {
                         ) {
                             Ok(Started::Ran(value)) => $registers.set(*dst, value),
                             Ok(Started::Entered) => {
-                            break $park Park {
-                                at: op_after($ops, region_op, $from),
-                                $header: $header.take().map(Box::new),
-                                deliver: Deliver::Register(*dst),
-                            };
+                            break 'entered Deliver::Register(*dst);
                             }
                             Err(failure) => break $cold Err(failure),
                         }
-                        continue;
+                        continue 'region_loop;
                     }
                     match $self.run_call_args(
                         $code, $chunk, $clause, *slot, *path, *site, *argc,
@@ -489,7 +482,7 @@ macro_rules! region_ops {
                     // untraced run walks no path to reach a
                     // node it is not going to print.
                     if !$self.tracing_intermediates() {
-                        continue;
+                        continue 'region_loop;
                     }
                     let Some(expr) =
                         Interp::chunk_node_at($clause, *slot, *path)
@@ -509,21 +502,17 @@ macro_rules! region_ops {
                      reserved"
                     );
                     if $top {
-                        match $self.begin_send_op($clause, $registers, region_op) {
+                        match $self.begin_send_op($chunk, $registers, region_op) {
                             Ok(true) => {}
                             Ok(false) => {
-                            break $park Park {
-                                at: op_after($ops, region_op, $from),
-                                $header: $header.take().map(Box::new),
-                                deliver: Deliver::Send,
-                            };
+                            break 'entered Deliver::Send;
                             }
                             Err(failure) => break $cold Err(failure),
                         }
-                        continue;
+                        continue 'region_loop;
                     }
                     if let Err(failure) =
-                        $self.run_send_op($clause, $registers, region_op)
+                        $self.run_send_op($chunk, $registers, region_op)
                     {
                         break $cold Err(failure);
                     }
@@ -665,7 +654,7 @@ macro_rules! region_ops {
                     // pinned `rexxcps` 11.427 to 11.060
                     // billion.
                     if !$self.tracing_intermediates() {
-                        continue;
+                        continue 'region_loop;
                     }
                     let value = $registers.get(*src);
                     $self.echo_literal(value);
@@ -748,7 +737,7 @@ macro_rules! region_ops {
                 // side effect of evaluating -- so a promoted
                 // clause with no such op drops them while every
                 // line after them still matches.
-                Op::TraceRead { symbol, read, src } => {
+                Op::TraceRead { symbol, src, .. } => {
                     debug_assert!(
                         $chunk.holds_register(*src),
                         "op reads register {src} outside the region the chunk \
@@ -757,14 +746,10 @@ macro_rules! region_ops {
                     // The gate in front of the register read,
                     // for `Op::TraceLiteral`'s own reason.
                     if !$self.tracing_intermediates() {
-                        continue;
+                        continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    if *read == SymbolRead::Environment {
-                        $self.echo_environment_symbol($code, *symbol, value);
-                    } else {
-                        $self.echo_symbol_read($code, *symbol, value);
-                    }
+                    $self.echo_symbol_read($code, *symbol, value);
                 }
                 // **A native expression op**: one arithmetic
                 // operator applied to two registers, through
@@ -890,7 +875,7 @@ macro_rules! region_ops {
                     // The gate in front of the register read,
                     // for `Op::TraceLiteral`'s own reason.
                     if !$self.tracing_intermediates() {
-                        continue;
+                        continue 'region_loop;
                     }
                     let value = $registers.get(*src);
                     $self.echo_operator(*op, value);
@@ -948,7 +933,7 @@ macro_rules! region_ops {
                     // The gate in front of the register read,
                     // for `Op::TraceLiteral`'s own reason.
                     if !$self.tracing_intermediates() {
-                        continue;
+                        continue 'region_loop;
                     }
                     let value = $registers.get(*src);
                     $self.echo_prefix_op(*op, value);
@@ -1246,11 +1231,7 @@ macro_rules! region_ops {
                                     .map(RegionEnd::Flowed);
                             }
                             Ok((Started::Entered, base_indent)) => {
-                            break $park Park {
-                                at: op_after($ops, region_op, $from),
-                                $header: $header.take().map(Box::new),
-                                deliver: Deliver::Flow(base_indent),
-                            };
+                            break 'entered Deliver::Flow(base_indent);
                             }
                             Err(failure) => break $cold Err(failure),
                         }
@@ -1279,11 +1260,7 @@ macro_rules! region_ops {
                                     .map(RegionEnd::Flowed);
                             }
                             Ok((Started::Entered, base_indent)) => {
-                            break $park Park {
-                                at: op_after($ops, region_op, $from),
-                                $header: $header.take().map(Box::new),
-                                deliver: Deliver::Flow(base_indent),
-                            };
+                            break 'entered Deliver::Flow(base_indent);
                             }
                             Err(failure) => break $cold Err(failure),
                         }
@@ -1639,6 +1616,13 @@ macro_rules! region_ops {
                     break $cold Err(Loud::op_not_driven("EndWhen").into());
                 }
             }
+            continue 'region_loop;
+            };
+            break $park Park {
+                at: op_after($ops, region_op, $from),
+                $header: $header.take().map(Box::new),
+                deliver,
+            };
         }
     };
 }
@@ -1925,40 +1909,24 @@ impl Interp {
     #[inline(never)]
     fn begin_send_op(
         &mut self,
-        clause: &Instruction,
+        chunk: &Chunk,
         registers: RegFrame<'_>,
         op: &Op,
     ) -> Result<bool, Failure> {
         let Op::Send {
-            slot,
-            path,
-            recv,
-            argc,
-            form,
-            ..
+            site, recv, argc, ..
         } = *op
         else {
             return Err(Loud::call_op_off_its_node().into());
         };
-        let Some(ExprKind::Message { name, .. }) =
-            Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind)
-        else {
+        let (Some(name), Some(mark)) = (
+            chunk.send_name(site),
+            self.activity
+                .value_buffer
+                .len()
+                .checked_sub(usize::from(argc)),
+        ) else {
             return Err(Loud::call_op_off_its_node().into());
-        };
-        let Some(mark) = self
-            .activity
-            .value_buffer
-            .len()
-            .checked_sub(usize::from(argc))
-        else {
-            return Err(Loud::call_op_off_its_node().into());
-        };
-        let assigned;
-        let name: &[u8] = if form == SendForm::Assign {
-            assigned = [&name[..], b"="].concat();
-            &assigned
-        } else {
-            name
         };
         let receiver = registers.get(recv);
         let probe = 0u8;
@@ -1972,7 +1940,7 @@ impl Interp {
             Ok(Started::Entered) => Ok(false),
             Ok(Started::Ran(sent)) => {
                 self.activity.depth -= 1;
-                self.deliver_sent(clause, registers, op, sent)?;
+                self.deliver_sent(chunk, registers, op, sent)?;
                 Ok(true)
             }
             Err(failure) => {
@@ -1986,15 +1954,15 @@ impl Interp {
     #[inline(never)]
     fn run_send_op(
         &mut self,
-        clause: &Instruction,
+        chunk: &Chunk,
         registers: RegFrame<'_>,
         op: &Op,
     ) -> Result<(), Failure> {
-        if self.begin_send_op(clause, registers, op)? {
+        if self.begin_send_op(chunk, registers, op)? {
             return Ok(());
         }
         let ended = self.run_activation();
-        self.finish_sent(clause, registers, op, ended)
+        self.finish_sent(chunk, registers, op, ended)
     }
 
     /// The [`Op::Send`] in front of op `at`, once the body it entered has
@@ -2003,7 +1971,6 @@ impl Interp {
     fn finish_send_op(
         &mut self,
         chunk: &Chunk,
-        clause: &Instruction,
         registers: RegFrame<'_>,
         at: u32,
         ended: Result<Ended, Failure>,
@@ -2015,20 +1982,20 @@ impl Interp {
         let Some(op) = op else {
             return Err(Loud::chunk_map_too_short().into());
         };
-        self.finish_sent(clause, registers, op, ended)
+        self.finish_sent(chunk, registers, op, ended)
     }
 
     /// [`Interp::finish_send_op`] with the op in hand.
     fn finish_sent(
         &mut self,
-        clause: &Instruction,
+        chunk: &Chunk,
         registers: RegFrame<'_>,
         op: &Op,
         ended: Result<Ended, Failure>,
     ) -> Result<(), Failure> {
         let sent = self.finish_send(ended);
         self.activity.depth -= 1;
-        self.deliver_sent(clause, registers, op, sent?)
+        self.deliver_sent(chunk, registers, op, sent?)
     }
 
     /// Where [`Op::Send`] `op` puts the answer `sent`, and the `>M>` line it
@@ -2036,31 +2003,27 @@ impl Interp {
     /// `Interp::message_term` emits it for `Interp::exec_message`.
     fn deliver_sent(
         &mut self,
-        clause: &Instruction,
+        chunk: &Chunk,
         registers: RegFrame<'_>,
         op: &Op,
         sent: Option<ObjRef>,
     ) -> Result<(), Failure> {
         let Op::Send {
-            slot,
-            path,
-            dst,
-            form,
-            ..
+            site, dst, form, ..
         } = *op
         else {
             return Err(Loud::call_op_off_its_node().into());
         };
         if form == SendForm::Value {
             let Some(value) = sent else {
-                return Err(self.sent_nothing(clause, slot, path));
+                return Err(Raised::no_result(chunk.send_name(site).unwrap_or_default()).into());
             };
             registers.set(dst, value);
         }
         if let Some(value) = sent
             && self.tracing_intermediates()
         {
-            self.trace_sent(clause, slot, path, form, value)?;
+            self.trace_sent(chunk.send_name(site).unwrap_or_default(), value);
         }
         if form != SendForm::Value {
             let slot = self.reserved_result_slot();
@@ -2079,41 +2042,14 @@ impl Interp {
         Ok(())
     }
 
-    /// The 91.999 a send in an expression that answered nothing raises.
+    /// The `>M>` line a send of `name` that answered `value` owes.
     #[cold]
     #[inline(never)]
-    fn sent_nothing(&self, clause: &Instruction, slot: u16, path: super::NodePath) -> Failure {
-        match Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind) {
-            Some(ExprKind::Message { name, .. }) => Raised::no_result(name).into(),
-            _ => Loud::call_op_off_its_node().into(),
-        }
-    }
-
-    /// The `>M>` line a send that answered `value` owes.
-    #[cold]
-    #[inline(never)]
-    fn trace_sent(
-        &mut self,
-        clause: &Instruction,
-        slot: u16,
-        path: super::NodePath,
-        form: SendForm,
-        value: ObjRef,
-    ) -> Result<(), Failure> {
-        let Some(ExprKind::Message { name, .. }) =
-            Interp::chunk_node_at(clause, slot, path).map(|node| &node.kind)
-        else {
-            return Err(Loud::call_op_off_its_node().into());
-        };
-        let mut name = name.to_vec();
-        if form == SendForm::Assign {
-            name.push(b'=');
-        }
+    fn trace_sent(&mut self, name: &[u8], value: ObjRef) {
         if let Some(rendered) = self.intermediate_text(value) {
             let indent = self.activity.clause_state.current_value_indent;
-            self.trace_message(indent, &name, &rendered);
+            self.trace_message(indent, name, &rendered);
         }
-        Ok(())
     }
 
     /// One [`Op::List`]: the array of the `argc` values on top of the argument
@@ -2510,9 +2446,7 @@ impl Interp {
                             Deliver::Register(dst) => self
                                 .finish_function_op(ended)
                                 .map(|value| registers.set(dst, value)),
-                            Deliver::Send => {
-                                self.finish_send_op(chunk, clause, registers, at, ended)
-                            }
+                            Deliver::Send => self.finish_send_op(chunk, registers, at, ended),
                             Deliver::Flow(_) => {
                                 Err(Loud::op_not_driven("a parked CALL resumed mid-region").into())
                             }

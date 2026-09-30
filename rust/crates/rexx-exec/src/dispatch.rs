@@ -1649,8 +1649,8 @@ impl Interp {
         })
     }
 
-    /// **Step one of a send** (D24): which method a name reaches on this
-    /// receiver and from which scope, or why the send has none to run.
+    /// [`Interp::resolve_in`] with the receiver's behaviour looked up.
+    #[cfg(test)]
     pub(crate) fn resolve(
         &mut self,
         receiver: ObjRef,
@@ -1661,6 +1661,37 @@ impl Interp {
         let Some(resolution) = self.lookup(receiver, name, start_scope) else {
             return Err(Miss::NoMethod);
         };
+        self.admit(resolution, receiver, caller)
+    }
+
+    /// **Step one of a send** (D24): which method a name reaches on this
+    /// receiver, whose behaviour is `behaviour`, and from which scope, or why
+    /// the send has none to run.
+    fn resolve_in(
+        &mut self,
+        receiver: ObjRef,
+        behaviour: Behaviour,
+        name: &[u8],
+        start_scope: Option<ObjRef>,
+        caller: Caller,
+    ) -> Result<Resolution, Miss> {
+        let found = match self.own_lookup(receiver, name, start_scope) {
+            Some(found) => found,
+            None => self.lookup_behaviour(behaviour, name, start_scope),
+        };
+        let Some(resolution) = found else {
+            return Err(Miss::NoMethod);
+        };
+        self.admit(resolution, receiver, caller)
+    }
+
+    /// `resolution` once its method's access admits a send from `caller`.
+    fn admit(
+        &mut self,
+        resolution: Resolution,
+        receiver: ObjRef,
+        caller: Caller,
+    ) -> Result<Resolution, Miss> {
         match self.access_scope_of(resolution.method) {
             None => Ok(resolution),
             Some(scope) => match scope.access {
@@ -1693,12 +1724,36 @@ impl Interp {
         // override starts inside the class hierarchy and so never reaches
         // one: `RexxObject::superMethod` searches from a named scope, and a
         // one-off's scope is `.nil` or the class's own.
+        if let Some(found) = self.own_lookup(receiver, name, start_scope) {
+            return found;
+        }
+        let behaviour = self.receiver_behaviour(receiver).ok()?;
+        self.lookup_behaviour(behaviour, name, start_scope)
+    }
+
+    /// What `receiver`'s own methods answer for `name` ahead of its
+    /// behaviour: `None` where they do not decide it.
+    fn own_lookup(
+        &self,
+        receiver: ObjRef,
+        name: &[u8],
+        start_scope: Option<ObjRef>,
+    ) -> Option<Option<Resolution>> {
         if start_scope.is_none()
             && let Some(entry) = self.own_method_entry(receiver, name)
         {
-            return entry.map(|ObjectMethod { method, scope }| Resolution { scope, method });
+            return Some(entry.map(|ObjectMethod { method, scope }| Resolution { scope, method }));
         }
-        let behaviour = self.receiver_behaviour(receiver).ok()?;
+        None
+    }
+
+    /// [`Interp::lookup`] in `behaviour`, past the receiver's own methods.
+    fn lookup_behaviour(
+        &mut self,
+        behaviour: Behaviour,
+        name: &[u8],
+        start_scope: Option<ObjRef>,
+    ) -> Option<Resolution> {
         // Borrowed rather than owned wherever the name is UTF-8, which every
         // name a program can write is: `from_utf8_lossy` allocates only for
         // the bytes it has to replace.
@@ -1956,7 +2011,13 @@ impl Interp {
 
     /// [`Interp::super_scope_for`] for a method whose scope is `scope`.
     pub(crate) fn super_scope_of(&mut self, receiver: ObjRef, scope: ObjRef) -> Option<ObjRef> {
-        match self.receiver_behaviour(receiver).ok()? {
+        let behaviour = self.receiver_behaviour(receiver).ok()?;
+        self.super_scope_in(behaviour, scope)
+    }
+
+    /// [`Interp::super_scope_of`] in `behaviour`, the receiver's.
+    fn super_scope_in(&mut self, behaviour: Behaviour, scope: ObjRef) -> Option<ObjRef> {
+        match behaviour {
             Behaviour::Instance { methods, .. } => self.classes().super_scope_at(methods, scope),
             Behaviour::ClassSide(class) => self.classes().class_super_scope(class, scope),
         }
@@ -2005,7 +2066,7 @@ impl Interp {
         Err(Loud::native_method(name, &scope).into())
     }
 
-    /// **Step two of a send** (D24): run what [`Interp::resolve`] found.
+    /// **Step two of a send** (D24): run what [`Interp::resolve_in`] found.
     pub(crate) fn invoke(
         &mut self,
         resolution: Resolution,
@@ -2013,19 +2074,23 @@ impl Interp {
         name: &[u8],
         args: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
-        let started = self.begin_invoke(resolution, receiver, name, args)?;
+        let started = self.begin_invoke(resolution, None, receiver, name, args)?;
         self.complete_send(started)
     }
 
-    /// [`Interp::invoke`] up to the point a Rexx body it enters would run.
+    /// [`Interp::invoke`] up to the point a Rexx body it enters would run,
+    /// with `behaviour` the receiver's where the caller has it.
     fn begin_invoke(
         &mut self,
         resolution: Resolution,
+        behaviour: Option<Behaviour>,
         receiver: ObjRef,
         name: &[u8],
         args: &[Option<ObjRef>],
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let invocable = self.invocable(resolution, name)?;
+        // A protected method's check can run code that changes the receiver.
+        let behaviour = behaviour.filter(|_| !self.method_is_protected(resolution.method));
         let cleared = match seam::clear(self, receiver, name, args, resolution.method)? {
             seam::Clearance::Cleared(cleared) => cleared,
             seam::Clearance::Answered(result) => return Ok(Started::Ran(result)),
@@ -2070,8 +2135,8 @@ impl Interp {
             // An untrapped `1/0` inside a `::METHOD` body reports
             // the method's own failing clause and then the sending clause,
             // with no `Compiled method` line between them, and
-            // [`Interp::enter_method_body`] seals its own level for that,
-            // exactly as `Interp::invoke_call` does. A generated accessor and
+            // [`Interp::finish_call`] seals the method's own level for that,
+            // exactly as it does for a call. A generated accessor and
             // an `ABSTRACT` send report the *sending* clause and nothing
             // above it: measured, `.K~a(1)` on `::attribute a class` is
             // `93.902` with the sending clause alone on `stderr`, where
@@ -2082,7 +2147,9 @@ impl Interp {
             // from inside a `NativeActivation` of its own
             // (`execution/CPPCode.cpp:280`, `:526`).
             Invocable::Rexx(installed) => {
-                self.begin_method(cleared, installed, resolution, receiver, name, args)?;
+                self.begin_method(
+                    cleared, installed, resolution, behaviour, receiver, name, args,
+                )?;
                 return Ok(Started::Entered);
             }
             // **The refusal is the ordinary outcome here**, so unlike the
@@ -2376,7 +2443,7 @@ impl Interp {
     fn accessor_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
         let program = &self.programs[generated.program.0];
         // `get` rather than an index, and `None` rather than a panic, for the
-        // reason `Interp::enter_method_body`'s own reads carry.
+        // reason `Interp::begin_method`'s own reads carry.
         let Some(directive) = program.directives.get(generated.directive) else {
             return Err(Loud::missing_body().into());
         };
@@ -2393,11 +2460,16 @@ impl Interp {
     /// sender's level state goes into, up to the point the body would run.
     ///
     /// [`CallTail`]: crate::run::CallTail
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the send's own parts, and the receiver's behaviour where the send has it"
+    )]
     fn begin_method(
         &mut self,
         _cleared: Cleared,
         installed: crate::InstalledMethodBody,
         resolution: Resolution,
+        behaviour: Option<Behaviour>,
         receiver: ObjRef,
         name: &[u8],
         args: &[Option<ObjRef>],
@@ -2434,8 +2506,12 @@ impl Interp {
             &program.source,
         );
         let frame = self.roots.push_slots(plan.len());
+        let (self_slot, super_slot) = (plan.self_slot, plan.super_slot);
         let callee_id = self.next_activation_id();
-        let super_scope = self.super_scope_for(receiver, resolution);
+        let super_scope = match behaviour {
+            Some(behaviour) => self.super_scope_in(behaviour, resolution.scope),
+            None => self.super_scope_for(receiver, resolution),
+        };
         // **The calling convention, entered before anything reads it.** The
         // receiver goes in here and is read back out below, so the identity
         // the activation carries, the `SELF` the body reads and the caller a
@@ -2488,9 +2564,15 @@ impl Interp {
         // (`RexxActivation.cpp:535`-`536`). Measured in a class method of
         // `::class K`: `say self` is `The K class` and `say super` is
         // `The Class class`.
-        let self_slot = self.slot_of(b"SELF");
+        let self_slot = match self_slot {
+            Some(slot) => slot,
+            None => self.slot_of(b"SELF"),
+        };
         self.set_variable(frame, self_slot, receiver);
-        let super_slot = self.slot_of(b"SUPER");
+        let super_slot = match super_slot {
+            Some(slot) => slot,
+            None => self.slot_of(b"SUPER"),
+        };
         // `.nil` for the topmost scope, which is what `superScope` answers
         // there.
         self.set_variable(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
@@ -2796,7 +2878,7 @@ impl Interp {
         ));
     }
 
-    /// [`Interp::resolve`] then [`Interp::invoke`], with
+    /// [`Interp::resolve_in`] then [`Interp::invoke`], with
     /// [`Interp::unknown_or_nomethod`] behind them for a name the receiver's
     /// behaviour does not answer.
     pub(crate) fn send_message(
@@ -2821,11 +2903,12 @@ impl Interp {
         args: &[Option<ObjRef>],
         caller: Caller,
     ) -> Result<Started<Option<ObjRef>>, Failure> {
-        if let Err(kind) = self.receiver_kind(receiver) {
-            return Err(Loud::receiver_class(kind).into());
-        }
-        match self.resolve(receiver, name, start_scope, caller) {
-            Ok(resolution) => self.begin_invoke(resolution, receiver, name, args),
+        let behaviour = match self.receiver_behaviour(receiver) {
+            Ok(behaviour) => behaviour,
+            Err(kind) => return Err(Loud::receiver_class(kind).into()),
+        };
+        match self.resolve_in(receiver, behaviour, name, start_scope, caller) {
+            Ok(resolution) => self.begin_invoke(resolution, Some(behaviour), receiver, name, args),
             Err(miss) => self
                 .unknown_or_nomethod(receiver, name, args, miss)
                 .map(Started::Ran),

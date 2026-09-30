@@ -428,7 +428,7 @@ pub(super) fn annotation_target<'a>(
 }
 
 /// Why a resolved method's directive cannot be entered, or `None` when it
-/// can -- the gate `Interp::enter_method_body` (`dispatch.rs`) takes before
+/// can -- the gate `Interp::begin_method` (`dispatch.rs`) takes before
 /// it pushes anything.
 pub(super) fn method_body_gap(kind: &DirectiveKind) -> Option<Loud> {
     match kind {

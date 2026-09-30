@@ -89,17 +89,14 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                 ));
             }
             Op::Send {
-                slot,
-                path,
+                site,
                 recv,
                 argc,
                 dst,
                 form,
             } => {
                 out.push_str(&format!(
-                    "{index}: Send slot={slot} path={} recv={recv} argc={argc} dst={dst} \
-                     form={form:?}\n",
-                    render_path(*path)
+                    "{index}: Send site={site} recv={recv} argc={argc} dst={dst} form={form:?}\n"
                 ));
             }
             Op::List { argc, dst } => {

@@ -949,7 +949,10 @@ pub(crate) fn compile(
             InstructionKind::Message { term, value }
                 if native_message_instruction(term, value.as_ref()) =>
             {
-                let ExprKind::Message { target, args, .. } = &term.kind else {
+                let ExprKind::Message {
+                    target, name, args, ..
+                } = &term.kind
+                else {
                     unreachable!("the guard above admits only a message term")
                 };
                 let mark = registers.mark();
@@ -1017,17 +1020,18 @@ pub(crate) fn compile(
                 .ok_or(ChunkTooLarge {
                     what: "call arguments past u16",
                 })?;
+                // The message-assignment form sends the term's name with `=`
+                // appended.
+                let (name, form) = match value {
+                    Some(_) => ([&name[..], b"="].concat(), SendForm::Assign),
+                    None => (name.to_vec(), SendForm::Clause),
+                };
                 ops.push(Op::Send {
-                    slot: 0,
-                    path: NodePath::ROOT,
+                    site: calls.reserve_send(name.into_boxed_slice())?,
                     recv,
                     argc,
                     dst: recv,
-                    form: if value.is_some() {
-                        SendForm::Assign
-                    } else {
-                        SendForm::Clause
-                    },
+                    form,
                 });
                 close_region(&mut ops, at)?;
                 registers.release(mark);
@@ -1638,10 +1642,9 @@ fn push_native<'a>(
         }
         // The receiver lands in `dst` itself, which the send reads before it
         // writes its answer there.
-        ExprKind::Message { target, args, .. } => {
-            let slot16 = u16::try_from(slot).map_err(|_| ChunkTooLarge {
-                what: "expression slots past u16",
-            })?;
+        ExprKind::Message {
+            target, name, args, ..
+        } => {
             let path = path.expect("native_shape accepts a send only where an address reaches it");
             push_native(
                 ops,
@@ -1672,8 +1675,7 @@ fn push_native<'a>(
                 true,
             )?;
             ops.push(Op::Send {
-                slot: slot16,
-                path,
+                site: calls.reserve_send(Box::from(&name[..]))?,
                 recv: dst,
                 argc,
                 dst,

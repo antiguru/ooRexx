@@ -96,7 +96,7 @@ fn a_message_send_clause_whose_term_compiles_ends_in_one_send_op() {
         render(&compile_for_test(b"'abc'~length").expect("the chunk fits")),
         "0: Clause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
-         2: Send slot=0 path=root recv=0 argc=0 dst=0 form=Clause\n"
+         2: Send site=0 recv=0 argc=0 dst=0 form=Clause\n"
     );
     assert_eq!(
         render(&compile_for_test(b"zz = 'abc'; zz[1] = 2").expect("the chunk fits")),
@@ -109,7 +109,7 @@ fn a_message_send_clause_whose_term_compiles_ends_in_one_send_op() {
          6: PushArg src=1\n\
          7: LoadConstant dst=2\n\
          8: PushArg src=2\n\
-         9: Send slot=0 path=root recv=0 argc=2 dst=0 form=Assign\n"
+         9: Send site=0 recv=0 argc=2 dst=0 form=Assign\n"
     );
 }
 

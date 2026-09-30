@@ -12,7 +12,7 @@
 # surface -- which files the construction sites are in. `send` is dispatch.rs
 # (outside an inline #[cfg(test)] mod) and every file under dispatch/, the test
 # module dispatch/tests.rs among them; Interp::send_message and
-# Interp::enter_method_body are both in dispatch.rs. `ir` is ir.rs and ir/;
+# Interp::begin_method are both in dispatch.rs. `ir` is ir.rs and ir/;
 # `body` is everything else.
 #
 # verdict, for the `send` rows only -- about the program in the witness column:
@@ -218,7 +218,7 @@ Loud	native_method	send	crates/rexx-exec/src/lib.rs:406	diverges	yes	of class	m~
 Raised	no_data_returned	body	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
 Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1499	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
 Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1156	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
-Raised	no_result	body+send	crates/rexx-exec/src/error.rs:1595	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1595	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
 Raised	nomethod	send	crates/rexx-exec/src/error.rs:1529	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
 Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
 Raised	nostring	send	crates/rexx-exec/src/error.rs:1540	agrees	yes	NOSTRING	substr('abcdef', o)

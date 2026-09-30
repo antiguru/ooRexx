@@ -340,7 +340,8 @@ impl Interp {
         self.trace_dotvar(indent, &tag, &text);
     }
 
-    /// The `>V>` line one bare-symbol read owes.
+    /// The `>V>` line one bare-symbol read owes, or `>E>` for an environment
+    /// symbol.
     #[inline(always)]
     pub(crate) fn echo_symbol_read(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
         if !self.tracing_intermediates() {
@@ -350,9 +351,14 @@ impl Interp {
     }
 
     /// The name-building and the lines, out of line behind
-    /// [`Interp::echo_symbol_read`]'s gate.
+    /// [`Interp::echo_symbol_read`]'s gate. An environment symbol, whose
+    /// spelling starts with its period, echoes `>E>` instead.
     #[inline(never)]
     fn echo_symbol_read_line(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
+        if code.symbols.name(id).starts_with('.') {
+            self.echo_environment_symbol(code, id, value);
+            return;
+        }
         let indent = self.activity.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
         let text = self.string_value_text(value);
@@ -435,7 +441,7 @@ impl Interp {
 
             // `target~name(...)`, `target~~name(...)` and `target[...]`
             // (Phase 5a) -- see `Interp::message_term` (`dispatch.rs`) for
-            // the evaluation order and `Interp::resolve`/`Interp::invoke`
+            // the evaluation order and `Interp::resolve_in`/`Interp::invoke`
             // for the send itself. The **expression** form only: the
             // message-assignment form is an instruction and never an
             // expression, so `assigned` is `None` here.

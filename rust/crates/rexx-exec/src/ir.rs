@@ -273,12 +273,11 @@ pub(crate) enum Op {
         keyword: ConditionKeyword,
         target: u32,
     },
-    /// Sends the message term at `path` inside expression `slot` to the
-    /// receiver in `recv`, over the `argc` arguments on top of the driver's
-    /// argument stack, and delivers the answer as `form` says.
+    /// Sends the message [`Chunk`]'s send site `site` names to the receiver
+    /// in `recv`, over the `argc` arguments on top of the driver's argument
+    /// stack, and delivers the answer as `form` says.
     Send {
-        slot: u16,
-        path: NodePath,
+        site: u32,
         recv: u16,
         argc: u16,
         dst: u16,
@@ -514,10 +513,12 @@ impl CallSite {
 }
 
 /// One chunk's resolution table: a slot per call op -- [`Op::Call`] and
-/// [`Op::CallExpr`] alike -- indexed by that op's own `site` field.
+/// [`Op::CallExpr`] alike -- indexed by that op's own `site` field, and the
+/// message name each [`Op::Send`]'s `site` names.
 struct Calls {
     /// One slot per call op, or **empty** when [`CALL_SITE_CACHE`] is off.
     slots: Vec<CallSite>,
+    sends: Vec<Box<[u8]>>,
     /// How many call ops have taken a slot, kept separately from `slots.len()`
     /// so that the indices the ops carry are the same whether or not the table
     /// exists -- [`Hints::next`]'s own reason, so that a golden op stream reads
@@ -529,8 +530,18 @@ impl Calls {
     fn new() -> Calls {
         Calls {
             slots: Vec::new(),
+            sends: Vec::new(),
             next: 0,
         }
+    }
+
+    /// Files one send's message name, answering the site it has.
+    fn reserve_send(&mut self, name: Box<[u8]>) -> Result<u32, ChunkTooLarge> {
+        let at = u32::try_from(self.sends.len()).map_err(|_| ChunkTooLarge {
+            what: "send sites past u32",
+        })?;
+        self.sends.push(name);
+        Ok(at)
     }
 
     /// Reserves the slot for one call op, answering the index it carries.
@@ -743,6 +754,12 @@ impl Chunk {
     /// Records what call site `at` resolved to ([`Calls::remember`]).
     fn remember_call(&self, at: u16, resolved: Resolved, generation: u32) {
         self.calls.remember(at, resolved, generation);
+    }
+
+    /// The message name send site `at` sends, or `None` for a site this
+    /// chunk does not have.
+    pub(crate) fn send_name(&self, at: u32) -> Option<&[u8]> {
+        self.calls.sends.get(at as usize).map(|name| &name[..])
     }
 
     /// Call site `at`, lent to a call that resolves after its arguments.

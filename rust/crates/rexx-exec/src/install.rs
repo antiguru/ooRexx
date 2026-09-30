@@ -1135,7 +1135,7 @@ impl Interp {
     pub(crate) fn constant_name(&self, generated: GeneratedMethod) -> Result<Vec<u8>, Failure> {
         let program = &self.programs[generated.program.0];
         // `get` rather than an index, and a refusal rather than a panic, for
-        // the reason `Interp::enter_method_body`'s own reads carry.
+        // the reason `Interp::begin_method`'s own reads carry.
         let Some(directive) = program.directives.get(generated.directive) else {
             return Err(Loud::missing_body().into());
         };
@@ -2380,7 +2380,7 @@ impl Interp {
         self.set_variable(frame, self_slot, class);
         let super_slot = self.slot_of(b"SUPER");
         // `.nil` for the topmost scope, which is what `superScope` answers
-        // there and what `Interp::enter_method_body` writes for it.
+        // there and what `Interp::begin_method` writes for it.
         let super_scope = self.classes().class_super_scope(class, class);
         self.set_variable(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
         let code = Code {

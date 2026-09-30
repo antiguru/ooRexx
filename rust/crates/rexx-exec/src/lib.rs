@@ -2953,7 +2953,7 @@ fn execute(
     for (failure, mut sites) in interp.run_deferred_replies() {
         match failure {
             // `Interp::resume_reply` answers `Ok` for this variant, exactly as
-            // `Interp::enter_method_body` does; the arm is what makes this
+            // a send does; the arm is what makes this
             // match exhaustive and nothing else.
             Failure::Exited(_) => {}
             // The guard below the `UNINIT` sweep is what reports this, for

@@ -128,6 +128,9 @@ pub(crate) struct Plan {
     /// instructions per call against the oracle's 18.
     pub(crate) result_slot: Option<usize>,
     pub(crate) sigl_slot: Option<usize>,
+    /// A method body's `SELF` and `SUPER`, which every send binds.
+    pub(crate) self_slot: Option<usize>,
+    pub(crate) super_slot: Option<usize>,
     pub(crate) by_symbol: Vec<Option<usize>>,
     /// The walk's own flag, and scratch: `note_instruction` clears it when the
     /// instruction it is walking can change the `TRACE` setting in force, and
@@ -272,7 +275,7 @@ impl Plan {
         plan.slot_for(b"RC");
         plan.sigl_slot = Some(plan.slot_for(b"SIGL"));
         // **`SELF` and `SUPER` for the same reason, in a method body only.**
-        // `Interp::enter_method_body` binds both on every send through
+        // `Interp::begin_method` binds both on every send through
         // `Interp::slot_of`, whose third source grows the frame and records
         // the name in `Activation::extra` -- so a method body that never
         // mentions either name paid two boxed keys and two map inserts per
@@ -280,8 +283,8 @@ impl Plan {
         // `RESULT`. Measured on `bench-programs/dispatch.rex`, `slot_of`
         // reached from that binding was the largest single caller of `extra`.
         if kind == BodyKind::Method {
-            plan.slot_for(b"SELF");
-            plan.slot_for(b"SUPER");
+            plan.self_slot = Some(plan.slot_for(b"SELF"));
+            plan.super_slot = Some(plan.slot_for(b"SUPER"));
         }
         plan.indents = crate::run::all_indents(&body.instructions);
         if let Some(source) = source {
@@ -829,6 +832,8 @@ impl Interp {
         compiled.by_symbol = translation.clone();
         compiled.result_slot = compiled.result_slot.map(|slot| enclosing[slot]);
         compiled.sigl_slot = compiled.sigl_slot.map(|slot| enclosing[slot]);
+        compiled.self_slot = compiled.self_slot.map(|slot| enclosing[slot]);
+        compiled.super_slot = compiled.super_slot.map(|slot| enclosing[slot]);
         for entry in compiled.compounds.iter_mut().flatten() {
             entry.stem_at = None;
             for tail in entry.tails.iter_mut() {
