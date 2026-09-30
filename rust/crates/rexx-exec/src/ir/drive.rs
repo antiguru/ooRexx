@@ -503,8 +503,8 @@ macro_rules! region_ops {
                     );
                     if $top {
                         match $self.begin_send_op($chunk, $registers, region_op) {
-                            Ok(true) => {}
-                            Ok(false) => {
+                            Ok(Started::Ran(value)) => $registers.set(*dst, value),
+                            Ok(Started::Entered) => {
                             break 'entered Deliver::Send;
                             }
                             Err(failure) => break $cold Err(failure),
@@ -1902,17 +1902,17 @@ impl Interp {
         Ok((subroutine_started(begun), base_indent))
     }
 
-    /// One [`Op::Send`] up to the point a Rexx body it enters would run:
-    /// `true` where it answered without entering one, with the answer
-    /// delivered. An entered body keeps the evaluation depth this counted
-    /// until [`Interp::finish_send_op`].
+    /// One [`Op::Send`] up to the point a Rexx body it enters would run, or
+    /// the value its `dst` takes where it answered without entering one. An
+    /// entered body keeps the evaluation depth this counted until
+    /// [`Interp::finish_send_op`].
     #[inline(never)]
     fn begin_send_op(
         &mut self,
         chunk: &Chunk,
         registers: RegFrame<'_>,
         op: &Op,
-    ) -> Result<bool, Failure> {
+    ) -> Result<Started<ObjRef>, Failure> {
         let Op::Send {
             site, recv, argc, ..
         } = *op
@@ -1937,11 +1937,10 @@ impl Interp {
         values.truncate(mark);
         self.lend_stack(matches!(started, Ok(Started::Entered)), values);
         match started {
-            Ok(Started::Entered) => Ok(false),
+            Ok(Started::Entered) => Ok(Started::Entered),
             Ok(Started::Ran(sent)) => {
                 self.activity.depth -= 1;
-                self.deliver_sent(chunk, registers, op, sent)?;
-                Ok(true)
+                self.deliver_sent(chunk, op, sent).map(Started::Ran)
             }
             Err(failure) => {
                 self.activity.depth -= 1;
@@ -1958,11 +1957,17 @@ impl Interp {
         registers: RegFrame<'_>,
         op: &Op,
     ) -> Result<(), Failure> {
-        if self.begin_send_op(chunk, registers, op)? {
-            return Ok(());
+        let value = match self.begin_send_op(chunk, registers, op)? {
+            Started::Ran(value) => value,
+            Started::Entered => {
+                let ended = self.run_activation();
+                return self.finish_sent(chunk, registers, op, ended);
+            }
+        };
+        if let Op::Send { dst, .. } = *op {
+            registers.set(dst, value);
         }
-        let ended = self.run_activation();
-        self.finish_sent(chunk, registers, op, ended)
+        Ok(())
     }
 
     /// The [`Op::Send`] in front of op `at`, once the body it entered has
@@ -1995,57 +2000,58 @@ impl Interp {
     ) -> Result<(), Failure> {
         let sent = self.finish_send(ended);
         self.activity.depth -= 1;
-        self.deliver_sent(chunk, registers, op, sent?)
+        let value = self.deliver_sent(chunk, op, sent?)?;
+        if let Op::Send { dst, .. } = *op {
+            registers.set(dst, value);
+        }
+        Ok(())
     }
 
-    /// Where [`Op::Send`] `op` puts the answer `sent`, and the `>M>` line it
-    /// owes: the line comes before `RESULT` is settled, as
+    /// [`Op::Send`] `op`'s answer `sent` settled, and the `>M>` line it
+    /// owes, and what its `dst` takes: the answer for a send in an
+    /// expression, and `.nil` for the other forms, whose answer goes to
+    /// `RESULT`. The line comes before `RESULT` is settled, as
     /// `Interp::message_term` emits it for `Interp::exec_message`.
     fn deliver_sent(
         &mut self,
         chunk: &Chunk,
-        registers: RegFrame<'_>,
         op: &Op,
         sent: Option<ObjRef>,
-    ) -> Result<(), Failure> {
-        let Op::Send {
-            site, dst, form, ..
-        } = *op
-        else {
+    ) -> Result<ObjRef, Failure> {
+        let Op::Send { site, form, .. } = *op else {
             return Err(Loud::call_op_off_its_node().into());
         };
-        if form == SendForm::Value {
-            let Some(value) = sent else {
-                return Err(Raised::no_result(chunk.send_name(site).unwrap_or_default()).into());
-            };
-            registers.set(dst, value);
+        if form == SendForm::Value && sent.is_none() {
+            return Err(Raised::no_result(chunk.send_name(site).unwrap_or_default()).into());
         }
         if let Some(value) = sent
             && self.tracing_intermediates()
         {
             self.trace_sent(chunk.send_name(site).unwrap_or_default(), value);
         }
-        if form != SendForm::Value {
-            let slot = self.reserved_result_slot();
-            let frame = self.activation().frame;
-            // **A send that produced no value drops `RESULT`** rather than
-            // leaving the previous one in place, as `Interp::exec_message`
-            // does.
-            match sent {
-                Some(value) => {
-                    self.roots.activity_mut().push_temp(value);
-                    self.set_variable(frame, slot, value);
-                }
-                None => self.clear_variable(frame, slot),
-            }
+        if form == SendForm::Value {
+            return Ok(sent.unwrap_or(ObjRef::NIL));
         }
-        Ok(())
+        let slot = self.reserved_result_slot();
+        let frame = self.activation().frame;
+        // **A send that produced no value drops `RESULT`** rather than
+        // leaving the previous one in place, as `Interp::exec_message` does.
+        match sent {
+            Some(value) => {
+                self.roots.activity_mut().push_temp(value);
+                self.set_variable(frame, slot, value);
+            }
+            None => self.clear_variable(frame, slot),
+        }
+        Ok(ObjRef::NIL)
     }
 
     /// The `>M>` line a send of `name` that answered `value` owes.
     #[cold]
     #[inline(never)]
     fn trace_sent(&mut self, name: &[u8], value: ObjRef) {
+        // Rooted across the rendering, which can run a `STRING` method.
+        self.roots.activity_mut().push_temp(value);
         if let Some(rendered) = self.intermediate_text(value) {
             let indent = self.activity.clause_state.current_value_indent;
             self.trace_message(indent, name, &rendered);
