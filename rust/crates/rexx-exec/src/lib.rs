@@ -1685,9 +1685,9 @@ struct NativeFrame {
     kept: rustc_hash::FxHashSet<ObjRef>,
     /// The activation the call was made from.
     caller: Option<crate::activation::ActivationId>,
-    /// This native activation's own identity, which is what rexx-api names
-    /// the frame by.
-    id: crate::activation::ActivationId,
+    /// This native activation's number among its activity's, which is what
+    /// rexx-api names the frame by.
+    id: u32,
     /// Whether the code reports a package, which then leads a condition it
     /// raises with no line, so the condition has no `POSITION`.
     packaged: bool,

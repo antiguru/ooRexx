@@ -196,6 +196,7 @@ impl RootSet {
     }
 
     /// [`RootSet::frame_slot`] for a frame that need not be the top one.
+    #[cold]
     #[inline(never)]
     pub fn frame_slot_of(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
         self.at(self.activity.resolve(frame, index))
@@ -221,6 +222,7 @@ impl RootSet {
     }
 
     /// [`RootSet::set_frame_slot`] for a frame that need not be the top one.
+    #[cold]
     #[inline(never)]
     pub fn set_frame_slot_of(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
         let target = self.activity.resolve(frame, index);
@@ -234,7 +236,27 @@ impl RootSet {
     /// x = .nil            ; say x  ->  The NIL object    (`.nil` is a value)
     /// y = .nil  ; drop y  ; say y  ->  Y                 (unset, not NIL)
     /// ```
+    ///
+    /// `frame` is the top one, or an [`ActivityRoots::begin_indirect`] is in
+    /// force.
+    #[inline(always)]
     pub fn clear_frame_slot(&mut self, frame: SlotFrame, index: usize) {
+        let activity = &mut self.activity;
+        if activity.indirect == 0 {
+            activity.debug_assert_top(frame);
+            let position = activity.top_start + index;
+            assert!(position < activity.slots.len());
+            activity.slots[position] = None;
+            return;
+        }
+        self.clear_frame_slot_of(frame, index);
+    }
+
+    /// [`RootSet::clear_frame_slot`] for a frame that need not be the top
+    /// one.
+    #[cold]
+    #[inline(never)]
+    pub fn clear_frame_slot_of(&mut self, frame: SlotFrame, index: usize) {
         let target = self.activity.resolve(frame, index);
         self.write(target, None);
     }

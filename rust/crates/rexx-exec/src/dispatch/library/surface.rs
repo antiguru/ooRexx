@@ -738,7 +738,7 @@ impl Interp {
             .native_handles
             .iter()
             .rev()
-            .find(|native| native.id.0 == frame)?
+            .find(|native| u64::from(native.id) == frame)?
             .caller?;
         if self.activity.running.as_ref()?.id == caller {
             return None;

@@ -94,7 +94,7 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.activity.thread.clone();
         let (answered, pending) = {
-            let frame = self.native_frame().id.0;
+            let frame = u64::from(self.native_frame().id);
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -167,7 +167,7 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.activity.thread.clone();
         let (answered, pending) = {
-            let frame = self.native_frame().id.0;
+            let frame = u64::from(self.native_frame().id);
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -217,7 +217,7 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.activity.thread.clone();
         let (ran, pending) = {
-            let frame = self.native_frame().id.0;
+            let frame = u64::from(self.native_frame().id);
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -263,7 +263,7 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.activity.thread.clone();
         let (answered, pending) = {
-            let frame = self.native_frame().id.0;
+            let frame = u64::from(self.native_frame().id);
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -476,7 +476,7 @@ impl Interp {
                 code: None,
                 kept: rustc_hash::FxHashSet::default(),
                 caller: None,
-                id: crate::activation::ActivationId(0),
+                id: 0,
                 packaged: false,
             });
         frame.owner = owner;
@@ -485,7 +485,8 @@ impl Interp {
         frame.receiver = receiver.unwrap_or(ObjRef::NIL);
         frame.code = code;
         frame.caller = self.running_activation().map(|activation| activation.id);
-        frame.id = self.next_activation_id();
+        frame.id = self.activity.next_native;
+        self.activity.next_native = self.activity.next_native.wrapping_add(1);
         frame.packaged = false;
         frame.name.extend_from_slice(name);
         frame.arguments.extend_from_slice(args);
