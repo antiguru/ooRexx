@@ -545,7 +545,7 @@ pub(super) fn native_new_class(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     if args.is_empty() {
         return Err(Raised::not_enough_method_arguments(1).into());
@@ -568,9 +568,7 @@ pub(super) fn native_new_class(
     interp.copy_class_package(class, id);
     interp.classes().check_uninit(id);
     interp.flag_class_uninit(id);
-    let caller = interp.caller();
-    interp.send_message(id, INIT, None, &args[1..], caller)?;
-    Ok(Some(id))
+    begin_init(interp, id, &args[1..])
 }
 
 /// `Object~new`: what every class that declares no `NEW` of its own answers.
@@ -582,6 +580,15 @@ pub(super) fn native_new(
 ) -> Result<NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     let object = new_instance(interp, class)?;
+    begin_init(interp, object, args)
+}
+
+/// `object`'s `INIT` send with `args`, answering `object` once it has run.
+pub(super) fn begin_init(
+    interp: &mut Interp,
+    object: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<NativeStarted, Failure> {
     let caller = interp.caller();
     Ok(match interp.begin_send(object, INIT, None, args, caller)? {
         Started::Ran(_) => NativeStarted::Ran(Some(object)),

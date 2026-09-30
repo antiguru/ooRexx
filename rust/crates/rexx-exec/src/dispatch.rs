@@ -158,7 +158,7 @@ use method_arguments::{
 // `Class`'s own methods: its readers, the mutators, the class factory.
 mod class_protocol;
 use class_protocol::{
-    class_argument, class_receiver, compile_method_source, compile_routine_source,
+    begin_init, class_argument, class_receiver, compile_method_source, compile_routine_source,
     is_enhanced_instance, method_name_argument, method_source_lines, native_annotation,
     native_annotations, native_base_class, native_class_copy, native_class_default_name,
     native_class_inherit, native_define, native_define_class_method, native_define_methods,
@@ -713,7 +713,8 @@ static RESUMABLE_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
     ("Object", "STARTWITH", Arity::Fixed(2), native_start_with),
 ];
 
-/// [`RESUMABLE_METHODS`] for the class dictionary.
+/// [`RESUMABLE_METHODS`] for the class dictionary: every `NEW` that sends
+/// `INIT`.
 static RESUMABLE_CLASS_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
     // `AddClassMethod("New", RexxObject::newRexx, A_COUNT)`,
     // `memory/Setup.cpp:514`, reached by every class whose own class
@@ -725,18 +726,72 @@ static RESUMABLE_CLASS_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
     ("MutexSemaphore", "NEW", Arity::Counted, native_new),
     ("Queue", "NEW", Arity::Counted, native_new),
     ("Supplier", "NEW", Arity::Counted, native_new),
-];
-
-/// The primitive methods bound to a class's **class** dictionary rather than
-/// its instance one -- `memory/Setup.cpp`'s `AddClassMethod` rows.
-static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `AddClassMethod("New", ArrayClass::newRexx, A_COUNT)`,
     // `memory/Setup.cpp:708`. A row of its own for the reason
     // `StringTable`'s below is one: the answer is a body this crate builds
     // rather than an instance.
     ("Array", "NEW", Arity::Counted, native_array_new),
+    // `AddClassMethod("New", StringTable::newRexx, A_COUNT)` and
+    // `AddClassMethod("New", DirectoryClass::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:875` and `:928`. Rows of their own rather than
+    // `Object`'s, because each allocates a hash body rather than an instance.
+    (
+        "StringTable",
+        "NEW",
+        Arity::Counted,
+        native_hash_collection_new,
+    ),
+    ("Directory", "NEW", Arity::Counted, native_directory_new),
+    // Every class whose own `newRexx` is an allocation followed by
+    // `completeNewObject` and nothing else -- `memory/Setup.cpp:766`, `:821`,
+    // `:902`, `:953`, `:982`, `:1006`, `:1327`, `:1350`, `:1618`.
+    ("Bag", "NEW", Arity::Counted, hash::native_hash_new),
+    // `TableClass::newRexx` and `IdentityTable::newRexx` take an optional
+    // initial capacity, and it is observable: it decides the bucket count,
+    // which decides the order every iteration answers in.
+    (
+        "IdentityTable",
+        "NEW",
+        Arity::Counted,
+        hash::native_hash_new,
+    ),
+    ("Relation", "NEW", Arity::Counted, hash::native_hash_new),
+    ("Set", "NEW", Arity::Counted, hash::native_hash_new),
+    ("Table", "NEW", Arity::Counted, hash::native_hash_new),
+    // `AddClassMethod("New", RexxClass::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:450`, the one class method `.Class` adds.
+    ("Class", "NEW", Arity::Counted, native_new_class),
+    ("Message", "NEW", Arity::Counted, native_message_new),
+    (
+        "WeakReference",
+        "NEW",
+        Arity::Counted,
+        native_weak_reference_new,
+    ),
+    // `AddClassMethod("New", RexxString::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:572`. The one row here whose answer is a value rather
+    // than an instance.
+    ("String", "NEW", Arity::Counted, native_string_new),
+    // `AddClassMethod("New", StemClass::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:1371`. A row of its own because the answer is the
+    // `Body::Stem` a bare stem read also produces, not an instance.
+    ("Stem", "NEW", Arity::Counted, native_stem_new),
+    // `AddClassMethod("New", MutableBuffer::newRexx, A_COUNT)`,
+    // `memory/Setup.cpp:1418`. A row of its own because the arguments are
+    // checked before the allocation rather than by `INIT`.
+    (
+        "MutableBuffer",
+        "NEW",
+        Arity::Counted,
+        native_mutable_buffer_new,
+    ),
+];
+
+/// The primitive methods bound to a class's **class** dictionary rather than
+/// its instance one -- `memory/Setup.cpp`'s `AddClassMethod` rows.
+static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `AddClassMethod("Of", ArrayClass::ofRexx, A_COUNT)`,
-    // `memory/Setup.cpp:709`. The same body as the row above, filled from the
+    // `memory/Setup.cpp:709`. The same body as `Array~new`'s, filled from the
     // arguments rather than sized from them.
     ("Array", "OF", Arity::Counted, native_array_of),
     // `AddClassMethod("Of", QueueClass::ofRexx, A_COUNT)` and
@@ -755,51 +810,17 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Counted,
         collection::native_collection_of,
     ),
-    // `AddClassMethod("New", StringTable::newRexx, A_COUNT)` and
-    // `AddClassMethod("New", DirectoryClass::newRexx, A_COUNT)`,
-    // `memory/Setup.cpp:875` and `:928`. Rows of their own rather than
-    // `Object`'s, because each allocates a hash body rather than an instance.
-    (
-        "StringTable",
-        "NEW",
-        Arity::Counted,
-        native_hash_collection_new,
-    ),
-    ("Directory", "NEW", Arity::Counted, native_directory_new),
-    // Every class whose own `newRexx` is an allocation followed by
-    // `completeNewObject` and nothing else -- `memory/Setup.cpp:766`, `:821`,
-    // `:902`, `:953`, `:982`, `:1006`, `:1327`, `:1350`, `:1618`.
-    // Each allocates a primitive body this crate does not model, so each
-    // answers [`native_new`]'s plain instance: the class's own behaviour and
-    // the `INIT` send, and nothing that would read the body.
-    ("Bag", "NEW", Arity::Counted, hash::native_hash_new),
     // `AddClassMethod("Of", BagClass::ofRexx, A_COUNT)`, which unlike
     // `Set~of` keeps the duplicates.
     ("Bag", "OF", Arity::Counted, hash::native_bag_of),
-    // `TableClass::newRexx` and `IdentityTable::newRexx` take an optional
-    // initial capacity, and it is observable: it decides the bucket count,
-    // which decides the order every iteration answers in.
-    (
-        "IdentityTable",
-        "NEW",
-        Arity::Counted,
-        hash::native_hash_new,
-    ),
-    ("Relation", "NEW", Arity::Counted, hash::native_hash_new),
-    ("Set", "NEW", Arity::Counted, hash::native_hash_new),
     // `AddClassMethod("Of", SetClass::ofRexx, A_COUNT)`: `Set`'s own, unlike
     // the mapped classes whose `of` is `MapCollection~OF` in Rexx.
     ("Set", "OF", Arity::Counted, hash::native_set_of),
-    ("Table", "NEW", Arity::Counted, hash::native_hash_new),
-    // `AddClassMethod("New", RexxClass::newRexx, A_COUNT)`,
-    // `memory/Setup.cpp:450`, the one class method `.Class` adds.
-    ("Class", "NEW", Arity::Counted, native_new_class),
     // The classes whose own `newRexx` checks its arguments and then builds
-    // something this crate does not -- an undispatched message, a compiled
-    // executable, a loaded package, a weak reference (`memory/Setup.cpp:1052`,
-    // `:1091`, `:1128`, `:1156`, `:1683`). Each checks exactly what the C++
-    // checks before that point and refuses loudly past it.
-    ("Message", "NEW", Arity::Counted, native_message_new),
+    // something this crate does not -- a compiled executable, a loaded
+    // package (`memory/Setup.cpp:1091`, `:1128`, `:1156`). Each checks
+    // exactly what the C++ checks before that point and refuses loudly past
+    // it.
     (
         "Method",
         "LOADEXTERNALMETHOD",
@@ -817,34 +838,11 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     ("Routine", "NEW", Arity::Counted, native_executable_new),
     ("Routine", "NEWFILE", Arity::Fixed(2), native_new_file),
-    (
-        "WeakReference",
-        "NEW",
-        Arity::Counted,
-        native_weak_reference_new,
-    ),
     // The classes whose `newRexx` is the refusal and nothing else, because
     // their instances come only from native code (`utilityclasses.xml:429`,
     // `:6910`).
     ("Buffer", "NEW", Arity::Counted, native_unsupported_new),
     ("Pointer", "NEW", Arity::Counted, native_unsupported_new),
-    // `AddClassMethod("New", RexxString::newRexx, A_COUNT)`,
-    // `memory/Setup.cpp:572`. The one row here whose answer is a value rather
-    // than an instance.
-    ("String", "NEW", Arity::Counted, native_string_new),
-    // `AddClassMethod("New", StemClass::newRexx, A_COUNT)`,
-    // `memory/Setup.cpp:1371`. A row of its own because the answer is the
-    // `Body::Stem` a bare stem read also produces, not an instance.
-    ("Stem", "NEW", Arity::Counted, native_stem_new),
-    // `AddClassMethod("New", MutableBuffer::newRexx, A_COUNT)`,
-    // `memory/Setup.cpp:1418`. A row of its own because the arguments are
-    // checked before the allocation rather than by `INIT`.
-    (
-        "MutableBuffer",
-        "NEW",
-        Arity::Counted,
-        native_mutable_buffer_new,
-    ),
 ];
 
 /// The two methods `Setup.cpp` puts on `.Class` for the image build and
@@ -1057,19 +1055,21 @@ impl ObjectModel {
                 },
             );
         }
-        for (class_id, method_name, arity, body) in
-            NATIVE_CLASS_METHODS
-                .iter()
-                .chain(context::NATIVE_CLASS_METHODS)
-                .chain(package::NATIVE_CLASS_METHODS)
-                .map(|(class_id, method_name, arity, run)| {
-                    (class_id, method_name, arity, NativeBody::Run(*run))
-                })
-                .chain(RESUMABLE_CLASS_METHODS.iter().map(
-                    |(class_id, method_name, arity, begin)| {
+        for (class_id, method_name, arity, body) in NATIVE_CLASS_METHODS
+            .iter()
+            .chain(context::NATIVE_CLASS_METHODS)
+            .chain(package::NATIVE_CLASS_METHODS)
+            .map(|(class_id, method_name, arity, run)| {
+                (class_id, method_name, arity, NativeBody::Run(*run))
+            })
+            .chain(
+                RESUMABLE_CLASS_METHODS
+                    .iter()
+                    .chain(package::RESUMABLE_CLASS_METHODS)
+                    .map(|(class_id, method_name, arity, begin)| {
                         (class_id, method_name, arity, NativeBody::Begin(*begin))
-                    },
-                ))
+                    }),
+            )
         {
             let class = classes.lookup(class_id).unwrap_or_else(|| {
                 panic!(

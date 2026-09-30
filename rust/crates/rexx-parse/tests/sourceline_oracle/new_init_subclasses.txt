@@ -1,0 +1,65 @@
+count 64
+/* ~new into INIT for subclasses of the classes whose NEW builds its own */
+/* body, each INIT sending ~new again, then a failing INIT. */
+.local~n = 3
+a = .aa~new
+say a~class~id a~items .local~n
+.local~n = 3
+d = .dd~new
+say d~class~id d~items .local~n
+.local~n = 3
+t = .tt~new(10)
+say t~class~id t~items .local~n
+.local~n = 3
+s = .ss~new
+say s~class~id s~items .local~n
+.local~n = 3
+k = .kk~new('Zebra', 'extra')
+say k~id .local~n
+.local~n = 3
+m = .mb~new('abcdefghij', 20)
+say m~class~id m~string .local~n
+.local~n = 3
+w = .wr~new(a)
+say w~class~id (w~value == a) .local~n
+b = .bad~new
+say 'not reached'
+::class aa subclass array
+::method init
+  say 'aa init' arg()
+  .local~n = .local~n - 1
+  if .local~n > 0 then y = .aa~new
+  self~append('item')
+::class dd subclass directory
+::method init
+  say 'dd init' arg()
+  .local~n = .local~n - 1
+  if .local~n > 0 then y = .dd~new
+::class tt subclass table
+::method init
+  say 'tt init' arg() arg(1)
+  .local~n = .local~n - 1
+  if .local~n > 0 then y = .tt~new(5)
+::class ss subclass stringtable
+::method init
+  say 'ss init' arg()
+  .local~n = .local~n - 1
+  if .local~n > 0 then y = .ss~new
+::class kk subclass class
+::method init
+  say 'kk init' arg() arg(1)
+  .local~n = .local~n - 1
+  if .local~n > 0 then y = .kk~new('Inner', 'more')
+::class mb subclass mutablebuffer
+::method init
+  say 'mb init' arg()
+  .local~n = .local~n - 1
+  if .local~n > 0 then y = .mb~new('x')
+::class wr subclass weakreference
+::method init
+  say 'wr init' arg()
+  .local~n = .local~n - 1
+  if .local~n > 0 then y = .wr~new(self)
+::class bad subclass table
+::method init
+  return 1 / 0

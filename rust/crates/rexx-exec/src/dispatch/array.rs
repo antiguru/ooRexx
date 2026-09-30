@@ -512,7 +512,7 @@ pub(super) fn native_array_new(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     let spread;
     let body = match args {
@@ -537,9 +537,7 @@ pub(super) fn native_array_new(
         _ => multidimensional_body(interp, args)?,
     };
     let object = array_of_class(interp, class, body)?;
-    let caller = interp.caller();
-    interp.send_message(object, INIT, None, &[], caller)?;
-    Ok(Some(object))
+    super::begin_init(interp, object, &[])
 }
 
 /// `body` as an object of `class`: a bare `Body::Array` for `.Array` itself,

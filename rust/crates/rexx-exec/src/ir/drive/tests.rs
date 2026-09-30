@@ -608,6 +608,49 @@ fn a_send_op_runs_its_method_on_the_drivers_own_frame() {
     );
 }
 
+/// `~new` into a subclass's `INIT` that sends `~new` again adds no native
+/// stack per level, for every class whose own `NEW` sends `INIT`.
+#[test]
+fn recursion_by_new_into_init_keeps_the_native_stack_flat() {
+    let mut recursive = Vec::new();
+    for (class, args) in [
+        ("Object", ""),
+        ("Array", ""),
+        ("Directory", ""),
+        ("StringTable", ""),
+        ("Table", ""),
+        ("IdentityTable", ""),
+        ("Set", ""),
+        ("Bag", ""),
+        ("Relation", ""),
+        ("Class", "'Z'"),
+        ("MutableBuffer", ""),
+        ("WeakReference", "1"),
+    ] {
+        let span = |depth: usize| {
+            let program = format!(
+                ".local~n = {depth}\nx = .k~new({args})\nsay .local~n\n\
+                 ::class k subclass {class}\n::method init\n  .local~n = .local~n - 1\n  \
+                 if .local~n > 0 then y = .k~new({args})\n"
+            );
+            let outcome = crate::run_program("flat.rex", program.into_bytes(), Invocation::none());
+            assert_eq!(outcome.exit_code, 0, "{class}: {:?}", outcome.stderr);
+            assert_eq!(String::from_utf8_lossy(&outcome.stdout), "0\n", "{class}");
+            assert!(
+                outcome.stack.max_depth > depth,
+                "{class}: {:?}",
+                outcome.stack
+            );
+            outcome.stack.bytes
+        };
+        let (shallow, deep) = (span(50), span(500));
+        if deep > shallow + 1024 {
+            recursive.push(format!("{class}: {shallow} for 50, {deep} for 500"));
+        }
+    }
+    assert!(recursive.is_empty(), "{recursive:#?}");
+}
+
 /// Recursion by send adds no native stack per level.
 #[test]
 fn recursion_by_send_keeps_the_native_stack_flat() {

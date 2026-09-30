@@ -1470,15 +1470,13 @@ pub(super) fn native_hash_new(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = super::class_receiver(interp, receiver)?;
     let capacity = super::optional_length_argument(interp, args, 0)?.unwrap_or(0);
     let object = new_instance(interp, class)?;
     interp.roots.activity_mut().push_temp(object);
     install_store(interp, object, CONTENTS, calculate_bucket_size(capacity));
-    let caller = interp.caller();
-    interp.send_message(object, super::INIT, None, args, caller)?;
-    Ok(Some(object))
+    super::begin_init(interp, object, args)
 }
 
 // ---- the string-keyed classes' own accessors ----

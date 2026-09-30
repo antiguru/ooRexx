@@ -705,19 +705,21 @@ mod measured {
         assert!(pinned.is_empty(), "{pinned:#?}");
     }
 
-    /// A `DELEGATE` method and the collections' and `Class`'s `NEW` still run
-    /// the Rexx body on the Rust stack, so a park inside it is pinned.
+    /// A `DELEGATE` method and the `OF` factories still run the Rexx body on
+    /// the Rust stack, so a park inside it is pinned.
     #[test]
     fn a_park_inside_a_recursing_native_is_under_a_pinned_frame() {
         const CLASS: &str = "::class c\n::method m\n  call SysSleep 0\n  return 1\n";
+        const INIT: &str = "::method init\n  call SysSleep 0\n";
         let mut unpinned = Vec::new();
         for program in [
             "x = .kd~new~m\n::class kd\n::method init\n  expose d\n  d = .c~new\n\
-             ::method m delegate d\n",
-            "x = .dd~new\n::class dd subclass directory\n::method init\n  call SysSleep 0\n",
-            "x = .aa~new\n::class aa subclass array\n::method init\n  call SysSleep 0\n",
-            "x = .tt~new\n::class tt subclass table\n::method init\n  call SysSleep 0\n",
-            "x = .kk~new('Z')\n::class kk subclass class\n::method init\n  call SysSleep 0\n",
+             ::method m delegate d\n"
+                .to_string(),
+            format!("x = .aa~of(1)\n::class aa subclass array\n{INIT}"),
+            format!("x = .bb~of(1)\n::class bb subclass bag\n{INIT}"),
+            format!("x = .ss~of(1)\n::class ss subclass set\n{INIT}"),
+            format!("x = .qq~of(1)\n::class qq subclass queue\n{INIT}"),
         ] {
             let source = format!("{program}{CLASS}");
             let report = report_of(&source);
@@ -727,6 +729,65 @@ mod measured {
             }
         }
         assert!(unpinned.is_empty(), "{unpinned:#?}");
+    }
+
+    /// `~new` into a subclass's `INIT`, for every class a subclass reaches
+    /// `INIT` through: either a park inside `INIT` is under no pinned frame
+    /// and `INIT` reaching `~new` again adds no native stack per level, or
+    /// the park is pinned. The classes whose own `NEW` sends `INIT` are the
+    /// first kind.
+    #[test]
+    fn a_new_into_init_is_stackless_or_pinned() {
+        let sends_init = [
+            ("Object", ""),
+            ("EventSemaphore", ""),
+            ("MutexSemaphore", ""),
+            ("List", ""),
+            ("Queue", ""),
+            ("Supplier", ""),
+            ("Array", ""),
+            ("Directory", ""),
+            ("StringTable", ""),
+            ("Table", ""),
+            ("IdentityTable", ""),
+            ("Set", ""),
+            ("Bag", ""),
+            ("Relation", ""),
+            ("Class", "'Z'"),
+            ("MutableBuffer", ""),
+            ("WeakReference", "1"),
+        ];
+        let stack = |class: &str, args: &str, depth: usize| {
+            let program = format!(
+                ".local~n = {depth}\nx = .k~new({args})\nsay .local~n\n\
+                 ::class k subclass {class}\n::method init\n  .local~n = .local~n - 1\n  \
+                 if .local~n > 0 then y = .k~new({args})\n"
+            );
+            let outcome: Outcome =
+                run_program("probe.rex", program.into_bytes(), Invocation::none());
+            assert_eq!(outcome.exit_code, 0, "{class}: {:?}", outcome.stderr);
+            assert_eq!(String::from_utf8_lossy(&outcome.stdout), "0\n", "{class}");
+            outcome.stack.bytes
+        };
+        let mut wrong = Vec::new();
+        for (class, args) in sends_init.iter().copied().chain([("CircularQueue", "5")]) {
+            let report = report_of(&format!(
+                "x = .k~new({args})\n::class k subclass {class}\n::method init\n  \
+                 call SysSleep 0\n"
+            ));
+            let frames = frames_at(&report, ParkKind::SysSleep);
+            let (shallow, deep) = (stack(class, args, 50), stack(class, args, 500));
+            let flat = deep <= shallow + 1024;
+            let unpinned = frames == [Vec::<PinKind>::new()];
+            let pinned = !frames.is_empty() && frames.iter().all(|frames| !frames.is_empty());
+            let stackless = sends_init.contains(&(class, args));
+            if !(unpinned && flat || pinned) || stackless && !(unpinned && flat) {
+                wrong.push(format!(
+                    "{class}: {frames:?}, {shallow} for 50, {deep} for 500"
+                ));
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
     #[test]

@@ -13,11 +13,11 @@
 //! `~init`, and `Pointer`'s and `WeakReference`'s methods.
 
 use super::{
-    Arity, ArrayArgument, Body, Cleared, Failure, INIT, Interp, Loud, MESSAGE_ARGUMENTS,
-    MESSAGE_NAME, MESSAGE_SCOPE, MESSAGE_TARGET, NativeMethod, ObjRef, Package, Raised,
-    array_argument, class_receiver, compile_method_source, compile_routine_source,
-    decode_message_name, hash, native, native_new, new_instance, option_method_argument,
-    optional_length_argument, required_string_argument, required_string_named_argument,
+    Arity, ArrayArgument, Body, Cleared, Failure, Interp, Loud, MESSAGE_ARGUMENTS, MESSAGE_NAME,
+    MESSAGE_SCOPE, MESSAGE_TARGET, NativeMethod, ObjRef, Package, Raised, array_argument,
+    class_receiver, compile_method_source, compile_routine_source, decode_message_name, hash,
+    native, native_new, new_instance, option_method_argument, optional_length_argument,
+    required_string_argument, required_string_named_argument,
 };
 
 /// `Pointer`'s and `WeakReference`'s instance methods. Chained into
@@ -49,7 +49,7 @@ pub(super) fn native_hash_collection_new(
     cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     // **A `Directory` a program makes is a collection, not the environment.**
     // `NativeObject`'s map holds its keys already uppercased, by its callers,
     // and a `.Directory~new` does not: measured, `d['lower'] = 1` leaves
@@ -66,13 +66,12 @@ pub(super) fn native_directory_new(
     cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     if class == interp.object_model().directory {
         native_hash_collection_new(interp, cleared, receiver, args)
     } else {
-        let started = native_new(interp, cleared, receiver, args)?;
-        interp.complete_native(started)
+        native_new(interp, cleared, receiver, args)
     }
 }
 
@@ -110,7 +109,7 @@ pub(super) fn native_message_new(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     if args.len() < 2 {
         return Err(Raised::not_enough_method_arguments(2).into());
@@ -151,9 +150,7 @@ pub(super) fn native_message_new(
     }
     let arguments = interp.security_arguments_array(&arguments);
     interp.set_native_entry(object, MESSAGE_ARGUMENTS, arguments);
-    let caller = interp.caller();
-    interp.send_message(object, INIT, None, &[], caller)?;
-    Ok(Some(object))
+    super::begin_init(interp, object, &[])
 }
 
 /// `Method~new(name, source, ...)` and `Routine~new(name, source, ...)`: both
@@ -384,7 +381,7 @@ pub(super) fn native_string_new(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     let Some(Some(value)) = args.first().copied() else {
         return Err(Raised::missing_method_argument(1).into());
@@ -396,9 +393,7 @@ pub(super) fn native_string_new(
     let bytes = interp.to_text(text).to_vec();
     let object = interp.text_built(bytes);
     interp.roots.activity_mut().push_temp(object);
-    let caller = interp.caller();
-    interp.send_message(object, INIT, None, &args[1..], caller)?;
-    Ok(Some(object))
+    super::begin_init(interp, object, &args[1..])
 }
 
 /// `Stem~new(name, ...)`: a stem object whose name is the optional argument
@@ -408,7 +403,7 @@ pub(super) fn native_stem_new(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     let name = match args.first().copied().flatten() {
         Some(value) => {
@@ -430,10 +425,8 @@ pub(super) fn native_stem_new(
         },
     );
     interp.roots.activity_mut().push_temp(object);
-    let caller = interp.caller();
     let rest = args.get(1..).unwrap_or_default();
-    interp.send_message(object, INIT, None, rest, caller)?;
-    Ok(Some(object))
+    super::begin_init(interp, object, rest)
 }
 
 /// `Pointer~new` and `Buffer~new`: the raise that is the whole body of
@@ -529,7 +522,7 @@ pub(super) fn native_weak_reference_new(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     let Some(referent) = args.first().copied().flatten() else {
         return Err(Raised::missing_method_argument(1).into());
@@ -538,10 +531,8 @@ pub(super) fn native_weak_reference_new(
     let object = new_instance(interp, class)?;
     let cell = weak_referent_cell(interp, referent);
     interp.set_pool_variable(object, scope, WEAK_REFERENT, cell);
-    let caller = interp.caller();
     let rest: Vec<Option<ObjRef>> = args.iter().skip(1).copied().collect();
-    interp.send_message(object, INIT, None, &rest, caller)?;
-    Ok(Some(object))
+    super::begin_init(interp, object, &rest)
 }
 
 /// `WeakReference~value`: the referent, or `.nil` once the collector has

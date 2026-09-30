@@ -347,7 +347,7 @@ pub(super) fn native_mutable_buffer_new(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     let mut initial = interp.take_result_buffer();
     if let Some(text) = args.first().copied().flatten() {
@@ -375,11 +375,9 @@ pub(super) fn native_mutable_buffer_new(
         capacity,
         default_size,
     })));
-    let caller = interp.caller();
     let kept = args.len().saturating_sub(2);
     let rest: Vec<Option<ObjRef>> = args.iter().take(kept).copied().collect();
-    interp.send_message(object, INIT, None, &rest, caller)?;
-    Ok(Some(object))
+    super::begin_init(interp, object, &rest)
 }
 
 /// `MutableBuffer::DEFAULT_BUFFER_LENGTH` (`classes/MutableBufferClass.hpp:150`).

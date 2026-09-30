@@ -107,13 +107,15 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 ];
 
 /// `Package`'s class methods.
-pub(super) static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
-    (
-        "Package",
-        "DEFAULTOPTIONS",
-        Arity::Fixed(2),
-        default_options,
-    ),
+pub(super) static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[(
+    "Package",
+    "DEFAULTOPTIONS",
+    Arity::Fixed(2),
+    default_options,
+)];
+
+/// `Package`'s class methods entered by their begin halves.
+pub(super) static RESUMABLE_CLASS_METHODS: &[(&str, &str, Arity, super::NativeBegin)] = &[
     // `AddClassMethod("New", PackageClass::newRexx, A_COUNT)`.
     ("Package", "NEW", Arity::Counted, package_new),
 ];
@@ -955,7 +957,7 @@ fn package_new(
     _cleared: Cleared,
     _receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let Some(name) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("name").into());
     };
@@ -996,10 +998,8 @@ fn package_new(
     // rc 163, under a `Compiled method "INIT" with scope "Object".` frame:
     // `Object~init` raises it, so neither the count nor the frame is this
     // function's to produce.
-    let caller = interp.caller();
     let extra: Vec<Option<ObjRef>> = args.iter().skip(consumed).copied().collect();
-    interp.send_message(object, super::INIT, None, &extra, caller)?;
-    Ok(Some(object))
+    super::begin_init(interp, object, &extra)
 }
 
 /// `PackageClass::newRexx`'s context argument, resolved to the package the
