@@ -398,6 +398,7 @@ impl Interp {
 
     /// The calling convention [`Interp::prepare_level`] records on the
     /// running activation.
+    #[inline(always)]
     pub(crate) fn record_call_convention(&mut self) {
         let arguments = Rc::clone(&self.activity.call_context.arguments);
         // **The name is copied only where nothing else records it.** A
@@ -422,14 +423,6 @@ impl Interp {
         let program = Rc::clone(&self.activation().program);
         let plan = Rc::clone(&self.activation().plan);
         let selector = self.activation().body;
-        // A selector that resolves to nothing is an internal inconsistency
-        // and not a program error: it can only be built by a resolution step
-        // that already looked the body up. Loud rather than a panic, matching
-        // this crate's standing rule -- an abort is precisely the outcome
-        // that rule exists to exclude.
-        let Some(body) = body_of(&program, selector) else {
-            return Err(Loud::missing_body().into());
-        };
         // The key this body's plan was cached under, and the key its chunk is
         // cached under. **They have to be the same key**, and nothing but this
         // says so: `plan` is read off the activation while `key` is rebuilt
@@ -448,8 +441,23 @@ impl Interp {
 
         // **Every activation's body runs from a compiled chunk.** There is
         // no second engine and no selection left to make.
-        let Some(chunk) = self.chunk_for(key, self.chunk_trace(), body, &plan) else {
-            return Err(Loud::chunk_refused().into());
+        let trace = self.chunk_trace();
+        let chunk = match plan.last_chunk(key, trace) {
+            Some(chunk) => chunk,
+            None => {
+                // A selector that resolves to nothing is an internal inconsistency
+                // and not a program error: it can only be built by a resolution step
+                // that already looked the body up. Loud rather than a panic, matching
+                // this crate's standing rule -- an abort is precisely the outcome
+                // that rule exists to exclude.
+                let Some(body) = body_of(&program, selector) else {
+                    return Err(Loud::missing_body().into());
+                };
+                let Some(chunk) = self.chunk_for(key, trace, body, &plan) else {
+                    return Err(Loud::chunk_refused().into());
+                };
+                chunk
+            }
         };
         Ok(crate::ir::Level {
             program,

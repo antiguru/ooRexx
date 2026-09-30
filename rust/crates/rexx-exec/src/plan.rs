@@ -164,6 +164,22 @@ impl std::fmt::Debug for LastChunk {
 }
 
 impl Plan {
+    /// The chunk [`Interp::chunk_for`] last answered for this plan, if it
+    /// answered it for `key` under `trace`.
+    #[inline(always)]
+    pub(crate) fn last_chunk(
+        &self,
+        key: BodyKey,
+        trace: ChunkTrace,
+    ) -> Option<Rc<crate::ir::Chunk>> {
+        match &*self.last_chunk.0.borrow() {
+            Some((last_key, last_trace, chunk)) if *last_key == key && *last_trace == trace => {
+                Some(Rc::clone(chunk))
+            }
+            _ => None,
+        }
+    }
+
     /// The static clause indent of `target`.
     pub(crate) fn indent_of(&self, instructions: &[Instruction], target: usize) -> usize {
         match self.indents.get(target) {
@@ -722,11 +738,8 @@ impl Interp {
         body: &CodeBody,
         plan: &Plan,
     ) -> Option<Rc<crate::ir::Chunk>> {
-        if let Some((last_key, last_trace, chunk)) = &*plan.last_chunk.0.borrow()
-            && *last_key == key
-            && *last_trace == trace
-        {
-            return Some(Rc::clone(chunk));
+        if let Some(chunk) = plan.last_chunk(key, trace) {
+            return Some(chunk);
         }
         let chunk = match self.chunks.get(&(key, trace)) {
             Some(chunk) => Rc::clone(chunk),
