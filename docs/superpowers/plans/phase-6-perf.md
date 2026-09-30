@@ -449,3 +449,140 @@ move `dispatch` and sometimes `sendloop` past ±4% here. Task 2's own three padd
 Reported for a ruling rather than spent on rounds: no candidate change is indicated by a flat
 instruction count, and a round chasing linker-address luck on one benchmark is not a principled
 S0 change.
+
+## Task 7
+
+`S` is `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/p6-t7`.
+
+```
+git archive REV | tar -x -C $S/trees/NAME       # base 1754a3b5a, prev 8b253ef97, t7 31a394482, t7b a0a82f2b7
+find $S/trees/NAME -type f -exec touch {} +
+cd $S/trees/NAME/rust && CARGO_TARGET_DIR=$S/tgt/NAME cargo build --release -p rexx-exec --bin rexx-run > $S/logs/build-NAME.log 2>&1
+/bin/grep -a -c 'Compiling rexx-exec' $S/logs/build-NAME.log                 # 1 for each NAME
+cp $S/tgt/NAME/release/rexx-run $S/bin/NAME/rexx-run
+sha256sum < $S/bin/NAME/rexx-run
+objcopy -O binary --only-section=.text $S/bin/NAME/rexx-run /dev/stdout | wc -c
+cp $S/bin/base/rexx-run $S/bin/base2/rexx-run                                  # identical-binary control
+```
+
+| name | sha256 of `rexx-run` | `.text` bytes |
+|---|---|---:|
+| base | `d59c32248068af0bb927e2f2b714b1bffca4b17d32231c884f812b4bd40005b6` | 2,732,523 |
+| prev | `a1bb5533770cd845c8ec80e3ab189ee9243ed5f9cd6a8c24e4baf436d836bbbe` | 2,729,035 |
+| t7 | `9af11a0218e9d87244f147465cb5de008dee3c952798af7c7893a6cf2db3a2d9` | 2,725,499 |
+| t7b | `22cdd7a6d7f16d0b5ba23fe6e2f8170b849d81d84d4ac96791dafcb42068cc0d` | 2,725,563 |
+
+### Oracle comparison
+
+```
+cd $B; LIB=/home/moritz/dev/repos/ooRexx/build/lib; O=$S/oracmp
+for p in fibcall fibfunc sendloop extcall; do
+  f=$(readlink -f $p.rex)
+  d=$(mktemp -d); (cd $d; ( ulimit -v 1048576; LD_LIBRARY_PATH=$LIB /home/moritz/dev/repos/ooRexx/build/bin/rexx $f ) > $O/o.$p.out 2> $O/o.$p.err; echo $? > $O/o.$p.rc); rmdir $d
+  d=$(mktemp -d); (cd $d; LD_LIBRARY_PATH=$LIB $S/bin/t7b/rexx-run $f > $O/r.$p.out 2> $O/r.$p.err; echo $? > $O/r.$p.rc); rmdir $d
+  echo "$p stdout=$(cmp -s $O/o.$p.out $O/r.$p.out && echo same || echo DIFF) stderr=$(cmp -s $O/o.$p.err $O/r.$p.err && echo same || echo DIFF) rc=$(cat $O/o.$p.rc)/$(cat $O/r.$p.rc)"
+done
+```
+```
+fibcall stdout=same stderr=same rc=0/0
+fibfunc stdout=same stderr=same rc=0/0
+sendloop stdout=same stderr=same rc=0/0
+extcall stdout=same stderr=same rc=0/0
+```
+
+### Instruction counts (running total)
+
+```
+$B/callgrind.sh -r 3 -j 12 -o $S/cg2 base=$S/bin/base/rexx-run prev=$S/bin/prev/rexx-run t7=$S/bin/t7/rexx-run t7b=$S/bin/t7b/rexx-run
+```
+
+Exit 0, no SPREAD line. Instructions less libc.so.6 and ld-linux, median of three rounds. `t7` is
+round 1, `t7b` round 2.
+
+| program | base | prev - base | t7 - base | t7b - base | t7b d% |
+|---|---:|---:|---:|---:|---:|
+| alloc | 25,168,678,363 | +301,269 | +301,152 | -104,700,691 | -0.4160% |
+| alloc4c | 3,224,395,040 | +100,717 | +1,100,684 | -3,901,073 | -0.1210% |
+| arith | 11,520,060,059 | +68,516 | -4,931,607 | -7,933,454 | -0.0689% |
+| assign | 19,637,557,619 | +2,860,430 | -96,139,931 | -198,141,606 | -1.0090% |
+| compound | 9,271,611,424 | +424,894 | +5,424,713 | -19,578,129 | -0.2112% |
+| decloop | 2,565,175,706 | +63,903 | -8,336,125 | -9,137,885 | -0.3562% |
+| decrender | 4,348,396,202 | +109,284 | -9,890,829 | -10,692,672 | -0.2459% |
+| dispatch | 20,483,285,061 | +566,472 | -79,394,732 | -189,396,578 | -0.9246% |
+| dispatchclass | 15,850,195,601 | +339,924 | -99,652,412 | -135,654,255 | -0.8559% |
+| emptyloop | 9,308,098,320 | +1,416,085 | -23,584,020 | -73,585,862 | -0.7906% |
+| extcall | 8,281,259,519 | +169,981 | +81,169,955 | +12,168,197 | +0.1469% |
+| fibcall | 8,345,686,416 | +340,910 | -78,741,339 | -79,602,838 | -0.9538% |
+| fibfunc | 7,988,911,762 | +267,888 | -74,516,009 | -76,237,248 | -0.9543% |
+| heapshape | 3,278,634,105 | -3,412,716 | +18,611,708 | -13,456,840 | -0.4104% |
+| nop | 9,437,300,169 | +2,860,430 | -196,139,590 | -198,141,349 | -2.0996% |
+| parse | 1,541,986,626 | +35,303 | +5,435,148 | -1,566,696 | -0.1016% |
+| sayloop | 114,813,367 | +5,728 | -94,290 | -296,049 | -0.2579% |
+| sendloop | 13,863,190,791 | +283,258 | -34,716,950 | -144,718,793 | -1.0439% |
+| startup | 58,074,056 | +73 | +72 | -1,686 | -0.0029% |
+| strings | 17,749,287,481 | +433,668 | -2,566,378 | -23,568,139 | -0.1328% |
+| textnum | 1,176,579,478 | +68,049 | -1,731,983 | -3,133,743 | -0.2663% |
+| varlookup | 14,878,111,694 | +1,614,329 | -17,385,784 | -93,387,627 | -0.6277% |
+| rexxcps | 17,817,347,083 | +530,994 | -21,681,769 | -49,692,262 | -0.2789% |
+
+### Wall clock
+
+```
+$B/wallclock.sh -r 5 -o $S/wall base=$S/bin/base/rexx-run t7b=$S/bin/t7b/rexx-run
+```
+
+| program | base median s | t7b median s | t7b d% |
+|---|---:|---:|---:|
+| alloc | 2.019 | 1.995 | -1.19 |
+| alloc4c | 0.565 | 0.574 | +1.59 |
+| arith | 1.229 | 1.229 | +0.00 |
+| assign | 1.070 | 1.089 | +1.78 |
+| compound | 0.646 | 0.638 | -1.24 |
+| decloop | 0.246 | 0.267 | +8.54 |
+| decrender | 0.450 | 0.450 | +0.00 |
+| dispatch | 1.789 | 1.792 | +0.17 |
+| dispatchclass | 1.378 | 1.305 | -5.30 |
+| emptyloop | 0.529 | 0.519 | -1.89 |
+| extcall | 0.932 | 0.867 | -6.97 |
+| fibcall | 0.805 | 0.789 | -1.99 |
+| fibfunc | 0.790 | 0.774 | -2.03 |
+| heapshape | 0.323 | 0.333 | +3.10 |
+| nop | 0.654 | 0.563 | -13.91 |
+| parse | 0.130 | 0.129 | -0.77 |
+| sayloop | 0.029 | 0.028 | -3.45 |
+| sendloop | 1.077 | 1.057 | -1.86 |
+| startup | 0.024 | 0.025 | +4.17 |
+| strings | 1.144 | 1.142 | -0.17 |
+| textnum | 0.092 | 0.092 | +0.00 |
+| varlookup | 0.782 | 0.780 | -0.26 |
+| rexxcps | 2.007 | 1.971 | -1.79 |
+
+```
+$B/wallclock.sh -r 5 -o $S/wall2 base=$S/bin/base/rexx-run t7b=$S/bin/t7b/rexx-run base2=$S/bin/base2/rexx-run
+```
+
+| program | base median s | t7b median s | base2 median s | t7b d% | base2 d% |
+|---|---:|---:|---:|---:|---:|
+| alloc | 2.013 | 1.993 | 2.016 | -0.99 | +0.15 |
+| alloc4c | 0.568 | 0.570 | 0.568 | +0.35 | +0.00 |
+| arith | 1.258 | 1.228 | 1.211 | -2.38 | -3.74 |
+| assign | 1.069 | 1.089 | 1.070 | +1.87 | +0.09 |
+| compound | 0.647 | 0.639 | 0.658 | -1.24 | +1.70 |
+| decloop | 0.249 | 0.255 | 0.250 | +2.41 | +0.40 |
+| decrender | 0.451 | 0.451 | 0.450 | +0.00 | -0.22 |
+| dispatch | 1.823 | 1.832 | 1.779 | +0.49 | -2.41 |
+| dispatchclass | 1.388 | 1.297 | 1.387 | -6.56 | -0.07 |
+| emptyloop | 0.527 | 0.519 | 0.529 | -1.52 | +0.38 |
+| extcall | 0.924 | 0.866 | 0.923 | -6.28 | -0.11 |
+| fibcall | 0.789 | 0.785 | 0.789 | -0.51 | +0.00 |
+| fibfunc | 0.782 | 0.775 | 0.794 | -0.90 | +1.53 |
+| heapshape | 0.320 | 0.334 | 0.324 | +4.37 | +1.25 |
+| nop | 0.660 | 0.571 | 0.663 | -13.48 | +0.45 |
+| parse | 0.129 | 0.129 | 0.130 | +0.00 | +0.78 |
+| sayloop | 0.030 | 0.029 | 0.029 | -3.33 | -3.33 |
+| sendloop | 1.073 | 1.048 | 1.089 | -2.33 | +1.49 |
+| startup | 0.026 | 0.024 | 0.025 | -7.69 | -3.85 |
+| strings | 1.136 | 1.144 | 1.146 | +0.70 | +0.88 |
+| textnum | 0.092 | 0.093 | 0.091 | +1.09 | -1.09 |
+| varlookup | 0.786 | 0.777 | 0.779 | -1.15 | -0.89 |
+| rexxcps | 2.011 | 1.984 | 2.057 | -1.34 | +2.29 |
