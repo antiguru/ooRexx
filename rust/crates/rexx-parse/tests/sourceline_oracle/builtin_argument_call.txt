@@ -1,0 +1,17 @@
+count 16
+/* A builtin keeps its earlier arguments across a later one that calls a */
+/* Rexx function, compiled or evaluated through a cascade beside it. */
+o = .c~new
+say min(3, f())
+say min(3, f()) (o~~m == o)
+say max(9, f(), 2) (o~~m == o)
+say min(3, max(1, f())) (o~~m == o)
+say min(4, r()) (o~~m == o)
+call max 7, f(), (o~~m == o)
+say result
+exit
+f: return 5
+::routine r
+  return 6
+::class c
+::method m

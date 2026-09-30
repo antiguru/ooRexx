@@ -380,3 +380,4 @@ lang/send_callee_allocates.rex
 lang/send_resumable_entries.rex
 lang/send_new_init_fails.rex
 lang/send_guarded.rex
+lang/builtin_argument_call.rex

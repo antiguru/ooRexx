@@ -418,7 +418,14 @@ impl Interp {
                 _ => unreachable!("only the two arms above reach here"),
             };
         }
-        self.begin_call(resolved, name, &arguments, call_type, entry)
+        let begun = self.begin_call(resolved, name, &arguments, call_type, entry)?;
+        // An enclosing builtin's run stands on the stack while this call's
+        // callee clears it at its first clause.
+        if let Begun::Entered = begun {
+            let values = std::mem::take(&mut self.activity.value_buffer);
+            self.lend_stack(true, values);
+        }
+        Ok(begun)
     }
 
     /// What a call runs, once its arguments have run.
