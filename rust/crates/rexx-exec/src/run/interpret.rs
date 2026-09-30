@@ -82,7 +82,7 @@ impl Interp {
                 registers,
             },
         );
-        // Released on both paths, exactly as `run_chunk` does: a frame left
+        // Released on both paths, exactly as `Interp::drive` does: a frame left
         // behind would keep its registers rooted for the rest of the run.
         arena.release(registers);
         self.roots.activity_mut().pop_frame(temps);

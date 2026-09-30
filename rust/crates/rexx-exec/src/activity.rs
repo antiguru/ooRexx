@@ -86,6 +86,14 @@ pub(crate) struct Activity {
     /// The constructs the op driver has open, innermost last, across
     /// every level of it at once.
     pub(crate) frames: Vec<crate::ir::drive::Frame>,
+    /// The level state each call whose callee is running saved, innermost
+    /// last.
+    pub(crate) call_tails: Vec<crate::run::CallTail>,
+    /// The clause regions `Interp::drive`'s levels stopped at a call op,
+    /// innermost last.
+    pub(crate) parked_calls: Vec<crate::ir::drive::ParkedCall>,
+    /// The levels `Interp::drive` left for a callee, innermost last.
+    pub(crate) parked_levels: Vec<crate::ir::drive::ParkedLevel>,
     /// Boxes a finished loop handed back, so that entering a loop
     /// is a write into an allocation this interpreter already owns. A loop
     /// entered once per two passes is common enough -- `samples/rexxcps.rex`
@@ -276,6 +284,9 @@ impl Activity {
             flat_top: None,
             flat_spares: Vec::new(),
             frames: Vec::new(),
+            call_tails: Vec::new(),
+            parked_calls: Vec::new(),
+            parked_levels: Vec::new(),
             pending_traps: VecDeque::new(),
             active_condition: None,
             pending_additional: None,
@@ -348,6 +359,13 @@ impl Activity {
             flat_loops: _,
             flat_top: _,
             frames: _,
+            // A saved convention is the caller's, whose arguments and
+            // receiver that caller's temps and registers root; a lent argument
+            // stack holds values its caller's registers root; a parked level's
+            // registers stay reserved in the arena.
+            call_tails: _,
+            parked_calls: _,
+            parked_levels: _,
             // Overwritten at reuse, as `spare_activations` is.
             flat_spares: _,
             pending_traps,

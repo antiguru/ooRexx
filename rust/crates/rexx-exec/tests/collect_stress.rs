@@ -81,6 +81,7 @@ fn run_directory(rel_path: &str) -> PathBuf {
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "gate-tables/directives/attribute__external__subkeyword.rex",
     "gate-tables/directives/method__external__subkeyword.rex",
+    "lang/call_trace_nested.rex",
     "lang/class_duplicate_attribute.rex",
     "lang/class_duplicate_class.rex",
     "lang/class_duplicate_constant.rex",

@@ -1,0 +1,14 @@
+count 13
+/* Unbounded recursion by CALL, trapped in the outermost caller. */
+signal on syntax name caught
+say 'start'
+call rec 1
+say 'unreached'
+exit
+caught:
+  say 'caught' rc condition('C')
+  say condition('D')
+  exit 0
+rec: procedure
+  call rec arg(1) + 1
+  return

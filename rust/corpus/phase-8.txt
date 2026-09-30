@@ -362,3 +362,13 @@ lang/library_directory_members.rex
 lang/library_collection_members.rex
 # Final fix round (I4): RaiseCondition taken by CALL ON, built at the raise.
 lang/library_raise_condition_call_on.rex
+
+# Phase 6 Task 8: Rexx-to-Rexx calls that run their callee in the caller's
+# driver loop. Filed here because a phase-6.txt would count phase 6 as closed
+# to gate table C.
+lang/call_condition_three_deep.rex
+lang/call_signal_out_of_callee.rex
+lang/call_trace_nested.rex
+lang/call_depth_cap_function.rex
+lang/call_depth_cap_call.rex
+lang/call_callee_allocates.rex

@@ -1,0 +1,37 @@
+count 36
+/* SIGNAL inside a called routine and inside a function. */
+r = f(1) + 10
+say 'r' r
+call g
+say 'g result' result
+v = h() || '!'
+say v
+signal on novalue name nv
+w = 'w' k()
+say 'unreached' w
+exit
+f:
+  signal fdone
+  return 99
+fdone:
+  return 5
+g: procedure
+  do i = 1 to 3
+    if i = 2 then signal gout
+  end
+  return 'no'
+gout:
+  return 'out' i
+h:
+  call inner
+  return 'h' result
+inner:
+  signal innerdone
+  return 'skipped'
+innerdone:
+  return 'inner'
+k: procedure
+  return undefined_var
+nv:
+  say 'novalue at' sigl condition('D')
+  exit 3

@@ -77,7 +77,10 @@ mod condition;
 
 // `CALL` and function calls: resolving the name, running the arguments, entering the callee.
 mod call;
-pub(crate) use call::{CallEntry, CallResolution, MAX_ACTIVATION_DEPTH};
+pub(crate) use call::{
+    CallEntry, CallResolution, CallTail, MAX_ACTIVATION_DEPTH, Started, function_started,
+    subroutine_started,
+};
 #[cfg(test)]
 use call::{Entered, entered_receiver};
 
@@ -380,13 +383,22 @@ impl Interp {
     /// }
     /// ```
     pub(crate) fn run_activation(&mut self) -> Result<Ended, Failure> {
-        // `code` is bound to the activation on top of the stack at entry,
-        // while every `pc` read and write below goes to whatever is on top
-        // *now*. Those are the same frame only because `step` leaves the
-        // activation stack as it found it -- true for a fragment, which runs
-        // inside the creating activation rather than pushing its own, and
-        // true for a `CALL` only because the `Call` arm pops the callee
-        // before it returns.
+        let level = self.prepare_level()?;
+        self.drive(level)
+    }
+
+    /// Everything [`Interp::run_activation`] does before its body runs: the
+    /// calling convention recorded on the activation, and the body's program,
+    /// plan and chunk.
+    #[inline(always)]
+    pub(crate) fn prepare_level(&mut self) -> Result<crate::ir::Level, Failure> {
+        self.record_call_convention();
+        self.running_level()
+    }
+
+    /// The calling convention [`Interp::prepare_level`] records on the
+    /// running activation.
+    pub(crate) fn record_call_convention(&mut self) {
         let arguments = Rc::clone(&self.activity.call_context.arguments);
         // **The name is copied only where nothing else records it.** A
         // method activation already carries the message name it was entered
@@ -402,6 +414,11 @@ impl Interp {
             activation.call_name = Some(name);
         }
         activation.call_arguments = Some(arguments);
+    }
+
+    /// The running activation's program, plan and chunk.
+    #[inline(always)]
+    pub(crate) fn running_level(&mut self) -> Result<crate::ir::Level, Failure> {
         let program = Rc::clone(&self.activation().program);
         let plan = Rc::clone(&self.activation().plan);
         let selector = self.activation().body;
@@ -412,12 +429,6 @@ impl Interp {
         // that rule exists to exclude.
         let Some(body) = body_of(&program, selector) else {
             return Err(Loud::missing_body().into());
-        };
-        let code = Code {
-            body,
-            symbols: &program.symbols,
-            slots: &plan.by_symbol,
-            plan: Some(&plan),
         };
         // The key this body's plan was cached under, and the key its chunk is
         // cached under. **They have to be the same key**, and nothing but this
@@ -436,13 +447,16 @@ impl Interp {
         );
 
         // **Every activation's body runs from a compiled chunk.** There is
-        // no second engine and no selection left to make: `run_activation` is
-        // the one function that runs a body, and this is where the stream is
-        // entered.
+        // no second engine and no selection left to make.
         let Some(chunk) = self.chunk_for(key, self.chunk_trace(), body, &plan) else {
             return Err(Loud::chunk_refused().into());
         };
-        self.run_chunk(&code, &chunk, Some(&program.source))
+        Ok(crate::ir::Level {
+            program,
+            plan,
+            chunk,
+            selector,
+        })
     }
 
     /// Transfers "is this the first instruction executed in this activation"

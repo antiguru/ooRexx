@@ -34,7 +34,7 @@ pub use body::{
     StandardStream, StreamState, StreamStatus, VarRef, VarRefHome, pointer_to_string,
 };
 pub use bytes::{Bytes, INLINE_BYTES};
-pub use frame::{FrameArena, FrameBlock, RegFrame};
+pub use frame::{FrameArena, FrameBlock, ParkedFrame, RegFrame};
 pub use handle::{
     Decoded, GENERATION_MAX, INLINE_TEXT, InlineText, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN,
 };

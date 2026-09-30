@@ -19,7 +19,7 @@
 //! 1. a block is one zeroed allocation of `cells + GUARD` cells, freed only by
 //!    `FrameArena`'s `Drop`;
 //! 2. a frame starts at an offset `<= cells` of its block (`FrameArena::reserve`
-//!    opens a fresh block otherwise);
+//!    opens a fresh block otherwise, and `FrameArena::unpark` checks it);
 //! 3. an index is a `u16`, so below `GUARD`, and `start + index < cells + GUARD`;
 //! 4. a `RegFrame<'a>` borrows its arena for `'a`, so it cannot be used once the
 //!    arena is dropped;
@@ -121,6 +121,15 @@ impl RegFrame<'_> {
     pub fn is_empty(self) -> bool {
         self.len == 0
     }
+}
+
+/// A reserved frame held where a [`RegFrame`]'s borrow cannot be: the most
+/// recently reserved live frame when [`FrameArena::park`] took it, and again
+/// when [`FrameArena::unpark`] gives it back.
+#[derive(Debug)]
+pub struct ParkedFrame {
+    len: u16,
+    opened: bool,
 }
 
 /// The stack of live register frames, reserved and released in LIFO order.
@@ -240,6 +249,45 @@ impl FrameArena {
         }
     }
 
+    /// Parks `frame`, which must be the most recently reserved live one; it
+    /// stays reserved.
+    #[inline]
+    pub fn park(&self, frame: RegFrame<'_>) -> ParkedFrame {
+        debug_assert!(
+            std::ptr::eq(
+                frame.base.as_ptr().wrapping_add(frame.len as usize),
+                self.block.get().as_ptr().wrapping_add(self.top.get())
+            ),
+            "frame arena parked a frame that is not the most recent"
+        );
+        ParkedFrame {
+            len: frame.len,
+            opened: frame.opened,
+        }
+    }
+
+    /// The frame `parked` names, which must again be the most recently
+    /// reserved live one.
+    ///
+    /// # Panics
+    ///
+    /// If the most recent frame cannot be `parked`'s, by length or offset.
+    #[inline]
+    pub fn unpark(&self, parked: ParkedFrame) -> RegFrame<'_> {
+        let start = self.top.get().wrapping_sub(parked.len as usize);
+        assert!(
+            self.top.get() >= parked.len as usize && start <= self.size.0,
+            "frame arena unparked a frame that is not the most recent"
+        );
+        RegFrame {
+            // SAFETY: `start <= size`, checked just above (property 2).
+            base: unsafe { self.block.get().add(start) },
+            len: parked.len,
+            opened: parked.opened,
+            arena: PhantomData,
+        }
+    }
+
     #[cold]
     #[inline(never)]
     fn close_block(&self) {
@@ -293,7 +341,7 @@ impl Drop for FrameArena {
 
 #[cfg(test)]
 mod tests {
-    use super::{FrameArena, FrameBlock, GUARD};
+    use super::{FrameArena, FrameBlock, GUARD, ParkedFrame};
     use crate::ObjRef;
 
     fn offset(arena: &FrameArena, frame: super::RegFrame<'_>) -> usize {
@@ -373,6 +421,39 @@ mod tests {
         assert_eq!(arena.iter().count(), 2);
         arena.release(outer);
         assert_eq!(arena.iter().count(), 0);
+    }
+
+    #[test]
+    fn a_parked_frame_comes_back_with_its_registers_across_a_block_boundary() {
+        let arena = FrameArena::new(FrameBlock::new(3).expect("in range"));
+        let value = ObjRef::small_int(9).expect("small");
+        let outer = arena.reserve(4);
+        outer.set(1, value);
+        let parked = arena.park(outer);
+        let spilled = arena.reserve(5);
+        assert_eq!(arena.blocks(), 2);
+        assert_eq!(arena.iter().filter(|v| *v == value).count(), 1);
+        arena.release(spilled);
+        let back = arena.unpark(parked);
+        assert_eq!(back.get(1), value);
+        assert_eq!(offset(&arena, back), 0);
+        arena.release(back);
+        assert_eq!(arena.iter().count(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "frame arena unparked a frame that is not the most recent")]
+    fn unparking_under_a_shorter_top_is_refused() {
+        let arena = FrameArena::new(FrameBlock::new(3).expect("in range"));
+        let parked = arena.park(arena.reserve(2));
+        let first = arena.unpark(parked);
+        arena.release(first);
+        let short = arena.reserve(1);
+        let _ = arena.unpark(ParkedFrame {
+            len: 2,
+            opened: false,
+        });
+        arena.release(short);
     }
 
     #[test]

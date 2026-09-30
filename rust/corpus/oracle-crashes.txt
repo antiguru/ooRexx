@@ -933,3 +933,23 @@ SIGSEGV, rc 139, 3 runs of 3. Measured 2026-09-29 by the Phase 8 final re-review
 `rc/tw2.rex` in its scratchpad). **Cause not established.** One such raise in a clause is
 identical on both sides (`library_raise_condition_call_on.rex`); this crate runs the handler
 twice. No upstream ticket.
+
+## 20. Unbounded recursion by internal function call, trapped by `SIGNAL ON SYNTAX`
+
+    signal on syntax name caught
+    say 'start'
+    n = rec(1)
+    say 'unreached' n
+    exit
+    caught:
+      say 'caught' rc condition('C')
+      say condition('D')
+      exit 0
+    rec: procedure
+      return rec(arg(1) + 1) + 1
+
+SIGSEGV, rc 139, after `start`, stderr empty. Measured once, 2026-09-30, by Phase 6 Task 8 while
+writing its depth-cap witnesses. **Cause not established.** The same recursion by `CALL` under the
+same trap, and the same recursion through a `::ROUTINE`, are rc 0 on the oracle and identical here
+(`lang/call_depth_cap_call.rex`, `lang/call_depth_cap_function.rex`). This crate prints `start`,
+`caught 11 SYNTAX` and an empty line, rc 0 (measured 2026-09-30). No upstream ticket.

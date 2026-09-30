@@ -32,6 +32,7 @@ pub(crate) mod drive;
 pub(crate) mod trace_flow;
 mod valid;
 pub(crate) use compile::compile;
+pub(crate) use drive::Level;
 pub(crate) use golden::render_annotated;
 
 // `render` serialises an op stream back to text. Nothing the interpreter does
@@ -297,7 +298,7 @@ impl ConditionKeyword {
 pub(crate) enum BodyEngine<'a> {
     /// The clauses are stepped from `chunk`, whose `op_of` indexes exactly the
     /// body `Code::body` names, with `registers` naming the frame
-    /// `Interp::run_chunk` reserved for it.
+    /// `Interp::drive` reserved for it.
     Chunk {
         chunk: &'a Chunk,
         registers: RegFrame<'a>,
@@ -569,7 +570,7 @@ pub(crate) struct Chunk {
     op_of: Vec<u32>,
     /// The register allocator's high-water mark (the plan's Decisions
     /// section: "the chunk records its high-water mark").
-    /// `Interp::run_chunk` reserves this many registers before running a
+    /// `Interp::drive` reserves this many registers before running a
     /// chunk and truncates them away on the way out, and `Interp::run_fragment`
     /// does the same for the chunk an `INTERPRET` compiles.
     pub(crate) registers: u16,
@@ -681,7 +682,7 @@ impl Chunk {
         }
     }
 
-    /// Whether `reg` is inside the frame `run_chunk` reserves for this
+    /// Whether `reg` is inside the frame `Interp::drive` reserves for this
     /// chunk.
     fn holds_register(&self, reg: u16) -> bool {
         reg < self.registers

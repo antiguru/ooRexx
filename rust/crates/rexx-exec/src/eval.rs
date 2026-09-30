@@ -15,7 +15,7 @@
 use crate::activation::CallType;
 use crate::error::Raised;
 use crate::run::CallEntry;
-use crate::run::{CallResolution, Ended, Resolved};
+use crate::run::{CallResolution, Resolved, Started, function_started};
 use crate::value::{canonical_small_int, exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
 use rexx_core::{Body, Decoded, INLINE_BYTES, NotNumeric, ObjRef};
@@ -540,46 +540,44 @@ impl Interp {
         name: &[u8],
         args: &[Option<Expr>],
     ) -> Result<ObjRef, Failure> {
+        let started = self.begin_eval_call(code, resolution, name, args)?;
+        self.complete_function(started)
+    }
+
+    /// [`Interp::eval_call_resolved`] up to the point its callee's body would
+    /// run.
+    pub(crate) fn begin_eval_call(
+        &mut self,
+        code: &Code<'_>,
+        resolution: CallResolution<'_>,
+        name: &[u8],
+        args: &[Option<Expr>],
+    ) -> Result<Started<ObjRef>, Failure> {
         // **A builtin goes straight to its own entry point**, which is the
         // same call `invoke_call` would make and answers the value this
-        // function wants: none of the three arms below can apply to it, since
+        // function wants: none of `function_value`'s three arms can apply to it, since
         // it runs no activation and so can neither exit nor return nothing.
         // What the detour cost is the `Ended` -- wider than a register pair,
         // so built in memory here and read back out one line later, on the
         // path every `length(...)`/`substr(...)` in a program takes.
         if let CallResolution::Settled(Resolved::Builtin(target)) = resolution {
-            return self.invoke_builtin_call(code, target, name, args);
+            return self
+                .invoke_builtin_call(code, target, name, args)
+                .map(Started::Ran);
         }
         // `CallType::Function`: this is the function-invocation route, and a
         // `::ROUTINE` reached this way answers `FUNCTION` as `PARSE SOURCE`'s
         // second word where the same body reached by `CALL` answers
         // `SUBROUTINE`. Measured in one program, the same routine both ways.
-        match self.invoke_call(
+        let begun = self.begin_invoke_call(
             code,
             resolution,
             name,
             args,
             CallType::Function,
             CallEntry::Written,
-        )? {
-            // `EXIT` inside the routine, or the routine falling off its own
-            // end, ends the whole program exactly as it does when the same
-            // routine is reached through `CALL` (`Interp::invoke_call`'s
-            // own doc, `run/call.rs`). Propagated as `Failure::Exited` because
-            // `eval`'s own return type is a plain `ObjRef` with no `Flow` to
-            // carry the event through instead -- see that variant's own doc
-            // (`error.rs`) for why every intervening `?` needs no special
-            // handling to still unwind every nested `CALL` correctly.
-            Ended::Exited(value) => Err(Failure::Exited(value)),
-            Ended::Returned(Some(value)) => Ok(value),
-            // Measured on the oracle: a routine reached through the
-            // expression form and returning nothing (a bare `RETURN`) is
-            // Error 44.1 rc 212, "No data returned from function "NAME""
-            // -- the expression form's own answer to "nothing to use here",
-            // which `CALL` never has to give since its own value only ever
-            // reaches `RESULT`, unset or not.
-            Ended::Returned(None) => Err(Raised::no_data_returned(name).into()),
-        }
+        )?;
+        function_started(begun, name)
     }
 
     /// `+`/`-`/`\` (D15's "Expression evaluation"), over an operand this

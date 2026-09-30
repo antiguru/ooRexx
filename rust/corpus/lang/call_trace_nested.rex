@@ -1,0 +1,16 @@
+/* TRACE I across nested internal calls, and a callee that turns it off. */
+trace i
+x = sq(2) + sq(sq(1))
+call show x
+y = quiet(x) + 1
+say y
+exit
+sq: procedure
+  return arg(1) * arg(1)
+show:
+  say 'x=' arg(1)
+  return
+quiet:
+  trace o
+  n = arg(1) * 2
+  return n

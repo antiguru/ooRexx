@@ -176,8 +176,8 @@ pub(super) fn load_constant_builds() -> usize {
     LOAD_CONSTANT_BUILDS.with(std::cell::Cell::get)
 }
 
-// Test-only instrumentation: the deepest frame stack any [`Interp::run_ops`]
-// entry on this thread has found already open.
+// Test-only instrumentation: the deepest frame stack any driver entry on this
+// thread has found already open.
 #[cfg(test)]
 thread_local! {
     static FRAME_FLOOR_HIGH_WATER: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -194,4 +194,24 @@ pub(super) fn record_frame_floor(base: usize) {
 #[cfg(test)]
 pub(super) fn frame_floor_high_water() -> usize {
     FRAME_FLOOR_HIGH_WATER.with(std::cell::Cell::get)
+}
+
+// Test-only instrumentation: how many callee bodies [`Interp::drive`] on this
+// thread has entered by parking their caller's level.
+#[cfg(test)]
+thread_local! {
+    static STACKLESS_ENTRIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn count_stackless_entry() {
+    if !counting() {
+        return;
+    }
+    STACKLESS_ENTRIES.with(|entries| entries.set(entries.get() + 1));
+}
+
+#[cfg(test)]
+pub(super) fn stackless_entries() -> usize {
+    STACKLESS_ENTRIES.with(std::cell::Cell::get)
 }

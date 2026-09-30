@@ -14,7 +14,7 @@
 use super::super::{CALL_SITE_CACHE, QUICKENING};
 use super::{
     arith_hint_skips, call_site_hits, clause_op_entries, const_builds, frame_floor_high_water,
-    load_constant_builds, run_chunk_entries, trace_op_echoes,
+    load_constant_builds, run_chunk_entries, stackless_entries, trace_op_echoes,
 };
 use crate::{Invocation, Outcome, execute, run_program};
 
@@ -412,8 +412,8 @@ signal retry
     assert_eq!(
         frame_floor_high_water(),
         before,
-        "an entry found frames another level had left open. Every `run_ops` \
-         call in this program is the activation's own, so each starts at a \
+        "an entry found frames another level had left open. Every driver \
+         entry in this program is the activation's own, so each starts at a \
          floor of zero unless a raise walked out over open frames without \
          giving them back"
     );
@@ -521,5 +521,66 @@ say zs zt
         "adding a second distinct constant symbol took the count from {three} to {two}, \
          where exactly one more build is what a table keyed by the symbol's own id \
          promises"
+    );
+}
+
+/// Runs `program` on this thread, and how many callees the driver entered
+/// by parking their caller's level.
+fn stackless(program: &[u8]) -> (Outcome, usize) {
+    let before = stackless_entries();
+    let outcome = execute(TEST_PATH, program.to_vec(), false, Invocation::none());
+    (outcome, stackless_entries() - before)
+}
+
+/// Every Rexx-to-Rexx call a body's own ops make -- a `CALL`, a function
+/// call, recursive, and a `::ROUTINE` either way -- runs its callee on the
+/// driver's frame.
+#[test]
+fn a_call_op_runs_its_callee_on_the_drivers_own_frame() {
+    let (outcome, entered) = stackless(
+        b"call sub\nx = f(2)\ncall rtn\ny = rtn2()\nsay x y\nexit\n\
+          sub:\n  return\nf: procedure\n  if arg(1) = 0 then return 0\n  \
+          return f(arg(1) - 1) + 1\n::routine rtn\n  return\n::routine rtn2\n  return 'r'\n",
+    );
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "2 r\n");
+    assert_eq!(
+        entered, 6,
+        "sub, f three times, rtn and rtn2 are the calls this program makes"
+    );
+}
+
+/// The adjacent refusal: a call inside an `INTERPRET` fragment is driven by
+/// the fragment's own ops, which a nested Rust frame runs, and stays there.
+#[test]
+fn a_call_inside_a_fragment_runs_on_the_rust_stack() {
+    let (outcome, entered) = stackless(b"interpret 'call sub'\nexit\nsub:\n  say 'in'\n  return\n");
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "in\n");
+    assert_eq!(entered, 0);
+}
+
+/// Recursion by function call adds evaluation depth per level and no native
+/// stack: every level's call op is entered from the same driver frame.
+#[test]
+fn recursion_by_function_call_keeps_the_native_stack_flat() {
+    let span = |depth: usize| {
+        let program = format!(
+            "say f({depth})\nexit\nf: procedure\n  if arg(1) = 0 then return 0\n  \
+             return f(arg(1) - 1) + 1\n"
+        );
+        let outcome = crate::run_program("flat.rex", program.into_bytes(), Invocation::none());
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stdout),
+            format!("{depth}\n")
+        );
+        assert!(outcome.stack.max_depth > depth, "{:?}", outcome.stack);
+        outcome.stack.bytes
+    };
+    let (shallow, deep) = (span(50), span(2000));
+    assert!(
+        deep <= shallow + 1024,
+        "2000 levels took {deep} stack bytes against {shallow} for 50"
     );
 }
