@@ -1831,10 +1831,21 @@ fn release_to(slot: &mut Option<Mark>, mark: Mark) {
 }
 
 /// Rewrites the [`Op::Clause`] at `at` so that its `end` is the position one
-/// past everything pushed since -- the region's own end.
+/// past everything pushed since -- the region's own end -- and so that it is
+/// an [`Op::CallingClause`] where the region holds an op a callee resumes.
 fn close_region(ops: &mut [Op], at: u32) -> Result<(), ChunkTooLarge> {
     let end = op_index(ops)?;
-    match &mut ops[at as usize] {
+    let (head, region) = ops[at as usize..].split_at_mut(1);
+    let calling = region.iter().any(|op| {
+        matches!(
+            op,
+            Op::CallExpr { .. } | Op::CallArgs { .. } | Op::Send { .. }
+        )
+    });
+    match &mut head[0] {
+        Op::Clause { index, .. } if calling => {
+            head[0] = Op::CallingClause { index: *index, end };
+        }
         Op::Clause { end: slot, .. } => *slot = end,
         _ => unreachable!("close_region is given the index of the Clause op it closes"),
     }

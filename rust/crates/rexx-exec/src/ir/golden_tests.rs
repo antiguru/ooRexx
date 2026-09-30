@@ -94,7 +94,7 @@ fn a_message_send_clause_compiles_to_a_region_ending_in_one_message_op() {
 fn a_message_send_clause_whose_term_compiles_ends_in_one_send_op() {
     assert_eq!(
         render(&compile_for_test(b"'abc'~length").expect("the chunk fits")),
-        "0: Clause index=0 end=3\n\
+        "0: CallingClause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
          2: Send site=0 recv=0 argc=0 dst=0 form=Clause\n"
     );
@@ -103,7 +103,7 @@ fn a_message_send_clause_whose_term_compiles_ends_in_one_send_op() {
         "0: Clause index=0 end=3\n\
          1: Const dst=0 konst=0\n\
          2: Store index=0 at=0 src=0\n\
-         3: Clause index=1 end=10\n\
+         3: CallingClause index=1 end=10\n\
          4: Load read=Simple at=0 dst=0\n\
          5: LoadConstant dst=1\n\
          6: PushArg src=1\n\
@@ -122,7 +122,7 @@ fn a_call_promotes_at_the_root_and_below_it() {
     let root = compile_for_test(b"zz = length('abc')").expect("the chunk fits");
     assert_eq!(
         render(&root),
-        "0: Clause index=0 end=6\n\
+        "0: CallingClause index=0 end=6\n\
          1: Const dst=1 konst=0\n\
          2: PushArg src=1\n\
          3: CallArgs slot=0 path=root site=0 argc=1 dst=0\n\
@@ -133,7 +133,7 @@ fn a_call_promotes_at_the_root_and_below_it() {
     let left = compile_for_test(b"zz = length('abc') + 1").expect("the chunk fits");
     assert_eq!(
         render(&left),
-        "0: Clause index=0 end=8\n\
+        "0: CallingClause index=0 end=8\n\
          1: Const dst=1 konst=0\n\
          2: PushArg src=1\n\
          3: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
@@ -146,7 +146,7 @@ fn a_call_promotes_at_the_root_and_below_it() {
     let right = compile_for_test(b"zz = 1 + length('abc')").expect("the chunk fits");
     assert_eq!(
         render(&right),
-        "0: Clause index=0 end=8\n\
+        "0: CallingClause index=0 end=8\n\
          1: LoadConstant dst=0\n\
          2: Const dst=2 konst=0\n\
          3: PushArg src=2\n\
@@ -692,7 +692,7 @@ fn a_header_bound_that_is_a_symbol_and_one_that_is_a_call_take_their_own_ops() {
     let call = compile_for_test(b"do i = 1 to length(zs)\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&call),
-        "0: Clause index=0 end=9\n\
+        "0: CallingClause index=0 end=9\n\
          1: LoadConstant dst=0\n\
          2: LoopHeaderValue role=Initial src=0\n\
          3: Load read=Simple at=1 dst=2\n\
@@ -1123,7 +1123,7 @@ fn a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot() {
          2: Store index=0 at=0 src=0\n\
          3: Clause index=1 end=4\n\
          4: SelectCaseText index=1 case=-\n\
-         5: Clause index=2 end=13\n\
+         5: CallingClause index=2 end=13\n\
          6: Load read=Simple at=0 dst=1\n\
          7: PushArg src=1\n\
          8: CallArgs slot=0 path=root.L site=0 argc=1 dst=0\n\
@@ -1436,7 +1436,7 @@ fn a_call_argument_that_is_a_call_compiles_to_ops_of_its_own() {
     let nested = compile_for_test(b"call zsub 1, length('x')\n").expect("compiles");
     assert_eq!(
         render(&nested),
-        "0: Clause index=0 end=9\n\
+        "0: CallingClause index=0 end=9\n\
          1: LoadConstant dst=0\n\
          2: PushArg src=0\n\
          3: Const dst=2 konst=0\n\
@@ -1643,7 +1643,7 @@ fn a_call_in_a_returns_expression_is_addressed_at_the_returns_slot() {
     let chunk = compile_for_test(b"return length(zs)\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=6\n\
+        "0: CallingClause index=0 end=6\n\
          1: Load read=Simple at=0 dst=1\n\
          2: PushArg src=1\n\
          3: CallArgs slot=0 path=root site=0 argc=1 dst=0\n\

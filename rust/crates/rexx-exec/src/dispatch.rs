@@ -2100,6 +2100,28 @@ impl Interp {
             seam::Clearance::Checked(cleared) => (cleared, None),
             seam::Clearance::Answered(result) => return Ok(Started::Ran(result)),
         };
+        if let Invocable::Rexx(installed) = invocable {
+            // **Neither this path nor `Generated` blames the method**,
+            // measured twice over.
+            // An untrapped `1/0` inside a `::METHOD` body reports
+            // the method's own failing clause and then the sending clause,
+            // with no `Compiled method` line between them, and
+            // [`Interp::finish_call`] seals the method's own level for that,
+            // exactly as it does for a call. A generated accessor and
+            // an `ABSTRACT` send report the *sending* clause and nothing
+            // above it: measured, `.K~a(1)` on `::attribute a class` is
+            // `93.902` with the sending clause alone on `stderr`, where
+            // `'abc'~length(1)` -- a [`NativeMethod`] taking the same
+            // refusal -- carries a `Compiled method "LENGTH"` line. The two
+            // differ in the C++ because `AttributeGetterCode::run` and
+            // `AbstractCode::run` raise directly where `CPPCode::run` raises
+            // from inside a `NativeActivation` of its own
+            // (`execution/CPPCode.cpp:280`, `:526`).
+            self.begin_method(
+                cleared, installed, resolution, behaviour, receiver, name, args,
+            )?;
+            return Ok(Started::Entered);
+        }
         let outcome = match invocable {
             Invocable::Native(entry) => {
                 let outcome = match (entry.arity, entry.body) {
@@ -2133,32 +2155,29 @@ impl Interp {
                     }
                 }
             }
-            // **Neither this arm nor `Generated` blames the method**,
-            // measured twice over -- a claim about those arms and not
-            // about their position, since `External`'s implemented half sits
-            // between them and does blame.
-            // An untrapped `1/0` inside a `::METHOD` body reports
-            // the method's own failing clause and then the sending clause,
-            // with no `Compiled method` line between them, and
-            // [`Interp::finish_call`] seals the method's own level for that,
-            // exactly as it does for a call. A generated accessor and
-            // an `ABSTRACT` send report the *sending* clause and nothing
-            // above it: measured, `.K~a(1)` on `::attribute a class` is
-            // `93.902` with the sending clause alone on `stderr`, where
-            // `'abc'~length(1)` -- a [`NativeMethod`] taking the same
-            // refusal -- carries a `Compiled method "LENGTH"` line. The two
-            // differ in the C++ because `AttributeGetterCode::run` and
-            // `AbstractCode::run` raise directly where `CPPCode::run` raises
-            // from inside a `NativeActivation` of its own
-            // (`execution/CPPCode.cpp:280`, `:526`).
-            Invocable::Rexx(installed) => {
-                self.begin_method(
-                    cleared, installed, resolution, behaviour, receiver, name, args,
-                )?;
-                return Ok(Started::Entered);
+            other => {
+                return self.begin_invoke_other(other, cleared, resolution, receiver, name, args);
             }
+        };
+        outcome.map(Started::Ran)
+    }
+
+    /// [`Interp::begin_invoke`] for a method whose body is neither Rexx nor
+    /// native.
+    #[inline(never)]
+    fn begin_invoke_other(
+        &mut self,
+        invocable: Invocable,
+        cleared: Cleared,
+        resolution: Resolution,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<Started<Option<ObjRef>>, Failure> {
+        let outcome = match invocable {
             // **The refusal is the ordinary outcome here**, so unlike the
-            // `Native` arm above this one does not blame the method for it:
+            // `Native` arm of `begin_invoke` this one does not blame the
+            // method for it:
             // a `Loud` is a report about this crate and carries no traceback
             // at all. The implemented arm does blame, because its refusals
             // are the oracle's own -- measured, `.k~sep(1)` on a class method
@@ -2190,6 +2209,7 @@ impl Interp {
                     outcome
                 }
             },
+            Invocable::Rexx(_) | Invocable::Native(_) => return Err(Loud::missing_body().into()),
             Invocable::Library(binding) => {
                 let outcome = self.run_library_method(&binding, resolution, receiver, name, args);
                 if outcome.is_err() {

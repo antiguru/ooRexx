@@ -23,7 +23,7 @@ pub(super) fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
         let opens_here = at
             .checked_sub(1)
             .and_then(|before| ops.get(before))
-            .is_some_and(|before| matches!(before, Op::Clause { end, .. } if *end as usize > at));
+            .is_some_and(|before| matches!(before, Op::Clause { end, .. } | Op::CallingClause { end, .. } if *end as usize > at));
         assert!(
             opens_here,
             "the trace op at {at} is not the first op of a Clause region, so it echoes against \
@@ -209,7 +209,7 @@ pub(super) fn assert_keyword_echoes_precede_their_value(ops: &[Op]) {
 /// optional [`Op::TraceClause`] between them, and the `Exec` itself.
 pub(super) fn assert_exec_regions_hold_nothing_else(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
-        let Op::Clause { end, .. } = op else {
+        let (Op::Clause { end, .. } | Op::CallingClause { end, .. }) = op else {
             continue;
         };
         let inside = &ops[at + 1..(*end as usize).min(ops.len())];
@@ -230,7 +230,7 @@ pub(super) fn assert_exec_regions_hold_nothing_else(ops: &[Op]) {
 /// own clause.**
 pub(super) fn assert_region_ops_name_their_clause(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
-        let Op::Clause { index, end } = op else {
+        let (Op::Clause { index, end } | Op::CallingClause { index, end }) = op else {
             continue;
         };
         for (inside, op) in ops[at + 1..(*end as usize).min(ops.len())]
@@ -261,6 +261,7 @@ pub(super) fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 Op::TraceKeyword { .. }
                 | Op::LoopHeaderValue { .. }
                 | Op::Clause { .. }
+                | Op::CallingClause { .. }
                 | Op::Send { .. }
                 | Op::List { .. }
                 | Op::SelectCaseText { .. }

@@ -58,6 +58,7 @@ impl ValidOps {
                 | Op::Queue { src, .. } => optional(src),
                 Op::JumpUnless { reg, .. } | Op::ConditionJump { reg, .. } => inside(reg),
                 Op::Clause { .. }
+                | Op::CallingClause { .. }
                 | Op::LoopRun { .. }
                 | Op::LoopNext { .. }
                 | Op::TraceClause { .. }

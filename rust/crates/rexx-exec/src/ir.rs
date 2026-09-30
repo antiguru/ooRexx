@@ -74,6 +74,9 @@ pub(crate) enum Op {
     /// section: "a promoted clause takes a mark when its `Clause` op is
     /// emitted and releases to it at `end`").
     Clause { index: u32, end: u32 },
+    /// [`Op::Clause`] for a region holding an op a callee can resume after:
+    /// [`Op::CallExpr`], [`Op::CallArgs`] or [`Op::Send`].
+    CallingClause { index: u32, end: u32 },
     /// Echoes the `>K>` line of one `DO`/`LOOP` header value, from register
     /// `src`, under the tag [`HeaderRole`] gives it.
     TraceKeyword { role: HeaderRole, src: u16 },

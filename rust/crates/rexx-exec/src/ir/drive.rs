@@ -44,6 +44,10 @@ pub(crate) use super::counters::{resume_counters, suspend_counters};
 /// What a body that runs off its own end answers.
 const END_OF_BODY: Ended = Ended::Exited(None);
 
+/// The grant position of an [`Interp::ops_loop`] with no clause to grant the
+/// first-instruction permission to.
+const NO_GRANT: u32 = u32::MAX;
+
 /// One activation's compiled body, owned so that a parked level keeps it.
 pub(crate) struct Level {
     pub(crate) program: Rc<Program>,
@@ -247,6 +251,7 @@ fn undriven_op_name(op: &Op) -> &'static str {
         Op::LoopRun { .. } => "LoopRun",
         Op::LoopNext { .. } => "LoopNext",
         Op::Clause { .. } => "Clause",
+        Op::CallingClause { .. } => "CallingClause",
         Op::TraceClause { .. } => "TraceClause",
         Op::EvalExpr { .. } => "EvalExpr",
         Op::CallExpr { .. } => "CallExpr",
@@ -1596,6 +1601,9 @@ macro_rules! region_ops {
                 Op::Clause { .. } => {
                     break $cold Err(Loud::op_not_driven("Clause").into());
                 }
+                Op::CallingClause { .. } => {
+                    break $cold Err(Loud::op_not_driven("CallingClause").into());
+                }
                 Op::SelectCaseText { .. } => {
                     break $cold Err(
                         Loud::op_not_driven("SelectCaseText").into()
@@ -1623,6 +1631,245 @@ macro_rules! region_ops {
                 $header: $header.take().map(Box::new),
                 deliver,
             };
+        }
+    };
+}
+
+/// The opening half of an [`Op::Clause`] or [`Op::CallingClause`] arm: the
+/// clause `$op_index` names entered, and the region's state assigned to the
+/// idents given.
+macro_rules! open_clause {
+    (
+        $self:ident,
+        $code:ident,
+        $chunk:ident,
+        $source:ident,
+        $pc:ident,
+        $op_index:ident,
+        $op_end:ident,
+        $granting:ident,
+        $granting_instance:expr,
+        $grants:expr,
+        $clause_pc:ident,
+        $index:ident,
+        $region_end:ident,
+        $clause:ident,
+        $stale:ident,
+        $debugging:ident,
+        $entry:ident,
+        $from:ident
+    ) => {
+        if $granting_instance && !$granting {
+            return Ok(Exit::At($pc));
+        }
+        #[cfg(test)]
+        count_clause_op_entry();
+        // Where this region starts, which is where `=` at an
+        // interactive-debug pause sends the counter back to.
+        $clause_pc = $pc;
+        $index = *$op_index as usize;
+        $region_end = *$op_end;
+        // **The instruction this whole region names**, fetched once
+        // and read by every index-bearing op inside the region
+        // rather than each resolving its own `index` against the
+        // body, which is a bounds-checked lookup of the same
+        // instruction per op that would do it.
+        // `compile::invariants::assert_region_ops_name_their_clause` is what
+        // makes the two the same instruction by checking rather
+        // than by assuming, and [`debug_assert_names_the_clause`]
+        // is the same check per op in debug.
+        $clause = match $code.body.instructions.get($index) {
+            Some(found) => found,
+            None => return Err(Loud::chunk_map_too_short().into()),
+        };
+        if $granting {
+            $self.grant_procedure_permission($clause);
+            // **A label leaves the permission alone**, so a label
+            // reading `false` here is not the permission being
+            // spent: `sub: procedure expose zg` grants at the
+            // `PROCEDURE`, one clause after the label.
+            $granting = $self.activity.procedure_permitted
+                || matches!($clause.kind, InstructionKind::Label { .. });
+        }
+        // **Whether the setting in force is still the one this
+        // chunk's trace ops were emitted for**, and the whole of
+        // what makes a compiled-in emission decision safe.
+        // **One read of the setting answers both questions.**
+        // Asking `self` again after the clause for the debug flag
+        // cost `bench-programs/emptyloop.rex` 1.52% and
+        // `dispatch.rex` 1.14% in `instructions:u`, measured.
+        let sink = $self.chunk_trace();
+        // **The analysis, checked at the clause it answered for.**
+        // A `Known` answer is a claim that this clause always runs
+        // under exactly that setting, and the claim is what a
+        // compile-time emission decision rests on; a missing
+        // control-flow edge shows up here as a mismatch rather
+        // than as a program that silently stops tracing.
+        // `debug_pause` is excluded because
+        // [`Interp::traced_mode`] answers `OFF` under it by
+        // design, which is not the program's own setting.
+        #[cfg(debug_assertions)]
+        if !$self.activity.debug_pause
+            && let Some(crate::ir::trace_flow::Setting::Known(claimed)) = $chunk.setting_at($index)
+        {
+            debug_assert_eq!(
+                claimed, sink,
+                "the trace analysis answered {claimed:?} for instruction {}, and \
+         the setting in force when it ran is not that one",
+                $index
+            );
+        }
+        $stale = $chunk.trace().clause_echoes() != sink.clause_echoes();
+        $debugging = sink.debugging();
+        // **`stale` moves the clause echo from the stream back to
+        // the run-time gate, in both directions at once.** The
+        // region's own [`Op::TraceClause`] is skipped and
+        // [`Echo::Gated`] is passed instead, so a chunk compiled to
+        // echo under a setting that no longer does prints nothing,
+        // and one compiled silent under a setting that now echoes
+        // prints the line the setting now asks for. The two have
+        // to be one decision: doing only the first would leave a
+        // `TRACE R` inside a body invisible to every promoted
+        // clause after it, and only the second would leave `TRACE
+        // N` unable to switch one off.
+        let echo = if $stale { Echo::Gated } else { Echo::Compiled };
+        let counted = $self.count_clause_against_deadline()?;
+        // **The clause unit, entered by its two halves rather than
+        // by its closure form**, which is what puts the region's
+        // ops in this function's own frame instead of a callee's.
+        // There is one implementation of the clause boundary --
+        // `Interp::enter_stepped_clause` and
+        // `Interp::leave_stepped_clause`, which
+        // `crate::ir::Op::Clause` is itself defined in
+        // terms of -- so a promoted clause and an unpromoted one
+        // discharge the same list from the same code.
+        $entry = $self.enter_stepped_clause(
+            echo,
+            $code,
+            $index,
+            $clause,
+            $source,
+            $chunk.position_at($index),
+            counted,
+        );
+        // Taken on entry exactly as `step` takes it, because a
+        // promoted clause is a clause and the permission is spent
+        // by whichever clause the activation granted it to.
+        // Outside a body the driver runs nothing has granted it, so
+        // there is nothing to take.
+        $self.activity.region_procedure_permitted = if $grants {
+            std::mem::take(&mut $self.activity.procedure_permitted)
+        } else {
+            debug_assert!(
+                !$self.activity.procedure_permitted,
+                "a permission granted outside a driven body"
+            );
+            false
+        };
+        $from = $pc + 1;
+    };
+}
+
+/// The rest of an [`Op::Clause`] or [`Op::CallingClause`] arm, from the
+/// region's state: its ops from `$from`, and the clause boundary. Continues
+/// `$ops_label` or returns where the arm does, and otherwise answers the
+/// `Flow` and the op it is settled from.
+macro_rules! clause_region {
+    (
+        $self:ident,
+        $code:ident,
+        $chunk:ident,
+        $registers:ident,
+        $source:ident,
+        $pc:ident,
+        $clause_pc:ident,
+        $index:ident,
+        $clause:ident,
+        $stale:ident,
+        $debugging:ident,
+        $entry:ident,
+        $end:ident,
+        $from:ident,
+        $header:expr,
+        $top:expr,
+        $ops_label:lifetime
+    ) => {
+        // The ops of this clause region, `[from, end)`, and where
+        // they leave the counter.
+        'arm: {
+            let park: Park = 'park: {
+                let ran: Result<RegionEnd, Failure> = 'cold: {
+                    // **The region answers an op index and nothing else.**
+                    // Where a clause leaves the counter is the whole of what
+                    // an ordinary one has to say, and carrying that in a
+                    // `Result<RegionEnd, Failure>` costs a 24-byte value
+                    // built and moved per clause. The two answers that do
+                    // need one -- a `Flow` the enclosing range settles, and a
+                    // failure -- leave through `'cold` instead, so the
+                    // discriminant rides the program counter on the path
+                    // every clause takes and the value exists only on the
+                    // paths that have something to put in it.
+                    let next: u32 = 'region: {
+                        // A `DO`/`LOOP` header's values, accumulated across this
+                        // region's own ops because they are not `ObjRef`s and so
+                        // have no register to live in: a bound is a `Number` and
+                        // a budget is a count.
+                        let mut header: Option<LoopHeaderValues> = $header;
+                        let Some(ops) = $chunk.ops_in($from, $end) else {
+                            break 'cold Err(Loud::chunk_map_too_short().into());
+                        };
+                        region_ops!(
+                            $self, $code, $chunk, $registers, $source, $clause, $index, $stale,
+                            header, $end, ops, $from, $top, 'cold, 'region, 'park
+                        );
+                        $end
+                    };
+                    // **The hot exit, and the whole point of the split.**
+                    // `leave_clause`'s own fast path is this same question,
+                    // so asking it here reaches the same answer without
+                    // building the value that answer would travel in.
+                    // `finish_plain_clause` discharges what is left of the
+                    // boundary.
+                    if $self.activity.pending_traps.is_empty() {
+                        $self.finish_plain_clause($entry);
+                        // **Asked of the setting and not of `stale`.**
+                        // Staleness heals -- the chunk is recompiled under
+                        // the setting now in force -- so a skip count set
+                        // at a pause would stop running down after the
+                        // first clause. Measured: `trace -2` then suppressed
+                        // every later clause instead of two.
+                        if $debugging && $self.debug_pause_after_clause()? {
+                            $pc = $clause_pc;
+                            continue $ops_label;
+                        }
+                        $pc = next;
+                        continue $ops_label;
+                    }
+                    Ok(RegionEnd::At(next))
+                };
+                break 'arm match $self
+                    .leave_stepped_clause($entry, $code, $index, $clause, $source, ran)?
+                {
+                    ClauseOutcome::Ran(region) => match region? {
+                        // A promoted clause produces no `Flow` of its own:
+                        // where it leaves the counter *is* its answer, which
+                        // is what a jump op is for. Only its boundary can
+                        // end the activation, and that is the `Ended` below.
+                        RegionEnd::At(next) => {
+                            $pc = next;
+                            continue $ops_label;
+                        }
+                        // Settled against this range from the op past the
+                        // region, which is where an absorbed `Flow::Next`
+                        // continues -- the same position `pc + 1` is for an
+                        // op that runs one clause and no more.
+                        RegionEnd::Flowed(flow) => (flow, $end),
+                    },
+                    ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), $clause_pc),
+                };
+            };
+            $self.park_call(park, $entry, $clause_pc, $end, $index, $stale, $debugging);
+            return Ok(Exit::Parked);
         }
     };
 }
@@ -2081,7 +2328,7 @@ impl Interp {
     }
 
     /// Parks the clause region `park` stopped at, for its callee to run:
-    /// everything [`Interp::resume_region`] needs to go on from `park.at`.
+    /// everything [`Interp::ops_loop`] needs to go on from `park.at`.
     #[expect(
         clippy::too_many_arguments,
         reason = "every argument is one the driver already holds for the clause it has open"
@@ -2202,12 +2449,19 @@ impl Interp {
                                     // `[0, len]` is the whole body, so every `Goto` a clause of it
                                     // produces is absorbed here and only the flows that end or
                                     // redirect the activation come back.
-                                    self.ops_loop::<true, true>(
-                                        code, chunk, registers, at, 0, len, source, base,
-                                    )
+                                    match self.grant_for(code, chunk, at) {
+                                        Some(grant) => self.ops_loop_steady(
+                                            code, chunk, registers, at, 0, len, source, base,
+                                            grant, None,
+                                        ),
+                                        None => self.ops_loop_granting(
+                                            code, chunk, registers, at, 0, len, source, base,
+                                        ),
+                                    }
                                 }
                                 Next::At(at) => self.ops_loop_steady(
-                                    code, chunk, registers, at, 0, len, source, base,
+                                    code, chunk, registers, at, 0, len, source, base, NO_GRANT,
+                                    None,
                                 ),
                                 Next::Resume => {
                                     let ended = std::mem::replace(&mut callee, Ok(END_OF_BODY));
@@ -2358,8 +2612,8 @@ impl Interp {
         self.running_level().map(Some)
     }
 
-    /// [`Interp::resume_region`] for a parked `CALL`, whose op ends its clause
-    /// region: its `RESULT` settled at `base_indent`, and the clause boundary.
+    /// A parked `CALL`, whose op ends its clause region: its `RESULT` settled
+    /// at `base_indent`, and the clause boundary.
     #[expect(
         clippy::too_many_arguments,
         reason = "one caller, and every argument is a value it already holds"
@@ -2376,41 +2630,18 @@ impl Interp {
         base_indent: usize,
         ended: Result<Ended, Failure>,
     ) -> Result<Exit, Failure> {
-        let ParkedCall {
-            clause_pc,
-            end,
-            index,
-            entry,
-            ..
-        } = parked;
-        let Some(clause) = code.body.instructions.get(index) else {
-            return Err(Loud::chunk_map_too_short().into());
-        };
         let ran = self
             .finish_call(ended)
             .and_then(|ended| self.settle_call_result(ended, base_indent))
             .map(RegionEnd::Flowed);
-        let (flow, next) =
-            match self.leave_stepped_clause(entry, code, index, clause, source, ran)? {
-                ClauseOutcome::Ran(region) => match region? {
-                    RegionEnd::At(next) => return Ok(Exit::At(next)),
-                    RegionEnd::Flowed(flow) => (flow, end),
-                },
-                ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), clause_pc),
-            };
-        Ok(
-            match self.settle(code, chunk, base, flow, next, 0, len, source)? {
-                Settled::At(pc) => Exit::At(pc),
-                Settled::Escaped(other) => Exit::Flow(other),
-            },
-        )
+        self.leave_parked(code, chunk, source, base, len, parked, ran)
     }
 
     /// The level [`Interp::drive`] has just taken back from
     /// [`Activity::parked_levels`](crate::activity::Activity), run on from
     /// `parked`, a function call or send op, with `ended`, what the callee's
-    /// body answered: the answer delivered, the rest of its clause region,
-    /// and where the counter goes after them.
+    /// body answered: the answer delivered, then the rest of its clause
+    /// region in [`Interp::ops_loop_steady`].
     #[expect(
         clippy::too_many_arguments,
         reason = "one caller, and every argument is a value it already holds"
@@ -2427,70 +2658,65 @@ impl Interp {
         parked: ParkedCall,
         ended: Result<Ended, Failure>,
     ) -> Result<Exit, Failure> {
+        let delivered = match parked.deliver {
+            Deliver::Register(dst) => self
+                .finish_function_op(ended)
+                .map(|value| registers.set(dst, value)),
+            Deliver::Send => self.finish_send_op(chunk, registers, parked.at, ended),
+            Deliver::Flow(_) => Err(Loud::op_not_driven("a parked CALL resumed mid-region").into()),
+        };
+        match delivered {
+            Ok(()) => self.ops_loop_steady(
+                code,
+                chunk,
+                registers,
+                parked.at,
+                0,
+                len,
+                source,
+                base,
+                NO_GRANT,
+                Some(parked),
+            ),
+            Err(failure) => self.leave_parked(code, chunk, source, base, len, parked, Err(failure)),
+        }
+    }
+
+    /// `parked`'s clause left with `ran` rather than running on: the clause
+    /// boundary, and where the counter goes after it.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "every argument is a value each caller already holds"
+    )]
+    #[inline(always)]
+    fn leave_parked(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        source: Option<&ProgramSource>,
+        base: usize,
+        len: usize,
+        parked: ParkedCall,
+        ran: Result<RegionEnd, Failure>,
+    ) -> Result<Exit, Failure> {
         let ParkedCall {
             clause_pc,
-            at,
             end,
             index,
             entry,
-            stale,
-            debugging,
-            header,
-            deliver,
+            ..
         } = parked;
         let Some(clause) = code.body.instructions.get(index) else {
             return Err(Loud::chunk_map_too_short().into());
         };
-        // The rest of the region and its boundary, as `Op::Clause`'s arm in
-        // `ops_loop` runs and discharges them.
-        let (flow, next) = 'arm: {
-            let park: Park = 'park: {
-                let ran: Result<RegionEnd, Failure> = 'cold: {
-                    let next: u32 = 'region: {
-                        let mut header = header.map(|header| *header);
-                        let delivered = match deliver {
-                            Deliver::Register(dst) => self
-                                .finish_function_op(ended)
-                                .map(|value| registers.set(dst, value)),
-                            Deliver::Send => self.finish_send_op(chunk, registers, at, ended),
-                            Deliver::Flow(_) => {
-                                Err(Loud::op_not_driven("a parked CALL resumed mid-region").into())
-                            }
-                        };
-                        if let Err(failure) = delivered {
-                            break 'cold Err(failure);
-                        }
-                        let Some(ops) = chunk.ops_in(at, end) else {
-                            break 'cold Err(Loud::chunk_map_too_short().into());
-                        };
-                        region_ops!(
-                            self, code, chunk, registers, source, clause, index, stale, header, end,
-                            ops, at, true, 'cold, 'region, 'park
-                        );
-                        end
-                    };
-                    if self.activity.pending_traps.is_empty() {
-                        self.finish_plain_clause(entry);
-                        if debugging && self.debug_pause_after_clause()? {
-                            return Ok(Exit::At(clause_pc));
-                        }
-                        return Ok(Exit::At(next));
-                    }
-                    Ok(RegionEnd::At(next))
-                };
-                break 'arm match self
-                    .leave_stepped_clause(entry, code, index, clause, source, ran)?
-                {
-                    ClauseOutcome::Ran(region) => match region? {
-                        RegionEnd::At(next) => return Ok(Exit::At(next)),
-                        RegionEnd::Flowed(flow) => (flow, end),
-                    },
-                    ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), clause_pc),
-                };
+        let (flow, next) =
+            match self.leave_stepped_clause(entry, code, index, clause, source, ran)? {
+                ClauseOutcome::Ran(region) => match region? {
+                    RegionEnd::At(next) => return Ok(Exit::At(next)),
+                    RegionEnd::Flowed(flow) => (flow, end),
+                },
+                ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), clause_pc),
             };
-            self.park_call(park, entry, clause_pc, end, index, stale, debugging);
-            return Ok(Exit::Parked);
-        };
         Ok(
             match self.settle(code, chunk, base, flow, next, 0, len, source)? {
                 Settled::At(pc) => Exit::At(pc),
@@ -2571,7 +2797,9 @@ impl Interp {
         source: Option<&ProgramSource>,
         base: usize,
     ) -> Result<Flow, Failure> {
-        match self.ops_loop::<false, false>(code, chunk, registers, at, start, end, source, base)? {
+        match self.ops_loop::<false, false>(
+            code, chunk, registers, at, start, end, source, base, NO_GRANT, None,
+        )? {
             Exit::Flow(flow) => Ok(flow),
             Exit::At(_) | Exit::Parked => {
                 Err(Loud::op_not_driven("a handoff or a park outside a driven body").into())
@@ -2579,12 +2807,12 @@ impl Interp {
         }
     }
 
-    /// [`Interp::ops_loop`]'s non-granting instance for a body [`Interp::drive`]
-    /// runs. Its own function rather than inlined into `drive`: measured,
+    /// [`Interp::ops_loop`]'s instance for a body [`Interp::drive`] runs.
+    /// Its own function rather than inlined into `drive`: measured,
     /// `bench-programs/nop.rex` retires 5.2% fewer instructions this way.
     #[expect(
         clippy::too_many_arguments,
-        reason = "one caller, and every argument is a value it already holds"
+        reason = "every argument is a value each caller already holds"
     )]
     #[inline(never)]
     fn ops_loop_steady(
@@ -2597,14 +2825,69 @@ impl Interp {
         end: usize,
         source: Option<&ProgramSource>,
         base: usize,
+        grant: u32,
+        resume: Option<ParkedCall>,
     ) -> Result<Exit, Failure> {
-        self.ops_loop::<false, true>(code, chunk, registers, at, start, end, source, base)
+        self.ops_loop::<false, true>(
+            code, chunk, registers, at, start, end, source, base, grant, resume,
+        )
+    }
+
+    /// [`Interp::ops_loop`]'s granting instance, for a body whose entry
+    /// [`Interp::grant_for`] cannot place the permission for.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one caller, and every argument is a value it already holds"
+    )]
+    #[cold]
+    #[inline(never)]
+    fn ops_loop_granting(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        registers: RegFrame<'_>,
+        at: u32,
+        start: usize,
+        end: usize,
+        source: Option<&ProgramSource>,
+        base: usize,
+    ) -> Result<Exit, Failure> {
+        self.ops_loop::<true, true>(
+            code, chunk, registers, at, start, end, source, base, NO_GRANT, None,
+        )
+    }
+
+    /// The op of the clause a body entered at op `at` opens first once past
+    /// its labels, which the running activation's first-instruction
+    /// permission goes to in [`Interp::ops_loop_steady`]: [`NO_GRANT`] where
+    /// there is no permission, and `None` for an entry at anything but a run
+    /// of clauses.
+    fn grant_for(&self, code: &Code<'_>, chunk: &Chunk, at: u32) -> Option<u32> {
+        if !self.activation().first_instruction_pending {
+            return Some(NO_GRANT);
+        }
+        let mut pc = at;
+        loop {
+            let (index, end) = match chunk.ops_in(pc, pc + 1).and_then(<[Op]>::first) {
+                Some(Op::Clause { index, end } | Op::CallingClause { index, end }) => {
+                    (*index, *end)
+                }
+                _ => return None,
+            };
+            match code.body.instructions.get(index as usize) {
+                Some(clause) if matches!(clause.kind, InstructionKind::Label { .. }) => pc = end,
+                Some(_) => return Some(pc),
+                None => return None,
+            }
+        }
     }
 
     /// Runs `chunk`'s ops from op `at` until one of them produces a `Flow`
     /// that `[start, end]` does not absorb. Under `TOP` the range is a body
     /// [`Interp::drive`] runs, and a call op parks its clause region for its
-    /// callee.
+    /// callee; `grant` is the op of the clause the first-instruction
+    /// permission goes to, and `resume` a parked region whose callee has
+    /// ended and whose answer is delivered, run on first.
     #[expect(
         clippy::too_many_arguments,
         reason = "every argument is a value each caller already holds"
@@ -2620,6 +2903,8 @@ impl Interp {
         end: usize,
         source: Option<&ProgramSource>,
         base: usize,
+        grant: u32,
+        mut resume: Option<ParkedCall>,
     ) -> Result<Exit, Failure> {
         let Some(stop) = chunk.op_at(end) else {
             return Err(Loud::chunk_map_too_short().into());
@@ -2629,344 +2914,249 @@ impl Interp {
         // long, so every read of it under that guard is in range already and
         // the per-op check goes. A stream shorter than `stop` is the same
         // fault the per-op read used to report, found here instead.
-        let Some(stream) = chunk.ops_upto(stop) else {
+        let Some(full) = chunk.ops_upto(stop) else {
             return Err(Loud::chunk_map_too_short().into());
         };
+        // Cut short at the clause the permission goes to, so the bound check
+        // every op already makes is what finds that clause too.
+        let mut stream = full.get(..grant as usize).unwrap_or(full);
         let depth = self.activation_depth();
         // Whether the permission is still worth asking about. It is granted to
         // this activation's first instruction and cleared by the one after it;
         // the first clause that finds it spent hands the rest of the range to
         // the instance that never asks.
         let mut granting = GRANTING;
-        let mut pc = at;
+        // A parked region to resume starts the counter past `stop`, so the
+        // bound check every op already makes is what finds it.
+        let mut pc = if resume.is_some() { u32::MAX } else { at };
         'ops: loop {
-            // **A branch that runs out exactly at this range's own end.**
-            // `stop` is `Chunk::op_of`'s entry for `end`, which is where the
-            // branch's own `Op::EndWhen` sits -- so the op is one past what
-            // this range drives and the boundary owes the close itself.
-            if pc >= stop {
-                match self.leave_ended_select_branch(code, chunk, base, pc, start, end, source)? {
-                    BranchEnd::At(target) => {
-                        pc = target;
-                        continue;
+            let (flow, next) = 'step: {
+                // An `Op::CallingClause` region's state, opened here or resumed:
+                // assigned in place on each path rather than built as one
+                // value, which the region's hot path would then copy.
+                let clause_pc;
+                let index;
+                let region_end;
+                let clause;
+                let stale;
+                let debugging;
+                let entry;
+                let from;
+                // A resumed region's `DO`/`LOOP` header values so far.
+                let header: Option<Box<LoopHeaderValues>>;
+                'calling: {
+                    // **A branch that runs out exactly at this range's own end.**
+                    // `stop` is `Chunk::op_of`'s entry for `end`, which is where the
+                    // branch's own `Op::EndWhen` sits -- so the op is one past what
+                    // this range drives and the boundary owes the close itself.
+                    if pc as usize >= stream.len() {
+                        if let Some(parked) = resume.take() {
+                            clause = match code.body.instructions.get(parked.index) {
+                                Some(clause) => clause,
+                                None => return Err(Loud::chunk_map_too_short().into()),
+                            };
+                            clause_pc = parked.clause_pc;
+                            index = parked.index;
+                            region_end = parked.end;
+                            stale = parked.stale;
+                            debugging = parked.debugging;
+                            entry = parked.entry;
+                            header = parked.header;
+                            from = parked.at;
+                            break 'calling;
+                        }
+                        if stream.len() < full.len() {
+                            stream = full;
+                            if pc == grant {
+                                self.activity.procedure_permitted = std::mem::take(
+                                    &mut self.activation_mut().first_instruction_pending,
+                                );
+                            }
+                            continue 'ops;
+                        }
+                        match self
+                            .leave_ended_select_branch(code, chunk, base, pc, start, end, source)?
+                        {
+                            BranchEnd::At(target) => {
+                                pc = target;
+                                continue 'ops;
+                            }
+                            BranchEnd::Escaped(other) => return Ok(Exit::Flow(other)),
+                            BranchEnd::None => return Ok(Exit::Flow(Flow::Next)),
+                        }
                     }
-                    BranchEnd::Escaped(other) => return Ok(Exit::Flow(other)),
-                    BranchEnd::None => return Ok(Exit::Flow(Flow::Next)),
-                }
-            }
-            // **The tripwire for the op that replaced the check that used to
-            // stand here.** A frame is overdue only at the position its own
-            // `Op::EndWhen` occupies; anywhere else means a branch outlived
-            // the op that closes it, which is a `SELECT` running on into what
-            // follows it and is silent in any program whose branches happen to
-            // agree.
-            #[cfg(debug_assertions)]
-            if !matches!(stream.get(pc as usize), Some(Op::EndWhen)) {
-                debug_assert!(
-                    !(self.activity.frames.len() > base
-                        && self
-                            .activity
-                            .frames
-                            .last()
-                            .is_some_and(|frame| pc >= frame.op_end)),
-                    "the innermost SELECT frame ended before op {pc}, which is not its own EndWhen"
-                );
-            }
-            let op = &stream[pc as usize];
-            let (flow, next) = match op {
-                Op::Clause { index, end } => {
-                    if GRANTING && !granting {
-                        return Ok(Exit::At(pc));
-                    }
-                    #[cfg(test)]
-                    count_clause_op_entry();
-                    // Where this region starts, which is where `=` at an
-                    // interactive-debug pause sends the counter back to.
-                    let clause_pc = pc;
-                    let index = *index as usize;
-                    let end = *end;
-                    // **The instruction this whole region names**, fetched once
-                    // and read by every index-bearing op inside the region
-                    // rather than each resolving its own `index` against the
-                    // body, which is a bounds-checked lookup of the same
-                    // instruction per op that would do it.
-                    // `compile::invariants::assert_region_ops_name_their_clause` is what
-                    // makes the two the same instruction by checking rather
-                    // than by assuming, and [`debug_assert_names_the_clause`]
-                    // is the same check per op in debug.
-                    let Some(clause) = code.body.instructions.get(index) else {
-                        return Err(Loud::chunk_map_too_short().into());
-                    };
-                    if granting {
-                        self.grant_procedure_permission(clause);
-                        // **A label leaves the permission alone**, so a label
-                        // reading `false` here is not the permission being
-                        // spent: `sub: procedure expose zg` grants at the
-                        // `PROCEDURE`, one clause after the label.
-                        granting = self.activity.procedure_permitted
-                            || matches!(clause.kind, InstructionKind::Label { .. });
-                    }
-                    // **Whether the setting in force is still the one this
-                    // chunk's trace ops were emitted for**, and the whole of
-                    // what makes a compiled-in emission decision safe.
-                    // **One read of the setting answers both questions.**
-                    // Asking `self` again after the clause for the debug flag
-                    // cost `bench-programs/emptyloop.rex` 1.52% and
-                    // `dispatch.rex` 1.14% in `instructions:u`, measured.
-                    let sink = self.chunk_trace();
-                    // **The analysis, checked at the clause it answered for.**
-                    // A `Known` answer is a claim that this clause always runs
-                    // under exactly that setting, and the claim is what a
-                    // compile-time emission decision rests on; a missing
-                    // control-flow edge shows up here as a mismatch rather
-                    // than as a program that silently stops tracing.
-                    // `debug_pause` is excluded because
-                    // [`Interp::traced_mode`] answers `OFF` under it by
-                    // design, which is not the program's own setting.
+                    // **The tripwire for the op that replaced the check that used to
+                    // stand here.** A frame is overdue only at the position its own
+                    // `Op::EndWhen` occupies; anywhere else means a branch outlived
+                    // the op that closes it, which is a `SELECT` running on into what
+                    // follows it and is silent in any program whose branches happen to
+                    // agree.
                     #[cfg(debug_assertions)]
-                    if !self.activity.debug_pause
-                        && let Some(crate::ir::trace_flow::Setting::Known(claimed)) =
-                            chunk.setting_at(index)
-                    {
-                        debug_assert_eq!(
-                            claimed, sink,
-                            "the trace analysis answered {claimed:?} for instruction {index}, and \
-                             the setting in force when it ran is not that one"
-                        );
-                    }
-                    let stale = chunk.trace().clause_echoes() != sink.clause_echoes();
-                    let debugging = sink.debugging();
-                    // **`stale` moves the clause echo from the stream back to
-                    // the run-time gate, in both directions at once.** The
-                    // region's own [`Op::TraceClause`] is skipped and
-                    // [`Echo::Gated`] is passed instead, so a chunk compiled to
-                    // echo under a setting that no longer does prints nothing,
-                    // and one compiled silent under a setting that now echoes
-                    // prints the line the setting now asks for. The two have
-                    // to be one decision: doing only the first would leave a
-                    // `TRACE R` inside a body invisible to every promoted
-                    // clause after it, and only the second would leave `TRACE
-                    // N` unable to switch one off.
-                    let echo = if stale { Echo::Gated } else { Echo::Compiled };
-                    let counted = self.count_clause_against_deadline()?;
-                    // **The clause unit, entered by its two halves rather than
-                    // by its closure form**, which is what puts the region's
-                    // ops in this function's own frame instead of a callee's.
-                    // There is one implementation of the clause boundary --
-                    // `Interp::enter_stepped_clause` and
-                    // `Interp::leave_stepped_clause`, which
-                    // `crate::ir::Op::Clause` is itself defined in
-                    // terms of -- so a promoted clause and an unpromoted one
-                    // discharge the same list from the same code.
-                    let entry = self.enter_stepped_clause(
-                        echo,
-                        code,
-                        index,
-                        clause,
-                        source,
-                        chunk.position_at(index),
-                        counted,
-                    );
-                    // Taken on entry exactly as `step` takes it, because a
-                    // promoted clause is a clause and the permission is spent
-                    // by whichever clause the activation granted it to.
-                    // Outside a granting instance nothing has granted it, so
-                    // there is nothing to take.
-                    self.activity.region_procedure_permitted = if GRANTING {
-                        std::mem::take(&mut self.activity.procedure_permitted)
-                    } else {
+                    if !matches!(stream.get(pc as usize), Some(Op::EndWhen)) {
                         debug_assert!(
-                            !self.activity.procedure_permitted,
-                            "a permission granted outside a granting instance"
+                            !(self.activity.frames.len() > base
+                                && self
+                                    .activity
+                                    .frames
+                                    .last()
+                                    .is_some_and(|frame| pc >= frame.op_end)),
+                            "the innermost SELECT frame ended before op {pc}, which is not its own EndWhen"
                         );
-                        false
-                    };
-                    // The ops of this promoted clause, `[pc + 1, end)`, and
-                    // where they leave the counter.
-                    'arm: {
-                        let park: Park = 'park: {
-                            let ran: Result<RegionEnd, Failure> = 'cold: {
-                                // **The region answers an op index and nothing else.**
-                                // Where a clause leaves the counter is the whole of what
-                                // an ordinary one has to say, and carrying that in a
-                                // `Result<RegionEnd, Failure>` costs a 24-byte value
-                                // built and moved per clause. The two answers that do
-                                // need one -- a `Flow` the enclosing range settles, and a
-                                // failure -- leave through `'cold` instead, so the
-                                // discriminant rides the program counter on the path
-                                // every clause takes and the value exists only on the
-                                // paths that have something to put in it.
-                                let next: u32 = 'region: {
-                                    // A `DO`/`LOOP` header's values, accumulated across this
-                                    // region's own ops because they are not `ObjRef`s and so
-                                    // have no register to live in: a bound is a `Number` and
-                                    // a budget is a count.
-                                    let mut header: Option<LoopHeaderValues> = None;
-                                    let Some(ops) = chunk.ops_in(pc + 1, end) else {
-                                        break 'cold Err(Loud::chunk_map_too_short().into());
-                                    };
-                                    region_ops!(
-                                        self, code, chunk, registers, source, clause, index, stale, header, end, ops,
-                                        pc + 1, TOP, 'cold, 'region, 'park
-                                    );
-                                    end
-                                };
-                                // **The hot exit, and the whole point of the split.**
-                                // `leave_clause`'s own fast path is this same question,
-                                // so asking it here reaches the same answer without
-                                // building the value that answer would travel in.
-                                // `finish_plain_clause` discharges what is left of the
-                                // boundary.
-                                if self.activity.pending_traps.is_empty() {
-                                    self.finish_plain_clause(entry);
-                                    // **Asked of the setting and not of `stale`.**
-                                    // Staleness heals -- the chunk is recompiled under
-                                    // the setting now in force -- so a skip count set
-                                    // at a pause would stop running down after the
-                                    // first clause. Measured: `trace -2` then suppressed
-                                    // every later clause instead of two.
-                                    if debugging && self.debug_pause_after_clause()? {
-                                        pc = clause_pc;
-                                        continue 'ops;
-                                    }
-                                    pc = next;
-                                    continue 'ops;
-                                }
-                                Ok(RegionEnd::At(next))
-                            };
-                            break 'arm match self
-                                .leave_stepped_clause(entry, code, index, clause, source, ran)?
-                            {
-                                ClauseOutcome::Ran(region) => match region? {
-                                    // A promoted clause produces no `Flow` of its own:
-                                    // where it leaves the counter *is* its answer, which
-                                    // is what a jump op is for. Only its boundary can
-                                    // end the activation, and that is the `Ended` below.
-                                    RegionEnd::At(next) => {
-                                        pc = next;
-                                        continue 'ops;
-                                    }
-                                    // Settled against this range from the op past the
-                                    // region, which is where an absorbed `Flow::Next`
-                                    // continues -- the same position `pc + 1` is for an
-                                    // op that runs one clause and no more.
-                                    RegionEnd::Flowed(flow) => (flow, end),
-                                },
-                                ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), pc),
-                            };
-                        };
-                        self.park_call(park, entry, clause_pc, end, index, stale, debugging);
-                        return Ok(Exit::Parked);
                     }
-                }
-                // **A jump past this range's end is loud rather than a
-                // stop.** `absorb` cannot check it -- a jump target is an op
-                // index and absorption is decided in instruction space -- so
-                // without this the loop's own `pc < stop` reads an escaping
-                // jump as "the range completed" and answers `Flow::Next`,
-                // which is a construct silently finishing where it should have
-                // propagated. Landing exactly on `stop` *is* completion, which
-                // is what a branch-end jump at a range boundary does, so the
-                // comparison is strict. A backward jump out of the range is
-                // not checked and is not emitted: it would re-run ops inside
-                // the range, which is a wrong answer rather than a silent one,
-                // and checking it costs a second `op_at` on the hot path.
-                Op::Jump { target } => {
-                    if *target > stop {
-                        return Err(Loud::jump_out_of_range().into());
-                    }
-                    pc = *target;
-                    continue;
-                }
-                // Handing an absorbed `WHEN CASE` the text it compares against
-                // (`Op::SelectCaseText`'s own doc has why it is here rather
-                // than inside the header's clause region), and opening a frame
-                // over a branch. None of the three runs a clause or produces a
-                // `Flow`, so each continues straight to the next op.
-                Op::SelectCaseText { index, case } => {
-                    let value = case.map(|register| {
+                    let op = &stream[pc as usize];
+                    match op {
+                        Op::Clause {
+                            index: op_index,
+                            end: op_end,
+                        } => {
+                            let clause_pc;
+                            let index;
+                            let region_end;
+                            let clause;
+                            let stale;
+                            let debugging;
+                            let entry;
+                            let from;
+                            open_clause!(
+                                self, code, chunk, source, pc, op_index, op_end, granting,
+                                GRANTING, TOP, clause_pc, index, region_end, clause, stale,
+                                debugging, entry, from
+                            );
+                            let end = region_end;
+                            break 'step clause_region!(
+                                self, code, chunk, registers, source, pc, clause_pc, index, clause,
+                                stale, debugging, entry, end, from, None, TOP, 'ops
+                            );
+                        }
+                        Op::CallingClause {
+                            index: op_index,
+                            end: op_end,
+                        } => {
+                            open_clause!(
+                                self, code, chunk, source, pc, op_index, op_end, granting,
+                                GRANTING, TOP, clause_pc, index, region_end, clause, stale,
+                                debugging, entry, from
+                            );
+                            header = None;
+                        }
+                        // **A jump past this range's end is loud rather than a
+                        // stop.** `absorb` cannot check it -- a jump target is an op
+                        // index and absorption is decided in instruction space -- so
+                        // without this the loop's own `pc < stop` reads an escaping
+                        // jump as "the range completed" and answers `Flow::Next`,
+                        // which is a construct silently finishing where it should have
+                        // propagated. Landing exactly on `stop` *is* completion, which
+                        // is what a branch-end jump at a range boundary does, so the
+                        // comparison is strict. A backward jump out of the range is
+                        // not checked and is not emitted: it would re-run ops inside
+                        // the range, which is a wrong answer rather than a silent one,
+                        // and checking it costs a second `op_at` on the hot path.
+                        Op::Jump { target } => {
+                            if *target > stop {
+                                return Err(Loud::jump_out_of_range().into());
+                            }
+                            pc = *target;
+                            continue 'ops;
+                        }
+                        // Handing an absorbed `WHEN CASE` the text it compares against
+                        // (`Op::SelectCaseText`'s own doc has why it is here rather
+                        // than inside the header's clause region), and opening a frame
+                        // over a branch. None of the three runs a clause or produces a
+                        // `Flow`, so each continues straight to the next op.
+                        Op::SelectCaseText { index, case } => {
+                            let value = case.map(|register| {
                         debug_assert!(
                             chunk.holds_register(register),
                             "op reads register {register} outside the region the chunk reserved"
                         );
                         registers.get(register)
                     });
-                    debug_assert!(
-                        code.body.instructions.get(*index as usize).is_some(),
-                        "a SelectCaseText op names an instruction outside its own body"
-                    );
-                    self.open_select_case(value);
-                    pc += 1;
-                    continue;
-                }
-                // The boundary wrapper around an
-                // `IF`'s whole arm runs, which a flattened construct has no
-                // wrapper to run. `Interp::end_promoted_branch`'s doc comment
-                // has the program that says it is not a spare one.
-                Op::EndBranch => (self.end_promoted_branch(code, Flow::Next)?, pc + 1),
-                Op::EndWhen => {
-                    match self
-                        .leave_ended_select_branch(code, chunk, base, pc, start, end, source)?
-                    {
-                        BranchEnd::At(target) => {
-                            pc = target;
-                            continue;
+                            debug_assert!(
+                                code.body.instructions.get(*index as usize).is_some(),
+                                "a SelectCaseText op names an instruction outside its own body"
+                            );
+                            self.open_select_case(value);
+                            pc += 1;
+                            continue 'ops;
                         }
-                        BranchEnd::Escaped(other) => return Ok(Exit::Flow(other)),
-                        // The scan's own landing place when the branch this
-                        // ends was never entered.
-                        BranchEnd::None => (Flow::Next, pc + 1),
-                    }
-                }
-                Op::EnterWhen { select, when } => {
-                    let frame = self.when_frame(code, chunk, *select as usize, *when as usize)?;
-                    self.activity.frames.push(Frame::select(frame));
-                    pc += 1;
-                    continue;
-                }
-                Op::EnterOtherwise { select } => {
-                    let frame = self.otherwise_frame(code, chunk, *select as usize)?;
-                    self.activity.frames.push(Frame::select(frame));
-                    pc += 1;
-                    continue;
-                }
-                // The bottom of a flattened pass, reached by the
-                // body falling out of its last clause into the `END`'s own op.
-                Op::LoopNext { index } => {
-                    if self.activity.frames.len() <= base
-                        || !matches!(
-                            self.activity.frames.last().map(|f| &f.kind),
-                            Some(FrameKind::Loop)
-                        )
-                    {
-                        return Err(Loud::op_not_driven("LoopNext").into());
-                    }
-                    debug_assert_eq!(
-                        self.activity.flat_top.as_ref().map(|flat| flat.do_index),
-                        Some(*index as usize),
-                        "a LoopNext op ended a pass of a loop other than the one it names"
-                    );
-                    match self.flat_loop_step_top(code, source, Flow::Next)? {
-                        crate::run::FlatStep::Body(op_body) => {
-                            pc = op_body;
-                            continue;
+                        // The boundary wrapper around an
+                        // `IF`'s whole arm runs, which a flattened construct has no
+                        // wrapper to run. `Interp::end_promoted_branch`'s doc comment
+                        // has the program that says it is not a spare one.
+                        Op::EndBranch => {
+                            break 'step (self.end_promoted_branch(code, Flow::Next)?, pc + 1);
                         }
-                        crate::run::FlatStep::Done(flow) => {
-                            self.activity.frames.pop();
-                            (flow, pc)
+                        Op::EndWhen => {
+                            match self.leave_ended_select_branch(
+                                code, chunk, base, pc, start, end, source,
+                            )? {
+                                BranchEnd::At(target) => {
+                                    pc = target;
+                                    continue 'ops;
+                                }
+                                BranchEnd::Escaped(other) => return Ok(Exit::Flow(other)),
+                                // The scan's own landing place when the branch this
+                                // ends was never entered.
+                                BranchEnd::None => break 'step (Flow::Next, pc + 1),
+                            }
                         }
+                        Op::EnterWhen { select, when } => {
+                            let frame =
+                                self.when_frame(code, chunk, *select as usize, *when as usize)?;
+                            self.activity.frames.push(Frame::select(frame));
+                            pc += 1;
+                            continue 'ops;
+                        }
+                        Op::EnterOtherwise { select } => {
+                            let frame = self.otherwise_frame(code, chunk, *select as usize)?;
+                            self.activity.frames.push(Frame::select(frame));
+                            pc += 1;
+                            continue 'ops;
+                        }
+                        // The bottom of a flattened pass, reached by the
+                        // body falling out of its last clause into the `END`'s own op.
+                        Op::LoopNext { index } => {
+                            if self.activity.frames.len() <= base
+                                || !matches!(
+                                    self.activity.frames.last().map(|f| &f.kind),
+                                    Some(FrameKind::Loop)
+                                )
+                            {
+                                return Err(Loud::op_not_driven("LoopNext").into());
+                            }
+                            debug_assert_eq!(
+                                self.activity.flat_top.as_ref().map(|flat| flat.do_index),
+                                Some(*index as usize),
+                                "a LoopNext op ended a pass of a loop other than the one it names"
+                            );
+                            match self.flat_loop_step_top(code, source, Flow::Next)? {
+                                crate::run::FlatStep::Body(op_body) => {
+                                    pc = op_body;
+                                    continue 'ops;
+                                }
+                                crate::run::FlatStep::Done(flow) => {
+                                    self.activity.frames.pop();
+                                    break 'step (flow, pc);
+                                }
+                            }
+                        }
+                        // The ops below are only meaningful inside a `Clause` region,
+                        // which the `Op::Clause` arm above walks: reaching one here
+                        // means a jump landed in the middle of a region rather than on
+                        // its `Clause`. Loud rather than a panic, which is this crate's
+                        // standing rule for a state the type system admits and the
+                        // compiler does not produce.
+                        // Every op that belongs inside a clause region, which this
+                        // loop does not drive -- `undriven_op_name` has why they are
+                        // one arm rather than one each.
+                        _ => return Err(Loud::op_not_driven(undriven_op_name(op)).into()),
                     }
-                }
-                // The ops below are only meaningful inside a `Clause` region,
-                // which the `Op::Clause` arm above walks: reaching one here
-                // means a jump landed in the middle of a region rather than on
-                // its `Clause`. Loud rather than a panic, which is this crate's
-                // standing rule for a state the type system admits and the
-                // compiler does not produce.
-                // Every op that belongs inside a clause region, which this
-                // loop does not drive -- `undriven_op_name` has why they are
-                // one arm rather than one each.
-                _ => return Err(Loud::op_not_driven(undriven_op_name(op)).into()),
+                };
+                let end = region_end;
+                clause_region!(
+                    self, code, chunk, registers, source, pc, clause_pc, index, clause, stale,
+                    debugging, entry, end, from, header.map(|header| *header), TOP, 'ops
+                )
             };
             // **Per clause, not per escaping flow.** A clause that left the
             // activation stack changed makes this loop's `code` describe a

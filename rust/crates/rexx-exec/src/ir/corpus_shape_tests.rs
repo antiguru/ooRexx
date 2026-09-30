@@ -65,6 +65,7 @@ impl Root {
             | Op::Signal { .. }
             | Op::Parse { .. }
             | Op::Clause { .. }
+            | Op::CallingClause { .. }
             | Op::TraceClause { .. }
             | Op::SelectCaseText { .. }
             | Op::WhenTest { .. }
@@ -267,7 +268,7 @@ fn other_family(op: Operator) -> bool {
 fn regions(chunk: &Chunk) -> BTreeMap<u32, &[Op]> {
     let mut out = BTreeMap::new();
     for (at, op) in chunk.ops.iter().enumerate() {
-        if let Op::Clause { index, end } = op {
+        if let Op::Clause { index, end } | Op::CallingClause { index, end } = op {
             let previous = out.insert(*index, &chunk.ops[at + 1..*end as usize]);
             assert!(
                 previous.is_none(),

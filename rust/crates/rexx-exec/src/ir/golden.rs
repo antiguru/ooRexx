@@ -52,6 +52,9 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::Clause { index: at, end } => {
                 out.push_str(&format!("{index}: Clause index={at} end={end}\n"));
             }
+            Op::CallingClause { index: at, end } => {
+                out.push_str(&format!("{index}: CallingClause index={at} end={end}\n"));
+            }
             Op::TraceClause { index: at } => {
                 out.push_str(&format!("{index}: TraceClause index={at}\n"));
             }
@@ -345,7 +348,7 @@ pub(crate) fn render_annotated(
     // sequences are walked together rather than the line being re-derived.
     for (line, op) in render(chunk).lines().zip(chunk.ops.iter()) {
         out.push_str(line);
-        if let Op::Clause { index, .. } = op {
+        if let Op::Clause { index, .. } | Op::CallingClause { index, .. } = op {
             out.push_str(&annotation(*index, body, source));
         }
         out.push('\n');
