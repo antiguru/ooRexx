@@ -703,16 +703,25 @@ impl Interp {
         symbols: &SymbolTable,
         source: &ProgramSource,
     ) -> Rc<Plan> {
-        if let Some(plan) = self.plans.get(&key) {
+        if let Some((last, plan)) = &self.last_plan
+            && *last == key
+        {
             return Rc::clone(plan);
         }
-        let plan = Rc::new(Plan::build(
-            body,
-            symbols,
-            Some(source),
-            self.body_kind(key),
-        ));
-        self.plans.insert(key, Rc::clone(&plan));
+        let plan = match self.plans.get(&key) {
+            Some(plan) => Rc::clone(plan),
+            None => {
+                let plan = Rc::new(Plan::build(
+                    body,
+                    symbols,
+                    Some(source),
+                    self.body_kind(key),
+                ));
+                self.plans.insert(key, Rc::clone(&plan));
+                plan
+            }
+        };
+        self.last_plan = Some((key, Rc::clone(&plan)));
         plan
     }
 

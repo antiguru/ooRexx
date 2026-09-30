@@ -1085,6 +1085,9 @@ struct Interp {
     /// that returns at once, the two lookups here and on `chunks` cost 9.7% of
     /// the program between them.
     plans: NameMap<BodyKey, Rc<Plan>>,
+    /// The entry of `plans` `Interp::plan_for` answered last, which it asks
+    /// ahead of the map: `plans` only inserts, so the entry stays right.
+    last_plan: Option<(BodyKey, Rc<Plan>)>,
     /// The wall-clock bound `Interp::count_clause_against_deadline` honours,
     /// or `None` for the unbounded run every shipped caller asks for.
     deadline: Option<crate::clause::Deadline>,
@@ -1788,6 +1791,7 @@ impl Interp {
             package_options: FxHashMap::default(),
             security_managers: FxHashMap::default(),
             plans: NameMap::default(),
+            last_plan: None,
             deadline: None,
             clause_countdown: crate::clause::Deadline::CLAUSES_PER_CHECK,
             chunks: NameMap::default(),
@@ -2407,6 +2411,7 @@ impl Interp {
             package_options: _,
             security_managers,
             plans: _,
+            last_plan: _,
             deadline: _,
             clause_countdown: _,
             // A chunk's interned literals are allocated immortal.
