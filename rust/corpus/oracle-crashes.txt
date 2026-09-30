@@ -954,7 +954,7 @@ same trap, and the same recursion through a `::ROUTINE`, are rc 0 on the oracle 
 (`lang/call_depth_cap_call.rex`, `lang/call_depth_cap_function.rex`). This crate prints `start`,
 `caught 11 SYNTAX` and an empty line, rc 0 (measured 2026-09-30). No upstream ticket.
 
-## 21. A `[]=` store on `self` inside the `INIT` of a `Directory` or `Table` subclass
+## 21. Using `self` inside the `INIT` of a `Directory` or `Table` subclass
 
     d = .tt~new
     say d~items
@@ -963,6 +963,7 @@ same trap, and the same recursion through a `::ROUTINE`, are rc 0 on the oracle 
       self['k'] = 'v'
 
 SIGSEGV, rc 139, stdout and stderr empty; 3 runs of 3 for `Table`, 2 of 2 with `subclass directory`
-in its place. Measured 2026-09-30 by Phase 6 Task 9 fix round 1 while writing
+in its place. `say self~items` in place of the store crashes the same way, 3 runs of 3.
+Measured 2026-09-30 by Phase 6 Task 9 fix round 1 while writing
 `lang/new_init_subclasses.rex`. **Cause not established.** This crate prints `1`, rc 0. No upstream
 ticket.
