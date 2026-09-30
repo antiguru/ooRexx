@@ -831,3 +831,30 @@ compound and +10.25% on dispatch and is not used.
 Verdict: over the S1 budget. t8r3 exceeds +0.3% on fibcall (+2.96%), fibfunc (+3.64%), sendloop
 (+1.12%) and rexxcps (+0.63%); wall clock is over its bar on fibcall (+9.61%), fibfunc (+10.56%)
 and heapshape (+4.09%, base2 +1.57%).
+
+### Fix round 1
+
+`S` is `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/p6-t8-fix`.
+`base` `1754a3b5a`, `t8r3` `5b8c2af83`, `fix1` `8428ca61b`, each built by the recipe above in its own
+`CARGO_TARGET_DIR` (`$S/tgt/NAME`), one `Compiling rexx-exec` line each.
+
+| name | sha256 of `rexx-run` | `.text` bytes |
+|---|---|---:|
+| base | `9845d61cd833e7b21a7f64c7a13c7da492b2e5ede145b25c98942f7e69dfab53` | 2,732,523 |
+| t8r3 | `a0086755882c1b2b6cb5539b70574a2bd2f1c1c71ff81c64bd6dd83b73bcbbce` | 2,773,163 |
+| fix1 | `ef62c584ca23128752ce664899379cb1b5b580ae356f42de0d6178fa931ae285` | 2,771,147 |
+
+```
+$B/callgrind.sh -r 3 -j 8 -o $S/cg -p "fibcall fibfunc sendloop extcall rexxcps dispatch" base=$S/bin/base/rexx-run t8r3=$S/bin/t8r3/rexx-run fix1=$S/bin/fix1/rexx-run
+```
+
+Exit 0, no SPREAD line. Load 11.04 at start.
+
+| program | base | t8r3 | fix1 | t8r3 d% | fix1 d% |
+|---|---:|---:|---:|---:|---:|
+| fibcall | 8,345,686,512 | 8,592,742,497 | 8,592,742,497 | +2.9603% | +2.9603% |
+| fibfunc | 7,988,911,858 | 8,279,742,617 | 8,279,742,617 | +3.6404% | +3.6404% |
+| sendloop | 13,863,190,779 | 14,018,470,066 | 14,018,470,066 | +1.1201% | +1.1201% |
+| extcall | 8,281,259,615 | 8,200,425,304 | 8,200,425,304 | -0.9761% | -0.9761% |
+| rexxcps | 17,817,333,657 | 17,929,181,388 | 17,905,659,928 | +0.6277% | +0.4957% |
+| dispatch | 20,483,285,049 | 20,253,789,393 | 20,253,789,393 | -1.1204% | -1.1204% |
