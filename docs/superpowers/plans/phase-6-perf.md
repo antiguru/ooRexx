@@ -858,3 +858,76 @@ Exit 0, no SPREAD line. Load 11.04 at start.
 | extcall | 8,281,259,615 | 8,200,425,304 | 8,200,425,304 | -0.9761% | -0.9761% |
 | rexxcps | 17,817,333,657 | 17,929,181,388 | 17,905,659,928 | +0.6277% | +0.4957% |
 | dispatch | 20,483,285,049 | 20,253,789,393 | 20,253,789,393 | -1.1204% | -1.1204% |
+
+## Task 9
+
+`S` is `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/p6-t9`;
+`B` is `rust/bench-programs`. Each binary built by Task 8's recipe from `git archive REV` into
+`$S/trees/NAME`, touched, in its own `CARGO_TARGET_DIR` (`$S/tgt/NAME`), one `Compiling rexx-exec`
+line each: `base` `1754a3b5a`, `prev` `4b0128186` (Task 8 fix round 1), `t9` `805a1fb5d` (the
+implementation), `r1` `31f4a5485`, `r2` `54b07d745`, `r3` `f00c8921e` (perf rounds 1 to 3).
+
+| name | sha256 of `rexx-run` | `.text` bytes |
+|---|---|---:|
+| base | `8486d7ab22f995eaf47ba750a4a18987f7aac55892071c42ca57b3f48b271876` | 2,732,523 |
+| prev | `9cc21fe6a599f13f83584933ee7677292fb417b2a64280d962c0e2f367ed1ac8` | 2,771,147 |
+| t9 | `80b8774fcb705b75fd501b6cfd31983b3cdc2a19ad992155221c056d92f5594c` | 2,799,323 |
+| r1 | `938d5a1187fc1d081e53e0a1ad04034e4d90b804d3593d41acc3b94ea84d16e9` | 2,799,579 |
+| r2 | `edfa53ae8b625aade70a62a4886778e6e5bca3c16bc564c00a64050b24c06294` | 2,799,995 |
+| r3 | `b9b262261d36b48659bc97b37b0c478910975812aa400a61735d7b404022924f` | 2,800,331 |
+
+### Instruction counts
+
+```
+$B/callgrind.sh -r 3 -j 8 -o $S/cg-full1 base=$S/bin/base/rexx-run prev=$S/bin/prev/rexx-run t9=$S/bin/t9/rexx-run r1=$S/bin/r1/rexx-run
+$B/callgrind.sh -r 3 -j 8 -o $S/cg-full2 base=$S/bin/base/rexx-run r2=$S/bin/r2/rexx-run r3=$S/bin/r3/rexx-run
+```
+
+Both exit 0, no SPREAD line. Median of three, libc and ld-linux subtracted, delta against base.
+
+| program | base | prev d% | t9 d% | r1 d% | r2 d% | r3 d% |
+|---|---:|---:|---:|---:|---:|---:|
+| alloc | 25,168,678,345 | -0.1061% | -14.1948% | -18.5217% | -18.6170% | -18.6170% |
+| alloc4c | 3,224,394,975 | -1.5782% | +0.2829% | -0.9583% | -1.6716% | -1.6716% |
+| arith | 11,520,060,041 | -0.3640% | +0.1746% | -0.2161% | -0.4331% | -0.4331% |
+| assign | 19,637,557,664 | -5.0777% | -1.0048% | -3.0408% | -4.5685% | -4.5685% |
+| compound | 9,271,611,173 | -0.9662% | +1.3528% | -0.0494% | -0.6426% | -0.6426% |
+| decloop | 2,565,175,641 | -0.8085% | +0.1906% | -0.4806% | -0.9017% | -0.9017% |
+| decrender | 4,348,396,184 | -1.3222% | +0.2422% | -0.8896% | -1.4323% | -1.4323% |
+| dispatch | 20,483,284,810 | -1.1204% | +9.0587% | -0.1682% | -0.1926% | -1.1690% |
+| dispatchclass | 15,850,195,583 | -1.2093% | +8.1030% | -1.8402% | -1.9663% | -2.9758% |
+| emptyloop | 9,308,098,302 | -1.0592% | -0.5229% | -0.7906% | -1.0592% | -1.0592% |
+| extcall | 8,281,259,454 | -0.9761% | -0.4687% | -0.7226% | -1.0124% | -1.0124% |
+| fibcall | 8,345,686,351 | +2.9603% | +3.9723% | +3.1173% | +2.6435% | +2.6435% |
+| fibfunc | 7,988,911,697 | +3.6404% | +4.7423% | +4.1504% | +3.8706% | +3.8706% |
+| heapshape | 3,278,634,087 | -0.3507% | -22.0866% | -27.2255% | -27.3480% | -27.3480% |
+| nop | 9,437,300,104 | -4.2082% | -2.0909% | -3.1486% | -4.2083% | -4.2083% |
+| parse | 1,541,986,608 | -0.4649% | +0.7040% | +0.0284% | -0.5941% | -0.5941% |
+| sayloop | 114,813,302 | -0.2600% | +0.3642% | +0.0856% | -0.3498% | -0.3499% |
+| sendloop | 13,863,190,540 | +1.1201% | +16.3404% | +3.0316% | +2.9955% | +1.5529% |
+| startup | 58,073,991 | -0.0072% | +0.0221% | -0.0127% | -0.0125% | -0.0126% |
+| strings | 17,749,287,416 | -1.5019% | +0.4760% | -0.9268% | -1.9240% | -1.9240% |
+| textnum | 1,176,579,413 | -1.6604% | +1.0435% | -0.8958% | -2.0177% | -2.0177% |
+| varlookup | 14,878,111,676 | -2.6710% | +0.6490% | -1.5217% | -2.6710% | -2.6710% |
+| rexxcps | 17,817,352,350 | +0.4956% | +2.0317% | +1.2287% | +0.4998% | +0.4997% |
+
+(`rexxcps`' base is 17,817,341,052 in the second run; its deltas there are against that.)
+
+Verdict: over the S1 budget on fibcall (+2.64%), fibfunc (+3.87%), sendloop (+1.55%) and rexxcps
+(+0.50%); every other program is below base.
+
+- `t9`: a stackless send cost about 422 instructions more than Task 8's recursive one on sendloop,
+  and the new region arm cost clauses that run no send (nop +2.21%, varlookup +1.18%, rexxcps
+  +1.53% against prev, measured on the work tree with the SELF/SUPER change).
+- Round 1 (`r1`): SELF/SUPER slots on the plan (-216 per send), the behaviour computed once per
+  send and a per-chunk send-site name table (-154 per send), one Park construction per region
+  (nop +2.21% -> +1.11% against prev). Variants measured and not committed: without the List arm
+  (no change), the send arm placed after CallArgs (no change), a merged CallArgs/Send arm (worse
+  on fibfunc +1.24%), the header boxing out of line (fibcall +0.41%), the arm passing the op's
+  fields (sendloop worse).
+- Round 2 (`r2`): the send arm answering `Started<ObjRef>` like the call arms: nop, varlookup and
+  rexxcps back to prev's counts.
+- Round 3 (`r3`): `plan_for` answering its last entry first (-40 per send).
+- alloc's sends no longer evaluate through the tree: against prev, `eval_node`, `message_term` and
+  `eval_chunk_expr` retire 5.76 billion fewer instructions between them (`cgdiff.py` on
+  `cg-full1/alloc.prev.r1.cg` and `cg-full2/alloc.r3.r1.cg`). heapshape was not broken down.
