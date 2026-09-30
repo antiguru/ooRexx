@@ -372,3 +372,11 @@ lang/call_trace_nested.rex
 lang/call_depth_cap_function.rex
 lang/call_depth_cap_call.rex
 lang/call_callee_allocates.rex
+
+# Phase 6 Task 9: sends, calls in argument positions, and the natives that run
+# a Rexx method or routine, entered from the caller's driver loop.
+lang/send_in_argument.rex
+lang/send_callee_allocates.rex
+lang/send_resumable_entries.rex
+lang/send_new_init_fails.rex
+lang/send_guarded.rex

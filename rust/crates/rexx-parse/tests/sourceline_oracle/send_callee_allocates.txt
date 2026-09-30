@@ -1,0 +1,26 @@
+count 25
+/* A method that allocates while its sender holds values in registers. */
+a = copies('left', 4)
+o = .k~new
+do i = 1 to 3
+  s = (a || i) || o~churn(50) || (a || 'x')
+  say length(s) left(s, 6)
+end
+say o~pair(copies('ab', 6), o~churn(10))
+o~pair(a || 'z', o~churn(5))
+say result
+say .k~new~pair(copies('cd', 5), o~churn(3))
+say f(copies('ef', 5), o~churn(4))
+exit
+f: return arg(1) '/' arg(2)
+::class k
+::method churn
+  use arg n
+  t = ''
+  do j = 1 to n
+    t = t || j
+    b = .array~new(j)
+  end
+  return length(t)
+::method pair
+  return arg(1) '/' arg(2)
