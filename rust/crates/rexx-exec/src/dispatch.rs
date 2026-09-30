@@ -2421,7 +2421,11 @@ impl Interp {
         };
         self.roots.activity_mut().push_temp(target);
         let caller = self.caller();
-        self.send_message(target, name, None, args, caller)
+        pinned!(
+            self,
+            crate::pinning::PinKind::Delegate,
+            self.send_message(target, name, None, args, caller)
+        )
     }
 
     /// The variable a `DELEGATE` method addresses, refusing the name shapes

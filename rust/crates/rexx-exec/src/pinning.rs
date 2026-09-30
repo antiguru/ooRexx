@@ -86,6 +86,7 @@ mod counter {
         Conversion,
         Unknown,
         Forward,
+        Delegate,
         Operator,
         TrapHandler,
         NativeApiCallback,
@@ -106,22 +107,11 @@ mod counter {
     }
 
     impl PinKind {
-        /// The frame a native method `name` pushes; `None` for the natives
-        /// the spec makes resumable entries and for the park-point natives.
+        /// The frame a native method `name` pushes; `None` for the
+        /// park-point natives.
         pub(crate) fn native(name: &[u8]) -> Option<PinKind> {
-            const RESUMABLE_OR_PARKING: &[&[u8]] = &[
-                b"RESULT",
-                b"WAIT",
-                b"ACQUIRE",
-                b"SEND",
-                b"SENDWITH",
-                b"START",
-                b"STARTWITH",
-                b"NEW",
-                b"CALL",
-                b"CALLWITH",
-            ];
-            (!RESUMABLE_OR_PARKING.contains(&name))
+            const PARKING: &[&[u8]] = &[b"RESULT", b"WAIT", b"ACQUIRE"];
+            (!PARKING.contains(&name))
                 .then(|| PinKind::Native(String::from_utf8_lossy(name).into()))
         }
     }

@@ -595,6 +595,11 @@ mod measured {
             ".c~new~m\n::class c\n::method m\n  forward message('N')\n::method n\n  call SysSleep 0\n",
         ),
         (
+            "Delegate",
+            ".k~new~m\n::class k\n::method init\n  expose d\n  d = .c~new\n::method m delegate d\n\
+             ::class c\n::method m\n  call SysSleep 0\n",
+        ),
+        (
             "Operator",
             "y = .c~new + 1\n::class c\n::method '+'\n  call SysSleep 0\n  return 1\n",
         ),
@@ -698,6 +703,30 @@ mod measured {
             }
         }
         assert!(pinned.is_empty(), "{pinned:#?}");
+    }
+
+    /// A `DELEGATE` method and the collections' and `Class`'s `NEW` still run
+    /// the Rexx body on the Rust stack, so a park inside it is pinned.
+    #[test]
+    fn a_park_inside_a_recursing_native_is_under_a_pinned_frame() {
+        const CLASS: &str = "::class c\n::method m\n  call SysSleep 0\n  return 1\n";
+        let mut unpinned = Vec::new();
+        for program in [
+            "x = .kd~new~m\n::class kd\n::method init\n  expose d\n  d = .c~new\n\
+             ::method m delegate d\n",
+            "x = .dd~new\n::class dd subclass directory\n::method init\n  call SysSleep 0\n",
+            "x = .aa~new\n::class aa subclass array\n::method init\n  call SysSleep 0\n",
+            "x = .tt~new\n::class tt subclass table\n::method init\n  call SysSleep 0\n",
+            "x = .kk~new('Z')\n::class kk subclass class\n::method init\n  call SysSleep 0\n",
+        ] {
+            let source = format!("{program}{CLASS}");
+            let report = report_of(&source);
+            let frames = frames_at(&report, ParkKind::SysSleep);
+            if frames.is_empty() || frames.iter().any(Vec::is_empty) {
+                unpinned.push(format!("{program:?}: {frames:?}"));
+            }
+        }
+        assert!(unpinned.is_empty(), "{unpinned:#?}");
     }
 
     #[test]
