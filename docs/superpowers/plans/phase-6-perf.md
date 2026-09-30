@@ -751,3 +751,83 @@ Load average 1.09 4.13 7.35 at start, 1.15 2.23 5.64 at end.
 Verdict: over the S1 budget. t8r1 exceeds +0.3% on fibcall (+4.65%), fibfunc (+5.25%), sendloop
 (+3.07%), extcall (+0.91%, of which +0.36% is Task 7's), rexxcps (+0.76%) and dispatch (+0.32%);
 wall clock is over its bar on fibcall, fibfunc, sendloop, dispatchclass and alloc.
+
+### Rounds 2 and 3
+
+`t8r2` `7d7ace817`, `t8r3` `5b8c2af83`, each built by the recipe above.
+
+| name | sha256 of `rexx-run` | `.text` bytes |
+|---|---|---:|
+| t8r2 | `03e58dc39f25357721d4bf89d21784c18e0ab24561362ac585575fc707875b34` | 2,773,371 |
+| t8r3 | `8f0c7a431a9ce76e6fc0c65565714ae5de5d721cdcb800f96303c2cd018e2fec` | 2,773,163 |
+
+```
+$B/callgrind.sh -r 3 -j 8 -o $S/cg4 base=$S/bin/base/rexx-run t8r2=$S/bin/t8r2/rexx-run t8r3=$S/bin/t8r3/rexx-run
+```
+
+Exit 0, no SPREAD line. Same measure as above; base as in the table above except rexxcps
+17,817,346,217.
+
+| program | t8r2 d% | t8r3 d% |
+|---|---:|---:|
+| alloc | -0.1061% | -0.1061% |
+| alloc4c | -1.5782% | -1.5782% |
+| arith | -0.3640% | -0.3640% |
+| assign | -5.0777% | -5.0777% |
+| compound | -0.9662% | -0.9662% |
+| decloop | -0.8085% | -0.8085% |
+| decrender | -1.3222% | -1.3222% |
+| dispatch | -1.1204% | -1.1204% |
+| dispatchclass | -1.2093% | -1.2093% |
+| emptyloop | -1.0592% | -1.0592% |
+| extcall | +0.9077% | -0.9761% |
+| fibcall | +4.2376% | +2.9603% |
+| fibfunc | +4.8242% | +3.6404% |
+| heapshape | -0.3507% | -0.3507% |
+| nop | -4.2082% | -4.2082% |
+| parse | -0.4649% | -0.4649% |
+| sayloop | -0.2600% | -0.2600% |
+| sendloop | +1.1201% | +1.1201% |
+| startup | -0.0072% | -0.0072% |
+| strings | -1.5019% | -1.5019% |
+| textnum | -1.6604% | -1.6604% |
+| varlookup | -2.6710% | -2.6710% |
+| rexxcps | +0.7251% | +0.6277% |
+
+```
+$B/wallclock.sh -r 5 -o $S/wall3 base=$S/bin/base/rexx-run t8r3=$S/bin/t8r3/rexx-run base2=$S/bin/base2/rexx-run
+```
+
+Started once the one-minute load average was under 2: load 1.92 9.13 13.31 at start, 1.31 4.39
+10.15 at end. An earlier run (`$S/wall2`, load 4.50 11.14 14.16 at start) had base2 at +10.75% on
+compound and +10.25% on dispatch and is not used.
+
+| program | base median s | t8r3 median s | base2 median s | t8r3 d% | base2 d% |
+|---|---:|---:|---:|---:|---:|
+| alloc | 2.022 | 2.074 | 2.036 | +2.57 | +0.69 |
+| alloc4c | 0.585 | 0.594 | 0.580 | +1.54 | -0.85 |
+| arith | 1.242 | 1.243 | 1.235 | +0.08 | -0.56 |
+| assign | 1.081 | 1.056 | 1.069 | -2.31 | -1.11 |
+| compound | 0.649 | 0.641 | 0.644 | -1.23 | -0.77 |
+| decloop | 0.252 | 0.251 | 0.245 | -0.40 | -2.78 |
+| decrender | 0.457 | 0.443 | 0.452 | -3.06 | -1.09 |
+| dispatch | 1.768 | 1.784 | 1.764 | +0.90 | -0.23 |
+| dispatchclass | 1.395 | 1.433 | 1.398 | +2.72 | +0.22 |
+| emptyloop | 0.528 | 0.517 | 0.527 | -2.08 | -0.19 |
+| extcall | 0.922 | 0.899 | 0.941 | -2.49 | +2.06 |
+| fibcall | 0.791 | 0.867 | 0.813 | +9.61 | +2.78 |
+| fibfunc | 0.805 | 0.890 | 0.790 | +10.56 | -1.86 |
+| heapshape | 0.318 | 0.331 | 0.323 | +4.09 | +1.57 |
+| nop | 0.654 | 0.638 | 0.656 | -2.45 | +0.31 |
+| parse | 0.132 | 0.129 | 0.131 | -2.27 | -0.76 |
+| sayloop | 0.029 | 0.028 | 0.029 | -3.45 | +0.00 |
+| sendloop | 1.099 | 1.113 | 1.070 | +1.27 | -2.64 |
+| startup | 0.025 | 0.025 | 0.025 | +0.00 | +0.00 |
+| strings | 1.130 | 1.124 | 1.131 | -0.53 | +0.09 |
+| textnum | 0.092 | 0.092 | 0.092 | +0.00 | +0.00 |
+| varlookup | 0.777 | 0.764 | 0.780 | -1.67 | +0.39 |
+| rexxcps | 2.030 | 2.025 | 2.077 | -0.25 | +2.32 |
+
+Verdict: over the S1 budget. t8r3 exceeds +0.3% on fibcall (+2.96%), fibfunc (+3.64%), sendloop
+(+1.12%) and rexxcps (+0.63%); wall clock is over its bar on fibcall (+9.61%), fibfunc (+10.56%)
+and heapshape (+4.09%, base2 +1.57%).
