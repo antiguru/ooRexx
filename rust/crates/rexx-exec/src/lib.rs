@@ -1685,6 +1685,9 @@ struct NativeFrame {
     kept: rustc_hash::FxHashSet<ObjRef>,
     /// The activation the call was made from.
     caller: Option<crate::activation::ActivationId>,
+    /// This native activation's own identity, which is what rexx-api names
+    /// the frame by.
+    id: crate::activation::ActivationId,
     /// Whether the code reports a package, which then leads a condition it
     /// raises with no line, so the condition has no `POSITION`.
     packaged: bool,
@@ -2149,7 +2152,7 @@ impl Interp {
             &program.source,
         );
 
-        let frame = self.roots.activity_mut().push_slots(plan.len());
+        let frame = self.roots.push_slots(plan.len());
         let id = self.next_activation_id();
         let mut main = Activation::new(id, Rc::clone(&program), program_id, plan, frame);
         main.call_type = call_type;

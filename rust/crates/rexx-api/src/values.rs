@@ -749,7 +749,7 @@ impl Conversion<'_> {
 pub struct Activation<'a> {
     conversion: RefCell<Conversion<'a>>,
     pending: Cell<Option<usize>>,
-    frame: Cell<Option<usize>>,
+    frame: Cell<Option<u64>>,
 }
 
 impl<'a> Activation<'a> {
@@ -764,12 +764,12 @@ impl<'a> Activation<'a> {
     /// Names the host's native frame this call runs in, which is what a
     /// member reached through this call's context from a call nested inside
     /// it addresses.
-    pub fn set_frame(&self, frame: usize) {
+    pub fn set_frame(&self, frame: u64) {
         self.frame.set(Some(frame));
     }
 
     /// [`Activation::set_frame`]'s frame, or `None`.
-    pub fn frame(&self) -> Option<usize> {
+    pub fn frame(&self) -> Option<u64> {
         self.frame.get()
     }
 

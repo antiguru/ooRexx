@@ -18,37 +18,47 @@ use crate::frame::{FrameArena, FrameBlock};
 #[derive(Copy, Clone, Debug)]
 pub struct FrameId(usize);
 
-/// A handle to one activation's range of local-variable slots inside
-/// `ActivityRoots` (D16). `push_slots`/`pop_slots` bracket its lifetime.
-/// `frame_slot`, `set_frame_slot` and `grow_slots` address within it.
-/// `depth` is the frame stack's length at the moment this frame was pushed,
-/// and is how `grow_slots` recognises "the top frame" even when two frames
-/// happen to start at the same offset (both pushed with `initial_len` 0).
+/// A handle to one activation's segment of local-variable slots (D16).
+/// `push_slots`/`pop_slots` bracket its lifetime; `frame_slot`,
+/// `set_frame_slot` and `grow_slots_of` address within it by an offset from
+/// the segment's start, which only the segment's record holds.
+///
+/// `serial` is the activation's identity: [`RootSet::push_slots`] numbers
+/// every segment it opens, across every activity, and the record keeps the
+/// number, so a handle resolved against a record that is not its own is
+/// caught (a debug assertion). `depth` is where that record sits in its
+/// activity's stack of records.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SlotFrame {
-    start: usize,
     depth: usize,
+    serial: u64,
 }
 
 /// One variable's storage, with any alias already followed: what
 /// `PROCEDURE EXPOSE` and `USE ARG >name` bind a callee's slot *to*, and
 /// what a `>name` reference names.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct SlotRef(usize);
+pub struct SlotRef(Target);
 
-/// Set on the tagged `usize` a [`SlotRef`] and an `aliases` entry carry when
-/// it names a cell rather than a position in `slots`.
-const CELL_TAG: usize = 1 << (usize::BITS - 1);
+/// Where a [`SlotRef`] or an alias entry leads: an offset in one
+/// activation's segment, or a cell.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Target {
+    Slot { frame: SlotFrame, index: usize },
+    Cell(usize),
+}
 
 /// One frame's alias entries, saved across a park by
 /// [`ActivityRoots::take_frame_aliases`] and put back by
 /// [`ActivityRoots::put_frame_aliases`].
-pub struct FrameAliases(Vec<Option<usize>>);
+pub struct FrameAliases(Vec<Option<Target>>);
 
-impl SlotRef {
-    fn is_cell(self) -> bool {
-        self.0 & CELL_TAG != 0
-    }
+/// Where one open frame's segment starts in `ActivityRoots::slots`, and whose
+/// segment it is.
+#[derive(Copy, Clone, Debug)]
+struct Segment {
+    start: usize,
+    serial: u64,
 }
 
 /// Everything the collector starts from.
@@ -57,6 +67,8 @@ pub struct RootSet {
     /// Storage for variables a `>name` reference has been taken to, outside
     /// every frame and never truncated.
     cells: Vec<Option<ObjRef>>,
+    /// The next [`SlotFrame::serial`].
+    next_serial: u64,
     /// The running activity's roots.
     activity: ActivityRoots,
 }
@@ -67,24 +79,27 @@ pub struct ActivityRoots {
     temps: Vec<ObjRef>,
     /// The driver's register frames.
     frames: Rc<FrameArena>,
-    /// Local-variable slots for every currently active activation, flattened
-    /// into one vector: each `SlotFrame` owns a contiguous range starting at
-    /// its `start`. `None` is an unassigned (or `DROP`ped) variable, not a
+    /// Local-variable slots for every open frame, one segment each, in push
+    /// order: a frame's segment runs from its record's `start` to the next
+    /// record's. `None` is an unassigned (or `DROP`ped) variable, not a
     /// missing one -- unlike `temps`, whose entries are always live values,
     /// a slot must be able to say "no value" without that colliding with
     /// `ObjRef::NIL`, which is itself a legal Rexx value (`x = .nil`).
     slots: Vec<Option<ObjRef>>,
-    /// Exactly parallel to `slots`: `Some(target)` at absolute position `p`
-    /// means position `p` is an **alias** for absolute position `target`,
-    /// and every read and write addressed to `p` is served by `target`
-    /// instead. `None` is the ordinary case, a slot that is its own storage.
-    aliases: Vec<Option<usize>>,
-    /// How many entries of `aliases` are `Some`.
-    alias_count: usize,
-    /// The starting offset of every currently pushed frame, in push order.
-    /// Its length is also every live frame's `depth` plus one, which is how
-    /// `grow_slots` and `pop_slots` recognise the top frame.
-    frame_starts: Vec<usize>,
+    /// Parallel to a prefix of `slots`: `Some(target)` at position `p` means
+    /// that slot is an **alias** for `target`, and every read and write
+    /// addressed to it is served by `target` instead. `None`, or a position
+    /// past the end, is a slot that is its own storage.
+    aliases: Vec<Option<Target>>,
+    /// One record per open frame, in push order, so a frame's `depth`
+    /// indexes its own.
+    segments: Vec<Segment>,
+    /// The top record's `start`.
+    top_start: usize,
+    /// How many entries of `aliases` are `Some`, plus one for each
+    /// [`ActivityRoots::begin_indirect`] not yet ended. While it is zero no
+    /// slot redirects and every frame addressed is the top one.
+    indirect: usize,
     /// Values an activation that is **not** on any stack still owns.
     parked: Vec<Option<Vec<ObjRef>>>,
     /// Indices of `parked` that are `None`, so a park after a release reuses
@@ -102,6 +117,7 @@ impl RootSet {
         RootSet {
             globals: Vec::new(),
             cells: Vec::new(),
+            next_serial: 0,
             activity: ActivityRoots::new(),
         }
     }
@@ -125,20 +141,26 @@ impl RootSet {
         &mut self.activity
     }
 
+    /// Opens a new slot frame of `initial_len` unassigned slots in the
+    /// running activity, for an activation entering with a plan of that many
+    /// resolved names (D16).
+    pub fn push_slots(&mut self, initial_len: usize) -> SlotFrame {
+        let serial = self.next_serial;
+        self.next_serial += 1;
+        self.activity.push_segment(initial_len, serial)
+    }
+
     /// Moves slot `index` of `frame` into a cell and answers that cell, so
     /// that a reference to the variable survives the frame.
     pub fn promote(&mut self, frame: SlotFrame, index: usize) -> SlotRef {
-        let position = self.activity.resolve(frame, index);
-        if SlotRef(position).is_cell() {
-            return SlotRef(position);
-        }
-        self.cells.push(self.activity.slots[position]);
-        let cell = (self.cells.len() - 1) | CELL_TAG;
-        self.activity.slots[position] = None;
-        if self.activity.aliases[position].is_none() {
-            self.activity.alias_count += 1;
-        }
-        self.activity.aliases[position] = Some(cell);
+        let target = self.activity.resolve(frame, index);
+        let Target::Slot { frame, index } = target else {
+            return SlotRef(target);
+        };
+        let position = self.activity.position(frame, index);
+        self.cells.push(self.activity.slots[position].take());
+        let cell = Target::Cell(self.cells.len() - 1);
+        self.activity.set_alias(position, cell);
         SlotRef(cell)
     }
 
@@ -154,34 +176,55 @@ impl RootSet {
 
     /// Reads slot `index` within `frame`: `None` for an unassigned or
     /// `DROP`ped variable, which is a legal outcome and not an error.
+    ///
+    /// `frame` is the top one, or an [`ActivityRoots::begin_indirect`] is in
+    /// force; [`RootSet::frame_slot_of`] reads any open frame.
     #[inline(always)]
     pub fn frame_slot(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
-        let position = frame.start + index;
-        if self.activity.alias_count == 0 {
+        let activity = &self.activity;
+        if activity.indirect == 0 {
+            activity.debug_assert_top(frame);
+            let position = activity.top_start + index;
             debug_assert!(
-                self.activity.aliases[position].is_none(),
-                "slot {position} redirects while the alias count says none does"
+                activity.aliases.get(position).is_none_or(Option::is_none),
+                "slot {position} redirects while the count says none does"
             );
-            assert!(position < self.activity.slots.len());
-            return self.activity.slots[position];
+            assert!(position < activity.slots.len());
+            return activity.slots[position];
         }
-        self.at(self.activity.resolve_aliased(position))
+        self.frame_slot_of(frame, index)
     }
 
+    /// [`RootSet::frame_slot`] for a frame that need not be the top one.
+    #[inline(never)]
+    pub fn frame_slot_of(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
+        self.at(self.activity.resolve(frame, index))
+    }
+
+    /// Writes slot `index` within `frame`, which is the top one or an
+    /// [`ActivityRoots::begin_indirect`] is in force.
     #[inline(always)]
     pub fn set_frame_slot(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
-        let position = frame.start + index;
-        if self.activity.alias_count == 0 {
+        let activity = &mut self.activity;
+        if activity.indirect == 0 {
+            activity.debug_assert_top(frame);
+            let position = activity.top_start + index;
             debug_assert!(
-                self.activity.aliases[position].is_none(),
-                "slot {position} redirects while the alias count says none does"
+                activity.aliases.get(position).is_none_or(Option::is_none),
+                "slot {position} redirects while the count says none does"
             );
-            assert!(position < self.activity.slots.len());
-            self.activity.slots[position] = Some(value);
+            assert!(position < activity.slots.len());
+            activity.slots[position] = Some(value);
             return;
         }
-        let position = self.activity.resolve_aliased(position);
-        self.write(position, Some(value));
+        self.set_frame_slot_of(frame, index, value);
+    }
+
+    /// [`RootSet::set_frame_slot`] for a frame that need not be the top one.
+    #[inline(never)]
+    pub fn set_frame_slot_of(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
+        let target = self.activity.resolve(frame, index);
+        self.write(target, Some(value));
     }
 
     /// Returns slot `index` within `frame` to the unset state, which is what
@@ -192,29 +235,30 @@ impl RootSet {
     /// y = .nil  ; drop y  ; say y  ->  Y                 (unset, not NIL)
     /// ```
     pub fn clear_frame_slot(&mut self, frame: SlotFrame, index: usize) {
-        let position = self.activity.resolve(frame, index);
-        self.write(position, None);
+        let target = self.activity.resolve(frame, index);
+        self.write(target, None);
     }
 
-    /// Reads the storage at a tagged position: the frame arena, or a cell.
+    /// Reads the storage `target` names: a frame's slot, or a cell.
     #[inline(always)]
-    fn at(&self, position: usize) -> Option<ObjRef> {
-        if position & CELL_TAG == 0 {
-            assert!(position < self.activity.slots.len());
-            self.activity.slots[position]
-        } else {
-            self.cells[position & !CELL_TAG]
+    fn at(&self, target: Target) -> Option<ObjRef> {
+        match target {
+            Target::Slot { frame, index } => {
+                self.activity.slots[self.activity.position(frame, index)]
+            }
+            Target::Cell(cell) => self.cells[cell],
         }
     }
 
-    /// [`RootSet::at`]'s write, in the same position.
+    /// [`RootSet::at`]'s write, to the same storage.
     #[inline(always)]
-    fn write(&mut self, position: usize, value: Option<ObjRef>) {
-        if position & CELL_TAG == 0 {
-            assert!(position < self.activity.slots.len());
-            self.activity.slots[position] = value;
-        } else {
-            self.cells[position & !CELL_TAG] = value;
+    fn write(&mut self, target: Target, value: Option<ObjRef>) {
+        match target {
+            Target::Slot { frame, index } => {
+                let position = self.activity.position(frame, index);
+                self.activity.slots[position] = value;
+            }
+            Target::Cell(cell) => self.cells[cell] = value,
         }
     }
 
@@ -238,8 +282,9 @@ impl ActivityRoots {
             frames: Rc::new(FrameArena::new(FrameBlock::DEFAULT)),
             slots: Vec::new(),
             aliases: Vec::new(),
-            alias_count: 0,
-            frame_starts: Vec::new(),
+            segments: Vec::new(),
+            top_start: 0,
+            indirect: 0,
             parked: Vec::new(),
             parked_free: Vec::new(),
         }
@@ -314,67 +359,105 @@ impl ActivityRoots {
         self.temps.len()
     }
 
-    /// Opens a new slot frame of `initial_len` unassigned slots, for an
-    /// activation entering with a plan of that many resolved names (D16).
-    pub fn push_slots(&mut self, initial_len: usize) -> SlotFrame {
+    /// Opens a segment of `initial_len` unassigned slots for the frame
+    /// numbered `serial`.
+    fn push_segment(&mut self, initial_len: usize, serial: u64) -> SlotFrame {
         let start = self.slots.len();
         self.slots.resize(start + initial_len, None);
-        self.aliases.resize(start + initial_len, None);
-        let depth = self.frame_starts.len();
-        self.frame_starts.push(start);
-        SlotFrame { start, depth }
+        let depth = self.segments.len();
+        self.segments.push(Segment { start, serial });
+        self.top_start = start;
+        SlotFrame { depth, serial }
+    }
+
+    /// `frame`'s record.
+    ///
+    /// # Panics
+    ///
+    /// If `frame` is closed; in a debug build, also if its depth now holds
+    /// another frame's record.
+    #[inline(always)]
+    fn segment(&self, frame: SlotFrame) -> Segment {
+        let segment = self.segments[frame.depth];
+        debug_assert_eq!(
+            segment.serial, frame.serial,
+            "slot frame {frame:?} resolved against another frame's record"
+        );
+        segment
+    }
+
+    /// Where `frame`'s segment ends.
+    fn end_of(&self, frame: SlotFrame) -> usize {
+        self.segments
+            .get(frame.depth + 1)
+            .map_or(self.slots.len(), |next| next.start)
+    }
+
+    /// The position in `slots` of slot `index` of `frame`.
+    #[inline(always)]
+    fn position(&self, frame: SlotFrame, index: usize) -> usize {
+        let position = self.segment(frame).start + index;
+        debug_assert!(
+            position < self.end_of(frame),
+            "slot {index} is past the end of {frame:?}"
+        );
+        position
+    }
+
+    #[inline(always)]
+    fn debug_assert_top(&self, frame: SlotFrame) {
+        debug_assert!(
+            self.segments.len() == frame.depth + 1 && self.segment(frame).start == self.top_start,
+            "slot frame {frame:?} addressed as the top one"
+        );
     }
 
     /// How many slot frames are currently open.
     pub fn live_frames(&self) -> usize {
-        self.frame_starts.len()
+        self.segments.len()
     }
 
     /// How many slots `frame` currently holds, its own growth included.
     pub fn frame_len(&self, frame: SlotFrame) -> usize {
-        let end = self
-            .frame_starts
-            .get(frame.depth + 1)
-            .copied()
-            .unwrap_or(self.slots.len());
-        end - frame.start
+        self.end_of(frame) - self.segment(frame).start
+    }
+
+    /// `frame`'s alias entries, as far as `aliases` reaches into its segment.
+    fn aliases_of(&self, frame: SlotFrame) -> &[Option<Target>] {
+        let end = self.end_of(frame).min(self.aliases.len());
+        let start = self.segment(frame).start.min(end);
+        &self.aliases[start..end]
     }
 
     /// How many of `frame`'s slots are aliases for storage somewhere else.
     pub fn frame_aliases(&self, frame: SlotFrame) -> usize {
-        let end = frame.start + self.frame_len(frame);
-        self.aliases[frame.start..end]
+        self.aliases_of(frame)
             .iter()
             .flatten()
-            .filter(|target| !SlotRef(**target).is_cell())
+            .filter(|target| matches!(target, Target::Slot { .. }))
             .count()
     }
 
     /// Closes `frame`, releasing its slots. Frames nest like any stack, so
-    /// this must be the top one -- the same invariant `grow_slots` checks,
-    /// stated there.
+    /// this must be the top one.
     pub fn pop_slots(&mut self, frame: SlotFrame) {
         assert_eq!(
-            self.frame_starts.len(),
+            self.segments.len(),
             frame.depth + 1,
             "pop_slots on a frame that is not the top one"
         );
-        self.frame_starts.pop();
-        self.slots.truncate(frame.start);
-        // Truncated together with `slots`, never separately: the two are
-        // parallel by construction, and an `aliases` left longer would give
-        // the *next* frame pushed at this offset a set of stale redirects
-        // pointing into a dead activation's storage.
-        // The count goes with them. Only walked when there is something to
-        // find, so a program that never aliased pays one test per frame pop.
-        if self.alias_count != 0 {
-            let dropped = self.aliases[frame.start..].iter().flatten().count();
-            self.alias_count -= dropped;
+        let start = self.segment(frame).start;
+        self.segments.pop();
+        self.top_start = self.segments.last().map_or(0, |below| below.start);
+        self.slots.truncate(start);
+        if self.aliases.len() > start {
+            let dropped = self.aliases[start..].iter().flatten().count();
+            self.indirect -= dropped;
+            self.aliases.truncate(start);
         }
-        self.aliases.truncate(frame.start);
     }
 
-    /// The absolute position slot `index` of `frame` finally resolves to.
+    /// The storage slot `index` of `frame` finally resolves to.
     pub fn slot_ref(&self, frame: SlotFrame, index: usize) -> SlotRef {
         SlotRef(self.resolve(frame, index))
     }
@@ -382,20 +465,17 @@ impl ActivityRoots {
     /// Copies out `frame`'s alias entries, for a caller that is about to
     /// release the frame and re-push it later.
     pub fn take_frame_aliases(&self, frame: SlotFrame) -> FrameAliases {
-        let end = frame.start + self.frame_len(frame);
-        FrameAliases(self.aliases[frame.start..end].to_vec())
+        FrameAliases(self.aliases_of(frame).to_vec())
     }
 
     /// Puts back what [`ActivityRoots::take_frame_aliases`] copied out, into a
     /// frame pushed at the same length.
     pub fn put_frame_aliases(&mut self, frame: SlotFrame, saved: &FrameAliases) {
         for (index, entry) in saved.0.iter().enumerate() {
-            let Some(target) = *entry else { continue };
-            let at = &mut self.aliases[frame.start + index];
-            if at.is_none() {
-                self.alias_count += 1;
+            if let Some(target) = *entry {
+                let position = self.position(frame, index);
+                self.set_alias(position, target);
             }
-            *at = Some(target);
         }
     }
 
@@ -403,67 +483,91 @@ impl ActivityRoots {
     /// read and write addressed to it is served by `target`'s storage
     /// instead of its own.
     pub fn alias_slot(&mut self, frame: SlotFrame, index: usize, target: SlotRef) {
-        let entry = &mut self.aliases[frame.start + index];
-        if entry.is_none() {
-            self.alias_count += 1;
-        }
-        *entry = Some(target.0);
+        let position = self.position(frame, index);
+        self.set_alias(position, target.0);
     }
 
-    /// `frame`'s slot `index` as an absolute position, following an alias if
-    /// one is in force. The one place the redirect is applied, so that
+    fn set_alias(&mut self, position: usize, target: Target) {
+        if self.aliases.len() <= position {
+            self.aliases.resize(position + 1, None);
+        }
+        if self.aliases[position].replace(target).is_none() {
+            self.indirect += 1;
+        }
+    }
+
+    /// Opens a stretch in which frames other than the top one may be
+    /// addressed through [`RootSet::frame_slot`] and its writes, each through
+    /// its own record. Ended by [`ActivityRoots::end_indirect`].
+    pub fn begin_indirect(&mut self) {
+        self.indirect += 1;
+    }
+
+    /// Ends the innermost [`ActivityRoots::begin_indirect`].
+    pub fn end_indirect(&mut self) {
+        self.indirect -= 1;
+    }
+
+    /// `frame`'s slot `index`, following an alias if one is in force. The
+    /// one place the redirect is applied, so that
     /// `frame_slot`/`set_frame_slot`/`clear_frame_slot` cannot come apart on
     /// it.
-    fn resolve(&self, frame: SlotFrame, index: usize) -> usize {
-        let position = frame.start + index;
-        // Nothing is aliased anywhere, so nothing can redirect: the parallel
-        // vector is not read at all. See `alias_count` for what that is worth.
-        if self.alias_count == 0 {
+    fn resolve(&self, frame: SlotFrame, index: usize) -> Target {
+        if self.indirect == 0 {
             debug_assert!(
-                self.aliases[position].is_none(),
-                "slot {position} redirects while the alias count says none does"
+                self.aliases_of(frame).iter().all(Option::is_none),
+                "{frame:?} redirects while the count says nothing does"
             );
-            return position;
+            return Target::Slot { frame, index };
         }
-        self.resolve_aliased(position)
+        self.resolve_aliased(frame, index)
     }
 
     /// [`ActivityRoots::resolve`]'s slow half, for a caller that has already found
     /// an alias may be in force.
     #[inline(always)]
-    fn resolve_aliased(&self, position: usize) -> usize {
-        let mut at = position;
-        while at & CELL_TAG == 0 {
-            let Some(target) = self.aliases[at] else {
+    fn resolve_aliased(&self, frame: SlotFrame, index: usize) -> Target {
+        let mut at = Target::Slot { frame, index };
+        while let Target::Slot { frame, index } = at {
+            let position = self.position(frame, index);
+            let Some(Some(target)) = self.aliases.get(position).copied() else {
                 break;
             };
             debug_assert!(
-                target & CELL_TAG != 0 || target < at,
-                "alias at {at} points at {target}, which does not descend"
+                match target {
+                    Target::Slot {
+                        frame: to,
+                        index: to_index,
+                    } => (to.depth, to_index) < (frame.depth, index),
+                    Target::Cell(_) => true,
+                },
+                "alias at {at:?} points at {target:?}, which does not descend"
             );
             at = target;
         }
         at
     }
 
-    /// Grows `frame` by one slot for a name its plan never saw -- `DROP (v)`
+    /// Grows `frame` by `n` slots, for names its plan never saw -- `DROP (v)`
     /// naming its target at run time, measured: `v = 'X'; x = 1; drop (v);
     /// say x` prints `X`, so a name resolving to no existing slot must be
-    /// able to allocate one. Returns the new slot's index within `frame`.
-    pub fn grow_slots(&mut self, frame: SlotFrame) -> usize {
-        assert_eq!(
-            self.frame_starts.len(),
-            frame.depth + 1,
-            "grow_slots on a frame that is not the top one (a 4a invariant, \
-             kept: 4b binds exposed names with alias_slot and resolves a \
-             computed expose (v) before the callee's frame is pushed, so \
-             neither needs this -- see grow_slots's doc comment)"
-        );
-        let index = self.slots.len() - frame.start;
-        self.slots.push(None);
-        // Kept parallel; a new slot is its own storage, never an alias.
-        self.aliases.push(None);
-        index
+    /// able to allocate one. Returns the first new slot's index within
+    /// `frame`.
+    ///
+    /// `frame` need not be the top one: the frames above it keep their
+    /// offsets and their records move.
+    pub fn grow_slots_of(&mut self, frame: SlotFrame, n: usize) -> usize {
+        let start = self.segment(frame).start;
+        let end = self.end_of(frame);
+        self.slots.splice(end..end, std::iter::repeat_n(None, n));
+        if self.aliases.len() > end {
+            self.aliases.splice(end..end, std::iter::repeat_n(None, n));
+        }
+        for above in &mut self.segments[frame.depth + 1..] {
+            above.start += n;
+        }
+        self.top_start = self.segments.last().map_or(0, |top| top.start);
+        end - start
     }
 
     /// Yields this activity's temps, live registers, assigned slots and

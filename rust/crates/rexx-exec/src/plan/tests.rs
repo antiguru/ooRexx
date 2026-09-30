@@ -228,7 +228,7 @@ fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
         &program.symbols,
         &program.source,
     );
-    let frame = interp.roots.activity_mut().push_slots(plan.len());
+    let frame = interp.roots.push_slots(plan.len());
     let id = interp.next_activation_id();
     interp.push_activation(crate::Activation::new(
         id,
@@ -247,7 +247,7 @@ fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
 /// explicitly list (a `DROP`, a controlled `DO`) never even reached
 /// `note` at all. This asserts the plan's actual *contents* -- which
 /// names ended up in `plan.names` -- not merely that resolution still
-/// works afterwards through the `extra`/`grow_slots` fallback, which is
+/// works afterwards through the `extra`/`grow_slots_of` fallback, which is
 /// the exact bar the dispatch set: neutering `Plan::build` to return an
 /// empty plan unconditionally must fail this test. It does not fail the
 /// pre-existing tests below, whose own assertions run through

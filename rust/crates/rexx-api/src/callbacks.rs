@@ -157,7 +157,7 @@ pub trait Surface {
     /// Runs `serve` with the activation that made the native call in the
     /// host's frame `frame` as the one the context-variable members reach,
     /// and puts the running activation back however `serve` ends.
-    fn in_caller(&mut self, frame: usize, serve: &mut dyn FnMut(&mut dyn Surface));
+    fn in_caller(&mut self, frame: u64, serve: &mut dyn FnMut(&mut dyn Surface));
 
     /// The value of the running method's object variable `name`, or `None`.
     fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef>;
@@ -1292,7 +1292,7 @@ impl Activation<'_> {
     /// from an enclosing call reaches that call's caller, as the oracle's
     /// blocking members use the context's own activation
     /// (`interpreter/api/ContextApi.hpp:108`).
-    pub fn context_variable(&self, outer: Option<usize>, name: &[u8]) -> RexxObjectPtr {
+    pub fn context_variable(&self, outer: Option<u64>, name: &[u8]) -> RexxObjectPtr {
         self.surface_handle("CallContextInterface.GetContextVariable", |surface| {
             in_caller(surface, outer, |surface| surface.context_variable(name))
         })
@@ -1300,7 +1300,7 @@ impl Activation<'_> {
 
     /// `SetContextVariable`: a handle this activation does not hold assigns
     /// nothing. `outer` as [`Activation::context_variable`]'s.
-    pub fn set_context_variable(&self, outer: Option<usize>, name: &[u8], value: RexxObjectPtr) {
+    pub fn set_context_variable(&self, outer: Option<u64>, name: &[u8], value: RexxObjectPtr) {
         let Some(value) = self.resolve(value) else {
             return;
         };
@@ -1313,7 +1313,7 @@ impl Activation<'_> {
     }
 
     /// `DropContextVariable`. `outer` as [`Activation::context_variable`]'s.
-    pub fn drop_context_variable(&self, outer: Option<usize>, name: &[u8]) {
+    pub fn drop_context_variable(&self, outer: Option<u64>, name: &[u8]) {
         self.with_surface("CallContextInterface.DropContextVariable", (), |cx| {
             let surface = cx.host.surface().expect("checked by with_surface");
             in_caller(surface, outer, |surface| {
@@ -1323,7 +1323,7 @@ impl Activation<'_> {
     }
 
     /// `GetAllContextVariables`. `outer` as [`Activation::context_variable`]'s.
-    pub fn context_variables(&self, outer: Option<usize>) -> RexxObjectPtr {
+    pub fn context_variables(&self, outer: Option<u64>) -> RexxObjectPtr {
         self.surface_handle("CallContextInterface.GetAllContextVariables", |surface| {
             in_caller(surface, outer, |surface| surface.context_variables())
         })
@@ -1897,7 +1897,7 @@ fn source_lines(source: &[u8]) -> Vec<Vec<u8>> {
 /// `None` or already that activation.
 fn in_caller<R>(
     surface: &mut dyn Surface,
-    outer: Option<usize>,
+    outer: Option<u64>,
     serve: impl FnOnce(&mut dyn Surface) -> R,
 ) -> R {
     let Some(frame) = outer else {

@@ -919,6 +919,7 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
         code: None,
         kept: rustc_hash::FxHashSet::default(),
         caller: None,
+        id: crate::activation::ActivationId(0),
         packaged: false,
     };
     let handle = frame.locals.register(object);
@@ -973,6 +974,7 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
         code: None,
         kept: rustc_hash::FxHashSet::default(),
         caller: None,
+        id: crate::activation::ActivationId(0),
         packaged: false,
     });
     let held = [

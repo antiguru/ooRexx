@@ -466,7 +466,7 @@ impl Surface for FakeHost {
         None
     }
 
-    fn in_caller(&mut self, _frame: usize, serve: &mut dyn FnMut(&mut dyn Surface)) {
+    fn in_caller(&mut self, _frame: u64, serve: &mut dyn FnMut(&mut dyn Surface)) {
         serve(self);
     }
 

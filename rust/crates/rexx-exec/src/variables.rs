@@ -70,7 +70,7 @@ impl Interp {
             Some(var) => self
                 .pools_of(var.owner)
                 .and_then(|pools| pools.get(var.scope, &var.name)),
-            None => self.roots.frame_slot(frame, slot),
+            None => self.roots.frame_slot_of(frame, slot),
         }
     }
 

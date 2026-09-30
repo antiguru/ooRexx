@@ -829,7 +829,7 @@ unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> &'a Activation<'a
 ///
 /// # Safety
 /// As [`activation_of`].
-unsafe fn variables_of<'a, C: CallLinked>(context: *mut C) -> (&'a Activation<'a>, Option<usize>) {
+unsafe fn variables_of<'a, C: CallLinked>(context: *mut C) -> (&'a Activation<'a>, Option<u64>) {
     // SAFETY: as `activation_of`.
     let own = unsafe { &*owner_of::<C, Activation<'a>>(context) };
     if !own.is_busy() {

@@ -744,7 +744,7 @@ impl Interp {
             return *slot;
         }
         let frame = activation.frame;
-        let slot = self.roots.activity_mut().grow_slots(frame);
+        let slot = self.roots.activity_mut().grow_slots_of(frame, 1);
         self.activation_mut().extra.insert(name.into(), slot);
         slot
     }

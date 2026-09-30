@@ -44,29 +44,18 @@ fn rebinding_a_global_replaces_it_rather_than_adding_a_second_root() {
 // ---------------------------------------------------------------------------
 // Where an IR chunk's register file can live.
 
-/// The rejected design, and why: a register `SlotFrame` of its own makes
-/// every run-time variable introduction underneath it panic.
-#[test]
-#[should_panic(expected = "grow_slots on a frame that is not the top one")]
-fn a_register_slot_frame_makes_the_variable_frame_beneath_it_ungrowable() {
-    let mut roots = RootSet::new();
-    let variables = roots.activity_mut().push_slots(2);
-    let _registers = roots.activity_mut().push_slots(4);
-    roots.activity_mut().grow_slots(variables);
-}
-
 /// Registers live in the frame arena, so the variable frame beneath them is
 /// free to grow.
 #[test]
 fn registers_leave_the_variable_frame_growable() {
     let mut roots = RootSet::new();
-    let variables = roots.activity_mut().push_slots(2);
+    let variables = roots.push_slots(2);
     let arena = roots.activity().frames();
     let registers = arena.reserve(4);
     let live = ObjRef::heap(7, 0);
     registers.set(3, live);
 
-    let grown = roots.activity_mut().grow_slots(variables);
+    let grown = roots.activity_mut().grow_slots_of(variables, 1);
     roots.set_frame_slot(variables, grown, ObjRef::heap(8, 0));
 
     assert_eq!(registers.get(3), live);
@@ -131,7 +120,7 @@ fn the_frame_block_size_cannot_change_under_a_reserved_frame() {
 #[test]
 fn a_promoted_variable_still_reads_and_writes_by_name() {
     let mut roots = RootSet::new();
-    let frame = roots.activity_mut().push_slots(2);
+    let frame = roots.push_slots(2);
     let first = ObjRef::heap(1, 0);
     roots.set_frame_slot(frame, 0, first);
     let cell = roots.promote(frame, 0);
@@ -149,7 +138,7 @@ fn a_promoted_variable_still_reads_and_writes_by_name() {
 #[test]
 fn promoting_a_variable_twice_answers_one_cell() {
     let mut roots = RootSet::new();
-    let frame = roots.activity_mut().push_slots(1);
+    let frame = roots.push_slots(1);
     roots.set_frame_slot(frame, 0, ObjRef::heap(1, 0));
     assert_eq!(roots.promote(frame, 0), roots.promote(frame, 0));
 }
@@ -160,8 +149,8 @@ fn promoting_a_variable_twice_answers_one_cell() {
 #[test]
 fn a_cell_outlives_the_frame_it_was_promoted_out_of() {
     let mut roots = RootSet::new();
-    let outer = roots.activity_mut().push_slots(1);
-    let inner = roots.activity_mut().push_slots(1);
+    let outer = roots.push_slots(1);
+    let inner = roots.push_slots(1);
     let held = ObjRef::heap(7, 0);
     roots.set_frame_slot(inner, 0, held);
     let cell = roots.promote(inner, 0);
@@ -179,8 +168,8 @@ fn a_cell_outlives_the_frame_it_was_promoted_out_of() {
 #[test]
 fn promoting_an_exposed_name_promotes_the_storage_behind_it() {
     let mut roots = RootSet::new();
-    let outer = roots.activity_mut().push_slots(1);
-    let inner = roots.activity_mut().push_slots(1);
+    let outer = roots.push_slots(1);
+    let inner = roots.push_slots(1);
     let target = roots.activity().slot_ref(outer, 0);
     roots.activity_mut().alias_slot(inner, 0, target);
     let cell = roots.promote(inner, 0);
@@ -196,12 +185,77 @@ fn promoting_an_exposed_name_promotes_the_storage_behind_it() {
 #[test]
 fn an_alias_taken_before_a_promotion_still_reaches_the_cell() {
     let mut roots = RootSet::new();
-    let outer = roots.activity_mut().push_slots(1);
-    let inner = roots.activity_mut().push_slots(1);
+    let outer = roots.push_slots(1);
+    let inner = roots.push_slots(1);
     let target = roots.activity().slot_ref(outer, 0);
     roots.activity_mut().alias_slot(inner, 0, target);
     let cell = roots.promote(outer, 0);
     let written = ObjRef::heap(4, 0);
     roots.set_slot_value(cell, written);
     assert_eq!(roots.frame_slot(inner, 0), Some(written));
+}
+
+/// A frame beneath another grows, and an alias the upper frame holds into
+/// it still reaches the same variable afterwards.
+#[test]
+fn a_frame_beneath_another_grows_and_aliases_into_it_hold() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(2);
+    let inner = roots.push_slots(2);
+    let target = roots.activity().slot_ref(outer, 1);
+    roots.activity_mut().alias_slot(inner, 0, target);
+    roots.set_frame_slot(inner, 1, ObjRef::heap(2, 0));
+
+    let grown = roots.activity_mut().grow_slots_of(outer, 2);
+    assert_eq!(grown, 2);
+    roots.set_frame_slot(inner, 0, ObjRef::heap(1, 0));
+    roots.set_frame_slot_of(outer, grown + 1, ObjRef::heap(3, 0));
+
+    assert_eq!(roots.frame_slot_of(outer, 1), Some(ObjRef::heap(1, 0)));
+    assert_eq!(roots.frame_slot(inner, 1), Some(ObjRef::heap(2, 0)));
+    assert_eq!(
+        roots.frame_slot_of(outer, grown + 1),
+        Some(ObjRef::heap(3, 0))
+    );
+    assert_eq!(roots.frame_slot_of(outer, grown), None);
+}
+
+/// Inside an indirection a frame below the top one is addressed through the
+/// same accessors as the top one.
+#[test]
+fn an_indirection_lets_the_top_accessors_reach_a_lower_frame() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(1);
+    let inner = roots.push_slots(1);
+    roots.activity_mut().begin_indirect();
+    roots.set_frame_slot(outer, 0, ObjRef::heap(4, 0));
+    roots.set_frame_slot(inner, 0, ObjRef::heap(5, 0));
+    assert_eq!(roots.frame_slot(outer, 0), Some(ObjRef::heap(4, 0)));
+    roots.activity_mut().end_indirect();
+    assert_eq!(roots.frame_slot(inner, 0), Some(ObjRef::heap(5, 0)));
+    assert_eq!(roots.frame_slot_of(outer, 0), Some(ObjRef::heap(4, 0)));
+}
+
+/// A handle kept past its frame's pop is refused against the frame opened
+/// at the same depth afterwards.
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "resolved against another frame's record")]
+fn a_closed_frames_handle_is_refused_by_its_successor() {
+    let mut roots = RootSet::new();
+    let first = roots.push_slots(1);
+    roots.activity_mut().pop_slots(first);
+    let _second = roots.push_slots(1);
+    roots.frame_slot_of(first, 0);
+}
+
+/// Outside an indirection the top accessors refuse a lower frame.
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "addressed as the top one")]
+fn a_lower_frame_is_refused_by_the_top_accessors() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(1);
+    let _inner = roots.push_slots(1);
+    roots.frame_slot(outer, 0);
 }

@@ -347,24 +347,10 @@ impl Surface for Interp {
             // `isString(retriever)`: a constant symbol is its own value.
             SymbolKind::Numeric | SymbolKind::Literal => Some(self.text(&upper)),
             SymbolKind::LiteralDot => self.dot_variable(&upper).ok(),
-            SymbolKind::Name if self.activity.outer_caller => {
-                let slot = self.bound_slot_of(&upper)?;
-                let frame = self.activation().frame;
-                self.variable(frame, slot)
-            }
             SymbolKind::Name => {
                 let slot = self.slot_of(&upper);
                 let frame = self.activation().frame;
                 self.variable(frame, slot)
-            }
-            // Reading a stem or a tail makes the stem variable
-            // (`VariableDictionary::getStemVariable`), so an unbound one is
-            // a write.
-            SymbolKind::Stem | SymbolKind::CompoundName
-                if self.unbound_outer(governing(&upper)) =>
-            {
-                self.refuse_unbound_outer("GetContextVariable");
-                None
             }
             SymbolKind::Stem => Some(self.read_stem(&upper)),
             SymbolKind::CompoundName => {
@@ -379,16 +365,7 @@ impl Surface for Interp {
 
     fn set_context_variable(&mut self, name: &[u8], value: ObjRef) {
         let upper = name.to_ascii_uppercase();
-        let kind = classify(&upper);
-        if matches!(
-            kind,
-            SymbolKind::Name | SymbolKind::Stem | SymbolKind::CompoundName
-        ) && self.unbound_outer(governing(&upper))
-        {
-            self.refuse_unbound_outer("SetContextVariable");
-            return;
-        }
-        match kind {
+        match classify(&upper) {
             SymbolKind::Name => {
                 let slot = self.slot_of(&upper);
                 let frame = self.activation().frame;
@@ -405,10 +382,6 @@ impl Surface for Interp {
 
     fn drop_context_variable(&mut self, name: &[u8]) {
         let upper = name.to_ascii_uppercase();
-        // An unbound name is already as dropped as it can be.
-        if self.unbound_outer(governing(&upper)) {
-            return;
-        }
         match classify(&upper) {
             SymbolKind::Name => {
                 let slot = self.slot_of(&upper);
@@ -434,7 +407,7 @@ impl Surface for Interp {
         }
     }
 
-    fn in_caller(&mut self, frame: usize, serve: &mut dyn FnMut(&mut dyn Surface)) {
+    fn in_caller(&mut self, frame: u64, serve: &mut dyn FnMut(&mut dyn Surface)) {
         match self.suspended_caller(frame) {
             Some(index) => serve(&mut *CallerSwap::new(self, index)),
             None => serve(self),
@@ -752,36 +725,21 @@ impl Interp {
             .position(|&byte| byte == b'.')
             .expect("a compound name has a period");
         let stem = upper[..=dot].to_vec();
-        if !self.activity.outer_caller {
-            let key = crate::builtin::datatype::resolve_compound_key(self, &upper[dot + 1..]);
-            return (stem, key);
-        }
-        // A tail symbol the swapped-in caller has not bound is unset, so it is
-        // its own name, and reading it must not grow that frame.
-        let mut key = Vec::new();
-        for (index, piece) in upper[dot + 1..].split(|&byte| byte == b'.').enumerate() {
-            if index > 0 {
-                key.push(b'.');
-            }
-            let frame = self.activation().frame;
-            let value = match piece.first() {
-                Some(byte) if !byte.is_ascii_digit() => self
-                    .bound_slot_of(piece)
-                    .and_then(|slot| self.variable(frame, slot)),
-                _ => None,
-            };
-            match value {
-                Some(value) => key.extend_from_slice(&self.to_text(value)),
-                None => key.extend_from_slice(piece),
-            }
-        }
+        let key = crate::builtin::datatype::resolve_compound_key(self, &upper[dot + 1..]);
         (stem, key)
     }
 
     /// The index in [`Activity::suspended`] of the activation that made the
-    /// native call in frame `frame`, or `None` where it is the running one.
-    fn suspended_caller(&self, frame: usize) -> Option<usize> {
-        let caller = self.activity.native_handles.get(frame)?.caller?;
+    /// native call whose frame's identity is `frame`, or `None` where it is
+    /// the running one.
+    fn suspended_caller(&self, frame: u64) -> Option<usize> {
+        let caller = self
+            .activity
+            .native_handles
+            .iter()
+            .rev()
+            .find(|native| native.id.0 == frame)?
+            .caller?;
         if self.activity.running.as_ref()?.id == caller {
             return None;
         }
@@ -789,28 +747,6 @@ impl Interp {
             .suspended
             .iter()
             .position(|held| held.id == caller)
-    }
-
-    /// Whether a context-variable member is reaching a kept outer call's
-    /// caller, whose frame is not the top one, for a variable that caller
-    /// has not bound, which would need a slot that frame cannot grow.
-    fn unbound_outer(&self, governing: &[u8]) -> bool {
-        self.activity.outer_caller && self.bound_slot_of(governing).is_none()
-    }
-
-    /// Refuses `member` on a variable [`Interp::unbound_outer`] names: the
-    /// slots are one stack that grows only on the top frame
-    /// (`rexx_core::ActivityRoots::grow_slots`), and reaching a lower frame's
-    /// layout is D3's frame-ownership work.
-    fn refuse_unbound_outer(&mut self, member: &str) {
-        let message = crate::owned_message(
-            &format!(
-                "CallContextInterface.{member} through a kept outer call context, of a \
-                 variable its activation has not bound,"
-            ),
-            Some("Phase 6"),
-        );
-        self.hold_native_condition(crate::Loud { message }.into());
     }
 }
 
@@ -920,7 +856,8 @@ impl Interp {
 /// The caller of a kept outer call swapped in as [`Activity::running`] for as
 /// long as this lives, and swapped back when it drops, an unwind included.
 /// Both activations stay in `running` and `suspended`, where the collector
-/// reads them.
+/// reads them. The caller's frame is not the top one, so slots are reached
+/// through their frames' records meanwhile.
 struct CallerSwap<'a> {
     interp: &'a mut Interp,
     index: usize,
@@ -934,7 +871,7 @@ impl<'a> CallerSwap<'a> {
             .as_mut()
             .expect("a native call has a caller");
         std::mem::swap(running, &mut interp.activity.suspended[index]);
-        interp.activity.outer_caller = true;
+        interp.roots.activity_mut().begin_indirect();
         CallerSwap { interp, index }
     }
 }
@@ -948,7 +885,7 @@ impl Drop for CallerSwap<'_> {
             .as_mut()
             .expect("the swapped-in caller");
         std::mem::swap(running, &mut self.interp.activity.suspended[self.index]);
-        self.interp.activity.outer_caller = false;
+        self.interp.roots.activity_mut().end_indirect();
     }
 }
 
@@ -962,14 +899,5 @@ impl std::ops::Deref for CallerSwap<'_> {
 impl std::ops::DerefMut for CallerSwap<'_> {
     fn deref_mut(&mut self) -> &mut Interp {
         self.interp
-    }
-}
-
-/// The variable that decides whether `upper` is bound: a compound's stem,
-/// else the name itself.
-fn governing(upper: &[u8]) -> &[u8] {
-    match upper.iter().position(|&byte| byte == b'.') {
-        Some(dot) if dot + 1 < upper.len() => &upper[..=dot],
-        _ => upper,
     }
 }

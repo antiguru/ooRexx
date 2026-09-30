@@ -1170,7 +1170,7 @@ impl Interp {
     /// Pushes the activation an install-time evaluation or send runs in, and
     /// answers the frame [`Interp::pop_directive_activation`] takes back.
     fn push_directive_activation(&mut self, id: ProgramId, program: &Rc<Program>) -> SlotFrame {
-        let frame = self.roots.activity_mut().push_slots(0);
+        let frame = self.roots.push_slots(0);
         let activation_id = self.next_activation_id();
         self.push_activation(Activation::new(
             activation_id,

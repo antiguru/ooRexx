@@ -139,7 +139,7 @@ fn a_stems_tails_and_default_are_traced() {
 fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let frame = roots.activity_mut().push_slots(2);
+    let frame = roots.push_slots(2);
     let v = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"local"),
         num: None,
@@ -155,36 +155,63 @@ fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
 #[test]
 fn a_slot_frame_grows_for_a_name_the_plan_never_saw() {
     let mut roots = RootSet::new();
-    let frame = roots.activity_mut().push_slots(1);
-    let index = roots.activity_mut().grow_slots(frame);
+    let frame = roots.push_slots(1);
+    let index = roots.activity_mut().grow_slots_of(frame, 1);
     assert_eq!(index, 1);
 }
 
-/// `grow_slots` must panic rather than silently grow a frame that is not on
-/// top, because a silent wrong answer here is a variable landing in another
-/// routine's pool.
+/// A frame below the top one grows, and every value in both frames stays
+/// where its frame's offsets say and stays a root.
 #[test]
-#[should_panic(expected = "4a invariant")]
-fn growing_a_frame_that_is_not_the_top_one_panics() {
+fn growing_a_frame_below_the_top_keeps_every_frames_values() {
+    let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let outer = roots.activity_mut().push_slots(1);
-    let _inner = roots.activity_mut().push_slots(1);
-    roots.activity_mut().grow_slots(outer);
+    let outer = roots.push_slots(1);
+    let inner = roots.push_slots(2);
+    let text = |heap: &mut Heap, bytes: &[u8]| {
+        heap.alloc(Body::Text {
+            bytes: Bytes::from_slice(bytes),
+            num: None,
+        })
+    };
+    let (a, b, c, d) = (
+        text(&mut heap, b"a"),
+        text(&mut heap, b"b"),
+        text(&mut heap, b"c"),
+        text(&mut heap, b"d"),
+    );
+    roots.set_frame_slot_of(outer, 0, a);
+    roots.set_frame_slot(inner, 0, b);
+    roots.set_frame_slot(inner, 1, c);
+
+    let grown = roots.activity_mut().grow_slots_of(outer, 1);
+    assert_eq!(grown, 1);
+    roots.set_frame_slot_of(outer, grown, d);
+
+    assert_eq!(roots.frame_slot_of(outer, 0), Some(a));
+    assert_eq!(roots.frame_slot_of(outer, grown), Some(d));
+    assert_eq!(roots.frame_slot(inner, 0), Some(b));
+    assert_eq!(roots.frame_slot(inner, 1), Some(c));
+    assert_eq!(roots.activity().frame_len(outer), 2);
+    assert_eq!(roots.activity().frame_len(inner), 2);
+    let stats = heap.collect(&roots);
+    assert_eq!(stats.swept, 0, "a value in a grown frame was swept");
+
+    roots.activity_mut().pop_slots(inner);
+    assert_eq!(roots.frame_slot(outer, grown), Some(d));
+    let stats = heap.collect(&roots);
+    assert_eq!(stats.swept, 2, "the popped frame's values outlived it");
 }
 
-/// `pop_slots` out of order is a different defect than `grow_slots`'s, and
-/// is not the 4a-only invariant above: activation frames must nest like any
-/// stack's call and return do, in 4a or 4b alike, independent of however
-/// 4b ends up resolving `PROCEDURE EXPOSE`. This guards against popping the
-/// outer of two open frames while the inner one is still live, which would
-/// truncate `slots` out from under the inner frame's still-live locals
-/// instead of panicking where the mistake was actually made.
+/// Activation frames nest like any stack's call and return do, so popping
+/// the outer of two open frames while the inner one is live panics where
+/// the mistake is made instead of truncating the inner frame's locals.
 #[test]
 #[should_panic(expected = "pop_slots on a frame that is not the top one")]
 fn popping_a_frame_that_is_not_the_top_one_panics() {
     let mut roots = RootSet::new();
-    let outer = roots.activity_mut().push_slots(1);
-    let _inner = roots.activity_mut().push_slots(1);
+    let outer = roots.push_slots(1);
+    let _inner = roots.push_slots(1);
     roots.activity_mut().pop_slots(outer);
 }
 
@@ -200,7 +227,7 @@ fn popping_a_frame_that_is_not_the_top_one_panics() {
 fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let frame = roots.activity_mut().push_slots(2);
+    let frame = roots.push_slots(2);
 
     let five = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"5"),
@@ -237,7 +264,7 @@ fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
 fn a_cleared_slot_stops_being_a_root() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let frame = roots.activity_mut().push_slots(1);
+    let frame = roots.push_slots(1);
 
     let v = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"dropped"),
@@ -260,12 +287,12 @@ fn a_cleared_slot_stops_being_a_root() {
 }
 
 /// Growth never hands out a cleared slot's index, and that is a requirement
-/// rather than an accident of `grow_slots` appending.
+/// rather than an accident of `grow_slots_of` appending.
 #[test]
 fn growth_does_not_recycle_a_cleared_slot() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let frame = roots.activity_mut().push_slots(1);
+    let frame = roots.push_slots(1);
 
     let v = heap.alloc(Body::Text {
         bytes: Bytes::from_slice(b"a"),
@@ -274,7 +301,7 @@ fn growth_does_not_recycle_a_cleared_slot() {
     roots.set_frame_slot(frame, 0, v);
     roots.clear_frame_slot(frame, 0);
 
-    let grown = roots.activity_mut().grow_slots(frame);
+    let grown = roots.activity_mut().grow_slots_of(frame, 1);
     assert_eq!(grown, 1, "growth appends rather than reusing the cleared 0");
 
     // The cleared slot is still addressable and still its own name's, so a

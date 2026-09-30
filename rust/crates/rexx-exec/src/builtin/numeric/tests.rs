@@ -33,7 +33,7 @@ fn interp_with(digits: &str, form: &str, fuzz: &str) -> Interp {
         &program.symbols,
         &program.source,
     );
-    let frame = interp.roots.activity_mut().push_slots(plan.len());
+    let frame = interp.roots.push_slots(plan.len());
     let activation = interp.next_activation_id();
     interp.push_activation(Activation::new(
         activation, program, program_id, plan, frame,

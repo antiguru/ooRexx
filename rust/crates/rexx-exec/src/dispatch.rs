@@ -2202,7 +2202,7 @@ impl Interp {
             &program.symbols,
             &program.source,
         );
-        let frame = self.roots.activity_mut().push_slots(plan.len());
+        let frame = self.roots.push_slots(plan.len());
         let callee_id = self.next_activation_id();
         let super_scope = self.super_scope_for(receiver, resolution);
         // **The calling convention, entered before anything reads it.** The
@@ -2511,7 +2511,7 @@ impl Interp {
             aliases,
             parked,
         } = deferred;
-        let frame = self.roots.activity_mut().push_slots(slots.len());
+        let frame = self.roots.push_slots(slots.len());
         // Before the values, so that a promoted variable's write lands in
         // its cell and not in the slot the redirect stands in front of.
         self.roots.activity_mut().put_frame_aliases(frame, &aliases);

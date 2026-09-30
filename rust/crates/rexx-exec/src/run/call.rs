@@ -753,7 +753,7 @@ impl Interp {
                     &routine_program.symbols,
                     &routine_program.source,
                 );
-                let frame = self.roots.activity_mut().push_slots(plan.len());
+                let frame = self.roots.push_slots(plan.len());
                 let mut callee = Activation::routine(
                     callee_id,
                     routine_program,

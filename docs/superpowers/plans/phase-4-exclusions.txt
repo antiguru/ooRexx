@@ -4801,21 +4801,14 @@ directory's probes/.
   and o9b.rex are identical; o9b.rex reads, sets and drops bound simple,
   stem and compound variables and reads the whole pool through the kept
   context. rust/crates/rexx-exec/tests/outer_context.rs (gate-only) builds
-  that forge and runs o9b.rex against the oracle plainly and with a
-  collection at every allocation, and o9c.rex for the refusal below.
-  STILL DIFFERS, LOUD: a read of a stem or a compound, or a set, through
-  the kept context of a name the outer activation has never bound. The
-  oracle creates the variable there, and its read of a compound creates
-  the stem. o9c.rex sets a new name: the oracle prints `after VAR LIT`, rc
-  0; ours ends at rc 120 with `rexx-exec:
-  CallContextInterface.SetContextVariable through a kept outer call
-  context, of a variable its activation has not bound, is not implemented
-  (Phase 6)`. A new variable needs a slot, and slots are one stack that
-  only the top frame can grow (rust/crates/rexx-core/src/roots.rs:414-422,
-  RootSet::grow_slots); the outer activation is not on top. A drop of such
-  a name does nothing, which is all the oracle's drop can show. OWNER:
-  Phase 6 (controller ruling 2026-09-29): growing a frame below the top one
-  is D3's frame-ownership work.
+  that forge and runs o9b.rex, o9c.rex and o9d.rex against the oracle
+  plainly and with a collection at every allocation.
+  FIXED 2026-09-30 (Phase 6 Task 7) for a name the outer activation never
+  bound: each activation's slots are a segment of their own, and a frame
+  below the top one grows. o9c.rex and
+  rust/crates/rexx-exec/tests/outer_context/o9d.rex, which sets and reads
+  unbound simple, stem and compound names and drops an unbound simple one
+  through the kept context, match the oracle on all three descriptors.
   ObjectToValue WRITES NO PARTIAL VALUE ON FAILURE. Only an extension that
   reads the descriptor after a failed conversion can see it; orxmethod
   raises and answers NULL. OWNER: none; the header specifies no value on

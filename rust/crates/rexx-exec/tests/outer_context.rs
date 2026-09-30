@@ -17,8 +17,9 @@
 //! `o9b.rex` reads, sets and drops bound simple, stem and compound variables
 //! through the kept context and must match on all three descriptors, run
 //! plainly and with a collection at every allocation, which collects while
-//! the outer call's caller is swapped in. `o9c.rex` reaches a variable the
-//! outer activation never bound, which stays loud. Gate-only, Linux only.
+//! the outer call's caller is swapped in. `o9c.rex` and this test's own
+//! `outer_context/o9d.rex` reach variables the outer activation never bound,
+//! which grows a frame below the top one. Gate-only, Linux only.
 
 #![cfg(target_os = "linux")]
 
@@ -92,7 +93,7 @@ fn run_ours(program: &Path, run: &Path, library_path: &str, stress: bool) -> Out
 }
 
 #[test]
-fn a_kept_outer_context_reaches_its_callers_bound_variables() {
+fn a_kept_outer_context_reaches_its_callers_variables() {
     if !gate_mode() {
         eprintln!("outer_context: skipped without {GATE_ENV}");
         return;
@@ -106,44 +107,35 @@ fn a_kept_outer_context_reaches_its_callers_bound_variables() {
     let oracle = support::oracle::locate();
     let library_path = format!("{}:{}", oracle.lib_dir().display(), forge.display());
 
-    let bound = probes().join("o9b.rex");
-    let theirs = oracle.run_in(&bound, &run, &[("LD_LIBRARY_PATH", &library_path)]);
-    let status = theirs.expect_exit_code();
-    for stress in [false, true] {
-        let ours = run_ours(&bound, &run, &library_path, stress);
-        assert_eq!(
-            (
-                String::from_utf8_lossy(&ours.stdout),
-                String::from_utf8_lossy(&ours.stderr),
-                ours.exit_code
-            ),
-            (
-                String::from_utf8_lossy(&theirs.stdout),
-                String::from_utf8_lossy(&theirs.stderr),
-                status
-            ),
-            "o9b.rex, collecting at every allocation: {stress}"
-        );
-        assert!(
-            !stress || ours.collections > 0,
-            "the stress mode did not collect"
-        );
+    let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/outer_context");
+    for program in [
+        probes().join("o9b.rex"),
+        probes().join("o9c.rex"),
+        own.join("o9d.rex"),
+    ] {
+        let theirs = oracle.run_in(&program, &run, &[("LD_LIBRARY_PATH", &library_path)]);
+        let status = theirs.expect_exit_code();
+        for stress in [false, true] {
+            let ours = run_ours(&program, &run, &library_path, stress);
+            assert_eq!(
+                (
+                    String::from_utf8_lossy(&ours.stdout),
+                    String::from_utf8_lossy(&ours.stderr),
+                    ours.exit_code
+                ),
+                (
+                    String::from_utf8_lossy(&theirs.stdout),
+                    String::from_utf8_lossy(&theirs.stderr),
+                    status
+                ),
+                "{}, collecting at every allocation: {stress}",
+                program.display()
+            );
+            assert!(
+                !stress || ours.collections > 0,
+                "the stress mode did not collect"
+            );
+        }
     }
-
-    let unbound = probes().join("o9c.rex");
-    let theirs = oracle.run_in(&unbound, &run, &[("LD_LIBRARY_PATH", &library_path)]);
-    assert_eq!(
-        theirs.expect_exit_code(),
-        0,
-        "the oracle makes the variable"
-    );
-    let ours = run_ours(&unbound, &run, &library_path, false);
-    assert_eq!(ours.exit_code, 120);
-    assert!(
-        String::from_utf8_lossy(&ours.stderr)
-            .contains("has not bound, is not implemented (Phase 6)"),
-        "o9c.rex's refusal: {}",
-        String::from_utf8_lossy(&ours.stderr)
-    );
     fs::remove_dir_all(&base).expect("cannot remove the run directory");
 }

@@ -1261,7 +1261,7 @@ impl Interp {
         // The swap at the end of this function gives the callee a frame of
         // its own, and an activation that already owned one would be pushing
         // a second onto the same stack. That is the state
-        // `ActivityRoots::grow_slots` and `pop_slots` catch a step or two later,
+        // `ActivityRoots::pop_slots` catches a step or two later,
         // by which time the instruction that caused it has returned, so the
         // invariant is asserted where it is established rather than where
         // the damage surfaces. `Activation::nested` builds the entry kind
@@ -1319,7 +1319,7 @@ impl Interp {
         // into, and that same index has to address something on this side of
         // the alias too.
         let len = self.roots.activity().frame_len(outer);
-        let inner = self.roots.activity_mut().push_slots(len);
+        let inner = self.roots.push_slots(len);
         let mut exposed: Vec<(usize, InstanceVar)> = Vec::new();
         for (_, slot, target) in &bindings {
             match target {
