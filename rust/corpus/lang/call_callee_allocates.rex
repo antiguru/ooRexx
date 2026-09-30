@@ -1,10 +1,10 @@
 /* A callee that allocates while its caller holds values in registers. */
-a = 'left'
+a = copies('left', 4)
 do i = 1 to 3
   s = (a || i) || churn(50) || (a || 'x')
   say length(s) left(s, 6)
 end
-say pair(copies('ab', 3), churn(10))
+say pair(copies('ab', 6), churn(10))
 call pair (a || 'z'), churn(5)
 say result
 say rt(4) rt(0)
@@ -25,6 +25,6 @@ pair:
   if arg(1) = 0 then exit 'none'
   a = .array~new
   do i = 1 to arg(1)
-    a~append(copies('r', i))
+    a~append(copies('rr', i))
   end
   return a~items a[a~items]
