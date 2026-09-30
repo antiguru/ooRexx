@@ -36,6 +36,6 @@ trio:
   return 'trio' arg(1)
 deep:
   if arg(1) > 1 then call deep arg(1) - 1
-  else raise user done description 'from deep'
+  else raise user done description 'from deep' return
   say 'deep' arg(1)
   return
