@@ -40,6 +40,9 @@ mod seam {
     pub(super) enum Clearance {
         /// Run the method.
         Cleared(Cleared),
+        /// Run the method, which the security manager was asked about and
+        /// did not answer: code it ran may have changed the receiver.
+        Checked(Cleared),
         /// The security manager answered the send itself, and the method
         /// never runs (`RexxObject::processProtectedMethod`,
         /// `classes/ObjectClass.cpp:976`-`:988`).
@@ -57,12 +60,14 @@ mod seam {
         args: &[Option<ObjRef>],
         method: MethodId,
     ) -> Result<Clearance, Failure> {
-        if interp.method_is_protected(method)
-            && let Some(result) = interp.check_protected_method(receiver, name, args)?
-        {
-            return Ok(Clearance::Answered(result));
+        let cleared = Cleared(());
+        if interp.method_is_protected(method) {
+            if let Some(result) = interp.check_protected_method(receiver, name, args)? {
+                return Ok(Clearance::Answered(result));
+            }
+            return Ok(Clearance::Checked(cleared));
         }
-        Ok(Clearance::Cleared(Cleared(())))
+        Ok(Clearance::Cleared(cleared))
     }
 }
 
@@ -2089,10 +2094,10 @@ impl Interp {
         args: &[Option<ObjRef>],
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let invocable = self.invocable(resolution, name)?;
-        // A protected method's check can run code that changes the receiver.
-        let behaviour = behaviour.filter(|_| !self.method_is_protected(resolution.method));
-        let cleared = match seam::clear(self, receiver, name, args, resolution.method)? {
-            seam::Clearance::Cleared(cleared) => cleared,
+        let (cleared, behaviour) = match seam::clear(self, receiver, name, args, resolution.method)?
+        {
+            seam::Clearance::Cleared(cleared) => (cleared, behaviour),
+            seam::Clearance::Checked(cleared) => (cleared, None),
             seam::Clearance::Answered(result) => return Ok(Started::Ran(result)),
         };
         let outcome = match invocable {
