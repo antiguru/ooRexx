@@ -89,7 +89,7 @@ mod clause;
 mod run;
 use run::Ended;
 
-// The scheduler seam the driver's park and split outcomes go through.
+// The scheduler seam the driver's split outcome goes through.
 mod scheduler;
 
 // The `PARSE` template engine: the movement cursor (source-independent, one

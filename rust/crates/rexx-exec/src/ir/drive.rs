@@ -28,16 +28,16 @@ use crate::run::{
     otherwise_range, otherwise_resume, select_escape, select_parts, subroutine_started,
     when_resume, when_targets,
 };
-use crate::scheduler::{ActivityId, ExecOutcome, Scheduler};
+use crate::scheduler::{ExecOutcome, Scheduler};
 use crate::{Code, Failure, Interp, Loud, Raised};
 
 #[cfg(test)]
 use super::counters::{
     arith_hint_skips, call_site_hits, clause_op_entries, const_builds, count_arith_hint_skip,
-    count_call_site_hit, count_clause_op_entry, count_const_build, count_exec_park,
-    count_exec_split, count_load_constant_build, count_run_chunk_entry, count_stackless_entry,
-    count_trace_op_echo, exec_parks, exec_splits, frame_floor_high_water, load_constant_builds,
-    record_frame_floor, run_chunk_entries, stackless_entries, trace_op_echoes,
+    count_call_site_hit, count_clause_op_entry, count_const_build, count_exec_split,
+    count_load_constant_build, count_run_chunk_entry, count_stackless_entry, count_trace_op_echo,
+    exec_splits, frame_floor_high_water, load_constant_builds, record_frame_floor,
+    run_chunk_entries, stackless_entries, trace_op_echoes,
 };
 #[cfg(test)]
 pub(crate) use super::counters::{counting, resume_counters, suspend_counters};
@@ -95,8 +95,6 @@ enum Deliver {
     Flow(usize),
     /// Where the [`Op::Send`] in front of the resume point says.
     Send,
-    /// Nothing: the activity parked at an [`Op::Exec`], which runs again.
-    Wake,
 }
 
 /// Where [`Interp::drive`] goes on with the level it holds.
@@ -128,9 +126,6 @@ enum Exit {
     /// A call op parked its clause region on
     /// [`Activity::parked_calls`](crate::activity::Activity).
     Parked,
-    /// An [`Op::Exec`] parked its clause region there and the activity with
-    /// it.
-    Suspended,
 }
 
 /// What a call op that entered its callee leaves its region to park.
@@ -1338,20 +1333,7 @@ macro_rules! region_ops {
                         Ok(ExecOutcome::Done(flow)) => {
                             break $cold Ok(RegionEnd::Flowed(flow));
                         }
-                        Ok(ExecOutcome::Park(reason)) => {
-                            if !$top {
-                                break $cold Err(
-                                    Loud::op_not_driven("a park on a pinned path").into()
-                                );
-                            }
-                            $self.scheduler.park(reason);
-                            break 'entered Deliver::Wake;
-                        }
-                        Ok(ExecOutcome::Split(flow)) => {
-                            break $cold $self
-                                .split_continuation()
-                                .map(|()| RegionEnd::Flowed(flow));
-                        }
+                        Ok(outcome) => break $cold $self.exec_suspends(outcome),
                         Err(failure) => break $cold Err(failure),
                     }
                 }
@@ -1648,11 +1630,7 @@ macro_rules! region_ops {
             continue 'region_loop;
             };
             break $park Park {
-                // A woken instruction runs again.
-                at: match deliver {
-                    Deliver::Wake => op_after($ops, region_op, $from) - 1,
-                    _ => op_after($ops, region_op, $from),
-                },
+                at: op_after($ops, region_op, $from),
                 $header: $header.take().map(Box::new),
                 deliver,
             };
@@ -1893,9 +1871,8 @@ macro_rules! clause_region {
                     ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), $clause_pc),
                 };
             };
-            let woken = matches!(park.deliver, Deliver::Wake);
             $self.park_call(park, $entry, $clause_pc, $end, $index, $stale, $debugging);
-            return Ok(if woken { Exit::Suspended } else { Exit::Parked });
+            return Ok(Exit::Parked);
         }
     };
 }
@@ -2388,14 +2365,24 @@ impl Interp {
         });
     }
 
-    /// With none made, the continuation stays with this activity.
+    /// An [`Op::Exec`] outcome other than `Done`, as its region's answer. A
+    /// park is loud, since the driver parks no activity. With no activity made
+    /// for a split, the continuation stays with this activity.
     #[cold]
-    fn split_continuation(&mut self) -> Result<(), Failure> {
-        #[cfg(test)]
-        count_exec_split();
-        match self.scheduler.spawn() {
-            None => Ok(()),
-            Some(_) => Err(Loud::op_not_driven("a continuation on another activity").into()),
+    #[inline(never)]
+    fn exec_suspends(&mut self, outcome: ExecOutcome) -> Result<RegionEnd, Failure> {
+        match outcome {
+            ExecOutcome::Done(flow) => Ok(RegionEnd::Flowed(flow)),
+            ExecOutcome::Park(_) => Err(Loud::op_not_driven("an activity park").into()),
+            ExecOutcome::Split(flow) => {
+                #[cfg(test)]
+                count_exec_split();
+                if self.scheduler.spawn() {
+                    Err(Loud::op_not_driven("a continuation on another activity").into())
+                } else {
+                    Ok(RegionEnd::Flowed(flow))
+                }
+            }
         }
     }
 
@@ -2514,12 +2501,11 @@ impl Interp {
                                                 base_indent,
                                                 ended,
                                             ),
-                                            Deliver::Register(_)
-                                            | Deliver::Send
-                                            | Deliver::Wake => self.resume_region(
-                                                code, chunk, registers, source, base, len, parked,
-                                                ended,
-                                            ),
+                                            Deliver::Register(_) | Deliver::Send => self
+                                                .resume_region(
+                                                    code, chunk, registers, source, base, len,
+                                                    parked, ended,
+                                                ),
                                         },
                                         None => Err(Loud::op_not_driven("a parked call").into()),
                                     }
@@ -2529,18 +2515,6 @@ impl Interp {
                                 Ok(Exit::Flow(flow)) => flow,
                                 Ok(Exit::At(at)) => {
                                     next = Next::At(at);
-                                    continue;
-                                }
-                                Ok(Exit::Suspended) => {
-                                    #[cfg(test)]
-                                    count_exec_park();
-                                    if self.scheduler.run_until_park() != ActivityId::FIRST {
-                                        break 'ended Err(Loud::op_not_driven(
-                                            "a switch to another activity",
-                                        )
-                                        .into());
-                                    }
-                                    next = Next::Resume;
                                     continue;
                                 }
                                 Ok(Exit::Parked) => match self.callee_level(&level) {
@@ -2713,7 +2687,6 @@ impl Interp {
                 .finish_function_op(ended)
                 .map(|value| registers.set(dst, value)),
             Deliver::Send => self.finish_send_op(chunk, registers, parked.at, ended),
-            Deliver::Wake => ended.map(drop),
             Deliver::Flow(_) => Err(Loud::op_not_driven("a parked CALL resumed mid-region").into()),
         };
         match delivered {
@@ -2852,7 +2825,7 @@ impl Interp {
             code, chunk, registers, at, start, end, source, base, NO_GRANT, None,
         )? {
             Exit::Flow(flow) => Ok(flow),
-            Exit::At(_) | Exit::Parked | Exit::Suspended => {
+            Exit::At(_) | Exit::Parked => {
                 Err(Loud::op_not_driven("a handoff or a park outside a driven body").into())
             }
         }

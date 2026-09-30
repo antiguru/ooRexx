@@ -18,7 +18,8 @@ use crate::run::Flow;
 pub(crate) enum ExecOutcome {
     /// It ran, and this is its `Flow`.
     Done(Flow),
-    /// The activity parks at this instruction, which runs again on wake.
+    /// The instruction would park the activity, which the driver refuses
+    /// loudly.
     #[cfg_attr(
         not(test),
         expect(dead_code, reason = "constructed only by the test-only arm")
@@ -43,45 +44,22 @@ pub(crate) enum ParkReason {
     Guard,
 }
 
-/// An activity, named to the scheduler.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct ActivityId(u32);
-
-impl ActivityId {
-    /// The activity an interpreter starts with.
-    pub(crate) const FIRST: ActivityId = ActivityId(0);
-}
-
 /// What the driver asks of whatever runs the interpreter's activities.
 pub(crate) trait Scheduler {
-    /// A new activity for a continuation, or `None` where none is made and
-    /// the continuation stays with the current activity.
-    fn spawn(&mut self) -> Option<ActivityId>;
-    /// Runs ready activities until one is to continue on this driver, and
-    /// answers it.
-    fn run_until_park(&mut self) -> ActivityId;
-    /// The current activity parks for `reason`.
-    fn park(&mut self, reason: ParkReason);
+    /// Makes a new activity for a continuation; `false` where none is made
+    /// and the continuation stays with the current activity.
+    fn spawn(&mut self) -> bool;
 }
 
-/// One activity and no other: a parked activity is the one that continues,
-/// and a continuation stays where it is.
+/// One activity and no other.
 #[derive(Default)]
 pub(crate) struct SingleActivity;
 
 impl Scheduler for SingleActivity {
     /// No second activity exists to take a continuation.
-    fn spawn(&mut self) -> Option<ActivityId> {
-        None
+    fn spawn(&mut self) -> bool {
+        false
     }
-
-    /// No other activity is ready, so the parked one continues.
-    fn run_until_park(&mut self) -> ActivityId {
-        ActivityId::FIRST
-    }
-
-    /// Nothing is descheduled: `run_until_park` answers the same activity.
-    fn park(&mut self, _reason: ParkReason) {}
 }
 
 /// An outcome [`crate::Interp::exec_instruction`] answers in place of running
