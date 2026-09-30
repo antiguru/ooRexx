@@ -986,3 +986,115 @@ fibfunc (+8.24%) and arith (+6.61%, instructions -0.43%; base2 +1.06%).
 | branch-misses | 340,844 | 358,712 | 3,097,434 |
 
 About eleven L1 instruction-cache misses per send against none on base.
+
+## S1 front-end round
+
+`S` is `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/p6-perf1`;
+`B` is `rust/bench-programs`. Each binary built from `git archive REV` into `$S/trees/NAME`, touched,
+in its own `CARGO_TARGET_DIR` (`$S/tgt/NAME`), one `Compiling rexx-exec` line each (`$S/mkrev.sh
+NAME REV`). `base` is Task 9's `1754a3b5a` binary (sha256 `8486d7ab...`, as recorded there),
+`head` `2050300f4`, `r1` `49a55bea9`.
+
+| name | sha256 of `rexx-run` | `.text` bytes |
+|---|---|---:|
+| head | `466cb65a579f1bc414c23d1c4d361ddf9e33775c7820e1e5da46ef091e870adb` | 2,801,371 |
+| r1 | `64304a7794c4e18ff4569d4a5606c1468e01f26a068ecf32059b546dc8610509` | 2,822,475 |
+
+### Round 1 (`49a55bea9`)
+
+What changed: a region holding `CallExpr`, `CallArgs` or `Send` compiles as `Op::CallingClause`;
+the op loop runs `Op::Clause` through one region expansion and `Op::CallingClause` plus every
+resumed region through a second, in `ops_loop_steady` (`resume_region` only delivers the answer).
+A body's first non-label clause is found at entry and reached through the loop's own bound check
+(`grant_for`); the granting instance is a cold fallback. `begin_invoke` keeps the Rexx and native
+arms inline.
+
+```
+$B/callgrind.sh -r 3 -j 8 -o $S/cg-r1 base=$S/bin/base/rexx-run head=$S/bin/head/rexx-run r1=$S/bin/r1/rexx-run
+```
+
+Exit 0, no SPREAD. Median of three, libc and ld-linux subtracted.
+
+| program | base | head d% | r1 d% |
+|---|---:|---:|---:|
+| alloc | 25,168,678,669 | -19.8924% | -19.5468% |
+| alloc4c | 3,224,394,975 | -1.6717% | -1.5785% |
+| arith | 11,520,060,365 | -0.4331% | -0.4244% |
+| assign | 19,637,557,677 | -4.5685% | -4.0593% |
+| compound | 9,271,611,408 | -0.6427% | -0.9123% |
+| decloop | 2,565,175,641 | -0.9017% | -1.2446% |
+| decrender | 4,348,396,508 | -1.4324% | -1.7082% |
+| dispatch | 20,483,285,045 | -1.3887% | +0.1248% |
+| dispatchclass | 15,850,195,907 | -3.2029% | -2.2439% |
+| emptyloop | 9,308,098,626 | -1.0592% | -0.5220% |
+| extcall | 8,281,259,454 | -1.0124% | -0.6501% |
+| fibcall | 8,345,686,351 | +2.6435% | +2.1182% |
+| fibfunc | 7,988,911,697 | +3.8706% | +4.2995% |
+| heapshape | 3,278,634,411 | -27.9298% | -27.5934% |
+| nop | 9,437,300,104 | -4.2083% | -2.0890% |
+| parse | 1,541,986,932 | -0.5942% | -0.5680% |
+| sayloop | 114,813,302 | -0.3510% | -0.0861% |
+| sendloop | 13,863,190,775 | +1.2283% | -1.0800% |
+| startup | 58,073,991 | -0.0148% | -0.0076% |
+| strings | 17,749,287,416 | -1.9240% | -1.4677% |
+| textnum | 1,176,579,413 | -2.0178% | -2.0854% |
+| varlookup | 14,878,112,000 | -2.6710% | -2.7987% |
+| rexxcps | 17,817,347,405 | +0.4997% | +0.0939% |
+
+```
+$S/pstat.sh L1-icache-load-misses "sendloop dispatch dispatchclass fibfunc fibcall rexxcps alloc" base head r1
+$S/pstat.sh r20000048F "sendloop dispatch dispatchclass fibfunc fibcall rexxcps alloc" base head r1
+```
+
+`perf stat -x, -e EVENT`, one run per program per binary, output in `$S/r1-pstat2.txt`; load 0.58
+at start, 0.85 at end. (A first run at load 3.11 read base's sendloop at 34.6M L1i misses and is
+discarded.)
+
+| program | L1i base | L1i head | L1i r1 | op-cache base | op-cache head | op-cache r1 |
+|---|---:|---:|---:|---:|---:|---:|
+| sendloop | 1.0M | 41.2M | 69.9M | 268.2M | 471.8M | 735.5M |
+| dispatch | 145.3M | 253.4M | 163.8M | 998.2M | 1560.9M | 1160.4M |
+| dispatchclass | 106.7M | 123.0M | 117.9M | 738.4M | 826.9M | 906.4M |
+| fibfunc | 44.9M | 89.2M | 93.8M | 436.5M | 557.8M | 606.5M |
+| fibcall | 51.0M | 75.1M | 65.0M | 447.0M | 454.5M | 444.8M |
+| rexxcps | 175.3M | 218.8M | 205.4M | 1711.3M | 1674.5M | 1803.2M |
+| alloc | 3.6M | 26.9M | 7.0M | 544.5M | 540.0M | 325.5M |
+
+```
+$B/wallclock.sh -r 5 -o $S/wall-r1 base=$S/bin/base/rexx-run head=$S/bin/head/rexx-run r1=$S/bin/r1/rexx-run
+```
+
+Load 1.68 at start, 0.97 at end; exit 0.
+
+| program | base s | head s | r1 s | head d% | r1 d% |
+|---|---:|---:|---:|---:|---:|
+| alloc | 2.059 | 1.669 | 1.588 | -18.94 | -22.88 |
+| alloc4c | 0.566 | 0.561 | 0.561 | -0.88 | -0.88 |
+| arith | 1.229 | 1.315 | 1.319 | +7.00 | +7.32 |
+| assign | 1.068 | 1.084 | 1.036 | +1.50 | -3.00 |
+| compound | 0.640 | 0.646 | 0.636 | +0.94 | -0.63 |
+| decloop | 0.255 | 0.241 | 0.250 | -5.49 | -1.96 |
+| decrender | 0.451 | 0.437 | 0.468 | -3.10 | +3.77 |
+| dispatch | 1.772 | 2.106 | 1.876 | +18.85 | +5.87 |
+| dispatchclass | 1.379 | 1.454 | 1.476 | +5.44 | +7.03 |
+| emptyloop | 0.526 | 0.517 | 0.512 | -1.71 | -2.66 |
+| extcall | 0.971 | 0.866 | 0.866 | -10.81 | -10.81 |
+| fibcall | 0.794 | 0.814 | 0.842 | +2.52 | +6.05 |
+| fibfunc | 0.790 | 0.862 | 0.860 | +9.11 | +8.86 |
+| heapshape | 0.320 | 0.201 | 0.199 | -37.19 | -37.81 |
+| nop | 0.664 | 0.568 | 0.553 | -14.46 | -16.72 |
+| parse | 0.128 | 0.128 | 0.130 | +0.00 | +1.56 |
+| sayloop | 0.029 | 0.028 | 0.028 | -3.45 | -3.45 |
+| sendloop | 1.067 | 1.248 | 1.249 | +16.96 | +17.06 |
+| startup | 0.026 | 0.025 | 0.024 | -3.85 | -7.69 |
+| strings | 1.140 | 1.125 | 1.139 | -1.32 | -0.09 |
+| textnum | 0.090 | 0.098 | 0.095 | +8.89 | +5.56 |
+| varlookup | 0.772 | 0.778 | 0.782 | +0.78 | +1.30 |
+| rexxcps | 1.994 | 2.007 | 2.094 | +0.65 | +5.02 |
+
+Verdict: round 1 moves dispatch's wall from +18.85% to +5.87% and leaves sendloop at +17.06%,
+fibfunc +8.86%, dispatchclass +7.03%, and puts rexxcps at +5.02% and fibcall at +6.05%. Ir is
+inside +0.3% of base everywhere except fibcall (+2.12%) and fibfunc (+4.30%), both over at head
+too. The variants behind it are in the round's report
+(`.superpowers/sdd/2026-09-29-phase-6-s0-s1/perf1-report.md`).
+
