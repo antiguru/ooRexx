@@ -1140,7 +1140,4 @@ target dir.
 
 Over +0.3% against `92ac5c054`: assign +3.72, nop +3.25, varlookup +2.50, textnum +1.32,
 compound +1.31, emptyloop +1.08, dispatch +0.73, sayloop +0.70, alloc4c +0.69, decloop +0.65,
-decrender +0.65, arith +0.52, parse +0.46, dispatchclass +0.41, strings +0.34, sendloop +0.33. No
-bench program has a plain DO block (`grep -E '(then|else|^) *do *$'` over `bench-programs/*.rex`
-finds none), so the moves do not come from running a flattened block. Their cause is not
-attributed and is left for the perf agent.
+decrender +0.65, arith +0.52, parse +0.46, dispatchclass +0.41, strings +0.34, sendloop +0.33.

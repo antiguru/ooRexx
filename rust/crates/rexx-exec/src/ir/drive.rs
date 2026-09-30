@@ -2388,9 +2388,7 @@ impl Interp {
         });
     }
 
-    /// Hands the continuation of an [`Op::Exec`] that answered
-    /// [`ExecOutcome::Split`] to the activity the scheduler makes for it. With
-    /// none made, the continuation stays with this activity.
+    /// With none made, the continuation stays with this activity.
     #[cold]
     fn split_continuation(&mut self) -> Result<(), Failure> {
         #[cfg(test)]
