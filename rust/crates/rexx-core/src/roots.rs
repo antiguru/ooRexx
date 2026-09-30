@@ -25,9 +25,9 @@ pub struct FrameId(usize);
 ///
 /// `serial` is the activation's identity: [`RootSet::push_slots`] numbers
 /// every segment it opens, across every activity, and the record keeps the
-/// number, so a handle resolved against a record that is not its own is
-/// caught (a debug assertion). `depth` is where that record sits in its
-/// activity's stack of records.
+/// number, so a handle resolved against a record that is not its own
+/// panics. `depth` is where that record sits in its activity's stack of
+/// records.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SlotFrame {
     depth: usize,
@@ -96,10 +96,12 @@ pub struct ActivityRoots {
     segments: Vec<Segment>,
     /// The top record's `start`.
     top_start: usize,
-    /// How many entries of `aliases` are `Some`, plus one for each
-    /// [`ActivityRoots::begin_indirect`] not yet ended. While it is zero no
-    /// slot redirects and every frame addressed is the top one.
-    indirect: usize,
+    /// The top record's `serial` while `alias_count` is zero, else
+    /// `u64::MAX`, which no frame has: the one frame the fast accessors serve
+    /// by `top_start` alone.
+    fast_serial: u64,
+    /// How many entries of `aliases` are `Some`.
+    alias_count: usize,
     /// Values an activation that is **not** on any stack still owns.
     parked: Vec<Option<Vec<ObjRef>>>,
     /// Indices of `parked` that are `None`, so a park after a release reuses
@@ -176,13 +178,10 @@ impl RootSet {
 
     /// Reads slot `index` within `frame`: `None` for an unassigned or
     /// `DROP`ped variable, which is a legal outcome and not an error.
-    ///
-    /// `frame` is the top one, or an [`ActivityRoots::begin_indirect`] is in
-    /// force; [`RootSet::frame_slot_of`] reads any open frame.
     #[inline(always)]
     pub fn frame_slot(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
         let activity = &self.activity;
-        if activity.indirect == 0 {
+        if frame.serial == activity.fast_serial {
             activity.debug_assert_top(frame);
             let position = activity.top_start + index;
             debug_assert!(
@@ -202,12 +201,11 @@ impl RootSet {
         self.at(self.activity.resolve(frame, index))
     }
 
-    /// Writes slot `index` within `frame`, which is the top one or an
-    /// [`ActivityRoots::begin_indirect`] is in force.
+    /// Writes slot `index` within `frame`.
     #[inline(always)]
     pub fn set_frame_slot(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
         let activity = &mut self.activity;
-        if activity.indirect == 0 {
+        if frame.serial == activity.fast_serial {
             activity.debug_assert_top(frame);
             let position = activity.top_start + index;
             debug_assert!(
@@ -236,13 +234,10 @@ impl RootSet {
     /// x = .nil            ; say x  ->  The NIL object    (`.nil` is a value)
     /// y = .nil  ; drop y  ; say y  ->  Y                 (unset, not NIL)
     /// ```
-    ///
-    /// `frame` is the top one, or an [`ActivityRoots::begin_indirect`] is in
-    /// force.
     #[inline(always)]
     pub fn clear_frame_slot(&mut self, frame: SlotFrame, index: usize) {
         let activity = &mut self.activity;
-        if activity.indirect == 0 {
+        if frame.serial == activity.fast_serial {
             activity.debug_assert_top(frame);
             let position = activity.top_start + index;
             assert!(position < activity.slots.len());
@@ -306,7 +301,8 @@ impl ActivityRoots {
             aliases: Vec::new(),
             segments: Vec::new(),
             top_start: 0,
-            indirect: 0,
+            fast_serial: u64::MAX,
+            alias_count: 0,
             parked: Vec::new(),
             parked_free: Vec::new(),
         }
@@ -389,6 +385,7 @@ impl ActivityRoots {
         let depth = self.segments.len();
         self.segments.push(Segment { start, serial });
         self.top_start = start;
+        self.refresh_fast_serial();
         SlotFrame { depth, serial }
     }
 
@@ -396,12 +393,11 @@ impl ActivityRoots {
     ///
     /// # Panics
     ///
-    /// If `frame` is closed; in a debug build, also if its depth now holds
-    /// another frame's record.
+    /// If `frame` is closed, or its depth now holds another frame's record.
     #[inline(always)]
     fn segment(&self, frame: SlotFrame) -> Segment {
         let segment = self.segments[frame.depth];
-        debug_assert_eq!(
+        assert_eq!(
             segment.serial, frame.serial,
             "slot frame {frame:?} resolved against another frame's record"
         );
@@ -430,7 +426,7 @@ impl ActivityRoots {
     fn debug_assert_top(&self, frame: SlotFrame) {
         debug_assert!(
             self.segments.len() == frame.depth + 1 && self.segment(frame).start == self.top_start,
-            "slot frame {frame:?} addressed as the top one"
+            "the cached top record disagrees with {frame:?}'s"
         );
     }
 
@@ -474,9 +470,10 @@ impl ActivityRoots {
         self.slots.truncate(start);
         if self.aliases.len() > start {
             let dropped = self.aliases[start..].iter().flatten().count();
-            self.indirect -= dropped;
+            self.alias_count -= dropped;
             self.aliases.truncate(start);
         }
+        self.refresh_fast_serial();
     }
 
     /// The storage slot `index` of `frame` finally resolves to.
@@ -514,20 +511,17 @@ impl ActivityRoots {
             self.aliases.resize(position + 1, None);
         }
         if self.aliases[position].replace(target).is_none() {
-            self.indirect += 1;
+            self.alias_count += 1;
+            self.refresh_fast_serial();
         }
     }
 
-    /// Opens a stretch in which frames other than the top one may be
-    /// addressed through [`RootSet::frame_slot`] and its writes, each through
-    /// its own record. Ended by [`ActivityRoots::end_indirect`].
-    pub fn begin_indirect(&mut self) {
-        self.indirect += 1;
-    }
-
-    /// Ends the innermost [`ActivityRoots::begin_indirect`].
-    pub fn end_indirect(&mut self) {
-        self.indirect -= 1;
+    /// Recomputes `fast_serial` from the top record and `alias_count`.
+    fn refresh_fast_serial(&mut self) {
+        self.fast_serial = match self.segments.last() {
+            Some(top) if self.alias_count == 0 => top.serial,
+            _ => u64::MAX,
+        };
     }
 
     /// `frame`'s slot `index`, following an alias if one is in force. The
@@ -535,7 +529,7 @@ impl ActivityRoots {
     /// `frame_slot`/`set_frame_slot`/`clear_frame_slot` cannot come apart on
     /// it.
     fn resolve(&self, frame: SlotFrame, index: usize) -> Target {
-        if self.indirect == 0 {
+        if self.alias_count == 0 {
             debug_assert!(
                 self.aliases_of(frame).iter().all(Option::is_none),
                 "{frame:?} redirects while the count says nothing does"

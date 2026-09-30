@@ -115,6 +115,47 @@ fn say_output_traced(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
     std::mem::take(&mut interp.out)
 }
 
+/// A native frame's name for rexx-api resolves while that frame is live and
+/// is refused once another frame holds its row, as a context kept past its
+/// call names it.
+#[test]
+fn a_stale_native_frame_token_is_refused() {
+    let mut interp = Interp::new();
+    activate(&mut interp, parse_program(b"nop".to_vec()).expect("parses"));
+    let caller = interp.activation().id;
+    activate(&mut interp, parse_program(b"nop".to_vec()).expect("parses"));
+    let frame = |id| crate::NativeFrame {
+        owner: ObjRef::NIL,
+        scope: ObjRef::NIL,
+        method: false,
+        receiver: ObjRef::NIL,
+        name: Vec::new(),
+        arguments: Vec::new(),
+        argument_list: None,
+        locals: rexx_api::handles::Table::new(),
+        raised: None,
+        additional: None,
+        result: None,
+        condition: None,
+        code: None,
+        kept: rustc_hash::FxHashSet::default(),
+        caller: Some(caller),
+        id,
+        packaged: false,
+    };
+    interp.activity.native_handles.push(frame(6));
+    assert_eq!(interp.suspended_caller(6), Some(0));
+    interp.activity.native_handles.pop();
+    interp.activity.native_handles.push(frame(7));
+    assert_eq!(interp.suspended_caller(7), Some(0));
+    assert_eq!(interp.suspended_caller(6), None, "the old frame's token");
+    assert_eq!(
+        interp.suspended_caller(1 << 32 | 7),
+        None,
+        "a row no frame holds"
+    );
+}
+
 mod address;
 mod assignment;
 mod branch;

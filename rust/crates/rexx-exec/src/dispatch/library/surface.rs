@@ -730,15 +730,15 @@ impl Interp {
     }
 
     /// The index in [`Activity::suspended`] of the activation that made the
-    /// native call whose frame's identity is `frame`, or `None` where it is
-    /// the running one.
-    fn suspended_caller(&self, frame: u64) -> Option<usize> {
+    /// native call [`Interp::native_token`] named `frame`, or `None` where it
+    /// is the running one or that call has returned.
+    pub(crate) fn suspended_caller(&self, frame: u64) -> Option<usize> {
+        let row = usize::try_from(frame >> 32).ok()?;
         let caller = self
             .activity
             .native_handles
-            .iter()
-            .rev()
-            .find(|native| u64::from(native.id) == frame)?
+            .get(row)
+            .filter(|native| u64::from(native.id) == frame & u64::from(u32::MAX))?
             .caller?;
         if self.activity.running.as_ref()?.id == caller {
             return None;
@@ -856,8 +856,7 @@ impl Interp {
 /// The caller of a kept outer call swapped in as [`Activity::running`] for as
 /// long as this lives, and swapped back when it drops, an unwind included.
 /// Both activations stay in `running` and `suspended`, where the collector
-/// reads them. The caller's frame is not the top one, so slots are reached
-/// through their frames' records meanwhile.
+/// reads them.
 struct CallerSwap<'a> {
     interp: &'a mut Interp,
     index: usize,
@@ -871,7 +870,6 @@ impl<'a> CallerSwap<'a> {
             .as_mut()
             .expect("a native call has a caller");
         std::mem::swap(running, &mut interp.activity.suspended[index]);
-        interp.roots.activity_mut().begin_indirect();
         CallerSwap { interp, index }
     }
 }
@@ -885,7 +883,6 @@ impl Drop for CallerSwap<'_> {
             .as_mut()
             .expect("the swapped-in caller");
         std::mem::swap(running, &mut self.interp.activity.suspended[self.index]);
-        self.interp.roots.activity_mut().end_indirect();
     }
 }
 

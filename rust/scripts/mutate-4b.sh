@@ -496,8 +496,8 @@ run_one "1. PROCEDURE EXPOSE aliases nothing" "${RUN_RS}" DIVERGED DIVERGED \
 # one's failure is the guard working rather than a mutation being unlucky. The
 # first attempt at a `PROCEDURE`-shaped mutation pointed the callee's
 # activation back at the caller's frame while a fresh frame was already
-# pushed, which trips a `roots.rs` invariant (`grow_slots on a frame that is
-# not the top one`) and panics `corpus_differential` BEFORE it prints its
+# pushed, which trips a `roots.rs` invariant and
+# panics `corpus_differential` BEFORE it prints its
 # "N of M matching" line. `corpus_status` correctly classified that
 # INFRA_FAILURE and the script aborted rather than scoring it: a mutation that
 # breaks the harness has not been tested, and calling it "caught" would have

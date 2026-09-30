@@ -220,25 +220,24 @@ fn a_frame_beneath_another_grows_and_aliases_into_it_hold() {
     assert_eq!(roots.frame_slot_of(outer, grown), None);
 }
 
-/// Inside an indirection a frame below the top one is addressed through the
-/// same accessors as the top one.
+/// The top-frame accessors serve a frame below the top one through its own
+/// record.
 #[test]
-fn an_indirection_lets_the_top_accessors_reach_a_lower_frame() {
+fn the_top_accessors_reach_a_lower_frame() {
     let mut roots = RootSet::new();
     let outer = roots.push_slots(1);
     let inner = roots.push_slots(1);
-    roots.activity_mut().begin_indirect();
     roots.set_frame_slot(outer, 0, ObjRef::heap(4, 0));
     roots.set_frame_slot(inner, 0, ObjRef::heap(5, 0));
     assert_eq!(roots.frame_slot(outer, 0), Some(ObjRef::heap(4, 0)));
-    roots.activity_mut().end_indirect();
     assert_eq!(roots.frame_slot(inner, 0), Some(ObjRef::heap(5, 0)));
-    assert_eq!(roots.frame_slot_of(outer, 0), Some(ObjRef::heap(4, 0)));
+    roots.clear_frame_slot(outer, 0);
+    assert_eq!(roots.frame_slot(outer, 0), None);
+    assert_eq!(roots.frame_slot(inner, 0), Some(ObjRef::heap(5, 0)));
 }
 
 /// A handle kept past its frame's pop is refused against the frame opened
-/// at the same depth afterwards.
-#[cfg(debug_assertions)]
+/// at the same depth afterwards, by the top-frame accessors as well.
 #[test]
 #[should_panic(expected = "resolved against another frame's record")]
 fn a_closed_frames_handle_is_refused_by_its_successor() {
@@ -246,16 +245,18 @@ fn a_closed_frames_handle_is_refused_by_its_successor() {
     let first = roots.push_slots(1);
     roots.activity_mut().pop_slots(first);
     let _second = roots.push_slots(1);
-    roots.frame_slot_of(first, 0);
+    roots.frame_slot(first, 0);
 }
 
-/// Outside an indirection the top accessors refuse a lower frame.
+/// An alias must lead to an older slot, which is what ends the chase.
 #[cfg(debug_assertions)]
 #[test]
-#[should_panic(expected = "addressed as the top one")]
-fn a_lower_frame_is_refused_by_the_top_accessors() {
+#[should_panic(expected = "does not descend")]
+fn an_alias_that_does_not_descend_is_refused() {
     let mut roots = RootSet::new();
     let outer = roots.push_slots(1);
-    let _inner = roots.push_slots(1);
+    let inner = roots.push_slots(1);
+    let target = roots.activity().slot_ref(inner, 0);
+    roots.activity_mut().alias_slot(outer, 0, target);
     roots.frame_slot(outer, 0);
 }

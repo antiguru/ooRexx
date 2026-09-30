@@ -94,7 +94,7 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.activity.thread.clone();
         let (answered, pending) = {
-            let frame = u64::from(self.native_frame().id);
+            let frame = self.native_token();
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -167,7 +167,7 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.activity.thread.clone();
         let (answered, pending) = {
-            let frame = u64::from(self.native_frame().id);
+            let frame = self.native_token();
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -217,7 +217,7 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.activity.thread.clone();
         let (ran, pending) = {
-            let frame = u64::from(self.native_frame().id);
+            let frame = self.native_token();
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -263,7 +263,7 @@ impl Interp {
         let mut strings = CStringPool::new();
         let thread = self.activity.thread.clone();
         let (answered, pending) = {
-            let frame = u64::from(self.native_frame().id);
+            let frame = self.native_token();
             let activation = Activation::new(Conversion {
                 host: self,
                 strings: &mut strings,
@@ -1096,6 +1096,17 @@ impl Interp {
             .native_handles
             .last_mut()
             .expect("a native activation is running")
+    }
+
+    /// The running native activation's name for rexx-api: its row in
+    /// [`Activity::native_handles`] above its number, so no two live frames
+    /// share one.
+    ///
+    /// # Panics
+    /// As [`Interp::native_frame`].
+    fn native_token(&self) -> u64 {
+        let row = self.activity.native_handles.len() - 1;
+        (row as u64) << 32 | u64::from(self.activity.native_handles[row].id)
     }
 
     /// The running native activation.
