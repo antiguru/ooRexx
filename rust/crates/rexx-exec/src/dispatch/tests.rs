@@ -1800,3 +1800,45 @@ fn an_interlocked_termination_sweep_runs_nothing_and_consumes_nothing() {
         "a sweep that is not interlocked consumes what it ran"
     );
 }
+
+/// The message, receiver, scope and arguments a parked native tail holds
+/// are roots while it is parked, each one alone.
+#[test]
+fn a_native_tails_objects_are_rooted_only_while_it_is_parked() {
+    let mut interp = Interp::new();
+    let [then, scope, receiver, argument] = [
+        b"then-object-text",
+        b"scope-names-text",
+        b"receiver-of-send",
+        b"argument-to-send",
+    ]
+    .map(|text| interp.text(text));
+    interp.activity.native_tails.push(NativeTail {
+        depth: 0,
+        then: Then::Started(then),
+        blame: Some(NativeBlame {
+            name: b"SEND".as_slice().into(),
+            scope,
+            receiver,
+            args: [None, Some(argument)].into(),
+        }),
+    });
+    let held = [
+        (then, "started message"),
+        (scope, "scope"),
+        (receiver, "receiver"),
+        (argument, "argument"),
+    ];
+    interp.collect_now();
+    for (held, what) in held {
+        assert!(interp.heap.get(held).is_some(), "the {what} was collected");
+    }
+    interp.activity.native_tails.pop();
+    interp.collect_now();
+    for (held, what) in held {
+        assert!(
+            interp.heap.get(held).is_none(),
+            "the {what} outlived its tail, so something else roots it"
+        );
+    }
+}
