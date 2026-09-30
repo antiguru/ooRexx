@@ -582,3 +582,31 @@ arrivals 1624, with a frame other than TreeEval, TreeSend or OpExec 0
 | base/special.variables/RESULT_RC_SIGL.testGroup TEST_RESULT_WITH_REPLY | pass, rc 0 | Reply | TreeSend > OpExec | 3 |
 | doc/rexxref/chapter5/Section1.testGroup TEST_OBJECT_START | refused at method "START" of class "Message" is not implemented (Phase 9) | SysSleep | TreeSend | 1 |
 | regressions/bug2003_guard_when.testGroup TEST_GUARD_WHEN_1 | error, rc 2 | no park reached in-process | | |
+
+## S1 close
+
+At `1f9be8ea5`, from `rust/`:
+
+```
+CARGO_TARGET_DIR=$S/tgt/pin cargo test --release -p rexx-exec --features pinning --test concurrency_tests -- measured:: --nocapture
+```
+
+Exit 0, eight tests passed. The table is `$S/tgt/pin/tmp/pinning-table.md`. Per park, tests and
+arrivals, beside `## Measured` (the Task 3 figures, summed over its frame rows):
+
+| park | S1 tests | S1 arrivals | Task 3 arrivals |
+|---|---:|---:|---:|
+| GuardOn | 6 | 8 | 8 |
+| GuardWhen | 22 | 32 | 32 |
+| Reply | 42 | 48 | 48 |
+| MessageResult | 14 | 38 | 38 |
+| MessageWait | 1 | 1 | 1 |
+| SemaphoreWait | 8 | 8 | 8 |
+| SysSleep | 30 | 1476 | 1478 |
+| Timer | 11 | 11 | 11 |
+
+Total arrivals 1622 (Task 3: 1624), with a frame other than TreeEval, TreeSend or OpExec 0. The
+frames column of the S1 table lists `OpExec` for GuardOn, GuardWhen and Reply (`TreeEval > OpExec`
+for one Reply arrival) and `-` for every other park; Task 3's rows had `TreeSend` in their frame
+chains. Every park Task 3 counted is still reached. `SysSleep` differs by two arrivals; busy-wait arrival
+counts depend on timing.

@@ -1210,3 +1210,99 @@ own target dir, and every spread is 0.0000%:
 | textnum | 1176579576 | 1152043463 | 1152443648 | -2.09 | -2.05 | +0.03 |
 | varlookup | 14878111883 | 14461721676 | 14461721861 | -2.80 | -2.80 | +0.00 |
 | rexxcps | 17817343428 | 17834084874 | 17663721405 | +0.09 | -0.86 | -0.96 |
+
+## Task 11 (S1 close)
+
+Base `1754a3b5a`, head `1f9be8ea5`. Each was built from `git archive` into its own tree and target
+dir with `find TREE -type f -exec touch {} +`; both build logs carry one `Compiling rexx-exec` line.
+`S` is `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/99c66dfa-1d22-4940-ab62-784c7ef57f5f/scratchpad/p6-t11`.
+
+```
+cd $S/trees/NAME/rust && CARGO_TARGET_DIR=$S/tgt/NAME cargo build --release -p rexx-exec --bin rexx-run
+sha256sum $S/bin/NAME/rexx-run
+```
+
+| name | sha256 of `rexx-run` |
+|---|---|
+| base | `27303fd64bb0e5fe7669f9c3c03d966aae7081a94aa3affc37632ff6b4c0db1a` |
+| head | `16dc83ca9306a3da836421b86048320b7509c8303f1994fc4cc48900e4455e23` |
+
+### Instruction counts (running total against base)
+
+```
+bash rust/bench-programs/callgrind.sh -r 3 -j 16 -o $S/cg base=$S/bin/base/rexx-run head=$S/bin/head/rexx-run
+```
+
+Exit 0, median of 3 rounds, libc and ld-linux subtracted. Every spread is 0.0000% except base
+`rexxcps` at 0.0001%. The noise band is the Task 2 band (0 Ir except `heapshape` 100 Ir and
+`rexxcps` 11,030 Ir); the budget is +0.3% beyond it.
+
+| program | base Ir | head Ir | head vs base % |
+|---|---:|---:|---:|
+| alloc | 25168678394 | 20270018586 | -19.46 |
+| alloc4c | 3224394979 | 3176498710 | -1.49 |
+| arith | 11520060090 | 11498165784 | -0.19 |
+| assign | 19637557667 | 18840415591 | -4.06 |
+| compound | 9271611222 | 9187029373 | -0.91 |
+| decloop | 2565175645 | 2536048947 | -1.14 |
+| decrender | 4348396233 | 4276914991 | -1.64 |
+| dispatch | 20483284859 | 20493850031 | +0.05 |
+| dispatchclass | 15850195632 | 15490532719 | -2.27 |
+| emptyloop | 9308098351 | 9259510032 | -0.52 |
+| extcall | 8281259458 | 8230425092 | -0.61 |
+| fibcall | 8345686355 | 8324736055 | -0.25 |
+| fibfunc | 7988911701 | 8138967223 | +1.88 |
+| heapshape | 3278634148 | 2373955632 | -27.59 |
+| nop | 9437300108 | 9240156728 | -2.09 |
+| parse | 1541986657 | 1534028172 | -0.52 |
+| sayloop | 114813306 | 114714628 | -0.09 |
+| sendloop | 13863190589 | 13703470736 | -1.15 |
+| startup | 58073995 | 58069766 | -0.01 |
+| strings | 17749287420 | 17503789148 | -1.38 |
+| textnum | 1176579417 | 1152443489 | -2.05 |
+| varlookup | 14878111725 | 14461721703 | -2.80 |
+| rexxcps | 17817350197 | 17663720784 | -0.86 |
+
+Over budget: `fibfunc` (+1.88%). Every other program is inside it. Under ruling P16 no perf round
+was run; the figure goes to Moritz.
+
+### Wall clock
+
+```
+bash rust/bench-programs/wallclock.sh -r 5 -x extcall -o $S/wall base=$S/bin/base/rexx-run head=$S/bin/head/rexx-run base2=$S/bin/base2/rexx-run
+```
+
+`base2` is a copy of the base binary, the identical-binary control. Load average 0.57 1.60 3.73 at
+start, 1.18 1.35 3.03 at end. Exit 0. Ruling P19: no layout iteration and no layout control, so
+this records only. Bar: the larger of +-4% and the program's zero-work band (rulings P10, P15:
+`decloop` +6.10%, `startup` -7.69%, `dispatch` +14.91%).
+
+| program | base median s | head median s | base2 median s | head d% | base2 d% |
+|---|---:|---:|---:|---:|---:|
+| alloc | 2.024 | 1.584 | 2.038 | -21.74 | +0.69 |
+| alloc4c | 0.561 | 0.580 | 0.565 | +3.39 | +0.71 |
+| arith | 1.240 | 1.253 | 1.263 | +1.05 | +1.85 |
+| assign | 1.072 | 1.043 | 1.074 | -2.71 | +0.19 |
+| compound | 0.645 | 0.640 | 0.644 | -0.78 | -0.16 |
+| decloop | 0.247 | 0.251 | 0.249 | +1.62 | +0.81 |
+| decrender | 0.458 | 0.484 | 0.448 | +5.68 | -2.18 |
+| dispatch | 1.757 | 1.914 | 1.755 | +8.94 | -0.11 |
+| dispatchclass | 1.375 | 1.419 | 1.377 | +3.20 | +0.15 |
+| emptyloop | 0.527 | 0.526 | 0.527 | -0.19 | +0.00 |
+| extcall | 0.953 | 0.889 | 0.987 | -6.72 | +3.57 |
+| fibcall | 0.798 | 0.791 | 0.801 | -0.88 | +0.38 |
+| fibfunc | 0.781 | 0.805 | 0.785 | +3.07 | +0.51 |
+| heapshape | 0.325 | 0.190 | 0.320 | -41.54 | -1.54 |
+| nop | 0.658 | 0.559 | 0.657 | -15.05 | -0.15 |
+| parse | 0.130 | 0.129 | 0.128 | -0.77 | -1.54 |
+| sayloop | 0.028 | 0.029 | 0.029 | +3.57 | +3.57 |
+| sendloop | 1.055 | 1.162 | 1.056 | +10.14 | +0.09 |
+| startup | 0.024 | 0.024 | 0.025 | +0.00 | +4.17 |
+| strings | 1.128 | 1.137 | 1.133 | +0.80 | +0.44 |
+| textnum | 0.091 | 0.099 | 0.090 | +8.79 | -1.10 |
+| varlookup | 0.773 | 0.759 | 0.774 | -1.81 | +0.13 |
+| rexxcps | 2.038 | 2.022 | 2.002 | -0.79 | -1.77 |
+
+Over the bar: `decrender` +5.68%, `sendloop` +10.14%, `textnum` +8.79%. `dispatch` (+8.94%) is
+inside its 14.91% band. `sendloop`, `decrender` and `textnum` each have instruction counts below base. The cause of their
+wall figures was not measured (P19).
