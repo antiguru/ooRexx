@@ -370,7 +370,7 @@ impl Interp {
                 _ => unreachable!("only the two arms above reach here"),
             };
         }
-        self.begin_call(resolved, name, arguments, call_type, entry)
+        self.begin_call(resolved, name, &arguments, call_type, entry)
     }
 
     /// What a call runs, once its arguments have run.
@@ -571,7 +571,7 @@ impl Interp {
         let begun = self.begin_call(
             resolved,
             name,
-            values.to_vec(),
+            values,
             CallType::Function,
             CallEntry::Written,
         )?;
@@ -657,7 +657,7 @@ impl Interp {
         call_type: CallType,
         entry: CallEntry,
     ) -> Result<Ended, Failure> {
-        let begun = self.begin_call(resolved, name, arguments, call_type, entry)?;
+        let begun = self.begin_call(resolved, name, &arguments, call_type, entry)?;
         self.complete_call(begun)
     }
 
@@ -679,7 +679,7 @@ impl Interp {
         &mut self,
         resolved: Resolved,
         name: &[u8],
-        arguments: Vec<Option<ObjRef>>,
+        arguments: &[Option<ObjRef>],
         call_type: CallType,
         entry: CallEntry,
     ) -> Result<Begun, Failure> {
@@ -704,7 +704,7 @@ impl Interp {
         if matches!(
             resolved,
             Resolved::Library(_) | Resolved::External | Resolved::Unresolved
-        ) && let Some(handled) = self.call_checkpoint(name, &arguments)?
+        ) && let Some(handled) = self.call_checkpoint(name, arguments)?
         {
             return Ok(Begun::Done(Ended::Returned(handled)));
         }
@@ -713,7 +713,7 @@ impl Interp {
         }
         if let Resolved::Library(program) = resolved {
             return self
-                .enter_library_program(program, Some(arguments))
+                .enter_library_program(program, Some(arguments.to_vec()))
                 .map(|value| Begun::Done(Ended::Returned(value)));
         }
         // **And the external file ends here for the same reason**, which is
@@ -721,7 +721,7 @@ impl Interp {
         // a program, entered the way the command line's is.
         if let Resolved::External = resolved {
             return self
-                .enter_external_program(name, arguments, call_type)
+                .enter_external_program(name, arguments.to_vec(), call_type)
                 .map(|value| Begun::Done(Ended::Returned(value)));
         }
 
@@ -730,18 +730,18 @@ impl Interp {
         // manager is asked.
         if let Resolved::MergedLibraryRoutine(code) = resolved {
             return self
-                .run_library_routine(code, name, &arguments)
+                .run_library_routine(code, name, arguments)
                 .map(|value| Begun::Done(Ended::Returned(value)));
         }
         if let Resolved::Routine(installed) = resolved {
             if let Some(code) = self.library_routine_code(installed) {
                 return self
-                    .run_library_routine(code, name, &arguments)
+                    .run_library_routine(code, name, arguments)
                     .map(|value| Begun::Done(Ended::Returned(value)));
             }
             if let Some(row) = self.rexx_routine_row(installed) {
                 return self
-                    .run_internal_as(row, Some(name), &arguments)
+                    .run_internal_as(row, Some(name), arguments)
                     .map(|value| Begun::Done(Ended::Returned(Some(value))));
             }
         }
@@ -931,7 +931,7 @@ impl Interp {
         let saved_offset = std::mem::take(&mut self.activity.indent_offset);
         let saved_line = std::mem::take(&mut self.activity.clause_line_override);
         let inherited = entered_receiver(entered, entry, self.activity.call_context.receiver);
-        let arguments = self.shared_arguments(&arguments);
+        let arguments = self.shared_arguments(arguments);
         let saved_context = std::mem::replace(
             &mut self.activity.call_context,
             CallContext {
@@ -1341,7 +1341,7 @@ impl Interp {
                 .begin_call(
                     resolved,
                     name,
-                    values[mark..].to_vec(),
+                    &values[mark..],
                     CallType::Subroutine,
                     CallEntry::Written,
                 )
