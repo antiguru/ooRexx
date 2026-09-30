@@ -289,7 +289,11 @@ impl Interp {
                 Some(expr) if self.leaf_argument(expr) => {
                     Some(self.eval_leaf_argument(code, expr)?)
                 }
-                Some(expr) => Some(self.eval_traced_argument(code, expr)?),
+                Some(expr) => Some(pinned!(
+                    self,
+                    crate::pinning::PinKind::TreeEval,
+                    self.eval_traced_argument(code, expr)
+                )?),
             };
             self.activity.value_buffer.push(value);
         }
@@ -350,7 +354,11 @@ impl Interp {
                 Some(expr) if self.leaf_argument(expr) => {
                     arguments.push(Some(self.eval_leaf_argument(code, expr)?));
                 }
-                Some(expr) => arguments.push(Some(self.eval_traced_argument(code, expr)?)),
+                Some(expr) => arguments.push(Some(pinned!(
+                    self,
+                    crate::pinning::PinKind::TreeEval,
+                    self.eval_traced_argument(code, expr)
+                )?)),
             }
         }
         let resolved = self.settle_after_arguments(resolution, name)?;
@@ -1191,7 +1199,12 @@ impl Interp {
                     continue;
                 }
                 Some(expr) if self.leaf_argument(expr) => self.eval_leaf_argument(code, expr).err(),
-                Some(expr) => self.eval_traced_argument(code, expr).err(),
+                Some(expr) => pinned!(
+                    self,
+                    crate::pinning::PinKind::TreeEval,
+                    self.eval_traced_argument(code, expr)
+                )
+                .err(),
             };
             if let Some(raised) = raised {
                 return raised;

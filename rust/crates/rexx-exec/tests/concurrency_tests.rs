@@ -616,6 +616,18 @@ mod measured {
             "if .c~new~m then nop\n::class c\n::method m\n  call SysSleep 0\n  return 1\n",
         ),
         (
+            "TreeEval",
+            "x = f(g())\nexit\nf: return 1\ng:\n  call SysSleep 0\n  return 2\n",
+        ),
+        (
+            "TreeEval",
+            "call f g()\nexit\nf: return\ng:\n  call SysSleep 0\n  return 2\n",
+        ),
+        (
+            "TreeEval",
+            "x = abs(g())\nexit\ng:\n  call SysSleep 0\n  return 2\n",
+        ),
+        (
             "TreeSend",
             ".c~new~m\n::class c\n::method m\n  call SysSleep 0\n",
         ),
