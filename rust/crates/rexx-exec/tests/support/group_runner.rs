@@ -75,6 +75,8 @@ const STAMPED: &[&str] = &["[failure] ", "[error] "];
 pub enum SwitchMode {
     /// The scheduler as it ships.
     None,
+    /// A switch at every clause boundary, as `rexx_exec::SwitchMode` names it.
+    EveryOpportunity,
 }
 
 /// One run's three descriptors.
@@ -402,8 +404,12 @@ pub fn run_crate(run: &Path, args: &[&str], mode: SwitchMode) -> Run {
         b"LD_LIBRARY_PATH".to_vec(),
         lib.to_string_lossy().into_owned().into_bytes(),
     ));
+    let invocation = Invocation::with_argument(args.join(" ").into_bytes());
     let invocation = match mode {
-        SwitchMode::None => Invocation::with_argument(args.join(" ").into_bytes()),
+        SwitchMode::None => invocation,
+        SwitchMode::EveryOpportunity => {
+            invocation.with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity)
+        }
     }
     .with_directory(run.to_path_buf())
     .with_environment(environment);

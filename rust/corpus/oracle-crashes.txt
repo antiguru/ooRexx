@@ -988,3 +988,39 @@ round 1. Cause read, not run under a debugger: `Activity::display`
 (`concurrency/Activity.cpp:1428`) casts each TRACEBACK item to `RexxString *` without a check, so
 the Array is written as a string. This crate prints `an Array` for that line and re-raises, rc 214.
 No upstream ticket.
+
+## 23. `Message~halt` sent again once a halted started activity has ended with 4.1
+
+    g = .gate~new
+    m = .message~new(.t~new, 'plain', 'I', g)
+    m~start
+    do until g~parked == 1
+    end
+    call syssleep 0.2
+    say m~halt
+    g~q~send
+    m~wait
+    say m~hasError
+    say m~halt
+    ::class gate
+    ::attribute parked unguarded
+    ::attribute q unguarded
+    ::method init
+      expose parked
+      parked = 0
+    ::method release unguarded
+      return 'released'
+    ::class t
+    ::method plain
+      use arg g
+      g~q = .message~new(g, 'release')
+      g~parked = 1
+      g~q~wait
+      return 'plain'
+
+SIGSEGV, rc 139, in 5 runs of 10, stdout complete (`1`, `1`, `1`); stderr then has a second HALT
+report naming `Method UNKNOWN with scope "Monitor"` (line 1457 of the `REXX` package) before the
+crash. The other runs exit 0 with the started activity's 4.1 report alone. Without the last
+`say m~halt` it is 30 runs of 30 rc 0 (`lang/message_halt_untrapped.rex`). Measured 2026-10-01 by
+Phase 6 S2-S5 Task 4. **Cause not established.** This crate answers `1` for the last halt (the
+started activity has no Rexx frame) and exits 0. No upstream ticket.

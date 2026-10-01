@@ -66,6 +66,8 @@ pub(crate) enum DriveStart {
         floor: usize,
         sent: Result<Option<ObjRef>, Failure>,
     },
+    /// The level a slice left at `floor`, from the clause at op `at`.
+    Sliced { floor: usize, at: u32 },
 }
 
 /// How [`Interp::drive_from`] stopped.
@@ -74,6 +76,12 @@ pub(crate) enum Driven {
     /// A primitive method parked the activity, whose levels down to this floor
     /// are parked on it.
     Parked(usize),
+    /// The activity's slice ended before the clause at op `at` began, with
+    /// its levels down to `floor` parked.
+    Sliced {
+        floor: usize,
+        at: u32,
+    },
 }
 
 /// A level [`Interp::drive`] left for a callee: its body, its register frame
@@ -127,6 +135,8 @@ enum Next {
     Resume,
     /// The send it parked, whose activity has woken.
     Woken,
+    /// The body, from the clause at this op, which a slice left unopened.
+    Sliced(u32),
 }
 
 /// Why [`Interp::drive`] let go of the body it holds.
@@ -137,6 +147,8 @@ enum Left {
     Resumed(Level),
     /// A primitive method parked the activity.
     Parked,
+    /// The activity's slice ended before the clause at this op.
+    Sliced(u32),
 }
 
 /// How a pass of [`Interp::ops_loop`] ended.
@@ -149,6 +161,8 @@ enum Exit {
     /// A call op parked its clause region on
     /// [`Activity::parked_calls`](crate::activity::Activity).
     Parked,
+    /// The activity's slice ended before the clause at this op began.
+    Slice(u32),
 }
 
 /// What a call op that entered its callee leaves its region to park.
@@ -1688,6 +1702,13 @@ macro_rules! open_clause {
         if $granting_instance && !$granting {
             return Ok(Exit::At($pc));
         }
+        // Counted ahead of everything the clause's opening does, so a slice
+        // that ends here leaves it to be opened afresh from `$pc`.
+        let counted = match $self.count_clause_against_deadline($grants) {
+            Ok(counted) => counted,
+            Err(Failure::Slice) => return Ok(Exit::Slice($pc)),
+            Err(failure) => return Err(failure),
+        };
         #[cfg(test)]
         count_clause_op_entry();
         // Where this region starts, which is where `=` at an
@@ -1759,7 +1780,6 @@ macro_rules! open_clause {
         // clause after it, and only the second would leave `TRACE
         // N` unable to switch one off.
         let echo = if $stale { Echo::Gated } else { Echo::Compiled };
-        let counted = $self.count_clause_against_deadline()?;
         // **The clause unit, entered by its two halves rather than
         // by its closure form**, which is what puts the region's
         // ops in this function's own frame instead of a callee's.
@@ -2478,7 +2498,7 @@ impl Interp {
     pub(crate) fn drive(&mut self, root: Level) -> Result<Ended, Failure> {
         match self.drive_from(DriveStart::Level(root), false)? {
             Driven::Ended(ended) => Ok(ended),
-            Driven::Parked(_) => Err(Loud::scheduler_inconsistency(
+            Driven::Parked(_) | Driven::Sliced { .. } => Err(Loud::scheduler_inconsistency(
                 "a wait outside every root driver and pinned frame",
             )
             .into()),
@@ -2533,6 +2553,26 @@ impl Interp {
                         sent.map(Ended::Returned),
                     )
                 }
+                DriveStart::Sliced { floor, at } => {
+                    let Some(ParkedLevel {
+                        level: Some(level),
+                        registers,
+                        temps,
+                        base,
+                    }) = self.activity.parked_levels.pop()
+                    else {
+                        return Err(Loud::op_not_driven("a parked level").into());
+                    };
+                    (
+                        floor,
+                        level,
+                        temps,
+                        arena.unpark(registers),
+                        base,
+                        Next::Sliced(at),
+                        Ok(END_OF_BODY),
+                    )
+                }
             };
         loop {
             let left = 'level: {
@@ -2582,6 +2622,23 @@ impl Interp {
                                     code, chunk, registers, at, 0, len, source, base, NO_GRANT,
                                     None,
                                 ),
+                                // As `Next::Body` enters, from the clause the
+                                // slice left: the permission is still pending
+                                // where that clause is the body's first.
+                                Next::Sliced(at) => {
+                                    // The clause was counted when the slice
+                                    // ended at it.
+                                    self.clause_countdown += 1;
+                                    match self.grant_for(code, chunk, at) {
+                                        Some(grant) => self.ops_loop_steady(
+                                            code, chunk, registers, at, 0, len, source, base,
+                                            grant, None,
+                                        ),
+                                        None => self.ops_loop_granting(
+                                            code, chunk, registers, at, 0, len, source, base,
+                                        ),
+                                    }
+                                }
                                 Next::Resume => {
                                     let ended = std::mem::replace(&mut callee, Ok(END_OF_BODY));
                                     match self.activity.parked_calls.pop() {
@@ -2620,6 +2677,17 @@ impl Interp {
                                 Ok(Exit::Flow(flow)) => flow,
                                 Ok(Exit::At(at)) => {
                                     next = Next::At(at);
+                                    continue;
+                                }
+                                Ok(Exit::Slice(at)) => {
+                                    debug_assert!(
+                                        parkable,
+                                        "a slice ended in a driver no pinned frame counts"
+                                    );
+                                    if parkable {
+                                        break 'level Left::Sliced(at);
+                                    }
+                                    next = Next::Sliced(at);
                                     continue;
                                 }
                                 Ok(Exit::Parked) if self.activity.native_park.is_some() => {
@@ -2743,6 +2811,15 @@ impl Interp {
                         base,
                     });
                     return Ok(Driven::Parked(floor));
+                }
+                Left::Sliced(at) => {
+                    self.activity.parked_levels.push(ParkedLevel {
+                        level: Some(level),
+                        registers: arena.park(registers),
+                        temps,
+                        base,
+                    });
+                    return Ok(Driven::Sliced { floor, at });
                 }
             }
         }
@@ -2994,7 +3071,7 @@ impl Interp {
             code, chunk, registers, at, start, end, source, base, NO_GRANT, None,
         )? {
             Exit::Flow(flow) => Ok(flow),
-            Exit::At(_) | Exit::Parked => {
+            Exit::At(_) | Exit::Parked | Exit::Slice(_) => {
                 Err(Loud::op_not_driven("a handoff or a park outside a driven body").into())
             }
         }
@@ -3322,7 +3399,20 @@ impl Interp {
                                 Some(*index as usize),
                                 "a LoopNext op ended a pass of a loop other than the one it names"
                             );
-                            match self.flat_loop_step_top(code, source, Flow::Next)? {
+                            // The pass's header clause, counted here so a
+                            // slice that ends at it leaves this op to run
+                            // afresh.
+                            let counted = match self.count_clause_against_deadline(TOP) {
+                                Ok(counted) => counted,
+                                Err(Failure::Slice) => return Ok(Exit::Slice(pc)),
+                                Err(failure) => return Err(failure),
+                            };
+                            match self.flat_loop_step_top(
+                                code,
+                                source,
+                                Flow::Next,
+                                Some(counted),
+                            )? {
                                 crate::run::FlatStep::Body(op_body) => {
                                     pc = op_body;
                                     continue 'ops;
@@ -3461,18 +3551,20 @@ impl Interp {
                         // `ITERATE` this loop consumes puts the frame back and
                         // resumes at the body's first op -- the same place
                         // `Op::LoopNext` resumes a pass that fell through.
-                        FrameKind::Loop => match self.flat_loop_step_top(code, source, other)? {
-                            crate::run::FlatStep::Body(op_body) => {
-                                self.activity.frames.push(Frame {
-                                    op_end: u32::MAX,
-                                    start: frame_start,
-                                    end: frame_end,
-                                    kind: FrameKind::Loop,
-                                });
-                                return Ok(Settled::At(op_body));
+                        FrameKind::Loop => {
+                            match self.flat_loop_step_top(code, source, other, None)? {
+                                crate::run::FlatStep::Body(op_body) => {
+                                    self.activity.frames.push(Frame {
+                                        op_end: u32::MAX,
+                                        start: frame_start,
+                                        end: frame_end,
+                                        kind: FrameKind::Loop,
+                                    });
+                                    return Ok(Settled::At(op_body));
+                                }
+                                crate::run::FlatStep::Done(escape) => flow = escape,
                             }
-                            crate::run::FlatStep::Done(escape) => flow = escape,
-                        },
+                        }
                     }
                 }
             }

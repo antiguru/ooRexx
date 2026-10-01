@@ -184,13 +184,14 @@ use object_protocol::{
     ArrayArgument, array_argument, decode_message_name, hash_value, native_class, native_copy,
     native_default_name, native_has_method, native_hash_code, native_identity_hash, native_is_a,
     native_is_nil, native_message_arguments, native_message_completed,
-    native_message_error_condition, native_message_has_error, native_message_has_result,
-    native_message_name, native_message_result, native_message_send, native_message_send_with,
-    native_message_start, native_message_start_with, native_message_target, native_message_wait,
-    native_no_op, native_object_concat, native_object_concat_blank, native_object_different,
-    native_object_identical, native_object_name, native_object_name_set, native_request,
-    native_run, native_send, native_send_with, native_set_method, native_start, native_start_with,
-    native_string, native_unset_method, operator_argument, run_method_body, string_hash,
+    native_message_error_condition, native_message_halt, native_message_has_error,
+    native_message_has_result, native_message_name, native_message_result, native_message_send,
+    native_message_send_with, native_message_start, native_message_start_with,
+    native_message_target, native_message_wait, native_no_op, native_object_concat,
+    native_object_concat_blank, native_object_different, native_object_identical,
+    native_object_name, native_object_name_set, native_request, native_run, native_send,
+    native_send_with, native_set_method, native_start, native_start_with, native_string,
+    native_unset_method, operator_argument, run_method_body, string_hash,
 };
 
 // The required-string protocol and the string conversion behind it.
@@ -564,6 +565,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         native_message_error_condition,
     ),
+    ("Message", "HALT", Arity::Fixed(1), native_message_halt),
     (
         "Message",
         "HASERROR",
@@ -2934,7 +2936,11 @@ impl Interp {
             // the check set outlives this match. Every later clause of this
             // run fails the same way, so the bounded sweep above finishes at
             // once rather than running the remaining finalizers.
-            Ok(_) | Err(Failure::Raised(_) | Failure::Exited(_) | Failure::Deadline) => None,
+            // No slice ends under the pin this send holds.
+            Ok(_)
+            | Err(Failure::Raised(_) | Failure::Exited(_) | Failure::Deadline | Failure::Slice) => {
+                None
+            }
             Err(Failure::Loud(loud)) => Some(*loud),
         }
     }

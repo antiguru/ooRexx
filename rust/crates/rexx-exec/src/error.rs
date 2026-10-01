@@ -1881,6 +1881,10 @@ pub(crate) enum Failure {
     /// ([`Deadline`](crate::clause::Deadline), whose own doc has what that
     /// bound does and does not reach).
     Deadline,
+    /// The running activity's slice is over, at a clause boundary of a root
+    /// driver with nothing pinning it; the op that counted the clause turns
+    /// it into the driver's exit before the clause begins.
+    Slice,
 }
 
 impl From<Loud> for Failure {

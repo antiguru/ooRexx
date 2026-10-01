@@ -19,11 +19,13 @@ use std::collections::VecDeque;
 use rexx_core::{ActivityRoots, ObjRef};
 use rustc_hash::FxHashMap;
 
-use crate::activity::Activity;
+use crate::activity::{Activity, HaltRequest};
 use crate::dispatch::{Caller, Then};
-use crate::error::Failure;
+use crate::error::{Failure, Raised};
+use crate::ir::{DriveStart, Driven};
 use crate::run::{Ended, Flow, Started};
-use crate::{Interp, Loud};
+use crate::timer::SLICE;
+use crate::{Interp, Loud, PendingTrap, SwitchMode};
 
 /// What an instruction run by [`crate::ir::Op::Exec`] answers the driver.
 pub(crate) enum ExecOutcome {
@@ -190,8 +192,15 @@ enum Waited {
 
 /// How a run of the running activity stopped.
 enum Stopped {
+    /// Parked, or at the back of the ready queue with its slice over.
     Parked,
     Ended,
+}
+
+/// The deterministic switch mode in force, and the clauses counted under it.
+pub(crate) struct Switch {
+    mode: SwitchMode,
+    clauses: u64,
 }
 
 /// What the driver asks of whatever runs the interpreter's activities.
@@ -205,6 +214,9 @@ pub(crate) trait Scheduler {
     fn park(&mut self, reason: ParkReason);
     /// Moves a parked activity to the back of the ready queue.
     fn unpark(&mut self, activity: ActivityId);
+    /// Puts the running activity, whose slice is over, at the back of the
+    /// ready queue.
+    fn yield_at_slice(&mut self);
 }
 
 impl Scheduler for Interp {
@@ -248,6 +260,11 @@ impl Scheduler for Interp {
 
     fn unpark(&mut self, activity: ActivityId) {
         self.activities.ready.push_back(activity);
+    }
+
+    fn yield_at_slice(&mut self) {
+        let running = self.activities.running;
+        self.activities.ready.push_back(running);
     }
 }
 
@@ -295,6 +312,15 @@ impl Interp {
             }
         } else {
             table.idle[outgoing.0 as usize] = Some(idle);
+        }
+        // A slice belongs to the activity it was set for.
+        self.timer.requests().clear(SLICE);
+        self.slice_deferred = false;
+        if self.activity.halt.is_some() {
+            self.clause_countdown = 1;
+        }
+        if self.stress_collect {
+            self.collect_now();
         }
     }
 
@@ -418,6 +444,9 @@ impl Interp {
                 return Err(failure);
             }
             match self.next_runnable(me, level) {
+                // The activity whose slice ended, with nothing else this loop
+                // can run, runs on.
+                Some(ready) if ready == self.activities.running => {}
                 Some(ready) if ready != me => self.switch_to(ready, ended),
                 woken => {
                     self.switch_to(me, ended);
@@ -484,15 +513,10 @@ impl Interp {
                         }
                         None => match self.prepare_level() {
                             Ok(level) => {
-                                match self.drive_from(crate::ir::DriveStart::Level(level), true) {
-                                    Ok(crate::ir::Driven::Parked(floor)) => {
-                                        self.activity.drive_floor = Some(floor);
-                                        return Ok(Stopped::Parked);
-                                    }
-                                    Ok(crate::ir::Driven::Ended(ended)) => {
-                                        self.finish_send(Ok(ended))
-                                    }
-                                    Err(failure) => self.finish_send(Err(failure)),
+                                let driven = self.drive_from(DriveStart::Level(level), true);
+                                match self.started_driven(driven) {
+                                    Some(sent) => sent,
+                                    None => return Ok(Stopped::Parked),
                                 }
                             }
                             Err(failure) => self.finish_send(Err(failure)),
@@ -500,20 +524,20 @@ impl Interp {
                     },
                 }
             }
-            None => {
-                let sent = self.resume_parked(None);
-                match self.activity.drive_floor.take() {
-                    None => sent,
-                    Some(floor) => {
-                        match self.drive_from(crate::ir::DriveStart::Woken { floor, sent }, true) {
-                            Ok(crate::ir::Driven::Parked(floor)) => {
-                                self.activity.drive_floor = Some(floor);
-                                return Ok(Stopped::Parked);
-                            }
-                            Ok(crate::ir::Driven::Ended(ended)) => self.finish_send(Ok(ended)),
-                            Err(failure) => self.finish_send(Err(failure)),
-                        }
+            None => 'resumed: {
+                let driven = match self.activity.sliced.take() {
+                    Some((floor, at)) => self.drive_from(DriveStart::Sliced { floor, at }, true),
+                    None => {
+                        let sent = self.resume_parked(None);
+                        let Some(floor) = self.activity.drive_floor.take() else {
+                            break 'resumed sent;
+                        };
+                        self.drive_from(DriveStart::Woken { floor, sent }, true)
                     }
+                };
+                match self.started_driven(driven) {
+                    Some(sent) => sent,
+                    None => return Ok(Stopped::Parked),
                 }
             }
         };
@@ -536,6 +560,27 @@ impl Interp {
         match recorded {
             Ok(_) | Err(Failure::Raised(_)) => Ok(Stopped::Ended),
             Err(failure) => Err(failure),
+        }
+    }
+
+    /// What a root driver's run of the running started activity answers:
+    /// its send's outcome, or `None` where it parked or its slice ended.
+    fn started_driven(
+        &mut self,
+        driven: Result<Driven, Failure>,
+    ) -> Option<Result<Option<ObjRef>, Failure>> {
+        match driven {
+            Ok(Driven::Parked(floor)) => {
+                self.activity.drive_floor = Some(floor);
+                None
+            }
+            Ok(Driven::Sliced { floor, at }) => {
+                self.activity.sliced = Some((floor, at));
+                self.yield_at_slice();
+                None
+            }
+            Ok(Driven::Ended(ended)) => Some(self.finish_send(Ok(ended))),
+            Err(failure) => Some(self.finish_send(Err(failure))),
         }
     }
 
@@ -579,21 +624,175 @@ impl Interp {
         self.write_trace_report(&report);
     }
 
-    /// The running activity's main-program root, a park in which runs the
-    /// other activities until it is woken.
+    /// The running activity's main-program root, a park or slice in which
+    /// runs the other activities until it is ready again.
     pub(crate) fn run_activity_root(&mut self) -> Result<Ended, Failure> {
         let level = self.prepare_level()?;
-        let mut driven = self.drive_from(crate::ir::DriveStart::Level(level), true)?;
+        let mut driven = self.drive_from(DriveStart::Level(level), true)?;
         loop {
-            match driven {
-                crate::ir::Driven::Ended(ended) => return Ok(ended),
-                crate::ir::Driven::Parked(floor) => {
+            driven = match driven {
+                Driven::Ended(ended) => return Ok(ended),
+                Driven::Parked(floor) => {
                     let failure = self.wait_until_woken();
                     let sent = self.resume_parked(failure);
-                    driven = self.drive_from(crate::ir::DriveStart::Woken { floor, sent }, true)?;
+                    self.drive_from(DriveStart::Woken { floor, sent }, true)?
                 }
+                Driven::Sliced { floor, at } => {
+                    self.yield_at_slice();
+                    if let Some(failure) = self.wait_until_woken() {
+                        return Err(failure);
+                    }
+                    self.drive_from(DriveStart::Sliced { floor, at }, true)?
+                }
+            };
+        }
+    }
+
+    /// Switches activities as `mode` says, and never on the timer's word.
+    pub(crate) fn set_switch_mode(&mut self, mode: SwitchMode) {
+        self.switch = Some(Switch { mode, clauses: 0 });
+        self.timer.disarm();
+        self.clause_countdown = 1;
+    }
+
+    /// The requests a visit of the clause countdown serves, before the clause
+    /// begins: the switch mode's count, the timer's arming, a `HALT` asked of
+    /// the running activity, and `SLICE`. A slice ends only where the clause
+    /// `yields` and nothing pins the activity; anywhere else it is deferred
+    /// to the next clause that does (spec 2026-09-29 P6-4).
+    pub(crate) fn serve_requests(&mut self, yields: bool) -> Result<(), Failure> {
+        if self.stress_collect {
+            self.collect_now();
+        }
+        if let Some(switch) = &mut self.switch {
+            self.clause_countdown = 1;
+            switch.clauses += 1;
+            let due = match switch.mode {
+                SwitchMode::EveryOpportunity => true,
+                SwitchMode::AtClause(clause) => switch.clauses == clause,
+            };
+            if due {
+                self.timer.requests().set(SLICE);
+            }
+        } else if self.activities.ready.is_empty() {
+            self.timer.disarm();
+        } else {
+            self.timer.arm();
+        }
+        if let Some(halt) = self.activity.halt.take() {
+            return self.raise_requested_halt(halt);
+        }
+        if !self.timer.requests().pending(SLICE) {
+            return Ok(());
+        }
+        if self.activities.ready.is_empty() {
+            self.timer.requests().clear(SLICE);
+            self.slice_deferred = false;
+            return Ok(());
+        }
+        if !yields || self.activity.pin_depth > 0 {
+            if !self.slice_deferred {
+                self.slice_deferred = true;
+                deferred_slice!(self);
+            }
+            self.clause_countdown = 1;
+            return Ok(());
+        }
+        self.timer.requests().clear(SLICE);
+        self.slice_deferred = false;
+        Err(Failure::Slice)
+    }
+
+    /// `RexxActivation::processClauseBoundary`'s halt
+    /// (`execution/RexxActivation.cpp:4085`-`:4093`), at the start of the
+    /// clause after the one the request found running, whose line the
+    /// condition still names: a `CALL ON` trap queues it, a `SIGNAL ON` trap
+    /// takes it, and untrapped it is 4.1.
+    fn raise_requested_halt(&mut self, halt: HaltRequest) -> Result<(), Failure> {
+        let raised = Raised {
+            description: halt.description.clone(),
+            ..Raised::condition(std::borrow::Cow::Borrowed("HALT"))
+        };
+        match self.trap_for(b"HALT") {
+            Some(trap) if trap.call => {
+                let object = self.build_condition_object(&raised, Some(true))?;
+                self.activity.pending_traps.push_back(PendingTrap {
+                    condition: b"HALT".as_slice().into(),
+                    rc: None,
+                    description: halt.description,
+                    object: Some(object),
+                    activation: self.activation().id,
+                    queued_during_delivery: true,
+                    fragment_depth: self.activity.fragment_depth,
+                });
+                Ok(())
+            }
+            Some(_) => {
+                self.record_entered_clause_site();
+                Err(raised.into())
+            }
+            None => {
+                self.record_entered_clause_site();
+                Err(Raised::halt().into())
             }
         }
+    }
+
+    /// The clause the running activation entered last, as the site of a
+    /// failure raised before the next one begins.
+    fn record_entered_clause_site(&mut self) {
+        let program = std::rc::Rc::clone(&self.activation().program);
+        let plan = std::rc::Rc::clone(&self.activation().plan);
+        let Some(body) = crate::activation::body_of(&program, self.activation().body) else {
+            return;
+        };
+        let code = crate::Code {
+            body,
+            symbols: &program.symbols,
+            slots: &plan.by_symbol,
+            plan: Some(&plan),
+        };
+        let index = self.activity.clause_state.clause_index();
+        if let Some(instruction) = body.instructions.get(index) {
+            self.record_failure_site(&code, index, Some(&program.source), instruction);
+        }
+    }
+
+    /// `Message~halt` (`MessageClass::halt`, `classes/MessageClass.cpp:806`):
+    /// false for a message never started and for an activity already asked;
+    /// true where the request is made, and where the started activity has no
+    /// Rexx frame to make it to (`Activity::halt`,
+    /// `concurrency/Activity.cpp:2155`), which drops it.
+    pub(crate) fn halt_message(&mut self, message: ObjRef, description: Option<Vec<u8>>) -> bool {
+        if !self.started_messages.contains(&message) {
+            return false;
+        }
+        let runs = |activity: &Activity| matches!(activity.root_then, Some(Then::Started(started)) if started == message);
+        let running = runs(&self.activity);
+        let target = if running {
+            Some(&mut self.activity)
+        } else {
+            self.activities
+                .idle
+                .iter_mut()
+                .flatten()
+                .map(|idle| &mut idle.activity)
+                .find(|activity| runs(activity))
+        };
+        let Some(target) = target else {
+            return true;
+        };
+        if target.running.is_none() {
+            return true;
+        }
+        if target.halt.is_some() {
+            return false;
+        }
+        target.halt = Some(HaltRequest { description });
+        if running {
+            self.clause_countdown = 1;
+        }
+        true
     }
 }
 

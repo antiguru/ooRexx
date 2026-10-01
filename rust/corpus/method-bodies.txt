@@ -90,7 +90,7 @@ Message	new	class	answers	rc 163
 Message	arguments	instance	answers	rc 0
 Message	completed	instance	answers	rc 0
 Message	errorCondition	instance	answers	rc 0
-Message	halt	instance	loud	method "HALT" of class "Message"
+Message	halt	instance	answers	rc 0
 Message	hasError	instance	answers	rc 0
 Message	hasResult	instance	answers	rc 0
 Message	messageComplete	instance	loud	method "MESSAGECOMPLETE" of class "Message"

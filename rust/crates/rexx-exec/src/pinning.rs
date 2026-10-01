@@ -94,6 +94,19 @@ macro_rules! inverted_wait {
     ($interp:expr, $reason:expr) => {};
 }
 
+/// Records a `SLICE` deferred because the activity is pinned.
+#[cfg(feature = "pinning")]
+macro_rules! deferred_slice {
+    ($interp:expr) => {
+        $interp.pinning.deferred_slice(&$interp.activity.pins)
+    };
+}
+
+#[cfg(not(feature = "pinning"))]
+macro_rules! deferred_slice {
+    ($interp:expr) => {};
+}
+
 #[cfg(feature = "pinning")]
 pub use counter::{ParkKind, PinKind, PinReport};
 #[cfg(feature = "pinning")]
@@ -190,6 +203,9 @@ mod counter {
         pub parks: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
         /// Inverted pinned waits refused, keyed as `parks` is.
         pub inverted: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
+        /// Slices deferred to the next unpinned clause boundary, keyed by the
+        /// pinned frames where each was first seen.
+        pub deferred_slices: BTreeMap<Vec<PinKind>, u64>,
         /// Frames still pushed when the report was taken; zero unless a push
         /// has no matching pop.
         pub unbalanced: usize,
@@ -248,11 +264,23 @@ mod counter {
                 .or_default() += 1;
         }
 
+        pub(crate) fn deferred_slice(&self, pins: &PinStack) {
+            let mut frames: Vec<PinKind> = pins.stack.borrow().iter().flatten().cloned().collect();
+            frames.dedup();
+            *self
+                .report
+                .borrow_mut()
+                .deferred_slices
+                .entry(frames)
+                .or_default() += 1;
+        }
+
         /// Forgets the arrivals so far, keeping the frames pushed.
         pub(crate) fn reset(&self) {
             let mut report = self.report.borrow_mut();
             report.parks.clear();
             report.inverted.clear();
+            report.deferred_slices.clear();
         }
 
         pub(crate) fn take(&self, pins: &PinStack) -> PinReport {

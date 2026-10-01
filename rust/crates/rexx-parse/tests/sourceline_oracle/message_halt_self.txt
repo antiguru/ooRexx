@@ -1,0 +1,28 @@
+count 27
+-- A started activity halting its own message takes the condition at the
+-- end of the halting clause.
+g = .box~new
+g~m = .message~new(.t~new, 'trapped', 'I', g)
+g~m~start
+say 'trapped' g~m~result
+g = .box~new
+g~m = .message~new(.t~new, 'untrapped', 'I', g)
+g~m~start
+g~m~wait
+say 'untrapped error' g~m~hasError g~m~errorCondition~code g~m~errorCondition~position
+::class box
+::attribute m unguarded
+::class t
+::method trapped
+  use arg g
+  signal on halt
+  say 'halting' g~m~halt('self')
+  say 'not reached'
+  return 'no'
+halt:
+  return condition('d') sigl
+::method untrapped
+  use arg g
+  say 'halting' g~m~halt
+  say 'not reached'
+  return 'no'

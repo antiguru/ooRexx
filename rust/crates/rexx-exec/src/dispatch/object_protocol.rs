@@ -1134,6 +1134,25 @@ pub(super) fn native_message_has_error(
     Ok(Some(interp.counted(usize::from(failed))))
 }
 
+/// `Message~halt(description)`: asks the activity a start gave the message
+/// to raise `HALT` -- `MessageClass::halt` (`classes/MessageClass.cpp:806`).
+pub(super) fn native_message_halt(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let description = match args.first().copied().flatten() {
+        Some(value) => {
+            let text = required_string_named_argument(interp, value, "description")?;
+            Some(interp.to_text(text).into_owned())
+        }
+        None => None,
+    };
+    let halted = interp.halt_message(receiver, description);
+    Ok(Some(interp.counted(usize::from(halted))))
+}
+
 /// `Message~hasResult`: whether the send has answered a value --
 /// `MessageClass::hasResult` (`classes/MessageClass.cpp:750`).
 pub(super) fn native_message_has_result(

@@ -19,6 +19,7 @@ use super::{
     raised_for_count_not_whole, raised_iterate_wrong_kind, raised_repetition_count_not_whole,
     raised_until_not_logical, raised_while_not_logical, shape_of, within_digits,
 };
+use crate::clause::DeadlineCounted;
 
 /// What one pass of a `DO`/`LOOP` body just did, from `do_body_outcome`.
 enum DoOutcome {
@@ -1421,7 +1422,7 @@ impl Interp {
             conditional: body.conditional.as_ref().map(|cond| cond.until),
             state,
         };
-        let header = match self.flat_loop_header(code, source, &mut boxed) {
+        let header = match self.flat_loop_header(code, source, &mut boxed, None) {
             Ok(header) => header,
             Err(failure) => {
                 self.activity.flat_spares.push(boxed);
@@ -1482,11 +1483,12 @@ impl Interp {
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         arrival: Flow,
+        counted: Option<DeadlineCounted>,
     ) -> Result<FlatStep, Failure> {
         let Some(mut top) = self.activity.flat_top.take() else {
             return Err(Loud::op_not_driven("a pass boundary with no loop open").into());
         };
-        match self.flat_loop_step(code, source, &mut top, arrival) {
+        match self.flat_loop_step(code, source, &mut top, arrival, counted) {
             Ok(FlatStep::Body(op_body)) => {
                 self.activity.flat_top = Some(top);
                 Ok(FlatStep::Body(op_body))
@@ -1510,13 +1512,15 @@ impl Interp {
     }
 
     /// One pass boundary: what the body just answered, then the
-    /// next pass's header test.
+    /// next pass's header test, whose first clause is `counted` where its
+    /// caller counted it.
     fn flat_loop_step(
         &mut self,
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         flat: &mut FlatLoop,
         arrival: Flow,
+        counted: Option<DeadlineCounted>,
     ) -> Result<FlatStep, Failure> {
         // **Read once per pass boundary and used for both echoes.** The two
         // events are one boundary and nothing between them can run a `TRACE`,
@@ -1564,9 +1568,13 @@ impl Interp {
             {
                 self.trace_clause(line, flat.do_indent, &text);
             }
-            if let Some(flow) = self.flat_loop_until(code, source, flat)? {
+            if let Some(flow) = self.flat_loop_until(code, source, flat, counted)? {
                 return Ok(FlatStep::Done(flow));
             }
+            return match self.flat_loop_header(code, source, flat, None)? {
+                Some(flow) => Ok(FlatStep::Done(flow)),
+                None => Ok(FlatStep::Body(flat.op_body)),
+            };
         } else if echoing
             // **The re-echo of the `DO`/`LOOP` clause itself, once per pass
             // after the first**, and it is asked here rather than at the
@@ -1579,7 +1587,7 @@ impl Interp {
         {
             self.trace_clause(line, flat.do_indent, &text);
         }
-        match self.flat_loop_header(code, source, flat)? {
+        match self.flat_loop_header(code, source, flat, counted)? {
             Some(flow) => Ok(FlatStep::Done(flow)),
             None => Ok(FlatStep::Body(flat.op_body)),
         }
@@ -1592,6 +1600,7 @@ impl Interp {
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         flat: &FlatLoop,
+        counted: Option<DeadlineCounted>,
     ) -> Result<Option<Flow>, Failure> {
         let Some(cond) = loop_conditional_of(code, flat.do_index) else {
             return Err(Loud::instruction(&code.body.instructions[flat.do_index].kind).into());
@@ -1602,7 +1611,7 @@ impl Interp {
         // untouched -- `trace_clause` does not set it -- so without this the
         // `UNTIL`'s intermediates would read the `DO`'s own indent.
         self.activity.clause_state.current_value_indent = loop_indent;
-        let tested = self.in_clause(code, until_line, |it| {
+        let tested = self.in_counted_clause(code, until_line, counted, |it| {
             let held = pinned!(
                 it,
                 crate::pinning::PinKind::LoopHeader,
@@ -1676,9 +1685,10 @@ impl Interp {
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         flat: &mut FlatLoop,
+        counted: Option<DeadlineCounted>,
     ) -> Result<Option<Flow>, Failure> {
         if flat.conditional == Some(false) {
-            return self.flat_loop_header_while(code, source, flat);
+            return self.flat_loop_header_while(code, source, flat, counted);
         }
         let header_line = flat.header_line();
         let do_indent = flat.do_indent;
@@ -1688,7 +1698,7 @@ impl Interp {
         let blame = flat.header_clause;
         let site = &flat.iterate_site;
         let state = &mut flat.state;
-        let header = self.in_clause(code, header_line, |it| {
+        let header = self.in_counted_clause(code, header_line, counted, |it| {
             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
                 Ok(advanced) => advanced,
                 Err(failure) => {
@@ -1711,6 +1721,7 @@ impl Interp {
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         flat: &mut FlatLoop,
+        counted: Option<DeadlineCounted>,
     ) -> Result<Option<Flow>, Failure> {
         let Some(cond) = loop_conditional_of(code, flat.do_index) else {
             return Err(Loud::instruction(&code.body.instructions[flat.do_index].kind).into());
@@ -1723,7 +1734,7 @@ impl Interp {
         let blame = flat.header_clause;
         let site = &flat.iterate_site;
         let state = &mut flat.state;
-        let header = self.in_clause(code, header_line, |it| {
+        let header = self.in_counted_clause(code, header_line, counted, |it| {
             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
                 Ok(advanced) => advanced,
                 Err(failure) => {

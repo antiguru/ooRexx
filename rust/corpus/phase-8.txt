@@ -420,3 +420,8 @@ lang/started_primitive_error_condition.rex
 lang/message_send_reentered.rex
 lang/message_primitive_send_fails_main.rex
 lang/message_send_fails_main_frames.rex
+# Phase 6 S2 Task 4: Message~halt, raised at the halted activity's next clause
+# boundary.
+lang/message_halt_wait.rex
+lang/message_halt_self.rex
+lang/message_halt_untrapped.rex

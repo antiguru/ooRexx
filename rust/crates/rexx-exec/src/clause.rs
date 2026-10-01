@@ -220,7 +220,23 @@ impl Interp {
         line: usize,
         body: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
-        let counted = self.count_clause_against_deadline()?;
+        self.in_counted_clause(code, line, None, body)
+    }
+
+    /// [`Interp::in_clause`] for a clause already `counted`, or counted here
+    /// where `None`.
+    #[inline(always)]
+    pub(crate) fn in_counted_clause<T: ClauseValue>(
+        &mut self,
+        code: &Code<'_>,
+        line: usize,
+        counted: Option<DeadlineCounted>,
+        body: impl FnOnce(&mut Self) -> Result<T, Failure>,
+    ) -> Result<ClauseOutcome<T>, Failure> {
+        let counted = match counted {
+            Some(counted) => counted,
+            None => self.count_clause_against_deadline(false)?,
+        };
         let entry = self.enter_clause(line, counted);
         let ran = body(self);
         self.leave_clause(entry, code, ran)
@@ -263,25 +279,28 @@ impl Interp {
     }
 
     /// Counts one clause against this run's deadline, and answers the proof
-    /// [`Interp::enter_clause`] needs.
+    /// [`Interp::enter_clause`] needs. Only a clause a root driver can leave
+    /// `yields` its activity's slice.
     #[inline(always)]
-    pub(crate) fn count_clause_against_deadline(&mut self) -> Result<DeadlineCounted, Failure> {
+    pub(crate) fn count_clause_against_deadline(
+        &mut self,
+        yields: bool,
+    ) -> Result<DeadlineCounted, Failure> {
         self.clause_countdown -= 1;
         if self.clause_countdown == 0 {
-            self.countdown_reached()?;
+            self.countdown_reached(yields)?;
         }
         Ok(DeadlineCounted(()))
     }
 
-    /// Reads the clock and either reloads the countdown or ends the run.
+    /// Reads the clock and either ends the run or reloads the countdown and
+    /// serves the requests pending.
     #[cold]
     #[inline(never)]
-    fn countdown_reached(&mut self) -> Result<(), Failure> {
-        let Some(deadline) = &mut self.deadline else {
-            self.clause_countdown = Deadline::CLAUSES_PER_CHECK;
-            return Ok(());
-        };
-        if deadline.expired || Instant::now() >= deadline.at {
+    fn countdown_reached(&mut self, yields: bool) -> Result<(), Failure> {
+        if let Some(deadline) = &mut self.deadline
+            && (deadline.expired || Instant::now() >= deadline.at)
+        {
             // Reloaded to 1, so the very next clause lands here again and
             // fails too. A run that has outlived its bound does not get to
             // resume because a caller swallowed one failure.
@@ -290,7 +309,7 @@ impl Interp {
             return Err(Failure::Deadline);
         }
         self.clause_countdown = Deadline::CLAUSES_PER_CHECK;
-        Ok(())
+        self.serve_requests(yields)
     }
 
     /// Whether this run was cut short by its deadline.

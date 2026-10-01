@@ -83,6 +83,17 @@ pub struct Invocation {
     words: Vec<Vec<u8>>,
     /// The register frame arena's block size.
     frame_block: FrameBlock,
+    switch_mode: Option<SwitchMode>,
+}
+
+/// Where a test sets `SLICE` itself in place of the timer (spec 2026-09-29
+/// section 4, the deterministic switch mode).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SwitchMode {
+    /// At the program's `k`-th clause, counting from 1.
+    AtClause(u64),
+    /// At every clause boundary.
+    EveryOpportunity,
 }
 
 /// What an embedding that owns real descriptors hands the interpreter so that
@@ -133,6 +144,7 @@ impl Invocation {
             sinks: None,
             words: Vec::new(),
             frame_block: FrameBlock::DEFAULT,
+            switch_mode: None,
         }
     }
 
@@ -204,6 +216,15 @@ impl Invocation {
         }
     }
 
+    /// The same invocation, switching activities as `switch_mode` says rather
+    /// than when the timer says.
+    pub fn with_switch_mode(self, switch_mode: SwitchMode) -> Invocation {
+        Invocation {
+            switch_mode: Some(switch_mode),
+            ..self
+        }
+    }
+
     /// The argument string, if there is one, where `.input` reads from, how
     /// long the run may take, and the directory and environment it runs
     /// against -- each `None` when the process's own is to be taken.
@@ -218,6 +239,7 @@ impl Invocation {
             sinks: self.sinks,
             words: self.words,
             frame_block: self.frame_block,
+            switch_mode: self.switch_mode,
         }
     }
 }
@@ -234,6 +256,7 @@ pub(crate) struct InvocationParts {
     pub(crate) sinks: Option<Sinks>,
     pub(crate) words: Vec<Vec<u8>>,
     pub(crate) frame_block: FrameBlock,
+    pub(crate) switch_mode: Option<SwitchMode>,
 }
 
 /// The one argument string a list of command-line words becomes, or `None`

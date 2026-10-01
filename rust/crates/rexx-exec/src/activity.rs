@@ -21,6 +21,12 @@ use crate::error::{Failure, FailureSite};
 use crate::plan::Package;
 use crate::{ActiveCondition, CallContext, FragmentLevel, NativeFrame, PendingTrap};
 
+/// `Message~halt`'s request (`RexxActivation::halt`,
+/// `execution/RexxActivation.cpp:4151`).
+pub(crate) struct HaltRequest {
+    pub(crate) description: Option<Vec<u8>>,
+}
+
 /// What each execution of the interpreter needs its own copy of.
 pub(crate) struct Activity {
     /// A buffer lent out for a builtin call's evaluated argument values.
@@ -279,6 +285,11 @@ pub(crate) struct Activity {
     /// The floor of the driver a parked activity left, `None` where it parked
     /// outside one.
     pub(crate) drive_floor: Option<usize>,
+    /// The floor of the driver a slice left, and the op of the clause it
+    /// resumes at.
+    pub(crate) sliced: Option<(usize, u32)>,
+    /// A `HALT` asked of this activity, raised at its next clause boundary.
+    pub(crate) halt: Option<HaltRequest>,
     /// What `.context~thread` answers, assigned on first use
     /// ([`crate::Interp::activity_number`]).
     pub(crate) number: Option<u32>,
@@ -354,6 +365,8 @@ impl Activity {
             first_send: None,
             root_then: None,
             drive_floor: None,
+            sliced: None,
+            halt: None,
             number: None,
             failed_sends: Vec::new(),
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
@@ -449,6 +462,8 @@ impl Activity {
             first_send,
             root_then,
             drive_floor: _,
+            sliced: _,
+            halt: _,
             number: _,
             failed_sends,
             #[cfg(feature = "pinning")]

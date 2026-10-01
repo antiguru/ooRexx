@@ -46,6 +46,18 @@ fn gate_mode() -> bool {
     }
 }
 
+/// Env var that runs the crate's side under `SwitchMode::EveryOpportunity`
+/// when set to `every`.
+const SWITCH_ENV: &str = "REXX_CORPUS_SWITCH";
+
+fn switch_mode() -> Option<rexx_exec::SwitchMode> {
+    match env::var(SWITCH_ENV).as_deref() {
+        Ok("every") => Some(rexx_exec::SwitchMode::EveryOpportunity),
+        Ok(other) => panic!("{SWITCH_ENV} is `every` or unset, not `{other}`"),
+        Err(_) => None,
+    }
+}
+
 /// The union of every non-comment, non-blank line across `list_paths`, in
 /// first-seen order, each entry appearing once even if two files name the
 /// same corpus program. Neither the list nor its count is assumed anywhere
@@ -95,11 +107,12 @@ fn run_rust(
     // chooses it rather than this function taking the program's own: the
     // process's directory is shared between the interpreters this harness runs
     // on threads, and a program naming a relative path must see one state.
-    watchdog::run_bounded(
-        path_str,
-        text,
-        sidecar::invocation(directory, overrides, stdin),
-    )
+    let invocation = sidecar::invocation(directory, overrides, stdin);
+    let invocation = match switch_mode() {
+        Some(mode) => invocation.with_switch_mode(mode),
+        None => invocation,
+    };
+    watchdog::run_bounded(path_str, text, invocation)
 }
 
 /// One corpus program that disagreed with the oracle, or one where either

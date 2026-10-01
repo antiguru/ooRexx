@@ -529,7 +529,7 @@ mod measured {
     use std::path::{Path, PathBuf};
 
     use rayon::prelude::*;
-    use rexx_exec::{Invocation, Outcome, ParkKind, PinKind, PinReport, run_program};
+    use rexx_exec::{Invocation, Outcome, ParkKind, PinKind, PinReport, SwitchMode, run_program};
 
     use super::derive;
     use super::group_runner::{fresh_copy, worktree};
@@ -559,6 +559,34 @@ mod measured {
             .filter(|(kind, _)| *kind == park)
             .map(|(_, frames)| frames.clone())
             .collect()
+    }
+
+    /// A slice that ends inside a sort comparator is deferred, and counted
+    /// once with the comparator's frame, however many pinned clauses follow
+    /// before the sort returns.
+    #[test]
+    fn a_slice_deferred_inside_a_sort_comparator_is_counted_once() {
+        let source = "b = .t~new~start('other')\narr = .array~of(3, 1, 2)\n\
+                      arr~sortWith(.cmp~new)\nsay 'sorted'\n\
+                      ::class t\n::method other\n  say 'other ran'\n\
+                      ::class cmp\n::method compare\n  use arg l, r\n  return l - r\n";
+        let outcome = run_program(
+            "probe.rex",
+            source.as_bytes().to_vec(),
+            Invocation::none().with_switch_mode(SwitchMode::AtClause(4)),
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stdout),
+            "other ran\nsorted\n"
+        );
+        let deferred = &outcome.pinning.deferred_slices;
+        assert_eq!(deferred.values().sum::<u64>(), 1, "{deferred:?}");
+        assert!(
+            deferred
+                .keys()
+                .all(|frames| frames.contains(&PinKind::SortComparator)),
+            "{deferred:?}"
+        );
     }
 
     #[test]
@@ -1073,12 +1101,18 @@ mod group_runs {
     /// Where the Object table is written when set.
     const OBJECT_TABLE_ENV: &str = "REXX_OBJECT_TABLE";
 
+    /// Where the Message start tests' table under `EveryOpportunity` is
+    /// written when set.
+    const SWITCHED_TABLE_ENV: &str = "REXX_SWITCHED_TABLE";
+
     /// The Message start tests that do not pass, each with the method its
     /// refusal names.
-    const MESSAGE_START_REFUSED: &[(&str, &str)] = &[
-        ("TEST_HALT_START", "HALT"),
-        ("TEST_STARTWITH_NOT_ARRAY", "MAKEARRAY"),
-    ];
+    const MESSAGE_START_REFUSED: &[(&str, &str)] = &[("TEST_STARTWITH_NOT_ARRAY", "MAKEARRAY")];
+
+    /// The Message start tests whose outcome differs from the oracle's:
+    /// `SysSleep` blocks the thread, so the halt finds the started activity
+    /// before its first clause and is dropped.
+    const MESSAGE_START_DIFFERING: &[&str] = &["TEST_HALT_START"];
 
     fn scratch(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -1157,6 +1191,7 @@ mod group_runs {
         dir: &str,
         group: &str,
         table_env: &str,
+        mode: SwitchMode,
         chosen: impl Fn(&str) -> bool,
     ) -> Vec<TestResult> {
         // One group at a time: two at once outgrow the gate's memory cap.
@@ -1170,7 +1205,7 @@ mod group_runs {
             .into_iter()
             .filter(|test| chosen(test))
             .collect();
-        let results = run_tests(&oracle, &run, dir, group, &tests, SwitchMode::None, None);
+        let results = run_tests(&oracle, &run, dir, group, &tests, mode, None);
         let mut table = String::new();
         for row in &results {
             let detail = match &row.outcome {
@@ -1198,8 +1233,12 @@ mod group_runs {
     }
 
     /// The start tests of `results` that neither pass nor are refused as
-    /// `refused` says.
-    fn not_passing(results: &[TestResult], refused: &[(&str, &str)]) -> Vec<String> {
+    /// `refused` says nor differ where `differing` names them.
+    fn not_passing(
+        results: &[TestResult],
+        refused: &[(&str, &str)],
+        differing: &[&str],
+    ) -> Vec<String> {
         results
             .iter()
             .filter(|row| row.test.to_ascii_uppercase().contains("START"))
@@ -1209,6 +1248,9 @@ mod group_runs {
                     row.test.eq_ignore_ascii_case(test)
                         && message.contains(&format!("method \"{method}\""))
                 }),
+                Outcome::Differ { .. } => !differing
+                    .iter()
+                    .any(|test| row.test.eq_ignore_ascii_case(test)),
                 _ => true,
             })
             .map(|row| format!("{} {}", row.test, row.outcome.label()))
@@ -1221,10 +1263,15 @@ mod group_runs {
             eprintln!("group_runs: skipped without {GATE_ENV}");
             return;
         }
-        let results = outcome_table("message-table", "base/class", "Message", TABLE_ENV, |_| {
-            true
-        });
-        let failing = not_passing(&results, MESSAGE_START_REFUSED);
+        let results = outcome_table(
+            "message-table",
+            "base/class",
+            "Message",
+            TABLE_ENV,
+            SwitchMode::None,
+            |_| true,
+        );
+        let failing = not_passing(&results, MESSAGE_START_REFUSED, MESSAGE_START_DIFFERING);
         assert!(failing.is_empty(), "not passing: {failing:?}");
         for test in ["TEST_SEND", "TEST_START"] {
             let row = results
@@ -1253,9 +1300,30 @@ mod group_runs {
             "base/class",
             "Object",
             OBJECT_TABLE_ENV,
+            SwitchMode::None,
             |test| test.to_ascii_uppercase().contains("START"),
         );
-        let failing = not_passing(&results, &[]);
+        let failing = not_passing(&results, &[], &[]);
+        assert!(failing.is_empty(), "not passing: {failing:?}");
+    }
+
+    /// The Message start tests again with a switch at every clause boundary
+    /// the started activities reach.
+    #[test]
+    fn the_message_start_tests_under_every_opportunity() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        let results = outcome_table(
+            "message-table-switched",
+            "base/class",
+            "Message",
+            SWITCHED_TABLE_ENV,
+            SwitchMode::EveryOpportunity,
+            |test| test.to_ascii_uppercase().contains("START"),
+        );
+        let failing = not_passing(&results, MESSAGE_START_REFUSED, MESSAGE_START_DIFFERING);
         assert!(failing.is_empty(), "not passing: {failing:?}");
     }
 }

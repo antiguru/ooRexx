@@ -9,7 +9,7 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-use crate::{Interp, Invocation, Outcome, parse_program, run_program};
+use crate::{Interp, Invocation, Outcome, SwitchMode, parse_program, run_program};
 
 fn run(source: &str) -> Outcome {
     run_program(
@@ -279,4 +279,141 @@ fn an_ended_activitys_thread_context_is_kept() {
         .join()
         .expect("the run did not panic");
     assert_eq!(kept, 1, "the started activity's context was not kept");
+}
+
+fn run_with(source: &str, invocation: Invocation) -> Outcome {
+    run_program("/tmp/scheduler.rex", source.as_bytes().to_vec(), invocation)
+}
+
+const INTERLEAVED: &str = "a = .t~new~start('run', 'a')\nb = .t~new~start('run', 'b')\n\
+                           a~wait\nb~wait\nsay 'done'\n\
+                           ::class t\n::method run\n  use arg tag\n  do i = 1 to 3\n    \
+                           say tag i\n  end\n";
+
+/// Under `EveryOpportunity` every clause boundary ends the slice, so two
+/// started activities' lines alternate, the same on every run.
+#[test]
+fn started_activities_interleave_under_every_opportunity() {
+    for _ in 0..3 {
+        let outcome = run_with(
+            INTERLEAVED,
+            Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+        );
+        assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+        assert_eq!(stdout(&outcome), "a 1\nb 1\na 2\nb 2\na 3\nb 3\ndone\n");
+    }
+    let outcome = run(INTERLEAVED);
+    assert_eq!(stdout(&outcome), "a 1\na 2\na 3\nb 1\nb 2\nb 3\ndone\n");
+}
+
+/// A busy loop with no park point in it ends only because the timer ends its
+/// slice and the activity that sets the flag runs; the loop's body is empty,
+/// so the slice ends at the loop's own step.
+#[test]
+fn a_busy_loop_yields_to_the_activity_that_ends_it() {
+    let outcome = run_with(
+        "f = .flag~new\na = f~start('waitForFlag')\nf~start('setFlag')\nsay a~result\n\
+         ::class flag\n::attribute done unguarded\n::method init\n  expose done\n  done = 0\n\
+         ::method waitForFlag unguarded\n  do while \\self~done\n  end\n  return 'A ended'\n\
+         ::method setFlag unguarded\n  self~done = 1\n",
+        Invocation::none().with_deadline(std::time::Duration::from_secs(60)),
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "A ended\n");
+}
+
+const SORTED: &str = "b = .t~new~start('other')\narr = .array~of(3, 1, 2)\n\
+                      arr~sortWith(.cmp~new)\nsay 'sorted' arr~makeString('L', ' ')\n\
+                      ::class t\n::method other\n  say 'other ran'\n\
+                      ::class cmp\n::method compare\n  use arg l, r\n  say 'cmp' l r\n  \
+                      return l - r\n";
+
+/// A slice that ends inside the comparator, where the sort pins the
+/// activity, is deferred to the first clause after the sort: the other
+/// activity's line follows the sort's, whichever comparator clause it fell
+/// on. Clauses 4 to 12 are the comparator's.
+#[test]
+fn a_slice_inside_a_sort_comparator_waits_for_the_sort() {
+    for clause in 4..=12 {
+        let outcome = run_with(
+            SORTED,
+            Invocation::none().with_switch_mode(SwitchMode::AtClause(clause)),
+        );
+        assert_eq!(
+            stdout(&outcome),
+            "cmp 1 3\ncmp 2 3\ncmp 2 1\nother ran\nsorted 1 2 3\n",
+            "a slice at clause {clause}"
+        );
+    }
+    let outcome = run_with(
+        SORTED,
+        Invocation::none().with_switch_mode(SwitchMode::AtClause(3)),
+    );
+    assert_eq!(
+        stdout(&outcome),
+        "other ran\ncmp 1 3\ncmp 2 3\ncmp 2 1\nsorted 1 2 3\n"
+    );
+}
+
+/// Message.testGroup's `test_halt_start` (`:643`), its sleeps replaced by
+/// loops so that the switch mode, not time, decides that the started
+/// activity is running when the halt is asked.
+#[test]
+fn message_halt_in_the_shape_of_test_halt_start() {
+    let outcome = run_with(
+        "m = .message~new(.t~new, 'delayValueReturn')\nsay m~halt\nm~start\nsay m~halt\n\
+         m~wait\nsay m~hasResult m~hasError m~completed\nc = m~errorCondition\n\
+         say c~code '['c~description']'\n\
+         m = .message~new(.t~new, 'delayValueReturn')\nm~start\nsay m~halt('HALT Test')\n\
+         m~wait\nsay m~hasResult m~hasError m~completed\nc = m~errorCondition\n\
+         say c~code '['c~description']'\n\
+         m = .message~new(.t~new, 'delayHaltReturn')\nm~start\nsay m~halt('HALT Test')\n\
+         m~wait\nsay m~hasResult m~hasError m~completed\nc = m~result\n\
+         say c~condition '['c~description']'\n\
+         ::class t\n::method delayValueReturn\n  do i = 1 to 50\n  end\n  return arg(1)\n\
+         ::method delayHaltReturn\n  signal on halt\n  do i = 1 to 50\n  end\n  x = 123\n\
+         \x20 return .nil\n  halt:\n  return condition('o')\n",
+        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(
+        stdout(&outcome),
+        "0\n1\n0 1 1\n4.1 []\n1\n0 1 1\n4.1 []\n1\n1 0 1\nHALT [HALT Test]\n"
+    );
+    assert_eq!(
+        stderr(&outcome)
+            .matches("Error 4.1:  Program interrupted with HALT condition.")
+            .count(),
+        2,
+        "{}",
+        stderr(&outcome)
+    );
+}
+
+/// The stress mode collects at every countdown visit and every switch as
+/// well as at every allocation; under `EveryOpportunity` that is every
+/// clause.
+#[test]
+fn the_stress_mode_collects_at_every_visit_and_switch() {
+    let outcome = crate::run_program_collect_every_alloc(
+        "/tmp/scheduler.rex",
+        INTERLEAVED.as_bytes().to_vec(),
+        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "a 1\nb 1\na 2\nb 2\na 3\nb 3\ndone\n");
+    let unswitched = crate::run_program_collect_every_alloc(
+        "/tmp/scheduler.rex",
+        INTERLEAVED.as_bytes().to_vec(),
+        Invocation::none(),
+    );
+    // The unswitched run visits the countdown only every
+    // `CLAUSES_PER_CHECK` clauses and never switches; measured, the switched
+    // one collects 42 times more, its clause boundaries and its switches.
+    assert!(
+        outcome.collections >= unswitched.collections + 40,
+        "{} collections switched, {} unswitched",
+        outcome.collections,
+        unswitched.collections
+    );
 }

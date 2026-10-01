@@ -56,6 +56,22 @@ fn main() -> ExitCode {
             }),
         });
 
+    // `REXX_SWITCH_MODE` is the deterministic switch mode, for tests:
+    // `every`, or `at:K` for the program's K-th clause.
+    let invocation = match std::env::var("REXX_SWITCH_MODE").as_deref() {
+        Ok("every") => invocation.with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity),
+        Ok(mode) => match mode.strip_prefix("at:").map(str::parse) {
+            Some(Ok(clause)) => {
+                invocation.with_switch_mode(rexx_exec::SwitchMode::AtClause(clause))
+            }
+            _ => {
+                eprintln!("rexx-run: REXX_SWITCH_MODE is `every` or `at:K`, not `{mode}`");
+                return ExitCode::from(2);
+            }
+        },
+        Err(_) => invocation,
+    };
+
     let text = match std::fs::read(&path) {
         Ok(text) => text,
         Err(error) => {

@@ -45,7 +45,7 @@ use queue::Queue;
 // it can carry, how a list of words becomes that string, and where `.input`
 // reads from.
 mod invocation;
-pub use invocation::{Invocation, ProgramInput, Sinks, join_command_line};
+pub use invocation::{Invocation, ProgramInput, Sinks, SwitchMode, join_command_line};
 pub use rexx_core::FrameBlock;
 
 // `.input`: one line position, shared by every construct that reads a line,
@@ -91,6 +91,9 @@ use run::Ended;
 
 // The scheduler seam and the activity table.
 mod scheduler;
+
+// The live-interpreter registry and the timer thread.
+mod timer;
 
 // The `PARSE` template engine: the movement cursor (source-independent, one
 // struct, unit-tested against measured oracle bytes) and the driver that
@@ -1035,8 +1038,9 @@ struct PendingTrap {
     /// The activation this may be delivered to: the raising activation's
     /// **caller**, which is the one whose trap table matched.
     activation: ActivationId,
-    /// Whether this was queued by a **handler** running at a clause boundary
-    /// rather than by that clause's own work.
+    /// Whether this was queued by a **handler** running at a clause boundary,
+    /// or by a `HALT` request served there, rather than by that clause's own
+    /// work.
     queued_during_delivery: bool,
     /// [`Activity::fragment_depth`] as it stood when this was queued: which
     /// `INTERPRET` fragment, if any, was running.
@@ -1114,6 +1118,13 @@ struct Interp {
     deadline: Option<crate::clause::Deadline>,
     /// Clauses left before `Interp::countdown_reached` runs.
     clause_countdown: u32,
+    /// This interpreter's entry in the live-interpreter registry, with the
+    /// request word the timer sets.
+    timer: crate::timer::Registration,
+    /// The deterministic switch mode, where a test set one.
+    switch: Option<crate::scheduler::Switch>,
+    /// Whether the pending `SLICE` has been counted as deferred.
+    slice_deferred: bool,
     /// The chunk cache (Phase 4e): D16's discipline applied to a second cache
     /// rather than invented afresh for it, under `plans`' own `BodyKey`
     /// **paired with the trace setting the chunk was compiled under**.
@@ -1820,6 +1831,9 @@ impl Interp {
             last_plan: None,
             deadline: None,
             clause_countdown: crate::clause::Deadline::CLAUSES_PER_CHECK,
+            timer: crate::timer::Registration::new(),
+            switch: None,
+            slice_deferred: false,
             chunks: NameMap::default(),
             chunks_refused: 0,
             deferred: std::collections::VecDeque::new(),
@@ -2466,6 +2480,9 @@ impl Interp {
             last_plan: _,
             deadline: _,
             clause_countdown: _,
+            timer: _,
+            switch: _,
+            slice_deferred: _,
             // A chunk's interned literals are allocated immortal.
             chunks: _,
             chunks_refused: _,
@@ -2858,6 +2875,13 @@ fn report_late_failures(
                     .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
                 *exit_code = NOT_IMPLEMENTED_EXIT;
             }
+            Failure::Slice => {
+                let loud = Loud::scheduler_inconsistency("a slice outside a root driver");
+                interp
+                    .trace
+                    .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+                *exit_code = NOT_IMPLEMENTED_EXIT;
+            }
             Failure::Raised(raised) => {
                 if sites.is_empty() {
                     sites.push(FailureSite::Clause {
@@ -2950,7 +2974,7 @@ fn execute(
         .roots
         .activity_mut()
         .set_frame_block(parts.frame_block);
-    let (argument, deadline) = (parts.argument, parts.deadline);
+    let (argument, deadline, switch_mode) = (parts.argument, parts.deadline, parts.switch_mode);
     interp.input = Input::new(parts.input);
     interp.standard_transient = parts.standard_transient;
     interp.sinks = parts.sinks;
@@ -2991,6 +3015,11 @@ fn execute(
             interp.roots.activity_mut().push_temp(value);
             interp.activity.call_context.arguments = Rc::from(&[Some(value)][..]);
         }
+        // After the bootstrap, so `SwitchMode::AtClause` counts this program's
+        // clauses alone.
+        if let Some(mode) = switch_mode {
+            interp.set_switch_mode(mode);
+        }
         interp.run(program)
     });
     // The whole echo stack, innermost first: the levels `seal_site_level`
@@ -3014,6 +3043,13 @@ fn execute(
         // no stderr report, because it is not one.
         Ok(value) | Err(Failure::Exited(value)) => interp.exit_code_for(value),
         Err(Failure::Loud(loud)) => {
+            interp
+                .trace
+                .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+            NOT_IMPLEMENTED_EXIT
+        }
+        Err(Failure::Slice) => {
+            let loud = Loud::scheduler_inconsistency("a slice outside a root driver");
             interp
                 .trace
                 .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());

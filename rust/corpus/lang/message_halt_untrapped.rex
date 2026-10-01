@@ -1,0 +1,27 @@
+-- Message~halt reaching a started activity parked in a wait, with no trap:
+-- 4.1 once the wait ends, reported at the waiting clause.
+g = .gate~new
+m = .message~new(.t~new, 'plain', 'I', g)
+m~start
+do until g~parked == 1
+end
+call syssleep 0.2
+say m~halt
+g~q~send
+m~wait
+say m~hasError
+::class gate
+::attribute parked unguarded
+::attribute q unguarded
+::method init
+  expose parked
+  parked = 0
+::method release unguarded
+  return 'released'
+::class t
+::method plain
+  use arg g
+  g~q = .message~new(g, 'release')
+  g~parked = 1
+  g~q~wait
+  return 'plain'
