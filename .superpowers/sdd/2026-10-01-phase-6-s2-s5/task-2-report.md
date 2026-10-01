@@ -364,3 +364,7 @@ in stderr; script `t2/stab.sh`): every corpus program this task added gave one s
 runs: `started_waits_for_a_later_send`, `started_waits_inside_a_call`, `started_unwaited_says`,
 `started_result_message`, `started_raises`, `message_wait_then_completed`, `message_two_waiters`, `message_start`,
 `started_waited_in_a_replied_body` (rewritten), `started_waited_in_uninit`. None needed another change.
+
+### Gates this round
+
+At 84f076d8e: G1-G8 all exit 0, finished 2026-10-01T18:48:33+02:00, tree clean.
