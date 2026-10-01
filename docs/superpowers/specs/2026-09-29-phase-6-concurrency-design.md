@@ -355,7 +355,8 @@ in the first task that needs it, with the command recorded.
   A contended reserve parks. **Deadlock detection:** a contested reserve, and `Message~wait`/`~result`,
   follow the chain of what each waiting activity waits on and raise 98.905 on a cycle
   (`Activity::checkDeadLock`, `concurrency/Activity.cpp:2000-2027`); GUARD WHEN waits and waits on an
-  unsent message block forever (`rust/corpus/oracle-crashes.txt` entry 7).
+  unsent message block forever (`rust/corpus/oracle-crashes.txt` entry 7, and its
+  `Message~result` entry after entry 8).
 * **GUARD ON/OFF and WHEN.** ON reserves, OFF releases **one** nesting level. WHEN registers the
   activity as a watcher of each **variable named in its expression**
   (`instructions/GuardInstruction.cpp:141-144`), releases one level, and parks; 99.913 for a WHEN
