@@ -351,3 +351,6 @@ that depends on the slice. (A single-clause `do forever` was tried first: the or
 `END`, so it was not used.) Identical to the oracle 30 runs of 30, and on this side unswitched and
 under `EveryOpportunity`. SOURCELINE file regenerated. `collect_stress` (release, gated) now runs
 with the P28 checks: 34 passed, and the L0 stress test passed again on a second run.
+The oracle's own first traceback line for the old untrapped case (`git show 03914c920:...`) was
+`37 *-*   end` in 30 runs of 30: the instability was this crate's, where the halt lands depending on
+the slice.
