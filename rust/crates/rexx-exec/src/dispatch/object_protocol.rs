@@ -948,7 +948,9 @@ pub(super) fn record_held(
             if let Some(answer) = answer {
                 interp.set_native_entry(message, MESSAGE_RESULT, answer);
             }
-            interp.message_outcomes.insert(message, None);
+            // An error a send of the same message made during this one stays:
+            // `flagResultReturned` and `flagRaiseError` are separate flags.
+            interp.message_outcomes.entry(message).or_insert(None);
             interp.message_completed(message);
             Ok(answer)
         }

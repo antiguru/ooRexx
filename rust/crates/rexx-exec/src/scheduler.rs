@@ -567,7 +567,15 @@ impl Interp {
             path: &path,
             sites: &sites,
         };
-        let report = raised.report(&site);
+        // With no level that has a line, the report names no program or line
+        // (`Activity::display` with no `POSITION`).
+        let report = if sites.iter().any(|site| site.line().is_some()) {
+            raised.report(&site)
+        } else {
+            let mut positionless = raised.clone();
+            positionless.delivery.positionless = true;
+            positionless.report(&site)
+        };
         self.write_trace_report(&report);
     }
 

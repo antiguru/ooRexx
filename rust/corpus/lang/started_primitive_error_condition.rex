@@ -1,0 +1,13 @@
+/* A started send to a primitive method fails with no Rexx level: its
+   condition object has no POSITION or PACKAGE and an empty PROGRAM. */
+m = 'abc'~start('left', -1)
+m~wait
+call SysSleep 0.3
+c = m~errorCondition
+do k over .array~of('CONDITION','DESCRIPTION','CODE','ERRORTEXT','MESSAGE','POSITION','PROGRAM','PACKAGE','PROPAGATED','RC','INSTRUCTION')
+  v = c[k]
+  if v == .nil then say k '.nil'; else say k '['v']'
+end
+say 'ADDITIONAL' c~additional~items 'TB' c~traceback~items 'SF' c~stackframes~items
+say c~traceback[1]
+r = m~result

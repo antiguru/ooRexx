@@ -1,5 +1,5 @@
-/* Eight nested starts end innermost first; the pool keeps six numbers, so
-   the second chain reuses those six, oldest first, then takes new ones. */
+/* Eight nested starts end innermost first; the second chain reuses the
+   pooled numbers, oldest first, then takes new ones. */
 o = .t~new
 say 'first ' o~start('chain', 8)~result
 say 'second' o~start('chain', 8)~result

@@ -272,9 +272,16 @@ impl Interp {
             .map(|(package, _)| package)
             .or_else(|| self.running_program().map(Package::Program))
             .unwrap_or(Package::Rexx);
-        let package = self.package_object(origin);
-        self.roots.activity_mut().push_temp(package);
-        entries.push((key::PACKAGE, package));
+        // A started activity whose send failed with no Rexx level at all:
+        // `generateProgramInformation` finds no Rexx frame, so the object has
+        // no `PACKAGE` or `POSITION` and an empty `PROGRAM`.
+        let frameless = unwound.is_some_and(|unwound| unwound.origin.is_none())
+            && self.running_program().is_none();
+        if !frameless {
+            let package = self.package_object(origin);
+            self.roots.activity_mut().push_temp(package);
+            entries.push((key::PACKAGE, package));
+        }
         // `generateProgramInformation` puts no `POSITION` where the frame it
         // takes the package from is native, which has no line.
         let reraised = unwound.is_some_and(|unwound| unwound.reraised);
@@ -284,7 +291,7 @@ impl Interp {
                 .native_handles
                 .last()
                 .is_some_and(|frame| frame.packaged);
-        let position = if packaged_native {
+        let position = if packaged_native || frameless {
             None
         } else if raised.position != 0 && !reraised {
             // Captured at the raise, which is the only correct source when
@@ -304,6 +311,7 @@ impl Interp {
             entries.push((key::POSITION, position));
         }
         let program = match origin {
+            _ if frameless => Vec::new(),
             Package::Program(id) if !self.library_programs.contains(&id) => {
                 self.program_display_name(id).to_vec()
             }

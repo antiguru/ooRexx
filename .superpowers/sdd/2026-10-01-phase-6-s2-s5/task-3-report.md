@@ -174,3 +174,34 @@ self-tests: all exit 0, finished 2026-10-01T20:05:12+02:00, tree clean at the en
 4. The first commit message states a count of witnesses ("Twelve"), against the prose rule; it is
    true for that commit (a thirteenth came in the second).
 5. Task 9: TraceObject THREAD must use `activity_number()` so it numbers lazily as R-T3-1 records.
+
+## Fix round 1 (review task-3-review.md)
+
+* **I1** (`condition.rs` `build_condition_object_from`): a condition object built from unwound levels
+  none of which has a package, with no running program (a started send to a primitive method failing
+  at its activity's root) has no PACKAGE or POSITION and an empty PROGRAM, as
+  `generateProgramInformation` with no Rexx frame. The started report for such a failure is now
+  positionless (`scheduler.rs` `report_started_failure`: `Error 93:  ...` where it printed
+  `running FILE line 0`, a pre-existing difference the witness needed fixed). Witness
+  `started_primitive_error_condition.rex` (the reviewer's `sn1`).
+* **I2** (`dispatch/object_protocol.rs` `record_held`): an `Ok` completion no longer overwrites an
+  error a send of the same message recorded during it (`flagResultReturned` and `flagRaiseError` are
+  separate flags); `~hasError` is 1 and `~result` re-raises. Witness `message_send_reentered.rex`
+  (the reviewer's `re1`).
+* **M4**: the pool's size removed from `context_thread_pool_bound.rex`'s comment (SOURCELINE file
+  regenerated; still identical on the oracle, 30/30).
+* Oracle crash: entry 22 in `rust/corpus/oracle-crashes.txt` (the reviewer's `tb2`), SIGSEGV rc 139
+  3 runs of 3 under `memcap 1G timeout -s KILL 20`; cause read at `Activity.cpp:1428`.
+* M1 and M2 queued: `.superpowers/sdd/queued/2026-10-01-condition-object-directory-methods.md` and
+  `2026-10-01-message-notify-single-slot.md`, each with its probe and both sides' output measured at
+  this round's tree. M3 left to Task 6 as ruled.
+
+Witnesses, each compared on stdout, stderr and rc separately and run 30 times on the oracle:
+
+| program | oracle 30 runs | head | 9c9f6e510 (before this round) |
+|---|---|---|---|
+| started_primitive_error_condition | 30/30 one triple | same | stdout and stderr differ (POSITION 0, PROGRAM REXX, PACKAGE; `line 0`) |
+| message_send_reentered | 30/30 | same | stdout differs (`0 1 1 0`, `result ok`) |
+
+Checks before committing: fmt clean; `cargo test --release -p rexx-exec --lib` 880 passed;
+`refusal_sites` green with no row change; corpus 694 of 694 matching.

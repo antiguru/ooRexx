@@ -1,0 +1,21 @@
+count 20
+/* A send of the same message made inside its own send fails and is trapped;
+   the outer send answers, and the message has both a result and an error. */
+o = .t~new
+m = .message~new(o, 'twice')
+.local~m = m
+say 'outer answered' m~send
+say m~hasError m~completed m~hasResult (m~errorCondition == .nil)
+signal on syntax name s
+say 'result' m~result
+exit
+s: say 'result raised' condition('O')~code
+::class t
+::method twice unguarded
+  use arg flag
+  if flag == 'inner' then return 1/0
+  signal on syntax
+  .m~send(self, 'inner')
+  return 'no'
+syntax:
+  return 'ok'

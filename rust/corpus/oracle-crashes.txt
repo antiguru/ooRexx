@@ -967,3 +967,24 @@ in its place. `say self~items` in place of the store crashes the same way, 3 run
 Measured 2026-09-30 by Phase 6 Task 9 fix round 1 while writing
 `lang/new_init_subclasses.rex`. **Cause not established.** This crate prints `1`, rc 0. No upstream
 ticket.
+
+## 22. `~result` re-raising a started message's condition whose TRACEBACK holds a non-string
+
+    m = .t~new~start('boom')
+    m~wait
+    call SysSleep 0.3
+    e = m~errorCondition
+    e~traceback~insert('extra line')
+    e~traceback~insert(.array~of(1,2))
+    r = m~result
+    ::class t
+    ::method boom unguarded
+      return 1/0
+
+SIGSEGV, rc 139, 3 runs of 3, stdout empty; stderr has the started activity's report, then the
+re-raise report's first two traceback lines (`    10 *-* return 1/0`, `extra line`) before the
+crash. Found by the Phase 6 S2-S5 Task 3 review (probe `tb2.rex`), reproduced 2026-10-01 by its fix
+round 1. Cause read, not run under a debugger: `Activity::display`
+(`concurrency/Activity.cpp:1428`) casts each TRACEBACK item to `RexxString *` without a check, so
+the Array is written as a string. This crate prints `an Array` for that line and re-raises, rc 214.
+No upstream ticket.
