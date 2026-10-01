@@ -952,7 +952,10 @@ pub(super) fn record_held(
             interp.message_completed(message);
             Ok(answer)
         }
-        Err(Failure::Raised(raised)) => {
+        // Only a `SYNTAX` condition notifies the message
+        // (`execution/RexxActivation.cpp:2470`); any other leaves it
+        // uncompleted.
+        Err(Failure::Raised(raised)) if raised.condition == "SYNTAX" => {
             interp.activity.failed_sends.push(message);
             interp
                 .message_outcomes
@@ -1036,7 +1039,7 @@ fn start_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<Obj
         args,
         caller,
     };
-    interp.spawn(send, Then::Held(message));
+    interp.spawn(send, Then::Started(message));
     Ok(None)
 }
 

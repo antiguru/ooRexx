@@ -415,3 +415,4 @@ lang/message_reuse.rex
 lang/message_send_error_condition.rex
 lang/started_numeric_address.rex
 lang/message_error_condition_after_main.rex
+lang/message_send_user_condition.rex

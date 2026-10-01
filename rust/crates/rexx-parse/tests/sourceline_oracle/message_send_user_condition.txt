@@ -1,0 +1,15 @@
+count 14
+/* A send whose method raises a condition other than SYNTAX leaves its message
+   uncompleted; a started one ends completed without an error. */
+m = .message~new(.t~new, 'r')
+signal on user boom
+m~send
+boom:
+say 'trapped' condition('C')
+say m~hasError m~completed (m~errorCondition == .nil)
+m2 = .t~new~start('r')
+m2~wait
+say m2~hasError m2~completed (m2~errorCondition == .nil)
+::class t
+::method r unguarded
+  raise user boom
