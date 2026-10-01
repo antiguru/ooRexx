@@ -517,9 +517,9 @@ fn the_detector_tells_an_instruction_from_a_name_that_only_looks_like_one() {
     expect("TEST_CLASS", &["Alarm", "GUARD"]);
 }
 
-#[cfg(feature = "pinning")]
+#[path = "support/group_runner.rs"]
+mod group_runner;
 mod support;
-#[cfg(feature = "pinning")]
 mod watchdog;
 
 #[cfg(feature = "pinning")]
@@ -531,7 +531,8 @@ mod measured {
     use rayon::prelude::*;
     use rexx_exec::{Invocation, Outcome, ParkKind, PinKind, PinReport, run_program};
 
-    use super::{derive, worktree};
+    use super::derive;
+    use super::group_runner::{fresh_copy, worktree};
 
     /// Runs `source` in a directory holding the external routine `extf.rex`.
     fn report_of(source: &str) -> PinReport {
@@ -849,65 +850,9 @@ mod measured {
         );
     }
 
-    fn copy_tree(from: &Path, to: &Path) {
-        fs::create_dir_all(to).unwrap_or_else(|e| panic!("cannot create {}: {e}", to.display()));
-        for entry in
-            fs::read_dir(from).unwrap_or_else(|e| panic!("cannot read {}: {e}", from.display()))
-        {
-            let entry = entry.expect("a directory entry");
-            let target = to.join(entry.file_name());
-            if entry.path().is_dir() {
-                copy_tree(&entry.path(), &target);
-            } else {
-                fs::copy(entry.path(), &target)
-                    .unwrap_or_else(|e| panic!("cannot copy {}: {e}", entry.path().display()));
-            }
-        }
-    }
-
-    /// Lays the framework and the group's directory into `run`.
-    fn fresh_copy(run: &Path, group: &str) {
-        let ootest = worktree().join("ootest");
-        copy_tree(&ootest.join("framework"), &run.join("framework"));
-        let dir = Path::new(group).parent().expect("a group directory");
-        copy_tree(
-            &ootest.join("ooRexx").join(dir),
-            &run.join("ooRexx").join(dir),
-        );
-        for file in ["testOORexx.rex", "worker.rex", "ooTest.frm"] {
-            fs::copy(ootest.join(file), run.join(file))
-                .unwrap_or_else(|e| panic!("cannot copy {file}: {e}"));
-        }
-        without_rxfuncquery(&run.join("ooTest.frm"));
-        fs::copy(
-            worktree().join("extensions/rxregexp/rxregexp.cls"),
-            run.join("rxregexp.cls"),
-        )
-        .expect("cannot copy rxregexp.cls");
-    }
-
-    /// Removes each `rxfuncquery` probe from the copied `ooTest.frm`, with the
-    /// comment above it and the assignment it guards, as `api_group_tests.rs` does.
-    fn without_rxfuncquery(frm: &Path) {
-        let text = fs::read_to_string(frm).expect("the copied ooTest.frm");
-        let lines: Vec<&str> = text.split('\n').collect();
-        let hits: Vec<usize> = (0..lines.len())
-            .filter(|&at| lines[at].contains("rxfuncquery("))
-            .collect();
-        assert!(!hits.is_empty(), "ooTest.frm has no rxfuncquery to remove");
-        let mut dropped = std::collections::BTreeSet::new();
-        for at in hits {
-            dropped.extend([at - 1, at, at + 1]);
-        }
-        let kept: Vec<&str> = (0..lines.len())
-            .filter(|at| !dropped.contains(at))
-            .map(|at| lines[at])
-            .collect();
-        fs::write(frm, kept.join("\n")).expect("cannot rewrite the copied ooTest.frm");
-    }
-
     fn run_test(run: &Path, group: &str, test: &str) -> Outcome {
-        fresh_copy(run, group);
+        let dir = Path::new(group).parent().and_then(Path::to_str);
+        fresh_copy(run, dir.expect("a group directory"));
         let driver = run.join("testOORexx.rex");
         let text = fs::read(&driver).expect("the copied driver");
         let group_file = run.join("ooRexx").join(group);
@@ -1045,5 +990,128 @@ mod measured {
             unbalanced.is_empty(),
             "runs ending with a frame pushed: {unbalanced:?}"
         );
+    }
+}
+
+/// The both-sides group runner: its self-test, and the outcome table of
+/// `base/class/Message`'s tests. Gate-only.
+mod group_runs {
+    use std::collections::BTreeSet;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use super::group_runner::{
+        GATE_ENV, Outcome, SwitchMode, excerpt, first_difference, gate_mode, group_file, masked,
+        reaching_rxapi, run_tests, source_test_names, test_names,
+    };
+    use super::support::oracle;
+
+    /// Where the table is written when set, for the SDD record.
+    const TABLE_ENV: &str = "REXX_GROUP_TABLE";
+
+    fn scratch(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+            .join(format!("{name}-{}", std::process::id()))
+            .join("run")
+    }
+
+    fn listed(oracle: &oracle::Oracle, run: &Path, dir: &str, group: &str) -> Vec<String> {
+        let not_run: BTreeSet<String> = reaching_rxapi(dir, &[group]);
+        test_names(oracle, run, dir, group, &not_run)
+    }
+
+    #[test]
+    fn the_runner_passes_a_passing_group_and_reports_an_altered_test_as_differing() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        let oracle = oracle::locate();
+        let run = scratch("group-runner-self-test");
+        let (dir, group) = ("API/oo", "CONVERSION");
+        let tests = listed(&oracle, &run, dir, group);
+        assert_eq!(
+            source_test_names(dir, group),
+            tests,
+            "the source's test list against the oracle's listing"
+        );
+        let results = run_tests(&oracle, &run, dir, group, &tests, SwitchMode::None, None);
+        let not_passing: Vec<String> = results
+            .iter()
+            .filter(|row| !matches!(row.outcome, Outcome::Pass))
+            .map(|row| format!("{} {}", row.test, row.outcome.label()))
+            .collect();
+        assert!(not_passing.is_empty(), "not passing: {not_passing:?}");
+
+        let altered = |run: &Path| {
+            let file = group_file(run, dir, group);
+            let text = fs::read_to_string(&file).expect("the copied group file");
+            let from = "self~assertSame(1, .CONVERSIONTester~TestObjectToValue(1.0,";
+            assert!(text.contains(from), "the altered assertion is in the group");
+            fs::write(&file, text.replacen(from, &from.replace("(1,", "(2,"), 1))
+                .expect("cannot rewrite the copied group file");
+        };
+        let name = tests
+            .iter()
+            .find(|name| name.eq_ignore_ascii_case("testint01"))
+            .expect("testint01 is listed")
+            .clone();
+        let results = run_tests(
+            &oracle,
+            &run,
+            dir,
+            group,
+            std::slice::from_ref(&name),
+            SwitchMode::None,
+            Some(&altered),
+        );
+        let Outcome::Differ {
+            oracle: theirs,
+            ours,
+        } = &results[0].outcome
+        else {
+            panic!("the altered test is {}", results[0].outcome.label());
+        };
+        eprintln!(
+            "altered {name}: {}",
+            first_difference(&masked(&theirs.stdout), &masked(&ours.stdout))
+        );
+        fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
+    }
+
+    #[test]
+    fn the_outcome_table_of_the_message_group() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        let oracle = oracle::locate();
+        let run = scratch("message-table");
+        let (dir, group) = ("base/class", "Message");
+        let tests = source_test_names(dir, group);
+        let results = run_tests(&oracle, &run, dir, group, &tests, SwitchMode::None, None);
+        let mut table = String::new();
+        for row in &results {
+            let detail = match &row.outcome {
+                Outcome::Refused { message, .. } => message.clone(),
+                Outcome::Differ { oracle, ours } => format!(
+                    "{}; ours stderr {:?}",
+                    first_difference(&masked(&oracle.stdout), &masked(&ours.stdout)),
+                    excerpt(&ours.stderr)
+                ),
+                _ => String::new(),
+            };
+            table.push_str(&format!(
+                "{}\t{}\t{detail}\n",
+                row.test,
+                row.outcome.label()
+            ));
+        }
+        eprintln!("{table}");
+        if let Some(path) = std::env::var_os(TABLE_ENV) {
+            fs::write(path, &table).expect("cannot write the table");
+        }
+        assert_eq!(results.len(), tests.len());
+        fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
     }
 }
