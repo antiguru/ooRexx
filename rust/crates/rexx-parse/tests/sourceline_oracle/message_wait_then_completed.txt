@@ -1,0 +1,10 @@
+count 9
+/* ~wait returns once the send has completed, so ~completed and ~hasError
+   read after it are fixed. */
+m = .k~new~start('VALUE')
+m~wait
+say m~completed m~hasError
+say m~result
+::class k
+::method value
+  return 'xyz'

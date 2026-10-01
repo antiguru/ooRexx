@@ -1,0 +1,12 @@
+count 11
+/* Message~start and ~startWith make the held send on a new activity, with a
+   new receiver and arguments where given, and answer nothing. */
+m = .message~new('abc', 'length')
+m~start
+say m~result
+m = .message~new('abc', 'subchar', 'i', 3)
+m~startWith('ghi', .array~of(3))
+say m~result
+m = .message~new('abc', 'subchar', 'i', 3)
+m~start('def', 2)
+say m~result

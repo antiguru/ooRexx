@@ -114,4 +114,8 @@ stdout, stderr and exit status identical for every program; `heapshape` prints t
 
 ## Gates
 
-(filled below after the gate run)
+Round 1 at 1a7f030cb (`S=$W bash $W/p6-gates/gates.sh`): G1, G2, G3, G5, G7, G8 exit 0; G4 and G6 exit 101 with one
+failure each, `rexx-parse --test sourceline_oracle`: the new corpus programs had no `SOURCELINE` expectation files.
+Generated with the module comment's oracle script (scratchpad `t2/srcl/srclines.rex`; oracle counts equal each
+file's line count), committed in the fix commit. While G8 ran, those eight untracked files were written into the
+tree (rexx-parse test data, not read by G8); recorded here as a breach of the frozen-tree rule.

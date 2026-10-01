@@ -1,0 +1,8 @@
+count 7
+/* A started message whose send is another message's ~result parks before it
+   runs any Rexx, and records that result once the other send completes. */
+m = .message~new('abc', 'length')
+w = .message~new(m, 'RESULT')
+w~start
+m~send
+say w~result
