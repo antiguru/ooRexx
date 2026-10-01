@@ -1263,8 +1263,8 @@ Exit 0, median of 3 rounds, libc and ld-linux subtracted. Every spread is 0.0000
 | varlookup | 14878111725 | 14461721703 | -2.80 |
 | rexxcps | 17817350197 | 17663720784 | -0.86 |
 
-Over budget: `fibfunc` (+1.88%). Every other program is inside it. Under ruling P16 no perf round
-was run; the figure goes to Moritz.
+Over budget: `fibfunc` (+1.88%). Every other program is inside it. No perf round was run (P16);
+accepted by Moritz, 2026-10-01 (P22).
 
 ### Wall clock
 

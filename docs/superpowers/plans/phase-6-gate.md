@@ -10,7 +10,7 @@ Head `1f9be8ea5` before this record's commits. Base `1754a3b5a`. `S` is
 Tables, commands and binary hashes: `phase-6-perf.md` `## Task 11`.
 
 - Instructions, running total against base: `fibfunc` +1.88% is over the +0.3% budget; every other
-  program is inside it. The S1 gate is not met on `fibfunc`; Moritz rules (P16).
+  program is inside it. `fibfunc` over budget accepted by Moritz, 2026-10-01 (P22).
 - Wall clock, recorded without a control (P19): `decrender` +5.68%, `sendloop` +10.14% and
   `textnum` +8.79% are over their ±4% bars; `dispatch` +8.94% is inside its 14.91% band.
 
