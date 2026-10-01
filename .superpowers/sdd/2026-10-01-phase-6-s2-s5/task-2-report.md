@@ -304,3 +304,8 @@ counts nothing). Mutation: classifying per loop again (`*by == level`) turns bot
 
 Re-derived: `scheduler_inconsistency` added (body+ir, off the send surface); `inverted_wait` and
 `reply_inside_construct` lines moved.
+
+### Gates this round
+
+At 458fa0546: G1-G8 all exit 0, finished 2026-10-01T18:00:23+02:00, tree clean. Commits this round: 458fa0546
+(the fix), and the commit carrying this section.
