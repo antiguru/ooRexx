@@ -309,3 +309,40 @@ Re-derived: `scheduler_inconsistency` added (body+ir, off the send surface); `in
 
 At 458fa0546: G1-G8 all exit 0, finished 2026-10-01T18:00:23+02:00, tree clean. Commits this round: 458fa0546
 (the fix), and the commit carrying this section.
+
+## Fix round 3 (ruling P25)
+
+`Interp::blocked` (scheduler.rs) now answers `inverted` iff `Activities::set_aside` is non-empty: some activity is
+ready but its frames lie below a loop on the stack, whichever loop (the refusing one included) set it aside. With
+nothing set aside and nothing to run, no activity is ready anywhere (nothing is in flight before S4), and the
+refusal is "a wait that nothing left to run can end". Label, refusal and `PinReport::inverted` count follow that
+one decision, which reads only the stack state. R13 is superseded.
+
+### Oracle evidence (memcap 1G, `timeout -s KILL 20`, fresh directories)
+
+| witness | oracle | here |
+|---|---|---|
+| `p15_hidden_inversion.rex` (review) | completes, rc 0 in 0.05 s, six lines | inverted refusal, counted |
+| fix-round-1 witness (`t2/probes/p_inverted.rex`: main pinned in a comparator on `m1`; a started activity sends `m1`, waits pinned on `m2`, which main sends after its comparator) | completes, rc 0 in 0.02 s | inverted refusal, counted |
+| `p3_buried_deadlock.rex` (review) | prints `main got 10`, `main waits m3`, then hangs (killed at 20 s, rc 137) | **inverted** refusal, counted |
+
+`p3` lands in a different class than the review and the ruling's last sentence give it ("oracle hangs -> nothing
+left"). At its refusal the stack state is the fix-round-1 witness's: main is ready, set aside below the refusing
+`s1` loop. The two differ only in what main does after it runs (in `p3` it prints two lines and then waits on a
+message nothing sends; in the witness it sends `m2`), which no function of the stack state can see. Under P25's
+first sentence "nothing left to run" would be false for `p3`: main is ready and the oracle runs it (its two lines),
+so the label is inverted. Recorded rather than special-cased; the decision is the controller's if the oracle's
+eventual hang should count.
+
+### Tests
+
+- `scheduler::tests::an_inverted_pinned_wait_is_refused` (p15), `an_inversion_the_refusing_loop_set_aside_is_refused_as_inverted`
+  (the restored fix-round-1 witness), `a_deadlock_with_a_buried_activity_ready_is_refused_as_inverted` (p3),
+  `a_pinned_wait_nothing_can_end_is_refused` (nothing ready anywhere).
+- Pinning build `measured::an_inverted_wait_is_counted_with_its_kind_and_frames`: p15 counted once under
+  `MessageResult` and once (with `~wait`) under `MessageWait`; p3 counted once under `(MessageResult, [OpExec,
+  Interpret])`; a pinned wait on an unsent message with nothing started counts nothing.
+- Mutations: per-loop classification (`by == level`) turns the p15 test red; round 2's strictly-enclosing rule
+  (`by < level`) turns the restored witness and the p3 test red.
+
+UNINIT-spawned activities at termination: ledgered for Task 9, not changed.

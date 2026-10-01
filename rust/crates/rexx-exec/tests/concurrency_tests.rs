@@ -844,8 +844,8 @@ mod measured {
         ::method s2 unguarded\n  use arg m1, m2\n  interpret '$WAIT'\n  m1~send\n";
 
     /// An inverted pinned wait is counted under its own park kind and the
-    /// frames that pinned it; a deadlock whose only ready activity the
-    /// refusing loop set aside is not counted.
+    /// frames that pinned it, whichever loop set the ready activity aside; a
+    /// pinned wait with nothing ready anywhere is not counted.
     #[test]
     fn an_inverted_wait_is_counted_with_its_kind_and_frames() {
         for (wait, kind) in [
@@ -870,6 +870,15 @@ mod measured {
              \x20 interpret 'say m2~result'\n\
              ::method s2 unguarded\n  use arg m1\n  m1~send\n",
         );
+        assert_eq!(
+            report.inverted.get(&(
+                ParkKind::MessageResult,
+                vec![PinKind::OpExec, PinKind::Interpret]
+            )),
+            Some(&1),
+            "{report:?}"
+        );
+        let report = report_of("m = .message~new('abc', 'length')\ninterpret 'say m~result'\n");
         assert!(report.inverted.is_empty(), "{report:?}");
     }
 

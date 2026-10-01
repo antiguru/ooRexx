@@ -170,8 +170,8 @@ impl Activities {
 enum Waited {
     /// The activity it set aside is ready.
     Woken,
-    /// Nothing it can run is ready; `inverted` where a loop enclosing it set
-    /// a ready activity aside.
+    /// Nothing it can run is ready; `inverted` where an activity is ready
+    /// that only a loop below it can run.
     Blocked { inverted: bool },
 }
 
@@ -281,8 +281,9 @@ impl Interp {
     /// A wait for `reason` with Rust frames between the scheduler and the
     /// running driver (spec 2026-09-29 section 2.6): the other activities run
     /// on this stack until the running one is woken. Where nothing can run,
-    /// the refusal is an inverted wait if a loop enclosing this one set a
-    /// ready activity aside, and a wait nothing can end otherwise.
+    /// the refusal is an inverted wait if an activity is ready whose frames
+    /// lie below a loop on the stack, and a wait nothing can end where no
+    /// activity is ready at all.
     pub(crate) fn pinned_wait(&mut self, reason: ParkReason) -> Option<Failure> {
         self.park(reason);
         let failure = match self.run_others() {
@@ -368,7 +369,7 @@ impl Interp {
     /// [`Interp::run_others`]' loop, the one at `level` of the stack.
     fn run_others_from(&mut self, me: ActivityId, level: usize) -> Result<Waited, Failure> {
         let Some(next) = self.next_runnable(me, level) else {
-            return Ok(self.blocked(level));
+            return Ok(self.blocked());
         };
         if next == me {
             return Ok(Waited::Woken);
@@ -388,18 +389,19 @@ impl Interp {
                     self.switch_to(me, ended);
                     return Ok(match woken {
                         Some(_) => Waited::Woken,
-                        None => self.blocked(level),
+                        None => self.blocked(),
                     });
                 }
             }
         }
     }
 
-    /// The loop at `level` has nothing to run: inverted where a loop
-    /// enclosing it set a ready activity aside.
-    fn blocked(&self, level: usize) -> Waited {
+    /// A loop has nothing to run: inverted where some activity is ready
+    /// whose frames lie below a loop on the stack, which only that loop can
+    /// run.
+    fn blocked(&self) -> Waited {
         Waited::Blocked {
-            inverted: self.activities.set_aside.iter().any(|(_, by)| *by < level),
+            inverted: !self.activities.set_aside.is_empty(),
         }
     }
 

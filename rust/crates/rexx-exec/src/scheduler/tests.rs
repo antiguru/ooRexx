@@ -129,34 +129,50 @@ const HIDDEN_INVERSION: &str = "c = .w~new\n\
     \x20 .w~new~start('s2', m1, m2)\n\
     ::method s2 unguarded\n  use arg m1, m2\n  interpret 'say \"S2 got\" m2~result'\n  m1~send\n";
 
-/// A pinned wait whose loop finds nothing to run, while a loop enclosing it
-/// set a ready activity aside, is refused as inverted, loudly and with no
-/// owner.
+/// A pinned wait whose loop finds nothing to run while an activity is ready
+/// below it on the stack is refused as inverted, loudly and with no owner.
+/// The oracle completes this program.
 #[test]
 fn an_inverted_pinned_wait_is_refused() {
     let outcome = run(HIDDEN_INVERSION);
     assert_eq!(outcome.exit_code, 120);
     assert_eq!(stdout(&outcome), "s3 sent m0\n");
-    assert_eq!(
-        stderr(&outcome),
-        "rexx-exec: a pinned wait for a message's completion that only an activity pinned \
-         below it can end is not implemented\n"
-    );
+    assert_eq!(stderr(&outcome), INVERTED);
 }
 
-/// A pinned wait whose own loop set aside the only ready activity is a wait
-/// nothing left to run can end, not an inverted one: `s2` wakes main, and
-/// nothing ever sends `s1`'s message (the oracle prints two more lines and
-/// then blocks for ever).
+const INVERTED: &str = "rexx-exec: a pinned wait for a message's completion that only an \
+                        activity pinned below it can end is not implemented\n";
+
+/// The inversion where the refusing loop itself set the ready activity
+/// aside: main waits pinned in a comparator on `m1`; a started activity sends
+/// `m1` and waits pinned on `m2`, which main sends once its comparator
+/// returns. The oracle completes this program.
 #[test]
-fn a_deadlock_with_a_buried_activity_ready_is_not_an_inverted_wait() {
+fn an_inversion_the_refusing_loop_set_aside_is_refused_as_inverted() {
+    let outcome = run(
+        "m1 = .message~new('abc', 'length')\nm2 = .message~new('de', 'length')\n\
+         t = .s~new~start('RUN', m1, m2)\n\
+         a = .array~of(2, 1)\na~sortWith(.c~new(m1))\nsay 'main sorted'\nm2~send\nsay t~result\n\
+         ::class s\n::method run\n  use arg m1, m2\n  m1~send\n\
+         \x20 b = .array~of(2, 1)\n  b~sortWith(.c~new(m2))\n  return 'done'\n\
+         ::class c\n::method init\n  expose m\n  use arg m\n\
+         ::method compare\n  expose m\n  use arg l, r\n  say m~result\n  return l - r\n",
+    );
+    assert_eq!(outcome.exit_code, 120);
+    assert_eq!(stdout(&outcome), "");
+    assert_eq!(stderr(&outcome), INVERTED);
+}
+
+/// The same stack state where the oracle runs main on to a second wait that
+/// nothing ends (two more lines, then a block for ever): `s2` wakes main and
+/// nothing sends `s1`'s message. Main is ready below the refusing loop, so the
+/// refusal is the inverted one.
+#[test]
+fn a_deadlock_with_a_buried_activity_ready_is_refused_as_inverted() {
     let outcome = run(BURIED_DEADLOCK);
     assert_eq!(outcome.exit_code, 120);
     assert_eq!(stdout(&outcome), "");
-    assert_eq!(
-        stderr(&outcome),
-        "rexx-exec: a wait that nothing left to run can end is not implemented\n"
-    );
+    assert_eq!(stderr(&outcome), INVERTED);
 }
 
 /// The deadlock witness: main waits pinned on `m1`; `s1` starts `s2` and
