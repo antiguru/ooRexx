@@ -240,3 +240,9 @@ a path a bench program reaches (no bench program starts an activity).
    detection is later work.
 3. The Object gate run omits the two UNINIT tests for memory (R12).
 4. Concerns 2-5 of the first round stand.
+
+### Gates this round
+
+At 66368f3a7: G1-G8 all exit 0, finished 2026-10-01T17:02:14+02:00, tree clean; both `group_runs` table tests
+ran and passed in G4 (release) and G6 (debug). Commits this round: 66368f3a7 (the fix), and the commit carrying
+this section.
