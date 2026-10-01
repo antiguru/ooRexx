@@ -229,3 +229,6 @@ Gates this round at bbb4e82f7: G1-G8 all exit 0 (corpus 694 of 694 matching in G
 The reviewer's `s10`, `started_primitive_error_condition`, and every earlier Task 3 witness stay
 identical to the oracle. Checks before committing: fmt clean; lib tests 880 passed; refusal_sites
 re-derived, no row change; corpus 696 of 696 matching.
+
+Gates this round at e3ed73b5b: G1-G8 all exit 0 (corpus 696 of 696 matching in G4 and G6), finished
+2026-10-01T21:22:18+02:00, tree clean at the end.
