@@ -181,8 +181,9 @@ impl Interp {
         let object = match self.activity.reraised_object {
             Some(object) => self.reraise_condition_object(object, origin),
             None => {
-                let mut sites = self.activity.failure_sites.clone();
-                sites.extend(self.activity.failure_site.clone());
+                // The levels already left, as a trap takes them: a level still
+                // running contributes its live frame instead.
+                let sites = self.activity.failure_sites.clone();
                 let unwound = Unwound {
                     sites: &sites,
                     frames: self.activity.failure_frames.clone(),
@@ -272,11 +273,13 @@ impl Interp {
             .map(|(package, _)| package)
             .or_else(|| self.running_program().map(Package::Program))
             .unwrap_or(Package::Rexx);
-        // A started activity whose send failed with no Rexx level at all:
-        // `generateProgramInformation` finds no Rexx frame, so the object has
-        // no `PACKAGE` or `POSITION` and an empty `PROGRAM`.
-        let frameless = unwound.is_some_and(|unwound| unwound.origin.is_none())
-            && self.running_program().is_none();
+        // A failure that never had a Rexx level (no level left a line or a
+        // package, and none is running): `generateProgramInformation` finds no
+        // Rexx frame, so the object has no `PACKAGE` or `POSITION` and an
+        // empty `PROGRAM`.
+        let frameless = unwound.is_some_and(|unwound| {
+            unwound.origin.is_none() && unwound.sites.iter().all(|site| site.line().is_none())
+        }) && self.running_program().is_none();
         if !frameless {
             let package = self.package_object(origin);
             self.roots.activity_mut().push_temp(package);

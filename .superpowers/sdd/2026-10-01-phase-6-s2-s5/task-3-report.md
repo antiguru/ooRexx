@@ -208,3 +208,24 @@ Checks before committing: fmt clean; `cargo test --release -p rexx-exec --lib` 8
 
 Gates this round at bbb4e82f7: G1-G8 all exit 0 (corpus 694 of 694 matching in G4 and G6), finished
 2026-10-01T20:48:15+02:00, tree clean at the end.
+
+## Fix round 2 (re-review: I1 at main's end)
+
+* Main's untrapped failure now settles its failed sends inside `run_loaded` (`lib.rs`) while main's
+  activation is still live, in place of the settle after `interp.run` returned. The object then has
+  main's POSITION, PROGRAM and PACKAGE and main's live frame among STACKFRAMES and TRACEBACK, as the
+  oracle's object built at the raise. `settle_failed_sends` takes only the levels already left
+  (`failure_sites`), as a trap does; the running level contributes its live frame.
+* `frameless` (`condition.rs`) is decided from the failure's own history: no level it left recorded a
+  package or a line (`origin` none, no line-bearing site), and no level is running.
+* Found while checking: before this round the main-end object also lacked main's frame (STACKFRAMES 2
+  where the oracle has 3, probe `s4b`), now witnessed.
+
+| program | oracle 30 runs | head | 5ac32817d (before this round) |
+|---|---|---|---|
+| message_primitive_send_fails_main (reviewer's `s4`) | 30/30 one triple | same | stdout differs (`POSITION .nil`, `PROGRAM []`, PACKAGE `.nil`) |
+| message_send_fails_main_frames (`s4b`) | 30/30 | same | stdout differs (STACKFRAMES 2) |
+
+The reviewer's `s10`, `started_primitive_error_condition`, and every earlier Task 3 witness stay
+identical to the oracle. Checks before committing: fmt clean; lib tests 880 passed; refusal_sites
+re-derived, no row change; corpus 696 of 696 matching.

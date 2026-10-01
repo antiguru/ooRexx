@@ -2256,6 +2256,15 @@ impl Interp {
             }
             self.trace_invocation_exit();
         }
+        // Main's untrapped failure gives its failed sends their object while
+        // main's level is still live, as the oracle's is built at the raise.
+        let exit = match exit {
+            Err(Failure::Raised(raised)) if !nested => match self.settle_failed_sends(&raised) {
+                Ok(()) => Err(Failure::Raised(raised)),
+                Err(failure) => Err(failure),
+            },
+            other => other,
+        };
 
         // Popped whether or not the body raised, so the root set is left the
         // way it was found even on the failure path.
@@ -2984,13 +2993,6 @@ fn execute(
         }
         interp.run(program)
     });
-    let result = match result {
-        Err(Failure::Raised(raised)) => match interp.settle_failed_sends(&raised) {
-            Ok(()) => Err(Failure::Raised(raised)),
-            Err(failure) => Err(failure),
-        },
-        other => other,
-    };
     // The whole echo stack, innermost first: the levels `seal_site_level`
     // already closed, then the level that was still unwinding when the
     // condition reached the top. See `Activity::failure_sites` for why the two
