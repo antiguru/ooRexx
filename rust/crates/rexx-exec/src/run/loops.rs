@@ -1402,6 +1402,7 @@ impl Interp {
         // 1 to 1 ; end ; end`: -5.871% retired instructions, with
         // `__memmove_avx_unaligned_erms` falling from 8.41% of the program's
         // cycles to 2.52%.
+        let counted = self.count_clause_against_deadline(false)?;
         let mut boxed = match self.activity.flat_spares.pop() {
             Some(spare) => spare,
             None => Box::new(FlatLoop::vacant()),
@@ -1422,7 +1423,7 @@ impl Interp {
             conditional: body.conditional.as_ref().map(|cond| cond.until),
             state,
         };
-        let header = match self.flat_loop_header(code, source, &mut boxed, None) {
+        let header = match self.flat_loop_header(code, source, &mut boxed, counted) {
             Ok(header) => header,
             Err(failure) => {
                 self.activity.flat_spares.push(boxed);
@@ -1483,7 +1484,7 @@ impl Interp {
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         arrival: Flow,
-        counted: Option<DeadlineCounted>,
+        counted: impl FnOnce(&mut Self) -> Result<DeadlineCounted, Failure>,
     ) -> Result<FlatStep, Failure> {
         let Some(mut top) = self.activity.flat_top.take() else {
             return Err(Loud::op_not_driven("a pass boundary with no loop open").into());
@@ -1512,15 +1513,15 @@ impl Interp {
     }
 
     /// One pass boundary: what the body just answered, then the
-    /// next pass's header test, whose first clause is `counted` where its
-    /// caller counted it.
+    /// next pass's header test, whose first clause `counted` counts.
+    #[inline(always)]
     fn flat_loop_step(
         &mut self,
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         flat: &mut FlatLoop,
         arrival: Flow,
-        counted: Option<DeadlineCounted>,
+        counted: impl FnOnce(&mut Self) -> Result<DeadlineCounted, Failure>,
     ) -> Result<FlatStep, Failure> {
         // **Read once per pass boundary and used for both echoes.** The two
         // events are one boundary and nothing between them can run a `TRACE`,
@@ -1568,10 +1569,12 @@ impl Interp {
             {
                 self.trace_clause(line, flat.do_indent, &text);
             }
+            let counted = counted(self)?;
             if let Some(flow) = self.flat_loop_until(code, source, flat, counted)? {
                 return Ok(FlatStep::Done(flow));
             }
-            return match self.flat_loop_header(code, source, flat, None)? {
+            let counted = self.count_clause_against_deadline(false)?;
+            return match self.flat_loop_header(code, source, flat, counted)? {
                 Some(flow) => Ok(FlatStep::Done(flow)),
                 None => Ok(FlatStep::Body(flat.op_body)),
             };
@@ -1587,6 +1590,7 @@ impl Interp {
         {
             self.trace_clause(line, flat.do_indent, &text);
         }
+        let counted = counted(self)?;
         match self.flat_loop_header(code, source, flat, counted)? {
             Some(flow) => Ok(FlatStep::Done(flow)),
             None => Ok(FlatStep::Body(flat.op_body)),
@@ -1600,7 +1604,7 @@ impl Interp {
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         flat: &FlatLoop,
-        counted: Option<DeadlineCounted>,
+        counted: DeadlineCounted,
     ) -> Result<Option<Flow>, Failure> {
         let Some(cond) = loop_conditional_of(code, flat.do_index) else {
             return Err(Loud::instruction(&code.body.instructions[flat.do_index].kind).into());
@@ -1626,7 +1630,17 @@ impl Interp {
             // boundary sits outside the block.
             it.settle_block_indent(!held, do_indent);
             Ok(held)
-        })?;
+        });
+        let tested = match tested {
+            Ok(tested) => tested,
+            // The boundary's own failure, a requested `HALT`, is the `END`'s
+            // as the condition's is.
+            Err(failure) => {
+                let end = &code.body.instructions[flat.end_index];
+                self.record_failure_at(source, end, loop_indent);
+                return Err(failure);
+            }
+        };
         match tested {
             ClauseOutcome::Ended(exit) => Ok(Some(Flow::Exit(exit.value()))),
             ClauseOutcome::Ran(Ok(true)) => Ok(Some(Flow::Goto(resume))),
@@ -1685,7 +1699,7 @@ impl Interp {
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         flat: &mut FlatLoop,
-        counted: Option<DeadlineCounted>,
+        counted: DeadlineCounted,
     ) -> Result<Option<Flow>, Failure> {
         if flat.conditional == Some(false) {
             return self.flat_loop_header_while(code, source, flat, counted);
@@ -1708,7 +1722,16 @@ impl Interp {
             };
             it.settle_block_indent(advanced, do_indent);
             Ok(advanced)
-        })?;
+        });
+        let header = match header {
+            Ok(header) => header,
+            // The boundary's own failure, a requested `HALT`, is blamed as the
+            // header's is.
+            Err(failure) => {
+                self.blame_header_failure(code, source, blame, site, end_index, loop_indent);
+                return Err(failure);
+            }
+        };
         flat_header_outcome(header, resume)
     }
 
@@ -1721,7 +1744,7 @@ impl Interp {
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         flat: &mut FlatLoop,
-        counted: Option<DeadlineCounted>,
+        counted: DeadlineCounted,
     ) -> Result<Option<Flow>, Failure> {
         let Some(cond) = loop_conditional_of(code, flat.do_index) else {
             return Err(Loud::instruction(&code.body.instructions[flat.do_index].kind).into());
@@ -1768,7 +1791,16 @@ impl Interp {
             };
             it.settle_block_indent(held, do_indent);
             Ok(held)
-        })?;
+        });
+        let header = match header {
+            Ok(header) => header,
+            // The boundary's own failure, a requested `HALT`, is blamed as the
+            // header's is.
+            Err(failure) => {
+                self.blame_header_failure(code, source, blame, site, end_index, loop_indent);
+                return Err(failure);
+            }
+        };
         flat_header_outcome(header, resume)
     }
 

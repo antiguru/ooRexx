@@ -391,29 +391,131 @@ fn message_halt_in_the_shape_of_test_halt_start() {
 }
 
 /// The stress mode collects at every countdown visit and every switch as
-/// well as at every allocation; under `EveryOpportunity` that is every
-/// clause.
+/// well as at every allocation. Under either switch mode every clause visits
+/// the countdown, so `AtClause` past the program's end differs from
+/// `EveryOpportunity` by the switches alone; one activity never switches, so
+/// there the switch mode adds the visits alone.
 #[test]
 fn the_stress_mode_collects_at_every_visit_and_switch() {
-    let outcome = crate::run_program_collect_every_alloc(
-        "/tmp/scheduler.rex",
-        INTERLEAVED.as_bytes().to_vec(),
+    let stressed = |source: &str, invocation: Invocation| {
+        let outcome = crate::run_program_collect_every_alloc(
+            "/tmp/scheduler.rex",
+            source.as_bytes().to_vec(),
+            invocation,
+        );
+        assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+        outcome
+    };
+    let switching = stressed(
+        INTERLEAVED,
         Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
     );
-    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
-    assert_eq!(stdout(&outcome), "a 1\nb 1\na 2\nb 2\na 3\nb 3\ndone\n");
-    let unswitched = crate::run_program_collect_every_alloc(
-        "/tmp/scheduler.rex",
-        INTERLEAVED.as_bytes().to_vec(),
-        Invocation::none(),
+    assert_eq!(stdout(&switching), "a 1\nb 1\na 2\nb 2\na 3\nb 3\ndone\n");
+    let unswitched = stressed(
+        INTERLEAVED,
+        Invocation::none().with_switch_mode(SwitchMode::AtClause(u64::MAX)),
     );
-    // The unswitched run visits the countdown only every
-    // `CLAUSES_PER_CHECK` clauses and never switches; measured, the switched
-    // one collects 42 times more, its clause boundaries and its switches.
     assert!(
-        outcome.collections >= unswitched.collections + 40,
-        "{} collections switched, {} unswitched",
-        outcome.collections,
+        switching.collections > unswitched.collections,
+        "{} collections switching, {} visiting alone",
+        switching.collections,
         unswitched.collections
     );
+    let lone = "do i = 1 to 20\n  nop\nend\n";
+    let visiting = stressed(
+        lone,
+        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+    );
+    let unvisited = stressed(lone, Invocation::none());
+    assert!(
+        visiting.collections > unvisited.collections,
+        "{} collections visiting every clause, {} not",
+        visiting.collections,
+        unvisited.collections
+    );
+}
+
+/// A busy-wait inside `INTERPRET` and one inside a `CALL ON` handler, each
+/// pinned, end once the activity that sets the flag runs: the second slice
+/// that finds the waiter pinned runs the others on its stack.
+#[test]
+fn a_pinned_busy_wait_yields_to_the_activity_that_ends_it() {
+    let waits = [
+        (
+            "interpret \"do while \\self~done; end\"\n  say 'interpreted ended'\n",
+            "set\ninterpreted ended\nmain ended\n",
+        ),
+        (
+            "call on error name h\n  'exit 1'\n  return\nh:\n  do while \\self~done\n  end\n  \
+             say 'handler ended'\n  return\n",
+            "set\nhandler ended\nmain ended\n",
+        ),
+    ];
+    for (wait, expected) in waits {
+        let source = format!(
+            "f = .flag~new\na = f~start('waitForFlag')\nf~start('setFlag')\na~wait\n\
+             say 'main ended'\n::class flag\n::attribute done unguarded\n::method init\n  \
+             expose done\n  done = 0\n::method waitForFlag unguarded\n  {wait}\
+             ::method setFlag unguarded\n  say 'set'\n  self~done = 1\n"
+        );
+        for invocation in [
+            Invocation::none()
+                .with_switch_mode(SwitchMode::EveryOpportunity)
+                .with_deadline(std::time::Duration::from_secs(60)),
+            Invocation::none().with_deadline(std::time::Duration::from_secs(60)),
+        ] {
+            let outcome = run_with(&source, invocation);
+            assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+            assert_eq!(stdout(&outcome), expected);
+        }
+    }
+}
+
+/// Two pinned busy-waiters on a flag a third activity sets: the second runs
+/// on the first's stack and, pinned in turn, runs the setter on its own; both
+/// end, the inner first, with no livelock between their yields.
+#[test]
+fn two_pinned_busy_waiters_both_end() {
+    let source = "g = .flag~new\na = g~start('wait', 'A')\nb = g~start('wait', 'B')\n\
+                  g~start('setFlag')\na~wait\nb~wait\nsay 'main ended'\n\
+                  ::class flag\n::attribute done unguarded\n::method init\n  expose done\n  \
+                  done = 0\n::method wait unguarded\n  use arg tag\n  \
+                  interpret \"do while \\self~done; end\"\n  say tag 'ended'\n\
+                  ::method setFlag unguarded\n  say 'set'\n  self~done = 1\n";
+    for invocation in [
+        Invocation::none()
+            .with_switch_mode(SwitchMode::EveryOpportunity)
+            .with_deadline(std::time::Duration::from_secs(60)),
+        Invocation::none().with_deadline(std::time::Duration::from_secs(60)),
+    ] {
+        let outcome = run_with(source, invocation);
+        assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+        assert_eq!(stdout(&outcome), "set\nB ended\nA ended\nmain ended\n");
+    }
+}
+
+/// The timer is disarmed at the switch that leaves no other activity ready,
+/// not at the next countdown visit, which a run may never make.
+#[test]
+fn the_timer_disarms_when_no_other_activity_is_ready() {
+    let source = b"m = .t~new~start('quick')\ndo i = 1 to 3000\nend\nsay m~result\n\
+                   ::class t\n::method quick\n  return 'q'\n"
+        .to_vec();
+    let armed = std::thread::Builder::new()
+        .stack_size(crate::INTERPRETER_STACK_BYTES)
+        .spawn(move || {
+            let mut interp = Interp::new();
+            let program = parse_program(source).expect("the program parses");
+            let ran = interp
+                .bootstrap_library()
+                .and_then(|()| interp.run(program))
+                .and_then(|_| interp.run_started_activities());
+            assert!(ran.is_ok(), "{}", String::from_utf8_lossy(&interp.trace));
+            assert_eq!(String::from_utf8_lossy(&interp.out), "q\n");
+            interp.timer.armed_in_registry()
+        })
+        .expect("the interpreter thread")
+        .join()
+        .expect("the run did not panic");
+    assert!(!armed, "the timer is still armed with one activity left");
 }

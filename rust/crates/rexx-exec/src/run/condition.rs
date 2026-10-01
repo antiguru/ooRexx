@@ -126,6 +126,7 @@ impl Interp {
                     // being popped; nothing is popped here.
                     activation: self.activation().id,
                     queued_during_delivery: false,
+                    request: false,
                     fragment_depth: self.activity.fragment_depth,
                 });
                 Ok(())
@@ -441,6 +442,10 @@ impl Interp {
                 .remove(at)
                 .expect("position answered an index inside the queue");
             owed -= 1;
+            if pending.request {
+                self.raise_requested_halt(pending.description)?;
+                continue;
+            }
             if let Some(exit) = self.deliver_one_pending_trap(code, pending)? {
                 return Ok(Some(exit));
             }
@@ -894,6 +899,7 @@ impl Interp {
                     // been queued while a handler was running, which is not
                     // knowable here: this is the raise, not the delivery.
                     queued_during_delivery: false,
+                    request: false,
                     // Which `INTERPRET` fragment's queue this joins. The
                     // raising activation is about to be popped and the depth
                     // is not its own -- a fragment does not push an activation

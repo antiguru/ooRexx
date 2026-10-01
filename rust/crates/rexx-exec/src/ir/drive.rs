@@ -3407,12 +3407,9 @@ impl Interp {
                                 Err(Failure::Slice) => return Ok(Exit::Slice(pc)),
                                 Err(failure) => return Err(failure),
                             };
-                            match self.flat_loop_step_top(
-                                code,
-                                source,
-                                Flow::Next,
-                                Some(counted),
-                            )? {
+                            match self
+                                .flat_loop_step_top(code, source, Flow::Next, |_| Ok(counted))?
+                            {
                                 crate::run::FlatStep::Body(op_body) => {
                                     pc = op_body;
                                     continue 'ops;
@@ -3552,7 +3549,9 @@ impl Interp {
                         // resumes at the body's first op -- the same place
                         // `Op::LoopNext` resumes a pass that fell through.
                         FrameKind::Loop => {
-                            match self.flat_loop_step_top(code, source, other, None)? {
+                            match self.flat_loop_step_top(code, source, other, |it| {
+                                it.count_clause_against_deadline(false)
+                            })? {
                                 crate::run::FlatStep::Body(op_body) => {
                                     self.activity.frames.push(Frame {
                                         op_end: u32::MAX,

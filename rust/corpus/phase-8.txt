@@ -425,3 +425,11 @@ lang/message_send_fails_main_frames.rex
 lang/message_halt_wait.rex
 lang/message_halt_self.rex
 lang/message_halt_untrapped.rex
+# Task 4 fix round 1: HALT at the end of the halted clause, in its own
+# activation; a pinned busy-wait yields on its second slice (ruling P29).
+lang/message_halt_returning.rex
+lang/message_halt_loop_step.rex
+lang/message_halt_interpret.rex
+lang/pinned_busy_wait_interpret.rex
+lang/pinned_busy_wait_handler.rex
+lang/pinned_busy_wait_external.rex

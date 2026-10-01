@@ -1,0 +1,17 @@
+count 16
+-- A started activity busy-waiting inside INTERPRET, where it is pinned, ends
+-- once the activity that sets its flag runs on its stack.
+f = .flag~new
+a = f~start('waitForFlag')
+f~start('setFlag')
+say a~result
+::class flag
+::attribute done unguarded
+::method init
+  expose done
+  done = 0
+::method waitForFlag unguarded
+  interpret "do while \self~done; end"
+  return 'A ended'
+::method setFlag unguarded
+  self~done = 1

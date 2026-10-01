@@ -589,6 +589,44 @@ mod measured {
         );
     }
 
+    /// A busy-wait inside `INTERPRET` takes pinned yields, counted with the
+    /// `Interpret` frame, and no pinned yield is counted where nothing pins.
+    #[test]
+    fn a_pinned_busy_wait_counts_its_pinned_yields() {
+        let source = |wait: &str| {
+            format!(
+                "f = .flag~new\na = f~start('waitForFlag')\nf~start('setFlag')\na~wait\n\
+                 ::class flag\n::attribute done unguarded\n::method init\n  expose done\n  \
+                 done = 0\n::method waitForFlag unguarded\n  {wait}\n  say 'ended'\n\
+                 ::method setFlag unguarded\n  self~done = 1\n"
+            )
+        };
+        let run = |wait: &str| {
+            run_program(
+                "probe.rex",
+                source(wait).into_bytes(),
+                Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+            )
+        };
+        let pinned = run("interpret \"do while \\self~done; end\"");
+        assert_eq!(String::from_utf8_lossy(&pinned.stdout), "ended\n");
+        let yields = &pinned.pinning.pinned_yields;
+        assert!(yields.values().sum::<u64>() >= 1, "{yields:?}");
+        assert!(
+            yields
+                .keys()
+                .all(|frames| frames.contains(&PinKind::Interpret)),
+            "{yields:?}"
+        );
+        let unpinned = run("do while \\self~done; end");
+        assert_eq!(String::from_utf8_lossy(&unpinned.stdout), "ended\n");
+        assert!(
+            unpinned.pinning.pinned_yields.is_empty(),
+            "{:?}",
+            unpinned.pinning.pinned_yields
+        );
+    }
+
     #[test]
     fn a_park_records_the_pinned_frames_above_it() {
         let report = report_of("call SysSleep 0\n");
@@ -1114,6 +1152,11 @@ mod group_runs {
     /// before its first clause and is dropped.
     const MESSAGE_START_DIFFERING: &[&str] = &["TEST_HALT_START"];
 
+    /// The same under `EveryOpportunity`: main's pinned yields run the
+    /// started `delayValueReturn`, whose `SysSleep` blocks the thread, to its
+    /// end before the test asserts it has not completed.
+    const MESSAGE_START_DIFFERING_SWITCHED: &[&str] = &["TEST_START"];
+
     fn scratch(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
             .join(format!("{name}-{}", std::process::id()))
@@ -1323,7 +1366,11 @@ mod group_runs {
             SwitchMode::EveryOpportunity,
             |test| test.to_ascii_uppercase().contains("START"),
         );
-        let failing = not_passing(&results, MESSAGE_START_REFUSED, MESSAGE_START_DIFFERING);
+        let failing = not_passing(
+            &results,
+            MESSAGE_START_REFUSED,
+            MESSAGE_START_DIFFERING_SWITCHED,
+        );
         assert!(failing.is_empty(), "not passing: {failing:?}");
     }
 }

@@ -220,23 +220,19 @@ impl Interp {
         line: usize,
         body: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
-        self.in_counted_clause(code, line, None, body)
+        let counted = self.count_clause_against_deadline(false)?;
+        self.in_counted_clause(code, line, counted, body)
     }
 
-    /// [`Interp::in_clause`] for a clause already `counted`, or counted here
-    /// where `None`.
+    /// [`Interp::in_clause`] for a clause already `counted`.
     #[inline(always)]
     pub(crate) fn in_counted_clause<T: ClauseValue>(
         &mut self,
         code: &Code<'_>,
         line: usize,
-        counted: Option<DeadlineCounted>,
+        counted: DeadlineCounted,
         body: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
-        let counted = match counted {
-            Some(counted) => counted,
-            None => self.count_clause_against_deadline(false)?,
-        };
         let entry = self.enter_clause(line, counted);
         let ran = body(self);
         self.leave_clause(entry, code, ran)

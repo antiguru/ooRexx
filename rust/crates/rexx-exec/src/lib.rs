@@ -1042,6 +1042,9 @@ struct PendingTrap {
     /// or by a `HALT` request served there, rather than by that clause's own
     /// work.
     queued_during_delivery: bool,
+    /// A `HALT` `Message~halt` asked of this activity rather than a condition
+    /// raised: delivered by raising it (`Interp::raise_requested_halt`).
+    request: bool,
     /// [`Activity::fragment_depth`] as it stood when this was queued: which
     /// `INTERPRET` fragment, if any, was running.
     fragment_depth: usize,

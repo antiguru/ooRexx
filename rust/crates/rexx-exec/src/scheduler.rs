@@ -19,7 +19,7 @@ use std::collections::VecDeque;
 use rexx_core::{ActivityRoots, ObjRef};
 use rustc_hash::FxHashMap;
 
-use crate::activity::{Activity, HaltRequest};
+use crate::activity::Activity;
 use crate::dispatch::{Caller, Then};
 use crate::error::{Failure, Raised};
 use crate::ir::{DriveStart, Driven};
@@ -316,8 +316,8 @@ impl Interp {
         // A slice belongs to the activity it was set for.
         self.timer.requests().clear(SLICE);
         self.slice_deferred = false;
-        if self.activity.halt.is_some() {
-            self.clause_countdown = 1;
+        if self.activities.ready.is_empty() {
+            self.timer.disarm();
         }
         if self.stress_collect {
             self.collect_now();
@@ -656,10 +656,11 @@ impl Interp {
     }
 
     /// The requests a visit of the clause countdown serves, before the clause
-    /// begins: the switch mode's count, the timer's arming, a `HALT` asked of
-    /// the running activity, and `SLICE`. A slice ends only where the clause
-    /// `yields` and nothing pins the activity; anywhere else it is deferred
-    /// to the next clause that does (spec 2026-09-29 P6-4).
+    /// begins: the switch mode's count, the timer's arming, and `SLICE`. A
+    /// slice ends where the clause `yields` and nothing pins the activity;
+    /// anywhere else it is deferred to the next clause that does (spec
+    /// 2026-09-29 P6-4), and a second slice that finds the activity still
+    /// pinned takes a pinned yield (ruling P29).
     pub(crate) fn serve_requests(&mut self, yields: bool) -> Result<(), Failure> {
         if self.stress_collect {
             self.collect_now();
@@ -679,38 +680,54 @@ impl Interp {
         } else {
             self.timer.arm();
         }
-        if let Some(halt) = self.activity.halt.take() {
-            return self.raise_requested_halt(halt);
-        }
-        if !self.timer.requests().pending(SLICE) {
+        let fresh = self.timer.requests().pending(SLICE);
+        if !fresh && !self.slice_deferred {
             return Ok(());
         }
-        if self.activities.ready.is_empty() {
+        if fresh {
             self.timer.requests().clear(SLICE);
+        }
+        if self.activities.ready.is_empty() {
             self.slice_deferred = false;
             return Ok(());
         }
-        if !yields || self.activity.pin_depth > 0 {
-            if !self.slice_deferred {
-                self.slice_deferred = true;
-                deferred_slice!(self);
-            }
-            self.clause_countdown = 1;
-            return Ok(());
+        if yields && self.activity.pin_depth == 0 {
+            self.slice_deferred = false;
+            return Err(Failure::Slice);
         }
-        self.timer.requests().clear(SLICE);
-        self.slice_deferred = false;
-        Err(Failure::Slice)
+        if fresh && self.slice_deferred && self.activity.pin_depth > 0 {
+            self.slice_deferred = false;
+            return self.pinned_yield();
+        }
+        if fresh && !self.slice_deferred {
+            self.slice_deferred = true;
+            deferred_slice!(self);
+        }
+        self.clause_countdown = 1;
+        Ok(())
+    }
+
+    /// A pinned activity's yield (ruling P29): one round of the other ready
+    /// activities on its own stack, as a pinned wait runs them, each until it
+    /// parks, ends or its own slice ends; those whose frames lie below are
+    /// set aside. The pinned activity then runs on.
+    fn pinned_yield(&mut self) -> Result<(), Failure> {
+        pinned_yield!(self);
+        self.yield_at_slice();
+        self.run_others().map(|_| ())
     }
 
     /// `RexxActivation::processClauseBoundary`'s halt
-    /// (`execution/RexxActivation.cpp:4085`-`:4093`), at the start of the
-    /// clause after the one the request found running, whose line the
-    /// condition still names: a `CALL ON` trap queues it, a `SIGNAL ON` trap
-    /// takes it, and untrapped it is 4.1.
-    fn raise_requested_halt(&mut self, halt: HaltRequest) -> Result<(), Failure> {
+    /// (`execution/RexxActivation.cpp:4085`-`:4093`), at the end of the
+    /// clause the request found running, in that clause's activation: a
+    /// `CALL ON` trap queues it, a `SIGNAL ON` trap takes it, and untrapped it
+    /// is 4.1.
+    pub(crate) fn raise_requested_halt(
+        &mut self,
+        description: Option<Vec<u8>>,
+    ) -> Result<(), Failure> {
         let raised = Raised {
-            description: halt.description.clone(),
+            description: description.clone(),
             ..Raised::condition(std::borrow::Cow::Borrowed("HALT"))
         };
         match self.trap_for(b"HALT") {
@@ -719,48 +736,24 @@ impl Interp {
                 self.activity.pending_traps.push_back(PendingTrap {
                     condition: b"HALT".as_slice().into(),
                     rc: None,
-                    description: halt.description,
+                    description,
                     object: Some(object),
                     activation: self.activation().id,
                     queued_during_delivery: true,
+                    request: false,
                     fragment_depth: self.activity.fragment_depth,
                 });
                 Ok(())
             }
-            Some(_) => {
-                self.record_entered_clause_site();
-                Err(raised.into())
-            }
-            None => {
-                self.record_entered_clause_site();
-                Err(Raised::halt().into())
-            }
-        }
-    }
-
-    /// The clause the running activation entered last, as the site of a
-    /// failure raised before the next one begins.
-    fn record_entered_clause_site(&mut self) {
-        let program = std::rc::Rc::clone(&self.activation().program);
-        let plan = std::rc::Rc::clone(&self.activation().plan);
-        let Some(body) = crate::activation::body_of(&program, self.activation().body) else {
-            return;
-        };
-        let code = crate::Code {
-            body,
-            symbols: &program.symbols,
-            slots: &plan.by_symbol,
-            plan: Some(&plan),
-        };
-        let index = self.activity.clause_state.clause_index();
-        if let Some(instruction) = body.instructions.get(index) {
-            self.record_failure_site(&code, index, Some(&program.source), instruction);
+            Some(_) => Err(raised.into()),
+            None => Err(Raised::halt().into()),
         }
     }
 
     /// `Message~halt` (`MessageClass::halt`, `classes/MessageClass.cpp:806`):
     /// false for a message never started and for an activity already asked;
-    /// true where the request is made, and where the started activity has no
+    /// true where the request is queued for the started activity's running
+    /// activation (`RexxActivation::halt`), and where that activity has no
     /// Rexx frame to make it to (`Activity::halt`,
     /// `concurrency/Activity.cpp:2155`), which drops it.
     pub(crate) fn halt_message(&mut self, message: ObjRef, description: Option<Vec<u8>>) -> bool {
@@ -768,8 +761,7 @@ impl Interp {
             return false;
         }
         let runs = |activity: &Activity| matches!(activity.root_then, Some(Then::Started(started)) if started == message);
-        let running = runs(&self.activity);
-        let target = if running {
+        let target = if runs(&self.activity) {
             Some(&mut self.activity)
         } else {
             self.activities
@@ -782,16 +774,22 @@ impl Interp {
         let Some(target) = target else {
             return true;
         };
-        if target.running.is_none() {
+        let Some(activation) = target.running.as_ref().map(|running| running.id) else {
             return true;
-        }
-        if target.halt.is_some() {
+        };
+        if target.pending_traps.iter().any(|pending| pending.request) {
             return false;
         }
-        target.halt = Some(HaltRequest { description });
-        if running {
-            self.clause_countdown = 1;
-        }
+        target.pending_traps.push_back(PendingTrap {
+            condition: b"HALT".as_slice().into(),
+            rc: None,
+            description,
+            object: None,
+            activation,
+            queued_during_delivery: true,
+            request: true,
+            fragment_depth: target.fragment_depth,
+        });
         true
     }
 }

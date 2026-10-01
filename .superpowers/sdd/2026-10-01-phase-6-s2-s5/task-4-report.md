@@ -1,6 +1,6 @@
 # Task 4 report: slices, the timer thread, the deterministic switch mode, Message~halt
 
-Status: DONE. Commits 50d58865e (code, witnesses, records) and the commit carrying this report's gate section. Gates G1-G8 green at 50d58865e.
+Status: DONE through fix round 1. Commits 50d58865e, dd293bbdb (first round), and the fix round 1 commit; G1-G8 green at 50d58865e; fix round 1 ran the targeted checks of ruling P28, full gates run by the controller.
 
 Base: dcf9fd554 (checked before starting).
 
@@ -18,9 +18,10 @@ Base: dcf9fd554 (checked before starting).
   path checks the deadline, reloads 1024 and calls `Interp::serve_requests` (`scheduler.rs`), which:
   collects under the stress mode; under a switch mode reloads the countdown to 1, counts the clause and
   sets `SLICE` where the mode says; otherwise arms the timer when another activity is ready and disarms
-  it when none is; raises a pending `HALT`; then serves `SLICE`: cleared where nothing else is ready,
-  deferred (countdown 1, counted once in the pinning report) where the clause does not `yield` or the
-  pin depth is above zero, and otherwise answered as `Failure::Slice`.
+  it when none is; then serves `SLICE`: cleared where nothing else is ready, answered as
+  `Failure::Slice` where the clause `yields` at a pin depth of zero, and otherwise deferred (countdown
+  1, counted once in the pinning report); a second `SLICE` that finds the deferred one still pinned
+  takes a pinned yield (fix round 1, ruling P29).
 * **The SLICE exit** (`ir/drive.rs`). The count moved to the top of `open_clause!` (after the
   granting instance's hand-off, before anything the clause's opening does), so `Failure::Slice` turns
   into `Exit::Slice(pc)` with nothing of the clause begun. `drive_from` parks the level as a park does
@@ -36,17 +37,18 @@ Base: dcf9fd554 (checked before starting).
 * **Scheduler** (`scheduler.rs`). `Scheduler::yield_at_slice` puts the running activity at the back of
   the ready queue. `run_started` (through `started_driven`) records `Activity::sliced` and yields;
   `run_activity_root` yields main and runs the others until it is ready again. `switch_to` clears
-  `SLICE` (a slice belongs to the activity it was set for), lowers the countdown to 1 for an incoming
-  activity with a halt pending, and collects under the stress mode. A loop of `run_others` whose next
+  `SLICE` (a slice belongs to the activity it was set for), disarms the timer where no other activity
+  is ready, and collects under the stress mode. A loop of `run_others` whose next
   ready activity is the one whose slice just ended runs it on.
-* **Message~halt** (`dispatch/object_protocol.rs` `native_message_halt`, `Interp::halt_message`,
-  `Activity::halt`). False for a message never started and for an activity already asked; true where
-  the request is made, and where the started activity has no Rexx frame (not begun, or ended), which
-  drops it (`Activity::halt`, `Activity.cpp:2155`). The target applies it at its next countdown visit
-  (`raise_requested_halt`): `CALL ON HALT` queues a pending trap (`queued_during_delivery`, so the
-  boundary tripwire does not take it for the clause's own), `SIGNAL ON HALT` raises the condition, and
-  untrapped it is 4.1, each with the clause the request found running as the site
-  (`record_entered_clause_site`).
+* **Message~halt** (`dispatch/object_protocol.rs` `native_message_halt`, `Interp::halt_message`).
+  False for a message never started and for an activity already asked; true where the request is
+  made, and where the started activity has no Rexx frame (not begun, or ended), which drops it
+  (`Activity::halt`, `Activity.cpp:2155`). The request is an entry in the target's pending traps
+  (`PendingTrap::request`) for its running activation and fragment depth, so the end of the clause
+  that activation is running delivers it (`deliver_pending_traps`, `raise_requested_halt`):
+  `CALL ON HALT` queues a pending trap (`queued_during_delivery`, so the boundary tripwire does not
+  take it for the next clause's own), `SIGNAL ON HALT` raises the condition, and untrapped it is 4.1,
+  each failing that clause's boundary, which names it as the site (fix round 1).
 * **Switch mode** (`invocation.rs`): `SwitchMode::{AtClause(k), EveryOpportunity}` and
   `Invocation::with_switch_mode`, installed after the library bootstrap so `AtClause` counts the
   program's clauses alone; `rexx-run` reads `REXX_SWITCH_MODE` (`every`, `at:K`); the corpus harness
@@ -59,15 +61,15 @@ Base: dcf9fd554 (checked before starting).
   `Message~halt` is a request from inside the interpreter. An `Inbox` type, an `INBOX` bit and a
   post method with no caller would be dead code a seam may not carry (P20, P21's precedent); they come
   with the first poster (Task 5's sleeper wake or Task 17's completions). The request word carries
-  `SLICE` alone; `HALT` is a per-activity request (`Activity::halt`, with its description), because
-  its only requester names one activity. The interpreter-wide `HALT` bit comes with signals (Task 21).
-* **R-T4-2 HALT is raised at the start of the clause after the one it found running.** The oracle
-  raises it in `processClauseBoundary` after the instruction ends (`RexxActivation.cpp:651`,
-  `:4085`); the request here is served at the next countdown visit, before the next clause opens, so
-  the clause state still names the halted clause: `SIGL` (SIGNAL ON), `POSITION`, the traceback line
-  (recorded by `record_entered_clause_site`) and the CALL ON handler's timing (after the next clause,
-  as the oracle's queued trap is) all match. Measured by `message_halt_wait.rex`,
-  `message_halt_untrapped.rex` and `message_halt_self.rex`, identical to the oracle 30 runs of 30.
+  `SLICE` alone; `HALT` is a per-activity request (an entry in the target's pending traps, with its
+  description), because its only requester names one activity. The interpreter-wide `HALT` bit comes with signals (Task 21).
+* **R-T4-2 HALT is raised at the end of the clause it found running, in that clause's
+  activation**, where the oracle's `processClauseBoundary` raises it (`RexxActivation.cpp:651`,
+  `:4085`), including a `RETURN` that ends its activation (fix round 1: the first commit raised it
+  at the start of the next clause, which put a halted `RETURN`'s condition in the caller). Measured by
+  `message_halt_wait.rex`, `message_halt_untrapped.rex`, `message_halt_self.rex`,
+  `message_halt_returning.rex`, `message_halt_loop_step.rex` and `message_halt_interpret.rex`,
+  identical to the oracle 30 runs of 30.
 * **R-T4-3 A parked target is not woken by HALT.** `Message~halt` only sets the activation's flag in
   the oracle (`RexxActivation::halt`); a thread waiting on a message takes it when its wait ends
   (measured: `message_halt_wait.rex`). The wake in spec section 4 is for interruptible waits
@@ -75,7 +77,7 @@ Base: dcf9fd554 (checked before starting).
 * **R-T4-4 A halt to a started activity with no Rexx frame answers true and is dropped**, as
   `Activity::halt` does with `currentRexxFrame == NULL`: not yet begun, or ended.
 * **R-T4-5 A slice with nothing else ready is cleared, not taken**, and the timer is disarmed at the
-  next countdown visit that finds the ready queue empty. Slices are counted from the timer's tick,
+  switch or countdown visit that finds the ready queue empty. Slices are counted from the timer's tick,
   not from the switch.
 * **R-T4-6 The clause a slice ended at is not counted twice.** It was counted when the slice ended;
   `Next::Sliced` gives the countdown one back. Without it `EveryOpportunity` livelocked: each
@@ -109,8 +111,8 @@ by a script, the scheduler tests run, and the file restored byte for byte (`cmp`
 `concurrency_tests.rs` (`--features pinning`): `a_slice_deferred_inside_a_sort_comparator_is_counted_once`
 (one deferred slice, keyed with `SortComparator`); red with the count removed (0) and with the
 once-per-slice guard removed (6). `group_runs::the_message_start_tests_under_every_opportunity` runs
-the Message start tests under the switch mode (17 pass, the MAKEARRAY refusal, TEST_HALT_START
-differing).
+the Message start tests under the switch mode (17 pass, the MAKEARRAY refusal, one differing: at
+the first commit TEST_HALT_START, after fix round 1 TEST_START, see Fix round 1).
 
 Before the loop-step change the busy loop hung under the timer and under `EveryOpportunity` alike
 (rexx-run, killed at 30 s); the oracle prints `A ended`.
@@ -152,7 +154,7 @@ rexx-exec --test method_bodies`).
 `task-4-message-table.md` (raw `task-4-message-table.raw.md`): pass 51, refused 16, differ 1 (Task 3:
 51 / 17). The one changed row: TEST_HALT_START, refused at Task 3, now differs (R-T4-10). Object
 table: the 40 START tests pass, unchanged. Start tests under `EveryOpportunity`
-(`task-4-message-switched-table.raw.md`): 17 pass, 1 refused (MAKEARRAY), TEST_HALT_START differs.
+(`task-4-message-switched-table.raw.md`): 17 pass, 1 refused (MAKEARRAY), at fix round 1 TEST_START differs and TEST_HALT_START passes (the raw file is fix round 1's).
 
 ## "It works" bench check
 
@@ -172,13 +174,83 @@ report in G4 (report mode, not gated) reads 4247 of 4259; not compared against t
 
 ## Concerns
 
-1. `Op::LoopNext` now counts the pass header itself and hands an `Option<DeadlineCounted>` down, so
-   the flattened-loop pass path carries one more well-predicted branch than before; no per-task
-   performance gate measures it (Task 26 does).
-2. A halt request is served at the next countdown visit, so a request made to an activity whose
-   halted clause is the last of its activation is raised in the caller's next clause; the oracle's
-   flag lives on the activation and is lost with it. Not witnessed either way.
+1. The flattened-loop pass counts its header clause at `Op::LoopNext` and hands the proof down; the
+   per-pass `Option` of the first commit is gone (fix round 1). Not measured (Task 26 does).
+2. The oracle raises a halt in the activation the request found running, a `RETURN` that ends it
+   included; it does not lose the flag (the first commit's statement here was false, fix round 1).
 3. The timer's slices are counted from its own tick, not from each switch, so a slice can be shorter
    than 24 ms; nothing observable depends on its length beyond "a busy loop yields".
 4. TEST_HALT_START differs from the oracle until SysSleep parks (R-T4-10); listed as differing in
    `concurrency_tests.rs` rather than refused.
+
+## Fix round 1 (review task-4-review.md; ruling P28: no gates.sh, targeted runs)
+
+* **I1 HALT at the end of the halted clause** (`scheduler.rs` `halt_message`, `raise_requested_halt`;
+  `run/condition.rs` `deliver_pending_traps`; `lib.rs` `PendingTrap::request`). The request is now a
+  pending-trap entry for the target's running activation and fragment depth (the oracle's flag on
+  `currentRexxFrame`), delivered at the end of the clause that activation is running, where the
+  oracle's `processClauseBoundary` raises it; this crate's `Activity::halt` field and `record_entered_clause_site` are
+  gone. A halted `RETURN` raises in its own activation (h7: `outer after inner trapped sigl 43` in the
+  witness, as the oracle). A flattened loop's header clause failing at its boundary is blamed as the
+  header's own failures are (`run/loops.rs`: `END` for a pass that fell through), so POSITION and
+  the traceback both name the `END`; a self-halt in `INTERPRET` names the interpreted clause. Report
+  Concern 2 corrected: the oracle raises in the returning activation and does not lose the flag.
+  Witnesses (identical to the oracle on stdout, stderr with the run directory masked, and status,
+  30 runs of 30; identical on this side with and without `REXX_SWITCH_MODE=every`; each differs at
+  dd293bbdb, built by `git archive` in its own target dir):
+  * `message_halt_returning.rex`: trapped (`inner trapped sigl 43`, no error) and untrapped (4.1,
+    POSITION 37, traceback `37 *-* return g~q~result` then `30 *-* call plain g`). At dd293bbdb:
+    `trapped error 1`, 4.1 at 29.
+  * `message_halt_loop_step.rex`: `do forever`, `do while 1`, `do i = 1`, `do until 0`, empty
+    bodies: POSITION and traceback the `END` line each. At dd293bbdb: traceback `do forever`.
+  * `message_halt_interpret.rex` (the reviewer's h6): untrapped, the traceback's first line is the
+    fragment clause `x = g~m~halt;`. At dd293bbdb: the `INTERPRET` line twice.
+  The reviewer's `h2` with a `nop` body names `nop` or `END` with POSITION and traceback agreeing;
+  which one depends on where the timer's slice lands (on the oracle it was `END` in the reviewer's
+  runs), so it is not a witness.
+* **I2 pinned yield (ruling P29)** (`scheduler.rs` `serve_requests`, `pinned_yield`; `pinning.rs`
+  `pinned_yield!`, `PinReport::pinned_yields`). A `SLICE` seen while pinned is deferred once (the
+  bit cleared, `slice_deferred` set, countdown 1); an unpinned clause that yields takes it as before;
+  the next `SLICE` that finds the activity still pinned (pin depth above zero) runs one nested round:
+  the activity goes to the back of the ready queue and `run_others` runs the others on its stack,
+  each until it parks, ends or its own slice ends, owners below set aside, until the pinned activity
+  comes round again. A `SLICE` at a pin depth of zero in a clause that cannot yield stays deferred
+  (no pinned yield outside a pinned frame). Witnesses, identical to the oracle 30 runs of 30 and red
+  at dd293bbdb (killed at 15 s): `pinned_busy_wait_interpret.rex`, `pinned_busy_wait_handler.rex`,
+  `pinned_busy_wait_external.rex` (with `pinned_busy_wait_external.d/bwext.rex`). Crate tests
+  `a_pinned_busy_wait_yields_to_the_activity_that_ends_it` (INTERPRET and CALL ON handler, under
+  `EveryOpportunity` and the timer, fixed output) and `two_pinned_busy_waiters_both_end` (two
+  waiters inside INTERPRET on a third activity's flag: `set / B ended / A ended / main ended` under
+  both), both red with the pinned yield removed (60 s deadline). `concurrency_tests.rs`
+  `a_pinned_busy_wait_counts_its_pinned_yields` (pinning feature): yields keyed with `Interpret`,
+  none for the unpinned loop.
+  **Not completed:** the reviewer's `h5` (main busy-waits for a target spinning inside `INTERPRET`,
+  then halts it) still hangs: main's own `run_others` loop is below the target's pinned frames, so
+  main is set aside in every round (the inverted case, undetectable as a wait). The oracle
+  completes it.
+* **Message start tests under `EveryOpportunity`.** With pinned yields, main's pinned test body
+  yields to started activities: TEST_HALT_START now passes under the switch mode, and TEST_START
+  differs (23 assertions of 45): its started `delayValueReturn` runs its `SysSleep`, which blocks the
+  thread, to the end inside main's yields before the test asserts it has not completed.
+  `MESSAGE_START_DIFFERING_SWITCHED` lists it. The unswitched Message table is unchanged
+  (identical raw rows).
+* **M1 timer disarm** (`switch_to`): disarmed at the switch that leaves no other activity ready.
+  Test `the_timer_disarms_when_no_other_activity_is_ready` (reads the registry entry), red with the
+  disarm removed.
+* **M2** `in_counted_clause` takes a `DeadlineCounted`; the flattened-loop step takes a closure that
+  supplies it (`Op::LoopNext` hands the proof it counted, the `ITERATE` settle path counts after the
+  body's outcome is known, so an escape counts nothing); the loop's entry header and the header after
+  an `UNTIL` test count at their own sites. No `Option` on the pass path.
+* **M4** the stress test compares `EveryOpportunity` with `AtClause(u64::MAX)` (the same visits, the
+  slices' switches extra) and a one-activity program with and without the switch mode (visits only);
+  each red with its collect removed.
+* **M5 queued**: `.superpowers/sdd/queued/2026-10-01-time-elapsed-loop-hang.md` (`elapsed.rex`:
+  oracle ends in about 0.6 s; this crate killed at 10 s).
+
+Runs at the fix round 1 tree: `cargo fmt --all --check`; `cargo clippy -p rexx-exec --all-targets
+-- -D warnings`, and with `--features pinning`: clean. `REXX_CORPUS_GATE=1 memcap 8G cargo test
+--release -p rexx-exec --test corpus corpus_differential`: 705 of 705; with `REXX_CORPUS_SWITCH=every`
+release and debug: 705 of 705. `cargo test -p rexx-exec --lib`: 888 passed. `REXX_CORPUS_GATE=1
+cargo test --release -p rexx-exec --test concurrency_tests`: 27 passed (Object START 40 pass).
+`--features pinning --test concurrency_tests measured::`: 11 passed. `refusal_sites` (release) and
+`rexx-parse --test sourceline_oracle`: green.

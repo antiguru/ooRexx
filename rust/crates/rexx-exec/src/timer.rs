@@ -112,6 +112,15 @@ impl Registration {
         REGISTRY.changed.notify_one();
     }
 
+    /// Whether the registry has this interpreter armed.
+    #[cfg(test)]
+    pub(crate) fn armed_in_registry(&self) -> bool {
+        live()
+            .1
+            .iter()
+            .any(|entry| entry.id == self.id && entry.slice_began.is_some())
+    }
+
     pub(crate) fn disarm(&mut self) {
         if !self.armed {
             return;

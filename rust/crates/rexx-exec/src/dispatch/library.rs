@@ -406,6 +406,7 @@ impl Interp {
                     object: Some(object),
                     activation: self.activation().id,
                     queued_during_delivery: false,
+                    request: false,
                     fragment_depth: self.activity.fragment_depth,
                 });
                 Ok(result)

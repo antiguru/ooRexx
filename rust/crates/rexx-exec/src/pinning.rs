@@ -107,6 +107,19 @@ macro_rules! deferred_slice {
     ($interp:expr) => {};
 }
 
+/// Records a pinned yield: a slice that found the activity still pinned.
+#[cfg(feature = "pinning")]
+macro_rules! pinned_yield {
+    ($interp:expr) => {
+        $interp.pinning.pinned_yield(&$interp.activity.pins)
+    };
+}
+
+#[cfg(not(feature = "pinning"))]
+macro_rules! pinned_yield {
+    ($interp:expr) => {};
+}
+
 #[cfg(feature = "pinning")]
 pub use counter::{ParkKind, PinKind, PinReport};
 #[cfg(feature = "pinning")]
@@ -206,6 +219,8 @@ mod counter {
         /// Slices deferred to the next unpinned clause boundary, keyed by the
         /// pinned frames where each was first seen.
         pub deferred_slices: BTreeMap<Vec<PinKind>, u64>,
+        /// Pinned yields, keyed by the pinned frames they ran under.
+        pub pinned_yields: BTreeMap<Vec<PinKind>, u64>,
         /// Frames still pushed when the report was taken; zero unless a push
         /// has no matching pop.
         pub unbalanced: usize,
@@ -231,6 +246,14 @@ mod counter {
         pub(crate) fn leave(&self) {
             self.stack.borrow_mut().pop();
         }
+    }
+
+    /// The pinned frames on `pins`, outermost first with consecutive repeats
+    /// collapsed.
+    fn frames_of(pins: &PinStack) -> Vec<PinKind> {
+        let mut frames: Vec<PinKind> = pins.stack.borrow().iter().flatten().cloned().collect();
+        frames.dedup();
+        frames
     }
 
     impl Pinning {
@@ -265,13 +288,20 @@ mod counter {
         }
 
         pub(crate) fn deferred_slice(&self, pins: &PinStack) {
-            let mut frames: Vec<PinKind> = pins.stack.borrow().iter().flatten().cloned().collect();
-            frames.dedup();
             *self
                 .report
                 .borrow_mut()
                 .deferred_slices
-                .entry(frames)
+                .entry(frames_of(pins))
+                .or_default() += 1;
+        }
+
+        pub(crate) fn pinned_yield(&self, pins: &PinStack) {
+            *self
+                .report
+                .borrow_mut()
+                .pinned_yields
+                .entry(frames_of(pins))
                 .or_default() += 1;
         }
 
@@ -281,6 +311,7 @@ mod counter {
             report.parks.clear();
             report.inverted.clear();
             report.deferred_slices.clear();
+            report.pinned_yields.clear();
         }
 
         pub(crate) fn take(&self, pins: &PinStack) -> PinReport {

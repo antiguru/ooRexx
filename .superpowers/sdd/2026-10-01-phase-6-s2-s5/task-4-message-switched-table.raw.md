@@ -1,5 +1,5 @@
-TEST_HALT_START	differ	oracle Some("Assertions:         21"), ours Some("Assertions:         2"); ours stderr ""
-TEST_START	pass	
+TEST_HALT_START	pass	
+TEST_START	differ	oracle Some("Assertions:         45"), ours Some("Assertions:         23"); ours stderr ""
 TEST_STARTWITH_NOT_ARRAY	refused	method "MAKEARRAY" of class "Object" is not implemented (Phase 9)
 TEST_STARTWITH_NO_ARRAY	pass	
 TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES	pass	
