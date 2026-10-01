@@ -282,6 +282,8 @@ pub(crate) struct Activity {
     /// The floor of the driver a slice left, and the op of the clause it
     /// resumes at.
     pub(crate) sliced: Option<(usize, u32)>,
+    /// How main's root driver ended where a loop other than its own ran it.
+    pub(crate) root_end: Option<Result<crate::run::Ended, Failure>>,
     /// What `.context~thread` answers, assigned on first use
     /// ([`crate::Interp::activity_number`]).
     pub(crate) number: Option<u32>,
@@ -358,6 +360,7 @@ impl Activity {
             root_then: None,
             drive_floor: None,
             sliced: None,
+            root_end: None,
             number: None,
             failed_sends: Vec::new(),
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
@@ -454,6 +457,7 @@ impl Activity {
             root_then,
             drive_floor: _,
             sliced: _,
+            root_end,
             number: _,
             failed_sends,
             #[cfg(feature = "pinning")]
@@ -468,6 +472,11 @@ impl Activity {
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
         out.extend(failed_sends.iter().copied());
+        match root_end {
+            Some(Ok(crate::run::Ended::Returned(value) | crate::run::Ended::Exited(value)))
+            | Some(Err(Failure::Exited(value))) => out.extend(*value),
+            _ => {}
+        }
         for tail in native_tails {
             tail.object_roots(out);
         }

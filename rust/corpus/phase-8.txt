@@ -433,3 +433,8 @@ lang/message_halt_interpret.rex
 lang/pinned_busy_wait_interpret.rex
 lang/pinned_busy_wait_handler.rex
 lang/pinned_busy_wait_external.rex
+# Task 4 fix round 2: main parked or sliced at its root is not buried
+# (ruling P30), so a pinned activity's rounds run it.
+lang/message_halt_pinned_target.rex
+lang/main_ends_in_pinned_yield.rex
+lang/main_fails_in_pinned_yield.rex

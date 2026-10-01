@@ -896,13 +896,13 @@ mod measured {
         );
     }
 
-    /// `s1` waits pinned on `m1`; `s3` wakes main, which `s1`'s loop sets
-    /// aside; `s2` then waits pinned on `m2` with `$WAIT`, which only main
-    /// would send.
+    /// Main waits pinned on `m0`; `s1` waits pinned on `m1`; `s3` wakes main,
+    /// which `s1`'s loop sets aside; `s2` then waits pinned on `m2` with
+    /// `$WAIT`, which only main would send.
     const HIDDEN_INVERSION: &str = "c = .w~new\n\
         m0 = .message~new(c, 'val', 'I', 0)\nm1 = .message~new(c, 'val', 'I', 1)\n\
         m2 = .message~new(c, 'val', 'I', 2)\nc~start('s1', m0, m1, m2)\n\
-        say 'main got' m0~result\nm2~send\n\
+        interpret \"say 'main got' m0~result\"\nm2~send\n\
         ::class w\n::method val unguarded; use arg x; return x*10\n\
         ::method s1 unguarded\n  use arg m0, m1, m2\n  .w~new~start('s3', m0, m1, m2)\n\
         \x20 interpret 'say m1~result'\n\

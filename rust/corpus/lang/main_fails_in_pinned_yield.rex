@@ -1,0 +1,24 @@
+-- Main fails inside the pinned yield of a started activity spinning inside
+-- INTERPRET, having started another that fails later: main's report comes
+-- first, as main's end is answered as soon as the spinning activity returns.
+g = .flag~new
+g~start('spin')
+do while g~started == 0
+end
+g~done = 1
+.flag~new~start('boom')
+say 1/0
+::class flag
+::attribute started unguarded
+::attribute done unguarded
+::method init
+  expose started done
+  started = 0
+  done = 0
+::method spin unguarded
+  self~started = 1
+  interpret "do while \self~done; end"
+  say 'spin ended'
+::method boom unguarded
+  call syssleep 0.2
+  return 1/0

@@ -113,8 +113,9 @@ pub(crate) struct Activities {
     /// Woken and spawned activities, in arrival order.
     ready: VecDeque<ActivityId>,
     /// The activities whose loops of [`Interp::run_others`] are on the Rust
-    /// stack, outermost first.
-    owners: Vec<ActivityId>,
+    /// stack, outermost first, each with whether it is buried: whether it
+    /// entered its loop from Rust frames that stay live below it (ruling P30).
+    owners: Vec<(ActivityId, bool)>,
     /// Ready owners a loop could not run, each with the index in `owners` of
     /// the loop that set it aside; it goes back to the ready queue when that
     /// loop returns.
@@ -136,6 +137,10 @@ pub(crate) struct Activities {
     last_number: u32,
 }
 
+/// Main's handle, which `Activities::new` gives the activity that runs the
+/// program.
+const MAIN: ActivityId = ActivityId(0);
+
 /// `ActivityManager::MAX_THREAD_POOL_SIZE` (`ActivityManager.hpp:358`): an
 /// ended activity is pooled while the pool holds no more than this.
 const MAX_POOLED: usize = 5;
@@ -143,7 +148,7 @@ const MAX_POOLED: usize = 5;
 impl Activities {
     pub(crate) fn new() -> Activities {
         Activities {
-            running: ActivityId(0),
+            running: MAIN,
             idle: vec![None],
             free: Vec::new(),
             ready: VecDeque::new(),
@@ -329,7 +334,7 @@ impl Interp {
     /// failed with something that is not a condition, is the one its wait
     /// answers.
     pub(crate) fn wait_until_woken(&mut self) -> Option<Failure> {
-        let failure = match self.run_others() {
+        let failure = match self.run_others(false) {
             Ok(Waited::Woken) => return None,
             Ok(Waited::Blocked { .. }) => Loud::unsatisfiable_wait().into(),
             Err(failure) => failure,
@@ -346,7 +351,7 @@ impl Interp {
     /// activity is ready at all.
     pub(crate) fn pinned_wait(&mut self, reason: ParkReason) -> Option<Failure> {
         self.park(reason);
-        let failure = match self.run_others() {
+        let failure = match self.run_others(true) {
             Ok(Waited::Woken) => return None,
             Ok(Waited::Blocked { inverted: false }) => Loud::unsatisfiable_wait().into(),
             Ok(Waited::Blocked { inverted: true }) => {
@@ -380,7 +385,7 @@ impl Interp {
     /// Runs every started activity to its end, for the end of the program.
     /// Activities left waiting are abandoned, with the refusal.
     pub(crate) fn run_started_activities(&mut self) -> Result<(), Failure> {
-        self.run_others()?;
+        self.run_others(false)?;
         self.cancel_wait();
         let table = &mut self.activities;
         let me = table.running.0 as usize;
@@ -404,14 +409,16 @@ impl Interp {
     }
 
     /// Runs ready activities with the running one set aside, until it is
-    /// ready again or nothing can run. It is running again on return. An
-    /// activity whose Rust frames lie below this loop, another loop's owner,
-    /// is not run here: it is set aside and goes back to the ready queue for
-    /// its own loop when this one returns.
-    fn run_others(&mut self) -> Result<Waited, Failure> {
+    /// ready again, it has ended as main ends in another loop, or nothing can
+    /// run. It is running again on return. The running activity is `buried`
+    /// where it waits from Rust frames below this loop; a buried activity is
+    /// not run by a loop above its own: it is set aside and goes back to the
+    /// ready queue for its own loop when this one returns. An activity whose
+    /// state is all in its record runs in any loop (ruling P30).
+    fn run_others(&mut self, buried: bool) -> Result<Waited, Failure> {
         let me = self.activities.running;
         let level = self.activities.owners.len();
-        self.activities.owners.push(me);
+        self.activities.owners.push((me, buried));
         let waited = self.run_others_from(me, level);
         let table = &mut self.activities;
         let mine = table
@@ -443,6 +450,10 @@ impl Interp {
                 self.switch_to(me, ended);
                 return Err(failure);
             }
+            if self.root_ended(me) {
+                self.switch_to(me, ended);
+                return Ok(Waited::Woken);
+            }
             match self.next_runnable(me, level) {
                 // The activity whose slice ended, with nothing else this loop
                 // can run, runs on.
@@ -468,12 +479,27 @@ impl Interp {
         }
     }
 
-    /// The next ready activity the loop at `level` can run, or `me`; another
-    /// loop's owner is set aside.
+    /// Whether `activity`, not running, is main whose root driver ended in a
+    /// loop other than its own.
+    fn root_ended(&self, activity: ActivityId) -> bool {
+        self.activities
+            .idle
+            .get(activity.0 as usize)
+            .and_then(Option::as_ref)
+            .is_some_and(|idle| idle.activity.root_end.is_some())
+    }
+
+    /// The next ready activity the loop at `level` can run, or `me`; a buried
+    /// activity is set aside.
     fn next_runnable(&mut self, me: ActivityId, level: usize) -> Option<ActivityId> {
         loop {
             let ready = self.activities.ready.pop_front()?;
-            if ready == me || !self.activities.owners.contains(&ready) {
+            let buried = self
+                .activities
+                .owners
+                .iter()
+                .any(|&(owner, buried)| owner == ready && buried);
+            if ready == me || !buried {
                 return Some(ready);
             }
             self.activities.set_aside.push((ready, level));
@@ -485,6 +511,10 @@ impl Interp {
     /// recorded on its message; a failure that is not a condition is
     /// answered.
     fn run_started(&mut self) -> Result<Stopped, Failure> {
+        if self.activities.running == MAIN {
+            self.root_step(None);
+            return Ok(Stopped::Parked);
+        }
         let sent = match self.activity.first_send.take() {
             Some(send) => {
                 let frame = self.roots.activity_mut().push_frame();
@@ -625,26 +655,52 @@ impl Interp {
     }
 
     /// The running activity's main-program root, a park or slice in which
-    /// runs the other activities until it is ready again.
+    /// runs the other activities until it is ready again. Its continuation
+    /// is kept in its record, so a nested loop may run it too, and its end
+    /// there is recorded for this loop to answer (ruling P30).
     pub(crate) fn run_activity_root(&mut self) -> Result<Ended, Failure> {
         let level = self.prepare_level()?;
-        let mut driven = self.drive_from(DriveStart::Level(level), true)?;
+        let driven = self.drive_from(DriveStart::Level(level), true);
+        self.root_driven(driven);
         loop {
-            driven = match driven {
-                Driven::Ended(ended) => return Ok(ended),
-                Driven::Parked(floor) => {
-                    let failure = self.wait_until_woken();
+            if let Some(end) = self.activity.root_end.take() {
+                return end;
+            }
+            let failure = self.wait_until_woken();
+            if self.activity.root_end.is_none() {
+                self.root_step(failure);
+            }
+        }
+    }
+
+    /// Main's root driver run from its recorded continuation, with `failure`
+    /// as the answer of the wait it ends.
+    fn root_step(&mut self, failure: Option<Failure>) {
+        let driven = match (self.activity.sliced.take(), failure) {
+            (Some(_), Some(failure)) => Err(failure),
+            (Some((floor, at)), None) => self.drive_from(DriveStart::Sliced { floor, at }, true),
+            (None, failure) => match self.activity.drive_floor.take() {
+                Some(floor) => {
                     let sent = self.resume_parked(failure);
-                    self.drive_from(DriveStart::Woken { floor, sent }, true)?
+                    self.drive_from(DriveStart::Woken { floor, sent }, true)
                 }
-                Driven::Sliced { floor, at } => {
-                    self.yield_at_slice();
-                    if let Some(failure) = self.wait_until_woken() {
-                        return Err(failure);
-                    }
-                    self.drive_from(DriveStart::Sliced { floor, at }, true)?
-                }
-            };
+                None => Err(Loud::scheduler_inconsistency("a main with no continuation").into()),
+            },
+        };
+        self.root_driven(driven);
+    }
+
+    /// Records where main's root driver stopped: its park, its slice, which
+    /// puts it at the back of the ready queue, or its end.
+    fn root_driven(&mut self, driven: Result<Driven, Failure>) {
+        match driven {
+            Ok(Driven::Parked(floor)) => self.activity.drive_floor = Some(floor),
+            Ok(Driven::Sliced { floor, at }) => {
+                self.activity.sliced = Some((floor, at));
+                self.yield_at_slice();
+            }
+            Ok(Driven::Ended(ended)) => self.activity.root_end = Some(Ok(ended)),
+            Err(failure) => self.activity.root_end = Some(Err(failure)),
         }
     }
 
@@ -714,7 +770,7 @@ impl Interp {
     fn pinned_yield(&mut self) -> Result<(), Failure> {
         pinned_yield!(self);
         self.yield_at_slice();
-        self.run_others().map(|_| ())
+        self.run_others(true).map(|_| ())
     }
 
     /// `RexxActivation::processClauseBoundary`'s halt

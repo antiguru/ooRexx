@@ -114,14 +114,14 @@ fn a_pinned_wait_completes_under_each_pinning_frame() {
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
-/// The waits of the inversion witnesses: main parks unpinned on `m0`; `s1`
-/// waits pinned on `m1` and starts `s3`, which sends `m0` (main is ready, set
-/// aside by `s1`'s loop) and starts `s2`; `s2` waits pinned on `m2`, which
-/// main sends once it runs. The oracle completes.
+/// The waits of the inversion witnesses: main parks on `m0` at `$MAIN`; `s1`
+/// waits pinned on `m1` and starts `s3`, which sends `m0` and starts `s2`;
+/// `s2` waits pinned on `m2`, which main sends once it runs. The oracle
+/// completes.
 const HIDDEN_INVERSION: &str = "c = .w~new\n\
     m0 = .message~new(c, 'val', 'I', 0)\nm1 = .message~new(c, 'val', 'I', 1)\n\
     m2 = .message~new(c, 'val', 'I', 2)\nc~start('s1', m0, m1, m2)\n\
-    say 'main got' m0~result\nm2~send\nsay 'main sent m2'\nsay 'done'\n\
+    $MAIN\nm2~send\nsay 'main sent m2'\nsay 'done'\n\
     ::class w\n::method val unguarded; use arg x; return x*10\n\
     ::method s1 unguarded\n  use arg m0, m1, m2\n  .w~new~start('s3', m0, m1, m2)\n\
     \x20 interpret 'say \"S1 got\" m1~result'\n\
@@ -130,14 +130,38 @@ const HIDDEN_INVERSION: &str = "c = .w~new\n\
     ::method s2 unguarded\n  use arg m1, m2\n  interpret 'say \"S2 got\" m2~result'\n  m1~send\n";
 
 /// A pinned wait whose loop finds nothing to run while an activity is ready
-/// below it on the stack is refused as inverted, loudly and with no owner.
-/// The oracle completes this program.
+/// below it on the stack is refused as inverted, loudly and with no owner:
+/// main waits pinned inside `INTERPRET`, so `s1`'s loop sets it aside. The
+/// oracle completes this program.
 #[test]
 fn an_inverted_pinned_wait_is_refused() {
-    let outcome = run(HIDDEN_INVERSION);
+    let outcome = run(&HIDDEN_INVERSION.replace("$MAIN", "interpret \"say 'main got' m0~result\""));
     assert_eq!(outcome.exit_code, 120);
     assert_eq!(stdout(&outcome), "s3 sent m0\n");
     assert_eq!(stderr(&outcome), INVERTED);
+}
+
+/// The same waits with main parked at its root driver, unpinned: its state
+/// is all in its record, so `s2`'s loop runs it and every wait ends, as on
+/// the oracle (ruling P30). The oracle's order of the last lines varies
+/// between runs, so the lines are compared as a set.
+#[test]
+fn a_wait_main_can_end_from_its_root_is_satisfied() {
+    let outcome = run(&HIDDEN_INVERSION.replace("$MAIN", "say 'main got' m0~result"));
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    let mut lines: Vec<String> = stdout(&outcome).lines().map(str::to_string).collect();
+    lines.sort();
+    assert_eq!(
+        lines,
+        [
+            "S1 got 10",
+            "S2 got 20",
+            "done",
+            "main got 0",
+            "main sent m2",
+            "s3 sent m0"
+        ]
+    );
 }
 
 const INVERTED: &str = "rexx-exec: a pinned wait for a message's completion that only an \
@@ -518,4 +542,27 @@ fn the_timer_disarms_when_no_other_activity_is_ready() {
         .join()
         .expect("the run did not panic");
     assert!(!armed, "the timer is still armed with one activity left");
+}
+
+/// Main is not buried by its own root loop: a started activity's pinned
+/// yields run it, and where its body ends there, the program ends with its
+/// status once the pinned activity has (ruling P30).
+#[test]
+fn main_ends_inside_a_pinned_yield() {
+    let source = "g = .flag~new\ng~start('spin')\ndo while g~started == 0\nend\n\
+                  say 'main sets'\ng~done = 1\nsay 'main ends'\nexit 3\n\
+                  ::class flag\n::attribute started unguarded\n::attribute done unguarded\n\
+                  ::method init\n  expose started done\n  started = 0\n  done = 0\n\
+                  ::method spin unguarded\n  self~started = 1\n  \
+                  interpret \"do while \\self~done; end\"\n  say 'spin ended'\n";
+    for invocation in [
+        Invocation::none()
+            .with_switch_mode(SwitchMode::EveryOpportunity)
+            .with_deadline(std::time::Duration::from_secs(60)),
+        Invocation::none().with_deadline(std::time::Duration::from_secs(60)),
+    ] {
+        let outcome = run_with(source, invocation);
+        assert_eq!(outcome.exit_code, 3, "{}", stderr(&outcome));
+        assert_eq!(stdout(&outcome), "main sets\nmain ends\nspin ended\n");
+    }
 }

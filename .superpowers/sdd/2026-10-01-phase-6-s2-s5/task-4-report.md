@@ -1,6 +1,6 @@
 # Task 4 report: slices, the timer thread, the deterministic switch mode, Message~halt
 
-Status: DONE through fix round 1. Commits 50d58865e, dd293bbdb (first round), and the fix round 1 commit; G1-G8 green at 50d58865e; fix round 1 ran the targeted checks of ruling P28, full gates run by the controller.
+Status: DONE through fix round 2. Commits 50d58865e, dd293bbdb (first round), 8e36bcfdb (fix round 1) and the fix round 2 commit; G1-G8 green at 50d58865e; fix round 1 ran the targeted checks of ruling P28, full gates run by the controller.
 
 Base: dcf9fd554 (checked before starting).
 
@@ -224,10 +224,7 @@ report in G4 (report mode, not gated) reads 4247 of 4259; not compared against t
   both), both red with the pinned yield removed (60 s deadline). `concurrency_tests.rs`
   `a_pinned_busy_wait_counts_its_pinned_yields` (pinning feature): yields keyed with `Interpret`,
   none for the unpinned loop.
-  **Not completed:** the reviewer's `h5` (main busy-waits for a target spinning inside `INTERPRET`,
-  then halts it) still hangs: main's own `run_others` loop is below the target's pinned frames, so
-  main is set aside in every round (the inverted case, undetectable as a wait). The oracle
-  completes it.
+  The reviewer's `h5` hung at this round (main set aside as buried); fix round 2 completes it.
 * **Message start tests under `EveryOpportunity`.** With pinned yields, main's pinned test body
   yields to started activities: TEST_HALT_START now passes under the switch mode, and TEST_START
   differs (23 assertions of 45): its started `delayValueReturn` runs its `SysSleep`, which blocks the
@@ -253,4 +250,57 @@ Runs at the fix round 1 tree: `cargo fmt --all --check`; `cargo clippy -p rexx-e
 release and debug: 705 of 705. `cargo test -p rexx-exec --lib`: 888 passed. `REXX_CORPUS_GATE=1
 cargo test --release -p rexx-exec --test concurrency_tests`: 27 passed (Object START 40 pass).
 `--features pinning --test concurrency_tests measured::`: 11 passed. `refusal_sites` (release) and
+`rexx-parse --test sourceline_oracle`: green.
+
+## Fix round 2 (ruling P30: buried means Rust frames live below)
+
+* **Main is not buried by its own root loop** (`scheduler.rs`). `Activities::owners` records, per
+  loop, whether its owner is buried: a pinned wait or pinned yield entered from Rust frames that stay
+  live below (`run_others(true)`), or main waiting at its root driver or at the program's end, whose
+  state is all in its record (`run_others(false)`). `next_runnable` sets aside buried owners only, and
+  the inverted-wait classification (`blocked`, from `set_aside`) follows the same definition.
+* **Main's root continuation lives in its record.** `run_activity_root` records where its driver
+  stopped (`root_driven`: `drive_floor` for a park, `sliced` plus the ready queue for a slice,
+  `Activity::root_end` for its end) and resumes through `root_step`, which any loop calls when it
+  runs main (`run_started` for `MAIN`). Main ending in a nested round records `root_end` (rooted in
+  `Activity::object_roots`) and stays in the table; the loop that owns main returns as soon as it
+  sees it (`root_ended` after each run), and `run_activity_root` answers it, so the program-end steps
+  run there, never in the nested round.
+* **Witnesses** (identical to the oracle on stdout, stderr with the run directory masked, and status,
+  30 runs of 30; identical on this side with and without `REXX_SWITCH_MODE=every`; each killed at 15 s
+  at 8e36bcfdb, built by `git archive` in its own target dir):
+  * `message_halt_pinned_target.rex` (the reviewer's h5): main busy-waits for, then halts, a target
+    spinning inside `INTERPRET`, for SIGNAL ON, CALL ON and untrapped.
+  * `main_ends_in_pinned_yield.rex`: main's body ends (`exit 3`) inside the spinning activity's
+    pinned yield; `spin ended` follows, status 3.
+  * `main_fails_in_pinned_yield.rex`: main fails inside the pinned yield after starting a second
+    activity that fails later; main's report comes first, as on the oracle. With the `root_ended`
+    check removed the reports come in the other order (measured), so this is the witness of that
+    check; `main_ends_in_pinned_yield` alone passes without it.
+* **Crate tests:** `main_ends_inside_a_pinned_yield` (`EveryOpportunity` and the timer, status 3,
+  fixed lines) and `a_wait_main_can_end_from_its_root_is_satisfied`; both red when every owner is
+  treated as buried (the round-1 definition; 60 s deadline).
+* **Classifications re-checked under the corrected definition:**
+  * **p15 moved** (`HIDDEN_INVERSION`, `scheduler::tests::an_inverted_pinned_wait_is_refused` and
+    `concurrency_tests` `measured::an_inverted_wait_is_counted_with_its_kind_and_frames`). Its main
+    parks unpinned at its root on `m0`, so it is no longer buried: the program now completes, rc 0,
+    with the oracle's lines (oracle 30 runs: `s3 sent m0 / main got 0 / main sent m2`, then `done`
+    and `S2 got 20` in either order, 23 and 7, then `S1 got 10`; this crate prints the majority
+    order unswitched). That shape is kept as `a_wait_main_can_end_from_its_root_is_satisfied`
+    (lines compared as a set). The inverted witness now makes main wait pinned
+    (`interpret "say 'main got' m0~result"`): the oracle completes it (rc 0, the same six lines),
+    this crate refuses it as inverted, `s3 sent m0` then the refusal, as p15 did; the pinning test
+    counts it as before.
+  * **p3** (`BURIED_DEADLOCK`, main waits inside `INTERPRET`): still inverted, unchanged.
+  * **The fix-round-1 witness of Task 2** (`an_inversion_the_refusing_loop_set_aside_is_refused_as_inverted`,
+    main waits in a sort comparator): still inverted, unchanged.
+  * The Task 2 corpus programs (`started_waited_in_a_replied_body.rex`, `started_waited_in_uninit.rex`
+    and the rest of `phase-8.txt`) all still match.
+* **Concern 2 of fix round 1** (TEST_START under `EveryOpportunity`) accepted and carried to Task 5.
+
+Runs at the fix round 2 tree: `cargo fmt --all --check`; `cargo clippy -p rexx-exec --all-targets
+-- -D warnings`, and with `--features pinning`: clean. Corpus (release): 708 of 708; with
+`REXX_CORPUS_SWITCH=every`, release and debug: 708 of 708. `cargo test -p rexx-exec --lib`: 890
+passed. `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test concurrency_tests`: 27 passed.
+`--features pinning --test concurrency_tests measured::`: 11 passed. `refusal_sites` (release),
 `rexx-parse --test sourceline_oracle`: green.
