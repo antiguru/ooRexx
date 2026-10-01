@@ -27,7 +27,12 @@
 //! registries ([`reaching_rxapi`]) runs on neither side, the listing run
 //! included: on the oracle those read or change the state rxapi's daemon
 //! keeps between processes. The session queue lives for the process and is
-//! not excluded.
+//! not excluded. The oracle still asks rxapi's macro space, read-only, on each
+//! `::REQUIRES` and external call (`interpreter/package/PackageManager.cpp:747`,
+//! `interpreter/execution/RexxActivation.cpp:2996`), through
+//! `rexxapi/client/MacroSpaceApi.cpp:217-230` and `LocalAPIManager.cpp:56-74`
+//! and `:177-243`, which starts the daemon if it is not running; no ooTest run
+//! on the oracle can avoid that.
 
 // Pulled in by more than one test binary, each of which uses part of it.
 #![allow(dead_code)]
@@ -501,7 +506,9 @@ pub fn test_names(
 
 /// The group's tests, sorted and upper case, from the `::METHOD`s named
 /// `test...` of its `ooTestCase` subclasses: for a group whose whole-group
-/// listing run outlasts the oracle's deadline.
+/// listing run outlasts the oracle's deadline. A test class inheriting from
+/// another test class, or a `::CLASS` directive split across lines, is not
+/// listed.
 pub fn source_test_names(dir: &str, group: &str) -> Vec<String> {
     let text = read_lossy(&groups_root().join(dir).join(format!("{group}.testGroup")));
     let mut in_test_class = false;
