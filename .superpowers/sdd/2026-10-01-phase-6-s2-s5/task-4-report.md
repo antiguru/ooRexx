@@ -1,6 +1,6 @@
 # Task 4 report: slices, the timer thread, the deterministic switch mode, Message~halt
 
-Status: DONE through fix round 2. Commits 50d58865e, dd293bbdb (first round), 8e36bcfdb (fix round 1) and the fix round 2 commit; G1-G8 green at 50d58865e; fix round 1 ran the targeted checks of ruling P28, full gates run by the controller.
+Status: DONE through fix round 3. Commits 50d58865e, dd293bbdb (first round), 8e36bcfdb (fix round 1), 51c32cdda (fix round 2) and the fix round 3 commit; G1-G8 green at 50d58865e; fix round 1 ran the targeted checks of ruling P28, full gates run by the controller.
 
 Base: dcf9fd554 (checked before starting).
 
@@ -304,3 +304,37 @@ Runs at the fix round 2 tree: `cargo fmt --all --check`; `cargo clippy -p rexx-e
 passed. `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test concurrency_tests`: 27 passed.
 `--features pinning --test concurrency_tests measured::`: 11 passed. `refusal_sites` (release),
 `rexx-parse --test sourceline_oracle`: green.
+
+## Fix round 3 (re-review N1, N2, O1; ruling P31)
+
+* **N2 a later refusal after main ended in a nested round** (`scheduler.rs` `run_activity_root`,
+  `keep_late_failure`, `Activities::late_failures`, `run_started_to_end`). Where main's root loop
+  is answered with another activity's failure after main's end was recorded, the failure is kept
+  and reported first among the program's late failures, as when main ends at its root (stderr
+  `rexx-exec: method "REPLYWITH" of class "Message" is not implemented (Phase 9)`, rc 120). Before:
+  under the timer the refusal was dropped (stdout `main ends` / `spin ended`, stderr empty, rc 3).
+  Crate test `a_refusal_after_main_ended_in_a_nested_round_is_reported`, both shapes of the
+  reviewer's `loud` probe (main ending at once, and `a~wait` first, where the refusal answers main's
+  wait and `main ends` is not printed), each under the timer and `EveryOpportunity`, same output and
+  status both ways; red with the failure dropped (status 3). Not a corpus witness: the refusal is
+  this crate's, so the oracle has nothing to compare.
+* **N1 inverted yields (ruling P31)** (`scheduler.rs` `pinned_yield`, `run_round`; `pinning.rs`
+  `inverted_yield!`, `PinReport::inverted_yields`). A pinned yield whose round set aside a buried
+  activity that was ready is counted as an inverted yield, keyed by the pinned frames; no refusal,
+  since a pinned busy-wait cannot be told from a long pinned computation. `pinned_yield`'s doc
+  states the divergence. Test (pinning feature)
+  `pinned_busy_waiters_that_need_each_other_count_inverted_yields`: the reviewer's `pp.rex` shape
+  with `b` setting `x` and spinning inside one `INTERPRET`, so the order is fixed under
+  `EveryOpportunity`; bounded by a 2 s deadline: status 121, no output, inverted yields counted
+  (2788151 in the measuring run), each keyed with `Interpret`. Red with the count removed. The
+  oracle completes this program (`A ended` / `B ended`, rc 0). Under `EveryOpportunity` the
+  reviewer's own `pp.rex` completes here, so it is not the test's shape.
+* **O1 queued**: `.superpowers/sdd/queued/2026-10-02-while-condition-failure-traceback.md`, probes
+  `o1.rex` and `o1b.rex` with both sides' tracebacks.
+
+Runs at the fix round 3 tree: `cargo fmt --all --check`; `cargo clippy -p rexx-exec --all-targets
+-- -D warnings`, and with `--features pinning`: clean. Corpus (release): 708 of 708; with
+`REXX_CORPUS_SWITCH=every`, release and debug: 708 of 708. `cargo test -p rexx-exec --lib`: 891
+passed. `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test concurrency_tests`: 27 passed.
+`--features pinning --test concurrency_tests measured::`: 12 passed. `refusal_sites` (release):
+green.

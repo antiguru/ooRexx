@@ -120,6 +120,20 @@ macro_rules! pinned_yield {
     ($interp:expr) => {};
 }
 
+/// Records an inverted yield: a pinned yield whose round set aside a
+/// buried activity that was ready.
+#[cfg(feature = "pinning")]
+macro_rules! inverted_yield {
+    ($interp:expr) => {
+        $interp.pinning.inverted_yield(&$interp.activity.pins)
+    };
+}
+
+#[cfg(not(feature = "pinning"))]
+macro_rules! inverted_yield {
+    ($interp:expr) => {};
+}
+
 #[cfg(feature = "pinning")]
 pub use counter::{ParkKind, PinKind, PinReport};
 #[cfg(feature = "pinning")]
@@ -221,6 +235,9 @@ mod counter {
         pub deferred_slices: BTreeMap<Vec<PinKind>, u64>,
         /// Pinned yields, keyed by the pinned frames they ran under.
         pub pinned_yields: BTreeMap<Vec<PinKind>, u64>,
+        /// Pinned yields whose round set aside a buried activity that was
+        /// ready, keyed as `pinned_yields` is.
+        pub inverted_yields: BTreeMap<Vec<PinKind>, u64>,
         /// Frames still pushed when the report was taken; zero unless a push
         /// has no matching pop.
         pub unbalanced: usize,
@@ -305,6 +322,15 @@ mod counter {
                 .or_default() += 1;
         }
 
+        pub(crate) fn inverted_yield(&self, pins: &PinStack) {
+            *self
+                .report
+                .borrow_mut()
+                .inverted_yields
+                .entry(frames_of(pins))
+                .or_default() += 1;
+        }
+
         /// Forgets the arrivals so far, keeping the frames pushed.
         pub(crate) fn reset(&self) {
             let mut report = self.report.borrow_mut();
@@ -312,6 +338,7 @@ mod counter {
             report.inverted.clear();
             report.deferred_slices.clear();
             report.pinned_yields.clear();
+            report.inverted_yields.clear();
         }
 
         pub(crate) fn take(&self, pins: &PinStack) -> PinReport {

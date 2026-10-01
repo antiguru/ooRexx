@@ -135,6 +135,8 @@ pub(crate) struct Activities {
     pooled: VecDeque<Option<u32>>,
     /// The last number assigned (`Activity::getIdntfr`'s counter).
     last_number: u32,
+    /// Failures kept by [`Interp::keep_late_failure`].
+    late_failures: Vec<Failure>,
 }
 
 /// Main's handle, which `Activities::new` gives the activity that runs the
@@ -160,11 +162,17 @@ impl Activities {
             retired: Vec::new(),
             pooled: VecDeque::new(),
             last_number: 0,
+            late_failures: Vec::new(),
         }
     }
 
     /// Appends every `ObjRef` an activity that is not running holds.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        for failure in &self.late_failures {
+            if let Failure::Exited(value) = failure {
+                out.extend(*value);
+            }
+        }
         for idle in self.idle.iter().flatten() {
             idle.activity.object_roots(out);
             out.extend(idle.roots.iter());
@@ -375,11 +383,20 @@ impl Interp {
     /// [`Interp::run_started_activities`] until it has nothing left to run,
     /// with each failure it answered on the way, in order.
     pub(crate) fn run_started_to_end(&mut self) -> Vec<(Failure, Vec<crate::FailureSite>)> {
-        let mut failures = Vec::new();
+        let mut failures: Vec<_> = std::mem::take(&mut self.activities.late_failures)
+            .into_iter()
+            .map(|failure| (failure, Vec::new()))
+            .collect();
         while let Err(failure) = self.run_started_activities() {
             failures.push((failure, Vec::new()));
         }
         failures
+    }
+
+    /// A failure another activity answered main's root loop with after
+    /// main's own end, kept for the program's end to report.
+    fn keep_late_failure(&mut self, failure: Failure) {
+        self.activities.late_failures.push(failure);
     }
 
     /// Runs every started activity to its end, for the end of the program.
@@ -416,6 +433,12 @@ impl Interp {
     /// ready queue for its own loop when this one returns. An activity whose
     /// state is all in its record runs in any loop (ruling P30).
     fn run_others(&mut self, buried: bool) -> Result<Waited, Failure> {
+        self.run_round(buried).map(|(waited, _)| waited)
+    }
+
+    /// [`Interp::run_others`], answering besides whether the loop set aside
+    /// a buried activity that was ready.
+    fn run_round(&mut self, buried: bool) -> Result<(Waited, bool), Failure> {
         let me = self.activities.running;
         let level = self.activities.owners.len();
         self.activities.owners.push((me, buried));
@@ -426,11 +449,12 @@ impl Interp {
             .iter()
             .position(|(_, by)| *by >= level)
             .unwrap_or(table.set_aside.len());
+        let set_aside = mine < table.set_aside.len();
         for (activity, _) in table.set_aside.drain(mine..).rev() {
             table.ready.push_front(activity);
         }
         table.owners.pop();
-        waited
+        waited.map(|waited| (waited, set_aside))
     }
 
     /// [`Interp::run_others`]' loop, the one at `level` of the stack.
@@ -667,8 +691,15 @@ impl Interp {
                 return end;
             }
             let failure = self.wait_until_woken();
-            if self.activity.root_end.is_none() {
-                self.root_step(failure);
+            match failure {
+                // Main ended in a nested round, and this failure came after:
+                // the program's end reports it, as it does once main has
+                // ended here.
+                Some(failure) if self.activity.root_end.is_some() => {
+                    self.keep_late_failure(failure);
+                }
+                failure if self.activity.root_end.is_none() => self.root_step(failure),
+                _ => {}
             }
         }
     }
@@ -766,11 +797,17 @@ impl Interp {
     /// A pinned activity's yield (ruling P29): one round of the other ready
     /// activities on its own stack, as a pinned wait runs them, each until it
     /// parks, ends or its own slice ends; those whose frames lie below are
-    /// set aside. The pinned activity then runs on.
+    /// set aside, and a round that set one aside is counted as an inverted
+    /// yield. A pinned busy-wait on a buried activity therefore spins where
+    /// the oracle completes, a recorded divergence (ruling P31).
     fn pinned_yield(&mut self) -> Result<(), Failure> {
         pinned_yield!(self);
         self.yield_at_slice();
-        self.run_others(true).map(|_| ())
+        let (_, set_aside) = self.run_round(true)?;
+        if set_aside {
+            inverted_yield!(self);
+        }
+        Ok(())
     }
 
     /// `RexxActivation::processClauseBoundary`'s halt

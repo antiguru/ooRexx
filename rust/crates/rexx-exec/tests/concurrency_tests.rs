@@ -627,6 +627,39 @@ mod measured {
         );
     }
 
+    /// Two pinned busy-waiters that need each other: `a` spins until `b`
+    /// sets `x`, then sets `y`; `b`, run inside `a`'s pinned yields, sets `x`
+    /// and spins until `y`. `b`'s yields can never run `a`, buried below, so
+    /// each round of them is an inverted yield; the oracle completes (ruling
+    /// P31). Bounded by a deadline, so the count is asserted, not the end.
+    #[test]
+    fn pinned_busy_waiters_that_need_each_other_count_inverted_yields() {
+        let source = "g = .gate~new\na = .t~new~start('a', g)\nb = .t~new~start('b', g)\n\
+                      say a~result\nsay b~result\n::class gate\n::attribute x unguarded\n\
+                      ::attribute y unguarded\n::method init\n  expose x y\n  x = 0\n  y = 0\n\
+                      ::class t\n::method a unguarded\n  use arg g\n  \
+                      interpret 'do while \\g~x; end'\n  g~y = 1\n  return 'A ended'\n\
+                      ::method b unguarded\n  use arg g\n  \
+                      interpret 'g~x = 1; do while \\g~y; end'\n  return 'B ended'\n";
+        let outcome = run_program(
+            "probe.rex",
+            source.as_bytes().to_vec(),
+            Invocation::none()
+                .with_switch_mode(SwitchMode::EveryOpportunity)
+                .with_deadline(std::time::Duration::from_secs(2)),
+        );
+        assert_eq!(outcome.exit_code, rexx_exec::DEADLINE_EXIT);
+        assert_eq!(String::from_utf8_lossy(&outcome.stdout), "");
+        let inverted = &outcome.pinning.inverted_yields;
+        assert!(inverted.values().sum::<u64>() > 0, "{inverted:?}");
+        assert!(
+            inverted
+                .keys()
+                .all(|frames| frames.contains(&PinKind::Interpret)),
+            "{inverted:?}"
+        );
+    }
+
     #[test]
     fn a_park_records_the_pinned_frames_above_it() {
         let report = report_of("call SysSleep 0\n");

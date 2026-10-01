@@ -566,3 +566,44 @@ fn main_ends_inside_a_pinned_yield() {
         assert_eq!(stdout(&outcome), "main sets\nmain ends\nspin ended\n");
     }
 }
+
+/// A refusal in a started activity after main ended inside that activity's
+/// pinned yield is reported at the program's end, as it is where main ends
+/// at its root, under the timer and under `EveryOpportunity`. Where main
+/// waits for the activity instead, the refusal answers main's wait.
+#[test]
+fn a_refusal_after_main_ended_in_a_nested_round_is_reported() {
+    let source = |end: &str| {
+        format!(
+            "g = .flag~new\na = g~start('spin')\ndo while g~started == 0\nend\ng~done = 1\n{end}\n\
+             ::class flag\n::attribute started unguarded\n::attribute done unguarded\n\
+             ::method init\n  expose started done\n  started = 0\n  done = 0\n\
+             ::method spin unguarded\n  self~started = 1\n  \
+             interpret \"do while \\self~done; end\"\n  say 'spin ended'\n  \
+             x = .message~new(.nil, 'x')~replyWith(.array~new)\n  say 'spin after' x~items\n"
+        )
+    };
+    for (end, expected) in [
+        ("say 'main ends'; exit 3", &["main ends", "spin ended"][..]),
+        ("a~wait; say 'main ends'; exit 3", &["spin ended"][..]),
+    ] {
+        for invocation in [
+            Invocation::none()
+                .with_switch_mode(SwitchMode::EveryOpportunity)
+                .with_deadline(std::time::Duration::from_secs(60)),
+            Invocation::none().with_deadline(std::time::Duration::from_secs(60)),
+        ] {
+            let outcome = run_with(&source(end), invocation);
+            assert_eq!(outcome.exit_code, 120, "{end}: {}", stderr(&outcome));
+            assert_eq!(
+                stderr(&outcome),
+                "rexx-exec: method \"REPLYWITH\" of class \"Message\" is not implemented \
+                 (Phase 9)\n"
+            );
+            let printed = stdout(&outcome);
+            let mut lines: Vec<&str> = printed.lines().collect();
+            lines.sort_unstable();
+            assert_eq!(lines, expected, "{end}");
+        }
+    }
+}
