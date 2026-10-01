@@ -255,7 +255,8 @@ fn context_thread(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     depth_of(interp, receiver)?;
-    Ok(Some(interp.counted(1)))
+    let number = interp.activity_number();
+    Ok(Some(interp.counted(number as usize)))
 }
 
 /// `RexxContext::getInterpreter`:

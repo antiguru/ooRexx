@@ -1,0 +1,19 @@
+/* A message a start was sent to cannot be sent or started again. */
+o = .t~new
+m = .message~new(o, 'n')
+m~start
+say m~result
+signal on syntax name s1
+m~send
+s1: say 'send' condition('O')~code
+signal on syntax name s2
+m~start('x')
+s2: say 'start' condition('O')~code (m~target == 'x')
+m2 = o~start('n')
+signal on syntax name s3
+m2~sendWith(o, .array~new)
+s3: say 'sendWith' condition('O')~code
+say m2~result
+::class t
+::method n unguarded
+  return 'n'

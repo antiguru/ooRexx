@@ -1,0 +1,20 @@
+count 19
+/* A started method does not inherit the caller's NUMERIC settings, even under
+   NUMERIC INHERIT, and its ADDRESS is the default. */
+numeric digits 20
+numeric fuzz 3
+numeric form engineering
+address command
+o = .t~new
+say 'caller' digits() fuzz() form() address()
+say 'sent' o~show
+m = o~start('show')
+say 'started' m~result
+m = .message~new(o, 'show')
+say 'held send' m~send
+m~start
+say 'held start' m~result
+::options numeric inherit
+::class t
+::method show
+  return digits() fuzz() form() address() (1/3)

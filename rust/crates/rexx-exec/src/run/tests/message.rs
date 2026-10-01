@@ -390,9 +390,8 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
 }
 
 /// A started send that raises: its traceback on its own activity at once,
-/// `~hasError` answering `1` once waited on, and `~result` raising it again.
-/// The oracle's report of the second raise repeats the started method's clause
-/// where this one names `RESULT`, so no differential row carries it.
+/// `~hasError` answering `1` once waited on, and `~result` raising it again
+/// with the condition object's own traceback and the `~result` clause's line.
 #[test]
 fn a_started_method_that_raises_has_an_error_and_reraises_at_result() {
     const PATH: &str = "/tmp/message-has-error.rex";
@@ -417,8 +416,7 @@ fn a_started_method_that_raises_has_an_error_and_reraises_at_result() {
             "\x20    9 *-* return 1/0\n\
              Error 42 running {PATH} line 9:  Arithmetic overflow/underflow.\n\
              Error 42.3:  Arithmetic overflow; divisor must not be zero.\n\
-             \x20      *-* Compiled method \"RESULT\" with scope \"Message\".\n\
-             \x20    5 *-* say 'result' m~result\n\
+             \x20    9 *-* return 1/0\n\
              Error 42 running {PATH} line 5:  Arithmetic overflow/underflow.\n\
              Error 42.3:  Arithmetic overflow; divisor must not be zero.\n"
         )

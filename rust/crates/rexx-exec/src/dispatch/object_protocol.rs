@@ -17,9 +17,9 @@ use crate::scheduler::{ParkReason, Scheduler, StartedSend};
 
 use super::{
     Behaviour, BehaviourId, Body, Cleared, DEFAULTNAME, Failure, Interp, Loud, MESSAGE_ARGUMENTS,
-    MESSAGE_NAME, MESSAGE_RESULT, MESSAGE_SCOPE, MESSAGE_TARGET, NativeStarted, OBJECTNAME, ObjRef,
-    ObjectMethod, ObjectMethodWrite, Operator, Primitive, Raised, Resolution, Started, Then,
-    UNNAMED_METHOD, class_argument, compile_method_source, is_enhanced_instance,
+    MESSAGE_CONDITION, MESSAGE_NAME, MESSAGE_RESULT, MESSAGE_SCOPE, MESSAGE_TARGET, NativeStarted,
+    OBJECTNAME, ObjRef, ObjectMethod, ObjectMethodWrite, Operator, Primitive, Raised, Resolution,
+    Started, Then, UNNAMED_METHOD, class_argument, compile_method_source, is_enhanced_instance,
     method_name_argument, pointer_address, request_array, required_string_argument,
     required_string_named_argument, unconverted_array_argument,
 };
@@ -827,6 +827,15 @@ fn started_message(
     interp.validate_scope_override(receiver, scope)?;
     let class = interp.object_model().message;
     let object = interp.native_instance(class);
+    interp.set_native_entry(object, MESSAGE_TARGET, receiver);
+    let held_name = interp.text(&name);
+    interp.set_native_entry(object, MESSAGE_NAME, held_name);
+    if let Some(scope) = scope {
+        interp.set_native_entry(object, MESSAGE_SCOPE, scope);
+    }
+    let arguments = interp.security_arguments_array(args);
+    interp.set_native_entry(object, MESSAGE_ARGUMENTS, arguments);
+    interp.started_messages.insert(object);
     let caller = interp.caller();
     let send = StartedSend {
         receiver,
@@ -852,7 +861,10 @@ pub(super) fn record_started(
             interp.set_native_entry(object, MESSAGE_RESULT, value);
             None
         }
-        Err(Failure::Raised(raised)) => Some(raised),
+        Err(Failure::Raised(raised)) => {
+            interp.activity.failed_sends.push(object);
+            Some(raised)
+        }
         Err(other) => return Err(other),
     };
     interp.message_outcomes.insert(object, outcome);
@@ -901,8 +913,9 @@ pub(super) fn native_message_send_with(
 /// `:421`): the held send made, its answer or its condition recorded for
 /// `result`, `completed` and `hasError`, and the condition raised here too.
 fn dispatch_held_message(interp: &mut Interp, message: ObjRef) -> Result<NativeStarted, Failure> {
-    // A message `~start` made holds no unsent send, and reusing it is
-    // `Error_Execution_message_reuse`, which this crate does not raise.
+    if interp.started_messages.contains(&message) {
+        return Err(Raised::message_reuse().into());
+    }
     let (Some(target), Some(name), Some(arguments)) = (
         interp.native_entry(message, MESSAGE_TARGET),
         interp.native_entry(message, MESSAGE_NAME),
@@ -913,7 +926,7 @@ fn dispatch_held_message(interp: &mut Interp, message: ObjRef) -> Result<NativeS
     let scope = interp.native_entry(message, MESSAGE_SCOPE);
     let name = interp.to_text(name).into_owned();
     let values = interp.array_slots_of(arguments).unwrap_or_default();
-    interp.message_outcomes.remove(&message);
+    clear_completion(interp, message);
     interp.validate_scope_override(target, scope)?;
     let caller = interp.caller();
     let sent = match interp.begin_send(target, &name, scope, &values, caller) {
@@ -932,12 +945,15 @@ pub(super) fn record_held(
 ) -> Result<Option<ObjRef>, Failure> {
     match sent {
         Ok(answer) => {
-            interp.set_native_entry(message, MESSAGE_RESULT, answer.unwrap_or(ObjRef::NIL));
+            if let Some(answer) = answer {
+                interp.set_native_entry(message, MESSAGE_RESULT, answer);
+            }
             interp.message_outcomes.insert(message, None);
             interp.message_completed(message);
             Ok(answer)
         }
         Err(Failure::Raised(raised)) => {
+            interp.activity.failed_sends.push(message);
             interp
                 .message_outcomes
                 .insert(message, Some(raised.clone()));
@@ -946,6 +962,14 @@ pub(super) fn record_held(
         }
         Err(other) => Err(other),
     }
+}
+
+/// `MessageClass::clearCompletion` (`classes/MessageClass.cpp:382`): the
+/// outcome of an earlier send forgotten.
+fn clear_completion(interp: &mut Interp, message: ObjRef) {
+    interp.message_outcomes.remove(&message);
+    interp.remove_native_entry(message, MESSAGE_RESULT);
+    interp.remove_native_entry(message, MESSAGE_CONDITION);
 }
 
 /// `Message~start([receiver] [, argument ...])`: the send a `Message~new`
@@ -989,6 +1013,9 @@ pub(super) fn native_message_start_with(
 /// `MessageClass::start` (`classes/MessageClass.cpp:522`): the held send
 /// handed to a new activity, which records its outcome on `message`.
 fn start_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    if !interp.started_messages.insert(message) {
+        return Err(Raised::message_reuse().into());
+    }
     let (Some(target), Some(name), Some(arguments)) = (
         interp.native_entry(message, MESSAGE_TARGET),
         interp.native_entry(message, MESSAGE_NAME),
@@ -999,7 +1026,7 @@ fn start_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<Obj
     let scope = interp.native_entry(message, MESSAGE_SCOPE);
     let name = interp.to_text(name).into_owned();
     let args = interp.array_slots_of(arguments).unwrap_or_default();
-    interp.message_outcomes.remove(&message);
+    clear_completion(interp, message);
     interp.validate_scope_override(target, scope)?;
     let caller = interp.caller();
     let send = StartedSend {
@@ -1036,7 +1063,23 @@ pub(super) fn native_message_result(
 /// `.nil`.
 fn message_result(interp: &mut Interp, message: ObjRef) -> Result<Option<ObjRef>, Failure> {
     match interp.message_outcomes.get(&message) {
-        Some(Some(raised)) => Err(Failure::Raised(raised.clone())),
+        Some(Some(raised)) => {
+            let raised = raised.clone();
+            let Some(object) = interp.native_entry(message, MESSAGE_CONDITION) else {
+                return Err(Failure::Raised(raised));
+            };
+            // `Activity::display` prints the object's `TRACEBACK`
+            // (`concurrency/Activity.cpp:1417`).
+            let lines = match interp.condition_entry(object, b"TRACEBACK") {
+                Some(traceback) => super::collection::list_items(interp, traceback)?,
+                None => Vec::new(),
+            };
+            let lines = lines
+                .into_iter()
+                .map(|line| interp.string_value_text(line))
+                .collect();
+            interp.reraise_kept_condition(*raised, object, lines)
+        }
         Some(None) => {
             let held = interp.native_entry(message, MESSAGE_RESULT);
             Ok(Some(held.unwrap_or(ObjRef::NIL)))
@@ -1084,6 +1127,64 @@ pub(super) fn native_message_has_error(
 ) -> Result<Option<ObjRef>, Failure> {
     let failed = matches!(interp.message_outcomes.get(&receiver), Some(Some(_)));
     Ok(Some(interp.counted(usize::from(failed))))
+}
+
+/// `Message~hasResult`: whether the send has answered a value --
+/// `MessageClass::hasResult` (`classes/MessageClass.cpp:750`).
+pub(super) fn native_message_has_result(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let answered = interp.native_entry(receiver, MESSAGE_RESULT).is_some();
+    Ok(Some(interp.counted(usize::from(answered))))
+}
+
+/// `Message~errorCondition`: the condition object the send failed with, or
+/// `.nil` -- `MessageClass::errorCondition` (`classes/MessageClass.cpp:764`).
+pub(super) fn native_message_error_condition(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.hash_entry_read(receiver, MESSAGE_CONDITION)))
+}
+
+/// `Message~target` -- `MessageClass::messageTarget`
+/// (`classes/MessageClass.cpp:777`).
+pub(super) fn native_message_target(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.hash_entry_read(receiver, MESSAGE_TARGET)))
+}
+
+/// `Message~messageName` -- `MessageClass::messageName`
+/// (`classes/MessageClass.cpp:789`).
+pub(super) fn native_message_name(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    Ok(Some(interp.hash_entry_read(receiver, MESSAGE_NAME)))
+}
+
+/// `Message~arguments`: a copy of the argument array --
+/// `MessageClass::arguments` (`classes/MessageClass.cpp:800`).
+pub(super) fn native_message_arguments(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let held = interp.hash_entry_read(receiver, MESSAGE_ARGUMENTS);
+    let slots = interp.array_slots_of(held).unwrap_or_default();
+    Ok(Some(interp.security_arguments_array(&slots)))
 }
 
 /// `RexxObject::decodeMessageName` (`classes/ObjectClass.cpp:2125`): a

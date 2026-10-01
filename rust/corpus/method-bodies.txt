@@ -87,14 +87,14 @@ Class	superClass	instance	answers	rc 0
 Class	superClasses	instance	answers	rc 0
 Class	uninherit	instance	answers	rc 168
 Message	new	class	answers	rc 163
-Message	arguments	instance	loud	method "ARGUMENTS" of class "Message"
+Message	arguments	instance	answers	rc 0
 Message	completed	instance	answers	rc 0
-Message	errorCondition	instance	loud	method "ERRORCONDITION" of class "Message"
+Message	errorCondition	instance	answers	rc 0
 Message	halt	instance	loud	method "HALT" of class "Message"
 Message	hasError	instance	answers	rc 0
-Message	hasResult	instance	loud	method "HASRESULT" of class "Message"
+Message	hasResult	instance	answers	rc 0
 Message	messageComplete	instance	loud	method "MESSAGECOMPLETE" of class "Message"
-Message	messageName	instance	loud	method "MESSAGENAME" of class "Message"
+Message	messageName	instance	answers	rc 0
 Message	notify	instance	loud	method "NOTIFY" of class "Message"
 Message	reply	instance	loud	method "REPLY" of class "Message"
 Message	replyWith	instance	loud	method "REPLYWITH" of class "Message"
@@ -103,7 +103,7 @@ Message	send	instance	answers	rc 0
 Message	sendWith	instance	answers	rc 168
 Message	start	instance	answers	rc 165
 Message	startWith	instance	answers	rc 168
-Message	target	instance	loud	method "TARGET" of class "Message"
+Message	target	instance	answers	rc 0
 Message	triggered	instance	loud	method "TRIGGERED" of class "Message"
 Message	wait	instance	loud	a wait that nothing left to run can end
 Message	cancel	instance	answers	rc 165

@@ -1246,6 +1246,16 @@ impl Interp {
         }
     }
 
+    /// Removes one entry from a `Body::Native`, and does nothing for a
+    /// receiver that is not one.
+    pub(crate) fn remove_native_entry(&mut self, object: ObjRef, index: &[u8]) {
+        if let Some(held) = self.heap.get_mut(object)
+            && let Body::Native(native) = &mut held.body
+        {
+            native.remove_entry(index);
+        }
+    }
+
     /// Which of the two directories this model built `directory` is, or `None`
     /// for any other object.
     fn directory_scope(&mut self, directory: ObjRef) -> Option<EnvScope> {

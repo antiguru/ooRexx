@@ -1,0 +1,19 @@
+/* A started method re-raises another started method's error through
+   ~result; its own message keeps the same condition object. */
+o = .t~new
+m = o~start('relay')
+m~wait
+call SysSleep 0.5
+say 'relay hasError' m~hasError 'position' m~errorCondition~position
+say 'traceback' m~errorCondition~traceback~items
+r = m~result
+::class t
+::method relay unguarded
+  inner = self~start('boom', 7)
+  inner~wait
+  call SysSleep 0.2
+  say 'inner hasError' inner~hasError
+  return inner~result
+::method boom unguarded
+  use arg n
+  return n / 0

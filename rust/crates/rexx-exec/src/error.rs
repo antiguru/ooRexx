@@ -498,6 +498,12 @@ impl Raised {
         Raised::syntax(98, 985, Vec::new())
     }
 
+    /// 98.915: a send, start or reply of a message object a start has
+    /// already been sent to (`MessageClass::checkReuse`). No substitutions.
+    pub(crate) fn message_reuse() -> Raised {
+        Raised::syntax(98, 915, Vec::new())
+    }
+
     /// 98.981: a `RexxContext` whose activation has ended. No substitutions.
     pub(crate) fn context_not_active() -> Raised {
         Raised::syntax(98, 981, Vec::new())
@@ -1946,6 +1952,10 @@ pub(crate) enum FailureSite {
         /// reported against ([`Delivery::lineless`]).
         package: Option<Vec<u8>>,
     },
+    /// The level a kept condition object was raised again in, which echoes
+    /// nothing and whose line and `name` the report names
+    /// (`Activity::reraiseException`); no level it leaves records a site.
+    Reraised { line: usize, name: Option<Vec<u8>> },
 }
 
 impl FailureSite {
@@ -1953,7 +1963,9 @@ impl FailureSite {
     /// no clause of its own.
     pub(crate) fn line(&self) -> Option<usize> {
         match self {
-            FailureSite::Clause { line, .. } | FailureSite::Named { line, .. } => Some(*line),
+            FailureSite::Clause { line, .. }
+            | FailureSite::Named { line, .. }
+            | FailureSite::Reraised { line, .. } => Some(*line),
             FailureSite::Rendered { .. } => None,
         }
     }
@@ -1963,6 +1975,7 @@ impl FailureSite {
     pub(crate) fn reported_name(&self) -> Option<&[u8]> {
         match self {
             FailureSite::Named { name, .. } => Some(name),
+            FailureSite::Reraised { name, .. } => name.as_deref(),
             FailureSite::Clause { .. } | FailureSite::Rendered { .. } => None,
         }
     }
@@ -1972,7 +1985,9 @@ impl FailureSite {
     pub(crate) fn declaring_package(&self) -> Option<&[u8]> {
         match self {
             FailureSite::Rendered { package, .. } => package.as_deref(),
-            FailureSite::Clause { .. } | FailureSite::Named { .. } => None,
+            FailureSite::Clause { .. }
+            | FailureSite::Named { .. }
+            | FailureSite::Reraised { .. } => None,
         }
     }
 
@@ -1985,6 +2000,7 @@ impl FailureSite {
                 line, text, indent, ..
             } => crate::trace::push_clause(out, *line, *indent, text),
             FailureSite::Rendered { text, .. } => out.extend_from_slice(text),
+            FailureSite::Reraised { .. } => {}
         }
         while out.last() == Some(&b'\n') {
             out.pop();
@@ -1998,6 +2014,7 @@ impl FailureSite {
         match self {
             FailureSite::Clause { text, .. } | FailureSite::Named { text, .. } => text,
             FailureSite::Rendered { text, .. } => text,
+            FailureSite::Reraised { .. } => &[],
         }
     }
 
@@ -2007,7 +2024,7 @@ impl FailureSite {
     pub(crate) fn indent(&self) -> Option<usize> {
         match self {
             FailureSite::Clause { indent, .. } | FailureSite::Named { indent, .. } => Some(*indent),
-            FailureSite::Rendered { .. } => None,
+            FailureSite::Rendered { .. } | FailureSite::Reraised { .. } => None,
         }
     }
 }
@@ -2087,6 +2104,7 @@ impl Raised {
                     out.extend_from_slice(text);
                     out.push(b'\n');
                 }
+                FailureSite::Reraised { .. } => {}
             }
         }
         // The innermost *clause* entry's line, or `0` when nothing was

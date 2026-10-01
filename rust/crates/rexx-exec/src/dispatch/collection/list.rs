@@ -339,6 +339,16 @@ fn list_pairs(
     Ok(pairs)
 }
 
+/// A list's items in order, read the way `ListClass::makeArray` is called
+/// directly rather than sent.
+pub(in crate::dispatch) fn list_items(
+    interp: &mut Interp,
+    receiver: ObjRef,
+) -> Result<Vec<ObjRef>, Failure> {
+    let pairs = list_pairs(interp, receiver)?;
+    Ok(pairs.into_iter().filter_map(|(_, item)| item).collect())
+}
+
 fn native_list_all_items(
     interp: &mut Interp,
     _cleared: Cleared,

@@ -1076,7 +1076,6 @@ mod group_runs {
     /// The Message start tests that do not pass, each with the method its
     /// refusal names.
     const MESSAGE_START_REFUSED: &[(&str, &str)] = &[
-        ("TEST_START", "HASRESULT"),
         ("TEST_HALT_START", "HALT"),
         ("TEST_STARTWITH_NOT_ARRAY", "MAKEARRAY"),
     ];
@@ -1227,6 +1226,17 @@ mod group_runs {
         });
         let failing = not_passing(&results, MESSAGE_START_REFUSED);
         assert!(failing.is_empty(), "not passing: {failing:?}");
+        for test in ["TEST_SEND", "TEST_START"] {
+            let row = results
+                .iter()
+                .find(|row| row.test.eq_ignore_ascii_case(test))
+                .unwrap_or_else(|| panic!("{test} is listed"));
+            assert!(
+                matches!(row.outcome, Outcome::Pass),
+                "{test} is {}",
+                row.outcome.label()
+            );
+        }
     }
 
     #[test]

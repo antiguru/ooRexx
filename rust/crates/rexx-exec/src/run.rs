@@ -2988,6 +2988,12 @@ impl Interp {
     /// Closes off the level that is unwinding now, so the level above it can
     /// record its own clause.
     pub(crate) fn seal_site_level(&mut self) {
+        if matches!(
+            self.activity.failure_site,
+            Some(FailureSite::Reraised { .. })
+        ) {
+            return;
+        }
         if let Some(site) = self.activity.failure_site.take() {
             self.activity.failure_sites.push(site);
         }
@@ -3101,7 +3107,7 @@ impl Interp {
             .iter_mut()
             .chain(self.activity.failure_site.as_mut())
         {
-            if site.line().is_some() {
+            if site.line().is_some() && !matches!(site, FailureSite::Reraised { .. }) {
                 let mut text = Vec::new();
                 site.push_trace_line(&mut text);
                 *site = FailureSite::Rendered {
@@ -3110,6 +3116,43 @@ impl Interp {
                 };
             }
         }
+    }
+
+    /// `MessageClass::result` raising the condition its send failed with
+    /// again, `object` being that condition's object and `traceback` its
+    /// `TRACEBACK` lines (`Activity::reraiseException`,
+    /// `concurrency/Activity.cpp:1330`): the report echoes those lines and
+    /// names this clause's line.
+    pub(crate) fn reraise_kept_condition(
+        &mut self,
+        mut raised: Raised,
+        object: ObjRef,
+        traceback: Vec<Vec<u8>>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let sites = traceback
+            .into_iter()
+            .map(|text| FailureSite::Rendered {
+                text,
+                package: None,
+            })
+            .collect();
+        self.clear_failure_levels();
+        let line = self.activity.clause_state.line();
+        let name = self
+            .compiled_method_site(line, &[], 0)
+            .or_else(|| self.required_package_site(line, &[], 0))
+            .and_then(|site| site.reported_name().map(<[u8]>::to_vec));
+        let package = self
+            .running_program()
+            .map_or(Package::Rexx, Package::Program);
+        self.activity.failure_sites = sites;
+        self.activity.failure_site = Some(FailureSite::Reraised { line, name });
+        self.activity.failure_origin = Some((package, Some(line)));
+        self.activity.failure_propagated = true;
+        self.activity.failure_reraised = true;
+        self.activity.reraised_object = Some(object);
+        raised.position = 0;
+        Err(raised.into())
     }
 
     /// Forgets every level a failure has left, which a trap or a report has
@@ -3124,6 +3167,7 @@ impl Interp {
         self.activity.failure_reraised = false;
         self.activity.reraised_object = None;
         self.activity.reraise_leaving = 0;
+        self.activity.failed_sends.clear();
     }
 
     /// The clause boundary a promoted construct owes once the branch it chose

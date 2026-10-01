@@ -71,50 +71,50 @@
 # kind	name	surface	definition	verdict	reached	answer	witness
 Raised	abstract_class	send	crates/rexx-exec/src/error.rs:455	agrees	yes	98.989	say .K~new over ::class K abstract
 Raised	abstract_metaclass	body	crates/rexx-exec/src/error.rs:425	off-send-surface	-	-	-
-Raised	abstract_method	send	crates/rexx-exec/src/error.rs:1100	agrees	yes	93.965	.K~new~m over ::method m abstract
+Raised	abstract_method	send	crates/rexx-exec/src/error.rs:1106	agrees	yes	93.965	.K~new~m over ::method m abstract
 Loud	accessor_variable	send	crates/rexx-exec/src/lib.rs:539	diverges	yes	a generated accessor for the attribute	say o~"A.B" over ::attribute "A.B" -- o~a is 97.1 on both sides and reaches nothing
-Raised	address_input_source	body	crates/rexx-exec/src/error.rs:779	off-send-surface	-	-	-
-Raised	address_output_target	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
-Raised	argument_needs_a_string_value	body+send	crates/rexx-exec/src/error.rs:1296	agrees	yes	88.909	o~hasMethod(o)
-Raised	argument_not_a_class	send	crates/rexx-exec/src/error.rs:1201	agrees	yes	88.914	o~isA(5)
-Raised	argument_not_a_pad	body	crates/rexx-exec/src/error.rs:638	off-send-surface	-	-	-
-Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:917	off-send-surface	-	-	-
-Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:659	off-send-surface	-	-	-
-Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1212	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
-Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1073	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
-Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:715	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
-Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:888	agrees	yes	93.906	.array~new(-1)
-Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1001	off-send-surface	-	-	-
-Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:674	off-send-surface	-	-	-
-Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1783	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
-Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:623	off-send-surface	-	-	-
-Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:700	off-send-surface	-	-	-
+Raised	address_input_source	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
+Raised	address_output_target	body	crates/rexx-exec/src/error.rs:791	off-send-surface	-	-	-
+Raised	argument_needs_a_string_value	body+send	crates/rexx-exec/src/error.rs:1302	agrees	yes	88.909	o~hasMethod(o)
+Raised	argument_not_a_class	send	crates/rexx-exec/src/error.rs:1207	agrees	yes	88.914	o~isA(5)
+Raised	argument_not_a_pad	body	crates/rexx-exec/src/error.rs:644	off-send-surface	-	-	-
+Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:923	off-send-surface	-	-	-
+Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:665	off-send-surface	-	-	-
+Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1218	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1079	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:721	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:894	agrees	yes	93.906	.array~new(-1)
+Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1007	off-send-surface	-	-	-
+Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:680	off-send-surface	-	-	-
+Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1789	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:629	off-send-surface	-	-	-
+Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:706	off-send-surface	-	-	-
 Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:421	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
-Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1173	agrees	yes	93.959	.array~new(100000000000000001)
+Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1179	agrees	yes	93.959	.array~new(100000000000000001)
 Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
-Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:539	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:545	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
 Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:418	agrees	yes	99.927	.Object~subclass('K', 5)
 Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:316	off-send-surface	-	-	-
 Loud	builtin_option_object	body+send	crates/rexx-exec/src/lib.rs:561	diverges	yes	which is not implemented	signal on syntax; then .context~condition inside the handler -- the oracle answers a copy of the condition Directory at rc 0 and CONDITION('O') is what would build it; outside a handler both sides answer The NIL object
-Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:962	off-send-surface	-	-	-
+Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:968	off-send-surface	-	-	-
 Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:661	off-send-surface	-	-	-
 Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:587	off-send-surface	-	-	-
 Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:594	off-send-surface	-	-	-
-Raised	circular_requires	body	crates/rexx-exec/src/error.rs:545	off-send-surface	-	-	-
+Raised	circular_requires	body	crates/rexx-exec/src/error.rs:551	off-send-surface	-	-	-
 Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:399	off-send-surface	-	-	-
 Raised	class_not_found	body	crates/rexx-exec/src/error.rs:406	off-send-surface	-	-	-
-Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1145	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
-Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1151	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1151	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1157	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
 Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
-Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:552	off-send-surface	-	-	-
-Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1518	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:558	off-send-surface	-	-	-
+Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1524	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
 Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:669	off-send-surface	-	-	-
-Raised	context_not_active	send	crates/rexx-exec/src/error.rs:502	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
-Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1479	agrees	yes	93.970	.K~copy
-Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:514	off-send-surface	-	-	-
-Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:951	off-send-surface	-	-	-
-Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:944	off-send-surface	-	-	-
-Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:802	off-send-surface	-	-	-
+Raised	context_not_active	send	crates/rexx-exec/src/error.rs:508	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1485	agrees	yes	93.970	.K~copy
+Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:520	off-send-surface	-	-	-
+Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:957	off-send-surface	-	-	-
+Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:950	off-send-surface	-	-	-
+Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:808	off-send-surface	-	-	-
 Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:694	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
 Loud	delegate_variable	send	crates/rexx-exec/src/lib.rs:551	diverges	yes	a DELEGATE to the variable	::method m delegate a.b on an instance
 Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:375	off-send-surface	-	-	-
@@ -123,47 +123,47 @@ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:381	off-send-surfac
 Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:368	off-send-surface	-	-	-
 Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:428	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
 Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:400	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
-Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1777	off-send-surface	-	-	-
+Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1783	off-send-surface	-	-	-
 Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:391	off-send-surface	-	-	-
-Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1559	off-send-surface	-	-	-
+Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1565	off-send-surface	-	-	-
 Raised	escalated	body	crates/rexx-exec/src/command.rs:408	off-send-surface	-	-	-
-Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:532	off-send-surface	-	-	-
-Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1760	off-send-surface	-	-	-
-Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1724	off-send-surface	-	-	-
+Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:538	off-send-surface	-	-	-
+Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1766	off-send-surface	-	-	-
+Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1730	off-send-surface	-	-	-
 Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:523	off-send-surface	-	-	-
 Loud	expression	body	crates/rexx-exec/src/lib.rs:308	off-send-surface	-	-	-
 Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:287	off-send-surface	-	-	-
 Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
-Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1565	off-send-surface	-	-	-
-Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:838	off-send-surface	-	-	-
-Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1745	off-send-surface	-	-	-
-Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1739	off-send-surface	-	-	-
-Raised	from	body+send	crates/rexx-exec/src/error.rs:1825	agrees	yes	syntax(error.code	signal on syntax over .Routine~new('T', 'return arg(1') -- 36.901, the code the parse error carries, so the row's answer is the source of the code rather than an M.N
-Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1729	off-send-surface	-	-	-
+Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1571	off-send-surface	-	-	-
+Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:844	off-send-surface	-	-	-
+Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1751	off-send-surface	-	-	-
+Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1745	off-send-surface	-	-	-
+Raised	from	body+send	crates/rexx-exec/src/error.rs:1831	agrees	yes	syntax(error.code	signal on syntax over .Routine~new('T', 'return arg(1') -- 36.901, the code the parse error carries, so the row's answer is the source of the code rather than an M.N
+Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1735	off-send-surface	-	-	-
 Loud	guard_when_false	body	crates/rexx-exec/src/lib.rs:676	off-send-surface	-	-	-
 Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
-Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1123	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1129	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
 Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:330	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
-Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:877	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
-Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1112	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
-Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1139	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:883	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1118	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1145	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
 Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:476	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
 Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:469	agrees	yes	98.942	.K~inherit(.Array)
 Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:257	off-send-surface	-	-	-
 Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
 Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:342	off-send-surface	-	-	-
-Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1676	agrees	yes	93.962	'YW==YWJj'~decodeBase64
-Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:808	off-send-surface	-	-	-
-Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:980	off-send-surface	-	-	-
-Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:990	off-send-surface	-	-	-
-Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:859	agrees	yes	93.923	.stringtable~new('abc')
-Raised	invalid_option	body	crates/rexx-exec/src/error.rs:900	off-send-surface	-	-	-
-Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:867	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
-Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:789	off-send-surface	-	-	-
+Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1682	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:814	off-send-surface	-	-	-
+Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:986	off-send-surface	-	-	-
+Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:996	off-send-surface	-	-	-
+Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:865	agrees	yes	93.923	.stringtable~new('abc')
+Raised	invalid_option	body	crates/rexx-exec/src/error.rs:906	off-send-surface	-	-	-
+Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:873	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:795	off-send-surface	-	-	-
 Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:702	off-send-surface	-	-	-
 Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:611	off-send-surface	-	-	-
-Raised	label_not_found	body	crates/rexx-exec/src/error.rs:573	off-send-surface	-	-	-
-Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:935	off-send-surface	-	-	-
+Raised	label_not_found	body	crates/rexx-exec/src/error.rs:579	off-send-surface	-	-	-
+Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:941	off-send-surface	-	-	-
 Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:301	off-send-surface	-	-	-
 Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:453	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
 Loud	library_source	body	crates/rexx-exec/src/lib.rs:493	off-send-surface	-	-	-
@@ -171,81 +171,82 @@ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:307	agrees	yes	98
 Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
 Loud	loop_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:635	off-send-surface	-	-	-
 Raised	lostdigits	body	crates/rexx-exec/src/error.rs:463	off-send-surface	-	-	-
-Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1492	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
-Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1485	agrees	yes	93.972	o~sendWith(o, (1))
+Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1498	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1491	agrees	yes	93.972	o~sendWith(o, (1))
+Raised	message_reuse	send	crates/rexx-exec/src/error.rs:503	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
 Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
-Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1654	off-send-surface	-	-	-
-Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1224	agrees	yes	93.914	.Package~defaultOptions('FORM')
-Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1179	agrees	yes	93.907	(1,2,3)~at(0)
-Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1660	off-send-surface	-	-	-
+Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1230	agrees	yes	93.914	.Package~defaultOptions('FORM')
+Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.907	(1,2,3)~at(0)
+Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1097	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
 Loud	method_body	body	crates/rexx-exec/src/lib.rs:486	off-send-surface	-	-	-
 Loud	method_from_source	body+send	crates/rexx-exec/src/lib.rs:469	diverges	yes	a method source that is neither a string nor an array	self~setMethod('Z', .nil, 'BOGUS')
-Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1473	agrees	yes	93.915	(1,2)~makeString('X')
-Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1059	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
-Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1665	agrees	yes	93.943	'abc'~sign
-Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1670	agrees	yes	93.940	'1.5'~modulo(3)
-Raised	method_user_defined	send	crates/rexx-exec/src/error.rs:1086	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
-Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:969	off-send-surface	-	-	-
-Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:565	off-send-surface	-	-	-
-Raised	missing_argument	body	crates/rexx-exec/src/error.rs:607	off-send-surface	-	-	-
-Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1047	agrees	yes	93.903	s~seek('write') over a stream opened read
-Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1128	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1479	agrees	yes	93.915	(1,2)~makeString('X')
+Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1065	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1671	agrees	yes	93.943	'abc'~sign
+Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1676	agrees	yes	93.940	'1.5'~modulo(3)
+Raised	method_user_defined	send	crates/rexx-exec/src/error.rs:1092	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:975	off-send-surface	-	-	-
+Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:571	off-send-surface	-	-	-
+Raised	missing_argument	body	crates/rexx-exec/src/error.rs:613	off-send-surface	-	-	-
+Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1053	agrees	yes	93.903	s~seek('write') over a stream opened read
+Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1134	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
 Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:579	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
 Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:359	agrees	yes	88.901	say .Stream~new('/dev/null')~position
-Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1037	agrees	yes	93.903	o~hasMethod
-Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1238	agrees	yes	88.901	self~setMethod with no arguments
+Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1043	agrees	yes	93.903	o~hasMethod
+Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1244	agrees	yes	88.901	self~setMethod with no arguments
 Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:314	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
-Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1459	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
-Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1452	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
-Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1466	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
-Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1445	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1465	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1458	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1472	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1451	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
 Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:279	off-send-surface	-	-	-
 Raised	namespace_not_found	body	crates/rexx-exec/src/error.rs:269	off-send-surface	-	-	-
 Raised	namespace_routine_not_found	body	crates/rexx-exec/src/error.rs:262	off-send-surface	-	-	-
-Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1303	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
-Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1313	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
-Raised	native_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1251	off-send-surface	-	-	-
-Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1411	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
-Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1429	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
-Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1388	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
-Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1397	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
-Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1378	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
-Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1340	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
-Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1326	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
-Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1255	off-send-surface	-	-	-
-Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1276	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
-Raised	native_argument_outside_range	send	crates/rexx-exec/src/error.rs:1354	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1309	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
+Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1319	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
+Raised	native_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1257	off-send-surface	-	-	-
+Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1417	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1435	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1394	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1403	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1384	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1346	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1332	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1261	off-send-surface	-	-	-
+Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1282	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+Raised	native_argument_outside_range	send	crates/rexx-exec/src/error.rs:1360	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
 Loud	native_method	send	crates/rexx-exec/src/lib.rs:409	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
 Raised	no_data_returned	body	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
-Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1499	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
-Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1156	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
-Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1595	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
-Raised	nomethod	send	crates/rexx-exec/src/error.rs:1529	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1505	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1162	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1601	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+Raised	nomethod	send	crates/rexx-exec/src/error.rs:1535	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
 Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
-Raised	nostring	send	crates/rexx-exec/src/error.rs:1540	agrees	yes	NOSTRING	substr('abcdef', o)
-Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1549	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
-Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1709	off-send-surface	-	-	-
-Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1699	off-send-surface	-	-	-
-Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1683	off-send-surface	-	-	-
-Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:586	off-send-surface	-	-	-
-Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1106	agrees	yes	93.901	(1,2,3)~at()
-Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1166	agrees	yes	93.925	.array~new(2,2)~at(1)
+Raised	nostring	send	crates/rexx-exec/src/error.rs:1546	agrees	yes	NOSTRING	substr('abcdef', o)
+Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1555	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1715	off-send-surface	-	-	-
+Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1705	off-send-surface	-	-	-
+Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1689	off-send-surface	-	-	-
+Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:592	off-send-surface	-	-	-
+Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1112	agrees	yes	93.901	(1,2,3)~at()
+Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1172	agrees	yes	93.925	.array~new(2,2)~at(1)
 Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:490	agrees	yes	98.945	.K~uninherit(.Comparable)
 Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
 Raised	not_one_of	send	crates/rexx-exec/src/error.rs:433	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
-Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1582	off-send-surface	-	-	-
+Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1588	off-send-surface	-	-	-
 Loud	object_method	send	crates/rexx-exec/src/lib.rs:477	diverges	yes	a receiver with no scope of its own	self~setMethod('ZZ', "return 'x'") inside ::method cm class, then .K~zz -- from the main body it is 98.991
-Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1790	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1796	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
 Loud	object_position	body	crates/rexx-exec/src/lib.rs:383	off-send-surface	-	-	-
 Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:603	off-send-surface	-	-	-
 Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:370	off-send-surface	-	-	-
 Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:463	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
-Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1511	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1517	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
 Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:571	off-send-surface	-	-	-
 Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
-Raised	private_method	send	crates/rexx-exec/src/error.rs:1505	agrees	yes	97.2	.K~new~p over ::method p private
-Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:579	off-send-surface	-	-	-
-Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:756	off-send-surface	-	-	-
+Raised	private_method	send	crates/rexx-exec/src/error.rs:1511	agrees	yes	97.2	.K~new~p over ::method p private
+Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:762	off-send-surface	-	-	-
 Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:83	off-send-surface	-	-	-
 Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
 Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
@@ -268,56 +269,56 @@ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-sen
 Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:167	off-send-surface	-	-	-
 Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
 Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:162	off-send-surface	-	-	-
-Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1028	off-send-surface	-	-	-
-Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1020	off-send-surface	-	-	-
+Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1034	off-send-surface	-	-	-
+Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1026	off-send-surface	-	-	-
 Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:351	diverges	yes	a message send to	a. = 'dflt' then a.~length
 Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:483	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
 Loud	redirection	body	crates/rexx-exec/src/lib.rs:361	off-send-surface	-	-	-
-Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:762	off-send-surface	-	-	-
-Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1572	off-send-surface	-	-	-
+Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1578	off-send-surface	-	-	-
 Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:619	off-send-surface	-	-	-
 Loud	reply_inside_construct	body	crates/rexx-exec/src/lib.rs:712	off-send-surface	-	-	-
-Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1734	off-send-surface	-	-	-
-Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1750	off-send-surface	-	-	-
+Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1740	off-send-surface	-	-	-
+Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1756	off-send-surface	-	-	-
 Loud	required_source	body	crates/rexx-exec/src/lib.rs:503	off-send-surface	-	-	-
-Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:521	off-send-surface	-	-	-
+Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:527	off-send-surface	-	-	-
 Raised	restricted_method	send	crates/rexx-exec/src/error.rs:448	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
-Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1755	off-send-surface	-	-	-
+Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1761	off-send-surface	-	-	-
 Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:497	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
-Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:508	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:514	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
 Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
 Loud	scheduler_inconsistency	body+ir	crates/rexx-exec/src/lib.rs:694	off-send-surface	-	-	-
-Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1189	agrees	yes	88.914	o~m:v with v holding 5
-Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1195	agrees	yes	93.957	o~m:.Array
+Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1195	agrees	yes	88.914	o~m:v with v holding 5
+Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1201	agrees	yes	93.957	o~m:.Array
 Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:627	off-send-surface	-	-	-
-Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:814	off-send-surface	-	-	-
+Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:820	off-send-surface	-	-	-
 Loud	setup_method	send	crates/rexx-exec/src/lib.rs:515	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
 Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:644	off-send-surface	-	-	-
-Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1134	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1140	agrees	yes	93.954	.Array~new(2,3)~delete(1)
 Raised	source_syntax	send	crates/rexx-exec/src/dispatch/class_protocol.rs:290	agrees	yes	line_of(error.byte)	signal on syntax over .Routine~new('T', .array~of('nop', 'say 1', 'if then', 'nop')) -- 35.929 at POSITION 3, the line within the source; the message keeps its placeholders (roadmap row 3)
-Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:689	off-send-surface	-	-	-
-Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:773	off-send-surface	-	-	-
-Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:695	off-send-surface	-	-	-
+Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:779	off-send-surface	-	-	-
+Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:774	off-send-surface	-	-	-
 Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:653	off-send-surface	-	-	-
-Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:740	off-send-surface	-	-	-
-Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:745	off-send-surface	-	-	-
-Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:751	off-send-surface	-	-	-
+Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:746	off-send-surface	-	-	-
+Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:751	off-send-surface	-	-	-
+Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:757	off-send-surface	-	-	-
 Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
-Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:911	agrees	yes	5.0	.array~new(999999999999999)
-Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:596	off-send-surface	-	-	-
+Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:917	agrees	yes	5.0	.array~new(999999999999999)
+Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:602	off-send-surface	-	-	-
 Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:343	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
 Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:351	off-send-surface	-	-	-
-Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1067	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
-Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1161	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
-Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1054	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
-Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1589	off-send-surface	-	-	-
+Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1073	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1167	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1060	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1595	off-send-surface	-	-	-
 Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:441	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
 Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:325	off-send-surface	-	-	-
 Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:686	off-send-surface	-	-	-
-Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1118	agrees	yes	93.967	.Pointer~new
+Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1124	agrees	yes	93.967	.Pointer~new
 Loud	use_local_in_a_method	body	crates/rexx-exec/src/lib.rs:531	off-send-surface	-	-	-
-Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1772	off-send-surface	-	-	-
-Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1766	off-send-surface	-	-	-
-Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1719	off-send-surface	-	-	-
-Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1693	off-send-surface	-	-	-
-Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:957	off-send-surface	-	-	-
+Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1778	off-send-surface	-	-	-
+Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1772	off-send-surface	-	-	-
+Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1725	off-send-surface	-	-	-
+Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1699	off-send-surface	-	-	-
+Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:963	off-send-surface	-	-	-

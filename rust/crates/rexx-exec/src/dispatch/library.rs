@@ -1079,6 +1079,11 @@ impl Interp {
     /// Holds `failure` on the running native frame for the call to raise once
     /// the boundary has answered [`Refused::Raised`].
     fn hold_native_condition(&mut self, failure: Failure) -> Condition {
+        let refused = match &failure {
+            Failure::Raised(raised) => self.settle_failed_sends(raised).err(),
+            _ => None,
+        };
+        let failure = refused.unwrap_or(failure);
         self.activity
             .native_handles
             .last_mut()

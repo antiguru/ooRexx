@@ -125,7 +125,18 @@ pub(crate) struct Activities {
     /// The thread contexts of ended activities, which an extension may have
     /// kept and which last until interpreter termination.
     retired: Vec<rexx_api::ffi::ThreadContext>,
+    /// The numbers of ended activities a new one takes first, oldest first:
+    /// the oracle's pool of idle threads (`availableActivities`,
+    /// `concurrency/ActivityManager.cpp:556`), whose threads keep their
+    /// numbers, including none.
+    pooled: VecDeque<Option<u32>>,
+    /// The last number assigned (`Activity::getIdntfr`'s counter).
+    last_number: u32,
 }
+
+/// `ActivityManager::MAX_THREAD_POOL_SIZE` (`ActivityManager.hpp:358`): an
+/// ended activity is pooled while the pool holds no more than this.
+const MAX_POOLED: usize = 5;
 
 impl Activities {
     pub(crate) fn new() -> Activities {
@@ -140,6 +151,8 @@ impl Activities {
             next_message: 0,
             waiters: FxHashMap::default(),
             retired: Vec::new(),
+            pooled: VecDeque::new(),
+            last_number: 0,
         }
     }
 
@@ -196,9 +209,13 @@ pub(crate) trait Scheduler {
 
 impl Scheduler for Interp {
     fn spawn(&mut self, send: StartedSend, then: Then) -> ActivityId {
+        // `Activity::setCallerStackFrameAsStringTable` numbers the spawner
+        // (`concurrency/Activity.cpp:1206`).
+        self.activity_number();
         let mut activity = Activity::new();
         activity.first_send = Some(Box::new(send));
         activity.root_then = Some(then);
+        activity.number = self.activities.pooled.pop_front().flatten();
         let mut roots = ActivityRoots::new();
         roots.set_frame_block(self.roots.activity().frames().size());
         let table = &mut self.activities;
@@ -235,6 +252,20 @@ impl Scheduler for Interp {
 }
 
 impl Interp {
+    /// The running activity's number, which `.context~thread` answers: main
+    /// is 1 and an activity is numbered when first asked, as the oracle
+    /// numbers its threads (`Activity::getIdntfr`,
+    /// `concurrency/Activity.cpp:108`).
+    pub(crate) fn activity_number(&mut self) -> u32 {
+        if let Some(number) = self.activity.number {
+            return number;
+        }
+        self.activities.last_number += 1;
+        let number = self.activities.last_number;
+        self.activity.number = Some(number);
+        number
+    }
+
     /// Wakes every activity waiting on `message`, whose send has completed.
     pub(crate) fn message_completed(&mut self, message: ObjRef) {
         let Some(id) = self.activities.message_ids.remove(&message) else {
@@ -259,6 +290,9 @@ impl Interp {
         if ended {
             table.retired.push(idle.activity.thread.clone());
             table.free.push(outgoing.0);
+            if table.pooled.len() <= MAX_POOLED {
+                table.pooled.push_back(idle.activity.number);
+            }
         } else {
             table.idle[outgoing.0 as usize] = Some(idle);
         }
@@ -487,13 +521,19 @@ impl Interp {
             Err(Failure::Exited(value)) => Ok(value),
             other => other,
         };
-        if let Err(Failure::Raised(raised)) = &sent {
-            self.report_started_failure(raised);
-        }
+        let untrapped = match &sent {
+            Err(Failure::Raised(raised)) => Some(raised.clone()),
+            _ => None,
+        };
         let Some(then) = self.activity.root_then.take() else {
             unreachable!("a started activity records its outcome");
         };
-        match self.apply_then(then, sent) {
+        let recorded = self.apply_then(then, sent);
+        if let Some(raised) = untrapped {
+            self.settle_failed_sends(&raised)?;
+            self.report_started_failure(&raised);
+        }
+        match recorded {
             Ok(_) | Err(Failure::Raised(_)) => Ok(Stopped::Ended),
             Err(failure) => Err(failure),
         }

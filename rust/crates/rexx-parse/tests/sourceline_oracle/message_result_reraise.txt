@@ -1,0 +1,37 @@
+count 36
+/* ~result re-raises a started method's condition object: trapped twice, it
+   names the ~result line; untrapped two calls deep, no caller adds a line. */
+o = .t~new
+m = o~start('boom', 7)
+m~wait
+call SysSleep 0.3
+call trapit m
+say 'kept position' m~errorCondition~position
+call trapit m
+call deeper m
+say 'not reached'
+exit
+trapit: procedure
+  use arg m
+  signal on syntax
+  r = m~result
+  return
+syntax:
+  c = condition('O')
+  say 'trapped' c~code 'position' c~position 'instruction' c~instruction 'propagated' c~propagated
+  say 'traceback' c~traceback~items c~traceback~firstItem
+  return
+deeper: procedure
+  use arg m
+  call deepest m
+  return
+deepest: procedure
+  use arg m
+  x = 1
+  return m~result
+::class t
+::method boom unguarded
+  use arg n
+  x = n + 1
+  y = x / 0
+  return y

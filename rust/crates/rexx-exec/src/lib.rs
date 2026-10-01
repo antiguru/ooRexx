@@ -1270,6 +1270,9 @@ struct Interp {
     /// with -- `MessageClass`'s `flagResultReturned` and `flagRaiseError`
     /// (`classes/MessageClass.hpp:61`-`:62`) and its `condition` field (`:135`).
     message_outcomes: FxHashMap<ObjRef, Option<Box<Raised>>>,
+    /// The `Message` objects a start has been sent to, which cannot be sent,
+    /// started or replied again -- `MessageClass`'s `flagMsgActivated`.
+    started_messages: rustc_hash::FxHashSet<ObjRef>,
     /// The methods a directive implements itself -- see [`GeneratedMethod`]
     /// for why these are not rows of [`method_bodies`], which is a
     /// measurement rather than a taxonomy.
@@ -1859,6 +1862,7 @@ impl Interp {
             stem_exposers: FxHashMap::default(),
             method_flag_writes: FxHashMap::default(),
             message_outcomes: FxHashMap::default(),
+            started_messages: rustc_hash::FxHashSet::default(),
             generated_methods: FxHashMap::default(),
             native_externals: FxHashMap::default(),
             libraries: Libraries::new(),
@@ -2527,6 +2531,7 @@ impl Interp {
             stem_exposers,
             method_flag_writes: _,
             message_outcomes: _,
+            started_messages: _,
             generated_methods: _,
             native_externals: _,
             // Library handles and procedure names, no `ObjRef` in either.
@@ -2979,6 +2984,13 @@ fn execute(
         }
         interp.run(program)
     });
+    let result = match result {
+        Err(Failure::Raised(raised)) => match interp.settle_failed_sends(&raised) {
+            Ok(()) => Err(Failure::Raised(raised)),
+            Err(failure) => Err(failure),
+        },
+        other => other,
+    };
     // The whole echo stack, innermost first: the levels `seal_site_level`
     // already closed, then the level that was still unwinding when the
     // condition reached the top. See `Activity::failure_sites` for why the two

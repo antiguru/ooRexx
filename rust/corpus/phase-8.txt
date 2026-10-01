@@ -401,3 +401,17 @@ lang/message_start.rex
 # wait in either is a pinned wait.
 lang/started_waited_in_a_replied_body.rex
 lang/started_waited_in_uninit.rex
+# Phase 6 S2 Task 3: activity numbers, the Message accessors, and an error in a
+# started activity kept for ~errorCondition and re-raised by ~result.
+lang/context_thread_numbers.rex
+lang/context_thread_sequential.rex
+lang/context_thread_pool_bound.rex
+lang/context_thread_lazy.rex
+lang/message_start_error_condition.rex
+lang/message_result_reraise.rex
+lang/message_result_relayed.rex
+lang/message_accessors.rex
+lang/message_reuse.rex
+lang/message_send_error_condition.rex
+lang/started_numeric_address.rex
+lang/message_error_condition_after_main.rex

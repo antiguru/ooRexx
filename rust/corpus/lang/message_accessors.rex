@@ -1,0 +1,31 @@
+/* Message~hasResult, ~errorCondition, ~target, ~messageName and ~arguments,
+   on Message~new and Object~start messages. */
+o = .t~new
+m = .message~new(o, 'Echo', 'I', 'a', 'b')
+say 'new:' m~hasResult m~hasError m~completed (m~errorCondition == .nil)
+say 'target' (m~target == o) 'name' m~messageName 'args' m~arguments~makeString('L', ',') m~arguments~items
+a = m~arguments
+a[1] = 'changed'
+say 'copy' m~arguments[1] (m~arguments == m~arguments)
+m~start
+m~wait
+say 'done:' m~hasResult m~hasError m~completed (m~errorCondition == .nil) m~result
+m2 = .message~new(o, 'nothing')
+m2~start
+m2~wait
+say 'nothing:' m2~hasResult m2~completed m2~result
+m3 = o~start(('ECHO', .t), 'x', 'y')
+say 'started target' (m3~target == o) 'name' m3~messageName 'args' m3~arguments~makeString('L', ',')
+say 'started result' m3~result m3~hasResult
+m4 = o~startWith('echo', .array~of(1, , 3))
+say 'startWith args' m4~arguments~items m4~arguments~size m4~arguments~hasIndex(2) m4~result
+m5 = .message~new(o, 'echo', 'A', .array~of('p', 'q'))
+say 'A args' m5~arguments~makeString('L', ',') m5~send(.t~new, 'z')
+say 'after send' m5~arguments~makeString('L', ',') (m5~target == o)
+m6 = .message~new('abc', 'length')
+say 'sent:' m6~hasResult m6~send m6~hasResult
+::class t
+::method echo unguarded
+  return arg(1)'|'arg(2)'|'arg(3)
+::method nothing unguarded
+  return

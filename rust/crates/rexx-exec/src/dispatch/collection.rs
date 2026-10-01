@@ -33,6 +33,7 @@ pub(super) mod queue;
 // `Supplier`'s primitive methods, chained into `ObjectModel::build` after
 // `Array`'s.
 pub(super) mod supplier;
+pub(super) use list::list_items;
 pub(super) use supplier::new_supplier;
 
 /// [`array_slots`] over the receiver's store rather than the receiver.

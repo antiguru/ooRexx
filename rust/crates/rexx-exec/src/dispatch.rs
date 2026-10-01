@@ -183,13 +183,14 @@ mod object_protocol;
 use object_protocol::{
     ArrayArgument, array_argument, decode_message_name, hash_value, native_class, native_copy,
     native_default_name, native_has_method, native_hash_code, native_identity_hash, native_is_a,
-    native_is_nil, native_message_completed, native_message_has_error, native_message_result,
-    native_message_send, native_message_send_with, native_message_start, native_message_start_with,
-    native_message_wait, native_no_op, native_object_concat, native_object_concat_blank,
-    native_object_different, native_object_identical, native_object_name, native_object_name_set,
-    native_request, native_run, native_send, native_send_with, native_set_method, native_start,
-    native_start_with, native_string, native_unset_method, operator_argument, run_method_body,
-    string_hash,
+    native_is_nil, native_message_arguments, native_message_completed,
+    native_message_error_condition, native_message_has_error, native_message_has_result,
+    native_message_name, native_message_result, native_message_send, native_message_send_with,
+    native_message_start, native_message_start_with, native_message_target, native_message_wait,
+    native_no_op, native_object_concat, native_object_concat_blank, native_object_different,
+    native_object_identical, native_object_name, native_object_name_set, native_request,
+    native_run, native_send, native_send_with, native_set_method, native_start, native_start_with,
+    native_string, native_unset_method, operator_argument, run_method_body, string_hash,
 };
 
 // The required-string protocol and the string conversion behind it.
@@ -547,15 +548,39 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ),
     (
         "Message",
+        "ARGUMENTS",
+        Arity::Fixed(0),
+        native_message_arguments,
+    ),
+    (
+        "Message",
         "COMPLETED",
         Arity::Fixed(0),
         native_message_completed,
     ),
     (
         "Message",
+        "ERRORCONDITION",
+        Arity::Fixed(0),
+        native_message_error_condition,
+    ),
+    (
+        "Message",
         "HASERROR",
         Arity::Fixed(0),
         native_message_has_error,
+    ),
+    (
+        "Message",
+        "HASRESULT",
+        Arity::Fixed(0),
+        native_message_has_result,
+    ),
+    (
+        "Message",
+        "MESSAGENAME",
+        Arity::Fixed(0),
+        native_message_name,
     ),
     ("Message", "START", Arity::Counted, native_message_start),
     (
@@ -564,6 +589,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(2),
         native_message_start_with,
     ),
+    ("Message", "TARGET", Arity::Fixed(0), native_message_target),
     ("Method", "ANNOTATION", Arity::Fixed(1), native_annotation),
     ("Method", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     // `MethodClass::getScopeRexx`, `memory/Setup.cpp:1113`. `Routine` and
@@ -928,6 +954,10 @@ const UNNAMED_METHOD: &[u8] = b"*UNNAMED*";
 
 /// The entry a `Message` object keeps the value its send answered under.
 const MESSAGE_RESULT: &[u8] = b"RESULT";
+
+/// The entry a `Message` object keeps the condition object its send failed
+/// with under.
+pub(crate) const MESSAGE_CONDITION: &[u8] = b"ERRORCONDITION";
 
 /// The entries a `Message~new` object keeps its unsent message in:
 /// `MessageClass`'s `receiver`, `message`, `startscope` and `args`.

@@ -808,6 +808,10 @@ impl NativeObject {
         self.entries.insert(key.into(), value);
     }
 
+    pub fn remove_entry(&mut self, key: &[u8]) {
+        self.entries.remove(key);
+    }
+
     /// Every key this object holds, as owned copies.
     pub fn keys(&self) -> Vec<Box<[u8]>> {
         self.entries.keys().cloned().collect()

@@ -201,6 +201,24 @@ fn a_pinned_wait_nothing_can_end_is_refused() {
     );
 }
 
+/// `~result` of a message nothing ever sends is refused, owner none, where
+/// the oracle blocks for ever (`oracle-crashes.txt`'s unsent `Message~result`
+/// entry); the readers before it answer.
+#[test]
+fn the_result_of_a_message_never_sent_is_refused() {
+    let outcome = run("m = .message~new('abc', 'length')
+                       say m~hasResult m~completed m~target m~messageName
+                       say m~result
+say 'not reached'
+");
+    assert_eq!(outcome.exit_code, 120);
+    assert_eq!(stdout(&outcome), "0 0 abc LENGTH\n");
+    assert_eq!(
+        stderr(&outcome),
+        "rexx-exec: a wait that nothing left to run can end is not implemented\n"
+    );
+}
+
 /// A started activity whose wait nothing can end is refused at the program's
 /// end, where the oracle blocks for ever; main's output stands.
 #[test]

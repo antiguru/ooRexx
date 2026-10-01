@@ -1,0 +1,23 @@
+count 22
+/* An untrapped error in a started method: its report at once, then
+   ~errorCondition, and ~result re-raising it with its one-frame traceback.
+   The sleep lets the oracle's started thread finish its report first. */
+o = .t~new
+m = o~start('boom', 7)
+m~wait
+call SysSleep 0.3
+say 'hasError' m~hasError
+c = m~errorCondition
+say 'same twice' (c == m~errorCondition)
+say 'instruction' (c~instruction == .nil) 'code' c~code 'program' (c~program == .context~package~name)
+say 'position' c~position 'propagated' c~propagated
+say 'traceback' c~traceback~items c~traceback~firstItem
+say 'stackframes' c~stackFrames~items
+r = m~result
+say 'not reached'
+::class t
+::method boom
+  use arg n
+  x = n + 1
+  y = x / 0
+  return y

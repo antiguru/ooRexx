@@ -1,0 +1,19 @@
+count 18
+/* A started activity that never asks has no number: C, started after it,
+   asks first and is 2, and E later reuses the silent one's thread as 3. */
+o = .t~new
+mc = .message~new(o, 'ask')
+mb = o~start('silent', mc)
+mc~start
+say 'B silent, C' mb~result
+say 'D, E' o~start('outer')~result
+say 'main' .context~thread
+::class t
+::method silent unguarded
+  use arg mc
+  return mc~result
+::method ask unguarded
+  return .context~thread
+::method outer unguarded
+  n = .context~thread
+  return n self~start('ask')~result

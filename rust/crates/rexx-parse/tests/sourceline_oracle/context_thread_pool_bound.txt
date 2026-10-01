@@ -1,0 +1,13 @@
+count 12
+/* Eight nested starts end innermost first; the pool keeps six numbers, so
+   the second chain reuses those six, oldest first, then takes new ones. */
+o = .t~new
+say 'first ' o~start('chain', 8)~result
+say 'second' o~start('chain', 8)~result
+say 'main' .context~thread
+::class t
+::method chain unguarded
+  use arg depth
+  n = .context~thread
+  if depth = 1 then return n
+  return n self~start('chain', depth - 1)~result

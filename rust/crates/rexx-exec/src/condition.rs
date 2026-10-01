@@ -169,6 +169,59 @@ impl Interp {
         Ok(object)
     }
 
+    /// Gives every message whose send the unwinding failure ended the
+    /// condition object no trap built: the object of the levels it has left,
+    /// or the kept object a level raised again.
+    pub(crate) fn settle_failed_sends(&mut self, raised: &Raised) -> Result<(), Failure> {
+        if self.activity.failed_sends.is_empty() {
+            return Ok(());
+        }
+        let frame = self.roots.activity_mut().push_frame();
+        let origin = self.activity.failure_origin;
+        let object = match self.activity.reraised_object {
+            Some(object) => self.reraise_condition_object(object, origin),
+            None => {
+                let mut sites = self.activity.failure_sites.clone();
+                sites.extend(self.activity.failure_site.clone());
+                let unwound = Unwound {
+                    sites: &sites,
+                    frames: self.activity.failure_frames.clone(),
+                    origin,
+                    propagated: self.activity.failure_propagated,
+                    reraised: self.activity.failure_reraised,
+                };
+                self.build_condition_object_from(raised, None, false, Some(&unwound))
+            }
+        };
+        let attached = object.map(|object| self.attach_condition(object));
+        if attached.is_err() {
+            self.activity.failed_sends.clear();
+        }
+        self.roots.activity_mut().pop_frame(frame);
+        attached
+    }
+
+    /// `MessageClass::error` (`classes/MessageClass.cpp:706`) for every
+    /// message whose send the condition behind `object` ended.
+    pub(crate) fn attach_condition(&mut self, object: ObjRef) {
+        for message in std::mem::take(&mut self.activity.failed_sends) {
+            self.set_native_entry(message, crate::dispatch::MESSAGE_CONDITION, object);
+        }
+    }
+
+    /// [`Interp::reraise_condition_object`] for a `SIGNAL ON` trap, which
+    /// names its instruction in the object (`RexxActivation::trap`).
+    pub(crate) fn trap_reraised_condition_object(
+        &mut self,
+        object: ObjRef,
+        origin: Option<(Package, Option<usize>)>,
+    ) -> Result<ObjRef, Failure> {
+        let object = self.reraise_condition_object(object, origin)?;
+        let instruction = self.text(b"SIGNAL");
+        self.hash_entry_write(object, key::INSTRUCTION, instruction)?;
+        Ok(object)
+    }
+
     /// [`Interp::build_condition_object`] for a condition the innermost
     /// native call raised, whose own frame leads `STACKFRAMES` and
     /// `TRACEBACK` (`NativeActivation::createStackFrame`).

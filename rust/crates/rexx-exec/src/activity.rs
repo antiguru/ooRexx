@@ -279,6 +279,12 @@ pub(crate) struct Activity {
     /// The floor of the driver a parked activity left, `None` where it parked
     /// outside one.
     pub(crate) drive_floor: Option<usize>,
+    /// What `.context~thread` answers, assigned on first use
+    /// ([`crate::Interp::activity_number`]).
+    pub(crate) number: Option<u32>,
+    /// The messages whose send failed with the condition now unwinding,
+    /// until its condition object is built.
+    pub(crate) failed_sends: Vec<ObjRef>,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
 }
@@ -348,6 +354,8 @@ impl Activity {
             first_send: None,
             root_then: None,
             drive_floor: None,
+            number: None,
+            failed_sends: Vec::new(),
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
             pins: crate::pinning::PinStack::default(),
@@ -441,6 +449,8 @@ impl Activity {
             first_send,
             root_then,
             drive_floor: _,
+            number: _,
+            failed_sends,
             #[cfg(feature = "pinning")]
                 pins: _,
         } = self;
@@ -452,6 +462,7 @@ impl Activity {
         out.extend(*reraised_object);
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
+        out.extend(failed_sends.iter().copied());
         for tail in native_tails {
             tail.object_roots(out);
         }
