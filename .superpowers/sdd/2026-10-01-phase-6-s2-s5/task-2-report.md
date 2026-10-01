@@ -350,3 +350,17 @@ UNINIT-spawned activities at termination: ledgered for Task 9, not changed.
 ### Gates this round
 
 At 2793078c9: G1-G8 all exit 0, finished 2026-10-01T18:25:49+02:00, tree clean.
+
+## Fix round 4 (re-review: corpus order stability)
+
+`started_waited_in_a_replied_body.rex` raced on the oracle (the review: 92/8 over 100 runs, the replied body's
+lines against main's `main end`). Main now writes nothing (`x = .w~new~r`), so the body's `after reply S` is the
+only output. Still oracle-identical, and still red with the `DeferredReply` pin removed (rc 120, "the scheduler
+found a wait outside every root driver and pinned frame", run on a rebuilt `rexx-run`). Its SOURCELINE file is
+regenerated (11 lines, oracle count 11).
+
+Stability, 30 oracle runs each (memcap 1G, `timeout -s KILL 20`, a fresh directory per run, the directory masked
+in stderr; script `t2/stab.sh`): every corpus program this task added gave one stdout, stderr and status in all 30
+runs: `started_waits_for_a_later_send`, `started_waits_inside_a_call`, `started_unwaited_says`,
+`started_result_message`, `started_raises`, `message_wait_then_completed`, `message_two_waiters`, `message_start`,
+`started_waited_in_a_replied_body` (rewritten), `started_waited_in_uninit`. None needed another change.
