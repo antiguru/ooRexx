@@ -34,4 +34,7 @@ h:
   return
 ::method none
   use arg g
+  signal on syntax name s
   interpret 'do i = 1; g~i = i; end'
+s:
+  return 'syntax' condition('o')~code

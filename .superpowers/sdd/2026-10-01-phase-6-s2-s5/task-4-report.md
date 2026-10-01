@@ -338,3 +338,16 @@ Runs at the fix round 3 tree: `cargo fmt --all --check`; `cargo clippy -p rexx-e
 passed. `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test concurrency_tests`: 27 passed.
 `--features pinning --test concurrency_tests measured::`: 12 passed. `refusal_sites` (release):
 green.
+
+### Fix round 3, addendum: `message_halt_pinned_target.rex` made deterministic
+
+The background gates at 51c32cdda failed `collect_stress::the_l0_subset_passes_again_under_collect_on_every_allocation`
+on this witness: its untrapped case printed a traceback whose first line is the clause of the
+INTERPRETed spin loop the halt landed on (`end` or `g~i = i;`), which depends on where the slice
+lands. The untrapped case now traps the 4.1 it becomes (`signal on syntax`, answering
+`syntax 4.1`), so it still witnesses a halt reaching a target spinning pinned, with nothing printed
+that depends on the slice. (A single-clause `do forever` was tried first: the oracle was stable,
+30 of 30, but under `EveryOpportunity` this crate named the `DO` clause, where the oracle names
+`END`, so it was not used.) Identical to the oracle 30 runs of 30, and on this side unswitched and
+under `EveryOpportunity`. SOURCELINE file regenerated. `collect_stress` (release, gated) now runs
+with the P28 checks: 34 passed, and the L0 stress test passed again on a second run.

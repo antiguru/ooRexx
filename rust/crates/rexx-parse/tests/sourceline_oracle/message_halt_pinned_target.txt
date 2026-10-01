@@ -1,4 +1,4 @@
-count 37
+count 40
 -- Main busy-waits for, then halts, a started activity spinning inside
 -- INTERPRET: the spinning activity's pinned yields run main, whose state is
 -- all in its record.
@@ -35,4 +35,7 @@ h:
   return
 ::method none
   use arg g
+  signal on syntax name s
   interpret 'do i = 1; g~i = i; end'
+s:
+  return 'syntax' condition('o')~code
