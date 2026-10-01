@@ -1967,6 +1967,10 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         match self.begin_call_args(code, chunk, clause, slot, path, site, argc)? {
             Started::Ran(value) => Ok(value),
+            Started::Entered if self.activity.native_park.is_some() => {
+                self.activity.depth -= 1;
+                Err(self.refuse_unrooted_park())
+            }
             Started::Entered => {
                 let ended = self.run_activation();
                 self.finish_function_op(ended)
@@ -2044,6 +2048,10 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         match self.begin_call_expr(code, chunk, clause, slot, path, site)? {
             Started::Ran(value) => Ok(value),
+            Started::Entered if self.activity.native_park.is_some() => {
+                self.activity.depth -= 1;
+                Err(self.refuse_unrooted_park())
+            }
             Started::Entered => {
                 let ended = self.run_activation();
                 self.finish_function_op(ended)
@@ -2909,8 +2917,8 @@ impl Interp {
         }
     }
 
-    /// [`Interp::resume_region`] for a send whose activity parked and has
-    /// woken with `sent`.
+    /// [`Interp::resume_region`] for a call or send op whose activity parked
+    /// and has woken with `sent`.
     #[expect(
         clippy::too_many_arguments,
         reason = "one caller, and every argument is a value it already holds"
@@ -2930,10 +2938,26 @@ impl Interp {
     ) -> Result<Exit, Failure> {
         let delivered = match parked.deliver {
             Deliver::Send => self.deliver_woken_send(chunk, registers, parked.at, sent),
-            Deliver::Register(_) | Deliver::Flow(_) => Err(Loud::scheduler_inconsistency(
-                "a wait parked at an op that is not a send",
-            )
-            .into()),
+            Deliver::Register(dst) => {
+                self.activity.depth -= 1;
+                match sent {
+                    Ok(Some(value)) => {
+                        registers.set(dst, value);
+                        Ok(())
+                    }
+                    Ok(None) => Err(Loud::scheduler_inconsistency(
+                        "a function's wait that answered no value",
+                    )
+                    .into()),
+                    Err(failure) => Err(failure),
+                }
+            }
+            Deliver::Flow(base_indent) => {
+                let ran = sent
+                    .and_then(|value| self.settle_call_result(Ended::Returned(value), base_indent))
+                    .map(RegionEnd::Flowed);
+                return self.leave_parked(code, chunk, source, base, len, parked, ran);
+            }
         };
         match delivered {
             Ok(()) => self.ops_loop_steady(

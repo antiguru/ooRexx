@@ -695,6 +695,49 @@ mod measured {
         assert_eq!(frames_at(&report, ParkKind::GuardWhen).len(), 1);
     }
 
+    /// `SysSleep` inside `IF ... THEN DO`, a loop and a function argument
+    /// parks its activity at the driver: no pinned frame above it and no
+    /// pinned wait; inside a sort comparator it is a pinned wait under the
+    /// comparator's frame.
+    #[test]
+    fn a_sleep_is_a_pinned_wait_only_under_a_pinned_frame() {
+        let mut pinned = Vec::new();
+        for program in [
+            "if 1 then do\n  call SysSleep 0\n  say 'a'\nend\n",
+            "do i = 1 to 2\n  call SysSleep 0\nend\n",
+            "say length(SysSleep(0))\n",
+            "x = SysSleep(0)\n",
+        ] {
+            let report = report_of(program);
+            if frames_at(&report, ParkKind::SysSleep) != [Vec::<PinKind>::new()]
+                || !report.pinned_parks.is_empty()
+            {
+                pinned.push(format!("{program:?}: {report:?}"));
+            }
+        }
+        assert!(pinned.is_empty(), "{pinned:#?}");
+
+        let report = report_of(
+            "a = .array~of(2, 1)\na~sortWith(.c~new)\n\
+             ::class c\n::method compare\n  use arg l, r\n  call SysSleep 0\n  return l - r\n",
+        );
+        let arrivals: u64 = report
+            .parks
+            .iter()
+            .filter(|((kind, _), _)| *kind == ParkKind::SysSleep)
+            .map(|(_, count)| count)
+            .sum();
+        let parks = &report.pinned_parks;
+        assert!(
+            arrivals > 0
+                && parks.values().sum::<u64>() == arrivals
+                && parks.keys().all(|(kind, frames)| {
+                    *kind == ParkKind::SysSleep && frames.contains(&PinKind::SortComparator)
+                }),
+            "{report:?}"
+        );
+    }
+
     /// One program per frame kind reachable from Rexx, each reaching `SysSleep`
     /// under that kind.
     const FRAME_PROBES: &[(&str, &str)] = &[
@@ -1139,8 +1182,23 @@ mod measured {
             .iter()
             .flat_map(|(_, _, report)| report.parks.values())
             .sum();
+        let mut waits: BTreeMap<(&str, ParkKind, String), u64> = BTreeMap::new();
+        for (_, _, report) in &rows {
+            for (what, map) in [
+                ("pinned", &report.pinned_parks),
+                ("inverted", &report.inverted),
+            ] {
+                for ((park, frames), count) in map {
+                    *waits.entry((what, *park, frames_text(frames))).or_default() += count;
+                }
+            }
+        }
+        let mut by_kind = String::from("| wait | park | frames | count |\n|---|---|---|---|\n");
+        for ((what, park, frames), count) in &waits {
+            by_kind.push_str(&format!("| {what} | {park:?} | {frames} | {count} |\n"));
+        }
         let text = format!(
-            "{summary}\narrivals {all}, with a frame other than TreeEval, TreeSend or OpExec {beyond}\n\n{per_test}"
+            "{summary}\narrivals {all}, with a frame other than TreeEval, TreeSend or OpExec {beyond}\n\n{by_kind}\n{per_test}"
         );
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("pinning-table.md");
         fs::write(&out, &text).expect("cannot write the table");
@@ -1180,15 +1238,11 @@ mod group_runs {
     /// refusal names.
     const MESSAGE_START_REFUSED: &[(&str, &str)] = &[("TEST_STARTWITH_NOT_ARRAY", "MAKEARRAY")];
 
-    /// The Message start tests whose outcome differs from the oracle's:
-    /// `SysSleep` blocks the thread, so the halt finds the started activity
-    /// before its first clause and is dropped.
-    const MESSAGE_START_DIFFERING: &[&str] = &["TEST_HALT_START"];
+    /// The Message start tests whose outcome differs from the oracle's.
+    const MESSAGE_START_DIFFERING: &[&str] = &[];
 
-    /// The same under `EveryOpportunity`: main's pinned yields run the
-    /// started `delayValueReturn`, whose `SysSleep` blocks the thread, to its
-    /// end before the test asserts it has not completed.
-    const MESSAGE_START_DIFFERING_SWITCHED: &[&str] = &["TEST_START"];
+    /// The same under `EveryOpportunity`.
+    const MESSAGE_START_DIFFERING_SWITCHED: &[&str] = &[];
 
     fn scratch(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_TARGET_TMPDIR"))

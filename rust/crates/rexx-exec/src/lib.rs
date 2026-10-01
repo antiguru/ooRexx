@@ -2163,7 +2163,7 @@ impl Interp {
         // D19/I6, as `Interp::begin_call` takes it: this body runs on a nested
         // driver, so recursion through programs is bounded by the same count.
         let nested = self.running_activation().is_some();
-        if nested && self.activation_depth() >= crate::run::MAX_ACTIVATION_DEPTH {
+        if nested && self.stack_depth() >= crate::run::MAX_ACTIVATION_DEPTH {
             return Err(Raised::insufficient_stack().into());
         }
         if let Err(failure) = self.install_directives(program_id, &program) {

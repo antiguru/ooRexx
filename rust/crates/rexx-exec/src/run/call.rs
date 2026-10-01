@@ -409,9 +409,7 @@ impl Interp {
                 return Ok(Begun::Done(Ended::Returned(handled)));
             }
             return match resolved {
-                Resolved::Internal(row) => Ok(Begun::Done(Ended::Returned(Some(
-                    self.run_internal(row, &arguments)?,
-                )))),
+                Resolved::Internal(row) => Ok(internal_begun(self.run_internal(row, &arguments)?)),
                 Resolved::LibraryRoutine(slot) => self
                     .run_package_routine(slot, name, &arguments)
                     .map(|value| Begun::Done(Ended::Returned(value))),
@@ -485,7 +483,7 @@ impl Interp {
         let mut values = std::mem::take(&mut self.activity.value_buffer);
         let started = self.begin_call_over_values(resolved, name, &values[mark..]);
         values.truncate(mark);
-        self.lend_stack(matches!(started, Ok(Started::Entered)), values);
+        self.lend_stack(self.entered_body(&started), values);
         started
     }
 
@@ -559,12 +557,13 @@ impl Interp {
 
     /// One internal-package routine over its evaluated arguments. No
     /// activation, no `SIGL`, no depth guard -- the builtin discipline, since
-    /// the oracle runs these as native code too.
+    /// the oracle runs these as native code too. `Entered` where it parked
+    /// the activity, with the park on its record.
     fn run_internal(
         &mut self,
         row: &'static crate::internal_routines::InternalRoutine,
         values: &[Option<ObjRef>],
-    ) -> Result<ObjRef, Failure> {
+    ) -> Result<Started<ObjRef>, Failure> {
         self.run_internal_as(row, None, values)
     }
 
@@ -576,7 +575,7 @@ impl Interp {
         row: &'static crate::internal_routines::InternalRoutine,
         name: Option<&[u8]>,
         values: &[Option<ObjRef>],
-    ) -> Result<ObjRef, Failure> {
+    ) -> Result<Started<ObjRef>, Failure> {
         let Some(body) = row.body else {
             let owner = row
                 .owner
@@ -596,7 +595,11 @@ impl Interp {
                 }
             }
         }
-        outcome
+        let value = outcome?;
+        Ok(match self.activity.native_park {
+            Some(_) => Started::Entered,
+            None => Started::Ran(value),
+        })
     }
 
     /// [`Interp::begin_call_over_pushed_args`] with the run in hand.
@@ -612,7 +615,7 @@ impl Interp {
                     .map(Started::Ran)
                     .ok_or_else(|| Raised::no_data_returned(name).into());
             }
-            return self.run_internal(row, values).map(Started::Ran);
+            return self.run_internal(row, values);
         }
         if let Resolved::LibraryRoutine(slot) = resolved {
             let answered = match self.call_checkpoint(name, values)? {
@@ -641,11 +644,21 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         match started {
             Started::Ran(value) => Ok(value),
+            Started::Entered if self.activity.native_park.is_some() => {
+                Err(self.refuse_unrooted_park())
+            }
             Started::Entered => {
                 let ended = self.run_activation();
                 self.finish_function(ended)
             }
         }
+    }
+
+    /// Whether `started` entered a body that pushed an activation, rather
+    /// than answering or parking the activity.
+    #[inline(always)]
+    pub(crate) fn entered_body<T>(&self, started: &Result<Started<T>, Failure>) -> bool {
+        matches!(started, Ok(Started::Entered)) && self.activity.native_park.is_none()
     }
 
     /// A function call's value, once its callee's body has ended `ended`.
@@ -777,7 +790,7 @@ impl Interp {
             if let Some(row) = self.rexx_routine_row(installed) {
                 return self
                     .run_internal_as(row, Some(name), arguments)
-                    .map(|value| Begun::Done(Ended::Returned(Some(value))));
+                    .map(internal_begun);
             }
         }
 
@@ -822,7 +835,7 @@ impl Interp {
         // native abort. `Raised::insufficient_stack` already existed
         // (`error.rs`); measured, the oracle answers the same 11.1 at rc 245
         // for the same program, at its own depth of 27,314.
-        if self.activation_depth() >= MAX_ACTIVATION_DEPTH {
+        if self.stack_depth() >= MAX_ACTIVATION_DEPTH {
             return Err(Raised::insufficient_stack().into());
         }
 
@@ -1345,6 +1358,9 @@ impl Interp {
     ) -> Result<Flow, Failure> {
         let ended = match started {
             Started::Ran(ended) => ended,
+            Started::Entered if self.activity.native_park.is_some() => {
+                return Err(self.refuse_unrooted_park());
+            }
             Started::Entered => {
                 let ended = self.run_activation();
                 self.finish_call(ended)?
@@ -1377,7 +1393,7 @@ impl Interp {
                 Ok(Some(handled)) => Ok(Started::Ran(Ended::Returned(handled))),
                 Ok(None) => self
                     .run_internal(row, &values[mark..])
-                    .map(|value| Started::Ran(Ended::Returned(Some(value)))),
+                    .map(|started| subroutine_started(internal_begun(started))),
                 Err(failure) => Err(failure),
             },
             Resolved::LibraryRoutine(slot) => match self.call_checkpoint(name, &values[mark..]) {
@@ -1398,7 +1414,7 @@ impl Interp {
                 .map(subroutine_started),
         };
         values.truncate(mark);
-        self.lend_stack(matches!(outcome, Ok(Started::Entered)), values);
+        self.lend_stack(self.entered_body(&outcome), values);
         outcome
     }
 }
@@ -1408,6 +1424,14 @@ pub(crate) fn function_started(begun: Begun, name: &[u8]) -> Result<Started<ObjR
     match begun {
         Begun::Done(ended) => function_value(ended, name).map(Started::Ran),
         Begun::Entered => Ok(Started::Entered),
+    }
+}
+
+/// An internal routine's start as a begun call: `Entered` where it parked.
+fn internal_begun(started: Started<ObjRef>) -> Begun {
+    match started {
+        Started::Ran(value) => Begun::Done(Ended::Returned(Some(value))),
+        Started::Entered => Begun::Entered,
     }
 }
 

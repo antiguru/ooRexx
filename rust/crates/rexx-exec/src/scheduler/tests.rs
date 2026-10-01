@@ -607,3 +607,108 @@ fn a_refusal_after_main_ended_in_a_nested_round_is_reported() {
         }
     }
 }
+
+const SLEEPERS: &str = "a = .t~new~start('nap', 'A', 2)\nb = .t~new~start('nap', 'B', 1)\n\
+                        a~wait\nb~wait\nsay 'done'\n\
+                        ::class t\n::method nap\n  use arg name, secs\n  call SysSleep secs\n  \
+                        say name 'woke'\n";
+
+/// Two started activities sleep at once: they wake in deadline order, the
+/// longer sleeper started first, and the run takes about the longer sleep,
+/// well below the sum.
+#[test]
+fn sleepers_wake_in_deadline_order_and_overlap() {
+    for invocation in [
+        Invocation::none(),
+        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+    ] {
+        let began = std::time::Instant::now();
+        let outcome = run_with(SLEEPERS, invocation);
+        let took = began.elapsed();
+        assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+        assert_eq!(stdout(&outcome), "B woke\nA woke\ndone\n");
+        assert!(
+            took >= std::time::Duration::from_secs(2)
+                && took < std::time::Duration::from_millis(2900),
+            "took {took:?}"
+        );
+    }
+}
+
+/// A sleep inside a sort comparator is a pinned wait: the activity that
+/// wakes during it runs on the comparator's stack, so its line comes before
+/// the sort ends.
+#[test]
+fn a_sleep_in_a_sort_comparator_runs_the_others_meanwhile() {
+    let source = "b = .t~new~start('other')\narr = .array~of(3, 1, 2)\n\
+                  arr~sortWith(.cmp~new)\nsay 'sorted' arr~makeString('L', ' ')\n\
+                  ::class t\n::method other\n  call SysSleep 0.2\n  say 'other ran'\n\
+                  ::class cmp\n::method compare\n  use arg l, r\n  call SysSleep 0.3\n  \
+                  return l - r\n";
+    for invocation in [
+        Invocation::none(),
+        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+    ] {
+        let outcome = run_with(source, invocation);
+        assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+        assert_eq!(stdout(&outcome), "other ran\nsorted 1 2 3\n");
+    }
+}
+
+/// A busy main sees the flag a sleeper sets: the countdown's visits wake the
+/// sleeper when it is due, and the timer then ends main's slice.
+#[test]
+fn a_sleeper_wakes_while_main_is_busy() {
+    let outcome = run_with(
+        "f = .flag~new\nf~start('setLater')\ndo while \\f~done\nend\nsay 'saw flag'\n\
+         ::class flag\n::attribute done unguarded\n::method init\n  expose done\n  done = 0\n\
+         ::method setLater unguarded\n  call SysSleep 0.2\n  say 'set'\n  self~done = 1\n",
+        Invocation::none().with_deadline(std::time::Duration::from_secs(60)),
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "set\nsaw flag\n");
+}
+
+/// A run's deadline ends a wait on a sleeper due after it.
+#[test]
+fn a_deadline_ends_a_wait_on_a_later_sleeper() {
+    let began = std::time::Instant::now();
+    let outcome = run_with(
+        "call SysSleep 30\nsay 'woke'\n",
+        Invocation::none().with_deadline(std::time::Duration::from_millis(300)),
+    );
+    assert!(began.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(outcome.exit_code, crate::DEADLINE_EXIT);
+    assert_eq!(stdout(&outcome), "");
+}
+
+/// An inverted pinned wait is refused naming the kind of its wait under the
+/// switch mode too, whose pinned yields run the same activities.
+#[test]
+fn an_inverted_pinned_wait_is_refused_under_every_opportunity() {
+    let outcome = run_with(
+        &HIDDEN_INVERSION.replace("$MAIN", "interpret \"say 'main got' m0~result\""),
+        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+    );
+    assert_eq!(outcome.exit_code, 120);
+    assert_eq!(stdout(&outcome), "s3 sent m0\n");
+    assert_eq!(stderr(&outcome), INVERTED);
+}
+
+/// Nested pinned waits share one Rust stack, so their depth is bounded by
+/// 11.1 rather than by the stack: each started method waits pinned on the
+/// next, deeper than the bound lets the chain go.
+#[test]
+fn nested_pinned_waits_are_bounded_by_insufficient_stack() {
+    let outcome = run(
+        "say .w~new~chain(20000)\n::class w\n::method chain unguarded\n  use arg n\n  \
+         if n = 0 then return 0\n  m = .w~new~start('chain', n - 1)\n  \
+         interpret 'r = m~result'\n  return r + 1\n",
+    );
+    assert_eq!(outcome.exit_code, 245);
+    assert_eq!(stdout(&outcome), "");
+    assert!(
+        stderr(&outcome)
+            .contains("Error 11.1:  Insufficient control stack space; cannot continue execution.")
+    );
+}

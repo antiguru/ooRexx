@@ -438,3 +438,8 @@ lang/pinned_busy_wait_external.rex
 lang/message_halt_pinned_target.rex
 lang/main_ends_in_pinned_yield.rex
 lang/main_fails_in_pinned_yield.rex
+# Phase 6 S2 Task 5: SysSleep parks its activity; sleepers wake in deadline
+# order, at the countdown's visits while another activity runs.
+lang/sleepers_wake_in_deadline_order.rex
+lang/sleep_parks_in_if_do_and_argument.rex
+lang/sleeper_wakes_busy_main.rex

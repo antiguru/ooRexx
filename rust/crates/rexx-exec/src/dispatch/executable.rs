@@ -15,7 +15,7 @@
 
 use super::{
     Arity, Cleared, Failure, Interp, Loud, NativeBegin, NativeMethod, NativeStarted, ObjRef,
-    Raised, array_of_texts,
+    Raised, Started, Then, array_of_texts,
 };
 use crate::{ExecutableSource, ProgramId};
 use rexx_parse::{Access, DirectiveKind, GuardOption, Program, Protection};
@@ -582,7 +582,10 @@ fn begin_routine(
     if let Some(row) = row {
         return interp
             .run_internal_as(row, Some(row.name.as_bytes()), &values)
-            .map(|value| NativeStarted::Ran(Some(value)));
+            .map(|started| match started {
+                Started::Ran(value) => NativeStarted::Ran(Some(value)),
+                Started::Entered => NativeStarted::Entered(Then::Pass),
+            });
     }
     let Some((program, directive)) = record.routine else {
         return Err(

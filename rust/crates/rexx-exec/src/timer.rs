@@ -11,7 +11,8 @@
 
 //! The live-interpreter registry and the timer thread, the process's only
 //! global state (spec 2026-09-29 section 4, R3). Each interpreter registers
-//! its request word; the timer sets `SLICE` in every armed one each slice.
+//! its request word; the timer sets `SLICE` in every armed one each slice,
+//! and wakes an idle one when the deadline it idles until is due.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, Once, PoisonError};
@@ -46,6 +47,12 @@ struct Live {
     requests: Arc<Requests>,
     /// When its current slice began, while it is armed.
     slice_began: Option<Instant>,
+    /// The deadline it idles until, while it is idle.
+    idle_until: Option<Instant>,
+    /// Set by the timer when `idle_until` is due.
+    woken: bool,
+    /// What it idles on, with the registry's lock.
+    wake: Arc<Condvar>,
 }
 
 struct Registry {
@@ -81,6 +88,9 @@ impl Registration {
             id,
             requests: Arc::clone(&requests),
             slice_began: None,
+            idle_until: None,
+            woken: false,
+            wake: Arc::new(Condvar::new()),
         });
         Registration {
             id,
@@ -99,12 +109,7 @@ impl Registration {
             return;
         }
         self.armed = true;
-        TIMER.call_once(|| {
-            std::thread::Builder::new()
-                .name("rexx-timer".to_string())
-                .spawn(run_timer)
-                .expect("spawning the timer thread");
-        });
+        start_timer();
         let mut live = live();
         if let Some(entry) = live.1.iter_mut().find(|entry| entry.id == self.id) {
             entry.slice_began = Some(Instant::now());
@@ -131,6 +136,38 @@ impl Registration {
             entry.slice_began = None;
         }
     }
+
+    /// Blocks this thread until the timer finds `at` due.
+    pub(crate) fn idle_until(&self, at: Instant) {
+        start_timer();
+        let mut live = live();
+        let Some(entry) = live.1.iter_mut().find(|entry| entry.id == self.id) else {
+            return;
+        };
+        entry.idle_until = Some(at);
+        entry.woken = false;
+        let wake = Arc::clone(&entry.wake);
+        REGISTRY.changed.notify_one();
+        loop {
+            live = wake.wait(live).unwrap_or_else(PoisonError::into_inner);
+            let entry = live.1.iter_mut().find(|entry| entry.id == self.id);
+            if let Some(entry) = entry
+                && entry.woken
+            {
+                entry.woken = false;
+                return;
+            }
+        }
+    }
+}
+
+fn start_timer() {
+    TIMER.call_once(|| {
+        std::thread::Builder::new()
+            .name("rexx-timer".to_string())
+            .spawn(run_timer)
+            .expect("spawning the timer thread");
+    });
 }
 
 impl Drop for Registration {
@@ -140,14 +177,23 @@ impl Drop for Registration {
 }
 
 /// The timer thread: sets `SLICE` in each armed interpreter whose slice has
-/// run out, and sleeps until the next one does, or with no deadline where
-/// none is armed.
+/// run out, wakes each idle one whose deadline is due, and sleeps until the
+/// next of either, or with no deadline where there is none.
 fn run_timer() {
     let mut live = live();
     loop {
         let now = Instant::now();
         let mut next: Option<Instant> = None;
         for entry in &mut live.1 {
+            if let Some(at) = entry.idle_until {
+                if at <= now {
+                    entry.idle_until = None;
+                    entry.woken = true;
+                    entry.wake.notify_one();
+                } else {
+                    next = Some(next.map_or(at, |next| next.min(at)));
+                }
+            }
             let Some(began) = entry.slice_began else {
                 continue;
             };

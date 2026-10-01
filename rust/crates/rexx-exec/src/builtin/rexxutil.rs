@@ -158,8 +158,8 @@ pub(crate) fn mk_dir(
 /// nothing it checks.
 const SLEEP_MAXIMUM: f64 = 2_147_483.0;
 
-/// `SysSleep(seconds)`: blocks this thread alone, fractional seconds
-/// accepted.
+/// `SysSleep(seconds)`: parks the running activity until the delay has
+/// passed, fractional seconds accepted.
 pub(crate) fn sleep(
     interp: &mut Interp,
     _name: &'static [u8],
@@ -181,8 +181,9 @@ pub(crate) fn sleep(
         );
     }
     park_point!(interp, crate::pinning::ParkKind::SysSleep);
-    std::thread::sleep(std::time::Duration::from_secs_f64(seconds));
-    Ok(answer(interp, 0))
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds);
+    let done = answer(interp, 0);
+    interp.park_routine(crate::scheduler::ParkReason::Sleep { deadline }, done)
 }
 
 /// `SysVersion()` and `SysLinVer()`, which are one entry point: `uname`'s

@@ -1,0 +1,17 @@
+count 16
+-- SysSleep inside IF ... THEN DO and inside a function argument parks the
+-- activity, and the started one runs during each sleep.
+t = .k~new~start('tick')
+if 1 then do
+  call SysSleep 0.8
+  say 'main woke in DO'
+end
+say 'argument' length(SysSleep(0.8))
+t~wait
+::class k
+::method tick
+  say 'tick 1'
+  call SysSleep 0.4
+  say 'tick 2'
+  x = SysSleep(0.8)
+  say 'tick 3' x

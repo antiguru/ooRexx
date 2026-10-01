@@ -2371,6 +2371,18 @@ impl Interp {
         Ok(NativeStarted::Entered(Then::Pass))
     }
 
+    /// A park for `reason` by a routine whose answer, once woken, is
+    /// `answer`: that answer after a pinned wait, or with the park recorded
+    /// on the activity, where its caller finds it.
+    pub(crate) fn park_routine(
+        &mut self,
+        reason: crate::scheduler::ParkReason,
+        answer: ObjRef,
+    ) -> Result<ObjRef, Failure> {
+        self.park_native(reason, |_, answer| Ok(Some(answer)), answer)?;
+        Ok(answer)
+    }
+
     /// `park`'s primitive methods, run once their activity has woken: the
     /// continuation, or `failure` in its place, then each method's work after
     /// it.
@@ -2687,7 +2699,7 @@ impl Interp {
         // reason: a method that sends itself a message is an unbounded
         // recursion, and it must become a reportable condition rather than a
         // native abort.
-        if self.activation_depth() >= MAX_ACTIVATION_DEPTH {
+        if self.stack_depth() >= MAX_ACTIVATION_DEPTH {
             return Err(Raised::insufficient_stack().into());
         }
         let plan = self.plan_for(

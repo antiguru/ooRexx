@@ -94,6 +94,19 @@ macro_rules! inverted_wait {
     ($interp:expr, $reason:expr) => {};
 }
 
+/// Records a pinned wait for the park reason `$reason`.
+#[cfg(feature = "pinning")]
+macro_rules! pinned_park {
+    ($interp:expr, $reason:expr) => {
+        $interp.pinning.pinned_park(&$interp.activity.pins, $reason)
+    };
+}
+
+#[cfg(not(feature = "pinning"))]
+macro_rules! pinned_park {
+    ($interp:expr, $reason:expr) => {};
+}
+
 /// Records a `SLICE` deferred because the activity is pinned.
 #[cfg(feature = "pinning")]
 macro_rules! deferred_slice {
@@ -198,6 +211,16 @@ mod counter {
     }
 
     impl ParkKind {
+        /// The park point a wait for `reason` reached.
+        fn of(reason: crate::scheduler::ParkReason) -> ParkKind {
+            match reason {
+                crate::scheduler::ParkReason::Guard => ParkKind::GuardOn,
+                crate::scheduler::ParkReason::MessageResult(_) => ParkKind::MessageResult,
+                crate::scheduler::ParkReason::MessageWait(_) => ParkKind::MessageWait,
+                crate::scheduler::ParkReason::Sleep { .. } => ParkKind::SysSleep,
+            }
+        }
+
         /// The park point a send of `name` to a method of class `scope`
         /// with no body reaches.
         pub(crate) fn unimplemented_method(scope: &str, name: &[u8]) -> Option<ParkKind> {
@@ -228,6 +251,8 @@ mod counter {
     #[derive(Clone, Debug, Default)]
     pub struct PinReport {
         pub parks: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
+        /// Pinned waits, keyed as `parks` is.
+        pub pinned_parks: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
         /// Inverted pinned waits refused, keyed as `parks` is.
         pub inverted: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
         /// Slices deferred to the next unpinned clause boundary, keyed by the
@@ -288,19 +313,21 @@ mod counter {
                 .or_default() += 1;
         }
 
+        pub(crate) fn pinned_park(&self, pins: &PinStack, reason: crate::scheduler::ParkReason) {
+            *self
+                .report
+                .borrow_mut()
+                .pinned_parks
+                .entry((ParkKind::of(reason), frames_of(pins)))
+                .or_default() += 1;
+        }
+
         pub(crate) fn inverted(&self, pins: &PinStack, reason: crate::scheduler::ParkReason) {
-            let kind = match reason {
-                crate::scheduler::ParkReason::Guard => ParkKind::GuardOn,
-                crate::scheduler::ParkReason::MessageResult(_) => ParkKind::MessageResult,
-                crate::scheduler::ParkReason::MessageWait(_) => ParkKind::MessageWait,
-            };
-            let mut frames: Vec<PinKind> = pins.stack.borrow().iter().flatten().cloned().collect();
-            frames.dedup();
             *self
                 .report
                 .borrow_mut()
                 .inverted
-                .entry((kind, frames))
+                .entry((ParkKind::of(reason), frames_of(pins)))
                 .or_default() += 1;
         }
 
@@ -335,6 +362,7 @@ mod counter {
         pub(crate) fn reset(&self) {
             let mut report = self.report.borrow_mut();
             report.parks.clear();
+            report.pinned_parks.clear();
             report.inverted.clear();
             report.deferred_slices.clear();
             report.pinned_yields.clear();

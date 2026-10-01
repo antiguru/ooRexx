@@ -14,7 +14,9 @@
 //! and a switch swaps the two where a driver has exited or, for a pinned
 //! wait, inside the Rust frames that pin the outgoing activity.
 
-use std::collections::VecDeque;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, VecDeque};
+use std::time::Instant;
 
 use rexx_core::{ActivityRoots, ObjRef};
 use rustc_hash::FxHashMap;
@@ -48,7 +50,7 @@ pub(crate) enum ExecOutcome {
 }
 
 /// An activity's handle: its offset in the interpreter's activity table.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ActivityId(u32);
 
 /// A message object's identity among the activities waiting on it.
@@ -67,6 +69,8 @@ pub(crate) enum ParkReason {
     MessageResult(MessageId),
     /// `~wait`, until the message's send completes.
     MessageWait(MessageId),
+    /// `SysSleep`, until `deadline`.
+    Sleep { deadline: Instant },
 }
 
 impl ParkReason {
@@ -75,6 +79,7 @@ impl ParkReason {
         match self {
             ParkReason::Guard => "a guard",
             ParkReason::MessageResult(_) | ParkReason::MessageWait(_) => "a message's completion",
+            ParkReason::Sleep { .. } => "a sleep's end",
         }
     }
 }
@@ -112,6 +117,19 @@ pub(crate) struct Activities {
     free: Vec<u32>,
     /// Woken and spawned activities, in arrival order.
     ready: VecDeque<ActivityId>,
+    /// Sleeping activities, earliest deadline first, then in the order they
+    /// parked.
+    sleepers: BinaryHeap<Reverse<(Instant, u64, ActivityId)>>,
+    /// The order the next sleeper parks in.
+    next_sleeper: u64,
+    /// The activation depth of the activities whose loops of
+    /// [`Interp::run_others`] are on the Rust stack above live frames of
+    /// theirs: the depth guard's share of the stack below the running
+    /// activity.
+    buried_depth: usize,
+    /// The address of a local of the outermost loop of
+    /// [`Interp::run_others`] on the Rust stack, while there is one.
+    nest_floor: Option<usize>,
     /// The activities whose loops of [`Interp::run_others`] are on the Rust
     /// stack, outermost first, each with whether it is buried: whether it
     /// entered its loop from Rust frames that stay live below it (ruling P30).
@@ -143,6 +161,11 @@ pub(crate) struct Activities {
 /// program.
 const MAIN: ActivityId = ActivityId(0);
 
+/// The Rust stack the loops of [`Interp::run_others`] nested above the
+/// outermost one may span before a further one raises 11.1 instead: half the
+/// interpreter thread's, leaving the other half to the activation depth guard.
+const NESTED_LOOP_STACK_BYTES: usize = crate::INTERPRETER_STACK_BYTES / 2;
+
 /// `ActivityManager::MAX_THREAD_POOL_SIZE` (`ActivityManager.hpp:358`): an
 /// ended activity is pooled while the pool holds no more than this.
 const MAX_POOLED: usize = 5;
@@ -154,6 +177,10 @@ impl Activities {
             idle: vec![None],
             free: Vec::new(),
             ready: VecDeque::new(),
+            sleepers: BinaryHeap::new(),
+            next_sleeper: 0,
+            buried_depth: 0,
+            nest_floor: None,
             owners: Vec::new(),
             set_aside: Vec::new(),
             message_ids: FxHashMap::default(),
@@ -262,11 +289,18 @@ impl Scheduler for Interp {
     }
 
     fn park(&mut self, reason: ParkReason) {
+        let running = self.activities.running;
+        let table = &mut self.activities;
         match reason {
             ParkReason::Guard => {}
             ParkReason::MessageResult(id) | ParkReason::MessageWait(id) => {
-                let running = self.activities.running;
-                self.activities.waiters.entry(id).or_default().push(running);
+                table.waiters.entry(id).or_default().push(running);
+            }
+            ParkReason::Sleep { deadline } => {
+                table.next_sleeper += 1;
+                table
+                    .sleepers
+                    .push(Reverse((deadline, table.next_sleeper, running)));
             }
         }
     }
@@ -358,6 +392,7 @@ impl Interp {
     /// lie below a loop on the stack, and a wait nothing can end where no
     /// activity is ready at all.
     pub(crate) fn pinned_wait(&mut self, reason: ParkReason) -> Option<Failure> {
+        pinned_park!(self, reason);
         self.park(reason);
         let failure = match self.run_others(true) {
             Ok(Waited::Woken) => return None,
@@ -372,12 +407,37 @@ impl Interp {
         Some(failure)
     }
 
-    /// Withdraws the running activity from every message's waiters.
+    /// Withdraws the running activity from every message's waiters and from
+    /// the sleepers.
     fn cancel_wait(&mut self) {
         let running = self.activities.running;
         for waiters in self.activities.waiters.values_mut() {
             waiters.retain(|waiter| *waiter != running);
         }
+        self.activities
+            .sleepers
+            .retain(|Reverse((_, _, sleeper))| *sleeper != running);
+    }
+
+    /// Moves every sleeper whose deadline is due to the ready queue, in
+    /// deadline order.
+    fn wake_due_sleepers(&mut self) {
+        let now = Instant::now();
+        let table = &mut self.activities;
+        while let Some(Reverse((deadline, _, sleeper))) = table.sleepers.peek().copied() {
+            if deadline > now {
+                break;
+            }
+            table.sleepers.pop();
+            table.ready.push_back(sleeper);
+        }
+    }
+
+    /// The activation depth the guard against unbounded recursion counts:
+    /// the running activity's, and that of every activity whose frames lie
+    /// below it on this Rust stack.
+    pub(crate) fn stack_depth(&self) -> usize {
+        self.activation_depth() + self.activities.buried_depth
     }
 
     /// [`Interp::run_started_activities`] until it has nothing left to run,
@@ -420,6 +480,7 @@ impl Interp {
         if blocked {
             table.waiters.clear();
             table.message_ids.clear();
+            table.sleepers.clear();
             return Err(Loud::unsatisfiable_wait().into());
         }
         Ok(())
@@ -441,9 +502,22 @@ impl Interp {
     fn run_round(&mut self, buried: bool) -> Result<(Waited, bool), Failure> {
         let me = self.activities.running;
         let level = self.activities.owners.len();
+        let probe = 0u8;
+        let here = &raw const probe as usize;
+        match self.activities.nest_floor {
+            None => self.activities.nest_floor = Some(here),
+            Some(floor) if floor.abs_diff(here) > NESTED_LOOP_STACK_BYTES => {
+                self.activities.ready.retain(|ready| *ready != me);
+                return Err(Raised::insufficient_stack().into());
+            }
+            Some(_) => {}
+        }
+        let depth = if buried { self.activation_depth() } else { 0 };
         self.activities.owners.push((me, buried));
+        self.activities.buried_depth += depth;
         let waited = self.run_others_from(me, level);
         let table = &mut self.activities;
+        table.buried_depth -= depth;
         let mine = table
             .set_aside
             .iter()
@@ -454,12 +528,15 @@ impl Interp {
             table.ready.push_front(activity);
         }
         table.owners.pop();
+        if table.owners.is_empty() {
+            table.nest_floor = None;
+        }
         waited.map(|waited| (waited, set_aside))
     }
 
     /// [`Interp::run_others`]' loop, the one at `level` of the stack.
     fn run_others_from(&mut self, me: ActivityId, level: usize) -> Result<Waited, Failure> {
-        let Some(next) = self.next_runnable(me, level) else {
+        let Some(next) = self.next_runnable(me, level)? else {
             return Ok(self.blocked());
         };
         if next == me {
@@ -478,7 +555,15 @@ impl Interp {
                 self.switch_to(me, ended);
                 return Ok(Waited::Woken);
             }
-            match self.next_runnable(me, level) {
+            let woken = match self.next_runnable(me, level) {
+                Ok(woken) => woken,
+                Err(failure) => {
+                    self.activities.ready.retain(|ready| *ready != me);
+                    self.switch_to(me, ended);
+                    return Err(failure);
+                }
+            };
+            match woken {
                 // The activity whose slice ended, with nothing else this loop
                 // can run, runs on.
                 Some(ready) if ready == self.activities.running => {}
@@ -514,17 +599,31 @@ impl Interp {
     }
 
     /// The next ready activity the loop at `level` can run, or `me`; a buried
-    /// activity is set aside.
-    fn next_runnable(&mut self, me: ActivityId, level: usize) -> Option<ActivityId> {
+    /// activity is set aside. With none ready, this thread idles until the
+    /// earliest sleeper is due; the run's deadline passing first fails it.
+    fn next_runnable(
+        &mut self,
+        me: ActivityId,
+        level: usize,
+    ) -> Result<Option<ActivityId>, Failure> {
         loop {
-            let ready = self.activities.ready.pop_front()?;
+            if !self.activities.sleepers.is_empty() {
+                self.wake_due_sleepers();
+            }
+            let Some(ready) = self.activities.ready.pop_front() else {
+                let Some(Reverse((due, _, _))) = self.activities.sleepers.peek().copied() else {
+                    return Ok(None);
+                };
+                self.idle_until(due)?;
+                continue;
+            };
             let buried = self
                 .activities
                 .owners
                 .iter()
                 .any(|&(owner, buried)| owner == ready && buried);
             if ready == me || !buried {
-                return Some(ready);
+                return Ok(Some(ready));
             }
             self.activities.set_aside.push((ready, level));
         }
@@ -751,6 +850,9 @@ impl Interp {
     pub(crate) fn serve_requests(&mut self, yields: bool) -> Result<(), Failure> {
         if self.stress_collect {
             self.collect_now();
+        }
+        if !self.activities.sleepers.is_empty() {
+            self.wake_due_sleepers();
         }
         if let Some(switch) = &mut self.switch {
             self.clause_countdown = 1;
