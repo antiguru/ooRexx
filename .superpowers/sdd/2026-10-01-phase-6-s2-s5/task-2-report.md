@@ -346,3 +346,7 @@ eventual hang should count.
   (`by < level`) turns the restored witness and the p3 test red.
 
 UNINIT-spawned activities at termination: ledgered for Task 9, not changed.
+
+### Gates this round
+
+At 2793078c9: G1-G8 all exit 0, finished 2026-10-01T18:25:49+02:00, tree clean.
