@@ -246,3 +246,29 @@ fn unbounded_call_recursion_raises_11_1_rather_than_overflowing() {
          way out rather than the stack unwinding through a native abort"
     );
 }
+
+/// The same bound for an external routine recursing on itself, whose levels
+/// each run a nested driver.
+#[test]
+fn unbounded_external_recursion_raises_11_1_rather_than_overflowing() {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("external-recursion");
+    std::fs::create_dir_all(&dir).expect("the run directory");
+    std::fs::write(
+        dir.join("extf.rex"),
+        "use arg n\n.environment~depth = n\nreturn extf(n + 1)\n",
+    )
+    .expect("the external routine");
+    let outcome = run_program(
+        &dir.join("main.rex").to_string_lossy(),
+        b"signal on syntax\nsay extf(0)\nexit\nsyntax: say condition('o')~code .depth\n".to_vec(),
+        rexx_exec::Invocation::none().with_directory(dir),
+    );
+
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "11.1 9998\n",
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(outcome.exit_code, 0);
+}
